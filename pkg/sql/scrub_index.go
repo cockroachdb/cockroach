@@ -20,13 +20,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // indexCheckOperation implements the checkOperation interface. It is a
@@ -38,7 +37,7 @@ import (
 //    that refers to a primary index key that cannot be found.
 type indexCheckOperation struct {
 	tableName *tree.TableName
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
 	indexDesc *sqlbase.IndexDescriptor
 	asOf      hlc.Timestamp
 
@@ -64,7 +63,7 @@ type indexCheckRun struct {
 
 func newIndexCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
 	asOf hlc.Timestamp,
 ) *indexCheckOperation {
@@ -118,8 +117,8 @@ func (o *indexCheckOperation) Start(params runParams) error {
 	}
 	defer plan.Close(ctx)
 
-	planCtx := params.extendedEvalCtx.DistSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
-	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, plan)
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	physPlan, err := scrubPlanDistSQL(ctx, planCtx, plan)
 	if err != nil {
 		return err
 	}
@@ -140,7 +139,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		return errors.Errorf("could not find MergeJoinerSpec in plan")
 	}
 
-	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, physPlan, columnTypes)
+	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, physPlan, columnTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return err
@@ -260,7 +259,7 @@ func (o *indexCheckOperation) Close(ctx context.Context) {
 //   FROM
 //     (SELECT * FROM test@{NO_INDEX_JOIN} AS left ORDER BY k, s, v)
 //   FULL OUTER JOIN
-//     (SELECT * FROM test@{FORCE_INDEX=v_idx,NO_INDEX_JOIN} AS right ORDER BY k, s, v)
+//     (SELECT * FROM test@{FORCE_INDEX=v_idx} AS right ORDER BY k, s, v)
 //   ON
 //      left.k = right.k AND
 //      left.s = right.s AND
@@ -291,7 +290,7 @@ func (o *indexCheckOperation) Close(ctx context.Context) {
 //
 func createIndexCheckQuery(
 	columnNames []string,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 	indexDesc *sqlbase.IndexDescriptor,
 	asOf hlc.Timestamp,
@@ -309,9 +308,9 @@ func createIndexCheckQuery(
 	const checkIndexQuery = `
 				SELECT %[1]s, %[2]s
 				FROM
-					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1],NO_INDEX_JOIN} %[10]s ORDER BY %[5]s) AS leftside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1]} %[10]s ORDER BY %[5]s) AS leftside
 				FULL OUTER JOIN
-					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d],NO_INDEX_JOIN} %[10]s ORDER BY %[5]s) AS rightside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d]} %[10]s ORDER BY %[5]s) AS rightside
 					ON %[6]s
 				WHERE (%[7]s) OR
 							(%[8]s)`

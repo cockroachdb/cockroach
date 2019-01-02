@@ -43,7 +43,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 	var errWrapped3 = errors.Wrap(errWrapped2, "not recoverable :(")
 	var errWrappedSentinel = errors.Wrap(errors.Wrapf(errSentinel, "unseen"), "unsung")
 
-	runtimeErr := &runtime.TypeAssertionError{}
+	runtimeErr := makeTypeAssertionErr()
 
 	return []safeErrorTestCase{
 		{
@@ -55,22 +55,22 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 		{
 			// Intended result of panic(runtimeErr) which exhibits special case of known safe error.
 			format: "", rs: []interface{}{runtimeErr},
-			expErr: "?:0: *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
+			expErr: "?:0: *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
 		},
 		{
 			// Same as last, but skipping through to the cause: panic(errors.Wrap(safeErr, "gibberish")).
 			format: "", rs: []interface{}{errors.Wrap(runtimeErr, "unseen")},
-			expErr: "?:0: crash_reporting_test.go:62: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
+			expErr: "?:0: crash_reporting_test.go:62: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
 		},
 		{
 			// Special-casing switched off when format string present.
 			format: "%s", rs: []interface{}{runtimeErr},
-			expErr: "?:0: %s | *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
+			expErr: "?:0: %s | *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
 		},
 		{
 			// Special-casing switched off when more than one reportable present.
 			format: "", rs: []interface{}{runtimeErr, "foo"},
-			expErr: "?:0: *runtime.TypeAssertionError: interface conversion: interface is nil, not ; string",
+			expErr: "?:0: *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int; string",
 		},
 		{
 			format: "I like %s and %q and my pin code is %d", rs: []interface{}{Safe("A"), &SafeType{V: "B"}, 1234},
@@ -182,4 +182,16 @@ func TestWithCause(t *testing.T) {
 	if act != exp {
 		t.Fatalf("wanted %s, got %s", exp, act)
 	}
+}
+
+// makeTypeAssertionErr returns a runtime.Error with the message:
+//     interface conversion: interface {} is nil, not int
+func makeTypeAssertionErr() (result runtime.Error) {
+	defer func() {
+		e := recover()
+		result = e.(runtime.Error)
+	}()
+	var x interface{}
+	_ = x.(int)
+	return nil
 }

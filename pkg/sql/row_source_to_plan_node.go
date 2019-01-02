@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -28,7 +27,12 @@ import (
 // be constructed with Create(), after which it is a PlanNode and can be treated
 // as such.
 type rowSourceToPlanNode struct {
-	source distsqlrun.RowSource
+	source    distsqlrun.RowSource
+	forwarder metadataForwarder
+
+	originalPlanNode planNode
+
+	planCols sqlbase.ResultColumns
 
 	// Temporary variables
 	row      sqlbase.EncDatumRow
@@ -38,13 +42,32 @@ type rowSourceToPlanNode struct {
 
 var _ planNode = &rowSourceToPlanNode{}
 
-func makeRowSourceToPlanNode(s distsqlrun.RowSource) *rowSourceToPlanNode {
+// makeRowSourceToPlanNode creates a new planNode that wraps a RowSource. It
+// takes an optional metadataForwarder, which if non-nil is invoked for every
+// piece of metadata this wrapper receives from the wrapped RowSource.
+// It also takes an optional planNode, which is the planNode that the RowSource
+// that this rowSourceToPlanNode is wrapping originally replaced. That planNode
+// will be closed when this one is closed.
+func makeRowSourceToPlanNode(
+	s distsqlrun.RowSource,
+	forwarder metadataForwarder,
+	planCols sqlbase.ResultColumns,
+	originalPlanNode planNode,
+) *rowSourceToPlanNode {
 	row := make(tree.Datums, len(s.OutputTypes()))
 
 	return &rowSourceToPlanNode{
-		source:   s,
-		datumRow: row,
+		source:           s,
+		datumRow:         row,
+		forwarder:        forwarder,
+		planCols:         planCols,
+		originalPlanNode: originalPlanNode,
 	}
+}
+
+func (r *rowSourceToPlanNode) startExec(params runParams) error {
+	r.source.Start(params.ctx)
+	return nil
 }
 
 func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
@@ -55,6 +78,10 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 		if p != nil {
 			if p.Err != nil {
 				return false, p.Err
+			}
+			if r.forwarder != nil {
+				r.forwarder.forwardMetadata(p)
+				continue
 			}
 			if p.TraceData != nil {
 				// We drop trace metadata since we have no reasonable way to propagate
@@ -82,5 +109,8 @@ func (r *rowSourceToPlanNode) Values() tree.Datums {
 func (r *rowSourceToPlanNode) Close(ctx context.Context) {
 	if r.source != nil {
 		r.source.ConsumerClosed()
+	}
+	if r.originalPlanNode != nil {
+		r.originalPlanNode.Close(ctx)
 	}
 }

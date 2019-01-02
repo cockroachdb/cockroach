@@ -124,6 +124,9 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *windowNode:
 		p.setUnlimited(n.plan)
 
+	case *max1RowNode:
+		p.setUnlimited(n.plan)
+
 	case *joinNode:
 		p.setUnlimited(n.left.plan)
 		p.setUnlimited(n.right.plan)
@@ -174,7 +177,11 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 			p.applyLimit(n.sourcePlan, numRows, soft)
 		}
 	case *explainDistSQLNode:
-		p.setUnlimited(n.plan)
+		// EXPLAIN ANALYZE is special: it handles its own limit propagation, since
+		// it fully executes during startExec.
+		if !n.analyze {
+			p.setUnlimited(n.plan)
+		}
 	case *showTraceReplicaNode:
 		p.setUnlimited(n.plan)
 	case *explainPlanNode:
@@ -198,11 +205,20 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.setUnlimited(n.rows)
 
 	case *valuesNode:
+	case *virtualTableNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
+	case *renameColumnNode:
+	case *renameDatabaseNode:
+	case *renameIndexNode:
+	case *renameTableNode:
 	case *scrubNode:
+	case *truncateNode:
+	case *commentOnColumnNode:
+	case *commentOnDatabaseNode:
+	case *commentOnTableNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:
@@ -230,6 +246,9 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 
 	case *lookupJoinNode:
 		// The lookup join node is only planned by the optimizer.
+
+	case *zigzagJoinNode:
+		// The zigzag join node is only planned by the optimizer.
 
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))

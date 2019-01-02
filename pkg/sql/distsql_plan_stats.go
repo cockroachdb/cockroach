@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
@@ -32,17 +32,17 @@ const histogramSamples = 10000
 const histogramBuckets = 200
 
 func (dsp *DistSQLPlanner) createStatsPlan(
-	planCtx *planningCtx, desc *sqlbase.TableDescriptor, stats []requestedStat,
-) (physicalPlan, error) {
+	planCtx *PlanningCtx, desc *sqlbase.ImmutableTableDescriptor, stats []requestedStat,
+) (PhysicalPlan, error) {
 	// Create the table readers; for this we initialize a dummy scanNode.
 	scan := scanNode{desc: desc}
 	err := scan.initDescDefaults(nil /* planDependencies */, publicColumnsCfg)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
-	scan.spans, err = unconstrainedSpans(desc, scan.index)
+	scan.spans, err = unconstrainedSpans(desc, scan.index, scan.isDeleteSource)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 
 	// Calculate the relevant columns.
@@ -52,7 +52,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		for _, c := range s.columns {
 			colIdx, ok := scan.colIdxMap[c]
 			if !ok {
-				return physicalPlan{}, errors.Errorf("unknown column ID %d", c)
+				return PhysicalPlan{}, errors.Errorf("unknown column ID %d", c)
 			}
 			if !scan.valNeededForCol.Contains(colIdx) {
 				scan.valNeededForCol.Add(colIdx)
@@ -63,14 +63,14 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	p, err := dsp.createTableReaders(planCtx, &scan, nil /* overrideResultColumns */)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 
-	sketchSpecs := make([]distsqlrun.SketchSpec, len(stats))
+	sketchSpecs := make([]distsqlpb.SketchSpec, len(stats))
 	post := p.GetLastStagePost()
 	for i, s := range stats {
-		spec := distsqlrun.SketchSpec{
-			SketchType:          distsqlrun.SketchType_HLL_PLUS_PLUS_V1,
+		spec := distsqlpb.SketchSpec{
+			SketchType:          distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
 			GenerateHistogram:   s.histogram,
 			HistogramMaxBuckets: uint32(s.histogramMaxBuckets),
 			Columns:             make([]uint32, len(s.columns)),
@@ -104,7 +104,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	// Set up the samplers.
-	sampler := &distsqlrun.SamplerSpec{Sketches: sketchSpecs}
+	sampler := &distsqlpb.SamplerSpec{Sketches: sketchSpecs}
 	for _, s := range stats {
 		if s.histogram {
 			sampler.SampleSize = histogramSamples
@@ -128,14 +128,14 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
 
 	p.AddNoGroupingStage(
-		distsqlrun.ProcessorCoreUnion{Sampler: sampler},
-		distsqlrun.PostProcessSpec{},
+		distsqlpb.ProcessorCoreUnion{Sampler: sampler},
+		distsqlpb.PostProcessSpec{},
 		outTypes,
-		distsqlrun.Ordering{},
+		distsqlpb.Ordering{},
 	)
 
 	// Set up the final SampleAggregator stage.
-	agg := &distsqlrun.SampleAggregatorSpec{
+	agg := &distsqlpb.SampleAggregatorSpec{
 		Sketches:         sketchSpecs,
 		SampleSize:       sampler.SampleSize,
 		SampledColumnIDs: sampledColumnIDs,
@@ -148,24 +148,24 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 	p.AddSingleGroupStage(
 		node,
-		distsqlrun.ProcessorCoreUnion{SampleAggregator: agg},
-		distsqlrun.PostProcessSpec{},
+		distsqlpb.ProcessorCoreUnion{SampleAggregator: agg},
+		distsqlpb.PostProcessSpec{},
 		[]sqlbase.ColumnType{},
 	)
 	return p, nil
 }
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
-	planCtx *planningCtx, n *createStatsNode,
-) (physicalPlan, error) {
-
-	stats := []requestedStat{
-		{
-			columns:             n.columns,
-			histogram:           len(n.ColumnNames) == 1,
+	planCtx *PlanningCtx, n *createStatsNode,
+) (PhysicalPlan, error) {
+	stats := make([]requestedStat, len(n.columns))
+	for i := 0; i < len(stats); i++ {
+		stats[i] = requestedStat{
+			columns:             n.columns[i],
+			histogram:           len(n.columns[i]) == 1,
 			histogramMaxBuckets: histogramBuckets,
 			name:                string(n.Name),
-		},
+		}
 	}
 
 	return dsp.createStatsPlan(planCtx, n.tableDesc, stats)

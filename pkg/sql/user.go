@@ -17,16 +17,16 @@ package sql
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // GetUserHashedPassword returns the hashedPassword for the given username if
 // found in system.users.
 func GetUserHashedPassword(
-	ctx context.Context, execCfg *ExecutorConfig, metrics *MemoryMetrics, username string,
+	ctx context.Context, ie *InternalExecutor, metrics *MemoryMetrics, username string,
 ) (bool, []byte, error) {
 	normalizedUsername := tree.Name(username).Normalize()
 	// Always return no password for the root user, even if someone manually inserts one.
@@ -36,7 +36,7 @@ func GetUserHashedPassword(
 
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
 		`WHERE username=$1 AND "isRole" = false`
-	values, err := execCfg.InternalExecutor.QueryRow(
+	values, err := ie.QueryRow(
 		ctx, "get-hashed-pwd", nil /* txn */, getHashedPassword, normalizedUsername)
 	if err != nil {
 		return false, nil, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
@@ -71,15 +71,10 @@ var roleMembersTableName = tree.MakeTableName("system", "role_members")
 // BumpRoleMembershipTableVersion increases the table version for the
 // role membership table.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
-	var tableDesc *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, _, err = p.PhysicalSchemaAccessor().GetObjectDesc(&roleMembersTableName,
-			p.ObjectLookupFlags(ctx, true /*required*/))
-	})
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, anyDescType)
 	if err != nil {
 		return err
 	}
 
-	return p.saveNonmutationAndNotify(ctx, tableDesc)
+	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
 }

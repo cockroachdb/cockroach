@@ -197,6 +197,92 @@ func TestDiffMicros(t *testing.T) {
 	}
 }
 
+// TestAdd looks at various rounding cases, comparing our date math
+// to behavior observed in PostgreSQL 10.
+func TestAdd(t *testing.T) {
+	tests := []struct {
+		t   time.Time
+		d   Duration
+		exp time.Time
+	}{
+		// Year wraparound
+		{
+			t:   time.Date(1993, 10, 01, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 3},
+			exp: time.Date(1994, 1, 01, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(1992, 10, 01, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 15},
+			exp: time.Date(1994, 1, 01, 0, 0, 0, 0, time.UTC),
+		},
+
+		// Check leap behaviors
+		{
+			t:   time.Date(1996, 02, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 12},
+			exp: time.Date(1997, 02, 28, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(1996, 02, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 48},
+			exp: time.Date(2000, 02, 29, 0, 0, 0, 0, time.UTC),
+		},
+
+		// This pair shows something one might argue is weird:
+		// that two different times plus the same duration results
+		// in the same result.
+		{
+			t:   time.Date(1996, 01, 30, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 1, Days: 1},
+			exp: time.Date(1996, 03, 01, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(1996, 01, 31, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: 1, Days: 1},
+			exp: time.Date(1996, 03, 01, 0, 0, 0, 0, time.UTC),
+		},
+
+		// Check negative operations
+		{
+			t:   time.Date(2016, 02, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -1},
+			exp: time.Date(2016, 01, 29, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2016, 02, 29, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -1, Days: -1},
+			exp: time.Date(2016, 01, 28, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2016, 03, 31, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -1},
+			exp: time.Date(2016, 02, 29, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2016, 03, 31, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -1, Days: -1},
+			exp: time.Date(2016, 02, 28, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2016, 02, 01, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -1},
+			exp: time.Date(2016, 01, 01, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2016, 02, 01, 0, 0, 0, 0, time.UTC),
+			d:   Duration{Months: -1, Days: -1},
+			exp: time.Date(2015, 12, 31, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	for i, test := range tests {
+		if res := Add(nil, test.t, test.d); !test.exp.Equal(res) {
+			t.Errorf("%d: expected Add(%v, %d) = %v, found %v",
+				i, test.t, test.d, test.exp, res)
+		}
+	}
+}
+
 func TestAddMicros(t *testing.T) {
 	tests := []struct {
 		t   time.Time
@@ -277,4 +363,35 @@ func TestTruncate(t *testing.T) {
 			t.Errorf("%d: (%s,%s) should give %s, but got %s", i, tc.d, tc.r, tc.s, s)
 		}
 	}
+}
+
+func BenchmarkAdd(b *testing.B) {
+	b.Run("fast-path-by-no-months-in-duration", func(b *testing.B) {
+		s := time.Date(2018, 01, 01, 0, 0, 0, 0, time.UTC)
+		d := Duration{Days: 1}
+		for i := 0; i < b.N; i++ {
+			Add(AdditionModeCompatible, s, d)
+		}
+	})
+	b.Run("fast-path-by-day-number", func(b *testing.B) {
+		s := time.Date(2018, 01, 01, 0, 0, 0, 0, time.UTC)
+		d := Duration{Months: 1}
+		for i := 0; i < b.N; i++ {
+			Add(AdditionModeCompatible, s, d)
+		}
+	})
+	b.Run("no-adjustment", func(b *testing.B) {
+		s := time.Date(2018, 01, 31, 0, 0, 0, 0, time.UTC)
+		d := Duration{Months: 2}
+		for i := 0; i < b.N; i++ {
+			Add(AdditionModeCompatible, s, d)
+		}
+	})
+	b.Run("with-adjustment", func(b *testing.B) {
+		s := time.Date(2018, 01, 31, 0, 0, 0, 0, time.UTC)
+		d := Duration{Months: 1}
+		for i := 0; i < b.N; i++ {
+			Add(AdditionModeCompatible, s, d)
+		}
+	})
 }

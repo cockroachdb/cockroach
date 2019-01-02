@@ -24,6 +24,7 @@
 package tree
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -259,35 +260,66 @@ func (node *StatementSource) Format(ctx *FmtCtx) {
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID uint32
 
-// IndexHints represents "@<index_name>" or "@{param[,param]}" where param is
-// one of:
-//  - FORCE_INDEX=<index_name>
+// IndexFlags represents "@<index_name|index_id>" or "@{param[,param]}" where
+// param is one of:
+//  - FORCE_INDEX=<index_name|index_id>
 //  - NO_INDEX_JOIN
 // It is used optionally after a table name in SELECT statements.
-type IndexHints struct {
-	Index       UnrestrictedName
-	IndexID     IndexID
+type IndexFlags struct {
+	Index   UnrestrictedName
+	IndexID IndexID
+	// NoIndexJoin cannot be specified together with an index.
 	NoIndexJoin bool
 }
 
+// ForceIndex returns true if a forced index was specified, either using a name
+// or an IndexID.
+func (ih *IndexFlags) ForceIndex() bool {
+	return ih.Index != "" || ih.IndexID != 0
+}
+
+// CombineWith combines two IndexFlags structures, returning an error if they
+// conflict with one another.
+func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
+	if ih.NoIndexJoin && other.NoIndexJoin {
+		return errors.New("NO_INDEX_JOIN specified multiple times")
+	}
+	noIndexJoin := ih.NoIndexJoin || other.NoIndexJoin
+
+	if noIndexJoin && (ih.ForceIndex() || other.ForceIndex()) {
+		return errors.New("FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN")
+	}
+
+	if other.ForceIndex() {
+		if ih.ForceIndex() {
+			return errors.New("FORCE_INDEX specified multiple times")
+		}
+		ih.Index = other.Index
+		ih.IndexID = other.IndexID
+	}
+
+	ih.NoIndexJoin = noIndexJoin
+	return nil
+}
+
 // Format implements the NodeFormatter interface.
-func (n *IndexHints) Format(ctx *FmtCtx) {
-	if !n.NoIndexJoin {
+func (ih *IndexFlags) Format(ctx *FmtCtx) {
+	if !ih.NoIndexJoin {
 		ctx.WriteByte('@')
-		if n.Index != "" {
-			ctx.FormatNode(&n.Index)
+		if ih.Index != "" {
+			ctx.FormatNode(&ih.Index)
 		} else {
-			ctx.Printf("[%d]", n.IndexID)
+			ctx.Printf("[%d]", ih.IndexID)
 		}
 	} else {
-		if n.Index == "" && n.IndexID == 0 {
+		if ih.Index == "" && ih.IndexID == 0 {
 			ctx.WriteString("@{NO_INDEX_JOIN}")
 		} else {
 			ctx.WriteString("@{FORCE_INDEX=")
-			if n.Index != "" {
-				ctx.FormatNode(&n.Index)
+			if ih.Index != "" {
+				ctx.FormatNode(&ih.Index)
 			} else {
-				ctx.Printf("[%d]", n.IndexID)
+				ctx.Printf("[%d]", ih.IndexID)
 			}
 			ctx.WriteString(",NO_INDEX_JOIN}")
 		}
@@ -298,7 +330,7 @@ func (n *IndexHints) Format(ctx *FmtCtx) {
 // alias.
 type AliasedTableExpr struct {
 	Expr       TableExpr
-	Hints      *IndexHints
+	IndexFlags *IndexFlags
 	Ordinality bool
 	As         AliasClause
 }
@@ -306,8 +338,8 @@ type AliasedTableExpr struct {
 // Format implements the NodeFormatter interface.
 func (node *AliasedTableExpr) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Expr)
-	if node.Hints != nil {
-		ctx.FormatNode(node.Hints)
+	if node.IndexFlags != nil {
+		ctx.FormatNode(node.IndexFlags)
 	}
 	if node.Ordinality {
 		ctx.WriteString(" WITH ORDINALITY")
@@ -523,7 +555,7 @@ type Order struct {
 	Expr      Expr
 	Direction Direction
 	// Table/Index replaces Expr when OrderType = OrderByIndex.
-	Table NormalizableTableName
+	Table TableName
 	// If Index is empty, then the order should use the primary key.
 	Index UnrestrictedName
 }
@@ -647,6 +679,8 @@ const (
 	RANGE WindowFrameMode = iota
 	// ROWS is the mode of specifying frame in terms of physical offsets (e.g. 1 row before etc).
 	ROWS
+	// GROUPS is the mode of specifying frame in terms of peer groups.
+	GROUPS
 )
 
 // WindowFrameBoundType indicates which type of boundary is used.
@@ -655,12 +689,12 @@ type WindowFrameBoundType int
 const (
 	// UnboundedPreceding represents UNBOUNDED PRECEDING type of boundary.
 	UnboundedPreceding WindowFrameBoundType = iota
-	// ValuePreceding represents 'value' PRECEDING type of boundary.
-	ValuePreceding
+	// OffsetPreceding represents 'value' PRECEDING type of boundary.
+	OffsetPreceding
 	// CurrentRow represents CURRENT ROW type of boundary.
 	CurrentRow
-	// ValueFollowing represents 'value' FOLLOWING type of boundary.
-	ValueFollowing
+	// OffsetFollowing represents 'value' FOLLOWING type of boundary.
+	OffsetFollowing
 	// UnboundedFollowing represents UNBOUNDED FOLLOWING type of boundary.
 	UnboundedFollowing
 )
@@ -671,11 +705,21 @@ type WindowFrameBound struct {
 	OffsetExpr Expr
 }
 
+// HasOffset returns whether node contains an offset.
+func (node *WindowFrameBound) HasOffset() bool {
+	return node.BoundType == OffsetPreceding || node.BoundType == OffsetFollowing
+}
+
 // WindowFrameBounds specifies boundaries of the window frame.
 // The row at StartBound is included whereas the row at EndBound is not.
 type WindowFrameBounds struct {
 	StartBound *WindowFrameBound
 	EndBound   *WindowFrameBound
+}
+
+// HasOffset returns whether node contains an offset in either of the bounds.
+func (node *WindowFrameBounds) HasOffset() bool {
+	return node.StartBound.HasOffset() || (node.EndBound != nil && node.EndBound.HasOffset())
 }
 
 // WindowFrame represents static state of window frame over which calculations are made.
@@ -689,12 +733,12 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 	switch node.BoundType {
 	case UnboundedPreceding:
 		ctx.WriteString("UNBOUNDED PRECEDING")
-	case ValuePreceding:
+	case OffsetPreceding:
 		ctx.FormatNode(node.OffsetExpr)
 		ctx.WriteString(" PRECEDING")
 	case CurrentRow:
 		ctx.WriteString("CURRENT ROW")
-	case ValueFollowing:
+	case OffsetFollowing:
 		ctx.FormatNode(node.OffsetExpr)
 		ctx.WriteString(" FOLLOWING")
 	case UnboundedFollowing:
@@ -711,6 +755,8 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 		ctx.WriteString("RANGE ")
 	case ROWS:
 		ctx.WriteString("ROWS ")
+	case GROUPS:
+		ctx.WriteString("GROUPS ")
 	default:
 		panic(fmt.Sprintf("unhandled case: %d", node.Mode))
 	}

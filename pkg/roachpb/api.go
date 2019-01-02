@@ -241,7 +241,7 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 		rh.Txn = nil
 	}
 	if rh.ResumeSpan != nil {
-		panic(fmt.Sprintf("combining %+v with %+v", rh.ResumeSpan, otherRH.ResumeSpan))
+		return errors.Errorf("combining %+v with %+v", rh.ResumeSpan, otherRH.ResumeSpan)
 	}
 	rh.ResumeSpan = otherRH.ResumeSpan
 	rh.ResumeReason = otherRH.ResumeReason
@@ -256,6 +256,7 @@ func (sr *ScanResponse) combine(c combinable) error {
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
+		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
@@ -271,6 +272,7 @@ func (sr *ReverseScanResponse) combine(c combinable) error {
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
+		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
@@ -508,6 +510,9 @@ func (*AdminTransferLeaseRequest) Method() Method { return AdminTransferLease }
 func (*AdminChangeReplicasRequest) Method() Method { return AdminChangeReplicas }
 
 // Method implements the Request interface.
+func (*AdminRelocateRangeRequest) Method() Method { return AdminRelocateRange }
+
+// Method implements the Request interface.
 func (*HeartbeatTxnRequest) Method() Method { return HeartbeatTxn }
 
 // Method implements the Request interface.
@@ -571,7 +576,10 @@ func (*RefreshRequest) Method() Method { return Refresh }
 func (*RefreshRangeRequest) Method() Method { return RefreshRange }
 
 // Method implements the Request interface.
-func (*GetSnapshotForMergeRequest) Method() Method { return GetSnapshotForMerge }
+func (*SubsumeRequest) Method() Method { return Subsume }
+
+// Method implements the Request interface.
+func (*RangeStatsRequest) Method() Method { return RangeStats }
 
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
@@ -671,6 +679,12 @@ func (atlr *AdminTransferLeaseRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (acrr *AdminChangeReplicasRequest) ShallowCopy() Request {
+	shallowCopy := *acrr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (acrr *AdminRelocateRangeRequest) ShallowCopy() Request {
 	shallowCopy := *acrr
 	return &shallowCopy
 }
@@ -802,7 +816,13 @@ func (r *RefreshRangeRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
-func (r *GetSnapshotForMergeRequest) ShallowCopy() Request {
+func (r *SubsumeRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *RangeStatsRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -919,17 +939,6 @@ func NewScan(key, endKey Key) Request {
 	}
 }
 
-// NewCheckConsistency returns a Request initialized to scan from start to end keys.
-func NewCheckConsistency(key, endKey Key, withDiff bool) Request {
-	return &CheckConsistencyRequest{
-		RequestHeader: RequestHeader{
-			Key:    key,
-			EndKey: endKey,
-		},
-		WithDiff: withDiff,
-	}
-}
-
 // NewReverseScan returns a Request initialized to reverse scan from end to
 // start keys with max results.
 func NewReverseScan(key, endKey Key) Request {
@@ -956,19 +965,19 @@ func (*ConditionalPutRequest) flags() int {
 
 // InitPut, like ConditionalPut, effectively reads and may not write.
 // It also may return the actual data read on ConditionFailedErrors,
-// so must update the timestamp cache on errors. Unlike CPut, InitPuts
-// require a refresh because they may execute successfully without
-// leaving an intent (i.e., when the existing value is equal to the
-// proposed value).
+// so must update the timestamp cache on errors. InitPuts do not require
+// a refresh because on write-too-old errors, they return an error
+// immediately instead of continuing a serializable transaction to be
+// retried at end transaction.
 func (*InitPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnError | needsRefresh | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnError | consultsTSCache
 }
 
 // Increment reads the existing value, but always leaves an intent so
-// it does not need to update the timestamp cache. It also does not
-// require refresh because on write-too-old errors experienced during
-// serializable transactions, increment returns the error instead of
-// continuing the transaction.
+// it does not need to update the timestamp cache. Increments do not
+// require a refresh because on write-too-old errors, they return an
+// error immediately instead of continuing a serializable transaction
+// to be retried at end transaction.
 func (*IncrementRequest) flags() int {
 	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache
 }
@@ -1016,6 +1025,7 @@ func (*AdminSplitRequest) flags() int          { return isAdmin | isAlone }
 func (*AdminMergeRequest) flags() int          { return isAdmin | isAlone }
 func (*AdminTransferLeaseRequest) flags() int  { return isAdmin | isAlone }
 func (*AdminChangeReplicasRequest) flags() int { return isAdmin | isAlone }
+func (*AdminRelocateRangeRequest) flags() int  { return isAdmin | isAlone }
 func (*HeartbeatTxnRequest) flags() int        { return isWrite | isTxn }
 func (*GCRequest) flags() int                  { return isWrite | isRange }
 func (*PushTxnRequest) flags() int             { return isWrite | isAlone }
@@ -1053,7 +1063,7 @@ func (*TransferLeaseRequest) flags() int {
 	return isWrite | isAlone | skipLeaseCheck
 }
 func (*RecomputeStatsRequest) flags() int   { return isWrite | isAlone }
-func (*ComputeChecksumRequest) flags() int  { return isWrite | isRange }
+func (*ComputeChecksumRequest) flags() int  { return isWrite }
 func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
 func (*WriteBatchRequest) flags() int       { return isWrite | isRange }
 func (*ExportRequest) flags() int           { return isRead | isRange | updatesReadTSCache }
@@ -1067,12 +1077,14 @@ func (*AddSSTableRequest) flags() int       { return isWrite | isAlone | isRange
 func (*RefreshRequest) flags() int      { return isRead | isTxn | updatesReadTSCache }
 func (*RefreshRangeRequest) flags() int { return isRead | isTxn | isRange | updatesReadTSCache }
 
-func (*GetSnapshotForMergeRequest) flags() int { return isRead | isAlone | updatesReadTSCache }
+func (*SubsumeRequest) flags() int { return isRead | isAlone | updatesReadTSCache }
+
+func (*RangeStatsRequest) flags() int { return isRead }
 
 // Keys returns credentials in an aws.Config.
 func (b *ExportStorage_S3) Keys() *aws.Config {
 	return &aws.Config{
-		Credentials: credentials.NewStaticCredentials(b.AccessKey, b.Secret, ""),
+		Credentials: credentials.NewStaticCredentials(b.AccessKey, b.Secret, b.TempToken),
 	}
 }
 
@@ -1095,4 +1107,13 @@ func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	b.Rows += other.Rows
 	b.IndexEntries += other.IndexEntries
 	b.SystemRecords += other.SystemRecords
+}
+
+// MustSetValue is like SetValue, except it resets the enum and panics if the
+// provided value is not a valid variant type.
+func (e *RangeFeedEvent) MustSetValue(value interface{}) {
+	e.Reset()
+	if !e.SetValue(value) {
+		panic(fmt.Sprintf("%T excludes %T", e, value))
+	}
 }

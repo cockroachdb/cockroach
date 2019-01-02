@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -67,9 +68,10 @@ func (p *planner) optimizeSubquery(ctx context.Context, sq *subquery) error {
 		log.Infof(ctx, "optimizing subquery %d (%q)", sq.subquery.Idx, sq.subquery)
 	}
 
-	if sq.execMode == execModeExists || sq.execMode == execModeOneRow {
+	if sq.execMode == distsqlrun.SubqueryExecModeExists ||
+		sq.execMode == distsqlrun.SubqueryExecModeOneRow {
 		numRows := tree.DInt(1)
-		if sq.execMode == execModeOneRow {
+		if sq.execMode == distsqlrun.SubqueryExecModeOneRow {
 			// When using a sub-query in a scalar context, we must
 			// appropriately reject sub-queries that return more than 1
 			// row.
@@ -80,7 +82,7 @@ func (p *planner) optimizeSubquery(ctx context.Context, sq *subquery) error {
 	}
 
 	needed := make([]bool, len(planColumns(sq.plan)))
-	if sq.execMode != execModeExists {
+	if sq.execMode != distsqlrun.SubqueryExecModeExists {
 		// EXISTS does not need values; the rest does.
 		for i := range needed {
 			needed[i] = true

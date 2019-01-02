@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import classNames from "classnames";
 import { deviation as d3Deviation, mean as d3Mean } from "d3";
 import _ from "lodash";
@@ -6,9 +20,16 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
+import { createSelector } from "reselect";
 
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { LivenessStatus, NodesSummary, nodesSummarySelector } from "src/redux/nodes";
+import {
+  LivenessStatus,
+  NodesSummary,
+  nodesSummarySelector,
+  selectLivenessRequestStatus,
+  selectNodeRequestStatus,
+} from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment, NanoToMilli } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
@@ -20,10 +41,9 @@ import {
 } from "src/views/reports/components/nodeFilterList";
 import Loading from "src/views/shared/components/loading";
 
-import spinner from "assets/spinner.gif";
-
 interface NetworkOwnProps {
   nodesSummary: NodesSummary;
+  nodeSummaryErrors: Error[];
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
 }
@@ -444,22 +464,30 @@ class Network extends React.Component<NetworkProps, {}> {
         <h1>Network Diagnostics</h1>
         <Loading
           loading={!contentAvailable(nodesSummary)}
+          error={this.props.nodeSummaryErrors}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
-          image={spinner}
-        >
-          <div>
-            <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
-            {this.renderContent(nodesSummary, filters)}
-          </div>
-        </Loading>
+          render={() => (
+            <div>
+              <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
+              {this.renderContent(nodesSummary, filters)}
+            </div>
+          )}
+        />
       </div>
     );
   }
 }
 
+const nodeSummaryErrors = createSelector(
+  selectNodeRequestStatus,
+  selectLivenessRequestStatus,
+  (nodes, liveness) => [nodes.lastError, liveness.lastError],
+);
+
 function mapStateToProps(state: AdminUIState) {
   return {
     nodesSummary: nodesSummarySelector(state),
+    nodeSummaryErrors: nodeSummaryErrors(state),
   };
 }
 

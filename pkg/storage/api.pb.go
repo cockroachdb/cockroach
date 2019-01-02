@@ -6,18 +6,16 @@
 
 	It is generated from these files:
 		storage/api.proto
-		storage/lease_status.proto
-		storage/liveness.proto
-		storage/log.proto
 		storage/raft.proto
 
 	It has these top-level messages:
 		StoreRequestHeader
 		CollectChecksumRequest
 		CollectChecksumResponse
-		LeaseStatus
-		Liveness
-		RangeLogEvent
+		WaitForApplicationRequest
+		WaitForApplicationResponse
+		WaitForReplicaInitRequest
+		WaitForReplicaInitResponse
 		RaftHeartbeat
 		RaftMessageRequest
 		RaftMessageRequestBatch
@@ -97,10 +95,53 @@ func (m *CollectChecksumResponse) String() string            { return proto.Comp
 func (*CollectChecksumResponse) ProtoMessage()               {}
 func (*CollectChecksumResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{2} }
 
+// WaitForApplicationRequest blocks until the addressed replica has applied the
+// command with the specified lease index.
+type WaitForApplicationRequest struct {
+	StoreRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	RangeID            github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,2,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
+	LeaseIndex         uint64                                               `protobuf:"varint,3,opt,name=lease_index,json=leaseIndex,proto3" json:"lease_index,omitempty"`
+}
+
+func (m *WaitForApplicationRequest) Reset()                    { *m = WaitForApplicationRequest{} }
+func (m *WaitForApplicationRequest) String() string            { return proto.CompactTextString(m) }
+func (*WaitForApplicationRequest) ProtoMessage()               {}
+func (*WaitForApplicationRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{3} }
+
+type WaitForApplicationResponse struct {
+}
+
+func (m *WaitForApplicationResponse) Reset()                    { *m = WaitForApplicationResponse{} }
+func (m *WaitForApplicationResponse) String() string            { return proto.CompactTextString(m) }
+func (*WaitForApplicationResponse) ProtoMessage()               {}
+func (*WaitForApplicationResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{4} }
+
+type WaitForReplicaInitRequest struct {
+	StoreRequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	RangeID            github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,2,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
+}
+
+func (m *WaitForReplicaInitRequest) Reset()                    { *m = WaitForReplicaInitRequest{} }
+func (m *WaitForReplicaInitRequest) String() string            { return proto.CompactTextString(m) }
+func (*WaitForReplicaInitRequest) ProtoMessage()               {}
+func (*WaitForReplicaInitRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{5} }
+
+type WaitForReplicaInitResponse struct {
+}
+
+func (m *WaitForReplicaInitResponse) Reset()                    { *m = WaitForReplicaInitResponse{} }
+func (m *WaitForReplicaInitResponse) String() string            { return proto.CompactTextString(m) }
+func (*WaitForReplicaInitResponse) ProtoMessage()               {}
+func (*WaitForReplicaInitResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{6} }
+
 func init() {
 	proto.RegisterType((*StoreRequestHeader)(nil), "cockroach.storage.StoreRequestHeader")
 	proto.RegisterType((*CollectChecksumRequest)(nil), "cockroach.storage.CollectChecksumRequest")
 	proto.RegisterType((*CollectChecksumResponse)(nil), "cockroach.storage.CollectChecksumResponse")
+	proto.RegisterType((*WaitForApplicationRequest)(nil), "cockroach.storage.WaitForApplicationRequest")
+	proto.RegisterType((*WaitForApplicationResponse)(nil), "cockroach.storage.WaitForApplicationResponse")
+	proto.RegisterType((*WaitForReplicaInitRequest)(nil), "cockroach.storage.WaitForReplicaInitRequest")
+	proto.RegisterType((*WaitForReplicaInitResponse)(nil), "cockroach.storage.WaitForReplicaInitResponse")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -111,64 +152,130 @@ var _ grpc.ClientConn
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion4
 
-// Client API for Consistency service
+// Client API for PerReplica service
 
-type ConsistencyClient interface {
+type PerReplicaClient interface {
 	CollectChecksum(ctx context.Context, in *CollectChecksumRequest, opts ...grpc.CallOption) (*CollectChecksumResponse, error)
+	WaitForApplication(ctx context.Context, in *WaitForApplicationRequest, opts ...grpc.CallOption) (*WaitForApplicationResponse, error)
+	WaitForReplicaInit(ctx context.Context, in *WaitForReplicaInitRequest, opts ...grpc.CallOption) (*WaitForReplicaInitResponse, error)
 }
 
-type consistencyClient struct {
+type perReplicaClient struct {
 	cc *grpc.ClientConn
 }
 
-func NewConsistencyClient(cc *grpc.ClientConn) ConsistencyClient {
-	return &consistencyClient{cc}
+func NewPerReplicaClient(cc *grpc.ClientConn) PerReplicaClient {
+	return &perReplicaClient{cc}
 }
 
-func (c *consistencyClient) CollectChecksum(ctx context.Context, in *CollectChecksumRequest, opts ...grpc.CallOption) (*CollectChecksumResponse, error) {
+func (c *perReplicaClient) CollectChecksum(ctx context.Context, in *CollectChecksumRequest, opts ...grpc.CallOption) (*CollectChecksumResponse, error) {
 	out := new(CollectChecksumResponse)
-	err := grpc.Invoke(ctx, "/cockroach.storage.Consistency/CollectChecksum", in, out, c.cc, opts...)
+	err := grpc.Invoke(ctx, "/cockroach.storage.PerReplica/CollectChecksum", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// Server API for Consistency service
+func (c *perReplicaClient) WaitForApplication(ctx context.Context, in *WaitForApplicationRequest, opts ...grpc.CallOption) (*WaitForApplicationResponse, error) {
+	out := new(WaitForApplicationResponse)
+	err := grpc.Invoke(ctx, "/cockroach.storage.PerReplica/WaitForApplication", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
-type ConsistencyServer interface {
+func (c *perReplicaClient) WaitForReplicaInit(ctx context.Context, in *WaitForReplicaInitRequest, opts ...grpc.CallOption) (*WaitForReplicaInitResponse, error) {
+	out := new(WaitForReplicaInitResponse)
+	err := grpc.Invoke(ctx, "/cockroach.storage.PerReplica/WaitForReplicaInit", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for PerReplica service
+
+type PerReplicaServer interface {
 	CollectChecksum(context.Context, *CollectChecksumRequest) (*CollectChecksumResponse, error)
+	WaitForApplication(context.Context, *WaitForApplicationRequest) (*WaitForApplicationResponse, error)
+	WaitForReplicaInit(context.Context, *WaitForReplicaInitRequest) (*WaitForReplicaInitResponse, error)
 }
 
-func RegisterConsistencyServer(s *grpc.Server, srv ConsistencyServer) {
-	s.RegisterService(&_Consistency_serviceDesc, srv)
+func RegisterPerReplicaServer(s *grpc.Server, srv PerReplicaServer) {
+	s.RegisterService(&_PerReplica_serviceDesc, srv)
 }
 
-func _Consistency_CollectChecksum_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PerReplica_CollectChecksum_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CollectChecksumRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ConsistencyServer).CollectChecksum(ctx, in)
+		return srv.(PerReplicaServer).CollectChecksum(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/cockroach.storage.Consistency/CollectChecksum",
+		FullMethod: "/cockroach.storage.PerReplica/CollectChecksum",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConsistencyServer).CollectChecksum(ctx, req.(*CollectChecksumRequest))
+		return srv.(PerReplicaServer).CollectChecksum(ctx, req.(*CollectChecksumRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-var _Consistency_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "cockroach.storage.Consistency",
-	HandlerType: (*ConsistencyServer)(nil),
+func _PerReplica_WaitForApplication_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WaitForApplicationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PerReplicaServer).WaitForApplication(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.storage.PerReplica/WaitForApplication",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PerReplicaServer).WaitForApplication(ctx, req.(*WaitForApplicationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PerReplica_WaitForReplicaInit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WaitForReplicaInitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PerReplicaServer).WaitForReplicaInit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.storage.PerReplica/WaitForReplicaInit",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PerReplicaServer).WaitForReplicaInit(ctx, req.(*WaitForReplicaInitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _PerReplica_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "cockroach.storage.PerReplica",
+	HandlerType: (*PerReplicaServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "CollectChecksum",
-			Handler:    _Consistency_CollectChecksum_Handler,
+			Handler:    _PerReplica_CollectChecksum_Handler,
+		},
+		{
+			MethodName: "WaitForApplication",
+			Handler:    _PerReplica_WaitForApplication_Handler,
+		},
+		{
+			MethodName: "WaitForReplicaInit",
+			Handler:    _PerReplica_WaitForReplicaInit_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -290,6 +397,109 @@ func (m *CollectChecksumResponse) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *WaitForApplicationRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *WaitForApplicationRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintApi(dAtA, i, uint64(m.StoreRequestHeader.Size()))
+	n5, err := m.StoreRequestHeader.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n5
+	if m.RangeID != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintApi(dAtA, i, uint64(m.RangeID))
+	}
+	if m.LeaseIndex != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintApi(dAtA, i, uint64(m.LeaseIndex))
+	}
+	return i, nil
+}
+
+func (m *WaitForApplicationResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *WaitForApplicationResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *WaitForReplicaInitRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *WaitForReplicaInitRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintApi(dAtA, i, uint64(m.StoreRequestHeader.Size()))
+	n6, err := m.StoreRequestHeader.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n6
+	if m.RangeID != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintApi(dAtA, i, uint64(m.RangeID))
+	}
+	return i, nil
+}
+
+func (m *WaitForReplicaInitResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *WaitForReplicaInitResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
 func encodeVarintApi(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -341,6 +551,43 @@ func (m *CollectChecksumResponse) Size() (n int) {
 	}
 	l = m.Delta.Size()
 	n += 1 + l + sovApi(uint64(l))
+	return n
+}
+
+func (m *WaitForApplicationRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.StoreRequestHeader.Size()
+	n += 1 + l + sovApi(uint64(l))
+	if m.RangeID != 0 {
+		n += 1 + sovApi(uint64(m.RangeID))
+	}
+	if m.LeaseIndex != 0 {
+		n += 1 + sovApi(uint64(m.LeaseIndex))
+	}
+	return n
+}
+
+func (m *WaitForApplicationResponse) Size() (n int) {
+	var l int
+	_ = l
+	return n
+}
+
+func (m *WaitForReplicaInitRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.StoreRequestHeader.Size()
+	n += 1 + l + sovApi(uint64(l))
+	if m.RangeID != 0 {
+		n += 1 + sovApi(uint64(m.RangeID))
+	}
+	return n
+}
+
+func (m *WaitForReplicaInitResponse) Size() (n int) {
+	var l int
+	_ = l
 	return n
 }
 
@@ -749,6 +996,323 @@ func (m *CollectChecksumResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *WaitForApplicationRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowApi
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: WaitForApplicationRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: WaitForApplicationRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.StoreRequestHeader.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
+			}
+			m.RangeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RangeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaseIndex", wireType)
+			}
+			m.LeaseIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LeaseIndex |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipApi(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthApi
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *WaitForApplicationResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowApi
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: WaitForApplicationResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: WaitForApplicationResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipApi(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthApi
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *WaitForReplicaInitRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowApi
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: WaitForReplicaInitRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: WaitForReplicaInitRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreRequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthApi
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.StoreRequestHeader.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
+			}
+			m.RangeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowApi
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RangeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipApi(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthApi
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *WaitForReplicaInitResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowApi
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: WaitForReplicaInitResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: WaitForReplicaInitResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipApi(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthApi
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipApi(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -857,38 +1421,45 @@ var (
 func init() { proto.RegisterFile("storage/api.proto", fileDescriptorApi) }
 
 var fileDescriptorApi = []byte{
-	// 528 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x53, 0xcf, 0x6f, 0xd3, 0x30,
-	0x14, 0xae, 0xf7, 0xa3, 0xad, 0x5c, 0x24, 0x34, 0x0b, 0x8d, 0xa9, 0x48, 0xc9, 0xe8, 0x84, 0x34,
-	0x38, 0x24, 0xa2, 0xe3, 0x8e, 0x68, 0x2a, 0x41, 0x0e, 0xe3, 0x90, 0x6a, 0x1c, 0x76, 0x60, 0x72,
-	0x6d, 0x2f, 0xcd, 0xda, 0xda, 0x21, 0x76, 0x90, 0xf6, 0x5f, 0xf0, 0x4f, 0x21, 0x95, 0x5b, 0x8f,
-	0x88, 0x43, 0x04, 0xe1, 0xbf, 0xe0, 0x84, 0xec, 0x38, 0x1d, 0xa3, 0x3d, 0x0c, 0x4e, 0xf1, 0x7b,
-	0x7e, 0xdf, 0xf7, 0xde, 0xf7, 0xf9, 0x05, 0xee, 0x49, 0x25, 0x32, 0x1c, 0x33, 0x1f, 0xa7, 0x89,
-	0x97, 0x66, 0x42, 0x09, 0xb4, 0x47, 0x04, 0x99, 0x66, 0x02, 0x93, 0x89, 0x67, 0x2f, 0xbb, 0x8f,
-	0x4c, 0x98, 0x8e, 0xfd, 0x84, 0x2b, 0x96, 0x71, 0x3c, 0xbb, 0xc8, 0xf0, 0xa5, 0xaa, 0xea, 0xbb,
-	0xfb, 0xf5, 0xe5, 0x9c, 0x29, 0x4c, 0xb1, 0xc2, 0x36, 0x7f, 0x54, 0x53, 0x33, 0x1e, 0x27, 0xbc,
-	0xfe, 0xe8, 0xba, 0x8f, 0x84, 0x9c, 0xd8, 0xa2, 0x07, 0xb1, 0x88, 0x85, 0x39, 0xfa, 0xfa, 0x54,
-	0x65, 0x7b, 0x4b, 0x00, 0xd1, 0x48, 0x89, 0x8c, 0x45, 0xec, 0x43, 0xce, 0xa4, 0x7a, 0xc3, 0x30,
-	0x65, 0x19, 0x3a, 0x87, 0x2d, 0x2e, 0x28, 0xbb, 0x48, 0xe8, 0x01, 0x38, 0x04, 0xc7, 0xbb, 0x83,
-	0x57, 0x65, 0xe1, 0x36, 0xdf, 0x0a, 0xca, 0xc2, 0xe1, 0xaf, 0xc2, 0x3d, 0x89, 0x13, 0x35, 0xc9,
-	0xc7, 0x1e, 0x11, 0x73, 0x7f, 0xa5, 0x81, 0x8e, 0x6f, 0xce, 0x7e, 0x3a, 0x8d, 0x7d, 0x3b, 0xad,
-	0x57, 0xc1, 0xa2, 0xa6, 0x66, 0x0c, 0x29, 0x7a, 0x0f, 0xdb, 0x7a, 0x5e, 0x43, 0xbe, 0x65, 0xc8,
-	0x83, 0xb2, 0x70, 0x5b, 0x66, 0x0a, 0xc3, 0xfe, 0xe2, 0x9f, 0xd8, 0x2d, 0x2e, 0x6a, 0x19, 0xd2,
-	0x90, 0xf6, 0xbe, 0x6c, 0xc1, 0xfd, 0x40, 0xcc, 0x66, 0x8c, 0xa8, 0x60, 0xc2, 0xc8, 0x54, 0xe6,
-	0x73, 0x2b, 0x0e, 0xbd, 0x86, 0xcd, 0x89, 0x11, 0x68, 0x54, 0x75, 0xfa, 0x4f, 0xbc, 0xb5, 0x17,
-	0xf0, 0xd6, 0xdd, 0x18, 0xb4, 0x17, 0x85, 0xdb, 0x58, 0x16, 0x2e, 0x88, 0x2c, 0x5c, 0x6b, 0xc8,
-	0x30, 0x8f, 0x57, 0x1a, 0xb6, 0x2b, 0x0d, 0x91, 0xce, 0xfd, 0x87, 0x06, 0x8b, 0x8b, 0x5a, 0x86,
-	0x34, 0xa4, 0xe8, 0x0a, 0x76, 0x88, 0x9d, 0x5d, 0xb7, 0xd8, 0x3e, 0x04, 0xc7, 0xf7, 0x06, 0xa1,
-	0x1e, 0xe3, 0xdb, 0x5d, 0xdd, 0xcf, 0x55, 0x32, 0xf3, 0xf3, 0x3c, 0xa1, 0xde, 0xd9, 0x59, 0x38,
-	0x2c, 0x0b, 0x17, 0xd6, 0x6e, 0x84, 0xc3, 0x08, 0xd6, 0xec, 0x21, 0x45, 0x5d, 0xd8, 0xae, 0xa3,
-	0x83, 0x1d, 0xdd, 0x28, 0x5a, 0xc5, 0xbd, 0xcf, 0x00, 0x3e, 0x5c, 0xf3, 0x52, 0xa6, 0x82, 0x4b,
-	0x76, 0x0b, 0x07, 0x6e, 0xe3, 0xd0, 0x4b, 0xd8, 0x96, 0x1c, 0xa7, 0x72, 0x22, 0x94, 0xf1, 0xa7,
-	0xd3, 0x3f, 0xfa, 0xc3, 0xea, 0x1b, 0xd9, 0x97, 0x6a, 0x64, 0xcb, 0x86, 0x58, 0xe1, 0x68, 0x05,
-	0x42, 0xa7, 0x70, 0x97, 0xb2, 0x99, 0xc2, 0x46, 0x7a, 0xa7, 0xff, 0x7c, 0xc3, 0x43, 0x55, 0x5b,
-	0xee, 0xd5, 0xcb, 0xee, 0x9d, 0xbe, 0x0b, 0x82, 0x91, 0xc2, 0x4a, 0x0e, 0x35, 0x70, 0xb0, 0xa3,
-	0xdd, 0x8a, 0x2a, 0x96, 0xfe, 0x35, 0xec, 0x04, 0x82, 0xcb, 0x44, 0x2a, 0xc6, 0xc9, 0x35, 0xba,
-	0x82, 0xf7, 0xff, 0x52, 0x85, 0x9e, 0x6e, 0xe8, 0xb0, 0x79, 0x8b, 0xba, 0xcf, 0xee, 0x52, 0x5a,
-	0x99, 0xd4, 0x6b, 0x0c, 0x1e, 0x2f, 0x7e, 0x38, 0x8d, 0x45, 0xe9, 0x80, 0x65, 0xe9, 0x80, 0xaf,
-	0xa5, 0x03, 0xbe, 0x97, 0x0e, 0xf8, 0xf4, 0xd3, 0x69, 0x9c, 0xb7, 0x2c, 0x78, 0xdc, 0x34, 0xff,
-	0xe2, 0xc9, 0xef, 0x00, 0x00, 0x00, 0xff, 0xff, 0xd3, 0xc4, 0xd3, 0x39, 0x23, 0x04, 0x00, 0x00,
+	// 628 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x55, 0x5f, 0x6f, 0xd3, 0x3e,
+	0x14, 0xad, 0xf7, 0xa7, 0xad, 0xdc, 0x9f, 0xf4, 0xd3, 0x2c, 0x34, 0x46, 0x41, 0xcd, 0xc8, 0x84,
+	0x34, 0x10, 0x24, 0xa2, 0xe3, 0x1d, 0xad, 0xad, 0x80, 0x3c, 0x0c, 0x21, 0x4f, 0x03, 0x69, 0x0f,
+	0x4c, 0x6e, 0xec, 0xa5, 0xde, 0xb2, 0x38, 0x24, 0x0e, 0xe2, 0x63, 0xf0, 0xa1, 0x40, 0x1a, 0x6f,
+	0x7b, 0x44, 0x3c, 0x44, 0x10, 0xc4, 0x97, 0xe0, 0x09, 0xd9, 0x71, 0xba, 0x8d, 0x86, 0x69, 0xf0,
+	0xb6, 0xa7, 0xda, 0xd7, 0xf7, 0x9c, 0x7b, 0xcf, 0xb9, 0x57, 0x0d, 0x5c, 0x4a, 0xa5, 0x48, 0x48,
+	0xc0, 0x5c, 0x12, 0x73, 0x27, 0x4e, 0x84, 0x14, 0x68, 0xc9, 0x17, 0xfe, 0x61, 0x22, 0x88, 0x3f,
+	0x71, 0xcc, 0x63, 0xf7, 0xa6, 0xbe, 0xc6, 0x63, 0x97, 0x47, 0x92, 0x25, 0x11, 0x09, 0xf7, 0x12,
+	0xb2, 0x2f, 0xcb, 0xfc, 0xee, 0x72, 0xf5, 0x78, 0xc4, 0x24, 0xa1, 0x44, 0x12, 0x13, 0x5f, 0xab,
+	0xa8, 0x59, 0x14, 0xf0, 0xa8, 0xfa, 0x51, 0x79, 0x6f, 0x7d, 0x7f, 0xc3, 0x24, 0x5d, 0x0b, 0x44,
+	0x20, 0xf4, 0xd1, 0x55, 0xa7, 0x32, 0x6a, 0x9f, 0x00, 0x88, 0xb6, 0xa5, 0x48, 0x18, 0x66, 0x6f,
+	0x32, 0x96, 0xca, 0x67, 0x8c, 0x50, 0x96, 0xa0, 0x5d, 0xd8, 0x8a, 0x04, 0x65, 0x7b, 0x9c, 0xae,
+	0x80, 0x55, 0xb0, 0xbe, 0x38, 0xd8, 0x2c, 0x72, 0xab, 0xf9, 0x5c, 0x50, 0xe6, 0x8d, 0x7e, 0xe6,
+	0xd6, 0x46, 0xc0, 0xe5, 0x24, 0x1b, 0x3b, 0xbe, 0x38, 0x72, 0xa7, 0x1a, 0xe8, 0xf8, 0xf4, 0xec,
+	0xc6, 0x87, 0x81, 0x6b, 0xba, 0x75, 0x4a, 0x18, 0x6e, 0x2a, 0x46, 0x8f, 0xa2, 0xd7, 0xb0, 0xad,
+	0xfa, 0xd5, 0xe4, 0x73, 0x9a, 0x7c, 0x58, 0xe4, 0x56, 0x4b, 0x77, 0xa1, 0xd9, 0x1f, 0xfd, 0x15,
+	0xbb, 0xc1, 0xe1, 0x96, 0x26, 0xf5, 0xa8, 0xfd, 0x69, 0x0e, 0x2e, 0x0f, 0x45, 0x18, 0x32, 0x5f,
+	0x0e, 0x27, 0xcc, 0x3f, 0x4c, 0xb3, 0x23, 0x23, 0x0e, 0x3d, 0x85, 0xcd, 0x89, 0x16, 0xa8, 0x55,
+	0x75, 0xfa, 0x77, 0x9c, 0x99, 0x09, 0x38, 0xb3, 0x6e, 0x0c, 0xda, 0xc7, 0xb9, 0xd5, 0x38, 0xc9,
+	0x2d, 0x80, 0x0d, 0x5c, 0x69, 0x48, 0x48, 0x14, 0x4c, 0x35, 0xcc, 0x97, 0x1a, 0xb0, 0x8a, 0xfd,
+	0x83, 0x06, 0x83, 0xc3, 0x2d, 0x4d, 0xea, 0x51, 0x74, 0x00, 0x3b, 0xbe, 0xe9, 0x5d, 0x95, 0x98,
+	0x5f, 0x05, 0xeb, 0xff, 0x0d, 0x3c, 0xd5, 0xc6, 0x97, 0xcb, 0xba, 0x9f, 0x49, 0x1e, 0xba, 0x59,
+	0xc6, 0xa9, 0xb3, 0xb3, 0xe3, 0x8d, 0x8a, 0xdc, 0x82, 0x95, 0x1b, 0xde, 0x08, 0xc3, 0x8a, 0xdd,
+	0xa3, 0xa8, 0x0b, 0xdb, 0xd5, 0x6d, 0x65, 0x41, 0x15, 0xc2, 0xd3, 0xbb, 0xfd, 0x11, 0xc0, 0xeb,
+	0x33, 0x5e, 0xa6, 0xb1, 0x88, 0x52, 0x76, 0x0e, 0x07, 0xce, 0xe3, 0xd0, 0x63, 0xd8, 0x4e, 0x23,
+	0x12, 0xa7, 0x13, 0x21, 0xb5, 0x3f, 0x9d, 0xfe, 0xda, 0x19, 0xab, 0x4f, 0x65, 0xef, 0xcb, 0x6d,
+	0x93, 0x36, 0x22, 0x92, 0xe0, 0x29, 0x08, 0x6d, 0xc1, 0x45, 0xca, 0x42, 0x49, 0xb4, 0xf4, 0x4e,
+	0xff, 0x61, 0xcd, 0xa0, 0xca, 0x2d, 0x77, 0xaa, 0x65, 0x77, 0xb6, 0x5e, 0x0e, 0x87, 0xdb, 0x92,
+	0xc8, 0x74, 0xa4, 0x80, 0x83, 0x05, 0xe5, 0x16, 0x2e, 0x59, 0xec, 0x1f, 0x00, 0xde, 0x78, 0x45,
+	0xb8, 0x7c, 0x22, 0x92, 0xcd, 0x38, 0x0e, 0xb9, 0x4f, 0x24, 0x17, 0xd1, 0x95, 0x5b, 0x0b, 0x0b,
+	0x76, 0x42, 0x46, 0x52, 0xb6, 0xc7, 0x23, 0xca, 0xde, 0x69, 0x6f, 0x16, 0x30, 0xd4, 0x21, 0x4f,
+	0x45, 0xec, 0x5b, 0xb0, 0x5b, 0x27, 0xb3, 0x9c, 0x98, 0xfd, 0xe1, 0xd4, 0x05, 0xcc, 0xf4, 0xb3,
+	0x17, 0x71, 0x79, 0xd5, 0x5c, 0x38, 0x23, 0xf2, 0x9c, 0x8a, 0x52, 0x64, 0xbf, 0x98, 0x83, 0xf0,
+	0x05, 0xab, 0x9e, 0xd0, 0x01, 0xfc, 0xff, 0xb7, 0x05, 0x46, 0x77, 0x6b, 0x84, 0xd5, 0xff, 0x61,
+	0x74, 0xef, 0x5d, 0x26, 0xd5, 0xb8, 0xdb, 0x40, 0x29, 0x44, 0xb3, 0xee, 0xa3, 0xfb, 0x35, 0x1c,
+	0x7f, 0xdc, 0xc5, 0xee, 0x83, 0x4b, 0x66, 0xd7, 0x14, 0x3d, 0xe3, 0xc6, 0x45, 0x45, 0x67, 0x47,
+	0x7f, 0x51, 0xd1, 0x1a, 0x8b, 0xed, 0xc6, 0xe0, 0xf6, 0xf1, 0xb7, 0x5e, 0xe3, 0xb8, 0xe8, 0x81,
+	0x93, 0xa2, 0x07, 0x3e, 0x17, 0x3d, 0xf0, 0xb5, 0xe8, 0x81, 0xf7, 0xdf, 0x7b, 0x8d, 0xdd, 0x96,
+	0xc1, 0x8f, 0x9b, 0xfa, 0x03, 0xb3, 0xf1, 0x2b, 0x00, 0x00, 0xff, 0xff, 0x9d, 0xba, 0x22, 0x72,
+	0xf8, 0x06, 0x00, 0x00,
 }

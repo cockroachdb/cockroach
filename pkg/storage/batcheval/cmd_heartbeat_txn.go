@@ -16,6 +16,7 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -33,12 +34,6 @@ func declareKeysHeartbeatTransaction(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	declareKeysWriteTransaction(desc, header, req, spans)
-	if header.Txn != nil {
-		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{
-			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
-		})
-	}
 }
 
 // HeartbeatTxn updates the transaction status and heartbeat
@@ -55,10 +50,16 @@ func HeartbeatTxn(
 		return result.Result{}, err
 	}
 
+	if args.Now.IsEmpty() {
+		return result.Result{}, fmt.Errorf("Now not specified for heartbeat")
+	}
+
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
 	var txn roachpb.Transaction
-	if ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &txn); err != nil {
+	if ok, err := engine.MVCCGetProto(
+		ctx, batch, key, hlc.Timestamp{}, &txn, engine.MVCCGetOptions{},
+	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
 		// If no existing transaction record was found, skip heartbeat.

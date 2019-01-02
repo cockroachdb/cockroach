@@ -15,14 +15,15 @@
 package workload
 
 import (
+	"bytes"
 	"context"
-	"encoding/csv"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
@@ -67,6 +68,56 @@ func WriteCSVRows(
 	}
 	csvW.Flush()
 	return rowBatchIdx, csvW.Error()
+}
+
+type csvRowsReader struct {
+	t                    Table
+	batchStart, batchEnd int
+
+	buf        bytes.Buffer
+	csvW       *csv.Writer
+	batchIdx   int
+	stringsBuf []string
+}
+
+func (r *csvRowsReader) Read(p []byte) (n int, err error) {
+	for {
+		if r.buf.Len() > 0 {
+			return r.buf.Read(p)
+		}
+		r.buf.Reset()
+		if r.batchIdx == r.batchEnd {
+			return 0, io.EOF
+		}
+		batch := r.t.InitialRows.Batch(r.batchIdx)
+		r.batchIdx++
+		for _, row := range batch {
+			if cap(r.stringsBuf) < len(row) {
+				r.stringsBuf = make([]string, len(row))
+			} else {
+				r.stringsBuf = r.stringsBuf[:len(row)]
+			}
+			for i, datum := range row {
+				r.stringsBuf[i] = datumToCSVString(datum)
+			}
+			if err := r.csvW.Write(r.stringsBuf); err != nil {
+				return 0, err
+			}
+		}
+		r.csvW.Flush()
+	}
+}
+
+// NewCSVRowsReader returns an io.Reader that outputs the initial data of the
+// given table as CSVs. If batchEnd is the zero-value it defaults to the end of
+// the table.
+func NewCSVRowsReader(t Table, batchStart, batchEnd int) io.Reader {
+	if batchEnd == 0 {
+		batchEnd = t.InitialRows.NumBatches
+	}
+	r := &csvRowsReader{t: t, batchStart: batchStart, batchEnd: batchEnd, batchIdx: batchStart}
+	r.csvW = csv.NewWriter(&r.buf)
+	return r
 }
 
 func datumToCSVString(datum interface{}) string {
@@ -122,6 +173,9 @@ func HandleCSV(w http.ResponseWriter, req *http.Request, prefix string, meta Met
 	}
 	if table == nil {
 		return errors.Errorf(`could not find table %s in generator %s`, tableName, meta.Name)
+	}
+	if table.InitialRows.Batch == nil {
+		return errors.Errorf(`csv-server is not supported for workload %s`, meta.Name)
 	}
 
 	rowStart, rowEnd := 0, table.InitialRows.NumBatches

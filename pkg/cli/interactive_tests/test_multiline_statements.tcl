@@ -4,6 +4,10 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
+# we force TERM to xterm, otherwise we can't
+# test bracketed paste below.
+set env(TERM) xterm
+
 spawn $argv sql
 eexpect root@
 
@@ -71,18 +75,20 @@ eexpect "1 row"
 eexpect "root@"
 end_test
 
-start_test "Test that BEGIN .. without COMMIT also begins a multi-line statement with smart_prompt disabled."
-# Issue #19219.
+start_test "Test that BEGIN .. without COMMIT does not begin a multi-line statement with smart_prompt disabled."
 send "\\unset smart_prompt\r"
-send "begin; select 1;\r"
-eexpect " ->"
-send "commit;\r"
+send "begin;\r"
+eexpect "BEGIN"
 eexpect root@
-send "begin; select 1;\r"
-eexpect " ->"
+send "select 1;\r"
+eexpect "1 row"
+eexpect root@
 send "commit;\r"
-eexpect "root@"
-send "\\set smart_prompt\r"
+eexpect COMMIT
+eexpect root@
+send "\\set smart_prompt\rselect 1;\r"
+eexpect "1 row"
+eexpect root@
 end_test
 
 start_test "Test that BEGIN .. without COMMIT does not begin a multi-line statement in open txns. #16833"
@@ -134,6 +140,19 @@ send "commit;\r"
 eexpect COMMIT
 eexpect root@
 end_test
+
+start_test "Test that a multi-line bracketed paste is handled properly."
+send "\033\[200~"
+send "\\set display_format csv\r\n"
+send "values (1,'a'), (2,'b'), (3,'c');\r\n"
+send "\033\[201~\r\n"
+eexpect "1,a"
+eexpect "2,b"
+eexpect "3,c"
+eexpect root@
+end_test
+
+
 
 interrupt
 eexpect eof

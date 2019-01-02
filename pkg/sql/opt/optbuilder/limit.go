@@ -15,6 +15,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -26,21 +27,29 @@ import (
 //   SELECT k FROM kv LIMIT k
 // are not valid.
 func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
-	ordering := &inScope.physicalProps.Ordering
-	orderingPrivID := b.factory.InternOrderingChoice(ordering)
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 
 	if limit.Offset != nil {
 		op := "OFFSET"
 		b.assertNoAggregationOrWindowing(limit.Offset, op)
-		texpr := parentScope.resolveAndRequireType(limit.Offset, types.Int, op)
-		offset := b.buildScalar(texpr, parentScope)
-		inScope.group = b.factory.ConstructOffset(inScope.group, offset, orderingPrivID)
+		b.semaCtx.Properties.Require(op, tree.RejectSpecial)
+		parentScope.context = op
+		texpr := parentScope.resolveAndRequireType(limit.Offset, types.Int)
+		input := inScope.expr.(memo.RelExpr)
+		offset := b.buildScalar(texpr, parentScope, nil, nil, nil)
+		inScope.expr = b.factory.ConstructOffset(input, offset, inScope.makeOrderingChoice())
 	}
 	if limit.Count != nil {
 		op := "LIMIT"
 		b.assertNoAggregationOrWindowing(limit.Count, op)
-		texpr := parentScope.resolveAndRequireType(limit.Count, types.Int, op)
-		limit := b.buildScalar(texpr, parentScope)
-		inScope.group = b.factory.ConstructLimit(inScope.group, limit, orderingPrivID)
+		b.semaCtx.Properties.Require(op, tree.RejectSpecial)
+		parentScope.context = op
+		texpr := parentScope.resolveAndRequireType(limit.Count, types.Int)
+		input := inScope.expr.(memo.RelExpr)
+		limit := b.buildScalar(texpr, parentScope, nil, nil, nil)
+		inScope.expr = b.factory.ConstructLimit(input, limit, inScope.makeOrderingChoice())
 	}
 }

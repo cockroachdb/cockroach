@@ -1,0 +1,241 @@
+# NaN
+
+eval
+'NaN'::float
+----
+NaN
+
+eval
+'NaN'::float(4)
+----
+NaN
+
+eval
+'NaN'::real
+----
+NaN
+
+eval
+'NaN'::double precision
+----
+NaN
+
+eval
+'NaN'::float < 1.0
+----
+true
+
+eval
+'NaN'::float <= 1.0
+----
+true
+
+eval
+'NaN'::float = 1.0
+----
+false
+
+eval
+'NaN'::float > 1.0
+----
+false
+
+eval
+'NaN'::float >= 1.0
+----
+false
+
+eval
+'NaN'::float < '+Inf'::float
+----
+true
+
+eval
+'NaN'::float <= '+Inf'::float
+----
+true
+
+eval
+'NaN'::float = '+Inf'::float
+----
+false
+
+eval
+'NaN'::float > '+Inf'::float
+----
+false
+
+eval
+'NaN'::float >= '+Inf'::float
+----
+false
+
+eval
+'NaN'::float < '-Inf'::float
+----
+true
+
+eval
+'NaN'::float <= '-Inf'::float
+----
+true
+
+eval
+'NaN'::float = '-Inf'::float
+----
+false
+
+eval
+'NaN'::float > '-Inf'::float
+----
+false
+
+eval
+'NaN'::float >= '-Inf'::float
+----
+false
+
+eval
+'NaN'::float < 'NaN'::float
+----
+false
+
+eval
+'NaN'::float <= 'NaN'::float
+----
+true
+
+eval
+'NaN'::float = 'NaN'::float
+----
+true
+
+eval
+'NaN'::float > 'NaN'::float
+----
+false
+
+eval
+'NaN'::float >= 'NaN'::float
+----
+true
+
+eval
+'NaN'::decimal
+----
+NaN
+
+eval
+'NaN'::decimal(4)
+----
+NaN
+
+eval
+'NaN'::decimal < 1.0
+----
+true
+
+eval
+'NaN'::decimal <= 1.0
+----
+true
+
+eval
+'NaN'::decimal = 1.0
+----
+false
+
+eval
+'NaN'::decimal > 1.0
+----
+false
+
+eval
+'NaN'::decimal >= 1.0
+----
+false
+
+eval
+'NaN'::decimal < '+Inf'::decimal
+----
+true
+
+eval
+'NaN'::decimal <= '+Inf'::decimal
+----
+true
+
+eval
+'NaN'::decimal = '+Inf'::decimal
+----
+false
+
+eval
+'NaN'::decimal > '+Inf'::decimal
+----
+false
+
+eval
+'NaN'::decimal >= '+Inf'::decimal
+----
+false
+
+eval
+'NaN'::decimal < '-Inf'::decimal
+----
+true
+
+eval
+'NaN'::decimal <= '-Inf'::decimal
+----
+true
+
+eval
+'NaN'::decimal = '-Inf'::decimal
+----
+false
+
+eval
+'NaN'::decimal > '-Inf'::decimal
+----
+false
+
+eval
+'NaN'::decimal >= '-Inf'::decimal
+----
+false
+
+eval
+'NaN'::decimal < 'NaN'::decimal
+----
+false
+
+eval
+'NaN'::decimal <= 'NaN'::decimal
+----
+true
+
+eval
+'NaN'::decimal = 'NaN'::decimal
+----
+true
+
+eval
+'NaN'::decimal > 'NaN'::decimal
+----
+false
+
+eval
+'NaN'::decimal >= 'NaN'::decimal
+----
+true
+
+eval
+'NaN'::decimal::float
+----
+NaN
+
+eval
+'NaN'::float::decimal
+----
+NaN

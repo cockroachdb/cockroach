@@ -23,8 +23,8 @@ import (
 func init() {
 	logflags.InitFlags(
 		&logging.noStderrRedirect,
-		&logging.logDir, &showLogs, &noColor, &logging.verbosity,
-		&logging.vmodule, &logging.traceLocation,
+		&logging.logDir, &showLogs, &noColor,
+		&logging.vmodule,
 		&LogFileMaxSize, &LogFilesCombinedMaxSize,
 	)
 	// We define these flags here because they have the type Severity

@@ -25,11 +25,10 @@ import (
 	"strings"
 	"sync"
 
-	"golang.org/x/oauth2"
-
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/google/go-github/github"
-	version "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -41,7 +40,8 @@ const (
 	goFlagsEnv           = "GOFLAGS"
 	githubUser           = "cockroachdb"
 	githubRepo           = "cockroach"
-	cockroachPkgPrefix   = "github.com/cockroachdb/cockroach/pkg/"
+	// CockroachPkgPrefix is the crdb package prefix.
+	CockroachPkgPrefix = "github.com/cockroachdb/cockroach/pkg/"
 )
 
 var (
@@ -49,11 +49,12 @@ var (
 	stacktraceRE = regexp.MustCompile(`(?m:^goroutine\s\d+)`)
 )
 
-// Based on the following observed API response:
+// Based on the following observed API response the maximum here is 1<<16-1
+// (but we stay way below that as nobody likes to scroll for pages and pages).
 //
 // 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body
 // is too long (maximum is 65536 characters)}]
-const githubIssueBodyMaximumLength = 1<<16 - 1
+const githubIssueBodyMaximumLength = 5000
 
 // trimIssueRequestBody trims message such that the total size of an issue body
 // is less than githubIssueBodyMaximumLength. usedCharacters specifies the
@@ -160,17 +161,13 @@ func getProbableMilestone(
 		return nil
 	}
 
-	v, err := version.NewVersion(tag)
+	v, err := version.Parse(tag)
 	if err != nil {
 		log.Printf("unable to parse version from tag: %s", err)
 		log.Printf("issues will be posted without milestone")
 		return nil
 	}
-	if len(v.Segments()) < 2 {
-		log.Printf("version %s has less than two components; issues will be posted without milestone", tag)
-		return nil
-	}
-	vstring := fmt.Sprintf("%d.%d", v.Segments()[0], v.Segments()[1])
+	vstring := fmt.Sprintf("%d.%d", v.Major(), v.Minor())
 
 	milestones, _, err := listMilestones(ctx, githubUser, githubRepo, &github.MilestoneListOptions{
 		State: "open",
@@ -243,41 +240,61 @@ func (p *poster) init() {
 	p.milestone = getProbableMilestone(context.Background(), p.getLatestTag, p.listMilestones)
 }
 
-func (p *poster) post(
-	ctx context.Context, detail, packageName, testName, message, authorEmail string,
-) error {
-	packageName = cockroachPkgPrefix + packageName
+// DefaultStressFailureTitle provides the default title for stress failure
+// issues.
+func DefaultStressFailureTitle(packageName, testName string) string {
+	trimmedPkgName := strings.TrimPrefix(packageName, CockroachPkgPrefix)
+	return fmt.Sprintf("%s: %s failed under stress", trimmedPkgName, testName)
+}
 
+func (p *poster) post(
+	ctx context.Context, title, packageName, testName, message, authorEmail string,
+) error {
 	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
 
 Parameters:%[2]s
 
+To repro, try:
+
+` + "```" + `
+# Don't forget to check out a clean suitable branch and experiment with the
+# stress invocation until the desired results present themselves. For example,
+# using stress instead of stressrace and passing the '-p' stressflag which
+# controls concurrency.
+./scripts/gceworker.sh start && ./scripts/gceworker.sh mosh
+cd ~/go/src/github.com/cockroachdb/cockroach && \
+stdbuf -oL -eL \
+make stressrace TESTS=%[5]s PKG=%[4]s TESTTIMEOUT=5m STRESSFLAGS='-maxtime 20m -timeout 10m' 2>&1 | tee /tmp/stress.log
+` + "```" + `
+
 Failed test: %[3]s`
 	const messageTemplate = "\n\n```\n%s\n```"
 
-	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
-		title := fmt.Sprintf("%s: %s failed%s",
-			strings.TrimPrefix(packageName, cockroachPkgPrefix), testName, detail)
-		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL()) + messageTemplate
+	body := func(packageName, testName, message string) string {
+		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL(), packageName, testName) + messageTemplate
 		// We insert a raw "%s" above so we can figure out the length of the
 		// body so far, without the actual error text. We need this length so we
 		// can calculate the maximum amount of error text we can include in the
 		// issue without exceeding GitHub's limit. We replace that %s in the
 		// following Sprintf.
-		body = fmt.Sprintf(body, trimIssueRequestBody(message, len(body)))
+		return fmt.Sprintf(body, trimIssueRequestBody(message, len(body)))
+	}
+
+	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
+		b := body(packageName, testName, message)
 
 		return &github.IssueRequest{
 			Title:     &title,
-			Body:      &body,
+			Body:      &b,
 			Labels:    &issueLabels,
 			Assignee:  &assignee,
 			Milestone: p.milestone,
 		}
 	}
 
-	newIssueComment := func(packageName, testName string) *github.IssueComment {
-		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL())
-		return &github.IssueComment{Body: &body}
+	newIssueComment := func(packageName, testName, message string) *github.IssueComment {
+		b := body(packageName, testName, message)
+		return &github.IssueComment{Body: &b}
 	}
 
 	assignee, err := getAssignee(ctx, authorEmail, p.listCommits)
@@ -315,7 +332,7 @@ Failed test: %[3]s`
 				github.Stringify(issueRequest))
 		}
 	} else {
-		comment := newIssueComment(packageName, testName)
+		comment := newIssueComment(packageName, testName, message)
 		if _, _, err := p.createComment(
 			ctx, githubUser, githubRepo, *foundIssue, comment); err != nil {
 			return errors.Wrapf(err, "failed to update issue #%d with %s",
@@ -382,16 +399,16 @@ var defaultP struct {
 
 // Post either creates a new issue for a failed test, or posts a comment to an
 // existing open issue.
-func Post(ctx context.Context, detail, packageName, testName, message, authorEmail string) error {
+func Post(ctx context.Context, title, packageName, testName, message, authorEmail string) error {
 	defaultP.Do(func() {
 		defaultP.poster = newPoster()
 		defaultP.init()
 	})
-	err := defaultP.post(ctx, detail, packageName, testName, message, authorEmail)
+	err := defaultP.post(ctx, title, packageName, testName, message, authorEmail)
 	if !isInvalidAssignee(err) {
 		return err
 	}
-	return defaultP.post(ctx, detail, packageName, testName, message, "tobias.schottdorf@gmail.com")
+	return defaultP.post(ctx, title, packageName, testName, message, "tobias.schottdorf@gmail.com")
 }
 
 // CanPost returns true if the github API token environment variable is set.

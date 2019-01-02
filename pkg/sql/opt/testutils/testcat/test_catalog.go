@@ -19,24 +19,28 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
-// Catalog implements the opt.Catalog interface for testing purposes.
+// Catalog implements the cat.Catalog interface for testing purposes.
 type Catalog struct {
-	tables map[string]*Table
+	dataSources map[string]cat.DataSource
+	counter     int
 }
 
-var _ opt.Catalog = &Catalog{}
+var _ cat.Catalog = &Catalog{}
 
 // New creates a new empty instance of the test catalog.
 func New() *Catalog {
-	return &Catalog{tables: make(map[string]*Table)}
+	return &Catalog{dataSources: make(map[string]cat.DataSource)}
 }
 
 const (
@@ -44,66 +48,145 @@ const (
 	testDB = "t"
 )
 
-// FindTable is part of the opt.Catalog interface.
-func (tc *Catalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
+// ResolveDataSource is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveDataSource(
+	_ context.Context, name *tree.TableName,
+) (cat.DataSource, error) {
 	// This is a simplified version of tree.TableName.ResolveExisting() from
 	// sql/tree/name_resolution.go.
-	toFind := *name
-	if name.ExplicitSchema {
-		if name.ExplicitCatalog {
-			// Already 3 parts.
-			return tc.findTable(&toFind, name)
+	var ds cat.DataSource
+	var err error
+	toResolve := *name
+	if name.ExplicitSchema && name.ExplicitCatalog {
+		// Already 3 parts.
+		ds, err = tc.resolveDataSource(&toResolve, name)
+		if err == nil {
+			return ds, nil
 		}
-
+	} else if name.ExplicitSchema {
 		// Two parts: Try to use the current database, and be satisfied if it's
 		// sufficient to find the object.
-		toFind.CatalogName = testDB
-		if tab, err := tc.findTable(&toFind, name); err == nil {
+		toResolve.CatalogName = testDB
+		if tab, err := tc.resolveDataSource(&toResolve, name); err == nil {
 			return tab, nil
 		}
 
 		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T
 		// instead.
-		toFind.CatalogName = name.SchemaName
-		toFind.SchemaName = tree.PublicSchemaName
-		toFind.ExplicitCatalog = true
-		return tc.findTable(&toFind, name)
+		toResolve.CatalogName = name.SchemaName
+		toResolve.SchemaName = tree.PublicSchemaName
+		toResolve.ExplicitCatalog = true
+		ds, err = tc.resolveDataSource(&toResolve, name)
+		if err == nil {
+			return ds, nil
+		}
+	} else {
+		// This is a naked data source name. Use the current database.
+		toResolve.CatalogName = tree.Name(testDB)
+		toResolve.SchemaName = tree.PublicSchemaName
+		ds, err = tc.resolveDataSource(&toResolve, name)
+		if err == nil {
+			return ds, nil
+		}
 	}
 
-	// This is a naked table name. Use the current database.
-	toFind.CatalogName = tree.Name(testDB)
-	toFind.SchemaName = tree.PublicSchemaName
-	return tc.findTable(&toFind, name)
+	// If we didn't find the table in the catalog, try to lazily resolve it as
+	// a virtual table.
+	if table, ok := resolveVTable(name); ok {
+		// We rely on the check in CreateTable against this table's schema to infer
+		// that this is a virtual table.
+		return tc.CreateTable(table), nil
+	}
+
+	// If this didn't end up being a virtual table, then return the original
+	// error returned by resolveDataSource.
+	return nil, err
 }
 
-// findTable checks if the table `toFind` exists among the tables in this
-// Catalog. If it does, findTable updates `name` to match `toFind`, and
-// returns the corresponding table. Otherwise, it returns an error.
-func (tc *Catalog) findTable(toFind, name *tree.TableName) (opt.Table, error) {
-	if table, ok := tc.tables[toFind.FQString()]; ok {
-		*name = *toFind
+// ResolveDataSourceByID is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveDataSourceByID(
+	ctx context.Context, id cat.StableID,
+) (cat.DataSource, error) {
+	for _, ds := range tc.dataSources {
+		if tab, ok := ds.(*Table); ok && tab.StableID == id {
+			return ds, nil
+		}
+	}
+	return nil, pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
+		"relation [%d] does not exist", id)
+}
+
+// CheckPrivilege is part of the cat.Catalog interface.
+func (tc *Catalog) CheckPrivilege(
+	ctx context.Context, ds cat.DataSource, priv privilege.Kind,
+) error {
+	switch t := ds.(type) {
+	case *Table:
+		if t.Revoked {
+			return fmt.Errorf("user does not have privilege to access %v", t.TabName)
+		}
+	case *View:
+		if t.Revoked {
+			return fmt.Errorf("user does not have privilege to access %v", t.ViewName)
+		}
+	default:
+		panic("invalid DataSource")
+	}
+
+	return nil
+}
+
+// resolveDataSource checks if `toResolve` exists among the data sources in this
+// Catalog. If it does, resolveDataSource updates `name` to match `toResolve`,
+// and returns the corresponding data source. Otherwise, it returns an error.
+func (tc *Catalog) resolveDataSource(toResolve, name *tree.TableName) (cat.DataSource, error) {
+	if table, ok := tc.dataSources[toResolve.FQString()]; ok {
+		*name = *toResolve
 		return table, nil
 	}
-	return nil, fmt.Errorf("table %q not found", tree.ErrString(name))
+	return nil, fmt.Errorf("no data source matches prefix: %q", tree.ErrString(toResolve))
 }
 
 // Table returns the test table that was previously added with the given name.
-func (tc *Catalog) Table(name string) *Table {
-	tn := tree.MakeUnqualifiedTableName(tree.Name(name))
-	tab, err := tc.FindTable(context.TODO(), &tn)
+func (tc *Catalog) Table(name *tree.TableName) *Table {
+	ds, err := tc.ResolveDataSource(context.TODO(), name)
 	if err != nil {
-		panic(fmt.Errorf("table %q is not in the test catalog", tree.ErrString((*tree.Name)(&name))))
+		panic(err)
 	}
-	return tab.(*Table)
+	if tab, ok := ds.(*Table); ok {
+		return tab
+	}
+	panic(fmt.Errorf("\"%q\" is not a table", tree.ErrString(name)))
 }
 
 // AddTable adds the given test table to the catalog.
 func (tc *Catalog) AddTable(tab *Table) {
-	fq := tab.Name.FQString()
-	if _, ok := tc.tables[fq]; ok {
-		panic(fmt.Errorf("table %q already exists", tree.ErrString(&tab.Name)))
+	fq := tab.TabName.FQString()
+	if _, ok := tc.dataSources[fq]; ok {
+		panic(fmt.Errorf("table %q already exists", tree.ErrString(&tab.TabName)))
 	}
-	tc.tables[fq] = tab
+	tc.dataSources[fq] = tab
+}
+
+// View returns the test view that was previously added with the given name.
+func (tc *Catalog) View(name *tree.TableName) *View {
+	ds, err := tc.ResolveDataSource(context.TODO(), name)
+	if err != nil {
+		panic(err)
+	}
+	if vw, ok := ds.(*View); ok {
+		return vw
+	}
+	panic(fmt.Errorf("\"%q\" is not a view", tree.ErrString(name)))
+}
+
+// AddView adds the given test view to the catalog.
+func (tc *Catalog) AddView(view *View) {
+	fq := view.ViewName.FQString()
+	if _, ok := tc.dataSources[fq]; ok {
+		panic(fmt.Errorf("view %q already exists", tree.ErrString(&view.ViewName)))
+	}
+	tc.dataSources[fq] = view
 }
 
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
@@ -123,6 +206,10 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		tab := tc.CreateTable(stmt)
 		return tab.String(), nil
 
+	case *tree.CreateView:
+		view := tc.CreateView(stmt)
+		return view.String(), nil
+
 	case *tree.AlterTable:
 		tc.AlterTable(stmt)
 		return "", nil
@@ -132,15 +219,30 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return "", nil
 
 	default:
-		return "", fmt.Errorf("expected CREATE TABLE or ALTER TABLE statement but found: %v", stmt)
+		return "", fmt.Errorf("unsupported statement: %v", stmt)
 	}
+}
+
+// nextStableID returns a new unique StableID for a data source.
+func (tc *Catalog) nextStableID() cat.StableID {
+	tc.counter++
+
+	// 53 is a magic number derived from how CRDB internally stores tables. The
+	// first user table is 53. Use this to have the test catalog look more
+	// consistent with the real catalog.
+	return cat.StableID(53 + tc.counter - 1)
 }
 
 // qualifyTableName updates the given table name to include catalog and schema
 // if not already included.
 func (tc *Catalog) qualifyTableName(name *tree.TableName) {
-	if name.ExplicitSchema {
-		if name.ExplicitCatalog {
+	hadExplicitSchema := name.ExplicitSchema
+	hadExplicitCatalog := name.ExplicitCatalog
+	name.ExplicitSchema = true
+	name.ExplicitCatalog = true
+
+	if hadExplicitSchema {
+		if hadExplicitCatalog {
 			// Already 3 parts: nothing to do.
 			return
 		}
@@ -154,7 +256,6 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 		// Compatibility with CockroachDB v1.1: use D.public.T.
 		name.CatalogName = name.SchemaName
 		name.SchemaName = tree.PublicSchemaName
-		name.ExplicitCatalog = true
 		return
 	}
 
@@ -163,60 +264,130 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 	name.SchemaName = tree.PublicSchemaName
 }
 
-// Table implements the opt.Table interface for testing purposes.
-type Table struct {
-	Name      tree.TableName
-	Columns   []*Column
-	Indexes   []*Index
-	Stats     TableStats
-	IsVirtual bool
+// View implements the cat.View interface for testing purposes.
+type View struct {
+	ViewID      cat.StableID
+	ViewVersion cat.Version
+	ViewName    tree.TableName
+	QueryText   string
+	ColumnNames tree.NameList
+
+	// If Revoked is true, then the user has had privileges on the view revoked.
+	Revoked bool
 }
 
-var _ opt.Table = &Table{}
+var _ cat.View = &View{}
 
-func (tt *Table) String() string {
+func (tv *View) String() string {
 	tp := treeprinter.New()
-	opt.FormatCatalogTable(tt, tp)
+	cat.FormatCatalogView(tv, tp)
 	return tp.String()
 }
 
-// TabName is part of the opt.Table interface.
-func (tt *Table) TabName() *tree.TableName {
-	return &tt.Name
+// ID is part of the cat.DataSource interface.
+func (tv *View) ID() cat.StableID {
+	return tv.ViewID
 }
 
-// IsVirtualTable is part of the opt.Table interface.
+// Version is part of the cat.DataSource interface.
+func (tv *View) Version() cat.Version {
+	return tv.ViewVersion
+}
+
+// Name is part of the cat.DataSource interface.
+func (tv *View) Name() *tree.TableName {
+	return &tv.ViewName
+}
+
+// Query is part of the cat.View interface.
+func (tv *View) Query() string {
+	return tv.QueryText
+}
+
+// ColumnNameCount is part of the cat.View interface.
+func (tv *View) ColumnNameCount() int {
+	return len(tv.ColumnNames)
+}
+
+// ColumnName is part of the cat.View interface.
+func (tv *View) ColumnName(i int) tree.Name {
+	return tv.ColumnNames[i]
+}
+
+// Table implements the cat.Table interface for testing purposes.
+type Table struct {
+	StableID   cat.StableID
+	TabVersion cat.Version
+	TabName    tree.TableName
+	Columns    []*Column
+	Indexes    []*Index
+	Stats      TableStats
+	IsVirtual  bool
+	Catalog    cat.Catalog
+	Mutations  []cat.MutationColumn
+
+	// If Revoked is true, then the user has had privileges on the table revoked.
+	Revoked bool
+}
+
+var _ cat.Table = &Table{}
+
+func (tt *Table) String() string {
+	tp := treeprinter.New()
+	cat.FormatCatalogTable(tt.Catalog, tt, tp)
+	return tp.String()
+}
+
+// ID is part of the cat.DataSource interface.
+func (tt *Table) ID() cat.StableID {
+	return tt.StableID
+}
+
+// Version is part of the cat.DataSource interface.
+func (tt *Table) Version() cat.Version {
+	return tt.TabVersion
+}
+
+// Name is part of the cat.DataSource interface.
+func (tt *Table) Name() *tree.TableName {
+	return &tt.TabName
+}
+
+// IsVirtualTable is part of the cat.Table interface.
 func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
 }
 
-// ColumnCount is part of the opt.Table interface.
+// ColumnCount is part of the cat.Table interface.
 func (tt *Table) ColumnCount() int {
-	return len(tt.Columns)
+	return len(tt.Columns) + len(tt.Mutations)
 }
 
-// Column is part of the opt.Table interface.
-func (tt *Table) Column(i int) opt.Column {
-	return tt.Columns[i]
+// Column is part of the cat.Table interface.
+func (tt *Table) Column(i int) cat.Column {
+	if i < len(tt.Columns) {
+		return tt.Columns[i]
+	}
+	return &tt.Mutations[i-len(tt.Columns)]
 }
 
-// IndexCount is part of the opt.Table interface.
+// IndexCount is part of the cat.Table interface.
 func (tt *Table) IndexCount() int {
 	return len(tt.Indexes)
 }
 
-// Index is part of the opt.Table interface.
-func (tt *Table) Index(i int) opt.Index {
+// Index is part of the cat.Table interface.
+func (tt *Table) Index(i int) cat.Index {
 	return tt.Indexes[i]
 }
 
-// StatisticCount is part of the opt.Table interface.
+// StatisticCount is part of the cat.Table interface.
 func (tt *Table) StatisticCount() int {
 	return len(tt.Stats)
 }
 
-// Statistic is part of the opt.Table interface.
-func (tt *Table) Statistic(i int) opt.TableStatistic {
+// Statistic is part of the cat.Table interface.
+func (tt *Table) Statistic(i int) cat.TableStatistic {
 	return tt.Stats[i]
 }
 
@@ -230,126 +401,191 @@ func (tt *Table) FindOrdinal(name string) int {
 	panic(fmt.Sprintf(
 		"cannot find column %q in table %q",
 		tree.ErrString((*tree.Name)(&name)),
-		tree.ErrString(&tt.Name),
+		tree.ErrString(&tt.TabName),
 	))
 }
 
-// Index implements the opt.Index interface for testing purposes.
+// Index implements the v.Index interface for testing purposes.
 type Index struct {
-	Name    string
-	Columns []opt.IndexColumn
+	IdxName string
+
+	// Ordinal is the ordinal of this index in the table.
+	Ordinal int
 
 	// KeyCount is the number of columns that make up the unique key for the
-	// index. See the opt.Index.KeyColumnCount for more details.
+	// index. See the cat.Index.KeyColumnCount for more details.
 	KeyCount int
 
 	// LaxKeyCount is the number of columns that make up a lax key for the
 	// index, which allows duplicate rows when at least one of the values is
-	// NULL. See the opt.Index.LaxKeyColumnCount for more details.
+	// NULL. See the cat.Index.LaxKeyColumnCount for more details.
 	LaxKeyCount int
 
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
+
+	Columns []cat.IndexColumn
+
+	// table is a back reference to the table this index is on.
+	table *Table
+
+	// foreignKey is a struct representing an outgoing foreign key
+	// reference. If fkSet is true, then foreignKey is a valid
+	// index reference.
+	foreignKey cat.ForeignKeyReference
+	fkSet      bool
 }
 
-// IdxName is part of the opt.Index interface.
-func (ti *Index) IdxName() string {
-	return ti.Name
+// ID is part of the cat.Index interface.
+func (ti *Index) ID() cat.StableID {
+	return 1 + cat.StableID(ti.Ordinal)
 }
 
-// IsInverted is part of the opt.Index interface.
+// Name is part of the cat.Index interface.
+func (ti *Index) Name() string {
+	return ti.IdxName
+}
+
+// Table is part of the cat.Index interface.
+func (ti *Index) Table() cat.Table {
+	return ti.table
+}
+
+// IsInverted is part of the cat.Index interface.
 func (ti *Index) IsInverted() bool {
 	return ti.Inverted
 }
 
-// ColumnCount is part of the opt.Index interface.
+// ColumnCount is part of the cat.Index interface.
 func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)
 }
 
-// KeyColumnCount is part of the opt.Index interface.
+// KeyColumnCount is part of the cat.Index interface.
 func (ti *Index) KeyColumnCount() int {
 	return ti.KeyCount
 }
 
-// LaxKeyColumnCount is part of the opt.Index interface.
+// LaxKeyColumnCount is part of the cat.Index interface.
 func (ti *Index) LaxKeyColumnCount() int {
 	return ti.LaxKeyCount
 }
 
-// Column is part of the opt.Index interface.
-func (ti *Index) Column(i int) opt.IndexColumn {
+// Column is part of the cat.Index interface.
+func (ti *Index) Column(i int) cat.IndexColumn {
 	return ti.Columns[i]
 }
 
-// Column implements the opt.Column interface for testing purposes.
-type Column struct {
-	Hidden   bool
-	Nullable bool
-	Name     string
-	Type     types.T
+// ForeignKey is part of the cat.Index interface.
+func (ti *Index) ForeignKey() (cat.ForeignKeyReference, bool) {
+	return ti.foreignKey, ti.fkSet
 }
 
-var _ opt.Column = &Column{}
+// Column implements the cat.Column interface for testing purposes.
+type Column struct {
+	Ordinal      int
+	Hidden       bool
+	Nullable     bool
+	Name         string
+	Type         types.T
+	DefaultExpr  *string
+	ComputedExpr *string
+}
 
-// IsNullable is part of the opt.Column interface.
+var _ cat.Column = &Column{}
+
+// ColID is part of the cat.Index interface.
+func (tc *Column) ColID() cat.StableID {
+	return 1 + cat.StableID(tc.Ordinal)
+}
+
+// IsNullable is part of the cat.Column interface.
 func (tc *Column) IsNullable() bool {
 	return tc.Nullable
 }
 
-// ColName is part of the opt.Column interface.
-func (tc *Column) ColName() opt.ColumnName {
-	return opt.ColumnName(tc.Name)
+// ColName is part of the cat.Column interface.
+func (tc *Column) ColName() tree.Name {
+	return tree.Name(tc.Name)
 }
 
-// DatumType is part of the opt.Column interface.
+// DatumType is part of the cat.Column interface.
 func (tc *Column) DatumType() types.T {
 	return tc.Type
 }
 
-// IsHidden is part of the opt.Column interface.
+// ColTypeStr is part of the cat.Column interface.
+func (tc *Column) ColTypeStr() string {
+	t, err := coltypes.DatumTypeToColumnType(tc.Type)
+	if err != nil {
+		panic(err)
+	}
+	return t.String()
+}
+
+// IsHidden is part of the cat.Column interface.
 func (tc *Column) IsHidden() bool {
 	return tc.Hidden
 }
 
-// TableStat implements the opt.TableStatistic interface for testing purposes.
+// HasDefault is part of the cat.Column interface.
+func (tc *Column) HasDefault() bool {
+	return tc.DefaultExpr != nil
+}
+
+// IsComputed is part of the cat.Column interface.
+func (tc *Column) IsComputed() bool {
+	return tc.ComputedExpr != nil
+}
+
+// DefaultExprStr is part of the cat.Column interface.
+func (tc *Column) DefaultExprStr() string {
+	return *tc.DefaultExpr
+}
+
+// ComputedExprStr is part of the cat.Column interface.
+func (tc *Column) ComputedExprStr() string {
+	return *tc.ComputedExpr
+}
+
+// TableStat implements the cat.TableStatistic interface for testing purposes.
 type TableStat struct {
 	js stats.JSONStatistic
 	tt *Table
 }
 
-var _ opt.TableStatistic = &TableStat{}
+var _ cat.TableStatistic = &TableStat{}
 
-// CreatedAt is part of the opt.TableStatistic interface.
+// CreatedAt is part of the cat.TableStatistic interface.
 func (ts *TableStat) CreatedAt() time.Time {
-	d, err := tree.ParseDTimestamp(ts.js.CreatedAt, time.Microsecond)
+	d, err := tree.ParseDTimestamp(nil, ts.js.CreatedAt, time.Microsecond)
 	if err != nil {
 		panic(err)
 	}
 	return d.Time
 }
 
-// ColumnCount is part of the opt.TableStatistic interface.
+// ColumnCount is part of the cat.TableStatistic interface.
 func (ts *TableStat) ColumnCount() int {
 	return len(ts.js.Columns)
 }
 
-// ColumnOrdinal is part of the opt.TableStatistic interface.
+// ColumnOrdinal is part of the cat.TableStatistic interface.
 func (ts *TableStat) ColumnOrdinal(i int) int {
 	return ts.tt.FindOrdinal(ts.js.Columns[i])
 }
 
-// RowCount is part of the opt.TableStatistic interface.
+// RowCount is part of the cat.TableStatistic interface.
 func (ts *TableStat) RowCount() uint64 {
 	return ts.js.RowCount
 }
 
-// DistinctCount is part of the opt.TableStatistic interface.
+// DistinctCount is part of the cat.TableStatistic interface.
 func (ts *TableStat) DistinctCount() uint64 {
 	return ts.js.DistinctCount
 }
 
-// NullCount is part of the opt.TableStatistic interface.
+// NullCount is part of the cat.TableStatistic interface.
 func (ts *TableStat) NullCount() uint64 {
 	return ts.js.NullCount
 }

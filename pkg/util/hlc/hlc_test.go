@@ -536,3 +536,32 @@ func TestResetAndRefreshHLCUpperBound(t *testing.T) {
 		})
 	}
 }
+
+func TestLateStartForwardClockJump(t *testing.T) {
+	// Regression test for https://github.com/cockroachdb/cockroach/issues/28367
+	//
+	// Previously, if the clock offset monitor were started a long time
+	// after the last call to hlc.Clock.Now, that time would register as
+	// a forward clock jump (because the background goroutine to keep
+	// the HLC clock fresh was not yet running).
+	m := NewManualClock(1)
+	c := NewClock(m.UnixNano, 500*time.Millisecond)
+	c.Now()
+	m.Increment(int64(time.Second))
+
+	// Control channels for the clock monitor: active it immediately,
+	// then wait for the first tick. We use a real ticker because the
+	// interfaces involved are not very mock-friendly.
+	activeCh := make(chan bool, 1)
+	activeCh <- true
+	tickedCh := make(chan struct{}, 1)
+	ticked := func() {
+		tickedCh <- struct{}{}
+	}
+	if err := c.StartMonitoringForwardClockJumps(activeCh, time.NewTicker, ticked); err != nil {
+		t.Fatal(err)
+	}
+	<-tickedCh
+	c.Now()
+
+}

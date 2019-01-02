@@ -2,8 +2,8 @@
 
 statement ok
 CREATE TABLE kv (
-  k CHAR PRIMARY KEY,
-  v CHAR,
+  k VARCHAR PRIMARY KEY,
+  v VARCHAR,
   UNIQUE INDEX a (v),
   FAMILY (k),
   FAMILY (v)
@@ -295,23 +295,23 @@ CREATE TABLE select_t (x INT, v INT)
 # Check that INSERT supports ORDER BY (MySQL extension)
 query TTT
 SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
+EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 10
 ]
 ----
-count                     ·          ·
- └── insert               ·          ·
-      │                   into       insert_t(x, v, rowid)
-      │                   default 0  NULL
-      │                   default 1  NULL
-      │                   default 2  unique_rowid()
-      └── sort            ·          ·
-           │              order      -v
-           └── render     ·          ·
-                │         render 0   test.public.select_t.x
-                │         render 1   test.public.select_t.v
-                └── scan  ·          ·
-·                         table      select_t@primary
-·                         spans      ALL
+count                          ·         ·
+ └── insert                    ·         ·
+      │                        into      insert_t(x, v, rowid)
+      └── render               ·         ·
+           │                   render 0  x
+           │                   render 1  v
+           │                   render 2  unique_rowid()
+           └── limit           ·         ·
+                │              count     10
+                └── sort       ·         ·
+                     │         order     -v
+                     └── scan  ·         ·
+·                              table     select_t@primary
+·                              spans     ALL
 
 # Check that INSERT supports LIMIT (MySQL extension)
 query TTT
@@ -319,68 +319,142 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ]
 ----
-count                     ·          ·
- └── insert               ·          ·
-      │                   into       insert_t(x, v, rowid)
-      │                   default 0  NULL
-      │                   default 1  NULL
-      │                   default 2  unique_rowid()
-      └── limit           ·          ·
-           │              count      1
-           └── render     ·          ·
-                │         render 0   test.public.select_t.x
-                │         render 1   test.public.select_t.v
-                └── scan  ·          ·
-·                         table      select_t@primary
-·                         spans      ALL
-·                         limit      1
+count                ·         ·
+ └── insert          ·         ·
+      │              into      insert_t(x, v, rowid)
+      └── render     ·         ·
+           │         render 0  x
+           │         render 1  v
+           │         render 2  unique_rowid()
+           └── scan  ·         ·
+·                    table     select_t@primary
+·                    spans     ALL
+·                    limit     1
 
 # Check the grouping of LIMIT and ORDER BY
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
 ----
-count                  ·     ·
- └── insert            ·     ·
-      │                into  insert_t(x, v, rowid)
-      └── limit        ·     ·
-           └── values  ·     ·
-·                      size  2 columns, 2 rows
+count                       ·      ·
+ └── insert                 ·      ·
+      │                     into   insert_t(x, v, rowid)
+      └── render            ·      ·
+           └── limit        ·      ·
+                │           count  1
+                └── values  ·      ·
+·                           size   2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 ----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
+count                            ·      ·
+ └── insert                      ·      ·
+      │                          into   insert_t(x, v, rowid)
+      └── render                 ·      ·
+           └── limit             ·      ·
+                │                count  1
+                └── sort         ·      ·
+                     │           order  +column2
+                     └── values  ·      ·
+·                                size   2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 ----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
+count                            ·      ·
+ └── insert                      ·      ·
+      │                          into   insert_t(x, v, rowid)
+      └── render                 ·      ·
+           └── limit             ·      ·
+                │                count  1
+                └── sort         ·      ·
+                     │           order  +column2
+                     └── values  ·      ·
+·                                size   2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
 ----
-count                       ·         ·
- └── insert                 ·         ·
-      │                     into      insert_t(x, v, rowid)
-      └── limit             ·         ·
-           └── sort         ·         ·
-                │           order     +column2
-                │           strategy  top 1
-                └── values  ·         ·
-·                           size      2 columns, 2 rows
+count                            ·      ·
+ └── insert                      ·      ·
+      │                          into   insert_t(x, v, rowid)
+      └── render                 ·      ·
+           └── limit             ·      ·
+                │                count  1
+                └── sort         ·      ·
+                     │           order  +column2
+                     └── values  ·      ·
+·                                size   2 columns, 2 rows
+
+# ORDER BY expression that's not inserted into table.
+query TTTTT
+EXPLAIN (VERBOSE)
+INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETURNING x+v
+----
+render                                   ·         ·                      ("?column?")                   ·
+ │                                       render 0  x + v                  ·                              ·
+ └── run                                 ·         ·                      (x, v, rowid[hidden])          ·
+      └── insert                         ·         ·                      (x, v, rowid[hidden])          ·
+           │                             into      insert_t(x, v, rowid)  ·                              ·
+           └── render                    ·         ·                      (length, "?column?", column9)  ·
+                │                        render 0  length                 ·                              ·
+                │                        render 1  "?column?"             ·                              ·
+                │                        render 2  unique_rowid()         ·                              ·
+                └── limit                ·         ·                      (length, "?column?", column8)  +column8
+                     │                   count     10                     ·                              ·
+                     └── sort            ·         ·                      (length, "?column?", column8)  +column8
+                          │              order     +column8               ·                              ·
+                          └── render     ·         ·                      (length, "?column?", column8)  ·
+                               │         render 0  length(k)              ·                              ·
+                               │         render 1  2                      ·                              ·
+                               │         render 2  k || v                 ·                              ·
+                               └── scan  ·         ·                      (k, v)                         ·
+·                                        table     kv@primary             ·                              ·
+·                                        spans     ALL                    ·                              ·
+
+# ------------------------------------------------------------------------------
+# Insert rows into table during schema changes.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE mutation(x INT, y INT NOT NULL DEFAULT(10)); INSERT INTO mutation VALUES (1, 1)
+
+statement ok
+BEGIN; ALTER TABLE mutation DROP COLUMN y
+
+# Ensure that default value is still inserted into y, since y is write-only.
+query TTTTT
+EXPLAIN (VERBOSE) INSERT INTO mutation(x) VALUES (2) RETURNING *
+----
+render                 ·              ·                      (x)                          ·
+ │                     render 0       x                      ·                            ·
+ └── run               ·              ·                      (x, rowid[hidden])           ·
+      └── insert       ·              ·                      (x, rowid[hidden])           ·
+           │           into           mutation(x, rowid, y)  ·                            ·
+           └── values  ·              ·                      (column1, column5, column6)  ·
+·                      size           3 columns, 1 row       ·                            ·
+·                      row 0, expr 0  2                      ·                            ·
+·                      row 0, expr 1  unique_rowid()         ·                            ·
+·                      row 0, expr 2  10                     ·                            ·
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN; ALTER TABLE mutation ADD COLUMN z INT AS (x + y) STORED
+
+# Ensure that value is *not* inserted into z, since z is delete-only.
+query TTTTT
+EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
+----
+count             ·              ·                      ()                           ·
+ └── insert       ·              ·                      ()                           ·
+      │           into           mutation(x, y, rowid)  ·                            ·
+      └── values  ·              ·                      (column1, column2, column7)  ·
+·                 size           3 columns, 1 row       ·                            ·
+·                 row 0, expr 0  2                      ·                            ·
+·                 row 0, expr 1  2                      ·                            ·
+·                 row 0, expr 2  unique_rowid()         ·                            ·
+
+statement ok
+ROLLBACK

@@ -54,8 +54,3 @@ func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 
 // VisitPost satisfies the Visitor interface.
 func (*IsAggregateVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
-
-// Reset clear the IsAggregateVisitor's internal state.
-func (v *IsAggregateVisitor) Reset() {
-	v.Aggregated = false
-}

@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -34,9 +34,10 @@ import (
 func TestServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-	conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(context.Background())
+	defer s.Stopper().Stop(ctx)
+	conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,39 +50,40 @@ func TestServer(t *testing.T) {
 
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	ts := TableReaderSpec{
+	ts := distsqlpb.TableReaderSpec{
 		Table:    *td,
 		IndexIdx: 0,
 		Reverse:  false,
-		Spans:    []TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+		Spans:    []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
 	}
-	post := PostProcessSpec{
-		Filter:        Expression{Expr: "@1 != 2"}, // a != 2
+	post := distsqlpb.PostProcessSpec{
+		Filter:        distsqlpb.Expression{Expr: "@1 != 2"}, // a != 2
 		Projection:    true,
 		OutputColumns: []uint32{0, 1}, // a
 	}
 
-	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
-	txnCoordMeta := roachpb.MakeTxnCoordMeta(*txn.Proto())
+	txn := client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn)
+	txnCoordMeta := txn.GetTxnCoordMeta(ctx)
+	txnCoordMeta.StripRootToLeaf()
 
-	req := &SetupFlowRequest{Version: Version, TxnCoordMeta: &txnCoordMeta}
-	req.Flow = FlowSpec{
-		Processors: []ProcessorSpec{{
-			Core: ProcessorCoreUnion{TableReader: &ts},
+	req := &distsqlpb.SetupFlowRequest{Version: Version, TxnCoordMeta: &txnCoordMeta}
+	req.Flow = distsqlpb.FlowSpec{
+		Processors: []distsqlpb.ProcessorSpec{{
+			Core: distsqlpb.ProcessorCoreUnion{TableReader: &ts},
 			Post: post,
-			Output: []OutputRouterSpec{{
-				Type:    OutputRouterSpec_PASS_THROUGH,
-				Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+			Output: []distsqlpb.OutputRouterSpec{{
+				Type:    distsqlpb.OutputRouterSpec_PASS_THROUGH,
+				Streams: []distsqlpb.StreamEndpointSpec{{Type: distsqlpb.StreamEndpointSpec_SYNC_RESPONSE}},
 			}},
 		}},
 	}
 
-	distSQLClient := NewDistSQLClient(conn)
-	stream, err := distSQLClient.RunSyncFlow(context.Background())
+	distSQLClient := distsqlpb.NewDistSQLClient(conn)
+	stream, err := distSQLClient.RunSyncFlow(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := stream.Send(&ConsumerSignal{SetupFlowRequest: req}); err != nil {
+	if err := stream.Send(&distsqlpb.ConsumerSignal{SetupFlowRequest: req}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -115,7 +117,7 @@ func TestServer(t *testing.T) {
 	// Verify version handling.
 	t.Run("version", func(t *testing.T) {
 		testCases := []struct {
-			version     DistSQLVersion
+			version     distsqlpb.DistSQLVersion
 			expectedErr string
 		}{
 			{
@@ -133,13 +135,13 @@ func TestServer(t *testing.T) {
 		}
 		for _, tc := range testCases {
 			t.Run(fmt.Sprintf("%d", tc.version), func(t *testing.T) {
-				distSQLClient := NewDistSQLClient(conn)
+				distSQLClient := distsqlpb.NewDistSQLClient(conn)
 				stream, err := distSQLClient.RunSyncFlow(context.Background())
 				if err != nil {
 					t.Fatal(err)
 				}
 				req.Version = tc.version
-				if err := stream.Send(&ConsumerSignal{SetupFlowRequest: req}); err != nil {
+				if err := stream.Send(&distsqlpb.ConsumerSignal{SetupFlowRequest: req}); err != nil {
 					t.Fatal(err)
 				}
 				_, err = stream.Recv()
@@ -160,7 +162,7 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	var v DistSQLVersionGossipInfo
+	var v distsqlpb.DistSQLVersionGossipInfo
 	if err := s.Gossip().GetInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(s.NodeID()), &v,
 	); err != nil {

@@ -219,16 +219,16 @@ query TT
 SHOW CREATE TABLE t7
 ----
 t7  CREATE TABLE t7 (
-      x INT NULL,
-      y INT NULL,
-      z INT NULL,
-      FAMILY "primary" (x, y, z, rowid),
-      CONSTRAINT check_x CHECK (x > 0),
-      CONSTRAINT check_x_y CHECK ((x + y) > 0),
-      CONSTRAINT check_y_z CHECK ((y + z) > 0),
-      CONSTRAINT check_y_z1 CHECK ((y + z) = 0),
-      CONSTRAINT named_constraint CHECK (z = 1)
-    )
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    FAMILY "primary" (x, y, z, rowid),
+    CONSTRAINT check_x CHECK (x > 0),
+    CONSTRAINT check_x_y CHECK ((x + y) > 0),
+    CONSTRAINT check_y_z CHECK ((y + z) > 0),
+    CONSTRAINT check_y_z1 CHECK ((y + z) = 0),
+    CONSTRAINT named_constraint CHECK (z = 1)
+)
 
 # Check that table references are dequalified in their stored representation.
 
@@ -256,12 +256,12 @@ query TT
 SHOW CREATE TABLE t8
 ----
 t8  CREATE TABLE t8 (
-      a INT NULL,
-      FAMILY "primary" (a, rowid),
-      CONSTRAINT check_a CHECK (a > 0),
-      CONSTRAINT check_a1 CHECK (a > 0),
-      CONSTRAINT check_a2 CHECK (a > 0)
-    )
+    a INT8 NULL,
+    FAMILY "primary" (a, rowid),
+    CONSTRAINT check_a CHECK (a > 0),
+    CONSTRAINT check_a1 CHECK (a > 0),
+    CONSTRAINT check_a2 CHECK (a > 0)
+)
 
 statement ok
 CREATE DATABASE test2
@@ -273,3 +273,38 @@ CREATE TABLE test2.t (
   CHECK (t.a > 0),
   CHECK (test2.t.a > 0)
 )
+
+# Use multiple column families.
+
+statement ok
+CREATE TABLE t9 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d, e),
+  CHECK (a > b),
+  CHECK (d IS NULL)
+)
+
+statement ok
+INSERT INTO t9 VALUES (5, 3)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+INSERT INTO t9 VALUES (6, 7)
+
+statement ok
+UPDATE t9 SET b = 4 WHERE a = 5
+
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+UPDATE t9 SET b = 6 WHERE a = 5
+
+statement ok
+UPDATE t9 SET a = 7 WHERE a = 4
+
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+UPDATE t9 SET a = 2 WHERE a = 5

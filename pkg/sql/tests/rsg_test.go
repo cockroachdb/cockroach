@@ -27,8 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -40,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -48,19 +47,14 @@ var (
 	flagRSGExecTimeout = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
 )
 
-func parseStatementList(sql string) (tree.StatementList, error) {
-	var p parser.Parser
-	return p.Parse(sql)
-}
-
 func verifyFormat(sql string) error {
-	stmts, err := parseStatementList(sql)
+	stmts, _, err := parser.Parse(sql)
 	if err != nil {
 		// Cannot serialize a statement list without parsing it.
 		return nil
 	}
 	formattedSQL := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
-	formattedStmts, err := parseStatementList(formattedSQL)
+	formattedStmts, _, err := parser.Parse(formattedSQL)
 	if err != nil {
 		return errors.Wrapf(err, "cannot parse output of Format: sql=%q, formattedSQL=%q", sql, formattedSQL)
 	}
@@ -124,7 +118,30 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 		b := make([]byte, 1024*1024)
 		n := runtime.Stack(b, true)
 		fmt.Printf("%s\n", b[:n])
-		panic(errors.Errorf("timeout: %q. currently executing: %v", sql, db.mu.active))
+		// Now see if we can execute a SELECT 1. This is useful because sometimes an
+		// exec timeout is because of a slow-executing statement, and other times
+		// it's because the server is completely wedged. This is an automated way
+		// to find out.
+		errch := make(chan error, 1)
+		go func() {
+			rows, err := db.db.Query(`SELECT 1`)
+			if err == nil {
+				rows.Close()
+			}
+			errch <- err
+		}()
+		select {
+		case <-time.After(5 * time.Second):
+			fmt.Println("SELECT 1 timeout: probably a wedged server")
+		case err := <-errch:
+			if err != nil {
+				fmt.Println("SELECT 1 execute error:", err)
+			} else {
+				fmt.Println("SELECT 1 executed successfully: probably a slow statement")
+			}
+		}
+		fmt.Printf("timeout: %q. currently executing: %v\n", sql, db.mu.active)
+		panic("statement exec timeout")
 	}
 }
 
@@ -148,6 +165,9 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		}
 		if strings.Contains(s, "READ ONLY") || strings.Contains(s, "read_only") {
 			return errors.New("READ ONLY settings are unsupported")
+		}
+		if strings.Contains(s, "REVOKE") || strings.Contains(s, "GRANT") {
+			return errors.New("REVOKE and GRANT are unsupported")
 		}
 		// Recreate the database on every run in case it was dropped or renamed in
 		// a previous run. Should always succeed.
@@ -272,6 +292,9 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 		"create_database_stmt",
 		"drop_database_stmt",
 		"alter_rename_database_stmt",
+		"create_user_stmt",
+		"drop_user_stmt",
+		"alter_user_stmt",
 	}
 
 	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB) error {

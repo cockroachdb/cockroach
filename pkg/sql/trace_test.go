@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 func TestTrace(t *testing.T) {
@@ -70,10 +71,13 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
+				"flow",
 				"session recording",
 				"sql txn",
+				"table reader",
 				"consuming rows",
-				"dist sender",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
@@ -124,13 +128,14 @@ func TestTrace(t *testing.T) {
 				"flow",
 				"table reader",
 				"consuming rows",
-				"dist sender",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 			// Depending on whether the data is local or not, we may not see these
 			// spans.
 			optionalSpans: []string{
-				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
+				"/cockroach.sql.distsqlpb.DistSQL/SetupFlow",
 				"noop",
 			},
 		},
@@ -143,7 +148,7 @@ func TestTrace(t *testing.T) {
 				// TODO(justin): remove this and make sure the new results make sense.
 				// The optimizer elides some renders that the heuristic planner does
 				// not which makes the results different.
-				if _, err := sqlDB.Exec("SET EXPERIMENTAL_OPT = OFF"); err != nil {
+				if _, err := sqlDB.Exec("SET OPTIMIZER = OFF"); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
@@ -154,10 +159,13 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
+				"flow",
 				"session recording",
 				"sql txn",
+				"table reader",
 				"consuming rows",
-				"dist sender",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
@@ -170,7 +178,7 @@ func TestTrace(t *testing.T) {
 				// TODO(justin): remove this and make sure the new results make sense.
 				// The optimizer elides some renders that the heuristic planner does
 				// not which makes the results different.
-				if _, err := sqlDB.Exec("SET experimental_opt = off"); err != nil {
+				if _, err := sqlDB.Exec("SET OPTIMIZER = off"); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
@@ -186,13 +194,14 @@ func TestTrace(t *testing.T) {
 				"flow",
 				"table reader",
 				"consuming rows",
-				"dist sender",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 			// Depending on whether the data is local or not, we may not see these
 			// spans.
 			optionalSpans: []string{
-				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
+				"/cockroach.sql.distsqlpb.DistSQL/SetupFlow",
 				"noop",
 			},
 		},
@@ -215,7 +224,7 @@ func TestTrace(t *testing.T) {
 						"WHERE message LIKE '%1 DelRng%' ORDER BY op")
 			},
 			expSpans: []string{
-				"dist sender",
+				"dist sender send",
 				"kv.DistSender: sending partial batch",
 				"/cockroach.roachpb.Internal/Batch",
 			},
@@ -230,6 +239,9 @@ func TestTrace(t *testing.T) {
 	clusterDB := cluster.ServerConn(0)
 	if _, err := clusterDB.Exec(`
 		CREATE DATABASE test;
+
+		-- Prevent the merge queue from immediately discarding our splits.
+		SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
 
 		--- test.foo is a single range table.
 		CREATE TABLE test.foo (id INT PRIMARY KEY);
@@ -326,8 +338,7 @@ func TestTrace(t *testing.T) {
 								if r >= len(test.expSpans) {
 									t.Errorf("extra span: %s", op)
 									remainingErr = true
-								}
-								if op != test.expSpans[r] {
+								} else if op != test.expSpans[r] {
 									t.Errorf("expected span: %q, got: %q", test.expSpans[r], op)
 									remainingErr = true
 								}
@@ -370,7 +381,7 @@ func TestTraceFieldDecomposition(t *testing.T) {
 					if strings.Contains(stmt, query) {
 						// We need to check a tag containing brackets (e.g. an
 						// IPv6 address).  See #18558.
-						taggedCtx := log.WithLogTag(ctx, "hello", "[::666]")
+						taggedCtx := logtags.AddTag(ctx, "hello", "[::666]")
 						// We use log.Infof here (instead of log.Event) to ensure
 						// the trace message contains also a file name prefix. See
 						// #19453/#20085.
@@ -500,17 +511,11 @@ func TestKVTraceWithCountStar(t *testing.T) {
 	r.Exec(t, "SET tracing = on,kv; SELECT count(*) FROM test.a; SET tracing = off")
 }
 
-// Test that spans are collected from RPC that returned (structured) errors, in
-// addition to the spans from the successful retry of the RPC.
-func TestTraceFromErrorReplica(t *testing.T) {
+func TestKVTraceDistSQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// We're going to set up a scenario in which a node is not aware of the
-	// leaseholder for a range: the replicas are on n1,n2,n3 with the lease on n2.
-	// A query originating from n4 will initially contact n1, which will redirect
-	// to n2. We test that we have collected the spans from n1.
-
-	const numNodes = 4
+	// Test that kv tracing works in distsql.
+	const numNodes = 2
 	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
@@ -518,43 +523,34 @@ func TestTraceFromErrorReplica(t *testing.T) {
 		},
 	})
 	defer cluster.Stopper().Stop(context.TODO())
-	clusterDB := cluster.ServerConn(0)
-	n4 := cluster.ServerConn(3)
 
-	if _, err := clusterDB.Exec(`
-		CREATE DATABASE test;
-		CREATE TABLE test.foo (id INT PRIMARY KEY);
-	`); err != nil {
-		t.Fatal(err)
+	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
+	r.Exec(t, "CREATE DATABASE test")
+	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
+	r.Exec(t, "INSERT INTO test.a VALUES (1,1), (2,2)")
+	r.Exec(t, "ALTER TABLE a SPLIT AT VALUES(1)")
+	r.Exec(t, "SET tracing = on,kv; SELECT count(*) FROM test.a; SET tracing = off")
+
+	for node := 0; node < 2; node++ {
+		rows := r.Query(t,
+			fmt.Sprintf(`SELECT tag
+			 FROM [SHOW KV TRACE FOR SESSION]
+			 WHERE tag LIKE '%%%d%%'`, node))
+		if !rows.Next() {
+			t.Fatalf("no message from n%d found", node)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	// Do a read on the table through n4 so that it populates its lease cache.
-	if _, err := n4.Exec("SELECT * FROM foo"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Replicate foo on n1,n2,n3 with the lease on n2.
-	if _, err := clusterDB.Exec(`
-		ALTER TABLE test.foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[2,1,3], 1);
-	`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Query through n4 and look for a redirect log message from n1.
-	if _, err := n4.Exec("SET tracing = on; SELECT * FROM foo; SET tracing = off"); err != nil {
-		t.Fatal(err)
-	}
-	rows, err := n4.Query(
-		`SELECT tag, message
-			 FROM [SHOW TRACE FOR SESSION]
-				WHERE tag LIKE '%n1%' AND
-						 message LIKE '%NotLeaseHolderError%'
-		`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
+	rows := r.Query(t, `SELECT *
+           FROM [SHOW KV TRACE FOR SESSION]
+           WHERE MESSAGE LIKE '%fetched: %'`)
 	if !rows.Next() {
-		t.Fatal("no redirect message from n1 found")
+		t.Fatal("No kv messages found")
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
 	}
 }

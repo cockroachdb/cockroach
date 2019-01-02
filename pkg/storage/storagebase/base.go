@@ -22,6 +22,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+)
+
+// MergeQueueEnabled is a setting that controls whether the merge queue is
+// enabled.
+var MergeQueueEnabled = settings.RegisterBoolSetting(
+	"kv.range_merge.queue_enabled",
+	"whether the automatic merge queue is enabled",
+	true,
 )
 
 // TxnCleanupThreshold is the threshold after which a transaction is
@@ -49,14 +59,14 @@ type FilterArgs struct {
 // ProposalFilterArgs groups the arguments to ReplicaProposalFilter.
 type ProposalFilterArgs struct {
 	Ctx   context.Context
-	Cmd   RaftCommand
+	Cmd   storagepb.RaftCommand
 	CmdID CmdIDKey
 	Req   roachpb.BatchRequest
 }
 
 // ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
 type ApplyFilterArgs struct {
-	ReplicatedEvalResult
+	storagepb.ReplicatedEvalResult
 	CmdID   CmdIDKey
 	RangeID roachpb.RangeID
 	StoreID roachpb.StoreID
@@ -69,9 +79,8 @@ func (f *FilterArgs) InRaftCmd() bool {
 }
 
 // ReplicaRequestFilter can be used in testing to influence the error returned
-// from a request before it is evaluated. Notably, the filter is run before the
-// request is added to the CommandQueue, so blocking in the filter will not
-// block interfering requests.
+// from a request before it is evaluated. Return nil to continue with regular
+// processing or non-nil to terminate processing with the returned error.
 type ReplicaRequestFilter func(roachpb.BatchRequest) *roachpb.Error
 
 // ReplicaCommandFilter may be used in tests through the StoreTestingKnobs to
@@ -92,28 +101,6 @@ type ReplicaApplyFilter func(args ApplyFilterArgs) *roachpb.Error
 // response returned to a waiting client after a replica command has
 // been processed. This filter is invoked only by the command proposer.
 type ReplicaResponseFilter func(roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
-
-// CommandQueueAction is an action taken by a BatchRequest's batchCmdSet on the
-// CommandQueue.
-type CommandQueueAction int
-
-const (
-	// CommandQueueWaitForPrereqs represents the state of a batchCmdSet when it
-	// has just inserted itself into the CommandQueue and is beginning to wait
-	// for prereqs to finish execution.
-	CommandQueueWaitForPrereqs CommandQueueAction = iota
-	// CommandQueueCancellation represents the state of a batchCmdSet when it
-	// is canceled while waiting for prerequisites to finish and is forced to
-	// remove itself from the CommandQueue without executing.
-	CommandQueueCancellation
-	// CommandQueueBeginExecuting represents the state of a batchCmdSet when it
-	// has finished waiting for all prereqs to finish execution and is now free
-	// to execute itself.
-	CommandQueueBeginExecuting
-	// CommandQueueFinishExecuting represents the state of a batchCmdSet when it
-	// has finished executing and will remove itself from the CommandQueue.
-	CommandQueueFinishExecuting
-)
 
 // ContainsKey returns whether this range contains the specified key.
 func ContainsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {

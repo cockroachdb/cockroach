@@ -10,7 +10,7 @@ CREATE TABLE t (
   c INT,
   d INT,
   INDEX b_idx (b) STORING (c, d),
-  UNIQUE INDEX c_idx (c) STORING (a, b, d)
+  UNIQUE INDEX c_idx (c) STORING (b, d)
 )
 
 query TTBITTBB colnames
@@ -23,9 +23,9 @@ t           b_idx       true        2             c            N/A        true  
 t           b_idx       true        3             d            N/A        true     false
 t           b_idx       true        4             a            ASC        false    true
 t           c_idx       false       1             c            ASC        false    false
-t           c_idx       false       2             a            N/A        true     false
-t           c_idx       false       3             b            N/A        true     false
-t           c_idx       false       4             d            N/A        true     false
+t           c_idx       false       2             b            N/A        true     false
+t           c_idx       false       3             d            N/A        true     false
+t           c_idx       false       4             a            ASC        false    true
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
@@ -47,13 +47,13 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /t/c_idx/3 -> /1/2/4
+fetched: /t/c_idx/3/b/d -> /2/4
 output row: [1 2 3 4]
 
 # Test index backfill for UNIQUE and non-UNIQUE indexes with STORING columns.
 
 statement ok
-CREATE INDEX d_idx ON t (d) STORING (a, b)
+CREATE INDEX d_idx ON t (d) STORING (b)
 
 statement ok
 SET tracing = on,kv,results; SELECT a, b, d FROM t@d_idx; SET tracing = off
@@ -191,7 +191,7 @@ CREATE TABLE computed (
   k INT PRIMARY KEY,
   a JSON,
   b TEXT AS (a->>'q') STORED,
-  INDEX (b) STORING (k)
+  INDEX (b)
 )
 
 query TTT
@@ -225,7 +225,7 @@ INSERT INTO dt VALUES
   ('2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
 
 statement ok
-SET tracing = on,kv,results; SELECT * FROM dt WHERE a = '2015-08-25 06:45:45.53453+02:00'::timestamp; SET tracing = off
+SET tracing = on,kv,results; SELECT * FROM dt WHERE a = '2015-08-25 04:45:45.53453+02:00'::timestamp; SET tracing = off
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
@@ -233,8 +233,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00' -> NULL
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/b -> '2015-08-25'
-fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/c -> '2h45m2s234ms'
-output row: ['2015-08-25 04:45:45.53453+00:00' '2015-08-25' '2h45m2s234ms']
+fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/c -> '02:45:02.234'
+output row: ['2015-08-25 04:45:45.53453+00:00' '2015-08-25' '02:45:02.234']
 
 statement ok
 SET tracing = on,kv,results; SELECT b FROM dt WHERE b < '2015-08-29'::date; SET tracing = off
@@ -253,10 +253,10 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /dt/dt_c_key/'2h45m2s234ms' -> /'2015-08-25 04:45:45.53453+00:00'
-output row: ['2h45m2s234ms']
-fetched: /dt/dt_c_key/'34h2s' -> /'2015-08-30 03:34:45.34567+00:00'
-output row: ['34h2s']
+fetched: /dt/dt_c_key/'02:45:02.234' -> /'2015-08-25 04:45:45.53453+00:00'
+output row: ['02:45:02.234']
+fetched: /dt/dt_c_key/'34:00:02' -> /'2015-08-30 03:34:45.34567+00:00'
+output row: ['34:00:02']
 
 # ------------------------------------------------------------------------------
 # Ensure that decimal values result in correct scan spans.
@@ -346,10 +346,11 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT * FROM dec2 WHERE isnan(d)
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  dec2@dec2_d_idx
-·          spans  ALL
+render     ·       ·
+ └── scan  ·       ·
+·          table   dec2@dec2_d_idx
+·          spans   ALL
+·          filter  isnan(d)
 
 # ------------------------------------------------------------------------------
 # Verify that lookups for Float NaN use indices when possible:
@@ -379,7 +380,227 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT * FROM flt WHERE isnan(f)
 ----
+render     ·       ·
+ └── scan  ·       ·
+·          table   flt@flt_f_key
+·          spans   ALL
+·          filter  isnan(f)
+
+# ------------------------------------------------------
+# Verify that multi-span point lookups are parallelized.
+# ------------------------------------------------------
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, item STRING, price FLOAT, UNIQUE INDEX item (item), UNIQUE INDEX p (price))
+
+statement ok
+CREATE TABLE b (a INT, b INT, c INT NULL, d INT NULL, PRIMARY KEY (a, b))
+
+# No parallel line printed out for single-span selects.
+query TTT
+EXPLAIN SELECT * FROM a WHERE a = 10
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /10-/10/#
+
+query TTT
+EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /10-/10/# /20-/20/#
+·     parallel  ·
+
+query TTT
+EXPLAIN SELECT * FROM a WHERE a IN (10, 20)
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /10-/10/# /20-/20/#
+·     parallel  ·
+
+# Verify that consolidated point spans are still parallelized.
+query TTT
+EXPLAIN SELECT * FROM a WHERE a in (10, 11)
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /10-/11/#
+·     parallel  ·
+
+query TTT
+EXPLAIN SELECT * FROM a WHERE a > 10 AND a < 20
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /11-/19/#
+·     parallel  ·
+
+# This ticks all the boxes for parallelization apart from the fact that there
+# is no end key in the span.
+query TTT
+EXPLAIN SELECT * FROM a WHERE a > 10
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /11-
+
+# Test non-int types.
+
+# Point queries on non-int types are parallel.
+query TTT
+EXPLAIN SELECT price FROM a WHERE item IN ('sock', 'ball')
+----
+render           ·         ·
+ └── index-join  ·         ·
+      ├── scan   ·         ·
+      │          table     a@item
+      │          spans     /"ball"-/"ball"/PrefixEnd /"sock"-/"sock"/PrefixEnd
+      │          parallel  ·
+      └── scan   ·         ·
+·                table     a@primary
+
+# Range queries on non-int types are not parallel due to unbounded number of
+# results.
+query TTT
+EXPLAIN SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND price < 40
+----
+render           ·         ·
+ └── index-join  ·         ·
+      ├── scan   ·         ·
+      │          table     a@p
+      │          spans     /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
+      │          filter    (price < 10.0) OR (price > 20.0)
+      └── scan   ·         ·
+·                table     a@primary
+
+# TODO(radu): fix this testcase after #31614 is resolved. There should be no filter left.
+query TTT
+EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
+----
+scan  ·         ·
+·     table     b@primary
+·     spans     /10/10-/10/10/# /20/20-/20/20/#
+·     parallel  ·
+·     filter    ((a = 10) AND (b = 10)) OR ((a = 20) AND (b = 20))
+
+# This one isn't parallelizable because it's not a point lookup - only part of
+# the primary key is specified.
+query TTT
+EXPLAIN SELECT * FROM b WHERE a = 10 OR a = 20
+----
+scan  ·      ·
+·     table  b@primary
+·     spans  /10-/11 /20-/21
+
+# This one isn't parallelizable because it has a LIMIT clause.
+query TTT
+EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
+----
+limit      ·      ·
+ │         count  1
+ └── scan  ·      ·
+·          table  a@primary
+·          spans  /10-/10/# /20-/20/#
+·          limit  1
+
+statement ok
+CREATE INDEX on b(b) STORING (c)
+
+# This one isn't parallelizable because its index isn't unique.
+query TTT
+EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
+----
 render     ·      ·
  └── scan  ·      ·
-·          table  flt@flt_f_key
-·          spans  ALL
+·          table  b@b_b_idx
+·          spans  /10-/11 /20-/21
+
+statement ok
+CREATE UNIQUE INDEX on b(c)
+
+# If the index has nullable values, parallelize only when the spans do not
+# specify any nulls.
+query TTT
+EXPLAIN SELECT c FROM b WHERE c = 10 OR c = 20
+----
+render     ·         ·
+ └── scan  ·         ·
+·          table     b@b_c_key
+·          spans     /10-/11 /20-/21
+·          parallel  ·
+
+query TTT
+EXPLAIN SELECT c FROM b WHERE c = 10 OR c < 2
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  b@b_c_key
+·          spans  /!NULL-/2 /10-/11
+
+statement ok
+CREATE UNIQUE INDEX on b(d DESC)
+
+# This scan is not parallelizable because the second span has a null in its end
+# key.
+query TTT
+EXPLAIN SELECT d FROM b WHERE d = 10 OR d < 2
+----
+render     ·       ·
+ └── scan  ·       ·
+·          table   b@b_d_key
+·          spans  /10-/9 /1-/NULL
+
+statement ok
+CREATE UNIQUE INDEX ON b(c, d)
+
+# This scan is not parallelizable because although the second column is
+# constrained, the first column is null.
+# TODO(radu): fix this testcase after #31614 is resolved. There should be no filter left.
+query TTT
+EXPLAIN SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
+----
+render     ·       ·
+ └── scan  ·       ·
+·          table   b@b_c_d_key
+·          spans   /NULL/1-/NULL/2 /10/10-/10/11
+·          filter  ((c = 10) AND (d = 10)) OR ((c IS NULL) AND (d < 2))
+
+statement ok
+CREATE UNIQUE INDEX on b(b) STORING (c)
+
+# This one is parallelizable because its index is unique and non-null.
+query TTT
+EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
+----
+render     ·         ·
+ └── scan  ·         ·
+·          table     b@b_b_key
+·          spans     /10-/11 /20-/21
+·          parallel  ·
+
+statement ok
+ALTER TABLE a SPLIT AT VALUES(5)
+
+# Run a select to prime the range cache to simplify the trace below.
+statement ok
+SELECT * FROM a
+
+# Make sure that the scan actually gets parallelized.
+statement ok
+SET tracing = on; SELECT * FROM a WHERE a = 0 OR a = 10; SET tracing = off
+
+# The span "sending partial batch" means that the scan was parallelized.
+# If this test is failing and doesn't have that span, it means that the scanNode
+# was improperly configured to add a limit to the ScanRequest batch.
+# See #30943 for more details.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN 
+    ('querying next range at /Table/63/1/0',
+     'querying next range at /Table/63/1/10',
+     '=== SPAN START: kv.DistSender: sending partial batch ==='
+    )
+----
+querying next range at /Table/63/1/0
+=== SPAN START: kv.DistSender: sending partial batch ===
+querying next range at /Table/63/1/10

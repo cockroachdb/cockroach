@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import _ from "lodash";
 import Long from "long";
 import React from "react";
@@ -13,8 +27,6 @@ import { nodeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
 import Loading from "src/views/shared/components/loading";
-
-import spinner from "assets/spinner.gif";
 
 type NodeProblems$Properties = protos.cockroach.server.serverpb.ProblemRangesResponse.INodeProblems;
 
@@ -186,14 +198,14 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
         <h1>Problem Ranges Report</h1>
         <Loading
           loading={isLoading(this.props.problemRanges)}
-          className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
-          image={spinner}
-        >
-          <div>
-            {this.renderReportBody()}
-            <ConnectionsTable problemRanges={this.props.problemRanges} />
-          </div>
-        </Loading>
+          error={this.props.problemRanges && this.props.problemRanges.lastError}
+          render={() => (
+            <div>
+              {this.renderReportBody()}
+              <ConnectionsTable problemRanges={this.props.problemRanges} />
+            </div>
+          )}
+        />
       </div>
     );
   }

@@ -24,14 +24,12 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc"
-
-	"golang.org/x/net/http2"
-
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"golang.org/x/net/http2"
+	"google.golang.org/grpc"
 )
 
 // ListenAndServeGRPC creates a listener and serves the specified grpc Server

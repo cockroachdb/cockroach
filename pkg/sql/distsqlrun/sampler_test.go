@@ -16,11 +16,12 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/axiomhq/hyperloglog"
-
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -49,11 +50,11 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
-	spec := &SamplerSpec{SampleSize: uint32(numSamples)}
-	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &PostProcessSpec{}, out)
+	spec := &distsqlpb.SamplerSpec{SampleSize: uint32(numSamples)}
+	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &distsqlpb.PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,27 +94,39 @@ func TestSampler(t *testing.T) {
 	// We run many samplings and record the frequencies.
 	numRows := 100
 	numSamples := 20
-	numRuns := 1000
+	minRuns := 200
+	maxRuns := 5000
 	delta := 0.5
 
 	freq := make([]int, numRows)
-	for r := 0; r < numRuns; r++ {
-		for _, v := range runSampler(t, numRows, numSamples) {
-			freq[v]++
+	var err error
+	// Instead of doing maxRuns and checking at the end, we do minRuns at a time
+	// and exit early. This speeds up the test.
+	for r := 0; r < maxRuns; r += minRuns {
+		for i := 0; i < minRuns; i++ {
+			for _, v := range runSampler(t, numRows, numSamples) {
+				freq[v]++
+			}
+		}
+
+		// The expected frequency of each row is f = numRuns * (numSamples / numRows).
+		f := float64(r) * float64(numSamples) / float64(numRows)
+
+		// Verify that no frequency is outside of the range (f / (1+delta), f * (1+delta));
+		// the probability of a given row violating this is subject to the Chernoff
+		// bound which decreases exponentially (with exponent f).
+		err = nil
+		for i := range freq {
+			if float64(freq[i]) < f/(1+delta) || float64(freq[i]) > f*(1+delta) {
+				err = fmt.Errorf("frequency %d out of bound (expected value %f)", freq[i], f)
+				break
+			}
+		}
+		if err == nil {
+			return
 		}
 	}
-
-	// The expected frequency of each row is f = numRuns * (numSamples / numRows).
-	f := float64(numRuns) * float64(numSamples) / float64(numRows)
-
-	// Verify that no frequency is outside of the range (f / (1+delta), f * (1+delta));
-	// the probability of a given row violating this is subject to the Chernoff
-	// bound which decreases exponentially (with exponent f).
-	for i := range freq {
-		if float64(freq[i]) < f/(1+delta) || float64(freq[i]) > f*(1+delta) {
-			t.Errorf("frequency %d out of bound (expected value %f)", freq[i], f)
-		}
-	}
+	t.Error(err)
 }
 
 func TestSamplerSketch(t *testing.T) {
@@ -154,23 +167,23 @@ func TestSamplerSketch(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
-	spec := &SamplerSpec{
+	spec := &distsqlpb.SamplerSpec{
 		SampleSize: uint32(1),
-		Sketches: []SketchSpec{
+		Sketches: []distsqlpb.SketchSpec{
 			{
-				SketchType: SketchType_HLL_PLUS_PLUS_V1,
+				SketchType: distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
 				Columns:    []uint32{0},
 			},
 			{
-				SketchType: SketchType_HLL_PLUS_PLUS_V1,
+				SketchType: distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
 				Columns:    []uint32{1},
 			},
 		},
 	}
-	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &PostProcessSpec{}, out)
+	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &distsqlpb.PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)
 	}

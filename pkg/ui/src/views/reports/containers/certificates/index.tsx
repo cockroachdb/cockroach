@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
@@ -9,6 +23,7 @@ import { certificatesRequestKey, refreshCertificates } from "src/redux/apiReduce
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { LongToMoment } from "src/util/convert";
+import Loading from "src/views/shared/components/loading";
 
 interface CertificatesOwnProps {
   certificates: protos.cockroach.server.serverpb.CertificatesResponse;
@@ -115,7 +130,19 @@ class Certificates extends React.Component<CertificatesProps, {}> {
         certType = "Certificate Authority";
         break;
       case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.NODE:
-        certType = "Node";
+        certType = "Node Certificate";
+        break;
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CLIENT_CA:
+        certType = "Client Certificate Authority";
+        break;
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CLIENT:
+        certType = "Client Certificate";
+        break;
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.UI_CA:
+        certType = "UI Certificate Authority";
+        break;
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.UI:
+        certType = "UI Certificate";
         break;
       default:
         certType = "Unknown";
@@ -138,41 +165,15 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     );
   }
 
-  render() {
-    const nodeID = this.props.params[nodeIDAttr];
-    if (!_.isNil(this.props.lastError)) {
-      return (
-        <div className="section">
-          <Helmet>
-            <title>Certificates | Debug</title>
-          </Helmet>
-          <h1>Certificates</h1>
-          <h2>Error loading certificates for node {nodeID}</h2>
-        </div>
-      );
-    }
+  renderContent = () => {
     const { certificates } = this.props;
-    if (_.isEmpty(certificates)) {
-      return (
-        <div className="section">
-          <Helmet>
-            <title>Certificates | Debug</title>
-          </Helmet>
-          <h1>Certificates</h1>
-          <h2>Loading cluster status...</h2>
-        </div>
-      );
-    }
+    const nodeID = this.props.params[nodeIDAttr];
 
     if (_.isEmpty(certificates.certificates)) {
       return (
-        <div className="section">
-          <Helmet>
-            <title>Certificates | Debug</title>
-          </Helmet>
-          <h1>Certificates</h1>
+        <React.Fragment>
           <h2>No certificates were found on node {this.props.params[nodeIDAttr]}.</h2>
-        </div>
+        </React.Fragment>
       );
     }
 
@@ -184,17 +185,32 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     }
 
     return (
-      <div className="section">
-        <Helmet>
-          <title>Certificates | Debug</title>
-        </Helmet>
-        <h1>Certificates</h1>
+      <React.Fragment>
         <h2>{header} certificates</h2>
         {
           _.map(certificates.certificates, (cert, key) => (
             this.renderCert(cert, key)
           ))
         }
+      </React.Fragment>
+    );
+  }
+
+  render() {
+    return (
+      <div className="section">
+        <Helmet>
+          <title>Certificates | Debug</title>
+        </Helmet>
+        <h1>Certificates</h1>
+
+        <section className="section">
+          <Loading
+            loading={!this.props.certificates}
+            error={this.props.lastError}
+            render={this.renderContent}
+          />
+        </section>
       </div>
     );
   }

@@ -26,8 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-
 	// We dot-import fsm to use common names such as fsm.True/False. State machine
 	// implementations using that library are weird beasts intimately inter-twined
 	// with that package; therefor this file should stay as small as possible.
@@ -50,6 +48,8 @@ const (
 
 type stateNoTxn struct{}
 
+var _ State = &stateNoTxn{}
+
 func (stateNoTxn) String() string {
 	return NoTxnStr
 }
@@ -62,6 +62,8 @@ type stateOpen struct {
 	RetryIntent Bool
 }
 
+var _ State = &stateOpen{}
+
 func (stateOpen) String() string {
 	return OpenStateStr
 }
@@ -72,17 +74,23 @@ type stateAborted struct {
 	RetryIntent Bool
 }
 
+var _ State = &stateAborted{}
+
 func (stateAborted) String() string {
 	return AbortedStateStr
 }
 
 type stateRestartWait struct{}
 
+var _ State = &stateRestartWait{}
+
 func (stateRestartWait) String() string {
 	return RestartWaitStateStr
 }
 
 type stateCommitWait struct{}
+
+var _ State = &stateCommitWait{}
 
 func (stateCommitWait) String() string {
 	return CommitWaitStateStr
@@ -94,6 +102,8 @@ func (stateCommitWait) String() string {
 // transaction" is finished, however the higher-level transaction is not rolled
 // back.
 type stateInternalError struct{}
+
+var _ State = &stateInternalError{}
 
 func (stateInternalError) String() string {
 	return InternalErrorStateStr
@@ -114,7 +124,6 @@ type eventTxnStart struct {
 type eventTxnStartPayload struct {
 	tranCtx transitionCtx
 
-	iso enginepb.IsolationType
 	pri roachpb.UserPriority
 	// txnSQLTimestamp is the timestamp that statements executed in the
 	// transaction that is started by this event will report for now(),
@@ -124,14 +133,12 @@ type eventTxnStartPayload struct {
 }
 
 func makeEventTxnStartPayload(
-	iso enginepb.IsolationType,
 	pri roachpb.UserPriority,
 	readOnly tree.ReadWriteMode,
 	txnSQLTimestamp time.Time,
 	tranCtx transitionCtx,
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
-		iso:             iso,
 		pri:             pri,
 		readOnly:        readOnly,
 		txnSQLTimestamp: txnSQLTimestamp,
@@ -384,8 +391,7 @@ var TxnStateTransitions = Compile(Pattern{
 				// rollback to a regular savepoint, clearly we couldn't bump the
 				// timestamp in that case. In the special case of the cockroach_restart
 				// savepoint, it's not clear to me what a user's expectation might be.
-				state.mu.txn.Proto().Restart(
-					0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
+				state.mu.txn.ManualRestart(args.Ctx, hlc.Timestamp{})
 				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, txnRestart)
 				return nil
 			},
@@ -436,7 +442,7 @@ var TxnStateTransitions = Compile(Pattern{
 				ts.resetForNewSQLTxn(
 					ts.connCtx,
 					explicitTxn,
-					payload.txnSQLTimestamp, payload.iso, payload.pri, payload.readOnly,
+					payload.txnSQLTimestamp, payload.pri, payload.readOnly,
 					nil, /* txn */
 					args.Payload.(eventTxnStartPayload).tranCtx,
 				)
@@ -534,7 +540,6 @@ func (ts *txnState) noTxnToOpen(
 		connCtx,
 		txnTyp,
 		payload.txnSQLTimestamp,
-		payload.iso,
 		payload.pri,
 		payload.readOnly,
 		nil, /* txn */

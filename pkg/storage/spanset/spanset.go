@@ -36,6 +36,18 @@ const (
 	NumSpanAccess
 )
 
+// String returns a string representation of the SpanAccess.
+func (a SpanAccess) String() string {
+	switch a {
+	case SpanReadOnly:
+		return "read"
+	case SpanReadWrite:
+		return "write"
+	default:
+		panic("unreachable")
+	}
+}
+
 // SpanScope divides access types into local and global keys.
 type SpanScope int
 
@@ -46,10 +58,22 @@ const (
 	NumSpanScope
 )
 
+// String returns a string representation of the SpanScope.
+func (a SpanScope) String() string {
+	switch a {
+	case SpanGlobal:
+		return "global"
+	case SpanLocal:
+		return "local"
+	default:
+		panic("unreachable")
+	}
+}
+
 // SpanSet tracks the set of key spans touched by a command. The set
 // is divided into subsets for access type (read-only or read/write)
 // and key scope (local or global; used to facilitate use by the
-// separate local and global command queues).
+// separate local and global latches).
 type SpanSet struct {
 	spans [NumSpanAccess][NumSpanScope][]roachpb.Span
 }
@@ -60,7 +84,7 @@ func (ss *SpanSet) String() string {
 	for i := SpanAccess(0); i < NumSpanAccess; i++ {
 		for j := SpanScope(0); j < NumSpanScope; j++ {
 			for _, span := range ss.GetSpans(i, j) {
-				fmt.Fprintf(&buf, "%d %d: %s\n", i, j, span)
+				fmt.Fprintf(&buf, "%s %s: %s\n", i, j, span)
 			}
 		}
 	}
@@ -94,9 +118,39 @@ func (ss *SpanSet) Add(access SpanAccess, span roachpb.Span) {
 	ss.spans[access][scope] = append(ss.spans[access][scope], span)
 }
 
+// SortAndDedup sorts the spans in the SpanSet and removes any duplicates.
+func (ss *SpanSet) SortAndDedup() {
+	for i := SpanAccess(0); i < NumSpanAccess; i++ {
+		for j := SpanScope(0); j < NumSpanScope; j++ {
+			ss.spans[i][j], _ /* distinct */ = roachpb.MergeSpans(ss.spans[i][j])
+		}
+	}
+}
+
 // GetSpans returns a slice of spans with the given parameters.
 func (ss *SpanSet) GetSpans(access SpanAccess, scope SpanScope) []roachpb.Span {
 	return ss.spans[access][scope]
+}
+
+// BoundarySpan returns a span containing all the spans with the given params.
+func (ss *SpanSet) BoundarySpan(scope SpanScope) *roachpb.Span {
+	readOnlySpans := ss.GetSpans(SpanReadOnly, scope)
+	readWriteSpans := ss.GetSpans(SpanReadWrite, scope)
+	spans := append(readOnlySpans, readWriteSpans...)
+	if len(spans) == 0 {
+		return nil
+	}
+	smallestKey := spans[0].Key
+	largestKey := spans[0].EndKey
+	for _, span := range spans {
+		if bytes.Compare(span.Key, smallestKey) < 0 {
+			smallestKey = span.Key
+		}
+		if bytes.Compare(span.EndKey, largestKey) > 0 {
+			largestKey = span.EndKey
+		}
+	}
+	return &roachpb.Span{Key: smallestKey, EndKey: largestKey}
 }
 
 // AssertAllowed calls checkAllowed and fatals if the access is not allowed.
@@ -119,12 +173,8 @@ func (ss *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
 			}
 		}
 	}
-	action := "read"
-	if access == SpanReadWrite {
-		action = "write"
-	}
 
-	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s", action, span, ss)
+	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s", access, span, ss)
 }
 
 // Validate returns an error if any spans that have been added to the set

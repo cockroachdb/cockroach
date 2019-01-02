@@ -3,42 +3,41 @@
 # =============================================================================
 
 
+# SimplifySelectFilters simplifies the Filters operator in several possible
+# ways:
+#   - Removes True operands
+#   - Replaces the Filters operator with False if any operand is False or Null
+#   - Flattens nested And operands by merging their conditions into parent
+#
+# Note that the Null handling behavior is different than the SimplifyAnd rules,
+# because Filters only appears as a Select or Join filter condition, both of
+# which treat a Null filter conjunct exactly as if it were False.
+[SimplifySelectFilters, Normalize, HighPriority]
+(Select
+    $input:*
+    $filters:[ ... (FiltersItem (And | True | False | Null)) ... ] & ^(IsFilterFalse $filters)
+)
+=>
+(Select
+    $input
+    (SimplifyFilters $filters)
+)
+
+# DetectSelectContradiction replaces a Select with an empty Values if it detects
+# a contradiction in the filter.
+[DetectSelectContradiction, Normalize]
+(Select
+    $input:*
+    [ ... $item:(FiltersItem) & (IsContradiction $item) ... ]
+)
+=>
+(ConstructEmptyValues (OutputCols $input))
+
 # EliminateSelect discards an unnecessary Select operator in the case where its
 # filter is always true. Keep this near the top of the file so that it tends to
 # be checked early.
 [EliminateSelect, Normalize]
-(Select $input:* (True)) => $input
-
-# EnsureSelectFiltersAnd replaces an And operator in a Select filter with the
-# Filters operator. This allows other rules to rely upon the presence of the
-# Filters when matching. See comment at top of bool.opt for more details. This
-# rule is a special-case of the EnsureSelectFilters rule, for performance
-# reasons (no need to construct a new conditions list) in a common case.
-[EnsureSelectFiltersAnd, Normalize]
-(Select
-    $input:*
-    (And $conditions:*)
-)
-=>
-(Select
-    $input
-    (Filters $conditions)
-)
-
-# EnsureSelectFilters adds a Filters operator to a Select's filter condition
-# if it does not already exist. This allows other rules to rely upon the
-# presence of the Filters when matching. See comment at top of bool.opt for
-# more details.
-[EnsureSelectFilters, Normalize]
-(Select
-    $input:*
-    $filter:^(Filters | And | True | False)
-)
-=>
-(Select
-    $input
-    (Filters [ $filter ])
-)
+(Select $input:* []) => $input
 
 # MergeSelects combines two nested Select operators into a single Select that
 # ANDs the filter conditions of the two Selects.
@@ -46,14 +45,14 @@
 (Select
     (Select
         $input:*
-        $innerFilter:*
+        $innerFilters:*
     )
-    $filter:*
+    $filters:*
 )
 =>
 (Select
     $input
-    (ConcatFilters $innerFilter $filter)
+    (ConcatFilters $innerFilters $filters)
 )
 
 # PushSelectIntoProject pushes the Select operator into its Project input. This
@@ -65,21 +64,25 @@
     (Project
         $input:*
         $projections:*
+        $passthrough:*
     )
-    (Filters
-        $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ]
-    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $inputCols:(OutputCols $input))
+        ...
+    ]
 )
 =>
 (Select
     (Project
         (Select
             $input
-            (Filters (ExtractBoundConditions $list $input))
+            (ExtractBoundConditions $filters $inputCols)
         )
         $projections
+        $passthrough
     )
-    (Filters (ExtractUnboundConditions $list $input))
+    (ExtractUnboundConditions $filters $inputCols)
 )
 
 # MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
@@ -98,13 +101,13 @@
         $right:*
         $on:*
     )
-    $filter:*
+    $filters:*
 )
 =>
 ((OpName $input)
     $left
     $right
-    (ConcatFilters $on $filter)
+    (ConcatFilters $on $filters)
 )
 
 # PushSelectCondLeftIntoJoinLeftAndRight applies to the case when a condition
@@ -136,30 +139,28 @@
         $right:*
         $on:*
     )
-    (Filters
-        $list:[
-            ...
-            $condition:* &
-                (IsBoundBy $condition $left) &
-                (CanMap $on $condition $right)
-            ...
-        ]
-    )
+    $filters:[
+        ...
+        $item:(FiltersItem $condition:*) &
+            (IsBoundBy $item (OutputCols $left)) &
+            (CanMap $on $item $right)
+        ...
+    ]
 )
 =>
 (Select
     ((OpName $input)
         (Select
             $left
-            (Filters [$condition])
+            [ (FiltersItem $condition) ]
         )
         (Select
             $right
-            (Filters [(Map $on $condition $right)])
+            [ (FiltersItem (Map $on $item $right)) ]
         )
         $on
     )
-    (Filters (RemoveListItem $list $condition))
+    (RemoveFiltersItem $filters $item)
 )
 
 # PushSelectCondRightIntoJoinLeftAndRight is symmetric with
@@ -176,30 +177,28 @@
         $right:*
         $on:*
     )
-    (Filters
-        $list:[
-            ...
-            $condition:* &
-                (IsBoundBy $condition $right) &
-                (CanMap $on $condition $left)
-            ...
-        ]
-    )
+    $filters:[
+        ...
+        $item:(FiltersItem $condition:*) &
+            (IsBoundBy $item (OutputCols $right)) &
+            (CanMap $on $item $left)
+        ...
+    ]
 )
 =>
 (Select
     ((OpName $input)
         (Select
             $left
-            (Filters [(Map $on $condition $left)])
+            [ (FiltersItem (Map $on $item $left)) ]
         )
         (Select
             $right
-            (Filters [$condition])
+            [ (FiltersItem $condition) ]
         )
         $on
     )
-    (Filters (RemoveListItem $list $condition))
+    (RemoveFiltersItem $filters $item)
 )
 
 # PushSelectIntoJoinLeft pushes Select filter conditions into the left side of
@@ -224,19 +223,23 @@
         $right:*
         $on:*
     )
-    $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $left) ... ])
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
+        ...
+    ]
 )
 =>
 (Select
     ((OpName $input)
         (Select
             $left
-            (Filters (ExtractBoundConditions $list $left))
+            (ExtractBoundConditions $filters $leftCols)
         )
         $right
         $on
     )
-    (Filters (ExtractUnboundConditions $list $left))
+    (ExtractUnboundConditions $filters $leftCols)
 )
 
 # PushSelectIntoJoinRight is symmetric with PushSelectIntoJoinLeft. It pushes
@@ -249,7 +252,11 @@
         $right:*
         $on:*
     )
-    $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $right) ... ])
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $rightCols:(OutputCols $right))
+        ...
+    ]
 )
 =>
 (Select
@@ -257,17 +264,18 @@
         $left
         (Select
             $right
-            (Filters (ExtractBoundConditions $list $right))
+            (ExtractBoundConditions $filters $rightCols)
         )
         $on
     )
-    (Filters (ExtractUnboundConditions $list $right))
+    (ExtractUnboundConditions $filters $rightCols)
 )
 
 # PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case
-# where it does not reference any of the aggregation columns. This only works
-# if this is not an instance of the "scalar" GroupBy, which returns only one
-# row, and which exhibits different behavior if the input is empty:
+# where it only references grouping columns or ConstAgg columns.
+#
+# This rule doesn't work on ScalarGroupBy which exhibits different behavior if
+# the input is empty:
 #   SELECT MAX(y) FROM a
 #
 # If "a" is empty, this returns a single row containing a null value. This is
@@ -278,24 +286,31 @@
 # Citations: [2]
 [PushSelectIntoGroupBy, Normalize]
 (Select
-    (GroupBy
-        $input:*
+    $input:(GroupBy | DistinctOn
+        $groupingInput:*
         $aggregations:*
-        $def:* & ^(IsScalarGroupBy $def)
+        $groupingPrivate:*
     )
-    (Filters $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ])
+    $filters:[
+        ...
+        $item:* & (IsBoundBy
+            $item
+            $passthrough:(GroupingAndConstCols $groupingPrivate $aggregations)
+        )
+        ...
+    ]
 )
 =>
 (Select
-    (GroupBy
+    ((OpName $input)
         (Select
-            $input
-            (Filters (ExtractBoundConditions $list $input))
+            $groupingInput
+            (ExtractBoundConditions $filters $passthrough)
         )
         $aggregations
-        $def
+        $groupingPrivate
     )
-    (Filters (ExtractUnboundConditions $list $input))
+    (ExtractUnboundConditions $filters $passthrough)
 )
 
 # RemoveNotNullCondition removes a filter with an IS NOT NULL condition
@@ -303,14 +318,49 @@
 [RemoveNotNullCondition, Normalize]
 (Select
     $input:*
-    (Filters
-        $list:[ ... $condition:(IsNot (Variable $col:* & (IsColNotNull $col $input)) (Null))  ... ]
-    )
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (IsNot
+                (Variable $col:* & (IsColNotNull $col $input))
+                (Null)
+            )
+        )
+        ...
+    ]
 )
 =>
 (Select
     $input
-    (Filters
-        (RemoveListItem $list $condition)
-     )
+    (RemoveFiltersItem $filters $item)
+)
+
+# EliminateUnionAllLeft replaces a union all with a right side having a
+# cardinality of zero, with just the left side operand.
+[EliminateUnionAllLeft, Normalize]
+(UnionAll
+    $left:*
+    $right:* & (HasZeroRows $right)
+    $colmap:*
+)
+=>
+(Project
+    $left
+    (ProjectColMapLeft $colmap)
+    (MakeEmptyColSet)
+)
+
+# EliminateUnionAllRight replaces a union all with a left side having a
+# cardinality of zero, with just the right side operand.
+[EliminateUnionAllRight, Normalize]
+(UnionAll
+    $left:* & (HasZeroRows $left)
+    $right:*
+    $colmap:*
+)
+=>
+(Project
+    $right
+    (ProjectColMapRight $colmap)
+    (MakeEmptyColSet)
 )

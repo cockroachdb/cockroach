@@ -33,7 +33,7 @@ func EquiDepthHistogram(
 ) (HistogramData, error) {
 	numSamples := len(samples)
 	if numSamples == 0 {
-		return HistogramData{}, errors.Errorf("no samples")
+		return HistogramData{}, nil
 	}
 	if numRows < int64(numSamples) {
 		return HistogramData{}, errors.Errorf("more samples than rows")

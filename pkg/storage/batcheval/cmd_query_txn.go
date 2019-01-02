@@ -60,8 +60,8 @@ func QueryTxn(
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	// Fetch transaction record; if missing, return empty txn.
-	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, &reply.QueriedTxn)
+	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, &reply.QueriedTxn,
+		engine.MVCCGetOptions{})
 	if err != nil || !ok {
 		return result.Result{}, err
 	}

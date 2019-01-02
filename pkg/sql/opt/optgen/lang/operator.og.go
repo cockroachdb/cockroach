@@ -30,5 +30,6 @@ const (
 	AnyOp
 	SliceOp
 	StringOp
+	NumberOp
 	CustomFuncOp
 )

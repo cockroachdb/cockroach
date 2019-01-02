@@ -23,17 +23,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 func TestReplicateQueueRebalance(t *testing.T) {
@@ -45,14 +45,26 @@ func TestReplicateQueueRebalance(t *testing.T) {
 
 	const numNodes = 5
 	tc := testcluster.StartTestCluster(t, numNodes,
-		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				ScanMinIdleTime: time.Millisecond,
+				ScanMaxIdleTime: time.Millisecond,
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						// Prevent the merge queue from immediately discarding our splits.
+						DisableMergeQueue: true,
+					},
+				},
+			},
+		},
 	)
 	defer tc.Stopper().Stop(context.TODO())
 
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		storage.EnableStatsBasedRebalancing.Override(&st.SV, false)
+		storage.LoadBasedRebalancingMode.Override(&st.SV, int64(storage.LBRebalancingOff))
 	}
 
 	const newRanges = 5
@@ -91,7 +103,8 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		counts := countReplicas()
 		for _, c := range counts {
 			if c < minReplicas {
-				err := errors.Errorf("not balanced: %d", counts)
+				err := errors.Errorf(
+					"not balanced (want at least %d replicas on all stores): %d", minReplicas, counts)
 				log.Info(context.Background(), err)
 				return err
 			}
@@ -162,7 +175,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 	})
 
 	if err := verifyRangeLog(
-		tc.Conns[0], storage.RangeLogEventType_add, storage.ReasonRangeUnderReplicated,
+		tc.Conns[0], storagepb.RangeLogEventType_add, storagepb.ReasonRangeUnderReplicated,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -181,8 +194,14 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
-				ScanMinIdleTime: time.Millisecond,
-				ScanMaxIdleTime: time.Millisecond,
+				ScanMinIdleTime: 10 * time.Millisecond,
+				ScanMaxIdleTime: 10 * time.Millisecond,
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						// Prevent the merge queue from immediately discarding our splits.
+						DisableMergeQueue: true,
+					},
+				},
 			},
 		},
 	)
@@ -241,14 +260,14 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	})
 
 	if err := verifyRangeLog(
-		tc.Conns[0], storage.RangeLogEventType_remove, storage.ReasonRangeOverReplicated,
+		tc.Conns[0], storagepb.RangeLogEventType_remove, storagepb.ReasonRangeOverReplicated,
 	); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func verifyRangeLog(
-	conn *gosql.DB, eventType storage.RangeLogEventType, reason storage.RangeLogEventReason,
+	conn *gosql.DB, eventType storagepb.RangeLogEventType, reason storagepb.RangeLogEventReason,
 ) error {
 	rows, err := conn.Query(
 		"SELECT info FROM system.rangelog WHERE \"eventType\" = $1;", eventType.String())
@@ -263,7 +282,7 @@ func verifyRangeLog(
 		if err := rows.Scan(&infoStr); err != nil {
 			return err
 		}
-		var info storage.RangeLogEvent_Info
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr), &info); err != nil {
 			return errors.Errorf("error unmarshalling info string %q: %s", infoStr, err)
 		}

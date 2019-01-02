@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"math/rand"
+	"reflect"
 	"sync/atomic"
 	"time"
 
@@ -49,11 +50,56 @@ func jitter(avgInterval time.Duration) time.Duration {
 	return time.Duration(rand.Int63n(int64(2 * avgInterval)))
 }
 
+// raceTransport wrap a Transport implementation and intercepts all
+// BatchRequests, sending them to the transport racer task to read
+// them asynchronously in a tight loop.
+type raceTransport struct {
+	Transport
+}
+
+func (tr raceTransport) SendNext(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	// Make a copy of the requests slice, and shallow copies of the requests.
+	// The caller is allowed to mutate the request after the call returns. Since
+	// this transport has no way of checking who's doing mutations (the client -
+	// which is allowed, or the server - which is not). So, for now, we exclude
+	// the slice and the requests from any checks, since those are the parts that
+	// the client currently mutates.
+	requestsCopy := make([]roachpb.RequestUnion, len(ba.Requests))
+	for i, ru := range ba.Requests {
+		// ru is a RequestUnion interface, so we need some hoops to dereference it.
+		requestsCopy[i] = reflect.Indirect(reflect.ValueOf(ru)).Interface().(roachpb.RequestUnion)
+	}
+	ba.Requests = requestsCopy
+	select {
+	// We have a shallow copy here and so the top level scalar fields can't
+	// really race, but making more copies doesn't make anything more
+	// transparent, so from now on we operate on a pointer.
+	case incoming <- &ba:
+	default:
+		// Avoid slowing down the tests if we're backed up.
+	}
+	return tr.Transport.SendNext(ctx, ba)
+}
+
 // GRPCTransportFactory during race builds wraps the implementation and
-// intercepts all BatchRequests, reading them in a tight loop. This allows the
-// race detector to catch any mutations of a batch passed to the transport.
+// intercepts all BatchRequests, reading them asynchronously in a tight loop.
+// This allows the race detector to catch any mutations of a batch passed to the
+// transport. The dealio is that batches passed to the transport are immutable -
+// the server is not allowed to mutate anything and this transport makes sure
+// they don't. See client.Sender() for more.
+//
+// NOTE(andrei): We don't like this transport very much. It's slow, preventing
+// us from running clusters with race binaries and, the way it's written, it
+// prevents both the client and the server from mutating the BatchRequest. But
+// only the server is prohibited (according to the client.Sender interface). In
+// fact, we'd like to have the client reuse these requests and mutate them.
+// Instead of this transport, we should find other mechanisms ensuring that:
+// a) the server doesn't hold on to any memory, and
+// b) the server doesn't mutate the request
 func GRPCTransportFactory(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice, args roachpb.BatchRequest,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {
 		// NB: We can't use Stopper.RunWorker because doing so would race with
@@ -110,13 +156,10 @@ func GRPCTransportFactory(
 			atomic.StoreInt32(&running, 0)
 		}
 	}
-	select {
-	// We have a shallow copy here and so the top level scalar fields can't
-	// really race, but making more copies doesn't make anything more
-	// transparent, so from now on we operate on a pointer.
-	case incoming <- &args:
-	default:
-		// Avoid slowing down the tests if we're backed up.
+
+	t, err := grpcTransportFactoryImpl(opts, nodeDialer, replicas)
+	if err != nil {
+		return nil, err
 	}
-	return grpcTransportFactoryImpl(opts, nodeDialer, replicas, args)
+	return &raceTransport{Transport: t}, nil
 }

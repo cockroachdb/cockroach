@@ -44,6 +44,14 @@ send "echo \$?\r"
 eexpect "1\r\n:/# "
 end_test
 
+start_test "Check that unknown sub-commands report a non-zero exit status."
+send "$argv node wowowo\r"
+eexpect "Error: unknown sub-command"
+eexpect ":/# "
+send "echo \$?\r"
+eexpect "1\r\n:/# "
+end_test
+
 send "exit 0\r"
 eexpect eof
 

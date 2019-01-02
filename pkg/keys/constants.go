@@ -71,11 +71,15 @@ var (
 	// been down without needing to retrieve liveness records from the cluster.
 	localStoreLastUpSuffix = []byte("uptm")
 	// localHLCUpperBoundSuffix stores an upper bound to the wall time used by
-	// the HLC
+	// the HLC.
 	localHLCUpperBoundSuffix = []byte("hlcu")
 	// localStoreSuggestedCompactionSuffix stores suggested compactions to
 	// be aggregated and processed on the store.
 	localStoreSuggestedCompactionSuffix = []byte("comp")
+
+	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent reuse.
+	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
+	_                                   = localRemovedLeakedRaftEntriesSuffix
 
 	// LocalStoreSuggestedCompactionsMin is the start of the span of
 	// possible suggested compaction keys for a store.
@@ -324,4 +328,10 @@ const (
 	LocationsTableID       = 21
 	LivenessRangesID       = 22
 	RoleMembersTableID     = 23
+	CommentsTableID        = 24
+
+	// CommentType is type for system.comments
+	DatabaseCommentType = 0
+	TableCommentType    = 1
+	ColumnCommentType   = 2
 )

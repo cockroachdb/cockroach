@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
@@ -5,7 +19,6 @@ import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
 
-import spinner from "assets/spinner.gif";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { PrintTime } from "src/views/reports/containers/range/print";
@@ -30,8 +43,8 @@ type ICollectedStatementStatistics = protos.cockroach.server.serverpb.Statements
 type RouteProps = RouteComponentProps<any, any>;
 
 interface StatementsPageProps {
-  valid: boolean;
   statements: AggregateStatistics[];
+  statementsError: Error | null;
   apps: string[];
   totalFingerprints: number;
   lastReset: string;
@@ -72,12 +85,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     this.props.refreshStatements();
   }
 
-  renderStatements() {
-    if (!this.props.valid) {
-      // This should really be handled by a loader component.
-      return null;
-    }
-
+  renderStatements = () => {
     const selectedApp = this.props.params[appAttr] || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
@@ -91,8 +99,8 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     );
 
     return (
-      <div className="statements">
-        <PageConfig>
+      <React.Fragment>
+        <PageConfig layout="spread">
           <PageConfigItem>
             <Dropdown
               title="App"
@@ -101,52 +109,59 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
               onChange={this.selectApp}
             />
           </PageConfigItem>
+          <PageConfigItem>
+            <h4 className="statement-count-title">
+              {this.props.statements.length}
+              {selectedApp ? ` of ${this.props.totalFingerprints} ` : " "}
+              statement fingerprints.
+            </h4>
+          </PageConfigItem>
+          <PageConfigItem>
+            <h4 className="last-cleared-title">
+              <div className="last-cleared-tooltip__tooltip">
+                <ToolTipWrapper text={lastClearedHelpText}>
+                  <div className="last-cleared-tooltip__tooltip-hover-area">
+                    <div className="last-cleared-tooltip__info-icon">i</div>
+                  </div>
+                </ToolTipWrapper>
+              </div>
+              Last cleared {this.props.lastReset}.
+            </h4>
+          </PageConfigItem>
         </PageConfig>
 
-        <div className="statements__last-hour-note" style={{ marginTop: 20 }}>
-          {this.props.statements.length}
-          {selectedApp ? ` of ${this.props.totalFingerprints} ` : " "}
-          statement fingerprints.
-          Last cleared {this.props.lastReset}.
-          <div className="last-cleared-tooltip__tooltip">
-            <ToolTipWrapper text={lastClearedHelpText}>
-              <div className="last-cleared-tooltip__tooltip-hover-area">
-                <div className="last-cleared-tooltip__info-icon">i</div>
-              </div>
-            </ToolTipWrapper>
-          </div>
-        </div>
-
-        <StatementsSortedTable
-          className="statements-table"
-          data={this.props.statements}
-          columns={makeStatementsColumns(this.props.statements, selectedApp)}
-          sortSetting={this.state.sortSetting}
-          onChangeSortSetting={this.changeSortSetting}
-        />
-      </div>
+        <section className="section">
+          <StatementsSortedTable
+            className="statements-table"
+            data={this.props.statements}
+            columns={makeStatementsColumns(this.props.statements, selectedApp)}
+            sortSetting={this.state.sortSetting}
+            onChangeSortSetting={this.changeSortSetting}
+          />
+        </section>
+      </React.Fragment>
     );
   }
 
   render() {
     return (
-      <section className="section" style={{ maxWidth: "none" }}>
+      <React.Fragment>
         <Helmet>
           <title>
             { this.props.params[appAttr] ? this.props.params[appAttr] + " App | Statements" : "Statements"}
           </title>
         </Helmet>
 
-        <h1 style={{ marginBottom: 20 }}>Statements</h1>
+        <section className="section">
+          <h1>Statements</h1>
+        </section>
 
         <Loading
           loading={_.isNil(this.props.statements)}
-          className="loading-image loading-image__spinner"
-          image={spinner}
-        >
-          {this.renderStatements()}
-        </Loading>
-      </section>
+          error={this.props.statementsError}
+          render={this.renderStatements}
+        />
+      </React.Fragment>
     );
   }
 }
@@ -204,8 +219,8 @@ export const selectApps = createSelector(
     const apps: { [app: string]: boolean } = {};
     state.data.statements.forEach(
       (statement: ICollectedStatementStatistics) => {
-        if (statement.key.app) {
-          apps[statement.key.app] = true;
+        if (statement.key.key_data.app) {
+          apps[statement.key.key_data.app] = true;
         } else {
           sawBlank = true;
         }
@@ -245,10 +260,10 @@ export const selectLastReset = createSelector(
 const StatementsPageConnected = connect(
   (state: StatementsState, props: RouteProps) => ({
     statements: selectStatements(state, props),
+    statementsError: state.cachedData.statements.lastError,
     apps: selectApps(state),
     totalFingerprints: selectTotalFingerprints(state),
     lastReset: selectLastReset(state),
-    valid: state.cachedData.statements.valid,
   }),
   {
     refreshStatements,

@@ -62,6 +62,12 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 func TestStringToArrayAndBack(t *testing.T) {
 	// s allows us to have a string pointer literal.
 	s := func(x string) *string { return &x }
+	fs := func(x *string) string {
+		if x != nil {
+			return *x
+		}
+		return "<nil>"
+	}
 	cases := []struct {
 		input    string
 		sep      *string
@@ -89,7 +95,7 @@ func TestStringToArrayAndBack(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		t.Run(fmt.Sprintf("string_to_array(%q, %q)", tc.input, tc.sep), func(t *testing.T) {
+		t.Run(fmt.Sprintf("string_to_array(%q, %q)", tc.input, fs(tc.sep)), func(t *testing.T) {
 			result, err := stringToArray(tc.input, tc.sep, tc.nullStr)
 			if err != nil {
 				t.Fatal(err)

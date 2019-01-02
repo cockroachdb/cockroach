@@ -62,7 +62,7 @@ func TestDatabaseAccessors(t *testing.T) {
 			return err
 		}
 
-		databaseCache := newDatabaseCache(config.SystemConfig{})
+		databaseCache := newDatabaseCache(config.NewSystemConfig())
 		_, err := databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
 		return err
 	}); err != nil {

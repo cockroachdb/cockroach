@@ -17,14 +17,13 @@ package kv
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -36,10 +35,10 @@ const (
 	maxTxnRefreshAttempts = 5
 )
 
-// maxTxnRefreshSpansBytes is a threshold in bytes for refresh spans stored
+// MaxTxnRefreshSpansBytes is a threshold in bytes for refresh spans stored
 // on the coordinator during the lifetime of a transaction. Refresh spans
 // are used for SERIALIZABLE transactions to avoid client restarts.
-var maxTxnRefreshSpansBytes = settings.RegisterIntSetting(
+var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
 	"kv.transaction.max_refresh_spans_bytes",
 	"maximum number of bytes used to track refresh spans in serializable transactions",
 	256*1000,
@@ -75,7 +74,7 @@ type txnSpanRefresher struct {
 	canAutoRetry bool
 	// autoRetryCounter counts the number of auto retries which avoid
 	// client-side restarts.
-	autoRetryCounter *metric.CounterWithRates
+	autoRetryCounter *metric.Counter
 }
 
 // SendLocked implements the lockedSender interface.
@@ -84,17 +83,18 @@ func (sr *txnSpanRefresher) SendLocked(
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if rArgs, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
 		et := rArgs.(*roachpb.EndTransactionRequest)
-		if ba.Txn.IsSerializable() &&
-			!sr.refreshInvalid &&
-			len(sr.refreshReads) == 0 &&
-			len(sr.refreshWrites) == 0 {
+		if !sr.refreshInvalid && len(sr.refreshReads) == 0 && len(sr.refreshWrites) == 0 {
 			et.NoRefreshSpans = true
 		}
 	}
 
 	maxAttempts := maxTxnRefreshAttempts
-	if knob := sr.knobs.MaxTxnRefreshAttempts; knob > 0 {
-		maxAttempts = knob
+	if knob := sr.knobs.MaxTxnRefreshAttempts; knob != 0 {
+		if knob == -1 {
+			maxAttempts = 0
+		} else {
+			maxAttempts = knob
+		}
 	}
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
@@ -103,35 +103,46 @@ func (sr *txnSpanRefresher) SendLocked(
 		return nil, pErr
 	}
 
+	// If the transaction is no longer pending, just return without
+	// attempting to record its refresh spans.
+	if br.Txn.Status != roachpb.PENDING {
+		return br, nil
+	}
+
 	// Iterate over and aggregate refresh spans in the requests,
-	// qualified by possible resume spans in the responses, if the txn
-	// has serializable isolation and we haven't yet exceeded the max
-	// read key bytes.
-	if ba.Txn.IsSerializable() {
-		if !sr.refreshInvalid {
-			ba.Txn.RefreshedTimestamp.Forward(largestRefreshTS)
-			if !sr.appendRefreshSpans(ctx, ba, br) {
-				// The refresh spans are out of date, return a generic client-side retry error.
-				return nil, roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), br.Txn,
-				)
-			}
+	// qualified by possible resume spans in the responses, if we
+	// haven't yet exceeded the max read key bytes.
+	if !sr.refreshInvalid {
+		ba.Txn.RefreshedTimestamp.Forward(largestRefreshTS)
+		if !sr.appendRefreshSpans(ctx, ba, br) {
+			// The refresh spans are out of date, return a generic client-side retry error.
+			return nil, roachpb.NewErrorWithTxn(
+				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), br.Txn,
+			)
 		}
-		// Verify and enforce the size in bytes of all read-only spans
-		// doesn't exceed the max threshold.
-		if sr.refreshSpansBytes > maxTxnRefreshSpansBytes.Get(&sr.st.SV) {
-			log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
-			sr.refreshReads = nil
-			sr.refreshWrites = nil
-			sr.refreshInvalid = true
-			sr.refreshSpansBytes = 0
-		}
+	}
+	// Verify and enforce the size in bytes of all read-only spans
+	// doesn't exceed the max threshold.
+	if sr.refreshSpansBytes > MaxTxnRefreshSpansBytes.Get(&sr.st.SV) {
+		log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
+		sr.refreshReads = nil
+		sr.refreshWrites = nil
+		sr.refreshInvalid = true
+		sr.refreshSpansBytes = 0
 	}
 	// If the transaction will retry and the refresh spans are
 	// exhausted, return a non-retryable error indicating that the
 	// transaction is too large and should potentially be split.
 	// We do this to avoid endlessly retrying a txn likely refail.
-	if sr.refreshInvalid && (br.Txn.WriteTooOld || br.Txn.OrigTimestamp != br.Txn.Timestamp) {
+	//
+	// TODO(nvanbenschoten): this is duplicating some of the logic
+	// in IsSerializablePushAndRefreshNotPossible. We plan to remove
+	// this all shortly (#30074), but if that changes, we should clean
+	// this overlap up.
+	ts := br.Txn.OrigTimestamp
+	ts.Forward(br.Txn.RefreshedTimestamp)
+	pushed := ts != br.Txn.Timestamp
+	if pushed && sr.refreshInvalid {
 		return nil, roachpb.NewErrorWithTxn(
 			errors.New("transaction is too large to complete; try splitting into pieces"), br.Txn,
 		)
@@ -290,27 +301,31 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 }
 
 // appendRefreshSpans appends refresh spans from the supplied batch request,
-// qualified by the batch response where appropriate. Returns whether the batch
-// transaction's refreshed timestamp is greater or equal to the max refreshed
-// timestamp used so far with this sender.
+// qualified by the batch response where appropriate.
 //
-// The batch refreshed timestamp and the max refreshed timestamp for the sender
-// can get out of step because the txnSpanRefresher can be used concurrently
-// (i.e. when using the "RETURNING NOTHING" syntax). What we don't want is to
-// append refreshes which are already too old compared to the max refreshed
-// timestamp that's already in use with this sender. In that case the caller
-// should return an error for client-side retry.
+// Returns whether the batch transaction's refreshed timestamp is greater or
+// equal to the max refreshed timestamp used so far with this sender. In other
+// words, returns false if this batch ran straddled a refresh request, in which
+// case the refresh was invalid - to be valid, it should have included the this
+// request's spans. In that case the caller should return an error for
+// client-side retry.
+// Note that batches that don't produce any refresh spans are allowed to run
+// concurrently with refreshes. This is useful for the async rollbacks performed
+// by the heartbeater.
 func (sr *txnSpanRefresher) appendRefreshSpans(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) bool {
 	origTS := ba.Txn.OrigTimestamp
 	origTS.Forward(ba.Txn.RefreshedTimestamp)
+	var concurrentRefresh bool
 	if origTS.Less(sr.refreshedTimestamp) {
-		log.VEventf(ctx, 2, "txn orig timestamp %s < sender refreshed timestamp %s",
-			origTS, sr.refreshedTimestamp)
-		return false
+		// We'll return an error if any of the requests generate a refresh span.
+		concurrentRefresh = true
 	}
-	ba.RefreshSpanIterate(br, func(span roachpb.Span, write bool) {
+	if !ba.RefreshSpanIterate(br, func(span roachpb.Span, write bool) bool {
+		if concurrentRefresh {
+			return false
+		}
 		if log.V(3) {
 			log.Infof(ctx, "refresh: %s write=%t", span, write)
 		}
@@ -320,7 +335,12 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 			sr.refreshReads = append(sr.refreshReads, span)
 		}
 		sr.refreshSpansBytes += int64(len(span.Key) + len(span.EndKey))
-	})
+		return true
+	}) {
+		log.VEventf(ctx, 2, "txn orig timestamp %s < sender refreshed timestamp %s",
+			origTS, sr.refreshedTimestamp)
+		return false
+	}
 	return true
 }
 

@@ -165,6 +165,7 @@ func TestJSONEncodeRoundTrip(t *testing.T) {
 		`-1`,
 		`1000000000000000`,
 		`100000000000000000000000000000000000`,
+		`0e1`,
 		`[]`,
 		`["hello"]`,
 		`[1]`,
@@ -210,6 +211,7 @@ func TestJSONEncodeStrictRoundTrip(t *testing.T) {
 		`1.1231231230`,
 		`1.1231231230000`,
 		`1.1231231230000000`,
+		`0E+1`,
 	}
 
 	for _, tc := range cases {
@@ -231,40 +233,6 @@ func TestJSONEncodeStrictRoundTrip(t *testing.T) {
 		if newStr != tc {
 			t.Fatalf("expected %s, got %s", tc, newStr)
 		}
-	}
-}
-
-func TestJSONEncodeNonRoundTrip(t *testing.T) {
-	cases := []struct {
-		input    string
-		expected string
-	}{
-		// Due to the encoding used by the DECIMAL encoder, these values do not round trip perfectly.
-		{`0e+1`, `0`},
-		{`0e1`, `0`},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.input, func(t *testing.T) {
-			j, err := ParseJSON(tc.input)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			encoded, err := EncodeJSON(nil, j)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, decoded, err := DecodeJSON(encoded)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			newStr := decoded.String()
-			if newStr != tc.expected {
-				t.Fatalf("expected %s, got %s", tc.expected, newStr)
-			}
-		})
 	}
 }
 

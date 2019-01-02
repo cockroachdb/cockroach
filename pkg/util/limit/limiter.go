@@ -17,9 +17,8 @@ package limit
 import (
 	"context"
 
-	"github.com/marusama/semaphore"
-
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/marusama/semaphore"
 )
 
 // ConcurrentRequestLimiter wraps a simple semaphore, adding a tracing span when
@@ -38,6 +37,12 @@ func MakeConcurrentRequestLimiter(spanName string, limit int) ConcurrentRequestL
 // one is available or the context is canceled and adding a tracing span if it
 // is forced to block.
 func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	if l.sem.TryAcquire(1) {
 		return nil
 	}

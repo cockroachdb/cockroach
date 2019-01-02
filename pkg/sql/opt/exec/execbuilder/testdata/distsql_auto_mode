@@ -10,10 +10,10 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 
 # Verify that EXPLAIN (DISTSQL) hides the JSON column by default (#21089)
 query BT colnames
-EXPLAIN (DISTSQL) VALUES (1)
+EXPLAIN (DISTSQL) SELECT 1
 ----
-automatic url
-false       https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAQhff-CvOmFgS1O2rs5qUtHbIEDUI6HBNHZ3QSBIz-e7A0hAyBjO896fu4DYE9_dgLCfQRA4zCGtmRCMe9ag9Gf4XuFeaw5rTXRsFxJOgNaU4LQeNgl0zy2UPBU7LzUolf3Xf3PnTulMNZPmCKAud0p0iyE0H3Rb1u-idZOQg9mJ6TjQL5ido1wjk6-ovsqqbF3_qvFp4ktXVoYQxtKqa83QIAAP__QkpjGQ==
+automatic  url
+false      https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj7GKwzAQRPv7CjO14ORWf-DmLqQNKoS0GIOiNVopBIz-PVgq0rqcNzM77IHEgf7ckwTmgRlWYc_sSYTziUZgCW8YrbClvZYTWwXPmWAOlK1EgkFk7-L0crGSTPpXQyFQcVvs-abAtXzbUtxKMHNT1xfuJDsnoUuXdbMKFFYaXwjX7OmW2feZIf97r4NAUoY7D7GkYTXbfj4BAAD__xM4YY8=
 
 # Check the JSON column is still there, albeit hidden.
 query T colnames
@@ -99,29 +99,20 @@ true
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b))
 
-# TODO(radu): can't execbuild index join yet.
-## Index join - don't distribute.
-#query B
-#SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1]
-#----
-#false
-#
-## Index join with filter on result - don't distribute.
-#query B
-#SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND c%2=0]
-#----
-#false
-#
-## Index join with filter on index scan - distribute.
-#query B
-#SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
-#----
-#true
+# Index join - don't distribute.
+query B
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1]
+----
+false
 
-# OID cast - don't distribute (#22249).
-statement error pq: cast to REGCLASS is not supported by distsql
-EXPLAIN (DISTSQL) SELECT t1.a FROM abc t1 INNER JOIN abc t2 on t1.a::REGCLASS = t2.a::REGCLASS;
+# Index join with filter on result - don't distribute.
+query B
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND c%2=0]
+----
+false
 
-# Query with OID expression - don't distribute (#24423).
-statement error pq: OID expressions are not supported by distsql
-EXPLAIN (DISTSQL) SELECT 246::REGTYPE FROM abc
+# Index join with filter on index scan - distribute.
+query B
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
+----
+true

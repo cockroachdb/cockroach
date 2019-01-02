@@ -25,8 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -36,10 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -48,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their
@@ -81,7 +81,8 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		values := []int64{}
 		for _, eng := range mtc.engines {
-			val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), clocks[0].Now(), true, nil)
+			val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), clocks[0].Now(),
+				engine.MVCCGetOptions{})
 			if err != nil {
 				return err
 			}
@@ -147,7 +148,8 @@ func TestRejectFutureCommand(t *testing.T) {
 	if advance := ts3.GoTime().Sub(ts2.GoTime()); advance != 0 {
 		t.Fatalf("expected clock not to advance, but it advanced by %s", advance)
 	}
-	val, _, err := engine.MVCCGet(context.Background(), mtc.engines[0], key, ts3, true, nil)
+	val, _, err := engine.MVCCGet(context.Background(), mtc.engines[0], key, ts3,
+		engine.MVCCGetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,6 +360,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
@@ -539,13 +542,13 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	}
 
 	// Get the left range's ID.
-	rangeID := l.mtc.stores[0].LookupReplica(keys.MustAddr(l.leftKey), nil).RangeID
+	rangeID := l.mtc.stores[0].LookupReplica(keys.MustAddr(l.leftKey)).RangeID
 
 	// Replicate the left range onto node 1.
 	l.mtc.replicateRange(rangeID, 1)
 
-	l.replica0 = l.mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
-	l.replica1 = l.mtc.stores[1].LookupReplica(roachpb.RKey("a"), nil)
+	l.replica0 = l.mtc.stores[0].LookupReplica(roachpb.RKey("a"))
+	l.replica1 = l.mtc.stores[1].LookupReplica(roachpb.RKey("a"))
 	{
 		var err error
 		if l.replica0Desc, err = l.replica0.GetReplicaDescriptor(); err != nil {
@@ -564,7 +567,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 }
 
 func (l *leaseTransferTest) sendRead(storeIdx int) *roachpb.Error {
-	desc := l.mtc.stores[storeIdx].LookupReplica(keys.MustAddr(l.leftKey), nil)
+	desc := l.mtc.stores[storeIdx].LookupReplica(keys.MustAddr(l.leftKey))
 	replicaDesc, err := desc.GetReplicaDescriptor()
 	if err != nil {
 		return roachpb.NewError(err)
@@ -893,7 +896,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	mtc.clocks = []*hlc.Clock{clock1, clock2}
 
 	// Start a transaction using node2 as a gateway.
-	txn := roachpb.MakeTransaction("test", keyA, 1, enginepb.SERIALIZABLE, clock2.Now(), 250 /* maxOffsetNs */)
+	txn := roachpb.MakeTransaction("test", keyA, 1, clock2.Now(), 250 /* maxOffsetNs */)
 	// Simulate a read to another range on node2 by setting the observed timestamp.
 	txn.UpdateObservedTimestamp(2, clock2.Now())
 
@@ -908,11 +911,11 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	}
 
 	// Up-replicate the data in the range to node2.
-	replica1 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA), nil)
+	replica1 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
 	mtc.replicateRange(replica1.RangeID, 1)
 
 	// Transfer the lease from node1 to node2.
-	replica2 := mtc.stores[1].LookupReplica(roachpb.RKey(keyA), nil)
+	replica2 := mtc.stores[1].LookupReplica(roachpb.RKey(keyA))
 	replica2Desc, err := replica2.GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
@@ -952,6 +955,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	var injectLeaseTransferError atomic.Value
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableSplitQueue = true
+	sc.TestingKnobs.DisableMergeQueue = true
 	sc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if args, ok := filterArgs.Req.(*roachpb.TransferLeaseRequest); ok {
@@ -969,7 +973,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	mtc.Start(t, 2)
 
 	// Up-replicate to two replicas.
-	keyMinReplica0 := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+	keyMinReplica0 := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
 	mtc.replicateRange(keyMinReplica0.RangeID, 1)
 
 	// Split the key space at key "a".
@@ -991,7 +995,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	// Wait for all replicas to process.
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < 2; i++ {
-			r := mtc.stores[i].LookupReplica(roachpb.RKeyMin, nil)
+			r := mtc.stores[i].LookupReplica(roachpb.RKeyMin)
 			if l, _ := r.GetLease(); l.Replica.StoreID != mtc.stores[1].StoreID() {
 				return errors.Errorf("expected lease to transfer to replica 2: got %s", l)
 			}
@@ -1001,7 +1005,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 
 	// Next a failed transfer from RHS replica 0 to replica 1.
 	injectLeaseTransferError.Store(true)
-	keyAReplica0 := mtc.stores[0].LookupReplica(splitKey, nil)
+	keyAReplica0 := mtc.stores[0].LookupReplica(splitKey)
 	if err := mtc.dbs[0].AdminTransferLease(
 		context.TODO(), keyAReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
 	); err == nil {
@@ -1131,10 +1135,10 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 // lease holder) is not blocked by ongoing reads.
 // The test relies on two things:
 // 1) Lease extensions, unlike lease transfers, are not blocked by reads through
-// their ReplicatedEvalResult.BlockReads.
+//    their ReplicatedEvalResult.BlockReads.
 // 2) Requests such as RequestLeaseRequest don't declare to touch the whole key
-// span of the range, and thus don't conflict through the command queue with
-// other reads.
+//    span of the range, and thus don't acquire latches that conflict with other
+//    reads.
 func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	readBlocked := make(chan struct{})
@@ -1151,7 +1155,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &storage.StoreTestingKnobs{
-					EvalKnobs: batcheval.TestingKnobs{
+					EvalKnobs: storagebase.BatchEvalTestingKnobs{
 						TestingEvalFilter: cmdFilter,
 					},
 				},
@@ -1190,7 +1194,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		repl := store.LookupReplica(rKey, nil)
+		repl := store.LookupReplica(rKey)
 		if repl == nil {
 			t.Fatalf("replica for key %s not found", rKey)
 		}
@@ -1349,7 +1353,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &storage.StoreTestingKnobs{
-					EvalKnobs: batcheval.TestingKnobs{
+					EvalKnobs: storagebase.BatchEvalTestingKnobs{
 						TestingEvalFilter: cmdFilter,
 					},
 				},
@@ -1378,12 +1382,16 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 
 func TestRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	mtc := &multiTestContext{
+		storeConfig: &storeCfg,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
 	// Up-replicate to two replicas.
-	mtc.replicateRange(mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil).RangeID, 1)
+	mtc.replicateRange(mtc.stores[0].LookupReplica(roachpb.RKeyMin).RangeID, 1)
 
 	// Split the key space at key "a".
 	splitKey := roachpb.RKey("a")
@@ -1398,10 +1406,10 @@ func TestRangeInfo(t *testing.T) {
 	// a SucceedsSoon loop to ensure the split completes.
 	var lhsReplica0, lhsReplica1, rhsReplica0, rhsReplica1 *storage.Replica
 	testutils.SucceedsSoon(t, func() error {
-		lhsReplica0 = mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
-		lhsReplica1 = mtc.stores[1].LookupReplica(roachpb.RKeyMin, nil)
-		rhsReplica0 = mtc.stores[0].LookupReplica(splitKey, nil)
-		rhsReplica1 = mtc.stores[1].LookupReplica(splitKey, nil)
+		lhsReplica0 = mtc.stores[0].LookupReplica(roachpb.RKeyMin)
+		lhsReplica1 = mtc.stores[1].LookupReplica(roachpb.RKeyMin)
+		rhsReplica0 = mtc.stores[0].LookupReplica(splitKey)
+		rhsReplica1 = mtc.stores[1].LookupReplica(splitKey)
 		if lhsReplica0 == rhsReplica0 || lhsReplica1 == rhsReplica1 {
 			return errors.Errorf("replicas not post-split %v, %v, %v, %v",
 				lhsReplica0, rhsReplica0, rhsReplica0, rhsReplica1)
@@ -1471,7 +1479,7 @@ func TestRangeInfo(t *testing.T) {
 			EndKey: roachpb.KeyMax,
 		},
 	}
-	txn := roachpb.MakeTransaction("test", roachpb.KeyMin, 1, enginepb.SERIALIZABLE, mtc.clock.Now(), 0)
+	txn := roachpb.MakeTransaction("test", roachpb.KeyMin, 1, mtc.clock.Now(), 0)
 	h.Txn = &txn
 	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
 	if pErr != nil {
@@ -1548,161 +1556,6 @@ func TestRangeInfo(t *testing.T) {
 	}
 }
 
-// TestCampaignOnLazyRaftGroupInitialization verifies expected
-// behavior for which replicas will campaign on lazy initialization.
-func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	t.Skip("this test is flaky on the 5m initial stress due to errant Raft messages initializing the Raft group")
-	splitKey := keys.UserTableDataMin
-	testState := struct {
-		syncutil.Mutex
-		blockingCh chan struct{}
-		campaigns  map[roachpb.ReplicaID]bool // map from ReplicaID -> whether the replica campaigned
-	}{}
-	sc := storage.TestStoreConfig(nil)
-	sc.EnableEpochRangeLeases = false // simpler to test with
-	sc.TestingKnobs.DontPreventUseOfOldLeaseOnStart = true
-	sc.TestingKnobs.OnCampaign = func(r *storage.Replica) {
-		if !r.DescLocked().StartKey.Equal(keys.UserTableDataMin) {
-			return
-		}
-		testState.Lock()
-		if testState.campaigns == nil {
-			testState.Unlock()
-			return
-		}
-		testState.campaigns[r.ReplicaIDLocked()] = true
-		blocking := testState.blockingCh
-		testState.Unlock()
-		<-blocking
-	}
-	mtc := &multiTestContext{storeConfig: &sc}
-	defer mtc.Stop()
-	mtc.Start(t, 3)
-
-	// Split so we can rely on RHS range being quiescent after a restart.
-	// We use UserTableDataMin to avoid having the range activated to
-	// gossip system table data.
-	splitArgs := adminSplitArgs(splitKey)
-	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); err != nil {
-		t.Fatal(err)
-	}
-
-	// Up-replicate to three replicas.
-	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
-	if repl == nil {
-		t.Fatal("replica should not be nil for RHS range")
-	}
-	mtc.replicateRange(repl.RangeID, 1, 2)
-
-	testCases := []struct {
-		desc         string
-		prepFn       func(*testing.T)
-		expCampaigns map[roachpb.ReplicaID]bool
-	}{
-		{
-			desc:         "within idle replica campaign timeout",
-			prepFn:       func(t *testing.T) {},
-			expCampaigns: map[roachpb.ReplicaID]bool{},
-		},
-		{
-			desc: "past idle replica campaign timeout",
-			prepFn: func(t *testing.T) {
-				for _, s := range mtc.stores {
-					if err := s.GossipStore(context.TODO(), false /* useCached */); err != nil {
-						t.Fatal(err)
-					}
-				}
-				mtc.manualClock.Increment(sc.RaftElectionTimeout().Nanoseconds())
-			},
-			expCampaigns: map[roachpb.ReplicaID]bool{
-				1: true,
-			},
-		},
-		{
-			desc: "lease expired all replicas should campaign",
-			prepFn: func(t *testing.T) {
-				for _, s := range mtc.stores {
-					if err := s.GossipStore(context.TODO(), false /* useCached */); err != nil {
-						t.Fatal(err)
-					}
-				}
-				mtc.manualClock.Increment(mtc.storeConfig.LeaseExpiration())
-			},
-			expCampaigns: map[roachpb.ReplicaID]bool{
-				1: true,
-				2: true,
-				3: true,
-			},
-		},
-	}
-
-	for i, test := range testCases {
-		t.Run(test.desc, func(t *testing.T) {
-			// Restart the cluster for lazy initialization of the raft group.
-			mtc.restart()
-			// Clear the campaign map.
-			testState.Lock()
-			testState.blockingCh = make(chan struct{})
-			testState.campaigns = map[roachpb.ReplicaID]bool{}
-			testState.Unlock()
-			// Run whatever preparation is necessary for this test case.
-			test.prepFn(t)
-
-			// Send an increment to all three replicas in parallel.
-			errCh := make(chan error, len(mtc.stores))
-			for _, s := range mtc.stores {
-				go func(s *storage.Store) {
-					incArgs := incrementArgs(splitKey, 1)
-					_, pErr := client.SendWrappedWith(
-						context.Background(), s, roachpb.Header{RangeID: repl.RangeID}, incArgs,
-					)
-					errCh <- pErr.GoError()
-				}(s)
-			}
-
-			// Allow parallel invocations to proceed.
-			testutils.SucceedsSoon(t, func() error {
-				testState.Lock()
-				defer testState.Unlock()
-				if c, ec := len(testState.campaigns), len(test.expCampaigns); c != ec {
-					return errors.Errorf("have seen %d campaigns out of %d expected", c, ec)
-				}
-				return nil
-			})
-			close(testState.blockingCh)
-
-			// We expect not lease holder errors on 2 out of the three replicas.
-			var errCount int
-			for range mtc.stores {
-				if err := <-errCh; err != nil {
-					errCount++
-					if _, ok := err.(*roachpb.NotLeaseHolderError); !ok {
-						t.Errorf("got unexpected error %s", err)
-					}
-				}
-			}
-			if errCount != 2 {
-				t.Errorf("expected 2 errors; got %d", errCount)
-			}
-
-			mtc.waitForValues(splitKey, []int64{int64(i + 1), int64(i + 1), int64(i + 1)})
-
-			testState.Lock()
-			if !reflect.DeepEqual(test.expCampaigns, testState.campaigns) {
-				t.Errorf("expected %+v; got %+v", test.expCampaigns, testState.campaigns)
-			}
-			testState.Unlock()
-
-			// HACK: sleep to process raft leader wakeup proposals. It is
-			// otherwise too difficult to guarantee that the next test cycle
-			// will not have a stray raft request init the raft group after
-			// restart.
-			time.Sleep(100 * time.Millisecond)
-		})
-	}
-}
-
 // TestDrainRangeRejection verifies that an attempt to transfer a range to a
 // draining store fails.
 func TestDrainRangeRejection(t *testing.T) {
@@ -1726,7 +1579,7 @@ func TestDrainRangeRejection(t *testing.T) {
 			StoreID: mtc.idents[drainingIdx].StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %v", err)
@@ -1743,23 +1596,37 @@ func TestSystemZoneConfigs(t *testing.T) {
 		t.Skip()
 	}
 
-	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 7, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &storage.StoreTestingKnobs{
+					// Disable LBS because when the scan is happening at the rate it's happening
+					// below, it's possible that one of the system ranges trigger a split.
+					DisableLoadBasedSplitting: true,
+				},
+			},
 			// Scan like a bat out of hell to ensure replication and replica GC
 			// happen in a timely manner.
 			ScanInterval: 50 * time.Millisecond,
 		},
 	})
-	ctx := context.TODO()
 	defer tc.Stopper().Stop(ctx)
 	log.Info(ctx, "TestSystemZoneConfig: test cluster started")
 
-	expectedRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
+	expectedSystemRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.DefaultZoneConfig()
-	expectedReplicas := expectedRanges * int(config.DefaultZoneConfig().NumReplicas)
+	expectedUserRanges := tc.Servers[0].ExpectedInitialUserRangeCount()
+	expectedSystemRanges -= expectedUserRanges
+	systemNumReplicas := int(*config.DefaultSystemZoneConfig().NumReplicas)
+	userNumReplicas := int(*config.DefaultZoneConfig().NumReplicas)
+	expectedReplicas := expectedSystemRanges*systemNumReplicas + expectedUserRanges*userNumReplicas
+	log.Infof(ctx, "TestSystemZoneConfig: expecting %d system ranges and %d user ranges",
+		expectedSystemRanges, expectedUserRanges)
+	log.Infof(ctx, "TestSystemZoneConfig: expected (%dx%d) + (%dx%d) = %d replicas total",
+		expectedSystemRanges, systemNumReplicas, expectedUserRanges, userNumReplicas, expectedReplicas)
 
 	waitForReplicas := func() error {
 		var conflictingID roachpb.RangeID
@@ -1796,34 +1663,25 @@ func TestSystemZoneConfigs(t *testing.T) {
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: initial replication succeeded")
 
-	// Allow for inserting zone configs without having to go through (or
-	// duplicate the logic from) the CLI.
-	config.TestingSetupZoneConfigHook(tc.Stopper())
-
 	// Update the meta zone config to have more replicas and expect the number
 	// of replicas to go up accordingly after running all replicas through the
 	// replicate queue.
-	zoneConfig := config.DefaultZoneConfig()
-	zoneConfig.NumReplicas += 2
-	config.TestingSetZoneConfig(keys.MetaRangesID, zoneConfig)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE meta", "num_replicas: 7")
 	expectedReplicas += 2
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: up-replication of meta ranges succeeded")
 
 	// Do the same thing, but down-replicating the timeseries range.
-	zoneConfig = config.DefaultZoneConfig()
-	zoneConfig.NumReplicas -= 2
-	config.TestingSetZoneConfig(keys.TimeseriesRangesID, zoneConfig)
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE timeseries", "num_replicas: 1")
 	expectedReplicas -= 2
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: down-replication of timeseries ranges succeeded")
 
 	// Finally, verify the system ranges. Note that in a new cluster there are
 	// two system ranges, which we have to take into account here.
-	zoneConfig = config.DefaultZoneConfig()
-	zoneConfig.NumReplicas += 2
-	config.TestingSetZoneConfig(keys.SystemRangesID, zoneConfig)
-	expectedReplicas += 6
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE system", "num_replicas: 7")
+	expectedReplicas += 4
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: up-replication of system ranges succeeded")
 }

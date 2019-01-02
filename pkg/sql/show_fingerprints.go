@@ -19,17 +19,17 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 type showFingerprintsNode struct {
 	optColumnsSlot
 
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
 	indexes   []sqlbase.IndexDescriptor
 
 	run showFingerprintsRun
@@ -54,19 +54,10 @@ type showFingerprintsNode struct {
 func (p *planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
-	tn, err := n.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	var tableDesc *TableDescriptor
 	// We avoid the cache so that we can observe the fingerprints without
 	// taking a lease, like other SHOW commands.
-	//
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-	})
+	tableDesc, err := p.ResolveUncachedTableDescriptor(
+		ctx, &n.Table, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -148,12 +139,12 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	// exposed to users, consider adding a version to the fingerprint output.
 	sql := fmt.Sprintf(`SELECT
 	  xor_agg(fnv64(%s))::string AS fingerprint
-	  FROM [%d AS t]@{FORCE_INDEX=[%d],NO_INDEX_JOIN}
+	  FROM [%d AS t]@{FORCE_INDEX=[%d]}
 	`, strings.Join(cols, `,`), n.tableDesc.ID, index.ID)
 	// If were'in in an AOST context, propagate it to the inner statement so that
 	// the inner statement gets planned with planner.avoidCachedDescriptors set,
 	// like the outter one.
-	if params.p.asOfSystemTime {
+	if params.p.semaCtx.AsOfTimestamp != nil {
 		ts := params.p.txn.OrigTimestamp()
 		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
 	}
@@ -168,8 +159,8 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	}
 
 	if len(fingerprintCols) != 1 {
-		return false, errors.Errorf(
-			"programming error: unexpected number of columns returned: 1 vs %d",
+		return false, pgerror.NewAssertionErrorf(
+			"unexpected number of columns returned: 1 vs %d",
 			len(fingerprintCols))
 	}
 	fingerprint := fingerprintCols[0]

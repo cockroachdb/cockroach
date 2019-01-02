@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import d3 from "d3";
 import React from "react";
 import moment from "moment";
@@ -33,8 +47,8 @@ interface LineGraphProps extends MetricsDataComponentProps {
  * axis.
  */
 export class LineGraph extends React.Component<LineGraphProps, {}> {
-  // The SVG Element in the DOM used to render the graph.
-  graphEl: SVGElement;
+  // The SVG Element reference in the DOM used to render the graph.
+  graphEl: React.RefObject<SVGSVGElement> = React.createRef();
 
   // A configured NVD3 chart used to render the chart.
   chart: nvd3.LineChart;
@@ -83,7 +97,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
 
     // To get the x-coordinate within the chart we subtract the left side of the SVG
     // element and the left side margin.
-    const x = e.clientX - this.graphEl.getBoundingClientRect().left - CHART_MARGINS.left;
+    const x = e.clientX - this.graphEl.current.getBoundingClientRect().left - CHART_MARGINS.left;
     // Find the time value of the coordinate by asking the scale to invert the value.
     const t = Math.floor(timeScale.invert(x));
 
@@ -158,7 +172,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       }
 
       ConfigureLineChart(
-        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, hoverTime,
+        this.chart, this.graphEl.current, metrics, axis, this.props.data, this.props.timeInfo, hoverTime,
       );
     }
   }
@@ -194,7 +208,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     return (
       <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
         <div className="linegraph">
-          <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} {...hoverProps} />
+          <svg className="graph linked-guideline" ref={this.graphEl} {...hoverProps} />
         </div>
       </Visualization>
     );

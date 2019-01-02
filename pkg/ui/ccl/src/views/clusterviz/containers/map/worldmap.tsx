@@ -11,8 +11,7 @@
 import React from "react";
 import * as d3 from "d3";
 
-import worldShapes from "./world.json";
-import usStateShapes from "./us-states.json";
+import shapes from "./world.json";
 
 interface WorldMapProps {
   projection: d3.geo.Projection;
@@ -24,20 +23,11 @@ export class WorldMap extends React.Component<WorldMapProps> {
     return (
       <g>
         <g>
-          {worldShapes.features.map((feature: any, i: number) =>
+          {shapes.features.map((feature: any, i: number) =>
             <path
               key={i}
               className="geopath"
               id={`world-${feature.id}`}
-              d={pathGen(feature)}
-            />,
-          )}
-        </g>
-        <g>
-          {usStateShapes.features.map((feature: any, i: number) =>
-            <path
-              key={i}
-              className="geopath"
               d={pathGen(feature)}
             />,
           )}

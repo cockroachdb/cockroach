@@ -18,22 +18,30 @@ INSERT INTO t VALUES
   ('2015-08-25 04:45:45.53453', '2015-08-25', '2h45m2s234ms'),
   ('2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
 
-query TTT
-SELECT * FROM t WHERE a = '2015-08-25 05:45:45.53453+01:00'::timestamp
+# Spot-check date math.
+query T
+SELECT b + '6 month' from t order by a desc
 ----
-2015-08-25 04:45:45.53453 +0000 +0000   2015-08-25 00:00:00 +0000 +0000   2h45m2s234ms
+2016-02-29 00:00:00 +0000 UTC
+2016-02-29 00:00:00 +0000 UTC
+2016-02-25 00:00:00 +0000 UTC
+
+query TTT
+SELECT * FROM t WHERE a = '2015-08-25 04:45:45.53453+01:00'::timestamp
+----
+2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
 
 # insert duplicate value with different time zone offset
 statement error duplicate key value \(a\)=\('2015-08-30 03:34:45\.34567\+00:00'\) violates unique constraint "primary"
 INSERT INTO t VALUES
-  ('2015-08-29 20:34:45.34567-07:00', '2015-08-31', '35h2s')
+  ('2015-08-30 03:34:45.34567-07:00', '2015-08-31', '35h2s')
 
 # Check that time/date/interval representations outside of the index are okay.
 statement ok
 CREATE TABLE u (
   a BIGINT PRIMARY KEY,
   b TIMESTAMP,
-  c TIMESTAMP WITH TIME ZONE,
+  c TIMESTAMPTZ,
   d DATE,
   e INTERVAL
 )
@@ -59,10 +67,10 @@ INSERT INTO u VALUES
 query ITTTT
 SELECT * FROM u ORDER BY a
 ----
-123  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-29 22:34:45.34567 -0500 -0500  2015-08-30 00:00:00 +0000 +0000  34h2s
-234  2015-08-25 06:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  2h45m2s234ms
-345  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 23:10:09.98763 -0500 -0500  2015-08-29 00:00:00 +0000 +0000  234h45m2s234ms
-456  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 18:10:09.98763 -0500 -0500  2015-08-29 00:00:00 +0000 +0000  234h45m2s234ms
+123  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-29 22:34:45.34567 -0500 -0500  2015-08-30 00:00:00 +0000 +0000  34:00:02
+234  2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
+345  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 23:10:09.98763 -0500 -0500  2015-08-29 00:00:00 +0000 +0000  234:45:02.234
+456  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 18:10:09.98763 -0500 -0500  2015-08-29 00:00:00 +0000 +0000  234:45:02.234
 
 statement ok
 SET TIME ZONE UTC
@@ -70,10 +78,10 @@ SET TIME ZONE UTC
 query ITTTT
 SELECT * FROM u ORDER BY a
 ----
-123  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 00:00:00 +0000 +0000  34h2s
-234  2015-08-25 06:45:45.53453 +0000 +0000  2015-08-25 06:45:45.53453 +0000 +0000  2015-08-25 00:00:00 +0000 +0000  2h45m2s234ms
-345  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-30 04:10:09.98763 +0000 +0000  2015-08-29 00:00:00 +0000 +0000  234h45m2s234ms
-456  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 00:00:00 +0000 +0000  234h45m2s234ms
+123  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 03:34:45.34567 +0000 UTC  2015-08-30 00:00:00 +0000 +0000  34:00:02
+234  2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 06:45:45.53453 +0000 UTC  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
+345  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-30 04:10:09.98763 +0000 UTC  2015-08-29 00:00:00 +0000 +0000  234:45:02.234
+456  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 23:10:09.98763 +0000 UTC  2015-08-29 00:00:00 +0000 +0000  234:45:02.234
 
 statement ok
 SET TIME ZONE -5
@@ -81,12 +89,12 @@ SET TIME ZONE -5
 query TTTT
 SELECT max(b), max(c), max(d), max(e) FROM u
 ----
-2015-08-30 03:34:45.34567 +0000 +0000  2015-08-29 23:10:09.98763 -0500 -0500  2015-08-30 00:00:00 +0000 +0000  234h45m2s234ms
+2015-08-30 03:34:45.34567 +0000 +0000  2015-08-29 23:10:09.98763 -0500 -0500  2015-08-30 00:00:00 +0000 +0000  234:45:02.234
 
 query TTTT
 SELECT min(b), min(c), min(d), min(e) FROM u
 ----
-2015-08-25 06:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  2h45m2s234ms
+2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
 
 query BB
 SELECT now() < now() + '1m'::interval, now() <= now() + '1m'::interval
@@ -103,7 +111,7 @@ true true
 query T
 SELECT age('2001-04-10 22:06:45', '1957-06-13')
 ----
-384190h6m45s
+384190:06:45
 
 query B
 SELECT age('1957-06-13') - age(now(), '1957-06-13') = interval '0s'
@@ -123,7 +131,7 @@ true
 query TT
 SELECT now()::timestamp - now(), now() - now()::timestamp
 ----
-0s  0s
+00:00:00  00:00:00
 
 query BB
 SELECT now() = now()::timestamp, now()::timestamp = now()
@@ -142,16 +150,6 @@ true true
 
 query B
 SELECT current_date - current_date() = 0
-----
-true
-
-query B
-SELECT current_time:::timetz::time - current_timestamp:::timestamp::time > interval '-2us';
-----
-true
-
-query B
-SELECT current_time():::timetz::time - current_timestamp:::timestamp::time > interval '-2us';
 ----
 true
 
@@ -186,7 +184,7 @@ BEGIN TRANSACTION
 statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
-  v TIMESTAMP WITH TIME ZONE
+  v TIMESTAMPTZ
 )
 
 statement ok
@@ -346,9 +344,9 @@ statement ok
 CREATE TABLE ex (
   k BIGINT PRIMARY KEY,
   element STRING,
-  input TIMESTAMP WITH TIME ZONE,
+  input TIMESTAMPTZ,
   extract_result INT,
-  date_trunc_result TIMESTAMP WITH TIME ZONE
+  date_trunc_result TIMESTAMPTZ
 )
 
 statement ok
@@ -648,14 +646,13 @@ SELECT '2015-08-25 05:45:45.53453'::timestamp
 statement ok
 SET TIME ZONE 'Europe/Rome'
 
-query T
+query error pq: unimplemented: timestamp abbreviations not supported
 SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
-----
 
 statement ok
 SET TIME ZONE +1
 
-query error unknown zone "CET"
+query error pq: unimplemented: timestamp abbreviations not supported
 SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
 
 query T
@@ -692,7 +689,7 @@ SELECT '2015-08-25 05:45:45-01:00'::timestamptz
 statement ok
 SET TIMEZONE = +2
 
-query error unknown zone "CET"
+query error pq: unimplemented: timestamp abbreviations not supported
 SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
 
 query T
@@ -807,7 +804,7 @@ SET TIME ZONE default
 query T
 SELECT '2015-08-24 21:45:45.53453'::timestamptz
 ----
-2015-08-24 21:45:45.53453 +0000 +0000
+2015-08-24 21:45:45.53453 +0000 UTC
 
 statement ok
 SET TIME ZONE local
@@ -815,7 +812,7 @@ SET TIME ZONE local
 query T
 SELECT '2015-08-24 21:45:45.53453'::timestamptz
 ----
-2015-08-24 21:45:45.53453 +0000 +0000
+2015-08-24 21:45:45.53453 +0000 UTC
 
 statement ok
 SET TIME ZONE 'DEFAULT'
@@ -823,7 +820,7 @@ SET TIME ZONE 'DEFAULT'
 query T
 SELECT '2015-08-24 21:45:45.53453'::timestamptz
 ----
-2015-08-24 21:45:45.53453 +0000 +0000
+2015-08-24 21:45:45.53453 +0000 UTC
 
 statement ok
 SET TIME ZONE ''
@@ -831,7 +828,7 @@ SET TIME ZONE ''
 query T
 SELECT '2015-08-24 21:45:45.53453'::timestamptz
 ----
-2015-08-24 21:45:45.53453 +0000 +0000
+2015-08-24 21:45:45.53453 +0000 UTC
 
 
 statement ok
@@ -890,7 +887,7 @@ SET TIME ZONE 'UTC'
 query TTTT
 SELECT b, b::date, c, c::date FROM u WHERE a = 123
 ----
-2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 00:00:00 +0000 +0000  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 00:00:00 +0000 +0000
+2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 00:00:00 +0000 +0000  2015-08-30 03:34:45.34567 +0000 UTC  2015-08-30 00:00:00 +0000 +0000
 
 query T
 SELECT d::timestamp FROM u WHERE a = 123
@@ -917,17 +914,17 @@ statement ok
 CREATE TABLE tz (
   a INT PRIMARY KEY,
   b TIMESTAMP,
-  c TIMESTAMP WITH TIME ZONE,
+  c TIMESTAMPTZ,
   d TIMESTAMPTZ
 )
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM tz
 ----
-a  INT                       false  NULL  ·  {"primary"}
-b  TIMESTAMP                 true   NULL  ·  {}
-c  TIMESTAMP WITH TIME ZONE  true   NULL  ·  {}
-d  TIMESTAMP WITH TIME ZONE  true   NULL  ·  {}
+a  INT8         false  NULL  ·  {primary}  false
+b  TIMESTAMP    true   NULL  ·  {}         false
+c  TIMESTAMPTZ  true   NULL  ·  {}         false
+d  TIMESTAMPTZ  true   NULL  ·  {}         false
 
 statement ok
 INSERT INTO tz VALUES
@@ -941,7 +938,7 @@ query ITT
 SELECT a, b, c FROM tz ORDER BY a
 ----
 1   2015-08-30 03:34:45 +0000 +0000     2015-08-30 01:34:45 -0200 -0200
-2   2015-08-30 02:34:45 +0000 +0000     2015-08-30 00:34:45 -0200 -0200
+2   2015-08-30 03:34:45 +0000 +0000     2015-08-30 00:34:45 -0200 -0200
 
 query TTTT
 SELECT b + interval '1m', interval '1m' + b, c + interval '1m', interval '1m' + c FROM tz WHERE a = 1
@@ -964,11 +961,15 @@ SELECT a FROM tz WHERE c < d
 ----
 2
 
+
 query I rowsort
 SELECT a FROM tz WHERE b = c::timestamp
 ----
+
+query I rowsort
+SELECT a FROM tz WHERE c = d::timestamp
+----
 1
-2
 
 # reset for what follows.
 statement ok
@@ -1026,17 +1027,17 @@ SHOW TIME ZONE
 query T
 SELECT DATE '1999-01-01' + INTERVAL '4 minutes'
 ----
-1999-01-01 00:04:00 +0000 +0000
+1999-01-01 00:04:00 +0000 UTC
 
 query T
 SELECT INTERVAL '4 minutes' + DATE '1999-01-01'
 ----
-1999-01-01 00:04:00 +0000 +0000
+1999-01-01 00:04:00 +0000 UTC
 
 query T
 SELECT DATE '1999-01-01' - INTERVAL '4 minutes'
 ----
-1998-12-31 23:56:00 +0000 +0000
+1998-12-31 23:56:00 +0000 UTC
 
 query B
 SELECT DATE '1999-01-02' < TIMESTAMPTZ '1999-01-01'
@@ -1102,63 +1103,63 @@ true
 query TTTTT
 SELECT INTERVAL '5', INTERVAL '5' SECOND, INTERVAL '5' MINUTE TO SECOND, INTERVAL '5' HOUR TO SECOND, INTERVAL '5' DAY TO SECOND;
 ----
-5s  5s  5s  5s  5s
+00:00:05  00:00:05  00:00:05  00:00:05  00:00:05
 
 query TTT
 SELECT INTERVAL '5' MINUTE, INTERVAL '5' HOUR TO MINUTE, INTERVAL '5' DAY TO MINUTE;
 ----
-5m 5m 5m
+00:05:00  00:05:00  00:05:00
 
 query TT
 SELECT INTERVAL '5' HOUR, INTERVAL '5' DAY TO HOUR;
 ----
-5h 5h
+05:00:00  05:00:00
 
 query T
 SELECT INTERVAL '5' DAY;
 ----
-5d
+5 days
 
 query TT
 SELECT INTERVAL '5' MONTH, INTERVAL '5' YEAR TO MONTH;
 ----
-5mon 5mon
+5 mons  5 mons
 
 query T
 SELECT INTERVAL '5' YEAR
 ----
-5y
+5 years
 
 ## Test truncation via field specifiers
 query TTTT
 SELECT INTERVAL '1-2 3 4:5:6' SECOND, INTERVAL '1-2 3 4:5:6' MINUTE TO SECOND, INTERVAL '1-2 3 4:5:6' HOUR TO SECOND, INTERVAL '1-2 3 4:5:6' DAY TO SECOND;
 ----
-1y2mon3d4h5m6s  1y2mon3d4h5m6s  1y2mon3d4h5m6s  1y2mon3d4h5m6s
+1 year 2 mons 3 days 04:05:06  1 year 2 mons 3 days 04:05:06  1 year 2 mons 3 days 04:05:06  1 year 2 mons 3 days 04:05:06
 
 query TTT
 SELECT INTERVAL '1-2 3 4:5:6' MINUTE, INTERVAL '1-2 3 4:5:6' HOUR TO MINUTE, INTERVAL '1-2 3 4:5:6' DAY TO MINUTE;
 ----
-1y2mon3d4h5m  1y2mon3d4h5m  1y2mon3d4h5m
+1 year 2 mons 3 days 04:05:00  1 year 2 mons 3 days 04:05:00  1 year 2 mons 3 days 04:05:00
 
 query TT
 SELECT INTERVAL '1-2 3 4:5:6' HOUR, INTERVAL '1-2 3 4:5:6' DAY TO HOUR
 ----
-1y2mon3d4h  1y2mon3d4h
+1 year 2 mons 3 days 04:00:00  1 year 2 mons 3 days 04:00:00
 
 query T
 SELECT INTERVAL '1-2 3 4:5:6' DAY;
 ----
-1y2mon3d
+1 year 2 mons 3 days
 
 query TT
 SELECT INTERVAL '1-2 3 4:5:6' MONTH, INTERVAL '1-2 3 4:5:6' YEAR TO MONTH;
 ----
-1y2mon  1y2mon
+1 year 2 mons  1 year 2 mons
 
 query T
 SELECT INTERVAL '1-2 3 4:5:6' YEAR
 ----
-1y
+1 year
 
 
 # Test regression, #20464. When a built-in returns a datum that does not
@@ -1186,9 +1187,9 @@ SELECT date_trunc('month', ts) AS date_trunc_month_created_at FROM "topics";
 query T
 SELECT date_trunc('month', tstz) AS date_trunc_month_created_at FROM "topics";
 ----
-2017-12-01 00:00:00 +0000 +0000
+2017-12-01 00:00:00 +0000 UTC
 
 query T
 SELECT date_trunc('month', "date") AS date_trunc_month_created_at FROM "topics";
 ----
-2017-12-01 00:00:00 +0000 +0000
+2017-12-01 00:00:00 +0000 UTC

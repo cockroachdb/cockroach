@@ -20,19 +20,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	version "github.com/hashicorp/go-version"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
-
-// const char* compilerVersion() {
-// #if defined(__clang__)
-// 	return __VERSION__;
-// #elif defined(__GNUC__) || defined(__GNUG__)
-// 	return "gcc " __VERSION__;
-// #else
-// 	return "non-gcc, non-clang (or an unrecognized version)";
-// #endif
-// }
-import "C"
 
 // TimeFormat is the reference format for build.Time. Make sure it stays in sync
 // with the string passed to the linker in the root Makefile.
@@ -44,7 +33,7 @@ var (
 	tag             = "unknown" // Tag of this build (git describe --tags w/ optional '-dirty' suffix)
 	utcTime         string      // Build time in UTC (year/month/day hour:min:sec)
 	rev             string      // SHA-1 of this build (git rev-parse)
-	cgoCompiler     = C.GoString(C.compilerVersion())
+	cgoCompiler     = cgoVersion()
 	cgoTargetTriple string
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
@@ -66,12 +55,11 @@ func SeemsOfficial() bool {
 
 // VersionPrefix returns the version prefix of the current build.
 func VersionPrefix() string {
-	v, err := version.NewVersion(tag)
+	v, err := version.Parse(tag)
 	if err != nil {
 		return "dev"
 	}
-	semVer := v.Segments()[:2]
-	return fmt.Sprintf("v%d.%d", semVer[0], semVer[1])
+	return fmt.Sprintf("v%d.%d", v.Major(), v.Minor())
 }
 
 func init() {
@@ -90,6 +78,15 @@ func (b Info) Short() string {
 	}
 	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
 		b.Distribution, b.Tag, plat, b.Time, b.GoVersion)
+}
+
+// GoTime parses the utcTime string and returns a time.Time.
+func (b Info) GoTime() time.Time {
+	val, err := time.Parse(TimeFormat, b.Time)
+	if err != nil {
+		return time.Time{}
+	}
+	return val
 }
 
 // Timestamp parses the utcTime string and returns the number of seconds since epoch.

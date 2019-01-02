@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -49,7 +50,7 @@ var trackedMetrics = map[string]threshold{
 	"ranges.unavailable":          gaugeZero,
 	"ranges.underreplicated":      gaugeZero,
 	"requests.backpressure.split": gaugeZero,
-	"requests.slow.commandqueue":  gaugeZero,
+	"requests.slow.latch":         gaugeZero,
 	"requests.slow.lease":         gaugeZero,
 	"requests.slow.raft":          gaugeZero,
 	"sys.goroutines":              {gauge: true, min: 5000},
@@ -77,6 +78,10 @@ var trackedMetrics = map[string]threshold{
 	"queue.raftsnapshot.process.failure":  counterZero,
 	"queue.tsmaintenance.process.failure": counterZero,
 	"queue.consistency.process.failure":   counterZero,
+
+	// When there are more than 100 pending items in the Raft snapshot queue,
+	// this is certainly worth pointing out.
+	"queue.raftsnapshot.pending": {gauge: true, min: 100},
 }
 
 type metricsMap map[roachpb.StoreID]map[string]float64
@@ -142,11 +147,13 @@ func NewHealthChecker(trackedMetrics map[string]threshold) *HealthChecker {
 }
 
 // CheckHealth performs a (cheap) health check.
-func (h *HealthChecker) CheckHealth(ctx context.Context, nodeStatus NodeStatus) HealthCheckResult {
+func (h *HealthChecker) CheckHealth(
+	ctx context.Context, nodeStatus statuspb.NodeStatus,
+) statuspb.HealthCheckResult {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	// Gauges that trigger alerts when nonzero.
-	var alerts []HealthAlert
+	var alerts []statuspb.HealthAlert
 
 	m := map[roachpb.StoreID]map[string]float64{
 		0: nodeStatus.Metrics,
@@ -159,14 +166,14 @@ func (h *HealthChecker) CheckHealth(ctx context.Context, nodeStatus NodeStatus) 
 
 	for storeID, storeDiff := range diffs {
 		for name, value := range storeDiff {
-			alerts = append(alerts, HealthAlert{
+			alerts = append(alerts, statuspb.HealthAlert{
 				StoreID:     storeID,
-				Category:    HealthAlert_METRICS,
+				Category:    statuspb.HealthAlert_METRICS,
 				Description: name,
 				Value:       value,
 			})
 		}
 	}
 
-	return HealthCheckResult{Alerts: alerts}
+	return statuspb.HealthCheckResult{Alerts: alerts}
 }

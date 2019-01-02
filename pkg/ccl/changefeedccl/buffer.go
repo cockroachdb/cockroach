@@ -10,15 +10,22 @@ package changefeedccl
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type bufferEntry struct {
-	kv roachpb.KeyValue
-	// TODO(dan): Make this specific to a span.
-	resolved hlc.Timestamp
+	kv       roachpb.KeyValue
+	resolved *jobspb.ResolvedSpan
+	// Timestamp of the schema that should be used to read this KV.
+	// If unset (zero-valued), the value's timestamp will be used instead.
+	schemaTimestamp hlc.Timestamp
+	// bufferGetTimestamp is the time this entry came out of the buffer.
+	bufferGetTimestamp time.Time
 }
 
 // buffer mediates between the changed data poller and the rest of the
@@ -38,15 +45,13 @@ func makeBuffer() *buffer {
 // TODO(dan): AddKV currently requires that each key is added in increasing mvcc
 // timestamp order. This will have to change when we add support for RangeFeed,
 // which starts out in a catchup state without this guarantee.
-func (b *buffer) AddKV(ctx context.Context, kv roachpb.KeyValue) error {
-	return b.addEntry(ctx, bufferEntry{kv: kv})
+func (b *buffer) AddKV(ctx context.Context, kv roachpb.KeyValue, minTimestamp hlc.Timestamp) error {
+	return b.addEntry(ctx, bufferEntry{kv: kv, schemaTimestamp: minTimestamp})
 }
 
 // AddResolved inserts a resolved timestamp notification in the buffer.
-//
-// TODO(dan): Make this specific to a span.
-func (b *buffer) AddResolved(ctx context.Context, ts hlc.Timestamp) error {
-	return b.addEntry(ctx, bufferEntry{resolved: ts})
+func (b *buffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error {
+	return b.addEntry(ctx, bufferEntry{resolved: &jobspb.ResolvedSpan{Span: span, Timestamp: ts}})
 }
 
 func (b *buffer) addEntry(ctx context.Context, e bufferEntry) error {
@@ -66,6 +71,7 @@ func (b *buffer) Get(ctx context.Context) (bufferEntry, error) {
 	case <-ctx.Done():
 		return bufferEntry{}, ctx.Err()
 	case e := <-b.entriesCh:
+		e.bufferGetTimestamp = timeutil.Now()
 		return e, nil
 	}
 }

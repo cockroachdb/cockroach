@@ -71,10 +71,10 @@ EXPLAIN (TYPES) SELECT $1
 query TTTTT colnames
 EXPLAIN (TYPES) SELECT $1::INT
 ----
-tree           field     description               columns      ordering
-render         ·         ·                         ("int" int)  "int"=CONST
- │             render 0  (($1)[string]::INT)[int]  ·            ·
- └── emptyrow  ·         ·                         ()           ·
+tree           field     description                columns     ordering
+render         ·         ·                          (int8 int)  int8=CONST
+ │             render 0  (($1)[string]::INT8)[int]  ·           ·
+ └── emptyrow  ·         ·                          ()          ·
 
 
 # Ensure that all relevant statement types can be explained
@@ -110,9 +110,11 @@ drop database  ·  ·
 query TTT
 EXPLAIN SHOW JOBS
 ----
-render       ·     ·
- └── values  ·     ·
-·            size  13 columns, 0 rows
+sort              ·      ·
+ │                order  -"coalesce",-started
+ └── render       ·      ·
+      └── values  ·      ·
+·                 size   15 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -154,52 +156,82 @@ distinct               ·          ·
 query TTT
 EXPLAIN SHOW TABLES
 ----
-sort                   ·      ·
- │                     order  +table_schema,+table_name
- └── render            ·      ·
-      └── filter       ·      ·
-           └── values  ·      ·
-·                      size   6 columns, 89 rows
+sort                   ·       ·
+ │                     order   +table_schema,+table_name
+ └── render            ·       ·
+      └── filter       ·       ·
+           │           filter  table_schema = 'public'
+           └── values  ·       ·
+·                      size    6 columns, 92 rows
+
+query TTT
+EXPLAIN SHOW TABLES WITH COMMENT
+----
+sort                                  ·         ·
+ │                                    order     +table_schema,+table_name
+ └── render                           ·         ·
+      └── join                        ·         ·
+           │                          type      left outer
+           │                          equality  (table_id) = (object_id)
+           ├── filter                 ·         ·
+           │    │                     filter    ((state = 'PUBLIC') OR (state IS NULL)) AND ((database_name = 'test') OR (database_name IS NULL))
+           │    └── join              ·         ·
+           │         │                type      left outer
+           │         │                equality  (table_name, table_catalog) = (name, database_name)
+           │         ├── filter       ·         ·
+           │         │    │           filter    table_schema = 'public'
+           │         │    └── values  ·         ·
+           │         │                size      6 columns, 92 rows
+           │         └── values       ·         ·
+           │                          size      13 columns, 16 rows
+           └── scan                   ·         ·
+·                                     table     comments@primary
+·                                     spans     ALL
 
 query TTT
 EXPLAIN SHOW DATABASE
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 29 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'database'
+      └── values  ·       ·
+·                 size    3 columns, 40 rows
 
 query TTT
 EXPLAIN SHOW TIME ZONE
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 29 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'timezone'
+      └── values  ·       ·
+·                 size    3 columns, 40 rows
 
 query TTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 29 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'default_transaction_isolation'
+      └── values  ·       ·
+·                 size    3 columns, 40 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 29 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'transaction_isolation'
+      └── values  ·       ·
+·                 size    3 columns, 40 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION PRIORITY
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 29 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'transaction_priority'
+      └── values  ·       ·
+·                 size    3 columns, 40 rows
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
@@ -209,44 +241,48 @@ sort                                       ·            ·
  └── render                                ·            ·
       └── group                            ·            ·
            │                               aggregate 0  column_name
-           │                               aggregate 1  data_type
+           │                               aggregate 1  crdb_sql_type
            │                               aggregate 2  is_nullable
            │                               aggregate 3  column_default
            │                               aggregate 4  generation_expression
            │                               aggregate 5  ordinal_position
-           │                               aggregate 6  array_agg(index_name)
-           │                               group by     @1-@6
+           │                               aggregate 6  is_hidden
+           │                               aggregate 7  array_agg(index_name)
+           │                               group by     @1-@7
            └── render                      ·            ·
                 └── join                   ·            ·
                      │                     type         left outer
                      │                     equality     (column_name) = (column_name)
                      ├── render            ·            ·
                      │    └── filter       ·            ·
+                     │         │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
                      │         └── values  ·            ·
-                     │                     size         17 columns, 901 rows
+                     │                     size         23 columns, 962 rows
                      └── render            ·            ·
                           └── filter       ·            ·
+                               │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
                                └── values  ·            ·
 ·                                          size         13 columns, 3 rows
 
 query TTT
 EXPLAIN SHOW GRANTS ON foo
 ----
-sort                   ·      ·
- │                     order  +database_name,+schema_name,+table_name,+grantee
- └── render            ·      ·
-      └── filter       ·      ·
-           └── values  ·      ·
-·                      size   8 columns, 570 rows
-
+sort                   ·       ·
+ │                     order   +database_name,+schema_name,+table_name,+grantee,+privilege_type
+ └── render            ·       ·
+      └── filter       ·       ·
+           │           filter  (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
+           └── values  ·       ·
+·                      size    8 columns, 600 rows
 
 query TTT
 EXPLAIN SHOW INDEX FROM foo
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  13 columns, 3 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+      └── values  ·       ·
+·                 size    13 columns, 3 rows
 
 query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
@@ -258,11 +294,13 @@ sort                             ·         ·
            │                     type      inner
            │                     equality  (relnamespace, oid) = (oid, conrelid)
            ├── filter            ·         ·
+           │    │                filter    relname = 'foo'
            │    └── values       ·         ·
-           │                     size      27 columns, 91 rows
+           │                     size      27 columns, 94 rows
            └── join              ·         ·
                 │                type      cross
                 ├── filter       ·         ·
+                │    │           filter    nspname = 'public'
                 │    └── values  ·         ·
                 │                size      4 columns, 4 rows
                 └── values       ·         ·
@@ -271,10 +309,11 @@ sort                             ·         ·
 query TTT
 EXPLAIN SHOW USERS
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  users@primary
-·          spans  ALL
+render     ·       ·
+ └── scan  ·       ·
+·          table   users@primary
+·          spans   ALL
+·          filter  "isRole" = false
 
 # EXPLAIN selecting from a sequence.
 statement ok
@@ -326,9 +365,10 @@ scan  ·      ·          (k, v)  k!=NULL; key(k)
 query TTT
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
-scan  ·      ·
-·     table  t@primary
-·     spans  /1-/1/# /3-/3/#
+scan  ·         ·
+·     table     t@primary
+·     spans     /1-/1/# /3-/3/#
+·     parallel  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
@@ -377,37 +417,6 @@ SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t
 limit                ·         ·
  │                   count     1
  │                   offset    1
- └── distinct        ·         ·
-      └── render     ·         ·
-           │         render 0  test.public.t.v
-           └── scan  ·         ·
-·                    table     t@primary
-·                    spans     ALL
-
-# Ensure EXPLAIN EXECUTE works properly
-
-statement ok
-PREPARE x AS SELECT DISTINCT v from t LIMIT $1
-
-query TTT
-SELECT tree, field, description FROM [EXPLAIN (VERBOSE) EXECUTE x(3)]
-----
-limit                ·         ·
- │                   count     3
- └── distinct        ·         ·
-      └── render     ·         ·
-           │         render 0  test.public.t.v
-           └── scan  ·         ·
-·                    table     t@primary
-·                    spans     ALL
-
-query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM [EXECUTE x(3)]
-]
-----
-limit                ·         ·
- │                   count     3
  └── distinct        ·         ·
       └── render     ·         ·
            │         render 0  test.public.t.v
@@ -735,3 +744,11 @@ render              ·         ·                                           (x i
 
 statement error EXPLAIN \(OPT\) only supported with the cost-based optimizer
 EXPLAIN (OPT) SELECT 1
+
+# Make sure that casts of null values to collated strings roundtrip correctly.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT NULL COLLATE en
+----
+render         ·         ·                                ("?column?")  "?column?"=CONST
+ │             render 0  CAST(NULL AS STRING) COLLATE en  ·             ·
+ └── emptyrow  ·         ·                                ()            ·

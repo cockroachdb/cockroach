@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: fakedist
 
 #
 # Tests that verify DistSQL support and auto mode determination.
@@ -10,10 +10,10 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 
 # Verify that EXPLAIN (DISTSQL) hides the JSON column by default (#21089)
 query BT colnames
-EXPLAIN (DISTSQL) VALUES (1)
+EXPLAIN (DISTSQL) SELECT 1
 ----
 automatic  url
-false       https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAQhff-CvOmFgS1O2rs5qUtHbIEDUI6HBNHZ3QSBIz-e7A0hAyBjO896fu4DYE9_dgLCfQRA4zCGtmRCMe9ag9Gf4XuFeaw5rTXRsFxJOgNaU4LQeNgl0zy2UPBU7LzUolf3Xf3PnTulMNZPmCKAud0p0iyE0H3Rb1u-idZOQg9mJ6TjQL5ido1wjk6-ovsqqbF3_qvFp4ktXVoYQxtKqa83QIAAP__QkpjGQ==
+false      https://cockroachdb.github.io/distsqlplan/decode.html#eJyMjzFLxTAUhXd_RTmTQsB0kzu6dXnKQ1wkQ0kOz2JNSm4CwqP_XZoM4iA4nnOS7-NeEVPgaf6kQt4wwhlsOXmqpnxU_cEUviDWYIlbLUftDHzKhFxRlrISgtd5rdR7C4PAMi9rI9rhcbi1g3-v8UPvYHBmDMwyjCIynV4e4HaDVMsPWMt8IcTu5v_yM3VLUflL_jfZGTBc2A_UVLPnc06-aXp8av9aEailr2MPU-zT7vab7wAAAP__8hZoQg==
 
 # Check the JSON column is still there, albeit hidden.
 query T colnames
@@ -118,37 +118,13 @@ SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
 true
 
 # OID cast - don't distribute (#22249).
-statement error pq: cast to REGCLASS is not supported by distsql
+query BT
 EXPLAIN (DISTSQL) SELECT t1.a FROM abc t1 INNER JOIN abc t2 on t1.a::REGCLASS = t2.a::REGCLASS;
+----
+false  https://cockroachdb.github.io/distsqlplan/decode.html#eJykkc1qwzAMgO97iqCzobF7Mwwyxtg6RjPS3UYObiy6QGoF2YGNkncfcQ5ZSvfT9ShZnz5JPoAji2uzRw_6FSSUAlqmCr0nHlJjwcq-g04F1K7twpAuBVTECPoAoQ4NgoYXs22wQGORFykIsBhM3cS2Ldd7wx-Z2VYgIO-CTjIJZS-AujB19MHsELTsxf-s8hKr-tY6yTpHbJHRzkTlQP5WcmL0B-PfHql2yAs1nzxfJ5nUuri7v3262WyS6yRTU_iHZZbnnLBA35LzeLzUyc7psAnaHY6X8dRxhc9MVdSMYR65mLDow_iqxmDl4lP846-wPANWx7D6EV7O4LQv-6vPAAAA___WlPjR
 
 # Query with OID expression - don't distribute (#24423).
-statement error pq: OID expressions are not supported by distsql
+query BT
 EXPLAIN (DISTSQL) SELECT 246::REGTYPE FROM abc
-
-# Verify that EXPLAIN ANALYZE (DISTSQL) annotates plans with collected
-# statistics.
-
-statement ok
-INSERT INTO kv VALUES (1,1);
-
-statement ok
-INSERT INTO kw VALUES (1,1);
-
-# This query verifies stat collection for the tableReader, mergeJoiner, and
-# aggregator.
-query T
-SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT kv.k, avg(kw.k) FROM kv JOIN kw ON kv.k=kw.k GROUP BY kv.k]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJysk0Fv1DAQhe_8CmtOW2FpY29PlpCyXFChbFBVkBCKKhMPwSKJo7FDW1X731Hsw5Jss7CIW_w8n_3ejPMEnTO40y16UF9AQMmhJ1eh945GKRVcmQdQGQfb9UMY5ZJD5QhBPUGwoUFQcKu_NniD2iCtM-BgMGjbxGN7sq2mx_zHT-BA7t4zQm0UE8DBB900LNgWFcs8cCiGoFguoNxzcEM4XOiDrhGU2PN_MyUWTN3_B1Ny0dTBy9A5MkhoJj7KkfxTyTPJ3iPV-NbZDmktp8ka_BZWuXh58Yps_T19Ao8ymwWN2lHaiM1Lk3hU2-oH1mLr6JENHo1iMmPv7OtDz3guF9u2OWeW27omrHVwtN5MA-ejvyJ1Lo6Jw3b3-W5X3N7tPl5fr3Ix5t9-erPK5cVfTPsok0iZlmJcnhPjBn3vOo_zV_Dsydk4ejQ1pqfk3UAVfiBXxWvSsohcFAz6kHZlWlx1cSv-M7_D4gxYzmF5Et5M4GwOb07ClzO43L_4FQAA__-EfYCR
-
-# This query verifies stats collection for the hashJoiner, distinct and sorter.
-query T
-SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT DISTINCT(kw.w) FROM kv JOIN kw ON kv.k = kw.w ORDER BY kw.w]
-----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyck8FunDAQhu99CmtOrWppMZCLpUoo6qFppaZKe6s4uHi6sQIYzZgmUbTvXmEipbCBLnuD3_PBN_b4CVpv8atpkEH_BAWlhI58hcyehmgsuLIPoBMJru36MMSlhMoTgn6C4EKNoOGH-VXjDRqLtEtAgsVgXB0_25FrDD0Wd39AAvl7FoTGaqFAAgdT1yK4BrVIGCRc90GLQkF5kOD78PJDDmaPoNVBnielFqTuT5ZKF6XSRakXl771ZJHQTjzKgfxfySudfTJ8-9m7FmmXThur8Xd4W6h3H8jtb-MTyBiKWZcxO2o1UvPSMTyq5eAJrWBnUYtYAxIa8yAabDw9ip7RapEm4ou7fF6xju-e80RcnrC12Zbz_u4pIO2y6Y4U6v0JZ3zkrVa8l2zzLbYfHQfXVmGXz32HfRknId6FM-TXJC-2SN4gd75lnE_tq19OhlFFu8dx9Nn3VOE38lX8zfh6HbkYWOQwrqbjy1Ubl-Id_xdWG-B0DqercDaBkzmcrcL5OpyvwhczuDy8-RsAAP__mE7PKQ==
-
-# This query verifies support for zeroNode in DistSQL.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT sum(k) FROM kv WHERE FALSE]
-----
-true
+false  https://cockroachdb.github.io/distsqlplan/decode.html#eJyMjzFLBDEQhXt_hbw64K6IxVQ2h1yjx3KNSIpc8jgW9pJlkgXlyH-X3RRiIVz53pv53swVMQW-uQsz5BM9rMGsyTPnpKvVBvbhC9IZjHFeympbA5-UkCvKWCZCcHSniQNdoD50MAgsbpw27Kzjxen3izt5GAyMgSr3j0_PIjLsXo8fhx1sNUhL-eXn4s6E9NXcfsPAPKeY-af-P3JXrQHDme3PnBb1PGjyW02T79veZgTm0tK-iX1sUbX17icAAP__JLhsAQ==

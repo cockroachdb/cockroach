@@ -18,7 +18,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/kr/pretty"
 )
@@ -256,16 +255,17 @@ func TestRefreshSpanIterate(t *testing.T) {
 
 	var readSpans []Span
 	var writeSpans []Span
-	fn := func(span Span, write bool) {
+	fn := func(span Span, write bool) bool {
 		if write {
 			writeSpans = append(writeSpans, span)
 		} else {
 			readSpans = append(readSpans, span)
 		}
+		return true
 	}
 	ba.RefreshSpanIterate(&br, fn)
-	// Only the conditional put isn't considered a read span.
-	expReadSpans := []Span{testCases[2].span, testCases[4].span, testCases[5].span, testCases[6].span}
+	// The conditional put and init put are not considered read spans.
+	expReadSpans := []Span{testCases[4].span, testCases[5].span, testCases[6].span}
 	expWriteSpans := []Span{testCases[7].span}
 	if !reflect.DeepEqual(expReadSpans, readSpans) {
 		t.Fatalf("unexpected read spans: expected %+v, found = %+v", expReadSpans, readSpans)
@@ -290,7 +290,6 @@ func TestRefreshSpanIterate(t *testing.T) {
 	writeSpans = []Span{}
 	ba.RefreshSpanIterate(&br, fn)
 	expReadSpans = []Span{
-		{Key: Key("a-initput")},
 		{Key("a"), Key("b")},
 		{Key: Key("b")},
 		{Key("e"), Key("f")},
@@ -311,7 +310,7 @@ func TestBatchResponseCombine(t *testing.T) {
 	{
 		txn := MakeTransaction(
 			"test", nil /* baseKey */, NormalUserPriority,
-			enginepb.SERIALIZABLE, hlc.Timestamp{WallTime: 123}, 0, /* maxOffsetNs */
+			hlc.Timestamp{WallTime: 123}, 0, /* maxOffsetNs */
 		)
 		brTxn := &BatchResponse{
 			BatchResponse_Header: BatchResponse_Header{

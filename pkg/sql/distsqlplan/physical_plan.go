@@ -22,13 +22,13 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 // Processor contains the information associated with a processor in a plan.
@@ -39,7 +39,7 @@ type Processor struct {
 	// Spec for the processor; note that the StreamEndpointSpecs in the input
 	// synchronizers and output routers are not set until the end of the planning
 	// process.
-	Spec distsqlrun.ProcessorSpec
+	Spec distsqlpb.ProcessorSpec
 }
 
 // ProcessorIdx identifies a processor by its index in PhysicalPlan.Processors.
@@ -72,6 +72,18 @@ type PhysicalPlan struct {
 	// Processors in the plan.
 	Processors []Processor
 
+	// LocalProcessors contains all of the planNodeToRowSourceWrappers that were
+	// installed in this physical plan to wrap any planNodes that couldn't be
+	// properly translated into DistSQL processors. This will be empty if no
+	// wrapping had to happen.
+	LocalProcessors []distsqlrun.LocalProcessor
+
+	// LocalProcessorIndexes contains pointers to all of the RowSourceIdx fields
+	// of the  LocalPlanNodeSpecs that were created. This list is in the same
+	// order as LocalProcessors, and is kept up-to-date so that LocalPlanNodeSpecs
+	// always have the correct index into the LocalProcessors slice.
+	LocalProcessorIndexes []*uint32
+
 	// Streams accumulates the streams in the plan - both local (intra-node) and
 	// remote (inter-node); when we have a final plan, the streams are used to
 	// generate processor input and output specs (see PopulateEndpoints).
@@ -103,10 +115,14 @@ type PhysicalPlan struct {
 	// an ordering sometimes requires to add columns to streams for the sole
 	// reason of correctly merging the streams later (see AddProjection); we don't
 	// want to pay this cost if we don't have multiple streams to merge.
-	MergeOrdering distsqlrun.Ordering
+	MergeOrdering distsqlpb.Ordering
 
 	// Used internally for numbering stages.
 	stageCounter int32
+
+	// Used internally to avoid creating flow IDs for local flows. This boolean
+	// specifies whether there is more than one node involved in a plan.
+	remotePlan bool
 }
 
 // NewStageID creates a stage identifier that can be used in processor specs.
@@ -124,11 +140,11 @@ func (p *PhysicalPlan) AddProcessor(proc Processor) ProcessorIdx {
 }
 
 // SetMergeOrdering sets p.MergeOrdering.
-func (p *PhysicalPlan) SetMergeOrdering(o distsqlrun.Ordering) {
+func (p *PhysicalPlan) SetMergeOrdering(o distsqlpb.Ordering) {
 	if len(p.ResultRouters) > 1 {
 		p.MergeOrdering = o
 	} else {
-		p.MergeOrdering = distsqlrun.Ordering{}
+		p.MergeOrdering = distsqlpb.Ordering{}
 	}
 }
 
@@ -137,13 +153,13 @@ func (p *PhysicalPlan) SetMergeOrdering(o distsqlrun.Ordering) {
 // stages that correspond to logical blocks that don't require any grouping
 // (e.g. evaluator, sorting, etc).
 func (p *PhysicalPlan) AddNoGroupingStage(
-	core distsqlrun.ProcessorCoreUnion,
-	post distsqlrun.PostProcessSpec,
+	core distsqlpb.ProcessorCoreUnion,
+	post distsqlpb.PostProcessSpec,
 	outputTypes []sqlbase.ColumnType,
-	newOrdering distsqlrun.Ordering,
+	newOrdering distsqlpb.Ordering,
 ) {
 	p.AddNoGroupingStageWithCoreFunc(
-		func(_ int, _ *Processor) distsqlrun.ProcessorCoreUnion { return core },
+		func(_ int, _ *Processor) distsqlpb.ProcessorCoreUnion { return core },
 		post,
 		outputTypes,
 		newOrdering,
@@ -153,10 +169,10 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 // AddNoGroupingStageWithCoreFunc is like AddNoGroupingStage, but creates a core
 // spec based on the input processor's spec.
 func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
-	coreFunc func(int, *Processor) distsqlrun.ProcessorCoreUnion,
-	post distsqlrun.PostProcessSpec,
+	coreFunc func(int, *Processor) distsqlpb.ProcessorCoreUnion,
+	post distsqlpb.PostProcessSpec,
 	outputTypes []sqlbase.ColumnType,
-	newOrdering distsqlrun.Ordering,
+	newOrdering distsqlpb.Ordering,
 ) {
 	stageID := p.NewStageID()
 	for i, resultProc := range p.ResultRouters {
@@ -164,15 +180,15 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 
 		proc := Processor{
 			Node: prevProc.Node,
-			Spec: distsqlrun.ProcessorSpec{
-				Input: []distsqlrun.InputSyncSpec{{
-					Type:        distsqlrun.InputSyncSpec_UNORDERED,
+			Spec: distsqlpb.ProcessorSpec{
+				Input: []distsqlpb.InputSyncSpec{{
+					Type:        distsqlpb.InputSyncSpec_UNORDERED,
 					ColumnTypes: p.ResultTypes,
 				}},
 				Core: coreFunc(int(resultProc), prevProc),
 				Post: post,
-				Output: []distsqlrun.OutputRouterSpec{{
-					Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
+				Output: []distsqlpb.OutputRouterSpec{{
+					Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
 				}},
 				StageID: stageID,
 			},
@@ -198,15 +214,15 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 func (p *PhysicalPlan) MergeResultStreams(
 	resultRouters []ProcessorIdx,
 	sourceRouterSlot int,
-	ordering distsqlrun.Ordering,
+	ordering distsqlpb.Ordering,
 	destProcessor ProcessorIdx,
 	destInput int,
 ) {
 	proc := &p.Processors[destProcessor]
 	if len(ordering.Columns) == 0 || len(resultRouters) == 1 {
-		proc.Spec.Input[destInput].Type = distsqlrun.InputSyncSpec_UNORDERED
+		proc.Spec.Input[destInput].Type = distsqlpb.InputSyncSpec_UNORDERED
 	} else {
-		proc.Spec.Input[destInput].Type = distsqlrun.InputSyncSpec_ORDERED
+		proc.Spec.Input[destInput].Type = distsqlpb.InputSyncSpec_ORDERED
 		proc.Spec.Input[destInput].Ordering = ordering
 	}
 
@@ -225,21 +241,21 @@ func (p *PhysicalPlan) MergeResultStreams(
 // previous stage (ResultRouters) are all connected to this processor.
 func (p *PhysicalPlan) AddSingleGroupStage(
 	nodeID roachpb.NodeID,
-	core distsqlrun.ProcessorCoreUnion,
-	post distsqlrun.PostProcessSpec,
+	core distsqlpb.ProcessorCoreUnion,
+	post distsqlpb.PostProcessSpec,
 	outputTypes []sqlbase.ColumnType,
 ) {
 	proc := Processor{
 		Node: nodeID,
-		Spec: distsqlrun.ProcessorSpec{
-			Input: []distsqlrun.InputSyncSpec{{
+		Spec: distsqlpb.ProcessorSpec{
+			Input: []distsqlpb.InputSyncSpec{{
 				// The other fields will be filled in by mergeResultStreams.
 				ColumnTypes: p.ResultTypes,
 			}},
 			Core: core,
 			Post: post,
-			Output: []distsqlrun.OutputRouterSpec{{
-				Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,
+			Output: []distsqlpb.OutputRouterSpec{{
+				Type: distsqlpb.OutputRouterSpec_PASS_THROUGH,
 			}},
 			StageID: p.NewStageID(),
 		},
@@ -255,7 +271,7 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	p.ResultRouters[0] = pIdx
 
 	p.ResultTypes = outputTypes
-	p.MergeOrdering = distsqlrun.Ordering{}
+	p.MergeOrdering = distsqlpb.Ordering{}
 }
 
 // CheckLastStagePost checks that the processors of the last stage of the
@@ -283,7 +299,7 @@ func (p *PhysicalPlan) CheckLastStagePost() error {
 
 // GetLastStagePost returns the PostProcessSpec for the processors in the last
 // stage (ResultRouters).
-func (p *PhysicalPlan) GetLastStagePost() distsqlrun.PostProcessSpec {
+func (p *PhysicalPlan) GetLastStagePost() distsqlpb.PostProcessSpec {
 	if err := p.CheckLastStagePost(); err != nil {
 		panic(err)
 	}
@@ -294,7 +310,7 @@ func (p *PhysicalPlan) GetLastStagePost() distsqlrun.PostProcessSpec {
 // stage (ResultRouters).
 // The caller must update the ordering via SetOrdering.
 func (p *PhysicalPlan) SetLastStagePost(
-	post distsqlrun.PostProcessSpec, outputTypes []sqlbase.ColumnType,
+	post distsqlpb.PostProcessSpec, outputTypes []sqlbase.ColumnType,
 ) {
 	for _, pIdx := range p.ResultRouters {
 		p.Processors[pIdx].Spec.Post = post
@@ -332,7 +348,7 @@ func (p *PhysicalPlan) AddProjection(columns []uint32) {
 
 	// Update the ordering.
 	if len(p.MergeOrdering.Columns) > 0 {
-		newOrdering := make([]distsqlrun.Ordering_Column, len(p.MergeOrdering.Columns))
+		newOrdering := make([]distsqlpb.Ordering_Column, len(p.MergeOrdering.Columns))
 		for i, c := range p.MergeOrdering.Columns {
 			// Look for the column in the new projection.
 			found := -1
@@ -365,7 +381,7 @@ func (p *PhysicalPlan) AddProjection(columns []uint32) {
 		// only the renders needed by the new output columns, and reorder them
 		// accordingly.
 		oldRenders := post.RenderExprs
-		post.RenderExprs = make([]distsqlrun.Expression, len(columns))
+		post.RenderExprs = make([]distsqlpb.Expression, len(columns))
 		for i, c := range columns {
 			post.RenderExprs[i] = oldRenders[c]
 		}
@@ -406,11 +422,8 @@ func exprColumn(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
-	exprs []tree.TypedExpr,
-	evalCtx *tree.EvalContext,
-	indexVarMap []int,
-	outTypes []sqlbase.ColumnType,
-) {
+	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []sqlbase.ColumnType,
+) error {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
 	needRendering := false
@@ -428,7 +441,7 @@ func (p *PhysicalPlan) AddRendering(
 	if !needRendering {
 		if identity {
 			// Nothing to do.
-			return
+			return nil
 		}
 		// We don't need to do any rendering: the expressions effectively describe
 		// just a projection.
@@ -441,17 +454,17 @@ func (p *PhysicalPlan) AddRendering(
 			cols[i] = uint32(streamCol)
 		}
 		p.AddProjection(cols)
-		return
+		return nil
 	}
 
 	post := p.GetLastStagePost()
 	if len(post.RenderExprs) > 0 {
-		post = distsqlrun.PostProcessSpec{}
+		post = distsqlpb.PostProcessSpec{}
 		// The last stage contains render expressions. The new renders refer to
 		// the output of these, so we need to add another "no-op" stage to which
 		// to attach the new rendering.
 		p.AddNoGroupingStage(
-			distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+			distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
 			post,
 			p.ResultTypes,
 			p.MergeOrdering,
@@ -462,14 +475,18 @@ func (p *PhysicalPlan) AddRendering(
 	if post.Projection {
 		compositeMap = reverseProjection(post.OutputColumns, indexVarMap)
 	}
-	post.RenderExprs = make([]distsqlrun.Expression, len(exprs))
+	post.RenderExprs = make([]distsqlpb.Expression, len(exprs))
 	for i, e := range exprs {
-		post.RenderExprs[i] = MakeExpression(e, evalCtx, compositeMap)
+		var err error
+		post.RenderExprs[i], err = MakeExpression(e, exprCtx, compositeMap)
+		if err != nil {
+			return err
+		}
 	}
 
 	if len(p.MergeOrdering.Columns) > 0 {
 		outTypes = outTypes[:len(outTypes):len(outTypes)]
-		newOrdering := make([]distsqlrun.Ordering_Column, len(p.MergeOrdering.Columns))
+		newOrdering := make([]distsqlpb.Ordering_Column, len(p.MergeOrdering.Columns))
 		for i, c := range p.MergeOrdering.Columns {
 			found := -1
 			// Look for the column in the new projection.
@@ -488,7 +505,10 @@ func (p *PhysicalPlan) AddRendering(
 				if post.Projection {
 					internalColIdx = post.OutputColumns[internalColIdx]
 				}
-				newExpr := MakeExpression(&tree.IndexedVar{Idx: int(internalColIdx)}, evalCtx, nil)
+				newExpr, err := MakeExpression(&tree.IndexedVar{Idx: int(internalColIdx)}, exprCtx, nil)
+				if err != nil {
+					return err
+				}
 
 				found = len(post.RenderExprs)
 				post.RenderExprs = append(post.RenderExprs, newExpr)
@@ -503,6 +523,7 @@ func (p *PhysicalPlan) AddRendering(
 	post.Projection = false
 	post.OutputColumns = nil
 	p.SetLastStagePost(post, outTypes)
+	return nil
 }
 
 // reverseProjection remaps expression variable indices to refer to internal
@@ -568,8 +589,8 @@ func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddFilter(
-	expr tree.TypedExpr, evalCtx *tree.EvalContext, indexVarMap []int,
-) {
+	expr tree.TypedExpr, exprCtx ExprContext, indexVarMap []int,
+) error {
 	post := p.GetLastStagePost()
 	if len(post.RenderExprs) > 0 || post.Offset != 0 || post.Limit != 0 {
 		// The last stage contains render expressions or a limit. The filter refers
@@ -579,9 +600,9 @@ func (p *PhysicalPlan) AddFilter(
 		// In general, we might be able to push the filter "through" the rendering;
 		// but the higher level planning code should figure this out when
 		// propagating filters.
-		post = distsqlrun.PostProcessSpec{}
+		post = distsqlpb.PostProcessSpec{}
 		p.AddNoGroupingStage(
-			distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+			distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
 			post,
 			p.ResultTypes,
 			p.MergeOrdering,
@@ -592,20 +613,31 @@ func (p *PhysicalPlan) AddFilter(
 	if post.Projection {
 		compositeMap = reverseProjection(post.OutputColumns, indexVarMap)
 	}
-	filter := MakeExpression(expr, evalCtx, compositeMap)
-	if post.Filter.Expr != "" {
-		filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
+	filter, err := MakeExpression(expr, exprCtx, compositeMap)
+	if err != nil {
+		return err
+	}
+	if !post.Filter.Empty() {
+		if filter.Expr != "" {
+			filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
+		} else if filter.LocalExpr != nil {
+			filter.LocalExpr = tree.NewTypedAndExpr(
+				post.Filter.LocalExpr,
+				filter.LocalExpr,
+			)
+		}
 	}
 	for _, pIdx := range p.ResultRouters {
 		p.Processors[pIdx].Spec.Post.Filter = filter
 	}
+	return nil
 }
 
 // emptyPlan creates a plan with a single processor that generates no rows; the
 // output stream has the given types.
 func emptyPlan(types []sqlbase.ColumnType, node roachpb.NodeID) PhysicalPlan {
-	s := distsqlrun.ValuesCoreSpec{
-		Columns: make([]distsqlrun.DatumInfo, len(types)),
+	s := distsqlpb.ValuesCoreSpec{
+		Columns: make([]distsqlpb.DatumInfo, len(types)),
 	}
 	for i, t := range types {
 		s.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
@@ -615,9 +647,9 @@ func emptyPlan(types []sqlbase.ColumnType, node roachpb.NodeID) PhysicalPlan {
 	return PhysicalPlan{
 		Processors: []Processor{{
 			Node: node,
-			Spec: distsqlrun.ProcessorSpec{
-				Core:   distsqlrun.ProcessorCoreUnion{Values: &s},
-				Output: make([]distsqlrun.OutputRouterSpec, 1),
+			Spec: distsqlpb.ProcessorSpec{
+				Core:   distsqlpb.ProcessorCoreUnion{Values: &s},
+				Output: make([]distsqlpb.OutputRouterSpec, 1),
 			},
 		}},
 		ResultRouters: []ProcessorIdx{0},
@@ -630,16 +662,30 @@ func emptyPlan(types []sqlbase.ColumnType, node roachpb.NodeID) PhysicalPlan {
 // that is placed on the given node.
 //
 // For no limit, count should be MaxInt64.
-func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) error {
+func (p *PhysicalPlan) AddLimit(
+	count int64, offset int64, exprCtx ExprContext, node roachpb.NodeID,
+) error {
 	if count < 0 {
 		return errors.Errorf("negative limit")
 	}
 	if offset < 0 {
 		return errors.Errorf("negative offset")
 	}
+	// limitZero is set to true if the limit is a legitimate LIMIT 0 requested by
+	// the user. This needs to be tracked as a separate condition because DistSQL
+	// uses count=0 to mean no limit, not a limit of 0. Normally, DistSQL will
+	// short circuit 0-limit plans, but wrapped local planNodes sometimes need to
+	// be fully-executed despite having 0 limit, so if we do in fact have a
+	// limit-0 case when there's local planNodes around, we add an empty plan
+	// instead of completely eliding the 0-limit plan.
+	limitZero := false
 	if count == 0 {
-		*p = emptyPlan(p.ResultTypes, node)
-		return nil
+		if len(p.LocalProcessors) == 0 {
+			*p = emptyPlan(p.ResultTypes, node)
+			return nil
+		}
+		count = 1
+		limitZero = true
 	}
 
 	if len(p.ResultRouters) == 1 {
@@ -654,8 +700,15 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 				//   SELECT * FROM (SELECT * FROM .. LIMIT 5) OFFSET 10
 				// TODO(radu): perform this optimization while propagating filters
 				// instead of having to detect it here.
-				*p = emptyPlan(p.ResultTypes, node)
-				return nil
+				if len(p.LocalProcessors) == 0 {
+					// Even though we know there will be no results, we don't elide the
+					// plan if there are local processors. See comment above limitZero
+					// for why.
+					*p = emptyPlan(p.ResultTypes, node)
+					return nil
+				}
+				count = 1
+				limitZero = true
 			}
 			post.Offset += uint64(offset)
 		}
@@ -663,6 +716,11 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 			post.Limit = uint64(count)
 		}
 		p.SetLastStagePost(post, p.ResultTypes)
+		if limitZero {
+			if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
@@ -680,7 +738,7 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 		}
 	}
 
-	post := distsqlrun.PostProcessSpec{
+	post := distsqlpb.PostProcessSpec{
 		Offset: uint64(offset),
 	}
 	if count != math.MaxInt64 {
@@ -688,10 +746,15 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 	}
 	p.AddSingleGroupStage(
 		node,
-		distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+		distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
 		post,
 		p.ResultTypes,
 	)
+	if limitZero {
+		if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -708,14 +771,17 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 	for sIdx, s := range p.Streams {
 		p1 := &p.Processors[s.SourceProcessor]
 		p2 := &p.Processors[s.DestProcessor]
-		endpoint := distsqlrun.StreamEndpointSpec{StreamID: distsqlrun.StreamID(sIdx)}
+		endpoint := distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(sIdx)}
 		if p1.Node == p2.Node {
-			endpoint.Type = distsqlrun.StreamEndpointSpec_LOCAL
+			endpoint.Type = distsqlpb.StreamEndpointSpec_LOCAL
 		} else {
-			endpoint.Type = distsqlrun.StreamEndpointSpec_REMOTE
+			endpoint.Type = distsqlpb.StreamEndpointSpec_REMOTE
 		}
 		p2.Spec.Input[s.DestInput].Streams = append(p2.Spec.Input[s.DestInput].Streams, endpoint)
-		if endpoint.Type == distsqlrun.StreamEndpointSpec_REMOTE {
+		if endpoint.Type == distsqlpb.StreamEndpointSpec_REMOTE {
+			if !p.remotePlan {
+				p.remotePlan = true
+			}
 			var ok bool
 			endpoint.TargetNodeID = p2.Node
 			endpoint.DeprecatedTargetAddr, ok = nodeAddresses[p2.Node]
@@ -744,17 +810,23 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 // gateway is the current node's NodeID.
 func (p *PhysicalPlan) GenerateFlowSpecs(
 	gateway roachpb.NodeID,
-) map[roachpb.NodeID]distsqlrun.FlowSpec {
-	flowID := distsqlrun.FlowID{UUID: uuid.MakeV4()}
-	flows := make(map[roachpb.NodeID]distsqlrun.FlowSpec)
+) map[roachpb.NodeID]*distsqlpb.FlowSpec {
+	// Only generate a flow ID for a remote plan because it will need to be
+	// referenced by remote nodes when connecting streams. This id generation is
+	// skipped for performance reasons on local flows.
+	flowID := distsqlpb.FlowID{}
+	if p.remotePlan {
+		flowID.UUID = uuid.MakeV4()
+	}
+	flows := make(map[roachpb.NodeID]*distsqlpb.FlowSpec, 1)
 
 	for _, proc := range p.Processors {
 		flowSpec, ok := flows[proc.Node]
 		if !ok {
-			flowSpec = distsqlrun.FlowSpec{FlowID: flowID, Gateway: gateway}
+			flowSpec = NewFlowSpec(flowID, gateway)
+			flows[proc.Node] = flowSpec
 		}
 		flowSpec.Processors = append(flowSpec.Processors, proc.Spec)
-		flows[proc.Node] = flowSpec
 	}
 	return flows
 }
@@ -785,6 +857,13 @@ func MergePlans(
 	}
 	mergedPlan.stageCounter = left.stageCounter + right.stageCounter
 
+	mergedPlan.LocalProcessors = append(left.LocalProcessors, right.LocalProcessors...)
+	mergedPlan.LocalProcessorIndexes = append(left.LocalProcessorIndexes, right.LocalProcessorIndexes...)
+	// Update the local processor indices in the right streams.
+	for i := len(left.LocalProcessorIndexes); i < len(mergedPlan.LocalProcessorIndexes); i++ {
+		*mergedPlan.LocalProcessorIndexes[i] += uint32(len(left.LocalProcessorIndexes))
+	}
+
 	leftRouters = left.ResultRouters
 	rightRouters = append([]ProcessorIdx(nil), right.ResultRouters...)
 	// Update the processor indices in the right routers.
@@ -805,13 +884,13 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 	}
 	merged := make([]sqlbase.ColumnType, len(left))
 	for i := range left {
-		leftType, rightType := left[i], right[i]
+		leftType, rightType := &left[i], &right[i]
 		if rightType.SemanticType == sqlbase.ColumnType_NULL {
-			merged[i] = leftType
+			merged[i] = *leftType
 		} else if leftType.SemanticType == sqlbase.ColumnType_NULL {
-			merged[i] = rightType
-		} else if leftType.Equivalent(rightType) {
-			merged[i] = leftType
+			merged[i] = *rightType
+		} else if equivalentTypes(leftType, rightType) {
+			merged[i] = *leftType
 		} else {
 			return nil, errors.Errorf("conflicting ColumnTypes: %v and %v", leftType, rightType)
 		}
@@ -819,15 +898,36 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 	return merged, nil
 }
 
+// equivalentType checks whether a column type is equivalent to
+// another for the purpose of UNION. This excludes its VisibleType
+// type alias, which doesn't effect the merging of values. There is
+// also special handling for "naked" int types of no defined size.
+func equivalentTypes(c, other *sqlbase.ColumnType) bool {
+	// Convert a "naked" INT type to INT8. The 64-bit value is for
+	// historical compatibility before all INTs were assigned an
+	// explicit width at parse time.
+	lhs := *c
+	if lhs.SemanticType == sqlbase.ColumnType_INT && lhs.Width == 0 {
+		lhs.Width = 64
+	}
+
+	rhs := *other
+	if rhs.SemanticType == sqlbase.ColumnType_INT && rhs.Width == 0 {
+		rhs.Width = 64
+	}
+	rhs.VisibleType = c.VisibleType
+	return lhs.Equal(rhs)
+}
+
 // AddJoinStage adds join processors at each of the specified nodes, and wires
 // the left and right-side outputs to these processors.
 func (p *PhysicalPlan) AddJoinStage(
 	nodes []roachpb.NodeID,
-	core distsqlrun.ProcessorCoreUnion,
-	post distsqlrun.PostProcessSpec,
+	core distsqlpb.ProcessorCoreUnion,
+	post distsqlpb.PostProcessSpec,
 	leftEqCols, rightEqCols []uint32,
 	leftTypes, rightTypes []sqlbase.ColumnType,
-	leftMergeOrd, rightMergeOrd distsqlrun.Ordering,
+	leftMergeOrd, rightMergeOrd distsqlpb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 	includeRight bool,
 ) {
@@ -835,19 +935,19 @@ func (p *PhysicalPlan) AddJoinStage(
 	stageID := p.NewStageID()
 
 	for _, n := range nodes {
-		inputs := make([]distsqlrun.InputSyncSpec, 0, 2)
-		inputs = append(inputs, distsqlrun.InputSyncSpec{ColumnTypes: leftTypes})
+		inputs := make([]distsqlpb.InputSyncSpec, 0, 2)
+		inputs = append(inputs, distsqlpb.InputSyncSpec{ColumnTypes: leftTypes})
 		if includeRight {
-			inputs = append(inputs, distsqlrun.InputSyncSpec{ColumnTypes: rightTypes})
+			inputs = append(inputs, distsqlpb.InputSyncSpec{ColumnTypes: rightTypes})
 		}
 
 		proc := Processor{
 			Node: n,
-			Spec: distsqlrun.ProcessorSpec{
+			Spec: distsqlpb.ProcessorSpec{
 				Input:   inputs,
 				Core:    core,
 				Post:    post,
-				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				Output:  []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
 				StageID: stageID,
 			},
 		}
@@ -858,21 +958,21 @@ func (p *PhysicalPlan) AddJoinStage(
 		// Parallel hash or merge join: we distribute rows (by hash of
 		// equality columns) to len(nodes) join processors.
 
-		routerType := distsqlrun.OutputRouterSpec_BY_HASH
+		routerType := distsqlpb.OutputRouterSpec_BY_HASH
 		if !includeRight {
-			routerType = distsqlrun.OutputRouterSpec_PASS_THROUGH
+			routerType = distsqlpb.OutputRouterSpec_PASS_THROUGH
 		}
 
 		// Set up the left routers.
 		for _, resultProc := range leftRouters {
-			p.Processors[resultProc].Spec.Output[0] = distsqlrun.OutputRouterSpec{
+			p.Processors[resultProc].Spec.Output[0] = distsqlpb.OutputRouterSpec{
 				Type:        routerType,
 				HashColumns: leftEqCols,
 			}
 		}
 		// Set up the right routers.
 		for _, resultProc := range rightRouters {
-			p.Processors[resultProc].Spec.Output[0] = distsqlrun.OutputRouterSpec{
+			p.Processors[resultProc].Spec.Output[0] = distsqlpb.OutputRouterSpec{
 				Type:        routerType,
 				HashColumns: rightEqCols,
 			}
@@ -906,17 +1006,17 @@ func (p *PhysicalPlan) AddJoinStage(
 // can elide the distinct stage on that side.
 func (p *PhysicalPlan) AddDistinctSetOpStage(
 	nodes []roachpb.NodeID,
-	joinCore distsqlrun.ProcessorCoreUnion,
-	distinctCores []distsqlrun.ProcessorCoreUnion,
-	post distsqlrun.PostProcessSpec,
+	joinCore distsqlpb.ProcessorCoreUnion,
+	distinctCores []distsqlpb.ProcessorCoreUnion,
+	post distsqlpb.PostProcessSpec,
 	eqCols []uint32,
 	leftTypes, rightTypes []sqlbase.ColumnType,
-	leftMergeOrd, rightMergeOrd distsqlrun.Ordering,
+	leftMergeOrd, rightMergeOrd distsqlpb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 ) {
 	const numSides = 2
 	inputResultTypes := [numSides][]sqlbase.ColumnType{leftTypes, rightTypes}
-	inputMergeOrderings := [numSides]distsqlrun.Ordering{leftMergeOrd, rightMergeOrd}
+	inputMergeOrderings := [numSides]distsqlpb.Ordering{leftMergeOrd, rightMergeOrd}
 	inputResultRouters := [numSides][]ProcessorIdx{leftRouters, rightRouters}
 
 	// Create distinct stages for the left and right sides, where left and right
@@ -933,13 +1033,13 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 		for _, n := range nodes {
 			proc := Processor{
 				Node: n,
-				Spec: distsqlrun.ProcessorSpec{
-					Input: []distsqlrun.InputSyncSpec{
+				Spec: distsqlpb.ProcessorSpec{
+					Input: []distsqlpb.InputSyncSpec{
 						{ColumnTypes: types},
 					},
 					Core:    distinctCores[side],
-					Post:    distsqlrun.PostProcessSpec{},
-					Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+					Post:    distsqlpb.PostProcessSpec{},
+					Output:  []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
 					StageID: distinctStageID,
 				},
 			}
@@ -951,15 +1051,15 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	if len(nodes) > 1 {
 		// Set up the left routers.
 		for _, resultProc := range leftRouters {
-			p.Processors[resultProc].Spec.Output[0] = distsqlrun.OutputRouterSpec{
-				Type:        distsqlrun.OutputRouterSpec_BY_HASH,
+			p.Processors[resultProc].Spec.Output[0] = distsqlpb.OutputRouterSpec{
+				Type:        distsqlpb.OutputRouterSpec_BY_HASH,
 				HashColumns: eqCols,
 			}
 		}
 		// Set up the right routers.
 		for _, resultProc := range rightRouters {
-			p.Processors[resultProc].Spec.Output[0] = distsqlrun.OutputRouterSpec{
-				Type:        distsqlrun.OutputRouterSpec_BY_HASH,
+			p.Processors[resultProc].Spec.Output[0] = distsqlpb.OutputRouterSpec{
+				Type:        distsqlpb.OutputRouterSpec_BY_HASH,
 				HashColumns: eqCols,
 			}
 		}
@@ -983,14 +1083,14 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	for _, n := range nodes {
 		proc := Processor{
 			Node: n,
-			Spec: distsqlrun.ProcessorSpec{
-				Input: []distsqlrun.InputSyncSpec{
+			Spec: distsqlpb.ProcessorSpec{
+				Input: []distsqlpb.InputSyncSpec{
 					{ColumnTypes: leftTypes},
 					{ColumnTypes: rightTypes},
 				},
 				Core:    joinCore,
 				Post:    post,
-				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				Output:  []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
 				StageID: joinStageID,
 			},
 		}

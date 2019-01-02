@@ -121,6 +121,18 @@ func doExpandPlan(
 		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *deleteNode:
+		// If the source of the delete is a scan node (optionally with a render on
+		// top), mark it as such. Note that this parallels the logic in
+		// canDeleteFast.
+		maybeScan := n.source
+		if sel, ok := maybeScan.(*renderNode); ok {
+			maybeScan = sel.source.plan
+		}
+		scan, ok := maybeScan.(*scanNode)
+		if ok {
+			scan.isDeleteSource = true
+		}
+
 		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *rowCountNode:
@@ -271,6 +283,9 @@ func doExpandPlan(
 	case *windowNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 
+	case *max1RowNode:
+		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
+
 	case *sortNode:
 		if !n.ordering.IsPrefixOf(params.desiredOrdering) {
 			params.desiredOrdering = n.ordering
@@ -330,11 +345,20 @@ func doExpandPlan(
 		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *valuesNode:
+	case *virtualTableNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
+	case *commentOnColumnNode:
+	case *commentOnDatabaseNode:
+	case *commentOnTableNode:
+	case *renameColumnNode:
+	case *renameDatabaseNode:
+	case *renameIndexNode:
+	case *renameTableNode:
 	case *scrubNode:
+	case *truncateNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:
@@ -460,16 +484,16 @@ func expandDistinctNode(
 		// column values again. We can thus clear out our bookkeeping.
 		// This needs to be planColumns(n.plan) and not planColumns(n) since
 		// distinctNode is "distinctifying" on the child plan's output rows.
-		d.columnsInOrder = make([]bool, len(planColumns(d.plan)))
-		for i := range d.columnsInOrder {
+		d.columnsInOrder = util.FastIntSet{}
+		for i, numCols := 0, len(planColumns(d.plan)); i < numCols; i++ {
 			group := distinctOnPp.eqGroups.Find(i)
 			if distinctOnPp.constantCols.Contains(group) {
-				d.columnsInOrder[i] = true
+				d.columnsInOrder.Add(i)
 				continue
 			}
 			for _, g := range distinctOnPp.ordering {
 				if g.ColIdx == group {
-					d.columnsInOrder[i] = true
+					d.columnsInOrder.Add(i)
 					break
 				}
 			}
@@ -734,6 +758,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *limitNode:
 		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)
 
+	case *max1RowNode:
+		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)
+
 	case *spoolNode:
 		n.source = p.simplifyOrderings(n.source, usefulOrdering)
 
@@ -831,11 +858,20 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.rows = p.simplifyOrderings(n.rows, nil)
 
 	case *valuesNode:
+	case *virtualTableNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
+	case *commentOnColumnNode:
+	case *commentOnDatabaseNode:
+	case *commentOnTableNode:
+	case *renameColumnNode:
+	case *renameDatabaseNode:
+	case *renameIndexNode:
+	case *renameTableNode:
 	case *scrubNode:
+	case *truncateNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:

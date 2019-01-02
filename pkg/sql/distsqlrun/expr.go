@@ -17,6 +17,8 @@ package distsqlrun
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,7 +54,12 @@ func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // processExpression parses the string expression inside an Expression,
 // and associates ordinal references (@1, @2, etc) with the given helper.
-func processExpression(exprSpec Expression, h *tree.IndexedVarHelper) (tree.TypedExpr, error) {
+func processExpression(
+	exprSpec distsqlpb.Expression,
+	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+	h *tree.IndexedVarHelper,
+) (tree.TypedExpr, error) {
 	if exprSpec.Expr == "" {
 		return nil, nil
 	}
@@ -68,13 +75,25 @@ func processExpression(exprSpec Expression, h *tree.IndexedVarHelper) (tree.Type
 		return nil, v.err
 	}
 
+	semaCtx.IVarContainer = h.Container()
 	// Convert to a fully typed expression.
-	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: h.Container()}, types.Any)
+	typedExpr, err := tree.TypeCheck(expr, semaCtx, types.Any)
 	if err != nil {
 		return nil, errors.Wrap(err, expr.String())
 	}
 
-	return typedExpr, nil
+	// Pre-evaluate constant expressions. This is necessary to avoid repeatedly
+	// re-evaluating constant values every time the expression is applied.
+	//
+	// TODO(solon): It would be preferable to enhance our expression serialization
+	// format so this wouldn't be necessary.
+	c := tree.MakeConstantEvalVisitor(evalCtx)
+	expr, _ = tree.WalkExpr(&c, typedExpr)
+	if err := c.Err(); err != nil {
+		return nil, err
+	}
+
+	return expr.(tree.TypedExpr), nil
 }
 
 // exprHelper implements the common logic around evaluating an expression that
@@ -125,16 +144,24 @@ func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 }
 
 func (eh *exprHelper) init(
-	expr Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
+	expr distsqlpb.Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) error {
-	eh.evalCtx = evalCtx
-	if expr.Expr == "" {
+	if expr.Empty() {
 		return nil
 	}
+	eh.evalCtx = evalCtx
 	eh.types = types
 	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
+
+	if expr.LocalExpr != nil {
+		eh.expr = expr.LocalExpr
+		// Bind IndexedVars to our eh.vars.
+		eh.vars.Rebind(eh.expr, true /* alsoReset */, false /* normalizeToNonNil */)
+		return nil
+	}
 	var err error
-	eh.expr, err = processExpression(expr, &eh.vars)
+	semaContext := tree.MakeSemaContext(evalCtx.SessionData.User == security.RootUser)
+	eh.expr, err = processExpression(expr, evalCtx, &semaContext, &eh.vars)
 	if err != nil {
 		return err
 	}

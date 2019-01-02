@@ -26,13 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/status"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -48,6 +41,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 )
 
 // AddTestingDialOpts adds extra dialing options to the rpc Context. This should
@@ -132,6 +131,12 @@ func (*internalServer) Batch(
 	return nil, nil
 }
 
+func (*internalServer) RangeFeed(
+	_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer,
+) error {
+	panic("unimplemented")
+}
+
 // TestInternalServerAddress verifies that RPCContext uses AdvertiseAddr, not Addr, to
 // determine whether to apply the local server optimization.
 //
@@ -152,8 +157,9 @@ func TestInternalServerAddress(t *testing.T) {
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(internal)
 
-	if is := serverCtx.GetLocalInternalServerForAddr(serverCtx.Config.AdvertiseAddr); is != internal {
-		t.Fatalf("expected %+v, got %+v", internal, is)
+	exp := internalClientAdapter{internal}
+	if ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr); ic != exp {
+		t.Fatalf("expected %+v, got %+v", exp, ic)
 	}
 }
 
@@ -807,7 +813,8 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
-			ctx := stopper.WithCancel(context.TODO())
+			ctx, cancel := stopper.WithCancelOnQuiesce(context.TODO())
+			defer cancel()
 
 			// Construct server with server-side keepalive.
 			clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
@@ -1078,6 +1085,9 @@ func TestVersionCheckBidirectional(t *testing.T) {
 }
 
 func BenchmarkGRPCDial(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 

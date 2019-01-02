@@ -1,0 +1,31 @@
+### Bug fixes
+
+- Feature B [#1][#1] [57aa2eab6][57aa2eab6]
+
+### Doc updates
+
+Docs team: Please add these manually.
+
+### Contributors
+
+This release includes 3 merged PRs by 1 author.
+We would like to thank the following contributors from the CockroachDB community:
+
+- test7
+
+### PRs merged by contributors
+
+- test7:
+  - 2018-04-22 [#200  ][#200  ] [28245dacd][28245dacd] (+   0 -   0 ~   0/ 0) PR title 2 alternate format (2 commits)
+  - 2018-04-22 [#100  ][#100  ] [ba15054b5][ba15054b5] (+   0 -   0 ~   0/ 0) PR title 1 alternate format
+  - 2018-04-22 [#1    ][#1    ] [191b497b9][191b497b9] (+   0 -   0 ~   0/ 0) PR title 1 (2 commits)
+
+
+[#1]: https://github.com/cockroachdb/cockroach/pull/1
+[#100]: https://github.com/cockroachdb/cockroach/pull/100
+[#200]: https://github.com/cockroachdb/cockroach/pull/200
+[191b497b9]: https://github.com/cockroachdb/cockroach/commit/191b497b9
+[28245dacd]: https://github.com/cockroachdb/cockroach/commit/28245dacd
+[57aa2eab6]: https://github.com/cockroachdb/cockroach/commit/57aa2eab6
+[ba15054b5]: https://github.com/cockroachdb/cockroach/commit/ba15054b5
+

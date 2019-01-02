@@ -1,1 +1,5 @@
 *.pb.* -diff
+
+# Due to bytes not being escaped during array encoding, this file gets
+# rendered as binary.
+pkg/sql/logictest/testdata/logic_test/array diff

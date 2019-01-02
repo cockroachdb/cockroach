@@ -15,12 +15,12 @@
 package tpcc
 
 import (
-	gosql "database/sql"
 	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -155,14 +155,30 @@ const (
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
 		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
-		index order_line_fk (ol_supply_w_id, ol_d_id)
+		index order_line_fk (ol_supply_w_id, ol_i_id)
 	)`
 	tpccOrderLineSchemaInterleave = ` interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )
 
+func maybeDisableMergeQueue(db *pgx.ConnPool) error {
+	var ok bool
+	if err := db.QueryRow(
+		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] AS _ (v) WHERE v = 'kv.range_merge.queue_enabled'`,
+	).Scan(&ok); err != nil || !ok {
+		return err
+	}
+	_, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+	return err
+}
+
 // NB: Since we always split at the same points (specific warehouse IDs and
 // item IDs), splitting is idempotent.
-func splitTables(db *gosql.DB, warehouses int) {
+func splitTables(db *pgx.ConnPool, warehouses int) {
+	// Prevent the merge queue from immediately discarding our splits.
+	if err := maybeDisableMergeQueue(db); err != nil {
+		panic(err)
+	}
+
 	var g errgroup.Group
 	const concurrency = 64
 	sem := make(chan struct{}, concurrency)
@@ -225,7 +241,7 @@ func splitTables(db *gosql.DB, warehouses int) {
 	}
 }
 
-func scatterRanges(db *gosql.DB) {
+func scatterRanges(db *pgx.ConnPool) {
 	tables := []string{
 		`customer`,
 		`district`,

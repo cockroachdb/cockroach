@@ -18,6 +18,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -51,10 +52,11 @@ const (
 const (
 	// The batch header is composed of an 8-byte sequence number (all zeroes) and
 	// 4-byte count of the number of entries in the batch.
-	headerSize       int = 12
-	countPos             = 8
-	initialBatchSize     = 1 << 10
-	maxVarintLen32       = 5
+	headerSize           int = 12
+	countPos                 = 8
+	initialBatchSize         = 1 << 10 // 1 KB
+	maxRetainedBatchSize     = 1 << 20 // 1 MB
+	maxVarintLen32           = 5
 )
 
 // RocksDBBatchBuilder is used to construct the RocksDB batch representation.
@@ -89,14 +91,32 @@ const (
 // Note that the encoding of these keys needs to match up with the encoding in
 // rocksdb/db.cc:EncodeKey().
 type RocksDBBatchBuilder struct {
-	repr  []byte
-	count int
+	repr    []byte
+	count   int
+	logData bool
 }
 
 func (b *RocksDBBatchBuilder) maybeInit() {
 	if b.repr == nil {
 		b.repr = make([]byte, headerSize, initialBatchSize)
 	}
+}
+
+func (b *RocksDBBatchBuilder) reset() {
+	if b.repr != nil {
+		if cap(b.repr) > maxRetainedBatchSize {
+			// If the capacity of the buffer is larger than our maximum
+			// retention size, don't re-use it. Let it be GC-ed instead.
+			// This prevents the memory from an unusually large batch from
+			// being held on to indefinitely.
+			b.repr = nil
+		} else {
+			// Otherwise, reset the buffer for re-use.
+			b.repr = b.repr[:headerSize]
+		}
+	}
+	b.count = 0
+	b.logData = false
 }
 
 // Finish returns the constructed batch representation. After calling Finish,
@@ -106,17 +126,13 @@ func (b *RocksDBBatchBuilder) Finish() []byte {
 	repr := b.getRepr()
 	b.repr = b.repr[:headerSize]
 	b.count = 0
+	b.logData = false
 	return repr
 }
 
 // Len returns the number of bytes currently in the under construction repr.
 func (b *RocksDBBatchBuilder) Len() int {
 	return len(b.repr)
-}
-
-// Empty returns whether the under construction repr is empty.
-func (b *RocksDBBatchBuilder) Empty() bool {
-	return len(b.repr) <= headerSize
 }
 
 // getRepr constructs the batch representation and returns it.
@@ -250,6 +266,7 @@ func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 // but otherwise uninterpreted by RocksDB.
 func (b *RocksDBBatchBuilder) LogData(data []byte) {
 	b.maybeInit()
+	b.logData = true
 	pos := len(b.repr)
 	b.grow(1 + maxVarintLen32 + len(data))
 	b.repr[pos] = byte(BatchTypeLogData)
@@ -313,48 +330,11 @@ func EncodeKey(key MVCCKey) []byte {
 	return dbKey
 }
 
-// SplitMVCCKey returns the key and timestamp components of an encoded MVCC key. This
-// decoding must match engine/db.cc:SplitKey().
-func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
-	if len(mvccKey) == 0 {
-		return nil, nil, false
-	}
-	tsLen := int(mvccKey[len(mvccKey)-1])
-	keyPartEnd := len(mvccKey) - 1 - tsLen
-	if keyPartEnd < 0 {
-		return nil, nil, false
-	}
-
-	key = mvccKey[:keyPartEnd]
-	if tsLen > 0 {
-		ts = mvccKey[keyPartEnd+1 : len(mvccKey)-1]
-	}
-	return key, ts, true
-}
-
-// DecodeKey decodes an engine.MVCCKey from its serialized representation. This
+// DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation. This
 // decoding must match engine/db.cc:DecodeKey().
-func DecodeKey(encodedKey []byte) (MVCCKey, error) {
-	key, ts, ok := SplitMVCCKey(encodedKey)
-	if !ok {
-		return MVCCKey{}, errors.Errorf("invalid encoded mvcc key: %x", encodedKey)
-	}
-
-	mvccKey := MVCCKey{Key: key}
-	switch len(ts) {
-	case 0:
-		// No-op.
-	case 8:
-		mvccKey.Timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
-	case 12:
-		mvccKey.Timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
-		mvccKey.Timestamp.Logical = int32(binary.BigEndian.Uint32(ts[8:12]))
-	default:
-		return MVCCKey{}, errors.Errorf(
-			"invalid encoded mvcc key: %x bad timestamp %x", encodedKey, ts)
-	}
-
-	return mvccKey, nil
+func DecodeMVCCKey(encodedKey []byte) (MVCCKey, error) {
+	k, ts, err := enginepb.DecodeKey(encodedKey)
+	return MVCCKey{k, ts}, err
 }
 
 // Decode the header of RocksDB batch repr, returning both the count of the
@@ -460,7 +440,8 @@ func (r *RocksDBBatchReader) Key() []byte {
 
 // MVCCKey returns the MVCC key of the current batch entry.
 func (r *RocksDBBatchReader) MVCCKey() (MVCCKey, error) {
-	return DecodeKey(r.key)
+	k, ts, err := enginepb.DecodeKey(r.Key())
+	return MVCCKey{k, ts}, err
 }
 
 // Value returns the value of the current batch entry. Value panics if the

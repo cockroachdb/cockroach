@@ -38,11 +38,13 @@ type localTestClusterTransport struct {
 	latency time.Duration
 }
 
-func (l *localTestClusterTransport) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
+func (l *localTestClusterTransport) SendNext(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
 	if l.latency > 0 {
 		time.Sleep(l.latency)
 	}
-	return l.Transport.SendNext(ctx)
+	return l.Transport.SendNext(ctx, ba)
 }
 
 // InitFactoryForLocalTestCluster initializes a TxnCoordSenderFactory
@@ -57,31 +59,6 @@ func InitFactoryForLocalTestCluster(
 	stopper *stop.Stopper,
 	gossip *gossip.Gossip,
 ) client.TxnSenderFactory {
-	retryOpts := base.DefaultRetryOptions()
-	retryOpts.Closer = stopper.ShouldQuiesce()
-	senderTransportFactory := SenderTransportFactory(tracer, stores)
-	distSender := NewDistSender(DistSenderConfig{
-		AmbientCtx:      log.AmbientContext{Tracer: st.Tracer},
-		Settings:        st,
-		Clock:           clock,
-		RPCRetryOptions: &retryOpts,
-		nodeDescriptor:  nodeDesc,
-		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: func(
-				opts SendOptions,
-				nodeDialer *nodedialer.Dialer,
-				replicas ReplicaSlice,
-				args roachpb.BatchRequest,
-			) (Transport, error) {
-				transport, err := senderTransportFactory(opts, nodeDialer, replicas, args)
-				if err != nil {
-					return nil, err
-				}
-				return &localTestClusterTransport{transport, latency}, nil
-			},
-		},
-	}, gossip)
-
 	return NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
@@ -89,6 +66,43 @@ func InitFactoryForLocalTestCluster(
 			Clock:      clock,
 			Stopper:    stopper,
 		},
-		distSender,
+		NewDistSenderForLocalTestCluster(st, nodeDesc, tracer, clock, latency, stores, stopper, gossip),
 	)
+}
+
+// NewDistSenderForLocalTestCluster creates a DistSender for a LocalTestCluster.
+func NewDistSenderForLocalTestCluster(
+	st *cluster.Settings,
+	nodeDesc *roachpb.NodeDescriptor,
+	tracer opentracing.Tracer,
+	clock *hlc.Clock,
+	latency time.Duration,
+	stores client.Sender,
+	stopper *stop.Stopper,
+	g *gossip.Gossip,
+) *DistSender {
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.Closer = stopper.ShouldQuiesce()
+	senderTransportFactory := SenderTransportFactory(tracer, stores)
+	return NewDistSender(DistSenderConfig{
+		AmbientCtx:      log.AmbientContext{Tracer: st.Tracer},
+		Settings:        st,
+		Clock:           clock,
+		RPCRetryOptions: &retryOpts,
+		nodeDescriptor:  nodeDesc,
+		NodeDialer:      nodedialer.New(nil, gossip.AddressResolver(g)),
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: func(
+				opts SendOptions,
+				nodeDialer *nodedialer.Dialer,
+				replicas ReplicaSlice,
+			) (Transport, error) {
+				transport, err := senderTransportFactory(opts, nodeDialer, replicas)
+				if err != nil {
+					return nil, err
+				}
+				return &localTestClusterTransport{transport, latency}, nil
+			},
+		},
+	}, g)
 }

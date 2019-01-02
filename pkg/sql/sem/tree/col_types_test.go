@@ -29,73 +29,98 @@ func TestParseColumnType(t *testing.T) {
 		str          string
 		expectedType coltypes.T
 	}{
-		{"BIT", &coltypes.TInt{Name: "BIT", Width: 1, ImplicitWidth: true}},
-		{"BIT(2)", &coltypes.TInt{Name: "BIT", Width: 2}},
-		{"BOOL", &coltypes.TBool{Name: "BOOL"}},
-		{"BOOLEAN", &coltypes.TBool{Name: "BOOLEAN"}},
-		{"SMALLINT", &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}},
-		{"BIGINT", &coltypes.TInt{Name: "BIGINT"}},
-		{"INTEGER", &coltypes.TInt{Name: "INTEGER"}},
-		{"INT", &coltypes.TInt{Name: "INT"}},
-		{"INT2", &coltypes.TInt{Name: "INT2", Width: 16, ImplicitWidth: true}},
-		{"INT4", &coltypes.TInt{Name: "INT4", Width: 32, ImplicitWidth: true}},
-		{"INT8", &coltypes.TInt{Name: "INT8"}},
-		{"INT64", &coltypes.TInt{Name: "INT64"}},
-		{"REAL", &coltypes.TFloat{Name: "REAL", Width: 32}},
-		{"DOUBLE PRECISION", &coltypes.TFloat{Name: "DOUBLE PRECISION", Width: 64}},
-		{"FLOAT", &coltypes.TFloat{Name: "FLOAT", Width: 64}},
-		{"FLOAT4", &coltypes.TFloat{Name: "FLOAT4", Width: 32}},
-		{"FLOAT8", &coltypes.TFloat{Name: "FLOAT8", Width: 64}},
-		{"FLOAT(4)", &coltypes.TFloat{Name: "FLOAT", Width: 64, Prec: 4, PrecSpecified: true}},
-		{"DEC", &coltypes.TDecimal{Name: "DEC"}},
-		{"DECIMAL", &coltypes.TDecimal{Name: "DECIMAL"}},
-		{"NUMERIC", &coltypes.TDecimal{Name: "NUMERIC"}},
-		{"NUMERIC(8)", &coltypes.TDecimal{Name: "NUMERIC", Prec: 8}},
-		{"NUMERIC(9,10)", &coltypes.TDecimal{Name: "NUMERIC", Prec: 9, Scale: 10}},
+		{"BIT", &coltypes.TBitArray{Width: 1}},
+		{"VARBIT", &coltypes.TBitArray{Width: 0, Variable: true}},
+		{"BIT(2)", &coltypes.TBitArray{Width: 2}},
+		{"VARBIT(2)", &coltypes.TBitArray{Width: 2, Variable: true}},
+		{"BOOL", &coltypes.TBool{}},
+		{"INT2", &coltypes.TInt{Width: 16}},
+		{"INT4", &coltypes.TInt{Width: 32}},
+		{"INT8", &coltypes.TInt{Width: 64}},
+		{"FLOAT4", &coltypes.TFloat{Short: true}},
+		{"FLOAT8", &coltypes.TFloat{}},
+		{"DECIMAL", &coltypes.TDecimal{}},
+		{"DECIMAL(8)", &coltypes.TDecimal{Prec: 8}},
+		{"DECIMAL(9,10)", &coltypes.TDecimal{Prec: 9, Scale: 10}},
 		{"UUID", &coltypes.TUUID{}},
-		{"INET", &coltypes.TIPAddr{Name: "INET"}},
+		{"INET", &coltypes.TIPAddr{}},
 		{"DATE", &coltypes.TDate{}},
+		{"JSONB", &coltypes.TJSON{}},
 		{"TIME", &coltypes.TTime{}},
-		{"TIME WITH TIME ZONE", &coltypes.TTimeTZ{}},
 		{"TIMESTAMP", &coltypes.TTimestamp{}},
-		{"TIMESTAMP WITH TIME ZONE", &coltypes.TTimestampTZ{}},
+		{"TIMESTAMPTZ", &coltypes.TTimestampTZ{}},
 		{"INTERVAL", &coltypes.TInterval{}},
-		{"STRING", &coltypes.TString{Name: "STRING"}},
-		{"CHAR", &coltypes.TString{Name: "CHAR"}},
-		{"VARCHAR", &coltypes.TString{Name: "VARCHAR"}},
-		{"CHAR(11)", &coltypes.TString{Name: "CHAR", N: 11}},
-		{"TEXT", &coltypes.TString{Name: "TEXT"}},
-		{"BLOB", &coltypes.TBytes{Name: "BLOB"}},
-		{"BYTES", &coltypes.TBytes{Name: "BYTES"}},
-		{"BYTEA", &coltypes.TBytes{Name: "BYTEA"}},
-		{"STRING COLLATE da", &coltypes.TCollatedString{Name: "STRING", Locale: "da"}},
-		{"CHAR COLLATE de", &coltypes.TCollatedString{Name: "CHAR", Locale: "de"}},
-		{"VARCHAR COLLATE en", &coltypes.TCollatedString{Name: "VARCHAR", Locale: "en"}},
-		{"CHAR(11) COLLATE en", &coltypes.TCollatedString{Name: "CHAR", N: 11, Locale: "en"}},
+		{"STRING", &coltypes.TString{Variant: coltypes.TStringVariantSTRING}},
+		{"CHAR", &coltypes.TString{Variant: coltypes.TStringVariantCHAR, N: 1}},
+		{"CHAR(11)", &coltypes.TString{Variant: coltypes.TStringVariantCHAR, N: 11}},
+		{"VARCHAR", &coltypes.TString{Variant: coltypes.TStringVariantVARCHAR}},
+		{"VARCHAR(2)", &coltypes.TString{Variant: coltypes.TStringVariantVARCHAR, N: 2}},
+		{`"char"`, &coltypes.TString{Variant: coltypes.TStringVariantQCHAR}},
+		{"BYTES", &coltypes.TBytes{}},
+		{"STRING COLLATE da", &coltypes.TCollatedString{TString: *coltypes.String, Locale: "da"}},
+		{"CHAR COLLATE de", &coltypes.TCollatedString{TString: *coltypes.Char, Locale: "de"}},
+		{"CHAR(11) COLLATE de", &coltypes.TCollatedString{TString: coltypes.TString{Variant: coltypes.TStringVariantCHAR, N: 11}, Locale: "de"}},
+		{"VARCHAR COLLATE en", &coltypes.TCollatedString{TString: *coltypes.VarChar, Locale: "en"}},
+		{"VARCHAR(2) COLLATE en", &coltypes.TCollatedString{TString: coltypes.TString{Variant: coltypes.TStringVariantVARCHAR, N: 2}, Locale: "en"}},
 	}
 	for i, d := range testData {
-		sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
-		stmt, err := parser.ParseOne(sql)
-		if err != nil {
-			t.Errorf("%d: %s", i, err)
-			continue
-		}
-		if sql != stmt.String() {
-			t.Errorf("%d: expected %s, but got %s", i, sql, stmt)
-		}
-		createTable, ok := stmt.(*tree.CreateTable)
-		if !ok {
-			t.Errorf("%d: expected tree.CreateTable, but got %T", i, stmt)
-			continue
-		}
-		columnDef, ok2 := createTable.Defs[0].(*tree.ColumnTableDef)
-		if !ok2 {
-			t.Errorf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
-			continue
-		}
-		if !reflect.DeepEqual(d.expectedType, columnDef.Type) {
-			t.Errorf("%d: expected %s, but got %s", i, d.expectedType, columnDef.Type)
-			continue
-		}
+		t.Run(d.str, func(t *testing.T) {
+			sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
+			stmt, err := parser.ParseOne(sql)
+			if err != nil {
+				t.Fatalf("%d: %s", i, err)
+			}
+			if sql != stmt.String() {
+				t.Errorf("%d: expected %s, but got %s", i, sql, stmt)
+			}
+			createTable, ok := stmt.(*tree.CreateTable)
+			if !ok {
+				t.Fatalf("%d: expected tree.CreateTable, but got %T", i, stmt)
+			}
+			columnDef, ok2 := createTable.Defs[0].(*tree.ColumnTableDef)
+			if !ok2 {
+				t.Fatalf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
+			}
+			if !reflect.DeepEqual(d.expectedType, columnDef.Type) {
+				t.Fatalf("%d: expected %s, but got %s", i, d.expectedType, columnDef.Type)
+			}
+		})
+	}
+}
+
+func TestParseColumnTypeAliases(t *testing.T) {
+	testData := []struct {
+		str          string
+		expectedStr  string
+		expectedType coltypes.T
+	}{
+		// FLOAT has always been FLOAT8
+		{"FLOAT", "CREATE TABLE a (b FLOAT8)", &coltypes.TFloat{Short: false}},
+		// A "naked" INT is 64 bits, for historical compatibility.
+		{"INT", "CREATE TABLE a (b INT8)", &coltypes.TInt{Width: 64}},
+		{"INTEGER", "CREATE TABLE a (b INT8)", &coltypes.TInt{Width: 64}},
+	}
+	for i, d := range testData {
+		t.Run(d.str, func(t *testing.T) {
+			sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
+			stmt, err := parser.ParseOne(sql)
+			if err != nil {
+				t.Fatalf("%d: %s", i, err)
+			}
+			if d.expectedStr != stmt.String() {
+				t.Errorf("%d: expected %s, but got %s", i, d.expectedStr, stmt)
+			}
+			createTable, ok := stmt.(*tree.CreateTable)
+			if !ok {
+				t.Fatalf("%d: expected tree.CreateTable, but got %T", i, stmt)
+			}
+			columnDef, ok2 := createTable.Defs[0].(*tree.ColumnTableDef)
+			if !ok2 {
+				t.Fatalf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
+			}
+			if !reflect.DeepEqual(d.expectedType, columnDef.Type) {
+				t.Fatalf("%d: expected %s, but got %s", i, d.expectedType, columnDef.Type)
+			}
+		})
 	}
 }

@@ -1,0 +1,19 @@
+*   28245dacd01a6b6fc50245d108d6bd713361c1d7 Merge pull request #200 from foo/bar
+|\  
+| * 78b06acb8baec3e22dc47b4fd978405915400a97 merge pr canary
+| *   cb718dc99f4eb05d41de1da18fd027b0dc9f96bc Merge #2
+| |\  
+| | * 6da808a53cf9a00fe72e12c2be9712d0f5d81dd4 backport A
+| |/  
+* |   ba15054b5e8721606d2203aeb4241dd490696885 Merge pull request #100 from foo/bar
+|\ \  
+| * | 3c612877c5e9dac6a6d06c1161a275c2b2ab7848 merge pr canary
+|/ /  
+* |   191b497b9b62a436e86cded6f98a199b11ec6e65 Merge #1
+|\ \  
+| |/  
+|/|   
+| * 57aa2eab630906aa41639fafdfe3cd11fad33bf4 feature B
+| * 8b135a6544448ffb9d7977506e889b003f62a921 feature A
+|/  
+* 5d7ea53d1a3340e43c65ef950b3aa8516644e584 initial

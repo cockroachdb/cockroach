@@ -34,10 +34,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/pkg/errors"
-	// Import postgres driver.
-	_ "github.com/lib/pq"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -54,6 +50,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/gogo/protobuf/proto"
+	// Import postgres driver.
+	_ "github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 func repoRoot() string {
@@ -288,6 +288,9 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		cfg.Binary,
 		"start",
 		"--insecure",
+		// Although --host/--port are deprecated, we cannot yet replace
+		// this here by --listen-addr/--listen-port, because
+		// TestVersionUpgrade will also try old binaries.
 		fmt.Sprintf("--host=%s", n.IPAddr()),
 		fmt.Sprintf("--port=%d", cfg.RPCPort),
 		fmt.Sprintf("--http-port=%d", cfg.HTTPPort),
@@ -314,18 +317,6 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 	}
 	ch := n.StartAsync(ctx, joins...)
 	return n, ch
-}
-
-// RemoveNodeData removes the given node's data directory.
-func (c *Cluster) RemoveNodeData(nodeIdx int) error {
-	dir := c.Cfg.PerNodeCfg[nodeIdx].DataDir
-	return os.RemoveAll(dir)
-}
-
-// ReplaceBinary replaces the binary that will be used for the specified node
-// after its next restart.
-func (c *Cluster) ReplaceBinary(nodeIdx int, bin string) {
-	c.Nodes[nodeIdx].Cfg.ExtraArgs[0] = bin
 }
 
 // waitForFullReplication waits for the cluster to be fully replicated.
@@ -364,7 +355,7 @@ func (c *Cluster) isReplicated() (bool, string) {
 	done := true
 	for rows.Next() {
 		var rangeID int64
-		var startKey, endKey []byte
+		var startKey, endKey roachpb.Key
 		var numReplicas int
 		if err := rows.Scan(&rangeID, &startKey, &endKey, &numReplicas); err != nil {
 			log.Fatalf(context.Background(), "unable to scan range replicas: %s", err)
@@ -384,8 +375,8 @@ func (c *Cluster) isReplicated() (bool, string) {
 // UpdateZoneConfig updates the default zone config for the cluster.
 func (c *Cluster) UpdateZoneConfig(rangeMinBytes, rangeMaxBytes int64) {
 	zone := config.DefaultZoneConfig()
-	zone.RangeMinBytes = rangeMinBytes
-	zone.RangeMaxBytes = rangeMaxBytes
+	zone.RangeMinBytes = proto.Int64(rangeMinBytes)
+	zone.RangeMaxBytes = proto.Int64(rangeMaxBytes)
 
 	buf, err := protoutil.Marshal(&zone)
 	if err != nil {
@@ -548,6 +539,7 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 	}
 	n.cmd = exec.Command(n.Cfg.ExtraArgs[0], args...)
 	n.cmd.Env = os.Environ()
+	n.cmd.Env = append(n.cmd.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms") // speed up rebalancing
 	n.cmd.Env = append(n.cmd.Env, n.Cfg.ExtraEnv...)
 
 	atomic.StoreInt32(&n.startSeq, n.seq.Next())
@@ -828,3 +820,6 @@ func (n *Node) Wait() *exec.ExitError {
 	ee, _ := n.waitErr.Load().(*exec.ExitError)
 	return ee
 }
+
+// Silence unused warning.
+var _ = (*Node)(nil).Wait

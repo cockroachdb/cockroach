@@ -29,10 +29,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -430,6 +430,15 @@ func (v *Value) SetDuration(t duration.Duration) error {
 	return nil
 }
 
+// SetBitArray encodes the specified bit array value into the bytes field of the
+// receiver, sets the tag and clears the checksum.
+func (v *Value) SetBitArray(t bitarray.BitArray) {
+	words, _ := t.EncodingParts()
+	v.RawBytes = make([]byte, headerSize, headerSize+encoding.NonsortingUvarintMaxLen+8*len(words))
+	v.RawBytes = encoding.EncodeUntaggedBitArrayValue(v.RawBytes, t)
+	v.setTag(ValueType_BITARRAY)
+}
+
 // SetDecimal encodes the specified decimal value into the bytes field of
 // the receiver using Gob encoding, sets the tag and clears the checksum.
 func (v *Value) SetDecimal(dec *apd.Decimal) error {
@@ -544,6 +553,16 @@ func (v Value) GetDuration() (duration.Duration, error) {
 	return t, err
 }
 
+// GetBitArray decodes a bit array value from the bytes field of the receiver. If
+// the tag is not BITARRAY an error will be returned.
+func (v Value) GetBitArray() (bitarray.BitArray, error) {
+	if tag := v.GetTag(); tag != ValueType_BITARRAY {
+		return bitarray.BitArray{}, fmt.Errorf("value type is not %s: %s", ValueType_BITARRAY, tag)
+	}
+	_, t, err := encoding.DecodeUntaggedBitArrayValue(v.dataBytes())
+	return t, err
+}
+
 // GetDecimal decodes a decimal value from the bytes of the receiver. If the
 // tag is not DECIMAL an error will be returned.
 func (v Value) GetDecimal() (apd.Decimal, error) {
@@ -551,6 +570,16 @@ func (v Value) GetDecimal() (apd.Decimal, error) {
 		return apd.Decimal{}, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
 	return encoding.DecodeNonsortingDecimal(v.dataBytes(), nil)
+}
+
+// GetDecimalInto decodes a decimal value from the bytes of the receiver,
+// writing it directly into the provided non-null apd.Decimal. If the
+// tag is not DECIMAL an error will be returned.
+func (v Value) GetDecimalInto(d *apd.Decimal) error {
+	if tag := v.GetTag(); tag != ValueType_DECIMAL {
+		return fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
+	}
+	return encoding.DecodeIntoNonsortingDecimal(d, v.dataBytes(), nil)
 }
 
 // GetTimeseries decodes an InternalTimeSeriesData value from the bytes
@@ -661,6 +690,11 @@ func (v Value) PrettyPrint() string {
 			buf.WriteString("0x")
 			buf.WriteString(hex.EncodeToString(data))
 		}
+	case ValueType_BITARRAY:
+		var data bitarray.BitArray
+		data, err = v.GetBitArray()
+		buf.WriteByte('B')
+		data.Format(&buf)
 	case ValueType_TIME:
 		var t time.Time
 		t, err = v.GetTime()
@@ -701,14 +735,9 @@ const (
 // baseKey can be nil, in which case it will be set when sending the first
 // write.
 func MakeTransaction(
-	name string,
-	baseKey Key,
-	userPriority UserPriority,
-	isolation enginepb.IsolationType,
-	now hlc.Timestamp,
-	maxOffsetNs int64,
+	name string, baseKey Key, userPriority UserPriority, now hlc.Timestamp, maxOffsetNs int64,
 ) Transaction {
-	u := uuid.MakeV4()
+	u := uuid.FastMakeV4()
 	var maxTS hlc.Timestamp
 	if maxOffsetNs == timeutil.ClocklessMaxOffset {
 		// For clockless reads, use the largest possible maxTS. This means we'll
@@ -723,7 +752,6 @@ func MakeTransaction(
 		TxnMeta: enginepb.TxnMeta{
 			Key:       baseKey,
 			ID:        u,
-			Isolation: isolation,
 			Timestamp: now,
 			Priority:  MakePriority(userPriority),
 			Sequence:  0, // 1-indexed, incremented before each Request
@@ -739,6 +767,23 @@ func MakeTransaction(
 // transaction.
 func MakeTxnCoordMeta(txn Transaction) TxnCoordMeta {
 	return TxnCoordMeta{Txn: txn, DeprecatedRefreshValid: true}
+}
+
+// StripRootToLeaf strips out all information that is unnecessary to communicate
+// to leaf transactions.
+func (meta *TxnCoordMeta) StripRootToLeaf() *TxnCoordMeta {
+	meta.Intents = nil
+	meta.CommandCount = 0
+	meta.RefreshReads = nil
+	meta.RefreshWrites = nil
+	return meta
+}
+
+// StripLeafToRoot strips out all information that is unnecessary to communicate
+// back to the root transaction.
+func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
+	meta.OutstandingWrites = nil
+	return meta
 }
 
 // LastActive returns the last timestamp at which client activity definitely
@@ -852,9 +897,9 @@ func MakePriority(userPriority UserPriority) int32 {
 	// For userPriority=MaxUserPriority, the probability of overflow is 0.7%.
 	// For userPriority=(MaxUserPriority/2), the probability of overflow is 0.005%.
 	val = (val / (5 * float64(MaxUserPriority))) * math.MaxInt32
-	if val <= MinTxnPriority {
+	if val < MinTxnPriority+1 {
 		return MinTxnPriority + 1
-	} else if val >= MaxTxnPriority {
+	} else if val > MaxTxnPriority-1 {
 		return MaxTxnPriority - 1
 	}
 	return int32(val)
@@ -880,7 +925,6 @@ func (t *Transaction) Restart(
 	t.UpgradePriority(MakePriority(userPriority))
 	t.UpgradePriority(upgradePriority)
 	t.WriteTooOld = false
-	t.RetryOnPush = false
 	t.Sequence = 0
 	// Reset Writing. Since we're using a new epoch, we don't care about the abort
 	// cache.
@@ -931,14 +975,12 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 
 	// If the epoch or refreshed timestamp move forward, overwrite
-	// WriteTooOld and RetryOnPush, otherwise the flags are cumulative.
+	// WriteTooOld, otherwise the flags are cumulative.
 	if t.Epoch < o.Epoch || t.RefreshedTimestamp.Less(o.RefreshedTimestamp) {
 		t.WriteTooOld = o.WriteTooOld
-		t.RetryOnPush = o.RetryOnPush
 		t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
 	} else {
 		t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
-		t.RetryOnPush = t.RetryOnPush || o.RetryOnPush
 		t.OrigTimestampWasObserved = t.OrigTimestampWasObserved || o.OrigTimestampWasObserved
 	}
 
@@ -986,12 +1028,6 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 	}
 }
 
-// IsSerializable returns whether this transaction uses serializable
-// isolation.
-func (t *Transaction) IsSerializable() bool {
-	return t != nil && t.Isolation == enginepb.SERIALIZABLE
-}
-
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
 	var buf bytes.Buffer
@@ -1000,10 +1036,10 @@ func (t Transaction) String() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f iso=%s stat=%s epo=%d "+
-		"ts=%s orig=%s max=%s wto=%t rop=%t seq=%d",
-		t.Short(), Key(t.Key), t.Writing, floatPri, t.Isolation, t.Status, t.Epoch, t.Timestamp,
-		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.RetryOnPush, t.Sequence)
+	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f stat=%s epo=%d "+
+		"ts=%s orig=%s max=%s wto=%t seq=%d",
+		t.Short(), Key(t.Key), t.Writing, floatPri, t.Status, t.Epoch, t.Timestamp,
+		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1085,16 +1121,13 @@ func PrepareTransactionForRetry(
 		// advanced to at least the error's timestamp?
 		now := clock.Now()
 		newTxnTimestamp := now
-		if newTxnTimestamp.Less(txn.Timestamp) {
-			newTxnTimestamp = txn.Timestamp
-		}
+		newTxnTimestamp.Forward(txn.Timestamp)
 		txn = MakeTransaction(
 			txn.Name,
 			nil, // baseKey
 			// We have errTxnPri, but this wants a UserPriority. So we're going to
 			// overwrite the priority below.
 			NormalUserPriority,
-			txn.Isolation,
 			newTxnTimestamp,
 			clock.MaxOffset().Nanoseconds(),
 		)
@@ -1132,7 +1165,7 @@ func CanTransactionRetryAtRefreshedTimestamp(
 	ctx context.Context, pErr *Error,
 ) (bool, *Transaction) {
 	txn := pErr.GetTxn()
-	if !txn.IsSerializable() || txn.OrigTimestampWasObserved {
+	if txn == nil || txn.OrigTimestampWasObserved {
 		return false, nil
 	}
 	timestamp := txn.Timestamp
@@ -1460,6 +1493,11 @@ func (s Span) Contains(o Span) bool {
 // ContainsKey returns whether the span contains the given key.
 func (s Span) ContainsKey(key Key) bool {
 	return bytes.Compare(key, s.Key) >= 0 && bytes.Compare(key, s.EndKey) < 0
+}
+
+// ProperlyContainsKey returns whether the span properly contains the given key.
+func (s Span) ProperlyContainsKey(key Key) bool {
+	return bytes.Compare(key, s.Key) > 0 && bytes.Compare(key, s.EndKey) < 0
 }
 
 // AsRange returns the Span as an interval.Range.

@@ -20,6 +20,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -47,17 +48,17 @@ func (rsds ReplicaSnapshotDiffSlice) WriteTo(w io.Writer) (int64, error) {
 	for _, d := range rsds {
 		prefix := "+"
 		if d.LeaseHolder {
-			// follower (RHS) has something proposer (LHS) does not have
+			// Lease holder (RHS) has something follower (LHS) does not have.
 			prefix = "-"
 		}
 		ts := d.Timestamp
 		const format = `%s%d.%09d,%d %s
-%s  ts:%s
-%s  value:%s
-%s  raw_key:%x raw_value:%x
+%s    ts:%s
+%s    value:%q
+%s    raw mvcc_key/value: %x %x
 `
 		// TODO(tschottdorf): add pretty-printed value. We have the code in
-		// cli/debug.go (printKeyValue).
+		// cli/debug/SprintKeyValue.
 		var prettyTime string
 		if d.Timestamp == (hlc.Timestamp{}) {
 			prettyTime = "<zero>"
@@ -68,7 +69,7 @@ func (rsds ReplicaSnapshotDiffSlice) WriteTo(w io.Writer) (int64, error) {
 			prefix, ts.WallTime/1E9, ts.WallTime%1E9, ts.Logical, d.Key,
 			prefix, prettyTime,
 			prefix, d.Value,
-			prefix, d.Key, d.Value)
+			prefix, engine.EncodeKey(engine.MVCCKey{Key: d.Key, Timestamp: ts}), d.Value)
 		if err != nil {
 			return 0, err
 		}

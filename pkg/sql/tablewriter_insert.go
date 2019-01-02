@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -25,7 +26,7 @@ import (
 // tableInserter handles writing kvs and forming table rows for inserts.
 type tableInserter struct {
 	tableWriterBase
-	ri sqlbase.RowInserter
+	ri row.Inserter
 }
 
 // init is part of the tableWriter interface.
@@ -39,7 +40,7 @@ func (ti *tableInserter) row(
 	ctx context.Context, values tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
 	ti.batchSize++
-	return nil, ti.ri.InsertRow(ctx, ti.b, values, false, sqlbase.CheckFKs, traceKV)
+	return nil, ti.ri.InsertRow(ctx, ti.b, values, false, row.CheckFKs, traceKV)
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
@@ -58,12 +59,12 @@ func (ti *tableInserter) finalize(
 }
 
 // tableDesc is part of the tableWriter interface.
-func (ti *tableInserter) tableDesc() *sqlbase.TableDescriptor {
+func (ti *tableInserter) tableDesc() *sqlbase.ImmutableTableDescriptor {
 	return ti.ri.Helper.TableDesc
 }
 
 // fkSpanCollector is part of the tableWriter interface.
-func (ti *tableInserter) fkSpanCollector() sqlbase.FkSpanCollector {
+func (ti *tableInserter) fkSpanCollector() row.FkSpanCollector {
 	return ti.ri.Fks
 }
 

@@ -229,7 +229,6 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
   std::string best_split_key = start_key;
   int64_t best_split_diff = std::numeric_limits<int64_t>::max();
   std::string prev_key;
-  int n = 0;
 
   for (; iter_rep->Valid() && kComparator.Compare(iter_rep->key(), end_key) < 0; iter_rep->Next()) {
     const rocksdb::Slice key = iter_rep->key();
@@ -240,9 +239,7 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
       return FmtStatus("unable to decode key");
     }
 
-    ++n;
-    const bool valid =
-        n > 1 && IsValidSplitKey(decoded_key) && decoded_key.compare(min_split_key) >= 0;
+    const bool valid = IsValidSplitKey(decoded_key) && decoded_key.compare(min_split_key) >= 0;
     int64_t diff = target_size - size_so_far;
     if (diff < 0) {
       diff = -diff;
@@ -277,31 +274,26 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
 }
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
-                      bool consistent, bool tombstones) {
-  // Get is implemented as a scan where we retrieve a single key. Note
-  // that the semantics of max_keys is that we retrieve one more key
-  // than is specified in order to maintain the existing semantics of
-  // resume span. See storage/engine/mvcc.go:MVCCScan.
-  //
-  // We specify an empty key for the end key which will ensure we
-  // don't retrieve a key different than the start key. This is a bit
-  // of a hack.
+                      bool inconsistent, bool tombstones) {
+  // Get is implemented as a scan where we retrieve a single key. We specify an
+  // empty key for the end key which will ensure we don't retrieve a key
+  // different than the start key. This is a bit of a hack.
   const DBSlice end = {0, 0};
   ScopedStats scoped_iter(iter);
-  mvccForwardScanner scanner(iter, key, end, timestamp, 0 /* max_keys */, txn, consistent,
+  mvccForwardScanner scanner(iter, key, end, timestamp, 1 /* max_keys */, txn, inconsistent,
                              tombstones);
   return scanner.get();
 }
 
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
-                       int64_t max_keys, DBTxn txn, bool consistent, bool reverse,
+                       int64_t max_keys, DBTxn txn, bool inconsistent, bool reverse,
                        bool tombstones) {
   ScopedStats scoped_iter(iter);
   if (reverse) {
-    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, consistent, tombstones);
+    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, inconsistent, tombstones);
     return scanner.scan();
   } else {
-    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, consistent, tombstones);
+    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, inconsistent, tombstones);
     return scanner.scan();
   }
 }

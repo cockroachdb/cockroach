@@ -248,33 +248,33 @@ class DataKeysRegistry : public ::google::protobuf::MessageLite /* @@protoc_inse
   ::google::protobuf::Map< ::std::string, ::cockroach::ccl::storageccl::engineccl::enginepbccl::SecretKey >*
       mutable_data_keys();
 
-  // string active_store_key = 3;
-  void clear_active_store_key();
-  static const int kActiveStoreKeyFieldNumber = 3;
-  const ::std::string& active_store_key() const;
-  void set_active_store_key(const ::std::string& value);
+  // string active_store_key_id = 3;
+  void clear_active_store_key_id();
+  static const int kActiveStoreKeyIdFieldNumber = 3;
+  const ::std::string& active_store_key_id() const;
+  void set_active_store_key_id(const ::std::string& value);
   #if LANG_CXX11
-  void set_active_store_key(::std::string&& value);
+  void set_active_store_key_id(::std::string&& value);
   #endif
-  void set_active_store_key(const char* value);
-  void set_active_store_key(const char* value, size_t size);
-  ::std::string* mutable_active_store_key();
-  ::std::string* release_active_store_key();
-  void set_allocated_active_store_key(::std::string* active_store_key);
+  void set_active_store_key_id(const char* value);
+  void set_active_store_key_id(const char* value, size_t size);
+  ::std::string* mutable_active_store_key_id();
+  ::std::string* release_active_store_key_id();
+  void set_allocated_active_store_key_id(::std::string* active_store_key_id);
 
-  // string active_data_key = 4;
-  void clear_active_data_key();
-  static const int kActiveDataKeyFieldNumber = 4;
-  const ::std::string& active_data_key() const;
-  void set_active_data_key(const ::std::string& value);
+  // string active_data_key_id = 4;
+  void clear_active_data_key_id();
+  static const int kActiveDataKeyIdFieldNumber = 4;
+  const ::std::string& active_data_key_id() const;
+  void set_active_data_key_id(const ::std::string& value);
   #if LANG_CXX11
-  void set_active_data_key(::std::string&& value);
+  void set_active_data_key_id(::std::string&& value);
   #endif
-  void set_active_data_key(const char* value);
-  void set_active_data_key(const char* value, size_t size);
-  ::std::string* mutable_active_data_key();
-  ::std::string* release_active_data_key();
-  void set_allocated_active_data_key(::std::string* active_data_key);
+  void set_active_data_key_id(const char* value);
+  void set_active_data_key_id(const char* value, size_t size);
+  ::std::string* mutable_active_data_key_id();
+  ::std::string* release_active_data_key_id();
+  void set_allocated_active_data_key_id(::std::string* active_data_key_id);
 
   // @@protoc_insertion_point(class_scope:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry)
  private:
@@ -292,8 +292,8 @@ class DataKeysRegistry : public ::google::protobuf::MessageLite /* @@protoc_inse
       ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
       ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
       0 > data_keys_;
-  ::google::protobuf::internal::ArenaStringPtr active_store_key_;
-  ::google::protobuf::internal::ArenaStringPtr active_data_key_;
+  ::google::protobuf::internal::ArenaStringPtr active_store_key_id_;
+  ::google::protobuf::internal::ArenaStringPtr active_data_key_id_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto::TableStruct;
 };
@@ -768,110 +768,110 @@ DataKeysRegistry::mutable_data_keys() {
   return data_keys_.MutableMap();
 }
 
-// string active_store_key = 3;
-inline void DataKeysRegistry::clear_active_store_key() {
-  active_store_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+// string active_store_key_id = 3;
+inline void DataKeysRegistry::clear_active_store_key_id() {
+  active_store_key_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& DataKeysRegistry::active_store_key() const {
-  // @@protoc_insertion_point(field_get:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key)
-  return active_store_key_.GetNoArena();
+inline const ::std::string& DataKeysRegistry::active_store_key_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key_id)
+  return active_store_key_id_.GetNoArena();
 }
-inline void DataKeysRegistry::set_active_store_key(const ::std::string& value) {
+inline void DataKeysRegistry::set_active_store_key_id(const ::std::string& value) {
   
-  active_store_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key)
+  active_store_key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key_id)
 }
 #if LANG_CXX11
-inline void DataKeysRegistry::set_active_store_key(::std::string&& value) {
+inline void DataKeysRegistry::set_active_store_key_id(::std::string&& value) {
   
-  active_store_key_.SetNoArena(
+  active_store_key_id_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key_id)
 }
 #endif
-inline void DataKeysRegistry::set_active_store_key(const char* value) {
+inline void DataKeysRegistry::set_active_store_key_id(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
-  active_store_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key)
+  active_store_key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key_id)
 }
-inline void DataKeysRegistry::set_active_store_key(const char* value, size_t size) {
+inline void DataKeysRegistry::set_active_store_key_id(const char* value, size_t size) {
   
-  active_store_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  active_store_key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key_id)
 }
-inline ::std::string* DataKeysRegistry::mutable_active_store_key() {
+inline ::std::string* DataKeysRegistry::mutable_active_store_key_id() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key)
-  return active_store_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  // @@protoc_insertion_point(field_mutable:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key_id)
+  return active_store_key_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* DataKeysRegistry::release_active_store_key() {
-  // @@protoc_insertion_point(field_release:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key)
+inline ::std::string* DataKeysRegistry::release_active_store_key_id() {
+  // @@protoc_insertion_point(field_release:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key_id)
   
-  return active_store_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  return active_store_key_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void DataKeysRegistry::set_allocated_active_store_key(::std::string* active_store_key) {
-  if (active_store_key != NULL) {
+inline void DataKeysRegistry::set_allocated_active_store_key_id(::std::string* active_store_key_id) {
+  if (active_store_key_id != NULL) {
     
   } else {
     
   }
-  active_store_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), active_store_key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key)
+  active_store_key_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), active_store_key_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key_id)
 }
 
-// string active_data_key = 4;
-inline void DataKeysRegistry::clear_active_data_key() {
-  active_data_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+// string active_data_key_id = 4;
+inline void DataKeysRegistry::clear_active_data_key_id() {
+  active_data_key_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& DataKeysRegistry::active_data_key() const {
-  // @@protoc_insertion_point(field_get:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key)
-  return active_data_key_.GetNoArena();
+inline const ::std::string& DataKeysRegistry::active_data_key_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key_id)
+  return active_data_key_id_.GetNoArena();
 }
-inline void DataKeysRegistry::set_active_data_key(const ::std::string& value) {
+inline void DataKeysRegistry::set_active_data_key_id(const ::std::string& value) {
   
-  active_data_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key)
+  active_data_key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key_id)
 }
 #if LANG_CXX11
-inline void DataKeysRegistry::set_active_data_key(::std::string&& value) {
+inline void DataKeysRegistry::set_active_data_key_id(::std::string&& value) {
   
-  active_data_key_.SetNoArena(
+  active_data_key_id_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key_id)
 }
 #endif
-inline void DataKeysRegistry::set_active_data_key(const char* value) {
+inline void DataKeysRegistry::set_active_data_key_id(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
-  active_data_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key)
+  active_data_key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key_id)
 }
-inline void DataKeysRegistry::set_active_data_key(const char* value, size_t size) {
+inline void DataKeysRegistry::set_active_data_key_id(const char* value, size_t size) {
   
-  active_data_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  active_data_key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key_id)
 }
-inline ::std::string* DataKeysRegistry::mutable_active_data_key() {
+inline ::std::string* DataKeysRegistry::mutable_active_data_key_id() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key)
-  return active_data_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  // @@protoc_insertion_point(field_mutable:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key_id)
+  return active_data_key_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* DataKeysRegistry::release_active_data_key() {
-  // @@protoc_insertion_point(field_release:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key)
+inline ::std::string* DataKeysRegistry::release_active_data_key_id() {
+  // @@protoc_insertion_point(field_release:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key_id)
   
-  return active_data_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  return active_data_key_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void DataKeysRegistry::set_allocated_active_data_key(::std::string* active_data_key) {
-  if (active_data_key != NULL) {
+inline void DataKeysRegistry::set_allocated_active_data_key_id(::std::string* active_data_key_id) {
+  if (active_data_key_id != NULL) {
     
   } else {
     
   }
-  active_data_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), active_data_key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key)
+  active_data_key_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), active_data_key_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key_id)
 }
 
 // -------------------------------------------------------------------

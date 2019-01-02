@@ -153,8 +153,8 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			store.TestSender(),
 		)
 		db := client.NewDB(actx, tcsf, store.cfg.Clock)
-		txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
 		ctx := context.Background()
+		txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 		if err := txn.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +162,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.
-		kvs, _, _, err := engine.MVCCScan(ctx, store.Engine(), keys.MetaMin, keys.MetaMax, math.MaxInt64, hlc.MaxTimestamp, true, nil)
+		kvs, _, _, err := engine.MVCCScan(ctx, store.Engine(), keys.MetaMin, keys.MetaMax, math.MaxInt64, hlc.MaxTimestamp, engine.MVCCScanOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

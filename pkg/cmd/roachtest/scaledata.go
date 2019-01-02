@@ -18,7 +18,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"runtime"
 	"strings"
 	"time"
@@ -47,9 +46,9 @@ func registerScaleData(r *registry) {
 		const duration = 10 * time.Minute
 		for _, n := range []int{3, 6} {
 			r.Add(testSpec{
-				Name:   fmt.Sprintf("scaledata/%s/nodes=%d", app, n),
-				Nodes:  nodes(n + 1),
-				Stable: true, // DO NOT COPY to new tests
+				Name:    fmt.Sprintf("scaledata/%s/nodes=%d", app, n),
+				Timeout: 2 * duration,
+				Nodes:   nodes(n + 1),
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runSqlapp(ctx, t, c, app, flags, duration)
 				},
@@ -79,7 +78,11 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 
 	c.Put(ctx, b, app, appNode)
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
-	c.Start(ctx, roachNodes)
+	c.Start(ctx, t, roachNodes)
+
+	// TODO(nvanbenschoten): We are currently running these consistency checks with
+	// basic chaos. We should also run them in more chaotic environments which
+	// could introduce network partitions, ENOSPACE, clock issues, etc.
 
 	// Sqlapps each take a `--cockroach_ip_addresses_csv` flag, which is a
 	// comma-separated list of node IP addresses with optional port specifiers.
@@ -101,10 +104,11 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 		// they often have the effect of slowing down the test so much that it
 		// fails. To get around this we create a new logger that writes to an
 		// artifacts file but does not output to stdout or stderr.
-		sqlappL, err := newLogger(c.l.name, "sqlapp", "", ioutil.Discard, ioutil.Discard)
+		sqlappL, err := t.l.ChildLogger("sqlapp", logPrefix(""), quietStdout, quietStderr)
 		if err != nil {
 			return err
 		}
+		defer sqlappL.close()
 
 		t.Status("installing schema")
 		err = c.RunL(ctx, sqlappL, appNode, fmt.Sprintf("./%s --install_schema "+
@@ -113,11 +117,6 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 			return err
 		}
 
-		// TODO(nvanbenschoten): We are currently running these consistency
-		// checks in the most basic case where are nodes in the Cockroach
-		// cluster are healthy and able to communicate. We should also run them
-		// in a chaos environment, which could introduce network partitions,
-		// node and service restarts, ENOSPACE, clock issues, etc.
 		t.Status("running consistency checker")
 		const workers = 16
 		return c.RunL(ctx, sqlappL, appNode, fmt.Sprintf("./%s  --duration_secs=%d "+

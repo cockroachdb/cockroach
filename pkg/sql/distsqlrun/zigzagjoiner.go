@@ -17,16 +17,17 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // Consider the schema:
@@ -263,9 +264,9 @@ const zigzagJoinerProcName = "zigzagJoiner"
 func newZigzagJoiner(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *ZigzagJoinerSpec,
+	spec *distsqlpb.ZigzagJoinerSpec,
 	fixedValues []sqlbase.EncDatumRow,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*zigzagJoiner, error) {
 	z := &zigzagJoiner{}
@@ -287,7 +288,7 @@ func newZigzagJoiner(
 		0, /* numMerged */
 		post,
 		output,
-		procStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
+		ProcStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
 	)
 	if err != nil {
 		return nil, err
@@ -302,8 +303,16 @@ func newZigzagJoiner(
 
 	colOffset := 0
 	for i := 0; i < z.numTables; i++ {
-		if i < len(fixedValues) {
+		if fixedValues != nil && i < len(fixedValues) {
+			// Useful for testing. In cases where we plan a zigzagJoin in
+			// the planner, we specify fixed values as ValuesCoreSpecs in
+			// the spec itself.
 			z.infos[i].fixedValues = fixedValues[i]
+		} else if i < len(spec.FixedValues) {
+			z.infos[i].fixedValues, err = valuesSpecToEncDatum(spec.FixedValues[i])
+			if err != nil {
+				return nil, err
+			}
 		}
 		if err := z.setupInfo(spec, i, colOffset); err != nil {
 			return nil, err
@@ -314,9 +323,26 @@ func newZigzagJoiner(
 	return z, nil
 }
 
+// Helper function to convert a values spec containing one tuple into EncDatums for
+// each cell. Note that this function assumes that there is only one tuple in the
+// ValuesSpec (i.e. the way fixed values are encoded in the ZigzagJoinSpec).
+func valuesSpecToEncDatum(
+	valuesSpec *distsqlpb.ValuesCoreSpec,
+) (res []sqlbase.EncDatum, err error) {
+	res = make([]sqlbase.EncDatum, len(valuesSpec.Columns))
+	rem := valuesSpec.RawBytes[0]
+	for i, colInfo := range valuesSpec.Columns {
+		res[i], rem, err = sqlbase.EncDatumFromBuffer(&colInfo.Type, colInfo.Encoding, rem)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
 // Start is part of the RowSource interface.
 func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
-	ctx = z.startInternal(ctx, zigzagJoinerProcName)
+	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
 	z.evalCtx = z.flowCtx.NewEvalCtx()
 	z.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
@@ -326,10 +352,12 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 // zigzagJoinerInfo contains all the information that needs to be
 // stored for each side of the join.
 type zigzagJoinerInfo struct {
-	fetcher sqlbase.RowFetcher
-	alloc   *sqlbase.DatumAlloc
-	table   *sqlbase.TableDescriptor
-	index   *sqlbase.IndexDescriptor
+	fetcher    row.Fetcher
+	alloc      *sqlbase.DatumAlloc
+	table      *sqlbase.TableDescriptor
+	index      *sqlbase.IndexDescriptor
+	indexTypes []sqlbase.ColumnType
+	indexDirs  []sqlbase.IndexDescriptor_Direction
 
 	// Stores one batch of matches at a time. When all the rows are collected
 	// the cartesian product of the containers will be emitted.
@@ -355,10 +383,11 @@ type zigzagJoinerInfo struct {
 // colOffset is specified to determine the appropriate range of output columns
 // to process. It is the number of columns in the tables of all previous sides
 // of the join.
-func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int) error {
+func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, colOffset int) error {
 	z.side = side
 	info := z.infos[side]
 
+	info.alloc = &sqlbase.DatumAlloc{}
 	info.table = &spec.Tables[side]
 	info.eqColumnIDs = spec.EqColumns[side].Columns
 	indexID := spec.IndexIds[side]
@@ -366,6 +395,17 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 		info.index = &info.table.PrimaryIndex
 	} else {
 		info.index = &info.table.Indexes[indexID-1]
+	}
+
+	var columnIDs []sqlbase.ColumnID
+	columnIDs, info.indexDirs = info.index.FullColumnIDs()
+	info.indexTypes = make([]sqlbase.ColumnType, len(columnIDs))
+	indexCols := make([]uint32, len(columnIDs))
+	columnTypes := info.table.ColumnTypes()
+	colIdxMap := info.table.ColumnIdxMap()
+	for i, columnID := range columnIDs {
+		indexCols[i] = uint32(columnID)
+		info.indexTypes[i] = columnTypes[colIdxMap[columnID]]
 	}
 
 	// Add the outputted columns.
@@ -377,7 +417,6 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 	}
 
 	// Add the fixed columns.
-	indexCols := append(info.index.ColumnIDs, info.index.ExtraColumnIDs...)
 	for i := 0; i < len(info.fixedValues); i++ {
 		neededCols.Add(int(indexCols[i]) - 1)
 	}
@@ -390,7 +429,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 	// Setup the RowContainers.
 	info.container.Reset()
 
-	// Setup the RowFetcher.
+	// Setup the Fetcher.
 	_, _, err := initRowFetcher(
 		&(info.fetcher),
 		info.table,
@@ -400,6 +439,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 		neededCols,
 		false, /* check */
 		info.alloc,
+		distsqlpb.ScanVisibility_PUBLIC,
 	)
 	if err != nil {
 		return err
@@ -416,8 +456,8 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 }
 
 func (z *zigzagJoiner) close() {
-	if !z.closed {
-		log.VEventf(z.ctx, 2, "exiting zigzag joiner run")
+	if z.InternalClose() {
+		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}
 }
 
@@ -430,7 +470,7 @@ func (z *zigzagJoiner) producerMeta(err error) *ProducerMetadata {
 	if !z.closed {
 		if err != nil {
 			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(z.ctx); trace != nil {
+		} else if trace := getTraceData(z.Ctx); trace != nil {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
@@ -491,60 +531,84 @@ func (z *zigzagJoiner) extractEqDatums(row sqlbase.EncDatumRow, side int) sqlbas
 	return eqCols
 }
 
-// explicitTypes partitions the column types based on whether the column is
-// an explicit or implicit part of the index.
-func (z *zigzagJoiner) explicitTypes() []sqlbase.ColumnType {
-	curInfo := z.infos[z.side]
-	indexDescriptor := curInfo.index
-	allTypes := curInfo.table.ColumnTypes()
-	explicitTypes := make([]sqlbase.ColumnType, len(indexDescriptor.ColumnIDs))
-	for i, id := range indexDescriptor.ColumnIDs {
-		explicitTypes[i] = allTypes[id-1]
-	}
-	return explicitTypes
-}
+// Generates a Key for an inverted index from the passed datums and side
+// info. Used by produceKeyFromBaseRow.
+func (z *zigzagJoiner) produceInvertedIndexKey(
+	info *zigzagJoinerInfo, datums sqlbase.EncDatumRow,
+) (roachpb.Key, error) {
+	// For inverted indexes, the JSON field (first column in the index) is
+	// encoded a little differently. We need to explicitly call
+	// EncodeInvertedIndexKeys to generate the prefix. The rest of the
+	// index key containing the remaining neededDatums can be generated
+	// and appended using EncodeColumns.
+	colMap := make(map[sqlbase.ColumnID]int)
+	decodedDatums := make([]tree.Datum, len(datums))
 
-// separateNeededDatums partitions the column datums based on whether the column is
-// an explicit or implicit part of the index.
-func (z *zigzagJoiner) separateNeededDatums() (sqlbase.EncDatumRow, sqlbase.EncDatumRow) {
-	info := z.infos[z.side]
-	fixedDatums := info.fixedValues
-	neededDatums := fixedDatums
-	if z.baseRow != nil {
-		eqDatums := z.extractEqDatums(z.baseRow, z.prevSide())
-		neededDatums = append(neededDatums, eqDatums...)
-	}
-	indexDescriptor := info.index
-	explicitDatums := make(sqlbase.EncDatumRow, 0, len(indexDescriptor.ColumnIDs))
-	implicitDatums := make(sqlbase.EncDatumRow, 0, len(indexDescriptor.ExtraColumnIDs))
-	for i := range neededDatums {
-		if i < cap(explicitDatums) {
-			explicitDatums = append(explicitDatums, neededDatums[i])
+	// Ensure all EncDatums have been decoded.
+	for i, encDatum := range datums {
+		err := encDatum.EnsureDecoded(&info.indexTypes[i], info.alloc)
+		if err != nil {
+			return nil, err
+		}
+
+		decodedDatums[i] = encDatum.Datum
+		if i < len(info.index.ColumnIDs) {
+			colMap[info.index.ColumnIDs[i]] = i
 		} else {
-			implicitDatums = append(implicitDatums, neededDatums[i])
+			// This column's value will be encoded in the second part (i.e.
+			// EncodeColumns).
+			colMap[info.index.ExtraColumnIDs[i-len(info.index.ColumnIDs)]] = i
 		}
 	}
-	return explicitDatums, implicitDatums
+
+	keys, err := sqlbase.EncodeInvertedIndexKeys(
+		info.table,
+		info.index,
+		colMap,
+		decodedDatums,
+		info.prefix,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) != 1 {
+		return nil, errors.Errorf("%d fixed values passed in for inverted index", len(keys))
+	}
+
+	// Append remaining (non-JSON) datums to the key.
+	key, _, err := sqlbase.EncodeColumns(
+		info.index.ExtraColumnIDs[:len(datums)-1],
+		info.indexDirs[1:],
+		colMap,
+		decodedDatums,
+		keys[0],
+	)
+	return key, err
 }
 
 // Generates a Key, corresponding to the current `z.baseRow` in
 // the index on the current side.
 func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
-	explicitNeededDatums, implicitNeededDatums := z.separateNeededDatums()
-	explicitTypes := z.explicitTypes()
-	explicitTypes = explicitTypes[:len(explicitNeededDatums)]
-
 	info := z.infos[z.side]
+	neededDatums := info.fixedValues
+	if z.baseRow != nil {
+		eqDatums := z.extractEqDatums(z.baseRow, z.prevSide())
+		neededDatums = append(neededDatums, eqDatums...)
+	}
 
 	// Construct correct row by concatenating right fixed datums with
 	// primary key extracted from `row`.
-	key, err := sqlbase.MakeFullKeyFromEncDatums(
-		explicitTypes,
-		explicitNeededDatums,
-		implicitNeededDatums,
+	if info.index.Type == sqlbase.IndexDescriptor_INVERTED {
+		return z.produceInvertedIndexKey(info, neededDatums)
+	}
+
+	key, err := sqlbase.MakeKeyFromEncDatums(
+		info.prefix,
+		neededDatums,
+		info.indexTypes[:len(neededDatums)],
+		info.indexDirs,
 		info.table,
 		info.index,
-		info.prefix,
 		info.alloc,
 	)
 	return key, err
@@ -605,7 +669,7 @@ func (z *zigzagJoiner) matchBase(curRow sqlbase.EncDatumRow, side int) (bool, er
 
 	// Compare the equality columns of the baseRow to that of the curRow.
 	da := &sqlbase.DatumAlloc{}
-	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, &z.flowCtx.EvalCtx, curEqDatums)
+	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, z.flowCtx.EvalCtx, curEqDatums)
 	if err != nil {
 		return false, err
 	}
@@ -691,7 +755,7 @@ func (z *zigzagJoiner) nextRow(
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
-			false, /* traceKV */
+			z.flowCtx.traceKV,
 		)
 		if err != nil {
 			return nil, z.producerMeta(err)
@@ -754,7 +818,7 @@ func (z *zigzagJoiner) nextRow(
 				return nil, z.producerMeta(err)
 			}
 			da := &sqlbase.DatumAlloc{}
-			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, &z.flowCtx.EvalCtx, currentEqCols)
+			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.flowCtx.EvalCtx, currentEqCols)
 			if err != nil {
 				return nil, z.producerMeta(err)
 			}
@@ -831,20 +895,19 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		curInfo := z.infos[z.side]
 		// Fetch initial batch.
-		// TODO(pbardea): set the traceKV flag when requested by the session.
 		err := curInfo.fetcher.StartScan(
-			z.ctx,
+			z.Ctx,
 			txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
-			false, /* traceKV */
+			z.flowCtx.traceKV,
 		)
 		if err != nil {
-			log.Errorf(z.ctx, "scan error: %s", err)
+			log.Errorf(z.Ctx, "scan error: %s", err)
 			return nil, z.producerMeta(err)
 		}
-		fetchedRow, err := z.fetchRow(z.ctx)
+		fetchedRow, err := z.fetchRow(z.Ctx)
 		if err != nil {
 			err = scrub.UnwrapScrubError(err)
 			return nil, z.producerMeta(err)
@@ -859,26 +922,22 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 
 	for {
-		row, meta := z.nextRow(z.ctx, txn)
+		row, meta := z.nextRow(z.Ctx, txn)
 		if z.closed || meta != nil {
 			return nil, meta
 		}
 		if row == nil {
-			z.moveToDraining(nil /* err */)
+			z.MoveToDraining(nil /* err */)
 			break
 		}
 
-		outRow := z.processRowHelper(row)
+		outRow := z.ProcessRowHelper(row)
 		if outRow == nil {
 			continue
 		}
 		return outRow, nil
 	}
-	return nil, z.drainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (z *zigzagJoiner) ConsumerDone() {
+	return nil, z.DrainHelper()
 }
 
 // ConsumerClosed is part of the RowSource interface.

@@ -21,17 +21,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -62,6 +62,7 @@ type processCallback func(error)
 // processing state.
 type replicaItem struct {
 	value roachpb.RangeID
+	seq   int // enforce FIFO order for equal priorities
 
 	// fields used when a replicaItem is enqueued in a priority queue.
 	priority float64
@@ -87,34 +88,45 @@ func (i *replicaItem) registerCallback(cb processCallback) {
 }
 
 // A priorityQueue implements heap.Interface and holds replicaItems.
-type priorityQueue []*replicaItem
+type priorityQueue struct {
+	seqGen int
+	sl     []*replicaItem
+}
 
-func (pq priorityQueue) Len() int { return len(pq) }
+func (pq priorityQueue) Len() int { return len(pq.sl) }
 
 func (pq priorityQueue) Less(i, j int) bool {
+	a, b := pq.sl[i], pq.sl[j]
+	if a.priority == b.priority {
+		// When priorities are equal, we want the lower sequence number to show
+		// up first (FIFO).
+		return a.seq < b.seq
+	}
 	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return pq[i].priority > pq[j].priority
+	return a.priority > b.priority
 }
 
 func (pq priorityQueue) Swap(i, j int) {
-	pq[i], pq[j] = pq[j], pq[i]
-	pq[i].index, pq[j].index = i, j
+	pq.sl[i], pq.sl[j] = pq.sl[j], pq.sl[i]
+	pq.sl[i].index, pq.sl[j].index = i, j
 }
 
 func (pq *priorityQueue) Push(x interface{}) {
-	n := len(*pq)
+	n := len(pq.sl)
 	item := x.(*replicaItem)
 	item.index = n
-	*pq = append(*pq, item)
+	pq.seqGen++
+	item.seq = pq.seqGen
+	pq.sl = append(pq.sl, item)
 }
 
 func (pq *priorityQueue) Pop() interface{} {
-	old := *pq
+	old := pq.sl
 	n := len(old)
 	item := old[n-1]
 	item.index = -1 // for safety
 	old[n-1] = nil  // for gc
-	*pq = old[0 : n-1]
+	pq.sl = old[0 : n-1]
 	return item
 }
 
@@ -163,13 +175,13 @@ type queueImpl interface {
 	// and returns whether it should be queued and if so, at what priority.
 	// The Replica is guaranteed to be initialized.
 	shouldQueue(
-		context.Context, hlc.Timestamp, *Replica, config.SystemConfig,
+		context.Context, hlc.Timestamp, *Replica, *config.SystemConfig,
 	) (shouldQueue bool, priority float64)
 
 	// process accepts lease status, a replica, and the system config
 	// and executes queue-specific work on it. The Replica is guaranteed
 	// to be initialized.
-	process(context.Context, *Replica, config.SystemConfig) error
+	process(context.Context, *Replica, *config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue. The duration of the last processing of a replica
@@ -191,8 +203,12 @@ type queueConfig struct {
 	// concurrently. If not set, defaults to 1.
 	maxConcurrency int
 	// needsLease controls whether this queue requires the range lease to
-	// operate on a replica.
+	// operate on a replica. If so, one will be acquired if necessary.
 	needsLease bool
+	// needsRaftInitialized controls whether the Raft group will be initialized
+	// (if not already initialized) when deciding whether to process this
+	// replica.
+	needsRaftInitialized bool
 	// needsSystemConfig controls whether this queue requires a valid copy of the
 	// system config to operate on a replica. Not all queues require it, and it's
 	// unsafe for certain queues to wait on it. For example, a raft snapshot may
@@ -303,6 +319,16 @@ func newBaseQueue(
 	return &bq
 }
 
+// Name returns the name of the queue.
+func (bq *baseQueue) Name() string {
+	return bq.name
+}
+
+// NeedsLease returns whether the queue requires a replica to be leaseholder.
+func (bq *baseQueue) NeedsLease() bool {
+	return bq.needsLease
+}
+
 // Length returns the current size of the queue.
 func (bq *baseQueue) Length() int {
 	bq.mu.Lock()
@@ -389,11 +415,10 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 
 func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.Timestamp) {
 	// Load the system config if it's needed.
-	var cfg config.SystemConfig
-	var cfgOk bool
+	var cfg *config.SystemConfig
 	if bq.needsSystemConfig {
-		cfg, cfgOk = bq.gossip.GetSystemConfig()
-		if !cfgOk {
+		cfg = bq.gossip.GetSystemConfig()
+		if cfg == nil {
 			if log.V(1) {
 				log.Infof(ctx, "no system config available. skipping")
 			}
@@ -409,7 +434,11 @@ func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.
 		return
 	}
 
-	if cfgOk && bq.requiresSplit(cfg, repl) {
+	if bq.needsRaftInitialized {
+		repl.maybeInitializeRaftGroup(ctx)
+	}
+
+	if cfg != nil && bq.requiresSplit(cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(1) {
@@ -436,7 +465,7 @@ func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.
 	}
 }
 
-func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool {
+func (bq *baseQueue) requiresSplit(cfg *config.SystemConfig, repl *Replica) bool {
 	if bq.acceptsUnsplitRanges {
 		return false
 	}
@@ -515,7 +544,7 @@ func (bq *baseQueue) addInternalLocked(
 	// If adding this replica has pushed the queue past its maximum size,
 	// remove the lowest priority element.
 	if pqLen := bq.mu.priorityQ.Len(); pqLen > bq.maxSize {
-		bq.removeLocked(bq.mu.priorityQ[pqLen-1])
+		bq.removeLocked(bq.mu.priorityQ.sl[pqLen-1])
 	}
 	// Signal the processLoop that a replica has been added.
 	select {
@@ -635,7 +664,12 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 				} else {
 					// lastDur will be 0 after the first processing attempt.
 					lastDur := bq.lastProcessDuration()
-					nextTime = time.After(bq.impl.timer(lastDur))
+					switch t := bq.impl.timer(lastDur); t {
+					case 0:
+						nextTime = immediately
+					default:
+						nextTime = time.After(t)
+					}
 				}
 			}
 		}
@@ -661,11 +695,10 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 // while calling this method.
 func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) error {
 	// Load the system config if it's needed.
-	var cfg config.SystemConfig
-	var cfgOk bool
+	var cfg *config.SystemConfig
 	if bq.needsSystemConfig {
-		cfg, cfgOk = bq.gossip.GetSystemConfig()
-		if !cfgOk {
+		cfg = bq.gossip.GetSystemConfig()
+		if cfg == nil {
 			if log.V(1) {
 				log.Infof(queueCtx, "no system config available. skipping")
 			}
@@ -673,7 +706,7 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 		}
 	}
 
-	if cfgOk && bq.requiresSplit(cfg, repl) {
+	if cfg != nil && bq.requiresSplit(cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(3) {
@@ -701,7 +734,7 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 	}
 
 	if reason, err := repl.IsDestroyed(); err != nil {
-		if !bq.queueConfig.processDestroyedReplicas || reason != destroyReasonRemovalPending {
+		if !bq.queueConfig.processDestroyedReplicas || reason == destroyReasonRemoved {
 			if log.V(3) {
 				log.Infof(queueCtx, "replica destroyed (%s); skipping", err)
 			}
@@ -741,6 +774,33 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 	return nil
 }
 
+type benignError struct {
+	error
+}
+
+var _ causer.Causer = &benignError{}
+
+func (be *benignError) Cause() error {
+	return be.error
+}
+
+func isBenign(err error) bool {
+	return causer.Visit(err, func(err error) bool {
+		_, ok := err.(*benignError)
+		return ok
+	})
+}
+
+func isPurgatoryError(err error) (purgatoryError, bool) {
+	var purgErr purgatoryError
+	ok := causer.Visit(err, func(err error) bool {
+		var ok bool
+		purgErr, ok = err.(purgatoryError)
+		return ok
+	})
+	return purgErr, ok
+}
+
 // finishProcessingReplica handles the completion of a replica process attempt.
 // It removes the replica from the replica set and may re-enqueue the replica or
 // add it to purgatory.
@@ -762,20 +822,27 @@ func (bq *baseQueue) finishProcessingReplica(
 
 	// Handle failures.
 	if err != nil {
-		// Increment failures metric to capture all error.
+		benign := isBenign(err)
+
+		// Increment failures metric.
+		//
+		// TODO(tschottdorf): once we start asserting zero failures in tests
+		// (and production), move benign failures into a dedicated category.
 		bq.failures.Inc(1)
 
 		// Determine whether a failure is a purgatory error. If it is, add
 		// the failing replica to purgatory. Note that even if the item was
 		// scheduled to be requeued, we ignore this if we add the replica to
 		// purgatory.
-		if purgErr, ok := errors.Cause(err).(purgatoryError); ok {
+		if purgErr, ok := isPurgatoryError(err); ok {
 			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
 			return
 		}
 
-		// If not a purgatory error, log.
-		log.Error(ctx, err)
+		// If not a benign or purgatory error, log.
+		if !benign {
+			log.Error(ctx, err)
+		}
 	}
 
 	// Maybe add replica back into queue, if requested.
@@ -843,7 +910,6 @@ func (bq *baseQueue) addToPurgatoryLocked(
 					for _, id := range ranges {
 						repl, err := bq.store.GetReplica(id)
 						if err != nil {
-							log.Errorf(ctx, "range %s no longer exists on store: %s", id, err)
 							continue
 						}
 						annotatedCtx := repl.AnnotateCtx(ctx)

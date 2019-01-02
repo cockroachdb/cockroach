@@ -53,7 +53,21 @@ func TestDebugLogSpyOptions(t *testing.T) {
 			expOpts: logSpyOptions{
 				Count:    123,
 				Duration: durationAsString(9 * time.Second),
-				Grep:     regexpAsString{regexp.MustCompile(`^foo$`)},
+				Grep:     regexpAsString{re: regexp.MustCompile(`^foo$`)},
+			},
+		},
+		{
+			// Example where everything is specified (and parsed) and where grep is an integer.
+			vals: map[string][]string{
+				"NonexistentOptionIsIgnored": {"banana"},
+				"Count":    {"123"},
+				"Duration": {"9s"},
+				"Grep":     {`123`},
+			},
+			expOpts: logSpyOptions{
+				Count:    123,
+				Duration: durationAsString(9 * time.Second),
+				Grep:     regexpAsString{re: regexp.MustCompile(`123`), i: 123},
 			},
 		},
 		{

@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import { assert } from "chai";
 import * as sinon from "sinon";
 
@@ -172,6 +186,11 @@ describe("analytics listener", function() {
         "login redirect URL parameters",
         "/login?redirectTo=%2Fdatabase%2Ffoobar%2Ftable%2Fbaz",
         "/login?redirectTo=%2Fdatabase%2F%5Bdb%5D%2Ftable%2F%5Btbl%5D",
+      ),
+      testRedaction(
+        "statement details page",
+        "/statement/SELECT * FROM database.table",
+        "/statement/[statement]",
       ),
     ]).map(function ({ title, input, expected }) {
       it(`applies a redaction for ${title}`, function () {

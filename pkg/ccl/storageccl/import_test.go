@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -201,7 +200,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	const initialAmbiguousSubReqs = 3
 	remainingAmbiguousSubReqs := int64(initialAmbiguousSubReqs)
 	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-		EvalKnobs: batcheval.TestingKnobs{
+		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				switch filterArgs.Req.(type) {
 				case *roachpb.WriteBatchRequest, *roachpb.AddSSTableRequest:
@@ -216,6 +215,8 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 				return roachpb.NewError(roachpb.NewAmbiguousResultError(strconv.Itoa(int(r))))
 			},
 		},
+		// Prevent the merge queue from immediately discarding our splits.
+		DisableMergeQueue: true,
 	}}
 
 	ctx := context.Background()

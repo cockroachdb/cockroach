@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -28,25 +27,32 @@ import (
 // interface. During name resolution, unresolved column names in the AST are
 // replaced with a scopeColumn.
 type scopeColumn struct {
-	// origName is the original name of this column, either in its origin table,
-	// or when it was first synthesized.
-	origName tree.Name
-
 	// name is the current name of this column. It is usually the same as
-	// origName, unless this column was renamed with an AS expression.
+	// the original name, unless this column was renamed with an AS expression.
 	name  tree.Name
 	table tree.TableName
 	typ   types.T
 
 	// id is an identifier for this column, which is unique across all the
 	// columns in the query.
-	id     opt.ColumnID
+	id opt.ColumnID
+
+	// hidden is true if the column is not selected by a '*' wildcard operator.
+	// The column must be explicitly referenced by name, or otherwise is not
+	// included.
 	hidden bool
 
-	// group is the GroupID of the scalar expression associated with this column.
-	// group is 0 for columns that are just passed through from an inner scope
-	// and for table columns.
-	group memo.GroupID
+	// mutation is true if the column is in the process of being dropped or added
+	// to the table. It should not be visible to variable references.
+	mutation bool
+
+	// descending indicates whether this column is sorted in descending order.
+	// This field is only used for ordering columns.
+	descending bool
+
+	// scalar is the scalar expression associated with this column. If it is nil,
+	// then the column is a passthrough from an inner scope or a table column.
+	scalar opt.ScalarExpr
 
 	// expr is the AST expression that this column refers to, if any.
 	// expr is nil if the column does not refer to an expression.
@@ -57,20 +63,20 @@ type scopeColumn struct {
 	exprStr string
 }
 
+// getExpr returns the the expression that this column refers to, or the column
+// itself if the column does not refer to an expression.
+func (c *scopeColumn) getExpr() tree.TypedExpr {
+	if c.expr == nil {
+		return c
+	}
+	return c.expr
+}
+
 // getExprStr gets a stringified representation of the expression that this
-// column refers to, or the original column name if the column does not refer
-// to an expression. It caches the result in exprStr.
+// column refers to.
 func (c *scopeColumn) getExprStr() string {
 	if c.exprStr == "" {
-		if c.expr == nil {
-			if tableStr := c.table.String(); tableStr != "" {
-				c.exprStr = fmt.Sprintf("%s.%s", tableStr, c.origName)
-			} else {
-				c.exprStr = string(c.origName)
-			}
-		} else {
-			c.exprStr = symbolicExprStr(c.expr)
-		}
+		c.exprStr = symbolicExprStr(c.getExpr())
 	}
 	return c.exprStr
 }

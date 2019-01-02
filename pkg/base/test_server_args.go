@@ -87,7 +87,6 @@ type TestServerArgs struct {
 	TimeSeriesQueryWorkerMax    int
 	TimeSeriesQueryMemoryBudget int64
 	SQLMemoryPoolSize           int64
-	ListeningURLFile            string
 
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running
@@ -104,11 +103,6 @@ type TestServerArgs struct {
 	// If set, web session authentication will be disabled, even if the server
 	// is running in secure mode.
 	DisableWebSessionAuthentication bool
-
-	// ConnResultsBufferBytes is the size of the buffer in which each connection
-	// accumulates results set. Results are flushed to the network when this
-	// buffer overflows.
-	ConnResultsBufferBytes int
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -172,6 +166,8 @@ const (
 	// ReplicationAuto means that ranges are replicated according to the
 	// production default zone config. Replication is performed as in
 	// production, by the replication queue.
+	// If ReplicationAuto is used, StartTestCluster() blocks until the initial
+	// ranges are fully replicated.
 	ReplicationAuto TestClusterReplicationMode = iota
 	// ReplicationManual means that the split and replication queues of all
 	// servers are stopped, and the test must manually control splitting and

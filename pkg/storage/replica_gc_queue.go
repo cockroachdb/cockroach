@@ -16,10 +16,8 @@ package storage
 
 import (
 	"context"
+	"math"
 	"time"
-
-	"github.com/coreos/etcd/raft"
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -28,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 )
 
 const (
@@ -97,6 +97,7 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 		queueConfig{
 			maxSize:                  defaultQueueMaxSize,
 			needsLease:               false,
+			needsRaftInitialized:     true,
 			needsSystemConfig:        false,
 			acceptsUnsplitRanges:     true,
 			processDestroyedReplicas: true,
@@ -116,7 +117,7 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 // check must have occurred more than ReplicaGCQueueInactivityThreshold
 // in the past.
 func (rgcq *replicaGCQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
 ) (bool, float64) {
 	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
@@ -188,7 +189,7 @@ func replicaGCShouldQueueImpl(
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (rgcq *replicaGCQueue) process(
-	ctx context.Context, repl *Replica, _ config.SystemConfig,
+	ctx context.Context, repl *Replica, _ *config.SystemConfig,
 ) error {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
@@ -209,32 +210,8 @@ func (rgcq *replicaGCQueue) process(
 	}
 	replyDesc := rs[0]
 
-	if currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
-		// We are no longer a member of this range; clean up our local data.
-		rgcq.metrics.RemoveReplicaCount.Inc(1)
-		if log.V(1) {
-			log.Infof(ctx, "destroying local data")
-		}
-		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, RemoveOptions{
-			DestroyData: true,
-		}); err != nil {
-			return err
-		}
-	} else if desc.RangeID != replyDesc.RangeID {
-		// If we get a different range ID back, then the range has been merged
-		// away. But currentMember is true, so we are still a member of the
-		// subsuming range. Shut down raft processing for the former range
-		// and delete any remaining metadata, but do not delete the data.
-		rgcq.metrics.RemoveReplicaCount.Inc(1)
-		if log.V(1) {
-			log.Infof(ctx, "removing merged range")
-		}
-		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, RemoveOptions{
-			DestroyData: false,
-		}); err != nil {
-			return err
-		}
-	} else {
+	currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID())
+	if desc.RangeID == replyDesc.RangeID && currentMember {
 		// This replica is a current member of the raft group. Set the last replica
 		// GC check time to avoid re-processing for another check interval.
 		//
@@ -242,14 +219,118 @@ func (rgcq *replicaGCQueue) process(
 		// but also on how good a job the queue does at inspecting every
 		// Replica (see #8111) when inactive ones can be starved by
 		// event-driven additions.
-		if log.V(1) {
-			log.Infof(ctx, "not gc'able, replica is still in range descriptor: %v", currentDesc)
-		}
+		log.VEventf(ctx, 1, "not gc'able, replica is still in range descriptor: %v", currentDesc)
 		if err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now()); err != nil {
 			return err
 		}
-	}
+	} else if desc.RangeID == replyDesc.RangeID {
+		// We are no longer a member of this range, but the range still exists.
+		// Clean up our local data.
 
+		repl.mu.RLock()
+		replicaID := repl.mu.replicaID
+		ticks := repl.mu.ticks
+		repl.mu.RUnlock()
+
+		if replicaID == 0 {
+			// This is a preemptive replica. GC'ing a preemptive replica is a
+			// good idea if and only if the up-replication that it was a part of
+			// did *NOT* commit. If it *did* commit and we're removing the
+			// preemptive snapshot, the newly added follower will first need a
+			// Raft snapshot to catch up, and that snapshot will be delayed by
+			// #31875.
+			// Log if the replica hasn't been around for very long.
+			//
+			// TODO(tschottdorf): avoid these, ideally without a time-based mechanism.
+			// The replica carrying out the replication change could keep the
+			// snapshot alive until it has either committed or aborted the txn.
+			// Or we try to use Raft learners for this purpose.
+			if ticks < 10 {
+				log.Infof(ctx, "removing young preemptive snapshot (%d ticks)", ticks)
+			}
+		} else if replyDesc.EndKey.Less(desc.EndKey) {
+			// The meta records indicate that the range has split but that this
+			// replica hasn't processed the split trigger yet. By removing this
+			// replica, we're also wiping out the data of what would become the
+			// right hand side of the split (which may or may not still have a
+			// replica on this store), and will need a Raft snapshot. Even worse,
+			// the mechanism introduced in #31875 will artificially delay this
+			// snapshot by seconds, during which time the RHS may see more splits
+			// and incur more snapshots.
+			//
+			// TODO(tschottdorf): we can look up the range descriptor for the
+			// RHS of the split (by querying with replyDesc.EndKey) and fetch
+			// the local replica (which will be uninitialized, i.e. we have to
+			// look it up by RangeID) to disable the mechanism in #31875 for it.
+			// We should be able to use prefetching unconditionally to have this
+			// desc ready whenever we need it.
+			//
+			// NB: there's solid evidence that this phenomenon can actually lead
+			// to a large spike in Raft snapshots early in the life of a cluster
+			// (in particular when combined with a restore operation) when the
+			// removed replica has many pending splits and thus incurs a Raft
+			// snapshot for *each* of them. This typically happens for the last
+			// range:
+			// [n1,replicaGC,s1,r33/1:/{Table/53/1/3…-Max}] removing replica [...]
+			log.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
+		}
+
+		rgcq.metrics.RemoveReplicaCount.Inc(1)
+		log.VEventf(ctx, 1, "destroying local data")
+		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			return err
+		}
+	} else {
+		// This case is tricky. This range has been merged away, so it is likely
+		// that we can GC this replica, but we need to be careful. If this store has
+		// a replica of the subsuming range that has not yet applied the merge
+		// trigger, we must not GC this replica.
+		//
+		// We can't just ask our local left neighbor whether it has an unapplied
+		// merge, as if it's a slow follower it might not have learned about the
+		// merge yet! What we can do, though, is check whether the generation of our
+		// local left neighbor matches the generation of its meta2 descriptor. If it
+		// is generationally up-to-date, it has applied all splits and merges, and
+		// it is thus safe to remove this replica.
+		leftRepl := repl.store.lookupPrecedingReplica(desc.StartKey)
+		if leftRepl != nil {
+			leftDesc := leftRepl.Desc()
+			rs, _, err := client.RangeLookup(ctx, rgcq.db.NonTransactionalSender(), leftDesc.StartKey.AsRawKey(),
+				roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+			if err != nil {
+				return err
+			}
+			if len(rs) != 1 {
+				return errors.Errorf("expected 1 range descriptor, got %d", len(rs))
+			}
+			if leftReplyDesc := rs[0]; !leftDesc.Equal(leftReplyDesc) {
+				log.VEventf(ctx, 1, "left neighbor %s not up-to-date with meta descriptor %s; cannot safely GC range yet",
+					leftDesc, leftReplyDesc)
+				// Chances are that the left replica needs to be GC'd. Since we don't
+				// have definitive proof, queue it with a low priority.
+				if _, err := rgcq.Add(leftRepl, replicaGCPriorityDefault); err != nil {
+					log.Errorf(ctx, "unable to add %s to replica GC queue: %s", leftRepl, err)
+				}
+				return nil
+			}
+		}
+
+		// We don't have the last NextReplicaID for the subsumed range, nor can we
+		// obtain it, but that's OK: we can just be conservative and use the maximum
+		// possible replica ID. store.RemoveReplica will write a tombstone using
+		// this maximum possible replica ID, which would normally be problematic, as
+		// it would prevent this store from ever having a new replica of the removed
+		// range. In this case, however, it's copacetic, as subsumed ranges _can't_
+		// have new replicas.
+		const nextReplicaID = math.MaxInt32
+		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

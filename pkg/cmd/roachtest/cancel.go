@@ -42,7 +42,7 @@ func registerCancel(r *registry) {
 		queries []string, warehouses int, useDistsql bool) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t, c.All())
 
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
@@ -117,18 +117,16 @@ func registerCancel(r *registry) {
 	}
 
 	r.Add(testSpec{
-		Name:   fmt.Sprintf("cancel/tpcc/distsql/w=%d,nodes=%d", warehouses, numNodes),
-		Nodes:  nodes(numNodes),
-		Stable: true, // DO NOT COPY to new tests
+		Name:  fmt.Sprintf("cancel/tpcc/distsql/w=%d,nodes=%d", warehouses, numNodes),
+		Nodes: nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCancel(ctx, t, c, queries, warehouses, true /* useDistsql */)
 		},
 	})
 
 	r.Add(testSpec{
-		Name:   fmt.Sprintf("cancel/tpcc/local/w=%d,nodes=%d", warehouses, numNodes),
-		Nodes:  nodes(numNodes),
-		Stable: true, // DO NOT COPY to new tests
+		Name:  fmt.Sprintf("cancel/tpcc/local/w=%d,nodes=%d", warehouses, numNodes),
+		Nodes: nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCancel(ctx, t, c, queries, warehouses, false /* useDistsql */)
 		},

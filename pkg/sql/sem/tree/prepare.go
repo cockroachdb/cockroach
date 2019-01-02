@@ -14,9 +14,7 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 
 // Prepare represents a PREPARE statement.
 type Prepare struct {

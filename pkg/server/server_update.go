@@ -19,12 +19,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
 )
 
 // UpgradeTestingKnobs is a part of the context used to control whether cluster
@@ -38,7 +37,9 @@ func (*UpgradeTestingKnobs) ModuleTestingKnobs() {}
 
 // startAttemptUpgrade attempts to upgrade cluster version.
 func (s *Server) startAttemptUpgrade(ctx context.Context) {
-	if err := s.stopper.RunAsyncTask(s.stopper.WithCancel(ctx), "auto-upgrade", func(ctx context.Context) {
+	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+	if err := s.stopper.RunAsyncTask(ctx, "auto-upgrade", func(ctx context.Context) {
+		defer cancel()
 		retryOpts := retry.Options{
 			InitialBackoff: time.Second,
 			MaxBackoff:     30 * time.Second,
@@ -88,6 +89,7 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			}
 		}
 	}); err != nil {
+		cancel()
 		log.Infof(ctx, "failed attempt to upgrade cluster version, error: %s", err)
 	}
 }
@@ -111,8 +113,8 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 
 	var newVersion string
 	for nodeID, st := range nodesWithLiveness {
-		if st.LivenessStatus != storage.NodeLivenessStatus_LIVE &&
-			st.LivenessStatus != storage.NodeLivenessStatus_DECOMMISSIONING {
+		if st.LivenessStatus != storagepb.NodeLivenessStatus_LIVE &&
+			st.LivenessStatus != storagepb.NodeLivenessStatus_DECOMMISSIONING {
 			return false, errors.Errorf("node %d not running (%s), cannot determine version",
 				nodeID, st.LivenessStatus)
 		}

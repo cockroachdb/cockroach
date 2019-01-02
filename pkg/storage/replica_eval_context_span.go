@@ -17,8 +17,6 @@ package storage
 import (
 	"context"
 
-	opentracing "github.com/opentracing/opentracing-go"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // SpanSetReplicaEvalContext is a testing-only implementation of
@@ -49,7 +48,7 @@ func (rec *SpanSetReplicaEvalContext) AbortSpan() *abortspan.AbortSpan {
 }
 
 // EvalKnobs returns the batch evaluation Knobs.
-func (rec *SpanSetReplicaEvalContext) EvalKnobs() batcheval.TestingKnobs {
+func (rec *SpanSetReplicaEvalContext) EvalKnobs() storagebase.BatchEvalTestingKnobs {
 	return rec.i.EvalKnobs()
 }
 
@@ -108,6 +107,11 @@ func (rec *SpanSetReplicaEvalContext) GetTerm(i uint64) (uint64, error) {
 	return rec.i.GetTerm(i)
 }
 
+// GetLeaseAppliedIndex returns the lease index of the last applied command.
+func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() uint64 {
+	return rec.i.GetLeaseAppliedIndex()
+}
+
 // IsFirstRange returns true iff the replica belongs to the first range.
 func (rec *SpanSetReplicaEvalContext) IsFirstRange() bool {
 	return rec.i.IsFirstRange()
@@ -133,10 +137,15 @@ func (rec SpanSetReplicaEvalContext) ContainsKey(key roachpb.Key) bool {
 
 // GetMVCCStats returns the Replica's MVCCStats.
 func (rec SpanSetReplicaEvalContext) GetMVCCStats() enginepb.MVCCStats {
-	// Thanks to commutativity, the command queue does not have to serialize on
-	// the MVCCStats key. This means that the key is not included in SpanSet
+	// Thanks to commutativity, the spanlatch manager does not have to serialize
+	// on the MVCCStats key. This means that the key is not included in SpanSet
 	// declarations, so there's nothing to assert here.
 	return rec.i.GetMVCCStats()
+}
+
+// GetSplitQPS returns the Replica's queries/s rate for splitting purposes.
+func (rec SpanSetReplicaEvalContext) GetSplitQPS() float64 {
+	return rec.i.GetSplitQPS()
 }
 
 // GetGCThreshold returns the GC threshold of the Range, typically updated when
@@ -177,7 +186,7 @@ func (rec SpanSetReplicaEvalContext) GetLastReplicaGCTimestamp(
 }
 
 // GetLease returns the Replica's current and next lease (if any).
-func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease) {
+func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, roachpb.Lease) {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLeaseKey(rec.GetRangeID())},
 	)

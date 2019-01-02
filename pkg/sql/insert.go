@@ -19,13 +19,14 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 var insertNodePool = sync.Pool{
@@ -60,14 +61,23 @@ var _ autoCommitNode = &insertNode{}
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
 	ctx context.Context, n *tree.Insert, desiredTypes []types.T,
-) (planNode, error) {
+) (result planNode, resultErr error) {
 	// CTE analysis.
 	resetter, err := p.initWith(ctx, n.With)
 	if err != nil {
 		return nil, err
 	}
 	if resetter != nil {
-		defer resetter(p)
+		defer func() {
+			if cteErr := resetter(p); cteErr != nil && resultErr == nil {
+				// If no error was found in the inner planning but a CTE error
+				// is occurring during the final checks on the way back from
+				// the recursion, use that error as final error for this
+				// stage.
+				resultErr = cteErr
+				result = nil
+			}
+		}()
 	}
 
 	tracing.AnnotateTrace()
@@ -88,24 +98,31 @@ func (p *planner) Insert(
 	if err := p.CheckPrivilege(ctx, desc, privilege.INSERT); err != nil {
 		return nil, err
 	}
-	if n.OnConflict != nil && !n.OnConflict.DoNothing {
-		if err := p.CheckPrivilege(ctx, desc, privilege.UPDATE); err != nil {
+	if n.OnConflict != nil {
+		// UPSERT and INDEX ON CONFLICT will read from the table to check for duplicates.
+		if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 			return nil, err
+		}
+		if !n.OnConflict.DoNothing {
+			// UPSERT and INDEX ON CONFLICT DO UPDATE may modify rows.
+			if err := p.CheckPrivilege(ctx, desc, privilege.UPDATE); err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	// Determine what are the foreign key tables that are involved in the update.
-	var fkCheckType sqlbase.FKCheck
+	var fkCheckType row.FKCheck
 	if n.OnConflict == nil || n.OnConflict.DoNothing {
-		fkCheckType = sqlbase.CheckInserts
+		fkCheckType = row.CheckInserts
 	} else {
-		fkCheckType = sqlbase.CheckUpdates
+		fkCheckType = row.CheckUpdates
 	}
-	fkTables, err := sqlbase.TablesNeededForFKs(
+	fkTables, err := row.TablesNeededForFKs(
 		ctx,
 		*desc,
 		fkCheckType,
-		p.lookupFKTable,
+		p.LookupTableByID,
 		p.CheckPrivilege,
 		p.analyzeExpr,
 	)
@@ -118,7 +135,12 @@ func (p *planner) Insert(
 	if n.DefaultValues() {
 		// No target column, select all columns in the table, including
 		// hidden columns; these may have defaults too.
-		insertCols = desc.Columns
+		//
+		// Although this races with the backfill in case of UPSERT we do
+		// not care: the backfill is also inserting defaults, and we do
+		// not provide guarantees about the evaluation order of default
+		// expressions.
+		insertCols = desc.WritableColumns()
 	} else {
 		var err error
 		if insertCols, err = p.processColumns(desc, n.Columns,
@@ -162,35 +184,43 @@ func (p *planner) Insert(
 	}
 
 	// Now create the source data plan. For this we need an AST and as
-	// list of desired types. The AST comes from the Rows operand, the
-	// desired types from the inserted columns.
+	// list of required types. The AST comes from the Rows operand, the
+	// required types from the inserted columns.
 
 	// Analyze the expressions for column information and typing.
-	desiredTypesFromSelect := make([]types.T, len(insertCols))
+	requiredTypesFromSelect := make([]types.T, len(insertCols))
 	for i, col := range insertCols {
-		desiredTypesFromSelect[i] = col.Type.ToDatumType()
+		requiredTypesFromSelect[i] = col.Type.ToDatumType()
 	}
 
 	// Extract the AST for the data source.
+	isUpsert := n.OnConflict.IsUpsertAlias()
 	var insertRows tree.SelectStatement
 	arityChecked := false
+	colNames := make(tree.NameList, len(insertCols))
+	for i := range insertCols {
+		colNames[i] = tree.Name(insertCols[i].Name)
+	}
 	if n.DefaultValues() {
-		insertRows = newDefaultValuesClause(defaultExprs, insertCols)
+		insertRows = newDefaultValuesClause(defaultExprs, colNames)
 	} else {
-		src, values, err := extractInsertSource(n.Rows)
+		src, values, err := extractInsertSource(colNames, n.Rows)
 		if err != nil {
 			return nil, err
 		}
 		if values != nil {
-			if len(values.Tuples) > 0 {
+			if len(values.Rows) > 0 {
 				// Check to make sure the values clause doesn't have too many or
 				// too few expressions in each tuple.
-				numExprs := len(values.Tuples[0].Exprs)
-				if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
+				numExprs := len(values.Rows[0])
+				if err := checkNumExprs(isUpsert, numExprs, numInputColumns, n.Columns != nil); err != nil {
 					return nil, err
 				}
 				if numExprs > maxInsertIdx {
-					return nil, sqlbase.CannotWriteToComputedColError(insertCols[maxInsertIdx])
+					// TODO(justin): this is too restrictive. It should
+					// be possible to allow INSERT INTO (x) VALUES (DEFAULT)
+					// if x is a computed column. See #22434.
+					return nil, sqlbase.CannotWriteToComputedColError(insertCols[maxInsertIdx].Name)
 				}
 				arityChecked = true
 			}
@@ -205,27 +235,38 @@ func (p *planner) Insert(
 	// Ready to create the plan for the data source; do it.
 	// This performs type checking on source expressions, collecting
 	// types for placeholders in the process.
-	rows, err := p.newPlan(ctx, insertRows, desiredTypesFromSelect)
+	rows, err := p.newPlan(ctx, insertRows, requiredTypesFromSelect)
 	if err != nil {
 		return nil, err
 	}
 
+	srcCols := planColumns(rows)
 	if !arityChecked {
 		// If the insert source was not a VALUES clause, then we have not
 		// already verified the arity of the operand is correct.
 		// Do it now.
-		numExprs := len(planColumns(rows))
-		if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
+		numExprs := len(srcCols)
+		if err := checkNumExprs(isUpsert, numExprs, numInputColumns, n.Columns != nil); err != nil {
 			return nil, err
 		}
 		if numExprs > maxInsertIdx {
-			return nil, sqlbase.CannotWriteToComputedColError(insertCols[maxInsertIdx])
+			return nil, sqlbase.CannotWriteToComputedColError(insertCols[maxInsertIdx].Name)
+		}
+	}
+
+	// The required types may not have been matched exactly by the planning.
+	// While this may be OK if the results were geared toward a client,
+	// for INSERT/UPSERT we must have a direct match.
+	for i, srcCol := range srcCols {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(
+			insertCols[i], srcCol.Typ, &p.semaCtx.Placeholders); err != nil {
+			return nil, err
 		}
 	}
 
 	// Create the table insert, which does the bulk of the work.
-	ri, err := sqlbase.MakeRowInserter(p.txn, desc, fkTables, insertCols,
-		sqlbase.CheckFKs, &p.alloc)
+	ri, err := row.MakeInserter(p.txn, desc, fkTables, insertCols,
+		row.CheckFKs, &p.alloc)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +367,8 @@ type insertRun struct {
 	// rowIdxToRetIdx is the mapping from the ordering of rows in
 	// insertCols to the ordering in the result rows, used when
 	// rowsNeeded is set to populate resultRowBuffer and the row
-	// container.
+	// container. The return index is -1 if the column for the row
+	// index is not public.
 	rowIdxToRetIdx []int
 
 	// autoCommit indicates whether the last KV batch processed by
@@ -354,8 +396,7 @@ func (n *insertNode) startExec(params runParams) error {
 	if n.run.rowsNeeded {
 		n.run.rows = sqlbase.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(n.columns),
-			maxInsertBatchSize)
+			sqlbase.ColTypeInfoFromResCols(n.columns), 0)
 
 		// In some cases (e.g. `INSERT INTO t (a) ...`) the data source
 		// does not provide all the table columns. However we do need to
@@ -379,7 +420,12 @@ func (n *insertNode) startExec(params runParams) error {
 
 		n.run.rowIdxToRetIdx = make([]int, len(n.run.insertCols))
 		for i, col := range n.run.insertCols {
-			n.run.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
+			if idx, ok := colIDToRetIndex[col.ID]; !ok {
+				// Column must be write only and not public.
+				n.run.rowIdxToRetIdx[i] = -1
+			} else {
+				n.run.rowIdxToRetIdx[i] = idx
+			}
 		}
 	}
 
@@ -505,8 +551,11 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	if n.run.rows != nil {
 		for i, val := range rowVals {
 			// The downstream consumer will want the rows in the order of
-			// the table descriptor, not that of insertCols. Reorder them.
-			n.run.resultRowBuffer[n.run.rowIdxToRetIdx[i]] = val
+			// the table descriptor, not that of insertCols. Reorder them
+			// and ignore non-public columns.
+			if idx := n.run.rowIdxToRetIdx[i]; idx >= 0 {
+				n.run.resultRowBuffer[idx] = val
+			}
 		}
 		if _, err := n.run.rows.AddRow(params.ctx, n.run.resultRowBuffer); err != nil {
 			return err
@@ -559,7 +608,7 @@ func GenerateInsertRow(
 	insertCols []sqlbase.ColumnDescriptor,
 	computedCols []sqlbase.ColumnDescriptor,
 	evalCtx tree.EvalContext,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	rowVals tree.Datums,
 	rowContainerForComputedVals *sqlbase.RowIndexedVarContainer,
 ) (tree.Datums, error) {
@@ -607,7 +656,7 @@ func GenerateInsertRow(
 	}
 
 	// Check to see if NULL is being inserted into any non-nullable column.
-	for _, col := range tableDesc.Columns {
+	for _, col := range tableDesc.WritableColumns() {
 		if !col.Nullable {
 			if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !ok || rowVals[i] == tree.DNull {
 				return nil, sqlbase.NewNonNullViolationError(col.Name)
@@ -617,10 +666,11 @@ func GenerateInsertRow(
 
 	// Ensure that the values honor the specified column widths.
 	for i := range rowVals {
-		if err := sqlbase.CheckValueWidth(
-			insertCols[i].Type, rowVals[i], insertCols[i].Name); err != nil {
+		outVal, err := sqlbase.LimitValueWidth(insertCols[i].Type, rowVals[i], &insertCols[i].Name)
+		if err != nil {
 			return nil, err
 		}
+		rowVals[i] = outVal
 	}
 	return rowVals, nil
 }
@@ -632,7 +682,9 @@ func GenerateInsertRow(
 // are returned. If allowMutations is set, even columns undergoing
 // mutations are added.
 func (p *planner) processColumns(
-	tableDesc *sqlbase.TableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	nameList tree.NameList,
+	ensureColumns, allowMutations bool,
 ) ([]sqlbase.ColumnDescriptor, error) {
 	if len(nameList) == 0 {
 		if ensureColumns {
@@ -672,12 +724,28 @@ func (p *planner) processColumns(
 // extractInsertSource removes the parentheses around the data source of an INSERT statement.
 // If the data source is a VALUES clause not further qualified with LIMIT/OFFSET and ORDER BY,
 // the 3rd return value is a pre-casted pointer to the VALUES clause.
-func extractInsertSource(s *tree.Select) (tree.SelectStatement, *tree.ValuesClause, error) {
+func extractInsertSource(
+	colNames tree.NameList, s *tree.Select,
+) (tree.SelectStatement, *tree.ValuesClauseWithNames, error) {
 	wrapped := s.Select
 	limit := s.Limit
 	orderBy := s.OrderBy
+	with := s.With
 
+	// Be careful to not unwrap expressions with a WITH clause. These
+	// need to be handled generically.
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
+		if s.Select.With != nil {
+			if with != nil {
+				// (WITH ... (WITH ...))
+				// Currently we are unable to nest the scopes inside ParenSelect so we
+				// must refuse the syntax so that the query does not get invalid results.
+				return nil, nil, pgerror.UnimplementedWithIssueError(24303,
+					"multiple WITH clauses in parentheses")
+			}
+			with = s.Select.With
+		}
+
 		wrapped = s.Select.Select
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
@@ -693,27 +761,33 @@ func extractInsertSource(s *tree.Select) (tree.SelectStatement, *tree.ValuesClau
 		}
 	}
 
-	if orderBy == nil && limit == nil {
+	if with == nil && orderBy == nil && limit == nil {
 		values, _ := wrapped.(*tree.ValuesClause)
-		return wrapped, values, nil
+		if values != nil {
+			return wrapped, &tree.ValuesClauseWithNames{ValuesClause: *values, Names: colNames}, nil
+		}
+		return wrapped, nil, nil
 	}
 	return &tree.ParenSelect{
-		Select: &tree.Select{Select: wrapped, OrderBy: orderBy, Limit: limit},
+		Select: &tree.Select{Select: wrapped, OrderBy: orderBy, Limit: limit, With: with},
 	}, nil, nil
 }
 
 func newDefaultValuesClause(
-	defaultExprs []tree.TypedExpr, cols []sqlbase.ColumnDescriptor,
+	defaultExprs []tree.TypedExpr, colNames tree.NameList,
 ) tree.SelectStatement {
-	row := make(tree.Exprs, 0, len(cols))
-	for i := range cols {
+	row := make(tree.Exprs, 0, len(colNames))
+	for i := range colNames {
 		if defaultExprs == nil {
 			row = append(row, tree.DNull)
 			continue
 		}
 		row = append(row, defaultExprs[i])
 	}
-	return &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: row}}}
+	return &tree.ValuesClauseWithNames{
+		ValuesClause: tree.ValuesClause{Rows: []tree.Exprs{row}},
+		Names:        colNames,
+	}
 }
 
 // fillDefaults populates default expressions in the provided ValuesClause,
@@ -728,12 +802,14 @@ func newDefaultValuesClause(
 //
 // The function returns a ValuesClause with defaults filled or an error.
 func fillDefaults(
-	defaultExprs []tree.TypedExpr, cols []sqlbase.ColumnDescriptor, values *tree.ValuesClause,
-) (*tree.ValuesClause, error) {
+	defaultExprs []tree.TypedExpr,
+	cols []sqlbase.ColumnDescriptor,
+	values *tree.ValuesClauseWithNames,
+) (*tree.ValuesClauseWithNames, error) {
 	ret := values
 	copyValues := func() {
 		if ret == values {
-			ret = &tree.ValuesClause{Tuples: append([]*tree.Tuple(nil), values.Tuples...)}
+			ret = &tree.ValuesClauseWithNames{ValuesClause: tree.ValuesClause{Rows: append([]tree.Exprs(nil), values.Rows...)}, Names: values.Names}
 		}
 	}
 
@@ -747,9 +823,9 @@ func fillDefaults(
 		return defaultExprs[idx]
 	}
 
-	numColsOrig := len(ret.Tuples[0].Exprs)
-	for tIdx, tuple := range ret.Tuples {
-		if a, e := len(tuple.Exprs), numColsOrig; a != e {
+	numColsOrig := len(ret.Rows[0])
+	for tIdx, tuple := range ret.Rows {
+		if a, e := len(tuple), numColsOrig; a != e {
 			return nil, newValuesListLenErr(e, a)
 		}
 
@@ -757,31 +833,35 @@ func fillDefaults(
 		copyTuple := func() {
 			if !tupleCopied {
 				copyValues()
-				tuple = &tree.Tuple{Exprs: append([]tree.Expr(nil), tuple.Exprs...)}
-				ret.Tuples[tIdx] = tuple
+				tuple = append(tree.Exprs(nil), tuple...)
+				ret.Rows[tIdx] = tuple
 				tupleCopied = true
 			}
 		}
 
-		for eIdx, val := range tuple.Exprs {
+		for eIdx, val := range tuple {
 			switch val.(type) {
 			case tree.DefaultVal:
 				copyTuple()
-				tuple.Exprs[eIdx] = defaultExpr(eIdx)
+				tuple[eIdx] = defaultExpr(eIdx)
 			}
 		}
 
 		// The values for the row may be shorter than the number of columns being
 		// inserted into. Populate default expressions for those columns.
-		for i := len(tuple.Exprs); i < len(cols); i++ {
+		for i := len(tuple); i < len(cols); i++ {
 			copyTuple()
-			tuple.Exprs = append(tuple.Exprs, defaultExpr(len(tuple.Exprs)))
+			tuple = append(tuple, defaultExpr(len(tuple)))
+			ret.Rows[tIdx] = tuple
 		}
+	}
+	for i := numColsOrig; i < len(cols); i++ {
+		ret.Names = append(ret.Names, tree.Name(cols[i].Name))
 	}
 	return ret, nil
 }
 
-func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
+func checkNumExprs(isUpsert bool, numExprs, numCols int, specifiedTargets bool) error {
 	// It is ok to be missing exprs if !specifiedTargets, because the missing
 	// columns will be filled in by DEFAULT expressions.
 	extraExprs := numExprs > numCols
@@ -791,8 +871,13 @@ func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
 		if missingExprs {
 			more, less = less, more
 		}
-		return errors.Errorf("INSERT has more %s than %s, %d expressions for %d targets",
-			more, less, numExprs, numCols)
+		kw := "INSERT"
+		if isUpsert {
+			kw = "UPSERT"
+		}
+		return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"%s has more %s than %s, %d expressions for %d targets",
+			kw, more, less, numExprs, numCols)
 	}
 	return nil
 }

@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 /**
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
@@ -79,9 +93,6 @@ export type RangeLogRequestMessage =
 export type RangeLogResponseMessage =
   protos.cockroach.server.serverpb.RangeLogResponse;
 
-export type CommandQueueRequestMessage = protos.cockroach.server.serverpb.CommandQueueRequest;
-export type CommandQueueResponseMessage = protos.cockroach.server.serverpb.CommandQueueResponse;
-
 export type SettingsRequestMessage = protos.cockroach.server.serverpb.SettingsRequest;
 export type SettingsResponseMessage = protos.cockroach.server.serverpb.SettingsResponse;
 
@@ -96,6 +107,9 @@ export type UserLogoutResponseMessage = protos.cockroach.server.serverpb.UserLog
 export type StatementsResponseMessage = protos.cockroach.server.serverpb.StatementsResponse;
 
 export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.DataDistributionResponse;
+
+export type EnqueueRangeRequestMessage = protos.cockroach.server.serverpb.EnqueueRangeRequest;
+export type EnqueueRangeResponseMessage = protos.cockroach.server.serverpb.EnqueueRangeResponse;
 
 // API constants
 
@@ -311,11 +325,6 @@ export function getRangeLog(
   );
 }
 
-// getCommandQueue returns a representation of the command queue for a given range id
-export function getCommandQueue(req: CommandQueueRequestMessage, timeout?: moment.Duration): Promise<CommandQueueResponseMessage> {
-  return timeoutFetch(serverpb.CommandQueueResponse, `${STATUS_PREFIX}/range/${req.range_id}/cmdqueue`, null, timeout);
-}
-
 // getSettings gets all cluster settings
 export function getSettings(_req: SettingsRequestMessage, timeout?: moment.Duration): Promise<SettingsResponseMessage> {
   return timeoutFetch(serverpb.SettingsResponse, `${API_PREFIX}/settings`, null, timeout);
@@ -342,4 +351,8 @@ export function getStatements(timeout?: moment.Duration): Promise<StatementsResp
 // getDataDistribution returns information about how replicas are distributed across nodes.
 export function getDataDistribution(timeout?: moment.Duration): Promise<DataDistributionResponseMessage> {
   return timeoutFetch(serverpb.DataDistributionResponse, `${API_PREFIX}/data_distribution`, null, timeout);
+}
+
+export function enqueueRange(req: EnqueueRangeRequestMessage, timeout?: moment.Duration): Promise<EnqueueRangeResponseMessage> {
+  return timeoutFetch(serverpb.EnqueueRangeResponse, `${API_PREFIX}/enqueue_range`, req as any, timeout);
 }

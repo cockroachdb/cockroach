@@ -97,25 +97,45 @@ func TestColumnConversions(t *testing.T) {
 			{SemanticType: sqlbase.ColumnType_BYTES}: ColumnConversionImpossible,
 		},
 
-		{SemanticType: sqlbase.ColumnType_INT}: {
-			// Verify that INT -> INTEGER is a no-op
+		{SemanticType: sqlbase.ColumnType_INT, Width: 64}: {
+			{
+				SemanticType: sqlbase.ColumnType_INT,
+				VisibleType:  sqlbase.ColumnType_BIGINT,
+				Width:        64,
+			}: ColumnConversionTrivial,
 			{
 				SemanticType: sqlbase.ColumnType_INT,
 				VisibleType:  sqlbase.ColumnType_INTEGER,
-			}: ColumnConversionTrivial,
-			// See discussion in classifiers map.
+				Width:        32,
+			}: ColumnConversionValidate,
+			{SemanticType: sqlbase.ColumnType_BIT}: ColumnConversionGeneral,
+		},
+		{SemanticType: sqlbase.ColumnType_INT, Width: 32}: {
 			{
 				SemanticType: sqlbase.ColumnType_INT,
-				VisibleType:  sqlbase.ColumnType_BIT,
-			}: ColumnConversionDangerous,
-			{SemanticType: sqlbase.ColumnType_INT, Width: 4}: ColumnConversionValidate,
+				VisibleType:  sqlbase.ColumnType_SMALLINT,
+				Width:        16,
+			}: ColumnConversionValidate,
+			{
+				SemanticType: sqlbase.ColumnType_INT,
+				VisibleType:  sqlbase.ColumnType_BIGINT,
+				Width:        64,
+			}: ColumnConversionTrivial,
 		},
-		{SemanticType: sqlbase.ColumnType_INT, Width: 4}: {
-			{SemanticType: sqlbase.ColumnType_INT, Width: 2}: ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_INT, Width: 8}: ColumnConversionTrivial,
+
+		{SemanticType: sqlbase.ColumnType_BIT}: {
+			{SemanticType: sqlbase.ColumnType_INT}:           ColumnConversionGeneral,
+			{SemanticType: sqlbase.ColumnType_STRING}:        ColumnConversionGeneral,
+			{SemanticType: sqlbase.ColumnType_BYTES}:         ColumnConversionImpossible,
+			{SemanticType: sqlbase.ColumnType_BIT, Width: 4}: ColumnConversionValidate,
+		},
+		{SemanticType: sqlbase.ColumnType_BIT, Width: 4}: {
+			{SemanticType: sqlbase.ColumnType_BIT, Width: 2}: ColumnConversionValidate,
+			{SemanticType: sqlbase.ColumnType_BIT, Width: 8}: ColumnConversionTrivial,
 		},
 
 		{SemanticType: sqlbase.ColumnType_STRING}: {
+			{SemanticType: sqlbase.ColumnType_BIT}:              ColumnConversionGeneral,
 			{SemanticType: sqlbase.ColumnType_BYTES}:            ColumnConversionTrivial,
 			{SemanticType: sqlbase.ColumnType_BYTES, Width: 20}: ColumnConversionValidate,
 		},
@@ -124,14 +144,6 @@ func TestColumnConversions(t *testing.T) {
 			{SemanticType: sqlbase.ColumnType_BYTES, Width: 19}: ColumnConversionValidate,
 			{SemanticType: sqlbase.ColumnType_BYTES, Width: 20}: ColumnConversionTrivial,
 		},
-		// See discussion in alter_column_type.go
-		{SemanticType: sqlbase.ColumnType_TIME}: {
-			{SemanticType: sqlbase.ColumnType_TIMETZ}: ColumnConversionDangerous,
-		},
-		{SemanticType: sqlbase.ColumnType_TIMETZ}: {
-			{SemanticType: sqlbase.ColumnType_TIME}: ColumnConversionDangerous,
-		},
-
 		{SemanticType: sqlbase.ColumnType_TIMESTAMP}: {
 			{SemanticType: sqlbase.ColumnType_TIMESTAMPTZ}: ColumnConversionTrivial,
 		},
@@ -187,7 +199,7 @@ func TestColumnConversions(t *testing.T) {
 					defer sqlDB.Exec(t, "DROP DATABASE d")
 
 					sqlDB.Exec(t, fmt.Sprintf(
-						"CREATE TABLE d.t (i int primary key, a %s)", columnType(from).SQLString()))
+						"CREATE TABLE d.t (i int8 primary key, a %s)", columnType(from).SQLString()))
 
 					// We're just going to use an ugly, two-dimensional switch
 					// structure here to establish some values that we want to
@@ -201,6 +213,18 @@ func TestColumnConversions(t *testing.T) {
 						insert = []interface{}{[]uint8{}, []uint8("data")}
 						switch to.SemanticType {
 						case sqlbase.ColumnType_BYTES:
+							expect = insert
+						}
+
+					case sqlbase.ColumnType_BIT:
+						switch from.Width {
+						case 4:
+							insert = []interface{}{[]uint8("0110")}
+						case 0:
+							insert = []interface{}{[]uint8("110"), []uint8("000110")}
+						}
+						switch to.SemanticType {
+						case sqlbase.ColumnType_BIT:
 							expect = insert
 						}
 
@@ -220,7 +244,15 @@ func TestColumnConversions(t *testing.T) {
 						}
 
 					case sqlbase.ColumnType_INT:
-						insert = []interface{}{int64(math.MinInt64), int64(-1), int64(0), int64(1), int64(math.MaxInt64)}
+						insert = []interface{}{int64(-1), int64(0), int64(1)}
+						switch from.Width {
+						case 0, 64:
+							insert = append(insert, int64(math.MinInt64), int64(math.MaxInt64))
+						case 32:
+							insert = append(insert, int64(math.MinInt32), int64(math.MaxInt32))
+						case 16:
+							insert = append(insert, int64(math.MinInt16), int64(math.MaxInt16))
+						}
 						switch to.SemanticType {
 						case sqlbase.ColumnType_INT:
 							expect = insert
@@ -236,12 +268,10 @@ func TestColumnConversions(t *testing.T) {
 						}
 
 					case sqlbase.ColumnType_TIME,
-						sqlbase.ColumnType_TIMETZ,
 						sqlbase.ColumnType_TIMESTAMP,
 						sqlbase.ColumnType_TIMESTAMPTZ:
 
 						const timeOnly = "15:04:05"
-						const timeTZ = "15:04:05 -0700"
 						const noZone = "2006-01-02 15:04:05"
 						const withZone = "2006-01-02 15:04:05 -0700"
 
@@ -249,8 +279,6 @@ func TestColumnConversions(t *testing.T) {
 						switch from.SemanticType {
 						case sqlbase.ColumnType_TIME:
 							fromFmt = timeOnly
-						case sqlbase.ColumnType_TIMETZ:
-							fromFmt = timeTZ
 						case sqlbase.ColumnType_TIMESTAMP:
 							fromFmt = noZone
 						case sqlbase.ColumnType_TIMESTAMPTZ:
@@ -271,7 +299,6 @@ func TestColumnConversions(t *testing.T) {
 						switch to.SemanticType {
 						case
 							sqlbase.ColumnType_TIME,
-							sqlbase.ColumnType_TIMETZ,
 							sqlbase.ColumnType_TIMESTAMP,
 							sqlbase.ColumnType_TIMESTAMPTZ:
 							// We're going to re-parse the text as though we're in UTC
@@ -299,7 +326,7 @@ func TestColumnConversions(t *testing.T) {
 					}
 
 					// Insert the test data.
-					if tx, err := sqlDB.DB.Begin(); err != nil {
+					if tx, err := db.Begin(); err != nil {
 						t.Fatal(err)
 					} else {
 						for i, v := range insert {

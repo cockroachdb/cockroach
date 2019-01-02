@@ -17,10 +17,10 @@ package sql
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,11 +52,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	var dbDesc *DatabaseDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		dbDesc, err = ResolveDatabase(ctx, p, string(n.Name), !n.IfExists)
-	})
+	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), !n.IfExists)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +65,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	tbNames, err := GetObjectNames(ctx, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
+	tbNames, err := GetObjectNames(ctx, p.txn, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
 	if err != nil {
 		return nil, err
 	}
@@ -90,16 +86,14 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		}
 	}
 
-	td := make([]toDelete, len(tbNames))
+	td := make([]toDelete, 0, len(tbNames))
 	for i := range tbNames {
-		tbDesc, err := p.prepareDrop(ctx, &tbNames[i], true /*required*/, anyDescType)
+		tbDesc, err := p.prepareDrop(ctx, &tbNames[i], false /*required*/, anyDescType)
 		if err != nil {
 			return nil, err
 		}
 		if tbDesc == nil {
-			// Database claims to have this table, but it does not exist.
-			return nil, errors.Errorf("table %q was described by database %q, but does not exist",
-				tree.ErrString(&tbNames[i]), n.Name)
+			continue
 		}
 		// Recursively check permissions on all dependent views, since some may
 		// be in different databases.
@@ -108,7 +102,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 				return nil, err
 			}
 		}
-		td[i] = toDelete{&tbNames[i], tbDesc}
+		td = append(td, toDelete{&tbNames[i], tbDesc})
 	}
 
 	td, err = p.filterCascadedTables(ctx, td)
@@ -123,6 +117,31 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 	tbNameStrings := make([]string, 0, len(n.td))
+	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.td))
+	tableDescs := make([]*sqlbase.MutableTableDescriptor, 0, len(n.td))
+
+	for _, toDel := range n.td {
+		if toDel.desc.IsView() {
+			continue
+		}
+		droppedTableDetails = append(droppedTableDetails, jobspb.DroppedTableDetails{
+			Name: toDel.tn.FQString(),
+			ID:   toDel.desc.ID,
+		})
+		tableDescs = append(tableDescs, toDel.desc)
+	}
+
+	jobID, err := p.createDropTablesJob(
+		ctx,
+		tableDescs,
+		droppedTableDetails,
+		tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
+		true, /* drainNames */
+		n.dbDesc.ID)
+	if err != nil {
+		return err
+	}
+
 	for _, toDel := range n.td {
 		tbDesc := toDel.desc
 		if tbDesc.IsView() {
@@ -144,22 +163,33 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	_ /* zoneKey */, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
-	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
 
 	b := &client.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", descKey)
 		log.VEventf(ctx, 2, "Del %s", nameKey)
-		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 	}
 	b.Del(descKey)
 	b.Del(nameKey)
-	// Delete the zone config entry for this database.
-	b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+
+	// No job was created because no tables were dropped, so zone config can be
+	// immediately removed.
+	if jobID == 0 {
+		zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
+		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
+		}
+		// Delete the zone config entry for this database.
+		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+	}
 
 	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, dbDropped)
 
 	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	if err := p.removeDbComment(ctx, n.dbDesc.ID); err != nil {
 		return err
 	}
 
@@ -208,11 +238,11 @@ func (p *planner) filterCascadedTables(ctx context.Context, tables []toDelete) (
 }
 
 func (p *planner) accumulateDependentTables(
-	ctx context.Context, dependentTables map[sqlbase.ID]bool, desc *sqlbase.TableDescriptor,
+	ctx context.Context, dependentTables map[sqlbase.ID]bool, desc *sqlbase.MutableTableDescriptor,
 ) error {
 	for _, ref := range desc.DependedOnBy {
 		dependentTables[ref.ID] = true
-		dependentDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.ID)
+		dependentDesc, err := p.Tables().getMutableTableVersionByID(ctx, ref.ID, p.txn)
 		if err != nil {
 			return err
 		}
@@ -221,4 +251,16 @@ func (p *planner) accumulateDependentTables(
 		}
 	}
 	return nil
+}
+
+func (p *planner) removeDbComment(ctx context.Context, dbID sqlbase.ID) error {
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		ctx,
+		"delete-db-comment",
+		p.txn,
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
+		keys.DatabaseCommentType,
+		dbID)
+
+	return err
 }

@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -23,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -32,12 +35,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
 
-// extendedEvalCtx extends tree.EvalContext with fields that are just needed in
-// the sql package.
+// extendedEvalContext extends tree.EvalContext with fields that are needed for
+// distsql planning.
 type extendedEvalContext struct {
 	tree.EvalContext
 
@@ -108,28 +112,13 @@ type planner struct {
 	// statsCollector is used to collect statistics about SQL statement execution.
 	statsCollector sqlStatsCollector
 
-	// asOfSystemTime indicates whether the transaction timestamp was
-	// forced to a specific value (in which case that value is stored in
-	// txn.mu.Proto.OrigTimestamp). If set, avoidCachedDescriptors below
-	// must also be set.
-	// TODO(anyone): we may want to support table readers at arbitrary
-	// timestamps, so that each FROM clause can have its own
-	// timestamp. In that case, the timestamp would not be set
-	// globally for the entire txn and this field would not be needed.
-	asOfSystemTime bool
-
 	// avoidCachedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
-	// within the transaction. This is necessary to:
-	// - ensure that queries ran with AS OF SYSTEM TIME get the right
-	//   version of descriptors.
-	// - queries that create/update descriptors read all their dependencies
-	//   in the same txn that they write new descriptors or update their
-	//   dependencies, so that update/creation appears transactional
-	//   to the rest of the cluster.
-	// Code that sets this to true should probably also check that
-	// the txn isolation level is SERIALIZABLE, and reject any update
-	// if it is SNAPSHOT.
+	// within the transaction. This is necessary to read descriptors
+	// from the store for:
+	// 1. Descriptors that are part of a schema change but are not
+	// modified by the schema change. (reading a table in CREATE VIEW)
+	// 2. Disable the use of the table cache in tests.
 	avoidCachedDescriptors bool
 
 	// If set, the planner should skip checking for the SELECT privilege when
@@ -158,22 +147,26 @@ type planner struct {
 	curPlan planTop
 
 	// Avoid allocations by embedding commonly used objects and visitors.
-	parser                parser.Parser
 	txCtx                 transform.ExprTransformContext
 	subqueryVisitor       subqueryVisitor
 	nameResolutionVisitor sqlbase.NameResolutionVisitor
 	srfExtractionVisitor  srfExtractionVisitor
+	tableName             tree.TableName
 
 	// Use a common datum allocator across all the plan nodes. This separates the
 	// plan lifetime from the lifetime of returned results allowing plan nodes to
 	// be pool allocated.
 	alloc sqlbase.DatumAlloc
+
+	// optimizer caches an instance of the cost-based optimizer that can be reused
+	// to plan queries (reused in order to reduce allocations).
+	optimizer xform.Optimizer
 }
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
 // internal SQL pool before the pool starts explicitly logging overall usage
 // growth in the log.
-var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
+var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 1<<20 /* 1 MB */)
 
 // NewInternalPlanner is an exported version of newInternalPlanner. It
 // returns an interface{} so it can be used outside of the sql package.
@@ -201,26 +194,28 @@ func newInternalPlanner(
 	// asking the caller for one is hard to explain. What we need is better and
 	// separate interfaces for planning and running plans, which could take
 	// suitable contexts.
-	ctx := log.WithLogTagStr(context.Background(), opName, "")
+	ctx := logtags.AddTag(context.Background(), opName, "")
 
 	sd := &sessiondata.SessionData{
 		SearchPath:    sqlbase.DefaultSearchPath,
-		Location:      time.UTC,
 		User:          user,
 		Database:      "system",
 		SequenceState: sessiondata.NewSequenceState(),
+		DataConversion: sessiondata.DataConversionConfig{
+			Location: time.UTC,
+		},
 	}
 	tables := &TableCollection{
 		leaseMgr:      execCfg.LeaseManager,
-		databaseCache: newDatabaseCache(config.SystemConfig{}),
+		databaseCache: newDatabaseCache(config.NewSystemConfig()),
 	}
 	txnReadOnly := new(bool)
 	dataMutator := &sessionDataMutator{
 		data: sd,
-		defaults: sessionDefaults{
-			applicationName: "crdb-internal",
-			database:        "system",
-		},
+		defaults: SessionDefaults(map[string]string{
+			"application_name": "crdb-internal",
+			"database":         "system",
+		}),
 		settings:       execCfg.Settings,
 		curTxnReadOnly: txnReadOnly,
 	}
@@ -241,11 +236,11 @@ func newInternalPlanner(
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
 	p.semaCtx = tree.MakeSemaContext(sd.User == security.RootUser /* privileged */)
-	p.semaCtx.Location = &sd.Location
+	p.semaCtx.Location = &sd.DataConversion.Location
 	p.semaCtx.SearchPath = sd.SearchPath
 
 	plannerMon := mon.MakeUnlimitedMonitor(ctx,
-		"internal-planner",
+		fmt.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
@@ -304,7 +299,7 @@ func internalExtendedEvalCtx(
 			TxnReadOnly:   *dataMutator.curTxnReadOnly,
 			TxnImplicit:   true,
 			Settings:      execCfg.Settings,
-			CtxProvider:   tree.FixedCtxProvider{Context: ctx},
+			Context:       ctx,
 			Mon:           plannerMon,
 			TestingKnobs:  evalContextTestingKnobs,
 			StmtTimestamp: stmtTimestamp,
@@ -391,17 +386,21 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) erro
 	return err
 }
 
-func (p *planner) lookupFKTable(
+// LookupTableByID looks up a table, by the given descriptor ID. Based on the
+// CommonLookupFlags, it could use or skip the TableCollection cache. See
+// TableCollection.getTableVersionByID for how it's used.
+func (p *planner) LookupTableByID(
 	ctx context.Context, tableID sqlbase.ID,
-) (sqlbase.TableLookup, error) {
-	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID)
+) (row.TableLookup, error) {
+	flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{avoidCached: p.avoidCachedDescriptors}}
+	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
 		if err == errTableAdding {
-			return sqlbase.TableLookup{IsAdding: true}, nil
+			return row.TableLookup{IsAdding: true}, nil
 		}
-		return sqlbase.TableLookup{}, err
+		return row.TableLookup{}, err
 	}
-	return sqlbase.TableLookup{Table: table}, nil
+	return row.TableLookup{Table: table}, nil
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a
@@ -426,28 +425,39 @@ func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), 
 	return fn, nil
 }
 
+// KVStringOptValidate indicates the requested validation of a TypeAsStringOpts
+// option.
+type KVStringOptValidate string
+
+// KVStringOptValidate values
+const (
+	KVStringOptAny            KVStringOptValidate = `any`
+	KVStringOptRequireNoValue KVStringOptValidate = `no-value`
+	KVStringOptRequireValue   KVStringOptValidate = `value`
+)
+
 // TypeAsStringOpts enforces (not hints) that the given expressions
 // typecheck as strings, and returns a function that can be called to
 // get the string value during (planNode).Start.
 func (p *planner) TypeAsStringOpts(
-	opts tree.KVOptions, expectValues map[string]bool,
+	opts tree.KVOptions, optValidate map[string]KVStringOptValidate,
 ) (func() (map[string]string, error), error) {
 	typed := make(map[string]tree.TypedExpr, len(opts))
 	for _, opt := range opts {
 		k := string(opt.Key)
-		takesValue, ok := expectValues[k]
+		validate, ok := optValidate[k]
 		if !ok {
 			return nil, errors.Errorf("invalid option %q", k)
 		}
 
 		if opt.Value == nil {
-			if takesValue {
+			if validate == KVStringOptRequireValue {
 				return nil, errors.Errorf("option %q requires a value", k)
 			}
 			typed[k] = nil
 			continue
 		}
-		if !takesValue {
+		if validate == KVStringOptRequireNoValue {
 			return nil, errors.Errorf("option %q does not take a value", k)
 		}
 		r, err := tree.TypeCheckAndRequire(opt.Value, &p.semaCtx, types.String, k)
@@ -514,51 +524,43 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 }
 
 // prepareForDistSQLSupportCheck prepares p.curPlan.plan for a distSQL support
-// check and does additional verification of the planner state. It returns
-// whether the caller should go ahead and check for plan support through
-// shouldUseDistSQL. If returnError is set and false is returned, an error
-// explaining the failure will be returned.
-func (p *planner) prepareForDistSQLSupportCheck(
-	ctx context.Context, returnError bool,
-) (bool, error) {
+// check and does additional verification of the planner state.
+func (p *planner) prepareForDistSQLSupportCheck() {
 	// Trigger limit propagation.
 	p.setUnlimited(p.curPlan.plan)
-	// We don't support subqueries yet.
-	if len(p.curPlan.subqueryPlans) > 0 {
-		if returnError {
-			err := newQueryNotSupportedError("subqueries not supported yet")
-			log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
-			return false, err
-		}
-		return false, nil
-	}
-	return true, nil
 }
 
 // optionallyUseOptimizer will attempt to make an optimizer plan based on the
-// optimizerMode setting. If it is run, it will return true. If it returns false
-// and no error is returned, it is safe to fallback to a non-optimizer plan.
+// optimizerMode setting.
+//
+// If we are able to create a plan with the optimizer, the planFlagOptUsed is
+// set in the flags.
+//
+// If the optimizer is off or it is safe to fall back to the heuristic planner,
+// no error is returned and planFlagOptUsed is not set in the flags
+// (planFlagOptFallback is set in the latter case).
 func (p *planner) optionallyUseOptimizer(
 	ctx context.Context, sd sessiondata.SessionData, stmt Statement,
-) (bool, error) {
+) (planFlags, error) {
 	if sd.OptimizerMode == sessiondata.OptimizerOff {
-		log.VEvent(ctx, 1, "optimizer disabled")
-		return false, nil
+		log.VEvent(ctx, 2, "optimizer disabled")
+		return 0, nil
 	}
 
-	log.VEvent(ctx, 1, "generating optimizer plan")
+	log.VEvent(ctx, 2, "generating optimizer plan")
 
-	err := p.makeOptimizerPlan(ctx, stmt)
-	if err == nil {
-		log.VEvent(ctx, 1, "optimizer plan succeeded")
-		return true, nil
+	flags, err := p.makeOptimizerPlan(ctx, stmt)
+	if err != nil {
+		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
+		if canFallbackFromOpt(err, sd.OptimizerMode, stmt) {
+			log.VEvent(ctx, 1, "optimizer falls back on heuristic planner")
+			return planFlagOptFallback, nil
+		}
+		return 0, err
 	}
-	log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
-	if canFallbackFromOpt(err, sd.OptimizerMode, stmt) {
-		log.VEvent(ctx, 1, "optimizer falls back on heuristic planner")
-		return false, nil
-	}
-	return false, err
+
+	log.VEvent(ctx, 2, "optimizer plan succeeded")
+	return flags, nil
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current
@@ -579,6 +581,7 @@ type sqlStatsCollector interface {
 	RecordStatement(
 		stmt Statement,
 		distSQLUsed bool,
+		optUsed bool,
 		automaticRetryCount int,
 		numRows int,
 		err error,
@@ -587,4 +590,7 @@ type sqlStatsCollector interface {
 
 	// SQLStats provides access to the global sqlStats object.
 	SQLStats() *sqlStats
+
+	// Reset resets this stats collector with the given phaseTimes array.
+	Reset(sqlStats *sqlStats, appStats *appStats, times *phaseTimes)
 }

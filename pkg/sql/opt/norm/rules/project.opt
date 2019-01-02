@@ -8,21 +8,44 @@
 [EliminateProject, Normalize]
 (Project
     $input:*
-    $projections:(Projections []) & (HasSameCols $input $projections)
+    $projections:[]
+    $passthrough:* & (ColsAreEqual $passthrough (OutputCols $input))
 )
 =>
 $input
 
-# EliminateProjectProject discards a nested Project operator that is only
-# removing columns from its input (and not synthesizing new ones). That's
-# something the outer Project operator can do on its own.
-[EliminateProjectProject, Normalize]
+# MergeProjects merges an outer Project operator with an inner Project operator
+# if there are no references to the inner synthesized columns. This has the
+# side effect of pruning unused synthesized columns of the inner Project.
+[MergeProjects, Normalize]
 (Project
-    $input:(Project $innerInput:* (Projections []))
-    $projections:*
+    $input:(Project $innerInput:* $innerProjections:*)
+    $projections:* & (CanMergeProjections $projections $innerProjections)
+    $passthrough:*
 )
 =>
 (Project
     $innerInput
-    $projections
+    (MergeProjections $projections $innerProjections $passthrough)
+    (DifferenceCols $passthrough (ProjectionCols $innerProjections))
 )
+
+# MergeProjectWithValues merges an outer Project operator with an inner Values
+# operator that has a single row, as long as:
+#
+#   1. The Values operator has a single row (since if not, the projections would
+#      need to replicated for each row, which is undesirable).
+#
+#   2. The projections do not reference Values columns, since combined Values
+#      columns cannot reference one another.
+#
+# This rule has the side effect of pruning unused columns of the Values
+# operator.
+[MergeProjectWithValues, Normalize]
+(Project
+    $input:(Values [ * ])
+    $projections:* & ^(AreProjectionsCorrelated $projections (OutputCols $input))
+    $passthrough:*
+)
+=>
+(MergeProjectWithValues $projections $passthrough $input)

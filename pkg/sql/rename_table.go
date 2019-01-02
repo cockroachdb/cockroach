@@ -26,21 +26,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+type renameTableNode struct {
+	n            *tree.RenameTable
+	oldTn, newTn *tree.TableName
+	tableDesc    *sqlbase.MutableTableDescriptor
+}
+
 // RenameTable renames the table, view or sequence.
 // Privileges: DROP on source table/view/sequence, CREATE on destination database.
 //   Notes: postgres requires the table owner.
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
-	oldTn, err := n.Name.Normalize()
-	if err != nil {
-		return nil, err
-	}
-	newTn, err := n.NewName.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
+	oldTn := &n.Name
+	newTn := &n.NewName
 	toRequire := requireTableOrViewDesc
 	if n.IsView {
 		toRequire = requireViewDesc
@@ -48,12 +47,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		toRequire = requireSequenceDesc
 	}
 
-	var tableDesc *TableDescriptor
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, oldTn, !n.IfExists, toRequire)
-	})
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, oldTn, !n.IfExists, toRequire)
 	if err != nil {
 		return nil, err
 	}
@@ -79,26 +73,30 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 			ctx, tableDesc.TypeName(), oldTn.String(), tableDesc.ParentID, tableDesc.DependedOnBy[0].ID)
 	}
 
-	var prevDbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		prevDbDesc, err = ResolveDatabase(ctx, p, oldTn.Catalog(), true /*required*/)
-	})
+	return &renameTableNode{n: n, oldTn: oldTn, newTn: newTn, tableDesc: tableDesc}, nil
+}
+
+func (n *renameTableNode) startExec(params runParams) error {
+	p := params.p
+	ctx := params.ctx
+	oldTn := n.oldTn
+	newTn := n.newTn
+	tableDesc := n.tableDesc
+
+	prevDbDesc, err := p.ResolveUncachedDatabase(ctx, oldTn)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Check if target database exists.
 	// We also look at uncached descriptors here.
-	var targetDbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		targetDbDesc, err = ResolveTargetObject(ctx, p, newTn)
-	})
+	targetDbDesc, err := p.ResolveUncachedDatabase(ctx, newTn)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if err := p.CheckPrivilege(ctx, targetDbDesc, privilege.CREATE); err != nil {
-		return nil, err
+		return err
 	}
 
 	// oldTn and newTn are already normalized, so we can compare directly here.
@@ -106,7 +104,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		oldTn.Schema() == newTn.Schema() &&
 		oldTn.Table() == newTn.Table() {
 		// Noop.
-		return newZeroNode(nil /* columns */), nil
+		return nil
 	}
 
 	tableDesc.SetName(newTn.Table())
@@ -116,7 +114,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	newTbKey := tableKey{targetDbDesc.ID, newTn.Table()}.Key()
 
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
-		return nil, err
+		return err
 	}
 
 	descID := tableDesc.GetID()
@@ -127,7 +125,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		Name:     oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
 	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
-		return nil, err
+		return err
 	}
 
 	// We update the descriptor to the new name, but also leave the mapping of the
@@ -143,13 +141,17 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return nil, sqlbase.NewRelationAlreadyExistsError(newTn.Table())
+			return sqlbase.NewRelationAlreadyExistsError(newTn.Table())
 		}
-		return nil, err
+		return err
 	}
 
-	return newZeroNode(nil /* columns */), nil
+	return nil
 }
+
+func (n *renameTableNode) Next(runParams) (bool, error) { return false, nil }
+func (n *renameTableNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *renameTableNode) Close(context.Context)        {}
 
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).

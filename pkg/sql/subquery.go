@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -31,60 +32,26 @@ import (
 // planTop.subqueryPlans.
 type subquery struct {
 	subquery *tree.Subquery
-	execMode subqueryExecMode
+	execMode distsqlrun.SubqueryExecMode
 	expanded bool
 	started  bool
 	plan     planNode
 	result   tree.Datum
 }
 
-type subqueryExecMode int
-
-const (
-	execModeUnknown subqueryExecMode = iota
-	// Subquery is argument to EXISTS.
-	// Result type is Bool.
-	execModeExists
-	// Subquery is argument to IN, ANY, SOME, or ALL. Any number of rows
-	// expected. Result type is tuple of rows. As a special case, if
-	// there is only one column selected, the result is a tuple of the
-	// selected values (instead of a tuple of 1-tuples).
-	execModeAllRowsNormalized
-	// Subquery is argument to an ARRAY constructor. Any number of rows
-	// expected, and exactly one column is expected. Result type is tuple
-	// of selected values.
-	execModeAllRows
-	// Subquery is argument to another function. At most 1 row
-	// expected. Result type is tuple of columns, unless there is
-	// exactly 1 column in which case the result type is that column's
-	// type. If there are no rows, the result is NULL.
-	execModeOneRow
-)
-
-var execModeNames = map[subqueryExecMode]string{
-	execModeUnknown:           "<unknown>",
-	execModeExists:            "exists",
-	execModeAllRowsNormalized: "all rows normalized",
-	execModeAllRows:           "all rows",
-	execModeOneRow:            "one row",
-}
-
 // EvalSubquery is called by `tree.Eval()` method implementations to
 // retrieve the Datum result of a subquery.
 func (p *planner) EvalSubquery(expr *tree.Subquery) (result tree.Datum, err error) {
 	if expr.Idx == 0 {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: subquery %q was not processed, analyzeSubqueries not called?", expr)
+		return nil, pgerror.NewAssertionErrorf("subquery %q was not processed, analyzeSubqueries not called?", expr)
 	}
 	if expr.Idx < 0 || expr.Idx-1 >= len(p.curPlan.subqueryPlans) {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: invalid index %d for %q", expr.Idx, expr)
+		return nil, pgerror.NewAssertionErrorf("invalid index %d for %q", expr.Idx, expr)
 	}
 
 	s := &p.curPlan.subqueryPlans[expr.Idx-1]
 	if !s.started {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: subquery %d (%q) not started prior to evaluation", expr.Idx, expr)
+		return nil, pgerror.NewAssertionErrorf("subquery %d (%q) not started prior to evaluation", expr.Idx, expr)
 	}
 	return s.result, nil
 }
@@ -98,8 +65,7 @@ func (p *planTop) evalSubqueries(params runParams) error {
 		}
 
 		if !sq.expanded {
-			return pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: subquery %d (%q) was not expanded properly", i+1, sq.subquery)
+			return pgerror.NewAssertionErrorf("subquery %d (%q) was not expanded properly", i+1, sq.subquery)
 		}
 
 		if log.V(2) {
@@ -124,7 +90,7 @@ func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
 	defer func() { s.plan.Close(params.ctx); s.plan = nil }()
 
 	switch s.execMode {
-	case execModeExists:
+	case distsqlrun.SubqueryExecModeExists:
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// row.
 		hasRow, err := s.plan.Next(params)
@@ -133,7 +99,7 @@ func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
 		}
 		return tree.MakeDBool(tree.DBool(hasRow)), nil
 
-	case execModeAllRows, execModeAllRowsNormalized:
+	case distsqlrun.SubqueryExecModeAllRows, distsqlrun.SubqueryExecModeAllRowsNormalized:
 		var rows tree.DTuple
 		next, err := s.plan.Next(params)
 		for ; next; next, err = s.plan.Next(params) {
@@ -164,12 +130,12 @@ func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
 			}
 			rows.SetSorted()
 		}
-		if s.execMode == execModeAllRowsNormalized {
+		if s.execMode == distsqlrun.SubqueryExecModeAllRowsNormalized {
 			rows.Normalize(params.EvalContext())
 		}
 		return &rows, nil
 
-	case execModeOneRow:
+	case distsqlrun.SubqueryExecModeOneRow:
 		hasRow, err := s.plan.Next(params)
 		if err != nil {
 			return nil, err
@@ -189,14 +155,6 @@ func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
 			valuesCopy := tree.NewDTupleWithLen(typ, len(values))
 			copy(valuesCopy.D, values)
 			result = valuesCopy
-		}
-		another, err := s.plan.Next(params)
-		if err != nil {
-			return nil, err
-		}
-		if another {
-			err := fmt.Errorf("more than one row returned by a subquery used as an expression")
-			return nil, err
 		}
 		return result, nil
 
@@ -286,12 +244,17 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 	switch t := expr.(type) {
 	case *tree.ArrayFlatten:
 		if sub, ok := t.Subquery.(*tree.Subquery); ok {
+			if v.subqueryAlreadyAnalyzed(sub) {
+				// Subquery was already processed. Nothing to do.
+				return false, expr
+			}
+
 			result, err := v.extractSubquery(sub, true /* multi-row */, 1 /* desired-columns */)
 			if err != nil {
 				v.err = err
 				return false, expr
 			}
-			result.execMode = execModeAllRows
+			result.execMode = distsqlrun.SubqueryExecModeAllRows
 			// Multi-row types are always wrapped in a tuple-type, but the ARRAY
 			// flatten operator wants the unwrapped type.
 			sub.SetType(sub.ResolvedType().(types.TTuple).Types[0])
@@ -315,22 +278,28 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 			return false, expr
 		}
 		if t.Exists {
-			result.execMode = execModeExists
+			result.execMode = distsqlrun.SubqueryExecModeExists
 			t.SetType(types.Bool)
 		} else {
-			result.execMode = execModeOneRow
+			result.plan = &max1RowNode{plan: result.plan}
+			result.execMode = distsqlrun.SubqueryExecModeOneRow
 		}
 
 	case *tree.ComparisonExpr:
 		switch t.Operator {
 		case tree.In, tree.NotIn, tree.Any, tree.Some, tree.All:
 			if sub, ok := t.Right.(*tree.Subquery); ok {
+				if v.subqueryAlreadyAnalyzed(sub) {
+					// Subquery was already processed. Nothing to do.
+					return false, expr
+				}
+
 				result, err := v.extractSubquery(sub, true /* multi-row */, -1 /* desired-columns */)
 				if err != nil {
 					v.err = err
 					return false, expr
 				}
-				result.execMode = execModeAllRowsNormalized
+				result.execMode = distsqlrun.SubqueryExecModeAllRowsNormalized
 			}
 
 			// Note that we recurse into the comparison expression and a subquery in

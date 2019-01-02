@@ -27,14 +27,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,10 +40,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -63,16 +64,19 @@ const (
 type conn struct {
 	conn net.Conn
 
-	sessionArgs sql.SessionArgs
-	execCfg     *sql.ExecutorConfig
-	metrics     *ServerMetrics
+	sessionArgs        sql.SessionArgs
+	resultsBufferBytes int64
+	metrics            *ServerMetrics
 
 	// rd is a buffered reader consuming conn. All reads from conn go through
 	// this.
 	rd bufio.Reader
 
+	// parser is used to avoid allocating a parser each time.
+	parser parser.Parser
+
 	// stmtBuf is populated with commands queued for execution by this conn.
-	stmtBuf *sql.StmtBuf
+	stmtBuf sql.StmtBuf
 
 	// err is an error, accessed atomically. It represents any error encountered
 	// while accessing the underlying network connection. This can read via
@@ -91,7 +95,7 @@ type conn struct {
 	}
 
 	readBuf    pgwirebase.ReadBuffer
-	msgBuilder *writeBuffer
+	msgBuilder writeBuffer
 }
 
 // serveConn creates a conn that will serve the netConn. It returns once the
@@ -136,13 +140,15 @@ func serveConn(
 	ctx context.Context,
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
+	resultsBufferBytes int64,
 	metrics *ServerMetrics,
 	reserved mon.BoundAccount,
 	sqlServer *sql.Server,
 	draining func() bool,
-	execCfg *sql.ExecutorConfig,
+	ie *sql.InternalExecutor,
 	stopper *stop.Stopper,
 	insecure bool,
+	auth *hba.Conf,
 ) error {
 	sArgs.RemoteAddr = netConn.RemoteAddr()
 
@@ -150,9 +156,9 @@ func serveConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
-	c := newConn(netConn, sArgs, metrics, execCfg)
+	c := newConn(netConn, sArgs, metrics, resultsBufferBytes)
 
-	if err := c.handleAuthentication(ctx, insecure); err != nil {
+	if err := c.handleAuthentication(ctx, insecure, ie, auth); err != nil {
 		_ = c.conn.Close()
 		reserved.Close(ctx)
 		return err
@@ -164,20 +170,20 @@ func serveConn(
 }
 
 func newConn(
-	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, execCfg *sql.ExecutorConfig,
+	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, resultsBufferBytes int64,
 ) *conn {
 	c := &conn{
-		conn:        netConn,
-		stmtBuf:     sql.NewStmtBuf(),
-		sessionArgs: sArgs,
-		msgBuilder:  newWriteBuffer(metrics.BytesOutCount),
-		metrics:     metrics,
-		rd:          *bufio.NewReader(netConn),
-		execCfg:     execCfg,
+		conn:               netConn,
+		sessionArgs:        sArgs,
+		resultsBufferBytes: resultsBufferBytes,
+		metrics:            metrics,
+		rd:                 *bufio.NewReader(netConn),
 	}
+	c.stmtBuf.Init()
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
 	c.writerState.fi.cmdStarts = make(map[sql.CmdPos]int)
+	c.msgBuilder.init(metrics.BytesOutCount)
 
 	return c
 }
@@ -214,16 +220,64 @@ func (c *conn) serveImpl(
 ) error {
 	defer func() { _ = c.conn.Close() }()
 
+	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
+
 	// NOTE: We're going to write a few messages to the connection in this method,
 	// for the handshake. After that, all writes are done async, in the
 	// startWriter() goroutine.
 
-	for key, value := range statusReportParams {
+	sendStatusParam := func(param, value string) error {
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
-		c.msgBuilder.writeTerminatedString(key)
+		c.msgBuilder.writeTerminatedString(param)
 		c.msgBuilder.writeTerminatedString(value)
-		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+		return c.msgBuilder.finishMsg(c.conn)
+	}
+
+	var connHandler sql.ConnectionHandler
+	if sqlServer != nil {
+		var err error
+		connHandler, err = sqlServer.SetupConn(
+			ctx, c.sessionArgs, &c.stmtBuf, c, c.metrics.SQLMemMetrics)
+		if err != nil {
+			_ /* err */ = writeErr(err, &c.msgBuilder, c.conn)
 			return err
+		}
+
+		// Send the initial "status parameters" to the client.  This
+		// overlaps partially with session variables. The client wants to
+		// see the values that result of the combination of server-side
+		// defaults with client-provided values.
+		// For details see: https://www.postgresql.org/docs/10/static/libpq-status.html
+		for _, param := range statusReportParams {
+			value := connHandler.GetStatusParam(ctx, param)
+			if err := sendStatusParam(param, value); err != nil {
+				return err
+			}
+		}
+		// The two following status parameters have no equivalent session
+		// variable.
+		if err := sendStatusParam("session_authorization", c.sessionArgs.User); err != nil {
+			return err
+		}
+
+		// TODO(knz): this should retrieve the admin status during
+		// authentication using the roles table, instead of using a
+		// simple/naive username match.
+		isSuperUser := c.sessionArgs.User == security.RootUser
+		superUserVal := "off"
+		if isSuperUser {
+			superUserVal = "on"
+		}
+		if err := sendStatusParam("is_superuser", superUserVal); err != nil {
+			return err
+		}
+	} else {
+		// sqlServer == nil means we are in a local test. In this case
+		// we only need the minimum to make pgx happy.
+		for param, value := range testingStatusReportParams {
+			if err := sendStatusParam(param, value); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -234,9 +288,8 @@ func (c *conn) serveImpl(
 		return err
 	}
 
-	ctx = log.WithLogTagStr(ctx, "user", c.sessionArgs.User)
-	ctx, stopReader := context.WithCancel(ctx)
-	defer stopReader() // This calms the linter that wants these callbacks to always be called.
+	ctx, cancelConn := context.WithCancel(ctx)
+	defer cancelConn() // This calms the linter that wants these callbacks to always be called.
 	var ctxCanceled bool
 
 	// Once a session has been set up, the underlying net.Conn is switched to
@@ -260,16 +313,14 @@ func (c *conn) serveImpl(
 
 	var wg sync.WaitGroup
 	var writerErr error
-	processorCtx, stopProcessor := context.WithCancel(ctx)
 	if sqlServer != nil {
 		wg.Add(1)
 		go func() {
-			writerErr = sqlServer.ServeConn(
-				processorCtx, c.sessionArgs, c.stmtBuf, c, reserved, c.metrics.SQLMemMetrics, stopProcessor)
+			writerErr = sqlServer.ServeConn(ctx, connHandler, reserved, cancelConn)
 			// TODO(andrei): Should we sometimes transmit the writerErr's to the
 			// client?
 			wg.Done()
-			stopReader()
+			cancelConn()
 		}()
 	}
 
@@ -303,7 +354,7 @@ Loop:
 					break
 				}
 			}
-			if err = c.handleSimpleQuery(ctx, &c.readBuf, timeReceived); err != nil {
+			if err = c.handleSimpleQuery(ctx, &c.readBuf, timeReceived, connHandler); err != nil {
 				break
 			}
 			err = c.stmtBuf.Push(ctx, sql.Sync{})
@@ -314,7 +365,7 @@ Loop:
 
 		case pgwirebase.ClientMsgParse:
 			doingExtendedQueryMessage = true
-			err = c.handleParse(ctx, &c.readBuf)
+			err = c.handleParse(ctx, &c.readBuf, connHandler)
 
 		case pgwirebase.ClientMsgDescribe:
 			doingExtendedQueryMessage = true
@@ -366,7 +417,7 @@ Loop:
 	// canceled our context and that's how we got here; in that case, this will
 	// be a no-op.
 	c.stmtBuf.Close()
-	stopProcessor()
+	cancelConn() // This cancels the processor's context.
 	wg.Wait()
 
 	if terminateSeen {
@@ -376,7 +427,7 @@ Loop:
 	// and flushing the buffer.
 	if ctxCanceled || draining() {
 		_ /* err */ = writeErr(
-			newAdminShutdownErr(err), c.msgBuilder, &c.writerState.buf)
+			newAdminShutdownErr(err), &c.msgBuilder, &c.writerState.buf)
 		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 
 		// Swallow whatever error we might have gotten from the writer. If we're
@@ -392,7 +443,7 @@ Loop:
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleSimpleQuery(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time,
+	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time, ch sql.ConnectionHandler,
 ) error {
 	query, err := buf.GetString()
 	if err != nil {
@@ -402,7 +453,7 @@ func (c *conn) handleSimpleQuery(
 	tracing.AnnotateTrace()
 
 	startParse := timeutil.Now()
-	stmts, err := parser.Parse(query)
+	stmts, sqlStrs, err := c.parser.ParseWithInt(query, ch.GetDefaultIntSize())
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -411,6 +462,7 @@ func (c *conn) handleSimpleQuery(
 	if len(stmts) == 0 {
 		return c.stmtBuf.Push(
 			ctx, sql.ExecStmt{
+				SQL:          "",
 				Stmt:         nil,
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
@@ -418,7 +470,7 @@ func (c *conn) handleSimpleQuery(
 			})
 	}
 
-	for _, stmt := range stmts {
+	for i, stmt := range stmts {
 		// The CopyFrom statement is special. We need to detect it so we can hand
 		// control of the connection, through the stmtBuf, to a copyMachine, and
 		// block this network routine until control is passed back.
@@ -447,6 +499,7 @@ func (c *conn) handleSimpleQuery(
 		if err := c.stmtBuf.Push(
 			ctx,
 			sql.ExecStmt{
+				SQL:          sqlStrs[i],
 				Stmt:         stmt,
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
@@ -460,7 +513,9 @@ func (c *conn) handleSimpleQuery(
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleParse(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+func (c *conn) handleParse(
+	ctx context.Context, buf *pgwirebase.ReadBuffer, ch sql.ConnectionHandler,
+) error {
 	// protocolErr is set if a protocol error has to be sent to the client. A
 	// stanza at the bottom of the function pushes instructions for sending this
 	// error.
@@ -504,7 +559,7 @@ func (c *conn) handleParse(ctx context.Context, buf *pgwirebase.ReadBuffer) erro
 
 	startParse := timeutil.Now()
 	var stmt tree.Statement
-	stmts, err := parser.Parse(query)
+	stmts, _, err := c.parser.ParseWithInt(query, ch.GetDefaultIntSize())
 	if len(stmts) > 1 {
 		err = pgerror.NewWrongNumberOfPreparedStatements(len(stmts))
 	} else if len(stmts) == 1 {
@@ -530,6 +585,7 @@ func (c *conn) handleParse(ctx context.Context, buf *pgwirebase.ReadBuffer) erro
 	return c.stmtBuf.Push(
 		ctx,
 		sql.PrepareStmt{
+			SQL:          query,
 			Name:         name,
 			Stmt:         stmt,
 			TypeHints:    sqlTypeHints,
@@ -837,8 +893,7 @@ func (c *conn) bufferRow(
 	ctx context.Context,
 	row tree.Datums,
 	formatCodes []pgwirebase.FormatCode,
-	loc *time.Location,
-	be sessiondata.BytesEncodeFormat,
+	conv sessiondata.DataConversionConfig,
 ) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 	c.msgBuilder.putInt16(int16(len(row)))
@@ -849,9 +904,9 @@ func (c *conn) bufferRow(
 		}
 		switch fmtCode {
 		case pgwirebase.FormatText:
-			c.msgBuilder.writeTextDatum(ctx, col, loc, be)
+			c.msgBuilder.writeTextDatum(ctx, col, conv)
 		case pgwirebase.FormatBinary:
-			c.msgBuilder.writeBinaryDatum(ctx, col, loc)
+			c.msgBuilder.writeBinaryDatum(ctx, col, conv.Location)
 		default:
 			c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}
@@ -900,7 +955,7 @@ func (c *conn) bufferCommandComplete(tag []byte) {
 }
 
 func (c *conn) bufferErr(err error) {
-	if err := writeErr(err, c.msgBuilder, &c.writerState.buf); err != nil {
+	if err := writeErr(err, &c.msgBuilder, &c.writerState.buf); err != nil {
 		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
 	}
 }
@@ -1055,7 +1110,7 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 // maybeFlush flushes the buffer to the network connection if it exceeded
 // connResultsBufferSizeBytes.
 func (c *conn) maybeFlush(pos sql.CmdPos) (bool, error) {
-	if c.writerState.buf.Len() <= c.execCfg.ConnResultsBufferBytes {
+	if int64(c.writerState.buf.Len()) <= c.resultsBufferBytes {
 		return false, nil
 	}
 	return true, c.Flush(pos)
@@ -1117,10 +1172,9 @@ func (c *conn) CreateStatementResult(
 	descOpt sql.RowDescOpt,
 	pos sql.CmdPos,
 	formatCodes []pgwirebase.FormatCode,
-	loc *time.Location,
-	be sessiondata.BytesEncodeFormat,
+	conv sessiondata.DataConversionConfig,
 ) sql.CommandResult {
-	res := c.makeCommandResult(descOpt, pos, stmt, formatCodes, loc, be)
+	res := c.makeCommandResult(descOpt, pos, stmt, formatCodes, conv)
 	return &res
 }
 
@@ -1222,51 +1276,86 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 // name, if different from the one given initially. Note: at this
 // point the sql.Session does not exist yet! If need exists to access the
 // database to look up authentication data, use the internal executor.
-func (c *conn) handleAuthentication(ctx context.Context, insecure bool) error {
-
+func (c *conn) handleAuthentication(
+	ctx context.Context, insecure bool, ie *sql.InternalExecutor, auth *hba.Conf,
+) error {
 	sendError := func(err error) error {
-		_ /* err */ = writeErr(err, c.msgBuilder, c.conn)
+		_ /* err */ = writeErr(err, &c.msgBuilder, c.conn)
 		return err
 	}
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
 	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, c.execCfg, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
+		ctx, ie, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
 	)
 	if err != nil {
 		return sendError(err)
 	}
 	if !exists {
-		return sendError(errors.Errorf("user %s does not exist", c.sessionArgs.User))
+		return sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
 	}
 
 	if tlsConn, ok := c.conn.(*tls.Conn); ok {
-		var authenticationHook security.UserAuthHook
-
 		tlsState := tlsConn.ConnectionState()
-		// If no certificates are provided, default to password
-		// authentication.
-		if len(tlsState.PeerCertificates) == 0 {
-			password, err := c.sendAuthPasswordRequest()
+		var methodFn AuthMethod
+
+		if auth == nil {
+			methodFn = authCertPassword
+		} else if c.sessionArgs.User == security.RootUser {
+			// If a hba.conf file is specified, hard code the root user to always use
+			// cert auth. This prevents users from shooting themselves in the foot and
+			// making root not able to login, thus disallowing anyone from fixing the
+			// hba.conf file.
+			methodFn = authCert
+		} else {
+			addr, _, err := net.SplitHostPort(c.conn.RemoteAddr().String())
 			if err != nil {
 				return sendError(err)
 			}
-			authenticationHook = security.UserAuthPasswordHook(
-				insecure, password, hashedPassword,
-			)
-		} else {
-			// Normalize the username contained in the certificate.
-			tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
-				tlsState.PeerCertificates[0].Subject.CommonName,
-			).Normalize()
-			var err error
-			authenticationHook, err = security.UserAuthCertHook(insecure, &tlsState)
-			if err != nil {
-				return sendError(err)
+			ip := net.ParseIP(addr)
+			for _, entry := range auth.Entries {
+				switch a := entry.Address.(type) {
+				case *net.IPNet:
+					if !a.Contains(ip) {
+						continue
+					}
+				case hba.String:
+					if !a.IsSpecial("all") {
+						return sendError(errors.Errorf("unexpected %s address: %q", serverHBAConfSetting, a.Value))
+					}
+				default:
+					return sendError(errors.Errorf("unexpected address type %T", a))
+				}
+				match := false
+				for _, u := range entry.User {
+					if u.IsSpecial("all") {
+						match = true
+						break
+					}
+					if u.Value == c.sessionArgs.User {
+						match = true
+						break
+					}
+				}
+				if !match {
+					continue
+				}
+				methodFn = hbaAuthMethods[entry.Method]
+				if methodFn == nil {
+					return sendError(errors.Errorf("unknown auth method %s", entry.Method))
+				}
+				break
+			}
+			if methodFn == nil {
+				return sendError(errors.Errorf("no %s entry for host %q, user %q", serverHBAConfSetting, addr, c.sessionArgs.User))
 			}
 		}
 
+		authenticationHook, err := methodFn(c, tlsState, insecure, hashedPassword)
+		if err != nil {
+			return sendError(err)
+		}
 		if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
 			return sendError(err)
 		}
@@ -1277,9 +1366,98 @@ func (c *conn) handleAuthentication(ctx context.Context, insecure bool) error {
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
-// sendAuthPasswordRequest requests a cleartext password from the client and
+const serverHBAConfSetting = "server.host_based_authentication.configuration"
+
+var connAuthConf = settings.RegisterValidatedStringSetting(
+	serverHBAConfSetting,
+	"host-based authentication configuration to use during connection authentication",
+	"",
+	func(values *settings.Values, s string) error {
+		if s == "" {
+			return nil
+		}
+		conf, err := hba.Parse(s)
+		if err != nil {
+			return err
+		}
+		for _, entry := range conf.Entries {
+			for _, db := range entry.Database {
+				if !db.IsSpecial("all") {
+					return errors.New("database must be specified as all")
+				}
+			}
+			if addr, ok := entry.Address.(hba.String); ok && !addr.IsSpecial("all") {
+				return errors.New("host addresses not supported")
+			}
+			if hbaAuthMethods[entry.Method] == nil {
+				return errors.Errorf("unknown auth method %q", entry.Method)
+			}
+		}
+		return nil
+	},
+)
+
+// AuthConn defines exported methods of a conn needed for pgwire authentication.
+type AuthConn interface {
+	SendAuthPasswordRequest() (string, error)
+}
+
+// AuthMethod defines a method for authentication of a connection.
+type AuthMethod func(c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte) (security.UserAuthHook, error)
+
+var hbaAuthMethods = map[string]AuthMethod{}
+
+// RegisterAuthMethod registers an AuthMethod for pgwire authentication.
+func RegisterAuthMethod(method string, fn AuthMethod) {
+	hbaAuthMethods[method] = fn
+}
+
+func authPassword(
+	c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte,
+) (security.UserAuthHook, error) {
+	password, err := c.SendAuthPasswordRequest()
+	if err != nil {
+		return nil, err
+	}
+	return security.UserAuthPasswordHook(
+		insecure, password, hashedPassword,
+	), nil
+}
+
+func authCert(
+	c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte,
+) (security.UserAuthHook, error) {
+	if len(tlsState.PeerCertificates) == 0 {
+		return nil, errors.New("no TLS peer certificates, but required for auth")
+	}
+	// Normalize the username contained in the certificate.
+	tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
+		tlsState.PeerCertificates[0].Subject.CommonName,
+	).Normalize()
+	return security.UserAuthCertHook(insecure, &tlsState)
+}
+
+func authCertPassword(
+	c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte,
+) (security.UserAuthHook, error) {
+	var fn AuthMethod
+	if len(tlsState.PeerCertificates) == 0 {
+		fn = authPassword
+	} else {
+		fn = authCert
+	}
+	return fn(c, tlsState, insecure, hashedPassword)
+}
+
+func init() {
+	RegisterAuthMethod("password", authPassword)
+	RegisterAuthMethod("cert", authCert)
+	RegisterAuthMethod("cert-password", authCertPassword)
+}
+
+// SendAuthPasswordRequest requests a cleartext password from the client and
 // returns it.
-func (c *conn) sendAuthPasswordRequest() (string, error) {
+func (c *conn) SendAuthPasswordRequest() (string, error) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authCleartextPassword)
 	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
@@ -1299,27 +1477,31 @@ func (c *conn) sendAuthPasswordRequest() (string, error) {
 	return c.readBuf.GetString()
 }
 
-// statusReportParams is a static mapping from run-time parameters to their respective
-// hard-coded values, each of which is to be returned as part of the status report
-// during connection initialization.
-var statusReportParams = map[string]string{
-	"client_encoding": "UTF8",
-	"DateStyle":       "ISO",
-	// All datetime binary formats expect 64-bit integer microsecond values.
-	// This param needs to be provided to clients or some may provide 64-bit
-	// floating-point microsecond values instead, which was a legacy datetime
-	// binary format.
-	"integer_datetimes": "on",
-	// The latest version of the docs that was consulted during the development
-	// of this package. We specify this version to avoid having to support old
-	// code paths which various client tools fall back to if they can't
-	// determine that the server is new enough.
-	"server_version": sql.PgServerVersion,
-	// The current CockroachDB version string.
-	"crdb_version": build.GetInfo().Short(),
-	// If this parameter is not present, some drivers (including Python's psycopg2)
-	// will add redundant backslash escapes for compatibility with non-standard
-	// backslash handling in older versions of postgres.
+// statusReportParams is a list of session variables that are also
+// reported as server run-time parameters in the pgwire connection
+// initialization.
+//
+// The standard PostgreSQL status vars are listed here:
+// https://www.postgresql.org/docs/10/static/libpq-status.html
+var statusReportParams = []string{
+	"server_version",
+	"server_encoding",
+	"client_encoding",
+	"application_name",
+	// Note: is_superuser and session_authorization are handled
+	// specially in serveImpl().
+	"DateStyle",
+	"IntervalStyle",
+	"TimeZone",
+	"integer_datetimes",
+	"standard_conforming_strings",
+	"crdb_version", // CockroachDB extension.
+}
+
+// testingStatusReportParams is the minimum set of status parameters
+// needed to make pgx tests in the local package happy.
+var testingStatusReportParams = map[string]string{
+	"client_encoding":             "UTF8",
 	"standard_conforming_strings": "on",
 }
 

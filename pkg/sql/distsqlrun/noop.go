@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -25,7 +26,7 @@ import (
 // post-processing or in the last stage of a computation, where we may only
 // need the synchronizer to join streams.
 type noopProcessor struct {
-	processorBase
+	ProcessorBase
 	input RowSource
 }
 
@@ -35,10 +36,14 @@ var _ RowSource = &noopProcessor{}
 const noopProcName = "noop"
 
 func newNoopProcessor(
-	flowCtx *FlowCtx, processorID int32, input RowSource, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	input RowSource,
+	post *distsqlpb.PostProcessSpec,
+	output RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
-	if err := n.init(
+	if err := n.Init(
 		n,
 		post,
 		input.OutputTypes(),
@@ -46,7 +51,7 @@ func newNoopProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		procStateOpts{inputsToDrain: []RowSource{n.input}},
+		ProcStateOpts{InputsToDrain: []RowSource{n.input}},
 	); err != nil {
 		return nil, err
 	}
@@ -56,39 +61,34 @@ func newNoopProcessor(
 // Start is part of the RowSource interface.
 func (n *noopProcessor) Start(ctx context.Context) context.Context {
 	n.input.Start(ctx)
-	return n.startInternal(ctx, noopProcName)
+	return n.StartInternal(ctx, noopProcName)
 }
 
 // Next is part of the RowSource interface.
 func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for n.state == stateRunning {
+	for n.State == StateRunning {
 		row, meta := n.input.Next()
 
 		if meta != nil {
 			if meta.Err != nil {
-				n.moveToDraining(nil /* err */)
+				n.MoveToDraining(nil /* err */)
 			}
 			return nil, meta
 		}
 		if row == nil {
-			n.moveToDraining(nil /* err */)
+			n.MoveToDraining(nil /* err */)
 			break
 		}
 
-		if outRow := n.processRowHelper(row); outRow != nil {
+		if outRow := n.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
-	return nil, n.drainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (n *noopProcessor) ConsumerDone() {
-	n.moveToDraining(nil /* err */)
+	return nil, n.DrainHelper()
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (n *noopProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	n.internalClose()
+	n.InternalClose()
 }

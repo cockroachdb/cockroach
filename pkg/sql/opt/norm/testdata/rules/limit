@@ -22,7 +22,7 @@ TABLE b
 # --------------------------------------------------
 # EliminateLimit
 # --------------------------------------------------
-opt
+opt expect=EliminateLimit
 SELECT * FROM (SELECT * FROM a LIMIT 99) LIMIT 100
 ----
 scan a
@@ -31,7 +31,7 @@ scan a
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
-opt
+opt expect=EliminateLimit
 SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 100
 ----
 scan a
@@ -64,42 +64,34 @@ limit
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── limit
+ ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── limit: 5000000000
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5)
- │    └── const: 5000000000 [type=int]
+ │    └── fd: (1)-->(2-5)
  └── const: 5100000000 [type=int]
 
-# Don't eliminate in case of zero or negative limit.
+# Don't eliminate in case of negative limit.
 opt
 SELECT * FROM (SELECT * FROM a LIMIT 0) LIMIT -1
 ----
 limit
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
+ ├── side-effects
  ├── key: ()
  ├── fd: ()-->(1-5)
- ├── limit
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── values
+ │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── cardinality: [0 - 0]
  │    ├── key: ()
- │    ├── fd: ()-->(1-5)
- │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5)
- │    └── const: 0 [type=int]
+ │    └── fd: ()-->(1-5)
  └── const: -1 [type=int]
 
 # --------------------------------------------------
 # PushLimitIntoProject
 # --------------------------------------------------
-opt
+opt expect=PushLimitIntoProject
 SELECT k, f*2.0 AS r FROM a LIMIT 5
 ----
 project
@@ -112,10 +104,10 @@ project
  │    ├── limit: 5
  │    ├── key: (1)
  │    └── fd: (1)-->(3)
- └── projections [outer=(1,3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
+ └── projections
+      └── f * 2.0 [type=float, outer=(3)]
 
-opt
+opt expect=PushLimitIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY k LIMIT 5
 ----
 project
@@ -130,16 +122,17 @@ project
  │    ├── key: (1)
  │    ├── fd: (1)-->(3)
  │    └── ordering: +1
- └── projections [outer=(1,3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
+ └── projections
+      └── f * 2.0 [type=float, outer=(3)]
 
 # Don't push the limit through project when the ordering is on a
 # synthesized column.
-opt
+opt expect-not=PushLimitIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY r LIMIT 5 
 ----
 limit
  ├── columns: k:1(int!null) r:6(float)
+ ├── internal-ordering: +6
  ├── cardinality: [0 - 5]
  ├── key: (1)
  ├── fd: (1)-->(6)
@@ -157,8 +150,8 @@ limit
  │         │    ├── columns: k:1(int!null) f:3(float)
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(3)
- │         └── projections [outer=(1,3)]
- │              └── a.f * 2.0 [type=float, outer=(3)]
+ │         └── projections
+ │              └── f * 2.0 [type=float, outer=(3)]
  └── const: 5 [type=int]
 
 
@@ -169,41 +162,26 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 
 project
  ├── columns: f:3(float) r:6(float)
  ├── cardinality: [0 - 5]
- ├── fd: (3)-->(6)
  ├── ordering: +3
  ├── limit
  │    ├── columns: i:2(int) f:3(float)
+ │    ├── internal-ordering: +3
  │    ├── cardinality: [0 - 5]
  │    ├── key: (2,3)
  │    ├── ordering: +3
- │    ├── sort
+ │    ├── distinct-on
  │    │    ├── columns: i:2(int) f:3(float)
+ │    │    ├── grouping columns: i:2(int) f:3(float)
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    └── group-by
+ │    │    └── sort
  │    │         ├── columns: i:2(int) f:3(float)
- │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │         ├── key: (2,3)
+ │    │         ├── ordering: +3
  │    │         └── scan a
  │    │              └── columns: i:2(int) f:3(float)
  │    └── const: 5 [type=int]
- └── projections [outer=(3)]
-      └── a.f + 1.1 [type=float, outer=(3)]
-
-# Don't push zero limit into Scan.
-opt
-SELECT * FROM a LIMIT 0
-----
-limit
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── cardinality: [0 - 0]
- ├── key: ()
- ├── fd: ()-->(1-5)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── const: 0 [type=int]
+ └── projections
+      └── f + 1.1 [type=float, outer=(3)]
 
 # Don't push negative limit into Scan.
 opt
@@ -212,6 +190,7 @@ SELECT * FROM a LIMIT -1
 limit
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
+ ├── side-effects
  ├── key: ()
  ├── fd: ()-->(1-5)
  ├── scan a
@@ -223,7 +202,7 @@ limit
 # --------------------------------------------------
 # PushOffsetIntoProject
 # --------------------------------------------------
-opt
+opt expect=PushOffsetIntoProject
 SELECT k, f*2.0 AS r FROM a OFFSET 5
 ----
 project
@@ -239,10 +218,10 @@ project
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(3)
  │    └── const: 5 [type=int]
- └── projections [outer=(1,3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
+ └── projections
+      └── f * 2.0 [type=float, outer=(3)]
 
-opt
+opt expect=PushOffsetIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY k OFFSET 5
 ----
 project
@@ -252,6 +231,7 @@ project
  ├── ordering: +1
  ├── offset
  │    ├── columns: k:1(int!null) f:3(float)
+ │    ├── internal-ordering: +1
  │    ├── key: (1)
  │    ├── fd: (1)-->(3)
  │    ├── ordering: +1
@@ -261,16 +241,17 @@ project
  │    │    ├── fd: (1)-->(3)
  │    │    └── ordering: +1
  │    └── const: 5 [type=int]
- └── projections [outer=(1,3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
+ └── projections
+      └── f * 2.0 [type=float, outer=(3)]
 
 # Don't push the offset through project when the ordering is on a
 # synthesized column.
-opt
+opt expect-not=PushOffsetIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY r OFFSET 5
 ----
 offset
  ├── columns: k:1(int!null) r:6(float)
+ ├── internal-ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(6)
  ├── ordering: +6
@@ -287,8 +268,8 @@ offset
  │         │    ├── columns: k:1(int!null) f:3(float)
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(3)
- │         └── projections [outer=(1,3)]
- │              └── a.f * 2.0 [type=float, outer=(3)]
+ │         └── projections
+ │              └── f * 2.0 [type=float, outer=(3)]
  └── const: 5 [type=int]
 
 # Detect PushOffsetIntoProject and FilterUnusedOffsetCols dependency cycle.
@@ -297,30 +278,30 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET
 ----
 project
  ├── columns: f:3(float) r:6(float)
- ├── fd: (3)-->(6)
  ├── ordering: +3
  ├── offset
  │    ├── columns: i:2(int) f:3(float)
+ │    ├── internal-ordering: +3
  │    ├── key: (2,3)
  │    ├── ordering: +3
- │    ├── sort
+ │    ├── distinct-on
  │    │    ├── columns: i:2(int) f:3(float)
+ │    │    ├── grouping columns: i:2(int) f:3(float)
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    └── group-by
+ │    │    └── sort
  │    │         ├── columns: i:2(int) f:3(float)
- │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │         ├── key: (2,3)
+ │    │         ├── ordering: +3
  │    │         └── scan a
  │    │              └── columns: i:2(int) f:3(float)
  │    └── const: 5 [type=int]
- └── projections [outer=(3)]
-      └── a.f + 1.1 [type=float, outer=(3)]
+ └── projections
+      └── f + 1.1 [type=float, outer=(3)]
 
 # --------------------------------------------------
 # PushLimitIntoProject + PushOffsetIntoProject
 # --------------------------------------------------
-opt
+opt expect=(PushLimitIntoProject,PushOffsetIntoProject)
 SELECT k, f*2.0 AS r FROM a OFFSET 5 LIMIT 10
 ----
 project
@@ -343,37 +324,38 @@ project
  │    │    │    └── fd: (1)-->(3)
  │    │    └── const: 5 [type=int]
  │    └── const: 10 [type=int]
- └── projections [outer=(1,3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
+ └── projections
+      └── f * 2.0 [type=float, outer=(3)]
 
-opt
+opt expect=(PushLimitIntoProject,PushOffsetIntoProject)
 SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5 LIMIT 10
 ----
 project
  ├── columns: f:3(float) r:6(float)
  ├── cardinality: [0 - 10]
- ├── fd: (3)-->(6)
  ├── ordering: +3
  ├── limit
  │    ├── columns: i:2(int) f:3(float)
+ │    ├── internal-ordering: +3
  │    ├── cardinality: [0 - 10]
  │    ├── key: (2,3)
  │    ├── ordering: +3
  │    ├── offset
  │    │    ├── columns: i:2(int) f:3(float)
+ │    │    ├── internal-ordering: +3
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    ├── sort
+ │    │    ├── distinct-on
  │    │    │    ├── columns: i:2(int) f:3(float)
+ │    │    │    ├── grouping columns: i:2(int) f:3(float)
  │    │    │    ├── key: (2,3)
  │    │    │    ├── ordering: +3
- │    │    │    └── group-by
+ │    │    │    └── sort
  │    │    │         ├── columns: i:2(int) f:3(float)
- │    │    │         ├── grouping columns: i:2(int) f:3(float)
- │    │    │         ├── key: (2,3)
+ │    │    │         ├── ordering: +3
  │    │    │         └── scan a
  │    │    │              └── columns: i:2(int) f:3(float)
  │    │    └── const: 5 [type=int]
  │    └── const: 10 [type=int]
- └── projections [outer=(3)]
-      └── a.f + 1.1 [type=float, outer=(3)]
+ └── projections
+      └── f + 1.1 [type=float, outer=(3)]

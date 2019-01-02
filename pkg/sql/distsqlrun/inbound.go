@@ -18,6 +18,8 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -29,8 +31,8 @@ import (
 // it needs to be received before we can get here).
 func ProcessInboundStream(
 	ctx context.Context,
-	stream DistSQL_FlowStreamServer,
-	firstMsg *ProducerMessage,
+	stream distsqlpb.DistSQL_FlowStreamServer,
+	firstMsg *distsqlpb.ProducerMessage,
 	dst RowReceiver,
 	f *Flow,
 ) error {
@@ -51,8 +53,8 @@ func ProcessInboundStream(
 
 func processInboundStreamHelper(
 	ctx context.Context,
-	stream DistSQL_FlowStreamServer,
-	firstMsg *ProducerMessage,
+	stream distsqlpb.DistSQL_FlowStreamServer,
+	firstMsg *distsqlpb.ProducerMessage,
 	dst RowReceiver,
 	f *Flow,
 ) error {
@@ -95,8 +97,7 @@ func processInboundStreamHelper(
 			if err != nil {
 				if err != io.EOF {
 					// Communication error.
-					err = errors.Wrap(
-						err, log.MakeMessage(ctx, "communication error", nil /* args */))
+					err = pgerror.NewErrorf(pgerror.CodeConnectionFailureError, "communication error: %s", err)
 					sendErrToConsumer(err)
 					errChan <- err
 					return
@@ -130,9 +131,11 @@ func processInboundStreamHelper(
 // sendDrainSignalToProducer is called when the consumer wants to signal the
 // producer that it doesn't need any more rows and the producer should drain. A
 // signal is sent on stream to the producer to ask it to send metadata.
-func sendDrainSignalToStreamProducer(ctx context.Context, stream DistSQL_FlowStreamServer) error {
+func sendDrainSignalToStreamProducer(
+	ctx context.Context, stream distsqlpb.DistSQL_FlowStreamServer,
+) error {
 	log.VEvent(ctx, 1, "sending drain signal to producer")
-	sig := ConsumerSignal{DrainRequest: &DrainRequest{}}
+	sig := distsqlpb.ConsumerSignal{DrainRequest: &distsqlpb.DrainRequest{}}
 	return stream.Send(&sig)
 }
 
@@ -142,11 +145,11 @@ func sendDrainSignalToStreamProducer(ctx context.Context, stream DistSQL_FlowStr
 // closed), the caller must return the error to the producer.
 func processProducerMessage(
 	ctx context.Context,
-	stream DistSQL_FlowStreamServer,
+	stream distsqlpb.DistSQL_FlowStreamServer,
 	dst RowReceiver,
 	sd *StreamDecoder,
 	draining *bool,
-	msg *ProducerMessage,
+	msg *distsqlpb.ProducerMessage,
 ) processMessageResult {
 	err := sd.AddMessage(msg)
 	if err != nil {
@@ -184,7 +187,7 @@ func processProducerMessage(
 			// signal to the producer and expect it to quickly send trailing
 			// metadata and close its side of the stream, at which point we also
 			// close the consuming side of the stream and call dst.ProducerDone().
-			if *draining {
+			if !*draining {
 				*draining = true
 				if err := sendDrainSignalToStreamProducer(ctx, stream); err != nil {
 					log.Errorf(ctx, "draining error: %s", err)

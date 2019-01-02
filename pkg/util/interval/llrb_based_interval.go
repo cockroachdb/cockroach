@@ -23,9 +23,7 @@
 
 package interval
 
-import (
-	"github.com/biogo/store/llrb"
-)
+import "github.com/biogo/store/llrb"
 
 // Operation LLRBMode of the underlying LLRB tree.
 const (
@@ -675,4 +673,8 @@ func (t *llrbTree) Iterator() TreeIterator {
 func (t *llrbTree) Clear() {
 	t.Root = nil
 	t.Count = 0
+}
+
+func (t *llrbTree) Clone() Tree {
+	panic("unimplemented")
 }

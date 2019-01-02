@@ -1,3 +1,7 @@
+fmt.Fprint
+fmt.Fprintf
+fmt.Fprintln
+(*bufio.Writer).Flush
 (*database/sql.DB).Close
 (*database/sql.Rows).Close
 (*database/sql.Stmt).Close

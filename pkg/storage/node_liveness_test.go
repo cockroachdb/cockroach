@@ -25,23 +25,25 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 func verifyLiveness(t *testing.T, mtc *multiTestContext) {
@@ -347,7 +349,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 	for _, g := range mtc.gossips {
 		key := gossip.MakeNodeLivenessKey(g.NodeID.Get())
 		expKeys = append(expKeys, key)
-		if err := g.AddInfoProto(key, &storage.Liveness{}, 0); err != nil {
+		if err := g.AddInfoProto(key, &storagepb.Liveness{}, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -404,7 +406,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	// Verify liveness is properly initialized. This needs to be wrapped in a
 	// SucceedsSoon because node liveness gets initialized via an async gossip
 	// callback.
-	var liveness *storage.Liveness
+	var liveness *storagepb.Liveness
 	testutils.SucceedsSoon(t, func() error {
 		var err error
 		liveness, err = mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
@@ -461,7 +463,11 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	verifyLiveness(t, mtc)
 	pauseNodeLivenessHeartbeats(mtc, true)
 	lMap := mtc.nodeLivenesses[0].GetIsLiveMap()
-	expectedLMap := map[roachpb.NodeID]bool{1: true, 2: true, 3: true}
+	expectedLMap := storage.IsLiveMap{
+		1: {IsLive: true, Epoch: 1},
+		2: {IsLive: true, Epoch: 1},
+		3: {IsLive: true, Epoch: 1},
+	}
 	if !reflect.DeepEqual(expectedLMap, lMap) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
 	}
@@ -482,7 +488,11 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	// Now verify only node 0 is live.
 	lMap = mtc.nodeLivenesses[0].GetIsLiveMap()
-	expectedLMap = map[roachpb.NodeID]bool{1: true, 2: false, 3: false}
+	expectedLMap = storage.IsLiveMap{
+		1: {IsLive: true, Epoch: 1},
+		2: {IsLive: false, Epoch: 1},
+		3: {IsLive: false, Epoch: 1},
+	}
 	if !reflect.DeepEqual(expectedLMap, lMap) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
 	}
@@ -635,7 +645,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 
 	// Verify success on failed update of a liveness record that already has the
 	// given draining setting.
-	if err := mtc.nodeLivenesses[drainingNodeIdx].SetDrainingInternal(ctx, &storage.Liveness{}, false); err != nil {
+	if err := mtc.nodeLivenesses[drainingNodeIdx].SetDrainingInternal(ctx, &storagepb.Liveness{}, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -773,6 +783,9 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 				// Disable replica rebalancing to ensure that the liveness range
 				// does not get out of the first node (we'll be shutting down nodes).
 				DisableReplicaRebalancing: true,
+				// Disable LBS because when the scan is happening at the rate it's happening
+				// below, it's possible that one of the system ranges trigger a split.
+				DisableLoadBasedSplitting: true,
 			},
 		},
 		RaftConfig: base.RaftConfig{
@@ -793,7 +806,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	ctx := context.TODO()
 	defer tc.Stopper().Stop(ctx)
 
-	ctx = log.WithLogTag(ctx, "in test", nil)
+	ctx = logtags.AddTag(ctx, "in test", nil)
 
 	log.Infof(ctx, "setting zone config to disable replication")
 	// Allow for inserting zone configs without having to go through (or
@@ -802,7 +815,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	zoneConfig := config.DefaultZoneConfig()
 	// Force just one replica per range to ensure that we can shut down
 	// nodes without endangering the liveness range.
-	zoneConfig.NumReplicas = 1
+	zoneConfig.NumReplicas = proto.Int32(1)
 	config.TestingSetZoneConfig(keys.MetaRangesID, zoneConfig)
 
 	log.Infof(ctx, "starting 3 more nodes")
@@ -812,19 +825,10 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	log.Infof(ctx, "waiting for node statuses")
 	tc.WaitForNodeStatuses(t)
+	tc.WaitForNodeLiveness(t)
 	log.Infof(ctx, "waiting done")
 
 	firstServer := tc.Server(0).(*server.TestServer)
-
-	// Ensure that dead nodes are quickly recognized as dead by gossip.
-	// We set the cluster setting after we've done propagating statuses
-	// above so that the new setting value does not race with gossip
-	// initialization.
-	// Note: morally we'd probably need to use SQL here to set
-	// the cluster setting. However that restricts the allowable values
-	// to 1m15s, which is much too long for a test.
-	storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
-		storage.TestTimeUntilStoreDead)
 
 	liveNodeID := firstServer.NodeID()
 
@@ -855,13 +859,13 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	type expectedStatus struct {
 		nodeID         roachpb.NodeID
-		expectedStatus storage.NodeLivenessStatus
+		expectedStatus storagepb.NodeLivenessStatus
 	}
 	testData := []expectedStatus{
-		{liveNodeID, storage.NodeLivenessStatus_LIVE},
-		{deadNodeID, storage.NodeLivenessStatus_DEAD},
-		{decommissioningNodeID, storage.NodeLivenessStatus_DECOMMISSIONING},
-		{removedNodeID, storage.NodeLivenessStatus_DECOMMISSIONED},
+		{liveNodeID, storagepb.NodeLivenessStatus_LIVE},
+		{deadNodeID, storagepb.NodeLivenessStatus_DEAD},
+		{decommissioningNodeID, storagepb.NodeLivenessStatus_DECOMMISSIONING},
+		{removedNodeID, storagepb.NodeLivenessStatus_DECOMMISSIONED},
 	}
 
 	for _, test := range testData {
@@ -870,13 +874,23 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 			t.Parallel()
 
 			testutils.SucceedsSoon(t, func() error {
+				// Ensure that dead nodes are quickly recognized as dead by
+				// gossip. Overriding cluster settings is generally a really bad
+				// idea as they are also populated via Gossip and so our update
+				// is possibly going to be wiped out. But going through SQL
+				// doesn't allow durations below 1m15s, which is much too long
+				// for a test.
+				// We do this in every SucceedsSoon attempt, so we'll be good.
+				storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
+					storage.TestTimeUntilStoreDead)
+
 				log.Infof(ctx, "checking expected status for node %d", nodeID)
 				nodeStatuses := callerNodeLiveness.GetLivenessStatusMap()
 				if st, ok := nodeStatuses[nodeID]; !ok {
 					return fmt.Errorf("%s node not in statuses", expectedStatus)
 				} else {
 					if st != expectedStatus {
-						if expectedStatus == storage.NodeLivenessStatus_DECOMMISSIONING && st == storage.NodeLivenessStatus_DECOMMISSIONED {
+						if expectedStatus == storagepb.NodeLivenessStatus_DECOMMISSIONING && st == storagepb.NodeLivenessStatus_DECOMMISSIONED {
 							// Server somehow shut down super-fast. Tolerating the mismatch.
 							return nil
 						}
@@ -905,7 +919,7 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 
 	// Verify success on failed update of a liveness record that already has the
 	// given decommissioning setting.
-	if _, err := callerNodeLiveness.SetDecommissioningInternal(ctx, nodeID, &storage.Liveness{}, false); err != nil {
+	if _, err := callerNodeLiveness.SetDecommissioningInternal(ctx, nodeID, &storagepb.Liveness{}, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -963,7 +977,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	}
 
 	// Pretend the node was once there but isn't gossiped anywhere.
-	if err := mtc.dbs[0].CPut(ctx, keys.NodeLivenessKey(goneNodeID), &storage.Liveness{
+	if err := mtc.dbs[0].CPut(ctx, keys.NodeLivenessKey(goneNodeID), &storagepb.Liveness{
 		NodeID:     goneNodeID,
 		Epoch:      1,
 		Expiration: hlc.LegacyTimestamp(mtc.clock.Now()),
@@ -1010,12 +1024,12 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 	threshold := 5 * time.Minute
 
 	for _, tc := range []struct {
-		liveness storage.Liveness
-		expected storage.NodeLivenessStatus
+		liveness storagepb.Liveness
+		expected storagepb.NodeLivenessStatus
 	}{
 		// Valid status.
 		{
-			liveness: storage.Liveness{
+			liveness: storagepb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
@@ -1024,11 +1038,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Decommissioning: false,
 				Draining:        false,
 			},
-			expected: storage.NodeLivenessStatus_LIVE,
+			expected: storagepb.NodeLivenessStatus_LIVE,
 		},
 		// Minimum bound of liveness is now + max offset.
 		{
-			liveness: storage.Liveness{
+			liveness: storagepb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
@@ -1037,11 +1051,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Decommissioning: false,
 				Draining:        false,
 			},
-			expected: storage.NodeLivenessStatus_LIVE,
+			expected: storagepb.NodeLivenessStatus_LIVE,
 		},
 		// Expired status.
 		{
-			liveness: storage.Liveness{
+			liveness: storagepb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
@@ -1050,11 +1064,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Decommissioning: false,
 				Draining:        false,
 			},
-			expected: storage.NodeLivenessStatus_UNAVAILABLE,
+			expected: storagepb.NodeLivenessStatus_UNAVAILABLE,
 		},
 		// Expired status.
 		{
-			liveness: storage.Liveness{
+			liveness: storagepb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
@@ -1063,11 +1077,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Decommissioning: false,
 				Draining:        false,
 			},
-			expected: storage.NodeLivenessStatus_UNAVAILABLE,
+			expected: storagepb.NodeLivenessStatus_UNAVAILABLE,
 		},
 		// Max bound of expired.
 		{
-			liveness: storage.Liveness{
+			liveness: storagepb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
@@ -1076,11 +1090,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Decommissioning: false,
 				Draining:        false,
 			},
-			expected: storage.NodeLivenessStatus_UNAVAILABLE,
+			expected: storagepb.NodeLivenessStatus_UNAVAILABLE,
 		},
 		// Dead status.
 		{
-			liveness: storage.Liveness{
+			liveness: storagepb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
@@ -1089,11 +1103,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Decommissioning: false,
 				Draining:        false,
 			},
-			expected: storage.NodeLivenessStatus_DEAD,
+			expected: storagepb.NodeLivenessStatus_DEAD,
 		},
 		// Decommissioning.
 		{
-			liveness: storage.Liveness{
+			liveness: storagepb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
@@ -1102,11 +1116,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Decommissioning: true,
 				Draining:        false,
 			},
-			expected: storage.NodeLivenessStatus_DECOMMISSIONING,
+			expected: storagepb.NodeLivenessStatus_DECOMMISSIONING,
 		},
 		// Decommissioned.
 		{
-			liveness: storage.Liveness{
+			liveness: storagepb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
@@ -1115,11 +1129,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Decommissioning: true,
 				Draining:        false,
 			},
-			expected: storage.NodeLivenessStatus_DECOMMISSIONED,
+			expected: storagepb.NodeLivenessStatus_DECOMMISSIONED,
 		},
 		// Draining (reports as unavailable).
 		{
-			liveness: storage.Liveness{
+			liveness: storagepb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
@@ -1128,7 +1142,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Decommissioning: false,
 				Draining:        true,
 			},
-			expected: storage.NodeLivenessStatus_UNAVAILABLE,
+			expected: storagepb.NodeLivenessStatus_UNAVAILABLE,
 		},
 	} {
 		t.Run("", func(t *testing.T) {

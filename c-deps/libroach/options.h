@@ -19,6 +19,12 @@
 
 namespace cockroach {
 
+static const int kDefaultLogLevel = 3;
+
+// Make a new rocksdb::Logger that calls back into Go with log level.
+// Most callers should use kDefaultLogLevel to avoid excessive logging from C++ code.
+rocksdb::Logger* NewDBLogger(int go_log_level);
+
 // DBMakeOptions constructs a rocksdb::Options given a DBOptions.
 rocksdb::Options DBMakeOptions(DBOptions db_opts);
 

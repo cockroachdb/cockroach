@@ -194,7 +194,10 @@ func createTestTable(
 
 	for {
 		if _, err := db.Exec(tableSQL); err != nil {
-			if testutils.IsSQLRetryableError(err) {
+			// Scenario where an ambiguous commit error happens is described in more
+			// detail in
+			// https://reviewable.io/reviews/cockroachdb/cockroach/10251#-KVGGLbjhbPdlR6EFlfL
+			if testutils.IsError(err, "result is ambiguous") {
 				continue
 			}
 			t.Errorf("table %d: could not be created: %s", id, err)
@@ -436,9 +439,6 @@ SELECT * FROM t.kv%d
 func TestCreateStatementType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Make the connections' results buffers really small so that it overflows
-		// when we produce a few results.
-		ConnResultsBufferBytes: 10,
 		// Andrei is too lazy to figure out the incantation for telling pgx about
 		// our test certs.
 		Insecure: true,

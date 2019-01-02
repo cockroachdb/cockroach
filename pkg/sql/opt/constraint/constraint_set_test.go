@@ -227,6 +227,53 @@ func TestConstraintSetUnion(t *testing.T) {
 	test(res, "/1: [/10 - /10]")
 }
 
+func TestExtractCols(t *testing.T) {
+	type testCase struct {
+		constraints []string
+		expected    opt.ColSet
+	}
+
+	cols := util.MakeFastIntSet
+
+	cases := []testCase{
+		{
+			[]string{
+				`/1: [/10 - /10]`,
+				`/2: [/8 - /8]`,
+				`/-3: [/13 - /7]`,
+			},
+			cols(1, 2, 3),
+		},
+		{
+			[]string{
+				`/1/2: [/10/4 - /10/5] [/12/4 - /12/5]`,
+				`/2: [/4 - /4]`,
+			},
+			cols(1, 2),
+		},
+		{
+			[]string{
+				`/1/2/3: [/10/4 - /10/5] [/12/4 - /12/5]`,
+				`/4: [/4 - /4]`,
+			},
+			cols(1, 2, 3, 4),
+		},
+	}
+
+	evalCtx := tree.NewTestingEvalContext(nil)
+	for _, tc := range cases {
+		cs := Unconstrained
+		for _, constraint := range tc.constraints {
+			constraint := ParseConstraint(evalCtx, constraint)
+			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
+		}
+		cols := cs.ExtractCols()
+		if !tc.expected.Equals(cols) {
+			t.Errorf("expected constant columns from %s to be %s, was %s", cs, tc.expected, cols)
+		}
+	}
+}
+
 func TestExtractConstCols(t *testing.T) {
 	type testCase struct {
 		constraints []string

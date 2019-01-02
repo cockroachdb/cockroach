@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 // getRangeKeys returns the end keys of all ranges.
@@ -59,7 +58,7 @@ func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.RKey) bool {
 	}
 	for i := 0; i < len(ranges); i++ {
 		if !splits[i].Equal(ranges[i]) {
-			continue
+			return false
 		}
 	}
 	return true
@@ -87,14 +86,14 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// We split up to the largest allocated descriptor ID, be it a table
-	// or a database.
+	// We split up to the largest allocated descriptor ID, if it's a table.
+	// Ensure that no split happens if a database is created.
 	testutils.SucceedsSoon(t, func() error {
 		num, err := getNumRanges(kvDB)
 		if err != nil {
 			return err
 		}
-		if e := expectedInitialRanges + 1; num != e {
+		if e := expectedInitialRanges; num != e {
 			return errors.Errorf("expected %d splits, found %d", e, num)
 		}
 		return nil
@@ -102,7 +101,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 
 	// Verify the actual splits.
 	objectID := uint32(keys.MinUserDescID)
-	splits := []roachpb.RKey{keys.MakeTablePrefix(objectID), roachpb.RKeyMax}
+	splits := []roachpb.RKey{roachpb.RKeyMax}
 	ranges, err := getRangeKeys(kvDB)
 	if err != nil {
 		t.Fatal(err)
@@ -121,14 +120,14 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if e := expectedInitialRanges + 2; num != e {
+		if e := expectedInitialRanges + 1; num != e {
 			return errors.Errorf("expected %d splits, found %d", e, num)
 		}
 		return nil
 	})
 
 	// Verify the actual splits.
-	splits = []roachpb.RKey{keys.MakeTablePrefix(objectID), keys.MakeTablePrefix(objectID + 1), roachpb.RKeyMax}
+	splits = []roachpb.RKey{keys.MakeTablePrefix(objectID + 3), roachpb.RKeyMax}
 	ranges, err = getRangeKeys(kvDB)
 	if err != nil {
 		t.Fatal(err)

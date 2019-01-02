@@ -18,46 +18,55 @@ SELECT * FROM [SHOW client_encoding] WITH ORDINALITY
 client_encoding     ordinality
 UTF8                1
 
-# We filter here because experimental_opt will be different depending on which
+# We filter here because optimizer will be different depending on which
 # configuration this logic test is running in.
 query TT colnames
-SELECT * FROM [SHOW ALL] WHERE variable != 'experimental_opt'
+SELECT *
+FROM [SHOW ALL]
+WHERE variable != 'optimizer' AND variable != 'crdb_version' AND variable != 'experimental_optimizer_updates'
 ----
-variable                        value
-application_name                ·
-bytea_output                    hex
-client_encoding                 UTF8
-client_min_messages             ·
-database                        test
-datestyle                       ISO
-default_transaction_isolation   serializable
-default_transaction_read_only   off
-distsql                         off
-experimental_force_lookup_join  off
-experimental_force_zigzag_join  off
-extra_float_digits              ·
-intervalstyle                   postgres
-max_index_keys                  32
-node_id                         1
-search_path                     public
-server_version                  9.5.0
-server_version_num              90500
-session_user                    root
-sql_safe_updates                false
-standard_conforming_strings     on
-statement_timeout               0s
-timezone                        UTC
-tracing                         off
-transaction_isolation           serializable
-transaction_priority            normal
-transaction_read_only           off
-transaction_status              NoTxn
+variable                           value
+application_name                   ·
+bytea_output                       hex
+client_encoding                    UTF8
+client_min_messages                notice
+database                           test
+datestyle                          ISO, MDY
+default_int_size                   8
+default_transaction_isolation      serializable
+default_transaction_read_only      off
+distsql                            2.0-off
+experimental_enable_zigzag_join    off
+experimental_force_lookup_join     off
+experimental_force_split_at        off
+experimental_serial_normalization  rowid
+experimental_vectorize             off
+extra_float_digits                 0
+force_savepoint_restart            off
+integer_datetimes                  on
+intervalstyle                      postgres
+max_index_keys                     32
+node_id                            1
+search_path                        public
+server_encoding                    UTF8
+server_version                     9.5.0
+server_version_num                 90500
+session_user                       root
+sql_safe_updates                   off
+standard_conforming_strings        on
+statement_timeout                  0
+timezone                           UTC
+tracing                            off
+transaction_isolation              serializable
+transaction_priority               normal
+transaction_read_only              off
+transaction_status                 NoTxn
 
 query I colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
 ----
 sql.defaults.distsql
-0
+3
 
 query TTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
@@ -76,6 +85,16 @@ SELECT * FROM [SHOW DATABASE]
 ----
 database
 test
+
+query TT colnames
+SELECT * FROM [SHOW ZONE CONFIGURATIONS] LIMIT 0
+----
+zone_name  config_sql
+
+query TT colnames
+SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
+----
+zone_name  config_sql
 
 query T colnames
 SELECT * FROM [SHOW DATABASES]
@@ -126,6 +145,7 @@ query T colnames
 SELECT * FROM [SHOW TABLES FROM system]
 ----
 table_name
+comments
 descriptor
 eventlog
 jobs
@@ -140,6 +160,26 @@ ui
 users
 web_sessions
 zones
+
+query TT colnames
+SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
+----
+table_name        comment
+comments          NULL
+descriptor        NULL
+eventlog          NULL
+jobs              NULL
+lease             NULL
+locations         NULL
+namespace         NULL
+rangelog          NULL
+role_members      NULL
+settings          NULL
+table_statistics  NULL
+ui                NULL
+users             NULL
+web_sessions      NULL
+zones             NULL
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
@@ -211,7 +251,7 @@ SELECT * FROM [SHOW CREATE TABLE system.descriptor]
 ----
 table_name                create_statement
 system.public.descriptor  CREATE TABLE descriptor (
-                          id INT NOT NULL,
+                          id INT8 NOT NULL,
                           descriptor BYTES NULL,
                           CONSTRAINT "primary" PRIMARY KEY (id ASC),
                           FAMILY "primary" (id),
@@ -234,17 +274,17 @@ root
 testuser
 
 
-query TTITI colnames
-SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE system.descriptor]
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE system.descriptor]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       NULL     1         {1}       1
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
 
-query TTITI colnames
-CREATE INDEX ix ON foo(x); SELECT * FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX foo@ix]
+query TTTI colnames
+CREATE INDEX ix ON foo(x); SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX foo@ix]
 ----
-start_key  end_key  range_id  replicas  lease_holder
-NULL       NULL     1         {1}       1
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
 
 query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0
@@ -256,10 +296,10 @@ SELECT * FROM [SHOW COMPACT TRACE FOR SESSION] LIMIT 0
 ----
 age  message  tag  operation
 
-query ITTTTTTTTRTI colnames
+query ITTTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
 ----
-job_id  job_type  description  user_name  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+job_id  job_type  description  user_name  status  running_status  created  started  finished  modified  fraction_completed  error  coordinator_id
 
 query TT colnames
 SELECT * FROM [SHOW SYNTAX 'select 1; select 2']

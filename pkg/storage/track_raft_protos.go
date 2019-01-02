@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -69,7 +70,7 @@ func TrackRaftProtos() func() []reflect.Type {
 	// conditional put operations.
 	belowRaftProtos.Lock()
 	belowRaftProtos.inner[reflect.TypeOf(&roachpb.RangeDescriptor{})] = struct{}{}
-	belowRaftProtos.inner[reflect.TypeOf(&Liveness{})] = struct{}{}
+	belowRaftProtos.inner[reflect.TypeOf(&storagepb.Liveness{})] = struct{}{}
 	belowRaftProtos.Unlock()
 
 	protoutil.Interceptor = func(pb protoutil.Message) {

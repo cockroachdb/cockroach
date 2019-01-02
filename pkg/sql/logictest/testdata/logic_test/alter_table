@@ -18,13 +18,13 @@ ALTER TABLE t RENAME TO t.*
 statement ok
 ALTER TABLE t ADD b INT
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary","t_f_idx"}
-f            INT        true         NULL            ·                      {"t_f_idx"}
-b            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices            is_hidden
+a            INT8       false        NULL            ·                      {primary,t_f_idx}  false
+f            INT8       true         NULL            ·                      {t_f_idx}          false
+b            INT8       true         NULL            ·                      {}                 false
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -68,14 +68,14 @@ statement error duplicate key value \(c\)=\(1\) violates unique constraint "bar"
 ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
 # Test that rollback was successful
-query TTTTRT
-SELECT job_type, description, user_name, status, fraction_completed::decimal(10,2), error
+query TTTTTRT
+SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, running_status, fraction_completed::decimal(10,2), error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE  ROLL BACK ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  succeeded  1.00  ·
-SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)            root  failed     0.00  duplicate key value (c)=(1) violates unique constraint "bar"
+SCHEMA CHANGE  ROLL BACK JOB ...: ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  waiting for GC TTL  0.00  ·
+SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   NULL                0.00  duplicate key value (c)=(1) violates unique constraint "bar"
 
 query IIII colnames,rowsort
 SELECT * FROM t
@@ -178,13 +178,13 @@ ALTER TABLE t DROP CONSTRAINT foo
 statement ok
 DROP INDEX foo CASCADE
 
-query TTTTRT
-SELECT job_type, description, user_name, status, fraction_completed, error
+query TTTTTRT
+SELECT job_type, description, user_name, status, running_status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE root  succeeded  1  ·
+SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE  root  running  waiting for GC TTL  0  ·
 
 query TTBITTBB colnames
 SHOW INDEXES FROM t
@@ -261,13 +261,13 @@ INSERT INTO t (a, d, x, y, z) VALUES (33, 34, DECIMAL '2.0', DECIMAL '2.1', DECI
 statement ok
 DROP INDEX t@t_f_idx
 
-query TTTTRT
-SELECT job_type, description, user_name, status, fraction_completed, error
+query TTTTTRT
+SELECT job_type, description, user_name, status, running_status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx  root  succeeded  1  ·
+SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx  root  running  waiting for GC TTL  0  ·
 
 statement ok
 ALTER TABLE t DROP COLUMN f
@@ -349,10 +349,10 @@ ALTER TABLE o DROP COLUMN h
 statement ok
 ALTER TABLE o DROP COLUMN h CASCADE
 
-statement error adding a CHECK constraint via ALTER not supported
+statement error adding a CHECK constraint while also adding a column via ALTER not supported
 ALTER TABLE t ADD f INT CHECK (f>1)
 
-statement error adding a REFERENCES constraint via ALTER not supported
+statement error adding a REFERENCES constraint while also adding a column via ALTER not supported
 ALTER TABLE t ADD f INT UNIQUE REFERENCES other
 
 # Test that more than one column with constraints can be added in the same
@@ -401,15 +401,15 @@ ALTER TABLE tt ADD COLUMN s DECIMAL UNIQUE NOT NULL
 statement ok
 ALTER TABLE tt ADD t DECIMAL UNIQUE DEFAULT 4.0
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM tt
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary","tt_s_key","tt_t_key"}
-q            DECIMAL    false        NULL            ·                      {}
-r            DECIMAL    true         NULL            ·                      {}
-s            DECIMAL    false        NULL            ·                      {"tt_s_key"}
-t            DECIMAL    true         4.0:::DECIMAL   ·                      {"tt_t_key"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
+a            INT8       false        NULL            ·                      {primary,tt_s_key,tt_t_key}  false
+q            DECIMAL    false        NULL            ·                      {}                           false
+r            DECIMAL    true         NULL            ·                      {}                           false
+s            DECIMAL    false        NULL            ·                      {tt_s_key}                   false
+t            DECIMAL    true         4.0:::DECIMAL   ·                      {tt_t_key}                   false
 
 # Default values can be added and changed after table creation.
 statement ok
@@ -595,12 +595,12 @@ ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
 user root
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary"}
-b            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
+a            INT8       false        NULL            ·                      {primary}  false
+b            INT8       true         NULL            ·                      {}         false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -613,13 +613,13 @@ ALTER TABLE privs ADD c INT
 statement ok
 ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary","foo"}
-b            INT        true         NULL            ·                      {"foo"}
-c            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices        is_hidden
+a            INT8       false        NULL            ·                      {primary,foo}  false
+b            INT8       true         NULL            ·                      {foo}          false
+c            INT8       true         NULL            ·                      {}             false
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
@@ -689,6 +689,12 @@ INSERT INTO decomputed_column VALUES (3, NULL), (4, 99)
 statement ok
 ALTER TABLE decomputed_column ALTER COLUMN b DROP STORED
 
+statement error pq: column "a" is not a computed column
+ALTER TABLE decomputed_column ALTER COLUMN a DROP STORED
+
+statement error pq: column "b" is not a computed column
+ALTER TABLE decomputed_column ALTER COLUMN b DROP STORED
+
 # Verify that the computation is dropped and that we can mutate the column
 statement ok
 INSERT INTO decomputed_column VALUES (3, NULL), (4, 99)
@@ -705,8 +711,8 @@ query TT
 show create table decomputed_column
 ----
 decomputed_column  CREATE TABLE decomputed_column (
-                   a INT NOT NULL,
-                   b INT NULL,
+                   a INT8 NOT NULL,
+                   b INT8 NULL,
                    CONSTRAINT "primary" PRIMARY KEY (a ASC),
                    FAMILY "primary" (a, b)
 )
@@ -753,3 +759,62 @@ ALTER TABLE audit ADD COLUMN y INT
 # But not the audit settings.
 statement error change auditing settings on a table
 ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF;
+
+user root
+
+# Check column backfill in the presence of fks
+subtest 27402
+
+statement ok
+CREATE TABLE users (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    name STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC)
+)
+
+statement ok
+CREATE TABLE vehicles (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    type STRING NULL,
+    owner_id INT NULL,
+    mycol STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC)
+)
+
+statement ok
+CREATE TABLE rides (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    vehicle_city STRING NULL,
+    rider_id INT NULL,
+    vehicle_id INT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),
+    INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),
+    CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)
+)
+
+statement ok
+ALTER TABLE vehicles ADD CONSTRAINT fk_city_ref_users FOREIGN KEY (city, owner_id) REFERENCES users (city, id)
+
+statement ok
+ALTER TABLE rides ADD CONSTRAINT fk_city_ref_users FOREIGN KEY (city, rider_id) REFERENCES users (city, id)
+
+statement ok
+ALTER TABLE rides ADD CONSTRAINT fk_vehicle_city_ref_vehicles FOREIGN KEY (vehicle_city, vehicle_id) REFERENCES vehicles (city, id)
+
+
+statement ok
+INSERT INTO users VALUES (10, 'lagos', 'chimamanda')
+
+statement ok
+INSERT INTO vehicles VALUES (100, 'lagos', 'toyota', 10, 'mycol')
+
+statement ok
+INSERT INTO rides VALUES (567, 'lagos', 'lagos', 10, 100)
+
+statement ok
+ALTER TABLE vehicles DROP COLUMN mycol;

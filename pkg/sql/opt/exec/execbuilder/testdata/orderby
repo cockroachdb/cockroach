@@ -30,6 +30,7 @@ query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 limit           ·      ·
+ │              count  2
  └── sort       ·      ·
       │         order  +b
       └── scan  ·      ·
@@ -42,14 +43,12 @@ EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 render                    ·            ·          (c, b)  ·
  │                        render 0     c          ·       ·
  │                        render 1     b          ·       ·
- └── limit                ·            ·          (b, c)  +b
+ └── limit                ·            ·          (b, c)  weak-key(b,c); +b
       │                   count        2          ·       ·
-      └── sort            ·            ·          (b, c)  +b
+      └── sort            ·            ·          (b, c)  weak-key(b,c); +b
            │              order        +b         ·       ·
-           └── group      ·            ·          (b, c)  ·
-                │         aggregate 0  b          ·       ·
-                │         aggregate 1  c          ·       ·
-                │         group by     @1-@2      ·       ·
+           └── distinct   ·            ·          (b, c)  weak-key(b,c)
+                │         distinct on  b, c       ·       ·
                 └── scan  ·            ·          (b, c)  ·
 ·                         table        t@primary  ·       ·
 ·                         spans        ALL        ·       ·
@@ -176,7 +175,7 @@ CREATE TABLE abc (
   a INT,
   b INT,
   c INT,
-  d CHAR,
+  d VARCHAR,
   PRIMARY KEY (a, b, c),
   UNIQUE INDEX bc (b, c),
   INDEX ba (b, a),
@@ -240,12 +239,13 @@ render                ·      ·
 query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
-render          ·      ·
- └── sort       ·      ·
-      │         order  +b,+a,+d
-      └── scan  ·      ·
-·               table  abc@primary
-·               spans  ALL
+render          ·       ·
+ └── sort       ·       ·
+      │         order   +b,+a,+d
+      └── scan  ·       ·
+·               table   abc@primary
+·               spans   ALL
+·               filter  b > 10
 
 query III
 SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
@@ -359,18 +359,16 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
-sort            ·      ·
- │              order  -c
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  /2-/3
+render        ·      ·
+ └── revscan  ·      ·
+·             table  abc@bc
+·             spans  /2-/3
 
 # Verify that the ordering of the primary index is still used for the outer sort.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-render     ·         ·            (b, c)     ·
+render     ·         ·            (b, c)     +b,+c
  │         render 0  b            ·          ·
  │         render 1  c            ·          ·
  └── scan  ·         ·            (a, b, c)  +b,+c
@@ -405,34 +403,30 @@ CREATE TABLE abcd (
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
+scan  ·      ·
+·     table  abcd@abc
+·     spans  /1/4-/1/5
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
+scan  ·      ·
+·     table  abcd@abc
+·     spans  /1/4-/1/5
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
+scan  ·      ·
+·     table  abcd@abc
+·     spans  /1/4-/1/5
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
+scan  ·      ·
+·     table  abcd@abc
+·     spans  /1/4-/1/5
 
 statement ok
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL)
@@ -488,15 +482,16 @@ ordinality        ·              ·                 (x, "ordinality")  ·
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-render                        ·         ·                (b)        ·
- │                            render 0  test.public.t.b  ·          ·
- └── run                      ·         ·                (a, b, c)  ·
-      └── insert              ·         ·                (a, b, c)  ·
-           │                  into      t(a, b)          ·          ·
-           └── render         ·         ·                (x, y)     x=CONST; y=CONST
-                │             render 0  1                ·          ·
-                │             render 1  2                ·          ·
-                └── emptyrow  ·         ·                ()         ·
+render                 ·              ·                 (b)              ·
+ │                     render 0       b                 ·                ·
+ └── run               ·              ·                 (a, b, c)        ·
+      └── insert       ·              ·                 (a, b, c)        ·
+           │           into           t(a, b, c)        ·                ·
+           └── values  ·              ·                 (x, y, column6)  ·
+·                      size           3 columns, 1 row  ·                ·
+·                      row 0, expr 0  1                 ·                ·
+·                      row 0, expr 1  2                 ·                ·
+·                      row 0, expr 2  NULL              ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
@@ -513,20 +508,20 @@ render               ·         ·                (b)        key()
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
-render                    ·         ·                (b)              ·
- │                        render 0  test.public.t.b  ·                ·
- └── run                  ·         ·                (a, b, c)        ·
-      └── update          ·         ·                (a, b, c)        ·
-           │              table     t                ·                ·
-           │              set       c                ·                ·
-           └── render     ·         ·                (a, b, c, bool)  bool=CONST; a!=NULL; key(a)
-                │         render 0  test.public.t.a  ·                ·
-                │         render 1  test.public.t.b  ·                ·
-                │         render 2  test.public.t.c  ·                ·
-                │         render 3  true             ·                ·
-                └── scan  ·         ·                (a, b, c)        a!=NULL; key(a)
-·                         table     t@primary        ·                ·
-·                         spans     ALL              ·                ·
+render                    ·         ·          (b)                 ·
+ │                        render 0  b          ·                   ·
+ └── run                  ·         ·          (a, b, c)           ·
+      └── update          ·         ·          (a, b, c)           ·
+           │              table     t          ·                   ·
+           │              set       c          ·                   ·
+           └── render     ·         ·          (a, b, c, column7)  ·
+                │         render 0  a          ·                   ·
+                │         render 1  b          ·                   ·
+                │         render 2  c          ·                   ·
+                │         render 3  true       ·                   ·
+                └── scan  ·         ·          (a, b, c)           ·
+·                         table     t@primary  ·                   ·
+·                         spans     ALL        ·                   ·
 
 statement ok
 CREATE TABLE uvwxyz (
@@ -542,19 +537,16 @@ CREATE TABLE uvwxyz (
 
 # Verify that the outer ordering is propagated to index selection and we choose
 # the index that avoids any sorting.
-# TODO(radu): y is constant, so scan returns rows ordered on w,x already
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
-render          ·         ·           (y, w, x)  ·
- │              render 0  y           ·          ·
- │              render 1  w           ·          ·
- │              render 2  x           ·          ·
- └── sort       ·         ·           (w, x, y)  +w,+x
-      │         order     +w,+x       ·          ·
-      └── scan  ·         ·           (w, x, y)  ·
-·               table     uvwxyz@ywz  ·          ·
-·               spans     /1-/2       ·          ·
+render     ·         ·            (y, w, x)  ·
+ │         render 0  y            ·          ·
+ │         render 1  w            ·          ·
+ │         render 2  x            ·          ·
+ └── scan  ·         ·            (w, x, y)  +w,+x
+·          table     uvwxyz@ywxz  ·          ·
+·          spans     /1-/2        ·          ·
 
 
 statement ok
@@ -592,34 +584,34 @@ CREATE TABLE foo(a INT, b CHAR)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
-render               ·         ·            (b, a)                       ·
- │                   render 0  "foo.b"      ·                            ·
- │                   render 1  "foo.a"      ·                            ·
- └── sort            ·         ·            (column4, "foo.a", "foo.b")  +column4
-      │              order     +column4     ·                            ·
-      └── render     ·         ·            (column4, "foo.a", "foo.b")  ·
-           │         render 0  a            ·                            ·
-           │         render 1  a            ·                            ·
-           │         render 2  b            ·                            ·
-           └── scan  ·         ·            (a, b)                       ·
-·                    table     foo@primary  ·                            ·
-·                    spans     ALL          ·                            ·
+render               ·         ·            (b, a)           ·
+ │                   render 0  b            ·                ·
+ │                   render 1  a            ·                ·
+ └── sort            ·         ·            (column4, a, b)  +column4
+      │              order     +column4     ·                ·
+      └── render     ·         ·            (column4, a, b)  ·
+           │         render 0  a            ·                ·
+           │         render 1  a            ·                ·
+           │         render 2  b            ·                ·
+           └── scan  ·         ·            (a, b)           ·
+·                    table     foo@primary  ·                ·
+·                    spans     ALL          ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
 ----
-render               ·         ·            (b, a)                       ·
- │                   render 0  "foo.b"      ·                            ·
- │                   render 1  "foo.a"      ·                            ·
- └── sort            ·         ·            (column4, "foo.a", "foo.b")  +column4
-      │              order     +column4     ·                            ·
-      └── render     ·         ·            (column4, "foo.a", "foo.b")  ·
-           │         render 0  b            ·                            ·
-           │         render 1  a            ·                            ·
-           │         render 2  b            ·                            ·
-           └── scan  ·         ·            (a, b)                       ·
-·                    table     foo@primary  ·                            ·
-·                    spans     ALL          ·                            ·
+render               ·         ·            (b, a)           ·
+ │                   render 0  b            ·                ·
+ │                   render 1  a            ·                ·
+ └── sort            ·         ·            (column4, a, b)  +column4
+      │              order     +column4     ·                ·
+      └── render     ·         ·            (column4, a, b)  ·
+           │         render 0  b            ·                ·
+           │         render 1  a            ·                ·
+           │         render 2  b            ·                ·
+           └── scan  ·         ·            (a, b)           ·
+·                    table     foo@primary  ·                ·
+·                    spans     ALL          ·                ·
 
 # ------------------------------------------------------------------------------
 # Check star expansion in ORDER BY.
@@ -653,158 +645,118 @@ sort       ·      ·
 # ORDER BY INDEX test cases.
 # ------------------------------------------------------------------------------
 # subtest order_by_index
+
+statement ok
+CREATE TABLE kv(k INT PRIMARY KEY, v INT); CREATE INDEX foo ON kv(v DESC)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv
+----
+render     ·         ·           (v)     ·
+ │         render 0  v           ·       ·
+ └── scan  ·         ·           (k, v)  +k
+·          table     kv@primary  ·       ·
+·          spans     ALL         ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv ASC
+----
+render     ·         ·           (v)     ·
+ │         render 0  v           ·       ·
+ └── scan  ·         ·           (k, v)  +k
+·          table     kv@primary  ·       ·
+·          spans     ALL         ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv DESC
+----
+render        ·         ·           (v)     ·
+ │            render 0  v           ·       ·
+ └── revscan  ·         ·           (k, v)  -k
+·             table     kv@primary  ·       ·
+·             spans     ALL         ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
+----
+render          ·         ·           (k)     ·
+ │              render 0  k           ·       ·
+ └── sort       ·         ·           (k, v)  +v,+k
+      │         order     +v,+k       ·       ·
+      └── scan  ·         ·           (k, v)  ·
+·               table     kv@primary  ·       ·
+·               spans     ALL         ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo
+----
+render     ·         ·       (k)     ·
+ │         render 0  k       ·       ·
+ └── scan  ·         ·       (k, v)  -v,+k
+·          table     kv@foo  ·       ·
+·          spans     ALL     ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
+----
+render     ·         ·       (k)     ·
+ │         render 0  k       ·       ·
+ └── scan  ·         ·       (k, v)  -v,+k
+·          table     kv@foo  ·       ·
+·          spans     ALL     ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
+----
+render        ·         ·       (k)     ·
+ │            render 0  k       ·       ·
+ └── revscan  ·         ·       (k, v)  +v,-k
+·             table     kv@foo  ·       ·
+·             spans     ALL     ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo, k
+----
+render     ·         ·       (k)     ·
+ │         render 0  k       ·       ·
+ └── scan  ·         ·       (k, v)  -v,+k
+·          table     kv@foo  ·       ·
+·          spans     ALL     ·       ·
+
+# Check the syntax can be used with joins.
 #
-# TODO(radu): enable once we support ORDER BY INDEX
-#statement ok
-#CREATE TABLE kv(k INT PRIMARY KEY, v INT); CREATE INDEX foo ON kv(v DESC)
+# Note: an ORDER BY INDEX clause on the result of the join
+# does not imply use of that index by the underlying scan.
 #
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv
-#----
-#nosort          ·         ·                 (v)     ·
-# │              order     +k                ·       ·
-# └── render     ·         ·                 (v, k)  k!=NULL; key(k); +k
-#      │         render 0  test.public.kv.v  ·       ·
-#      │         render 1  test.public.kv.k  ·       ·
-#      └── scan  ·         ·                 (k, v)  k!=NULL; key(k); +k
-#·               table     kv@primary        ·       ·
-#·               spans     ALL               ·       ·
-#
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv ASC
-#----
-#nosort          ·         ·                 (v)     ·
-# │              order     +k                ·       ·
-# └── render     ·         ·                 (v, k)  k!=NULL; key(k); +k
-#      │         render 0  test.public.kv.v  ·       ·
-#      │         render 1  test.public.kv.k  ·       ·
-#      └── scan  ·         ·                 (k, v)  k!=NULL; key(k); +k
-#·               table     kv@primary        ·       ·
-#·               spans     ALL               ·       ·
-#
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv DESC
-#----
-#nosort             ·         ·                 (v)     ·
-# │                 order     -k                ·       ·
-# └── render        ·         ·                 (v, k)  k!=NULL; key(k); -k
-#      │            render 0  test.public.kv.v  ·       ·
-#      │            render 1  test.public.kv.k  ·       ·
-#      └── revscan  ·         ·                 (k, v)  k!=NULL; key(k); -k
-#·                  table     kv@primary        ·       ·
-#·                  spans     ALL               ·       ·
-#
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
-#----
-#sort               ·         ·                     (k)              k!=NULL
-# │                 order     +v,+k,+"v - 2"        ·                ·
-# └── render        ·         ·                     (k, v, "v - 2")  k!=NULL; weak-key(k,v); +v
-#      │            render 0  test.public.kv.k      ·                ·
-#      │            render 1  test.public.kv.v      ·                ·
-#      │            render 2  test.public.kv.v - 2  ·                ·
-#      └── revscan  ·         ·                     (k, v)           k!=NULL; weak-key(k,v); +v
-#·                  table     kv@foo                ·                ·
-#·                  spans     ALL                   ·                ·
-#
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo
-#----
-#nosort     ·      ·       (k)     k!=NULL
-# │         order  -v      ·       ·
-# └── scan  ·      ·       (k, v)  k!=NULL; weak-key(k,v); -v
-#·          table  kv@foo  ·       ·
-#·          spans  ALL     ·       ·
-#
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
-#----
-#nosort     ·      ·       (k)     k!=NULL
-# │         order  -v      ·       ·
-# └── scan  ·      ·       (k, v)  k!=NULL; weak-key(k,v); -v
-#·          table  kv@foo  ·       ·
-#·          spans  ALL     ·       ·
-#
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
-#----
-#nosort        ·      ·       (k)     k!=NULL
-# │            order  +v      ·       ·
-# └── revscan  ·      ·       (k, v)  k!=NULL; weak-key(k,v); +v
-#·             table  kv@foo  ·       ·
-#·             spans  ALL     ·       ·
-#
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo, k
-#----
-#nosort     ·      ·       (k)     k!=NULL
-# │         order  -v,+k   ·       ·
-# └── scan  ·      ·       (k, v)  k!=NULL; weak-key(k,v); -v,+k
-#·          table  kv@foo  ·       ·
-#·          spans  ALL     ·       ·
-#
-## Check the syntax can be used with joins.
-##
-## Note: an ORDER BY INDEX clause on the result of the join
-## does not imply use of that index by the underlying scan.
-##
-#
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT k FROM kv JOIN (VALUES (1,2)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
-#----
-#sort                   ·              ·                 (k)                             ·
-# │                     order          -v                ·                               ·
-# └── render            ·              ·                 (k, v)                          ·
-#      │                render 0       test.public.kv.k  ·                               ·
-#      │                render 1       test.public.kv.v  ·                               ·
-#      └── join         ·              ·                 (k, v, a[omitted], b[omitted])  ·
-#           │           type           inner             ·                               ·
-#           │           equality       (k) = (a)         ·                               ·
-#           ├── scan    ·              ·                 (k, v)                          k!=NULL; key(k)
-#           │           table          kv@primary        ·                               ·
-#           │           spans          ALL               ·                               ·
-#           └── values  ·              ·                 (column1, column2[omitted])     ·
-#·                      size           2 columns, 1 row  ·                               ·
-#·                      row 0, expr 0  1                 ·                               ·
-#
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
-#----
-#sort                 ·               ·                 (k)                             k!=NULL; key(k)
-# │                   order           -v                ·                               ·
-# └── render          ·               ·                 (k, v)                          k!=NULL; v!=NULL; key(k)
-#      │              render 0        a.k               ·                               ·
-#      │              render 1        test.public.kv.v  ·                               ·
-#      └── join       ·               ·                 (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; key(k)
-#           │         type            inner             ·                               ·
-#           │         equality        (k, v) = (k, v)   ·                               ·
-#           │         mergeJoinOrder  +"(k=k)"          ·                               ·
-#           ├── scan  ·               ·                 (k, v)                          k!=NULL; key(k); +k
-#           │         table           kv@primary        ·                               ·
-#           │         spans           ALL               ·                               ·
-#           └── scan  ·               ·                 (k, v)                          k!=NULL; key(k); +k
-#·                    table           kv@primary        ·                               ·
-#·                    spans           ALL               ·                               ·
-#
-## The underlying index can be forced manually, of course.
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@foo
-#----
-#nosort               ·               ·                  (k)                             k!=NULL
-# │                   order           -v                 ·                               ·
-# └── render          ·               ·                  (k, v)                          k!=NULL; v!=NULL; -v
-#      │              render 0        a.k                ·                               ·
-#      │              render 1        test.public.kv.v   ·                               ·
-#      └── join       ·               ·                  (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; -v
-#           │         type            inner              ·                               ·
-#           │         equality        (k, v) = (k, v)    ·                               ·
-#           │         mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                               ·
-#           ├── scan  ·               ·                  (k, v)                          k!=NULL; weak-key(k,v); -v,+k
-#           │         table           kv@foo             ·                               ·
-#           │         spans           ALL                ·                               ·
-#           └── scan  ·               ·                  (k, v)                          k!=NULL; weak-key(k,v); -v,+k
-#·                    table           kv@foo             ·                               ·
-#·                    spans           ALL                ·                               ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM kv JOIN (VALUES (1,2)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
+----
+render            ·              ·                (k)           ·
+ │                render 0       k                ·             ·
+ └── lookup-join  ·              ·                (column1, k)  ·
+      │           type           inner            ·             ·
+      ├── values  ·              ·                (column1)     ·
+      │           size           1 column, 1 row  ·             ·
+      │           row 0, expr 0  1                ·             ·
+      └── scan    ·              ·                (k)           ·
+·                 table          kv@primary       ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
+----
+render          ·               ·                  (k)           ·
+ │              render 0        k                  ·             ·
+ └── join       ·               ·                  (k, v, k, v)  -v,+k
+      │         type            inner              ·             ·
+      │         equality        (v, k) = (v, k)    ·             ·
+      │         mergeJoinOrder  -"(v=v)",+"(k=k)"  ·             ·
+      ├── scan  ·               ·                  (k, v)        -v,+k
+      │         table           kv@foo             ·             ·
+      │         spans           ALL                ·             ·
+      └── scan  ·               ·                  (k, v)        -v,+k
+·               table           kv@foo             ·             ·
+·               spans           ALL                ·             ·
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))
@@ -813,11 +765,13 @@ CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z=1 AND x=y ORDER BY x;
 ----
-filter           ·       ·                (x, y, z)              ·
- │               filter  x = y            ·                      ·
- └── index-join  ·       ·                (x, y, z)              +x
-      ├── scan   ·       ·                (y, z, rowid[hidden])  +y
-      │          table   xyz@xyz_z_y_idx  ·                      ·
-      │          spans   /1-/2            ·                      ·
-      └── scan   ·       ·                (x, y, z)              ·
-·                table   xyz@primary      ·                      ·
+sort                  ·       ·                (x, y, z)              +x
+ │                    order   +x               ·                      ·
+ └── filter           ·       ·                (x, y, z)              ·
+      │               filter  x = y            ·                      ·
+      └── index-join  ·       ·                (x, y, z)              ·
+           ├── scan   ·       ·                (y, z, rowid[hidden])  ·
+           │          table   xyz@xyz_z_y_idx  ·                      ·
+           │          spans   /1/!NULL-/2      ·                      ·
+           └── scan   ·       ·                (x, y, z)              ·
+·                     table   xyz@primary      ·                      ·

@@ -19,18 +19,18 @@ import (
 	"sync"
 
 	"github.com/axiomhq/hyperloglog"
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // sketchInfo contains the specification and run-time state for each sketch.
 type sketchInfo struct {
-	spec     SketchSpec
+	spec     distsqlpb.SketchSpec
 	sketch   *hyperloglog.Sketch
 	numNulls int64
 	numRows  int64
@@ -40,7 +40,7 @@ type sketchInfo struct {
 // statistics (including cardinality estimation sketch data). See SamplerSpec
 // for more details.
 type samplerProcessor struct {
-	processorBase
+	ProcessorBase
 
 	flowCtx  *FlowCtx
 	input    RowSource
@@ -59,18 +59,18 @@ var _ Processor = &samplerProcessor{}
 
 const samplerProcName = "sampler"
 
-var supportedSketchTypes = map[SketchType]struct{}{
+var supportedSketchTypes = map[distsqlpb.SketchType]struct{}{
 	// The code currently hardcodes the use of this single type of sketch
 	// (which avoids the extra complexity until we actually have multiple types).
-	SketchType_HLL_PLUS_PLUS_V1: {},
+	distsqlpb.SketchType_HLL_PLUS_PLUS_V1: {},
 }
 
 func newSamplerProcessor(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *SamplerSpec,
+	spec *distsqlpb.SamplerSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*samplerProcessor, error) {
 	for _, s := range spec.Sketches {
@@ -96,7 +96,7 @@ func newSamplerProcessor(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize))
+	s.sr.Init(int(spec.SampleSize), input.OutputTypes())
 
 	inTypes := input.OutputTypes()
 	outTypes := make([]sqlbase.ColumnType, 0, len(inTypes)+5)
@@ -126,10 +126,10 @@ func newSamplerProcessor(
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
 	s.outTypes = outTypes
 
-	if err := s.init(
+	if err := s.Init(
 		nil, post, outTypes, flowCtx, processorID, output, nil, /* memMonitor */
-		// this proc doesn't implement RowSource and doesn't use processorBase to drain
-		procStateOpts{},
+		// this proc doesn't implement RowSource and doesn't use ProcessorBase to drain
+		ProcStateOpts{},
 	); err != nil {
 		return nil, err
 	}
@@ -147,14 +147,14 @@ func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	s.input.Start(ctx)
-	s.startInternal(ctx, samplerProcName)
+	s.StartInternal(ctx, samplerProcName)
 	defer tracing.FinishSpan(s.span)
 
-	earlyExit, err := s.mainLoop(s.ctx)
+	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {
-		DrainAndClose(s.ctx, s.out.output, err, s.pushTrailingMeta, s.input)
+		DrainAndClose(s.Ctx, s.out.output, err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
-		s.pushTrailingMeta(s.ctx)
+		s.pushTrailingMeta(s.Ctx)
 		s.input.ConsumerClosed()
 		s.out.Close()
 	}
@@ -163,7 +163,6 @@ func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
 	rng, _ := randutil.NewPseudoRand()
 	var da sqlbase.DatumAlloc
-	var ra sqlbase.EncDatumRowAlloc
 	var buf []byte
 	for {
 		row, meta := s.input.Next()
@@ -200,8 +199,9 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 
 		// Use Int63 so we don't have headaches converting to DInt.
 		rank := uint64(rng.Int63())
-		row = ra.CopyRow(row)
-		s.sr.SampleRow(row, rank)
+		if err := s.sr.SampleRow(row, rank); err != nil {
+			return false, err
+		}
 	}
 
 	outRow := make(sqlbase.EncDatumRow, len(s.outTypes))

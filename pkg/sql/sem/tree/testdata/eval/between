@@ -1,0 +1,121 @@
+# Range conditions.
+
+eval
+0 BETWEEN 1 AND 3
+----
+false
+
+eval
+1 BETWEEN 1 AND 3
+----
+true
+
+eval
+2 BETWEEN 1 AND 3
+----
+true
+
+eval
+2 BETWEEN 3 AND 1
+----
+false
+
+eval
+3 BETWEEN 1 AND 3
+----
+true
+
+eval
+4 BETWEEN 1 AND 3
+----
+false
+
+eval
+0 BETWEEN ASYMMETRIC 1 AND 3
+----
+false
+
+eval
+2 BETWEEN ASYMMETRIC 1 AND 3
+----
+true
+
+eval
+0 NOT BETWEEN 1 AND 3
+----
+true
+
+eval
+2 NOT BETWEEN 1 AND 3
+----
+false
+
+eval
+2 NOT BETWEEN 3 AND 1
+----
+true
+
+eval
+'foo' BETWEEN 'a' AND 'z'
+----
+true
+
+eval
+0 BETWEEN SYMMETRIC 1 AND 3
+----
+false
+
+eval
+1 BETWEEN SYMMETRIC 3 AND 1
+----
+true
+
+eval
+1 BETWEEN SYMMETRIC 1 AND 3
+----
+true
+
+eval
+2 BETWEEN SYMMETRIC 3 AND 1
+----
+true
+
+eval
+2 BETWEEN SYMMETRIC 1 AND 3
+----
+true
+
+eval
+3 BETWEEN SYMMETRIC 3 AND 1
+----
+true
+
+eval
+3 BETWEEN SYMMETRIC 1 AND 3
+----
+true
+
+eval
+4 BETWEEN SYMMETRIC 1 AND 3
+----
+false
+
+eval
+2 NOT BETWEEN SYMMETRIC 1 AND 3
+----
+false
+
+eval
+2 NOT BETWEEN SYMMETRIC 3 AND 1
+----
+false
+
+eval
+0 NOT BETWEEN SYMMETRIC 1 AND 3
+----
+true
+
+eval
+0 NOT BETWEEN SYMMETRIC 3 AND 1
+----
+true

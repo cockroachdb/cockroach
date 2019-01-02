@@ -47,6 +47,10 @@ func (n Node) Batch(
 	return &roachpb.BatchResponse{}, nil
 }
 
+func (n Node) RangeFeed(_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer) error {
+	panic("unimplemented")
+}
+
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {
@@ -85,7 +89,6 @@ func TestSendToOneClient(t *testing.T) {
 // requests to the first N addresses, then succeeds.
 type firstNErrorTransport struct {
 	replicas  ReplicaSlice
-	args      roachpb.BatchRequest
 	numErrors int
 	numSent   int
 }
@@ -94,11 +97,9 @@ func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
 }
 
-func (f *firstNErrorTransport) GetPending() []roachpb.ReplicaDescriptor {
-	return nil
-}
-
-func (f *firstNErrorTransport) SendNext(_ context.Context) (*roachpb.BatchResponse, error) {
+func (f *firstNErrorTransport) SendNext(
+	_ context.Context, _ roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
 	var err error
 	if f.numSent < f.numErrors {
 		err = roachpb.NewSendError("test")
@@ -107,14 +108,17 @@ func (f *firstNErrorTransport) SendNext(_ context.Context) (*roachpb.BatchRespon
 	return &roachpb.BatchResponse{}, err
 }
 
+func (f *firstNErrorTransport) NextInternalClient(
+	ctx context.Context,
+) (context.Context, roachpb.InternalClient, error) {
+	panic("unimplemented")
+}
+
 func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
 	return roachpb.ReplicaDescriptor{}
 }
 
 func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
-}
-
-func (*firstNErrorTransport) Close() {
 }
 
 // TestComplexScenarios verifies various complex success/failure scenarios by
@@ -167,11 +171,9 @@ func TestComplexScenarios(t *testing.T) {
 				_ SendOptions,
 				_ *nodedialer.Dialer,
 				replicas ReplicaSlice,
-				args roachpb.BatchRequest,
 			) (Transport, error) {
 				return &firstNErrorTransport{
 					replicas:  replicas,
-					args:      args,
 					numErrors: test.numErrors,
 				}, nil
 			},
@@ -206,40 +208,40 @@ func TestSplitHealthy(t *testing.T) {
 		{nil, nil, 0},
 		{
 			[]batchClient{
-				{nodeID: 1, healthy: false},
-				{nodeID: 2, healthy: false},
-				{nodeID: 3, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
 			[]batchClient{
-				{nodeID: 3, healthy: true},
-				{nodeID: 1, healthy: false},
-				{nodeID: 2, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
 			},
 			1,
 		},
 		{
 			[]batchClient{
-				{nodeID: 1, healthy: true},
-				{nodeID: 2, healthy: false},
-				{nodeID: 3, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
 			[]batchClient{
-				{nodeID: 1, healthy: true},
-				{nodeID: 3, healthy: true},
-				{nodeID: 2, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
 			},
 			2,
 		},
 		{
 			[]batchClient{
-				{nodeID: 1, healthy: true},
-				{nodeID: 2, healthy: true},
-				{nodeID: 3, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
 			[]batchClient{
-				{nodeID: 1, healthy: true},
-				{nodeID: 2, healthy: true},
-				{nodeID: 3, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
 			3,
 		},
@@ -279,5 +281,5 @@ func sendBatch(
 			TransportFactory: transportFactory,
 		},
 	}, nil)
-	return ds.sendToReplicas(ctx, SendOptions{metrics: &ds.metrics}, 0, makeReplicas(addrs...), roachpb.BatchRequest{}, nodeDialer)
+	return ds.sendToReplicas(ctx, SendOptions{metrics: &ds.metrics}, 0, makeReplicas(addrs...), roachpb.BatchRequest{}, nodeDialer, roachpb.ReplicaDescriptor{})
 }

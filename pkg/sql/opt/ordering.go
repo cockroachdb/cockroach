@@ -67,15 +67,6 @@ func (c OrderingColumn) Format(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "%d", c.ID())
 }
 
-// ColListToSet converts a column id list to a column id set.
-func ColListToSet(colList ColList) ColSet {
-	var r ColSet
-	for _, col := range colList {
-		r.Add(int(col))
-	}
-	return r
-}
-
 // Ordering defines the order of rows provided or required by an operator. A
 // negative value indicates descending order on the column id "-(value)".
 type Ordering []OrderingColumn
@@ -162,6 +153,9 @@ func (os OrderingSet) Copy() OrderingSet {
 // Add an ordering to the list, checking whether it is a prefix of another
 // ordering (or vice-versa).
 func (os *OrderingSet) Add(o Ordering) {
+	if len(o) == 0 {
+		panic("empty ordering")
+	}
 	for i := range *os {
 		prefix := (*os)[i].CommonPrefix(o)
 		if len(prefix) == len(o) {

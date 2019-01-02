@@ -52,7 +52,7 @@ var showLogs bool
 
 // Scope creates a TestLogScope which corresponds to the lifetime of a logging
 // directory. The logging directory is named after the calling test. It also
-// disables logging to stderr for severity levels below ERROR.
+// disables logging to stderr.
 func Scope(t tShim) *TestLogScope {
 	if showLogs {
 		return (*TestLogScope)(nil)
@@ -73,7 +73,7 @@ func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 	if err := dirTestOverride("", tempDir); err != nil {
 		t.Fatal(err)
 	}
-	undo, err := enableLogFileOutput(tempDir, Severity_ERROR)
+	undo, err := enableLogFileOutput(tempDir, Severity_NONE)
 	if err != nil {
 		undo()
 		t.Fatal(err)

@@ -335,6 +335,8 @@ const (
 	NumComparisonOperators
 )
 
+var _ = NumComparisonOperators
+
 var comparisonOpName = [...]string{
 	EQ:                "=",
 	LT:                "<",
@@ -399,7 +401,7 @@ type ComparisonExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
-	fn CmpOp
+	fn *CmpOp
 }
 
 func (*ComparisonExpr) operatorExpr() {}
@@ -437,6 +439,51 @@ func NewTypedComparisonExprWithSubOp(
 	return node
 }
 
+// NewTypedIndirectionExpr returns a new IndirectionExpr that is verified to be well-typed.
+func NewTypedIndirectionExpr(expr, index TypedExpr) *IndirectionExpr {
+	node := &IndirectionExpr{
+		Expr:        expr,
+		Indirection: ArraySubscripts{&ArraySubscript{Begin: index}},
+	}
+	node.typ = types.UnwrapType(expr.(TypedExpr).ResolvedType()).(types.TArray).Typ
+	return node
+}
+
+// NewTypedCollateExpr returns a new CollateExpr that is verified to be well-typed.
+func NewTypedCollateExpr(expr TypedExpr, locale string) *CollateExpr {
+	node := &CollateExpr{
+		Expr:   expr,
+		Locale: locale,
+	}
+	node.typ = types.TCollatedString{Locale: locale}
+	return node
+}
+
+// NewTypedArrayFlattenExpr returns a new ArrayFlattenExpr that is verified to be well-typed.
+func NewTypedArrayFlattenExpr(input Expr) *ArrayFlatten {
+	inputTyp := input.(TypedExpr).ResolvedType()
+	node := &ArrayFlatten{
+		Subquery: input,
+	}
+	node.typ = types.TArray{Typ: inputTyp}
+	return node
+}
+
+// NewTypedIfErrExpr returns a new IfErrExpr that is verified to be well-typed.
+func NewTypedIfErrExpr(cond, orElse, errCode TypedExpr) *IfErrExpr {
+	node := &IfErrExpr{
+		Cond:    cond,
+		Else:    orElse,
+		ErrCode: errCode,
+	}
+	if orElse == nil {
+		node.typ = types.Bool
+	} else {
+		node.typ = cond.ResolvedType()
+	}
+	return node
+}
+
 func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
@@ -445,7 +492,7 @@ func (node *ComparisonExpr) memoizeFn() {
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = foldComparisonExpr(node.SubOperator, nil, nil)
 		// The right operand is either an array or a tuple/subquery.
-		switch t := rightRet.(type) {
+		switch t := types.UnwrapType(rightRet).(type) {
 		case types.TArray:
 			// For example:
 			//   x = ANY(ARRAY[1,2])
@@ -454,7 +501,11 @@ func (node *ComparisonExpr) memoizeFn() {
 			// For example:
 			//   x = ANY(SELECT y FROM t)
 			//   x = ANY(1,2)
-			rightRet = t.Types[0]
+			if len(t.Types) > 0 {
+				rightRet = t.Types[0]
+			} else {
+				rightRet = leftRet
+			}
 		}
 	}
 
@@ -683,19 +734,19 @@ func (node DefaultVal) Format(ctx *FmtCtx) {
 // ResolvedType implements the TypedExpr interface.
 func (DefaultVal) ResolvedType() types.T { return nil }
 
-// MaxVal represents the MAXVALUE expression.
-type MaxVal struct{}
+// PartitionMaxVal represents the MAXVALUE expression.
+type PartitionMaxVal struct{}
 
 // Format implements the NodeFormatter interface.
-func (node MaxVal) Format(ctx *FmtCtx) {
+func (node PartitionMaxVal) Format(ctx *FmtCtx) {
 	ctx.WriteString("MAXVALUE")
 }
 
-// MinVal represents the MINVALUE expression.
-type MinVal struct{}
+// PartitionMinVal represents the MINVALUE expression.
+type PartitionMinVal struct{}
 
 // Format implements the NodeFormatter interface.
-func (node MinVal) Format(ctx *FmtCtx) {
+func (node PartitionMinVal) Format(ctx *FmtCtx) {
 	ctx.WriteString("MINVALUE")
 }
 
@@ -733,8 +784,10 @@ func (node *Placeholder) ResolvedType() types.T {
 type Tuple struct {
 	Exprs  Exprs
 	Labels []string
-	// Row indicates whether or not the tuple should be textually represented as
-	// ROW ( ... ).
+
+	// Row indicates whether `ROW` was used in the input syntax. This is
+	// used solely to generate column names automatically, see
+	// col_name.go.
 	Row bool
 
 	typ types.TTuple
@@ -756,11 +809,13 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 	if len(node.Labels) > 0 {
 		ctx.WriteByte('(')
 	}
-	if node.Row {
-		ctx.WriteString("ROW")
-	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Exprs)
+	if len(node.Exprs) == 1 {
+		// Ensure the pretty-printed 1-value tuple is not ambiguous with
+		// the equivalent value enclosed in grouping parentheses.
+		ctx.WriteByte(',')
+	}
 	ctx.WriteByte(')')
 	if len(node.Labels) > 0 {
 		ctx.WriteString(" AS ")
@@ -833,6 +888,16 @@ type ArrayFlatten struct {
 func (node *ArrayFlatten) Format(ctx *FmtCtx) {
 	ctx.WriteString("ARRAY ")
 	exprFmtWithParen(ctx, node.Subquery)
+	if ctx.HasFlags(FmtParsable) {
+		if t, ok := node.Subquery.(*DTuple); ok {
+			if len(t.D) == 0 {
+				if colTyp, err := coltypes.DatumTypeToColumnType(node.typ); err == nil {
+					ctx.WriteString(":::")
+					colTyp.Format(ctx.Buffer, ctx.flags.EncodeFlags())
+				}
+			}
+		}
+	}
 }
 
 // Exprs represents a list of value expressions. It's not a valid expression
@@ -935,6 +1000,8 @@ const (
 	NumBinaryOperators
 )
 
+var _ = NumBinaryOperators
+
 var binaryOpName = [...]string{
 	Bitand:            "&",
 	Bitor:             "|",
@@ -997,7 +1064,7 @@ type BinaryExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
-	fn BinOp
+	fn *BinOp
 }
 
 // TypedLeft returns the BinaryExpr's left expression as a TypedExpr.
@@ -1013,7 +1080,7 @@ func (node *BinaryExpr) TypedRight() TypedExpr {
 // ResolvedBinOp returns the resolved binary op overload; can only be called
 // after Resolve (which happens during TypeCheck).
 func (node *BinaryExpr) ResolvedBinOp() *BinOp {
-	return &node.fn
+	return node.fn
 }
 
 // NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
@@ -1067,15 +1134,15 @@ func (UnaryOperator) operator() {}
 
 // UnaryExpr.Operator
 const (
-	UnaryPlus UnaryOperator = iota
-	UnaryMinus
+	UnaryMinus UnaryOperator = iota
 	UnaryComplement
 
 	NumUnaryOperators
 )
 
+var _ = NumUnaryOperators
+
 var unaryOpName = [...]string{
-	UnaryPlus:       "+",
 	UnaryMinus:      "-",
 	UnaryComplement: "~",
 }
@@ -1093,7 +1160,7 @@ type UnaryExpr struct {
 	Expr     Expr
 
 	typeAnnotation
-	fn UnaryOp
+	fn *UnaryOp
 }
 
 func (*UnaryExpr) operatorExpr() {}
@@ -1101,7 +1168,17 @@ func (*UnaryExpr) operatorExpr() {}
 // Format implements the NodeFormatter interface.
 func (node *UnaryExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString(node.Operator.String())
-	exprFmtWithParen(ctx, node.Expr)
+	e := node.Expr
+	_, isOp := e.(operatorExpr)
+	_, isDatum := e.(Datum)
+	_, isConstant := e.(Constant)
+	if isOp || (node.Operator == UnaryMinus && (isDatum || isConstant)) {
+		ctx.WriteByte('(')
+		ctx.FormatNode(e)
+		ctx.WriteByte(')')
+	} else {
+		ctx.FormatNode(e)
+	}
 }
 
 // TypedInnerExpr returns the UnaryExpr's inner expression as a TypedExpr.
@@ -1115,7 +1192,7 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ types.T) *UnaryExpr
 	node.typ = typ
 	innerType := expr.ResolvedType()
 	for _, o := range UnaryOps[op] {
-		o := o.(UnaryOp)
+		o := o.(*UnaryOp)
 		if innerType.Equivalent(o.Typ) && node.typ.Equivalent(o.ReturnType) {
 			node.fn = o
 			return node
@@ -1173,13 +1250,13 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 
 // GetAggregateConstructor exposes the AggregateFunc field for use by
 // the group node in package sql.
-func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext) AggregateFunc {
+func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext, Datums) AggregateFunc {
 	if node.fn == nil || node.fn.AggregateFunc == nil {
 		return nil
 	}
-	return func(evalCtx *EvalContext) AggregateFunc {
+	return func(evalCtx *EvalContext, arguments Datums) AggregateFunc {
 		types := typesOfExprs(node.Exprs)
-		return node.fn.AggregateFunc(types, evalCtx)
+		return node.fn.AggregateFunc(types, evalCtx, arguments)
 	}
 }
 
@@ -1246,7 +1323,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 		typ = funcTypeName[node.Type] + " "
 	}
 
-	// We need to remove name anonimization for the function name in
+	// We need to remove name anonymization for the function name in
 	// particular. Do this by overriding the flags.
 	subCtx := ctx.CopyWithFlags(ctx.flags & ^FmtAnonymize)
 	subCtx.FormatNode(&node.Func)
@@ -1255,6 +1332,19 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString(typ)
 	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(')')
+	if ctx.HasFlags(FmtParsable) && node.typ != nil {
+		if node.fnProps.AmbiguousReturnType {
+			if typ, err := coltypes.DatumTypeToColumnType(node.typ); err == nil {
+				// There's no type annotation available for tuples.
+				// TODO(jordan,knz): clean this up. AmbiguousReturnType should be set only
+				// when we should and can put an annotation here. #28579
+				if _, ok := typ.(coltypes.TTuple); !ok {
+					ctx.WriteString(":::")
+					ctx.WriteString(typ.TypeName())
+				}
+			}
+		}
+	}
 	if node.Filter != nil {
 		ctx.WriteString(" FILTER (WHERE ")
 		ctx.FormatNode(node.Filter)
@@ -1362,8 +1452,17 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(" AS ")
-		node.Type.Format(buf, ctx.flags.EncodeFlags())
+		t, isCollatedString := node.Type.(*coltypes.TCollatedString)
+		typ := node.Type
+		if isCollatedString {
+			typ = coltypes.String
+		}
+		typ.Format(buf, ctx.flags.EncodeFlags())
 		ctx.WriteByte(')')
+		if isCollatedString {
+			ctx.WriteString(" COLLATE ")
+			lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, t.Locale, lex.EncNoFlags)
+		}
 	}
 }
 
@@ -1379,19 +1478,22 @@ func (node *CastExpr) castType() types.T {
 }
 
 var (
-	boolCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString}
-	intCastTypes  = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid}
+	bitArrayCastTypes = []types.T{types.Unknown, types.BitArray, types.Int, types.String, types.FamCollatedString}
+	boolCastTypes     = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString}
+	intCastTypes      = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.BitArray}
 	floatCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
 	decimalCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
 	stringCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.JSON}
-	bytesCastTypes     = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
-	dateCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
-	timeCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time, types.TimeTZ, types.Timestamp, types.TimestampTZ, types.Interval}
-	timetzCastTypes    = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time, types.TimeTZ, types.TimestampTZ}
+		types.BitArray,
+		types.FamArray, types.FamTuple,
+		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.Oid, types.INet, types.JSON}
+	bytesCastTypes = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
+	dateCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
+	timeCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time,
+		types.Timestamp, types.TimestampTZ, types.Interval}
 	timestampCastTypes = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
 	intervalCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal}
 	oidCastTypes       = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Oid}
@@ -1404,6 +1506,8 @@ var (
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t types.T) []types.T {
 	switch types.UnwrapType(t) {
+	case types.BitArray:
+		return bitArrayCastTypes
 	case types.Bool:
 		return boolCastTypes
 	case types.Int:
@@ -1420,8 +1524,6 @@ func validCastTypes(t types.T) []types.T {
 		return dateCastTypes
 	case types.Time:
 		return timeCastTypes
-	case types.TimeTZ:
-		return timetzCastTypes
 	case types.Timestamp, types.TimestampTZ:
 		return timestampCastTypes
 	case types.Interval:
@@ -1590,11 +1692,11 @@ func (node *ColumnAccessExpr) String() string { return AsString(node) }
 func (node *CollateExpr) String() string      { return AsString(node) }
 func (node *ComparisonExpr) String() string   { return AsString(node) }
 func (node *Datums) String() string           { return AsString(node) }
+func (node *DBitArray) String() string        { return AsString(node) }
 func (node *DBool) String() string            { return AsString(node) }
 func (node *DBytes) String() string           { return AsString(node) }
 func (node *DDate) String() string            { return AsString(node) }
 func (node *DTime) String() string            { return AsString(node) }
-func (node *DTimeTZ) String() string          { return AsString(node) }
 func (node *DDecimal) String() string         { return AsString(node) }
 func (node *DFloat) String() string           { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }
@@ -1633,8 +1735,8 @@ func (node *TupleStar) String() string        { return AsString(node) }
 func (node *AnnotateTypeExpr) String() string { return AsString(node) }
 func (node *UnaryExpr) String() string        { return AsString(node) }
 func (node DefaultVal) String() string        { return AsString(node) }
-func (node MaxVal) String() string            { return AsString(node) }
-func (node MinVal) String() string            { return AsString(node) }
+func (node PartitionMaxVal) String() string   { return AsString(node) }
+func (node PartitionMinVal) String() string   { return AsString(node) }
 func (node *Placeholder) String() string      { return AsString(node) }
 func (node dNull) String() string             { return AsString(node) }
 func (list *NameList) String() string         { return AsString(list) }

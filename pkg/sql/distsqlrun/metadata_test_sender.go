@@ -17,12 +17,13 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // metadataTestSender intersperses a metadata record after every row.
 type metadataTestSender struct {
-	processorBase
+	ProcessorBase
 	input RowSource
 	id    string
 
@@ -41,12 +42,12 @@ func newMetadataTestSender(
 	flowCtx *FlowCtx,
 	processorID int32,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 	id string,
 ) (*metadataTestSender, error) {
 	mts := &metadataTestSender{input: input, id: id}
-	if err := mts.init(
+	if err := mts.Init(
 		mts,
 		post,
 		input.OutputTypes(),
@@ -54,13 +55,13 @@ func newMetadataTestSender(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		procStateOpts{
-			inputsToDrain: []RowSource{mts.input},
-			trailingMetaCallback: func() []ProducerMetadata {
-				mts.internalClose()
+		ProcStateOpts{
+			InputsToDrain: []RowSource{mts.input},
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
+				mts.InternalClose()
 				// Send a final record with LastMsg set.
 				meta := ProducerMetadata{
-					RowNum: &RemoteProducerMetadata_RowNum{
+					RowNum: &distsqlpb.RemoteProducerMetadata_RowNum{
 						RowNum:   mts.rowNumCnt,
 						SenderID: mts.id,
 						LastMsg:  true,
@@ -78,7 +79,7 @@ func newMetadataTestSender(
 // Start is part of the RowSource interface.
 func (mts *metadataTestSender) Start(ctx context.Context) context.Context {
 	mts.input.Start(ctx)
-	return mts.startInternal(ctx, metadataTestSenderProcName)
+	return mts.StartInternal(ctx, metadataTestSenderProcName)
 }
 
 // Next is part of the RowSource interface.
@@ -88,7 +89,7 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		mts.sendRowNumMeta = false
 		mts.rowNumCnt++
 		return nil, &ProducerMetadata{
-			RowNum: &RemoteProducerMetadata_RowNum{
+			RowNum: &distsqlpb.RemoteProducerMetadata_RowNum{
 				RowNum:   mts.rowNumCnt,
 				SenderID: mts.id,
 				LastMsg:  false,
@@ -96,7 +97,7 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 
-	for mts.state == stateRunning {
+	for mts.State == StateRunning {
 		row, meta := mts.input.Next()
 		if meta != nil {
 			// Other processors will start draining when they get an error meta from
@@ -105,25 +106,20 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			return nil, meta
 		}
 		if row == nil {
-			mts.moveToDraining(nil /* err */)
+			mts.MoveToDraining(nil /* err */)
 			break
 		}
 
-		if outRow := mts.processRowHelper(row); outRow != nil {
+		if outRow := mts.ProcessRowHelper(row); outRow != nil {
 			mts.sendRowNumMeta = true
 			return outRow, nil
 		}
 	}
-	return nil, mts.drainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (mts *metadataTestSender) ConsumerDone() {
-	mts.moveToDraining(nil /* err */)
+	return nil, mts.DrainHelper()
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (mts *metadataTestSender) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	mts.internalClose()
+	mts.InternalClose()
 }

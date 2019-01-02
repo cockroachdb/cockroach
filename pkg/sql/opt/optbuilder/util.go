@@ -18,12 +18,13 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 func checkFrom(expr tree.Expr, inScope *scope) {
@@ -86,20 +87,24 @@ func (b *Builder) expandStar(
 		if err != nil {
 			panic(builderError{err})
 		}
+		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
+		labels = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
-			col := inScope.cols[i]
+			col := &inScope.cols[i]
 			if col.table == *src && !col.hidden {
-				exprs = append(exprs, &col)
+				exprs = append(exprs, col)
 				labels = append(labels, string(col.name))
 			}
 		}
 
 	case tree.UnqualifiedStar:
 		checkFrom(expr, inScope)
+		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
+		labels = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
-			col := inScope.cols[i]
+			col := &inScope.cols[i]
 			if !col.hidden {
-				exprs = append(exprs, &col)
+				exprs = append(exprs, col)
 				labels = append(labels, string(col.name))
 			}
 		}
@@ -151,32 +156,65 @@ func (b *Builder) expandStarAndResolveType(
 // group  The memo group ID of this column/expression (if any). This parameter
 //        is optional and can be set later in the returned scopeColumn.
 //
-// The new column is returned as a columnProps object.
+// The new column is returned as a scopeColumn object.
 func (b *Builder) synthesizeColumn(
-	scope *scope, label string, typ types.T, expr tree.TypedExpr, group memo.GroupID,
+	scope *scope, label string, typ types.T, expr tree.TypedExpr, scalar opt.ScalarExpr,
 ) *scopeColumn {
-	if label == "" {
-		label = fmt.Sprintf("column%d", len(b.colMap))
-	}
-
 	name := tree.Name(label)
 	colID := b.factory.Metadata().AddColumn(label, typ)
-	col := scopeColumn{
-		origName: name,
-		name:     name,
-		typ:      typ,
-		id:       colID,
-		expr:     expr,
-		group:    group,
+	scope.cols = append(scope.cols, scopeColumn{
+		name:   name,
+		typ:    typ,
+		id:     colID,
+		expr:   expr,
+		scalar: scalar,
+	})
+	return &scope.cols[len(scope.cols)-1]
+}
+
+// populateSynthesizedColumn is similar to synthesizeColumn, but it fills in
+// the given existing column rather than allocating a new one.
+func (b *Builder) populateSynthesizedColumn(col *scopeColumn, scalar opt.ScalarExpr) {
+	colID := b.factory.Metadata().AddColumn(string(col.name), col.typ)
+	col.id = colID
+	col.scalar = scalar
+}
+
+// projectColumn projects src by copying its column ID to dst. projectColumn
+// also copies src.name to dst if an alias is not already set in dst. No other
+// fields are copied, for the following reasons:
+// - We don't copy group, as dst becomes a pass-through column in the new
+//   scope. dst already has group=0, so keep it as-is.
+// - We don't copy hidden, because projecting a column makes it visible.
+//   dst already has hidden=false, so keep it as-is.
+// - We don't copy table, since the table becomes anonymous in the new scope.
+// - We don't copy descending, since we don't want to overwrite dst.descending
+//   if dst is an ORDER BY column.
+// - expr, exprStr and typ in dst already correspond to the expression and type
+//   of the src column.
+func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
+	if dst.name == "" {
+		dst.name = src.name
 	}
-	b.colMap = append(b.colMap, col)
-	scope.cols = append(scope.cols, col)
+	dst.id = src.id
+}
+
+// addColumn adds a column to scope with the given label, type, and
+// expression. It returns a pointer to the new column. The column ID and group
+// are left empty so they can be filled in later.
+func (b *Builder) addColumn(scope *scope, label string, expr tree.TypedExpr) *scopeColumn {
+	name := tree.Name(label)
+	scope.cols = append(scope.cols, scopeColumn{
+		name: name,
+		typ:  expr.ResolvedType(),
+		expr: expr,
+	})
 	return &scope.cols[len(scope.cols)-1]
 }
 
 func (b *Builder) synthesizeResultColumns(scope *scope, cols sqlbase.ResultColumns) {
 	for i := range cols {
-		c := b.synthesizeColumn(scope, cols[i].Name, cols[i].Typ, nil /* expr */, 0 /* group */)
+		c := b.synthesizeColumn(scope, cols[i].Name, cols[i].Typ, nil /* expr */, nil /* scalar */)
 		if cols[i].Hidden {
 			c.hidden = true
 		}
@@ -251,29 +289,43 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 			//   SELECT a AS b FROM t ORDER BY b
 			//   SELECT DISTINCT ON (b) a AS b FROM t
 			target := c.ColumnName
-			for j, col := range scope.cols {
-				if col.name == target {
-					if index != -1 {
-						// There is more than one projection alias that matches the clause.
-						// Here, SQL92 is specific as to what should be done: if the
-						// underlying expression is known and it is equivalent, then just
-						// accept that and ignore the ambiguity. This plays nice with
-						// `SELECT b, * FROM t ORDER BY b`. Otherwise, reject with an
-						// ambiguity error.
-						if scope.cols[j].getExprStr() != scope.cols[index].getExprStr() {
-							panic(builderError{pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
-								"%s \"%s\" is ambiguous", op, target)})
-						}
-						// Use the index of the first matching column.
-						continue
-					}
-					index = j
+			for j := range scope.cols {
+				col := &scope.cols[j]
+				if col.name != target {
+					continue
 				}
+
+				if col.mutation {
+					panic(builderError{makeBackfillError(col.name)})
+				}
+
+				if index != -1 {
+					// There is more than one projection alias that matches the clause.
+					// Here, SQL92 is specific as to what should be done: if the
+					// underlying expression is known and it is equivalent, then just
+					// accept that and ignore the ambiguity. This plays nice with
+					// `SELECT b, * FROM t ORDER BY b`. Otherwise, reject with an
+					// ambiguity error.
+					if scope.cols[j].getExprStr() != scope.cols[index].getExprStr() {
+						panic(builderError{pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+							"%s \"%s\" is ambiguous", op, target)})
+					}
+					// Use the index of the first matching column.
+					continue
+				}
+				index = j
 			}
 		}
 	}
 
 	return index
+}
+
+// makeBackfillError returns an error indicating that the column of the given
+// name is currently being backfilled and cannot be referenced.
+func makeBackfillError(name tree.Name) error {
+	return pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+		"column %q is being backfilled", tree.ErrString(&name))
 }
 
 // flattenTuples extracts the members of tuples into a list of columns.
@@ -329,15 +381,70 @@ func colsToColList(cols []scopeColumn) opt.ColList {
 }
 
 func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
-	exprTransformCtx := transform.ExprTransformContext{}
-	if exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
+	if b.exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
 		panic(builderError{
 			pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op),
 		})
 	}
-	if exprTransformCtx.WindowFuncInExpr(expr) {
+	if b.exprTransformCtx.WindowFuncInExpr(expr) {
 		panic(builderError{
 			pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op),
 		})
 	}
+}
+
+// resolveTable returns the data source in the catalog with the given name. If
+// the name does not resolve to a table, or if the current user does not have
+// the given privilege, then resolveTable raises an error.
+func (b *Builder) resolveTable(tn *tree.TableName, priv privilege.Kind) cat.Table {
+	tab, ok := b.resolveDataSource(tn, priv).(cat.Table)
+	if !ok {
+		panic(builderError{sqlbase.NewWrongObjectTypeError(tn, "table")})
+	}
+	return tab
+}
+
+// resolveDataSource returns the data source in the catalog with the given name.
+// If the name does not resolve to a table, or if the current user does not have
+// the given privilege, then resolveDataSource raises an error.
+func (b *Builder) resolveDataSource(tn *tree.TableName, priv privilege.Kind) cat.DataSource {
+	ds, err := b.catalog.ResolveDataSource(b.ctx, tn)
+	if err != nil {
+		panic(builderError{err})
+	}
+	b.checkPrivilege(ds, priv)
+	return ds
+}
+
+// resolveDataSourceFromRef returns the data source in the catalog that matches
+// the given TableRef spec. If no data source matches, or if the current user
+// does not have the given privilege, then resolveDataSourceFromRef raises an
+// error.
+func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) cat.DataSource {
+	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, cat.StableID(ref.TableID))
+	if err != nil {
+		panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
+	}
+	b.checkPrivilege(ds, priv)
+	return ds
+}
+
+// checkPrivilege ensures that the current user has the privilege needed to
+// access the given data source in the catalog. If not, then checkPrivilege
+// raises an error. It also adds the data source as a dependency to the
+// metadata, so that the privileges can be re-checked on reuse of the memo.
+func (b *Builder) checkPrivilege(ds cat.DataSource, priv privilege.Kind) {
+	if priv != privilege.SELECT || !b.skipSelectPrivilegeChecks {
+		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
+		if err != nil {
+			panic(builderError{err})
+		}
+	} else {
+		// The check is skipped, so don't recheck when dependencies are checked.
+		priv = 0
+	}
+
+	// Add dependency on this data source to the metadata, so that the metadata
+	// can be cached and later checked for freshness.
+	b.factory.Metadata().AddDependency(ds, priv)
 }

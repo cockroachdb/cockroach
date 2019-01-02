@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import { assert } from "chai";
 import Long from "long";
 
@@ -76,20 +90,26 @@ describe("flattenStatementStats", () => {
     const stats = [
       {
         key: {
-          statement: "SELECT * FROM foobar",
-          app: "foobar",
-          distSQL: true,
-          failed: false,
+          key_data: {
+            query: "SELECT * FROM foobar",
+            app: "foobar",
+            distSQL: true,
+            opt: true,
+            failed: false,
+          },
           node_id: 1,
         },
         stats: {},
       },
       {
         key: {
-          statement: "UPDATE foobar SET name = 'baz' WHERE id = 42",
-          app: "bazzer",
-          distSQL: false,
-          failed: true,
+          key_data: {
+            query: "UPDATE foobar SET name = 'baz' WHERE id = 42",
+            app: "bazzer",
+            distSQL: false,
+            opt: false,
+            failed: true,
+          },
           node_id: 2,
         },
         stats: {},
@@ -101,10 +121,11 @@ describe("flattenStatementStats", () => {
     assert.equal(flattened.length, stats.length);
 
     for (let i = 0; i < flattened.length; i++) {
-      assert.equal(flattened[i].statement, stats[i].key.statement);
-      assert.equal(flattened[i].app, stats[i].key.app);
-      assert.equal(flattened[i].distSQL, stats[i].key.distSQL);
-      assert.equal(flattened[i].failed, stats[i].key.failed);
+      assert.equal(flattened[i].statement, stats[i].key.key_data.query);
+      assert.equal(flattened[i].app, stats[i].key.key_data.app);
+      assert.equal(flattened[i].distSQL, stats[i].key.key_data.distSQL);
+      assert.equal(flattened[i].opt, stats[i].key.key_data.opt);
+      assert.equal(flattened[i].failed, stats[i].key.key_data.failed);
       assert.equal(flattened[i].node_id, stats[i].key.node_id);
 
       assert.equal(flattened[i].stats, stats[i].stats);

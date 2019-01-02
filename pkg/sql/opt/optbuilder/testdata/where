@@ -31,9 +31,9 @@ select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
  │    └── columns: k:1(int!null) v:2(int)
- └── filters [type=bool]
+ └── filters
       └── in [type=bool]
-           ├── variable: kv.k [type=int]
+           ├── variable: k [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 3 [type=int]
@@ -45,9 +45,9 @@ select
  ├── columns: k:1(int!null) v:2(int!null)
  ├── scan kv
  │    └── columns: k:1(int!null) v:2(int)
- └── filters [type=bool]
+ └── filters
       └── in [type=bool]
-           ├── variable: kv.v [type=int]
+           ├── variable: v [type=int]
            └── tuple [type=tuple{int}]
                 └── const: 6 [type=int]
 
@@ -57,14 +57,14 @@ SELECT * FROM kv WHERE k IN (SELECT k FROM kv)
 select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
- │    └── columns: kv.k:1(int!null) kv.v:2(int)
- └── filters [type=bool]
+ │    └── columns: k:1(int!null) v:2(int)
+ └── filters
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: kv.k:3(int!null)
+           │    ├── columns: k:3(int!null)
            │    └── scan kv
-           │         └── columns: kv.k:3(int!null) kv.v:4(int)
-           └── variable: kv.k [type=int]
+           │         └── columns: k:3(int!null) v:4(int)
+           └── variable: k [type=int]
 
 build
 SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
@@ -72,20 +72,20 @@ SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
 select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
- │    └── columns: kv.k:1(int!null) kv.v:2(int)
- └── filters [type=bool]
+ │    └── columns: k:1(int!null) v:2(int)
+ └── filters
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column5:5(tuple{int AS k, int AS v})
+           │    ├── columns: column5:5(tuple{int, int})
            │    ├── scan kv
-           │    │    └── columns: kv.k:3(int!null) kv.v:4(int)
+           │    │    └── columns: k:3(int!null) v:4(int)
            │    └── projections
-           │         └── tuple [type=tuple{int AS k, int AS v}]
-           │              ├── variable: kv.k [type=int]
-           │              └── variable: kv.v [type=int]
+           │         └── tuple [type=tuple{int, int}]
+           │              ├── variable: k [type=int]
+           │              └── variable: v [type=int]
            └── tuple [type=tuple{int, int}]
-                ├── variable: kv.k [type=int]
-                └── variable: kv.v [type=int]
+                ├── variable: k [type=int]
+                └── variable: v [type=int]
 
 build
 SELECT * FROM kv WHERE nonexistent = 1
@@ -96,7 +96,7 @@ build
 SELECT 'hello' LIKE v AS r FROM kvString WHERE k LIKE 'like%' ORDER BY k
 ----
 project
- ├── columns: r:3(bool)
+ ├── columns: r:3(bool)  [hidden: k:1(string!null)]
  ├── ordering: +1
  ├── select
  │    ├── columns: k:1(string!null) v:2(string)
@@ -104,20 +104,20 @@ project
  │    ├── scan kvstring
  │    │    ├── columns: k:1(string!null) v:2(string)
  │    │    └── ordering: +1
- │    └── filters [type=bool]
+ │    └── filters
  │         └── like [type=bool]
- │              ├── variable: kvstring.k [type=string]
+ │              ├── variable: k [type=string]
  │              └── const: 'like%' [type=string]
  └── projections
       └── like [type=bool]
            ├── const: 'hello' [type=string]
-           └── variable: kvstring.v [type=string]
+           └── variable: v [type=string]
 
 build
 SELECT 'hello' SIMILAR TO v AS r FROM kvString WHERE k SIMILAR TO 'like[1-2]' ORDER BY k
 ----
 project
- ├── columns: r:3(bool)
+ ├── columns: r:3(bool)  [hidden: k:1(string!null)]
  ├── ordering: +1
  ├── select
  │    ├── columns: k:1(string!null) v:2(string)
@@ -125,20 +125,20 @@ project
  │    ├── scan kvstring
  │    │    ├── columns: k:1(string!null) v:2(string)
  │    │    └── ordering: +1
- │    └── filters [type=bool]
+ │    └── filters
  │         └── similar-to [type=bool]
- │              ├── variable: kvstring.k [type=string]
+ │              ├── variable: k [type=string]
  │              └── const: 'like[1-2]' [type=string]
  └── projections
       └── similar-to [type=bool]
            ├── const: 'hello' [type=string]
-           └── variable: kvstring.v [type=string]
+           └── variable: v [type=string]
 
 build
 SELECT 'hello' ~ replace(v, '%', '.*') AS r FROM kvString WHERE k ~ 'like[1-2]' ORDER BY k
 ----
 project
- ├── columns: r:3(bool)
+ ├── columns: r:3(bool)  [hidden: k:1(string!null)]
  ├── ordering: +1
  ├── select
  │    ├── columns: k:1(string!null) v:2(string)
@@ -146,15 +146,15 @@ project
  │    ├── scan kvstring
  │    │    ├── columns: k:1(string!null) v:2(string)
  │    │    └── ordering: +1
- │    └── filters [type=bool]
+ │    └── filters
  │         └── reg-match [type=bool]
- │              ├── variable: kvstring.k [type=string]
+ │              ├── variable: k [type=string]
  │              └── const: 'like[1-2]' [type=string]
  └── projections
       └── reg-match [type=bool]
            ├── const: 'hello' [type=string]
            └── function: replace [type=string]
-                ├── variable: kvstring.v [type=string]
+                ├── variable: v [type=string]
                 ├── const: '%' [type=string]
                 └── const: '.*' [type=string]
 
@@ -167,9 +167,9 @@ select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
  │    └── columns: k:1(int!null) v:2(int)
- └── filters [type=bool]
+ └── filters
       └── in [type=bool]
-           ├── variable: kv.k [type=int]
+           ├── variable: k [type=int]
            └── tuple [type=tuple{int, int, int}]
                 ├── const: 1 [type=int]
                 ├── const: 5 [type=int]
@@ -195,9 +195,9 @@ project
       ├── columns: a:1(int!null) b:2(int) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
-      └── filters [type=bool]
+      └── filters
            └── in [type=bool]
-                ├── variable: ab.a [type=int]
+                ├── variable: a [type=int]
                 └── tuple [type=tuple{int, int, int}]
                      ├── const: 1 [type=int]
                      ├── const: 3 [type=int]
@@ -212,9 +212,9 @@ project
       ├── columns: a:1(int!null) b:2(int) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
-      └── filters [type=bool]
+      └── filters
            └── in [type=bool]
-                ├── variable: ab.a [type=int]
+                ├── variable: a [type=int]
                 └── tuple [type=tuple{int, int, int, int}]
                      ├── const: 1 [type=int]
                      ├── const: 3 [type=int]
@@ -230,11 +230,11 @@ project
       ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
-      └── filters [type=bool]
+      └── filters
            └── in [type=bool]
                 ├── tuple [type=tuple{int, int}]
-                │    ├── variable: ab.a [type=int]
-                │    └── variable: ab.b [type=int]
+                │    ├── variable: a [type=int]
+                │    └── variable: b [type=int]
                 └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
                      ├── tuple [type=tuple{int, int}]
                      │    ├── const: 1 [type=int]
@@ -255,11 +255,11 @@ project
       ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
-      └── filters [type=bool]
+      └── filters
            └── in [type=bool]
                 ├── tuple [type=tuple{int, int}]
-                │    ├── variable: ab.a [type=int]
-                │    └── variable: ab.b [type=int]
+                │    ├── variable: a [type=int]
+                │    └── variable: b [type=int]
                 └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
                      ├── tuple [type=tuple{int, int}]
                      │    ├── const: 1 [type=int]

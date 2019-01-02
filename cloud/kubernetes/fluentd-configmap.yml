@@ -1,0 +1,102 @@
+# This ConfigMap is used to ingest logs against new resources like "k8s_container".
+# The configuration instruct Fluentd deamons to correctly parse CockroachDB logs,
+# extracting timestamp, severity and log message into the log output format for follow on output stanzas to process.
+# This is tested on Google Cloud Platform using a custom deployment of Stackdriver:
+# https://cloud.google.com/solutions/customizing-stackdriver-logs-fluentd
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: fluentd-config
+  namespace: kube-system
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
+data:
+  containers.input.conf: |-
+    # Read and tail all log files on the node
+    # Match timestamp with one of the patterns, and prefix the tag with "reform".
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+      pos_file /var/log/containers.log.pos
+      # Tags at this point are in the format of:
+      # reform.var.log.containers.<POD_NAME>_<NAMESPACE_NAME>_<CONTAINER_NAME>-<CONTAINER_ID>.log
+      tag reform.*
+      read_from_head true
+      format multi_format
+      <pattern>
+        format json
+        time_key time
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </pattern>
+      <pattern>
+        format /^(?<time>.+) (?<stream>stdout|stderr) [^ ]* (?<log>.*)$/
+        time_format %Y-%m-%dT%H:%M:%S.%N%:z
+      </pattern>
+    </source>
+
+    # This filter tries to parse the log records. The follow on filters will override the values set by this filter.
+    # This is for all containers that don't match the follow on filters - effectively treat this as the 'default' case.
+    # Note: Fluentd processes the log file on every 'Filter' that matches the pattern,
+    # however Fluentd allows only one 'Match' per pattern.
+    <filter reform.**>
+      @type parser
+      format /^(?<severity>\w)(?<time>\d{4} [^\s]*)\s+(?<pid>\d+)\s+(?<source>[^ \]]+)\] (?<log>.*)/
+      reserve_data true
+      suppress_parse_error_log true
+      emit_invalid_record_to_error false
+      key_name log
+    </filter>
+
+    # Reprocess the log line, this time match on particular formats.
+    # You can add your own custom format in this section.
+    # For CockroachDB, we are assigning the severity, time and log as capture groups.
+    <filter reform.**>
+      @type parser
+      key_name log
+      reserve_data true
+      suppress_parse_error_log true
+      emit_invalid_record_to_error false
+      format multi_format
+      <pattern>
+        # CockroachDB log format
+        format /^(?<severity>\w{1})(?<time>\d{6}\s\d{2}:\d{2}:\d{2})\.\d{6}\s*(?<log>.*)/
+        time_key time
+        time_format %y%m%d %H:%M:%S.%N
+      </pattern>
+    </filter>
+
+    # Match only on cockroachdb log records, so we can normalize the severity format.
+    # This is useful for output pipelines that expect certain format (like Stackdriver)
+    # After this we don't need to further process records, so we'll tag the log record with "parsed" to indicate as such.
+    <match reform.var.log.containers.cockroachdb**>
+      @type record_reformer
+      enable_ruby true
+      tag parsed.${tag_suffix[1]}
+      <record>
+        severity ${ if (record["severity"] == "E") then "error" elsif (record["severity"] == "W") then "warning" elsif (record["severity"] == "I") then "info" elsif (record["severity"] == "D") then "debug" else record["severity"] end}
+      </record>
+    </match>
+
+    # After this we don't need to further process records, so we'll tag the log record with "parsed" to indicate as such.
+    <match reform.**>
+      @type record_reformer
+      enable_ruby true
+      tag parsed.${tag_suffix[1]}
+    </match>
+
+    # We remove the prefix "parsed.reform.var.log.containers" and replace it with the format below
+    <match parsed.**>
+      @type record_reformer
+      enable_ruby true
+      # Tags at this point are in the format of:
+      # 'raw.kubernetes.<POD_NAME>_<NAMESPACE_NAME>_<CONTAINER_NAME>'.
+      tag raw.kubernetes.${tag_suffix[4].split('-')[0..-2].join('-')}
+    </match>
+
+    <match raw.kubernetes.**>
+      #########
+      # NOTE: You must replace this with your log inject pipeline
+      #########
+      type stdout
+    </match>

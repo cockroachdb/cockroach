@@ -24,9 +24,6 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/pkg/errors"
-	"golang.org/x/sync/syncmap"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -42,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/kr/pretty"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/syncmap"
 )
 
 // makeTS creates a new hybrid logical timestamp.
@@ -348,7 +347,7 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 		irrelevantTTL := 24 * time.Hour * 365
 		ms, valSize := initialMS(), 1<<10
 		txn := newTransaction(
-			"txn", roachpb.Key("key"), roachpb.NormalUserPriority, enginepb.SERIALIZABLE,
+			"txn", roachpb.Key("key"), roachpb.NormalUserPriority,
 			hlc.NewClock(func() int64 { return ms.LastUpdateNanos }, time.Millisecond))
 
 		// Write 1000 distinct 1kb intents at the initial timestamp. This means that
@@ -447,7 +446,7 @@ func TestGCQueueProcess(t *testing.T) {
 			dArgs := deleteArgs(datum.key)
 			var txn *roachpb.Transaction
 			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.Clock())
+				txn = newTransaction("test", datum.key, 1, tc.Clock())
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 				assignSeqNumsForReqs(txn, &dArgs)
@@ -462,7 +461,7 @@ func TestGCQueueProcess(t *testing.T) {
 			pArgs := putArgs(datum.key, []byte("value"))
 			var txn *roachpb.Transaction
 			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, enginepb.SERIALIZABLE, tc.Clock())
+				txn = newTransaction("test", datum.key, 1, tc.Clock())
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 				assignSeqNumsForReqs(txn, &pArgs)
@@ -476,8 +475,8 @@ func TestGCQueueProcess(t *testing.T) {
 		}
 	}
 
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 
@@ -507,7 +506,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 		ctx := context.Background()
 		now := tc.Clock().Now()
-		return RunGC(ctx, desc, snap, now, zone.GC,
+		return RunGC(ctx, desc, snap, now, *zone.GC,
 			NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
@@ -710,7 +709,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
 		txnClock := hlc.NewClock(hlc.NewManualClock(test.orig).UnixNano, time.Nanosecond)
-		txn := newTransaction("txn1", baseKey, 1, enginepb.SERIALIZABLE, txnClock)
+		txn := newTransaction("txn1", baseKey, 1, txnClock)
 		txn.Status = test.status
 		txn.Intents = testIntents
 		if test.hb > 0 {
@@ -734,8 +733,8 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	// Run GC.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 
@@ -747,7 +746,8 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
 			key := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
-			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, hlc.Timestamp{}, true, nil, txn)
+			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, hlc.Timestamp{}, txn,
+				engine.MVCCGetOptions{})
 			if err != nil {
 				return err
 			}
@@ -786,7 +786,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
 	if _, err := engine.MVCCIterate(context.Background(), tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
-		true, false, nil, false, func(roachpb.KeyValue) (bool, error) {
+		engine.MVCCScanOptions{}, func(roachpb.KeyValue) (bool, error) {
 			count++
 			return false, nil
 		}); err != nil {
@@ -829,8 +829,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	now := tc.Clock().Now().WallTime
 
 	txns := []*roachpb.Transaction{
-		newTransaction("txn1", roachpb.Key("0-0"), 1, enginepb.SERIALIZABLE, tc.Clock()),
-		newTransaction("txn2", roachpb.Key("1-0"), 1, enginepb.SERIALIZABLE, tc.Clock()),
+		newTransaction("txn1", roachpb.Key("0-0"), 1, tc.Clock()),
+		newTransaction("txn2", roachpb.Key("1-0"), 1, tc.Clock()),
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].OrigTimestamp = intentResolveTS
@@ -853,8 +853,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 
 	// Process through GC queue.
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 	gcQ := newGCQueue(tc.store, tc.gossip)
@@ -909,8 +909,8 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 		}
 	}
 
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 
@@ -923,7 +923,8 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	// Verify GC.
 	testutils.SucceedsSoon(t, func() error {
 		for _, lpv := range lastProcessedVals {
-			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, lpv.key, hlc.Timestamp{}, true, nil, &ts)
+			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, lpv.key, hlc.Timestamp{}, &ts,
+				engine.MVCCGetOptions{})
 			if err != nil {
 				return err
 			}
@@ -1009,8 +1010,8 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	}
 
 	// Forward the clock past the default GC time.
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 	zone, err := cfg.GetZoneConfigForKey(roachpb.RKey("key"))

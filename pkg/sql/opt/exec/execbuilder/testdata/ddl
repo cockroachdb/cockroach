@@ -215,7 +215,7 @@ DROP table t
 statement ok
 CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE UNIQUE INDEX test_v_idx ON test_kv(v);
-  CREATE INDEX test_v_idx2 ON test_kv(v DESC) STORING(k);
+  CREATE INDEX test_v_idx2 ON test_kv(v DESC) STORING(w);
   CREATE INDEX test_v_idx3 ON test_kv(w) STORING(v);
   CREATE TABLE test_kvr1(k INT PRIMARY KEY REFERENCES test_kv(k));
   CREATE TABLE test_kvr2(k INT, v INT UNIQUE REFERENCES test_kv(k));
@@ -238,18 +238,18 @@ COMMIT
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM v
 ----
-tree                      field     description       columns                ordering
-render                    ·         ·                 (k)                    ·
- │                        render 0  test.public.kv.k  ·                      ·
- └── run                  ·         ·                 (k, v, z)              ·
-      └── update          ·         ·                 (k, v, z)              ·
-           │              table     kv                ·                      ·
-           │              set       v                 ·                      ·
-           └── render     ·         ·                 (k, v, z, "?column?")  "?column?"=CONST; k!=NULL; key(k)
-                │         render 0  test.public.kv.k  ·                      ·
-                │         render 1  test.public.kv.v  ·                      ·
-                │         render 2  test.public.kv.z  ·                      ·
-                │         render 3  444               ·                      ·
-                └── scan  ·         ·                 (k, v, z)              k!=NULL; key(k)
-·                         table     kv@primary        ·                      ·
-·                         spans     /1-               ·                      ·
+tree                      field     description  columns             ordering
+render                    ·         ·            (k)                 ·
+ │                        render 0  k            ·                   ·
+ └── run                  ·         ·            (k, v, z)           ·
+      └── update          ·         ·            (k, v, z)           ·
+           │              table     kv           ·                   ·
+           │              set       v            ·                   ·
+           └── render     ·         ·            (k, v, z, column7)  ·
+                │         render 0  k            ·                   ·
+                │         render 1  v            ·                   ·
+                │         render 2  z            ·                   ·
+                │         render 3  444          ·                   ·
+                └── scan  ·         ·            (k, v, z)           ·
+·                         table     kv@primary   ·                   ·
+·                         spans     /1-          ·                   ·

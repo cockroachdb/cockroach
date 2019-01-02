@@ -24,16 +24,11 @@ import (
 	"strings"
 	"time"
 
-	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -41,16 +36,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -61,6 +61,11 @@ const (
 	// defaultAPIEventLimit is the default maximum number of events returned by any
 	// endpoints returning events.
 	defaultAPIEventLimit = 1000
+
+	// Number of empty ranges for table descriptors that aren't actually tables,
+	// e.g. descriptors 17, 18, 19, and 22 which correspond to MetaRangesID,
+	// SystemRangesID, TimeseriesRangesID, and LivenessRangesID in pkg/keys.
+	nonTableDescriptorRangeCount = 4
 )
 
 // apiServerMessage is the standard body for all HTTP 500 responses.
@@ -165,9 +170,8 @@ func (s *adminServer) Databases(
 	ctx context.Context, req *serverpb.DatabasesRequest,
 ) (*serverpb.DatabasesResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	args := sql.SessionArgs{User: s.getUser(req)}
-	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admi-show-db", nil /* txn */, args, "SHOW DATABASES",
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admi-show-db", nil /* txn */, s.getUser(req), "SHOW DATABASES",
 	)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -192,7 +196,7 @@ func (s *adminServer) DatabaseDetails(
 	ctx context.Context, req *serverpb.DatabaseDetailsRequest,
 ) (*serverpb.DatabaseDetailsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	args := sql.SessionArgs{User: s.getUser(req)}
+	userName := s.getUser(req)
 
 	escDBName := tree.NameStringP(&req.Database)
 	// Placeholders don't work with SHOW statements, so we need to manually
@@ -201,8 +205,8 @@ func (s *adminServer) DatabaseDetails(
 	// TODO(cdo): Use placeholders when they're supported by SHOW.
 
 	// Marshal grants.
-	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-show-grants", nil /* txn */, args,
+	rows, cols, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-show-grants", nil /* txn */, userName,
 		fmt.Sprintf("SHOW GRANTS ON DATABASE %s", escDBName),
 	)
 	if s.isNotFoundError(err) {
@@ -245,8 +249,8 @@ func (s *adminServer) DatabaseDetails(
 	}
 
 	// Marshal table names.
-	rows, cols, err = s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-show-tables", nil /* txn */, args,
+	rows, cols, err = s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-show-tables", nil /* txn */, userName,
 		fmt.Sprintf("SHOW TABLES FROM %s", escDBName),
 	)
 	if s.isNotFoundError(err) {
@@ -274,13 +278,13 @@ func (s *adminServer) DatabaseDetails(
 
 	// Query the descriptor ID and zone configuration for this database.
 	{
-		path, err := s.queryDescriptorIDPath(ctx, args, []string{req.Database})
+		path, err := s.queryDescriptorIDPath(ctx, userName, []string{req.Database})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
 		resp.DescriptorID = int64(path[1])
 
-		id, zone, zoneExists, err := s.queryZonePath(ctx, args, path)
+		id, zone, zoneExists, err := s.queryZonePath(ctx, userName, path)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -307,7 +311,7 @@ func (s *adminServer) TableDetails(
 	ctx context.Context, req *serverpb.TableDetailsRequest,
 ) (*serverpb.TableDetailsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	args := sql.SessionArgs{User: s.getUser(req)}
+	userName := s.getUser(req)
 
 	escDBName := tree.NameStringP(&req.Database)
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
@@ -318,9 +322,9 @@ func (s *adminServer) TableDetails(
 	var resp serverpb.TableDetailsResponse
 
 	// Marshal SHOW COLUMNS result.
-	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
+	rows, cols, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-show-columns",
-		nil /* txn */, args, fmt.Sprintf("SHOW COLUMNS FROM %s", escQualTable),
+		nil /* txn */, userName, fmt.Sprintf("SHOW COLUMNS FROM %s", escQualTable),
 	)
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
@@ -339,6 +343,7 @@ func (s *adminServer) TableDetails(
 			nullCol    = "is_nullable"
 			defaultCol = "column_default"
 			genCol     = "generation_expression"
+			hiddenCol  = "is_hidden"
 		)
 		scanner := makeResultScanner(cols)
 		for _, row := range rows {
@@ -350,6 +355,9 @@ func (s *adminServer) TableDetails(
 				return nil, err
 			}
 			if err := scanner.Scan(row, nullCol, &col.Nullable); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, hiddenCol, &col.Hidden); err != nil {
 				return nil, err
 			}
 			isDefaultNull, err := scanner.IsNull(row, defaultCol)
@@ -375,9 +383,9 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Marshal SHOW INDEX result.
-	rows, cols, err = s.server.internalExecutor.QueryWithSessionArgs(
+	rows, cols, err = s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-showindex",
-		nil /* txn */, args, fmt.Sprintf("SHOW INDEX FROM %s", escQualTable),
+		nil /* txn */, userName, fmt.Sprintf("SHOW INDEX FROM %s", escQualTable),
 	)
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
@@ -427,9 +435,9 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Marshal SHOW GRANTS result.
-	rows, cols, err = s.server.internalExecutor.QueryWithSessionArgs(
+	rows, cols, err = s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-show-grants",
-		nil /* txn */, args, fmt.Sprintf("SHOW GRANTS ON TABLE %s", escQualTable),
+		nil /* txn */, userName, fmt.Sprintf("SHOW GRANTS ON TABLE %s", escQualTable),
 	)
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
@@ -459,9 +467,9 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Marshal SHOW CREATE result.
-	rows, cols, err = s.server.internalExecutor.QueryWithSessionArgs(
+	rows, cols, err = s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-show-create",
-		nil /* txn */, args, fmt.Sprintf("SHOW CREATE %s", escQualTable),
+		nil /* txn */, userName, fmt.Sprintf("SHOW CREATE %s", escQualTable),
 	)
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
@@ -487,14 +495,14 @@ func (s *adminServer) TableDetails(
 	var tableID sqlbase.ID
 	// Query the descriptor ID and zone configuration for this table.
 	{
-		path, err := s.queryDescriptorIDPath(ctx, args, []string{req.Database, req.Table})
+		path, err := s.queryDescriptorIDPath(ctx, userName, []string{req.Database, req.Table})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
 		tableID = path[2]
 		resp.DescriptorID = int64(tableID)
 
-		id, zone, zoneExists, err := s.queryZonePath(ctx, args, path)
+		id, zone, zoneExists, err := s.queryZonePath(ctx, userName, path)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -556,7 +564,7 @@ func (s *adminServer) TableStats(
 ) (*serverpb.TableStatsResponse, error) {
 	// Get table span.
 	path, err := s.queryDescriptorIDPath(
-		ctx, sql.SessionArgs{User: s.getUser(req)}, []string{req.Database, req.Table},
+		ctx, s.getUser(req), []string{req.Database, req.Table},
 	)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -564,15 +572,15 @@ func (s *adminServer) TableStats(
 	tableID := path[2]
 	tableSpan := generateTableSpan(tableID)
 
-	return s.tableStatsForSpan(ctx, tableSpan)
+	return s.statsForSpan(ctx, tableSpan)
 }
 
 // NonTableStats is an endpoint that returns disk usage and replication
-// statistics for the time series system.
+// statistics for non-table parts of the system.
 func (s *adminServer) NonTableStats(
 	ctx context.Context, req *serverpb.NonTableStatsRequest,
 ) (*serverpb.NonTableStatsResponse, error) {
-	timeSeriesStats, err := s.tableStatsForSpan(ctx, roachpb.Span{
+	timeSeriesStats, err := s.statsForSpan(ctx, roachpb.Span{
 		Key:    keys.TimeseriesPrefix,
 		EndKey: keys.TimeseriesPrefix.PrefixEnd(),
 	})
@@ -582,29 +590,75 @@ func (s *adminServer) NonTableStats(
 	response := serverpb.NonTableStatsResponse{
 		TimeSeriesStats: timeSeriesStats,
 	}
+
+	spansForInternalUse := []roachpb.Span{
+		{
+			Key:    keys.LocalMax,
+			EndKey: keys.TimeseriesPrefix,
+		},
+		{
+			Key:    keys.TimeseriesKeyMax,
+			EndKey: keys.TableDataMin,
+		},
+	}
+	for _, span := range spansForInternalUse {
+		nonTableStats, err := s.statsForSpan(ctx, span)
+		if err != nil {
+			return nil, err
+		}
+		if response.InternalUseStats == nil {
+			response.InternalUseStats = nonTableStats
+		} else {
+			response.InternalUseStats.Add(nonTableStats)
+		}
+	}
+
+	// There are four empty ranges for table descriptors 17, 18, 19, and 22 that
+	// aren't actually tables (a.k.a. MetaRangesID, SystemRangesID,
+	// TimeseriesRangesID, and LivenessRangesID in pkg/keys).
+	// No data is ever really written to them since they don't have actual
+	// tables. Some backend work could probably be done to eliminate these empty
+	// ranges, but it may be more trouble than it's worth. In the meantime,
+	// sweeping them under the general-purpose "Internal use" label in
+	// the "Non-Table" section of the Databases page.
+	response.InternalUseStats.RangeCount += nonTableDescriptorRangeCount
+
 	return &response, nil
 }
 
-func (s *adminServer) tableStatsForSpan(
-	ctx context.Context, tableSpan roachpb.Span,
+func (s *adminServer) statsForSpan(
+	ctx context.Context, span roachpb.Span,
 ) (*serverpb.TableStatsResponse, error) {
-	startKey, err := keys.Addr(tableSpan.Key)
+	startKey, err := keys.Addr(span.Key)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	endKey, err := keys.Addr(tableSpan.EndKey)
+	endKey, err := keys.Addr(span.EndKey)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
 
 	// Get current range descriptors for table. This is done by scanning over
-	// meta2 keys for the range.
-	rangeDescKVs, err := s.server.db.Scan(ctx, keys.RangeMetaKey(startKey), keys.RangeMetaKey(endKey), 0)
+	// meta2 keys for the range. A special case occurs if we wish to include
+	// the meta1 key range itself, in which case we'll get KeyMin back and that
+	// cannot be scanned (due to range-local addressing confusion). This is
+	// handled appropriately by adjusting the bounds to grab the descriptors
+	// for all ranges (including range1, which is not only gossiped but also
+	// persisted in meta1).
+	startMetaKey := keys.RangeMetaKey(startKey)
+	if bytes.Equal(startMetaKey, roachpb.RKeyMin) {
+		// This is the special case described above. The following key instructs
+		// the code below to scan all of the addressing, i.e. grab all of the
+		// descriptors including that for r1.
+		startMetaKey = keys.RangeMetaKey(keys.MustAddr(keys.Meta2Prefix))
+	}
+
+	rangeDescKVs, err := s.server.db.Scan(ctx, startMetaKey, keys.RangeMetaKey(endKey), 0)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
 
-	// Extract a list of node IDs from the response.
+	// This map will store the nodes we need to fan out to.
 	nodeIDs := make(map[roachpb.NodeID]struct{})
 	for _, kv := range rangeDescKVs {
 		var rng roachpb.RangeDescriptor
@@ -705,10 +759,9 @@ func (s *adminServer) Users(
 	ctx context.Context, req *serverpb.UsersRequest,
 ) (*serverpb.UsersResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	args := sql.SessionArgs{User: s.getUser(req)}
 	query := `SELECT username FROM system.users WHERE "isRole" = false`
-	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-users", nil /* txn */, args, query,
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-users", nil /* txn */, s.getUser(req), query,
 	)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -730,7 +783,6 @@ func (s *adminServer) Events(
 	ctx context.Context, req *serverpb.EventsRequest,
 ) (*serverpb.EventsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	args := sql.SessionArgs{User: s.getUser(req)}
 
 	limit := req.Limit
 	if limit == 0 {
@@ -755,8 +807,8 @@ func (s *adminServer) Events(
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-events", nil /* txn */, args, q.String(), q.QueryArguments()...)
+	rows, cols, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-events", nil /* txn */, s.getUser(req), q.String(), q.QueryArguments()...)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
@@ -818,8 +870,6 @@ func (s *adminServer) RangeLog(
 ) (*serverpb.RangeLogResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
 
-	args := sql.SessionArgs{User: s.getUser(req)}
-
 	limit := req.Limit
 	if limit == 0 {
 		limit = defaultAPIEventLimit
@@ -842,9 +892,9 @@ func (s *adminServer) RangeLog(
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
+	rows, cols, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-range-log",
-		nil /* txn */, args, q.String(), q.QueryArguments()...,
+		nil /* txn */, s.getUser(req), q.String(), q.QueryArguments()...,
 	)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -857,7 +907,7 @@ func (s *adminServer) RangeLog(
 	}
 	scanner := makeResultScanner(cols)
 	for _, row := range rows {
-		var event storage.RangeLogEvent
+		var event storagepb.RangeLogEvent
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("Timestamp didn't parse correctly: %s", row[0].String()))
@@ -877,8 +927,8 @@ func (s *adminServer) RangeLog(
 		if err := scanner.ScanIndex(row, 3, &eventTypeString); err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("EventType didn't parse correctly: %s", row[3].String()))
 		}
-		if eventType, ok := storage.RangeLogEventType_value[eventTypeString]; ok {
-			event.EventType = storage.RangeLogEventType(eventType)
+		if eventType, ok := storagepb.RangeLogEventType_value[eventTypeString]; ok {
+			event.EventType = storagepb.RangeLogEventType(eventType)
 		} else {
 			return nil, errors.Errorf("EventType didn't parse correctly: %s", eventTypeString)
 		}
@@ -935,7 +985,7 @@ func (s *adminServer) RangeLog(
 // getUIData returns the values and timestamps for the given UI keys. Keys
 // that are not found will not be returned.
 func (s *adminServer) getUIData(
-	ctx context.Context, args sql.SessionArgs, user string, keys []string,
+	ctx context.Context, userName string, keys []string,
 ) (*serverpb.GetUIDataResponse, error) {
 	if len(keys) == 0 {
 		return &serverpb.GetUIDataResponse{}, nil
@@ -954,8 +1004,8 @@ func (s *adminServer) getUIData(
 	if err := query.Errors(); err != nil {
 		return nil, s.serverErrorf("error constructing query: %v", err)
 	}
-	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-getUIData", nil /* txn */, args, query.String(), query.QueryArguments()...,
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-getUIData", nil /* txn */, userName, query.String(), query.QueryArguments()...,
 	)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -996,14 +1046,12 @@ func (s *adminServer) SetUIData(
 		return nil, status.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
 	}
 
-	args := sql.SessionArgs{User: s.getUser(req)}
-
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
-		rowsAffected, err := s.server.internalExecutor.ExecWithSessionArgs(
-			ctx, "admin-set-ui-data", nil /* txn */, args, query, key, val)
+		rowsAffected, err := s.server.internalExecutor.ExecWithUser(
+			ctx, "admin-set-ui-data", nil /* txn */, s.getUser(req), query, key, val)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -1025,13 +1073,11 @@ func (s *adminServer) GetUIData(
 	ctx context.Context, req *serverpb.GetUIDataRequest,
 ) (*serverpb.GetUIDataResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	args := sql.SessionArgs{User: s.getUser(req)}
-
 	if len(req.Keys) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "keys cannot be empty")
 	}
 
-	resp, err := s.getUIData(ctx, args, s.getUser(req), req.Keys)
+	resp, err := s.getUIData(ctx, s.getUser(req), req.Keys)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
@@ -1119,12 +1165,12 @@ func (s *adminServer) Jobs(
 	ctx context.Context, req *serverpb.JobsRequest,
 ) (*serverpb.JobsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	args := sql.SessionArgs{User: s.getUser(req)}
 
 	q := makeSQLQuery()
 	q.Append(`
       SELECT job_id, job_type, description, user_name, descriptor_ids, status,
-             created, started, finished, modified, fraction_completed, error
+						 running_status, created, started, finished, modified,
+						 fraction_completed, high_water_timestamp, error
         FROM crdb_internal.jobs
        WHERE true
 	`)
@@ -1138,8 +1184,8 @@ func (s *adminServer) Jobs(
 	if req.Limit > 0 {
 		q.Append(" LIMIT $", tree.DInt(req.Limit))
 	}
-	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-jobs", nil /* txn */, args, q.String(), q.QueryArguments()...,
+	rows, cols, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-jobs", nil /* txn */, s.getUser(req), q.String(), q.QueryArguments()...,
 	)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -1151,6 +1197,9 @@ func (s *adminServer) Jobs(
 	}
 	for i, row := range rows {
 		job := &resp.Jobs[i]
+		var fractionCompletedOrNil *float32
+		var highwaterOrNil *apd.Decimal
+		var runningStatusOrNil *string
 		if err := scanner.ScanAll(
 			row,
 			&job.ID,
@@ -1159,14 +1208,31 @@ func (s *adminServer) Jobs(
 			&job.Username,
 			&job.DescriptorIDs,
 			&job.Status,
+			&runningStatusOrNil,
 			&job.Created,
 			&job.Started,
 			&job.Finished,
 			&job.Modified,
-			&job.FractionCompleted,
+			&fractionCompletedOrNil,
+			&highwaterOrNil,
 			&job.Error,
 		); err != nil {
 			return nil, s.serverError(err)
+		}
+		if highwaterOrNil != nil {
+			highwaterTimestamp, err := tree.DecimalToHLC(highwaterOrNil)
+			if err != nil {
+				return nil, s.serverError(errors.Wrap(err, "highwater timestamp had unexpected format"))
+			}
+			goTime := highwaterTimestamp.GoTime()
+			job.HighwaterTimestamp = &goTime
+			job.HighwaterDecimal = highwaterOrNil.String()
+		}
+		if fractionCompletedOrNil != nil {
+			job.FractionCompleted = *fractionCompletedOrNil
+		}
+		if runningStatusOrNil != nil {
+			job.RunningStatus = *runningStatusOrNil
 		}
 	}
 
@@ -1177,12 +1243,11 @@ func (s *adminServer) Locations(
 	ctx context.Context, req *serverpb.LocationsRequest,
 ) (*serverpb.LocationsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	args := sql.SessionArgs{User: s.getUser(req)}
 
 	q := makeSQLQuery()
 	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
-	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-locations", nil /* txn */, args, q.String(),
+	rows, cols, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-locations", nil /* txn */, s.getUser(req), q.String(),
 	)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -1216,11 +1281,10 @@ func (s *adminServer) QueryPlan(
 	ctx context.Context, req *serverpb.QueryPlanRequest,
 ) (*serverpb.QueryPlanResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	args := sql.SessionArgs{User: s.getUser(req)}
 
 	// As long as there's only one query provided it's safe to construct the
 	// explain query.
-	stmts, err := parser.Parse(req.Query)
+	stmts, _, err := parser.Parse(req.Query)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
@@ -1231,8 +1295,8 @@ func (s *adminServer) QueryPlan(
 	explain := fmt.Sprintf(
 		"SELECT json FROM [EXPLAIN (DISTSQL) %s]",
 		strings.Trim(req.Query, ";"))
-	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-query-plan", nil /* txn */, args, explain,
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-query-plan", nil /* txn */, s.getUser(req), explain,
 	)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -1399,7 +1463,7 @@ func (s *adminServer) DataDistribution(
 ) (*serverpb.DataDistributionResponse, error) {
 	resp := &serverpb.DataDistributionResponse{
 		DatabaseInfo: make(map[string]serverpb.DataDistributionResponse_DatabaseInfo),
-		ZoneConfigs:  make(map[int64]serverpb.DataDistributionResponse_ZoneConfig),
+		ZoneConfigs:  make(map[string]serverpb.DataDistributionResponse_ZoneConfig),
 	}
 
 	// Get ids and names for databases and tables.
@@ -1408,10 +1472,10 @@ func (s *adminServer) DataDistribution(
 	// This relies on crdb_internal.tables returning data even for newly added tables
 	// and deleted tables (as opposed to e.g. information_schema) because we are interested
 	// in the data for all ranges, not just ranges for visible tables.
-	args := sql.SessionArgs{User: s.getUser(req)}
-	tablesQuery := `SELECT name, table_id, database_name, parent_id FROM "".crdb_internal.tables`
-	rows1, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-replica-matrix", nil /* txn */, args, tablesQuery,
+	userName := s.getUser(req)
+	tablesQuery := `SELECT name, table_id, database_name, drop_time FROM "".crdb_internal.tables`
+	rows1, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-replica-matrix", nil /* txn */, userName, tablesQuery,
 	)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -1425,6 +1489,13 @@ func (s *adminServer) DataDistribution(
 		tableID := uint64(tree.MustBeDInt(row[1]))
 		dbName := (*string)(row[2].(*tree.DString))
 
+		// Look at whether it was dropped.
+		var droppedAtTime *time.Time
+		droppedAtDatum, ok := row[3].(*tree.DTimestamp)
+		if ok {
+			droppedAtTime = &droppedAtDatum.Time
+		}
+
 		// Insert database if it doesn't exist.
 		dbInfo, ok := resp.DatabaseInfo[*dbName]
 		if !ok {
@@ -1435,30 +1506,35 @@ func (s *adminServer) DataDistribution(
 		}
 
 		// Get zone config for table.
-		zoneConfigQuery := fmt.Sprintf(
-			`SELECT zone_id, cli_specifier FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
-			(*tree.Name)(dbName), (*tree.Name)(tableName),
-		)
-		rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
-			ctx, "admin-replica-matrix", nil /* txn */, args, zoneConfigQuery,
-		)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
+		zcID := int64(0)
 
-		if len(rows) != 1 {
-			return nil, s.serverError(fmt.Errorf(
-				"could not get zone config for table %s; %d rows returned", *tableName, len(rows),
-			))
-		}
+		if droppedAtTime == nil {
+			// TODO(vilterp): figure out a way to get zone configs for tables that are dropped
+			zoneConfigQuery := fmt.Sprintf(
+				`SELECT zone_id, cli_specifier FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
+				(*tree.Name)(dbName), (*tree.Name)(tableName),
+			)
+			rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+				ctx, "admin-replica-matrix", nil /* txn */, userName, zoneConfigQuery,
+			)
+			if err != nil {
+				return nil, s.serverError(err)
+			}
 
-		zcRow := rows[0]
-		zcID := int64(tree.MustBeDInt(zcRow[0]))
+			if len(rows) != 1 {
+				return nil, s.serverError(fmt.Errorf(
+					"could not get zone config for table %s; %d rows returned", *tableName, len(rows),
+				))
+			}
+			zcRow := rows[0]
+			zcID = int64(tree.MustBeDInt(zcRow[0]))
+		}
 
 		// Insert table.
 		tableInfo := serverpb.DataDistributionResponse_TableInfo{
 			ReplicaCountByNodeId: make(map[roachpb.NodeID]int64),
 			ZoneConfigId:         zcID,
+			DroppedAt:            droppedAtTime,
 		}
 		dbInfo.TableInfo[*tableName] = tableInfo
 		tableInfosByTableID[tableID] = tableInfo
@@ -1508,32 +1584,157 @@ func (s *adminServer) DataDistribution(
 
 	// Get zone configs.
 	// TODO(vilterp): this can be done in parallel with getting table/db names and replica counts.
-	zoneConfigsQuery := `EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS`
-	rows2, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-replica-matrix", nil /* txn */, args, zoneConfigsQuery,
+	zoneConfigsQuery := `
+		SELECT zone_name, config_sql, config_protobuf 
+		FROM crdb_internal.zones
+		WHERE zone_name IS NOT NULL
+	`
+	rows2, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-replica-matrix", nil /* txn */, userName, zoneConfigsQuery,
 	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
 
 	for _, row := range rows2 {
-		zcID := int64(tree.MustBeDInt(row[0]))
-		zcCliSpecifier := string(tree.MustBeDString(row[1]))
-		zcYaml := tree.MustBeDBytes(row[2])
-		zcBytes := tree.MustBeDBytes(row[3])
+		zoneName := string(tree.MustBeDString(row[0]))
+		zcSQL := tree.MustBeDString(row[1])
+		zcBytes := tree.MustBeDBytes(row[2])
 		var zcProto config.ZoneConfig
 		if err := protoutil.Unmarshal([]byte(zcBytes), &zcProto); err != nil {
 			return nil, s.serverError(err)
 		}
 
-		resp.ZoneConfigs[zcID] = serverpb.DataDistributionResponse_ZoneConfig{
-			CliSpecifier: zcCliSpecifier,
-			Config:       zcProto,
-			ConfigYaml:   string(zcYaml),
+		resp.ZoneConfigs[zoneName] = serverpb.DataDistributionResponse_ZoneConfig{
+			ZoneName:  zoneName,
+			Config:    zcProto,
+			ConfigSQL: string(zcSQL),
 		}
 	}
 
 	return resp, nil
+}
+
+// EnqueueRange runs the specified range through the specified queue, returning
+// the detailed trace and error information from doing so.
+func (s *adminServer) EnqueueRange(
+	ctx context.Context, req *serverpb.EnqueueRangeRequest,
+) (*serverpb.EnqueueRangeResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.server.ClusterSettings()) {
+		return nil, remoteDebuggingErr
+	}
+
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.server.AnnotateCtx(ctx)
+
+	if req.NodeID < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "node_id must be non-negative; got %d", req.NodeID)
+	}
+	if req.Queue == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "queue name must be non-empty")
+	}
+	if req.RangeID <= 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "range_id must be positive; got %d", req.RangeID)
+	}
+
+	// If the request is targeted at this node, serve it directly. Otherwise,
+	// forward it to the appropriate node(s). If no node was specified, forward
+	// it to all nodes.
+	if req.NodeID == s.server.NodeID() {
+		return s.enqueueRangeLocal(ctx, req)
+	} else if req.NodeID != 0 {
+		admin, err := s.dialNode(ctx, req.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		return admin.EnqueueRange(ctx, req)
+	}
+
+	response := &serverpb.EnqueueRangeResponse{}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		admin := client.(serverpb.AdminClient)
+		req := *req
+		req.NodeID = nodeID
+		return admin.EnqueueRange(ctx, &req)
+	}
+	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		nodeDetails := nodeResp.(*serverpb.EnqueueRangeResponse)
+		response.Details = append(response.Details, nodeDetails.Details...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errDetail := &serverpb.EnqueueRangeResponse_Details{
+			NodeID: nodeID,
+			Error:  err.Error(),
+		}
+		response.Details = append(response.Details, errDetail)
+	}
+
+	nodeCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	if err := s.server.status.iterateNodes(
+		nodeCtx, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
+		dialFn, nodeFn, responseFn, errorFn,
+	); err != nil {
+		if len(response.Details) == 0 {
+			return nil, err
+		}
+		response.Details = append(response.Details, &serverpb.EnqueueRangeResponse_Details{
+			Error: err.Error(),
+		})
+	}
+
+	return response, nil
+}
+
+// enqueueRangeLocal checks whether the local node has a replica for the
+// requested range that can be run through the queue, running it through the
+// queue and returning trace/error information if so. If not, returns an empty
+// response.
+func (s *adminServer) enqueueRangeLocal(
+	ctx context.Context, req *serverpb.EnqueueRangeRequest,
+) (*serverpb.EnqueueRangeResponse, error) {
+	response := &serverpb.EnqueueRangeResponse{
+		Details: []*serverpb.EnqueueRangeResponse_Details{
+			{
+				NodeID: s.server.NodeID(),
+			},
+		},
+	}
+
+	var store *storage.Store
+	var repl *storage.Replica
+	if err := s.server.node.stores.VisitStores(func(s *storage.Store) error {
+		r, err := s.GetReplica(req.RangeID)
+		if err != nil {
+			return nil
+		}
+		repl = r
+		store = s
+		return nil
+	}); err != nil {
+		response.Details[0].Error = err.Error()
+		return response, nil
+	}
+
+	if store == nil || repl == nil {
+		response.Details[0].Error = fmt.Sprintf("n%d has no replica for r%d", s.server.NodeID(), req.RangeID)
+		return response, nil
+	}
+
+	traceSpans, processErr, err := store.ManuallyEnqueue(ctx, req.Queue, repl, req.SkipShouldQueue)
+	if err != nil {
+		response.Details[0].Error = err.Error()
+		return response, nil
+	}
+	response.Details[0].Events = recordedSpansToTraceEvents(traceSpans)
+	response.Details[0].Error = processErr
+	return response, nil
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
@@ -1648,6 +1849,18 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		}
 		*d = string(s)
 
+	case **string:
+		s, ok := tree.AsDString(src)
+		if !ok {
+			if src != tree.DNull {
+				return errors.Errorf("source type assertion failed")
+			}
+			*d = nil
+			break
+		}
+		val := string(s)
+		*d = &val
+
 	case *bool:
 		s, ok := src.(*tree.DBool)
 		if !ok {
@@ -1661,6 +1874,18 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = float32(*s)
+
+	case **float32:
+		s, ok := src.(*tree.DFloat)
+		if !ok {
+			if src != tree.DNull {
+				return errors.Errorf("source type assertion failed")
+			}
+			*d = nil
+			break
+		}
+		val := float32(*s)
+		*d = &val
 
 	case *int64:
 		s, ok := tree.AsDInt(src)
@@ -1698,7 +1923,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 				return errors.Errorf("source type assertion failed")
 			}
 			*d = nil
-			return nil
+			break
 		}
 		*d = &s.Time
 
@@ -1716,6 +1941,17 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = s.Decimal
+
+	case **apd.Decimal:
+		s, ok := src.(*tree.DDecimal)
+		if !ok {
+			if src != tree.DNull {
+				return errors.Errorf("source type assertion failed")
+			}
+			*d = nil
+			break
+		}
+		*d = &s.Decimal
 
 	default:
 		return errors.Errorf("unimplemented type for scanCol: %T", dst)
@@ -1756,30 +1992,30 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 // queryZone retrieves the specific ZoneConfig associated with the supplied ID,
 // if it exists.
 func (s *adminServer) queryZone(
-	ctx context.Context, sargs sql.SessionArgs, id sqlbase.ID,
+	ctx context.Context, userName string, id sqlbase.ID,
 ) (config.ZoneConfig, bool, error) {
 	const query = `SELECT config FROM system.zones WHERE id = $1`
-	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-query-zone", nil /* txn */, sargs, query, id,
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-query-zone", nil /* txn */, userName, query, id,
 	)
 	if err != nil {
-		return config.ZoneConfig{}, false, err
+		return *config.NewZoneConfig(), false, err
 	}
 
 	if len(rows) == 0 {
-		return config.ZoneConfig{}, false, nil
+		return *config.NewZoneConfig(), false, nil
 	}
 
 	var zoneBytes []byte
 	scanner := resultScanner{}
 	err = scanner.ScanIndex(rows[0], 0, &zoneBytes)
 	if err != nil {
-		return config.ZoneConfig{}, false, err
+		return *config.NewZoneConfig(), false, err
 	}
 
 	var zone config.ZoneConfig
 	if err := protoutil.Unmarshal(zoneBytes, &zone); err != nil {
-		return config.ZoneConfig{}, false, err
+		return *config.NewZoneConfig(), false, err
 	}
 	return zone, true, nil
 }
@@ -1788,25 +2024,25 @@ func (s *adminServer) queryZone(
 // queryDescriptorIDPath(), for a ZoneConfig. It returns the most specific
 // ZoneConfig specified for the object IDs in the path.
 func (s *adminServer) queryZonePath(
-	ctx context.Context, sargs sql.SessionArgs, path []sqlbase.ID,
+	ctx context.Context, userName string, path []sqlbase.ID,
 ) (sqlbase.ID, config.ZoneConfig, bool, error) {
 	for i := len(path) - 1; i >= 0; i-- {
-		zone, zoneExists, err := s.queryZone(ctx, sargs, path[i])
+		zone, zoneExists, err := s.queryZone(ctx, userName, path[i])
 		if err != nil || zoneExists {
 			return path[i], zone, true, err
 		}
 	}
-	return 0, config.ZoneConfig{}, false, nil
+	return 0, *config.NewZoneConfig(), false, nil
 }
 
 // queryNamespaceID queries for the ID of the namespace with the given name and
 // parent ID.
 func (s *adminServer) queryNamespaceID(
-	ctx context.Context, sargs sql.SessionArgs, parentID sqlbase.ID, name string,
+	ctx context.Context, userName string, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
 	const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
-	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
-		ctx, "admin-query-namespace-ID", nil /* txn */, sargs, query, parentID, name,
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-query-namespace-ID", nil /* txn */, userName, query, parentID, name,
 	)
 	if err != nil {
 		return 0, err
@@ -1831,15 +2067,29 @@ func (s *adminServer) queryNamespaceID(
 // it will return a list of IDs consisting of the root namespace ID, the
 // databases ID, and the table ID (in that order).
 func (s *adminServer) queryDescriptorIDPath(
-	ctx context.Context, sargs sql.SessionArgs, names []string,
+	ctx context.Context, userName string, names []string,
 ) ([]sqlbase.ID, error) {
 	path := []sqlbase.ID{keys.RootNamespaceID}
 	for _, name := range names {
-		id, err := s.queryNamespaceID(ctx, sargs, path[len(path)-1], name)
+		id, err := s.queryNamespaceID(ctx, userName, path[len(path)-1], name)
 		if err != nil {
 			return nil, err
 		}
 		path = append(path, id)
 	}
 	return path, nil
+}
+
+func (s *adminServer) dialNode(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (serverpb.AdminClient, error) {
+	addr, err := s.server.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := s.server.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return serverpb.NewAdminClient(conn), nil
 }

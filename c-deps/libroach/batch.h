@@ -41,6 +41,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus GetEnvStats(DBEnvStatsResult* stats);
+  virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result);
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
   virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file);
   virtual DBStatus EnvReadFile(DBSlice path, DBSlice* contents);
@@ -71,6 +72,7 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBString GetEnvStats(DBEnvStatsResult* stats);
+  virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result);
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
   virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file);
   virtual DBStatus EnvReadFile(DBSlice path, DBSlice* contents);

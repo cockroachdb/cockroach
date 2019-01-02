@@ -20,30 +20,16 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-)
-
-// RangeLogEventReason specifies the reason why a range-log event happened.
-type RangeLogEventReason string
-
-// The set of possible reasons for range events to happen.
-const (
-	ReasonUnknown              RangeLogEventReason = ""
-	ReasonRangeUnderReplicated RangeLogEventReason = "range under-replicated"
-	ReasonRangeOverReplicated  RangeLogEventReason = "range over-replicated"
-	ReasonStoreDead            RangeLogEventReason = "store dead"
-	ReasonStoreDecommissioning RangeLogEventReason = "store decommissioning"
-	ReasonRebalance            RangeLogEventReason = "rebalance"
-	ReasonAdminRequest         RangeLogEventReason = "admin request"
+	"github.com/pkg/errors"
 )
 
 func (s *Store) insertRangeLogEvent(
-	ctx context.Context, txn *client.Txn, event RangeLogEvent,
+	ctx context.Context, txn *client.Txn, event storagepb.RangeLogEvent,
 ) error {
 	// Record range log event to console log.
 	var info string
@@ -56,13 +42,13 @@ func (s *Store) insertRangeLogEvent(
 	}
 
 	const insertEventTableStmt = `
-INSERT INTO system.rangelog (
-  timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info
-)
-VALUES(
-  $1, $2, $3, $4, $5, $6
-)
-`
+	INSERT INTO system.rangelog (
+		timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info
+	)
+	VALUES(
+		$1, $2, $3, $4, $5, $6
+	)
+	`
 	args := []interface{}{
 		event.Timestamp,
 		event.RangeID,
@@ -86,11 +72,13 @@ VALUES(
 	// corresponding range log entry to reduce potential skew between metrics and
 	// range log.
 	switch event.EventType {
-	case RangeLogEventType_split:
+	case storagepb.RangeLogEventType_split:
 		s.metrics.RangeSplits.Inc(1)
-	case RangeLogEventType_add:
+	case storagepb.RangeLogEventType_merge:
+		s.metrics.RangeMerges.Inc(1)
+	case storagepb.RangeLogEventType_add:
 		s.metrics.RangeAdds.Inc(1)
-	case RangeLogEventType_remove:
+	case storagepb.RangeLogEventType_remove:
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
@@ -107,7 +95,8 @@ VALUES(
 // logSplit logs a range split event into the event table. The affected range is
 // the range which previously existed and is being split in half; the "other"
 // range is the new range which is being created.
-// TODO(mrtracy): There are several different reasons that a replica split
+//
+// TODO(mrtracy): There are several different reasons that a range split
 // could occur, and that information should be logged.
 func (s *Store) logSplit(
 	ctx context.Context, txn *client.Txn, updatedDesc, newDesc roachpb.RangeDescriptor,
@@ -115,15 +104,39 @@ func (s *Store) logSplit(
 	if !s.cfg.LogRangeEvents {
 		return nil
 	}
-	return s.insertRangeLogEvent(ctx, txn, RangeLogEvent{
-		Timestamp:    selectEventTimestamp(s, txn.Proto().Timestamp),
+	return s.insertRangeLogEvent(ctx, txn, storagepb.RangeLogEvent{
+		Timestamp:    selectEventTimestamp(s, txn.OrigTimestamp()),
 		RangeID:      updatedDesc.RangeID,
-		EventType:    RangeLogEventType_split,
+		EventType:    storagepb.RangeLogEventType_split,
 		StoreID:      s.StoreID(),
 		OtherRangeID: newDesc.RangeID,
-		Info: &RangeLogEvent_Info{
+		Info: &storagepb.RangeLogEvent_Info{
 			UpdatedDesc: &updatedDesc,
 			NewDesc:     &newDesc,
+		},
+	})
+}
+
+// logMerge logs a range split event into the event table. The affected range is
+// the subsuming range; the "other" range is the subsumed range.
+//
+// TODO(benesch): There are several different reasons that a range merge
+// could occur, and that information should be logged.
+func (s *Store) logMerge(
+	ctx context.Context, txn *client.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor,
+) error {
+	if !s.cfg.LogRangeEvents {
+		return nil
+	}
+	return s.insertRangeLogEvent(ctx, txn, storagepb.RangeLogEvent{
+		Timestamp:    selectEventTimestamp(s, txn.OrigTimestamp()),
+		RangeID:      updatedLHSDesc.RangeID,
+		EventType:    storagepb.RangeLogEventType_merge,
+		StoreID:      s.StoreID(),
+		OtherRangeID: rhsDesc.RangeID,
+		Info: &storagepb.RangeLogEvent_Info{
+			UpdatedDesc: &updatedLHSDesc,
+			RemovedDesc: &rhsDesc,
 		},
 	})
 }
@@ -138,27 +151,27 @@ func (s *Store) logChange(
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
-	reason RangeLogEventReason,
+	reason storagepb.RangeLogEventReason,
 	details string,
 ) error {
 	if !s.cfg.LogRangeEvents {
 		return nil
 	}
 
-	var logType RangeLogEventType
-	var info RangeLogEvent_Info
+	var logType storagepb.RangeLogEventType
+	var info storagepb.RangeLogEvent_Info
 	switch changeType {
 	case roachpb.ADD_REPLICA:
-		logType = RangeLogEventType_add
-		info = RangeLogEvent_Info{
+		logType = storagepb.RangeLogEventType_add
+		info = storagepb.RangeLogEvent_Info{
 			AddedReplica: &replica,
 			UpdatedDesc:  &desc,
 			Reason:       reason,
 			Details:      details,
 		}
 	case roachpb.REMOVE_REPLICA:
-		logType = RangeLogEventType_remove
-		info = RangeLogEvent_Info{
+		logType = storagepb.RangeLogEventType_remove
+		info = storagepb.RangeLogEvent_Info{
 			RemovedReplica: &replica,
 			UpdatedDesc:    &desc,
 			Reason:         reason,
@@ -168,8 +181,8 @@ func (s *Store) logChange(
 		return errors.Errorf("unknown replica change type %s", changeType)
 	}
 
-	return s.insertRangeLogEvent(ctx, txn, RangeLogEvent{
-		Timestamp: selectEventTimestamp(s, txn.Proto().Timestamp),
+	return s.insertRangeLogEvent(ctx, txn, storagepb.RangeLogEvent{
+		Timestamp: selectEventTimestamp(s, txn.OrigTimestamp()),
 		RangeID:   desc.RangeID,
 		EventType: logType,
 		StoreID:   s.StoreID(),

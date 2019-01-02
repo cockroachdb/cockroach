@@ -55,6 +55,7 @@ class FileRegistry {
 
   // Load the file registry. Errors on file reading/parsing issues.
   // OK if the file does not exist or is empty.
+  // This does **not** create a file registry.
   rocksdb::Status Load();
 
   // Returns a hash-set of all used env types.

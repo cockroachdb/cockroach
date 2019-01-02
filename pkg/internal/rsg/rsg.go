@@ -116,6 +116,8 @@ func (r *RSG) generate(root string, depth int) []string {
 				v = []string{fmt.Sprint(r.Float64())}
 			case "BCONST":
 				v = []string{`b'bytes'`}
+			case "BITCONST":
+				v = []string{`B'10010'`}
 			case "substr_from":
 				v = []string{"FROM", `'string'`}
 			case "substr_for":
@@ -230,13 +232,20 @@ func (r *RSG) Float64() float64 {
 // GenerateRandomArg generates a random, valid, SQL function argument of
 // the specified type.
 func (r *RSG) GenerateRandomArg(typ types.T) string {
-	if r.Intn(10) == 0 {
+	switch r.Intn(10) {
+	case 0:
 		return "NULL"
+	case 1:
+		return fmt.Sprintf("NULL::%s", typ)
+	case 2:
+		return fmt.Sprintf("(SELECT NULL)::%s", typ)
 	}
 	var v interface{}
 	switch types.UnwrapType(typ) {
 	case types.Int:
 		v = r.Int()
+	case types.BitArray:
+		v = bitArrayArgs[r.Intn(len(bitArrayArgs))]
 	case types.Float, types.Decimal:
 		v = r.Float64()
 	case types.String:
@@ -256,10 +265,6 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 	case types.Time:
 		i := r.Int63n(int64(timeofday.Max))
 		d := tree.MakeDTime(timeofday.FromInt(i))
-		v = fmt.Sprintf(`'%s'`, d)
-	case types.TimeTZ:
-		i := r.Int63n(int64(timeofday.Max))
-		d := tree.MakeDTimeTZ(timeofday.FromInt(i), time.UTC)
 		v = fmt.Sprintf(`'%s'`, d)
 	case types.Interval:
 		d := duration.Duration{Nanos: r.Int63()}
@@ -309,6 +314,12 @@ var stringArgs = map[int]string{
 	3: `'1234567890'`,
 	4: `'12345678901234567890'`,
 	5: `'123456789123456789123456789123456789123456789123456789123456789123456789'`,
+}
+
+var bitArrayArgs = map[int]string{
+	0: `B''`,
+	1: `B'1'`,
+	2: `B'10010'`,
 }
 
 var boolArgs = map[int]string{

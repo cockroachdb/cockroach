@@ -54,7 +54,7 @@ func ParseFixedOffsetTimeZone(location string) (offset int, origRepr string, suc
 		return 0, "", false
 	}
 	location = strings.TrimPrefix(location, fixedOffsetPrefix)
-	parts := strings.Split(location, " ")
+	parts := strings.SplitN(location, " ", 2)
 	if len(parts) < 2 {
 		return 0, "", false
 	}

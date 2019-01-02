@@ -17,12 +17,11 @@ package kv
 import (
 	"context"
 
-	"github.com/google/btree"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/google/btree"
 )
 
 // The degree of the outstandingWrites btree.
@@ -36,7 +35,15 @@ var pipelinedWritesEnabled = settings.RegisterBoolSetting(
 var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 	"kv.transaction.write_pipelining_max_batch_size",
 	"if non-zero, defines that maximum size batch that will be pipelined through Raft consensus",
-	0,
+	// NB: there is a tradeoff between the overhead of synchronously waiting for
+	// consensus for a batch if we don't pipeline and proving that all of the
+	// writes in the batch succeed if we do pipeline. We set this default to a
+	// value which experimentally strikes a balance between the two costs.
+	//
+	// Notably, this is well below sql.max{Insert/Update/Upsert/Delete}BatchSize,
+	// so implicit SQL txns should never pipeline their writes - they should either
+	// hit the 1PC fast-path or should have batches which exceed this limit.
+	128,
 )
 
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using
@@ -66,15 +73,14 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //    ordering guarantees between concurrent requests in the same transaction to
 //    avoid needing explicit chaining. For instance, DistSender uses unary gRPC
 //    requests instead of gRPC streams, so it can't natively expose strong ordering
-//    guarantees. Perhaps more importantly, even when a command has entered the
-//    command queue and evaluated on a Replica, it is not guaranteed to be applied
-//    before interfering commands. This is because the command may be retried
-//    outside of the serialization of the command queue for any number of reasons,
-//    such as leaseholder changes. When the command re-enters the command queue,
-//    it's possible that interfering commands may jump ahead of it. To combat
-//    this, the txnPipeliner uses chaining to throw an error when these
-//    re-orderings would have affected the order that transactional requests
-//    evaluate in.
+//    guarantees. Perhaps more importantly, even when a command has acquired latches
+//    and evaluated on a Replica, it is not guaranteed to be applied before
+//    interfering commands. This is because the command may be retried outside of
+//    the serialization of the spanlatch manager for any number of reasons, such as
+//    leaseholder changes. When the command re-acquired its latches, it's possible
+//    that interfering commands may jump ahead of it. To combat this, the
+//    txnPipeliner uses chaining to throw an error when these re-orderings would
+//    have affected the order that transactional requests evaluate in.
 //
 // The interceptor proves all outstanding writes before committing a transaction
 // by tacking on a QueryIntent request for each one to the front of an
@@ -122,8 +128,9 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //     "staging" EndTransaction request.
 //
 type txnPipeliner struct {
-	st      *cluster.Settings
-	wrapped lockedSender
+	st       *cluster.Settings
+	wrapped  lockedSender
+	disabled bool
 
 	outstandingWrites *btree.BTree
 	owAlloc           outstandingWriteAlloc
@@ -162,8 +169,11 @@ func (tp *txnPipeliner) SendLocked(
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
 
-	// WIP: I think it's possible for this response to be from an earlier
-	// epoch. Fix that.
+	// TODO(nvanbenschoten): It's currently possible for this response to be
+	// from an earlier epoch when txns are used concurrently. That's ok for now
+	// because we always manually restart transactions once all concurrent
+	// operations synchronize. Once we move away from that model to a txnAttempt
+	// model, we'll need to reconsider how this works. It ~should~ just work.
 
 	// Prove any outstanding writes that we proved to exist.
 	br = tp.updateOutstandingWrites(ctx, ba, br)
@@ -183,7 +193,7 @@ func (tp *txnPipeliner) SendLocked(
 // proactively prove outstanding writes or stop pipelining new writes.
 func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
 	asyncConsensus := tp.st.Version.IsActive(cluster.VersionAsyncConsensus) &&
-		pipelinedWritesEnabled.Get(&tp.st.SV)
+		pipelinedWritesEnabled.Get(&tp.st.SV) && !tp.disabled
 
 	// We provide a setting to bound the number of writes we permit in a batch
 	// that uses async consensus. This is useful because we'll have to prove

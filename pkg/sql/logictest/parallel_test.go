@@ -32,8 +32,6 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v2"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -46,6 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/gogo/protobuf/proto"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -213,8 +213,8 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 			log.Infof(t.ctx, "Setting range split size: %d", spec.RangeSplitSize)
 		}
 		zoneCfg := config.DefaultZoneConfig()
-		zoneCfg.RangeMaxBytes = int64(spec.RangeSplitSize)
-		zoneCfg.RangeMinBytes = zoneCfg.RangeMaxBytes / 2
+		zoneCfg.RangeMaxBytes = proto.Int64(int64(spec.RangeSplitSize))
+		zoneCfg.RangeMinBytes = proto.Int64(*zoneCfg.RangeMaxBytes / 2)
 		buf, err := protoutil.Marshal(&zoneCfg)
 		if err != nil {
 			t.Fatal(err)

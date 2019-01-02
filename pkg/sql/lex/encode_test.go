@@ -73,7 +73,7 @@ func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, str
 			t.Fatalf("unprintable character: %v (%v): %s %v", ch, input, sql, []byte(sql))
 		}
 	}
-	stmts, err := parser.Parse(sql)
+	stmts, _, err := parser.Parse(sql)
 	if err != nil {
 		t.Fatalf("%s: expected success, but found %s", sql, err)
 	}
@@ -86,16 +86,9 @@ func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, str
 
 func BenchmarkEncodeSQLString(b *testing.B) {
 	str := strings.Repeat("foo", 10000)
-	b.Run("old version", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			lex.EncodeSQLStringWithFlags(bytes.NewBuffer(nil), str, lex.EncBareStrings)
-		}
-	})
-	b.Run("new version", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			lex.EncodeSQLStringInsideArray(bytes.NewBuffer(nil), str)
-		}
-	})
+	for i := 0; i < b.N; i++ {
+		lex.EncodeSQLStringWithFlags(bytes.NewBuffer(nil), str, lex.EncBareStrings)
+	}
 }
 
 func TestEncodeRestrictedSQLIdent(t *testing.T) {

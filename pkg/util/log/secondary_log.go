@@ -17,6 +17,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -86,7 +87,7 @@ func NewSecondaryLogger(
 // Logf logs an event on a secondary logger.
 func (l *SecondaryLogger) Logf(ctx context.Context, format string, args ...interface{}) {
 	file, line, _ := caller.Lookup(1)
-	var buf msgBuf
+	var buf strings.Builder
 	formatTags(ctx, &buf)
 
 	// Add a counter. This is important for auditing.

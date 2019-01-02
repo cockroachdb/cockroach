@@ -161,7 +161,7 @@ spec:
       # In addition to the node certificate and key, the init-certs entrypoint will symlink
       # the cluster CA to the certs directory.
       - name: init-certs
-        image: cockroachdb/cockroach-k8s-request-cert:0.3
+        image: cockroachdb/cockroach-k8s-request-cert:0.4
         imagePullPolicy: IfNotPresent
         command:
         - "/bin/ash"
@@ -189,7 +189,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v2.0.4
+        image: cockroachdb/cockroach:v2.1.3
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 26257
@@ -230,4 +230,4 @@ spec:
         - "ReadWriteOnce"
       resources:
         requests:
-          storage: 1Gi
+          storage: 100Gi

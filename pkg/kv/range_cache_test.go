@@ -24,11 +24,11 @@ import (
 	"testing"
 
 	"github.com/biogo/store/llrb"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 type testDescriptorDB struct {
@@ -493,7 +493,7 @@ func TestRangeCacheContextCancellation(t *testing.T) {
 	}
 
 	expectContextCancellation := func(t *testing.T, c <-chan error) {
-		if err := <-c; err.Error() != context.Canceled.Error() {
+		if err := <-c; errors.Cause(err) != context.Canceled {
 			t.Errorf("expected context cancellation error, found %v", err)
 		}
 	}

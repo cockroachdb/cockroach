@@ -57,6 +57,22 @@ DBSSTable* DBEngine::GetSSTables(int* n) {
   return tables;
 }
 
+DBStatus DBEngine::GetSortedWALFiles(DBWALFile** out_files, int* n) {
+  rocksdb::VectorLogPtr files;
+  rocksdb::Status s = rep->GetSortedWalFiles(files);
+  if (!s.ok()) {
+    return ToDBStatus(s);
+  }
+  *n = files.size();
+  // We calloc the result so it can be deallocated by the caller using free().
+  *out_files = reinterpret_cast<DBWALFile*>(calloc(files.size(), sizeof(DBWALFile)));
+  for (int i = 0; i < files.size(); i++) {
+    (*out_files)[i].log_number = files[i]->LogNumber();
+    (*out_files)[i].size = files[i]->SizeFileBytes();
+  }
+  return kSuccess;
+}
+
 DBString DBEngine::GetUserProperties() {
   rocksdb::TablePropertiesCollection props;
   rocksdb::Status status = rep->GetPropertiesOfAllTables(&props);
@@ -239,6 +255,39 @@ DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {
   if (!status.ok()) {
     return ToDBStatus(status);
   }
+
+  return kSuccess;
+}
+
+DBStatus DBImpl::GetEncryptionRegistries(DBEncryptionRegistries* result) {
+  // Always initialize the fields.
+  result->file_registry = DBString();
+  result->key_registry = DBString();
+
+  if (env_mgr->env_stats_handler == nullptr || env_mgr->file_registry == nullptr) {
+    // We can't compute these if we don't have a file registry or stats handler.
+    // This happens in OSS mode or when encryption has not been turned on.
+    return kSuccess;
+  }
+
+  auto file_registry = env_mgr->file_registry->GetFileRegistry();
+  if (file_registry == nullptr) {
+    return ToDBStatus(rocksdb::Status::InvalidArgument("file registry has not been loaded"));
+  }
+
+  std::string serialized_file_registry;
+  if (!file_registry->SerializeToString(&serialized_file_registry)) {
+    return ToDBStatus(rocksdb::Status::InvalidArgument("failed to serialize file registry proto"));
+  }
+
+  std::string serialized_key_registry;
+  auto status = env_mgr->env_stats_handler->GetEncryptionRegistry(&serialized_key_registry);
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+
+  result->file_registry = ToDBString(serialized_file_registry);
+  result->key_registry = ToDBString(serialized_key_registry);
 
   return kSuccess;
 }

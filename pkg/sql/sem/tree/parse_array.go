@@ -145,45 +145,6 @@ func (p *parseState) parseElement() error {
 	return p.result.Append(d)
 }
 
-// StringToColType returns a column type given a string representation of the
-// type. Used by dump.
-func StringToColType(s string) (coltypes.T, error) {
-	switch s {
-	case "BOOL":
-		return coltypes.Bool, nil
-	case "INT":
-		return coltypes.Int, nil
-	case "FLOAT":
-		return coltypes.Float, nil
-	case "DECIMAL":
-		return coltypes.Decimal, nil
-	case "TIMESTAMP":
-		return coltypes.Timestamp, nil
-	case "TIMESTAMPTZ", "TIMESTAMP WITH TIME ZONE":
-		return coltypes.TimestampWithTZ, nil
-	case "INTERVAL":
-		return coltypes.Interval, nil
-	case "UUID":
-		return coltypes.UUID, nil
-	case "INET":
-		return coltypes.INet, nil
-	case "DATE":
-		return coltypes.Date, nil
-	case "TIME":
-		return coltypes.Time, nil
-	case "TIMETZ", "TIME WITH TIME ZONE":
-		return coltypes.TimeTZ, nil
-	case "STRING":
-		return coltypes.String, nil
-	case "NAME":
-		return coltypes.Name, nil
-	case "BYTES":
-		return coltypes.Bytes, nil
-	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected column type %s", s)
-	}
-}
-
 // ParseDArrayFromString parses the string-form of constructing arrays, handling
 // cases such as `'{1,2,3}'::INT[]`.
 func ParseDArrayFromString(evalCtx *EvalContext, s string, t coltypes.T) (*DArray, error) {

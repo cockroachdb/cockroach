@@ -340,7 +340,7 @@ var orderingFunctions = map[string]struct{}{
 
 func containsOrderingFunction(ctx context.Context, plan planNode) bool {
 	sawOrderingFn := false
-	po := planObserver{expr: func(_, _ string, n int, expr tree.Expr) {
+	po := planObserver{expr: func(_ observeVerbosity, _, _ string, n int, expr tree.Expr) {
 		if f, ok := expr.(*tree.FuncExpr); ok {
 			if _, ok := orderingFunctions[f.Func.String()]; ok {
 				sawOrderingFn = true
@@ -365,12 +365,12 @@ func rangeGroupFromSpans(spans roachpb.Spans) interval.RangeGroup {
 // parallelized. This means that its results should be mocked out, and that
 // it should be run asynchronously and in parallel with other statements that
 // are independent.
-func IsStmtParallelized(stmt Statement) bool {
+func IsStmtParallelized(stmt tree.Statement) bool {
 	parallelizedRetClause := func(ret tree.ReturningClause) bool {
 		_, ok := ret.(*tree.ReturningNothing)
 		return ok
 	}
-	switch s := stmt.AST.(type) {
+	switch s := stmt.(type) {
 	case *tree.Delete:
 		return parallelizedRetClause(s.Returning)
 	case *tree.Insert:

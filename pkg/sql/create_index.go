@@ -26,7 +26,7 @@ import (
 
 type createIndexNode struct {
 	n         *tree.CreateIndex
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.MutableTableDescriptor
 }
 
 // CreateIndex creates an index.
@@ -34,17 +34,9 @@ type createIndexNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
-	tn, err := n.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	var tableDesc *TableDescriptor
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-	})
+	tableDesc, err := p.ResolveMutableTableDescriptor(
+		ctx, &n.Table, true /*required*/, requireTableDesc,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +124,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		}
 	}
 
-	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
+	mutationID, err := params.p.createOrUpdateSchemaChangeJob(params.ctx, n.tableDesc,
 		tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
 	if err != nil {
 		return err
@@ -157,7 +149,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 			User       string
 			MutationID uint32
 		}{
-			n.n.Table.TableName().FQString(), n.n.Name.String(), n.n.String(),
+			n.n.Table.FQString(), n.n.Name.String(), n.n.String(),
 			params.SessionData().User, uint32(mutationID),
 		},
 	)

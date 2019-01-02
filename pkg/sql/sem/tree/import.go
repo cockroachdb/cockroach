@@ -16,7 +16,7 @@ package tree
 
 // Import represents a IMPORT statement.
 type Import struct {
-	Table      NormalizableTableName
+	Table      *TableName
 	CreateFile Expr
 	CreateDefs TableDefs
 	FileFormat string
@@ -32,17 +32,17 @@ func (node *Import) Format(ctx *FmtCtx) {
 	ctx.WriteString("IMPORT ")
 
 	if node.Bundle {
-		if node.Table.TableNameReference != nil {
-			ctx.FormatNode(&node.Table)
+		if node.Table != nil {
+			ctx.WriteString("TABLE ")
+			ctx.FormatNode(node.Table)
 			ctx.WriteString(" FROM ")
 		}
 		ctx.WriteString(node.FileFormat)
-		ctx.WriteString(" (")
+		ctx.WriteByte(' ')
 		ctx.FormatNode(&node.Files)
-		ctx.WriteString(")")
 	} else {
 		ctx.WriteString("TABLE ")
-		ctx.FormatNode(&node.Table)
+		ctx.FormatNode(node.Table)
 
 		if node.CreateFile != nil {
 			ctx.WriteString(" CREATE USING ")

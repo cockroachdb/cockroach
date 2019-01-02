@@ -15,6 +15,7 @@
 package tree_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -43,19 +43,21 @@ func TestClusterTimestampConversion(t *testing.T) {
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-
-	factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
-		return nil
-	})
+	senderFactory := client.MakeMockTxnSenderFactory(
+		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		) (*roachpb.BatchResponse, *roachpb.Error) {
+			panic("unused")
+		})
 	db := client.NewDB(
 		testutils.MakeAmbientCtx(),
-		factory,
+		senderFactory,
 		clock)
 
 	for _, d := range testData {
 		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}
 		ctx := tree.EvalContext{
 			Txn: client.NewTxnWithProto(
+				context.Background(),
 				db,
 				1, /* gatewayNodeID */
 				client.RootTxn,
@@ -63,7 +65,6 @@ func TestClusterTimestampConversion(t *testing.T) {
 					"test",
 					nil, // baseKey
 					roachpb.NormalUserPriority,
-					enginepb.SERIALIZABLE,
 					ts,
 					0, /* maxOffsetNs */
 				),

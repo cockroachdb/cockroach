@@ -34,15 +34,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/events"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/docker/go-connections/nat"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -53,6 +44,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/events"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/docker/go-connections/nat"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -71,7 +70,7 @@ const CockroachBinaryInContainer = "/cockroach/cockroach"
 var cockroachImage = flag.String("i", defaultImage, "the docker image to run")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
-var maxRangeBytes = config.DefaultZoneConfig().RangeMaxBytes
+var maxRangeBytes = *config.DefaultZoneConfig().RangeMaxBytes
 
 // CockroachBinary is the path to the host-side binary to use.
 var CockroachBinary = flag.String("b", func() string {
@@ -166,7 +165,7 @@ func CreateDocker(
 		log.Fatalf(ctx, "\"%s\": does not exist", *CockroachBinary)
 	}
 
-	cli, err := client.NewEnvClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 	maybePanic(err)
 
 	cli.NegotiateAPIVersion(ctx)
@@ -248,37 +247,6 @@ func (l *DockerCluster) OneShot(
 		return err
 	}
 	return l.oneshot.Wait(ctx, container.WaitConditionNotRunning)
-}
-
-// SidecarContainer runs a container in the same bridge network as the
-// CockroachDB nodes.
-func (l *DockerCluster) SidecarContainer(
-	ctx context.Context, cfg container.Config, portMap map[string]string,
-) (*Container, error) {
-	if err := pullImage(ctx, l, cfg.Image, types.ImagePullOptions{}); err != nil {
-		return nil, err
-	}
-	portBindings := nat.PortMap{}
-	for from, to := range portMap {
-		portBindings[nat.Port(from+`/tcp`)] = []nat.PortBinding{{HostPort: to}}
-	}
-	hostConfig := &container.HostConfig{
-		NetworkMode: container.NetworkMode(l.networkID),
-		// Disable DNS search under the host machine's domain. This can catch
-		// upstream wildcard DNS matching and result in odd behavior.
-		DNSSearch:    []string{"."},
-		PortBindings: portBindings,
-	}
-	containerName := fmt.Sprintf(`%s-%s`, cfg.Hostname, l.clusterID)
-	resp, err := l.client.ContainerCreate(ctx, &cfg, hostConfig, nil, containerName)
-	if err != nil {
-		return nil, err
-	}
-	return &Container{
-		id:      resp.ID,
-		name:    containerName,
-		cluster: l,
-	}, nil
 }
 
 // stopOnPanic is invoked as a deferred function in Start in order to attempt
@@ -496,8 +464,8 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 	cmd := []string{
 		"start",
 		"--certs-dir=/certs/",
-		"--host=" + node.nodeStr,
-		"--verbosity=1",
+		"--listen-addr=" + node.nodeStr,
+		"--vmodule=*=1",
 	}
 
 	// Forward the vmodule flag to the nodes.
@@ -541,7 +509,7 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
   pprof:     docker exec -it %[4]s pprof https+insecure://$(hostname):%[5]s/debug/pprof/heap
   cockroach: %[6]s
 
-  cli-env:   COCKROACH_INSECURE=false COCKROACH_CERTS_DIR=%[7]s COCKROACH_HOST=%s COCKROACH_PORT=%d`,
+  cli-env:   COCKROACH_INSECURE=false COCKROACH_CERTS_DIR=%[7]s COCKROACH_HOST=%s:%d`,
 		node.Name(), "https://"+httpAddr.String(), localLogDir, node.Container.id[:5],
 		base.DefaultHTTPPort, cmd, certsDir, httpAddr.IP, httpAddr.Port)
 }

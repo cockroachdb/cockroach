@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -29,6 +30,9 @@ type columnBackfiller struct {
 	backfiller
 
 	backfill.ColumnBackfiller
+
+	desc        *sqlbase.ImmutableTableDescriptor
+	otherTables []*sqlbase.ImmutableTableDescriptor
 }
 
 var _ Processor = &columnBackfiller{}
@@ -37,11 +41,17 @@ var _ chunkBackfiller = &columnBackfiller{}
 func newColumnBackfiller(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec BackfillerSpec,
-	post *PostProcessSpec,
+	spec distsqlpb.BackfillerSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*columnBackfiller, error) {
+	otherTables := make([]*sqlbase.ImmutableTableDescriptor, len(spec.OtherTables))
+	for i, tbl := range spec.OtherTables {
+		otherTables[i] = sqlbase.NewImmutableTableDescriptor(tbl)
+	}
 	cb := &columnBackfiller{
+		desc:        sqlbase.NewImmutableTableDescriptor(spec.Table),
+		otherTables: otherTables,
 		backfiller: backfiller{
 			name:        "Column",
 			filter:      backfill.ColumnMutationFilter,
@@ -53,7 +63,7 @@ func newColumnBackfiller(
 	}
 	cb.backfiller.chunkBackfiller = cb
 
-	if err := cb.ColumnBackfiller.Init(cb.flowCtx.NewEvalCtx(), cb.spec.Table); err != nil {
+	if err := cb.ColumnBackfiller.Init(cb.flowCtx.NewEvalCtx(), cb.desc); err != nil {
 		return nil, err
 	}
 
@@ -68,9 +78,8 @@ func (cb *columnBackfiller) runChunk(
 	chunkSize int64,
 	readAsOf hlc.Timestamp,
 ) (roachpb.Key, error) {
-	tableDesc := cb.backfiller.spec.Table
 	var key roachpb.Key
-	err := cb.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := cb.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if cb.flowCtx.testingKnobs.RunBeforeBackfillChunk != nil {
 			if err := cb.flowCtx.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
 				return err
@@ -85,8 +94,8 @@ func (cb *columnBackfiller) runChunk(
 		key, err = cb.RunColumnBackfillChunk(
 			ctx,
 			txn,
-			tableDesc,
-			cb.backfiller.spec.OtherTables,
+			cb.desc,
+			cb.otherTables,
 			sp,
 			chunkSize,
 			true,  /*alsoCommit*/

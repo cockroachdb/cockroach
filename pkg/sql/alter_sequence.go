@@ -24,22 +24,12 @@ import (
 
 type alterSequenceNode struct {
 	n       *tree.AlterSequence
-	seqDesc *sqlbase.TableDescriptor
+	seqDesc *sqlbase.MutableTableDescriptor
 }
 
 // AlterSequence transforms a tree.AlterSequence into a plan node.
 func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
-	tn, err := n.Name.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	var seqDesc *TableDescriptor
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		seqDesc, err = ResolveExistingObject(ctx, p, tn, !n.IfExists, requireSequenceDesc)
-	})
+	seqDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Name, !n.IfExists, requireSequenceDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +69,7 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 			SequenceName string
 			Statement    string
 			User         string
-		}{n.n.Name.TableName().FQString(), n.n.String(), params.SessionData().User},
+		}{n.n.Name.FQString(), n.n.String(), params.SessionData().User},
 	)
 }
 

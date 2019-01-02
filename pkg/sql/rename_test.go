@@ -96,7 +96,7 @@ func isRenamed(
 	tableID sqlbase.ID,
 	expectedName string,
 	expectedVersion sqlbase.DescriptorVersion,
-	cfg config.SystemConfig,
+	cfg *config.SystemConfig,
 ) bool {
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	val := cfg.GetValue(descKey)
@@ -145,7 +145,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	// version is ignored by the leasing refresh mechanism).
 	renamed := make(chan interface{})
 	lmKnobs.TestingLeasesRefreshedEvent =
-		func(cfg config.SystemConfig) {
+		func(cfg *config.SystemConfig) {
 			mu.Lock()
 			defer mu.Unlock()
 			if waitTableID != 0 {
@@ -225,7 +225,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	// Check that the old name is not usable outside of the transaction now
 	// that the node doesn't have a lease on it anymore (committing the txn
 	// should have released the lease on the version of the descriptor with the
-	// old name), even thoudh the name mapping still exists.
+	// old name), even though the name mapping still exists.
 	lease := s.LeaseManager().(*LeaseManager).tableNames.get(tableDesc.ID, "t", s.Clock().Now())
 	if lease != nil {
 		t.Fatalf(`still have lease on "t"`)

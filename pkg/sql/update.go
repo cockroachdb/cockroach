@@ -21,9 +21,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -54,7 +56,7 @@ var _ autoCommitNode = &updateNode{}
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(
 	ctx context.Context, n *tree.Update, desiredTypes []types.T,
-) (planNode, error) {
+) (result planNode, resultErr error) {
 	// UX friendliness safeguard.
 	if n.Where == nil && p.SessionData().SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
@@ -66,7 +68,16 @@ func (p *planner) Update(
 		return nil, err
 	}
 	if resetter != nil {
-		defer resetter(p)
+		defer func() {
+			if cteErr := resetter(p); cteErr != nil && resultErr == nil {
+				// If no error was found in the inner planning but a CTE error
+				// is occurring during the final checks on the way back from
+				// the recursion, use that error as final error for this
+				// stage.
+				resultErr = cteErr
+				result = nil
+			}
+		}()
 	}
 
 	tracing.AnnotateTrace()
@@ -89,11 +100,11 @@ func (p *planner) Update(
 	}
 
 	// Determine what are the foreign key tables that are involved in the update.
-	fkTables, err := sqlbase.TablesNeededForFKs(
+	fkTables, err := row.TablesNeededForFKs(
 		ctx,
 		*desc,
-		sqlbase.CheckUpdates,
-		p.lookupFKTable,
+		row.CheckUpdates,
+		p.LookupTableByID,
 		p.CheckPrivilege,
 		p.analyzeExpr,
 	)
@@ -157,9 +168,10 @@ func (p *planner) Update(
 	// Ensure that the columns being updated are not computed.
 	// We do this check as early as possible to avoid doing
 	// unnecessary work below in case there's an error.
-	// TODO(justin): this is incorrect: we should allow this, but then it should
-	// error unless we both have a VALUES clause and every value being "inserted"
-	// into a computed column is DEFAULT. See #22434.
+	//
+	// TODO(justin): this is too restrictive. It should
+	// be possible to allow UPDATE foo SET x = DEFAULT
+	// when x is a computed column. See #22434.
 	if err := checkHasNoComputedCols(updateCols); err != nil {
 		return nil, err
 	}
@@ -187,25 +199,55 @@ func (p *planner) Update(
 	rowsNeeded := resultsNeeded(n.Returning)
 
 	var requestedCols []sqlbase.ColumnDescriptor
-	if rowsNeeded || len(desc.Checks) > 0 {
+	if rowsNeeded {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
-		// TODO(nvanbenschoten): This could be made tighter, just the rows needed for
-		// the CHECK exprs.
 		requestedCols = desc.Columns
+	} else if len(desc.Checks) > 0 {
+		// Request any columns we'll need when validating check constraints. We
+		// could be smarter and only validate check constraints which depend on
+		// columns that are being modified in the UPDATE statement, in which
+		// case we'd only need to request the columns used by that subset of
+		// check constraints, but that doesn't seem worth the effort.
+		//
+		// TODO(nvanbenschoten): These conditions shouldn't be mutually
+		// exclusive, but since rowsNeeded implies that requestedCols =
+		// desc.Columns, there's no reason to enter this block if rowsNeeded is
+		// true. Remove this when the TODO above is addressed.
+		var requestedColSet util.FastIntSet
+		for _, col := range requestedCols {
+			requestedColSet.Add(int(col.ID))
+		}
+		for _, ck := range desc.Checks {
+			cols, err := ck.ColumnsUsed(desc.TableDesc())
+			if err != nil {
+				return nil, err
+			}
+			for _, colID := range cols {
+				if !requestedColSet.Contains(int(colID)) {
+					col, err := desc.FindColumnByID(colID)
+					if err != nil {
+						return nil, errors.Wrapf(err, "error finding column %d in table %s",
+							colID, desc.Name)
+					}
+					requestedCols = append(requestedCols, *col)
+					requestedColSet.Add(int(colID))
+				}
+			}
+		}
 	}
 
 	// Create the table updater, which does the bulk of the work.
-	// As a result of MakeRowUpdater, ru.FetchCols include all the
+	// As a result of MakeUpdater, ru.FetchCols include all the
 	// columns in the table descriptor + any columns currently in the
 	// process of being added.
-	ru, err := sqlbase.MakeRowUpdater(
+	ru, err := row.MakeUpdater(
 		p.txn,
 		desc,
 		fkTables,
 		updateCols,
 		requestedCols,
-		sqlbase.RowUpdaterDefault,
+		row.UpdaterDefault,
 		p.EvalContext(),
 		&p.alloc,
 	)
@@ -257,10 +299,32 @@ func (p *planner) Update(
 	// Capture the columns of the source, prior to the insertion of
 	// extra renders. This will be the input for RETURNING, if any, and
 	// this must not see the additional renders added below.
+	// It also must not see the additional columns captured in FetchCols
+	// but which were not in requestedCols.
 	var columns sqlbase.ResultColumns
 	if rowsNeeded {
 		columns = planColumns(rows)
+		// If rowsNeeded is set, we have requested from the source above
+		// all the columns from the descriptor. However, to ensure that
+		// modified rows include all columns, the construction of the
+		// source has used publicAndNonPublicColumns so the source may
+		// contain additional columns for every newly added column not yet
+		// visible.
+		// We do not want these to be available for RETURNING below.
+		//
+		// MakeUpdater guarantees that the first columns of the source
+		// are those specified in requestedCols, which, in the case where
+		// rowsNeeded is true, is also desc.Columns. So we can truncate to
+		// the length of that to only see public columns.
+		columns = columns[:len(desc.Columns)]
 	}
+
+	// For the analysis below, we need to restrict the planning to only
+	// allow simple expressions. Before we restrict anything, we need to
+	// save the current context.
+	scalarProps := &p.semaCtx.Properties
+	defer scalarProps.Restore(*scalarProps)
+	p.semaCtx.Properties.Require("UPDATE SET", tree.RejectSpecial)
 
 	for _, setExpr := range setExprs {
 		if setExpr.Tuple {
@@ -459,8 +523,7 @@ func (u *updateNode) startExec(params runParams) error {
 	if u.run.rowsNeeded {
 		u.run.rows = sqlbase.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(u.columns),
-			maxUpdateBatchSize)
+			sqlbase.ColTypeInfoFromResCols(u.columns), 0)
 	}
 	return u.run.tu.init(params.p.txn, params.EvalContext())
 }
@@ -608,6 +671,26 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		params.EvalContext().PopIVarContainer()
 	}
 
+	// Verify the schema constraints. For consistency with INSERT/UPSERT
+	// and compatibility with PostgreSQL, we must do this before
+	// processing the CHECK constraints.
+	for i, val := range u.run.updateValues {
+		col := &u.run.tu.ru.UpdateCols[i]
+		if val == tree.DNull {
+			// Verify no NULL makes it to a nullable column.
+			if !col.Nullable {
+				return sqlbase.NewNonNullViolationError(col.Name)
+			}
+		} else {
+			// Verify that the data width matches the column constraint.
+			newVal, err := sqlbase.LimitValueWidth(col.Type, val, &col.Name)
+			if err != nil {
+				return err
+			}
+			u.run.updateValues[i] = newVal
+		}
+	}
+
 	// Run the CHECK constraints, if any.
 	// TODO(justin): we have actually constructed the whole row at this point and
 	// thus should be able to avoid loading it separately like this now.
@@ -625,22 +708,6 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		}
 	}
 
-	// Verify the schema constraints.
-	for i, val := range u.run.updateValues {
-		col := &u.run.tu.ru.UpdateCols[i]
-		if val == tree.DNull {
-			// Verify no NULL makes it to a nullable column.
-			if !col.Nullable {
-				return sqlbase.NewNonNullViolationError(col.Name)
-			}
-		} else {
-			// Verify that the data width matches the column constraint.
-			if err := sqlbase.CheckValueWidth(col.Type, val, col.Name); err != nil {
-				return err
-			}
-		}
-	}
-
 	// Queue the insert in the KV batch.
 	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, u.run.updateValues, u.run.traceKV)
 	if err != nil {
@@ -649,7 +716,15 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 	// If result rows need to be accumulated, do it.
 	if u.run.rows != nil {
-		if _, err := u.run.rows.AddRow(params.ctx, newValues); err != nil {
+		// The new values can include all columns, the construction of the
+		// values has used publicAndNonPublicColumns so the values may
+		// contain additional columns for every newly added column not yet
+		// visible. We do not want them to be available for RETURNING.
+		//
+		// MakeUpdater guarantees that the first columns of the new values
+		// are those specified u.columns.
+		resultValues := newValues[:len(u.columns)]
+		if _, err := u.run.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}
 	}
@@ -708,7 +783,7 @@ func (ts tupleSlot) extractValues(row tree.Datums) tree.Datums {
 func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
 	renderedResult := row[ts.sourceIndex]
 	for i, typ := range renderedResult.ResolvedType().(types.TTuple).Types {
-		if err := sqlbase.CheckColumnType(ts.columns[i], typ, pmap); err != nil {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(ts.columns[i], typ, pmap); err != nil {
 			return err
 		}
 	}
@@ -727,7 +802,7 @@ func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
 func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
 	renderedResult := row[ss.sourceIndex]
 	typ := renderedResult.ResolvedType()
-	return sqlbase.CheckColumnType(ss.column, typ, pmap)
+	return sqlbase.CheckDatumTypeFitsColumnType(ss.column, typ, pmap)
 }
 
 // addOrMergeExpr inserts an Expr into a renderNode, attempting to reuse
@@ -801,7 +876,7 @@ func fillDefault(expr tree.Expr, index int, defaultExprs []tree.TypedExpr) tree.
 func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
 	for i := range cols {
 		if cols[i].IsComputed() {
-			return sqlbase.CannotWriteToComputedColError(cols[i])
+			return sqlbase.CannotWriteToComputedColError(cols[i].Name)
 		}
 	}
 	return nil

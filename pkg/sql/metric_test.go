@@ -17,8 +17,10 @@ package sql_test
 import (
 	"bytes"
 	"context"
+	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -51,12 +53,19 @@ func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			// Disable SELECT called for delete orphaned leases to keep
+			// query stats stable.
+			DisableDeleteOrphanedLeases: true,
+		},
+	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
-		{query: "SET EXPERIMENTAL_OPT = 'off'", miscCount: 1},
+		{query: "SET OPTIMIZER = 'off'", miscCount: 1, fallbackCount: 1},
 		{query: "SET DISTSQL = 'off'", miscCount: 1},
 		{query: "BEGIN; END", txnBeginCount: 1, txnCommitCount: 1},
 		{query: "SELECT 1", selectCount: 1, txnCommitCount: 1},
@@ -84,11 +93,11 @@ func TestQueryCounts(t *testing.T) {
 		{query: "SET DISTSQL = 'off'", miscCount: 1},
 		{query: "DROP TABLE mt.n", ddlCount: 1},
 		{query: "SET database = system", miscCount: 1},
-		{query: "SET EXPERIMENTAL_OPT = 'on'", miscCount: 1, fallbackCount: 1},
+		{query: "SET OPTIMIZER = 'on'", miscCount: 1},
 		{query: "SELECT 3", selectCount: 1, optCount: 1},
 		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1, fallbackCount: 1},
 		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1, fallbackCount: 1},
-		{query: "SET EXPERIMENTAL_OPT = 'off'", miscCount: 1},
+		{query: "SET OPTIMIZER = 'off'", miscCount: 1, fallbackCount: 1},
 	}
 
 	accum := initializeQueryCounter(s)
@@ -173,7 +182,8 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 			if bytes.Contains(req.Value.RawBytes, []byte("marker")) && !restarted {
 				restarted = true
 				return roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionAbortedError(), args.Hdr.Txn)
+					roachpb.NewTransactionAbortedError(
+						roachpb.ABORT_REASON_ABORTED_RECORD_FOUND), args.Hdr.Txn)
 			}
 		}
 		return nil
@@ -190,8 +200,9 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	}
 
 	_, err = txn.Exec("INSERT INTO db.t VALUES ('key', 'marker')")
-	if !testutils.IsError(err, "aborted") {
-		t.Fatalf("expected aborted error, got: %v", err)
+	expErr := "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)"
+	if !testutils.IsError(err, regexp.QuoteMeta(expErr)) {
+		t.Fatalf("expected %s, got: %v", expErr, err)
 	}
 
 	if err = txn.Rollback(); err != nil {

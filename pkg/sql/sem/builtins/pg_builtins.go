@@ -19,17 +19,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 // This file contains builtin functions that we implement primarily for
@@ -57,7 +55,7 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 
 // typeBuiltinsHaveUnderscore is a map to keep track of which types have i/o
 // builtins with underscores in between their type name and the i/o builtin
-// name, like date_in vs int8int. There seems to be no other way to
+// name, like date_in vs int8in. There seems to be no other way to
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
@@ -65,11 +63,12 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
 	types.Time.Oid():        {},
-	types.TimeTZ.Oid():      {},
 	types.Decimal.Oid():     {},
 	types.Interval.Oid():    {},
 	types.JSON.Oid():        {},
 	types.UUID.Oid():        {},
+	oid.T_varbit:            {},
+	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},
 	types.FamTuple.Oid():    {},
@@ -79,7 +78,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 // is either the type's postgres display name or the type's postgres display
 // name plus an underscore, depending on the type.
 func PGIOBuiltinPrefix(typ types.T) string {
-	builtinPrefix := types.PGDisplayName(typ)
+	builtinPrefix := strings.ToLower(oid.TypeName[typ.Oid()])
 	if _, ok := typeBuiltinsHaveUnderscore[typ.Oid()]; ok {
 		return builtinPrefix + "_"
 	}
@@ -110,6 +109,12 @@ func initPGBuiltins() {
 	}
 	for name, builtin := range makeTypeIOBuiltins("anyarray_", types.AnyArray) {
 		builtins[name] = builtin
+	}
+
+	// Make crdb_internal.create_regfoo builtins.
+	for _, typ := range []types.TOid{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {
+		typName := typ.SQLName()
+		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(typ)
 	}
 }
 
@@ -208,7 +213,7 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 				return tree.NewDString(""), nil
 			}
 			if len(r) > 1 {
-				return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "programming error: pg_get_indexdef query has more than 1 result row: %+v", r)
+				return nil, pgerror.NewAssertionErrorf("pg_get_indexdef query has more than 1 result row: %+v", r)
 			}
 			return r[0], nil
 		},
@@ -512,6 +517,22 @@ func evalPrivilegeCheck(
 	return tree.DBoolTrue, nil
 }
 
+func makeCreateRegDef(typ types.TOid) builtinDefinition {
+	return makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"oid", types.Int},
+				{"name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(typ),
+			Fn: func(_ *tree.EvalContext, d tree.Datums) (tree.Datum, error) {
+				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), coltypes.OidTypeToColType(typ), string(tree.MustBeDString(d[1]))), nil
+			},
+			Info: notUsableInfo,
+		},
+	)
+}
+
 var pgBuiltins = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_backend_pid": makeBuiltin(defProps(),
@@ -690,8 +711,25 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"table_oid", types.Oid}, {"column_number", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				return tree.DNull, nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid, ok := args[0].(*tree.DOid)
+				if !ok {
+					return tree.DNull, nil
+				}
+
+				r, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_get_coldesc",
+					ctx.Txn,
+					"SELECT description FROM pg_catalog.pg_description WHERE objoid=$1 AND objsubid=$2 LIMIT 1;",
+					oid.DInt,
+					args[1])
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return tree.DNull, nil
+				}
+				return r[0], nil
 			},
 			Info: notUsableInfo,
 		},
@@ -701,8 +739,23 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				return tree.DNull, nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid, ok := args[0].(*tree.DOid)
+				if !ok {
+					return tree.DNull, nil
+				}
+
+				r, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_get_objdesc",
+					ctx.Txn,
+					"SELECT description FROM pg_catalog.pg_description WHERE objoid=$1 LIMIT 1", oid.DInt)
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return tree.DNull, nil
+				}
+				return r[0], nil
 			},
 			Info: notUsableInfo,
 		},
@@ -786,7 +839,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					ctx.Ctx(), "pg_table_is_visible",
 					ctx.Txn,
 					"SELECT nspname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON c.relnamespace=n.oid "+
-						"WHERE c.oid=$1 AND nspname=ANY(current_schemas(true));", oid)
+						"WHERE c.oid=$1 AND nspname=ANY(current_schemas(true))", oid)
 				if err != nil {
 					return nil, err
 				}

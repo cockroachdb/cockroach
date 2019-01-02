@@ -147,14 +147,15 @@ func (c *indexConstraintCtx) verifyType(offset int, typ types.T) bool {
 // operand. The <tight> return value indicates if the spans are exactly
 // equivalent to the expression (and not weaker).
 func (c *indexConstraintCtx) makeSpansForSingleColumn(
-	offset int, op opt.Operator, val memo.ExprView, out *constraint.Constraint,
+	offset int, op opt.Operator, val opt.Expr, out *constraint.Constraint,
 ) (tight bool) {
-	if op == opt.InOp && memo.MatchesTupleOfConstants(val) {
+	if op == opt.InOp && memo.CanExtractConstTuple(val) {
+		tupVal := val.(*memo.TupleExpr)
 		keyCtx := &c.keyCtx[offset]
 		var spans constraint.Spans
-		spans.Alloc(val.ChildCount())
-		for i, n := 0, val.ChildCount(); i < n; i++ {
-			datum := memo.ExtractConstDatum(val.Child(i))
+		spans.Alloc(len(tupVal.Elems))
+		for _, child := range tupVal.Elems {
+			datum := memo.ExtractConstDatum(child)
 			if !c.verifyType(offset, datum.ResolvedType()) {
 				c.unconstrained(offset, out)
 				return false
@@ -177,11 +178,12 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 				*si, *sj = *sj, *si
 			}
 		}
+		spans.SortAndMerge(keyCtx)
 		out.Init(keyCtx, &spans)
 		return true
 	}
 
-	if val.IsConstValue() {
+	if opt.IsConstValueOp(val) {
 		return c.makeSpansForSingleColumnDatum(offset, op, memo.ExtractConstDatum(val), out)
 	}
 
@@ -326,37 +328,37 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 // The <tight> return value indicates if the spans are exactly equivalent
 // to the expression (and not weaker).
 func (c *indexConstraintCtx) makeSpansForTupleInequality(
-	offset int, ev memo.ExprView, out *constraint.Constraint,
+	offset int, e opt.Expr, out *constraint.Constraint,
 ) (tight bool) {
-	lhs, rhs := ev.Child(0), ev.Child(1)
+	lhs, rhs := e.Child(0).(*memo.TupleExpr), e.Child(1).(*memo.TupleExpr)
 
 	// Find the longest prefix of the tuple that maps to index columns (with the
 	// same direction) starting at <offset>.
 	prefixLen := 0
 	descending := c.columns[offset].Descending()
 	nullVal := false
-	for i, n := 0, lhs.ChildCount(); i < n; i++ {
-		leftChild, rightChild := lhs.Child(i), rhs.Child(i)
+	for i, leftChild := range lhs.Elems {
+		rightChild := rhs.Elems[i]
 		if !(offset+i < len(c.columns) && c.isIndexColumn(leftChild, offset+i)) {
 			// Variable doesn't refer to the column of interest.
 			break
 		}
-		if !rightChild.IsConstValue() {
+		if !opt.IsConstValueOp(rightChild) {
 			// Right-hand value is not a constant.
 			break
 		}
-		if !c.verifyType(offset+i, rightChild.Logical().Scalar.Type) {
+		if !c.verifyType(offset+i, rightChild.DataType()) {
 			// We have a mixed-type comparison; we can't encode this in a span
 			// (see #4313).
 			break
 		}
-		if rightChild.Operator() == opt.NullOp {
+		if rightChild.Op() == opt.NullOp {
 			// NULLs are tricky and require special handling; see
 			// nullVal related code below.
 			nullVal = true
 			break
 		}
-		if c.columns[offset+i].Descending() != descending && ev.Operator() != opt.NeOp {
+		if c.columns[offset+i].Descending() != descending && e.Op() != opt.NeOp {
 			// The direction changed. For example:
 			//   a ASCENDING, b DESCENDING, c ASCENDING
 			//   (a, b, c) >= (1, 2, 3)
@@ -380,7 +382,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 
 	datums := make(tree.Datums, prefixLen)
 	for i := range datums {
-		datums[i] = memo.ExtractConstDatum(rhs.Child(i))
+		datums[i] = memo.ExtractConstDatum(rhs.Elems[i])
 	}
 
 	// less is true if the op is < or <= and false if the op is > or >=.
@@ -389,9 +391,9 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	var less bool
 	var boundary constraint.SpanBoundary
 
-	switch ev.Operator() {
+	switch e.Op() {
 	case opt.NeOp:
-		if prefixLen < lhs.ChildCount() {
+		if prefixLen < len(lhs.Elems) {
 			// If we have (a, b, c) != (1, 2, 3), we cannot
 			// determine any constraint on (a, b).
 			c.unconstrained(offset, out)
@@ -430,11 +432,11 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	case opt.GeOp:
 		less, boundary = false, includeBoundary
 	default:
-		panic(fmt.Sprintf("unsupported op %s", ev.Operator()))
+		panic(fmt.Sprintf("unsupported op %s", e.Op()))
 	}
 
 	// The spans are "tight" unless we used just a prefix.
-	tight = (prefixLen == lhs.ChildCount())
+	tight = (prefixLen == len(lhs.Elems))
 
 	if nullVal {
 		// NULL is treated semantically as "unknown value", so
@@ -504,9 +506,9 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 // The <tight> return value indicates if the spans are exactly equivalent
 // to the expression (and not weaker).
 func (c *indexConstraintCtx) makeSpansForTupleIn(
-	offset int, ev memo.ExprView, out *constraint.Constraint,
+	offset int, e opt.Expr, out *constraint.Constraint,
 ) (tight bool) {
-	lhs, rhs := ev.Child(0), ev.Child(1)
+	lhs, rhs := e.Child(0).(*memo.TupleExpr), e.Child(1).(*memo.TupleExpr)
 
 	// Find the longest prefix of columns starting at <offset> which is contained
 	// in the left-hand tuple; tuplePos[i] is the position of column <offset+i> in
@@ -514,8 +516,8 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 	var tuplePos []int
 	for i := offset; i < len(c.columns); i++ {
 		found := false
-		for j, n := 0, lhs.ChildCount(); j < n; j++ {
-			if c.isIndexColumn(lhs.Child(j), i) {
+		for j, child := range lhs.Elems {
+			if c.isIndexColumn(child, i) {
 				tuplePos = append(tuplePos, j)
 				found = true
 				break
@@ -534,17 +536,17 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 	keyCtx := &c.keyCtx[offset]
 	var spans constraint.Spans
 	var sp constraint.Span
-	spans.Alloc(rhs.ChildCount())
-	for i, n := 0, rhs.ChildCount(); i < n; i++ {
-		valTuple := rhs.Child(i)
-		if valTuple.Operator() != opt.TupleOp {
+	spans.Alloc(len(rhs.Elems))
+	for _, child := range rhs.Elems {
+		valTuple, ok := child.(*memo.TupleExpr)
+		if !ok {
 			c.unconstrained(offset, out)
 			return false
 		}
 		vals := make(tree.Datums, len(tuplePos))
 		for i, pos := range tuplePos {
-			val := valTuple.Child(pos)
-			if !val.IsConstValue() {
+			val := valTuple.Elems[pos]
+			if !opt.IsConstValueOp(val) {
 				c.unconstrained(offset, out)
 				return false
 			}
@@ -577,7 +579,7 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 	spans.SortAndMerge(keyCtx)
 	out.Init(keyCtx, &spans)
 	// The spans are "tight" unless we used just a prefix.
-	return len(tuplePos) == lhs.ChildCount()
+	return len(tuplePos) == len(lhs.Elems)
 }
 
 // makeSpansForExpr creates spans for index columns starting at <offset>
@@ -586,83 +588,90 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 // The <tight> return value indicates if the spans are exactly equivalent to the
 // expression (and not weaker). See simplifyFilter for more information.
 func (c *indexConstraintCtx) makeSpansForExpr(
-	offset int, ev memo.ExprView, out *constraint.Constraint,
+	offset int, e opt.Expr, out *constraint.Constraint,
 ) (tight bool) {
 
-	if ev.IsConstValue() {
-		datum := memo.ExtractConstDatum(ev)
+	if opt.IsConstValueOp(e) {
+		datum := memo.ExtractConstDatum(e)
 		if datum == tree.DBoolFalse || datum == tree.DNull {
 			// Condition is never true.
 			c.contradiction(offset, out)
 			return true
 		}
 		c.unconstrained(offset, out)
-		return false
+		return datum == tree.DBoolTrue
 	}
 
-	switch ev.Operator() {
-	case opt.FiltersOp:
-		if ev.ChildCount() == 1 {
-			return c.makeSpansForExpr(offset, ev.Child(0), out)
+	switch t := e.(type) {
+	case *memo.FiltersExpr:
+		if len(*t) == 1 {
+			return c.makeSpansForExpr(offset, (*t)[0].Condition, out)
 		}
-		fallthrough
-	case opt.AndOp:
 		// We don't have enough information to know if the spans are "tight".
-		c.makeSpansForAnd(offset, ev, out)
+		c.makeSpansForAnd(offset, t, out)
 		return false
 
-	case opt.OrOp:
-		return c.makeSpansForOr(offset, ev, out)
+	case *memo.FiltersItem:
+		// Pass through the call.
+		return c.makeSpansForExpr(offset, t.Condition, out)
 
-	case opt.VariableOp:
+	case *memo.AndExpr:
+		// We don't have enough information to know if the spans are "tight".
+		c.makeSpansForAnd(offset, t, out)
+		return false
+
+	case *memo.OrExpr:
+		return c.makeSpansForOr(offset, t, out)
+
+	case *memo.VariableExpr:
 		// Support (@1) as (@1 = TRUE) if @1 is boolean.
-		if c.colType(offset) == types.Bool && c.isIndexColumn(ev, offset) {
+		if c.colType(offset) == types.Bool && c.isIndexColumn(t, offset) {
 			return c.makeSpansForSingleColumnDatum(offset, opt.EqOp, tree.DBoolTrue, out)
 		}
 
-	case opt.NotOp:
+	case *memo.NotExpr:
 		// Support (NOT @1) as (@1 = FALSE) if @1 is boolean.
-		if c.colType(offset) == types.Bool && c.isIndexColumn(ev.Child(0), offset) {
+		if c.colType(offset) == types.Bool && c.isIndexColumn(t.Input, offset) {
 			return c.makeSpansForSingleColumnDatum(offset, opt.EqOp, tree.DBoolFalse, out)
 		}
 	}
 
-	if ev.ChildCount() < 2 {
+	if e.ChildCount() < 2 {
 		c.unconstrained(offset, out)
 		return false
 	}
-	child0, child1 := ev.Child(0), ev.Child(1)
+	child0, child1 := e.Child(0), e.Child(1)
 
 	// Check for an operation where the left-hand side is an
 	// indexed var for this column.
 	if c.isIndexColumn(child0, offset) {
-		tight := c.makeSpansForSingleColumn(offset, ev.Operator(), child1, out)
+		tight := c.makeSpansForSingleColumn(offset, e.Op(), child1, out)
 		if !out.IsUnconstrained() || tight {
 			return tight
 		}
 		// We couldn't get any constraints for the column; see if we can at least
 		// deduce a not-NULL constraint.
-		if c.isNullable(offset) && opt.BoolOperatorRequiresNotNullArgs(ev.Operator()) {
+		if c.isNullable(offset) && opt.BoolOperatorRequiresNotNullArgs(e.Op()) {
 			c.makeNotNullSpan(offset, out)
 			return false
 		}
 	}
 	// Check for tuple operations.
-	if child0.Operator() == opt.TupleOp && child1.Operator() == opt.TupleOp {
-		switch ev.Operator() {
+	if child0.Op() == opt.TupleOp && child1.Op() == opt.TupleOp {
+		switch e.Op() {
 		case opt.LtOp, opt.LeOp, opt.GtOp, opt.GeOp, opt.NeOp:
 			// Tuple inequality.
-			return c.makeSpansForTupleInequality(offset, ev, out)
+			return c.makeSpansForTupleInequality(offset, e, out)
 		case opt.InOp:
 			// Tuple IN tuple.
-			return c.makeSpansForTupleIn(offset, ev, out)
+			return c.makeSpansForTupleIn(offset, e, out)
 		}
 	}
 
 	// Last resort: for conditions like a > b, our column can appear on the right
 	// side. We can deduce a not-null constraint from such conditions.
 	if c.isNullable(offset) && c.isIndexColumn(child1, offset) &&
-		opt.BoolOperatorRequiresNotNullArgs(ev.Operator()) {
+		opt.BoolOperatorRequiresNotNullArgs(e.Op()) {
 		c.makeNotNullSpan(offset, out)
 		return false
 	}
@@ -672,15 +681,13 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 }
 
 // makeSpansForAnd calculates spans for an AndOp or FiltersOp.
-func (c *indexConstraintCtx) makeSpansForAnd(
-	offset int, ev memo.ExprView, out *constraint.Constraint,
-) {
+func (c *indexConstraintCtx) makeSpansForAnd(offset int, e opt.Expr, out *constraint.Constraint) {
 	// TODO(radu): sorting the expressions by the variable index, or pre-building
 	// a map could help here.
-	c.makeSpansForExpr(offset, ev.Child(0), out)
+	c.makeSpansForExpr(offset, e.Child(0), out)
 	var exprConstraint constraint.Constraint
-	for i := 1; i < ev.ChildCount(); i++ {
-		c.makeSpansForExpr(offset, ev.Child(i), &exprConstraint)
+	for i, n := 1, e.ChildCount(); i < n; i++ {
+		c.makeSpansForExpr(offset, e.Child(i), &exprConstraint)
 		out.IntersectWith(c.evalCtx, &exprConstraint)
 	}
 	if out.IsUnconstrained() {
@@ -715,9 +722,9 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 			break
 		}
 
-		c.makeSpansForExpr(offset+delta, ev.Child(0), &ofsC)
-		for j := 1; j < ev.ChildCount(); j++ {
-			c.makeSpansForExpr(offset+delta, ev.Child(j), &exprConstraint)
+		c.makeSpansForExpr(offset+delta, e.Child(0), &ofsC)
+		for j, n := 1, e.ChildCount(); j < n; j++ {
+			c.makeSpansForExpr(offset+delta, e.Child(j), &exprConstraint)
 			ofsC.IntersectWith(c.evalCtx, &exprConstraint)
 		}
 		out.Combine(c.evalCtx, &ofsC)
@@ -726,13 +733,13 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 
 // makeSpansForOr calculates spans for an OrOp.
 func (c *indexConstraintCtx) makeSpansForOr(
-	offset int, ev memo.ExprView, out *constraint.Constraint,
+	offset int, e opt.Expr, out *constraint.Constraint,
 ) (tight bool) {
 	c.contradiction(offset, out)
 	tight = true
 	var exprConstraint constraint.Constraint
-	for i, n := 0, ev.ChildCount(); i < n; i++ {
-		exprTight := c.makeSpansForExpr(offset, ev.Child(i), &exprConstraint)
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		exprTight := c.makeSpansForExpr(offset, e.Child(i), &exprConstraint)
 		if exprConstraint.IsUnconstrained() {
 			// If we can't generate spans for a disjunct, exit early.
 			c.unconstrained(offset, out)
@@ -746,24 +753,34 @@ func (c *indexConstraintCtx) makeSpansForOr(
 }
 
 // makeInvertedIndexSpansForExpr is analogous to makeSpansForExpr, but it is
-// used for inverted indexes.
+// used for inverted indexes. If allPaths is true, the slice is populated with
+// all constraints found. Otherwise, this function stops at the first
+// constraint. Note that we use a slice instead of a constraint.Set, because
+// constraint.Set.Union merges spans of constraints on the same columns. This
+// logically represents an OR of the different span constraints, while what
+// we want to represent is effectively an AND of the different spans, forcing
+// us to store every span in its own constraint.Constraint and store it in
+// a slice.
 func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
-	ev memo.ExprView, out *constraint.Constraint,
-) (tight bool) {
-	switch ev.Operator() {
+	nd opt.Expr, constraints []*constraint.Constraint, allPaths bool,
+) (bool, []*constraint.Constraint) {
+	var tight bool
+	out := &constraint.Constraint{}
+	constrained := false
+	switch nd.Op() {
 	case opt.ContainsOp:
-		lhs, rhs := ev.Child(0), ev.Child(1)
+		lhs, rhs := nd.Child(0), nd.Child(1)
 
-		if !c.isIndexColumn(lhs, 0 /* index */) || !rhs.IsConstValue() {
+		if !c.isIndexColumn(lhs, 0 /* index */) || !opt.IsConstValueOp(rhs) {
 			c.unconstrained(0 /* offset */, out)
-			return false
+			return false, append(constraints, out)
 		}
 
 		rightDatum := memo.ExtractConstDatum(rhs)
 
 		if rightDatum == tree.DNull {
 			c.contradiction(0 /* offset */, out)
-			return true
+			return false, append(constraints, out)
 		}
 
 		rd := rightDatum.(*tree.DJSON).JSON
@@ -775,14 +792,14 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 			if err != nil {
 				log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
 				c.unconstrained(0 /* offset */, out)
-				return false
+				return false, append(constraints, out)
 			}
 			for i := range paths {
 				hasContainerLeaf, err := paths[i].HasContainerLeaf()
 				if err != nil {
 					log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
 					c.unconstrained(0 /* offset */, out)
-					return false
+					return false, append(constraints, out)
 				}
 				if hasContainerLeaf {
 					// We want to have a full index scan if the RHS contains either [] or {}.
@@ -792,16 +809,25 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 				if err != nil {
 					log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
 					c.unconstrained(0 /* offset */, out)
-					return false
+					return false, append(constraints, out)
 				}
 				c.eqSpan(0 /* offset */, pathDatum, out)
+				constraints = append(constraints, out)
 				// The span is tight if we just had 1 path through the index constraint.
-				return len(paths) == 1
+				constrained = true
+				if !allPaths {
+					return len(paths) == 1, constraints
+				}
+				// Reset out for next iteration
+				out = &constraint.Constraint{}
 			}
 
 			// We found no paths that could constrain the scan.
-			c.unconstrained(0 /* offset */, out)
-			return false
+			if !constrained {
+				c.unconstrained(0 /* offset */, out)
+				return false, append(constraints, out)
+			}
+			return len(paths) == 1, constraints
 
 		default:
 			// If we find a scalar on the right side of the @> operator it means that we need to find
@@ -824,29 +850,48 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 			var other constraint.Constraint
 			c.eqSpan(0 /* offset */, dJSON, &other)
 			out.UnionWith(c.evalCtx, &other)
-			return true
+			return true, append(constraints, out)
 		}
 
 	case opt.AndOp, opt.FiltersOp:
-		for i, n := 0, ev.ChildCount(); i < n; i++ {
-			tight := c.makeInvertedIndexSpansForExpr(ev.Child(i), out)
+		for i, n := 0, nd.ChildCount(); i < n; i++ {
+			tight, constraints = c.makeInvertedIndexSpansForExpr(
+				nd.Child(i), constraints, allPaths,
+			)
 			if n == 1 {
 				// Single child.
-				return tight
+				return tight, constraints
 			}
+			// Only need to check the last appended element in constraints
+			// to figure out whether we are unconstrained.
+			out = constraints[len(constraints)-1]
 			if !out.IsUnconstrained() {
-				// TODO(radu, masha): for now, the best we can do is to generate
-				// constraints for at most one "contains" op in the disjunction; the
-				// rest are remaining filters.
-				//
-				// The spans are not tight because we have other conditions in the
-				// conjunction.
-				return false
+				if !allPaths {
+					// TODO(radu, masha): for now, the best we can do is to generate
+					// constraints for at most one "contains" op in the disjunction; the
+					// rest are remaining filters.
+					//
+					// The spans are not tight because we have other conditions in the
+					// conjunction.
+					return false, constraints
+				}
+				constrained = true
+			} else {
+				// The last added element is unconstrained. Remove it from the slice
+				// in case the next iteration finds a constraint that works.
+				constraints = constraints[:len(constraints)-1]
 			}
 		}
+
+	case opt.FiltersItemOp:
+		// Pass through the call.
+		return c.makeInvertedIndexSpansForExpr(nd.Child(0), constraints, allPaths)
 	}
-	c.unconstrained(0 /* offset */, out)
-	return false
+	if !constrained {
+		c.unconstrained(0 /* offset */, out)
+		constraints = append(constraints, out)
+	}
+	return false, constraints
 }
 
 // getMaxSimplifyPrefix finds the longest prefix (maxSimplifyPrefix) such that
@@ -939,26 +984,19 @@ func (c *indexConstraintCtx) getMaxSimplifyPrefix(idxConstraint *constraint.Cons
 //    `@1 <= 1 OR @1 >= 4` has spans `[ - /1], [/1 - ]` but in separation neither
 //    sub-expression is always true inside these spans.
 func (c *indexConstraintCtx) simplifyFilter(
-	ev memo.ExprView, final *constraint.Constraint, maxSimplifyPrefix int,
-) memo.GroupID {
-	// Special handling for AND and OR.
-	if ev.Operator() == opt.OrOp || ev.Operator() == opt.AndOp || ev.Operator() == opt.FiltersOp {
-		newChildren := make([]memo.GroupID, ev.ChildCount())
-		for i := range newChildren {
-			newChildren[i] = c.simplifyFilter(ev.Child(i), final, maxSimplifyPrefix)
-		}
+	scalar opt.ScalarExpr, final *constraint.Constraint, maxSimplifyPrefix int,
+) opt.ScalarExpr {
+	// Special handling for And, Or, and Filters.
+	switch t := scalar.(type) {
+	case *memo.AndExpr:
+		left := c.simplifyFilter(t.Left, final, maxSimplifyPrefix)
+		right := c.simplifyFilter(t.Right, final, maxSimplifyPrefix)
+		return c.factory.ConstructAnd(left, right)
 
-		// Note: if nothing changed, the factory will detect that it's the same
-		// expression and not create a new group. We also rely on rules to simplify
-		// the node (e.g. if children have been simplified to True).
-		switch ev.Operator() {
-		case opt.AndOp:
-			return c.factory.ConstructAnd(c.factory.InternList(newChildren))
-		case opt.FiltersOp:
-			return c.factory.ConstructFilters(c.factory.InternList(newChildren))
-		case opt.OrOp:
-			return c.factory.ConstructOr(c.factory.InternList(newChildren))
-		}
+	case *memo.OrExpr:
+		left := c.simplifyFilter(t.Left, final, maxSimplifyPrefix)
+		right := c.simplifyFilter(t.Right, final, maxSimplifyPrefix)
+		return c.factory.ConstructOr(left, right)
 	}
 
 	// We try to create tight spans for the expression (as allowed by
@@ -969,12 +1007,16 @@ func (c *indexConstraintCtx) simplifyFilter(
 		var tight bool
 		if c.isInverted {
 			if offset == 0 {
-				tight = c.makeInvertedIndexSpansForExpr(ev, &cExpr)
+				constraints := make([]*constraint.Constraint, 0, 1)
+				tight, constraints = c.makeInvertedIndexSpansForExpr(scalar, constraints, false)
+				// makeInvertedIndexSpansForExpr is guaranteed to add at least one
+				// constraint. It may be an "unconstrained" constraint.
+				cExpr = *constraints[0]
 			} else {
 				c.unconstrained(0, &cExpr)
 			}
 		} else {
-			tight = c.makeSpansForExpr(offset, ev, &cExpr)
+			tight = c.makeSpansForExpr(offset, scalar, &cExpr)
 		}
 
 		if !tight {
@@ -987,15 +1029,15 @@ func (c *indexConstraintCtx) simplifyFilter(
 			}
 			if !cExpr.ContainsSpan(c.evalCtx, &sp) {
 				// We won't get another tight constraint at another offset.
-				return ev.Group()
+				return scalar
 			}
 		}
 
 		// The final spans are a subset of the spans for this expression; there
 		// is no need for a remaining filter for this condition.
-		return c.factory.ConstructTrue()
+		return memo.TrueSingleton
 	}
-	return ev.Group()
+	return scalar
 }
 
 // Instance is used to generate index constraints from a scalar boolean filter
@@ -1012,7 +1054,7 @@ func (c *indexConstraintCtx) simplifyFilter(
 type Instance struct {
 	indexConstraintCtx
 
-	filter memo.ExprView
+	filters memo.FiltersExpr
 
 	constraint   constraint.Constraint
 	consolidated constraint.Constraint
@@ -1022,19 +1064,25 @@ type Instance struct {
 
 // Init processes the filter and calculates the spans.
 func (ic *Instance) Init(
-	filter memo.ExprView,
+	filters memo.FiltersExpr,
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
 	isInverted bool,
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 ) {
-	ic.filter = filter
+	ic.filters = filters
 	ic.indexConstraintCtx.init(columns, notNullCols, isInverted, evalCtx, factory)
+	constraints := make([]*constraint.Constraint, 0, 1)
 	if isInverted {
-		ic.tight = ic.makeInvertedIndexSpansForExpr(ic.filter, &ic.constraint)
+		ic.tight, constraints = ic.makeInvertedIndexSpansForExpr(
+			&ic.filters, constraints, false,
+		)
+		// makeInvertedIndexSpansForExpr is guaranteed to add at least one
+		// constraint. It may be an "unconstrained" constraint.
+		ic.constraint = *constraints[0]
 	} else {
-		ic.tight = ic.makeSpansForExpr(0 /* offset */, ic.filter, &ic.constraint)
+		ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.filters, &ic.constraint)
 	}
 	// Note: we only consolidate spans at the end; consolidating partial results
 	// can lead to worse spans, for example:
@@ -1067,17 +1115,37 @@ func (ic *Instance) Constraint() *constraint.Constraint {
 	return &ic.consolidated
 }
 
-// RemainingFilter calculates a simplified filter that needs to be applied
+// AllInvertedIndexConstraints returns all constraints that can be created on
+// the specified inverted index. Only works for inverted indexes.
+func (ic *Instance) AllInvertedIndexConstraints() ([]*constraint.Constraint, error) {
+	allConstraints := make([]*constraint.Constraint, 0)
+	_, allConstraints = ic.makeInvertedIndexSpansForExpr(&ic.filters, allConstraints, true)
+
+	return allConstraints, nil
+}
+
+// RemainingFilters calculates a simplified FiltersExpr that needs to be applied
 // within the returned Spans.
-func (ic *Instance) RemainingFilter() memo.GroupID {
+func (ic *Instance) RemainingFilters() memo.FiltersExpr {
 	if ic.tight || ic.constraint.IsContradiction() {
 		// The spans are "tight", or we have a contradiction; there is no remaining filter.
-		return ic.factory.ConstructTrue()
+		return memo.TrueFilter
 	}
 	if ic.constraint.IsUnconstrained() {
-		return ic.filter.Group()
+		return ic.filters
 	}
-	return ic.simplifyFilter(ic.filter, &ic.constraint, ic.getMaxSimplifyPrefix(&ic.constraint))
+	var newFilters memo.FiltersExpr
+	for i := range ic.filters {
+		prefix := ic.getMaxSimplifyPrefix(&ic.constraint)
+		condition := ic.simplifyFilter(ic.filters[i].Condition, &ic.constraint, prefix)
+		if condition.Op() != opt.TrueOp {
+			if newFilters == nil {
+				newFilters = make(memo.FiltersExpr, 0, len(ic.filters))
+			}
+			newFilters = append(newFilters, memo.FiltersItem{Condition: condition})
+		}
+	}
+	return newFilters
 }
 
 type indexConstraintCtx struct {
@@ -1125,8 +1193,11 @@ func (c *indexConstraintCtx) init(
 
 // isIndexColumn returns true if ev is a variable on the n indexed var that
 // corresponds to index column <offset>.
-func (c *indexConstraintCtx) isIndexColumn(ev memo.ExprView, offset int) bool {
-	return ev.Operator() == opt.VariableOp && ev.Private().(opt.ColumnID) == c.columns[offset].ID()
+func (c *indexConstraintCtx) isIndexColumn(nd opt.Expr, offset int) bool {
+	if v, ok := nd.(*memo.VariableExpr); ok && v.Col == c.columns[offset].ID() {
+		return true
+	}
+	return false
 }
 
 // isNullable returns true if the index column <offset> is nullable.
@@ -1136,5 +1207,5 @@ func (c *indexConstraintCtx) isNullable(offset int) bool {
 
 // colType returns the type of the index column <offset>.
 func (c *indexConstraintCtx) colType(offset int) types.T {
-	return c.md.ColumnType(c.columns[offset].ID())
+	return c.md.ColumnMeta(c.columns[offset].ID()).Type
 }

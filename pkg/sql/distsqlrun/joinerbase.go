@@ -15,15 +15,14 @@
 package distsqlrun
 
 import (
-	"context"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
 
 type joinerBase struct {
-	processorBase
+	ProcessorBase
 
 	joinType    sqlbase.JoinType
 	onCond      exprHelper
@@ -44,7 +43,7 @@ type joinerBase struct {
 
 // init initializes the joinerBase.
 //
-// opts is passed along to the underlying processorBase. The zero value is used
+// opts is passed along to the underlying ProcessorBase. The zero value is used
 // if the processor using the joinerBase is not implementing RowSource.
 func (jb *joinerBase) init(
 	self RowSource,
@@ -53,18 +52,18 @@ func (jb *joinerBase) init(
 	leftTypes []sqlbase.ColumnType,
 	rightTypes []sqlbase.ColumnType,
 	jType sqlbase.JoinType,
-	onExpr Expression,
+	onExpr distsqlpb.Expression,
 	leftEqColumns []uint32,
 	rightEqColumns []uint32,
 	numMergedColumns uint32,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
-	opts procStateOpts,
+	opts ProcStateOpts,
 ) error {
 	jb.joinType = jType
 
-	if isSetOpJoin(jb.joinType) {
-		if onExpr.Expr != "" {
+	if jb.joinType.IsSetOpJoin() {
+		if !onExpr.Empty() {
 			return errors.Errorf("expected empty onExpr, got %v", onExpr.Expr)
 		}
 	}
@@ -106,7 +105,7 @@ func (jb *joinerBase) init(
 	}
 	outputTypes := condTypes[:outputSize]
 
-	if err := jb.processorBase.init(
+	if err := jb.ProcessorBase.Init(
 		self, post, outputTypes, flowCtx, processorID, output, nil /* memMonitor */, opts,
 	); err != nil {
 		return err
@@ -164,10 +163,6 @@ func shouldIncludeRightColsInOutput(joinType sqlbase.JoinType) bool {
 	}
 }
 
-func isSetOpJoin(joinType sqlbase.JoinType) bool {
-	return joinType == sqlbase.IntersectAllJoin || joinType == sqlbase.ExceptAllJoin
-}
-
 // shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
 // NULLs for the columns of the other stream). This happens in FULL OUTER joins
 // and LEFT or RIGHT OUTER joins and ANTI joins (depending on which stream is
@@ -189,30 +184,6 @@ func shouldEmitUnmatchedRow(side joinSide, joinType sqlbase.JoinType) bool {
 	default:
 		return true
 	}
-}
-
-// maybeEmitUnmatchedRow is used for rows that don't match anything in the
-// other table; we emit them if it's called for given the type of join,
-// otherwise we discard them.
-//
-// Returns false if no more rows are needed. Also returns any error occurring
-// when emitting the row (i.e. filtering or rendering errors). If false or an
-// error are returned, the inputs still need to be drained and closed and the
-// output needs to be closed. If an error is returned, it is the caller's
-// responsibility to pushed the error to the output.
-func (jb *joinerBase) maybeEmitUnmatchedRow(
-	ctx context.Context, row sqlbase.EncDatumRow, side joinSide,
-) (bool, error) {
-	if !shouldEmitUnmatchedRow(side, jb.joinType) {
-		return true, nil
-	}
-
-	renderedRow := jb.renderUnmatchedRow(row, side)
-	consumerStatus, err := jb.out.EmitRow(ctx, renderedRow)
-	if err != nil {
-		return false, err
-	}
-	return consumerStatus == NeedMoreRows, nil
 }
 
 // render constructs a row with columns from both sides. The ON condition is

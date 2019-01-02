@@ -75,6 +75,9 @@ type Cache interface {
 	// timestamp which overlaps the interval spanning from start to end.
 	GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
 
+	// Metrics returns the Cache's metrics struct.
+	Metrics() Metrics
+
 	// The following methods are used for testing within this package:
 	//
 	// clear clears the cache and resets the low-water mark.
@@ -85,11 +88,11 @@ type Cache interface {
 
 // New returns a new timestamp cache with the supplied hybrid clock. If the
 // pageSize is provided, it will override the default page size.
-func New(clock *hlc.Clock, pageSize uint32, metrics Metrics) Cache {
+func New(clock *hlc.Clock, pageSize uint32) Cache {
 	if envutil.EnvOrDefaultBool("COCKROACH_USE_TREE_TSCACHE", false) {
 		return newTreeImpl(clock)
 	}
-	return newSklImpl(clock, pageSize, metrics)
+	return newSklImpl(clock, pageSize)
 }
 
 // cacheValue combines a timestamp with an optional txnID. It is shared between

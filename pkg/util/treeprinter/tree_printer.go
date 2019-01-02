@@ -17,6 +17,7 @@ package treeprinter
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -38,7 +39,7 @@ type Node struct {
 //   tp := New()
 //   root := n.Child("root")
 //   root.Child("child-1")
-//   root.Child("child-2").Child("grandchild").AddLine("grandchild-more-info")
+//   root.Child("child-2").Child("grandchild\ngrandchild-more-info")
 //   root.Child("child-3")
 //
 //   fmt.Print(tp.String())
@@ -77,8 +78,37 @@ func (n Node) Childf(format string, args ...interface{}) Node {
 	return n.Child(fmt.Sprintf(format, args...))
 }
 
-// Child adds a node as a child of the given node.
+// Child adds a node as a child of the given node. Multi-line strings are
+// supported with appropriate indentation.
 func (n Node) Child(text string) Node {
+	if strings.ContainsRune(text, '\n') {
+		splitLines := strings.Split(text, "\n")
+		node := n.childLine(splitLines[0])
+		for _, l := range splitLines[1:] {
+			n.AddLine(l)
+		}
+		return node
+	}
+	return n.childLine(text)
+}
+
+// AddLine adds a new line to a child node without an edge.
+func (n Node) AddLine(v string) {
+	// Each level indents by this much.
+	k := len(edgeLast)
+	indent := n.level * k
+	row := make([]rune, indent+len(v))
+	for i := 0; i < indent; i++ {
+		row[i] = ' '
+	}
+	for i, r := range v {
+		row[indent+i] = r
+	}
+	n.tree.rows = append(n.tree.rows, row)
+}
+
+// childLine adds a node as a child of the given node.
+func (n Node) childLine(text string) Node {
 	runes := []rune(text)
 
 	// Each level indents by this much.

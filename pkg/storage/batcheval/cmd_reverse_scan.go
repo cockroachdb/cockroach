@@ -16,6 +16,7 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
@@ -37,18 +38,48 @@ func ReverseScan(
 	h := cArgs.Header
 	reply := resp.(*roachpb.ReverseScanResponse)
 
-	rows, resumeSpan, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey,
-		cArgs.MaxKeys, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
-	if err != nil {
-		return result.Result{}, err
+	var err error
+	var intents []roachpb.Intent
+	var resumeSpan *roachpb.Span
+
+	switch args.ScanFormat {
+	case roachpb.BATCH_RESPONSE:
+		var kvData []byte
+		var numKvs int64
+		kvData, numKvs, resumeSpan, intents, err = engine.MVCCScanToBytes(
+			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp,
+			engine.MVCCScanOptions{
+				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
+				Txn:          h.Txn,
+				Reverse:      true,
+			})
+		if err != nil {
+			return result.Result{}, err
+		}
+		reply.NumKeys = numKvs
+		reply.BatchResponses = [][]byte{kvData}
+	case roachpb.KEY_VALUES:
+		var rows []roachpb.KeyValue
+		rows, resumeSpan, intents, err = engine.MVCCScan(
+			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, engine.MVCCScanOptions{
+				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
+				Txn:          h.Txn,
+				Reverse:      true,
+			})
+		if err != nil {
+			return result.Result{}, err
+		}
+		reply.NumKeys = int64(len(rows))
+		reply.Rows = rows
+	default:
+		panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
 	}
 
-	reply.NumKeys = int64(len(rows))
 	if resumeSpan != nil {
 		reply.ResumeSpan = resumeSpan
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
-	reply.Rows = rows
+
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
 		reply.IntentRows, err = CollectIntentRows(ctx, batch, cArgs, intents)
 	}

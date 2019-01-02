@@ -1,5 +1,5 @@
 exec-ddl
-CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, d DATE)
 ----
 TABLE a
  ├── k int not null
@@ -7,6 +7,7 @@ TABLE a
  ├── f float
  ├── s string
  ├── j jsonb
+ ├── d date
  └── INDEX primary
       └── k int not null
 
@@ -16,220 +17,261 @@ TABLE a
 
 # Put variables on both sides of comparison operator to avoid matching constant
 # patterns.
-opt
+opt expect=CommuteVarInequality
 SELECT * FROM a WHERE 1+i<k AND k-1<=i AND i*i>k AND k/2>=i
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ ├── side-effects
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-      ├── a.k > (a.i + 1) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
-      ├── a.i >= (a.k - 1) [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
-      ├── a.k < (a.i * a.i) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
-      └── a.i <= (a.k / 2) [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      ├── k > (i + 1) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+      ├── i >= (k - 1) [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
+      ├── k < (i * i) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+      └── i <= (k / 2) [type=bool, outer=(1,2), side-effects, constraints=(/2: (/NULL - ])]
 
 # --------------------------------------------------
 # CommuteConstInequality
 # --------------------------------------------------
-opt
-SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2 AND 5>i AND 'foo'>=s
+opt expect=CommuteConstInequality
+SELECT * FROM a WHERE 5+1<i+k AND 5*5/3<=i*2 AND 5>i AND 'foo'>=s
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb) d:6(date)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(1,2,4), constraints=(/2: (/NULL - /4]; /4: (/NULL - /'foo'])]
-      ├── (a.i + a.k) > (length('foo') + 1) [type=bool, outer=(1,2)]
-      ├── (a.i * 2) >= length('bar') [type=bool, outer=(2)]
-      ├── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      └── a.s <= 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      ├── (i + k) > 6 [type=bool, outer=(1,2)]
+      ├── (i * 2) >= 8.3333333333333333333 [type=bool, outer=(2)]
+      ├── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      └── s <= 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
+
+# TODO(andyk): Constant fold functions
+opt expect-not=CommuteConstInequality
+SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      ├── (length('foo') + 1) < (i + k) [type=bool, outer=(1,2)]
+      └── length('bar') <= (i * 2) [type=bool, outer=(2)]
+
+# Impure function should not be considered constant.
+opt expect-not=CommuteConstInequality
+SELECT * FROM a WHERE random()::int>a.i+a.i
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ ├── side-effects
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      └── random()::INT8 > (i + i) [type=bool, outer=(2), side-effects]
 
 # --------------------------------------------------
 # NormalizeCmpPlusConst
 # --------------------------------------------------
-opt
+opt expect=NormalizeCmpPlusConst
 SELECT *
 FROM a
 WHERE
-    i+1 = 2 AND
+    k+1 = 2 AND
     (f+f)+2 < 5 AND
     1::decimal+i <= length('foo') AND
     i+2+2 > 10 AND
     '1:00:00'::time + i::interval >= '2:00:00'::time
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── a.i = (2 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── (a.f + a.f) < (5.0 - 2.0) [type=bool, outer=(3)]
-      ├── a.i <= (length('foo') - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── a.i > ((10 - 2) - 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── a.i::INTERVAL >= ('02:00:00' - '01:00:00') [type=bool, outer=(2)]
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ │    ├── constraint: /1: [/1 - /1]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1-6)
+ └── filters
+      ├── (f + f) < 3.0 [type=bool, outer=(3)]
+      ├── (i + 1) <= length('foo') [type=bool, outer=(2)]
+      ├── i > 6 [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
+      └── i::INTERVAL >= '01:00:00' [type=bool, outer=(2)]
 
 # Try case that should not match pattern because Minus overload is not defined.
-opt
+opt expect-not=NormalizeCmpPlusConst
 SELECT * FROM a WHERE s::date + '02:00:00'::time = '2000-01-01T02:00:00'::timestamp
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(4)]
-      └── (a.s::DATE + '02:00:00') = '2000-01-01 02:00:00+00:00' [type=bool, outer=(4)]
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      └── (s::DATE + '02:00:00') = '2000-01-01 02:00:00+00:00' [type=bool, outer=(4)]
 
 # --------------------------------------------------
 # NormalizeCmpMinusConst
 # --------------------------------------------------
-opt
+opt expect=NormalizeCmpMinusConst
 SELECT *
 FROM a
 WHERE
-    i-1 = 2 AND
+    k-1 = 2 AND
     (f+f)-2 < 5 AND
     i-1::decimal <= length('foo') AND
     i-2-2 > 10 AND
-    f+i::float-10.0 >= 100.0
+    f+i::float-10.0 >= 100.0 AND
+    d-'1w'::interval >= '2018-09-23'::date
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) d:6(date!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── a.i = (2 + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── (a.f + a.f) < (5.0 + 2.0) [type=bool, outer=(3)]
-      ├── a.i <= (length('foo') + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── a.i > ((10 + 2) + 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── (a.f + a.i::FLOAT) >= (100.0 + 10.0) [type=bool, outer=(2,3)]
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ │    ├── constraint: /1: [/3 - /3]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1-6)
+ └── filters
+      ├── (f + f) < 7.0 [type=bool, outer=(3)]
+      ├── (i - 1) <= length('foo') [type=bool, outer=(2)]
+      ├── i > 14 [type=bool, outer=(2), constraints=(/2: [/15 - ]; tight)]
+      ├── (f + i::FLOAT8) >= 110.0 [type=bool, outer=(2,3)]
+      └── d >= '2018-09-30' [type=bool, outer=(6), constraints=(/6: [/'2018-09-30' - ]; tight)]
 
 # Try case that should not match pattern because Plus overload is not defined.
-opt
+opt expect-not=NormalizeCmpMinusConst
 SELECT * FROM a WHERE s::json - 1 = '[1]'::json
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(4)]
-      └── (a.s::JSON - 1) = '[1]' [type=bool, outer=(4)]
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      └── (s::JSONB - 1) = '[1]' [type=bool, outer=(4)]
 
 # --------------------------------------------------
 # NormalizeCmpConstMinus
 # --------------------------------------------------
-opt
+opt expect=NormalizeCmpConstMinus
 SELECT *
 FROM a
 WHERE
-    1-i = 2 AND
+    1-k = 2 AND
     2-(f+f) < 5 AND
     1::decimal-i <= length('foo') AND
     2-(2-i) > 10 AND
     10.0-(f+i::float) >= 100.0
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── a.i = (1 - 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── (a.f + a.f) > (2.0 - 5.0) [type=bool, outer=(3)]
-      ├── a.i >= (1 - length('foo')) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── a.i > (2 - (2 - 10)) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── (a.f + a.i::FLOAT) <= (10.0 - 100.0) [type=bool, outer=(2,3)]
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ │    ├── constraint: /1: [/-1 - /-1]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1-6)
+ └── filters
+      ├── (f + f) > -3.0 [type=bool, outer=(3)]
+      ├── (1 - i) <= length('foo') [type=bool, outer=(2)]
+      ├── i > 10 [type=bool, outer=(2), constraints=(/2: [/11 - ]; tight)]
+      └── (f + i::FLOAT8) <= -90.0 [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Minus overload is not defined.
-opt
+opt expect-not=NormalizeCmpConstMinus
 SELECT * FROM a WHERE '[1, 2]'::json - i = '[1]'
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
  ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2)]
-      └── ('[1, 2]' - a.i) = '[1]' [type=bool, outer=(2)]
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      └── ('[1, 2]' - i) = '[1]' [type=bool, outer=(2)]
 
 # --------------------------------------------------
 # NormalizeTupleEquality
 # --------------------------------------------------
-opt
+opt expect=NormalizeTupleEquality
 SELECT * FROM a WHERE (i, f, s) = (1, 3.5, 'foo')
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb) d:6(date)
  ├── key: (1)
- ├── fd: ()-->(2-4), (1)-->(5)
+ ├── fd: ()-->(2-4), (1)-->(5,6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2-4), constraints=(/2: [/1 - /1]; /3: [/3.5 - /3.5]; /4: [/'foo' - /'foo']; tight), fd=()-->(2-4)]
-      ├── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
-      ├── a.f = 3.5 [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight)]
-      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      ├── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      ├── f = 3.5 [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight), fd=()-->(3)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # --------------------------------------------------
-# NormalizeTupleEquality, FlattenAnd
+# NormalizeTupleEquality, NormalizeNestedAnds
 # --------------------------------------------------
 
 # Nested tuples.
-opt
+opt expect=(NormalizeTupleEquality,NormalizeNestedAnds)
 SELECT * FROM a WHERE (1, (2, 'foo')) = (k, (i, s))
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb) d:6(date)
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-5)
+ ├── fd: ()-->(1-6)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
  │    ├── constraint: /1: [/1 - /1]
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    └── fd: ()-->(1-5)
- └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - /2]; /4: [/'foo' - /'foo']; tight), fd=()-->(2,4)]
-      ├── a.i = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
-      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │    └── fd: ()-->(1-6)
+ └── filters
+      ├── i = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # --------------------------------------------------
 # FoldNullComparisonLeft, FoldNullComparisonRight
 # --------------------------------------------------
 
 # Use null::type to circumvent type checker constant folding.
-opt
+opt expect=(FoldNullComparisonLeft,FoldNullComparisonRight)
 SELECT *
 FROM a
 WHERE
@@ -254,66 +296,60 @@ WHERE
     null::jsonb ?| ARRAY['foo'] OR '{}' ?| null::string[] OR
     null::jsonb ?& ARRAY['foo'] OR '{}' ?& null::string[]
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: contradiction
- ├── key: (1)
- └── fd: (1)-->(2-5)
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-6)
 
 # --------------------------------------------------
 # FoldIsNull
 # --------------------------------------------------
-opt
+opt expect=FoldIsNull
 SELECT NULL IS NULL AS r
 ----
-project
- ├── columns: r:1(bool!null)
+values
+ ├── columns: r:1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── true [type=bool]
+ └── (true,) [type=tuple{bool}]
 
 # --------------------------------------------------
 # FoldNonNullIsNull
 # --------------------------------------------------
-opt
+opt expect=FoldNonNullIsNull
 SELECT 1 IS NULL AS r
 ----
-project
- ├── columns: r:1(bool!null)
+values
+ ├── columns: r:1(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      └── false [type=bool]
+ └── (false,) [type=tuple{bool}]
+
+opt expect=FoldNonNullIsNull
+SELECT (1, 2, 3) IS NULL AS r
+----
+values
+ ├── columns: r:1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
 
 # --------------------------------------------------
 # FoldIsNotNull
 # --------------------------------------------------
-opt
+opt expect=FoldIsNotNull
 SELECT NULL IS NOT NULL AS r, NULL IS NOT TRUE AS s
 ----
-project
- ├── columns: r:1(bool!null) s:2(bool!null)
+values
+ ├── columns: r:1(bool) s:2(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      ├── false [type=bool]
-      └── true [type=bool]
+ └── (false, true) [type=tuple{bool, bool}]
 
 # --------------------------------------------------
 # FoldNonNullIsNotNull
@@ -321,36 +357,40 @@ project
 
 # We could (but do not currently) infer that k IS NOT NULL is always True given
 # that k is declared NOT NULL.
-opt
+opt expect=FoldNonNullIsNotNull
 SELECT 1 IS NOT NULL AS r, k IS NOT NULL AS s, i IS NOT NULL AS t FROM a
 ----
 project
- ├── columns: r:6(bool!null) s:7(bool) t:8(bool)
- ├── fd: ()-->(6)
+ ├── columns: r:7(bool!null) s:8(bool) t:9(bool)
+ ├── fd: ()-->(7)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── projections [outer=(1,2)]
+ └── projections
       ├── true [type=bool]
-      ├── a.k IS NOT NULL [type=bool, outer=(1)]
-      └── a.i IS NOT NULL [type=bool, outer=(2)]
+      ├── k IS NOT NULL [type=bool, outer=(1)]
+      └── i IS NOT NULL [type=bool, outer=(2)]
+
+opt expect=FoldNonNullIsNotNull
+SELECT (1, 2, 3) IS NOT NULL AS r
+----
+values
+ ├── columns: r:1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
 
 # --------------------------------------------------
 # CommuteNullIs
 # --------------------------------------------------
-opt
+opt expect=CommuteNullIs
 SELECT NULL IS NOT TRUE AS r, NULL IS TRUE AS s
 ----
-project
- ├── columns: r:1(bool!null) s:2(bool!null)
+values
+ ├── columns: r:1(bool) s:2(bool)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
- └── projections
-      ├── true [type=bool]
-      └── false [type=bool]
+ └── (true, false) [type=tuple{bool, bool}]

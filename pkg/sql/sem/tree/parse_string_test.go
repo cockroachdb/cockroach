@@ -25,7 +25,7 @@ import (
 )
 
 // TestParseDatumStringAs tests that datums are roundtrippable between
-// printing with FmtParseDatums and ParseDatumStringAs.
+// printing with FmtExport and ParseDatumStringAs.
 func TestParseDatumStringAs(t *testing.T) {
 	tests := map[types.T][]string{
 		types.Bool: {
@@ -44,7 +44,6 @@ func TestParseDatumStringAs(t *testing.T) {
 		},
 		types.Decimal: {
 			"0.0",
-			"-0.0",
 			"1.0",
 			"-1.0",
 			strconv.FormatFloat(math.MaxFloat64, 'G', -1, 64),
@@ -81,9 +80,9 @@ func TestParseDatumStringAs(t *testing.T) {
 			strconv.Itoa(math.MinInt64),
 		},
 		types.Interval: {
-			"1h",
-			"-1m",
-			"2y3mon",
+			"01:00:00",
+			"-00:01:00",
+			"2 years 3 mons",
 		},
 		types.JSON: {
 			"{}",
@@ -92,19 +91,20 @@ func TestParseDatumStringAs(t *testing.T) {
 			"1",
 			"1.0",
 			`""`,
+			`"abc"`,
+			`"ab\u0000c"`,
+			`"ab\u0001c"`,
+			`"ab⚣ cd"`,
 		},
 		types.String: {
 			"",
 			"abc",
 			"abc\x00",
+			"ab⚣ cd",
 		},
 		types.Time: {
 			"01:02:03",
 			"02:03:04.123456",
-		},
-		types.TimeTZ: {
-			"01:02:03+00:00",
-			"02:03:04.123456+00:00",
 		},
 		types.Timestamp: {
 			"2001-01-01 01:02:03+00:00",
@@ -130,7 +130,7 @@ func TestParseDatumStringAs(t *testing.T) {
 					if d.ResolvedType() != typ {
 						t.Fatalf("unexpected type: %s", d.ResolvedType())
 					}
-					ds := AsStringWithFlags(d, FmtParseDatums)
+					ds := AsStringWithFlags(d, FmtExport)
 					if s != ds {
 						t.Fatalf("unexpected string: %q, expected: %q", ds, s)
 					}

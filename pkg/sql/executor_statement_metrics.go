@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -71,6 +70,9 @@ type EngineMetrics struct {
 	// The subset of queries which we attempted and failed to plan with the
 	// cost-based optimizer.
 	SQLOptFallbackCount   *metric.Counter
+	SQLOptPlanCacheHits   *metric.Counter
+	SQLOptPlanCacheMisses *metric.Counter
+
 	DistSQLExecLatency    *metric.Histogram
 	SQLExecLatency        *metric.Histogram
 	DistSQLServiceLatency *metric.Histogram
@@ -94,17 +96,11 @@ func (EngineMetrics) MetricStruct() {}
 func (ex *connExecutor) recordStatementSummary(
 	planner *planner,
 	stmt Statement,
-	distSQLUsed bool,
-	optUsed bool,
+	planFlags planFlags,
 	automaticRetryCount int,
 	rowsAffected int,
 	err error,
-	m *EngineMetrics,
 ) {
-	if ex.stmtCounterDisabled {
-		return
-	}
-
 	phaseTimes := planner.statsCollector.PhaseTimes()
 
 	// Compute the run latency. This is always recorded in the
@@ -129,28 +125,33 @@ func (ex *connExecutor) recordStatementSummary(
 	execOverhead := svcLat - processingLat
 
 	if automaticRetryCount == 0 {
-		if optUsed {
+		m := &ex.metrics.EngineMetrics
+		if planFlags.IsSet(planFlagOptUsed) {
 			m.SQLOptCount.Inc(1)
-		}
-
-		if !optUsed && planner.SessionData().OptimizerMode == sessiondata.OptimizerOn {
+		} else if planFlags.IsSet(planFlagOptFallback) {
 			m.SQLOptFallbackCount.Inc(1)
 		}
 
-		if distSQLUsed {
+		if planFlags.IsSet(planFlagDistributed) {
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)
 			}
 			m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
 			m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
-		} else {
-			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 		}
+		if planFlags.IsSet(planFlagOptCacheHit) {
+			m.SQLOptPlanCacheHits.Inc(1)
+		} else if planFlags.IsSet(planFlagOptCacheMiss) {
+			m.SQLOptPlanCacheMisses.Inc(1)
+		}
+		m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 	}
 
 	planner.statsCollector.RecordStatement(
-		stmt, distSQLUsed, automaticRetryCount, rowsAffected, err,
+		stmt,
+		planFlags.IsSet(planFlagDistributed), planFlags.IsSet(planFlagOptUsed),
+		automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)
 

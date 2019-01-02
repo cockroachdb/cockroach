@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -29,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 //
@@ -63,10 +62,10 @@ type databaseCache struct {
 
 	// systemConfig holds a copy of the latest system config since the last
 	// call to resetForBatch.
-	systemConfig config.SystemConfig
+	systemConfig *config.SystemConfig
 }
 
-func newDatabaseCache(cfg config.SystemConfig) *databaseCache {
+func newDatabaseCache(cfg *config.SystemConfig) *databaseCache {
 	return &databaseCache{
 		systemConfig: cfg,
 	}
@@ -207,8 +206,8 @@ func (dc *databaseCache) getDatabaseDesc(
 	if desc == nil {
 		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
 			a := UncachedPhysicalAccessor{}
-			desc, err = a.GetDatabaseDesc(name,
-				DatabaseLookupFlags{ctx: ctx, txn: txn, required: required})
+			desc, err = a.GetDatabaseDesc(ctx, txn, name,
+				DatabaseLookupFlags{required: required})
 			return err
 		}); err != nil {
 			return nil, err
@@ -253,11 +252,22 @@ func (dc *databaseCache) getDatabaseID(
 	return desc.ID, nil
 }
 
-// createDatabase implements the DatabaseDescEditor interface.
-func (p *planner) createDatabase(
-	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
-) (bool, error) {
-	return p.createDescriptor(ctx, databaseKey{desc.Name}, desc, ifNotExists)
+// getCachedDatabaseID returns the ID of a database given its name
+// from the cache. This method never goes to the store to resolve
+// the name to id mapping. Returns 0 if the name to id mapping or
+// the database descriptor are not in the cache.
+func (dc *databaseCache) getCachedDatabaseID(ctx context.Context, name string) (sqlbase.ID, error) {
+	if id := dc.getID(name); id != 0 {
+		return id, nil
+	}
+
+	desc, err := dc.getCachedDatabaseDesc(name, false /*required*/)
+	if err != nil || desc == nil {
+		// desc can be nil if required == false and the database was not found.
+		return 0, err
+	}
+
+	return desc.ID, nil
 }
 
 // renameDatabase implements the DatabaseDescEditor interface.

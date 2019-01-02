@@ -25,8 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
@@ -36,16 +34,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -129,42 +128,54 @@ func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 		opts SendOptions,
 		nodeDialer *nodedialer.Dialer,
 		replicas ReplicaSlice,
-		args roachpb.BatchRequest,
 	) (Transport, error) {
-		return &simpleTransportAdapter{fn, opts, replicas, args, false}, nil
+		return &simpleTransportAdapter{
+			fn:       fn,
+			opts:     opts,
+			replicas: replicas}, nil
 	}
 }
 
 type simpleTransportAdapter struct {
-	fn       simpleSendFn
-	opts     SendOptions
-	replicas ReplicaSlice
-	args     roachpb.BatchRequest
-
-	called bool
+	fn          simpleSendFn
+	opts        SendOptions
+	replicas    ReplicaSlice
+	nextReplica int
 }
 
 func (l *simpleTransportAdapter) IsExhausted() bool {
-	return l.called
+	return l.nextReplica >= len(l.replicas)
 }
 
-func (l *simpleTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
-	return nil
+func (l *simpleTransportAdapter) SendNext(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	ba.Replica = l.replicas[l.nextReplica].ReplicaDescriptor
+	l.nextReplica++
+	return l.fn(ctx, l.opts, l.replicas, ba)
 }
 
-func (l *simpleTransportAdapter) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
-	l.called = true
-	return l.fn(ctx, l.opts, l.replicas, l.args)
+func (l *simpleTransportAdapter) NextInternalClient(
+	ctx context.Context,
+) (context.Context, roachpb.InternalClient, error) {
+	panic("unimplemented")
 }
 
 func (l *simpleTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
+	if !l.IsExhausted() {
+		return l.replicas[l.nextReplica].ReplicaDescriptor
+	}
 	return roachpb.ReplicaDescriptor{}
 }
 
 func (*simpleTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) {
 }
 
-func (*simpleTransportAdapter) Close() {
+func newNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
+	return &roachpb.NodeDescriptor{
+		NodeID:  nodeID,
+		Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("invalid.invalid:%d", nodeID)),
+	}
 }
 
 // TestSendRPCOrder verifies that sendRPC correctly takes into account the
@@ -264,9 +275,9 @@ func TestSendRPCOrder(t *testing.T) {
 		{
 			args:  &roachpb.PutRequest{},
 			tiers: append(nodeTiers[5], roachpb.Tier{Key: "irrelevant", Value: ""}),
-			// Compare only the first resulting addresses as we have a lease holder
+			// Compare only the first resulting address as we have a lease holder
 			// and that means we're only trying to send there.
-			expReplica:  []roachpb.NodeID{2, 5, 4, 0, 0},
+			expReplica:  []roachpb.NodeID{2, 0, 0, 0, 0},
 			leaseHolder: 2,
 		},
 		// Inconsistent Get without matching attributes but lease holder (node 3). Should just
@@ -324,17 +335,20 @@ func TestSendRPCOrder(t *testing.T) {
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: mockRangeDescriptorDBForDescs(descriptor),
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 
 	ds := NewDistSender(cfg, g)
 
 	for n, tc := range testCases {
+		log.Infof(context.TODO(), "testcase %d", n)
 		verifyCall = makeVerifier(tc.expReplica)
 
 		{
 			// The local node needs to get its attributes during sendRPC.
 			nd := &roachpb.NodeDescriptor{
-				NodeID: 6,
+				NodeID:  6,
+				Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("invalid.invalid:6")),
 				Locality: roachpb.Locality{
 					Tiers: tc.tiers,
 				},
@@ -487,13 +501,14 @@ func TestImmutableBatchArgs(t *testing.T) {
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 
 	ds := NewDistSender(cfg, g)
 
 	txn := roachpb.MakeTransaction(
 		"test", nil /* baseKey */, roachpb.NormalUserPriority,
-		enginepb.SERIALIZABLE, clock.Now(), clock.MaxOffset().Nanoseconds(),
+		clock.Now(), clock.MaxOffset().Nanoseconds(),
 	)
 	origTxnTs := txn.Timestamp
 
@@ -533,14 +548,18 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		_ ReplicaSlice,
 		args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
+		reply := &roachpb.BatchResponse{}
 		if first {
-			reply := &roachpb.BatchResponse{}
 			reply.Error = roachpb.NewError(
 				&roachpb.NotLeaseHolderError{LeaseHolder: &leaseHolder})
 			first = false
 			return reply, nil
 		}
-		return args.CreateReply(), nil
+		// Return an error to avoid activating a code path that would
+		// populate the leaseholder cache from the successful response.
+		// That's not what this test wants to test.
+		reply.Error = roachpb.NewErrorf("boom")
+		return reply, nil
 	}
 
 	cfg := DistSenderConfig{
@@ -550,12 +569,13 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 	v := roachpb.MakeValueFromString("value")
 	put := roachpb.NewPut(roachpb.Key("a"), v)
-	if _, err := client.SendWrapped(context.Background(), ds, put); err != nil {
-		t.Errorf("put encountered error: %s", err)
+	if _, pErr := client.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
+		t.Fatalf("unexpected error: %v", pErr)
 	}
 	if first {
 		t.Errorf("The command did not retry")
@@ -565,6 +585,174 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		t.Errorf("lease holder cache was not updated: expected %+v", leaseHolder)
 	} else if cur != leaseHolder.StoreID {
 		t.Errorf("lease holder cache was not updated: expected %d, got %d", leaseHolder.StoreID, cur)
+	}
+}
+
+// TestRetryOnNotLeaseHolderError verifies that the DistSender backs off upon
+// receiving multiple NotLeaseHolderErrors without observing an increase in
+// LeaseSequence.
+func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+	leaseHolders := testUserRangeDescriptor3Replicas.Replicas
+	for _, n := range leaseHolders {
+		if err := g.AddInfoProto(
+			gossip.MakeNodeIDKey(n.NodeID),
+			newNodeDesc(n.NodeID),
+			gossip.NodeDescriptorTTL,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var sequences []roachpb.LeaseSequence
+	var testFn simpleSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		args roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		reply := &roachpb.BatchResponse{}
+		if len(sequences) > 0 {
+			seq := sequences[0]
+			sequences = sequences[1:]
+			lease := roachpb.Lease{
+				Sequence: seq,
+				Replica:  leaseHolders[int(seq)%2],
+			}
+			reply.Error = roachpb.NewError(
+				&roachpb.NotLeaseHolderError{
+					Replica:     leaseHolders[int(seq)%2],
+					LeaseHolder: &leaseHolders[(int(seq)+1)%2],
+					Lease:       &lease,
+				})
+			return reply, nil
+		}
+		// Return an error to bail out of retries.
+		reply.Error = roachpb.NewErrorf("boom")
+		return reply, nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
+		RPCRetryOptions: &retry.Options{
+			InitialBackoff: time.Microsecond,
+			MaxBackoff:     time.Microsecond,
+		},
+	}
+	for i, c := range []struct {
+		leaseSequences []roachpb.LeaseSequence
+		expected       int64
+	}{
+		{[]roachpb.LeaseSequence{1, 0, 1, 2}, 2},
+		{[]roachpb.LeaseSequence{0}, 0},
+		{[]roachpb.LeaseSequence{1, 0, 1, 2, 1}, 3},
+	} {
+		sequences = c.leaseSequences
+		ds := NewDistSender(cfg, g)
+		v := roachpb.MakeValueFromString("value")
+		put := roachpb.NewPut(roachpb.Key("a"), v)
+		if _, pErr := client.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
+			t.Fatalf("%d: unexpected error: %v", i, pErr)
+		}
+		if got := ds.Metrics().InLeaseTransferBackoffs.Count(); got != c.expected {
+			t.Fatalf("%d: expected %d backoffs, got %d", i, c.expected, got)
+		}
+	}
+}
+
+// This test verifies that when we have a cached leaseholder that is down
+// it is ejected from the cache.
+func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	g, clock := makeGossip(t, stopper)
+	if err := g.AddInfoProto(
+		gossip.MakeNodeIDKey(roachpb.NodeID(2)),
+		newNodeDesc(2),
+		gossip.NodeDescriptorTTL,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	var contacted1, contacted2 bool
+
+	transport := func(
+		ctx context.Context,
+		opts SendOptions,
+		replicas ReplicaSlice,
+		ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		switch ba.Replica.StoreID {
+		case 1:
+			contacted1 = true
+			return nil, errors.New("mock RPC error")
+		case 2:
+			contacted2 = true
+			return ba.CreateReply(), nil
+		default:
+			panic("unexpected replica: " + ba.Replica.String())
+		}
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(transport),
+		},
+		RangeDescriptorDB: mockRangeDescriptorDBForDescs(
+			roachpb.RangeDescriptor{
+				RangeID:  1,
+				StartKey: roachpb.RKeyMin,
+				EndKey:   roachpb.RKeyMax,
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						NodeID:  1,
+						StoreID: 1,
+					},
+					{
+						NodeID:  2,
+						StoreID: 2,
+					},
+				},
+			}),
+		NodeDialer: nodedialer.New(nil, gossip.AddressResolver(g)),
+	}
+
+	ds := NewDistSender(cfg, g)
+	ds.LeaseHolderCache().Update(ctx, roachpb.RangeID(1), roachpb.StoreID(1))
+
+	var ba roachpb.BatchRequest
+	ba.RangeID = 1
+	get := &roachpb.GetRequest{}
+	get.Key = roachpb.Key("a")
+	ba.Add(get)
+
+	if _, pErr := ds.Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if !contacted1 || !contacted2 {
+		t.Errorf("contacted n1: %t, contacted n2: %t", contacted1, contacted2)
+	}
+
+	if storeID, ok := ds.LeaseHolderCache().Lookup(ctx, roachpb.RangeID(1)); !ok {
+		t.Fatalf("expected new leaseholder to be cached")
+	} else if exp := roachpb.StoreID(2); storeID != exp {
+		t.Fatalf("expected lease holder for r1 to be cached as s%d, but got s%d", exp, storeID)
 	}
 }
 
@@ -599,6 +787,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 			errs = errs[1:]
 			return []roachpb.RangeDescriptor{testUserRangeDescriptor}, nil, err
 		}),
+		NodeDialer: nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
@@ -624,10 +813,7 @@ func makeGossip(t *testing.T, stopper *stop.Stopper) (*gossip.Gossip, *hlc.Clock
 
 	const nodeID = 1
 	g := gossip.NewTest(nodeID, rpcContext, server, stopper, metric.NewRegistry())
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
-		NodeID:  nodeID,
-		Address: util.MakeUnresolvedAddr("tcp", "neverused:9999"),
-	}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(nodeID)); err != nil {
 		t.Fatal(err)
 	}
 	if err := g.AddInfo(gossip.KeySentinel, nil, time.Hour); err != nil {
@@ -686,6 +872,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 			),
 		},
 		RangeDescriptorDB: rDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 
 	ds := NewDistSender(cfg, g).withMetaRecursion()
@@ -713,6 +900,9 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 			t.Fatalf("expected one first range lookup, got %d", num)
 		}
 	}
+	// Tweak the descriptor so that the gossip callback will be invoked.
+	desc.Generation = new(int64)
+	*desc.Generation = 1
 	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &desc, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -799,6 +989,7 @@ func TestEvictCacheOnError(t *testing.T) {
 				TransportFactory: adaptSimpleTransport(testFn),
 			},
 			RangeDescriptorDB: defaultMockRangeDescriptorDB,
+			NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 		}
 		ds := NewDistSender(cfg, g)
 		ds.leaseHolderCache.Update(context.TODO(), 1, leaseHolder.StoreID)
@@ -828,11 +1019,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 
 	// Gossip the two nodes referred to in testUserRangeDescriptor3Replicas.
 	for i := 2; i <= 3; i++ {
-		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
-		nd := &roachpb.NodeDescriptor{
-			NodeID:  roachpb.NodeID(i),
-			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-		}
+		nd := newNodeDesc(roachpb.NodeID(i))
 		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
 			t.Fatal(err)
 		}
@@ -850,7 +1037,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 		case 0, 1:
 			err = &roachpb.NotLeaseHolderError{LeaseHolder: &roachpb.ReplicaDescriptor{NodeID: 99, StoreID: 999}}
 		case 2:
-			err = roachpb.NewRangeNotFoundError(0)
+			err = roachpb.NewRangeNotFoundError(0, 0)
 		default:
 			return args.CreateReply(), nil
 		}
@@ -867,6 +1054,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 	key := roachpb.Key("a")
@@ -963,6 +1151,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
+		NodeDialer: nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
@@ -1054,6 +1243,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
+		NodeDialer: nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
@@ -1075,6 +1265,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	n.Start()
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		NodeDialer: nodedialer.New(nil, gossip.AddressResolver(n.Nodes[0].Gossip)),
 	}, n.Nodes[0].Gossip)
 	if _, err := ds.FirstRange(); err == nil {
 		t.Errorf("expected not to find first range descriptor")
@@ -1116,7 +1307,7 @@ func TestSendRPCRetry(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1177,6 +1368,94 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 }
 
+// This test reproduces the main problem in:
+// https://github.com/cockroachdb/cockroach/issues/30613.
+// by verifying that if a RangeNotFoundError is returned from a Replica,
+// the next Replica is tried.
+func TestSendRPCRangeNotFoundError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fill RangeDescriptor with three replicas.
+	var descriptor = roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("z"),
+	}
+	for i := 1; i <= 3; i++ {
+		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
+		nd := &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		}
+		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+
+		descriptor.Replicas = append(descriptor.Replicas, roachpb.ReplicaDescriptor{
+			NodeID:    roachpb.NodeID(i),
+			StoreID:   roachpb.StoreID(i),
+			ReplicaID: roachpb.ReplicaID(i),
+		})
+	}
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor,
+	)
+
+	seen := map[roachpb.ReplicaID]struct{}{}
+	var leaseholderStoreID roachpb.StoreID
+	var ds *DistSender
+	var testFn simpleSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		br := ba.CreateReply()
+		if _, ok := seen[ba.Replica.ReplicaID]; ok {
+			br.Error = roachpb.NewErrorf("visited replica %+v twice", ba.Replica)
+			return br, nil
+		}
+		seen[ba.Replica.ReplicaID] = struct{}{}
+		if len(seen) <= 2 {
+			if len(seen) == 1 {
+				// Add to the leaseholder cache to verify that the response evicts it.
+				ds.leaseHolderCache.Update(context.Background(), ba.RangeID, ba.Replica.StoreID)
+			}
+			br.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(ba.RangeID, ba.Replica.StoreID))
+			return br, nil
+		}
+		leaseholderStoreID = ba.Replica.StoreID
+		return br, nil
+	}
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		RangeDescriptorDB: descDB,
+	}
+	ds = NewDistSender(cfg, g)
+	get := roachpb.NewGet(roachpb.Key("b"))
+	_, err := client.SendWrapped(context.Background(), ds, get)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storeID, found := ds.leaseHolderCache.Lookup(context.Background(), roachpb.RangeID(1)); !found {
+		t.Fatal("expected a cached leaseholder")
+	} else if storeID != leaseholderStoreID {
+		t.Fatalf("unexpected cached leaseholder s%d, expected s%d", storeID, leaseholderStoreID)
+	}
+}
+
 // TestGetNodeDescriptor checks that the Node descriptor automatically gets
 // looked up from Gossip.
 func TestGetNodeDescriptor(t *testing.T) {
@@ -1190,7 +1469,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 		Clock:      clock,
 	}, g)
 	g.NodeID.Reset(5)
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 5}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(5)); err != nil {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
@@ -1269,7 +1548,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 
 	ds := NewDistSender(cfg, g)
 
-	txn := roachpb.MakeTransaction("foo", nil, 1.0, enginepb.SERIALIZABLE, clock.Now(), 0)
+	txn := roachpb.MakeTransaction("foo", nil, 1.0, clock.Now(), 0)
 
 	var ba roachpb.BatchRequest
 	ba.Txn = &txn
@@ -1433,6 +1712,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:             clock,
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 
@@ -1481,7 +1761,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -1603,7 +1883,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -1763,7 +2043,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		},
 	}
 
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -1938,18 +2218,17 @@ func TestSenderTransport(t *testing.T) {
 			) (r *roachpb.BatchResponse, e *roachpb.Error) {
 				return
 			},
-		))(SendOptions{}, &nodedialer.Dialer{}, ReplicaSlice{{}}, roachpb.BatchRequest{})
+		))(SendOptions{}, &nodedialer.Dialer{}, ReplicaSlice{{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = transport.SendNext(context.Background())
+	_, err = transport.SendNext(context.Background(), roachpb.BatchRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !transport.IsExhausted() {
 		t.Fatalf("transport is not exhausted")
 	}
-	transport.Close()
 }
 
 func TestGatewayNodeID(t *testing.T) {
@@ -1959,10 +2238,7 @@ func TestGatewayNodeID(t *testing.T) {
 
 	g, clock := makeGossip(t, stopper)
 	const expNodeID = 42
-	nd := &roachpb.NodeDescriptor{
-		NodeID:  expNodeID,
-		Address: util.MakeUnresolvedAddr("tcp", "foobar:1234"),
-	}
+	nd := newNodeDesc(expNodeID)
 	g.NodeID.Reset(nd.NodeID)
 	if err := g.SetNodeDescriptor(nd); err != nil {
 		t.Fatal(err)
@@ -2012,7 +2288,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 
 	g, clock := makeGossip(t, stopper)
 
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -2152,5 +2428,154 @@ func TestErrorIndexAlignment(t *testing.T) {
 			}
 		})
 	}
+}
 
+// TestMixedSuccessErrorWrapped tests that an internal MixedSuccessError
+// seen by a caller of Send() cannot wrap another MixedSuccessError.
+func TestMixedSuccessErrorWrapped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+		t.Fatal(err)
+	}
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(1),
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
+		t.Fatal(err)
+
+	}
+
+	// Fill MockRangeDescriptorDB with three descriptors.
+	var descriptor1 = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: testMetaEndKey,
+		EndKey:   roachpb.RKey("b"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor2 = roachpb.RangeDescriptor{
+		RangeID:  3,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("c"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor3 = roachpb.RangeDescriptor{
+		RangeID:  4,
+		StartKey: roachpb.RKey("c"),
+		EndKey:   roachpb.RKeyMax,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor1,
+		descriptor2,
+		descriptor3,
+	)
+
+	reqNum := 0
+
+	var testFn simpleSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		reply := ba.CreateReply()
+		reqNum++
+		// Return an error on the third batch request.
+		if reqNum == 3 {
+			// The relative index is always 1 since
+			// we return an error for the second
+			// request of the 3rd batch.
+			index := &roachpb.ErrPosition{Index: 1}
+
+			// This will be the error that will be wrapped
+			// within a MixedSuccessError. Make this error itself a
+			// MixedSuccessError to test if it escapes the dist-sender.
+			// Set the wrapped index and the MixedSuccessError index to the
+			// same value because that's what the code does.
+			wrapped := roachpb.NewError(errors.Errorf("dummy error"))
+			wrapped.Index = index
+			reply.Error = roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: wrapped})
+			reply.Error.Index = index
+		}
+		return reply, nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		RangeDescriptorDB: descDB,
+	}
+	ds := NewDistSender(cfg, g)
+
+	// Create a batch request with 3 requests that will trigger a
+	// MixedSuccessError.
+	var ba roachpb.BatchRequest
+	ba.Txn = &roachpb.Transaction{Name: "test"}
+	// First batch has 1 request.
+	val := roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("a"), val))
+	// Second batch has 2 requests.
+	val = roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("b"), val))
+	val = roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("bb"), val))
+	// Third batch has 2 request.
+	val = roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("c"), val))
+	val = roachpb.MakeValueFromString("val")
+	ba.Add(roachpb.NewPut(roachpb.Key("cc"), val))
+
+	_, pErr := ds.Send(context.Background(), ba)
+	if pErr == nil {
+		t.Fatalf("expected an error to be returned from distSender")
+	}
+	mse, ok := pErr.GetDetail().(*roachpb.MixedSuccessError)
+	if !ok {
+		t.Fatal("expected mixed success error")
+	}
+
+	wrapped := mse.Wrapped
+
+	// The error wrapped is not a MixedSuccessError and is the original
+	// wrapped error.
+	if _, ok := wrapped.GetDetail().(*roachpb.MixedSuccessError); ok {
+		t.Fatal("found another mixed success error")
+	}
+	if wrapped.Message != "dummy error" {
+		t.Fatalf("err = %s", wrapped.Message)
+	}
+
+	// The index is correctly set.
+	if wrapped.Index == nil {
+		t.Fatalf("expected error index to be set for err %T", pErr.GetDetail())
+	}
+	if wrapped.Index.Index != 4 {
+		t.Errorf("expected error index to be %d, instead got %d", 3, wrapped.Index.Index)
+	}
 }

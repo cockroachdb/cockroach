@@ -19,8 +19,6 @@ import (
 	"testing"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -30,10 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/opentracing/opentracing-go"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -62,6 +62,12 @@ type LocalTestCluster struct {
 	Latency                  time.Duration // sleep for each RPC sent
 	tester                   testing.TB
 	DontRetryPushTxnFailures bool
+	// DontStartLivenessHeartbeat, if set, inhibits the heartbeat loop. Some tests
+	// need this because, for example, the heartbeat loop increments some
+	// transaction metrics.
+	// However, note that without heartbeats, ranges with epoch-based leases
+	// cannot be accessed because the leases cannot be granted.
+	DontStartLivenessHeartbeat bool
 }
 
 // InitFactoryFn is a callback used to initiate the txn coordinator
@@ -93,14 +99,17 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ambient.AddLogTag("n", nc)
 
 	nodeID := roachpb.NodeID(1)
-	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
+	nodeDesc := &roachpb.NodeDescriptor{
+		NodeID:  nodeID,
+		Address: util.MakeUnresolvedAddr("tcp", "invalid.invalid:26257"),
+	}
 
 	ltc.tester = t
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper, &cfg.Settings.Version)
 	c := &rpcContext.ClusterID
 	server := rpc.NewServer(rpcContext) // never started
-	ltc.Gossip = gossip.New(ambient, c, nc, rpcContext, server, ltc.Stopper, metric.NewRegistry())
+	ltc.Gossip = gossip.New(ambient, c, nc, rpcContext, server, ltc.Stopper, metric.NewRegistry(), roachpb.Locality{})
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20)
 	ltc.Stopper.AddCloser(ltc.Eng)
 
@@ -151,20 +160,25 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	)
 	cfg.Transport = transport
 	cfg.TimestampCachePageSize = tscache.TestSklPageSize
-	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
 	ctx := context.TODO()
 
-	if err := ltc.Store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, cfg.Settings.Version.BootstrapVersion()); err != nil {
+	if err := storage.Bootstrap(ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, cfg.Settings.Version.BootstrapVersion()); err != nil {
+		t.Fatalf("unable to start local test cluster: %s", err)
+	}
+	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
+	if err := ltc.Store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
+		t.Fatalf("unable to start local test cluster: %s", err)
+	}
+
+	if !ltc.DontStartLivenessHeartbeat {
+		cfg.NodeLiveness.StartHeartbeat(ctx, ltc.Stopper, nil /* alive */)
+	}
+
+	if err := ltc.Store.Start(ctx, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 
 	ltc.Stores.AddStore(ltc.Store)
-	if err := ltc.Store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
-		t.Fatalf("unable to start local test cluster: %s", err)
-	}
-	if err := ltc.Store.Start(ctx, ltc.Stopper); err != nil {
-		t.Fatalf("unable to start local test cluster: %s", err)
-	}
 	nc.Set(ctx, nodeDesc.NodeID)
 	if err := ltc.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatalf("unable to set node descriptor: %s", err)

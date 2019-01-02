@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 func TestTableSet(t *testing.T) {
@@ -127,9 +127,10 @@ func TestPurgeOldVersions(t *testing.T) {
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLLeaseManager: &LeaseManagerTestingKnobs{
-				GossipUpdateEvent: func(cfg config.SystemConfig) {
+				GossipUpdateEvent: func(cfg *config.SystemConfig) error {
 					gossipSem <- struct{}{}
 					<-gossipSem
+					return nil
 				},
 			},
 		},
@@ -153,11 +154,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	var tables []sqlbase.TableDescriptor
+	var tables []sqlbase.ImmutableTableDescriptor
 	var expiration hlc.Timestamp
 	getLeases := func() {
 		for i := 0; i < 3; i++ {
-			if err := leaseManager.acquireFreshestFromStore(context.TODO(), tableDesc.ID); err != nil {
+			if err := leaseManager.AcquireFreshestFromStore(context.TODO(), tableDesc.ID); err != nil {
 				t.Fatal(err)
 			}
 			table, exp, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), tableDesc.ID)
@@ -178,14 +179,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Verifies that errDidntUpdateDescriptor doesn't leak from Publish().
-	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.TableDescriptor) error {
+	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
 		return errDidntUpdateDescriptor
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Publish a new version for the table
-	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.TableDescriptor) error {
+	if _, err := leaseManager.Publish(context.TODO(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
 		return nil
 	}, nil); err != nil {
 		t.Fatal(err)
@@ -220,8 +221,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// without a lease.
 	ts.mu.Lock()
 	tableVersion := &tableVersionState{
-		TableDescriptor: tables[0],
-		expiration:      tables[5].ModificationTime,
+		ImmutableTableDescriptor: tables[0],
+		expiration:               tables[5].ModificationTime,
 	}
 	ts.mu.active.insert(tableVersion)
 	ts.mu.Unlock()
@@ -276,7 +277,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.ID != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
 	}
-	if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
+	if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
 		t.Fatal(err)
 	}
 
@@ -303,7 +304,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.ID != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
 	}
-	if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
+	if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -336,7 +337,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now()); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
 	} else {
-		if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
+		if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -421,7 +422,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Release.
 	// tableChan acts as a barrier, synchronizing the two routines at every
 	// iteration.
-	tableChan := make(chan *sqlbase.TableDescriptor)
+	tableChan := make(chan *sqlbase.ImmutableTableDescriptor)
 	errChan := make(chan error)
 	go func() {
 		for table := range tableChan {
@@ -511,7 +512,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < numRoutines; i++ {
 		go func() {
 			defer wg.Done()
-			if err := leaseManager.acquireFreshestFromStore(context.TODO(), tableDesc.ID); err != nil {
+			if err := leaseManager.AcquireFreshestFromStore(context.TODO(), tableDesc.ID); err != nil {
 				t.Error(err)
 			}
 			table, _, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), tableDesc.ID)
@@ -603,7 +604,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {
-		table *sqlbase.TableDescriptor
+		table *sqlbase.ImmutableTableDescriptor
 		exp   hlc.Timestamp
 		err   error
 	}
@@ -642,7 +643,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		ctx := log.WithLogTag(context.Background(), "test: Lease", nil)
+		ctx := logtags.AddTag(context.Background(), "test: Lease", nil)
 
 		t.Run(test.name, func(t *testing.T) {
 			// blockChan and freshestBlockChan is used to set up the race condition.
@@ -715,7 +716,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			go acquireBlock(ctx, leaseManager, acquireResultChan)
 			if test.isSecondCallAcquireFreshest {
 				go func(ctx context.Context, m *LeaseManager, acquireChan chan Result) {
-					if err := m.acquireFreshestFromStore(ctx, descID); err != nil {
+					if err := m.AcquireFreshestFromStore(ctx, descID); err != nil {
 						acquireChan <- Result{err: err, exp: hlc.Timestamp{}, table: nil}
 						return
 					}

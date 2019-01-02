@@ -32,25 +32,50 @@ import (
 	"github.com/kr/pretty"
 )
 
+const defaultParallelism = 10
+
+func TestMatchOrSkip(t *testing.T) {
+	testCases := []struct {
+		filter       []string
+		name         string
+		tags         []string
+		expected     bool
+		expectedSkip string
+	}{
+		{nil, "foo", nil, true, ""},
+		{nil, "foo", []string{"bar"}, true, "[tag:default] does not match [bar]"},
+		{[]string{"tag:b"}, "foo", []string{"bar"}, true, ""},
+		{[]string{"tag:b"}, "foo", nil, true, "[tag:b] does not match [default]"},
+		{[]string{"tag:default"}, "foo", nil, true, ""},
+		{[]string{"tag:f"}, "foo", []string{"bar"}, true, "[tag:f] does not match [bar]"},
+		{[]string{"f"}, "foo", []string{"bar"}, true, "[tag:default] does not match [bar]"},
+		{[]string{"f"}, "bar", []string{"bar"}, false, ""},
+		{[]string{"f", "tag:b"}, "foo", []string{"bar"}, true, ""},
+		{[]string{"f", "tag:f"}, "foo", []string{"bar"}, true, "[tag:f] does not match [bar]"},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			f := newFilter(c.filter)
+			spec := &testSpec{Name: c.name, Tags: c.tags}
+			if value := spec.matchOrSkip(f); c.expected != value {
+				t.Fatalf("expected %t, but found %t", c.expected, value)
+			} else if value && c.expectedSkip != spec.Skip {
+				t.Fatalf("expected %s, but found %s", c.expectedSkip, spec.Skip)
+			}
+		})
+	}
+}
+
 func TestRegistryRun(t *testing.T) {
 	r := newRegistry()
 	r.out = ioutil.Discard
 	r.Add(testSpec{
-		Name:   "pass",
-		Stable: true,
+		Name: "pass",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 		},
 	})
 	r.Add(testSpec{
-		Name:   "fail",
-		Stable: true,
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			t.Fatal("failed")
-		},
-	})
-	r.Add(testSpec{
-		Name:   "fail-unstable",
-		Stable: false,
+		Name: "fail",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Fatal("failed")
 		},
@@ -63,15 +88,15 @@ func TestRegistryRun(t *testing.T) {
 		{nil, 1},
 		{[]string{"pass"}, 0},
 		{[]string{"fail"}, 1},
-		{[]string{"fail-unstable"}, 0},
 		{[]string{"pass|fail"}, 1},
 		{[]string{"pass", "fail"}, 1},
+		{[]string{"notests"}, 1},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			code := r.Run(c.filters)
+			code := r.Run(c.filters, defaultParallelism, "" /* artifactsDir */, "myuser")
 			if c.expected != code {
-				t.Fatalf("expected %d, but found %d", c.expected, code)
+				t.Fatalf("expected code %d, but found code %d. Filters: %s", c.expected, code, c.filters)
 			}
 		})
 	}
@@ -103,8 +128,7 @@ func TestRegistryStatus(t *testing.T) {
 	r.out = &buf
 	r.statusInterval = 20 * time.Millisecond
 	r.Add(testSpec{
-		Name:   `status`,
-		Stable: true,
+		Name: `status`,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Status("waiting")
 			var wg sync.WaitGroup
@@ -134,7 +158,7 @@ func TestRegistryStatus(t *testing.T) {
 			}
 		},
 	})
-	r.Run([]string{"status"})
+	r.Run([]string{"status"}, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	status := buf.String()
 	if !waitingRE.MatchString(status) {
@@ -157,8 +181,7 @@ func TestRegistryStatusUnknown(t *testing.T) {
 	r.statusInterval = 20 * time.Millisecond
 
 	r.Add(testSpec{
-		Name:   `status`,
-		Stable: true,
+		Name: `status`,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			for i := 0; i < 100; i++ {
 				time.Sleep(r.statusInterval)
@@ -168,7 +191,7 @@ func TestRegistryStatusUnknown(t *testing.T) {
 			}
 		},
 	})
-	r.Run([]string{"status"})
+	r.Run([]string{"status"}, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	status := buf.String()
 	if !unknownRE.MatchString(status) {
@@ -189,12 +212,11 @@ func TestRegistryRunTimeout(t *testing.T) {
 	r.Add(testSpec{
 		Name:    `timeout`,
 		Timeout: 10 * time.Millisecond,
-		Stable:  true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			<-ctx.Done()
 		},
 	})
-	r.Run([]string{"timeout"})
+	r.Run([]string{"timeout"}, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	out := buf.String()
 	if !timeoutRE.MatchString(out) {
@@ -202,27 +224,71 @@ func TestRegistryRunTimeout(t *testing.T) {
 	}
 }
 
+func TestRegistryRunSubTestFailed(t *testing.T) {
+	var buf syncedBuffer
+	failedRE := regexp.MustCompile(`(?m)^.*--- FAIL: parent \(.*$`)
+
+	r := newRegistry()
+	r.out = &buf
+	r.Add(testSpec{
+		Name: "parent",
+		SubTests: []testSpec{{
+			Name: "child",
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				t.Fatal("failed")
+			},
+		}},
+	})
+
+	r.Run([]string{"."}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	out := buf.String()
+	if !failedRE.MatchString(out) {
+		t.Fatalf("unable to find \"FAIL: parent\" message:\n%s", out)
+	}
+}
+
+func TestRegistryRunNoTests(t *testing.T) {
+	var buf syncedBuffer
+	failedRE := regexp.MustCompile(`(?m)^warning: no tests to run \[notest\]\nFAIL$`)
+
+	r := newRegistry()
+	r.out = &buf
+	r.Add(testSpec{
+		Name: "some-test",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			t.Fatal("failed")
+		},
+	})
+
+	r.Run([]string{"notest"}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	out := buf.String()
+	if !failedRE.MatchString(out) {
+		t.Fatalf("unable to find \"warning: no tests to run\" message:\n%s", out)
+	}
+}
+
 func TestRegistryRunClusterExpired(t *testing.T) {
-	defer func(l, v bool, n string) {
-		local, testingSkipValidation, clusterName = l, v, n
-	}(local, testingSkipValidation, clusterName)
-	local, testingSkipValidation, clusterName = true, true, "local"
+	defer func(l bool, n string) {
+		local, clusterName = l, n
+	}(local, clusterName)
+	local, clusterName = true, "local"
 
 	var buf syncedBuffer
 	expiredRE := regexp.MustCompile(`(?m)^.*cluster expired \(.*\)$`)
 
 	r := newRegistry()
+	r.config.skipClusterValidationOnAttach = true
+	r.config.skipClusterStopOnAttach = true
 	r.out = &buf
 
 	r.Add(testSpec{
-		Name:   `expired`,
-		Stable: true,
-		Nodes:  nodes(1, nodeLifetimeOption(time.Second)),
+		Name:  `expired`,
+		Nodes: nodes(1, nodeLifetimeOption(time.Second)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			panic("not reached")
 		},
 	})
-	r.Run([]string{"expired"})
+	r.Run([]string{"expired"}, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	out := buf.String()
 	if !expiredRE.MatchString(out) {
@@ -230,7 +296,7 @@ func TestRegistryRunClusterExpired(t *testing.T) {
 	}
 }
 
-func TestRegistryVerifyClusterName(t *testing.T) {
+func TestRegistryVerifyValidClusterName(t *testing.T) {
 	testCases := []struct {
 		testNames   []string
 		expectedErr string
@@ -239,15 +305,15 @@ func TestRegistryVerifyClusterName(t *testing.T) {
 		{[]string{"HELLO", "hello"}, "have equivalent nightly cluster names"},
 		{[]string{"hel+lo", "hel++lo"}, "have equivalent nightly cluster names"},
 		{[]string{"hello+"}, "must match regex"},
-		{[]string{strings.Repeat("y", 46)}, ""},
-		{[]string{strings.Repeat("y", 47)}, "must match regex"},
+		{[]string{strings.Repeat("y", 41)}, ""},
+		{[]string{strings.Repeat("y", 42)}, "must match regex"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			r := newRegistry()
 			var err error
 			for _, n := range c.testNames {
-				err = r.verifyClusterName(n)
+				err = r.verifyValidClusterName(n)
 			}
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %s, but found %v", c.expectedErr, err)
@@ -353,10 +419,19 @@ func TestRegistryPrepareSpec(t *testing.T) {
 		{
 			testSpec{
 				Name:       "a",
+				MinVersion: "v2.1.0-foo",
+				Run:        dummyRun,
+			},
+			regexp.QuoteMeta(`invalid version v2.1.0-foo, cannot specify a prerelease (-xxx)`),
+			nil,
+		},
+		{
+			testSpec{
+				Name:       "a",
 				MinVersion: "foo",
 				Run:        dummyRun,
 			},
-			"a: unable to parse min-version: foo",
+			"a: unable to parse min-version: invalid version string 'foo'",
 			nil,
 		},
 		{
@@ -377,7 +452,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 			r := newRegistry()
 			err := r.prepareSpec(&c.spec, 0)
 			if !testutils.IsError(err, c.expectedErr) {
-				t.Fatalf("expected %s, but found %v", c.expectedErr, err)
+				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
 			}
 			if c.expectedErr == "" {
 				tests := listTests(&c.spec)
@@ -396,9 +471,9 @@ func TestRegistryMinVersion(t *testing.T) {
 		expectedA    bool
 		expectedB    bool
 	}{
-		{"1.1.0", false, false},
-		{"2.0.0", true, false},
-		{"2.1.0", true, true},
+		{"v1.1.0", false, false},
+		{"v2.0.0", true, false},
+		{"v2.1.0", true, true},
 	}
 	for _, c := range testCases {
 		t.Run(c.buildVersion, func(t *testing.T) {
@@ -408,14 +483,14 @@ func TestRegistryMinVersion(t *testing.T) {
 			r.out = &buf
 			r.Add(testSpec{
 				Name:       "a",
-				MinVersion: "2.0.0",
+				MinVersion: "v2.0.0",
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runA = true
 				},
 			})
 			r.Add(testSpec{
 				Name:       "b",
-				MinVersion: "2.1.0",
+				MinVersion: "v2.1.0",
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runB = true
 				},
@@ -423,7 +498,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			if err := r.setBuildVersion(c.buildVersion); err != nil {
 				t.Fatal(err)
 			}
-			r.Run(nil)
+			r.Run(nil /* filter */, defaultParallelism, "" /* artifactsDir */, "myuser")
 			if c.expectedA != runA || c.expectedB != runB {
 				t.Fatalf("expected %t,%t, but got %t,%t\n%s",
 					c.expectedA, c.expectedB, runA, runB, buf.String())

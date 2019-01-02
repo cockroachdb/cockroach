@@ -17,6 +17,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "roachpb/metadata.proto";
+import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
@@ -60,6 +61,8 @@ enum ValueType {
   // TUPLE represents a DTuple, encoded as repeated pairs of varint field number
   // followed by a value encoded Datum.
   TUPLE = 10;
+
+  BITARRAY = 11;
 
   // TIMESERIES is applied to values which contain InternalTimeSeriesData.
   TIMESERIES = 100;
@@ -133,9 +136,19 @@ message MergeTrigger {
   RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
 
-  // A snapshot of the replicated data from the right-hand side of the merge
-  // as a serialized RocksDB write batch.
-  bytes right_data = 3;
+  reserved 3;
+
+  storage.engine.enginepb.MVCCStats right_mvcc_stats = 4 [
+    (gogoproto.customname) = "RightMVCCStats",
+    (gogoproto.nullable) = false
+  ];
+
+  // FreezeStart is a timestamp that is guaranteed to be greater than the
+  // timestamps at which any requests were serviced by the responding replica
+  // before it stopped responding to requests altogether (in anticipation of
+  // being subsumed). It is suitable for use as the timestamp cache's low water
+  // mark for the keys previously owned by the subsumed range.
+  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
@@ -150,6 +163,10 @@ message ChangeReplicasTrigger {
   option (gogoproto.equal) = true;
 
   option (gogoproto.goproto_stringer) = false;
+
+  // TODO(benesch): this trigger should just specify the updated descriptor,
+  // like the split and merge triggers, so that the receiver doesn't need to
+  // reconstruct the range descriptor update.
 
   ReplicaChangeType change_type = 1;
   // The replica being modified.
@@ -221,11 +238,10 @@ message ObservedTimestamp {
 }
 
 // A Transaction is a unit of work performed on the database.
-// Cockroach transactions support two isolation levels: snapshot
-// isolation and serializable snapshot isolation. Each Cockroach
-// transaction is assigned a random priority. This priority will be
-// used to decide whether a transaction will be aborted during
-// contention.
+// Cockroach transactions always operate at the serializable isolation
+// level. Each Cockroach transaction is assigned a random priority.
+// This priority will be used to decide whether a transaction will be
+// aborted during contention.
 //
 // If you add fields to Transaction you'll need to update
 // Transaction.Clone. Failure to do so will result in test failures.
@@ -246,42 +262,11 @@ message Transaction {
   // transaction will retry unless we manage to "refresh the reads" - see
   // refreshed_timestamp.
   //
-  // This timestamp is the one at which all transactions will read, unless
-  // refreshed_timestamp is set. It is also, surprisingly, the timestamp at
-  // which transactions will provisionally _write_ (i.e. intents are written at
-  // this orig_timestamp and, after commit, when the intents are resolved,
-  // their timestamps are bumped to the to the commit timestamp), if
-  // refreshed_timestamp isn't set.
-  // This is ultimately because of correctness concerns around SNAPSHOT
-  // transactions.
+  // This timestamp is the one at which all reads occur, unless
+  // refreshed_timestamp is set.
   //
-  // Intuitively, one could think that the timestamp at which intents should be
-  // written should be the provisional commit timestamp, and while this is
-  // morally true, consider the following scenario, where txn1 is a SNAPSHOT
-  // txn:
-  //
-  // - txn1 at orig_timestamp=5 reads key1: (value) 1.
-  // - txn1 writes elsewhere, has its commit timestamp increased to 20.
-  // - txn2 at orig_timestamp=10 reads key1: 1
-  // - txn2 increases the value by 5: key1: 6 and commits
-  // - txn1 increases the value by 1: key1: 2, attempts commit
-  //
-  // If txn1 uses its orig_timestamp for updating key1 (as it does), it
-  // conflicts with txn2's committed value (which is at timestamp 10, in the
-  // future of 5), and restarts.
-  // Using instead its candidate commit timestamp, it wouldn't see a conflict
-  // and commit, but this is not the expected outcome (the expected outcome is
-  // {key1: 6} (since txn1 is not expected to commit)) and we would be
-  // experiencing the Lost Update Anomaly.
-  //
-  // Note that in practice, before restarting, txn1 would still lay down an
-  // intent (just above the committed value) not with the intent to commit it,
-  // but to avoid being starved by short-lived transactions on that key which
-  // would otherwise not have to go through conflict resolution with txn1.
-  //
-  // Again, keep in mind that, when the transaction commits, all the intents are
-  // bumped to the commit timestamp (otherwise, pushing a transaction wouldn't
-  // achieve anything).
+  // Note that writes do not occur at this timestamp; they instead occur at the
+  // provisional commit timestamp, meta.Timestamp.
   util.hlc.Timestamp orig_timestamp = 6 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between timestamp and max_timestamp trigger a txn
@@ -294,9 +279,15 @@ message Transaction {
   // can commit without necessitating a serializable restart. This
   // value is forwarded to the transaction's current timestamp (meta.timestamp)
   // if the transaction coordinator is able to refresh all refreshable spans
-  // encountered during the course of the txn. If set, this take precedence
-  // over orig_timestamp and is the timestamp at which the transaction both
-  // reads and writes going forward.
+  // encountered during the course of the txn. If set, this takes precedence
+  // over orig_timestamp and is the timestamp at which the transaction reads
+  // going forward.
+  //
+  // We need to keep track of both refresh_timestamp and orig_timestamp (instead
+  // of simply overwriting the orig_timestamp after refreshes) because the
+  // orig_timestamp needs to be used as a lower bound timestamp for the
+  // time-bound iterator used to resolve intents - i.e. there can be intents to
+  // resolve up to the timestamp that the txn started with.
   util.hlc.Timestamp refreshed_timestamp = 15 [(gogoproto.nullable) = false];
   // A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
   // as observed from their local clock during this transaction. The purpose of
@@ -348,17 +339,13 @@ message Transaction {
   bool writing = 9;
   // If this is true, the transaction must retry. Relevant only for
   // SNAPSHOT transactions: a SERIALIZABLE transaction would have to
-  // retry anyway due to its commit timestamp having moved forward.
+  // retry anyway due to its commit timestamp having moved forward (whenever
+  // write_too_old is set, meta.Timestamp has been pushed above orig_timestamp).
   // This bool is set instead of immediately returning a txn retry
   // error so that intents can continue to be laid down, minimizing
   // work required on txn restart.
   bool write_too_old = 12;
-  // If retry_on_push is true, the transaction must retry in the event
-  // that the commit timestamp is pushed forward. This flag is set if
-  // the transaction contains any calls to DeleteRange, in order to
-  // prevent the LostDeleteRange anomaly. This flag is relevant only
-  // for SNAPSHOT transactions.
-  bool retry_on_push = 13;
+  reserved 13;
   repeated Span intents = 11 [(gogoproto.nullable) = false];
   // Epoch zero timestamp is used to keep track of the earliest timestamp
   // that any epoch of the transaction used. This is set only if the
@@ -487,7 +474,7 @@ message TxnCoordMeta {
   repeated Span refresh_writes = 5 [(gogoproto.nullable) = false];
   // refresh_invalid indicates that spans were discarded or not collected
   // (i.e. because of a dist SQL processor running a version before refreshing
-  // was introduced). This is false if all spans encountered during the 
+  // was introduced). This is false if all spans encountered during the
   // transaction which need refreshing have been collected to the refresh_reads
   // and refresh_writes span slices.
   bool refresh_invalid = 7;

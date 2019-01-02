@@ -34,6 +34,7 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 	switch n := plan.(type) {
 	case
 		*valuesNode,
+		*virtualTableNode,
 		*zeroNode,
 		*unaryNode:
 		return nil, nil, nil
@@ -72,6 +73,8 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 	case *explainPlanNode:
 		return collectSpans(params, n.plan)
 	case *limitNode:
+		return collectSpans(params, n.plan)
+	case *max1RowNode:
 		return collectSpans(params, n.plan)
 	case *spoolNode:
 		return collectSpans(params, n.source)

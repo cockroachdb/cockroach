@@ -81,18 +81,22 @@ message LeasePreference {
 }
 
 // ZoneConfig holds configuration that applies to one or more ranges.
+//
+// Note: when adding.removing fields here, be sure to update
+// supportedZoneConfigOptions in the sql package, to synchronize
+// with the code for ALTER ... CONFIGURE ZONE.
 message ZoneConfig {
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   reserved 1;
-  optional int64 range_min_bytes = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_min_bytes\""];
-  optional int64 range_max_bytes = 3 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_max_bytes\""];
+  optional int64 range_min_bytes = 2 [(gogoproto.moretags) = "yaml:\"range_min_bytes\""];
+  optional int64 range_max_bytes = 3 [(gogoproto.moretags) = "yaml:\"range_max_bytes\""];
   // If GC policy is not set, uses the next highest, non-null policy
   // in the zone config hierarchy, up to the default policy if necessary.
-  optional GCPolicy gc = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "GC"];
+  optional GCPolicy gc = 4 [(gogoproto.customname) = "GC"];
   // NumReplicas specifies the desired number of replicas
-  optional int32 num_replicas = 5 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"num_replicas\""];
+  optional int32 num_replicas = 5 [(gogoproto.moretags) = "yaml:\"num_replicas\""];
   // Constraints constrains which stores the replicas can be stored on. The
   // order in which the constraints are stored is arbitrary and may change.
   // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
@@ -102,6 +106,10 @@ message ZoneConfig {
   // field with num_replicas set to 0.
   repeated Constraints constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
 
+  // InheritedContraints specifies if the value in the Constraints field was
+  // inherited from the zone's parent or specified explicitly by the user.
+  optional bool inherited_constraints = 10 [(gogoproto.nullable) = false];
+
   // LeasePreference stores information about where the user would prefer for
   // range leases to be placed. Leases are allowed to be placed elsewhere if
   // needed, but will follow the provided preference when possible.
@@ -109,10 +117,12 @@ message ZoneConfig {
   // More than one lease preference is allowed, but they should be ordered from
   // most preferred to lease preferred. The first preference that an existing
   // replica of a range matches will take priority.
-  //
-  // TODO(a-robinson,v2.1): Remove the word "experimental" from the yaml field.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false,
-           (gogoproto.moretags) = "yaml:\"experimental_lease_preferences,flow,omitempty\""];
+           (gogoproto.moretags) = "yaml:\"lease_preferences,flow\""];
+
+  // InheritedLeasePreferences specifies if the value in the LeasePreferences field
+  // was inherited from the zone's parent or specified explicitly by the user.
+  optional bool inherited_lease_preferences = 11 [(gogoproto.nullable) = false];
 
   // Subzones stores config overrides for "subzones", each of which represents
   // either a SQL table index or a partition of a SQL table index. Subzones are

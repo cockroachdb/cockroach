@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestRaftLogQueue verifies that the raft log queue correctly truncates the
@@ -37,9 +38,9 @@ func TestRaftLogQueue(t *testing.T) {
 	// Set maxBytes to something small so we can trigger the raft log truncation
 	// without adding 64MB of logs.
 	const maxBytes = 1 << 16
-	defer config.TestingSetDefaultZoneConfig(config.ZoneConfig{
-		RangeMaxBytes: maxBytes,
-	})()
+	cfg := config.DefaultZoneConfig()
+	cfg.RangeMaxBytes = proto.Int64(maxBytes)
+	defer config.TestingSetDefaultZoneConfig(cfg)()
 
 	// Turn off raft elections so the raft leader won't change out from under
 	// us in this test.
@@ -58,7 +59,7 @@ func TestRaftLogQueue(t *testing.T) {
 	}
 
 	// Get the raft leader (and ensure one exists).
-	rangeID := mtc.stores[0].LookupReplica([]byte("a"), nil).RangeID
+	rangeID := mtc.stores[0].LookupReplica([]byte("a")).RangeID
 	raftLeaderRepl := mtc.getRaftLeader(rangeID)
 	if raftLeaderRepl == nil {
 		t.Fatalf("could not find raft leader replica for range %d", rangeID)

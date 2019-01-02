@@ -26,30 +26,32 @@ import (
 // subquery represents a subquery expression in an expression tree
 // after it has been type-checked and added to the memo.
 type subquery struct {
+	// Subquery is the AST Subquery expression.
+	*tree.Subquery
+
 	// cols contains the output columns of the subquery.
 	cols []scopeColumn
 
-	// group is the top level memo GroupID of the subquery.
-	group memo.GroupID
+	// node is the top level memo node of the subquery.
+	node memo.RelExpr
 
-	// Is the subquery in a multi-row or single-row context?
-	multiRow bool
+	// ordering is the ordering requested by the subquery.
+	// It is only consulted in certain cases, however (such as the
+	// ArrayFlatten operation).
+	ordering opt.Ordering
+
+	// wrapInTuple is true if the subquery return type should be wrapped in a
+	// tuple. This is true for subqueries that may return multiple rows in
+	// comparison expressions (e.g., IN, ANY, ALL) and EXISTS expressions.
+	wrapInTuple bool
 
 	// typ is the lazily resolved type of the subquery.
 	typ types.T
 
-	// expr is the AST Subquery expression.
-	expr *tree.Subquery
-}
-
-// String is part of the tree.Expr interface.
-func (s *subquery) String() string {
-	return s.expr.String()
-}
-
-// Format is part of the tree.Expr interface.
-func (s *subquery) Format(ctx *tree.FmtCtx) {
-	s.expr.Format(ctx)
+	// outerCols stores the set of outer columns in the subquery. These are
+	// columns which are referenced within the subquery but are bound in an
+	// outer scope.
+	outerCols opt.ColSet
 }
 
 // Walk is part of the tree.Expr interface.
@@ -119,7 +121,7 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedEx
 	// Without that auto-unwrapping of single-column subqueries, this query would
 	// type check as "<int> IN <tuple{tuple{int}}>" which would fail.
 
-	if s.expr.Exists {
+	if s.Exists {
 		s.typ = types.Bool
 		return s, nil
 	}
@@ -138,7 +140,7 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedEx
 		s.typ = t
 	}
 
-	if s.multiRow {
+	if s.wrapInTuple {
 		// The subquery is in a multi-row context. For example:
 		//
 		//   SELECT 1 IN (SELECT * FROM t)
@@ -171,8 +173,8 @@ func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 // original columns: tuple{col1, col2...}.
 func (b *Builder) buildSubqueryProjection(
 	s *subquery, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	out = s.group
+) (out memo.RelExpr, outScope *scope) {
+	out = s.node
 	outScope = inScope.replace()
 
 	switch len(s.cols) {
@@ -187,20 +189,18 @@ func (b *Builder) buildSubqueryProjection(
 		// col1, col2... from the subquery becomes tuple{col1, col2...} in the
 		// projection.
 		cols := make(tree.Exprs, len(s.cols))
-		colGroups := make([]memo.GroupID, len(s.cols))
+		els := make(memo.ScalarListExpr, len(s.cols))
 		typ := types.TTuple{
-			Types:  make([]types.T, len(s.cols)),
-			Labels: make([]string, len(s.cols)),
+			Types: make([]types.T, len(s.cols)),
 		}
 		for i := range s.cols {
 			cols[i] = &s.cols[i]
-			typ.Labels[i] = string(s.cols[i].name)
 			typ.Types[i] = s.cols[i].ResolvedType()
-			colGroups[i] = b.factory.ConstructVariable(b.factory.InternColumnID(s.cols[i].id))
+			els[i] = b.factory.ConstructVariable(s.cols[i].id)
 		}
 
 		texpr := tree.NewTypedTuple(typ, cols)
-		tup := b.factory.ConstructTuple(b.factory.InternList(colGroups), b.factory.InternType(typ))
+		tup := b.factory.ConstructTuple(els, typ)
 		col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, tup)
 		out = b.constructProject(out, []scopeColumn{*col})
 	}
@@ -216,19 +216,21 @@ func (b *Builder) buildSubqueryProjection(
 // return values.
 func (b *Builder) buildSingleRowSubquery(
 	s *subquery, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	if s.expr.Exists {
-		return b.factory.ConstructExists(s.group), inScope
+) (out opt.ScalarExpr, outScope *scope) {
+	subqueryPrivate := memo.SubqueryPrivate{OriginalExpr: s.Subquery}
+	if s.Exists {
+		return b.factory.ConstructExists(s.node, &subqueryPrivate), inScope
 	}
 
-	out, outScope = b.buildSubqueryProjection(s, inScope)
+	var input memo.RelExpr
+	input, outScope = b.buildSubqueryProjection(s, inScope)
 
 	// Wrap the subquery in a Max1Row operator to enforce that it should return
 	// at most one row. Max1Row may be removed by the optimizer later if it can
 	// prove statically that the subquery always returns at most one row.
-	out = b.factory.ConstructMax1Row(out)
+	input = b.factory.ConstructMax1Row(input)
 
-	out = b.factory.ConstructSubquery(out)
+	out = b.factory.ConstructSubquery(input, &subqueryPrivate)
 	return out, outScope
 }
 
@@ -253,11 +255,13 @@ func (b *Builder) buildSingleRowSubquery(
 //     ==> ConstructNot(ConstructAny(<subquery>, <var>, Negate(<comp>)))
 //
 func (b *Builder) buildMultiRowSubquery(
-	c *tree.ComparisonExpr, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	out, outScope = b.buildSubqueryProjection(c.Right.(*subquery), inScope)
+	c *tree.ComparisonExpr, inScope *scope, colRefs *opt.ColSet,
+) (out opt.ScalarExpr, outScope *scope) {
+	var input memo.RelExpr
+	s := c.Right.(*subquery)
+	input, outScope = b.buildSubqueryProjection(s, inScope)
 
-	scalar := b.buildScalar(c.TypedLeft(), outScope)
+	scalar := b.buildScalar(c.TypedLeft(), inScope, nil, nil, colRefs)
 	outScope = outScope.replace()
 
 	var cmp opt.Operator
@@ -281,7 +285,10 @@ func (b *Builder) buildMultiRowSubquery(
 	}
 
 	// Construct the outer Any(...) operator.
-	out = b.factory.ConstructAny(out, scalar, b.factory.InternOperator(cmp))
+	out = b.factory.ConstructAny(input, scalar, &memo.SubqueryPrivate{
+		Cmp:          cmp,
+		OriginalExpr: s.Subquery,
+	})
 	switch c.Operator {
 	case tree.NotIn, tree.All:
 		// NOT Any(...)

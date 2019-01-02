@@ -27,9 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -40,7 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -52,6 +50,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 )
 
 func getStatusJSONProto(
@@ -185,6 +186,52 @@ func startServer(t *testing.T) *TestServer {
 	}
 
 	return ts
+}
+
+// TestStatusLocalFileRetrieval tests the files/local endpoint.
+// See debug/heap roachtest for testing heap profile file collection.
+func TestStatusLocalFileRetrieval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.TODO())
+
+	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
+		&ts.ClusterSettings().Version)
+	url := ts.ServingAddr()
+	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+
+	request := serverpb.GetFilesRequest{
+		NodeId: "local", ListOnly: true, Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
+	response, err := client.GetFiles(context.Background(), &request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a, e := len(response.Files), 0; a != e {
+		t.Errorf("expected %d files(s), found %d", e, a)
+	}
+
+	// Testing path separators in pattern.
+	request = serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
+		Type: serverpb.FileType_HEAP, Patterns: []string{"pattern/with/separators"}}
+	_, err = client.GetFiles(context.Background(), &request)
+	if err == nil {
+		t.Errorf("GetFiles: path separators allowed in pattern")
+	}
+
+	// Testing invalid filetypes.
+	request = serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
+		Type: -1, Patterns: []string{"*"}}
+	_, err = client.GetFiles(context.Background(), &request)
+	if err == nil {
+		t.Errorf("GetFiles: invalid file type allowed")
+	}
 }
 
 // TestStatusLocalLogs checks to ensure that local/logfiles,
@@ -362,7 +409,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// Now fetch each one individually. Loop through the nodeStatuses to use the
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
-		nodeStatus := status.NodeStatus{}
+		nodeStatus := statuspb.NodeStatus{}
 		if err := getStatusJSONProto(s, "nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
@@ -655,8 +702,8 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// We expect two certificates: CA and node.
-	if a, e := len(response.Certificates), 2; a != e {
+	// We expect 4 certificates: CA, node, and client certs for root, testuser.
+	if a, e := len(response.Certificates), 4; a != e {
 		t.Errorf("expected %d certificates, found %d", e, a)
 	}
 
@@ -894,25 +941,15 @@ func TestStatusAPIStatements(t *testing.T) {
 	statements := []struct {
 		stmt          string
 		fingerprinted string
-		notInStats    bool
 	}{
-		{
-			stmt: `CREATE DATABASE roachblog`,
-		},
-		{
-			stmt:       `USE roachblog`,
-			notInStats: true,
-		},
-		{
-			stmt: `CREATE TABLE posts (id INT PRIMARY KEY, body TEXT)`,
-		},
+		{stmt: `CREATE DATABASE roachblog`},
+		{stmt: `SET database = roachblog`},
+		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
 		{
 			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
 			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
 		},
-		{
-			stmt: `SELECT * FROM posts`,
-		},
+		{stmt: `SELECT * FROM posts`},
 	}
 
 	for _, stmt := range statements {
@@ -928,9 +965,6 @@ func TestStatusAPIStatements(t *testing.T) {
 	// See if the statements returned are what we executed.
 	var expectedStatements []string
 	for _, stmt := range statements {
-		if stmt.notInStats {
-			continue
-		}
 		var expectedStmt = stmt.stmt
 		if stmt.fingerprinted != "" {
 			expectedStmt = stmt.fingerprinted
@@ -940,13 +974,84 @@ func TestStatusAPIStatements(t *testing.T) {
 
 	var statementsInResponse []string
 	for _, respStatement := range resp.Statements {
-		statementsInResponse = append(statementsInResponse, respStatement.Key.Statement)
+		if respStatement.Key.KeyData.Failed {
+			// We ignore failed statements here as the INSERT statement can fail and
+			// be automatically retried, confusing the test success check.
+			continue
+		}
+		if strings.HasPrefix(respStatement.Key.KeyData.App, sql.InternalAppNamePrefix) {
+			// We ignore internal queries, these are not relevant for the
+			// validity of this test.
+			continue
+		}
+		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
 	}
 
 	sort.Strings(expectedStatements)
 	sort.Strings(statementsInResponse)
 
 	if !reflect.DeepEqual(expectedStatements, statementsInResponse) {
-		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v", expectedStatements, statementsInResponse)
+		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s",
+			expectedStatements, statementsInResponse, pretty.Sprint(resp))
+	}
+}
+
+func TestListSessionsSecurity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ts := s.(*TestServer)
+	defer ts.Stopper().Stop(context.TODO())
+
+	// HTTP requests respect the authenticated username from the HTTP session.
+	testCases := []struct {
+		endpoint    string
+		expectedErr string
+	}{
+		{"local_sessions", ""},
+		{"sessions", ""},
+		{fmt.Sprintf("local_sessions?username=%s", authenticatedUserName), ""},
+		{fmt.Sprintf("sessions?username=%s", authenticatedUserName), ""},
+		{"local_sessions?username=root", "does not have permission to view sessions from user"},
+		{"sessions?username=root", "does not have permission to view sessions from user"},
+	}
+	for _, tc := range testCases {
+		var response serverpb.ListSessionsResponse
+		err := getStatusJSONProto(ts, tc.endpoint, &response)
+		if tc.expectedErr == "" {
+			if err != nil || len(response.Errors) > 0 {
+				t.Errorf("unexpected failure listing sessions from %s; error: %v; response errors: %v",
+					tc.endpoint, err, response.Errors)
+			}
+		} else {
+			if !testutils.IsError(err, tc.expectedErr) &&
+				!strings.Contains(response.Errors[0].Message, tc.expectedErr) {
+				t.Errorf("did not get expected error %q when listing sessions from %s: %v",
+					tc.expectedErr, tc.endpoint, err)
+			}
+		}
+	}
+
+	// gRPC requests behave as root and thus are always allowed.
+	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
+		&ts.ClusterSettings().Version)
+	url := ts.ServingAddr()
+	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+	ctx := context.Background()
+	for _, user := range []string{"", authenticatedUserName, "root"} {
+		request := &serverpb.ListSessionsRequest{Username: user}
+		if resp, err := client.ListLocalSessions(ctx, request); err != nil || len(resp.Errors) > 0 {
+			t.Errorf("unexpected failure listing local sessions for %q; error: %v; response errors: %v",
+				user, err, resp.Errors)
+		}
+		if resp, err := client.ListSessions(ctx, request); err != nil || len(resp.Errors) > 0 {
+			t.Errorf("unexpected failure listing sessions for %q; error: %v; response errors: %v",
+				user, err, resp.Errors)
+		}
 	}
 }

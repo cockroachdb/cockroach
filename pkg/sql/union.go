@@ -18,12 +18,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // unionNode is a planNode whose rows are the result of one of three set
@@ -236,7 +235,8 @@ func (n *unionNode) readRight(params runParams) (bool, error) {
 			return true, nil
 		}
 		n.run.scratch = n.run.scratch[:0]
-		if n.run.scratch, err = sqlbase.EncodeDatums(n.run.scratch, n.right.Values()); err != nil {
+		if n.run.scratch, err = sqlbase.EncodeDatumsKeyAscending(
+			n.run.scratch, n.right.Values()); err != nil {
 			return false, err
 		}
 		// TODO(dan): Sending the entire encodeDTuple to be stored in the map would
@@ -262,7 +262,8 @@ func (n *unionNode) readLeft(params runParams) (bool, error) {
 			return true, nil
 		}
 		n.run.scratch = n.run.scratch[:0]
-		if n.run.scratch, err = sqlbase.EncodeDatums(n.run.scratch, n.left.Values()); err != nil {
+		if n.run.scratch, err = sqlbase.EncodeDatumsKeyAscending(
+			n.run.scratch, n.left.Values()); err != nil {
 			return false, err
 		}
 		if n.emit.emitLeft(n.run.scratch) {

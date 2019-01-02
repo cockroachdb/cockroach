@@ -23,9 +23,7 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/lex"
 
 // ShowVar represents a SHOW statement.
 type ShowVar struct {
@@ -35,7 +33,11 @@ type ShowVar struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowVar) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
-	ctx.FormatNameP(&node.Name)
+	// Session var names never contain PII and should be distinguished
+	// for feature tracking purposes.
+	deAnonCtx := *ctx
+	deAnonCtx.flags &= ^FmtAnonymize
+	deAnonCtx.FormatNameP(&node.Name)
 }
 
 // ShowClusterSetting represents a SHOW CLUSTER SETTING statement.
@@ -46,7 +48,11 @@ type ShowClusterSetting struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CLUSTER SETTING ")
-	ctx.WriteString(node.Name)
+	// Cluster setting names never contain PII and should be distinguished
+	// for feature tracking purposes.
+	deAnonCtx := *ctx
+	deAnonCtx.flags &= ^FmtAnonymize
+	deAnonCtx.FormatNameP(&node.Name)
 }
 
 // BackupDetails represents the type of details to display for a SHOW BACKUP
@@ -81,7 +87,7 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 
 // ShowColumns represents a SHOW COLUMNS statement.
 type ShowColumns struct {
-	Table NormalizableTableName
+	Table TableName
 }
 
 // Format implements the NodeFormatter interface.
@@ -126,7 +132,7 @@ func (node *ShowTraceForSession) Format(ctx *FmtCtx) {
 
 // ShowIndex represents a SHOW INDEX statement.
 type ShowIndex struct {
-	Table NormalizableTableName
+	Table TableName
 }
 
 // Format implements the NodeFormatter interface.
@@ -191,6 +197,7 @@ func (node *ShowSchemas) Format(ctx *FmtCtx) {
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
 	TableNamePrefix
+	WithComment bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -200,20 +207,21 @@ func (node *ShowTables) Format(ctx *FmtCtx) {
 		ctx.WriteString(" FROM ")
 		ctx.FormatNode(&node.TableNamePrefix)
 	}
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
+	}
 }
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
 type ShowConstraints struct {
-	Table NormalizableTableName
+	Table TableName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowConstraints) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CONSTRAINTS")
-	if node.Table.TableNameReference != nil {
-		ctx.WriteString(" FROM ")
-		ctx.FormatNode(&node.Table)
-	}
+	ctx.WriteString("SHOW CONSTRAINTS FROM ")
+	ctx.FormatNode(&node.Table)
 }
 
 // ShowGrants represents a SHOW GRANTS statement.
@@ -257,7 +265,7 @@ func (node *ShowRoleGrants) Format(ctx *FmtCtx) {
 
 // ShowCreate represents a SHOW CREATE statement.
 type ShowCreate struct {
-	Name NormalizableTableName
+	Name TableName
 }
 
 // Format implements the NodeFormatter interface.
@@ -311,7 +319,7 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 // ShowRanges represents a SHOW EXPERIMENTAL_RANGES statement.
 // Only one of Table and Index can be set.
 type ShowRanges struct {
-	Table *NormalizableTableName
+	Table *TableName
 	Index *TableNameWithIndex
 }
 
@@ -329,18 +337,18 @@ func (node *ShowRanges) Format(ctx *FmtCtx) {
 
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
 type ShowFingerprints struct {
-	Table *NormalizableTableName
+	Table TableName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowFingerprints) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ")
-	ctx.FormatNode(node.Table)
+	ctx.FormatNode(&node.Table)
 }
 
 // ShowTableStats represents a SHOW STATISTICS FOR TABLE statement.
 type ShowTableStats struct {
-	Table     NormalizableTableName
+	Table     TableName
 	UsingJSON bool
 }
 

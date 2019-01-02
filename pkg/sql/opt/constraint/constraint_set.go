@@ -253,6 +253,19 @@ func (s *Set) Union(evalCtx *tree.EvalContext, other *Set) *Set {
 	return mergeSet
 }
 
+// ExtractCols returns all columns involved in the constraints in this set.
+func (s *Set) ExtractCols() opt.ColSet {
+	var res opt.ColSet
+	if s.length == 0 {
+		return res
+	}
+	res = s.firstConstraint.Columns.ColSet()
+	for i := int32(1); i < s.length; i++ {
+		res.UnionWith(s.otherConstraints[i-1].Columns.ColSet())
+	}
+	return res
+}
+
 // ExtractNotNullCols returns a set of columns that cannot be NULL for the
 // constraints in the set to hold.
 func (s *Set) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {

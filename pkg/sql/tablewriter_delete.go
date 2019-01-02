@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -33,7 +34,7 @@ import (
 type tableDeleter struct {
 	tableWriterBase
 
-	rd    sqlbase.RowDeleter
+	rd    row.Deleter
 	alloc *sqlbase.DatumAlloc
 }
 
@@ -65,7 +66,7 @@ func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
 	td.batchSize++
-	return nil, td.rd.DeleteRow(ctx, td.b, values, sqlbase.CheckFKs, traceKV)
+	return nil, td.rd.DeleteRow(ctx, td.b, values, row.CheckFKs, traceKV)
 }
 
 // fastPathAvailable returns true if the fastDelete optimization can be used.
@@ -97,7 +98,6 @@ func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
 func (td *tableDeleter) fastDelete(
 	ctx context.Context, scan *scanNode, autoCommit autoCommitOpt, traceKV bool,
 ) (rowCount int, err error) {
-
 	for _, span := range scan.spans {
 		log.VEvent(ctx, 2, "fast delete: skipping scan")
 		if traceKV {
@@ -203,8 +203,8 @@ func (td *tableDeleter) deleteAllRowsScan(
 		valNeededForCol.Add(idx)
 	}
 
-	var rf sqlbase.RowFetcher
-	tableArgs := sqlbase.RowFetcherTableArgs{
+	var rf row.Fetcher
+	tableArgs := row.FetcherTableArgs{
 		Desc:            td.rd.Helper.TableDesc,
 		Index:           &td.rd.Helper.TableDesc.PrimaryIndex,
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
@@ -260,7 +260,7 @@ func (td *tableDeleter) deleteIndex(
 	autoCommit autoCommitOpt,
 	traceKV bool,
 ) (roachpb.Span, error) {
-	if len(idx.Interleave.Ancestors) > 0 || len(idx.InterleavedBy) > 0 {
+	if idx.IsInterleaved() {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
@@ -284,8 +284,6 @@ func (td *tableDeleter) deleteIndexFast(
 	if traceKV {
 		log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	}
-	// TODO(vivekmenezes): adapt index deletion to use the same GC
-	// deadline / ClearRange fast path that table deletion uses.
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
 	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
@@ -295,6 +293,25 @@ func (td *tableDeleter) deleteIndexFast(
 		panic(fmt.Sprintf("%d results returned, expected 1", l))
 	}
 	return td.b.Results[0].ResumeSpan, nil
+}
+
+func (td *tableDeleter) clearIndex(ctx context.Context, idx *sqlbase.IndexDescriptor) error {
+	if idx.IsInterleaved() {
+		return errors.Errorf("unexpected interleaved index %d", idx.ID)
+	}
+
+	sp := td.rd.Helper.TableDesc.IndexSpan(idx.ID)
+
+	// ClearRange cannot be run in a transaction, so create a
+	// non-transactional batch to send the request.
+	b := &client.Batch{}
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    sp.Key,
+			EndKey: sp.EndKey,
+		},
+	})
+	return td.txn.DB().Run(ctx, b)
 }
 
 func (td *tableDeleter) deleteIndexScan(
@@ -314,8 +331,8 @@ func (td *tableDeleter) deleteIndexScan(
 		valNeededForCol.Add(idx)
 	}
 
-	var rf sqlbase.RowFetcher
-	tableArgs := sqlbase.RowFetcherTableArgs{
+	var rf row.Fetcher
+	tableArgs := row.FetcherTableArgs{
 		Desc:            td.rd.Helper.TableDesc,
 		Index:           &td.rd.Helper.TableDesc.PrimaryIndex,
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
@@ -353,11 +370,11 @@ func (td *tableDeleter) deleteIndexScan(
 	return resume, err
 }
 
-func (td *tableDeleter) tableDesc() *sqlbase.TableDescriptor {
+func (td *tableDeleter) tableDesc() *sqlbase.ImmutableTableDescriptor {
 	return td.rd.Helper.TableDesc
 }
 
-func (td *tableDeleter) fkSpanCollector() sqlbase.FkSpanCollector {
+func (td *tableDeleter) fkSpanCollector() row.FkSpanCollector {
 	return td.rd.Fks
 }
 

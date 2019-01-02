@@ -85,13 +85,14 @@ func (ss *inMemSideloadStorage) Filename(_ context.Context, index, term uint64) 
 	return filepath.Join(ss.prefix, fmt.Sprintf("i%d.t%d", index, term)), nil
 }
 
-func (ss *inMemSideloadStorage) Purge(_ context.Context, index, term uint64) error {
+func (ss *inMemSideloadStorage) Purge(_ context.Context, index, term uint64) (int64, error) {
 	k := ss.key(index, term)
 	if _, ok := ss.m[k]; !ok {
-		return errSideloadedFileNotFound
+		return 0, errSideloadedFileNotFound
 	}
+	size := int64(len(ss.m[k]))
 	delete(ss.m, k)
-	return nil
+	return size, nil
 }
 
 func (ss *inMemSideloadStorage) Clear(_ context.Context) error {
@@ -99,12 +100,14 @@ func (ss *inMemSideloadStorage) Clear(_ context.Context) error {
 	return nil
 }
 
-func (ss *inMemSideloadStorage) TruncateTo(_ context.Context, index uint64) error {
+func (ss *inMemSideloadStorage) TruncateTo(_ context.Context, index uint64) (int64, error) {
 	// Not efficient, but this storage is for testing purposes only anyway.
-	for k := range ss.m {
+	var size int64
+	for k, v := range ss.m {
 		if k.index < index {
+			size += int64(len(v))
 			delete(ss.m, k)
 		}
 	}
-	return nil
+	return size, nil
 }

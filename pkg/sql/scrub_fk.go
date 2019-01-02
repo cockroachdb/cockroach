@@ -30,7 +30,7 @@ import (
 // sqlForeignKeyCheckOperation is a check on an indexes physical data.
 type sqlForeignKeyCheckOperation struct {
 	tableName  *tree.TableName
-	tableDesc  *sqlbase.TableDescriptor
+	tableDesc  *sqlbase.ImmutableTableDescriptor
 	constraint *sqlbase.ConstraintDetail
 	asOf       hlc.Timestamp
 
@@ -49,7 +49,7 @@ type sqlForeignKeyConstraintCheckRun struct {
 
 func newSQLForeignKeyCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	constraint sqlbase.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) *sqlForeignKeyCheckOperation {
@@ -109,8 +109,8 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		o.colIDToRowIdx[id] = i
 	}
 
-	planCtx := params.extendedEvalCtx.DistSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
-	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, plan)
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	physPlan, err := scrubPlanDistSQL(ctx, planCtx, plan)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		return errors.Errorf("could not find MergeJoinerSpec in plan")
 	}
 
-	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, physPlan, columnTypes)
+	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, physPlan, columnTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return err
@@ -233,9 +233,9 @@ func (o *sqlForeignKeyCheckOperation) Close(ctx context.Context) {
 //
 //   SELECT p.id, p.dept_id
 //   FROM
-//     (SELECT id, dept_id FROM child@{FORCE_INDEX=[..],NO_INDEX_JOIN} ORDER BY dept_id) AS p
+//     (SELECT id, dept_id FROM child@{FORCE_INDEX=[..]} ORDER BY dept_id) AS p
 //   LEFT OUTER JOIN
-//     (SELECT dept_id FROM parent@{FORCE_INDEX=dept_idx,NO_INDEX_JOIN} ORDER BY dept_id) AS c
+//     (SELECT dept_id FROM parent@{FORCE_INDEX=dept_idx} ORDER BY dept_id) AS c
 //   ON
 //      p.dept_id = c.dept_id
 //   WHERE p.dept_id IS NOT NULL AND c.dept_id IS NULL
@@ -257,7 +257,7 @@ func (o *sqlForeignKeyCheckOperation) Close(ctx context.Context) {
 //
 func createFKCheckQuery(
 	database string,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	constraint *sqlbase.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) (string, error) {
@@ -273,7 +273,7 @@ func createFKCheckQuery(
 				FROM
 					(SELECT %[9]s FROM %[2]s.%[3]s@{NO_INDEX_JOIN} %[12]s ORDER BY %[10]s) AS p
 				FULL OUTER JOIN
-					(SELECT %[11]s FROM %[2]s.%[4]s@{FORCE_INDEX=[%[5]d],NO_INDEX_JOIN} %[12]s ORDER BY %[11]s) AS c
+					(SELECT %[11]s FROM %[2]s.%[4]s@{FORCE_INDEX=[%[5]d]} %[12]s ORDER BY %[11]s) AS c
 					ON %[6]s
         WHERE (%[7]s) AND %[8]s`
 

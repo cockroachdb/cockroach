@@ -24,7 +24,7 @@ func registerRoachmart(r *registry) {
 	runRoachmart := func(ctx context.Context, t *test, c *cluster, partition bool) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
-		c.Start(ctx)
+		c.Start(ctx, t)
 
 		// TODO(benesch): avoid hardcoding this list.
 		nodes := []struct {
@@ -44,7 +44,7 @@ func registerRoachmart(r *registry) {
 				"--orders=100",
 				fmt.Sprintf("--partition=%v", partition))
 
-			l, err := c.l.childLogger(fmt.Sprint(nodes[i].i))
+			l, err := t.l.ChildLogger(fmt.Sprint(nodes[i].i))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -74,9 +74,8 @@ func registerRoachmart(r *registry) {
 	for _, v := range []bool{true, false} {
 		v := v
 		r.Add(testSpec{
-			Name:   fmt.Sprintf("roachmart/partition=%v", v),
-			Nodes:  nodes(9, geo(), zones("us-central1-b,us-west1-b,europe-west2-b")),
-			Stable: true, // DO NOT COPY to new tests
+			Name:  fmt.Sprintf("roachmart/partition=%v", v),
+			Nodes: nodes(9, geo(), zones("us-central1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

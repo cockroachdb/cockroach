@@ -37,6 +37,13 @@ func valueEncodePartitionTuple(
 	maybeTuple tree.Expr,
 	cols []sqlbase.ColumnDescriptor,
 ) ([]byte, error) {
+	// Replace any occurrences of the MINVALUE/MAXVALUE pseudo-names
+	// into MinVal and MaxVal, to be recognized below.
+	// We are operating in a context where the expressions cannot
+	// refer to table columns, so these two names are unambiguously
+	// referring to the desired partition boundaries.
+	maybeTuple, _ = tree.WalkExpr(replaceMinMaxValVisitor{}, maybeTuple)
+
 	tuple, ok := maybeTuple.(*tree.Tuple)
 	if !ok {
 		// If we don't already have a tuple, promote whatever we have to a 1-tuple.
@@ -60,7 +67,7 @@ func valueEncodePartitionTuple(
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
 			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionDefaultVal))
 			continue
-		case tree.MinVal:
+		case tree.PartitionMinVal:
 			if typ != tree.PartitionByRange {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
@@ -68,7 +75,7 @@ func valueEncodePartitionTuple(
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
 			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionMinVal))
 			continue
-		case tree.MaxVal:
+		case tree.PartitionMaxVal:
 			if typ != tree.PartitionByRange {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
@@ -96,7 +103,7 @@ func valueEncodePartitionTuple(
 		if err != nil {
 			return nil, errors.Wrap(err, typedExpr.String())
 		}
-		if err := sqlbase.CheckColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
 			return nil, err
 		}
 		value, err = sqlbase.EncodeTableValue(
@@ -109,10 +116,32 @@ func valueEncodePartitionTuple(
 	return value, nil
 }
 
+// replaceMinMaxValVisitor replaces occurrences of the unqualified
+// identifiers "minvalue" and "maxvalue" in the partitioning
+// (sub-)exprs by the symbolic values tree.PartitionMinVal and
+// tree.PartitionMaxVal.
+type replaceMinMaxValVisitor struct{}
+
+// VisitPre satisfies the tree.Visitor interface.
+func (v replaceMinMaxValVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if t, ok := expr.(*tree.UnresolvedName); ok && t.NumParts == 1 {
+		switch t.Parts[0] {
+		case "minvalue":
+			return false, tree.PartitionMinVal{}
+		case "maxvalue":
+			return false, tree.PartitionMaxVal{}
+		}
+	}
+	return true, expr
+}
+
+// VisitPost satisfies the Visitor interface.
+func (replaceMinMaxValVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
+
 func createPartitioningImpl(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
 	partBy *tree.PartitionBy,
 	colOffset int,
@@ -186,12 +215,12 @@ func createPartitioningImpl(
 		}
 		var err error
 		p.FromInclusive, err = valueEncodePartitionTuple(
-			tree.PartitionByRange, evalCtx, r.From, cols)
+			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.From}, cols)
 		if err != nil {
 			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		p.ToExclusive, err = valueEncodePartitionTuple(
-			tree.PartitionByRange, evalCtx, r.To, cols)
+			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.To}, cols)
 		if err != nil {
 			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
@@ -210,7 +239,7 @@ func createPartitioning(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
 	partBy *tree.PartitionBy,
 ) (sqlbase.PartitioningDescriptor, error) {
@@ -261,9 +290,6 @@ func selectPartitionExprs(
 	expr, err = evalCtx.NormalizeExpr(expr)
 	if err != nil {
 		return nil, err
-	}
-	if e, equiv := sql.SimplifyExpr(evalCtx, expr); equiv {
-		expr = e
 	}
 	// In order to typecheck during simplification and normalization, we used
 	// dummy IndexVars. Swap them out for actual column references.

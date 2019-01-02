@@ -19,22 +19,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/kr/pretty"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 )
 
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const keysPerDesc = 2
-	const nonDescKeys = 5
+	const nonDescKeys = 7
 
 	ms := sqlbase.MakeMetadataSchema()
 	kv := ms.GetInitialValues()
@@ -120,15 +119,15 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.TableStatisticsTableID, sqlbase.TableStatisticsTableSchema, sqlbase.TableStatisticsTable},
 		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable},
 		{keys.RoleMembersTableID, sqlbase.RoleMembersTableSchema, sqlbase.RoleMembersTable},
+		{keys.CommentsTableID, sqlbase.CommentsTableSchema, sqlbase.CommentsTable},
 	} {
-		// Always create tables with "admin" privileges included, or CreateTestTableDescriptor fails.
-		privs := sqlbase.NewCustomSuperuserPrivilegeDescriptor(sqlbase.SystemAllowedPrivileges[test.id])
+		privs := *test.pkg.Privileges
 		gen, err := sql.CreateTestTableDescriptor(
 			context.TODO(),
 			keys.SystemDatabaseID,
 			test.id,
 			test.schema,
-			privs,
+			&privs,
 		)
 		if err != nil {
 			t.Fatalf("test: %+v, err: %v", test, err)

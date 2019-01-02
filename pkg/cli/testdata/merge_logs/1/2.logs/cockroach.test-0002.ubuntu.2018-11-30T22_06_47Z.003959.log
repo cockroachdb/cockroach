@@ -1,0 +1,10 @@
+I181130 22:14:49.706516 6152567 storage/split_queue.go:213  [n2,split,s2,r163/3:/Table/53/1/-36{84178…-35915…}] initiating a split based on load at key /Table/53/1/-3661595080111255049
+I181130 22:14:49.706563 6152567 storage/replica_command.go:342  [n2,split,s2,r163/3:/Table/53/1/-36{84178…-35915…}] initiating a split of this range at key /Table/53/1/-3661595080111255049 [r586]
+I181130 22:14:49.732930 6153357 storage/split_queue.go:213  [n2,split,s2,r269/3:/Table/53/1/-81{56147…-10716…}] initiating a split based on load at key /Table/53/1/-8134885765915906309
+I181130 22:14:49.732976 6153357 storage/replica_command.go:342  [n2,split,s2,r269/3:/Table/53/1/-81{56147…-10716…}] initiating a split of this range at key /Table/53/1/-8134885765915906309 [r587]
+I181130 22:14:50.203263 6163815 storage/split_queue.go:213  [n2,split,s2,r171/3:/Table/53/1/-87{94402…-45781…}] initiating a split based on load at key /Table/53/1/-8768249731886885702
+I181130 22:14:50.203299 6163815 storage/replica_command.go:342  [n2,split,s2,r171/3:/Table/53/1/-87{94402…-45781…}] initiating a split of this range at key /Table/53/1/-8768249731886885702 [r588]
+I181130 22:14:57.650774 499 server/status/runtime.go:465  [n2] runtime stats: 729 MiB RSS, 1127 goroutines, 416 MiB/91 MiB/584 MiB GO alloc/idle/total, 75 MiB/128 MiB CGO alloc/total, 111534.7 CGO/sec, 2013.0/232.3 %(u/s)time, 0.4 %gc (56x), 189 MiB/189 MiB (r/w)net
+I181130 22:15:05.892547 6507691 storage/split_queue.go:213  [n2,split,s2,r129/3:/Table/53/1/-{722633…-673989…}] initiating a split based on load at key /Table/53/1/-698671514117501959
+I181130 22:15:05.892592 6507691 storage/replica_command.go:342  [n2,split,s2,r129/3:/Table/53/1/-{722633…-673989…}] initiating a split of this range at key /Table/53/1/-698671514117501959 [r589]
+I181130 22:15:07.653821 499 server/status/runtime.go:465  [n2] runtime stats: 756 MiB RSS, 1127 goroutines, 338 MiB/113 MiB/584 MiB GO alloc/idle/total, 94 MiB/149 MiB CGO alloc/total, 108469.2 CGO/sec, 1964.7/227.0 %(u/s)time, 0.4 %gc (54x), 185 MiB/184 MiB (r/w)net

@@ -23,7 +23,9 @@ DBIterator::DBIterator(std::atomic<int64_t>* iters, DBIterOptions iter_options) 
   read_opts.prefix_same_as_start = iter_options.prefix;
   read_opts.total_order_seek = !iter_options.prefix;
 
+  SetLowerBound(iter_options.lower_bound);
   SetUpperBound(iter_options.upper_bound);
+  read_opts.iterate_lower_bound = &lower_bound;
   read_opts.iterate_upper_bound = &upper_bound;
 
   if (!EmptyTimestamp(iter_options.min_timestamp_hint) ||
@@ -68,6 +70,16 @@ DBIterator::DBIterator(std::atomic<int64_t>* iters, DBIterOptions iter_options) 
 DBIterator::~DBIterator() {
   --(*iters_count);
 }
+
+void DBIterator::SetLowerBound(DBKey key) {
+  if (key.key.data == NULL) {
+    lower_bound_str = kMinKey.data();
+  } else {
+    lower_bound_str = EncodeKey(key);
+  }
+  lower_bound = lower_bound_str;
+}
+
 
 void DBIterator::SetUpperBound(DBKey key) {
   if (key.key.data == NULL) {

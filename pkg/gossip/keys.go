@@ -89,6 +89,17 @@ const (
 	// statistic was computed. The statistics themselves are not stored in gossip;
 	// the keys are used to notify nodes to invalidate table statistic caches.
 	KeyTableStatAddedPrefix = "table-stat-added"
+
+	// KeyTableDisableMergesPrefix is the prefix for keys that indicate range
+	// merges for the specified table ID should be disabled. This is used by
+	// IMPORT and RESTORE to disable range merging while those operations are in
+	// progress.
+	KeyTableDisableMergesPrefix = "table-disable-merges"
+
+	// KeyGossipClientsPrefix is the prefix for keys that indicate which gossip
+	// client connections a node has open. This is used by other nodes in the
+	// cluster to build a map of the gossip network.
+	KeyGossipClientsPrefix = "gossip-clients"
 )
 
 // MakeKey creates a canonical key under which to gossip a piece of
@@ -131,6 +142,11 @@ func NodeIDFromKey(key string, prefix string) (roachpb.NodeID, error) {
 	return roachpb.NodeID(nodeID), nil
 }
 
+// MakeGossipClientsKey returns the gossip client key for the given node.
+func MakeGossipClientsKey(nodeID roachpb.NodeID) string {
+	return MakeKey(KeyGossipClientsPrefix, nodeID.String())
+}
+
 // MakeNodeHealthAlertKey returns the gossip key under which the given node can
 // gossip health alerts.
 func MakeNodeHealthAlertKey(nodeID roachpb.NodeID) string {
@@ -145,6 +161,21 @@ func MakeNodeLivenessKey(nodeID roachpb.NodeID) string {
 // MakeStoreKey returns the gossip key for the given store.
 func MakeStoreKey(storeID roachpb.StoreID) string {
 	return MakeKey(KeyStorePrefix, storeID.String())
+}
+
+// StoreIDFromKey attempts to extract a StoreID from the provided key after
+// stripping the provided prefix. Returns an error if the key is not of the
+// correct type or is not parsable.
+func StoreIDFromKey(storeKey string) (roachpb.StoreID, error) {
+	trimmedKey, err := removePrefixFromKey(storeKey, KeyStorePrefix)
+	if err != nil {
+		return 0, err
+	}
+	storeID, err := strconv.ParseInt(trimmedKey, 10 /* base */, 64 /* bitSize */)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed parsing StoreID from key %q", storeKey)
+	}
+	return roachpb.StoreID(storeID), nil
 }
 
 // MakeDeadReplicasKey returns the dead replicas gossip key for the given store.
@@ -183,6 +214,12 @@ func TableIDFromTableStatAddedKey(key string) (uint32, error) {
 		return 0, errors.Wrapf(err, "failed parsing table ID from key %q", key)
 	}
 	return uint32(tableID), nil
+}
+
+// MakeTableDisableMergesKey returns the gossip key used to disable merges for
+// the specified table ID.
+func MakeTableDisableMergesKey(tableID uint32) string {
+	return MakeKey(KeyTableDisableMergesPrefix, strconv.FormatUint(uint64(tableID), 10 /* base */))
 }
 
 // removePrefixFromKey removes the key prefix and separator and returns what's

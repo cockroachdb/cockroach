@@ -1,5 +1,19 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 @require "~styl/base/palette.styl"
-@require "~styl/layout/layout.styl"
+@require "~styl/base/layout-vars.styl"
 
 .page
   padding-top 0
@@ -24,7 +38,7 @@
 
     display grid
     align-items end
-    grid-template-columns 6fr 8fr 6fr 8fr 2fr 6fr 6fr 6fr 2fr 6fr 10fr 6fr
+    grid-template-columns 6fr 8fr 6fr minmax(auto,8fr) minmax(10px, 2fr) 6fr 6fr 6fr 2fr 6fr 10fr 6fr
     grid-template-rows repeat(3, auto)
     grid-template-areas "cap-t cap-t cap-t cap-t . live-t live-t live-t . rep-t rep-t rep-t" "cap-m cap-c cap-c cap-c . live-a live-b live-c . rep-a rep-b rep-c" "cap-a1 cap-a2 cap-a3 cap-a4 . live-1 live-2 live-3 . rep-1 rep-2 rep-3"
 
@@ -36,7 +50,10 @@
       grid-template-areas "cap-t cap-t live-t live-t rep-t rep-t" "cap-m2 cap-m live-1 live-a rep-1 rep-a" "cap-a1 cap-a2 live-2 live-b rep-2 rep-b" "cap-a3 cap-a4 live-3 live-c rep-3 rep-c"
 
     @media screen and (min-width: 1400px)
-      grid-template-columns 100px 135px 100px 135px 1fr 100px 100px 100px 1fr 100px 168px 100px
+      grid-template-columns 2fr 3fr 2fr 3fr 4fr 2fr 2fr 2fr 4fr 2fr 3fr 2fr
+
+    @media screen and (min-width: 1720px)
+      grid-template-columns 3fr 4fr 3fr 4fr 8fr 3fr 3fr 3fr 8fr 4fr 4fr 4fr
 
     .capacity-usage
       &.cluster-summary__title

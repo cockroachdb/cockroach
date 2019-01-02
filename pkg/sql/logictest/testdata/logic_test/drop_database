@@ -34,6 +34,11 @@ postgres
 system
 test
 
+query TT
+SELECT status, running_status FROM [SHOW JOBS]
+----
+running  waiting for GC TTL
+
 statement ok
 CREATE DATABASE "foo bar"
 

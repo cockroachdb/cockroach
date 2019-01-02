@@ -18,12 +18,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 var _ checkOperation = &physicalCheckOperation{}
@@ -31,7 +30,7 @@ var _ checkOperation = &physicalCheckOperation{}
 // physicalCheckOperation is a check on an indexes physical data.
 type physicalCheckOperation struct {
 	tableName *tree.TableName
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
 	indexDesc *sqlbase.IndexDescriptor
 
 	// columns is a list of the columns returned in the query result
@@ -53,7 +52,9 @@ type physicalCheckRun struct {
 }
 
 func newPhysicalCheckOperation(
-	tableName *tree.TableName, tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+	tableName *tree.TableName,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
 ) *physicalCheckOperation {
 	return &physicalCheckOperation{
 		tableName: tableName,
@@ -103,14 +104,14 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 		return err
 	}
 
-	indexHints := &tree.IndexHints{
+	indexFlags := &tree.IndexFlags{
 		IndexID:     tree.IndexID(o.indexDesc.ID),
 		NoIndexJoin: true,
 	}
 	scan := params.p.Scan()
 	scan.run.isCheck = true
 	colCfg := scanColumnsConfig{wantedColumns: columnIDs, addUnwantedAsHidden: true}
-	if err := scan.initTable(ctx, params.p, o.tableDesc, indexHints, colCfg); err != nil {
+	if err := scan.initTable(ctx, params.p, o.tableDesc, indexFlags, colCfg); err != nil {
 		return err
 	}
 	plan := planNode(scan)
@@ -134,9 +135,9 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	span := o.tableDesc.IndexSpan(o.indexDesc.ID)
 	spans := []roachpb.Span{span}
 
-	planCtx := params.extendedEvalCtx.DistSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
 	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(
-		&planCtx, scan, *o.tableDesc, *o.indexDesc, spans, params.p.ExecCfg().Clock.Now())
+		planCtx, scan, *o.tableDesc.TableDesc(), *o.indexDesc, spans, params.p.ExecCfg().Clock.Now())
 	if err != nil {
 		return err
 	}
@@ -144,7 +145,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	o.primaryColIdxs = primaryColIdxs
 	o.columns = columns
 	o.run.started = true
-	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, &physPlan, distsqlrun.ScrubTypes)
+	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, &physPlan, distsqlrun.ScrubTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return err

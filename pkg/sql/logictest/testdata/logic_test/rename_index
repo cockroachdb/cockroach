@@ -101,3 +101,16 @@ SELECT * FROM users@pk
 ----
 1 tom   cat
 2 jerry rat
+
+query TTT
+EXPLAIN ALTER INDEX users@bar RENAME TO woo
+----
+rename index  ·  ·
+
+# Verify that EXPLAIN did not actually rename the index (#30543)
+query T rowsort
+SELECT DISTINCT index_name FROM [SHOW INDEXES FROM users]
+----
+pk
+ufo
+bar

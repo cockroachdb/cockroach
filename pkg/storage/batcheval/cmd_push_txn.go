@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -108,8 +107,7 @@ func PushTxn(
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	existTxn := &roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, existTxn)
+	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, existTxn, engine.MVCCGetOptions{})
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -187,11 +185,6 @@ func PushTxn(
 		// If just attempting to cleanup old or already-committed txns,
 		// pusher always fails.
 		pusherWins = false
-	case args.PushType == roachpb.PUSH_TIMESTAMP &&
-		reply.PusheeTxn.Isolation == enginepb.SNAPSHOT:
-		// Can always push a SNAPSHOT txn's timestamp.
-		reason = "pushee is SNAPSHOT"
-		pusherWins = true
 	case CanPushWithPriority(&args.PusherTxn, &reply.PusheeTxn):
 		reason = "pusher has priority"
 		pusherWins = true

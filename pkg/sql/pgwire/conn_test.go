@@ -17,20 +17,19 @@ package pgwire
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"io"
 	"io/ioutil"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -47,6 +46,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/jackc/pgx"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // Test the conn struct: check that it marshalls the correct commands to the
@@ -116,7 +118,7 @@ func TestConn(t *testing.T) {
 
 	// Now we'll expect to receive the commands corresponding to the operations in
 	// client().
-	rd := sql.MakeStmtBufReader(conn.stmtBuf)
+	rd := sql.MakeStmtBufReader(&conn.stmtBuf)
 	expectExecStmt(ctx, t, "SELECT 1", &rd, conn, queryStringComplete)
 	expectSync(ctx, t, &rd)
 	expectExecStmt(ctx, t, "SELECT 2", &rd, conn, queryStringComplete)
@@ -182,30 +184,36 @@ func TestConn(t *testing.T) {
 // processPgxStartup processes the first few queries that the pgx driver
 // automatically sends on a new connection that has been established.
 func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c *conn) error {
-	rd := sql.MakeStmtBufReader(c.stmtBuf)
+	rd := sql.MakeStmtBufReader(&c.stmtBuf)
 
 	for {
 		cmd, err := rd.CurCmd()
 		if err != nil {
+			log.Errorf(ctx, "CurCmd error: %v", err)
 			return err
 		}
 
 		if _, ok := cmd.(sql.Sync); ok {
+			log.Infof(ctx, "advancing Sync")
 			rd.AdvanceOne()
 			continue
 		}
 
 		exec, ok := cmd.(sql.ExecStmt)
 		if !ok {
+			log.Infof(ctx, "stop wait at: %v", cmd)
 			return nil
 		}
 		query := exec.Stmt.String()
 		if !strings.HasPrefix(query, "SELECT t.oid") {
+			log.Infof(ctx, "stop wait at query: %s", query)
 			return nil
 		}
 		if err := execQuery(ctx, query, s, c); err != nil {
+			log.Errorf(ctx, "execQuery %s error: %v", query, err)
 			return err
 		}
+		log.Infof(ctx, "executed query: %s", query)
 		rd.AdvanceOne()
 	}
 }
@@ -234,9 +242,10 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	}
 	conn, err := pgx.Connect(
 		pgx.ConnConfig{
-			Host: host,
-			Port: uint16(port),
-			User: "root",
+			Logger: pgxTestLogger{},
+			Host:   host,
+			Port:   uint16(port),
+			User:   "root",
 			// Setting this so that the queries sent by pgx to initialize the
 			// connection are not using prepared statements. That simplifies the
 			// scaffolding of the test.
@@ -246,7 +255,6 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	if err != nil {
 		return err
 	}
-	conn.SetLogger(pgxTestLogger{})
 
 	if _, err := conn.Exec("select 1"); err != nil {
 		return err
@@ -323,8 +331,15 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	metrics := makeServerMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(conn, sql.SessionArgs{}, &metrics, &sql.ExecutorConfig{})
+	pgwireConn := newConn(conn, sql.SessionArgs{}, &metrics, 16<<10 /* resultsBufferBytes */)
 	return pgwireConn, nil
+}
+
+func makeTestingConvCfg() sessiondata.DataConversionConfig {
+	return sessiondata.DataConversionConfig{
+		Location:          time.UTC,
+		BytesEncodeFormat: sessiondata.BytesEncodeHex,
+	}
 }
 
 // sendResult serializes a set of rows in pgwire format and sends them on a
@@ -339,11 +354,12 @@ func sendResult(
 		return err
 	}
 
+	defaultConv := makeTestingConvCfg()
 	for _, row := range rows {
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 		c.msgBuilder.putInt16(int16(len(row)))
 		for _, col := range row {
-			c.msgBuilder.writeTextDatum(ctx, col, time.UTC /* sessionLoc */, sessiondata.BytesEncodeHex)
+			c.msgBuilder.writeTextDatum(ctx, col, defaultConv)
 		}
 
 		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
@@ -635,9 +651,6 @@ var _ pgx.Logger = pgxTestLogger{}
 func TestConnClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Make the connections' results buffers really small so that it overflows
-		// when we produce a few results.
-		ConnResultsBufferBytes: 10,
 		// Andrei is too lazy to figure out the incantation for telling pgx about
 		// our test certs.
 		Insecure: true,
@@ -645,7 +658,24 @@ func TestConnClose(t *testing.T) {
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
-	r := sqlutils.MakeSQLRunner(db)
+	// Disable results buffering.
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
+	)
+	pgURL.RawQuery = "sslmode=disable"
+	defer cleanupFunc()
+	noBufferDB, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer noBufferDB.Close()
+
+	r := sqlutils.MakeSQLRunner(noBufferDB)
 	r.Exec(t, "CREATE DATABASE test")
 	r.Exec(t, "CREATE TABLE test.test AS SELECT * FROM generate_series(1,100)")
 
@@ -750,7 +780,12 @@ func TestMaliciousInputs(t *testing.T) {
 			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
 
-			conn := newConn(r, sql.SessionArgs{}, &metrics, nil /* execCfg */)
+			conn := newConn(
+				r, sql.SessionArgs{}, &metrics,
+				// resultsBufferBytes - really small so that it overflows when we
+				// produce a few results.
+				10,
+			)
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.
 			_ /* err */ = conn.serveImpl(

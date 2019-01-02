@@ -246,7 +246,7 @@ func (node *WindowFrameBound) copyNode() *WindowFrameBound {
 
 func walkWindowFrameBound(v Visitor, bound *WindowFrameBound) (*WindowFrameBound, bool) {
 	ret := bound
-	if bound.OffsetExpr != nil {
+	if bound.HasOffset() {
 		e, changed := WalkExpr(v, bound.OffsetExpr)
 		if changed {
 			if ret == bound {
@@ -593,10 +593,10 @@ func (expr *ColumnItem) Walk(_ Visitor) Expr {
 func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr MaxVal) Walk(_ Visitor) Expr { return expr }
+func (expr PartitionMaxVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr MinVal) Walk(_ Visitor) Expr { return expr }
+func (expr PartitionMinVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *NumVal) Walk(_ Visitor) Expr { return expr }
@@ -606,6 +606,9 @@ func (expr *StrVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *Placeholder) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr *DBitArray) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DBool) Walk(_ Visitor) Expr { return expr }
@@ -618,9 +621,6 @@ func (expr *DDate) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DTime) Walk(_ Visitor) Expr { return expr }
-
-// Walk implements the Expr interface.
-func (expr *DTimeTZ) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DFloat) Walk(_ Visitor) Expr { return expr }
@@ -721,7 +721,7 @@ func walkReturningClause(v Visitor, clause ReturningClause) (ReturningClause, bo
 	case *ReturningNothing, *NoReturningClause:
 		return t, false
 	default:
-		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected ReturningClause type: %T", t))
+		panic(pgerror.NewAssertionErrorf("unexpected ReturningClause type: %T", t))
 	}
 }
 
@@ -1195,11 +1195,23 @@ func (stmt *SetVar) walkStmt(v Visitor) Statement {
 // walkStmt is part of the walkableStmt interface.
 func (stmt *SetZoneConfig) walkStmt(v Visitor) Statement {
 	ret := stmt
-	e, changed := WalkExpr(v, stmt.YAMLConfig)
-	if changed {
-		newStmt := *stmt
-		ret = &newStmt
-		ret.YAMLConfig = e
+	if stmt.YAMLConfig != nil {
+		e, changed := WalkExpr(v, stmt.YAMLConfig)
+		if changed {
+			newStmt := *stmt
+			ret = &newStmt
+			ret.YAMLConfig = e
+		}
+	}
+	if stmt.Options != nil {
+		newOpts, changed := walkKVOptions(v, stmt.Options)
+		if changed {
+			if ret == stmt {
+				newStmt := *stmt
+				ret = &newStmt
+			}
+			ret.Options = newOpts
+		}
 	}
 	return ret
 }
@@ -1296,13 +1308,13 @@ func (stmt *Update) walkStmt(v Visitor) Statement {
 // walkStmt is part of the walkableStmt interface.
 func (stmt *ValuesClause) walkStmt(v Visitor) Statement {
 	ret := stmt
-	for i, tuple := range stmt.Tuples {
-		t, changed := WalkExpr(v, tuple)
+	for i, tuple := range stmt.Rows {
+		exprs, changed := walkExprSlice(v, tuple)
 		if changed {
 			if ret == stmt {
-				ret = &ValuesClause{append([]*Tuple(nil), stmt.Tuples...)}
+				ret = &ValuesClause{append([]Exprs(nil), stmt.Rows...)}
 			}
-			ret.Tuples[i] = t.(*Tuple)
+			ret.Rows[i] = exprs
 		}
 	}
 	return ret

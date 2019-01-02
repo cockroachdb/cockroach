@@ -22,16 +22,16 @@ import (
 	"sync"
 
 	"github.com/biogo/store/llrb"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // rangeCacheKey is the key type used to store and sort values in the
@@ -355,13 +355,19 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	select {
 	case res = <-resC:
 	case <-ctxDone:
-		return nil, nil, ctx.Err()
+		return nil, nil, errors.Wrap(ctx.Err(), "aborted during range descriptor lookup")
 	}
 
-	if res.Shared {
-		log.Event(ctx, "looked up range descriptor with shared request")
+	var s string
+	if res.Err != nil {
+		s = res.Err.Error()
 	} else {
-		log.Event(ctx, "looked up range descriptor")
+		s = res.Val.(lookupResult).desc.String()
+	}
+	if res.Shared {
+		log.Eventf(ctx, "looked up range descriptor with shared request: %s", s)
+	} else {
+		log.Eventf(ctx, "looked up range descriptor: %s", s)
 	}
 	if res.Err != nil {
 		return nil, nil, res.Err
@@ -390,7 +396,7 @@ func (rdc *RangeDescriptorCache) performRangeLookup(
 	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// Tag inner operations.
-	ctx = log.WithLogTag(ctx, "range-lookup", key)
+	ctx = logtags.AddTag(ctx, "range-lookup", key)
 
 	// In this case, the requested key is stored in the cluster's first
 	// range. Return the first range, which is always gossiped and not

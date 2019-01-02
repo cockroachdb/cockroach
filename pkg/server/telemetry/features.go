@@ -15,10 +15,38 @@
 package telemetry
 
 import (
+	"fmt"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+// Bucket10 buckets a number by order of magnitude base 10, eg 637 -> 100.
+// This can be used in telemetry to get ballpark ideas of how users use a given
+// feature, such as file sizes, qps, etc, without being as revealing as the
+// raw numbers.
+// The numbers 0-10 are reported unchanged.
+func Bucket10(num int64) int64 {
+	if num <= 0 {
+		return 0
+	}
+	if num < 10 {
+		return num
+	}
+	res := int64(10)
+	for ; res < 1000000000000000000 && res*10 < num; res *= 10 {
+	}
+	return res
+}
+
+// CountBucketed counts the feature identified by prefix and the value, using
+// the bucketed value to pick a feature bucket to increment, e.g. a prefix of
+// "foo.bar" and value of 632 would be counted as "foo.bar.100".
+func CountBucketed(prefix string, value int64) {
+	Count(fmt.Sprintf("%s.%d", prefix, Bucket10(value)))
+}
 
 // Count retrieves and increments the usage counter for the passed feature.
 // High-volume callers may want to instead use `GetCounter` and hold on to the
@@ -64,14 +92,69 @@ var counters struct {
 	m map[string]Counter
 }
 
-// GetAndResetFeatureCounts returns the current feature usage counts and resets
-// the counts for all features back to 0.
-func GetAndResetFeatureCounts() map[string]int32 {
+// GetFeatureCounts returns the current feature usage counts. Used for
+// inspection via SQL. They are not quantized! Thus not suitable for
+// reporting.
+func GetFeatureCounts() map[string]int32 {
 	counters.RLock()
-	m := make(map[string]int32, approxFeatureCount)
-	for k := range counters.m {
-		m[k] = atomic.SwapInt32(counters.m[k], 0)
+	defer counters.RUnlock()
+	m := make(map[string]int32, len(counters.m))
+	for k, cnt := range counters.m {
+		m[k] = atomic.LoadInt32(cnt)
+	}
+	return m
+}
+
+// GetAndResetFeatureCounts returns the current feature usage counts and resets
+// the counts for all features back to 0. If `quantize` is true, the returned
+// counts are quantized to just order of magnitude using the `Bucket10` helper.
+func GetAndResetFeatureCounts(quantize bool) map[string]int32 {
+	counters.RLock()
+	m := make(map[string]int32, len(counters.m))
+	for k, cnt := range counters.m {
+		val := atomic.SwapInt32(cnt, 0)
+		if val != 0 {
+			m[k] = val
+		}
 	}
 	counters.RUnlock()
+	if quantize {
+		for k := range m {
+			m[k] = int32(Bucket10(int64(m[k])))
+		}
+	}
 	return m
+}
+
+// RecordError takes an error and increments the corresponding count
+// for its error code, and, if it is an unimplemented or internal
+// error, the count for that feature or the internal error's shortened
+// stack trace.
+func RecordError(err error) {
+	if err == nil {
+		return
+	}
+
+	if pgErr, ok := pgerror.GetPGCause(err); ok {
+		Count("errorcodes." + pgErr.Code)
+
+		if details := pgErr.InternalCommand; details != "" {
+			var prefix string
+			switch pgErr.Code {
+			case pgerror.CodeFeatureNotSupportedError:
+				prefix = "unimplemented."
+			case pgerror.CodeInternalError:
+				prefix = "internalerror."
+			default:
+				prefix = "othererror." + pgErr.Code + "."
+			}
+			Count(prefix + details)
+		}
+	} else {
+		typ := log.ErrorSource(err)
+		if typ == "" {
+			typ = "unknown"
+		}
+		Count("othererror." + typ)
+	}
 }

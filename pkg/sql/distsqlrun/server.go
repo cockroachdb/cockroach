@@ -17,37 +17,36 @@ package distsqlrun
 import (
 	"context"
 	"io"
-	time "time"
-
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
-
-// DistSQLVersion identifies DistSQL engine versions.
-type DistSQLVersion uint32
 
 // Version identifies the distsqlrun protocol version.
 //
@@ -75,11 +74,11 @@ type DistSQLVersion uint32
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version DistSQLVersion = 17
+const Version distsqlpb.DistSQLVersion = 22
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion DistSQLVersion = 6
+const MinAcceptedVersion distsqlpb.DistSQLVersion = 21
 
 // minFlowDrainWait is the minimum amount of time a draining server allows for
 // any incoming flows to be registered. It acts as a grace period in which the
@@ -136,7 +135,7 @@ type ServerConfig struct {
 
 	// TempStorage is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory.
-	TempStorage engine.Engine
+	TempStorage diskmap.Factory
 	// DiskMonitor is used to monitor temporary storage disk usage. Actual disk
 	// space used will be a small multiple (~1.1) of this because of RocksDB
 	// space amplification.
@@ -146,21 +145,25 @@ type ServerConfig struct {
 
 	// NodeID is the id of the node on which this Server is running.
 	NodeID    *base.NodeIDContainer
-	ClusterID uuid.UUID
+	ClusterID *base.ClusterIDContainer
 
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
+
+	// LeaseManager is a *sql.LeaseManager. It's stored as an `interface{}` due
+	// to package dependency cycles
+	LeaseManager interface{}
 
 	// A handle to gossip used to broadcast the node's DistSQL version and
 	// draining state.
 	Gossip *gossip.Gossip
 
+	NodeDialer *nodedialer.Dialer
+
 	// SessionBoundInternalExecutorFactory is used to construct session-bound
 	// executors. The idea is that a higher-layer binds some of the arguments
 	// required, so that users of ServerConfig don't have to care about them.
-	SessionBoundInternalExecutorFactory func(
-		ctx context.Context, sessionData *sessiondata.SessionData,
-	) sqlutil.InternalExecutor
+	SessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -172,7 +175,7 @@ type ServerImpl struct {
 	regexpCache   *tree.RegexpCache
 }
 
-var _ DistSQLServer = &ServerImpl{}
+var _ distsqlpb.DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
 func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
@@ -201,7 +204,7 @@ func (ds *ServerImpl) Start() {
 	// for us.
 	if err := ds.ServerConfig.Gossip.AddInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(ds.ServerConfig.NodeID.Get()),
-		&DistSQLVersionGossipInfo{
+		&distsqlpb.DistSQLVersionGossipInfo{
 			Version:            Version,
 			MinAcceptedVersion: MinAcceptedVersion,
 		},
@@ -251,7 +254,7 @@ func (ds *ServerImpl) Undrain(ctx context.Context) {
 func (ds *ServerImpl) setDraining(drain bool) error {
 	return ds.ServerConfig.Gossip.AddInfoProto(
 		gossip.MakeDistSQLDrainingKey(ds.ServerConfig.NodeID.Get()),
-		&DistSQLDrainingInfo{
+		&distsqlpb.DistSQLDrainingInfo{
 			Draining: drain,
 		},
 		0, // ttl - no expiration
@@ -260,27 +263,25 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 
 // FlowVerIsCompatible checks a flow's version is compatible with this node's
 // DistSQL version.
-func FlowVerIsCompatible(flowVer, minAcceptedVersion, serverVersion DistSQLVersion) bool {
+func FlowVerIsCompatible(flowVer, minAcceptedVersion, serverVersion distsqlpb.DistSQLVersion) bool {
 	return flowVer >= minAcceptedVersion && flowVer <= serverVersion
 }
 
-// simpleCtxProvider always returns the context that it holds.
-type simpleCtxProvider struct {
-	ctx context.Context
-}
-
-func (s simpleCtxProvider) Ctx() context.Context {
-	return s.ctx
-}
-
+// setupFlow creates a Flow.
+//
+// Args:
+// localState: Specifies if the flow runs entirely on this node and, if it does,
+//   specifies the txn and other attributes.
+//
 // Note: unless an error is returned, the returned context contains a span that
 // must be finished through Flow.Cleanup.
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context,
 	parentSpan opentracing.Span,
 	parentMonitor *mon.BytesMonitor,
-	req *SetupFlowRequest,
+	req *distsqlpb.SetupFlowRequest,
 	syncFlowConsumer RowReceiver,
+	localState LocalState,
 ) (context.Context, *Flow, error) {
 	if !FlowVerIsCompatible(req.Version, MinAcceptedVersion, Version) {
 		err := errors.Errorf(
@@ -298,11 +299,20 @@ func (ds *ServerImpl) setupFlow(
 	const opName = "flow"
 	var sp opentracing.Span
 	if parentSpan == nil {
-		sp = ds.Tracer.StartSpan(opName)
+		sp = ds.Tracer.(*tracing.Tracer).StartRootSpan(
+			opName, logtags.FromContext(ctx), tracing.NonRecordableSpan)
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
-		sp = ds.Tracer.StartSpan(opName, opentracing.FollowsFrom(parentSpan.Context()))
+		// TODO(andrei): We should use something more efficient than StartSpan; we
+		// should use AmbientContext.AnnotateCtxWithSpan() but that interface
+		// doesn't currently support FollowsFrom relationships.
+		sp = ds.Tracer.StartSpan(
+			opName,
+			opentracing.FollowsFrom(parentSpan.Context()),
+			tracing.LogTagsFromCtx(ctx),
+		)
 	}
+	// sp will be Finish()ed by Flow.Cleanup().
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	// The monitor and account opened here are closed in Flow.Cleanup().
@@ -318,63 +328,110 @@ func (ds *ServerImpl) setupFlow(
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 	acc := monitor.MakeBoundAccount()
 
-	if txn := req.DeprecatedTxn; txn != nil {
-		if req.TxnCoordMeta != nil {
-			return nil, nil, errors.Errorf("provided both Txn and TxnCoordMeta")
-		}
-		meta := roachpb.MakeTxnCoordMeta(*txn)
-		req.TxnCoordMeta = &meta
-	}
+	// Figure out what txn the flow needs to run in, if any.
+	// For local flows, the txn comes from localState.Txn. For non-local ones, we
+	// create a txn based on the request's TxnCoordMeta.
 	var txn *client.Txn
-	if meta := req.TxnCoordMeta; meta != nil {
-		// The flow will run in a Txn that specifies child=true because we
-		// do not want each distributed Txn to heartbeat the transaction.
-		txn = client.NewTxnWithCoordMeta(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
+	if !localState.IsLocal {
+		if depTxn := req.DeprecatedTxn; depTxn != nil {
+			if req.TxnCoordMeta != nil {
+				return nil, nil, errors.Errorf("provided both Txn and TxnCoordMeta")
+			}
+			meta := roachpb.MakeTxnCoordMeta(*depTxn)
+			req.TxnCoordMeta = &meta
+		}
+		if meta := req.TxnCoordMeta; meta != nil {
+			if meta.Txn.Status != roachpb.PENDING {
+				return nil, nil, errors.Errorf("cannot create flow in non-PENDING txn: %s",
+					meta.Txn)
+			}
+			// The flow will run in a LeafTxn because we do not want each distributed
+			// Txn to heartbeat the transaction.
+			txn = client.NewTxnWithCoordMeta(ctx, ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
+		}
+	} else {
+		txn = localState.Txn
 	}
 
-	location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
-	if err != nil {
-		tracing.FinishSpan(sp)
-		return ctx, nil, err
-	}
+	var evalCtx *tree.EvalContext
+	if localState.EvalContext != nil {
+		evalCtx = localState.EvalContext
+		evalCtx.Mon = &monitor
+		evalCtx.ActiveMemAcc = &acc
+		evalCtx.Txn = txn
+	} else {
+		location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
+		if err != nil {
+			tracing.FinishSpan(sp)
+			return ctx, nil, err
+		}
 
-	sd := &sessiondata.SessionData{
-		ApplicationName: req.EvalContext.ApplicationName,
-		Location:        location,
-		Database:        req.EvalContext.Database,
-		User:            req.EvalContext.User,
-		SearchPath:      sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
-		SequenceState:   sessiondata.NewSequenceState(),
-	}
-	ie := ds.SessionBoundInternalExecutorFactory(ctx, sd)
+		var be sessiondata.BytesEncodeFormat
+		switch req.EvalContext.BytesEncodeFormat {
+		case distsqlpb.BytesEncodeFormat_HEX:
+			be = sessiondata.BytesEncodeHex
+		case distsqlpb.BytesEncodeFormat_ESCAPE:
+			be = sessiondata.BytesEncodeEscape
+		case distsqlpb.BytesEncodeFormat_BASE64:
+			be = sessiondata.BytesEncodeBase64
+		default:
+			return nil, nil, errors.Errorf("unknown byte encode format: %s",
+				req.EvalContext.BytesEncodeFormat.String())
+		}
+		sd := &sessiondata.SessionData{
+			ApplicationName: req.EvalContext.ApplicationName,
+			Database:        req.EvalContext.Database,
+			User:            req.EvalContext.User,
+			SearchPath:      sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
+			SequenceState:   sessiondata.NewSequenceState(),
+			DataConversion: sessiondata.DataConversionConfig{
+				Location:          location,
+				BytesEncodeFormat: be,
+				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
+			},
+		}
+		// Enable better compatibility with PostgreSQL date math.
+		if req.Version >= 22 {
+			sd.DurationAdditionMode = duration.AdditionModeCompatible
+		} else {
+			sd.DurationAdditionMode = duration.AdditionModeLegacy
+		}
+		ie := &lazyInternalExecutor{
+			newInternalExecutor: func() tree.SessionBoundInternalExecutor {
+				return ds.SessionBoundInternalExecutorFactory(ctx, sd)
+			},
+		}
 
-	evalCtx := tree.EvalContext{
-		Settings:     ds.ServerConfig.Settings,
-		SessionData:  sd,
-		ClusterID:    ds.ServerConfig.ClusterID,
-		NodeID:       nodeID,
-		ReCache:      ds.regexpCache,
-		Mon:          &monitor,
-		ActiveMemAcc: &acc,
-		// TODO(andrei): This is wrong. Each processor should override Ctx with its
-		// own context.
-		CtxProvider:      simpleCtxProvider{ctx: ctx},
-		Txn:              txn,
-		Planner:          &dummyEvalPlanner{},
-		Sequence:         &dummySequenceOperators{},
-		InternalExecutor: ie,
+		evalPlanner := &sqlbase.DummyEvalPlanner{}
+		sequence := &sqlbase.DummySequenceOperators{}
+		evalCtx = &tree.EvalContext{
+			Settings:     ds.ServerConfig.Settings,
+			SessionData:  sd,
+			ClusterID:    ds.ServerConfig.ClusterID.Get(),
+			NodeID:       nodeID,
+			ReCache:      ds.regexpCache,
+			Mon:          &monitor,
+			ActiveMemAcc: &acc,
+			// TODO(andrei): This is wrong. Each processor should override Ctx with its
+			// own context.
+			Context:          ctx,
+			Txn:              txn,
+			Planner:          evalPlanner,
+			Sequence:         sequence,
+			InternalExecutor: ie,
+		}
+		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
+		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
+		var haveSequences bool
+		for _, seq := range req.EvalContext.SeqState.Seqs {
+			evalCtx.SessionData.SequenceState.RecordValue(seq.SeqID, seq.LatestVal)
+			haveSequences = true
+		}
+		if haveSequences {
+			evalCtx.SessionData.SequenceState.SetLastSequenceIncremented(
+				*req.EvalContext.SeqState.LastSeqIncremented)
+		}
 	}
-	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
-	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
-	var haveSequences bool
-	for _, seq := range req.EvalContext.SeqState.Seqs {
-		evalCtx.SessionData.SequenceState.RecordValue(seq.SeqID, seq.LatestVal)
-	}
-	if haveSequences {
-		evalCtx.SessionData.SequenceState.SetLastSequenceIncremented(
-			*req.EvalContext.SeqState.LastSeqIncremented)
-	}
-
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := FlowCtx{
 		Settings:       ds.Settings,
@@ -383,27 +440,30 @@ func (ds *ServerImpl) setupFlow(
 		id:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
 		rpcCtx:         ds.RPCContext,
-		nodeDialer:     nodedialer.New(ds.RPCContext, gossip.AddressResolver(ds.Gossip)),
-		gossip:         ds.Gossip,
+		nodeDialer:     ds.NodeDialer,
+		Gossip:         ds.Gossip,
 		txn:            txn,
-		clientDB:       ds.DB,
+		ClientDB:       ds.DB,
 		executor:       ds.Executor,
+		LeaseManager:   ds.ServerConfig.LeaseManager,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		TempStorage:    ds.TempStorage,
 		diskMonitor:    ds.DiskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
+		traceKV:        req.TraceKV,
+		local:          localState.IsLocal,
 	}
-
-	ctx = flowCtx.AnnotateCtx(ctx)
-
-	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
-	flowCtx.AddLogTagStr("f", f.id.Short())
+	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs)
 	if err := f.setup(ctx, &req.Flow); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)
 		ctx = opentracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, err
+	}
+	if !f.isLocal() {
+		flowCtx.AddLogTag("f", f.id.Short())
+		flowCtx.AnnotateCtx(ctx)
 	}
 	return ctx, f, nil
 }
@@ -414,13 +474,47 @@ func (ds *ServerImpl) setupFlow(
 // Note: the returned context contains a span that must be finished through
 // Flow.Cleanup.
 func (ds *ServerImpl) SetupSyncFlow(
-	ctx context.Context, parentMonitor *mon.BytesMonitor, req *SetupFlowRequest, output RowReceiver,
+	ctx context.Context,
+	parentMonitor *mon.BytesMonitor,
+	req *distsqlpb.SetupFlowRequest,
+	output RowReceiver,
 ) (context.Context, *Flow, error) {
-	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output)
+	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{})
+}
+
+// LocalState carries information that is required to set up a flow with wrapped
+// planNodes.
+type LocalState struct {
+	EvalContext *tree.EvalContext
+
+	// IsLocal is true if the flow is being run locally in the first place.
+	IsLocal bool
+
+	/////////////////////////////////////////////
+	// Fields below are empty if IsLocal == false
+	/////////////////////////////////////////////
+
+	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
+	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
+	LocalProcs []LocalProcessor
+	Txn        *client.Txn
+}
+
+// SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node.
+// It's used by the gateway node to set up the flows local to it. Otherwise,
+// the same as SetupSyncFlow.
+func (ds *ServerImpl) SetupLocalSyncFlow(
+	ctx context.Context,
+	parentMonitor *mon.BytesMonitor,
+	req *distsqlpb.SetupFlowRequest,
+	output RowReceiver,
+	localState LocalState,
+) (context.Context, *Flow, error) {
+	return ds.setupFlow(ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState)
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
+func (ds *ServerImpl) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) error {
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutboxSyncFlowStream(stream)
 
@@ -441,9 +535,9 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 	if err := ds.Stopper.RunTask(ctx, "distsqlrun.ServerImpl: sync flow", func(ctx context.Context) {
 		ctx, ctxCancel := contextutil.WithCancel(ctx)
 		defer ctxCancel()
-		mbox.start(ctx, &f.waitGroup, ctxCancel)
+		f.startables = append(f.startables, mbox)
 		ds.Metrics.FlowStart()
-		if err := f.Start(ctx, func() {}); err != nil {
+		if err := f.StartSync(ctx, func() {}); err != nil {
 			log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 				"The error should have gone to the consumer.", err)
 		}
@@ -458,14 +552,14 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 
 // SetupFlow is part of the DistSQLServer interface.
 func (ds *ServerImpl) SetupFlow(
-	ctx context.Context, req *SetupFlowRequest,
-) (*SimpleResponse, error) {
+	ctx context.Context, req *distsqlpb.SetupFlowRequest,
+) (*distsqlpb.SimpleResponse, error) {
 	parentSpan := opentracing.SpanFromContext(ctx)
 
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, err := ds.setupFlow(ctx, parentSpan, &ds.memMonitor, req, nil /* syncFlowConsumer */)
+	ctx, f, err := ds.setupFlow(ctx, parentSpan, &ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}
@@ -473,12 +567,14 @@ func (ds *ServerImpl) SetupFlow(
 		// We return flow deployment errors in the response so that they are
 		// packaged correctly over the wire. If we return them directly to this
 		// function, they become part of an rpc error.
-		return &SimpleResponse{Error: NewError(err)}, nil
+		return &distsqlpb.SimpleResponse{Error: distsqlpb.NewError(err)}, nil
 	}
-	return &SimpleResponse{}, nil
+	return &distsqlpb.SimpleResponse{}, nil
 }
 
-func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStreamServer) error {
+func (ds *ServerImpl) flowStreamInt(
+	ctx context.Context, stream distsqlpb.DistSQL_FlowStreamServer,
+) error {
 	// Receive the first message.
 	msg, err := stream.Recv()
 	if err != nil {
@@ -507,7 +603,7 @@ func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStre
 }
 
 // FlowStream is part of the DistSQLServer interface.
-func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
+func (ds *ServerImpl) FlowStream(stream distsqlpb.DistSQL_FlowStreamServer) error {
 	ctx := ds.AnnotateCtx(stream.Context())
 	err := ds.flowStreamInt(ctx, stream)
 	if err != nil {
@@ -551,6 +647,9 @@ type TestingKnobs struct {
 	// DeterministicStats overrides stats which don't have reliable values, like
 	// stall time and bytes sent. It replaces them with a zero value.
 	DeterministicStats bool
+
+	// Changefeed contains testing knobs specific to the changefeed system.
+	Changefeed base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
@@ -570,85 +669,27 @@ const (
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
 
-var errEvalPlanner = errors.New("cannot backfill such evaluated expression")
+// lazyInternalExecutor is a tree.SessionBoundInternalExecutor that initializes
+// itself only on the first call to QueryRow.
+type lazyInternalExecutor struct {
+	// Set when an internal executor has been initialized.
+	tree.SessionBoundInternalExecutor
 
-// Implements the tree.EvalPlanner interface by returning errors.
-type dummyEvalPlanner struct {
+	// Used for initializing the internal executor exactly once.
+	once sync.Once
+
+	// newInternalExecutor must be set when instantiating a lazyInternalExecutor,
+	// it provides an internal executor to use when necessary.
+	newInternalExecutor func() tree.SessionBoundInternalExecutor
 }
 
-var _ tree.EvalPlanner = &dummyEvalPlanner{}
+var _ tree.SessionBoundInternalExecutor = &lazyInternalExecutor{}
 
-// Implements the tree.EvalDatabase interface.
-func (ep *dummyEvalPlanner) ParseQualifiedTableName(
-	ctx context.Context, sql string,
-) (*tree.TableName, error) {
-	return nil, errEvalPlanner
-}
-
-// Implements the tree.EvalDatabase interface.
-func (ep *dummyEvalPlanner) LookupSchema(
-	ctx context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
-	return false, nil, errEvalPlanner
-}
-
-// Implements the tree.EvalDatabase interface.
-func (ep *dummyEvalPlanner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errEvalPlanner
-}
-
-// Implements the tree.EvalPlanner interface.
-func (ep *dummyEvalPlanner) ParseType(sql string) (coltypes.CastTargetType, error) {
-	return nil, errEvalPlanner
-}
-
-// Implements the tree.EvalPlanner interface.
-func (ep *dummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error) {
-	return nil, errEvalPlanner
-}
-
-var errSequenceOperators = errors.New("cannot backfill such sequence operation")
-
-// Implements the tree.SequenceOperators interface by returning errors.
-type dummySequenceOperators struct {
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *dummySequenceOperators) ParseQualifiedTableName(
-	ctx context.Context, sql string,
-) (*tree.TableName, error) {
-	return nil, errSequenceOperators
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *dummySequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errSequenceOperators
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *dummySequenceOperators) LookupSchema(
-	ctx context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
-	return false, nil, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *dummySequenceOperators) IncrementSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	return 0, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *dummySequenceOperators) GetLatestValueInSessionForSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	return 0, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *dummySequenceOperators) SetSequenceValue(
-	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
-) error {
-	return errSequenceOperators
+func (ie *lazyInternalExecutor) QueryRow(
+	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+) (tree.Datums, error) {
+	ie.once.Do(func() {
+		ie.SessionBoundInternalExecutor = ie.newInternalExecutor()
+	})
+	return ie.SessionBoundInternalExecutor.QueryRow(ctx, opName, txn, stmt, qargs...)
 }

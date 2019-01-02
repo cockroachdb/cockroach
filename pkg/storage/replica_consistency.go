@@ -24,10 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
@@ -36,12 +33,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
+
+var testingFatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_FATAL_ON_STATS_MISMATCH", false)
 
 const (
 	// collectChecksumTimeout controls how long we'll wait to collect a checksum
@@ -49,7 +50,7 @@ const (
 	// because the checksum might never be computed for a replica if that replica
 	// is caught up via a snapshot and never performs the ComputeChecksum
 	// operation.
-	collectChecksumTimeout = 5 * time.Second
+	collectChecksumTimeout = 15 * time.Second
 )
 
 // CheckConsistency runs a consistency check on the range. It first applies a
@@ -60,23 +61,12 @@ const (
 func (r *Replica) CheckConsistency(
 	ctx context.Context, args roachpb.CheckConsistencyRequest,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	desc := r.Desc()
-	key := desc.StartKey.AsRawKey()
-	// Keep the request from crossing the local->global boundary.
-	if bytes.Compare(key, keys.LocalMax) < 0 {
-		key = keys.LocalMax
-	}
-	endKey := desc.EndKey.AsRawKey()
-	id := uuid.MakeV4()
+	startKey := r.Desc().StartKey.AsRawKey()
 
 	checkArgs := roachpb.ComputeChecksumRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    key,
-			EndKey: endKey,
-		},
-		Version:    batcheval.ReplicaChecksumVersion,
-		ChecksumID: id,
-		Snapshot:   args.WithDiff,
+		RequestHeader: roachpb.RequestHeader{Key: startKey},
+		Version:       batcheval.ReplicaChecksumVersion,
+		Snapshot:      args.WithDiff,
 	}
 
 	results, err := r.RunConsistencyCheck(ctx, checkArgs)
@@ -97,8 +87,8 @@ func (r *Replica) CheckConsistency(
 			result.Replica, expResponse.Checksum, result.Response.Checksum)
 		if expResponse.Snapshot != nil && result.Response.Snapshot != nil {
 			diff := diffRange(expResponse.Snapshot, result.Response.Snapshot)
-			if report := r.store.cfg.TestingKnobs.BadChecksumReportDiff; report != nil {
-				report(r.store.Ident, diff)
+			if report := r.store.cfg.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
+				report(*r.store.Ident, diff)
 			}
 			buf.WriteByte('\n')
 			_, _ = diff.WriteTo(&buf)
@@ -121,6 +111,13 @@ func (r *Replica) CheckConsistency(
 			return roachpb.CheckConsistencyResponse{}, nil
 		}
 
+		if !delta.ContainsEstimates && testingFatalOnStatsMismatch {
+			// ContainsEstimates is true if the replica's persisted MVCCStats had ContainsEstimates set.
+			// If this was *not* the case, the replica believed it had accurate stats. But we just found
+			// out that this isn't true.
+			log.Fatalf(ctx, "found a delta of %+v", log.Safe(delta))
+		}
+
 		// We've found that there's something to correct; send an RecomputeStatsRequest. Note that this
 		// code runs only on the lease holder (at the time of initiating the computation), so this work
 		// isn't duplicated except in rare leaseholder change scenarios (and concurrent invocation of
@@ -129,7 +126,7 @@ func (r *Replica) CheckConsistency(
 		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
 		req := roachpb.RecomputeStatsRequest{
-			RequestHeader: roachpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
+			RequestHeader: roachpb.RequestHeader{Key: startKey},
 		}
 
 		var b client.Batch
@@ -140,11 +137,11 @@ func (r *Replica) CheckConsistency(
 	}
 
 	logFunc := log.Fatalf
-	if p := r.store.TestingKnobs().BadChecksumPanic; p != nil {
+	if p := r.store.cfg.ConsistencyTestingKnobs.BadChecksumPanic; p != nil {
 		if !args.WithDiff {
 			// We'll call this recursively with WithDiff==true; let's let that call
 			// be the one to trigger the handler.
-			p(r.store.Ident)
+			p(*r.store.Ident)
 		}
 		logFunc = log.Errorf
 	}
@@ -159,8 +156,9 @@ func (r *Replica) CheckConsistency(
 	// Note that this will call Fatal recursively in `CheckConsistency` (in the code above).
 	log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
 		inconsistencyCount)
-	if err := r.store.db.CheckConsistency(ctx, key, endKey, true /* withDiff */); err != nil {
-		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", err)
+	args.WithDiff = true
+	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
+		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
 	}
 
 	// Not reached except in tests.
@@ -182,7 +180,7 @@ func (r *Replica) collectChecksumFromReplica(
 		return CollectChecksumResponse{},
 			errors.Wrapf(err, "could not dial node ID %d", replica.NodeID)
 	}
-	client := NewConsistencyClient(conn)
+	client := NewPerReplicaClient(conn)
 	req := &CollectChecksumRequest{
 		StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
 		r.RangeID,
@@ -205,14 +203,11 @@ func (r *Replica) RunConsistencyCheck(
 ) ([]ConsistencyCheckResult, error) {
 	// Send a ComputeChecksum which will trigger computation of the checksum on
 	// all replicas.
-	{
-		var b client.Batch
-		b.AddRawRequest(&req)
-
-		if err := r.store.db.Run(ctx, &b); err != nil {
-			return nil, err
-		}
+	res, pErr := client.SendWrapped(ctx, r.store.db.NonTransactionalSender(), &req)
+	if pErr != nil {
+		return nil, pErr.GoError()
 	}
+	ccRes := res.(*roachpb.ComputeChecksumResponse)
 
 	var orderedReplicas []roachpb.ReplicaDescriptor
 	{
@@ -249,7 +244,7 @@ func (r *Replica) RunConsistencyCheck(
 				if len(results) > 0 {
 					masterChecksum = results[0].Response.Checksum
 				}
-				resp, err := r.collectChecksumFromReplica(ctx, replica, req.ChecksumID, masterChecksum)
+				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,
@@ -374,9 +369,11 @@ func (r *Replica) sha512(
 	defer iter.Close()
 
 	var alloc bufalloc.ByteAllocator
+	var intBuf [8]byte
+	var legacyTimestamp hlc.LegacyTimestamp
+	var timestampBuf []byte
 	hasher := sha512.New()
 
-	var legacyTimestamp hlc.LegacyTimestamp
 	visitor := func(unsafeKey engine.MVCCKey, unsafeValue []byte) error {
 		if snapshot != nil {
 			// Add (a copy of) the kv pair into the debug message.
@@ -389,24 +386,30 @@ func (r *Replica) sha512(
 		}
 
 		// Encode the length of the key and value.
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(unsafeKey.Key))); err != nil {
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.Key)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
 			return err
 		}
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(unsafeValue))); err != nil {
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeValue)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(unsafeKey.Key); err != nil {
 			return err
 		}
 		legacyTimestamp = hlc.LegacyTimestamp(unsafeKey.Timestamp)
-		timestamp, err := protoutil.Marshal(&legacyTimestamp)
-		if err != nil {
+		if size := legacyTimestamp.Size(); size > cap(timestampBuf) {
+			timestampBuf = make([]byte, size)
+		} else {
+			timestampBuf = timestampBuf[:size]
+		}
+		if _, err := protoutil.MarshalToWithoutFuzzing(&legacyTimestamp, timestampBuf); err != nil {
 			return err
 		}
-		if _, err := hasher.Write(timestamp); err != nil {
+		if _, err := hasher.Write(timestampBuf); err != nil {
 			return err
 		}
-		_, err = hasher.Write(unsafeValue)
+		_, err := hasher.Write(unsafeValue)
 		return err
 	}
 

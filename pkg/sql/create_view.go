@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -43,15 +44,7 @@ type createViewNode struct {
 //						selected columns.
 //          mysql requires CREATE VIEW plus SELECT on all the selected columns.
 func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode, error) {
-	name, err := n.Name.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	var dbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		dbDesc, err = ResolveTargetObject(ctx, p, name)
-	})
+	dbDesc, err := p.ResolveUncachedDatabase(ctx, &n.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -60,39 +53,41 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		return nil, err
 	}
 
-	// Ensure that all the table names are properly qualified.  The
-	// traversal will update the NormalizableTableNames in-place, so the
-	// changes are persisted in n.AsSource. We use tree.FormatNode
-	// merely as a traversal method; its output buffer is discarded
-	// immediately after the traversal because it is not needed further.
-	var fmtErr error
+	var planDeps planDependencies
+	var sourceColumns sqlbase.ResultColumns
+	// To avoid races with ongoing schema changes to tables that the view
+	// depends on, make sure we use the most recent versions of table
+	// descriptors rather than the copies in the lease cache.
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		planDeps, sourceColumns, err = p.analyzeViewQuery(ctx, n.AsSource)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure that all the table names pretty-print as fully qualified,
+	// so we store that in the view descriptor.
+	//
+	// The traversal will update the TableNames in-place, so the changes are
+	// persisted in n.AsSource. We exploit the fact that semantic analysis above
+	// has populated any missing db/schema details in the table names in-place.
+	// We use tree.FormatNode merely as a traversal method; its output buffer is
+	// discarded immediately after the traversal because it is not needed further.
 	{
 		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
 		f.WithReformatTableNames(
-			func(_ *tree.FmtCtx, t *tree.NormalizableTableName) {
-				tn, err := p.QualifyWithDatabase(ctx, t)
-				if err != nil {
-					log.Warningf(ctx, "failed to qualify table name %q with database name: %v",
-						tree.ErrString(t), err)
-					fmtErr = err
-					return
-				}
+			func(_ *tree.FmtCtx, tn *tree.TableName) {
 				// Persist the database prefix expansion.
-				tn.ExplicitSchema = true
-				tn.ExplicitCatalog = true
+				if tn.SchemaName != "" {
+					// All CTE or table aliases have no schema
+					// information. Those do not turn into explicit.
+					tn.ExplicitSchema = true
+					tn.ExplicitCatalog = true
+				}
 			},
 		)
 		f.FormatNode(n.AsSource)
 		f.Close() // We don't need the string.
-	}
-
-	if fmtErr != nil {
-		return nil, fmtErr
-	}
-
-	planDeps, sourceColumns, err := p.analyzeViewQuery(ctx, n.AsSource)
-	if err != nil {
-		return nil, err
 	}
 
 	numColNames := len(n.ColumnNames)
@@ -115,7 +110,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 }
 
 func (n *createViewNode) startExec(params runParams) error {
-	viewName := n.n.Name.TableName().Table()
+	viewName := n.n.Name.Table()
 	tKey := tableKey{parentID: n.dbDesc.ID, name: viewName}
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
@@ -146,22 +141,23 @@ func (n *createViewNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err = desc.ValidateTable(params.EvalContext().Settings); err != nil {
-		return err
-	}
-
 	// Collect all the tables/views this view depends on.
 	for backrefID := range n.planDeps {
 		desc.DependsOn = append(desc.DependsOn, backrefID)
 	}
 
-	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err = params.p.createDescriptorWithID(
+		params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
 	// Persist the back-references in all referenced table descriptors.
 	for _, updated := range n.planDeps {
-		backrefDesc := *updated.desc
+		backrefID := updated.desc.ID
+		backRefMutable := params.p.Tables().getUncommittedTableByID(backrefID).MutableTableDescriptor
+		if backRefMutable == nil {
+			backRefMutable = sqlbase.NewMutableExistingTableDescriptor(*updated.desc.TableDesc())
+		}
 		for _, dep := range updated.deps {
 			// The logical plan constructor merely registered the dependencies.
 			// It did not populate the "ID" field of TableDescriptor_Reference,
@@ -169,9 +165,9 @@ func (n *createViewNode) startExec(params runParams) error {
 			// yet known.
 			// We need to do it here.
 			dep.ID = desc.ID
-			backrefDesc.DependedOnBy = append(backrefDesc.DependedOnBy, dep)
+			backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, dep)
 		}
-		if err := params.p.saveNonmutationAndNotify(params.ctx, &backrefDesc); err != nil {
+		if err := params.p.writeSchemaChange(params.ctx, backRefMutable, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}
@@ -192,7 +188,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			ViewName  string
 			Statement string
 			User      string
-		}{n.n.Name.TableName().FQString(), n.n.String(), params.SessionData().User},
+		}{n.n.Name.FQString(), n.n.String(), params.SessionData().User},
 	)
 }
 
@@ -215,7 +211,7 @@ func (n *createViewNode) makeViewTableDesc(
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
-) (sqlbase.TableDescriptor, error) {
+) (sqlbase.MutableTableDescriptor, error) {
 	desc := InitTableDescriptor(id, parentID, viewName,
 		params.p.txn.CommitTimestamp(), privileges)
 	desc.ViewQuery = tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable)
@@ -228,8 +224,49 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
+		// The new types in the CREATE VIEW column specs never use
+		// SERIAL so we need not process SERIAL types here.
 		col, _, _, err := sqlbase.MakeColumnDefDescs(
 			&columnTableDef, &params.p.semaCtx, params.EvalContext())
+		if err != nil {
+			return desc, err
+		}
+		desc.AddColumn(*col)
+	}
+	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
+	// happens to work in gc, but does not work in gccgo.
+	//
+	// See https://github.com/golang/go/issues/23188.
+	err := desc.AllocateIDs()
+	return desc, err
+}
+
+// MakeViewTableDesc returns the table descriptor for a new view.
+func MakeViewTableDesc(
+	n *tree.CreateView,
+	resultColumns sqlbase.ResultColumns,
+	parentID, id sqlbase.ID,
+	creationTime hlc.Timestamp,
+	privileges *sqlbase.PrivilegeDescriptor,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+) (sqlbase.MutableTableDescriptor, error) {
+	viewName := n.Name.Table()
+	desc := InitTableDescriptor(id, parentID, viewName, creationTime, privileges)
+	desc.ViewQuery = tree.AsStringWithFlags(n.AsSource, tree.FmtParsable)
+
+	for i, colRes := range resultColumns {
+		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
+		if err != nil {
+			return desc, err
+		}
+		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colType}
+		if len(n.ColumnNames) > i {
+			columnTableDef.Name = n.ColumnNames[i]
+		}
+		// The new types in the CREATE VIEW column specs never use
+		// SERIAL so we need not process SERIAL types here.
+		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
 		if err != nil {
 			return desc, err
 		}

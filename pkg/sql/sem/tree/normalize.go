@@ -90,9 +90,6 @@ func (expr *UnaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	}
 
 	switch expr.Operator {
-	case UnaryPlus:
-		// +a -> a
-		return val
 	case UnaryMinus:
 		// -0 -> 0 (except for float which has negative zero)
 		if val.ResolvedType() != types.Float && v.isNumericZero(val) {
@@ -430,14 +427,29 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				if err != nil {
 					break
 				}
+				// Check that we still have a string after evaluation.
+				if _, ok := str.(*DString); !ok {
+					break
+				}
 
 				rhs, err := expr.TypedRight().Eval(v.ctx)
 				if err != nil {
 					break
 				}
 
+				rjson := rhs.(*DJSON).JSON
+				t := rjson.Type()
+				if t == json.ObjectJSONType || t == json.ArrayJSONType {
+					// We can't make this transformation in cases like
+					//
+					//   a->'b' = '["c"]',
+					//
+					// because containment is not equivalent to equality for non-scalar types.
+					break
+				}
+
 				j := json.NewObjectBuilder(1)
-				j.Add(string(*str.(*DString)), rhs.(*DJSON).JSON)
+				j.Add(string(*str.(*DString)), rjson)
 
 				dj, err := MakeDJSON(j.Build())
 				if err != nil {
@@ -470,7 +482,10 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			}
 			if len(tupleCopy.D) == 0 {
 				// NULL IN <empty-tuple> is false.
-				return DBoolFalse
+				if expr.Operator == In {
+					return DBoolFalse
+				}
+				return DBoolTrue
 			}
 			if expr.TypedLeft() == DNull {
 				// NULL IN <non-empty-tuple> is NULL.
@@ -671,14 +686,14 @@ type NormalizeVisitor struct {
 	ctx *EvalContext
 	err error
 
-	isConstVisitor isConstVisitor
+	fastIsConstVisitor fastIsConstVisitor
 }
 
 var _ Visitor = &NormalizeVisitor{}
 
 // MakeNormalizeVisitor creates a NormalizeVisitor instance.
 func MakeNormalizeVisitor(ctx *EvalContext) NormalizeVisitor {
-	return NormalizeVisitor{ctx: ctx, isConstVisitor: isConstVisitor{ctx: ctx}}
+	return NormalizeVisitor{ctx: ctx, fastIsConstVisitor: fastIsConstVisitor{ctx: ctx}}
 }
 
 // Err retrieves the error field in the NormalizeVisitor.
@@ -719,9 +734,6 @@ func (v *NormalizeVisitor) VisitPost(expr Expr) Expr {
 
 	// Evaluate all constant expressions.
 	if v.isConst(expr) {
-		if _, ok := expr.(*Placeholder); ok {
-			return expr
-		}
 		value, err := expr.(TypedExpr).Eval(v.ctx)
 		if err != nil {
 			// Ignore any errors here (e.g. division by zero), so they can happen
@@ -747,7 +759,7 @@ func (v *NormalizeVisitor) VisitPost(expr Expr) Expr {
 }
 
 func (v *NormalizeVisitor) isConst(expr Expr) bool {
-	return v.isConstVisitor.run(expr)
+	return v.fastIsConstVisitor.run(expr)
 }
 
 // isNumericZero returns true if the datum is a number and equal to
@@ -795,7 +807,7 @@ func invertComparisonOp(op ComparisonOperator) (ComparisonOperator, error) {
 	case LT:
 		return GT, nil
 	default:
-		return op, pgerror.NewErrorf(pgerror.CodeInternalError, "internal error: unable to invert: %s", op)
+		return op, pgerror.NewAssertionErrorf("unable to invert: %s", op)
 	}
 }
 
@@ -837,6 +849,72 @@ func (v *isConstVisitor) run(expr Expr) bool {
 func IsConst(evalCtx *EvalContext, expr Expr) bool {
 	v := isConstVisitor{ctx: evalCtx}
 	return v.run(expr)
+}
+
+// fastIsConstVisitor is similar to isConstVisitor, but it only visits
+// at most two levels of the tree (with one exception, see below).
+// In essence, it determines whether an expression is constant by checking
+// whether its children are const Datums.
+//
+// This can be used during normalization since constants are evaluated
+// bottom-up. If a child is *not* a const Datum, that means it was already
+// determined to be non-constant, and therefore was not evaluated.
+type fastIsConstVisitor struct {
+	ctx     *EvalContext
+	isConst bool
+
+	// visited indicates whether we have already visited one level of the tree.
+	// fastIsConstVisitor only visits at most two levels of the tree, with one
+	// exception: If the second level has a Cast expression, fastIsConstVisitor
+	// may visit three levels.
+	visited bool
+}
+
+var _ Visitor = &fastIsConstVisitor{}
+
+func (v *fastIsConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	if v.visited {
+		if _, ok := expr.(*CastExpr); ok {
+			// We recurse one more time for cast expressions, since the
+			// NormalizeVisitor may have wrapped a NULL.
+			return true, expr
+		}
+		if _, ok := expr.(Datum); !ok || isVar(v.ctx, expr) {
+			// If the child expression is not a const Datum, the parent expression is
+			// not constant. Note that all constant literals have already been
+			// normalized to Datum in TypeCheck.
+			v.isConst = false
+		}
+		return false, expr
+	}
+	v.visited = true
+
+	// If the parent expression is a variable or impure function, we know that it
+	// is not constant.
+
+	if isVar(v.ctx, expr) {
+		v.isConst = false
+		return false, expr
+	}
+
+	switch t := expr.(type) {
+	case *FuncExpr:
+		if t.IsImpure() {
+			v.isConst = false
+			return false, expr
+		}
+	}
+
+	return true, expr
+}
+
+func (*fastIsConstVisitor) VisitPost(expr Expr) Expr { return expr }
+
+func (v *fastIsConstVisitor) run(expr Expr) bool {
+	v.isConst = true
+	v.visited = false
+	WalkExprConst(v, expr)
+	return v.isConst
 }
 
 // isVar returns true if the expression's value can vary during plan
@@ -882,7 +960,7 @@ func ContainsVars(evalCtx *EvalContext, expr Expr) bool {
 var DecimalOne DDecimal
 
 func init() {
-	DecimalOne.SetCoefficient(1)
+	DecimalOne.SetFinite(1, 0)
 }
 
 // ReType ensures that the given numeric expression evaluates

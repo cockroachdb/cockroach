@@ -21,12 +21,11 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
-
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 )
 
 const (
@@ -85,7 +84,6 @@ func FromConfig(rows int, payloadBytes int, ranges int) workload.Generator {
 		ranges = rows
 	}
 	b := bankMeta.New().(*bank)
-	b.seed = timeutil.Now().UnixNano()
 	b.rows = rows
 	b.payloadBytes = payloadBytes
 	b.ranges = ranges
@@ -162,7 +160,7 @@ func (b *bank) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	updateStmt, err := db.Prepare(`
 		UPDATE bank
 		SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
-		WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank WHERE id = $1)
+		WHERE id IN ($1, $2)
 	`)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -181,7 +179,8 @@ func (b *bank) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			amount := rand.Intn(maxTransfer)
 			start := timeutil.Now()
 			_, err := updateStmt.Exec(from, to, amount)
-			hists.Get(`transfer`).Record(timeutil.Since(start))
+			elapsed := timeutil.Since(start)
+			hists.Get(`transfer`).Record(elapsed)
 			return err
 		}
 		ql.WorkerFns = append(ql.WorkerFns, workerFn)

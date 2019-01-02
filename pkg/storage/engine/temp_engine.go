@@ -21,7 +21,9 @@ import (
 
 // NewTempEngine creates a new engine for DistSQL processors to use when the
 // working set is larger than can be stored in memory.
-func NewTempEngine(tempStorage base.TempStorageConfig, storeSpec base.StoreSpec) (Engine, error) {
+func NewTempEngine(
+	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+) (MapProvidingEngine, error) {
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.

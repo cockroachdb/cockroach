@@ -14,9 +14,7 @@
 
 package settings
 
-import (
-	"github.com/pkg/errors"
-)
+import "github.com/pkg/errors"
 
 // IntSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
@@ -36,6 +34,16 @@ func (i *IntSetting) Get(sv *Values) int64 {
 
 func (i *IntSetting) String(sv *Values) string {
 	return EncodeInt(i.Get(sv))
+}
+
+// Encoded returns the encoded value of the current value of the setting.
+func (i *IntSetting) Encoded(sv *Values) string {
+	return i.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (i *IntSetting) EncodedDefault() string {
+	return EncodeInt(i.defaultValue)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.
@@ -88,6 +96,16 @@ func RegisterNonNegativeIntSetting(key, desc string, defaultValue int64) *IntSet
 	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("cannot set %s to a negative value: %d", key, v)
+		}
+		return nil
+	})
+}
+
+// RegisterPositiveIntSetting defines a new setting with type int.
+func RegisterPositiveIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
+		if v < 1 {
+			return errors.Errorf("cannot set %s to a value < 1: %d", key, v)
 		}
 		return nil
 	})

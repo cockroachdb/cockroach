@@ -35,7 +35,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	version "github.com/hashicorp/go-version"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/kr/pretty"
 )
 
@@ -66,8 +66,6 @@ var libsRe = func() *regexp.Regexp {
 		regexp.QuoteMeta("librt.so."),
 		regexp.QuoteMeta("libpthread.so."),
 		regexp.QuoteMeta("libdl.so."),
-		regexp.QuoteMeta("libtinfo.so."),
-		regexp.QuoteMeta("libncurses.so."),
 		regexp.QuoteMeta("libm.so."),
 		regexp.QuoteMeta("libc.so."),
 		strings.Replace(regexp.QuoteMeta("ld-linux-ARCH.so."), "ARCH", ".*", -1),
@@ -112,13 +110,13 @@ func main() {
 	var versionStr string
 	var isStableRelease bool
 	if *isRelease {
-		ver, err := version.NewVersion(branch)
+		ver, err := version.Parse(branch)
 		if err != nil {
 			log.Fatalf("refusing to build release with invalid version name '%s' (err: %s)", branch, err)
 		}
 
 		// Prerelease returns anything after the `-` and before metadata. eg: `beta` for `1.0.1-beta+metadata`
-		if ver.Prerelease() == "" {
+		if ver.PreRelease() == "" {
 			isStableRelease = true
 		}
 		versionStr = branch

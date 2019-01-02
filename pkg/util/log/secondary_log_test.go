@@ -19,6 +19,8 @@ import (
 	"io/ioutil"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 func TestSecondaryLog(t *testing.T) {
@@ -31,7 +33,7 @@ func TestSecondaryLog(t *testing.T) {
 
 	// Interleave some messages.
 	Infof(context.Background(), "test1")
-	ctx := WithLogTagStr(context.Background(), "hello", "world")
+	ctx := logtags.AddTag(context.Background(), "hello", "world")
 	l.Logf(ctx, "story time")
 	Infof(context.Background(), "test2")
 

@@ -18,17 +18,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"strconv"
 	"time"
-
-	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	_ "github.com/lib/pq"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 func registerHotSpotSplits(r *registry) {
@@ -40,7 +36,7 @@ func registerHotSpotSplits(r *registry) {
 		appNode := c.Node(c.nodes)
 
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
-		c.Start(ctx, roachNodes)
+		c.Start(ctx, t, roachNodes)
 
 		c.Put(ctx, workload, "./workload", appNode)
 		c.Run(ctx, appNode, `./workload init kv --drop {pgurl:1}`)
@@ -49,12 +45,14 @@ func registerHotSpotSplits(r *registry) {
 		m, ctx = errgroup.WithContext(ctx)
 
 		m.Go(func() error {
-			c.l.printf("starting load generator\n")
+			t.l.Printf("starting load generator\n")
 
-			quietL, err := newLogger("run kv", strconv.Itoa(0), "workload"+strconv.Itoa(0), ioutil.Discard, os.Stderr)
+			quietL, err := t.l.ChildLogger("kv-0", quietStdout)
 			if err != nil {
 				return err
 			}
+			defer quietL.close()
+
 			const blockSize = 1 << 19 // 512 KB
 			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
 				"./workload run kv --read-percent=0 --splits=0 --tolerate-errors --concurrency=%d "+
@@ -102,9 +100,8 @@ func registerHotSpotSplits(r *registry) {
 	concurrency := 128
 
 	r.Add(testSpec{
-		Name:   fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
-		Nodes:  nodes(numNodes),
-		Stable: true, // DO NOT COPY to new tests
+		Name:  fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
+		Nodes: nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 32

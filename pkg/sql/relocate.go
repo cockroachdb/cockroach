@@ -17,8 +17,6 @@ package sql
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -27,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 type relocateNode struct {
@@ -105,7 +103,7 @@ func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, err
 
 	return &relocateNode{
 		relocateLease: n.RelocateLease,
-		tableDesc:     tableDesc,
+		tableDesc:     tableDesc.TableDesc(),
 		index:         index,
 		rows:          rows,
 		run: relocateRun{
@@ -210,7 +208,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 	} else {
-		if err := storage.RelocateRange(params.ctx, params.p.ExecCfg().DB, rangeDesc, relocationTargets); err != nil {
+		if err := params.p.ExecCfg().DB.AdminRelocateRange(params.ctx, rowKey, relocationTargets); err != nil {
 			return false, err
 		}
 	}

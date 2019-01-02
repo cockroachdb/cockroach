@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
@@ -54,7 +54,8 @@ func declareKeysClearRange(
 //
 // Note that "correct" use of this command is only possible for key
 // spans consisting of user data that we know is not being written to
-// or queried any more, such as after a DROP or TRUNCATE table.
+// or queried any more, such as after a DROP or TRUNCATE table, or
+// DROP index.
 func ClearRange(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -94,11 +95,11 @@ func ClearRange(
 
 	// Otherwise, suggest a compaction for the cleared range and clear
 	// the key span using engine.ClearRange.
-	pd.Replicated.SuggestedCompactions = []storagebase.SuggestedCompaction{
+	pd.Replicated.SuggestedCompactions = []storagepb.SuggestedCompaction{
 		{
 			StartKey: from.Key,
 			EndKey:   to.Key,
-			Compaction: storagebase.Compaction{
+			Compaction: storagepb.Compaction{
 				Bytes:            statsDelta.Total(),
 				SuggestedAtNanos: cArgs.Header.Timestamp.WallTime,
 			},

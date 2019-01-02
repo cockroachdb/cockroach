@@ -84,6 +84,7 @@ SELECT DISTINCT ON (b, c, a) a FROM abc
 1
 1
 
+# We need to rowsort this since the ORDER BY isn't on the entire SELECT columns.
 query T rowsort
 SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
 ----
@@ -121,14 +122,14 @@ SELECT DISTINCT ON (x, y) y FROM xyz
 5
 1
 
-query TT rowsort
+query TT
 SELECT DISTINCT ON (a, c) a, b FROM abc ORDER BY a, c, b
 ----
 1 1
 1 1
 
 # We wrap this with an ORDER BY otherwise this would be non-deterministic.
-query TTT rowsort
+query TTT
 SELECT DISTINCT ON (c, a) b, c, a FROM abc ORDER BY c, a, b DESC
 ----
 1 1 1
@@ -157,7 +158,7 @@ SELECT DISTINCT ON (b) b FROM abc
 2
 
 # We wrap this with an ORDER BY otherwise this would be non-deterministic.
-query TTT rowsort
+query TTT
 SELECT DISTINCT ON (a) a, b, c FROM abc ORDER BY a, b, c
 ----
 1 1 1
@@ -171,13 +172,13 @@ SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 # With ORDER BY #
 #################
 
-statement error SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions
+statement error SELECT DISTINCT ON expressions must match initial ORDER BY expressions
 SELECT DISTINCT ON (x) x, y, z FROM xyz ORDER BY y
 
-statement error SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions
+statement error SELECT DISTINCT ON expressions must match initial ORDER BY expressions
 SELECT DISTINCT ON (y) x, y, z FROM xyz ORDER BY x, y
 
-statement error SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions
+statement error SELECT DISTINCT ON expressions must match initial ORDER BY expressions
 SELECT DISTINCT ON (y, z) x, y, z FROM xyz ORDER BY x
 
 query I
@@ -254,7 +255,7 @@ SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 #########################
 
 query I rowsort
-SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
+SELECT DISTINCT ON(row_number() OVER(ORDER BY (pk1, pk2))) y FROM xyz
 ----
 1
 1
@@ -265,7 +266,7 @@ SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 1
 
 query I
-SELECT DISTINCT ON(row_number() OVER()) y FROM xyz ORDER BY row_number() OVER() DESC
+SELECT DISTINCT ON(row_number() OVER(ORDER BY (pk1, pk2))) y FROM xyz ORDER BY row_number() OVER(ORDER BY (pk1, pk2)) DESC
 ----
 1
 5

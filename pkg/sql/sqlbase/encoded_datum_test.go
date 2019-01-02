@@ -17,10 +17,8 @@ package sqlbase
 import (
 	"context"
 	"testing"
-
-	"unsafe"
-
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -218,7 +216,7 @@ func TestEncDatumCompare(t *testing.T) {
 	for kind := range ColumnType_SemanticType_name {
 		kind := ColumnType_SemanticType(kind)
 		if kind == ColumnType_NULL || kind == ColumnType_ARRAY || kind == ColumnType_INT2VECTOR ||
-			kind == ColumnType_OIDVECTOR || kind == ColumnType_JSON || kind == ColumnType_TUPLE {
+			kind == ColumnType_OIDVECTOR || kind == ColumnType_JSONB || kind == ColumnType_TUPLE {
 			continue
 		}
 		typ := ColumnType{SemanticType: kind}
@@ -300,7 +298,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 			}
 			buf, err = ed[i].Encode(&types[i], &alloc, enc[i], buf)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("Failed to encode type %v: %s", types[i], err)
 			}
 		}
 		// Decode the buffer.
@@ -312,14 +310,14 @@ func TestEncDatumFromBuffer(t *testing.T) {
 			var decoded EncDatum
 			decoded, b, err = EncDatumFromBuffer(&types[i], enc[i], b)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("%+v: encdatum from %+v: %+v (%+v)", ed[i].Datum, enc[i], err, &types[i])
 			}
 			err = decoded.EnsureDecoded(&types[i], &alloc)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("%+v: ensuredecoded: %v (%+v)", ed[i], err, &types[i])
 			}
 			if decoded.Datum.Compare(evalCtx, ed[i].Datum) != 0 {
-				t.Errorf("decoded datum %s doesn't equal original %s", decoded.Datum, ed[i].Datum)
+				t.Errorf("decoded datum %+v doesn't equal original %+v", decoded.Datum, ed[i].Datum)
 			}
 		}
 		if len(b) != 0 {
@@ -492,6 +490,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	tests := make([]tree.Datum, 1000)
 	colTypes := make([]ColumnType, 1000)
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for i := range tests {
 		colTypes[i] = ColumnType{SemanticType: ColumnType_TUPLE}
@@ -527,7 +526,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 					seed, test, colTypes[i], testTyp, len(buf))
 			}
 
-			if cmp := decodedTuple.Compare(&tree.EvalContext{}, test); cmp != 0 {
+			if cmp := decodedTuple.Compare(evalCtx, test); cmp != 0 {
 				t.Fatalf("seed %d: encoded %+v, decoded %+v, expected equal, received comparison: %d", seed, test, decodedTuple, cmp)
 			}
 		default:

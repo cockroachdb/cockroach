@@ -186,7 +186,6 @@ index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 IS OF (INT)
 ----
 [/1 - /1]
-Remaining filter: @2 IS OF (INT)
 
 # This testcase exposed an issue around extending spans. We don't normalize the
 # expression so we have a hierarchy of ANDs (which requires a more complex path
@@ -196,7 +195,7 @@ index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4) nonormalize
 @1 = 1 AND @2 = 2 AND @3 = 3 AND @4 IN (4,5,6)
 ----
 [/1/2/3/4 - /1/2/3/6]
-Remaining filter: ((true AND true) AND true) AND true
+Remaining filter: true
 
 index-constraints vars=(int, int) index=(@1, @2)
 (@1 = 1) AND (@2 > 5) AND (@2 < 1)

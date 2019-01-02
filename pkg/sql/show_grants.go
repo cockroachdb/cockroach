@@ -69,7 +69,7 @@ FROM "".information_schema.table_privileges`
 		}
 
 		fmt.Fprint(&source, dbPrivQuery)
-		orderBy = "1,2,3"
+		orderBy = "1,2,3,4"
 		if len(params) == 0 {
 			// There are no rows, but we can't simply return emptyNode{} because
 			// the result columns must still be defined.
@@ -79,7 +79,7 @@ FROM "".information_schema.table_privileges`
 		}
 	} else {
 		fmt.Fprint(&source, tablePrivQuery)
-		orderBy = "1,2,3,4"
+		orderBy = "1,2,3,4,5"
 
 		if n.Targets != nil {
 			// Get grants of table from information_schema.table_privileges
@@ -97,7 +97,7 @@ FROM "".information_schema.table_privileges`
 				//
 				// TODO(vivek): check if the cache can be used.
 				p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					tables, err = expandTableGlob(ctx, p, tableGlob)
+					tables, err = expandTableGlob(ctx, p.txn, p, tableGlob)
 				})
 				if err != nil {
 					return nil, err

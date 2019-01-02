@@ -81,7 +81,7 @@ func runShowSyntax(
 	report func(ctx context.Context, field, msg string) error,
 	reportErr func(err error),
 ) error {
-	stmts, err := parser.Parse(stmt)
+	stmts, _, err := parser.Parse(stmt)
 	if err != nil {
 		if reportErr != nil {
 			reportErr(err)
@@ -89,7 +89,7 @@ func runShowSyntax(
 
 		pqErr, ok := pgerror.GetPGCause(err)
 		if !ok {
-			return pgerror.NewErrorf(pgerror.CodeInternalError, "unknown parser error: %v", err)
+			return pgerror.NewAssertionErrorf("unknown parser error: %v", err)
 		}
 		if err := report(ctx, "error", pqErr.Message); err != nil {
 			return err

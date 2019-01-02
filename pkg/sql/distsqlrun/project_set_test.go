@@ -15,8 +15,12 @@
 package distsqlrun
 
 import (
+	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -32,15 +36,15 @@ func TestProjectSet(t *testing.T) {
 
 	testCases := []struct {
 		description string
-		spec        ProjectSetSpec
+		spec        distsqlpb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
 		inputTypes  []sqlbase.ColumnType
 		expected    sqlbase.EncDatumRows
 	}{
 		{
 			description: "scalar function",
-			spec: ProjectSetSpec{
-				Exprs: []Expression{
+			spec: distsqlpb.ProjectSetSpec{
+				Exprs: []distsqlpb.Expression{
 					{Expr: "@1 + 1"},
 				},
 				GeneratedColumns: oneIntCol,
@@ -56,8 +60,8 @@ func TestProjectSet(t *testing.T) {
 		},
 		{
 			description: "set-returning function",
-			spec: ProjectSetSpec{
-				Exprs: []Expression{
+			spec: distsqlpb.ProjectSetSpec{
+				Exprs: []distsqlpb.Expression{
 					{Expr: "generate_series(@1, 2)"},
 				},
 				GeneratedColumns: oneIntCol,
@@ -78,8 +82,8 @@ func TestProjectSet(t *testing.T) {
 		},
 		{
 			description: "multiple exprs with different lengths",
-			spec: ProjectSetSpec{
-				Exprs: []Expression{
+			spec: distsqlpb.ProjectSetSpec{
+				Exprs: []distsqlpb.Expression{
 					{Expr: "0"},
 					{Expr: "generate_series(0, 0)"},
 					{Expr: "generate_series(0, 1)"},
@@ -104,8 +108,8 @@ func TestProjectSet(t *testing.T) {
 		t.Run(c.description, func(t *testing.T) {
 			runProcessorTest(
 				t,
-				ProcessorCoreUnion{ProjectSet: &c.spec},
-				PostProcessSpec{},
+				distsqlpb.ProcessorCoreUnion{ProjectSet: &c.spec},
+				distsqlpb.PostProcessSpec{},
 				c.inputTypes,
 				c.input,
 				append(c.inputTypes, c.spec.GeneratedColumns...), /* outputTypes */
@@ -114,4 +118,64 @@ func TestProjectSet(t *testing.T) {
 			)
 		})
 	}
+}
+
+func BenchmarkProjectSet(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(context.Background())
+
+	v := [10]sqlbase.EncDatum{}
+	for i := range v {
+		v[i] = intEncDatum(i)
+	}
+
+	benchCases := []struct {
+		description string
+		spec        distsqlpb.ProjectSetSpec
+		input       sqlbase.EncDatumRows
+		inputTypes  []sqlbase.ColumnType
+	}{
+		{
+			description: "generate_series",
+			spec: distsqlpb.ProjectSetSpec{
+				Exprs: []distsqlpb.Expression{
+					{Expr: "generate_series(1, 100000)"},
+				},
+				GeneratedColumns: oneIntCol,
+				NumColsPerGen:    []uint32{1},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[0]},
+			},
+			inputTypes: oneIntCol,
+		},
+	}
+
+	for _, c := range benchCases {
+		b.Run(c.description, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				flowCtx := FlowCtx{
+					Settings: st,
+					EvalCtx:  &evalCtx,
+					txn:      nil,
+				}
+
+				in := NewRowBuffer(c.inputTypes, c.input, RowBufferArgs{})
+				out := &RowBuffer{}
+				p, err := newProcessor(
+					context.Background(), &flowCtx, 0, /* processorID */
+					&distsqlpb.ProcessorCoreUnion{ProjectSet: &c.spec}, &distsqlpb.PostProcessSpec{},
+					[]RowSource{in}, []RowReceiver{out}, []LocalProcessor{})
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				p.Run(context.Background(), nil /* wg */)
+			}
+		})
+	}
+
 }

@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -28,9 +29,6 @@ import (
 // distinctNode de-duplicates rows returned by a wrapped planNode.
 type distinctNode struct {
 	plan planNode
-	// All the columns that are part of the Sort. Set to nil if no-sort, or
-	// sort used an expression that was not part of the requested column set.
-	columnsInOrder []bool
 
 	// distinctOnColIdxs are the column indices of the child planNode and
 	// is what defines the distinct key.
@@ -40,6 +38,10 @@ type distinctNode struct {
 	// planNode's column indices indicating which columns are specified in
 	// the DISTINCT ON (<exprs>) clause.
 	distinctOnColIdxs util.FastIntSet
+
+	// Subset of distinctOnColIdxs on which the input guarantees an ordering.
+	// All rows that are equal on these columns appear contiguously in the input.
+	columnsInOrder util.FastIntSet
 
 	run *rowSourceToPlanNode
 }
@@ -189,7 +191,7 @@ func (p *planner) distinct(
 
 func (n *distinctNode) startExec(params runParams) error {
 	flowCtx := &distsqlrun.FlowCtx{
-		EvalCtx: *params.EvalContext(),
+		EvalCtx: params.EvalContext(),
 	}
 
 	cols := make([]int, len(planColumns(n.plan)))
@@ -199,7 +201,7 @@ func (n *distinctNode) startExec(params runParams) error {
 
 	spec := createDistinctSpec(n, cols)
 
-	input, err := makePlanNodeToRowSource(n.plan, params)
+	input, err := makePlanNodeToRowSource(n.plan, params, false)
 	if err != nil {
 		return err
 	}
@@ -207,15 +209,28 @@ func (n *distinctNode) startExec(params runParams) error {
 		return errors.New("cannot initialize a distinctNode with 0 columns")
 	}
 
-	post := &distsqlrun.PostProcessSpec{} // post is not used as we only use the processor for the core distinct logic.
-	var output distsqlrun.RowReceiver     // output is never used as distinct is only run as a RowSource.
+	// Normally, startExec isn't recursive, since it's invoked for all nodes using
+	// the planTree walker. And as normal, the walker will startExec the source
+	// of this distinct.
+	// But, we also need to startExec our planNodeToRowSource to properly
+	// initialize it. That won't get touched via the planNode walker, so we have
+	// to do it recursively here.
+	if err := input.startExec(params); err != nil {
+		return err
+	}
+	if err := input.InitWithOutput(&distsqlpb.PostProcessSpec{}, nil); err != nil {
+		return err
+	}
+
+	post := &distsqlpb.PostProcessSpec{} // post is not used as we only use the processor for the core distinct logic.
+	var output distsqlrun.RowReceiver    // output is never used as distinct is only run as a RowSource.
 
 	proc, err := distsqlrun.NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, output)
 	if err != nil {
 		return err
 	}
 
-	n.run = makeRowSourceToPlanNode(proc)
+	n.run = makeRowSourceToPlanNode(proc, nil /* forwarder */, planColumns(n), nil /* originalPlanNode */)
 
 	n.run.source.Start(params.ctx)
 
@@ -233,11 +248,8 @@ func (n *distinctNode) Values() tree.Datums {
 func (n *distinctNode) Close(ctx context.Context) {
 	if n.run != nil {
 		n.run.Close(ctx)
-	} else {
-		// If we haven't gotten around to initializing n.run yet, then we still
-		// need to propagate the close message to our inputs - do so directly.
-		n.plan.Close(ctx)
 	}
+	n.plan.Close(ctx)
 }
 
 // projectChildPropsToOnExprs takes the physical props (e.g. ordering info,

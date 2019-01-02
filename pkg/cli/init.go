@@ -19,9 +19,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
-
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/spf13/cobra"
 )
 
 var initCmd = &cobra.Command{

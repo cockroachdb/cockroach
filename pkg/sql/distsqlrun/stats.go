@@ -15,21 +15,12 @@
 package distsqlrun
 
 import (
-	"time"
-
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
-
-// DistSQLSpanStats is a tracing.SpanStats that returns a list of stats to
-// output on a query plan.
-type DistSQLSpanStats interface {
-	tracing.SpanStats
-	StatsForQueryPlan() []string
-}
 
 // InputStatCollector wraps a RowSource and collects stats from it.
 type InputStatCollector struct {

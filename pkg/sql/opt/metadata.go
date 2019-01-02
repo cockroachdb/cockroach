@@ -15,46 +15,19 @@
 package opt
 
 import (
+	"context"
 	"fmt"
+	"math/bits"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// TableID uniquely identifies the usage of a table within the scope of a
-// query. The ids of its columns start at the table id and proceed sequentially
-// from there. See the comment for Metadata for more details.
-type TableID int32
-
-// TableAnnID uniquely identifies an annotation on an instance of table
-// metadata. A table annotation allows arbitrary values to be cached with table
-// metadata, which can be used to avoid recalculating base table properties or
-// other information each time it's needed.
-//
-// To create a TableAnnID, call NewTableAnnID during Go's program initialization
-// phase. The returned TableAnnID never clashes with other annotations on the
-// same table. Here is a usage example:
-//
-//   var myAnnID = NewTableAnnID()
-//
-//   md.SetTableAnnotation(TableID(1), myAnnID, "foo")
-//   ann := md.TableAnnotation(TableID(1), myAnnID)
-//
-// Currently, the following annotations are in use:
-//   - WeakKeys: weak keys derived from the base table
-//   - Stats: statistics derived from the base table
-//
-// To add an additional annotation, increase the value of maxTableAnnIDCount and
-// add a call to NewTableAnnID.
-type TableAnnID int
-
-// tableAnnIDCount counts the number of times NewTableAnnID is called.
-var tableAnnIDCount TableAnnID
-
-// maxTableAnnIDCount is the maximum number of times that NewTableAnnID can be
-// called. Calling more than this number of times results in a panic. Having
-// a maximum enables a static annotation array to be inlined into the metadata
-// table struct.
-const maxTableAnnIDCount = 2
+// privilegeBitmap stores a union of zero or more privileges. Each privilege
+// that is present in the bitmap is represented by a bit that is shifted by
+// 1 << privilege.Kind, so that multiple privileges can be stored.
+type privilegeBitmap uint32
 
 // Metadata assigns unique ids to the columns, tables, and other metadata used
 // within the scope of a particular query. Because it is specific to one query,
@@ -85,168 +58,168 @@ const maxTableAnnIDCount = 2
 //   -- [1] -> y
 type Metadata struct {
 	// cols stores information about each metadata column, indexed by ColumnID.
-	// Skip id 0 so that it is reserved for "unknown column".
-	cols []mdColumn
+	cols []ColumnMeta
 
-	// tables maps from table id to the catalog metadata for the table. The
-	// table id is the id of the first column in the table. The remaining
-	// columns form a contiguous group following that id.
-	tables map[TableID]*mdTable
+	// tables stores information about each metadata table, indexed by TableID.
+	tables []TableMeta
+
+	// deps stores information about all unique data sources depended on by the
+	// query, as well as the privileges required to access those data sources.
+	// The map key is the data source so that each data source is referenced at
+	// most once. The map value is the union of all required privileges.
+	deps map[cat.DataSource]privilegeBitmap
 }
 
-// mdTable stores information about one of the tables stored in the metadata.
-type mdTable struct {
-	// tab is a reference to the table in the catalog.
-	tab Table
-
-	// anns annotates the table metadata with arbitrary data.
-	anns [maxTableAnnIDCount]interface{}
+// Init prepares the metadata for use (or reuse).
+func (md *Metadata) Init() {
+	// Clear the columns and tables to release memory (this clearing pattern is
+	// optimized by Go).
+	for i := range md.cols {
+		md.cols[i] = ColumnMeta{}
+	}
+	for i := range md.tables {
+		md.tables[i] = TableMeta{}
+	}
+	md.cols = md.cols[:0]
+	md.tables = md.tables[:0]
+	md.deps = nil
 }
 
-// mdColumn stores information about one of the columns stored in the metadata,
-// including its label and type.
-type mdColumn struct {
-	// label is the best-effort name of this column. Since the same column can
-	// have multiple labels (using aliasing), one of those is chosen to be used
-	// for pretty-printing and debugging. This might be different than what is
-	// stored in the physical properties and is presented to end users.
-	label string
-
-	// typ is the scalar SQL type of this column.
-	typ types.T
+// AddMetadata initializes the metadata with a copy of the provided metadata.
+// This metadata can then be modified independent of the copied metadata.
+func (md *Metadata) AddMetadata(from *Metadata) {
+	if len(md.cols) != 0 || len(md.tables) != 0 || len(md.deps) != 0 {
+		panic("AddMetadata not supported when destination metadata is not empty")
+	}
+	md.cols = append(md.cols, from.cols...)
+	md.tables = append(md.tables, from.tables...)
+	md.deps = make(map[cat.DataSource]privilegeBitmap, len(from.deps))
+	for ds, privs := range from.deps {
+		md.deps[ds] = privs
+	}
 }
 
-// NewMetadata constructs a new instance of metadata for the optimizer.
-func NewMetadata() *Metadata {
-	// Skip mdColumn index 0 so that it is reserved for "unknown column".
-	return &Metadata{cols: make([]mdColumn, 1)}
-}
-
-// AddColumn assigns a new unique id to a column within the query and records
-// its label and type.
-func (md *Metadata) AddColumn(label string, typ types.T) ColumnID {
-	md.cols = append(md.cols, mdColumn{label: label, typ: typ})
-	return ColumnID(len(md.cols) - 1)
-}
-
-// NumColumns returns the count of columns tracked by this Metadata instance.
-func (md *Metadata) NumColumns() int {
-	// Index 0 is skipped.
-	return len(md.cols) - 1
-}
-
-// IndexColumns returns the set of columns in the given index.
-// TODO(justin): cache this value in the table metadata.
-func (md *Metadata) IndexColumns(tableID TableID, indexOrdinal int) ColSet {
-	tab := md.Table(tableID)
-	index := tab.Index(indexOrdinal)
-
-	var indexCols ColSet
-	for i := 0; i < index.ColumnCount(); i++ {
-		ord := index.Column(i).Ordinal
-		indexCols.Add(int(md.TableColumn(tableID, ord)))
+// AddDependency tracks one of the data sources on which the query depends, as
+// well as the privilege required to access that data source. If the Memo using
+// this metadata is cached, then a call to CheckDependencies can detect if
+// changes to schema or permissions on the data source has invalidated the
+// cached metadata.
+func (md *Metadata) AddDependency(ds cat.DataSource, priv privilege.Kind) {
+	if md.deps == nil {
+		md.deps = make(map[cat.DataSource]privilegeBitmap)
 	}
 
-	return indexCols
+	// Use shift operator to store union of privileges required of the data
+	// source.
+	existing := md.deps[ds]
+	md.deps[ds] = existing | (1 << priv)
 }
 
-// ColumnLabel returns the label of the given column. It is used for pretty-
-// printing and debugging.
-func (md *Metadata) ColumnLabel(id ColumnID) string {
-	if id == 0 {
-		panic("uninitialized column id 0")
+// CheckDependencies resolves each data source on which this metadata depends,
+// in order to check that the fully qualified data source names still resolve to
+// the same version of the same data source, and that the user still has
+// sufficient privileges to access the data source.
+func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) bool {
+	for dep, privs := range md.deps {
+		ds, err := catalog.ResolveDataSource(ctx, dep.Name())
+		if err != nil {
+			return false
+		}
+		if dep.ID() != ds.ID() {
+			return false
+		}
+		if dep.Version() != ds.Version() {
+			return false
+		}
+
+		for privs != 0 {
+			// Strip off each privilege bit and make call to CheckPrivilege for it.
+			// Note that priv == 0 can occur when a dependency was added with
+			// privilege.Kind = 0 (e.g. for a table within a view, where the table
+			// privileges do not need to be checked). Ignore the "zero privilege".
+			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
+			if priv != 0 {
+				if err = catalog.CheckPrivilege(ctx, ds, priv); err != nil {
+					return false
+				}
+			}
+
+			// Set the just-handled privilege bit to zero and look for next.
+			privs &= ^(1 << priv)
+		}
 	}
-
-	return md.cols[id].label
-}
-
-// ColumnType returns the SQL scalar type of the given column.
-func (md *Metadata) ColumnType(id ColumnID) types.T {
-	if id == 0 {
-		panic("uninitialized column id 0")
-	}
-
-	return md.cols[id].typ
+	return true
 }
 
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g. in a
-// self-join query).
-func (md *Metadata) AddTable(tab Table) TableID {
-	return md.AddTableWithName(tab, "")
+// self-join query). All columns are added to the metadata. If mutation columns
+// are present, they are added after active columns.
+func (md *Metadata) AddTable(tab cat.Table) TableID {
+	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
+	if md.tables == nil {
+		md.tables = make([]TableMeta, 0, 4)
+	}
+	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab})
+	tabMeta := md.TableMeta(tabID)
+
+	colCount := tab.ColumnCount()
+	if md.cols == nil {
+		md.cols = make([]ColumnMeta, 0, colCount)
+	}
+
+	for i := 0; i < colCount; i++ {
+		col := tab.Column(i)
+		colID := md.AddColumn(string(col.ColName()), col.DatumType())
+		md.ColumnMeta(colID).TableMeta = tabMeta
+	}
+
+	return tabID
 }
 
-// AddTableWithName indexes a new reference to a table within the query.
-// Separate references to the same table are assigned different table ids
-// (e.g. in a self-join query). Optionally, include a table name tabName to
-// override the name in tab when creating column labels.
-func (md *Metadata) AddTableWithName(tab Table, tabName string) TableID {
-	tabID := TableID(md.NumColumns() + 1)
-	if tabName == "" {
-		tabName = string(tab.TabName().TableName)
-	}
-
-	for i := 0; i < tab.ColumnCount(); i++ {
-		col := tab.Column(i)
-		if tabName == "" {
-			md.AddColumn(string(col.ColName()), col.DatumType())
-		} else {
-			md.AddColumn(fmt.Sprintf("%s.%s", tabName, col.ColName()), col.DatumType())
-		}
-	}
-
-	if md.tables == nil {
-		md.tables = make(map[TableID]*mdTable)
-	}
-
-	md.tables[tabID] = &mdTable{tab: tab}
-	return tabID
+// TableMeta looks up the metadata for the table associated with the given table
+// id. The same table can be added multiple times to the query metadata and
+// associated with multiple table ids.
+func (md *Metadata) TableMeta(tabID TableID) *TableMeta {
+	return &md.tables[tabID.index()]
 }
 
 // Table looks up the catalog table associated with the given metadata id. The
 // same table can be associated with multiple metadata ids.
-func (md *Metadata) Table(tabID TableID) Table {
-	return md.tables[tabID].tab
+func (md *Metadata) Table(tabID TableID) cat.Table {
+	return md.TableMeta(tabID).Table
 }
 
-// TableColumn returns the metadata id of the column at the given ordinal
-// position in the table.
-func (md *Metadata) TableColumn(tabID TableID, ord int) ColumnID {
-	return ColumnID(int(tabID) + ord)
-}
-
-// TableAnnotation returns the given annotation that is associated with the
-// given table. If the table has no such annotation, TableAnnotation returns
-// nil.
-func (md *Metadata) TableAnnotation(tabID TableID, annID TableAnnID) interface{} {
-	return md.tables[tabID].anns[annID]
-}
-
-// SetTableAnnotation associates the given annotation with the given table. The
-// annotation is associated by the given ID, which was allocated by
-// calling NewTableAnnID. If an annotation with the ID already exists on the
-// table, then it is overwritten.
-//
-// See the TableAnnID comment for more details and a usage example.
-func (md *Metadata) SetTableAnnotation(tabID TableID, tabAnnID TableAnnID, ann interface{}) {
-	md.tables[tabID].anns[tabAnnID] = ann
-}
-
-// NewTableAnnID allocates a unique annotation identifier that is used to
-// associate arbitrary data with table metadata. Only maxTableAnnIDCount total
-// annotation ID's can exist in the system. Attempting to exceed the maximum
-// results in a panic.
-//
-// This method is not thread-safe, and therefore should only be called during
-// Go's program initialization phase (which uses a single goroutine to init
-// variables).
-//
-// See the TableAnnID comment for more details and a usage example.
-func NewTableAnnID() TableAnnID {
-	if tableAnnIDCount == maxTableAnnIDCount {
-		panic("can't allocate table annotation id; increase maxTableAnnIDCount to allow")
+// TableByStableID looks up the catalog table associated with the given
+// StableID (unique across all tables and stable across queries).
+func (md *Metadata) TableByStableID(id cat.StableID) cat.Table {
+	for _, mdTab := range md.tables {
+		if mdTab.Table.ID() == id {
+			return mdTab.Table
+		}
 	}
-	cnt := tableAnnIDCount
-	tableAnnIDCount++
-	return cnt
+	return nil
+}
+
+// AddColumn assigns a new unique id to a column within the query and records
+// its alias and type. If the alias is empty, a "column<ID>" alias is created.
+func (md *Metadata) AddColumn(alias string, typ types.T) ColumnID {
+	if alias == "" {
+		alias = fmt.Sprintf("column%d", len(md.cols)+1)
+	}
+	colID := ColumnID(len(md.cols) + 1)
+	md.cols = append(md.cols, ColumnMeta{MetaID: colID, Alias: alias, Type: typ, md: md})
+	return colID
+}
+
+// NumColumns returns the count of columns tracked by this Metadata instance.
+func (md *Metadata) NumColumns() int {
+	return len(md.cols)
+}
+
+// ColumnMeta looks up the metadata for the column associated with the given
+// column id. The same column can be added multiple times to the query metadata
+// and associated with multiple column ids.
+func (md *Metadata) ColumnMeta(colID ColumnID) *ColumnMeta {
+	return &md.cols[colID.index()]
 }

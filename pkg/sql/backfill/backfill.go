@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -47,7 +48,7 @@ func IndexMutationFilter(m sqlbase.DescriptorMutation) bool {
 
 // backfiller is common to a ColumnBackfiller or an IndexBackfiller.
 type backfiller struct {
-	fetcher sqlbase.RowFetcher
+	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
 }
 
@@ -64,7 +65,9 @@ type ColumnBackfiller struct {
 }
 
 // Init initializes a column backfiller.
-func (cb *ColumnBackfiller) Init(evalCtx *tree.EvalContext, desc sqlbase.TableDescriptor) error {
+func (cb *ColumnBackfiller) Init(
+	evalCtx *tree.EvalContext, desc *sqlbase.ImmutableTableDescriptor,
+) error {
 	cb.evalCtx = evalCtx
 	var dropped []sqlbase.ColumnDescriptor
 	if len(desc.Mutations) > 0 {
@@ -87,8 +90,8 @@ func (cb *ColumnBackfiller) Init(evalCtx *tree.EvalContext, desc sqlbase.TableDe
 		return err
 	}
 	var txCtx transform.ExprTransformContext
-	computedExprs, err := sqlbase.MakeComputedExprs(cb.added, &desc,
-		tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, cb.evalCtx)
+	computedExprs, err := sqlbase.MakeComputedExprs(cb.added, desc,
+		tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, cb.evalCtx, true /* addingCols */)
 	if err != nil {
 		return err
 	}
@@ -113,8 +116,8 @@ func (cb *ColumnBackfiller) Init(evalCtx *tree.EvalContext, desc sqlbase.TableDe
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(desc.Columns)-1)
 
-	tableArgs := sqlbase.RowFetcherTableArgs{
-		Desc:            &desc,
+	tableArgs := row.FetcherTableArgs{
+		Desc:            desc,
 		Index:           &desc.PrimaryIndex,
 		ColIdxMap:       desc.ColumnIdxMap(),
 		Cols:            desc.Columns,
@@ -130,28 +133,29 @@ func (cb *ColumnBackfiller) Init(evalCtx *tree.EvalContext, desc sqlbase.TableDe
 func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	ctx context.Context,
 	txn *client.Txn,
-	tableDesc sqlbase.TableDescriptor,
-	otherTables []sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	otherTables []*sqlbase.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
-	fkTables, _ := sqlbase.TablesNeededForFKs(
+	fkTables, _ := row.TablesNeededForFKs(
 		ctx,
-		tableDesc,
-		sqlbase.CheckUpdates,
-		sqlbase.NoLookup,
-		sqlbase.NoCheckPrivilege,
+		*tableDesc,
+		row.CheckUpdates,
+		row.NoLookup,
+		row.NoCheckPrivilege,
 		nil, /* AnalyzeExprFunction */
 	)
-	for _, fkTableDesc := range otherTables {
+	for i, fkTableDesc := range otherTables {
 		found, ok := fkTables[fkTableDesc.ID]
 		if !ok {
 			// We got passed an extra table for some reason - just ignore it.
 			continue
 		}
-		found.Table = &fkTableDesc
+
+		found.Table = otherTables[i]
 		fkTables[fkTableDesc.ID] = found
 	}
 	for id, table := range fkTables {
@@ -165,13 +169,13 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	requestedCols := make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added))
 	requestedCols = append(requestedCols, tableDesc.Columns...)
 	requestedCols = append(requestedCols, cb.added...)
-	ru, err := sqlbase.MakeRowUpdater(
+	ru, err := row.MakeUpdater(
 		txn,
-		&tableDesc,
+		tableDesc,
 		fkTables,
 		cb.updateCols,
 		requestedCols,
-		sqlbase.RowUpdaterOnlyColumns,
+		row.UpdaterOnlyColumns,
 		cb.evalCtx,
 		&cb.alloc,
 	)
@@ -206,7 +210,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	b := txn.NewBatch()
 	rowLength := 0
 	iv := &sqlbase.RowIndexedVarContainer{
-		Cols:    tableDesc.Columns,
+		Cols:    append(tableDesc.Columns, cb.added...),
 		Mapping: ru.FetchColIDtoRowIndex,
 	}
 	cb.evalCtx.IVarContainer = iv
@@ -230,6 +234,13 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			if j < len(cb.added) && !cb.added[j].Nullable && val == tree.DNull {
 				return roachpb.Key{}, sqlbase.NewNonNullViolationError(cb.added[j].Name)
 			}
+
+			// Added computed column values should be usable for the next
+			// added columns being backfilled. They have already been type
+			// checked.
+			if j < len(cb.added) {
+				iv.CurSourceRow = append(iv.CurSourceRow, val)
+			}
 			updateValues[j] = val
 		}
 		copy(oldValues, datums)
@@ -242,7 +253,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			}
 		}
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, sqlbase.CheckFKs, traceKV,
+			ctx, b, oldValues, updateValues, row.CheckFKs, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}
@@ -253,20 +264,20 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		writeBatch = txn.CommitInBatch
 	}
 	if err := writeBatch(ctx, b); err != nil {
-		return roachpb.Key{}, ConvertBackfillError(ctx, &tableDesc, b)
+		return roachpb.Key{}, ConvertBackfillError(ctx, tableDesc, b)
 	}
 	return cb.fetcher.Key(), nil
 }
 
 // ConvertBackfillError returns a cleaner SQL error for a failed Batch.
 func ConvertBackfillError(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, b *client.Batch,
+	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *client.Batch,
 ) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
 	// are "live" in the tableDesc.
-	desc := protoutil.Clone(tableDesc).(*sqlbase.TableDescriptor)
+	desc := sqlbase.NewMutableExistingTableDescriptor(*protoutil.Clone(tableDesc.TableDesc()).(*sqlbase.TableDescriptor))
 	mutationID := desc.Mutations[0].MutationID
 	for _, mutation := range desc.Mutations {
 		if mutation.MutationID != mutationID {
@@ -274,9 +285,11 @@ func ConvertBackfillError(
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		desc.MakeMutationComplete(mutation)
+		if err := desc.MakeMutationComplete(mutation); err != nil {
+			return errors.Wrap(err, "backfill error")
+		}
 	}
-	return sqlbase.ConvertBatchError(ctx, desc, b)
+	return row.ConvertBatchError(ctx, sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()), b)
 }
 
 // IndexBackfiller is capable of backfilling all the added index.
@@ -292,14 +305,16 @@ type IndexBackfiller struct {
 }
 
 // Init initializes an IndexBackfiller.
-func (ib *IndexBackfiller) Init(desc sqlbase.TableDescriptor) error {
+func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 	numCols := len(desc.Columns)
 	cols := desc.Columns
 	if len(desc.Mutations) > 0 {
 		cols = make([]sqlbase.ColumnDescriptor, 0, numCols+len(desc.Mutations))
 		cols = append(cols, desc.Columns...)
 		for _, m := range desc.Mutations {
-			if column := m.GetColumn(); column != nil {
+			if column := m.GetColumn(); column != nil &&
+				m.Direction == sqlbase.DescriptorMutation_ADD &&
+				m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 				cols = append(cols, *column)
 			}
 		}
@@ -332,8 +347,8 @@ func (ib *IndexBackfiller) Init(desc sqlbase.TableDescriptor) error {
 		ib.colIdxMap[c.ID] = i
 	}
 
-	tableArgs := sqlbase.RowFetcherTableArgs{
-		Desc:            &desc,
+	tableArgs := row.FetcherTableArgs{
+		Desc:            desc,
 		Index:           &desc.PrimaryIndex,
 		ColIdxMap:       ib.colIdxMap,
 		Cols:            cols,
@@ -349,7 +364,7 @@ func (ib *IndexBackfiller) Init(desc sqlbase.TableDescriptor) error {
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *client.Txn,
-	tableDesc sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	traceKV bool,
@@ -393,7 +408,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// subsequent rows and we would then have duplicates in entries on output.
 		buffer = buffer[:len(ib.added)]
 		if buffer, err = sqlbase.EncodeSecondaryIndexes(
-			&tableDesc, ib.added, ib.colIdxMap,
+			tableDesc.TableDesc(), ib.added, ib.colIdxMap,
 			ib.rowVals, buffer); err != nil {
 			return nil, nil, err
 		}
@@ -408,7 +423,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	ctx context.Context,
 	txn *client.Txn,
-	tableDesc sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,
@@ -431,7 +446,7 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 		writeBatch = txn.CommitInBatch
 	}
 	if err := writeBatch(ctx, batch); err != nil {
-		return nil, ConvertBackfillError(ctx, &tableDesc, batch)
+		return nil, ConvertBackfillError(ctx, tableDesc, batch)
 	}
 	return key, nil
 }

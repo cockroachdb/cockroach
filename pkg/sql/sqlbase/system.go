@@ -20,8 +20,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
+
+func init() {
+	// We use a hook to avoid a dependency on the sqlbase package. We
+	// should probably move keys/protos elsewhere.
+	config.SplitAtIDHook = SplitAtIDHook
+}
+
+// SplitAtIDHook determines whether a specific descriptor ID
+// should be considered for a split at all. If it is a database
+// or a view table descriptor, it should not be considered.
+func SplitAtIDHook(id uint32, cfg *config.SystemConfig) bool {
+	descVal := cfg.GetDesc(MakeDescMetadataKey(ID(id)))
+	if descVal == nil {
+		return false
+	}
+	var desc Descriptor
+	if err := descVal.GetProto(&desc); err != nil {
+		return false
+	}
+	if dbDesc := desc.GetDatabase(); dbDesc != nil {
+		return false
+	}
+	if tableDesc := desc.GetTable(); tableDesc != nil {
+		if viewStr := tableDesc.GetViewQuery(); viewStr != "" {
+			return false
+		}
+	}
+	return true
+}
 
 // sql CREATE commands and full schema for each system table.
 // These strings are *not* used at runtime, but are checked by the
@@ -33,15 +63,15 @@ import (
 const (
 	NamespaceTableSchema = `
 CREATE TABLE system.namespace (
-  "parentID" INT,
+  "parentID" INT8,
   name       STRING,
-  id         INT,
+  id         INT8,
   PRIMARY KEY ("parentID", name)
 );`
 
 	DescriptorTableSchema = `
 CREATE TABLE system.descriptor (
-  id         INT PRIMARY KEY,
+  id         INT8 PRIMARY KEY,
   descriptor BYTES
 );`
 
@@ -55,7 +85,7 @@ CREATE TABLE system.users (
 	// Zone settings per DB/Table.
 	ZonesTableSchema = `
 CREATE TABLE system.zones (
-  id     INT PRIMARY KEY,
+  id     INT8 PRIMARY KEY,
   config BYTES
 );`
 
@@ -73,9 +103,9 @@ CREATE TABLE system.settings (
 const (
 	LeaseTableSchema = `
 CREATE TABLE system.lease (
-  "descID"   INT,
-  version    INT,
-  "nodeID"   INT,
+  "descID"   INT8,
+  version    INT8,
+  "nodeID"   INT8,
   expiration TIMESTAMP,
   PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
@@ -84,8 +114,8 @@ CREATE TABLE system.lease (
 CREATE TABLE system.eventlog (
   timestamp     TIMESTAMP  NOT NULL,
   "eventType"   STRING     NOT NULL,
-  "targetID"    INT        NOT NULL,
-  "reportingID" INT        NOT NULL,
+  "targetID"    INT8       NOT NULL,
+  "reportingID" INT8       NOT NULL,
   info          STRING,
   "uniqueID"    BYTES      DEFAULT uuid_v4(),
   PRIMARY KEY (timestamp, "uniqueID")
@@ -96,12 +126,12 @@ CREATE TABLE system.eventlog (
 	RangeEventTableSchema = `
 CREATE TABLE system.rangelog (
   timestamp      TIMESTAMP  NOT NULL,
-  "rangeID"      INT        NOT NULL,
-  "storeID"      INT        NOT NULL,
+  "rangeID"      INT8       NOT NULL,
+  "storeID"      INT8       NOT NULL,
   "eventType"    STRING     NOT NULL,
-  "otherRangeID" INT,
+  "otherRangeID" INT8,
   info           STRING,
-  "uniqueID"     INT        DEFAULT unique_rowid(),
+  "uniqueID"     INT8       DEFAULT unique_rowid(),
   PRIMARY KEY (timestamp, "uniqueID")
 );`
 
@@ -114,7 +144,7 @@ CREATE TABLE system.ui (
 
 	JobsTableSchema = `
 CREATE TABLE system.jobs (
-	id                INT       DEFAULT unique_rowid() PRIMARY KEY,
+	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
 	status            STRING    NOT NULL,
 	created           TIMESTAMP NOT NULL DEFAULT now(),
 	payload           BYTES     NOT NULL,
@@ -128,7 +158,7 @@ CREATE TABLE system.jobs (
 	// Design outlined in /docs/RFCS/web_session_login.rfc
 	WebSessionsTableSchema = `
 CREATE TABLE system.web_sessions (
-	id             SERIAL     PRIMARY KEY,
+	id             INT8       NOT NULL DEFAULT unique_rowid() PRIMARY KEY,
 	"hashedSecret" BYTES      NOT NULL,
 	username       STRING     NOT NULL,
 	"createdAt"    TIMESTAMP  NOT NULL DEFAULT now(),
@@ -149,14 +179,14 @@ CREATE TABLE system.web_sessions (
 	// Design outlined in /docs/RFCS/20170908_sql_optimizer_statistics.md
 	TableStatisticsTableSchema = `
 CREATE TABLE system.table_statistics (
-	"tableID"       INT        NOT NULL,
-	"statisticID"   INT        NOT NULL DEFAULT unique_rowid(),
+	"tableID"       INT8       NOT NULL,
+	"statisticID"   INT8       NOT NULL DEFAULT unique_rowid(),
 	name            STRING,
-	"columnIDs"     INT[]      NOT NULL,
+	"columnIDs"     INT8[]     NOT NULL,
 	"createdAt"     TIMESTAMP  NOT NULL DEFAULT now(),
-	"rowCount"      INT        NOT NULL,
-	"distinctCount" INT        NOT NULL,
-	"nullCount"     INT        NOT NULL,
+	"rowCount"      INT8       NOT NULL,
+	"distinctCount" INT8       NOT NULL,
+	"nullCount"     INT8       NOT NULL,
 	histogram       BYTES,
 	PRIMARY KEY ("tableID", "statisticID"),
 	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram)
@@ -183,6 +213,16 @@ CREATE TABLE system.role_members (
   PRIMARY KEY  ("role", "member"),
   INDEX ("role"),
   INDEX ("member")
+);`
+
+	// comments stores comments(database, table, column...).
+	CommentsTableSchema = `
+CREATE TABLE system.comments (
+   type      INT NOT NULL,    -- type of object, to distinguish between db, table, column and others
+   object_id INT NOT NULL,    -- object ID, this will be usually db/table desc ID
+   sub_id    INT NOT NULL,    -- sub ID for columns inside table, 0 for pure table
+   comment   STRING NOT NULL, -- the comment
+   PRIMARY KEY (type, object_id, sub_id)
 );`
 )
 
@@ -223,16 +263,21 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.TableStatisticsTableID: privilege.ReadWriteData,
 	keys.LocationsTableID:       privilege.ReadWriteData,
 	keys.RoleMembersTableID:     privilege.ReadWriteData,
+	keys.CommentsTableID:        privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
 	colTypeBool      = ColumnType{SemanticType: ColumnType_BOOL}
-	colTypeInt       = ColumnType{SemanticType: ColumnType_INT}
+	colTypeInt       = ColumnType{SemanticType: ColumnType_INT, VisibleType: ColumnType_BIGINT, Width: 64}
 	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
 	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
 	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
-	colTypeIntArray  = ColumnType{SemanticType: ColumnType_ARRAY, ArrayContents: &colTypeInt.SemanticType,
+	colTypeIntArray  = ColumnType{
+		SemanticType:    ColumnType_ARRAY,
+		ArrayContents:   &colTypeInt.SemanticType,
+		VisibleType:     colTypeInt.VisibleType,
+		Width:           colTypeInt.Width,
 		ArrayDimensions: []int32{-1}}
 	singleASC = []IndexDescriptor_Direction{IndexDescriptor_ASC}
 	singleID1 = []ColumnID{1}
@@ -533,7 +578,7 @@ var (
 		NextMutationID: 1,
 	}
 
-	nowString = "now()"
+	nowString = "now():::TIMESTAMP"
 
 	// JobsTable is the descriptor for the jobs table.
 	JobsTable = TableDescriptor{
@@ -792,12 +837,44 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	// CommentsTable is the descriptor for the comments table.
+	CommentsTable = TableDescriptor{
+		Name:     "comments",
+		ID:       keys.CommentsTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "type", ID: 1, Type: colTypeInt},
+			{Name: "object_id", ID: 2, Type: colTypeInt},
+			{Name: "sub_id", ID: 3, Type: colTypeInt},
+			{Name: "comment", ID: 4, Type: colTypeString},
+		},
+		NextColumnID: 5,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"type", "object_id", "sub_id"}, ColumnIDs: []ColumnID{1, 2, 3}},
+			{Name: "fam_4_comment", ID: 4, ColumnNames: []string{"comment"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+		},
+		NextFamilyID: 5,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"type", "object_id", "sub_id"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2, 3},
+		},
+		NextIndexID:    2,
+		Privileges:     newCommentPrivilegeDescriptor(SystemAllowedPrivileges[keys.CommentsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create a kv pair for the zone config for the given key and config value.
-func createZoneConfigKV(keyID int, zoneConfig config.ZoneConfig) roachpb.KeyValue {
+func createZoneConfigKV(keyID int, zoneConfig *config.ZoneConfig) roachpb.KeyValue {
 	value := roachpb.Value{}
-	if err := value.SetProto(&zoneConfig); err != nil {
+	if err := value.SetProto(zoneConfig); err != nil {
 		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
 	}
 	return roachpb.KeyValue{
@@ -812,13 +889,13 @@ func createZoneConfigKV(keyID int, zoneConfig config.ZoneConfig) roachpb.KeyValu
 // descriptors to the cockroach store.
 func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// Add system database.
-	target.AddConfigDescriptor(keys.RootNamespaceID, &SystemDB)
+	target.AddDescriptor(keys.RootNamespaceID, &SystemDB)
 
 	// Add system config tables.
-	target.AddConfigDescriptor(keys.SystemDatabaseID, &NamespaceTable)
-	target.AddConfigDescriptor(keys.SystemDatabaseID, &DescriptorTable)
-	target.AddConfigDescriptor(keys.SystemDatabaseID, &UsersTable)
-	target.AddConfigDescriptor(keys.SystemDatabaseID, &ZonesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &NamespaceTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &UsersTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
 
 	// Add all the other system tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
@@ -844,19 +921,26 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 
 	// Default zone config entry.
 	zoneConf := config.DefaultZoneConfig()
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, zoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, &zoneConf))
+
+	systemZoneConf := config.DefaultSystemZoneConfig()
+	metaRangeZoneConf := config.DefaultSystemZoneConfig()
+	jobsZoneConf := config.DefaultSystemZoneConfig()
+	livenessZoneConf := config.DefaultSystemZoneConfig()
 
 	// .meta zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 60 * 60 // 1h
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, zoneConf))
-
-	// Liveness zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, zoneConf))
+	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, &metaRangeZoneConf))
 
 	// Jobs zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, zoneConf))
+	jobsZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, &jobsZoneConf))
+
+	// Liveness zone config entry with a shorter GC time.
+	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, &livenessZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemRangesID, &systemZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemDatabaseID, &systemZoneConf))
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.
@@ -867,4 +951,24 @@ func IsSystemConfigID(id ID) bool {
 // IsReservedID returns whether this ID is for any system object.
 func IsReservedID(id ID) bool {
 	return id > 0 && id <= keys.MaxReservedDescID
+}
+
+// newCommentPrivilegeDescriptor returns a privilege descriptor for comment table
+func newCommentPrivilegeDescriptor(priv privilege.List) *PrivilegeDescriptor {
+	return &PrivilegeDescriptor{
+		Users: []UserPrivileges{
+			{
+				User:       AdminRole,
+				Privileges: priv.ToBitField(),
+			},
+			{
+				User:       PublicRole,
+				Privileges: priv.ToBitField(),
+			},
+			{
+				User:       security.RootUser,
+				Privileges: priv.ToBitField(),
+			},
+		},
+	}
 }

@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"context"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -23,39 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
-
-// Execute creates a plan for an execute statement by substituting the plan for
-// the prepared statement. This is not called in normal circumstances by
-// the executor - it merely exists to enable explains and traces for execute
-// statements.
-func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error) {
-	if p.isPreparing {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidPreparedStatementDefinitionError,
-			"can't prepare an EXECUTE statement")
-	} else if p.curPlan.plannedExecute {
-		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
-			"can't have more than 1 EXECUTE per statement")
-	}
-	p.curPlan.plannedExecute = true
-	name := n.Name.String()
-	ps, ok := p.preparedStatements.Get(name)
-	if !ok {
-		return nil, pgerror.NewErrorf(
-			pgerror.CodeInvalidSQLStatementNameError,
-			"prepared statement %q does not exist", name,
-		)
-	}
-	pInfo, err := fillInPlaceholders(
-		ps, name, n.Params, p.EvalContext().SessionData.SearchPath,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	p.semaCtx.Placeholders.Assign(pInfo)
-
-	return p.newPlan(ctx, ps.Statement, nil /* desiredTypes */)
-}
 
 // fillInPlaceholder helps with the EXECUTE foo(args) SQL statement: it takes in
 // a prepared statement returning

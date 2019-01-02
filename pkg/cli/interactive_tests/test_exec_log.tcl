@@ -14,13 +14,15 @@ system "if test -e $logfile; then false; fi"
 end_test
 
 start_test "Check that the exec log is created after enabled"
-send "SET CLUSTER SETTING sql.trace.log_statement_execute = TRUE;\r"
+send "SET CLUSTER   SETTING sql.trace.log_statement_execute = TRUE;\r"
+eexpect "SET CLUSTER SETTING"
 eexpect root@
 system "test -e $logfile"
 end_test
 
 start_test "Check that statements get logged to the exec log but stop logging when disabled"
-send "SELECT 'helloworld';\r"
+send "SELECT 'hello' || 'world';\r"
+eexpect "helloworld"
 eexpect root@
 
 # Errors must be logged too
@@ -33,13 +35,14 @@ eexpect root@
 # Check logging after disable
 send "SET CLUSTER SETTING sql.trace.log_statement_execute = FALSE;\r"
 eexpect root@
-send "SELECT 'lovely';\r"
+send "SELECT 'lov' || 'ely';\r"
+eexpect "lovely"
 eexpect root@
 
 flush_server_logs
 
 # Now check the items are there in the log file.
-system "grep -q helloworld $logfile"
+system "grep -q 'hello.*world' $logfile"
 system "grep -q nonexistent $logfile"
 system "if grep -q lovely $logfile; then false; fi"
 

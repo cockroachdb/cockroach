@@ -16,9 +16,10 @@ package testcat
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -43,27 +44,26 @@ const (
 	nonKeyCol
 )
 
+var uniqueRowIDString = "unique_rowid()"
+
 // CreateTable creates a test table from a parsed DDL statement and adds it to
 // the catalog. This is intended for testing, and is not a complete (and
 // probably not fully correct) implementation. It just has to be "good enough".
 func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
-	tn, err := stmt.Table.Normalize()
-	if err != nil {
-		panic(fmt.Errorf("%s", err))
-	}
+	stmt.HoistConstraints()
 
 	// Update the table name to include catalog and schema if not provided.
-	tc.qualifyTableName(tn)
+	tc.qualifyTableName(&stmt.Table)
 
-	tab := &Table{Name: *tn}
+	tab := &Table{StableID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
-	// Assume that every table in the "system" catalog is a virtual table. This
-	// is a simplified assumption for testing purposes.
-	if tn.CatalogName == "system" {
+	// Assume that every table in the "system" or "information_schema" catalog
+	// is a virtual table. This is a simplified assumption for testing purposes.
+	if stmt.Table.CatalogName == "system" || stmt.Table.SchemaName == "information_schema" {
 		tab.IsVirtual = true
 	}
 
-	// Add the columns.
+	// Add columns.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ColumnTableDef:
@@ -89,12 +89,18 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 	// If there is no primary index, add the hidden rowid column.
 	if len(tab.Indexes) == 0 && !tab.IsVirtual {
-		rowid := &Column{Name: "rowid", Type: types.Int, Hidden: true}
+		rowid := &Column{
+			Ordinal:     tab.ColumnCount(),
+			Name:        "rowid",
+			Type:        types.Int,
+			Hidden:      true,
+			DefaultExpr: &uniqueRowIDString,
+		}
 		tab.Columns = append(tab.Columns, rowid)
 		tab.addPrimaryColumnIndex(rowid.Name)
 	}
 
-	// Search for other relevant definitions.
+	// Search for index definitions.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.UniqueConstraintTableDef:
@@ -105,9 +111,16 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		case *tree.IndexTableDef:
 			tab.addIndex(def, nonUniqueIndex)
 		}
-		// TODO(rytaft): In the future we will likely want to check for unique
-		// constraints, indexes, and foreign key constraints to determine
-		// nullability, uniqueness, etc.
+	}
+
+	// Search for foreign key constraints. We want to process them after first
+	// processing all the indexes (otherwise the foreign keys could add
+	// unnecessary indexes).
+	for _, def := range stmt.Defs {
+		switch def := def.(type) {
+		case *tree.ForeignKeyConstraintTableDef:
+			tc.resolveFK(tab, def)
+		}
 	}
 
 	// Add the new table to the catalog.
@@ -116,17 +129,145 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	return tab
 }
 
+// resolveFK processes a foreign key constraint
+func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
+	fromCols := make([]int, len(d.FromCols))
+	for i, c := range d.FromCols {
+		fromCols[i] = tab.FindOrdinal(string(c))
+	}
+
+	targetTable := tc.Table(&d.Table)
+
+	toCols := make([]int, len(d.ToCols))
+	for i, c := range d.ToCols {
+		toCols[i] = targetTable.FindOrdinal(string(c))
+	}
+
+	// Foreign keys require indexes in both tables:
+	//
+	//  1. In the target table, we need an index because adding a new row to the
+	//     source table requires looking up whether there is a matching value in
+	//     the target table. This index should already exist because a unique
+	//     constraint is required on the target table (it's a foreign *key*).
+	//
+	//  2. In the source table, we need an index because removing a row from the
+	//     target table requires looking up whether there would be orphan values
+	//     left in the source table. This index does not need to be unique; in
+	//     fact, if an existing index has the relevant columns as a prefix, that
+	//     is good enough.
+
+	// matches returns true if the key columns in the given index match the given
+	// columns. If strict is false, it is acceptable if the given columns are a
+	// prefix of the index key columns.
+	matches := func(idx *Index, cols []int, strict bool) bool {
+		if idx.KeyColumnCount() < len(cols) {
+			return false
+		}
+		if strict && idx.KeyColumnCount() > len(cols) {
+			return false
+		}
+		for i := range cols {
+			if idx.Column(i).Ordinal != cols[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// 1. Verify that the target table has a unique index.
+	var targetIndex *Index
+	for _, idx := range targetTable.Indexes {
+		if matches(idx, toCols, true /* strict */) {
+			targetIndex = idx
+			break
+		}
+	}
+	if targetIndex == nil {
+		panic(fmt.Errorf(
+			"there is no unique constraint matching given keys for referenced table %s",
+			targetTable.Name(),
+		))
+	}
+
+	// 2. Search for an existing index in the source table; add it if necessary.
+	found := false
+	for _, idx := range tab.Indexes {
+		if matches(idx, fromCols, false /* strict */) {
+			found = true
+			idx.foreignKey.TableID = targetTable.ID()
+			idx.foreignKey.IndexID = targetIndex.ID()
+			idx.foreignKey.PrefixLen = int32(len(fromCols))
+			idx.fkSet = true
+			break
+		}
+	}
+	if !found {
+		// Add a non-unique index on fromCols.
+		constraintName := string(d.Name)
+		if constraintName == "" {
+			constraintName = fmt.Sprintf(
+				"fk_%s_ref_%s", string(d.FromCols[0]), targetTable.TabName.Table(),
+			)
+		}
+		idx := tree.IndexTableDef{
+			Name:    tree.Name(fmt.Sprintf("%s_auto_index_%s", tab.TabName.Table(), constraintName)),
+			Columns: make(tree.IndexElemList, len(fromCols)),
+		}
+		for i, c := range fromCols {
+			idx.Columns[i].Column = tab.Columns[c].ColName()
+			idx.Columns[i].Direction = tree.Ascending
+		}
+		index := tab.addIndex(&idx, nonUniqueIndex)
+		index.foreignKey.TableID = targetTable.ID()
+		index.foreignKey.IndexID = targetIndex.ID()
+		index.foreignKey.PrefixLen = int32(len(fromCols))
+		index.fkSet = true
+	}
+}
+
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	nullable := !def.PrimaryKey && def.Nullable.Nullability != tree.NotNull
 	typ := coltypes.CastTargetToDatumType(def.Type)
-	col := &Column{Name: string(def.Name), Type: typ, Nullable: nullable}
-	tt.Columns = append(tt.Columns, col)
+	col := &Column{
+		Ordinal:  tt.ColumnCount(),
+		Name:     string(def.Name),
+		Type:     typ,
+		Nullable: nullable,
+	}
+
+	// Look for name suffixes indicating this is a mutation column.
+	var mutCol *cat.MutationColumn
+	if strings.HasSuffix(string(def.Name), ":write-only") {
+		col.Name = strings.TrimSuffix(col.Name, ":write-only")
+		mutCol = &cat.MutationColumn{Column: col, IsDeleteOnly: false}
+	} else if strings.HasSuffix(string(def.Name), ":delete-only") {
+		col.Name = strings.TrimSuffix(col.Name, ":delete-only")
+		mutCol = &cat.MutationColumn{Column: col, IsDeleteOnly: true}
+	}
+
+	if def.DefaultExpr.Expr != nil {
+		s := tree.Serialize(def.DefaultExpr.Expr)
+		col.DefaultExpr = &s
+	}
+
+	if def.Computed.Expr != nil {
+		s := tree.Serialize(def.Computed.Expr)
+		col.ComputedExpr = &s
+	}
+
+	// Add mutation columns to the Mutations list.
+	if mutCol != nil {
+		tt.Mutations = append(tt.Mutations, *mutCol)
+	} else {
+		tt.Columns = append(tt.Columns, col)
+	}
 }
 
-func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
+func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	idx := &Index{
-		Name:     tt.makeIndexName(def.Name, typ),
+		IdxName:  tt.makeIndexName(def.Name, typ),
 		Inverted: def.Inverted,
+		table:    tt,
 	}
 
 	// Add explicit columns and mark primary key columns as not null.
@@ -157,17 +298,18 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		if len(tt.Indexes) != 0 {
 			panic("primary index should always be 0th index")
 		}
+		idx.Ordinal = len(tt.Indexes)
 		tt.Indexes = append(tt.Indexes, idx)
-		return
+		return idx
 	}
 
 	// Add implicit key columns from primary index.
-	pkCols := tt.Indexes[opt.PrimaryIndex].Columns[:tt.Indexes[opt.PrimaryIndex].KeyCount]
+	pkCols := tt.Indexes[cat.PrimaryIndex].Columns[:tt.Indexes[cat.PrimaryIndex].KeyCount]
 	for _, pkCol := range pkCols {
 		// Only add columns that aren't already part of index.
 		found := false
 		for _, colDef := range def.Columns {
-			if pkCol.Column.ColName() == opt.ColumnName(colDef.Column) {
+			if pkCol.Column.ColName() == colDef.Column {
 				found = true
 			}
 		}
@@ -200,7 +342,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		// key columns.
 		found := false
 		for _, pkCol := range pkCols {
-			if opt.ColumnName(name) == pkCol.Column.ColName() {
+			if name == pkCol.Column.ColName() {
 				found = true
 			}
 		}
@@ -209,7 +351,10 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		}
 	}
 
+	idx.Ordinal = len(tt.Indexes)
 	tt.Indexes = append(tt.Indexes, idx)
+
+	return idx
 }
 
 func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {
@@ -234,7 +379,7 @@ func (ti *Index) addColumnByOrdinal(
 	tt *Table, ord int, direction tree.Direction, colType colType,
 ) *Column {
 	col := tt.Column(ord)
-	idxCol := opt.IndexColumn{
+	idxCol := cat.IndexColumn{
 		Column:     col,
 		Ordinal:    ord,
 		Descending: direction == tree.Descending,

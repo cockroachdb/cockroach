@@ -37,6 +37,61 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+func TestCertNomenclature(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We're just testing nomenclature parsing, all files exist and contain a valid PEM block.
+
+	testCases := []struct {
+		filename      string
+		expectedError string
+		usage         security.PemUsage
+		name          string
+	}{
+		// Test valid names.
+		{"ca.crt", "", security.CAPem, ""},
+		{"ca-client.crt", "", security.ClientCAPem, ""},
+		{"ca-ui.crt", "", security.UICAPem, ""},
+		{"node.crt", "", security.NodePem, ""},
+		{"ui.crt", "", security.UIPem, ""},
+		{"client.root.crt", "", security.ClientPem, "root"},
+		{"client.foo-bar.crt", "", security.ClientPem, "foo-bar"},
+		{"client....foo.bar.baz.how.many.dots.do.you.need...really....crt", "", security.ClientPem, "...foo.bar.baz.how.many.dots.do.you.need...really..."},
+
+		// Bad names. This function is only called on filenames ending with '.crt'.
+		{"crt", "not enough parts found", 0, ""},
+		{".crt", "unknown prefix", 0, ""},
+		{"ca2.crt", "unknown prefix \"ca2\"", 0, ""},
+		{"ca-client.foo.crt", "client CA certificate filename should match ca-client.crt", 0, ""},
+		{"ca-ui.foo.crt", "UI CA certificate filename should match ca-ui.crt", 0, ""},
+		{"ca.client.crt", "CA certificate filename should match ca.crt", 0, ""},
+		{"ui2.crt", "unknown prefix \"ui2\"", 0, ""},
+		{"ui.blah.crt", "UI certificate filename should match ui.crt", 0, ""},
+		{"node2.crt", "unknown prefix \"node2\"", 0, ""},
+		{"node.foo.crt", "node certificate filename should match node.crt", 0, ""},
+		{"client2.crt", "unknown prefix \"client2\"", 0, ""},
+		{"client.crt", "client certificate filename should match client.<user>.crt", 0, ""},
+		{"root.crt", "unknown prefix \"root\"", 0, ""},
+	}
+
+	for i, tc := range testCases {
+		ci, err := security.CertInfoFromFilename(tc.filename)
+		if !testutils.IsError(err, tc.expectedError) {
+			t.Errorf("#%d: expected error %v, got %v", i, tc.expectedError, err)
+			continue
+		}
+		if err != nil {
+			continue
+		}
+		if ci.FileUsage != tc.usage {
+			t.Errorf("#%d: expected file usage %v, got %v", i, tc.usage, ci.FileUsage)
+		}
+		if ci.Name != tc.name {
+			t.Errorf("#%d: expected name %v, got %v", i, tc.name, ci.Name)
+		}
+	}
+}
+
 func TestLoadEmbeddedCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cl := security.NewCertificateLoader(security.EmbeddedCertsDir)
@@ -117,17 +172,9 @@ func TestNamingScheme(t *testing.T) {
 
 	goodNodeCert := makeTestCert(t, "node", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 	badUserNodeCert := makeTestCert(t, "notnode", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
-	noServerAuthNodeCert := makeTestCert(t, "node", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
-	noClientAuthNodeCert := makeTestCert(t, "node", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
-	noAuthNodeCert := makeTestCert(t, "node", fullKeyUsage, nil)
-	noEnciphermentNodeCert := makeTestCert(t, "node", x509.KeyUsageDigitalSignature, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
-	noSignatureNodeCert := makeTestCert(t, "node", x509.KeyUsageKeyEncipherment, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 
 	goodRootCert := makeTestCert(t, "root", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 	notRootCert := makeTestCert(t, "notroot", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
-	noClientAuthRootCert := makeTestCert(t, "root", fullKeyUsage, nil)
-	noEnciphermentRootCert := makeTestCert(t, "root", x509.KeyUsageDigitalSignature, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
-	noSignatureRootCert := makeTestCert(t, "root", x509.KeyUsageKeyEncipherment, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 
 	// Do not use embedded certs.
 	security.ResetAssetLoader()
@@ -245,85 +292,18 @@ func TestNamingScheme(t *testing.T) {
 			},
 		},
 		{
-			// Bad CommonName.
+			// Bad CommonName: this is checked later in the CertificateManager.
 			files: []testFile{
 				{"node.crt", 0777, badUserNodeCert},
-				{"node.key", 0700, []byte{}},
+				{"node.key", 0700, []byte("node.key")},
 				{"client.root.crt", 0777, notRootCert},
 				{"client.root.key", 0700, []byte{}},
 			},
 			certs: []security.CertInfo{
 				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
 					Error: errors.New("client certificate has Subject \"CN=notroot\", expected \"CN=root")},
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate has Subject \"CN=notnode\", expected \"CN=node")},
-			},
-		},
-		{
-			// No ServerAuth key usage.
-			files: []testFile{
-				{"node.crt", 0777, noServerAuthNodeCert},
-				{"node.key", 0700, []byte{}},
-			},
-			certs: []security.CertInfo{
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate extended key usages: ServerAuth=false, ClientAuth=true, but both are needed")},
-			},
-		},
-		{
-			// No ClientAuth key usage.
-			files: []testFile{
-				{"node.crt", 0777, noClientAuthNodeCert},
-				{"node.key", 0700, []byte{}},
-				{"client.root.crt", 0777, noClientAuthRootCert},
-				{"client.root.key", 0700, []byte{}},
-			},
-			certs: []security.CertInfo{
-				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
-					Error: errors.New("client certificate does not have ClientAuth extended key usage")},
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate extended key usages: ServerAuth=true, ClientAuth=false, but both are needed")},
-			},
-		},
-		{
-			// No auth key usage.
-			files: []testFile{
-				{"node.crt", 0777, noAuthNodeCert},
-				{"node.key", 0700, []byte{}},
-			},
-			certs: []security.CertInfo{
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate extended key usages: ServerAuth=false, ClientAuth=false, but both are needed")},
-			},
-		},
-		{
-			// No KeyEncipherment key usage.
-			files: []testFile{
-				{"node.crt", 0777, noEnciphermentNodeCert},
-				{"node.key", 0700, []byte{}},
-				{"client.root.crt", 0777, noEnciphermentRootCert},
-				{"client.root.key", 0700, []byte{}},
-			},
-			certs: []security.CertInfo{
-				{FileUsage: security.NodePem, Filename: "client.root.crt",
-					Error: errors.New("client certificate key usages: KeyEncipherment=false, DigitalSignature=true, but both are needed")},
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate key usages: KeyEncipherment=false, DigitalSignature=true, but both are needed")},
-			},
-		},
-		{
-			// No DigitalSignature key usage.
-			files: []testFile{
-				{"node.crt", 0777, noSignatureNodeCert},
-				{"node.key", 0700, []byte{}},
-				{"client.root.crt", 0777, noSignatureRootCert},
-				{"client.root.key", 0700, []byte{}},
-			},
-			certs: []security.CertInfo{
-				{FileUsage: security.NodePem, Filename: "client.root.crt",
-					Error: errors.New("client certificate key usages: KeyEncipherment=true, DigitalSignature=false, but both are needed")},
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate key usages: KeyEncipherment=true, DigitalSignature=false, but both are needed")},
+				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key",
+					FileContents: badUserNodeCert, KeyFileContents: []byte("node.key")},
 			},
 		},
 		{

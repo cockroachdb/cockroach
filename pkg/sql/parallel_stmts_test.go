@@ -20,14 +20,14 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func newPlanNode() planNode {
@@ -314,7 +314,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*planner, func()) {
 	kvDB := s.DB()
-	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
+	txn := client.NewTxn(context.TODO(), kvDB, s.NodeID(), client.RootTxn)
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	p, cleanup := newInternalPlanner(
 		"plan", txn, security.RootUser, &MemoryMetrics{}, &execCfg)
@@ -325,15 +325,11 @@ func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*pl
 	// planner with the session so that its copy of the session data gets updated.
 	p.extendedEvalCtx.SessionData.Database = "test"
 
-	stmts, err := p.parser.Parse(sql)
+	stmt, err := parser.ParseOne(sql)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stmts) != 1 {
-		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
-	}
-	stmt := stmts[0]
-	if err := p.makePlan(context.TODO(), Statement{AST: stmt}); err != nil {
+	if err := p.makePlan(context.TODO(), Statement{SQL: sql, AST: stmt}); err != nil {
 		t.Fatal(err)
 	}
 	return p, func() {

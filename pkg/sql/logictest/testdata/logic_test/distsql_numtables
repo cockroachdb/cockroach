@@ -13,6 +13,10 @@ INSERT INTO NumToSquare SELECT i, i*i FROM generate_series(1, 100) AS g(i)
 statement ok
 CREATE TABLE NumToStr (y INT PRIMARY KEY, str STRING)
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 # Split into five parts.
 statement ok
 ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM generate_series(1, 4) AS g(i)
@@ -196,13 +200,6 @@ SELECT y FROM (SELECT y FROM NumToStr ORDER BY y LIMIT 5) AS a WHERE y <> 2
 3
 4
 5
-
-statement error memory budget exceeded
-SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
-
-# Verify we use the "top K" strategy and thus don't hit OOM as above.
-statement ok
-SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 
 # Regression test for #20481.
 query I

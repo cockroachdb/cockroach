@@ -140,12 +140,17 @@ SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
 true
 
 query B
-SELECT 1 < ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
+SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
 ----
 true
 
 query B
-SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0001, 2]))
+SELECT 1.0 < ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
+----
+true
+
+query B
+SELECT 1.0 = ANY(SELECT * FROM unnest(ARRAY[1.0001, 2]))
 ----
 false
 
@@ -362,6 +367,9 @@ SELECT 1 = ANY (1, 2, 3)
 ----
 true
 
+query error could not parse "foo" as type int
+SELECT 1 = ANY (1, 2, 3.3, 'foo')
+
 query B
 SELECT 1 = ANY (((1, 2, 3)))
 ----
@@ -377,19 +385,25 @@ SELECT 1 = ANY (((2, 3, 4)))
 ----
 false
 
-query error incompatible tuple element type: decimal
+query B
 SELECT 1 = ANY (1, 1.1)
+----
+true
 
 query B
 SELECT 1::decimal = ANY (1, 1.1)
 ----
 true
 
-query error incompatible tuple element type: decimal
+query B
 SELECT 1 = ANY (1.0, 1.1)
+----
+true
 
-query error incompatible tuple element type: decimal
+query B
 SELECT 1 = ANY (((1.0, 1.1)))
+----
+true
 
 query B
 SELECT 1::decimal = ANY (1.0, 1.1)
@@ -404,5 +418,7 @@ true
 query error could not parse \"hello\" as type int
 SELECT 1 = ANY (1, 'hello', 3)
 
-query error unsupported comparison operator: <int> = ANY <tuple{}>
+query B
 SELECT 1 = ANY ROW()
+----
+false

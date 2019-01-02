@@ -61,6 +61,16 @@ RUN mkdir src \
  && mkdir build && (cd build && DEFCONFIG=../aarch64-unknown-linux-gnueabi.defconfig /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && rm -rf src
 
+RUN mkdir -p /usr/local/lib/ccache \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-gnu-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-gnu-c++ \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-musl-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-musl-c++ \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-w64-mingw32-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-w64-mingw32-c++ \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-c++
+
 ENV PATH $PATH:/x-tools/x86_64-unknown-linux-gnu/bin:/x-tools/x86_64-unknown-linux-musl/bin:/x-tools/x86_64-w64-mingw32/bin:/x-tools/aarch64-unknown-linux-gnueabi/bin
 
 # Build & install the terminfo lib (incl. in ncurses) for the linux targets (x86 and arm).
@@ -92,8 +102,8 @@ RUN mkdir ncurses \
        CXX=/x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-c++ \
        ../configure --prefix=/x-tools/x86_64-unknown-linux-musl/x86_64-unknown-linux-musl/sysroot/usr \
          --host=x86_64-unknown-linux-musl \
-         $(cat /ncurses.conf) --without-shared --without-dlsym \
-    && (cd ncurses && make all && make install)) \
+         $(cat /ncurses.conf) \
+    && make install.libs) \
  && mkdir build-x86_64-unknown-linux-gnu \
  && (cd build-x86_64-unknown-linux-gnu \
     && CC=/x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-cc \
@@ -101,7 +111,7 @@ RUN mkdir ncurses \
        ../configure --prefix=/x-tools/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr \
          --host=x86_64-unknown-linux-gnu \
          $(cat /ncurses.conf) \
-    && (cd ncurses && make all && make install)) \
+    && make install.libs) \
  && mkdir build-aarch64-unknown-linux-gnueabi \
  && (cd build-aarch64-unknown-linux-gnueabi \
     && CC=/x-tools/aarch64-unknown-linux-gnueabi/bin/aarch64-unknown-linux-gnueabi-cc \
@@ -109,7 +119,7 @@ RUN mkdir ncurses \
        ../configure --prefix=/x-tools/aarch64-unknown-linux-gnueabi/aarch64-unknown-linux-gnueabi/sysroot/usr \
          --host=aarch64-unknown-linux-gnueabi \
          $(cat /ncurses.conf) \
-    && (cd ncurses && make all && make install)) \
+    && make install.libs) \
  && cd .. \
  && rm -rf ncurses ncurses.conf ncurses.patch
 
@@ -138,7 +148,32 @@ RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
  && mv osxcross/target /x-tools/x86_64-apple-darwin13 \
  && rm -rf osxcross
 
+RUN ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin13-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin13-c++
+
 ENV PATH $PATH:/x-tools/x86_64-apple-darwin13/bin
+
+# automake - sed build
+# autopoint - sed build
+# gettext - sed build
+# rsync - sed build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    automake \
+    autopoint \
+    gettext \
+    rsync
+
+# Compile GNU sed from source to pick up an unreleased change that buffers
+# output. This speeds up compiles on Docker for Mac by *minutes*.
+RUN git clone git://git.sv.gnu.org/sed \
+ && cd sed \
+ && git checkout 8e52c0aff039f0a88127ca131b060050c107b0e2 \
+ && ./bootstrap \
+ && ./configure \
+ && make \
+ && make install \
+ && cd .. \
+ && rm -rf sed
 
 # Compile Go from source so that CC defaults to clang instead of gcc. This
 # requires a Go toolchain to bootstrap.
@@ -147,8 +182,8 @@ ENV PATH $PATH:/x-tools/x86_64-apple-darwin13/bin
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-chech.sh.
 RUN apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.10.3.src.tar.gz -o golang.tar.gz \
- && echo '567b1cc66c9704d1c019c50bef946272e911ec6baf244310f87f4e678be155f2 golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.10.7.src.tar.gz -o golang.tar.gz \
+ && echo 'b84a0d7c90789f3a2ec5349dbe7419efb81f1fac9289b6f60df86bd919bd4447 golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
@@ -178,43 +213,60 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # ccache - speed up C and C++ compilation
 # lsof - roachprod monitor
 # netcat - roachprod monitor
+# netbase - /etc/services etc
 # nodejs - ui
 # openjdk-8-jre - railroad diagram generation
 # google-cloud-sdk - roachprod acceptance tests
 # yarn - ui
 # chrome - ui
+# unzip - for installing awscli
 RUN apt-get install -y --no-install-recommends \
     ccache \
     google-cloud-sdk \
     lsof \
     netcat \
+    netbase \
     nodejs \
     openjdk-8-jre \
     openssh-client \
     yarn \
-    google-chrome-stable
+    google-chrome-stable \
+    unzip
 
-# Without CCACHE_CPP2=1, ccache can generate spurious warnings. See the manpage
-# for details. This option is enabled by default in ccache v3.3+, but our
-# version of Ubuntu ships v3.2.4.
-ENV CCACHE_CPP2=1
+# awscli - roachtests
+# NB: we don't use apt-get because we need an up to date version of awscli
+RUN curl -fsSL "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip" && \
+  unzip awscli-bundle.zip && \
+  ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws && \
+  rm -rf awscli-bundle.zip awscli-bundle
 
 ENV PATH /opt/backtrace/bin:$PATH
 
 RUN apt-get purge -y \
     apt-transport-https \
+    automake \
+    autopoint \
     bison \
     bzip2 \
     file \
     flex \
     gawk \
+    gettext \
     golang \
     gperf \
     help2man \
     python \
+    rsync \
     texinfo \
  && apt-get autoremove -y
 
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
 RUN ln -s /go/src/github.com/cockroachdb/cockroach/build/builder/mkrelease.sh /usr/local/bin/mkrelease
+
+RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.1.0/autouseradd-1.1.0-amd64.tar.gz \
+    | tar xz -C /usr --strip-components 1
+
+COPY entrypoint.sh /usr/local/bin
+
+ENTRYPOINT ["autouseradd", "--user", "roach", "--no-create-home", "--", "entrypoint.sh"]

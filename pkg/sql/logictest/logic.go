@@ -38,8 +38,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -49,19 +47,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 // This file is home to TestLogic, a general-purpose engine for
@@ -361,6 +361,13 @@ var (
 	)
 	sqlfmtLen = flag.Int("line-length", tree.DefaultPrettyCfg().LineWidth,
 		"target line length when using -rewrite-sql")
+	disableOptRuleProbability = flag.Float64(
+		"disable-opt-rule-probability", 0,
+		"disable transformation rules in the cost-based optimizer with the given probability.")
+	optimizerCostPerturbation = flag.Float64(
+		"optimizer-cost-perturbation", 0,
+		"randomly perturb the estimated cost of each expression in the query tree by at most the "+
+			"given fraction for the purpose of creating alternate query plans in the optimizer.")
 )
 
 type testClusterConfig struct {
@@ -372,6 +379,8 @@ type testClusterConfig struct {
 	overrideOptimizerMode string
 	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
+	// if non-empty, overrides the default experimental_vectorize mode.
+	overrideExpVectorize string
 	// if set, queries using distSQL processors that can fall back to disk do
 	// so immediately, using only their disk-based implementation.
 	distSQLUseDisk bool
@@ -395,9 +404,9 @@ type testClusterConfig struct {
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
 var logicTestConfigs = []testClusterConfig{
-	{name: "local", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
+	{name: "local", numNodes: 1, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
 	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1,
-		overrideDistSQLMode: "off", overrideOptimizerMode: "off",
+		overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off",
 		bootstrapVersion: &cluster.ClusterVersion{
 			UseVersion:     cluster.VersionByKey(cluster.VersionBase),
 			MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
@@ -405,15 +414,16 @@ var logicTestConfigs = []testClusterConfig{
 		serverVersion:  &roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: 1,
 	},
-	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "on"},
-	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
+	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "on"},
+	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
+	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "off", overrideExpVectorize: "true"},
 	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
 	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on"},
 	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
 		distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
 		distSQLUseDisk: true, skipShort: true},
-	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
+	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
 	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
 	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on"},
 	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "on", distSQLMetadataTestEnabled: true,
@@ -519,7 +529,7 @@ func (ls *logicStatement) readSQL(
 		if !hasVars {
 			newSyntax, err := func(inSql string) (string, error) {
 				// Can't rewrite the SQL otherwise because the vars make it invalid.
-				stmtList, err := parser.Parse(inSql)
+				stmtList, _, err := parser.Parse(inSql)
 				if err != nil {
 					if ls.expectErr != "" {
 						// Maybe a parse error was expected. Simply do not rewrite.
@@ -904,9 +914,23 @@ func (t *logicTest) setUser(user string) func() {
 	}
 	// Enable the cost-based optimizer rather than the heuristic planner.
 	if optMode := t.cfg.overrideOptimizerMode; optMode != "" {
-		if _, err := db.Exec(fmt.Sprintf("SET EXPERIMENTAL_OPT = %s;", optMode)); err != nil {
+		if _, err := db.Exec(fmt.Sprintf("SET OPTIMIZER = %s;", optMode)); err != nil {
 			t.Fatal(err)
 		}
+
+		// Use the cost-based-optimizer for planning UPDATE statements.
+		if optMode == "on" {
+			if _, err := db.Exec("SET experimental_optimizer_updates = true"); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// The default value for extra_float_digits assumed by tests is
+	// 0. However, lib/pq by default configures this to 2 during
+	// connection initialization, so we need to set it back to 0 before
+	// we run anything.
+	if _, err := db.Exec("SET extra_float_digits = 0"); err != nil {
+		t.Fatal(err)
 	}
 	t.clients[user] = db
 	t.db = db
@@ -933,18 +957,24 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 					CheckStmtStringChange: true,
 				},
 				Store: &storage.StoreTestingKnobs{
-					BootstrapVersion: cfg.bootstrapVersion,
+					// The consistency queue makes a lot of noisy logs during logic tests.
+					DisableConsistencyQueue: true,
+					BootstrapVersion:        cfg.bootstrapVersion,
 				},
 				SQLEvalContext: &tree.EvalContextTestingKnobs{
-					AssertBinaryExprReturnTypes: true,
-					AssertUnaryExprReturnTypes:  true,
-					AssertFuncExprReturnTypes:   true,
+					AssertBinaryExprReturnTypes:     true,
+					AssertUnaryExprReturnTypes:      true,
+					AssertFuncExprReturnTypes:       true,
+					DisableOptimizerRuleProbability: *disableOptRuleProbability,
+					OptimizerCostPerturbation:       *optimizerCostPerturbation,
 				},
 				Upgrade: &server.UpgradeTestingKnobs{
 					DisableUpgrade: cfg.disableUpgrade,
 				},
 			},
 			UseDatabase: "test",
+			// Set Locality so we can use it in zone config tests.
+			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}}},
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
 		// matter where the data really is.
@@ -958,7 +988,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		distSQLKnobs.MemoryLimitBytes = 1
 	}
 	if cfg.distSQLMetadataTestEnabled {
-		distSQLKnobs.MetadataTestLevel = distsqlrun.NoExplain
+		distSQLKnobs.MetadataTestLevel = distsqlrun.On
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 
@@ -1012,6 +1042,13 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 			}
 			return nil
 		})
+	}
+	if cfg.overrideExpVectorize != "" {
+		if _, err := t.cluster.ServerConn(0).Exec(
+			"SET CLUSTER SETTING sql.defaults.experimental_vectorize = $1", cfg.overrideExpVectorize,
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// db may change over the lifetime of this function, with intermediate
@@ -1572,7 +1609,7 @@ func (t *logicTest) processSubtest(
 				return errors.Errorf("kv-batch-size needs an integer argument; %s", err)
 			}
 			t.outf("Setting kv batch size %d", batchSize)
-			defer sqlbase.SetKVBatchSize(int64(batchSize))()
+			defer row.SetKVBatchSize(int64(batchSize))()
 
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
@@ -2054,9 +2091,12 @@ func RunLogicTest(t *testing.T, globs ...string) {
 				path := path // Rebind range variable.
 				// Inner test: one per file path.
 				t.Run(filepath.Base(path), func(t *testing.T) {
-					if !*showSQL && !*rewriteResultsInTestfiles && !*rewriteSQL {
-						// If we're not printing out all of the SQL interactions and we're
-						// not generating testfiles, run the tests in parallel.
+					// Run the test in parallel, unless:
+					//  - we're printing out all of the SQL interactions, or
+					//  - we're generating testfiles, or
+					//  - we are in race mode (where we can hit a limit on alive
+					//    goroutines).
+					if !*showSQL && !*rewriteResultsInTestfiles && !*rewriteSQL && !util.RaceEnabled {
 						// Skip parallelizing tests that use the kv-batch-size directive since
 						// the batch size is a global variable.
 						// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.

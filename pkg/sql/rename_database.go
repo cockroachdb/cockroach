@@ -25,6 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+type renameDatabaseNode struct {
+	dbDesc  *sqlbase.DatabaseDescriptor
+	newName string
+}
+
 // RenameDatabase renames the database.
 // Privileges: superuser, DROP on source database.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
@@ -42,11 +47,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, err
 	}
 
-	var dbDesc *DatabaseDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		dbDesc, err = ResolveDatabase(ctx, p, string(n.Name), true /*required*/)
-	})
+	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), true /*required*/)
 	if err != nil {
 		return nil, err
 	}
@@ -60,36 +61,48 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return newZeroNode(nil /* columns */), nil
 	}
 
+	return &renameDatabaseNode{
+		dbDesc:  dbDesc,
+		newName: string(n.NewName),
+	}, nil
+}
+
+func (n *renameDatabaseNode) startExec(params runParams) error {
+	p := params.p
+	ctx := params.ctx
+	dbDesc := n.dbDesc
+
 	// Check if any views depend on tables in the database. Because our views
 	// are currently just stored as strings, they explicitly specify the database
 	// name. Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
 	phyAccessor := p.PhysicalSchemaAccessor()
-	lookupFlags := p.CommonLookupFlags(ctx, true /*required*/)
+	lookupFlags := p.CommonLookupFlags(true /*required*/)
 	// DDL statements bypass the cache.
 	lookupFlags.avoidCached = true
 	tbNames, err := phyAccessor.GetObjectNames(
-		dbDesc, tree.PublicSchema, DatabaseListFlags{
+		ctx, p.txn, dbDesc, tree.PublicSchema, DatabaseListFlags{
 			CommonLookupFlags: lookupFlags,
 			explicitPrefix:    true,
 		})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	lookupFlags.required = false
 	for i := range tbNames {
-		tbDesc, _, err := phyAccessor.GetObjectDesc(&tbNames[i],
+		objDesc, _, err := phyAccessor.GetObjectDesc(ctx, p.txn, &tbNames[i],
 			ObjectLookupFlags{CommonLookupFlags: lookupFlags})
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if tbDesc == nil {
+		if objDesc == nil {
 			continue
 		}
+		tbDesc := objDesc.TableDesc()
 		if len(tbDesc.DependedOnBy) > 0 {
 			viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, tbDesc.DependedOnBy[0].ID)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			viewName := viewDesc.Name
 			if dbDesc.ID != viewDesc.ParentID {
@@ -99,17 +112,18 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 					log.Warningf(ctx, "unable to retrieve fully-qualified name of view %d: %v",
 						viewDesc.ID, err)
 					msg := fmt.Sprintf("cannot rename database because a view depends on table %q", tbDesc.Name)
-					return nil, sqlbase.NewDependentObjectError(msg)
+					return sqlbase.NewDependentObjectError(msg)
 				}
 			}
 			msg := fmt.Sprintf("cannot rename database because view %q depends on table %q", viewName, tbDesc.Name)
 			hint := fmt.Sprintf("you can drop %s instead.", viewName)
-			return nil, sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+			return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
 		}
 	}
 
-	if err := p.renameDatabase(ctx, dbDesc, string(n.NewName)); err != nil {
-		return nil, err
-	}
-	return newZeroNode(nil /* columns */), nil
+	return p.renameDatabase(ctx, dbDesc, n.newName)
 }
+
+func (n *renameDatabaseNode) Next(runParams) (bool, error) { return false, nil }
+func (n *renameDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *renameDatabaseNode) Close(context.Context)        {}

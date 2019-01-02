@@ -20,10 +20,9 @@ import (
 	gosql "database/sql"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach-go/crdb"
 )
 
 func registerCopy(r *registry) {
@@ -43,7 +42,7 @@ func registerCopy(r *registry) {
 
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t, c.All())
 
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
@@ -121,7 +120,7 @@ func registerCopy(r *registry) {
 			}
 
 			rc := rangeCount()
-			c.l.printf("range count after copy = %d\n", rc)
+			t.l.Printf("range count after copy = %d\n", rc)
 			highExp := (rows * rowEstimate) / (32 << 20 /* 32MB */)
 			lowExp := (rows * rowEstimate) / (64 << 20 /* 64MB */)
 			if rc > highExp || rc < lowExp {
@@ -139,9 +138,8 @@ func registerCopy(r *registry) {
 	for _, inTxn := range []bool{true, false} {
 		inTxn := inTxn
 		r.Add(testSpec{
-			Name:   fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, numNodes, inTxn),
-			Nodes:  nodes(numNodes),
-			Stable: true, // DO NOT COPY to new tests
+			Name:  fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, numNodes, inTxn),
+			Nodes: nodes(numNodes),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runCopy(ctx, t, c, rows, inTxn)
 			},

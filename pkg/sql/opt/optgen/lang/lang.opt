@@ -80,8 +80,9 @@ define DefineFields {
 }
 
 define DefineField {
-    Name String
-    Type String
+    Comments Comments
+    Name     String
+    Type     String
 }
 
 define Rule {
@@ -92,6 +93,7 @@ define Rule {
     Replace  Expr
 }
 
+[HasType]
 define Func {
     Name Expr
     Args Slice
@@ -109,15 +111,18 @@ define Name {
     Value string
 }
 
+[HasType]
 define And {
     Left  Expr
     Right Expr
 }
 
+[HasType]
 define Not {
     Input Expr
 }
 
+[HasType]
 define List {
     Items Slice
 }
@@ -125,15 +130,18 @@ define List {
 define ListAny {
 }
 
+[HasType]
 define Bind {
     Label  String
     Target Expr
 }
 
+[HasType]
 define Ref {
     Label String
 }
 
+[HasType]
 define Any {
 }
 
@@ -149,11 +157,18 @@ define String {
     Value string
 }
 
+# type NumberExpr int
+[Value]
+define Number {
+    Value int64
+}
+
 #
 # The below operators are never created by the parser, but are created by the
 # compiler, in order to make further processing of the tree easier.
 #
 
+[HasType]
 define CustomFunc {
     Name Name
     Args Slice

@@ -38,7 +38,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx)
+	c.Start(ctx, t)
 
 	db := c.Conn(ctx, c.nodes)
 	defer db.Close()
@@ -68,7 +68,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	t.Status("injecting offset")
 	offsetInjector.offset(ctx, c.nodes, tc.offset)
 	t.Status("starting cockroach post offset")
-	c.Start(ctx, c.Node(c.nodes))
+	c.Start(ctx, t, c.Node(c.nodes))
 
 	if !isAlive(db) {
 		t.Fatal("Node unexpectedly crashed")
@@ -80,10 +80,10 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	}
 
 	t.Status("validating clock monotonicity")
-	c.l.printf("pre-restart time:  %f\n", preRestartTime)
-	c.l.printf("post-restart time: %f\n", postRestartTime)
+	t.l.Printf("pre-restart time:  %f\n", preRestartTime)
+	t.l.Printf("post-restart time: %f\n", postRestartTime)
 	difference := postRestartTime - preRestartTime
-	c.l.printf("time-difference: %v\n", time.Duration(difference*float64(time.Second)))
+	t.l.Printf("time-difference: %v\n", time.Duration(difference*float64(time.Second)))
 
 	if tc.expectIncreasingWallTime {
 		if preRestartTime > postRestartTime {
@@ -114,15 +114,13 @@ func makeClockMonotonicTests() testSpec {
 	}
 
 	spec := testSpec{
-		Name:   "monotonic",
-		Stable: true, // DO NOT COPY to new tests
+		Name: "monotonic",
 	}
 
 	for i := range testCases {
 		tc := testCases[i]
 		spec.SubTests = append(spec.SubTests, testSpec{
-			Name:   tc.name,
-			Stable: true, // DO NOT COPY to new tests
+			Name: tc.name,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockMonotonicity(ctx, t, c, tc)
 			},

@@ -209,6 +209,7 @@ build
 ----
 limit
  ├── columns: column1:3(int)
+ ├── internal-ordering: -3
  ├── ordering: -3
  ├── sort
  │    ├── columns: column1:3(int)
@@ -245,6 +246,7 @@ VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LI
 ----
 limit
  ├── columns: column1:3(int)
+ ├── internal-ordering: -3
  ├── ordering: -3
  ├── sort
  │    ├── columns: column1:3(int)
@@ -388,22 +390,22 @@ union
  ├── project
  │    ├── columns: uniontest.v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1(int!null) uniontest.v:2(int) rowid:3(int!null)
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         │    └── columns: k:1(int) uniontest.v:2(int) rowid:3(int!null)
+ │         └── filters
  │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
+ │                   ├── variable: k [type=int]
  │                   └── const: 1 [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:4(int!null) uniontest.v:5(int) rowid:6(int!null)
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           │    └── columns: k:4(int) uniontest.v:5(int) rowid:6(int!null)
+           └── filters
                 └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
+                     ├── variable: k [type=int]
                      └── const: 2 [type=int]
 
 build
@@ -416,22 +418,22 @@ union-all
  ├── project
  │    ├── columns: uniontest.v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1(int!null) uniontest.v:2(int) rowid:3(int!null)
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         │    └── columns: k:1(int) uniontest.v:2(int) rowid:3(int!null)
+ │         └── filters
  │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
+ │                   ├── variable: k [type=int]
  │                   └── const: 1 [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:4(int!null) uniontest.v:5(int) rowid:6(int!null)
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           │    └── columns: k:4(int) uniontest.v:5(int) rowid:6(int!null)
+           └── filters
                 └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
+                     ├── variable: k [type=int]
                      └── const: 2 [type=int]
 
 build
@@ -439,27 +441,27 @@ SELECT v FROM uniontest WHERE k = 1 INTERSECT SELECT v FROM uniontest WHERE k = 
 ----
 intersect
  ├── columns: v:2(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.v:5(int)
+ ├── left columns: v:2(int)
+ ├── right columns: v:5(int)
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1(int!null) v:2(int) rowid:3(int!null)
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         │    └── columns: k:1(int) v:2(int) rowid:3(int!null)
+ │         └── filters
  │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
+ │                   ├── variable: k [type=int]
  │                   └── const: 1 [type=int]
  └── project
-      ├── columns: uniontest.v:5(int)
+      ├── columns: v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:4(int!null) v:5(int) rowid:6(int!null)
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           │    └── columns: k:4(int) v:5(int) rowid:6(int!null)
+           └── filters
                 └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
+                     ├── variable: k [type=int]
                      └── const: 2 [type=int]
 
 build
@@ -467,27 +469,27 @@ SELECT v FROM uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM uniontest WHERE 
 ----
 intersect-all
  ├── columns: v:2(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.v:5(int)
+ ├── left columns: v:2(int)
+ ├── right columns: v:5(int)
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1(int!null) v:2(int) rowid:3(int!null)
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         │    └── columns: k:1(int) v:2(int) rowid:3(int!null)
+ │         └── filters
  │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
+ │                   ├── variable: k [type=int]
  │                   └── const: 1 [type=int]
  └── project
-      ├── columns: uniontest.v:5(int)
+      ├── columns: v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:4(int!null) v:5(int) rowid:6(int!null)
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           │    └── columns: k:4(int) v:5(int) rowid:6(int!null)
+           └── filters
                 └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
+                     ├── variable: k [type=int]
                      └── const: 2 [type=int]
 
 build
@@ -495,27 +497,27 @@ SELECT v FROM uniontest WHERE k = 1 EXCEPT SELECT v FROM uniontest WHERE k = 2
 ----
 except
  ├── columns: v:2(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.v:5(int)
+ ├── left columns: v:2(int)
+ ├── right columns: v:5(int)
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1(int!null) v:2(int) rowid:3(int!null)
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         │    └── columns: k:1(int) v:2(int) rowid:3(int!null)
+ │         └── filters
  │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
+ │                   ├── variable: k [type=int]
  │                   └── const: 1 [type=int]
  └── project
-      ├── columns: uniontest.v:5(int)
+      ├── columns: v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:4(int!null) v:5(int) rowid:6(int!null)
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           │    └── columns: k:4(int) v:5(int) rowid:6(int!null)
+           └── filters
                 └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
+                     ├── variable: k [type=int]
                      └── const: 2 [type=int]
 
 build
@@ -523,27 +525,27 @@ SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k =
 ----
 except-all
  ├── columns: v:2(int)
- ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.v:5(int)
+ ├── left columns: v:2(int)
+ ├── right columns: v:5(int)
  ├── project
- │    ├── columns: uniontest.v:2(int)
+ │    ├── columns: v:2(int)
  │    └── select
- │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         ├── columns: k:1(int!null) v:2(int) rowid:3(int!null)
  │         ├── scan uniontest
- │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         │    └── columns: k:1(int) v:2(int) rowid:3(int!null)
+ │         └── filters
  │              └── eq [type=bool]
- │                   ├── variable: uniontest.k [type=int]
+ │                   ├── variable: k [type=int]
  │                   └── const: 1 [type=int]
  └── project
-      ├── columns: uniontest.v:5(int)
+      ├── columns: v:5(int)
       └── select
-           ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           ├── columns: k:4(int!null) v:5(int) rowid:6(int!null)
            ├── scan uniontest
-           │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           │    └── columns: k:4(int) v:5(int) rowid:6(int!null)
+           └── filters
                 └── eq [type=bool]
-                     ├── variable: uniontest.k [type=int]
+                     ├── variable: k [type=int]
                      └── const: 2 [type=int]
 
 build
@@ -551,6 +553,7 @@ build
 ----
 limit
  ├── columns: v:7(int)
+ ├── internal-ordering: -7
  ├── ordering: -7
  ├── sort
  │    ├── columns: v:7(int)
@@ -562,22 +565,22 @@ limit
  │         ├── project
  │         │    ├── columns: uniontest.v:2(int)
  │         │    └── select
- │         │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         │         ├── columns: k:1(int!null) uniontest.v:2(int) rowid:3(int!null)
  │         │         ├── scan uniontest
- │         │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         │         └── filters [type=bool]
+ │         │         │    └── columns: k:1(int) uniontest.v:2(int) rowid:3(int!null)
+ │         │         └── filters
  │         │              └── eq [type=bool]
- │         │                   ├── variable: uniontest.k [type=int]
+ │         │                   ├── variable: k [type=int]
  │         │                   └── const: 1 [type=int]
  │         └── project
  │              ├── columns: uniontest.v:5(int)
  │              └── select
- │                   ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+ │                   ├── columns: k:4(int!null) uniontest.v:5(int) rowid:6(int!null)
  │                   ├── scan uniontest
- │                   │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
- │                   └── filters [type=bool]
+ │                   │    └── columns: k:4(int) uniontest.v:5(int) rowid:6(int!null)
+ │                   └── filters
  │                        └── eq [type=bool]
- │                             ├── variable: uniontest.k [type=int]
+ │                             ├── variable: k [type=int]
  │                             └── const: 2 [type=int]
  └── const: 2 [type=int]
 
@@ -587,6 +590,7 @@ SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 
 ----
 limit
  ├── columns: v:7(int)
+ ├── internal-ordering: -7
  ├── ordering: -7
  ├── sort
  │    ├── columns: v:7(int)
@@ -598,22 +602,22 @@ limit
  │         ├── project
  │         │    ├── columns: uniontest.v:2(int)
  │         │    └── select
- │         │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         │         ├── columns: k:1(int!null) uniontest.v:2(int) rowid:3(int!null)
  │         │         ├── scan uniontest
- │         │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         │         └── filters [type=bool]
+ │         │         │    └── columns: k:1(int) uniontest.v:2(int) rowid:3(int!null)
+ │         │         └── filters
  │         │              └── eq [type=bool]
- │         │                   ├── variable: uniontest.k [type=int]
+ │         │                   ├── variable: k [type=int]
  │         │                   └── const: 1 [type=int]
  │         └── project
  │              ├── columns: uniontest.v:5(int)
  │              └── select
- │                   ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
+ │                   ├── columns: k:4(int!null) uniontest.v:5(int) rowid:6(int!null)
  │                   ├── scan uniontest
- │                   │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
- │                   └── filters [type=bool]
+ │                   │    └── columns: k:4(int) uniontest.v:5(int) rowid:6(int!null)
+ │                   └── filters
  │                        └── eq [type=bool]
- │                             ├── variable: uniontest.k [type=int]
+ │                             ├── variable: k [type=int]
  │                             └── const: 2 [type=int]
  └── const: 2 [type=int]
 
@@ -623,15 +627,15 @@ SELECT v FROM uniontest UNION SELECT k FROM uniontest
 union
  ├── columns: v:7(int)
  ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.k:4(int)
+ ├── right columns: k:4(int)
  ├── project
  │    ├── columns: uniontest.v:2(int)
  │    └── scan uniontest
- │         └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         └── columns: k:1(int) uniontest.v:2(int) rowid:3(int!null)
  └── project
-      ├── columns: uniontest.k:4(int)
+      ├── columns: k:4(int)
       └── scan uniontest
-           └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           └── columns: k:4(int) uniontest.v:5(int) rowid:6(int!null)
 
 build
 SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
@@ -639,15 +643,15 @@ SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 union-all
  ├── columns: v:7(int)
  ├── left columns: uniontest.v:2(int)
- ├── right columns: uniontest.k:4(int)
+ ├── right columns: k:4(int)
  ├── project
  │    ├── columns: uniontest.v:2(int)
  │    └── scan uniontest
- │         └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
+ │         └── columns: k:1(int) uniontest.v:2(int) rowid:3(int!null)
  └── project
-      ├── columns: uniontest.k:4(int)
+      ├── columns: k:4(int)
       └── scan uniontest
-           └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           └── columns: k:4(int) uniontest.v:5(int) rowid:6(int!null)
 
 build
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
@@ -670,7 +674,7 @@ left-join
  │         ├── columns: column1:3(int)
  │         └── tuple [type=tuple{int}]
  │              └── const: 2 [type=int]
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: column1 [type=int]
            └── variable: column1 [type=int]
@@ -696,7 +700,7 @@ left-join
  │         ├── columns: column1:3(int)
  │         └── tuple [type=tuple{int}]
  │              └── const: 2 [type=int]
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: column1 [type=int]
            └── variable: column1 [type=int]
@@ -731,7 +735,6 @@ SELECT 1 EXCEPT SELECT '3'
 ----
 error (42804): EXCEPT types int and string cannot be matched
 
-# TODO(rytaft): Error message should be `pgcode 42703 column "z" does not exist`
 build
 SELECT 1 UNION SELECT 3 ORDER BY z
 ----
@@ -792,15 +795,15 @@ sort
  └── union-all
       ├── columns: a:9(string)
       ├── left columns: abc.a:1(string)
-      ├── right columns: abc.b:6(string)
+      ├── right columns: b:6(string)
       ├── project
-      │    ├── columns: abc.a:1(string) abc.b:2(string!null)
+      │    ├── columns: abc.a:1(string) b:2(string!null)
       │    └── scan abc
-      │         └── columns: abc.a:1(string) abc.b:2(string!null) abc.c:3(string!null) abc.rowid:4(int!null)
+      │         └── columns: abc.a:1(string) b:2(string!null) c:3(string!null) rowid:4(int!null)
       └── project
-           ├── columns: abc.b:6(string!null)
+           ├── columns: b:6(string!null)
            └── scan abc
-                └── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null) abc.rowid:8(int!null)
+                └── columns: abc.a:5(string) b:6(string!null) c:7(string!null) rowid:8(int!null)
 
 build
 (SELECT a FROM abc ORDER BY b) UNION ALL (SELECT a FROM abc ORDER BY c) ORDER BY a
@@ -813,26 +816,26 @@ sort
       ├── left columns: abc.a:1(string)
       ├── right columns: abc.a:5(string)
       ├── project
-      │    ├── columns: abc.a:1(string) abc.b:2(string!null)
+      │    ├── columns: abc.a:1(string) b:2(string!null)
       │    └── scan abc
-      │         └── columns: abc.a:1(string) abc.b:2(string!null) abc.c:3(string!null) abc.rowid:4(int!null)
+      │         └── columns: abc.a:1(string) b:2(string!null) c:3(string!null) rowid:4(int!null)
       └── project
-           ├── columns: abc.a:5(string) abc.c:7(string!null)
+           ├── columns: abc.a:5(string) c:7(string!null)
            └── scan abc
-                └── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null) abc.rowid:8(int!null)
+                └── columns: abc.a:5(string) b:6(string!null) c:7(string!null) rowid:8(int!null)
 
 build
 (SELECT a FROM abc ORDER BY b) EXCEPT (SELECT b FROM abc ORDER BY c, b, a)
 ----
 except
  ├── columns: a:1(string)
- ├── left columns: abc.a:1(string)
- ├── right columns: abc.b:6(string)
+ ├── left columns: a:1(string)
+ ├── right columns: b:6(string)
  ├── project
- │    ├── columns: abc.a:1(string) abc.b:2(string!null)
+ │    ├── columns: a:1(string) b:2(string!null)
  │    └── scan abc
- │         └── columns: abc.a:1(string) abc.b:2(string!null) abc.c:3(string!null) abc.rowid:4(int!null)
+ │         └── columns: a:1(string) b:2(string!null) c:3(string!null) rowid:4(int!null)
  └── project
-      ├── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null)
+      ├── columns: a:5(string) b:6(string!null) c:7(string!null)
       └── scan abc
-           └── columns: abc.a:5(string) abc.b:6(string!null) abc.c:7(string!null) abc.rowid:8(int!null)
+           └── columns: a:5(string) b:6(string!null) c:7(string!null) rowid:8(int!null)

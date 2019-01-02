@@ -38,7 +38,7 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx)
+	c.Start(ctx, t)
 
 	db := c.Conn(ctx, c.nodes)
 	defer db.Close()
@@ -112,15 +112,13 @@ func makeClockJumpTests() testSpec {
 	}
 
 	spec := testSpec{
-		Name:   "jump",
-		Stable: true, // DO NOT COPY to new tests
+		Name: "jump",
 	}
 
 	for i := range testCases {
 		tc := testCases[i]
 		spec.SubTests = append(spec.SubTests, testSpec{
-			Name:   tc.name,
-			Stable: true, // DO NOT COPY to new tests
+			Name: tc.name,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockJump(ctx, t, c, tc)
 			},
@@ -132,9 +130,8 @@ func makeClockJumpTests() testSpec {
 
 func registerClock(r *registry) {
 	r.Add(testSpec{
-		Name:   "clock",
-		Nodes:  nodes(1),
-		Stable: true, // DO NOT COPY to new tests
+		Name:  "clock",
+		Nodes: nodes(1),
 		SubTests: []testSpec{
 			makeClockJumpTests(),
 			makeClockMonotonicTests(),

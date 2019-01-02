@@ -30,7 +30,7 @@ import (
 // CHECK constraint on a table.
 type sqlCheckConstraintCheckOperation struct {
 	tableName *tree.TableName
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
 	checkDesc *sqlbase.TableDescriptor_CheckConstraint
 	asOf      hlc.Timestamp
 
@@ -54,7 +54,7 @@ type sqlCheckConstraintCheckRun struct {
 
 func newSQLCheckConstraintCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	checkDesc *sqlbase.TableDescriptor_CheckConstraint,
 	asOf hlc.Timestamp,
 ) *sqlCheckConstraintCheckOperation {
@@ -75,11 +75,10 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	if err != nil {
 		return err
 	}
-	normalizableTableName := &tree.NormalizableTableName{TableNameReference: o.tableName}
 	sel := &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(o.tableDesc.Columns, false /* forUpdateOrDelete */),
 		From: &tree.From{
-			Tables: tree.TableExprs{normalizableTableName},
+			Tables: tree.TableExprs{o.tableName},
 		},
 		Where: &tree.Where{Expr: &tree.NotExpr{Expr: expr}},
 	}

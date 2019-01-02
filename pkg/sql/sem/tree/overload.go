@@ -47,7 +47,7 @@ type Overload struct {
 	// might be more appropriate.
 	Info string
 
-	AggregateFunc func([]types.T, *EvalContext) AggregateFunc
+	AggregateFunc func([]types.T, *EvalContext, Datums) AggregateFunc
 	WindowFunc    func([]types.T, *EvalContext) WindowFunc
 	Fn            func(*EvalContext, Datums) (Datum, error)
 	Generator     GeneratorFactory
@@ -97,8 +97,8 @@ type overloadImpl interface {
 }
 
 var _ overloadImpl = &Overload{}
-var _ overloadImpl = UnaryOp{}
-var _ overloadImpl = BinOp{}
+var _ overloadImpl = &UnaryOp{}
+var _ overloadImpl = &BinOp{}
 
 // GetParamsAndReturnType gets the parameters and return type of an
 // overloadImpl.
@@ -390,7 +390,7 @@ func typeCheckOverloadedExprs(
 	ctx *SemaContext, desired types.T, overloads []overloadImpl, inBinOp bool, exprs ...Expr,
 ) ([]TypedExpr, []overloadImpl, error) {
 	if len(overloads) > math.MaxUint8 {
-		return nil, nil, pgerror.NewErrorf(pgerror.CodeInternalError, "too many overloads (%d > 255)", len(overloads))
+		return nil, nil, pgerror.NewAssertionErrorf("too many overloads (%d > 255)", len(overloads))
 	}
 
 	var s typeCheckOverloadState
@@ -773,8 +773,7 @@ func checkReturn(
 			if err != nil {
 				return s.typedExprs, nil, true, errors.Wrap(err, "error type checking constant value")
 			} else if des != nil && !typ.ResolvedType().Equivalent(des) {
-				panic(pgerror.NewErrorf(
-					pgerror.CodeInternalError, "desired constant value type %s but set type %s", des, typ.ResolvedType()))
+				panic(pgerror.NewAssertionErrorf("desired constant value type %s but set type %s", des, typ.ResolvedType()))
 			}
 			s.typedExprs[i] = typ
 		}

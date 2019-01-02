@@ -21,10 +21,10 @@ import "gossip/gossip.proto";
 import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
 import "server/diagnosticspb/diagnostics.proto";
-import "server/status/status.proto";
+import "server/status/statuspb/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
-import "storage/lease_status.proto";
-import "storage/storagebase/state.proto";
+import "storage/storagepb/lease_status.proto";
+import "storage/storagepb/state.proto";
 import "util/log/log.proto";
 import "util/unresolved_addr.proto";
 
@@ -46,6 +46,10 @@ message CertificateDetails {
   enum CertificateType {
     CA = 0;
     NODE = 1;
+    CLIENT_CA = 2;
+    CLIENT = 3;
+    UI_CA = 4;
+    UI = 5;
   }
 
   message Fields {
@@ -83,6 +87,15 @@ message DetailsRequest {
   bool ready = 2;
 }
 
+// SystemInfo contains information about the host system.
+message SystemInfo {
+  // system_info is the output from `uname -a`
+  string system_info = 1;
+
+  // kernel_info is the output from `uname -r`.
+  string kernel_info = 2;
+}
+
 message DetailsResponse {
   int32 node_id = 1 [
     (gogoproto.customname) = "NodeID",
@@ -91,12 +104,13 @@ message DetailsResponse {
   ];
   util.UnresolvedAddr address = 2 [ (gogoproto.nullable) = false ];
   build.Info build_info = 3 [ (gogoproto.nullable) = false ];
+  SystemInfo system_info = 4 [ (gogoproto.nullable) = false ];
 }
 
 message NodesRequest {}
 
 message NodesResponse {
-  repeated status.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
+  repeated server.status.statuspb.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
 }
 
 message NodeRequest {
@@ -106,7 +120,7 @@ message NodeRequest {
 }
 
 // RaftState gives internal details about a Raft group's state.
-// Closely mirrors the upstream definitions in github.com/coreos/etcd/raft.
+// Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 message RaftState {
   message Progress {
     uint64 match = 1;
@@ -141,6 +155,9 @@ message RangeProblems {
   // If the replica's quiescent flag doesn't agree with the store's
   // list of replicas that are ticking, warn about it.
   bool quiescent_equals_ticking = 6;
+
+  // When the raft log is too large, it can be a symptom of other issues.
+  bool raft_log_too_large = 7;
 }
 
 message RangeStatistics {
@@ -157,17 +174,10 @@ message PrettySpan {
   string end_key = 2;
 }
 
-message CommandQueueMetrics {
-  int64 write_commands = 1;
-  int64 read_commands = 2;
-  int64 max_overlaps_seen = 3;
-  int32 tree_size = 4;
-}
-
 message RangeInfo {
   PrettySpan span = 1 [ (gogoproto.nullable) = false ];
   RaftState raft_state = 2 [ (gogoproto.nullable) = false ];
-  storage.storagebase.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
+  storage.storagepb.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
   int32 source_node_id = 5 [
     (gogoproto.customname) = "SourceNodeID",
     (gogoproto.casttype) =
@@ -182,8 +192,8 @@ message RangeInfo {
   repeated roachpb.Lease lease_history = 8 [ (gogoproto.nullable) = false ];
   RangeProblems problems = 9 [ (gogoproto.nullable) = false ];
   RangeStatistics stats = 10 [ (gogoproto.nullable) = false ];
-  CommandQueueMetrics cmd_q_local = 11 [ (gogoproto.nullable) = false ];
-  CommandQueueMetrics cmd_q_global = 12 [ (gogoproto.nullable) = false ];
+  storage.storagepb.LatchManagerInfo latches_local = 11 [ (gogoproto.nullable) = false ];
+  storage.storagepb.LatchManagerInfo latches_global = 12 [ (gogoproto.nullable) = false ];
   storage.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
   bool ticking = 15;
@@ -210,18 +220,19 @@ message GossipRequest {
   string node_id = 1;
 }
 
+message TraceEvent {
+  google.protobuf.Timestamp time = 1
+      [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  string message = 2;
+}
+
 message AllocatorDryRun {
-  message Event {
-    google.protobuf.Timestamp time = 1
-        [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
-    string message = 2;
-  }
   int64 range_id = 1 [
     (gogoproto.customname) = "RangeID",
     (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
   ];
-  repeated Event events = 2;
+  repeated TraceEvent events = 2;
 }
 
 message AllocatorRangeRequest {
@@ -290,6 +301,38 @@ message StacksRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
+}
+
+// Represents the type of file.
+// TODO(ridwanmsharif): Add support for log files. They're currently served
+// by an endpoint that parses the log messages, which is not what the 
+// debug zip client wants.
+enum FileType { HEAP = 0; }
+
+message File {
+  string name = 1;
+  int64 file_size = 2;
+  // Contents may not be populated if only a list of Files are requested.
+  bytes contents = 3;
+}
+
+message GetFilesRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  // If list_only is true then the contents of the files will not be populated
+  // in the response. Only filenames and sizes will be returned.
+  bool list_only = 2;
+  FileType type = 5;
+  // Each pattern given is matched with Files of the above type in the node
+  // using filepath.Glob(). The patterns only match to filenames and so path
+  // separators cannot be used.
+  // Example: * will match all files of requested type.
+  repeated string patterns = 6;
+}
+
+message GetFilesResponse {
+  repeated File files = 1;
 }
 
 message ProfileRequest {
@@ -522,6 +565,11 @@ message ProblemRangesResponse {
       (gogoproto.casttype) =
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
+    repeated int64 raft_log_too_large_range_ids = 8 [
+      (gogoproto.customname) = "RaftLogTooLargeRangeIDs",
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
   }
   reserved 1 to 7;
   // NodeID is the node that submitted all the requests.
@@ -564,13 +612,6 @@ message RangeResponse {
     (gogoproto.nullable) = false
   ];
   reserved 4; // Previously used.
-}
-
-message CommandQueueRequest { int64 range_id = 1; }
-
-message CommandQueueResponse {
-  storage.storagebase.CommandQueuesSnapshot snapshot = 1
-      [ (gogoproto.nullable) = false ];
 }
 
 // DiagnosticsRequest requests a diagnostics report.
@@ -620,17 +661,14 @@ message StatementsRequest {
 }
 
 message StatementsResponse {
-  message StatementStatisticsKey {
-    string statement = 1;
-    string app = 2;
-    bool distSQL = 3;
-    bool failed = 4;
-    int32 node_id = 5 [ (gogoproto.customname) = "NodeID",
+  message ExtendedStatementStatisticsKey {
+    cockroach.sql.StatementStatisticsKey key_data = 1 [(gogoproto.nullable) = false];
+    int32 node_id = 2 [(gogoproto.customname) = "NodeID",
                         (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   }
 
   message CollectedStatementStatistics {
-    StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
+    ExtendedStatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
     cockroach.sql.StatementStatistics stats = 2 [(gogoproto.nullable) = false];
   }
 
@@ -656,7 +694,7 @@ service Status {
       get : "/_status/nodes"
     };
   }
-  rpc Node(NodeRequest) returns (status.NodeStatus) {
+  rpc Node(NodeRequest) returns (server.status.statuspb.NodeStatus) {
     option (google.api.http) = {
       get : "/_status/nodes/{node_id}"
     };
@@ -733,6 +771,11 @@ service Status {
       get : "/_status/metrics/{node_id}"
     };
   }
+  rpc GetFiles(GetFilesRequest) returns (GetFilesResponse) {
+    option (google.api.http) = {
+      get : "/_status/files/{node_id}"
+    };
+  }
   rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {
     option (google.api.http) = {
       get : "/_status/logfiles/{node_id}"
@@ -758,11 +801,6 @@ service Status {
       get : "/_status/range/{range_id}"
     };
   }
-  rpc CommandQueue(CommandQueueRequest) returns (CommandQueueResponse) {
-    option (google.api.http) = {
-      get : "/_status/range/{range_id}/cmdqueue"
-    };
-  }
   rpc Diagnostics(DiagnosticsRequest)
       returns (cockroach.server.diagnosticspb.DiagnosticReport) {
     option (google.api.http) = {
@@ -781,3 +819,4 @@ service Status {
     };
   }
 }
+

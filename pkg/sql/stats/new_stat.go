@@ -82,7 +82,12 @@ func InsertNewStat(
 	}
 
 	// TODO(radu): we need to clear out old stats that are superseded.
+	return GossipTableStatAdded(g, tableID)
+}
 
+// GossipTableStatAdded causes the statistic caches for this table to be
+// invalidated.
+func GossipTableStatAdded(g *gossip.Gossip, tableID sqlbase.ID) error {
 	// TODO(radu): perhaps use a TTL here to avoid having a key per table floating
 	// around forever (we would need the stat cache to evict old entries
 	// automatically though).

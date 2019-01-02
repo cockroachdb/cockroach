@@ -244,6 +244,11 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *max1RowNode:
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
+			return plan, extraFilter, err
+		}
+
 	case *windowNode:
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
@@ -360,7 +365,15 @@ func (p *planner) propagateFilters(
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
+	case *renameColumnNode:
+	case *renameDatabaseNode:
+	case *renameIndexNode:
+	case *renameTableNode:
 	case *scrubNode:
+	case *truncateNode:
+	case *commentOnColumnNode:
+	case *commentOnDatabaseNode:
+	case *commentOnTableNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:
@@ -375,6 +388,7 @@ func (p *planner) propagateFilters(
 	case *DropUserNode:
 	case *hookFnNode:
 	case *valuesNode:
+	case *virtualTableNode:
 	case *sequenceSelectNode:
 	case *setVarNode:
 	case *setClusterSettingNode:
@@ -921,4 +935,19 @@ func mergeConj(left, right tree.TypedExpr) tree.TypedExpr {
 
 func isFilterTrue(expr tree.TypedExpr) bool {
 	return expr == nil || expr == tree.DBoolTrue
+}
+
+// splitAndExpr flattens a tree of AND expressions, appending all of the child
+// expressions as a list. Any non-AND expression is appended as a single element
+// in the list.
+//
+//   a AND b AND c AND d -> [a, b, c, d]
+func splitAndExpr(
+	evalCtx *tree.EvalContext, e tree.TypedExpr, exprs tree.TypedExprs,
+) tree.TypedExprs {
+	switch t := e.(type) {
+	case *tree.AndExpr:
+		return splitAndExpr(evalCtx, t.TypedRight(), splitAndExpr(evalCtx, t.TypedLeft(), exprs))
+	}
+	return append(exprs, e)
 }

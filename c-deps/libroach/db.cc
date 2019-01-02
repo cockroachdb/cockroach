@@ -35,21 +35,11 @@
 #include "options.h"
 #include "snapshot.h"
 #include "status.h"
+#include "table_props.h"
 
 using namespace cockroach;
 
 namespace cockroach {
-
-// DBOpenHook in OSS mode only verifies that no extra options are specified.
-__attribute__((weak)) rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log,
-                                                 const std::string& db_dir, const DBOptions opts,
-                                                 EnvManager* env_mgr) {
-  if (opts.extra_options.len != 0) {
-    return rocksdb::Status::InvalidArgument(
-        "DBOptions has extra_options, but OSS code cannot handle them");
-  }
-  return rocksdb::Status::OK();
-}
 
 DBKey ToDBKey(const rocksdb::Slice& s) {
   DBKey key;
@@ -143,6 +133,23 @@ DBIterState DBIterGetState(DBIterator* iter) {
 
 }  // namespace
 
+namespace cockroach {
+
+// DBOpenHookOSS mode only verifies that no extra options are specified.
+rocksdb::Status DBOpenHookOSS(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
+                              const DBOptions db_opts, EnvManager* env_mgr) {
+  if (db_opts.extra_options.len != 0) {
+    return rocksdb::Status::InvalidArgument("encryption options are not supported in OSS builds");
+  }
+  return rocksdb::Status::OK();
+}
+
+}  // namespace cockroach
+
+static DBOpenHook* db_open_hook = DBOpenHookOSS;
+
+void DBSetOpenHook(void* hook) { db_open_hook = (DBOpenHook*)hook; }
+
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options = DBMakeOptions(db_opts);
 
@@ -189,6 +196,23 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
       return ToDBStatus(status);
     }
 
+    status = file_registry->CheckNoRegistryFile();
+    if (!status.ok()) {
+      // We have a file registry, this means we've used encryption flags before
+      // and are tracking all files on disk. Running without encryption (extra_options empty)
+      // will bypass the file registry and lose changes.
+      // In this case, we have multiple possibilities:
+      // - no extra_options: this fails here
+      // - extra_options:
+      //   - OSS: this fails in the OSS hook (OSS does not understand extra_options)
+      //   - CCL: fails if the options do not parse properly
+      if (db_opts.extra_options.len == 0) {
+        return ToDBStatus(rocksdb::Status::InvalidArgument(
+            "encryption was used on this store before, but no encryption flags specified. You need "
+            "a CCL build and must fully specify the --enterprise-encryption flag"));
+      }
+    }
+
     // EnvManager takes ownership of the file registry.
     env_mgr->file_registry.swap(file_registry);
   } else {
@@ -201,16 +225,10 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   }
 
   // Call hooks to handle db_opts.extra_options.
-  auto hook_status = DBOpenHook(options.info_log, db_dir, db_opts, env_mgr.get());
+  auto hook_status = db_open_hook(options.info_log, db_dir, db_opts, env_mgr.get());
   if (!hook_status.ok()) {
     return ToDBStatus(hook_status);
   }
-
-  // TODO(mberhault):
-  // - check available ciphers somehow?
-  //   We may have a encrypted files in the registry file but running without encryption flags.
-  // - pass read-only flag though, we should not be modifying file/key registries (including key
-  //   rotation) in read-only mode.
 
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
@@ -393,6 +411,16 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bot
   return kSuccess;
 }
 
+DBStatus DBDisableAutoCompaction(DBEngine *db) {
+  auto status = db->rep->SetOptions({{"disable_auto_compactions", "true"}});
+  return ToDBStatus(status);
+}
+
+DBStatus DBEnableAutoCompaction(DBEngine *db) {
+  auto status = db->rep->EnableAutoCompaction({db->rep->DefaultColumnFamily()});
+  return ToDBStatus(status);
+}
+
 DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t* size) {
   const std::string start_key(EncodeKey(start));
   const std::string end_key(EncodeKey(end));
@@ -477,7 +505,9 @@ DBStatus DBEnvDeleteFile(DBEngine* db, DBSlice path) { return db->EnvDeleteFile(
 
 DBStatus DBEnvDeleteDirAndFiles(DBEngine* db, DBSlice dir) { return db->EnvDeleteDirAndFiles(dir); }
 
-DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname) { return db->EnvLinkFile(oldname, newname); }
+DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname) {
+  return db->EnvLinkFile(oldname, newname);
+}
 
 DBIterator* DBNewIter(DBEngine* db, DBIterOptions iter_options) {
   return db->NewIter(iter_options);
@@ -592,9 +622,8 @@ DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions) {
   return DBIterGetState(iter);
 }
 
-void DBIterSetUpperBound(DBIterator* iter, DBKey key) {
-  iter->SetUpperBound(key);
-}
+void DBIterSetLowerBound(DBIterator* iter, DBKey key) { iter->SetLowerBound(key); }
+void DBIterSetUpperBound(DBIterator* iter, DBKey key) { iter->SetUpperBound(key); }
 
 DBStatus DBMerge(DBSlice existing, DBSlice update, DBString* new_value, bool full_merge) {
   new_value->len = 0;
@@ -615,15 +644,13 @@ DBStatus DBMerge(DBSlice existing, DBSlice update, DBString* new_value, bool ful
   return MergeResult(&meta, new_value);
 }
 
-
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
-   return DBMerge(existing, update, new_value, true);
+  return DBMerge(existing, update, new_value, true);
 }
 
 DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   return DBMerge(existing, update, new_value, false);
 }
-
 
 // DBGetStats queries the given DBEngine for various operational stats and
 // write them to the provided DBStatsResult instance.
@@ -633,7 +660,15 @@ DBString DBGetCompactionStats(DBEngine* db) { return db->GetCompactionStats(); }
 
 DBStatus DBGetEnvStats(DBEngine* db, DBEnvStatsResult* stats) { return db->GetEnvStats(stats); }
 
+DBStatus DBGetEncryptionRegistries(DBEngine* db, DBEncryptionRegistries* result) {
+  return db->GetEncryptionRegistries(result);
+}
+
 DBSSTable* DBGetSSTables(DBEngine* db, int* n) { return db->GetSSTables(n); }
+
+DBStatus DBGetSortedWALFiles(DBEngine* db, DBWALFile** files, int* n) {
+  return db->GetSortedWALFiles(files, n);
+}
 
 DBString DBGetUserProperties(DBEngine* db) { return db->GetUserProperties(); }
 
@@ -699,6 +734,14 @@ DBSstFileWriter* DBSstFileWriterNew() {
   options->comparator = &kComparator;
   options->table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
+  // Use the TablePropertiesCollector hook to store the min and max MVCC
+  // timestamps present in each sstable in the metadata for that sstable. Used
+  // by the time bounded iterator optimization.
+  options->table_properties_collector_factories.emplace_back(DBMakeTimeBoundCollector());
+  // Automatically request compactions whenever an SST contains too many range
+  // deletions.
+  options->table_properties_collector_factories.emplace_back(DBMakeDeleteRangeCollector());
+
   std::unique_ptr<rocksdb::Env> memenv;
   memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
   options->env = memenv.get();
@@ -716,6 +759,14 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
 
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
   rocksdb::Status status = fw->rep.Put(EncodeKey(key), ToSlice(val));
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
+}
+
+DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key) {
+  rocksdb::Status status = fw->rep.Delete(EncodeKey(key));
   if (!status.ok()) {
     return ToDBStatus(status);
   }

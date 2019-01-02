@@ -17,8 +17,6 @@ import (
 	"io"
 	"math/rand"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -28,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // Load converts r into SSTables and backup descriptors. database is the name
@@ -54,7 +54,7 @@ func Load(
 	tempPrefix string,
 ) (backupccl.BackupDescriptor, error) {
 	if loadChunkBytes == 0 {
-		loadChunkBytes = config.DefaultZoneConfig().RangeMaxBytes / 2
+		loadChunkBytes = *config.DefaultZoneConfig().RangeMaxBytes / 2
 	}
 
 	var txCtx transform.ExprTransformContext
@@ -93,14 +93,14 @@ func Load(
 
 	privs := dbDesc.GetPrivileges()
 
-	tableDescs := make(map[string]*sqlbase.TableDescriptor)
+	tableDescs := make(map[string]*sqlbase.ImmutableTableDescriptor)
 
 	var currentCmd bytes.Buffer
 	scanner := bufio.NewReader(r)
-	var ri sqlbase.RowInserter
+	var ri row.Inserter
 	var defaultExprs []tree.TypedExpr
 	var cols []sqlbase.ColumnDescriptor
-	var tableDesc *sqlbase.TableDescriptor
+	var tableDesc *sqlbase.ImmutableTableDescriptor
 	var tableName string
 	var prevKey roachpb.Key
 	var kvs []engine.MVCCKeyValue
@@ -119,7 +119,7 @@ func Load(
 			return backupccl.BackupDescriptor{}, errors.Wrap(err, "read line")
 		}
 		currentCmd.WriteString(line)
-		if !isEndOfStatement(currentCmd.String()) {
+		if !parser.EndsInSemicolon(currentCmd.String()) {
 			currentCmd.WriteByte('\n')
 			continue
 		}
@@ -156,21 +156,23 @@ func Load(
 			// rejected during restore.
 			st := cluster.MakeTestingClusterSettings()
 
-			affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+			affected := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 			// A nil txn is safe because it is only used by sql.MakeTableDesc, which
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here. Ditto for the schema accessor.
 			var txn *client.Txn
+			// At this point the CREATE statements in the loaded SQL do not
+			// use the SERIAL type so we need not process SERIAL types here.
 			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.ID,
 				0 /* table ID */, ts, privs, affected, nil, &evalCtx)
 			if err != nil {
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}
 
-			tableDesc = &desc
+			tableDesc = sqlbase.NewImmutableTableDescriptor(*desc.TableDesc())
 			tableDescs[tableName] = tableDesc
 			backup.Descriptors = append(backup.Descriptors, sqlbase.Descriptor{
-				Union: &sqlbase.Descriptor_Table{Table: tableDesc},
+				Union: &sqlbase.Descriptor_Table{Table: desc.TableDesc()},
 			})
 
 			for _, col := range tableDesc.Columns {
@@ -179,7 +181,7 @@ func Load(
 				}
 			}
 
-			ri, err = sqlbase.MakeRowInserter(nil, tableDesc, nil, tableDesc.Columns,
+			ri, err = row.MakeInserter(nil, tableDesc, nil, tableDesc.Columns,
 				true, &sqlbase.DatumAlloc{})
 			if err != nil {
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make row inserter")
@@ -250,11 +252,11 @@ func Load(
 
 func insertStmtToKVs(
 	ctx context.Context,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	defaultExprs []tree.TypedExpr,
 	cols []sqlbase.ColumnDescriptor,
 	evalCtx tree.EvalContext,
-	ri sqlbase.RowInserter,
+	ri row.Inserter,
 	stmt *tree.Insert,
 	f func(roachpb.KeyValue),
 ) error {
@@ -290,11 +292,11 @@ func insertStmtToKVs(
 		Mapping: ri.InsertColIDtoRowIndex,
 		Cols:    tableDesc.Columns,
 	}
-	for _, tuple := range values.Tuples {
-		row := make([]tree.Datum, len(tuple.Exprs))
-		for i, expr := range tuple.Exprs {
+	for _, tuple := range values.Rows {
+		insertRow := make([]tree.Datum, len(tuple))
+		for i, expr := range tuple {
 			if expr == tree.DNull {
-				row[i] = tree.DNull
+				insertRow[i] = tree.DNull
 				continue
 			}
 			c, ok := expr.(tree.Constant)
@@ -302,7 +304,7 @@ func insertStmtToKVs(
 				return errors.Errorf("unsupported expr: %q", expr)
 			}
 			var err error
-			row[i], err = c.ResolveAsType(nil, tableDesc.Columns[i].Type.ToDatumType())
+			insertRow[i], err = c.ResolveAsType(nil, tableDesc.Columns[i].Type.ToDatumType())
 			if err != nil {
 				return err
 			}
@@ -312,16 +314,16 @@ func insertStmtToKVs(
 		var computeExprs []tree.TypedExpr
 		var computedCols []sqlbase.ColumnDescriptor
 
-		row, err := sql.GenerateInsertRow(
-			defaultExprs, computeExprs, cols, computedCols, evalCtx, tableDesc, row, &computedIVarContainer,
+		insertRow, err := sql.GenerateInsertRow(
+			defaultExprs, computeExprs, cols, computedCols, evalCtx, tableDesc, insertRow, &computedIVarContainer,
 		)
 		if err != nil {
-			return errors.Wrapf(err, "process insert %q", row)
+			return errors.Wrapf(err, "process insert %q", insertRow)
 		}
 		// TODO(bram): Is the checking of FKs here required? If not, turning them
 		// off may provide a speed boost.
-		if err := ri.InsertRow(ctx, b, row, true, sqlbase.CheckFKs, false /* traceKV */); err != nil {
-			return errors.Wrapf(err, "insert %q", row)
+		if err := ri.InsertRow(ctx, b, insertRow, true, row.CheckFKs, false /* traceKV */); err != nil {
+			return errors.Wrapf(err, "insert %q", insertRow)
 		}
 	}
 	return nil
@@ -349,16 +351,6 @@ func (i inserter) InitPut(key, value interface{}, failOnTombstones bool) {
 		Key:   *key.(*roachpb.Key),
 		Value: *value.(*roachpb.Value),
 	})
-}
-
-// isEndOfStatement returns true if stmt ends with a semicolon.
-func isEndOfStatement(stmt string) bool {
-	sc := parser.MakeScanner(stmt)
-	var last int
-	sc.Tokens(func(t int) {
-		last = t
-	})
-	return last == ';'
 }
 
 func writeSST(

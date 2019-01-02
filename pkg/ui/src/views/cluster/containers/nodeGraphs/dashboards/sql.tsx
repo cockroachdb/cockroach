@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import React from "react";
 import _ from "lodash";
 
@@ -37,16 +51,25 @@ export default function (props: GraphDashboardProps) {
       title="SQL Queries"
       sources={nodeSources}
       tooltip={
-        `A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE operations
+        `A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements
         started per second ${tooltipSelection}.`
       }
     >
       <Axis label="queries">
-        <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
-        <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
+        <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
         <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
         <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
         <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="SQL Query Errors"
+      sources={nodeSources}
+      tooltip={"The number of statements which returned a planning or runtime error."}
+    >
+      <Axis label="errors">
+        <Metric name="cr.node.sql.failure.count" title="Errors" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
@@ -119,50 +142,6 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={node}
               name="cr.node.sql.service.latency-p90"
-              title={nodeDisplayName(nodesSummary, node)}
-              sources={[node]}
-              downsampleMax
-            />
-          ))
-        }
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Service Latency: DistSQL, 99th percentile"
-      tooltip={
-        `The latency of distributed SQL statements serviced over
-           10 second periods ${tooltipSelection}.`
-      }
-    >
-      <Axis units={AxisUnits.Duration} label="latency">
-        {
-          _.map(nodeIDs, (node) => (
-            <Metric
-              key={node}
-              name="cr.node.sql.distsql.service.latency-p99"
-              title={nodeDisplayName(nodesSummary, node)}
-              sources={[node]}
-              downsampleMax
-            />
-          ))
-        }
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Service Latency: DistSQL, 90th percentile"
-      tooltip={
-        `The latency of distributed SQL statements serviced over
-           10 second periods ${tooltipSelection}.`
-      }
-    >
-      <Axis units={AxisUnits.Duration} label="latency">
-        {
-          _.map(nodeIDs, (node) => (
-            <Metric
-              key={node}
-              name="cr.node.sql.distsql.service.latency-p90"
               title={nodeDisplayName(nodesSummary, node)}
               sources={[node]}
               downsampleMax

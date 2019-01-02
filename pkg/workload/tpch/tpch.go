@@ -240,7 +240,7 @@ const (
 		p_type            VARCHAR(25) NOT NULL,
 		p_size            INTEGER NOT NULL,
 		p_container       CHAR(10) NOT NULL,
-		p_retailprice     DECIMAL(15,2) NOT NULL,
+		p_retailprice     FLOAT NOT NULL,
 		p_comment         VARCHAR(23) NOT NULL
 	)`
 	tpchSupplierSchema = `(
@@ -249,7 +249,7 @@ const (
 		s_address         VARCHAR(40) NOT NULL,
 		s_nationkey       INTEGER NOT NULL,
 		s_phone           CHAR(15) NOT NULL,
-		s_acctbal         DECIMAL(15,2) NOT NULL,
+		s_acctbal         FLOAT NOT NULL,
 		s_comment         VARCHAR(101) NOT NULL,
 		INDEX s_nk (s_nationkey ASC)
 	)`
@@ -257,11 +257,10 @@ const (
 		ps_partkey            INTEGER NOT NULL,
 		ps_suppkey            INTEGER NOT NULL,
 		ps_availqty           INTEGER NOT NULL,
-		ps_supplycost         DECIMAL(15,2) NOT NULL,
+		ps_supplycost         FLOAT NOT NULL,
 		ps_comment            VARCHAR(199) NOT NULL,
-		INDEX ps_sk (ps_suppkey ASC),
 		PRIMARY KEY (ps_partkey ASC, ps_suppkey ASC),
-		UNIQUE INDEX ps_sk_pk (ps_suppkey ASC, ps_partkey ASC)
+		INDEX ps_sk (ps_suppkey ASC)
 	)`
 	tpchCustomerSchema = `(
 		c_custkey         INTEGER NOT NULL PRIMARY KEY,
@@ -269,7 +268,7 @@ const (
 		c_address         VARCHAR(40) NOT NULL,
 		c_nationkey       INTEGER NOT NULL,
 		c_phone           CHAR(15) NOT NULL,
-		c_acctbal         DECIMAL(15,2)   NOT NULL,
+		c_acctbal         FLOAT NOT NULL,
 		c_mktsegment      CHAR(10) NOT NULL,
 		c_comment         VARCHAR(117) NOT NULL,
 		INDEX c_nk (c_nationkey ASC)
@@ -278,7 +277,7 @@ const (
 		o_orderkey           INTEGER NOT NULL PRIMARY KEY,
 		o_custkey            INTEGER NOT NULL,
 		o_orderstatus        CHAR(1) NOT NULL,
-		o_totalprice         DECIMAL(15,2) NOT NULL,
+		o_totalprice         FLOAT NOT NULL,
 		o_orderdate          DATE NOT NULL,
 		o_orderpriority      CHAR(15) NOT NULL,
 		o_clerk              CHAR(15) NOT NULL,
@@ -292,10 +291,10 @@ const (
 		l_partkey       INTEGER NOT NULL,
 		l_suppkey       INTEGER NOT NULL,
 		l_linenumber    INTEGER NOT NULL,
-		l_quantity      DECIMAL(15,2) NOT NULL,
-		l_extendedprice DECIMAL(15,2) NOT NULL,
-		l_discount      DECIMAL(15,2) NOT NULL,
-		l_tax           DECIMAL(15,2) NOT NULL,
+		l_quantity      FLOAT NOT NULL,
+		l_extendedprice FLOAT NOT NULL,
+		l_discount      FLOAT NOT NULL,
+		l_tax           FLOAT NOT NULL,
 		l_returnflag    CHAR(1) NOT NULL,
 		l_linestatus    CHAR(1) NOT NULL,
 		l_shipdate      DATE NOT NULL,

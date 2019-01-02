@@ -21,15 +21,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 // This file contains utils and interfaces used by a connExecutor to communicate
@@ -97,10 +96,6 @@ type StmtBuf struct {
 		// cond is signaled when new commands are pushed.
 		cond *sync.Cond
 
-		// readerBlocked is set while the reader is blocked on waiting for a command
-		// to be pushed into the buffer.
-		readerBlocked bool
-
 		// data contains the elements of the buffer.
 		data []Command
 
@@ -129,13 +124,10 @@ type Command interface {
 type ExecStmt struct {
 	// Stmt can be nil, in which case a "empty query response" message should be
 	// produced.
-	//
-	// TODO(andrei): Many places call Stmt.String() (e.g. ExecStmt.String()),
-	// which seems inneficient. We should find a way to memo-ize this. Another
-	// option is to keep track of the query as we got it from the client, except
-	// that we might have gotten a batch of them at once, in which case only the
-	// parser can do the splitting.
 	Stmt tree.Statement
+
+	// SQL is the SQL string that was parsed into Stmt.
+	SQL string
 
 	// TimeReceived is the time at which the exec message was received
 	// from the client. Used to compute the service latency.
@@ -150,6 +142,8 @@ type ExecStmt struct {
 func (ExecStmt) command() {}
 
 func (e ExecStmt) String() string {
+	// We have the original SQL, but we still use String() because it obfuscates
+	// passwords.
 	return fmt.Sprintf("ExecStmt: %s", e.Stmt.String())
 }
 
@@ -177,10 +171,16 @@ var _ Command = ExecPortal{}
 
 // PrepareStmt is the command for creating a prepared statement.
 type PrepareStmt struct {
+	// Name of the prepared statement (optional).
 	Name string
+
 	// Stmt can be nil, in which case executing it should produce an "empty query
 	// response" message.
-	Stmt      tree.Statement
+	Stmt tree.Statement
+
+	// SQL is the string from which Stmt was parsed.
+	SQL string
+
 	TypeHints tree.PlaceholderTypes
 	// RawTypeHints is the representation of type hints exactly as specified by
 	// the client.
@@ -193,6 +193,8 @@ type PrepareStmt struct {
 func (PrepareStmt) command() {}
 
 func (p PrepareStmt) String() string {
+	// We have the original SQL, but we still use String() because it obfuscates
+	// passwords.
 	return fmt.Sprintf("PrepareStmt: %s", p.Stmt.String())
 }
 
@@ -357,9 +359,15 @@ var _ Command = SendError{}
 // NewStmtBuf creates a StmtBuf.
 func NewStmtBuf() *StmtBuf {
 	var buf StmtBuf
+	buf.Init()
+	return &buf
+}
+
+// Init initializes a StmtBuf. It exists to avoid the allocation imposed by
+// NewStmtBuf.
+func (buf *StmtBuf) Init() {
 	buf.mu.lastPos = -1
 	buf.mu.cond = sync.NewCond(&buf.mu.Mutex)
-	return &buf
 }
 
 // Close marks the buffer as closed. Once Close() is called, no further push()es
@@ -421,9 +429,7 @@ func (buf *StmtBuf) curCmd() (Command, CmdPos, error) {
 				"can only wait for next command; corrupt cursor: %d", curPos)
 		}
 		// Wait for the next Command to arrive to the buffer.
-		buf.mu.readerBlocked = true
 		buf.mu.cond.Wait()
-		buf.mu.readerBlocked = false
 	}
 }
 
@@ -568,8 +574,7 @@ type ClientComm interface {
 		descOpt RowDescOpt,
 		pos CmdPos,
 		formatCodes []pgwirebase.FormatCode,
-		loc *time.Location,
-		be sessiondata.BytesEncodeFormat,
+		conv sessiondata.DataConversionConfig,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.
 	CreatePrepareResult(pos CmdPos) ParseResult

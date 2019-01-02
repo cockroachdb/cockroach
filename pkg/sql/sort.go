@@ -19,14 +19,13 @@ import (
 	"context"
 	"sort"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // sortNode represents a node that sorts the rows returned by its
@@ -205,7 +204,7 @@ func (p *planner) orderBy(
 	}
 
 	if p.semaCtx.Properties.Derived.SeenGenerator {
-		return nil, pgerror.Unimplemented("srf in order by", "generator functions are not yet supported in ORDER BY")
+		return nil, tree.NewInvalidFunctionUsageError(tree.GeneratorClass, "ORDER BY")
 	}
 
 	if ordering == nil {
@@ -387,11 +386,8 @@ func (p *planner) rewriteIndexOrderings(
 			}
 
 		case tree.OrderByIndex:
-			tn, err := o.Table.Normalize()
-			if err != nil {
-				return nil, err
-			}
-			desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
+			tn := o.Table
+			desc, err := ResolveExistingObject(ctx, p, &tn, true /*required*/, requireTableDesc)
 			if err != nil {
 				return nil, err
 			}
@@ -433,8 +429,21 @@ func (p *planner) rewriteIndexOrderings(
 			for k, colName := range idxDesc.ColumnNames {
 				newOrderBy = append(newOrderBy, &tree.Order{
 					OrderType: tree.OrderByColumn,
-					Expr:      tree.NewColumnItem(tn, tree.Name(colName)),
+					Expr:      tree.NewColumnItem(&tn, tree.Name(colName)),
 					Direction: chooseDirection(o.Direction == tree.Descending, idxDesc.ColumnDirections[k]),
+				})
+			}
+
+			for _, id := range idxDesc.ExtraColumnIDs {
+				col, err := desc.FindColumnByID(id)
+				if err != nil {
+					return nil, pgerror.NewAssertionErrorf("column with ID %d not found", id)
+				}
+
+				newOrderBy = append(newOrderBy, &tree.Order{
+					OrderType: tree.OrderByColumn,
+					Expr:      tree.NewColumnItem(&tn, tree.Name(col.Name)),
+					Direction: chooseDirection(o.Direction == tree.Descending, sqlbase.IndexDescriptor_ASC),
 				})
 			}
 

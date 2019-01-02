@@ -22,8 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -92,8 +90,34 @@ const (
 	DefaultTableDescriptorLeaseRenewalTimeout = time.Minute
 )
 
-var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
-	"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
+var (
+	// defaultRaftElectionTimeoutTicks specifies the number of Raft Tick
+	// invocations that must pass between elections.
+	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
+
+	// defaultRaftLogTruncationThreshold specifies the upper bound that a single
+	// Range's Raft log can grow to before log truncations are triggered, even
+	// if that means a snapshot will be required for a straggling follower.
+	defaultRaftLogTruncationThreshold = envutil.EnvOrDefaultInt64(
+		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 4<<20 /* 4 MB */)
+
+	// defaultRaftMaxSizePerMsg specifies the maximum aggregate byte size of Raft
+	// log entries that a leader will send to followers in a single MsgApp.
+	defaultRaftMaxSizePerMsg = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_MAX_SIZE_PER_MSG", 16<<10 /* 16 KB */)
+
+	// defaultRaftMaxSizeCommittedSizePerReady specifies the maximum aggregate
+	// byte size of the committed log entries which a node will receive in a
+	// single Ready.
+	defaultRaftMaxCommittedSizePerReady = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_MAX_COMMITTED_SIZE_PER_READY", 64<<20 /* 64 MB */)
+
+	// defaultRaftMaxSizePerMsg specifies how many "inflight" messages a leader
+	// will send to a follower without hearing a response.
+	defaultRaftMaxInflightMsgs = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 64)
+)
 
 type lazyHTTPClient struct {
 	once       sync.Once
@@ -131,13 +155,17 @@ type Config struct {
 	// route to an interface that Addr is listening on.
 	AdvertiseAddr string
 
-	// HTTPAddr is server's public HTTP address.
+	// HTTPAddr is the configured HTTP listen address.
 	//
 	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
 	// performance problems are addressed upstream.
 	//
 	// See https://github.com/grpc/grpc-go/issues/586.
 	HTTPAddr string
+
+	// HTTPAdvertiseAddr is the advertised HTTP address.
+	// This is computed from HTTPAddr if specified otherwise Addr.
+	HTTPAdvertiseAddr string
 
 	// The certificate manager. Must be accessed through GetCertificateManager.
 	certificateManager lazyCertificateManager
@@ -152,8 +180,14 @@ type Config struct {
 	HistogramWindowInterval time.Duration
 }
 
-func didYouMeanInsecureError(err error) error {
-	return errors.Wrap(err, "problem using security settings, did you mean to use --insecure?")
+func wrapError(err error) error {
+	if _, ok := err.(*security.Error); !ok {
+		return &security.Error{
+			Message: "problem using security settings",
+			Err:     err,
+		}
+	}
+	return err
 }
 
 // InitDefaults sets up the default values for a config.
@@ -180,7 +214,7 @@ func (cfg *Config) HTTPRequestScheme() string {
 func (cfg *Config) AdminURL() *url.URL {
 	return &url.URL{
 		Scheme: cfg.HTTPRequestScheme(),
-		Host:   cfg.HTTPAddr,
+		Host:   cfg.HTTPAdvertiseAddr,
 	}
 }
 
@@ -207,21 +241,40 @@ func (cfg *Config) GetCACertPath() (string, error) {
 // already contained SSL config options.
 func (cfg *Config) LoadSecurityOptions(options url.Values, username string) error {
 	if cfg.Insecure {
-		options.Add("sslmode", "disable")
+		options.Set("sslmode", "disable")
+		options.Del("sslrootcert")
+		options.Del("sslcert")
+		options.Del("sslkey")
 	} else {
-		// Fetch CA cert. This is required.
-		caCertPath, err := cfg.GetCACertPath()
-		if err != nil {
-			return didYouMeanInsecureError(err)
+		sslMode := options.Get("sslmode")
+		if sslMode == "" || sslMode == "disable" {
+			options.Set("sslmode", "verify-full")
 		}
-		options.Add("sslmode", "verify-full")
-		options.Add("sslrootcert", caCertPath)
+
+		if sslMode != "require" {
+			// verify-ca and verify-full need a CA certificate.
+			if options.Get("sslrootcert") == "" {
+				// Fetch CA cert. This is required.
+				caCertPath, err := cfg.GetCACertPath()
+				if err != nil {
+					return wrapError(err)
+				}
+				options.Set("sslrootcert", caCertPath)
+			}
+		} else {
+			// require does not check the CA.
+			options.Del("sslrootcert")
+		}
 
 		// Fetch certs, but don't fail, we may be using a password.
 		certPath, keyPath, err := cfg.GetClientCertPaths(username)
 		if err == nil {
-			options.Add("sslcert", certPath)
-			options.Add("sslkey", keyPath)
+			if options.Get("sslcert") == "" {
+				options.Set("sslcert", certPath)
+			}
+			if options.Get("sslkey") == "" {
+				options.Set("sslkey", keyPath)
+			}
 		}
 	}
 	return nil
@@ -267,6 +320,9 @@ func (cfg *Config) InitializeNodeTLSConfigs(
 	if _, err := cfg.GetServerTLSConfig(); err != nil {
 		return nil, err
 	}
+	if _, err := cfg.GetUIServerTLSConfig(); err != nil {
+		return nil, err
+	}
 	if _, err := cfg.GetClientTLSConfig(); err != nil {
 		return nil, err
 	}
@@ -282,6 +338,7 @@ func (cfg *Config) InitializeNodeTLSConfigs(
 // GetClientTLSConfig returns the client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
 // manager for a TLS config using certs for the config.User.
+// This TLSConfig might **NOT** be suitable to talk to the Admin UI, use GetUIClientTLSConfig instead.
 func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if cfg.Insecure {
@@ -290,12 +347,34 @@ func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 
 	tlsCfg, err := cm.GetClientTLSConfig(cfg.User)
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
+	}
+	return tlsCfg, nil
+}
+
+// GetUIClientTLSConfig returns the client TLS config for Admin UI clients, initializing it if needed.
+// If Insecure is true, return a nil config, otherwise ask the certificate
+// manager for a TLS config configured to talk to the Admin UI.
+// This TLSConfig is **NOT** suitable to talk to the GRPC or SQL servers, use GetClientTLSConfig instead.
+func (cfg *Config) GetUIClientTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if cfg.Insecure {
+		return nil, nil
+	}
+
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	tlsCfg, err := cm.GetUIClientTLSConfig()
+	if err != nil {
+		return nil, wrapError(err)
 	}
 	return tlsCfg, nil
 }
@@ -311,12 +390,33 @@ func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 
 	tlsCfg, err := cm.GetServerTLSConfig()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
+	}
+	return tlsCfg, nil
+}
+
+// GetUIServerTLSConfig returns the server TLS config for the Admin UI, initializing it if needed.
+// If Insecure is true, return a nil config, otherwise ask the certificate
+// manager for a server UI TLS config.
+func (cfg *Config) GetUIServerTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if cfg.Insecure {
+		return nil, nil
+	}
+
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	tlsCfg, err := cm.GetUIServerTLSConfig()
+	if err != nil {
+		return nil, wrapError(err)
 	}
 	return tlsCfg, nil
 }
@@ -328,7 +428,7 @@ func (cfg *Config) GetHTTPClient() (http.Client, error) {
 		cfg.httpClient.httpClient.Timeout = 10 * time.Second
 		var transport http.Transport
 		cfg.httpClient.httpClient.Transport = &transport
-		transport.TLSClientConfig, cfg.httpClient.err = cfg.GetClientTLSConfig()
+		transport.TLSClientConfig, cfg.httpClient.err = cfg.GetUIClientTLSConfig()
 	})
 
 	return cfg.httpClient.httpClient, cfg.httpClient.err
@@ -347,6 +447,54 @@ type RaftConfig struct {
 	// RangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
 	RangeLeaseRaftElectionTimeoutMultiplier float64
+
+	// RaftLogTruncationThreshold controls how large a single Range's Raft log
+	// can grow. When a Range's Raft log grows above this size, the Range will
+	// begin performing log truncations.
+	RaftLogTruncationThreshold int64
+
+	// RaftProposalQuota controls the maximum aggregate size of Raft commands
+	// that a leader is allowed to propose concurrently.
+	//
+	// By default, the quota is set to a fraction of the Raft log truncation
+	// threshold. In doing so, we ensure all replicas have sufficiently up to
+	// date logs so that when the log gets truncated, the followers do not need
+	// non-preemptive snapshots. Changing this deserves care. Too low and
+	// everything comes to a grinding halt, too high and we're not really
+	// throttling anything (we'll still generate snapshots).
+	RaftProposalQuota int64
+
+	// RaftMaxUncommittedEntriesSize controls how large the uncommitted tail of
+	// the Raft log can grow. The limit is meant to provide protection against
+	// unbounded Raft log growth when quorum is lost and entries stop being
+	// committed but continue to be proposed.
+	RaftMaxUncommittedEntriesSize uint64
+
+	// RaftMaxSizePerMsg controls the maximum aggregate byte size of Raft log
+	// entries the leader will send to followers in a single MsgApp.
+	RaftMaxSizePerMsg uint64
+
+	// RaftMaxCommittedSizePerReady controls the maximum aggregate byte size of
+	// committed Raft log entries a replica will receive in a single Ready.
+	RaftMaxCommittedSizePerReady uint64
+
+	// RaftMaxInflightMsgs controls how many "inflight" messages Raft will send
+	// to a follower without hearing a response. The total number of Raft log
+	// entries is a combination of this setting and RaftMaxSizePerMsg. The
+	// current default settings provide for up to 1 MB of raft log to be sent
+	// without acknowledgement. With an average entry size of 1 KB that
+	// translates to ~1024 commands that might be executed in the handling of a
+	// single raft.Ready operation.
+	RaftMaxInflightMsgs int
+
+	// Splitting a range which has a replica needing a snapshot results in two
+	// ranges in that state. The delay configured here slows down splits when in
+	// that situation (limiting to those splits not run through the split
+	// queue). The most important target here are the splits performed by
+	// backup/restore.
+	//
+	// -1 to disable.
+	RaftDelaySplitToSuppressSnapshotTicks int
 }
 
 // SetDefaults initializes unset fields.
@@ -359,6 +507,40 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RangeLeaseRaftElectionTimeoutMultiplier == 0 {
 		cfg.RangeLeaseRaftElectionTimeoutMultiplier = defaultRangeLeaseRaftElectionTimeoutMultiplier
+	}
+	if cfg.RaftLogTruncationThreshold == 0 {
+		cfg.RaftLogTruncationThreshold = defaultRaftLogTruncationThreshold
+	}
+	if cfg.RaftProposalQuota == 0 {
+		// By default, set this to a fraction of RaftLogMaxSize. See the comment
+		// on the field for the tradeoffs of setting this higher or lower.
+		cfg.RaftProposalQuota = cfg.RaftLogTruncationThreshold / 4
+	}
+	if cfg.RaftMaxUncommittedEntriesSize == 0 {
+		// By default, set this to twice the RaftProposalQuota. The logic here
+		// is that the quotaPool should be responsible for throttling proposals
+		// in all cases except for unbounded Raft re-proposals because it queues
+		// efficiently instead of dropping proposals on the floor indiscriminately.
+		cfg.RaftMaxUncommittedEntriesSize = uint64(2 * cfg.RaftProposalQuota)
+	}
+	if cfg.RaftMaxSizePerMsg == 0 {
+		cfg.RaftMaxSizePerMsg = uint64(defaultRaftMaxSizePerMsg)
+	}
+	if cfg.RaftMaxCommittedSizePerReady == 0 {
+		cfg.RaftMaxCommittedSizePerReady = uint64(defaultRaftMaxCommittedSizePerReady)
+	}
+	if cfg.RaftMaxInflightMsgs == 0 {
+		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
+	}
+
+	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
+		// The Raft Ticks interval defaults to 200ms, and an election is 15
+		// ticks. Add a generous amount of ticks to make sure even a backed up
+		// Raft snapshot queue is going to make progress when a (not overly
+		// concurrent) amount of splits happens.
+		// The resulting delay configured here is north of 20s by default, which
+		// experimentally has shown to be enough.
+		cfg.RaftDelaySplitToSuppressSnapshotTicks = 3*cfg.RaftElectionTimeoutTicks + 60
 	}
 }
 
@@ -399,6 +581,16 @@ func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal t
 	livenessActive = cfg.RangeLeaseActiveDuration()
 	livenessRenewal = time.Duration(float64(livenessActive) * livenessRenewalFraction)
 	return
+}
+
+// SentinelGossipTTL is time-to-live for the gossip sentinel. The sentinel
+// informs a node whether or not it's connected to the primary gossip network
+// and not just a partition. As such it must expire fairly quickly and be
+// continually re-gossiped as a connected gossip network is necessary to
+// propagate liveness. The replica which is the lease holder of the first range
+// gossips it.
+func (cfg RaftConfig) SentinelGossipTTL() time.Duration {
+	return cfg.RangeLeaseActiveDuration() / 2
 }
 
 // DefaultRetryOptions should be used for retrying most

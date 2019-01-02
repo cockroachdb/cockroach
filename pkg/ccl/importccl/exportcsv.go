@@ -11,25 +11,25 @@ package importccl
 import (
 	"bytes"
 	"context"
-	"encoding/csv"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // exportHeader is the header for EXPORT stmt results.
@@ -46,11 +46,11 @@ const (
 	exportOptionFileName  = "filename"
 )
 
-var exportOptionExpectValues = map[string]bool{
-	exportOptionChunkSize: true,
-	exportOptionDelimiter: true,
-	exportOptionFileName:  true,
-	exportOptionNullAs:    true,
+var exportOptionExpectValues = map[string]sql.KVStringOptValidate{
+	exportOptionChunkSize: sql.KVStringOptRequireValue,
+	exportOptionDelimiter: sql.KVStringOptRequireValue,
+	exportOptionFileName:  sql.KVStringOptRequireValue,
+	exportOptionNullAs:    sql.KVStringOptRequireValue,
 }
 
 const exportChunkSizeDefault = 100000
@@ -83,10 +83,6 @@ func exportPlanHook(
 	sel, err := p.Select(ctx, exportStmt.Query, nil)
 	if err != nil {
 		return nil, nil, nil, err
-	}
-
-	if !p.DistSQLPlanner().CheckPossible(sel) {
-		return nil, nil, nil, errors.Errorf("unsupported EXPORT query -- as an alternative try `cockroach sql --format=csv`")
 	}
 
 	fn := func(ctx context.Context, plans []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -141,7 +137,7 @@ func exportPlanHook(
 			}
 		}
 
-		out := distsqlrun.ProcessorCoreUnion{CSVWriter: &distsqlrun.CSVWriterSpec{
+		out := distsqlpb.ProcessorCoreUnion{CSVWriter: &distsqlpb.CSVWriterSpec{
 			Destination: file,
 			NamePattern: exportFilePatternDefault,
 			Options:     csvOpts,
@@ -171,7 +167,7 @@ func exportPlanHook(
 func newCSVWriterProcessor(
 	flowCtx *distsqlrun.FlowCtx,
 	processorID int32,
-	spec distsqlrun.CSVWriterSpec,
+	spec distsqlpb.CSVWriterSpec,
 	input distsqlrun.RowSource,
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
@@ -182,7 +178,7 @@ func newCSVWriterProcessor(
 		input:       input,
 		output:      output,
 	}
-	if err := c.out.Init(&distsqlrun.PostProcessSpec{}, sql.ExportPlanResultTypes, flowCtx.NewEvalCtx(), output); err != nil {
+	if err := c.out.Init(&distsqlpb.PostProcessSpec{}, sql.ExportPlanResultTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -191,7 +187,7 @@ func newCSVWriterProcessor(
 type csvWriter struct {
 	flowCtx     *distsqlrun.FlowCtx
 	processorID int32
-	spec        distsqlrun.CSVWriterSpec
+	spec        distsqlpb.CSVWriterSpec
 	input       distsqlrun.RowSource
 	out         distsqlrun.ProcOutputHelper
 	output      distsqlrun.RowReceiver
@@ -232,7 +228,7 @@ func (sp *csvWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if sp.spec.Options.NullEncoding != nil {
 			nullsAs = *sp.spec.Options.NullEncoding
 		}
-		f := tree.NewFmtCtxWithBuf(tree.FmtParseDatums)
+		f := tree.NewFmtCtxWithBuf(tree.FmtExport)
 		defer f.Close()
 
 		csvRow := make([]string, len(types))

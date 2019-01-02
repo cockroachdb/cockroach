@@ -1,0 +1,17 @@
+# Func expressions.
+
+eval
+length('hel'||'lo')
+----
+5
+
+eval
+lower('HELLO')
+----
+'hello'
+
+# lint: uppercase function OK
+eval
+UPPER('hello')
+----
+'HELLO'

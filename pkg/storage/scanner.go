@@ -41,6 +41,10 @@ type replicaQueue interface {
 	MaybeAdd(*Replica, hlc.Timestamp)
 	// MaybeRemove removes the replica from the queue if it is present.
 	MaybeRemove(roachpb.RangeID)
+	// Name returns the name of the queue.
+	Name() string
+	// NeedsLease returns whether the queue requires a replica to be leaseholder.
+	NeedsLease() bool
 }
 
 // A replicaSet provides access to a sequence of replicas to consider

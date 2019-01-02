@@ -18,18 +18,18 @@ import (
 	"context"
 	"fmt"
 
-	opentracing "github.com/opentracing/opentracing-go"
-	"golang.org/x/time/rate"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	opentracing "github.com/opentracing/opentracing-go"
+	"golang.org/x/time/rate"
 )
 
 // Limiters is the collection of per-store limits used during cmd evaluation.
@@ -44,7 +44,7 @@ type Limiters struct {
 type EvalContext interface {
 	fmt.Stringer
 	ClusterSettings() *cluster.Settings
-	EvalKnobs() TestingKnobs
+	EvalKnobs() storagebase.BatchEvalTestingKnobs
 
 	// TODO(tschottdorf): available through ClusterSettings().
 	Tracer() opentracing.Tracer
@@ -63,13 +63,25 @@ type EvalContext interface {
 	IsFirstRange() bool
 	GetFirstIndex() (uint64, error)
 	GetTerm(uint64) (uint64, error)
+	GetLeaseAppliedIndex() uint64
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
 
+	// GetMVCCStats returns a snapshot of the MVCC stats for the range.
+	// If called from a command that declares a read/write span on the
+	// entire range, the stats will be consistent with the data that is
+	// visible to the batch. Otherwise, it may return inconsistent
+	// results due to concurrent writes.
 	GetMVCCStats() enginepb.MVCCStats
+
+	// GetSplitQPS returns the queries/s request rate for this range.
+	// NOTE: This should not be used when the load based splitting cluster
+	// setting is disabled.
+	GetSplitQPS() float64
+
 	GetGCThreshold() hlc.Timestamp
 	GetTxnSpanGCThreshold() hlc.Timestamp
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
-	GetLease() (roachpb.Lease, *roachpb.Lease)
+	GetLease() (roachpb.Lease, roachpb.Lease)
 }

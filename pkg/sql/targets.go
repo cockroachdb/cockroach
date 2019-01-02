@@ -109,14 +109,23 @@ func (s *renderNode) isRenderEquivalent(exprStr string, j int) bool {
 func (s *renderNode) addOrReuseRender(
 	col sqlbase.ResultColumn, expr tree.TypedExpr, reuseExistingRender bool,
 ) (colIdx int) {
+	return s.addOrReuseRenderStartingFromIdx(col, expr, reuseExistingRender, 0 /* idx */)
+}
+
+// addOrReuseRenderStartingFromIdx adds the given result column to the select
+// render list and returns its column index. If the expression is already
+// rendered by a render with index not smaller than idx and the reuse flag is true,
+// no new render is added and the index of the existing column is returned instead.
+func (s *renderNode) addOrReuseRenderStartingFromIdx(
+	col sqlbase.ResultColumn, expr tree.TypedExpr, reuseExistingRender bool, idx int,
+) (colIdx int) {
 	exprStr := symbolicExprStr(expr)
-	if reuseExistingRender && len(s.render) > 0 {
-		// Now, try to find an equivalent render. We use the syntax
-		// representation as approximation of equivalence.  At this
-		// point the expressions must have underwent name resolution
-		// already so that comparison occurs after replacing column names
-		// to IndexedVars.
-		for j := range s.render {
+	if reuseExistingRender {
+		for j := idx; j < len(s.render); j++ {
+			// Now, try to find an equivalent render starting from idx. We use
+			// the syntax representation as approximation of equivalence. At this point
+			// the expressions must have undergone name resolution already so that
+			// comparison occurs after replacing column names to IndexedVars.
 			if s.isRenderEquivalent(exprStr, j) && s.render[j].ResolvedType() == col.Typ {
 				return j
 			}
@@ -124,7 +133,6 @@ func (s *renderNode) addOrReuseRender(
 	}
 
 	s.addRenderColumn(expr, exprStr, col)
-
 	return len(s.render) - 1
 }
 
@@ -135,9 +143,19 @@ func (s *renderNode) addOrReuseRender(
 func (s *renderNode) addOrReuseRenders(
 	cols sqlbase.ResultColumns, exprs []tree.TypedExpr, reuseExistingRender bool,
 ) (colIdxs []int) {
+	return s.addOrReuseRendersStartingFromIdx(cols, exprs, reuseExistingRender, 0 /* idx */)
+}
+
+// addOrReuseRendersStartingFromIdx adds the given result columns to the select
+// render list and returns their column indices. If an expression is already
+// rendered by a render with index not smaller than idx and the reuse flag is true,
+// no new render is added and the index of the existing column is returned instead.
+func (s *renderNode) addOrReuseRendersStartingFromIdx(
+	cols sqlbase.ResultColumns, exprs []tree.TypedExpr, reuseExistingRender bool, idx int,
+) (colIdxs []int) {
 	colIdxs = make([]int, len(cols))
 	for i := range cols {
-		colIdxs[i] = s.addOrReuseRender(cols[i], exprs[i], reuseExistingRender)
+		colIdxs[i] = s.addOrReuseRenderStartingFromIdx(cols[i], exprs[i], reuseExistingRender, idx)
 	}
 	return colIdxs
 }

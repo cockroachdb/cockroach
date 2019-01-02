@@ -42,14 +42,10 @@ func (b *Builder) buildShowTrace(
 		panic(fmt.Errorf("SHOW %s not supported", showTrace.TraceType))
 	}
 
-	def := memo.ShowTraceOpDef{
-		Type:    showTrace.TraceType,
-		Compact: showTrace.Compact,
-		ColList: colsToColList(outScope.cols),
-	}
-	for i := range outScope.cols {
-		def.ColList[i] = outScope.cols[i].id
-	}
-	outScope.group = b.factory.ConstructShowTraceForSession(b.factory.InternShowTraceOpDef(&def))
+	outScope.expr = b.factory.ConstructShowTraceForSession(&memo.ShowTracePrivate{
+		TraceType: showTrace.TraceType,
+		Compact:   showTrace.Compact,
+		ColList:   colsToColList(outScope.cols),
+	})
 	return outScope
 }

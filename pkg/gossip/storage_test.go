@@ -22,8 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
@@ -33,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 )
 
 type testStorage struct {
@@ -264,7 +263,7 @@ func TestGossipStorageCleanup(t *testing.T) {
 			}
 			for _, addr := range p.Info().Addresses {
 				if addr.String() == invalidAddr {
-					return errors.Errorf("node %d still needs bootstrap cleanup", i)
+					return errors.Errorf("n%d still needs bootstrap cleanup", i)
 				}
 			}
 		}

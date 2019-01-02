@@ -303,7 +303,7 @@ output row: [9]
 statement ok
 SET tracing = on,kv,results; VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1); SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
@@ -316,7 +316,7 @@ output row: [3 4]
 statement ok
 SET tracing = on,kv,results; SELECT * FROM abc EXCEPT SELECT * FROM abc WHERE b > 'p'; SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----

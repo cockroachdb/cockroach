@@ -16,20 +16,18 @@ package distsqlrun
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
-	opentracing "github.com/opentracing/opentracing-go"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/opentracing/opentracing-go"
 )
 
 const rowChannelBufSize = 16
@@ -39,6 +37,8 @@ type columns []uint32
 // ConsumerStatus is the type returned by RowReceiver.Push(), informing a
 // producer of a consumer's state.
 type ConsumerStatus uint32
+
+//go:generate stringer -type=ConsumerStatus
 
 const (
 	// NeedMoreRows indicates that the consumer is still expecting more rows.
@@ -77,6 +77,10 @@ type RowReceiver interface {
 	//
 	// Implementations of Push() must be thread-safe.
 	Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus
+
+	// Types returns the types of the EncDatumRow that this RowReceiver expects
+	// to be pushed.
+	Types() []sqlbase.ColumnType
 
 	// ProducerDone is called when the producer has pushed all the rows and
 	// metadata; it causes the RowReceiver to process all rows and clean up.
@@ -253,9 +257,10 @@ func sendTraceData(ctx context.Context, dst RowReceiver) {
 // a node, and so it's possible for multiple processors to send the same
 // TxnCoordMeta. The root TxnCoordSender doesn't care if it receives the same
 // thing multiple times.
-func getTxnCoordMeta(txn *client.Txn) *roachpb.TxnCoordMeta {
+func getTxnCoordMeta(ctx context.Context, txn *client.Txn) *roachpb.TxnCoordMeta {
 	if txn.Type() == client.LeafTxn {
-		txnMeta := txn.GetStrippedTxnCoordMeta()
+		txnMeta := txn.GetTxnCoordMeta(ctx)
+		txnMeta.StripLeafToRoot()
 		if txnMeta.Txn.ID != uuid.Nil {
 			return &txnMeta
 		}
@@ -371,7 +376,7 @@ type ProducerMetadata struct {
 	// RowNum corresponds to a row produced by a "source" processor that takes no
 	// inputs. It is used in tests to verify that all metadata is forwarded
 	// exactly once to the receiver on the gateway node.
-	RowNum *RemoteProducerMetadata_RowNum
+	RowNum *distsqlpb.RemoteProducerMetadata_RowNum
 }
 
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to
@@ -481,6 +486,11 @@ func (rc *RowChannel) ConsumerClosed() {
 		default:
 		}
 	}
+}
+
+// Types is part of the RowReceiver interface.
+func (rc *RowChannel) Types() []sqlbase.ColumnType {
+	return rc.types
 }
 
 // BufferedRecord represents a row or metadata record that has been buffered
@@ -593,6 +603,11 @@ func (rb *RowBuffer) ProducerDone() {
 	rb.ProducerClosed = true
 }
 
+// Types is part of the RowReceiver interface.
+func (rb *RowBuffer) Types() []sqlbase.ColumnType {
+	return rb.types
+}
+
 // OutputTypes is part of the RowSource interface.
 func (rb *RowBuffer) OutputTypes() []sqlbase.ColumnType {
 	if rb.types == nil {
@@ -656,47 +671,4 @@ func (r *copyingRowReceiver) Push(row sqlbase.EncDatumRow, meta *ProducerMetadat
 		row = r.alloc.CopyRow(row)
 	}
 	return r.RowReceiver.Push(row, meta)
-}
-
-// String implements fmt.Stringer.
-func (e *Error) String() string {
-	if err := e.ErrorDetail(); err != nil {
-		return err.Error()
-	}
-	return "<nil>"
-}
-
-// NewError creates an Error from an error, to be sent on the wire. It will
-// recognize certain errors and marshall them accordingly, and everything
-// unrecognized is turned into a PGError with code "internal".
-func NewError(err error) *Error {
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		return &Error{Detail: &Error_PGError{PGError: pgErr}}
-	} else if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
-		return &Error{
-			Detail: &Error_RetryableTxnError{
-				RetryableTxnError: retryErr,
-			}}
-	} else {
-		// Anything unrecognized is an "internal error".
-		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.NewError(
-					pgerror.CodeInternalError, err.Error())}}
-	}
-}
-
-// ErrorDetail returns the payload as a Go error.
-func (e *Error) ErrorDetail() error {
-	if e == nil {
-		return nil
-	}
-	switch t := e.Detail.(type) {
-	case *Error_PGError:
-		return t.PGError
-	case *Error_RetryableTxnError:
-		return t.RetryableTxnError
-	default:
-		panic(fmt.Sprintf("bad error detail: %+v", t))
-	}
 }

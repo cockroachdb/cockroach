@@ -15,26 +15,33 @@
 package testutils
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/pmezard/go-difflib/difflib"
+	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/pmezard/go-difflib/difflib"
 )
+
+// RuleSet efficiently stores an unordered set of RuleNames.
+type RuleSet = util.FastIntSet
 
 // OptTester is a helper for testing the various optimizer components. It
 // contains the boiler-plate code for the following useful tasks:
@@ -49,11 +56,12 @@ import (
 type OptTester struct {
 	Flags OptTesterFlags
 
-	catalog opt.Catalog
-	sql     string
-	ctx     context.Context
-	semaCtx tree.SemaContext
-	evalCtx tree.EvalContext
+	catalog   cat.Catalog
+	sql       string
+	ctx       context.Context
+	semaCtx   tree.SemaContext
+	evalCtx   tree.EvalContext
+	seenRules RuleSet
 
 	builder strings.Builder
 }
@@ -61,12 +69,12 @@ type OptTester struct {
 // OptTesterFlags are control knobs for tests. Note that specific testcases can
 // override these defaults.
 type OptTesterFlags struct {
-	// Format controls the output detail of build / opt/ optsteps command
+	// ExprFormat controls the output detail of build / opt/ optsteps command
 	// directives.
-	ExprFormat opt.ExprFmtFlags
+	ExprFormat memo.ExprFmtFlags
 
 	// MemoFormat controls the output detail of memo command directives.
-	MemoFormat memo.FmtFlags
+	MemoFormat xform.FmtFlags
 
 	// AllowUnsupportedExpr if set: when building a scalar, the optbuilder takes
 	// any TypedExpr node that it doesn't recognize and wraps that expression in
@@ -84,21 +92,51 @@ type OptTesterFlags struct {
 	// output to stdout when commands run. Only certain commands support this.
 	Verbose bool
 
+	// DisableRules is a set of rules that are not allowed to run.
+	DisableRules RuleSet
+
 	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
 	// of a specific rule.
-	ExploreTraceRule string
+	ExploreTraceRule opt.RuleName
+
+	// ExpectedRules is a set of rules which must be exercised for the test to
+	// pass.
+	ExpectedRules RuleSet
+
+	// UnexpectedRules is a set of rules which must not be exercised for the test
+	// to pass.
+	UnexpectedRules RuleSet
+
+	// ColStats is a list of ColSets for which a column statistic is requested.
+	ColStats []opt.ColSet
+
+	// PerturbCost indicates how much to randomly perturb the cost. It is used
+	// to generate alternative plans for testing. For example, if PerturbCost is
+	// 0.5, and the estimated cost of an expression is c, the cost returned by
+	// the coster will be in the range [c - 0.5 * c, c + 0.5 * c).
+	PerturbCost float64
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
 // statement. Metadata used by the SQL query is accessed via the catalog.
-func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
-	return &OptTester{
+func NewOptTester(catalog cat.Catalog, sql string) *OptTester {
+	ot := &OptTester{
 		catalog: catalog,
 		sql:     sql,
 		ctx:     context.Background(),
 		semaCtx: tree.MakeSemaContext(false /* privileged */),
 		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+
+	// Set any OptTester-wide session flags here.
+
+	// Enable CBO planning for UPDATE statements, for all tests.
+	ot.evalCtx.SessionData.OptimizerUpdates = true
+
+	// Enable zigzag joins for all opt tests. Execbuilder tests exercise
+	// cases where this flag is false.
+	ot.evalCtx.SessionData.ZigzagJoinEnabled = true
+	return ot
 }
 
 // RunCommand implements commands that are used by most tests:
@@ -113,6 +151,12 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //
 //    Builds an expression tree from a SQL query and outputs it without any
 //    optimizations applied to it.
+//
+//  - norm [flags]
+//
+//    Builds an expression tree from a SQL query, applies normalization
+//    optimizations, and outputs it without any exploration optimizations
+//    applied to it.
 //
 //  - opt [flags]
 //
@@ -134,23 +178,42 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //    Builds an expression tree from a SQL query, fully optimizes it using the
 //    memo, and then outputs the memo containing the forest of trees.
 //
+//  - rulestats [flags]
+//
+//    Performs the optimization and outputs statistics about applied rules.
+//
+//
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
 //    optsteps commands. Possible values: show-all, hide-all, or any combination
-//    of hide-cost, hide-stats, hide-constraints, hide-scalars. Example:
-//      build format={hide-cost,hide-stats}
-//
-//  - raw-memo: show the raw memo groups, in the order they were originally
-//	  added, including any "orphaned" groups.
+//    of hide-cost, hide-stats, hide-constraints, hide-scalars, hide-qual.
+//    For example:
+//      build format=(hide-cost,hide-stats)
 //
 //  - allow-unsupported: wrap unsupported expressions in UnsupportedOp.
 //
 //  - fully-qualify-names: fully qualify all column names in the test output.
 //
+//  - expect: fail the test if the rules specified by name do not match.
+//
+//  - expect-not: fail the test if the rules specified by name match.
+//
+//  - disable: disables optimizer rules by name. Examples:
+//      opt disable=ConstrainScan
+//      norm disable=(NegateOr,NegateAnd)
+//
 //  - rule: used with exploretrace; the value is the name of a rule. When
 //    specified, the exploretrace output is filtered to only show expression
 //    changes due to that specific rule.
+//
+//  - colstat: requests the calculation of a column statistic on the top-level
+//    expression. The value is a column or a list of columns. The flag can
+//    be used multiple times to request different statistics.
+//
+//  - perturb-cost: used to randomly perturb the estimated cost of each
+//    expression in the query tree for the purpose of creating alternate query
+//    plans in the optimizer.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -161,21 +224,22 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	}
 
 	ot.Flags.Verbose = testing.Verbose()
+	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 
 	switch d.Cmd {
 	case "exec-ddl":
 		testCatalog, ok := ot.catalog.(*testcat.Catalog)
 		if !ok {
-			tb.Fatal("exec-ddl can only be used with TestCatalog")
+			d.Fatalf(tb, "exec-ddl can only be used with TestCatalog")
 		}
 		s, err := testCatalog.ExecuteDDL(d.Input)
 		if err != nil {
-			tb.Fatal(err)
+			d.Fatalf(tb, "%v", err)
 		}
 		return s
 
 	case "build":
-		ev, err := ot.OptBuild()
+		e, err := ot.OptBuild()
 		if err != nil {
 			text := strings.TrimSpace(err.Error())
 			if pgerr, ok := err.(*pgerror.Error); ok {
@@ -184,16 +248,35 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		fillInLazyProps(ev)
-		return ev.FormatString(ot.Flags.ExprFormat)
+		if err := ot.postProcess(e); err != nil {
+			tb.Fatal(err)
+		}
+		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+
+	case "norm":
+		e, err := ot.OptNorm()
+		if err != nil {
+			text := strings.TrimSpace(err.Error())
+			if pgerr, ok := err.(*pgerror.Error); ok {
+				// Output Postgres error code if it's available.
+				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
+			}
+			return fmt.Sprintf("error: %s\n", text)
+		}
+		if err := ot.postProcess(e); err != nil {
+			tb.Fatal(err)
+		}
+		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
 	case "opt":
-		ev, err := ot.Optimize()
+		e, err := ot.Optimize()
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
-		fillInLazyProps(ev)
-		return ev.FormatString(ot.Flags.ExprFormat)
+		if err := ot.postProcess(e); err != nil {
+			tb.Fatal(err)
+		}
+		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
 	case "optsteps":
 		result, err := ot.OptSteps()
@@ -204,6 +287,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	case "exploretrace":
 		result, err := ot.ExploreTrace()
+		if err != nil {
+			d.Fatalf(tb, "%v", err)
+		}
+		return result
+
+	case "rulestats":
+		result, err := ot.RuleStats()
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
@@ -222,15 +312,70 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	}
 }
 
+func formatRuleSet(r RuleSet) string {
+	var buf bytes.Buffer
+	comma := false
+	for i, ok := r.Next(0); ok; i, ok = r.Next(i + 1) {
+		if comma {
+			buf.WriteString(", ")
+		}
+		comma = true
+		fmt.Fprintf(&buf, "%v", opt.RuleName(i))
+	}
+	return buf.String()
+}
+
+func (ot *OptTester) postProcess(e opt.Expr) error {
+	fillInLazyProps(e)
+
+	if rel, ok := e.(memo.RelExpr); ok {
+		for _, cols := range ot.Flags.ColStats {
+			memo.RequestColStat(&ot.evalCtx, rel, cols)
+		}
+	}
+
+	if !ot.Flags.ExpectedRules.SubsetOf(ot.seenRules) {
+		unseen := ot.Flags.ExpectedRules.Difference(ot.seenRules)
+		return fmt.Errorf("expected to see %s, but was not triggered. Did see %s",
+			formatRuleSet(unseen), formatRuleSet(ot.seenRules))
+	}
+
+	if ot.Flags.UnexpectedRules.Intersects(ot.seenRules) {
+		seen := ot.Flags.UnexpectedRules.Intersection(ot.seenRules)
+		return fmt.Errorf("expected not to see %s, but it was triggered", formatRuleSet(seen))
+	}
+
+	return nil
+}
+
 // Fills in lazily-derived properties (for display).
-func fillInLazyProps(ev memo.ExprView) {
-	if !ev.IsScalar() {
+func fillInLazyProps(e opt.Expr) {
+	if rel, ok := e.(memo.RelExpr); ok {
+		// Derive columns that are candidates for pruning.
+		norm.DerivePruneCols(rel)
+
+		// Derive columns that are candidates for null rejection.
+		norm.DeriveRejectNullCols(rel)
+
 		// Make sure the interesting orderings are calculated.
-		xform.GetInterestingOrderings(ev)
+		xform.DeriveInterestingOrderings(rel)
 	}
-	for i := 0; i < ev.ChildCount(); i++ {
-		fillInLazyProps(ev.Child(i))
+
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		fillInLazyProps(e.Child(i))
 	}
+}
+
+func ruleNamesToRuleSet(args []string) (RuleSet, error) {
+	var result RuleSet
+	for _, r := range args {
+		rn, err := ruleFromString(r)
+		if err != nil {
+			return result, err
+		}
+		result.Add(int(rn))
+	}
+	return result, nil
 }
 
 // Set parses an argument that refers to a flag.
@@ -243,14 +388,15 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 			return fmt.Errorf("format flag requires value(s)")
 		}
 		for _, v := range arg.Vals {
-			m := map[string]opt.ExprFmtFlags{
-				"show-all":         opt.ExprFmtShowAll,
-				"hide-all":         opt.ExprFmtHideAll,
-				"hide-stats":       opt.ExprFmtHideStats,
-				"hide-cost":        opt.ExprFmtHideCost,
-				"hide-constraints": opt.ExprFmtHideConstraints,
-				"hide-ruleprops":   opt.ExprFmtHideRuleProps,
-				"hide-scalars":     opt.ExprFmtHideScalars,
+			m := map[string]memo.ExprFmtFlags{
+				"show-all":         memo.ExprFmtShowAll,
+				"hide-all":         memo.ExprFmtHideAll,
+				"hide-stats":       memo.ExprFmtHideStats,
+				"hide-cost":        memo.ExprFmtHideCost,
+				"hide-constraints": memo.ExprFmtHideConstraints,
+				"hide-ruleprops":   memo.ExprFmtHideRuleProps,
+				"hide-scalars":     memo.ExprFmtHideScalars,
+				"hide-qual":        memo.ExprFmtHideQualifications,
 			}
 			if val, ok := m[v]; ok {
 				f.ExprFormat |= val
@@ -259,22 +405,71 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 			}
 		}
 
-	case "raw-memo":
-		f.MemoFormat = memo.FmtRaw
-
 	case "allow-unsupported":
 		f.AllowUnsupportedExpr = true
 
 	case "fully-qualify-names":
 		f.FullyQualifyNames = true
 		// Hiding qualifications defeats the purpose.
-		f.ExprFormat &= ^opt.ExprFmtHideQualifications
+		f.ExprFormat &= ^memo.ExprFmtHideQualifications
+
+	case "disable":
+		if len(arg.Vals) == 0 {
+			return fmt.Errorf("disable requires arguments")
+		}
+		for _, s := range arg.Vals {
+			r, err := ruleFromString(s)
+			if err != nil {
+				return err
+			}
+			f.DisableRules.Add(int(r))
+		}
 
 	case "rule":
 		if len(arg.Vals) != 1 {
 			return fmt.Errorf("rule requires one argument")
 		}
-		f.ExploreTraceRule = arg.Vals[0]
+		var err error
+		f.ExploreTraceRule, err = ruleFromString(arg.Vals[0])
+		if err != nil {
+			return err
+		}
+
+	case "expect":
+		var err error
+		if f.ExpectedRules, err = ruleNamesToRuleSet(arg.Vals); err != nil {
+			return err
+		}
+
+	case "expect-not":
+		var err error
+		if f.UnexpectedRules, err = ruleNamesToRuleSet(arg.Vals); err != nil {
+			return err
+		}
+
+	case "colstat":
+		if len(arg.Vals) == 0 {
+			return fmt.Errorf("colstat requires arguments")
+		}
+		var cols opt.ColSet
+		for _, v := range arg.Vals {
+			col, err := strconv.Atoi(v)
+			if err != nil {
+				return fmt.Errorf("invalid colstat column %v", v)
+			}
+			cols.Add(col)
+		}
+		f.ColStats = append(f.ColStats, cols)
+
+	case "perturb-cost":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("perturb-cost requires one argument")
+		}
+		var err error
+		f.PerturbCost, err = strconv.ParseFloat(arg.Vals[0], 64)
+		if err != nil {
+			return err
+		}
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -285,27 +480,151 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 // OptBuild constructs an opt expression tree for the SQL query, with no
 // transformations applied to it. The untouched output of the optbuilder is the
 // final expression tree.
-func (ot *OptTester) OptBuild() (memo.ExprView, error) {
-	return ot.optimizeExpr(false /* allowOptimizations */)
+func (ot *OptTester) OptBuild() (opt.Expr, error) {
+	o := ot.makeOptimizer()
+	o.DisableOptimizations()
+	return ot.optimizeExpr(o)
+}
+
+// OptNorm constructs an opt expression tree for the SQL query, with all
+// normalization transformations applied to it. The normalized output of the
+// optbuilder is the final expression tree.
+func (ot *OptTester) OptNorm() (opt.Expr, error) {
+	o := ot.makeOptimizer()
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		if !ruleName.IsNormalize() {
+			return false
+		}
+		if ot.Flags.DisableRules.Contains(int(ruleName)) {
+			return false
+		}
+		ot.seenRules.Add(int(ruleName))
+		return true
+	})
+	return ot.optimizeExpr(o)
 }
 
 // Optimize constructs an opt expression tree for the SQL query, with all
 // transformations applied to it. The result is the memo expression tree with
 // the lowest estimated cost.
-func (ot *OptTester) Optimize() (memo.ExprView, error) {
-	return ot.optimizeExpr(true /* allowOptimizations */)
+func (ot *OptTester) Optimize() (opt.Expr, error) {
+	o := ot.makeOptimizer()
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		if ot.Flags.DisableRules.Contains(int(ruleName)) {
+			return false
+		}
+		ot.seenRules.Add(int(ruleName))
+		return true
+	})
+	return ot.optimizeExpr(o)
 }
 
 // Memo returns a string that shows the memo data structure that is constructed
 // by the optimizer.
 func (ot *OptTester) Memo() (string, error) {
-	o := xform.NewOptimizer(&ot.evalCtx)
-	root, required, err := ot.buildExpr(o.Factory())
-	if err != nil {
+	var o xform.Optimizer
+	o.Init(&ot.evalCtx)
+	if _, err := ot.optimizeExpr(&o); err != nil {
 		return "", err
 	}
-	o.Optimize(root, required)
-	return o.Memo().FormatString(ot.Flags.MemoFormat), nil
+	return o.FormatMemo(ot.Flags.MemoFormat), nil
+}
+
+// RuleStats performs the optimization and returns statistics about how many
+// rules were applied.
+func (ot *OptTester) RuleStats() (string, error) {
+	type ruleStats struct {
+		rule       opt.RuleName
+		numApplied int
+		numAdded   int
+	}
+	stats := make([]ruleStats, opt.NumRuleNames)
+	for i := range stats {
+		stats[i].rule = opt.RuleName(i)
+	}
+
+	o := ot.makeOptimizer()
+	o.NotifyOnAppliedRule(
+		func(ruleName opt.RuleName, source, target opt.Expr) {
+			stats[ruleName].numApplied++
+			if target != nil {
+				stats[ruleName].numAdded++
+				if rel, ok := target.(memo.RelExpr); ok {
+					for {
+						rel = rel.NextExpr()
+						if rel == nil {
+							break
+						}
+						stats[ruleName].numAdded++
+					}
+				}
+			}
+		},
+	)
+	if _, err := ot.optimizeExpr(o); err != nil {
+		return "", err
+	}
+
+	// Split the rules.
+	var norm, explore []ruleStats
+	var allNorm, allExplore ruleStats
+	for i := range stats {
+		if stats[i].numApplied > 0 {
+			if stats[i].rule.IsNormalize() {
+				allNorm.numApplied += stats[i].numApplied
+				norm = append(norm, stats[i])
+			} else {
+				allExplore.numApplied += stats[i].numApplied
+				allExplore.numAdded += stats[i].numAdded
+				explore = append(explore, stats[i])
+			}
+		}
+	}
+	// Sort with most applied rules first.
+	sort.SliceStable(norm, func(i, j int) bool {
+		return norm[i].numApplied > norm[j].numApplied
+	})
+	sort.SliceStable(explore, func(i, j int) bool {
+		return explore[i].numApplied > explore[j].numApplied
+	})
+
+	// Only show the top 5 rules.
+	const topK = 5
+	if len(norm) > topK {
+		norm = norm[:topK]
+	}
+	if len(explore) > topK {
+		explore = explore[:topK]
+	}
+
+	// Ready to report.
+	var res strings.Builder
+	fmt.Fprintf(&res, "Normalization rules applied %d times.\n", allNorm.numApplied)
+	if len(norm) > 0 {
+		fmt.Fprintf(&res, "Top normalization rules:\n")
+		tw := tabwriter.NewWriter(&res, 1 /* minwidth */, 1 /* tabwidth */, 1 /* padding */, ' ', 0)
+		for _, s := range norm {
+			fmt.Fprintf(tw, "  %s\tapplied\t%d\ttimes.\n", s.rule, s.numApplied)
+		}
+		_ = tw.Flush()
+	}
+
+	fmt.Fprintf(
+		&res, "Exploration rules applied %d times, added %d expressions.\n",
+		allExplore.numApplied, allExplore.numAdded,
+	)
+
+	if len(explore) > 0 {
+		fmt.Fprintf(&res, "Top exploration rules:\n")
+		tw := tabwriter.NewWriter(&res, 1 /* minwidth */, 1 /* tabwidth */, 1 /* padding */, ' ', 0)
+		for _, s := range explore {
+			fmt.Fprintf(
+				tw, "  %s\tapplied\t%d\ttimes, added\t%d\texpressions.\n", s.rule, s.numApplied, s.numAdded,
+			)
+		}
+		_ = tw.Flush()
+	}
+	return res.String(), nil
 }
 
 // OptSteps steps through the transformations performed by the optimizer on the
@@ -339,17 +658,17 @@ func (ot *OptTester) OptSteps() (string, error) {
 
 	os := newOptSteps(ot)
 	for {
-		err := os.next()
+		err := os.Next()
 		if err != nil {
 			return "", err
 		}
 
-		next = os.exprView().FormatString(ot.Flags.ExprFormat)
+		next = memo.FormatExpr(os.Root(), ot.Flags.ExprFormat)
 
 		// This call comes after setting "next", because we want to output the
 		// final expression, even though there were no diffs from the previous
 		// iteration.
-		if os.done() {
+		if os.Done() {
 			break
 		}
 
@@ -359,7 +678,7 @@ func (ot *OptTester) OptSteps() (string, error) {
 			prevBest = next
 		} else if next == prev || next == prevBest {
 			ot.optStepsDisplay(next, next, os)
-		} else if os.isBetter() {
+		} else if os.IsBetter() {
 			// New expression is better than the previous expression. Diff
 			// it against the previous *best* expression (might not be the
 			// previous expression).
@@ -384,10 +703,14 @@ func (ot *OptTester) OptSteps() (string, error) {
 func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) {
 	// bestHeader is used when the expression is an improvement over the previous
 	// expression.
-	bestHeader := func(ev memo.ExprView, format string, args ...interface{}) {
+	bestHeader := func(e opt.Expr, format string, args ...interface{}) {
 		ot.separator("=")
 		ot.output(format, args...)
-		ot.output("  Cost: %.2f\n", ev.Cost())
+		if rel, ok := e.(memo.RelExpr); ok {
+			ot.output("  Cost: %.2f\n", rel.Cost())
+		} else {
+			ot.output("\n")
+		}
 		ot.separator("=")
 	}
 
@@ -403,18 +726,18 @@ func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) 
 		if ot.Flags.Verbose {
 			fmt.Print("------ optsteps verbose output starts ------\n")
 		}
-		bestHeader(os.exprView(), "Initial expression\n")
+		bestHeader(os.Root(), "Initial expression\n")
 		ot.indent(after)
 		return
 	}
 
 	if before == after {
-		altHeader("%s (no changes)\n", os.lastRuleName())
+		altHeader("%s (no changes)\n", os.LastRuleName())
 		return
 	}
 
 	if after == "" {
-		bestHeader(os.exprView(), "Final best expression\n")
+		bestHeader(os.Root(), "Final best expression\n")
 		ot.indent(before)
 
 		if ot.Flags.Verbose {
@@ -424,13 +747,13 @@ func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) 
 	}
 
 	var diff difflib.UnifiedDiff
-	if os.isBetter() {
+	if os.IsBetter() {
 		// New expression is better than the previous expression. Diff
 		// it against the previous *best* expression (might not be the
 		// previous expression).
-		bestHeader(os.exprView(), "%s\n", os.lastRuleName())
+		bestHeader(os.Root(), "%s\n", os.LastRuleName())
 	} else {
-		altHeader("%s (higher cost)\n", os.lastRuleName())
+		altHeader("%s (higher cost)\n", os.LastRuleName())
 	}
 
 	diff = difflib.UnifiedDiff{
@@ -461,7 +784,8 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 			break
 		}
 
-		if ot.Flags.ExploreTraceRule != "" && et.LastRuleName().String() != ot.Flags.ExploreTraceRule {
+		if ot.Flags.ExploreTraceRule != opt.InvalidRuleName &&
+			et.LastRuleName() != ot.Flags.ExploreTraceRule {
 			continue
 		}
 
@@ -472,25 +796,23 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 		ot.output("%s\n", et.LastRuleName())
 		ot.separator("=")
 		ot.output("Source expression:\n")
-		ot.indent(et.SrcExpr().FormatString(ot.Flags.ExprFormat))
-		newExprs := et.NewExprs()
-		if len(newExprs) == 0 {
+		ot.indent(memo.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat))
+		newNodes := et.NewExprs()
+		if len(newNodes) == 0 {
 			ot.output("\nNo new expressions.\n")
 		}
-		for i := range newExprs {
-			ot.output("\nNew expression %d of %d:\n", i+1, len(newExprs))
-			ot.indent(newExprs[i].FormatString(ot.Flags.ExprFormat))
+		for i := range newNodes {
+			ot.output("\nNew expression %d of %d:\n", i+1, len(newNodes))
+			ot.indent(memo.FormatExpr(newNodes[i], ot.Flags.ExprFormat))
 		}
 	}
 	return ot.builder.String(), nil
 }
 
-func (ot *OptTester) buildExpr(
-	factory *norm.Factory,
-) (root memo.GroupID, required *props.Physical, _ error) {
+func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	stmt, err := parser.ParseOne(ot.sql)
 	if err != nil {
-		return 0, nil, err
+		return err
 	}
 
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt)
@@ -501,16 +823,22 @@ func (ot *OptTester) buildExpr(
 	return b.Build()
 }
 
-func (ot *OptTester) optimizeExpr(allowOptimizations bool) (memo.ExprView, error) {
-	o := xform.NewOptimizer(&ot.evalCtx)
-	if !allowOptimizations {
-		o.DisableOptimizations()
-	}
-	root, required, err := ot.buildExpr(o.Factory())
+func (ot *OptTester) makeOptimizer() *xform.Optimizer {
+	var o xform.Optimizer
+	o.Init(&ot.evalCtx)
+	return &o
+}
+
+func (ot *OptTester) optimizeExpr(o *xform.Optimizer) (opt.Expr, error) {
+	err := ot.buildExpr(o.Factory())
 	if err != nil {
-		return memo.ExprView{}, err
+		return nil, err
 	}
-	return o.Optimize(root, required), nil
+	root := o.Optimize()
+	if ot.Flags.PerturbCost != 0 {
+		o.RecomputeCost()
+	}
+	return root, nil
 }
 
 func (ot *OptTester) output(format string, args ...interface{}) {
@@ -530,4 +858,16 @@ func (ot *OptTester) indent(str string) {
 	for _, line := range lines {
 		ot.output("  %s\n", line)
 	}
+}
+
+// ruleFromString returns the rule that matches the given string,
+// or InvalidRuleName if there is no such rule.
+func ruleFromString(str string) (opt.RuleName, error) {
+	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
+		if i.String() == str {
+			return i, nil
+		}
+	}
+
+	return opt.InvalidRuleName, fmt.Errorf("rule '%s' does not exist", str)
 }

@@ -17,15 +17,16 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // valuesProcessor is a processor that has no inputs and generates "pre-canned"
 // rows.
 type valuesProcessor struct {
-	processorBase
+	ProcessorBase
 
-	columns []DatumInfo
+	columns []distsqlpb.DatumInfo
 	data    [][]byte
 	// numRows is only guaranteed to be set if there are zero columns (because of
 	// backward compatibility). If it set and there are columns, it matches the
@@ -44,8 +45,8 @@ const valuesProcName = "values"
 func newValuesProcessor(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *ValuesCoreSpec,
-	post *PostProcessSpec,
+	spec *distsqlpb.ValuesCoreSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*valuesProcessor, error) {
 	v := &valuesProcessor{
@@ -57,8 +58,8 @@ func newValuesProcessor(
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}
-	if err := v.init(
-		v, post, types, flowCtx, processorID, output, nil /* memMonitor */, procStateOpts{},
+	if err := v.Init(
+		v, post, types, flowCtx, processorID, output, nil /* memMonitor */, ProcStateOpts{},
 	); err != nil {
 		return nil, err
 	}
@@ -67,16 +68,16 @@ func newValuesProcessor(
 
 // Start is part of the RowSource interface.
 func (v *valuesProcessor) Start(ctx context.Context) context.Context {
-	ctx = v.startInternal(ctx, valuesProcName)
+	ctx = v.StartInternal(ctx, valuesProcName)
 
-	// Add a bogus header to apease the StreamDecoder, which wants to receive a
+	// Add a bogus header to appease the StreamDecoder, which wants to receive a
 	// header before any data.
-	m := &ProducerMessage{
+	m := &distsqlpb.ProducerMessage{
 		Typing: v.columns,
-		Header: &ProducerHeader{},
+		Header: &distsqlpb.ProducerHeader{},
 	}
 	if err := v.sd.AddMessage(m); err != nil {
-		v.moveToDraining(err)
+		v.MoveToDraining(err)
 		return ctx
 	}
 
@@ -86,10 +87,10 @@ func (v *valuesProcessor) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for v.state == stateRunning {
+	for v.State == StateRunning {
 		row, meta, err := v.sd.GetRow(v.rowBuf)
 		if err != nil {
-			v.moveToDraining(err)
+			v.MoveToDraining(err)
 			break
 		}
 
@@ -99,44 +100,39 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		if row == nil {
 			// Push a chunk of data to the stream decoder.
-			m := &ProducerMessage{}
+			m := &distsqlpb.ProducerMessage{}
 			if len(v.columns) == 0 {
 				if v.numRows == 0 {
-					v.moveToDraining(nil /* err */)
+					v.MoveToDraining(nil /* err */)
 					break
 				}
 				m.Data.NumEmptyRows = int32(v.numRows)
 				v.numRows = 0
 			} else {
 				if len(v.data) == 0 {
-					v.moveToDraining(nil /* err */)
+					v.MoveToDraining(nil /* err */)
 					break
 				}
 				m.Data.RawBytes = v.data[0]
 				v.data = v.data[1:]
 			}
 			if err := v.sd.AddMessage(m); err != nil {
-				v.moveToDraining(err)
+				v.MoveToDraining(err)
 				break
 			}
 			continue
 		}
 
-		if outRow := v.processRowHelper(row); outRow != nil {
+		if outRow := v.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
-	return nil, v.drainHelper()
+	return nil, v.DrainHelper()
 
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (v *valuesProcessor) ConsumerDone() {
-	v.moveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (v *valuesProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	v.internalClose()
+	v.InternalClose()
 }

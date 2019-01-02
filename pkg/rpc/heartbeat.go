@@ -19,24 +19,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
-
-var _ security.RequestWithUser = &PingRequest{}
-
-// GetUser implements security.RequestWithUser.
-// Heartbeat messages are always sent by the node user.
-func (*PingRequest) GetUser() string {
-	return security.NodeUser
-}
 
 func (r RemoteOffset) measuredAt() time.Time {
 	return timeutil.Unix(0, r.MeasuredAt)

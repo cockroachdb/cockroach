@@ -485,8 +485,8 @@ The final physical plan for a three-node cluster looks something like
 First the union of the spans from the two `scanNode`s (by invoking
 [`MergeSpans`](https://github.com/cockroachdb/cockroach/blob/master/pkg/roachpb/merge_spans.go#L42))
 are passed into
-[`partitionSpans`](https://github.com/cockroachdb/cockroach/blob/62b7495302a8e06b4be3780e349d10d31e378bd7/pkg/sql/distsql_physical_planner.go#L488).
-This will return a slice of `spanPartitions` of length `n`, which corresponds
+[`PartitionSpans`](https://github.com/cockroachdb/cockroach/blob/62b7495302a8e06b4be3780e349d10d31e378bd7/pkg/sql/distsql_physical_planner.go#L488).
+This will return a slice of `SpanPartition`s of length `n`, which corresponds
 to the number of data nodes.  We will eventually spawn `n`
 `InterleaveReaderJoiner`s, one for each node (`n = 3` in the diagram above).
 Side note: any scan over an interleaved index will always [default to
@@ -508,7 +508,7 @@ To do this, we need to figure out the cumulative. That is for a given `child` ke
 where the number of segments (`/.../`) for `<parent-interleave-prefix>` (i.e.
 number of columns in the prefix) is `shared_prefix_len` in the child table's
 `InterleaveDescriptor`.
-For example, if we wanted to fix this span (generated from `partitionSpans`)
+For example, if we wanted to fix this span (generated from `PartitionSpans`)
 (`#` is the `<interleave sentinel>`)
 ```
 StartKey: /parent/1/2/#/child/2
@@ -759,7 +759,7 @@ for the parent table is ordered, two 2-pass approaches using a merge-join
 pattern e-merges here:
 
   TODO(richardwu): From my understanding, if one does not know the exact
-  `/pk1/pk2` start and end keys (i.e. one can't tell RowFetcher/kvFetcher to scan
+  `/pk1/pk2` start and end keys (i.e. one can't tell RowFetcher/kvBatchFetcher to scan
   the first, second, etc. /pk1/pk2/ range), then one would have to scan the
   entire hierarchy. The bases for the following approaches revolve around the
   fact that we can't do separate scans for each unique `(pk1, pk2)` prefix.

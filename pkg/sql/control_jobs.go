@@ -17,7 +17,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -81,8 +81,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 
 		jobID, ok := tree.AsDInt(jobIDDatum)
 		if !ok {
-			return pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: %q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
+			return pgerror.NewAssertionErrorf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
 		switch n.desiredStatus {
@@ -93,8 +92,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		case jobs.StatusCanceled:
 			err = reg.Cancel(params.ctx, params.p.txn, int64(jobID))
 		default:
-			err = pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: unhandled status %v", n.desiredStatus)
+			err = pgerror.NewAssertionErrorf("unhandled status %v", n.desiredStatus)
 		}
 		if err != nil {
 			return err

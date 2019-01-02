@@ -1,0 +1,3914 @@
+diff --git a/docs/generated/settings/settings.html b/docs/generated/settings/settings.html
+index 90ebcf30ab1..46f33476c42 100644
+--- a/docs/generated/settings/settings.html
++++ b/docs/generated/settings/settings.html
+@@ -37,6 +37,8 @@
+ <tr><td><code>rocksdb.min_wal_sync_interval</code></td><td>duration</td><td><code>0s</code></td><td>minimum duration between syncs of the RocksDB WAL</td></tr>
+ <tr><td><code>server.clock.forward_jump_check_enabled</code></td><td>boolean</td><td><code>false</code></td><td>if enabled, forward clock jumps > max_offset/2 will cause a panic.</td></tr>
+ <tr><td><code>server.clock.persist_upper_bound_interval</code></td><td>duration</td><td><code>0s</code></td><td>the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.</td></tr>
++<tr><td><code>server.closed_timestamp.close_fraction</code></td><td>float</td><td><code>0.2</code></td><td>desc</td></tr>
++<tr><td><code>server.closed_timestamp.target_duration</code></td><td>duration</td><td><code>5s</code></td><td>if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration</td></tr>
+ <tr><td><code>server.consistency_check.interval</code></td><td>duration</td><td><code>24h0m0s</code></td><td>the time between range consistency checks; set to 0 to disable consistency checking</td></tr>
+ <tr><td><code>server.declined_reservation_timeout</code></td><td>duration</td><td><code>1s</code></td><td>the amount of time to consider the store throttled for up-replication after a reservation was declined</td></tr>
+ <tr><td><code>server.failed_reservation_timeout</code></td><td>duration</td><td><code>5s</code></td><td>the amount of time to consider the store throttled for up-replication after a failed reservation call</td></tr>
+diff --git a/pkg/storage/closedts/closedts.go b/pkg/storage/closedts/closedts.go
+new file mode 100644
+index 00000000000..5abab028897
+--- /dev/null
++++ b/pkg/storage/closedts/closedts.go
+@@ -0,0 +1,160 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++// Package closedts houses the interfaces and basic definitions used by the
++// various components of the closed timestamp subsystems.
++//
++// The following diagram illustrates how these components fit together. In
++// running operation, the components are grouped in a container.Container
++// (intended as a pass-around per-instance Singleton).
++// Replicas proposing commands talk to the Tracker; replicas trying to serve
++// follower reads talk to the Provider, which receives closed timestamp updates
++// for the local node and its peers.
++//
++//                             Node 1 | Node 2
++//                                    |
++// +---------+  Close  +-----------+  |  +-----------+
++// | Tracker |<--------|           |  |  |           |
++// +-----+---+         | +-------+ |  |  | +-------+ |  CanServe
++//       ^             | |Storage| |  |  | |Storage| |<---------+
++//       |             | --------+ |  |  | +-------+ |          |
++//       |Track        |           |  |  |           |     +----+----+
++//       |             | Provider  |  |  | Provider  |     | Follower|
++//       |             +-----------+  |  +-----------+     | Replica |
++//       |                 ^                  ^            +----+----+
++//       |                 |Subscribe         |Notify           |
++//       |                 |                  |                 |
++// +---------+             |      Request     |                 |
++// |Proposing| Refresh +---+----+ <------ +---+-----+  Request  |
++// | Replica |<--------| Server |         | Clients |<----------+
++// +---------+         +--------+ ------> +---------+  EnsureClient
++//                                  CT
++package closedts
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/util/hlc"
++)
++
++// A Storage holds the closed timestamps and associated MLAIs for each node. It
++// additionally provides historical information about past state that it
++// "compacts" regularly, and which can be introspected via the VisitAscending
++// method.
++//
++// The data in a Storage is ephemeral, i.e. is lost during process restarts.
++// Introducing a persistent storage will require some design work to make
++// sure a) that the records in the storage are certifiably up to date (they
++// won't be naturally, unless we add a synchronous write to each proposal)
++// and b) that the proposal at each MLAI has actually been proposed. It's
++// unlikely that we'll ever find it useful to introduce persistence here
++// (though we want to persist historical information for recovery after
++// permanent loss of quorum, but there we only need some consistent on-
++// disk state; we don't need to bootstrap it into a new consistent state
++// that can be updated incrementally).
++type Storage interface {
++	fmt.Stringer
++	// VisitAscending visits the historical states contained within the Storage
++	// in ascending closed timestamp order. Each state (Entry) is full, i.e.
++	// non-incremental. The iteration stops when all states have been visited
++	// or the visitor returns true.
++	VisitAscending(roachpb.NodeID, func(ctpb.Entry) (done bool))
++	// VisitDescending visits the historical states contained within the Storage
++	// in descending closed timestamp order. Each state (Entry) is full, i.e.
++	// non-incremental. The iteration stops when all states have been visited
++	// or the visitor returns true.
++	VisitDescending(roachpb.NodeID, func(ctpb.Entry) (done bool))
++	// Add merges the given Entry into the state for the given NodeID. The first
++	// Entry passed in for any given Entry.Epoch must have Entry.Full set.
++	Add(roachpb.NodeID, ctpb.Entry)
++}
++
++// A Notifyee is a sink for closed timestamp updates.
++type Notifyee interface {
++	// Notify returns a channel into which updates are written.
++	//
++	// In practice, the Notifyee will be a Provider.
++	Notify(roachpb.NodeID) chan<- ctpb.Entry
++}
++
++// A Producer is a source of closed timestamp updates about the local node.
++type Producer interface {
++	// The Subscribe method blocks and, until the context cancels, writes a
++	// stream of updates to the provided channel the aggregate of which is
++	// guaranteed to represent a valid (i.e. gapless) state.
++	Subscribe(context.Context, chan<- ctpb.Entry)
++}
++
++// Provider is the central coordinator in the closed timestamp subsystem and the
++// gatekeeper for the closed timestamp state for both local and remote nodes,
++// which it handles in a symmetric fashion. It has the following tasks:
++//
++// 1. it accepts subscriptions for closed timestamp updates sourced from the
++//    local node. Upon accepting a subscription, the subscriber first receives
++//    the aggregate closed timestamp snapshot of the local node and then periodic
++//    updates.
++// 2. it periodically closes out timestamps on the local node and passes the
++//    resulting entries to all of its subscribers.
++// 3. it accepts notifications from other nodes, passing these updates through
++//    to its local storage, so that
++// 4. the CanServe method determines via the the underlying storage whether a
++//    given read can be satisfied via follower reads.
++//
++// Note that a Provider has no duty to immediately persist the local closed
++// timestamps to the underlying storage.
++type Provider interface {
++	Producer
++	Notifyee
++	Start()
++	CanServe(roachpb.NodeID, hlc.Timestamp, roachpb.RangeID, ctpb.Epoch, ctpb.LAI) bool
++}
++
++// A ClientRegistry is the client component of the follower reads subsystem. It
++// contacts other nodes and requests a continuous stream of closed timestamp
++// updates which it relays to the Provider.
++type ClientRegistry interface {
++	// Request asynchronously notifies the given node that an update should be
++	// emitted for the given range.
++	Request(roachpb.NodeID, roachpb.RangeID)
++	// EnsureClient instructs the registry to (asynchronously) request a stream
++	// of closed timestamp updates from the given node.
++	EnsureClient(roachpb.NodeID)
++}
++
++// CloseFn is periodically called by Producers to close out new timestamps.
++// Outside of tests, it corresponds to (*Tracker).Close.
++type CloseFn func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI)
++
++// LiveClockFn supplies a current HLC timestamp from the local node with the
++// extra constraints that the local node is live for the returned timestamp at
++// the given epoch.
++type LiveClockFn func() (liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, _ error)
++
++// RefreshFn is called by the Producer when it is asked to manually create (and
++// emit) an update for a number of its replicas. The closed timestamp subsystem
++// intentionally knows as little about the outside world as possible, and this
++// function, injected from the outside, provides the minimal glue. Its job is
++// to register a proposal for the current lease applied indexes of the replicas
++// with the Tracker, so that updates for them are emitted soon thereafter.
++type RefreshFn func(...roachpb.RangeID)
++
++// A Dialer opens closed timestamp connections to receive updates from remote
++// nodes.
++type Dialer interface {
++	Dial(context.Context, roachpb.NodeID) (ctpb.Client, error)
++	Ready(roachpb.NodeID) bool // if false, Dial is likely to fail
++}
+diff --git a/pkg/storage/closedts/container/container.go b/pkg/storage/closedts/container/container.go
+new file mode 100644
+index 00000000000..28f3e818ea3
+--- /dev/null
++++ b/pkg/storage/closedts/container/container.go
+@@ -0,0 +1,142 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package container
++
++import (
++	"context"
++	"time"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
++	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/minprop"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/provider"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/transport"
++	"github.com/cockroachdb/cockroach/pkg/util/stop"
++
++	"google.golang.org/grpc"
++)
++
++// Config is a container that holds references to all of the components required
++// to set up a full closed timestamp subsystem.
++type Config struct {
++	NodeID   roachpb.NodeID
++	Settings *cluster.Settings
++	Stopper  *stop.Stopper
++	Clock    closedts.LiveClockFn
++	Refresh  closedts.RefreshFn
++	Dialer   closedts.Dialer
++
++	// GRPCServer specifies an (optional) server to register the CT update server
++	// with.
++	GRPCServer *grpc.Server
++}
++
++// A Container is a full closed timestamp subsystem along with the Config it was
++// created from.
++type Container struct {
++	Config
++	Tracker  *minprop.Tracker
++	Storage  closedts.Storage
++	Provider closedts.Provider
++	Server   ctpb.Server
++	Clients  closedts.ClientRegistry
++}
++
++const (
++	// For each node, keep two historical buckets (i.e. one recent one, and one that
++	// lagging followers can still satisfy some reads from).
++	storageBucketNum = 2
++	// StorageBucketScale determines the (exponential) spacing of storage buckets.
++	// For example, a scale of 5s means that the second bucket will attempt to hold
++	// a closed timestamp 5s in the past from the first, and the third 5*5=25s from
++	// the first, etc.
++	//
++	// TODO(tschottdorf): it's straightforward to make this dynamic. It should track
++	// the interval at which timestamps are closed out, ideally being a little shorter.
++	// The effect of that would be that the most recent closed timestamp and the previous
++	// one can be queried against separately.
++	StorageBucketScale = 10 * time.Second
++)
++
++// NewContainer initializes a Container from the given Config. The Container
++// will need to be started separately.
++func NewContainer(cfg Config) *Container {
++	storage := storage.NewMultiStorage(func() storage.SingleStorage {
++		return storage.NewMemStorage(StorageBucketScale, storageBucketNum)
++	})
++
++	tracker := minprop.NewTracker()
++
++	pConf := provider.Config{
++		NodeID:   cfg.NodeID,
++		Settings: cfg.Settings,
++		Stopper:  cfg.Stopper,
++		Storage:  storage,
++		Clock:    cfg.Clock,
++		Close:    tracker.CloseFn(),
++	}
++	provider := provider.NewProvider(&pConf)
++
++	server := transport.NewServer(cfg.Stopper, provider, cfg.Refresh)
++
++	if cfg.GRPCServer != nil {
++		ctpb.RegisterClosedTimestampServer(cfg.GRPCServer, ctpb.ServerShim{Server: server})
++	}
++
++	rConf := transport.Config{
++		Settings: cfg.Settings,
++		Stopper:  cfg.Stopper,
++		Dialer:   cfg.Dialer,
++		Sink:     provider,
++	}
++
++	return &Container{
++		Config:   cfg,
++		Storage:  storage,
++		Provider: provider,
++		Tracker:  tracker,
++		Server:   server,
++		Clients:  transport.NewClients(rConf),
++	}
++}
++
++// Start starts the Container. The Stopper used to create the Container is in
++// charge of stopping it.
++func (c *Container) Start() {
++	c.Provider.Start()
++}
++
++type dialerAdapter nodedialer.Dialer
++
++func (da *dialerAdapter) Ready(nodeID roachpb.NodeID) bool {
++	return (*nodedialer.Dialer)(da).GetCircuitBreaker(nodeID).Ready()
++}
++
++func (da *dialerAdapter) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Client, error) {
++	c, err := (*nodedialer.Dialer)(da).Dial(ctx, nodeID)
++	if err != nil {
++		return nil, err
++	}
++	return ctpb.NewClosedTimestampClient(c).Get(ctx)
++}
++
++// DialerAdapter turns a node dialer into a closedts.Dialer.
++func DialerAdapter(dialer *nodedialer.Dialer) closedts.Dialer {
++	return (*dialerAdapter)(dialer)
++}
+diff --git a/pkg/storage/closedts/container/container_test.go b/pkg/storage/closedts/container/container_test.go
+new file mode 100644
+index 00000000000..714cb7245c1
+--- /dev/null
++++ b/pkg/storage/closedts/container/container_test.go
+@@ -0,0 +1,379 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package container_test // intentionally test from external package
++
++import (
++	"context"
++	"reflect"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/kr/pretty"
++	"github.com/pkg/errors"
++	"github.com/stretchr/testify/require"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	transporttestutils "github.com/cockroachdb/cockroach/pkg/storage/closedts/transport/testutils"
++	"github.com/cockroachdb/cockroach/pkg/testutils"
++	"github.com/cockroachdb/cockroach/pkg/util/hlc"
++	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
++	"github.com/cockroachdb/cockroach/pkg/util/stop"
++	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
++)
++
++type Tick struct {
++	liveNow   hlc.Timestamp
++	liveEpoch ctpb.Epoch
++	err       error
++}
++
++type LateBoundDialer struct {
++	Wrapped *transporttestutils.ChanDialer
++}
++
++func (d *LateBoundDialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Client, error) {
++	return d.Wrapped.Dial(ctx, nodeID)
++}
++
++func (d *LateBoundDialer) Ready(nodeID roachpb.NodeID) bool {
++	return d.Wrapped.Ready(nodeID)
++}
++
++type TestContainer struct {
++	*container.Container
++	Refreshed struct {
++		syncutil.Mutex
++		RangeIDs []roachpb.RangeID
++	}
++	Dialer    *LateBoundDialer
++	TestClock *TestClock
++}
++
++type TestClock struct {
++	stopper *stop.Stopper
++	ch      chan Tick
++}
++
++func NewTestClock(stopper *stop.Stopper) *TestClock {
++	t := &TestClock{
++		stopper: stopper,
++		ch:      make(chan Tick),
++	}
++	return t
++}
++
++func (c *TestClock) Tick(liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, err error) {
++	c.ch <- Tick{liveNow, liveEpoch, err}
++}
++
++func (c *TestClock) LiveNow() (liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, _ error) {
++	select {
++	case r := <-c.ch:
++		return r.liveNow, r.liveEpoch, r.err
++	case <-c.stopper.ShouldQuiesce():
++		return hlc.Timestamp{}, 0, errors.New("quiescing")
++	}
++}
++
++func prepareContainer(nodeID roachpb.NodeID) *TestContainer {
++	stopper := stop.NewStopper()
++
++	tc := &TestContainer{}
++
++	tc.TestClock = NewTestClock(stopper)
++
++	var wg sync.WaitGroup
++	wg.Add(1)
++	refresh := func(requested ...roachpb.RangeID) {
++		tc.Refreshed.Lock()
++		tc.Refreshed.RangeIDs = append(tc.Refreshed.RangeIDs, requested...)
++		tc.Refreshed.Unlock()
++	}
++
++	st := cluster.MakeTestingClusterSettings()
++
++	// Set the target duration to a second and the close fraction so small
++	// that the Provider will essentially close in a hot loop. In this test
++	// we'll block in the clock to pace the Provider's closer loop.
++	closedts.TargetDuration.Override(&st.SV, time.Second)
++	closedts.CloseFraction.Override(&st.SV, 1E-9)
++
++	// We perform a little dance with the Dialer. It needs to be hooked up to the
++	// Server, but that's only created in NewContainer. The Dialer isn't used until
++	// that point, so we just create it a little later.
++	tc.Dialer = &LateBoundDialer{}
++
++	cfg := container.Config{
++		Settings: st,
++		NodeID:   nodeID,
++		Stopper:  stopper,
++		Clock:    tc.TestClock.LiveNow,
++		Refresh:  refresh,
++		Dialer:   tc.Dialer,
++	}
++
++	tc.Container = container.NewContainer(cfg)
++	return tc
++}
++
++func setupTwoNodeTest() (_ *TestContainer, _ *TestContainer, shutdown func()) {
++	c1 := prepareContainer(roachpb.NodeID(1))
++	c2 := prepareContainer(roachpb.NodeID(2))
++
++	c1.Dialer.Wrapped = transporttestutils.NewChanDialer(c1.Stopper, c2.Server)
++	c2.Dialer.Wrapped = transporttestutils.NewChanDialer(c2.Stopper, c1.Server)
++
++	c1.Start()
++	c2.Start()
++
++	return c1, c2, func() {
++		// Oh, the joy of multiple stoppers.
++		var wg sync.WaitGroup
++		wg.Add(2)
++		go func() {
++			defer wg.Done()
++			c1.Stopper.Stop(context.Background())
++		}()
++		go func() {
++			defer wg.Done()
++			c2.Stopper.Stop(context.Background())
++		}()
++	}
++}
++
++func TestTwoNodes(t *testing.T) {
++	defer leaktest.AfterTest(t)()
++
++	ctx := context.Background()
++
++	c1, c2, shutdown := setupTwoNodeTest()
++	defer shutdown()
++	defer func() {
++		t.Logf("n1 -> n2: %s", pretty.Sprint(c1.Dialer.Wrapped.Transcript(c2.NodeID)))
++		t.Logf("n2 -> n1: %s", pretty.Sprint(c2.Dialer.Wrapped.Transcript(c1.NodeID)))
++	}()
++
++	// Initially, can't serve random things for either n1 or n2.
++	require.False(t, c1.Container.Provider.CanServe(
++		c1.NodeID, hlc.Timestamp{}, roachpb.RangeID(5), ctpb.Epoch(0), ctpb.LAI(0)),
++	)
++	require.False(t, c1.Container.Provider.CanServe(
++		c2.NodeID, hlc.Timestamp{}, roachpb.RangeID(5), ctpb.Epoch(0), ctpb.LAI(0)),
++	)
++
++	// Track and release a command.
++	ts, release := c1.Tracker.Track(ctx)
++	release(ctx, roachpb.RangeID(17), ctpb.LAI(12))
++
++	// The command is forced above ts=0.2. This is just an artifact of how the
++	// Tracker is implemented - it closes out 0.1 first, so it begins by forcing
++	// commands just above that.
++	require.Equal(t, hlc.Timestamp{Logical: 2}, ts)
++
++	// The clock gives a timestamp to the Provider, which should close out the
++	// current timestamp and set up 2E9-1E9=1E9 as the next one it wants to close.
++	// We do this twice (for the same timestamp) to make sure that the Provider
++	// not only read the tick, but also processed it. Otherwise, it becomes hard
++	// to write the remainder of the test because the commands we track below may
++	// fall into either case, and may be forced above the old or new timestamp.
++	for i := 0; i < 2; i++ {
++		c1.TestClock.Tick(hlc.Timestamp{WallTime: 2E9}, ctpb.Epoch(1), nil)
++	}
++
++	// The Tracker still won't let us serve anything, even though it has closed out
++	// 0.1 - this is because it has no information about any ranges at that timestamp.
++	// (Note that the Tracker may not have processed the closing yet, so if there were
++	// a bug here, this test would fail flakily - that's ok).
++	require.False(t, c1.Container.Provider.CanServe(
++		c1.NodeID, hlc.Timestamp{Logical: 1}, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12)),
++	)
++
++	// Two more commands come in.
++	ts, release = c1.Tracker.Track(ctx)
++	release(ctx, roachpb.RangeID(17), ctpb.LAI(16))
++	require.Equal(t, hlc.Timestamp{WallTime: 1E9, Logical: 1}, ts)
++
++	ts, release = c1.Tracker.Track(ctx)
++	release(ctx, roachpb.RangeID(8), ctpb.LAI(88))
++	require.Equal(t, hlc.Timestamp{WallTime: 1E9, Logical: 1}, ts)
++
++	// Now another tick. Shortly after it, we should be able to serve below 1E9, and 2E9 should
++	// be the next planned closed timestamp (though we can only verify the former).
++	c1.TestClock.Tick(hlc.Timestamp{WallTime: 3E9}, ctpb.Epoch(1), nil)
++
++	testutils.SucceedsSoon(t, func() error {
++		if !c1.Container.Provider.CanServe(
++			c1.NodeID, hlc.Timestamp{WallTime: 1E9}, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
++		) {
++			return errors.New("still can't serve")
++		}
++		return nil
++	})
++
++	// Shouldn't be able to serve the same thing if we haven't caught up yet.
++	require.False(t, c1.Container.Provider.CanServe(
++		c1.NodeID, hlc.Timestamp{WallTime: 1E9}, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(11),
++	))
++
++	// Shouldn't be able to serve at a higher timestamp.
++	require.False(t, c1.Container.Provider.CanServe(
++		c1.NodeID, hlc.Timestamp{WallTime: 1E9, Logical: 1}, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
++	))
++
++	// Now things get a little more interesting. Tell node2 to get a stream of
++	// information from node1. We do this via Request, which as a side effect lets
++	// us ascertain that this request makes it to n1.
++	c2.Clients.Request(roachpb.NodeID(1), roachpb.RangeID(18))
++	testutils.SucceedsSoon(t, func() error {
++		exp := []roachpb.RangeID{18}
++		c1.Refreshed.Lock()
++		defer c1.Refreshed.Unlock()
++		if !reflect.DeepEqual(exp, c1.Refreshed.RangeIDs) {
++			return errors.Errorf("still waiting for %v: currently %v", exp, c1.Refreshed.RangeIDs)
++		}
++		return nil
++	})
++
++	// And n2 should soon also be able to serve follower reads for a range lead by
++	// n1 when it has caught up.
++	testutils.SucceedsSoon(t, func() error {
++		if !c2.Container.Provider.CanServe(
++			c1.NodeID, hlc.Timestamp{WallTime: 1E9}, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
++		) {
++			return errors.New("n2 still can't serve")
++		}
++		return nil
++	})
++
++	// Remember the other proposals we tracked above on n1: (r17, 16) and (r8, 88). Feeding another
++	// timestamp to n1, we should see them closed out at t=2E9, and both n1 and n2 should automatically
++	// be able to serve them soon thereafter.
++	c1.TestClock.Tick(hlc.Timestamp{WallTime: 4E9}, ctpb.Epoch(1), nil)
++
++	checkEpoch1Reads := func(ts hlc.Timestamp) {
++		for i, c := range []*TestContainer{c1, c2} {
++			for _, tuple := range []struct {
++				roachpb.RangeID
++				ctpb.LAI
++			}{
++				{17, 16},
++				{8, 88},
++			} {
++				testutils.SucceedsSoon(t, func() error {
++					if !c.Container.Provider.CanServe(
++						c1.NodeID, ts, tuple.RangeID, ctpb.Epoch(1), tuple.LAI,
++					) {
++						return errors.Errorf("n%d still can't serve (r%d,%d) @ %s", i+1, tuple.RangeID, tuple.LAI, ts)
++					}
++					return nil
++				})
++				// Still can't serve when not caught up.
++				require.False(t, c.Container.Provider.CanServe(
++					c1.NodeID, ts, tuple.RangeID, ctpb.Epoch(1), tuple.LAI-1,
++				))
++				// Can serve when more than caught up.
++				require.True(t, c.Container.Provider.CanServe(
++					c1.NodeID, ts, tuple.RangeID, ctpb.Epoch(1), tuple.LAI+1,
++				))
++				// Can't serve when in different epoch, no matter larger or smaller.
++				require.False(t, c.Container.Provider.CanServe(
++					c1.NodeID, ts, tuple.RangeID, ctpb.Epoch(0), tuple.LAI,
++				))
++				require.False(t, c.Container.Provider.CanServe(
++					c1.NodeID, ts, tuple.RangeID, ctpb.Epoch(2), tuple.LAI,
++				))
++			}
++		}
++	}
++	checkEpoch1Reads(hlc.Timestamp{WallTime: 2E9})
++
++	// Uh-oh! n1 must've missed a heartbeat. The epoch goes up by one. This means
++	// that soon (after the next tick) timestamps should be closed out under the
++	// the epoch. 3E9 gets closed out under the first epoch in this tick. The
++	// timestamp at which this happens is doctored to make sure the Storage holds
++	// on to the past information, because we want to end-to-end test that this all
++	// works out. Consequently we try Tick at the rotation interval plus the target
++	// duration next (so that the next closed timestamp is the rotation interval).
++	c1.TestClock.Tick(hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 5E9}, ctpb.Epoch(2), nil)
++
++	// Previously valid reads should remain valid.
++	checkEpoch1Reads(hlc.Timestamp{WallTime: 2E9})
++	checkEpoch1Reads(hlc.Timestamp{WallTime: 3E9})
++
++	// Commands get forced above next closed timestamp (from the tick above) minus target interval.
++	ts, release = c1.Tracker.Track(ctx)
++	release(ctx, roachpb.RangeID(123), ctpb.LAI(456))
++	require.Equal(t, hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 4E9, Logical: 1}, ts)
++
++	// With the next tick, epoch two fully goes into effect (as the first epoch two
++	// timestamp gets closed out). We do this twice to make sure it's processed before
++	// the test proceeds.
++	c1.TestClock.Tick(hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 6E9}, ctpb.Epoch(2), nil)
++
++	// Previously valid reads should remain valid. Note that this is because the
++	// storage keeps historical data, and we've fine tuned the epoch flip so that
++	// it happens after the epoch 1 information rotates into another bucket and
++	// thus is preserved. If the epoch changed at a smaller timestamp, that
++	// would've wiped out the first epoch's information.
++	//
++	// TODO(tschottdorf): we could make the storage smarter so that it forces a
++	// rotation when the epoch changes, at the expense of pushing out historical
++	// information earlier. Frequent epoch changes could lead to very little
++	// historical information in the storage. Probably better not to risk that.
++	checkEpoch1Reads(hlc.Timestamp{WallTime: 2E9})
++	checkEpoch1Reads(hlc.Timestamp{WallTime: 3E9})
++
++	// Another second, another tick. Now the proposal tracked during epoch 2 should
++	// be readable from followers (as `scale+5E9` gets closed out).
++	c1.TestClock.Tick(hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 7E9}, ctpb.Epoch(2), nil)
++	for i, c := range []*TestContainer{c1, c2} {
++		rangeID := roachpb.RangeID(123)
++		lai := ctpb.LAI(456)
++		epoch := ctpb.Epoch(2)
++		ts := hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 5E9}
++
++		testutils.SucceedsSoon(t, func() error {
++			if !c.Container.Provider.CanServe(
++				c1.NodeID, ts, rangeID, epoch, lai,
++			) {
++				return errors.Errorf("n%d still can't serve (r%d,%d) @ %s", i+1, rangeID, lai, ts)
++			}
++			return nil
++		})
++
++		// Still can't serve when not caught up.
++		require.False(t, c.Container.Provider.CanServe(
++			c1.NodeID, ts, rangeID, epoch, lai-1,
++		))
++
++		// Can serve when more than caught up.
++		require.True(t, c.Container.Provider.CanServe(
++			c1.NodeID, ts, rangeID, epoch, lai+1,
++		))
++
++		// Can't serve when in different epoch, no matter larger or smaller.
++		require.False(t, c.Container.Provider.CanServe(
++			c1.NodeID, ts, rangeID, epoch-1, lai,
++		))
++		require.False(t, c.Container.Provider.CanServe(
++			c1.NodeID, ts, rangeID, epoch+1, lai,
++		))
++	}
++}
+diff --git a/pkg/storage/closedts/ctpb/client.go b/pkg/storage/closedts/ctpb/client.go
+new file mode 100644
+index 00000000000..76e4acc24f2
+--- /dev/null
++++ b/pkg/storage/closedts/ctpb/client.go
+@@ -0,0 +1,27 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package ctpb
++
++import "context"
++
++// Client is the interface for closed timestamp update clients.
++type Client interface {
++	Send(*Reaction) error
++	Recv() (*Entry, error)
++	CloseSend() error
++	Context() context.Context
++}
++
++var _ Client = ClosedTimestamp_GetClient(nil)
+diff --git a/pkg/storage/closedts/ctpb/entry.go b/pkg/storage/closedts/ctpb/entry.go
+new file mode 100644
+index 00000000000..5d1a284a6cf
+--- /dev/null
++++ b/pkg/storage/closedts/ctpb/entry.go
+@@ -0,0 +1,59 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package ctpb
++
++import (
++	"fmt"
++	"sort"
++	"strings"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++)
++
++// Epoch is an int64 with its own type to avoid mix-ups in positional arguments.
++type Epoch int64
++
++// LAI is an int64 denoting a lease applied index with its own type to avoid
++// mix-ups in positional arguments.
++type LAI int64
++
++// String formats Entry for human consumption as well as testing (by avoiding
++// randomness in the output caused by map iteraton order).
++func (e Entry) String() string {
++	rangeIDs := make([]roachpb.RangeID, 0, len(e.MLAI))
++	for k := range e.MLAI {
++		rangeIDs = append(rangeIDs, k)
++	}
++
++	sort.Slice(rangeIDs, func(i, j int) bool {
++		a, b := rangeIDs[i], rangeIDs[j]
++		if a == b {
++			return e.MLAI[a] < e.MLAI[b]
++		}
++		return a < b
++	})
++	sl := make([]string, 0, len(rangeIDs))
++	for _, rangeID := range rangeIDs {
++		sl = append(sl, fmt.Sprintf("r%d: %d", rangeID, e.MLAI[rangeID]))
++	}
++	if len(sl) == 0 {
++		sl = []string{"(empty)"}
++	}
++	return fmt.Sprintf("CT: %s @ Epoch %d\nFull: %t\nMLAI: %s\n", e.ClosedTimestamp, e.Epoch, e.Full, strings.Join(sl, ", "))
++}
++
++func (r Reaction) String() string {
++	return fmt.Sprintf("Refresh: %v", r.Requested)
++}
+diff --git a/pkg/storage/closedts/ctpb/entry.pb.go b/pkg/storage/closedts/ctpb/entry.pb.go
+new file mode 100644
+index 00000000000..7bbec1fe515
+--- /dev/null
++++ b/pkg/storage/closedts/ctpb/entry.pb.go
+@@ -0,0 +1,813 @@
++// Code generated by protoc-gen-gogo. DO NOT EDIT.
++// source: storage/closedts/ctpb/entry.proto
++
++/*
++	Package ctpb is a generated protocol buffer package.
++
++	It is generated from these files:
++		storage/closedts/ctpb/entry.proto
++
++	It has these top-level messages:
++		Entry
++		Reaction
++*/
++package ctpb
++
++import proto "github.com/gogo/protobuf/proto"
++import fmt "fmt"
++import math "math"
++import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
++
++import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
++
++import context "context"
++import grpc "google.golang.org/grpc"
++
++import sortkeys "github.com/gogo/protobuf/sortkeys"
++
++import io "io"
++
++// Reference imports to suppress errors if they are not otherwise used.
++var _ = proto.Marshal
++var _ = fmt.Errorf
++var _ = math.Inf
++
++// This is a compile-time assertion to ensure that this generated file
++// is compatible with the proto package it is being compiled against.
++// A compilation error at this line likely means your copy of the
++// proto package needs to be updated.
++const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
++
++// An Entry is a closed timestamp update. It consists of a closed timestamp
++// (i.e. a timestamp at or below which the origin node guarantees no more new
++// writes are going to be permitted), an associated epoch in which the origin
++// node promises it was live (for the closed timestamp), a map of minimum lease
++// applied indexes (which have to be caught up to before being allowed to use
++// the closed timestamp) as well as an indicator of whether this update supplies
++// a full initial state or an increment to be merged into a previous state. In
++// practice, the first Entry received for each epoch is full, while the remainder
++// are incremental. An incremental update represents the implicit promise that
++// the state accumulated since the last full Entry is the true full state.
++type Entry struct {
++	Epoch           Epoch                                                        `protobuf:"varint,1,opt,name=epoch,proto3,casttype=Epoch" json:"epoch,omitempty"`
++	ClosedTimestamp cockroach_util_hlc.Timestamp                                 `protobuf:"bytes,2,opt,name=closed_timestamp,json=closedTimestamp" json:"closed_timestamp"`
++	MLAI            map[github_com_cockroachdb_cockroach_pkg_roachpb.RangeID]LAI `protobuf:"bytes,3,rep,name=mlai,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID,castvalue=LAI" json:"mlai,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
++	// Full is true if the emitter promises that any future write to any range
++	// mentioned in this Entry will be reflected in a subsequent Entry before any
++	// stale follower reads are possible. For example, if range 1 is assigned an
++	// MLAI of 12 in this Entry and isn't mentioned in the five subsequent
++	// entries, the recipient may behave as if the MLAI of 12 were repeated across
++	// all of these entries.
++	//
++	// In practice, a Full message is received when a stream of Entries is first
++	// established (or the Epoch changes), and all other updates are incremental
++	// (i.e. not Full).
++	Full bool `protobuf:"varint,4,opt,name=full,proto3" json:"full,omitempty"`
++}
++
++func (m *Entry) Reset()                    { *m = Entry{} }
++func (*Entry) ProtoMessage()               {}
++func (*Entry) Descriptor() ([]byte, []int) { return fileDescriptorEntry, []int{0} }
++
++// Reactions flow in the direction opposite to Entries and request for ranges to
++// be included in the next Entry. Under rare circumstances, ranges may be omitted
++// from closed timestamp updates, and so serving follower reads from them would
++// fail. The Reaction mechanism serves to explicitly request the missing information
++// when that happens.
++type Reaction struct {
++	Requested []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,rep,packed,name=Requested,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"Requested,omitempty"`
++}
++
++func (m *Reaction) Reset()                    { *m = Reaction{} }
++func (*Reaction) ProtoMessage()               {}
++func (*Reaction) Descriptor() ([]byte, []int) { return fileDescriptorEntry, []int{1} }
++
++func init() {
++	proto.RegisterType((*Entry)(nil), "cockroach.storage.ctupdate.Entry")
++	proto.RegisterType((*Reaction)(nil), "cockroach.storage.ctupdate.Reaction")
++}
++
++// Reference imports to suppress errors if they are not otherwise used.
++var _ context.Context
++var _ grpc.ClientConn
++
++// This is a compile-time assertion to ensure that this generated file
++// is compatible with the grpc package it is being compiled against.
++const _ = grpc.SupportPackageIsVersion4
++
++// Client API for ClosedTimestamp service
++
++type ClosedTimestampClient interface {
++	Get(ctx context.Context, opts ...grpc.CallOption) (ClosedTimestamp_GetClient, error)
++}
++
++type closedTimestampClient struct {
++	cc *grpc.ClientConn
++}
++
++func NewClosedTimestampClient(cc *grpc.ClientConn) ClosedTimestampClient {
++	return &closedTimestampClient{cc}
++}
++
++func (c *closedTimestampClient) Get(ctx context.Context, opts ...grpc.CallOption) (ClosedTimestamp_GetClient, error) {
++	stream, err := grpc.NewClientStream(ctx, &_ClosedTimestamp_serviceDesc.Streams[0], c.cc, "/cockroach.storage.ctupdate.ClosedTimestamp/Get", opts...)
++	if err != nil {
++		return nil, err
++	}
++	x := &closedTimestampGetClient{stream}
++	return x, nil
++}
++
++type ClosedTimestamp_GetClient interface {
++	Send(*Reaction) error
++	Recv() (*Entry, error)
++	grpc.ClientStream
++}
++
++type closedTimestampGetClient struct {
++	grpc.ClientStream
++}
++
++func (x *closedTimestampGetClient) Send(m *Reaction) error {
++	return x.ClientStream.SendMsg(m)
++}
++
++func (x *closedTimestampGetClient) Recv() (*Entry, error) {
++	m := new(Entry)
++	if err := x.ClientStream.RecvMsg(m); err != nil {
++		return nil, err
++	}
++	return m, nil
++}
++
++// Server API for ClosedTimestamp service
++
++type ClosedTimestampServer interface {
++	Get(ClosedTimestamp_GetServer) error
++}
++
++func RegisterClosedTimestampServer(s *grpc.Server, srv ClosedTimestampServer) {
++	s.RegisterService(&_ClosedTimestamp_serviceDesc, srv)
++}
++
++func _ClosedTimestamp_Get_Handler(srv interface{}, stream grpc.ServerStream) error {
++	return srv.(ClosedTimestampServer).Get(&closedTimestampGetServer{stream})
++}
++
++type ClosedTimestamp_GetServer interface {
++	Send(*Entry) error
++	Recv() (*Reaction, error)
++	grpc.ServerStream
++}
++
++type closedTimestampGetServer struct {
++	grpc.ServerStream
++}
++
++func (x *closedTimestampGetServer) Send(m *Entry) error {
++	return x.ServerStream.SendMsg(m)
++}
++
++func (x *closedTimestampGetServer) Recv() (*Reaction, error) {
++	m := new(Reaction)
++	if err := x.ServerStream.RecvMsg(m); err != nil {
++		return nil, err
++	}
++	return m, nil
++}
++
++var _ClosedTimestamp_serviceDesc = grpc.ServiceDesc{
++	ServiceName: "cockroach.storage.ctupdate.ClosedTimestamp",
++	HandlerType: (*ClosedTimestampServer)(nil),
++	Methods:     []grpc.MethodDesc{},
++	Streams: []grpc.StreamDesc{
++		{
++			StreamName:    "Get",
++			Handler:       _ClosedTimestamp_Get_Handler,
++			ServerStreams: true,
++			ClientStreams: true,
++		},
++	},
++	Metadata: "storage/closedts/ctpb/entry.proto",
++}
++
++func (m *Entry) Marshal() (dAtA []byte, err error) {
++	size := m.Size()
++	dAtA = make([]byte, size)
++	n, err := m.MarshalTo(dAtA)
++	if err != nil {
++		return nil, err
++	}
++	return dAtA[:n], nil
++}
++
++func (m *Entry) MarshalTo(dAtA []byte) (int, error) {
++	var i int
++	_ = i
++	var l int
++	_ = l
++	if m.Epoch != 0 {
++		dAtA[i] = 0x8
++		i++
++		i = encodeVarintEntry(dAtA, i, uint64(m.Epoch))
++	}
++	dAtA[i] = 0x12
++	i++
++	i = encodeVarintEntry(dAtA, i, uint64(m.ClosedTimestamp.Size()))
++	n1, err := m.ClosedTimestamp.MarshalTo(dAtA[i:])
++	if err != nil {
++		return 0, err
++	}
++	i += n1
++	if len(m.MLAI) > 0 {
++		keysForMLAI := make([]int32, 0, len(m.MLAI))
++		for k := range m.MLAI {
++			keysForMLAI = append(keysForMLAI, int32(k))
++		}
++		sortkeys.Int32s(keysForMLAI)
++		for _, k := range keysForMLAI {
++			dAtA[i] = 0x1a
++			i++
++			v := m.MLAI[github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(k)]
++			mapSize := 1 + sovEntry(uint64(k)) + 1 + sovEntry(uint64(v))
++			i = encodeVarintEntry(dAtA, i, uint64(mapSize))
++			dAtA[i] = 0x8
++			i++
++			i = encodeVarintEntry(dAtA, i, uint64(k))
++			dAtA[i] = 0x10
++			i++
++			i = encodeVarintEntry(dAtA, i, uint64(v))
++		}
++	}
++	if m.Full {
++		dAtA[i] = 0x20
++		i++
++		if m.Full {
++			dAtA[i] = 1
++		} else {
++			dAtA[i] = 0
++		}
++		i++
++	}
++	return i, nil
++}
++
++func (m *Reaction) Marshal() (dAtA []byte, err error) {
++	size := m.Size()
++	dAtA = make([]byte, size)
++	n, err := m.MarshalTo(dAtA)
++	if err != nil {
++		return nil, err
++	}
++	return dAtA[:n], nil
++}
++
++func (m *Reaction) MarshalTo(dAtA []byte) (int, error) {
++	var i int
++	_ = i
++	var l int
++	_ = l
++	if len(m.Requested) > 0 {
++		dAtA3 := make([]byte, len(m.Requested)*10)
++		var j2 int
++		for _, num1 := range m.Requested {
++			num := uint64(num1)
++			for num >= 1<<7 {
++				dAtA3[j2] = uint8(uint64(num)&0x7f | 0x80)
++				num >>= 7
++				j2++
++			}
++			dAtA3[j2] = uint8(num)
++			j2++
++		}
++		dAtA[i] = 0xa
++		i++
++		i = encodeVarintEntry(dAtA, i, uint64(j2))
++		i += copy(dAtA[i:], dAtA3[:j2])
++	}
++	return i, nil
++}
++
++func encodeVarintEntry(dAtA []byte, offset int, v uint64) int {
++	for v >= 1<<7 {
++		dAtA[offset] = uint8(v&0x7f | 0x80)
++		v >>= 7
++		offset++
++	}
++	dAtA[offset] = uint8(v)
++	return offset + 1
++}
++func (m *Entry) Size() (n int) {
++	var l int
++	_ = l
++	if m.Epoch != 0 {
++		n += 1 + sovEntry(uint64(m.Epoch))
++	}
++	l = m.ClosedTimestamp.Size()
++	n += 1 + l + sovEntry(uint64(l))
++	if len(m.MLAI) > 0 {
++		for k, v := range m.MLAI {
++			_ = k
++			_ = v
++			mapEntrySize := 1 + sovEntry(uint64(k)) + 1 + sovEntry(uint64(v))
++			n += mapEntrySize + 1 + sovEntry(uint64(mapEntrySize))
++		}
++	}
++	if m.Full {
++		n += 2
++	}
++	return n
++}
++
++func (m *Reaction) Size() (n int) {
++	var l int
++	_ = l
++	if len(m.Requested) > 0 {
++		l = 0
++		for _, e := range m.Requested {
++			l += sovEntry(uint64(e))
++		}
++		n += 1 + sovEntry(uint64(l)) + l
++	}
++	return n
++}
++
++func sovEntry(x uint64) (n int) {
++	for {
++		n++
++		x >>= 7
++		if x == 0 {
++			break
++		}
++	}
++	return n
++}
++func sozEntry(x uint64) (n int) {
++	return sovEntry(uint64((x << 1) ^ uint64((int64(x) >> 63))))
++}
++func (m *Entry) Unmarshal(dAtA []byte) error {
++	l := len(dAtA)
++	iNdEx := 0
++	for iNdEx < l {
++		preIndex := iNdEx
++		var wire uint64
++		for shift := uint(0); ; shift += 7 {
++			if shift >= 64 {
++				return ErrIntOverflowEntry
++			}
++			if iNdEx >= l {
++				return io.ErrUnexpectedEOF
++			}
++			b := dAtA[iNdEx]
++			iNdEx++
++			wire |= (uint64(b) & 0x7F) << shift
++			if b < 0x80 {
++				break
++			}
++		}
++		fieldNum := int32(wire >> 3)
++		wireType := int(wire & 0x7)
++		if wireType == 4 {
++			return fmt.Errorf("proto: Entry: wiretype end group for non-group")
++		}
++		if fieldNum <= 0 {
++			return fmt.Errorf("proto: Entry: illegal tag %d (wire type %d)", fieldNum, wire)
++		}
++		switch fieldNum {
++		case 1:
++			if wireType != 0 {
++				return fmt.Errorf("proto: wrong wireType = %d for field Epoch", wireType)
++			}
++			m.Epoch = 0
++			for shift := uint(0); ; shift += 7 {
++				if shift >= 64 {
++					return ErrIntOverflowEntry
++				}
++				if iNdEx >= l {
++					return io.ErrUnexpectedEOF
++				}
++				b := dAtA[iNdEx]
++				iNdEx++
++				m.Epoch |= (Epoch(b) & 0x7F) << shift
++				if b < 0x80 {
++					break
++				}
++			}
++		case 2:
++			if wireType != 2 {
++				return fmt.Errorf("proto: wrong wireType = %d for field ClosedTimestamp", wireType)
++			}
++			var msglen int
++			for shift := uint(0); ; shift += 7 {
++				if shift >= 64 {
++					return ErrIntOverflowEntry
++				}
++				if iNdEx >= l {
++					return io.ErrUnexpectedEOF
++				}
++				b := dAtA[iNdEx]
++				iNdEx++
++				msglen |= (int(b) & 0x7F) << shift
++				if b < 0x80 {
++					break
++				}
++			}
++			if msglen < 0 {
++				return ErrInvalidLengthEntry
++			}
++			postIndex := iNdEx + msglen
++			if postIndex > l {
++				return io.ErrUnexpectedEOF
++			}
++			if err := m.ClosedTimestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
++				return err
++			}
++			iNdEx = postIndex
++		case 3:
++			if wireType != 2 {
++				return fmt.Errorf("proto: wrong wireType = %d for field MLAI", wireType)
++			}
++			var msglen int
++			for shift := uint(0); ; shift += 7 {
++				if shift >= 64 {
++					return ErrIntOverflowEntry
++				}
++				if iNdEx >= l {
++					return io.ErrUnexpectedEOF
++				}
++				b := dAtA[iNdEx]
++				iNdEx++
++				msglen |= (int(b) & 0x7F) << shift
++				if b < 0x80 {
++					break
++				}
++			}
++			if msglen < 0 {
++				return ErrInvalidLengthEntry
++			}
++			postIndex := iNdEx + msglen
++			if postIndex > l {
++				return io.ErrUnexpectedEOF
++			}
++			if m.MLAI == nil {
++				m.MLAI = make(map[github_com_cockroachdb_cockroach_pkg_roachpb.RangeID]LAI)
++			}
++			var mapkey int32
++			var mapvalue int64
++			for iNdEx < postIndex {
++				entryPreIndex := iNdEx
++				var wire uint64
++				for shift := uint(0); ; shift += 7 {
++					if shift >= 64 {
++						return ErrIntOverflowEntry
++					}
++					if iNdEx >= l {
++						return io.ErrUnexpectedEOF
++					}
++					b := dAtA[iNdEx]
++					iNdEx++
++					wire |= (uint64(b) & 0x7F) << shift
++					if b < 0x80 {
++						break
++					}
++				}
++				fieldNum := int32(wire >> 3)
++				if fieldNum == 1 {
++					for shift := uint(0); ; shift += 7 {
++						if shift >= 64 {
++							return ErrIntOverflowEntry
++						}
++						if iNdEx >= l {
++							return io.ErrUnexpectedEOF
++						}
++						b := dAtA[iNdEx]
++						iNdEx++
++						mapkey |= (int32(b) & 0x7F) << shift
++						if b < 0x80 {
++							break
++						}
++					}
++				} else if fieldNum == 2 {
++					for shift := uint(0); ; shift += 7 {
++						if shift >= 64 {
++							return ErrIntOverflowEntry
++						}
++						if iNdEx >= l {
++							return io.ErrUnexpectedEOF
++						}
++						b := dAtA[iNdEx]
++						iNdEx++
++						mapvalue |= (int64(b) & 0x7F) << shift
++						if b < 0x80 {
++							break
++						}
++					}
++				} else {
++					iNdEx = entryPreIndex
++					skippy, err := skipEntry(dAtA[iNdEx:])
++					if err != nil {
++						return err
++					}
++					if skippy < 0 {
++						return ErrInvalidLengthEntry
++					}
++					if (iNdEx + skippy) > postIndex {
++						return io.ErrUnexpectedEOF
++					}
++					iNdEx += skippy
++				}
++			}
++			m.MLAI[github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(mapkey)] = ((LAI)(mapvalue))
++			iNdEx = postIndex
++		case 4:
++			if wireType != 0 {
++				return fmt.Errorf("proto: wrong wireType = %d for field Full", wireType)
++			}
++			var v int
++			for shift := uint(0); ; shift += 7 {
++				if shift >= 64 {
++					return ErrIntOverflowEntry
++				}
++				if iNdEx >= l {
++					return io.ErrUnexpectedEOF
++				}
++				b := dAtA[iNdEx]
++				iNdEx++
++				v |= (int(b) & 0x7F) << shift
++				if b < 0x80 {
++					break
++				}
++			}
++			m.Full = bool(v != 0)
++		default:
++			iNdEx = preIndex
++			skippy, err := skipEntry(dAtA[iNdEx:])
++			if err != nil {
++				return err
++			}
++			if skippy < 0 {
++				return ErrInvalidLengthEntry
++			}
++			if (iNdEx + skippy) > l {
++				return io.ErrUnexpectedEOF
++			}
++			iNdEx += skippy
++		}
++	}
++
++	if iNdEx > l {
++		return io.ErrUnexpectedEOF
++	}
++	return nil
++}
++func (m *Reaction) Unmarshal(dAtA []byte) error {
++	l := len(dAtA)
++	iNdEx := 0
++	for iNdEx < l {
++		preIndex := iNdEx
++		var wire uint64
++		for shift := uint(0); ; shift += 7 {
++			if shift >= 64 {
++				return ErrIntOverflowEntry
++			}
++			if iNdEx >= l {
++				return io.ErrUnexpectedEOF
++			}
++			b := dAtA[iNdEx]
++			iNdEx++
++			wire |= (uint64(b) & 0x7F) << shift
++			if b < 0x80 {
++				break
++			}
++		}
++		fieldNum := int32(wire >> 3)
++		wireType := int(wire & 0x7)
++		if wireType == 4 {
++			return fmt.Errorf("proto: Reaction: wiretype end group for non-group")
++		}
++		if fieldNum <= 0 {
++			return fmt.Errorf("proto: Reaction: illegal tag %d (wire type %d)", fieldNum, wire)
++		}
++		switch fieldNum {
++		case 1:
++			if wireType == 0 {
++				var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
++				for shift := uint(0); ; shift += 7 {
++					if shift >= 64 {
++						return ErrIntOverflowEntry
++					}
++					if iNdEx >= l {
++						return io.ErrUnexpectedEOF
++					}
++					b := dAtA[iNdEx]
++					iNdEx++
++					v |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
++					if b < 0x80 {
++						break
++					}
++				}
++				m.Requested = append(m.Requested, v)
++			} else if wireType == 2 {
++				var packedLen int
++				for shift := uint(0); ; shift += 7 {
++					if shift >= 64 {
++						return ErrIntOverflowEntry
++					}
++					if iNdEx >= l {
++						return io.ErrUnexpectedEOF
++					}
++					b := dAtA[iNdEx]
++					iNdEx++
++					packedLen |= (int(b) & 0x7F) << shift
++					if b < 0x80 {
++						break
++					}
++				}
++				if packedLen < 0 {
++					return ErrInvalidLengthEntry
++				}
++				postIndex := iNdEx + packedLen
++				if postIndex > l {
++					return io.ErrUnexpectedEOF
++				}
++				for iNdEx < postIndex {
++					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
++					for shift := uint(0); ; shift += 7 {
++						if shift >= 64 {
++							return ErrIntOverflowEntry
++						}
++						if iNdEx >= l {
++							return io.ErrUnexpectedEOF
++						}
++						b := dAtA[iNdEx]
++						iNdEx++
++						v |= (github_com_cockroachdb_cockroach_pkg_roachpb.RangeID(b) & 0x7F) << shift
++						if b < 0x80 {
++							break
++						}
++					}
++					m.Requested = append(m.Requested, v)
++				}
++			} else {
++				return fmt.Errorf("proto: wrong wireType = %d for field Requested", wireType)
++			}
++		default:
++			iNdEx = preIndex
++			skippy, err := skipEntry(dAtA[iNdEx:])
++			if err != nil {
++				return err
++			}
++			if skippy < 0 {
++				return ErrInvalidLengthEntry
++			}
++			if (iNdEx + skippy) > l {
++				return io.ErrUnexpectedEOF
++			}
++			iNdEx += skippy
++		}
++	}
++
++	if iNdEx > l {
++		return io.ErrUnexpectedEOF
++	}
++	return nil
++}
++func skipEntry(dAtA []byte) (n int, err error) {
++	l := len(dAtA)
++	iNdEx := 0
++	for iNdEx < l {
++		var wire uint64
++		for shift := uint(0); ; shift += 7 {
++			if shift >= 64 {
++				return 0, ErrIntOverflowEntry
++			}
++			if iNdEx >= l {
++				return 0, io.ErrUnexpectedEOF
++			}
++			b := dAtA[iNdEx]
++			iNdEx++
++			wire |= (uint64(b) & 0x7F) << shift
++			if b < 0x80 {
++				break
++			}
++		}
++		wireType := int(wire & 0x7)
++		switch wireType {
++		case 0:
++			for shift := uint(0); ; shift += 7 {
++				if shift >= 64 {
++					return 0, ErrIntOverflowEntry
++				}
++				if iNdEx >= l {
++					return 0, io.ErrUnexpectedEOF
++				}
++				iNdEx++
++				if dAtA[iNdEx-1] < 0x80 {
++					break
++				}
++			}
++			return iNdEx, nil
++		case 1:
++			iNdEx += 8
++			return iNdEx, nil
++		case 2:
++			var length int
++			for shift := uint(0); ; shift += 7 {
++				if shift >= 64 {
++					return 0, ErrIntOverflowEntry
++				}
++				if iNdEx >= l {
++					return 0, io.ErrUnexpectedEOF
++				}
++				b := dAtA[iNdEx]
++				iNdEx++
++				length |= (int(b) & 0x7F) << shift
++				if b < 0x80 {
++					break
++				}
++			}
++			iNdEx += length
++			if length < 0 {
++				return 0, ErrInvalidLengthEntry
++			}
++			return iNdEx, nil
++		case 3:
++			for {
++				var innerWire uint64
++				var start int = iNdEx
++				for shift := uint(0); ; shift += 7 {
++					if shift >= 64 {
++						return 0, ErrIntOverflowEntry
++					}
++					if iNdEx >= l {
++						return 0, io.ErrUnexpectedEOF
++					}
++					b := dAtA[iNdEx]
++					iNdEx++
++					innerWire |= (uint64(b) & 0x7F) << shift
++					if b < 0x80 {
++						break
++					}
++				}
++				innerWireType := int(innerWire & 0x7)
++				if innerWireType == 4 {
++					break
++				}
++				next, err := skipEntry(dAtA[start:])
++				if err != nil {
++					return 0, err
++				}
++				iNdEx = start + next
++			}
++			return iNdEx, nil
++		case 4:
++			return iNdEx, nil
++		case 5:
++			iNdEx += 4
++			return iNdEx, nil
++		default:
++			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
++		}
++	}
++	panic("unreachable")
++}
++
++var (
++	ErrInvalidLengthEntry = fmt.Errorf("proto: negative length found during unmarshaling")
++	ErrIntOverflowEntry   = fmt.Errorf("proto: integer overflow")
++)
++
++func init() { proto.RegisterFile("storage/closedts/ctpb/entry.proto", fileDescriptorEntry) }
++
++var fileDescriptorEntry = []byte{
++	// 459 bytes of a gzipped FileDescriptorProto
++	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x52, 0x4f, 0x6b, 0xd4, 0x40,
++	0x1c, 0xcd, 0x6c, 0x12, 0xe9, 0x4e, 0x0f, 0x2d, 0x43, 0x0f, 0x21, 0x68, 0x92, 0x2e, 0x1e, 0x02,
++	0xc2, 0x8c, 0xac, 0x82, 0xa5, 0xb7, 0x46, 0x4b, 0x59, 0x68, 0x3d, 0x0c, 0xc5, 0x83, 0x17, 0x99,
++	0xcc, 0x8e, 0x49, 0xd8, 0xd9, 0x4c, 0xdc, 0x4c, 0x84, 0x5e, 0x3d, 0x89, 0x27, 0x8f, 0x1e, 0xfd,
++	0x38, 0x7b, 0xf4, 0x24, 0x9e, 0xb6, 0x1a, 0xbf, 0x45, 0x4f, 0x92, 0x49, 0x77, 0x17, 0x04, 0x15,
++	0xbc, 0xbd, 0xfc, 0xfe, 0xbc, 0xf7, 0xf2, 0xe6, 0x07, 0x0f, 0x6b, 0xad, 0x16, 0x2c, 0x13, 0x84,
++	0x4b, 0x55, 0x8b, 0xa9, 0xae, 0x09, 0xd7, 0x55, 0x4a, 0x44, 0xa9, 0x17, 0x57, 0xb8, 0x5a, 0x28,
++	0xad, 0x90, 0xcf, 0x15, 0x9f, 0x2d, 0x14, 0xe3, 0x39, 0xbe, 0x1d, 0xc6, 0x5c, 0x37, 0xd5, 0x94,
++	0x69, 0xe1, 0x1f, 0x64, 0x2a, 0x53, 0x66, 0x8c, 0x74, 0xa8, 0xdf, 0xf0, 0xef, 0x66, 0x4a, 0x65,
++	0x52, 0x10, 0x56, 0x15, 0x84, 0x95, 0xa5, 0xd2, 0x4c, 0x17, 0xaa, 0xac, 0x6f, 0xbb, 0x5e, 0xa3,
++	0x0b, 0x49, 0x72, 0xc9, 0x89, 0x2e, 0xe6, 0xa2, 0xd6, 0x6c, 0x5e, 0xf5, 0x9d, 0xd1, 0xd7, 0x01,
++	0x74, 0x4f, 0x3b, 0x65, 0x14, 0x42, 0x57, 0x54, 0x8a, 0xe7, 0x1e, 0x88, 0x40, 0x6c, 0x27, 0xc3,
++	0x9b, 0x55, 0xe8, 0x9e, 0x76, 0x05, 0xda, 0xd7, 0xd1, 0x73, 0xb8, 0xdf, 0x3b, 0x7e, 0xb5, 0x21,
++	0xf1, 0x06, 0x11, 0x88, 0x77, 0xc7, 0xf7, 0xf0, 0xd6, 0x6f, 0xa7, 0x84, 0x73, 0xc9, 0xf1, 0xe5,
++	0x7a, 0x28, 0x71, 0x96, 0xab, 0xd0, 0xa2, 0x7b, 0xfd, 0xf2, 0xa6, 0x8c, 0xde, 0x03, 0xe8, 0xcc,
++	0x25, 0x2b, 0x3c, 0x3b, 0xb2, 0xe3, 0xdd, 0xf1, 0x03, 0xfc, 0xe7, 0x9f, 0xc6, 0xc6, 0x22, 0xbe,
++	0x90, 0xac, 0x30, 0x28, 0x39, 0x6b, 0x57, 0xa1, 0x73, 0x71, 0x7e, 0x32, 0x79, 0x77, 0x1d, 0x3e,
++	0xce, 0x0a, 0x9d, 0x37, 0x29, 0xe6, 0x6a, 0x4e, 0x36, 0x14, 0xd3, 0x74, 0x8b, 0x49, 0x35, 0xcb,
++	0x88, 0x41, 0x55, 0x8a, 0x29, 0x2b, 0x33, 0x31, 0x79, 0xf6, 0xe1, 0x3a, 0xb4, 0xcf, 0x4f, 0x26,
++	0xd4, 0x38, 0x40, 0x08, 0x3a, 0xaf, 0x1b, 0x29, 0x3d, 0x27, 0x02, 0xf1, 0x0e, 0x35, 0xd8, 0x7f,
++	0x02, 0x87, 0x1b, 0x3d, 0xb4, 0x0f, 0xed, 0x99, 0xb8, 0x32, 0xd1, 0xb8, 0xb4, 0x83, 0xe8, 0x00,
++	0xba, 0x6f, 0x99, 0x6c, 0x84, 0x89, 0xc0, 0xa6, 0xfd, 0xc7, 0xf1, 0xe0, 0x08, 0x1c, 0x3b, 0x9f,
++	0x3e, 0x87, 0xd6, 0x28, 0x87, 0x3b, 0x54, 0x30, 0xde, 0xbd, 0x02, 0x7a, 0x01, 0x87, 0x54, 0xbc,
++	0x69, 0x44, 0xad, 0xc5, 0xd4, 0x03, 0x91, 0x1d, 0xbb, 0xc9, 0xd1, 0xcd, 0xea, 0xff, 0x8c, 0xd3,
++	0x2d, 0x55, 0xaf, 0x34, 0xce, 0xe0, 0xde, 0xd3, 0xdf, 0xa2, 0xbd, 0x84, 0xf6, 0x99, 0xd0, 0xe8,
++	0xfe, 0xdf, 0x22, 0x5d, 0xbb, 0xf3, 0x0f, 0xff, 0x19, 0xfc, 0xc8, 0x8a, 0xc1, 0x43, 0x90, 0x04,
++	0xcb, 0x1f, 0x81, 0xb5, 0x6c, 0x03, 0xf0, 0xa5, 0x0d, 0xc0, 0xb7, 0x36, 0x00, 0xdf, 0xdb, 0x00,
++	0x7c, 0xfc, 0x19, 0x58, 0x2f, 0x9d, 0xee, 0x82, 0xd3, 0x3b, 0xe6, 0xa4, 0x1e, 0xfd, 0x0a, 0x00,
++	0x00, 0xff, 0xff, 0x30, 0xde, 0x98, 0x28, 0xe1, 0x02, 0x00, 0x00,
++}
+diff --git a/pkg/storage/closedts/ctpb/entry.proto b/pkg/storage/closedts/ctpb/entry.proto
+new file mode 100644
+index 00000000000..9bd3ad45f3b
+--- /dev/null
++++ b/pkg/storage/closedts/ctpb/entry.proto
+@@ -0,0 +1,68 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++syntax = "proto3";
++package cockroach.storage.ctupdate;
++option go_package = "ctpb";
++
++import "gogoproto/gogo.proto";
++import "google/api/annotations.proto";
++
++import "util/hlc/timestamp.proto";
++
++// An Entry is a closed timestamp update. It consists of a closed timestamp
++// (i.e. a timestamp at or below which the origin node guarantees no more new
++// writes are going to be permitted), an associated epoch in which the origin
++// node promises it was live (for the closed timestamp), a map of minimum lease
++// applied indexes (which have to be caught up to before being allowed to use
++// the closed timestamp) as well as an indicator of whether this update supplies
++// a full initial state or an increment to be merged into a previous state. In
++// practice, the first Entry received for each epoch is full, while the remainder
++// are incremental. An incremental update represents the implicit promise that
++// the state accumulated since the last full Entry is the true full state.
++message Entry {
++  option (gogoproto.goproto_stringer) = false;
++
++  int64 epoch = 1 [(gogoproto.casttype) = "Epoch"];
++  util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
++  map<int32, int64> mlai = 3 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
++    (gogoproto.castvalue) = "LAI",
++    (gogoproto.customname) = "MLAI"];
++  // Full is true if the emitter promises that any future write to any range
++  // mentioned in this Entry will be reflected in a subsequent Entry before any
++  // stale follower reads are possible. For example, if range 1 is assigned an
++  // MLAI of 12 in this Entry and isn't mentioned in the five subsequent
++  // entries, the recipient may behave as if the MLAI of 12 were repeated across
++  // all of these entries.
++  //
++  // In practice, a Full message is received when a stream of Entries is first
++  // established (or the Epoch changes), and all other updates are incremental
++  // (i.e. not Full).
++  bool full = 4;
++}
++
++// Reactions flow in the direction opposite to Entries and request for ranges to
++// be included in the next Entry. Under rare circumstances, ranges may be omitted
++// from closed timestamp updates, and so serving follower reads from them would
++// fail. The Reaction mechanism serves to explicitly request the missing information
++// when that happens.
++message Reaction {
++  option (gogoproto.goproto_stringer) = false;
++
++  repeated int32 Requested = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
++}
++
++service ClosedTimestamp {
++  rpc Get(stream Reaction) returns (stream Entry) { }
++}
+diff --git a/pkg/storage/closedts/ctpb/server.go b/pkg/storage/closedts/ctpb/server.go
+new file mode 100644
+index 00000000000..0b8bd186dc6
+--- /dev/null
++++ b/pkg/storage/closedts/ctpb/server.go
+@@ -0,0 +1,84 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package ctpb
++
++import (
++	"context"
++	"errors"
++
++	"google.golang.org/grpc/metadata"
++)
++
++// InboundClient is an interface that narrows ClosedTimestamp_GetServer down to what's
++// actually required.
++type InboundClient interface {
++	Send(*Entry) error
++	Recv() (*Reaction, error)
++	Context() context.Context
++}
++
++// Server is the interface implemented by types that want to serve incoming
++// closed timestamp update streams.
++type Server interface {
++	Get(InboundClient) error
++}
++
++// ServerShim is a wrapper around Server that provides the wider interface that
++// gRPC expects.
++type ServerShim struct{ Server }
++
++var _ ClosedTimestampServer = (*ServerShim)(nil)
++
++// Get implements ClosedTimestampServer by passing through to the wrapped Server.
++func (s ServerShim) Get(client ClosedTimestamp_GetServer) error {
++	return s.Server.Get(client)
++}
++
++var _ InboundClient = ClosedTimestamp_GetServer(nil)
++
++// InboundClientShim extends a ctpb.InboundClient to a ClosedTimestamp_GetServer
++// by returning errors from all added methods where possible, and no-oping the
++// rest.
++type InboundClientShim struct {
++	InboundClient
++}
++
++// SetHeader is a shim implementation for ClosedTimestamp_GetServer
++// that always returns an error.
++func (s InboundClientShim) SetHeader(metadata.MD) error {
++	return errors.New("unimplemented")
++}
++
++// SendHeader is a shim implementation for ClosedTimestamp_GetServer
++// that always returns an error.
++func (s InboundClientShim) SendHeader(metadata.MD) error {
++	return errors.New("unimplemented")
++}
++
++// SetTrailer is a shim implementation for ClosedTimestamp_GetServer
++// that ignores the argument.
++func (s InboundClientShim) SetTrailer(metadata.MD) {}
++
++// SendMsg is a shim implementation for ClosedTimestamp_GetServer
++// that always returns an error.
++func (s InboundClientShim) SendMsg(m interface{}) error {
++	return errors.New("unimplemented")
++}
++
++// RecvMsg is a shim implementation for ClosedTimestamp_GetServer
++// that always returns an error.
++func (s InboundClientShim) RecvMsg(m interface{}) error {
++	return errors.New("unimplemented")
++}
+diff --git a/pkg/storage/minprop/doc.go b/pkg/storage/closedts/minprop/doc.go
+similarity index 100%
+rename from pkg/storage/minprop/doc.go
+rename to pkg/storage/closedts/minprop/doc.go
+diff --git a/pkg/storage/minprop/doc_test.go b/pkg/storage/closedts/minprop/doc_test.go
+similarity index 98%
+rename from pkg/storage/minprop/doc_test.go
+rename to pkg/storage/closedts/minprop/doc_test.go
+index 6968328a88d..f2d0b6c9f6b 100644
+--- a/pkg/storage/minprop/doc_test.go
++++ b/pkg/storage/closedts/minprop/doc_test.go
+@@ -21,6 +21,7 @@ import (
+ 	"strings"
+ 
+ 	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
+ 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+ )
+ 
+@@ -196,7 +197,7 @@ func Example() {
+ 
+ // mlaiString converts an mlai map into a string. Avoids randomized ordering of
+ // map elements in string output.
+-func mlaiString(mlai map[roachpb.RangeID]int64) string {
++func mlaiString(mlai map[roachpb.RangeID]ctpb.LAI) string {
+ 	var rangeIDs []roachpb.RangeID
+ 	for rangeID := range mlai {
+ 		rangeIDs = append(rangeIDs, rangeID)
+diff --git a/pkg/storage/minprop/tracker.go b/pkg/storage/closedts/minprop/tracker.go
+similarity index 92%
+rename from pkg/storage/minprop/tracker.go
+rename to pkg/storage/closedts/minprop/tracker.go
+index 78d0b4b3005..6d17eb15c9f 100644
+--- a/pkg/storage/minprop/tracker.go
++++ b/pkg/storage/closedts/minprop/tracker.go
+@@ -20,6 +20,8 @@ import (
+ 	"sort"
+ 
+ 	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
+ 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+ 	"github.com/cockroachdb/cockroach/pkg/util/log"
+ 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+@@ -72,18 +74,20 @@ type Tracker struct {
+ 		// `rightRef`.
+ 
+ 		next                hlc.Timestamp
+-		leftMLAI, rightMLAI map[roachpb.RangeID]int64
++		leftMLAI, rightMLAI map[roachpb.RangeID]ctpb.LAI
+ 		leftRef, rightRef   int
+ 	}
+ }
+ 
++var _ closedts.CloseFn = (&Tracker{}).CloseFn()
++
+ // NewTracker returns a Tracker initialized to a closed timestamp of zero and
+ // a next closed timestamp of one logical tick past zero.
+ func NewTracker() *Tracker {
+ 	t := &Tracker{}
+ 	t.mu.next = hlc.Timestamp{Logical: 1}
+-	t.mu.leftMLAI = map[roachpb.RangeID]int64{}
+-	t.mu.rightMLAI = map[roachpb.RangeID]int64{}
++	t.mu.leftMLAI = map[roachpb.RangeID]ctpb.LAI{}
++	t.mu.rightMLAI = map[roachpb.RangeID]ctpb.LAI{}
+ 
+ 	return t
+ }
+@@ -97,7 +101,7 @@ func (t *Tracker) String() string {
+ 
+ 	type item struct {
+ 		rangeID roachpb.RangeID
+-		mlai    int64
++		mlai    ctpb.LAI
+ 		left    bool
+ 	}
+ 
+@@ -153,12 +157,12 @@ func (t *Tracker) String() string {
+ // like a successful call that happens to not return any new information).
+ // Similarly, failure to provide a timestamp strictly larger than that to be
+ // closed out next results in the same "idempotent" return values.
+-func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]int64) {
++func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
+ 	t.mu.Lock()
+ 	defer t.mu.Unlock()
+ 
+ 	var closed hlc.Timestamp
+-	var mlai map[roachpb.RangeID]int64
++	var mlai map[roachpb.RangeID]ctpb.LAI
+ 	if log.V(3) {
+ 		log.Infof(context.TODO(), "close: leftRef=%d rightRef=%d next=%s closed=%s new=%s", t.mu.leftRef, t.mu.rightRef, t.mu.next, t.mu.closed, next)
+ 	}
+@@ -181,7 +185,7 @@ func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]
+ 		// everything that's in-flight).
+ 		t.mu.leftMLAI = t.mu.rightMLAI
+ 		t.mu.leftRef = t.mu.rightRef
+-		t.mu.rightMLAI = map[roachpb.RangeID]int64{}
++		t.mu.rightMLAI = map[roachpb.RangeID]ctpb.LAI{}
+ 		t.mu.rightRef = 0
+ 
+ 		t.mu.next = next
+@@ -204,7 +208,7 @@ func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]
+ // arguments once after a regular call.
+ func (t *Tracker) Track(
+ 	ctx context.Context,
+-) (hlc.Timestamp, func(context.Context, roachpb.RangeID, int64)) {
++) (hlc.Timestamp, func(context.Context, roachpb.RangeID, ctpb.LAI)) {
+ 	shouldLog := log.V(3)
+ 
+ 	t.mu.Lock()
+@@ -217,7 +221,7 @@ func (t *Tracker) Track(
+ 	}
+ 
+ 	var calls int
+-	release := func(ctx context.Context, rangeID roachpb.RangeID, lai int64) {
++	release := func(ctx context.Context, rangeID roachpb.RangeID, lai ctpb.LAI) {
+ 		calls++
+ 		if calls != 1 {
+ 			if lai != 0 || rangeID != 0 || calls > 2 {
+@@ -265,3 +269,10 @@ func (t *Tracker) Track(
+ 
+ 	return minProp, release
+ }
++
++// CloseFn returns this Tracker's Close method as a CloseFn.
++func (t *Tracker) CloseFn() closedts.CloseFn {
++	return func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
++		return t.Close(next)
++	}
++}
+diff --git a/pkg/storage/minprop/tracker_test.go b/pkg/storage/closedts/minprop/tracker_test.go
+similarity index 92%
+rename from pkg/storage/minprop/tracker_test.go
+rename to pkg/storage/closedts/minprop/tracker_test.go
+index 087cefe8cf4..296200fb85c 100644
+--- a/pkg/storage/minprop/tracker_test.go
++++ b/pkg/storage/closedts/minprop/tracker_test.go
+@@ -22,6 +22,7 @@ import (
+ 	"testing"
+ 
+ 	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
+ 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+ 	"github.com/cockroachdb/cockroach/pkg/util/log"
+ 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+@@ -100,9 +101,9 @@ type modelClient struct {
+ 	lai map[roachpb.RangeID]*int64 // read-only map, values accessed atomically
+ 	mu  struct {
+ 		syncutil.Mutex
+-		closed   []hlc.Timestamp             // closed timestamps
+-		released []map[roachpb.RangeID]int64 // known released LAIs, rotated on Close
+-		m        map[roachpb.RangeID]int64   // max over all maps returned from Close()
++		closed   []hlc.Timestamp                // closed timestamps
++		released []map[roachpb.RangeID]ctpb.LAI // known released LAIs, rotated on Close
++		m        map[roachpb.RangeID]ctpb.LAI   // max over all maps returned from Close()
+ 	}
+ }
+ 
+@@ -120,18 +121,18 @@ func TestTrackerConcurrentUse(t *testing.T) {
+ 	)
+ 
+ 	var mc modelClient
+-	mc.mu.m = map[roachpb.RangeID]int64{}
++	mc.mu.m = map[roachpb.RangeID]ctpb.LAI{}
+ 	mc.mu.closed = make([]hlc.Timestamp, 1)
+-	mc.mu.released = []map[roachpb.RangeID]int64{{}, {}, {}}
++	mc.mu.released = []map[roachpb.RangeID]ctpb.LAI{{}, {}, {}}
+ 
+ 	mc.lai = map[roachpb.RangeID]*int64{}
+ 	for i := roachpb.RangeID(1); i <= numRanges; i++ {
+ 		mc.lai[i] = new(int64)
+ 	}
+ 
+-	get := func(i int) (roachpb.RangeID, int64) {
++	get := func(i int) (roachpb.RangeID, ctpb.LAI) {
+ 		rangeID := roachpb.RangeID(1 + (i % numRanges))
+-		return rangeID, atomic.AddInt64(mc.lai[rangeID], 1)
++		return rangeID, ctpb.LAI(atomic.AddInt64(mc.lai[rangeID], 1))
+ 	}
+ 
+ 	// It becomes a lot more complicated to collect the released indexes
+@@ -182,7 +183,7 @@ func TestTrackerConcurrentUse(t *testing.T) {
+ 			// weaken the test overall.
+ 			released := mc.mu.released[len(mc.mu.released)-3]
+ 			// Rotate released commands bucket.
+-			mc.mu.released = append(mc.mu.released, map[roachpb.RangeID]int64{})
++			mc.mu.released = append(mc.mu.released, map[roachpb.RangeID]ctpb.LAI{})
+ 
+ 			for rangeID, mlai := range m {
+ 				// Intuitively you expect mc.mu.m[rangeID] < mlai, but this
+@@ -230,7 +231,7 @@ func TestTrackerConcurrentUse(t *testing.T) {
+ 		runtime.Gosched()
+ 
+ 		var rangeID roachpb.RangeID
+-		var lai int64
++		var lai ctpb.LAI
+ 		switch i % 3 {
+ 		case 0:
+ 			// Successful evaluation.
+@@ -283,7 +284,7 @@ func TestTrackerConcurrentUse(t *testing.T) {
+ 	t.Log(tracker)
+ 
+ 	for rangeID, addr := range mc.lai {
+-		assignedMLAI := atomic.LoadInt64(addr)
++		assignedMLAI := ctpb.LAI(atomic.LoadInt64(addr))
+ 		mlai := mc.mu.m[rangeID]
+ 
+ 		if assignedMLAI > mlai {
+diff --git a/pkg/storage/closedts/provider/provider.go b/pkg/storage/closedts/provider/provider.go
+new file mode 100644
+index 00000000000..9cfe2614f13
+--- /dev/null
++++ b/pkg/storage/closedts/provider/provider.go
+@@ -0,0 +1,283 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package provider
++
++import (
++	"context"
++	"sync"
++	"time"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/util/hlc"
++	"github.com/cockroachdb/cockroach/pkg/util/log"
++	"github.com/cockroachdb/cockroach/pkg/util/stop"
++	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
++	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
++)
++
++// Config holds the information necessary to create a Provider.
++type Config struct {
++	// NodeID is the ID of the node on which the Provider is housed.
++	NodeID   roachpb.NodeID
++	Settings *cluster.Settings
++	Stopper  *stop.Stopper
++	Storage  closedts.Storage
++	Clock    closedts.LiveClockFn
++	Close    closedts.CloseFn
++}
++
++type subscriber struct {
++	ch    chan<- ctpb.Entry
++	queue []ctpb.Entry
++}
++
++// Provider implements closedts.Provider. It orchestrates the flow of closed
++// timestamps and lets callers check whether they can serve reads.
++type Provider struct {
++	cfg *Config
++
++	mu struct {
++		syncutil.RWMutex
++		subscribers []*subscriber
++		draining    bool // tell subscribers to terminate
++	}
++	cond *sync.Cond
++
++	everyClockLog log.EveryN
++}
++
++var _ closedts.Provider = (*Provider)(nil)
++
++// NewProvider initializes a Provider, that has yet to be started.
++func NewProvider(cfg *Config) *Provider {
++	return &Provider{
++		cfg:           cfg,
++		cond:          sync.NewCond((&syncutil.RWMutex{}).RLocker()),
++		everyClockLog: log.Every(time.Minute),
++	}
++}
++
++// Start implements closedts.Provider.
++//
++// TODO(tschottdorf): the closer functionality could be extracted into its own
++// component, which would make the interfaces a little cleaner. Decide whether
++// it's worth it during testing.
++func (p *Provider) Start() {
++	p.cfg.Stopper.RunWorker(log.WithLogTagStr(context.Background(), "ct-closer", ""), p.runCloser)
++}
++
++func (p *Provider) drain() {
++	p.mu.Lock()
++	p.mu.draining = true
++	p.mu.Unlock()
++	for {
++		p.cond.Broadcast()
++		p.mu.Lock()
++		done := true
++		for _, sub := range p.mu.subscribers {
++			done = done && sub == nil
++		}
++		p.mu.Unlock()
++
++		if done {
++			return
++		}
++	}
++}
++
++func (p *Provider) runCloser(ctx context.Context) {
++	// The loop below signals the subscribers, so when it exits it needs to do
++	// extra work to help the subscribers terminate.
++	defer p.drain()
++
++	var t timeutil.Timer
++	defer t.Stop()
++	var lastEpoch ctpb.Epoch
++	for {
++		closeFraction := closedts.CloseFraction.Get(&p.cfg.Settings.SV)
++		targetDuration := float64(closedts.TargetDuration.Get(&p.cfg.Settings.SV))
++		t.Reset(time.Duration(closeFraction * targetDuration))
++
++		select {
++		case <-p.cfg.Stopper.ShouldQuiesce():
++			return
++		case <-ctx.Done():
++			return
++		case <-t.C:
++			t.Read = true
++		}
++
++		next, epoch, err := p.cfg.Clock()
++
++		next.WallTime -= int64(targetDuration)
++		if err != nil {
++			if p.everyClockLog.ShouldLog() {
++				log.Warningf(ctx, "unable to move closed timestamp forward: %s", err)
++			}
++		} else {
++			closed, m := p.cfg.Close(next)
++			if log.V(1) {
++				log.Infof(ctx, "closed ts=%s with %+v, next closed timestamp should be %s", closed, m, next)
++			}
++			entry := ctpb.Entry{
++				Epoch:           lastEpoch,
++				ClosedTimestamp: closed,
++				MLAI:            m,
++			}
++			// TODO(tschottdorf): this one-off between the epoch is awkward. Clock() gives us the epoch for `next`
++			// but the entry wants the epoch for the current closed timestamp. Better to pass both into Close and
++			// to get both back from it as well.
++			lastEpoch = epoch
++
++			// Simulate a subscription to the local node, so that the new information
++			// is added to the storage (and thus becomes available to future subscribers
++			// as well, not only to existing ones).
++			//
++			// TODO(tschottdorf): the transport should ignore connection requests from
++			// the node to itself. Those connections would pointlessly loop this around
++			// once more.
++			p.cfg.Storage.Add(p.cfg.NodeID, entry)
++
++			// Notify existing subscribers.
++			p.mu.Lock()
++			for _, sub := range p.mu.subscribers {
++				sub.queue = append(sub.queue, entry)
++			}
++			p.mu.Unlock()
++		}
++
++		// Broadcast even if nothing new was queued, so that the subscribers
++		// loop to check their client's context.
++		p.cond.Broadcast()
++	}
++}
++
++// Notify implements closedts.Notifyee. It passes the incoming stream of Entries
++// to the local Storage.
++func (p *Provider) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
++	ch := make(chan ctpb.Entry)
++
++	p.cfg.Stopper.RunWorker(context.Background(), func(ctx context.Context) {
++		for entry := range ch {
++			p.cfg.Storage.Add(nodeID, entry)
++		}
++	})
++
++	return ch
++}
++
++// Subscribe implements closedts.Producer.
++func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
++	var i int
++	sub := &subscriber{ch, nil}
++	p.mu.Lock()
++	for i = range p.mu.subscribers {
++		if p.mu.subscribers[i] == nil {
++			p.mu.subscribers[i] = sub
++		}
++	}
++	if i == len(p.mu.subscribers) {
++		p.mu.subscribers = append(p.mu.subscribers, sub)
++	}
++	draining := p.mu.draining
++	p.mu.Unlock()
++
++	defer func() {
++		p.mu.Lock()
++		p.mu.subscribers[i] = nil
++		p.mu.Unlock()
++		close(ch)
++	}()
++
++	if draining {
++		return
++	}
++
++	if log.V(1) {
++		log.Info(ctx, "new subscriber connected")
++	}
++
++	// The subscription is already active, so any storage snapshot from now on is
++	// going to fully catch up the subscriber without a gap.
++	{
++		p.cfg.Storage.VisitAscending(p.cfg.NodeID, func(e ctpb.Entry) (done bool) {
++			select {
++			case ch <- e:
++			case <-ctx.Done():
++				return true // done
++			}
++			return false // want more
++		})
++	}
++
++	for {
++		p.cond.L.Lock()
++		p.cond.Wait()
++		p.cond.L.Unlock()
++
++		if err := ctx.Err(); err != nil {
++			if log.V(1) {
++				log.Info(ctx, err)
++			}
++			return
++		}
++
++		var queue []ctpb.Entry
++		p.mu.RLock()
++		queue, p.mu.subscribers[i].queue = p.mu.subscribers[i].queue, nil
++		draining := p.mu.draining
++		p.mu.RUnlock()
++
++		if draining {
++			return
++		}
++
++		for _, entry := range queue {
++			select {
++			case ch <- entry:
++			default:
++				// Abort the subscription if consumer doesn't keep up.
++				log.Warning(ctx, "closed timestamp update subscriber did not catch up; terminating")
++				return
++			}
++		}
++	}
++}
++
++// CanServe implements closedts.Provider.
++func (p *Provider) CanServe(
++	nodeID roachpb.NodeID, ts hlc.Timestamp, rangeID roachpb.RangeID, epoch ctpb.Epoch, lai ctpb.LAI,
++) bool {
++	var ok bool
++	p.cfg.Storage.VisitDescending(nodeID, func(entry ctpb.Entry) bool {
++		mlai, found := entry.MLAI[rangeID]
++		ctOK := !entry.ClosedTimestamp.Less(ts)
++
++		ok = found &&
++			ctOK &&
++			mlai <= lai &&
++			entry.Epoch == epoch
++
++		// We're done either if we proved that the read is possible, or if we're
++		// already done looking at closed timestamps large enough to satisfy it.
++		done := ok || !ctOK
++		return done
++	})
++
++	return ok
++}
+diff --git a/pkg/storage/closedts/setting.go b/pkg/storage/closedts/setting.go
+new file mode 100644
+index 00000000000..f4d20b0cfd4
+--- /dev/null
++++ b/pkg/storage/closedts/setting.go
+@@ -0,0 +1,42 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package closedts
++
++import (
++	"errors"
++	"time"
++
++	"github.com/cockroachdb/cockroach/pkg/settings"
++)
++
++// TargetDuration is the follower reads closed timestamp update target duration.
++var TargetDuration = settings.RegisterNonNegativeDurationSetting(
++	"server.closed_timestamp.target_duration",
++	"if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration",
++	5*time.Second,
++)
++
++// CloseFraction is the fraction of TargetDuration determining how often closed
++// timestamp updates are to be attempted.
++var CloseFraction = settings.RegisterValidatedFloatSetting(
++	"server.closed_timestamp.close_fraction",
++	"desc",
++	0.2,
++	func(v float64) error {
++		if v <= 0 || v > 1 {
++			return errors.New("value not between zero and one")
++		}
++		return nil
++	})
+diff --git a/pkg/storage/closedts/storage/storage.go b/pkg/storage/closedts/storage/storage.go
+new file mode 100644
+index 00000000000..f7f5fc3a73d
+--- /dev/null
++++ b/pkg/storage/closedts/storage/storage.go
+@@ -0,0 +1,149 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package storage
++
++import (
++	"fmt"
++
++	"unsafe"
++
++	"bytes"
++	"sort"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
++)
++
++// SingleStorage stores and manages closed timestamp updates originating from a
++// single source (i.e. node). A SingleStorage internally maintains multiple
++// buckets for historical closed timestamp information. The reason for this is
++// twofold:
++//
++// 1. The most recent closed timestamp update is also the hardest to prove a
++// read for, since it comes with larger minimum lease applied indexes. In
++// situations in which followers are lagging behind with their command
++// application, this could lead to a runaway scenario, in which a closed
++// timestamp update can never be used until it is replaced by a new one, which
++// in turn also will never be used, etc. Instead, a SingleStorage keeps some
++// amount of history and upstream systems can try to prove a follower read using
++// an older closed timestamp instead.
++//
++// 2. Follower reads can be used to implement recovery of a consistent
++// cluster-wide snapshot after catastrophic loss of quorum. To do this, the
++// mechanism must locate at least one replica of every range in the cluster, and
++// for each range find the largest possible timestamp at which follower reads
++// are possible among the surviving replicas. Of all these per-range timestamps,
++// the smallest can be used to read from all ranges, resulting in a consistent
++// snapshot. This makes it crucial that every replica can serve at least some
++// follower reads, even when regularly outpaced by the closed timestamp
++// frontier. Emitted MLAIs may never even be proposed to Raft in the event of
++// an ill-timed crash, and so historic information is invaluable.
++//
++// TODO(tschottdorf): revisit whether this shouldn't be a concrete impl instead,
++// with only the buckets abstracted out.
++type SingleStorage interface {
++	fmt.Stringer
++	// VisitAscending walks through the buckets of the storage in ascending
++	// closed timestamp order, until the closure returns true (or all buckets
++	// have been visited).
++	VisitAscending(func(ctpb.Entry) (done bool))
++	// VisitDescending walks through the buckets of the storage in descending
++	// closed timestamp order, until the closure returns true (or all buckets
++	// have been visited).
++	VisitDescending(func(ctpb.Entry) (done bool))
++	// Add adds a new Entry to this storage. The entry is added to the most
++	// recent bucket and remaining buckets are rotated as indicated by their age
++	// relative to the newly added Entry.
++	Add(ctpb.Entry)
++}
++
++type entry struct {
++	SingleStorage
++}
++
++// MultiStorage implements the closedts.Storage interface.
++type MultiStorage struct {
++	// constructor creates a SingleStorage whenever one is initialized for a new
++	// NodeID.
++	constructor func() SingleStorage
++	// TODO(tschottdorf): clean up storages that haven't been used for extended
++	// periods of time.
++	m syncutil.IntMap
++}
++
++var _ closedts.Storage = (*MultiStorage)(nil)
++
++// NewMultiStorage sets up a MultiStorage which uses the given factory method
++// for setting up the SingleStorage used for each individual NodeID for which
++// operations are received.
++func NewMultiStorage(constructor func() SingleStorage) *MultiStorage {
++	return &MultiStorage{constructor: constructor}
++}
++
++func (ms *MultiStorage) getOrCreate(nodeID roachpb.NodeID) SingleStorage {
++	key := int64(nodeID)
++	p, found := ms.m.Load(key)
++	if found {
++		// Fast path that avoids calling f().
++		return (*entry)(p).SingleStorage
++	}
++
++	ss := ms.constructor()
++	p, _ = ms.m.LoadOrStore(key, unsafe.Pointer(&entry{ss}))
++	return (*entry)(p).SingleStorage
++}
++
++// VisitAscending implements closedts.Storage.
++func (ms *MultiStorage) VisitAscending(nodeID roachpb.NodeID, f func(ctpb.Entry) (done bool)) {
++	ss := ms.getOrCreate(nodeID)
++	ss.VisitAscending(f)
++}
++
++// VisitDescending implements closedts.Storage.
++func (ms *MultiStorage) VisitDescending(nodeID roachpb.NodeID, f func(ctpb.Entry) (done bool)) {
++	ss := ms.getOrCreate(nodeID)
++	ss.VisitDescending(f)
++}
++
++// Add implements closedts.Storage.
++func (ms *MultiStorage) Add(nodeID roachpb.NodeID, entry ctpb.Entry) {
++	ss := ms.getOrCreate(nodeID)
++	ss.Add(entry)
++}
++
++// String prints a tabular rundown of the contents of the MultiStorage.
++func (ms *MultiStorage) String() string {
++	type tuple struct {
++		roachpb.NodeID
++		SingleStorage
++	}
++
++	var sl []tuple
++	ms.m.Range(func(k int64, p unsafe.Pointer) bool {
++		sl = append(sl, tuple{roachpb.NodeID(k), (*entry)(p).SingleStorage})
++		return true // want more
++	})
++	sort.Slice(sl, func(i, j int) bool {
++		return sl[i].NodeID < sl[j].NodeID
++	})
++	var buf bytes.Buffer
++	for i := range sl {
++		buf.WriteString(fmt.Sprintf("***** n%d *****\n", sl[i].NodeID))
++		buf.WriteString(sl[i].SingleStorage.String())
++	}
++	return buf.String()
++}
+diff --git a/pkg/storage/closedts/storage/storage_mem.go b/pkg/storage/closedts/storage/storage_mem.go
+new file mode 100644
+index 00000000000..ea8aa5be009
+--- /dev/null
++++ b/pkg/storage/closedts/storage/storage_mem.go
+@@ -0,0 +1,199 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package storage
++
++import (
++	"bytes"
++	"fmt"
++	"sort"
++	"strconv"
++	"strings"
++	"time"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
++	"github.com/olekukonko/tablewriter"
++)
++
++type memStorage struct {
++	mu struct {
++		syncutil.RWMutex
++		buckets []ctpb.Entry
++		scale   time.Duration
++	}
++}
++
++var _ SingleStorage = (*memStorage)(nil)
++
++// NewMemStorage initializes a SingleStorage backed by an in-memory slice that
++// represents the given number of buckets, where the i-th bucket holds a closed
++// timestamp approximately 2^i*scale in the past.
++func NewMemStorage(scale time.Duration, buckets int) SingleStorage {
++	m := &memStorage{}
++	m.mu.buckets = make([]ctpb.Entry, buckets)
++	m.mu.scale = scale
++	return m
++}
++
++func (m *memStorage) String() string {
++	m.mu.RLock()
++	defer m.mu.RUnlock()
++
++	var buf bytes.Buffer
++	tw := tablewriter.NewWriter(&buf)
++
++	header := make([]string, 1+len(m.mu.buckets))
++	header[0] = ""
++	align := make([]int, 1+len(m.mu.buckets))
++	align[0] = tablewriter.ALIGN_LEFT
++
++	for i := range m.mu.buckets {
++		header[1+i] = m.mu.buckets[i].ClosedTimestamp.String() + "\nage=" + time.Duration(
++			m.mu.buckets[0].ClosedTimestamp.WallTime-m.mu.buckets[i].ClosedTimestamp.WallTime,
++		).String() + " (target ≤" + m.bucketMaxAge(i).String() + ")\nepoch=" + fmt.Sprintf("%d", m.mu.buckets[i].Epoch)
++		align[1+i] = tablewriter.ALIGN_RIGHT
++	}
++	tw.SetAutoFormatHeaders(false)
++	tw.SetColumnAlignment(align)
++	tw.SetHeader(header)
++	tw.SetHeaderLine(true)
++	tw.SetRowLine(false)
++	tw.SetColumnSeparator(" ")
++	tw.SetBorder(true)
++
++	rangeIDs := make([]roachpb.RangeID, 0, len(m.mu.buckets[0].MLAI))
++	for rangeID := range m.mu.buckets[0].MLAI {
++		rangeIDs = append(rangeIDs, rangeID)
++	}
++	sort.Slice(rangeIDs, func(i, j int) bool {
++		return rangeIDs[i] < rangeIDs[j]
++	})
++
++	row := make([]string, 1+len(m.mu.buckets))
++	for _, rangeID := range rangeIDs {
++		row[0] = "r" + strconv.FormatInt(int64(rangeID), 10)
++		for i, entry := range m.mu.buckets {
++			lai, ok := entry.MLAI[rangeID]
++			if ok {
++				row[1+i] = strconv.FormatInt(int64(lai), 10)
++			} else {
++				row[1+i] = ""
++			}
++		}
++		tw.Append(row)
++	}
++
++	tw.Render()
++
++	// It's apparently impossible to write passing Example tests when
++	// intermediate lines have trailing whitespace (💩), so remove all of
++	// that.
++	//
++	// See https://github.com/golang/go/issues/6416.
++	s := strings.Split(buf.String(), "\n")
++	for i := range s {
++		s[i] = strings.TrimRight(s[i], " ")
++	}
++	return strings.Join(s, "\n")
++
++}
++
++func (m *memStorage) bucketMaxAge(index int) time.Duration {
++	if index == 0 {
++		return 0
++	}
++	return (1 << uint(index-1)) * m.mu.scale
++}
++
++func (m *memStorage) Add(e ctpb.Entry) {
++	m.mu.Lock()
++	defer m.mu.Unlock()
++
++	now := e.ClosedTimestamp.WallTime
++
++	for i := 0; i < len(m.mu.buckets); i++ {
++		if time.Duration(now-m.mu.buckets[i].ClosedTimestamp.WallTime) <= m.bucketMaxAge(i) {
++			break
++		}
++		mergedEntry := merge(m.mu.buckets[i], e)
++		e = m.mu.buckets[i]
++		m.mu.buckets[i] = mergedEntry
++	}
++}
++
++func (m *memStorage) VisitAscending(f func(ctpb.Entry) (done bool)) {
++	m.mu.RLock()
++	defer m.mu.RUnlock()
++
++	for i := len(m.mu.buckets) - 1; i >= 0; i-- {
++		entry := m.mu.buckets[i]
++		if entry.Epoch == 0 {
++			// Skip empty buckets.
++			continue
++		}
++		if f(entry) {
++			return
++		}
++	}
++}
++
++func (m *memStorage) VisitDescending(f func(ctpb.Entry) (done bool)) {
++	m.mu.RLock()
++	defer m.mu.RUnlock()
++
++	for l, i := len(m.mu.buckets), 0; i < l; i++ {
++		entry := m.mu.buckets[i]
++		// Stop once we hit an empty bucket (which implies that all further buckets
++		// are also empty), or once the visitor is satisfied.
++		if entry.Epoch == 0 || f(entry) {
++			return
++		}
++	}
++}
++
++func merge(e, ee ctpb.Entry) ctpb.Entry {
++	// TODO(tschottdorf): if either of these hit, check that what we're
++	// returning has Full set. If we make it past, check that either of
++	// them has it set. The first Entry the Storage sees for an epoch must have it
++	// set, so the assertions should never fire.
++	if e.Epoch < ee.Epoch {
++		return ee
++	} else if e.Epoch > ee.Epoch {
++		return e
++	}
++
++	// Epochs match, so we can actually update.
++
++	// Initialize re as a deep copy of e.
++	re := e
++	re.MLAI = map[roachpb.RangeID]ctpb.LAI{}
++	for rangeID, mlai := range e.MLAI {
++		re.MLAI[rangeID] = mlai
++	}
++	// The result is full if either operand is.
++	re.Full = e.Full || ee.Full
++
++	// Use the larger of both timestamps with the union of the MLAIs, preferring larger
++	// ones on conflict.
++	re.ClosedTimestamp.Forward(ee.ClosedTimestamp)
++	for rangeID, mlai := range ee.MLAI {
++		if re.MLAI[rangeID] < mlai {
++			re.MLAI[rangeID] = mlai
++		}
++	}
++
++	return re
++}
+diff --git a/pkg/storage/closedts/storage/storage_test.go b/pkg/storage/closedts/storage/storage_test.go
+new file mode 100644
+index 00000000000..7999ac698a1
+--- /dev/null
++++ b/pkg/storage/closedts/storage/storage_test.go
+@@ -0,0 +1,428 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package storage
++
++import (
++	"fmt"
++	"math/rand"
++	"testing"
++	"time"
++
++	"github.com/pkg/errors"
++
++	"golang.org/x/sync/errgroup"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/util/hlc"
++	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
++	"github.com/cockroachdb/cockroach/pkg/util/randutil"
++)
++
++func ExampleSingleStorage() {
++	s := NewMemStorage(10*time.Second, 4)
++	fmt.Println("The empty storage renders as below:")
++	fmt.Println(s)
++
++	fmt.Println("After adding the following entry:")
++	e1 := ctpb.Entry{
++		Full:            true,
++		ClosedTimestamp: hlc.Timestamp{WallTime: 123E9},
++		MLAI: map[roachpb.RangeID]ctpb.LAI{
++			1: 1000,
++			9: 2000,
++		},
++	}
++	fmt.Println(e1)
++	s.Add(e1)
++	fmt.Println("the result is:")
++	fmt.Println(s)
++	fmt.Println("Note how the most recent bucket picked up the update.")
++
++	fmt.Println("A new update comes in only two seconds later:")
++	e2 := ctpb.Entry{
++		ClosedTimestamp: hlc.Timestamp{WallTime: 125E9},
++		MLAI: map[roachpb.RangeID]ctpb.LAI{
++			1: 1001,
++			7: 12,
++		},
++	}
++	fmt.Println(e2)
++	s.Add(e2)
++	fmt.Println("The first bucket now contains the union of both updates.")
++	fmt.Println("The second bucket holds on to the previous value of the first.")
++	fmt.Println("The remaining buckets are unchanged. The best we could do is")
++	fmt.Println("give them identical copies of the second, but that's nonsense.")
++	fmt.Println(s)
++
++	fmt.Println("Another update, another eight seconds later:")
++	e3 := ctpb.Entry{
++		ClosedTimestamp: hlc.Timestamp{WallTime: 133E9},
++		MLAI: map[roachpb.RangeID]ctpb.LAI{
++			9: 2020,
++			1: 999,
++		},
++	}
++	fmt.Println(e3)
++	s.Add(e3)
++	fmt.Println("Note how the second bucket didn't rotate, for it is not yet")
++	fmt.Println("older than 10s. Note also how the first bucket ignores the")
++	fmt.Println("downgrade for r1; these can occur in practice.")
++	fmt.Println(s)
++
++	fmt.Println("Half a second later, with the next update, it will rotate:")
++	e4 := ctpb.Entry{
++		ClosedTimestamp: hlc.Timestamp{WallTime: 133E9 + 1E9/2},
++		MLAI: map[roachpb.RangeID]ctpb.LAI{
++			7: 17,
++			8: 711,
++		},
++	}
++	fmt.Println(e4)
++	s.Add(e4)
++	fmt.Println("Consequently we now see the third bucket fill up.")
++	fmt.Println(s)
++
++	fmt.Println("Next update arrives a whopping 46.5s later (why not).")
++	e5 := ctpb.Entry{
++		ClosedTimestamp: hlc.Timestamp{WallTime: 180E9},
++		MLAI: map[roachpb.RangeID]ctpb.LAI{
++			1: 1004,
++			7: 19,
++			2: 929922,
++		},
++	}
++	fmt.Println(e5)
++	s.Add(e5)
++	fmt.Println("The second bucket rotated, but due to the sparseness of updates,")
++	fmt.Println("it's still above its target age and will rotate again next time.")
++	fmt.Println("The same is true for the remaining buckets.")
++	fmt.Println(s)
++
++	fmt.Println("Another five seconds later, another update:")
++	e6 := ctpb.Entry{
++		ClosedTimestamp: hlc.Timestamp{WallTime: 185E9},
++		MLAI: map[roachpb.RangeID]ctpb.LAI{
++			3: 1771,
++		},
++	}
++	fmt.Println(e6)
++	s.Add(e6)
++	fmt.Println("All buckets rotate, but the third and fourth remain over target age.")
++	fmt.Println("This would resolve itself if reasonably spaced updates kept coming in.")
++	fmt.Println(s)
++
++	// Output:
++	// The empty storage renders as below:
++	// +--+---------------------+----------------------+----------------------+----------------------+
++	//         0.000000000,0         0.000000000,0          0.000000000,0          0.000000000,0
++	//      age=0s (target ≤0s)   age=0s (target ≤10s)   age=0s (target ≤20s)   age=0s (target ≤40s)
++	//            epoch=0               epoch=0                epoch=0                epoch=0
++	// +--+---------------------+----------------------+----------------------+----------------------+
++	// +--+---------------------+----------------------+----------------------+----------------------+
++	//
++	// After adding the following entry:
++	// CT: 123.000000000,0 @ Epoch 0
++	// Full: true
++	// MLAI: r1: 1000, r9: 2000
++	//
++	// the result is:
++	// +----+---------------------+------------------------+------------------------+------------------------+
++	//          123.000000000,0     0.000000000,0 age=2m3s   0.000000000,0 age=2m3s   0.000000000,0 age=2m3s
++	//        age=0s (target ≤0s)   (target ≤10s) epoch=0    (target ≤20s) epoch=0    (target ≤40s) epoch=0
++	//              epoch=0
++	// +----+---------------------+------------------------+------------------------+------------------------+
++	//   r1                  1000
++	//   r9                  2000
++	// +----+---------------------+------------------------+------------------------+------------------------+
++	//
++	// Note how the most recent bucket picked up the update.
++	// A new update comes in only two seconds later:
++	// CT: 125.000000000,0 @ Epoch 0
++	// Full: false
++	// MLAI: r1: 1001, r7: 12
++	//
++	// The first bucket now contains the union of both updates.
++	// The second bucket holds on to the previous value of the first.
++	// The remaining buckets are unchanged. The best we could do is
++	// give them identical copies of the second, but that's nonsense.
++	// +----+---------------------+----------------------+------------------------+------------------------+
++	//          125.000000000,0       123.000000000,0      0.000000000,0 age=2m5s   0.000000000,0 age=2m5s
++	//        age=0s (target ≤0s)   age=2s (target ≤10s)   (target ≤20s) epoch=0    (target ≤40s) epoch=0
++	//              epoch=0               epoch=0
++	// +----+---------------------+----------------------+------------------------+------------------------+
++	//   r1                  1001                   1000
++	//   r7                    12
++	//   r9                  2000                   2000
++	// +----+---------------------+----------------------+------------------------+------------------------+
++	//
++	// Another update, another eight seconds later:
++	// CT: 133.000000000,0 @ Epoch 0
++	// Full: false
++	// MLAI: r1: 999, r9: 2020
++	//
++	// Note how the second bucket didn't rotate, for it is not yet
++	// older than 10s. Note also how the first bucket ignores the
++	// downgrade for r1; these can occur in practice.
++	// +----+---------------------+-----------------------+-------------------------+-------------------------+
++	//          133.000000000,0        123.000000000,0      0.000000000,0 age=2m13s   0.000000000,0 age=2m13s
++	//        age=0s (target ≤0s)   age=10s (target ≤10s)    (target ≤20s) epoch=0     (target ≤40s) epoch=0
++	//              epoch=0                epoch=0
++	// +----+---------------------+-----------------------+-------------------------+-------------------------+
++	//   r1                  1001                    1000
++	//   r7                    12
++	//   r9                  2020                    2000
++	// +----+---------------------+-----------------------+-------------------------+-------------------------+
++	//
++	// Half a second later, with the next update, it will rotate:
++	// CT: 133.500000000,0 @ Epoch 0
++	// Full: false
++	// MLAI: r7: 17, r8: 711
++	//
++	// Consequently we now see the third bucket fill up.
++	// +----+---------------------+-------------------------+-------------------------+---------------------------+
++	//          133.500000000,0         133.000000000,0           123.000000000,0       0.000000000,0 age=2m13.5s
++	//        age=0s (target ≤0s)   age=500ms (target ≤10s)   age=10.5s (target ≤20s)     (target ≤40s) epoch=0
++	//              epoch=0                 epoch=0                   epoch=0
++	// +----+---------------------+-------------------------+-------------------------+---------------------------+
++	//   r1                  1001                      1001                      1000
++	//   r7                    17                        12
++	//   r8                   711
++	//   r9                  2020                      2020                      2000
++	// +----+---------------------+-------------------------+-------------------------+---------------------------+
++	//
++	// Next update arrives a whopping 46.5s later (why not).
++	// CT: 180.000000000,0 @ Epoch 0
++	// Full: false
++	// MLAI: r1: 1004, r2: 929922, r7: 19
++	//
++	// The second bucket rotated, but due to the sparseness of updates,
++	// it's still above its target age and will rotate again next time.
++	// The same is true for the remaining buckets.
++	// +----+---------------------+-------------------------+-----------------------+-----------------------+
++	//          180.000000000,0         133.500000000,0          133.000000000,0         123.000000000,0
++	//        age=0s (target ≤0s)   age=46.5s (target ≤10s)   age=47s (target ≤20s)   age=57s (target ≤40s)
++	//              epoch=0                 epoch=0                  epoch=0                 epoch=0
++	// +----+---------------------+-------------------------+-----------------------+-----------------------+
++	//   r1                  1004                      1001                    1001                    1000
++	//   r2                929922
++	//   r7                    19                        17                      12
++	//   r8                   711                       711
++	//   r9                  2020                      2020                    2020                    2000
++	// +----+---------------------+-------------------------+-----------------------+-----------------------+
++	//
++	// Another five seconds later, another update:
++	// CT: 185.000000000,0 @ Epoch 0
++	// Full: false
++	// MLAI: r3: 1771
++	//
++	// All buckets rotate, but the third and fourth remain over target age.
++	// This would resolve itself if reasonably spaced updates kept coming in.
++	// +----+---------------------+----------------------+-------------------------+-----------------------+
++	//          185.000000000,0       180.000000000,0          133.500000000,0          133.000000000,0
++	//        age=0s (target ≤0s)   age=5s (target ≤10s)   age=51.5s (target ≤20s)   age=52s (target ≤40s)
++	//              epoch=0               epoch=0                  epoch=0                  epoch=0
++	// +----+---------------------+----------------------+-------------------------+-----------------------+
++	//   r1                  1004                   1004                      1001                    1001
++	//   r2                929922                 929922
++	//   r3                  1771
++	//   r7                    19                     19                        17                      12
++	//   r8                   711                    711                       711
++	//   r9                  2020                   2020                      2020                    2020
++	// +----+---------------------+----------------------+-------------------------+-----------------------+
++}
++
++func ExampleMultiStorage_epoch() {
++	ms := NewMultiStorage(func() SingleStorage {
++		return NewMemStorage(time.Millisecond, 2)
++	})
++
++	e1 := ctpb.Entry{
++		Epoch:           10,
++		ClosedTimestamp: hlc.Timestamp{WallTime: 1E9},
++		MLAI: map[roachpb.RangeID]ctpb.LAI{
++			9: 17,
++		},
++	}
++	fmt.Println("First, the following entry is added:")
++	fmt.Println(e1)
++	ms.Add(1, e1)
++	fmt.Println(ms)
++
++	fmt.Println("The epoch changes. It can only increase, for we receive Entries in a fixed order.")
++	e2 := ctpb.Entry{
++		Epoch:           11,
++		ClosedTimestamp: hlc.Timestamp{WallTime: 2E9},
++		MLAI: map[roachpb.RangeID]ctpb.LAI{
++			9:  18,
++			10: 99,
++		},
++	}
++	ms.Add(1, e2)
++	fmt.Println(e2)
++	fmt.Println(ms)
++
++	fmt.Println("If it *did* decrease, a higher level component should trigger an assertion.")
++	fmt.Println("The storage itself will simply ignore such updates:")
++	e3 := ctpb.Entry{
++		Epoch:           8,
++		ClosedTimestamp: hlc.Timestamp{WallTime: 3E9},
++		MLAI: map[roachpb.RangeID]ctpb.LAI{
++			9:  19,
++			10: 199,
++		},
++	}
++	fmt.Println(e3)
++	ms.Add(1, e3)
++	fmt.Println(ms)
++
++	// Output:
++	// First, the following entry is added:
++	// CT: 1.000000000,0 @ Epoch 10
++	// Full: false
++	// MLAI: r9: 17
++	//
++	// ***** n1 *****
++	// +----+---------------------+----------------------+
++	//           1.000000000,0         0.000000000,0
++	//        age=0s (target ≤0s)   age=1s (target ≤1ms)
++	//             epoch=10               epoch=0
++	// +----+---------------------+----------------------+
++	//   r9                    17
++	// +----+---------------------+----------------------+
++	//
++	// The epoch changes. It can only increase, for we receive Entries in a fixed order.
++	// CT: 2.000000000,0 @ Epoch 11
++	// Full: false
++	// MLAI: r9: 18, r10: 99
++	//
++	// ***** n1 *****
++	// +-----+---------------------+----------------------+
++	//            2.000000000,0         1.000000000,0
++	//         age=0s (target ≤0s)   age=1s (target ≤1ms)
++	//              epoch=11               epoch=10
++	// +-----+---------------------+----------------------+
++	//   r9                     18                     17
++	//   r10                    99
++	// +-----+---------------------+----------------------+
++	//
++	// If it *did* decrease, a higher level component should trigger an assertion.
++	// The storage itself will simply ignore such updates:
++	// CT: 3.000000000,0 @ Epoch 8
++	// Full: false
++	// MLAI: r9: 19, r10: 199
++	//
++	// ***** n1 *****
++	// +-----+---------------------+----------------------+
++	//            2.000000000,0         2.000000000,0
++	//         age=0s (target ≤0s)   age=0s (target ≤1ms)
++	//              epoch=11               epoch=11
++	// +-----+---------------------+----------------------+
++	//   r9                     18                     18
++	//   r10                    99                     99
++	// +-----+---------------------+----------------------+
++}
++
++// TestConcurrent runs a very basic sanity check against a Storage, verifiying
++// that the bucketed Entries don't regress in obvious ways.
++func TestConcurrent(t *testing.T) {
++	defer leaktest.AfterTest(t)()
++
++	ms := NewMultiStorage(func() SingleStorage {
++		return NewMemStorage(time.Millisecond, 10)
++	})
++
++	var g errgroup.Group
++
++	const (
++		iters             = 10
++		numNodes          = roachpb.NodeID(2)
++		numRanges         = roachpb.RangeID(3)
++		numReadersPerNode = 3
++		numWritersPerNode = 3
++	)
++
++	// concurrently add and read from storage
++	// after add: needs to be visible to future read
++	// read ts never regresses
++	globalRand, seed := randutil.NewPseudoRand()
++	t.Log("seed is", seed)
++
++	for i := 0; i < numWritersPerNode; i++ {
++		for nodeID := roachpb.NodeID(1); nodeID <= numNodes; nodeID++ {
++			for i := 0; i < iters; i++ {
++				r := rand.New(rand.NewSource(globalRand.Int63()))
++				m := make(map[roachpb.RangeID]ctpb.LAI)
++				for rangeID := roachpb.RangeID(1); rangeID < numRanges; rangeID++ {
++					if r.Intn(int(numRanges)) == 0 {
++						continue
++					}
++					m[rangeID] = ctpb.LAI(rand.Intn(100))
++				}
++				ct := hlc.Timestamp{WallTime: r.Int63n(100), Logical: r.Int31n(10)}
++				epo := ctpb.Epoch(r.Int63n(100))
++				g.Go(func() error {
++					<-time.After(time.Duration(rand.Intn(1E7)))
++					ms.Add(nodeID, ctpb.Entry{
++						Epoch:           epo,
++						ClosedTimestamp: ct,
++						MLAI:            m,
++					})
++					return nil
++				})
++			}
++		}
++	}
++
++	for i := 0; i < numReadersPerNode; i++ {
++		for nodeID := roachpb.NodeID(1); nodeID <= numNodes; nodeID++ {
++			nodeID := nodeID
++			g.Go(func() error {
++				epo := ctpb.Epoch(-1)
++				var ct hlc.Timestamp
++				var mlai map[roachpb.RangeID]ctpb.LAI
++				var err error
++				var n int
++				ms.VisitDescending(nodeID, func(e ctpb.Entry) bool {
++					n++
++					if n > 1 && e.Epoch > epo {
++						err = errors.Errorf("epoch regressed from %d to %d", epo, e.Epoch)
++						return true // done
++					}
++					if n > 1 && ct.Less(e.ClosedTimestamp) {
++						err = errors.Errorf("closed timestamp regressed from %s to %s", ct, e.ClosedTimestamp)
++						return true // done
++					}
++					for rangeID := roachpb.RangeID(1); rangeID <= numRanges; rangeID++ {
++						if l := mlai[rangeID]; l < e.MLAI[rangeID] && n > 1 {
++							err = errors.Errorf("MLAI for r%d regressed: %+v to %+v", rangeID, mlai, e.MLAI)
++							return true // done
++						}
++					}
++
++					epo = e.Epoch
++					ct = e.ClosedTimestamp
++					mlai = e.MLAI
++					return false // not done
++				})
++				return err
++			})
++		}
++	}
++
++	if err := g.Wait(); err != nil {
++		t.Fatal(err)
++	}
++}
+diff --git a/pkg/storage/closedts/transport/clients.go b/pkg/storage/closedts/transport/clients.go
+new file mode 100644
+index 00000000000..23e2118a463
+--- /dev/null
++++ b/pkg/storage/closedts/transport/clients.go
+@@ -0,0 +1,157 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package transport
++
++import (
++	"context"
++	"unsafe"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/util/log"
++	"github.com/cockroachdb/cockroach/pkg/util/stop"
++	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
++)
++
++// Config holds the information necessary to create a client registry.
++type Config struct {
++	Settings *cluster.Settings
++	Stopper  *stop.Stopper
++	Dialer   closedts.Dialer
++	Sink     closedts.Notifyee
++}
++
++// Clients manages clients receiving closed timestamp updates from
++// peer nodes, along with facilities to request information about certain
++// ranges. Received updates are relayed to a provided Notifyee.
++type Clients struct {
++	cfg Config
++
++	// TODO(tschottdorf): remove unused clients. Perhaps expiring them after,
++	// say, 24h is enough? There is no interruption when doing so; the only
++	// price is that a full update is sent, but that is pretty cheap too.
++	clients syncutil.IntMap
++}
++
++var _ closedts.ClientRegistry = (*Clients)(nil)
++
++// NewClients sets up a client registry.
++func NewClients(cfg Config) *Clients {
++	return &Clients{cfg: cfg}
++}
++
++type client struct {
++	mu struct {
++		syncutil.Mutex
++		requested map[roachpb.RangeID]struct{} // never nil
++	}
++}
++
++// Request is called when serving a follower read has failed due to missing or
++// insufficient information. By calling this method, the caller gives the
++// instruction to connect to the given node (if it hasn't already) and ask it to
++// send (or re-send) up-to-date information about the specified range. Having
++// done so, the information should soon thereafter be available to the Sink and
++// from there, further follower read attempts. Does not block.
++func (pr *Clients) Request(nodeID roachpb.NodeID, rangeID roachpb.RangeID) {
++	if cl := pr.getOrCreateClient(nodeID); cl != nil {
++		cl.mu.Lock()
++		cl.mu.requested[rangeID] = struct{}{}
++		cl.mu.Unlock()
++	}
++}
++
++// EnsureClient makes sure that updates from the given nodes are pulled in, if
++// they aren't already. This call does not block (and is cheap).
++func (pr *Clients) EnsureClient(nodeID roachpb.NodeID) {
++	pr.getOrCreateClient(nodeID)
++}
++
++func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
++	ctx := log.WithLogTagStr(context.Background(), "ct-client", "")
++	// Fast path to check for existing client without an allocation.
++	p, found := pr.clients.Load(int64(nodeID))
++	cl := (*client)(p)
++	if found {
++		return cl
++	}
++	if !pr.cfg.Dialer.Ready(nodeID) {
++		return nil
++	}
++
++	// Slow path: create the client. Another inserter might race us to it.
++	cl = &client{}
++	cl.mu.requested = map[roachpb.RangeID]struct{}{}
++
++	if firstClient, loaded := pr.clients.LoadOrStore(int64(nodeID), unsafe.Pointer(cl)); loaded {
++		return (*client)(firstClient)
++	}
++
++	// If our client made it into the map, start it. The point in inserting
++	// before starting is to be able to collect RangeIDs immediately while never
++	// blocking callers.
++	pr.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
++		defer pr.clients.Delete(int64(nodeID))
++
++		c, err := pr.cfg.Dialer.Dial(ctx, nodeID)
++		if err != nil {
++			return
++		}
++		defer func() {
++			_ = c.CloseSend()
++		}()
++
++		ctx = c.Context()
++
++		ch := pr.cfg.Sink.Notify(nodeID)
++		defer close(ch)
++
++		reaction := &ctpb.Reaction{}
++		for {
++			if err := c.Send(reaction); err != nil {
++				return
++			}
++			entry, err := c.Recv()
++			if err != nil {
++				return
++			}
++
++			select {
++			case ch <- *entry:
++			case <-ctx.Done():
++				return
++			case <-pr.cfg.Stopper.ShouldQuiesce():
++				return
++			}
++
++			var requested map[roachpb.RangeID]struct{}
++			cl.mu.Lock()
++			requested, cl.mu.requested = cl.mu.requested, map[roachpb.RangeID]struct{}{}
++			cl.mu.Unlock()
++
++			slice := make([]roachpb.RangeID, 0, len(requested))
++			for rangeID := range requested {
++				slice = append(slice, rangeID)
++			}
++			reaction = &ctpb.Reaction{
++				Requested: slice,
++			}
++		}
++	})
++
++	return cl
++}
+diff --git a/pkg/storage/closedts/transport/server.go b/pkg/storage/closedts/transport/server.go
+new file mode 100644
+index 00000000000..a72fca8358e
+--- /dev/null
++++ b/pkg/storage/closedts/transport/server.go
+@@ -0,0 +1,97 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package transport
++
++import (
++	"context"
++	"errors"
++	"time"
++
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/util/stop"
++	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
++)
++
++// Server handles incoming closed timestamp update stream requests.
++type Server struct {
++	stopper *stop.Stopper
++	p       closedts.Producer
++	refresh closedts.RefreshFn
++}
++
++// NewServer sets up a Server which relays information from the given producer
++// to incoming clients.
++func NewServer(stopper *stop.Stopper, p closedts.Producer, refresh closedts.RefreshFn) *Server {
++	return &Server{
++		stopper: stopper,
++		p:       p,
++		refresh: refresh,
++	}
++}
++
++var _ ctpb.Server = (*Server)(nil)
++
++// Get handles incoming client connections.
++func (s *Server) Get(client ctpb.InboundClient) error {
++	// TODO(tschottdorf): the InboundClient API isn't great since it
++	// is blocking. How can we eagerly terminate these connections when
++	// the server shuts down? I think we need to inject a cancellation
++	// into the context, but grpc hands that to us.
++	// This problem has likely been solved somewhere in our codebase.
++	ctx := client.Context()
++	ch := make(chan ctpb.Entry, 10)
++
++	// TODO: X*closedts.CloseFraction*TargetInterval
++	const closedTimestampNoUpdateWarnThreshold = 10 * time.Second
++	t := timeutil.NewTimer()
++
++	s.stopper.RunWorker(ctx, func(ctx context.Context) {
++		s.p.Subscribe(ctx, ch)
++	})
++	for {
++		reaction, err := client.Recv()
++		if err != nil {
++			return err
++		}
++
++		if len(reaction.Requested) != 0 {
++			s.refresh(reaction.Requested...)
++		}
++
++		t.Reset(closedTimestampNoUpdateWarnThreshold)
++		var entry ctpb.Entry
++		var ok bool
++		select {
++		case <-ctx.Done():
++			return ctx.Err()
++		case <-s.stopper.ShouldQuiesce():
++			return errors.New("node is draining")
++		case entry, ok = <-ch:
++			if !ok {
++				return errors.New("subscription dropped unexpectedly")
++			}
++		case <-t.C:
++			t.Read = true
++			// Send an empty entry to the client, which can use that to warn
++			// about the absence of heartbeats. We don't log here since it
++			// would log a message per incoming stream, which makes little
++			// sense. It's the producer's job to warn on this node.
++		}
++		if err := client.Send(&entry); err != nil {
++			return err
++		}
++	}
++}
+diff --git a/pkg/storage/closedts/transport/testutils/chan_dialer.go b/pkg/storage/closedts/transport/testutils/chan_dialer.go
+new file mode 100644
+index 00000000000..97fac236b60
+--- /dev/null
++++ b/pkg/storage/closedts/transport/testutils/chan_dialer.go
+@@ -0,0 +1,148 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package testutils
++
++import (
++	"context"
++	"io"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/util/stop"
++	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
++)
++
++// ChanDialer is an implementation of closedts.Dialer that connects clients
++// directly via a channel to a Server.
++type ChanDialer struct {
++	stopper *stop.Stopper
++	server  ctpb.Server
++
++	mu struct {
++		syncutil.Mutex
++		transcripts map[roachpb.NodeID][]interface{}
++	}
++}
++
++// NewChanDialer sets up a ChanDialer.
++func NewChanDialer(stopper *stop.Stopper, server ctpb.Server) *ChanDialer {
++	d := &ChanDialer{
++		stopper: stopper,
++		server:  server,
++	}
++	d.mu.transcripts = make(map[roachpb.NodeID][]interface{})
++	return d
++}
++
++// Transcript returns a slice of messages sent over the "wire".
++func (d *ChanDialer) Transcript(nodeID roachpb.NodeID) []interface{} {
++	d.mu.Lock()
++	defer d.mu.Unlock()
++	return append([]interface{}(nil), d.mu.transcripts[nodeID]...)
++}
++
++// Dial implements closedts.Dialer.
++func (d *ChanDialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Client, error) {
++	c := &client{
++		ctx:     ctx,
++		send:    make(chan *ctpb.Reaction),
++		recv:    make(chan *ctpb.Entry),
++		stopper: d.stopper,
++		observe: func(msg interface{}) {
++			d.mu.Lock()
++			if d.mu.transcripts == nil {
++				d.mu.transcripts = map[roachpb.NodeID][]interface{}{}
++			}
++			d.mu.transcripts[nodeID] = append(d.mu.transcripts[nodeID], msg)
++			d.mu.Unlock()
++		},
++	}
++
++	d.stopper.RunWorker(ctx, func(ctx context.Context) {
++		_ = d.server.Get((*incomingClient)(c))
++	})
++	return c, nil
++
++}
++
++// Ready implements closedts.Dialer by always returning true.
++func (d *ChanDialer) Ready(nodeID roachpb.NodeID) bool {
++	return true
++}
++
++type client struct {
++	ctx     context.Context
++	stopper *stop.Stopper
++	send    chan *ctpb.Reaction
++	recv    chan *ctpb.Entry
++
++	observe func(interface{})
++}
++
++func (c *client) Send(msg *ctpb.Reaction) error {
++	select {
++	case <-c.stopper.ShouldQuiesce():
++		return io.EOF
++	case c.send <- msg:
++		c.observe(msg)
++		return nil
++	}
++}
++
++func (c *client) Recv() (*ctpb.Entry, error) {
++	select {
++	case <-c.stopper.ShouldQuiesce():
++		return nil, io.EOF
++	case msg := <-c.recv:
++		c.observe(msg)
++		return msg, nil
++	}
++}
++
++func (c *client) CloseSend() error {
++	close(c.send)
++	return nil
++}
++
++func (c *client) Context() context.Context {
++	return c.ctx
++}
++
++type incomingClient client
++
++func (c *incomingClient) Send(msg *ctpb.Entry) error {
++	select {
++	case <-c.stopper.ShouldQuiesce():
++		return io.EOF
++	case c.recv <- msg:
++		return nil
++	}
++}
++
++func (c *incomingClient) Recv() (*ctpb.Reaction, error) {
++	select {
++	case <-c.stopper.ShouldQuiesce():
++		return nil, io.EOF
++	case msg, ok := <-c.send:
++		if !ok {
++			return nil, io.EOF
++		}
++		return msg, nil
++	}
++}
++
++func (c *incomingClient) Context() context.Context {
++	return c.ctx
++}
+diff --git a/pkg/storage/closedts/transport/transport_test.go b/pkg/storage/closedts/transport/transport_test.go
+new file mode 100644
+index 00000000000..1b62d3ac5f2
+--- /dev/null
++++ b/pkg/storage/closedts/transport/transport_test.go
+@@ -0,0 +1,199 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package transport_test
++
++import (
++	"context"
++	"fmt"
++	"strings"
++	"testing"
++
++	"github.com/kr/pretty"
++	"github.com/pkg/errors"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/transport"
++	transporttestutils "github.com/cockroachdb/cockroach/pkg/storage/closedts/transport/testutils"
++	"github.com/cockroachdb/cockroach/pkg/testutils"
++	"github.com/cockroachdb/cockroach/pkg/util/hlc"
++	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
++	"github.com/cockroachdb/cockroach/pkg/util/stop"
++)
++
++// NewTestContainer sets up an environment suitable for black box testing the
++// transport subsystem. The returned test container contains most notably a
++// Clients and Server set up to communicate to each other via a Dialer (which
++// keeps a transcript that can be verified).
++func NewTestContainer() *TestContainer {
++	stopper := stop.NewStopper()
++
++	st := cluster.MakeTestingClusterSettings()
++	p := &TestProducer{}
++	sink := newTestNotifyee(stopper)
++	refreshed := &RefreshTracker{}
++	s := transport.NewServer(stopper, p, refreshed.Add)
++	dialer := transporttestutils.NewChanDialer(stopper, s)
++	c := transport.NewClients(transport.Config{
++		Settings: st,
++		Stopper:  stopper,
++		Dialer:   dialer,
++		Sink:     sink,
++	})
++	return &TestContainer{
++		Settings:  st,
++		Stopper:   stopper,
++		Producer:  p,
++		Notifyee:  sink,
++		Refreshed: refreshed,
++		Server:    s,
++		Dialer:    dialer,
++		Clients:   c,
++	}
++}
++
++func assertNumSubscribers(t *testing.T, p *TestProducer, exp int) {
++	testutils.SucceedsSoon(t, func() error {
++		n := p.numSubscriptions()
++		if n > exp {
++			t.Fatalf("expected a single subscription, got %d", n)
++		}
++		if n < exp {
++			return errors.New("waiting for subscription")
++		}
++		return nil
++	})
++}
++
++func TestTransportConnectOnRequest(t *testing.T) {
++	defer leaktest.AfterTest(t)()
++
++	container := NewTestContainer()
++	defer container.Stopper.Stop(context.Background())
++
++	const (
++		nodeID  = 1
++		rangeID = 13
++	)
++
++	// Requesting an update for a Range implies a connection attempt.
++	container.Clients.Request(nodeID, rangeID)
++
++	// Find the connection (via its subscription to receive new Entries).
++	assertNumSubscribers(t, container.Producer, 1)
++
++	// Verify that the client soon asks the server for an update for this range.
++	testutils.SucceedsSoon(t, func() error {
++		act := container.Refreshed.Get()
++		exp := []roachpb.RangeID{rangeID}
++
++		if diff := pretty.Diff(act, exp); len(diff) != 0 {
++			// We have to kick the tires a little bit. The client can only send
++			// the request as the reaction to an Entry.
++			container.Producer.sendAll(ctpb.Entry{})
++			return errors.Errorf("diff(act, exp): %s", strings.Join(diff, "\n"))
++		}
++		return nil
++	})
++}
++
++func TestTransportClientReceivesEntries(t *testing.T) {
++	defer leaktest.AfterTest(t)()
++
++	container := NewTestContainer()
++	defer container.Stopper.Stop(context.Background())
++
++	const nodeID = 7
++
++	// Manual reconnections don't spawn new clients.
++	container.Clients.EnsureClient(nodeID)
++	container.Clients.EnsureClient(nodeID)
++	container.Clients.EnsureClient(nodeID)
++	assertNumSubscribers(t, container.Producer, 1)
++
++	// But connecting to other nodes does (only once).
++	for i := 0; i < 7; i++ {
++		container.Clients.EnsureClient(nodeID + 1)
++		container.Clients.EnsureClient(nodeID + 2)
++		container.Clients.Request(nodeID+3, roachpb.RangeID(7))
++	}
++	assertNumSubscribers(t, container.Producer, 4)
++
++	// Our initial client doesn't do anything except say "hello" via
++	// a Reaction.
++	testutils.SucceedsSoon(t, func() error {
++		expectedTranscript := []interface{}{
++			&ctpb.Reaction{},
++		}
++		return checkTranscript(t, container.Dialer.Transcript(nodeID), expectedTranscript)
++	})
++
++	// Now the producer (to which the server should maintain a subscription for this client, and
++	// notifications from which it should relay) emits an Entry.
++	e1 := ctpb.Entry{ClosedTimestamp: hlc.Timestamp{WallTime: 1E9}, Epoch: 12, MLAI: map[roachpb.RangeID]ctpb.LAI{12: 7}}
++	container.Producer.sendAll(e1)
++
++	// The client should see this entry soon thereafter. it responds with an empty
++	// Reaction (since we haven't Request()ed anything).
++	testutils.SucceedsSoon(t, func() error {
++		expectedTranscript := []interface{}{
++			&ctpb.Reaction{},
++			&e1,
++			&ctpb.Reaction{},
++		}
++		return checkTranscript(t, container.Dialer.Transcript(nodeID), expectedTranscript)
++	})
++
++	// And again, but only after Request() is called (which should be reflected in the transcript).
++	const rangeID = 7
++	container.Clients.Request(nodeID, rangeID)
++	e2 := ctpb.Entry{ClosedTimestamp: hlc.Timestamp{WallTime: 2E9}, Epoch: 13, MLAI: map[roachpb.RangeID]ctpb.LAI{13: 8}}
++	container.Producer.sendAll(e2)
++	testutils.SucceedsSoon(t, func() error {
++		expectedTranscript := []interface{}{
++			&ctpb.Reaction{},
++			&e1,
++			&ctpb.Reaction{},
++			&e2,
++			&ctpb.Reaction{Requested: []roachpb.RangeID{rangeID}},
++		}
++		return checkTranscript(t, container.Dialer.Transcript(nodeID), expectedTranscript)
++	})
++
++}
++
++func checkTranscript(t *testing.T, actI, expI []interface{}) error {
++	t.Helper()
++	var act, exp []string
++	for _, i := range actI {
++		act = append(act, strings.TrimSpace(fmt.Sprintf("%v", i)))
++	}
++	for _, i := range expI {
++		exp = append(exp, strings.TrimSpace(fmt.Sprintf("%v", i)))
++	}
++
++	diffErr := errors.Errorf("actual:\n%s\nexpected:\n%s", strings.Join(act, "\n"), strings.Join(exp, "\n"))
++	if len(act) > len(exp) {
++		t.Fatal(errors.Wrap(diffErr, "actual transcript longer than expected"))
++	}
++	if len(act) < len(exp) {
++		return errors.Wrap(diffErr, "waiting for more")
++	}
++	if diff := pretty.Diff(actI, expI); len(diff) != 0 {
++		t.Fatal(errors.Wrapf(diffErr, "diff:\n%v\n", strings.Join(diff, "\n")))
++	}
++	return nil
++}
+diff --git a/pkg/storage/closedts/transport/transport_util_test.go b/pkg/storage/closedts/transport/transport_util_test.go
+new file mode 100644
+index 00000000000..d077d0f947e
+--- /dev/null
++++ b/pkg/storage/closedts/transport/transport_util_test.go
+@@ -0,0 +1,108 @@
++// Copyright 2018 The Cockroach Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++// implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++package transport_test
++
++import (
++	"context"
++
++	"github.com/cockroachdb/cockroach/pkg/roachpb"
++	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/transport"
++	"github.com/cockroachdb/cockroach/pkg/storage/closedts/transport/testutils"
++	"github.com/cockroachdb/cockroach/pkg/util/stop"
++	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
++)
++
++type TestContainer struct {
++	Settings  *cluster.Settings
++	Stopper   *stop.Stopper
++	Producer  *TestProducer
++	Notifyee  *TestNotifyee
++	Refreshed *RefreshTracker
++	Server    *transport.Server
++	Dialer    *testutils.ChanDialer
++	Clients   *transport.Clients
++}
++
++type TestProducer struct {
++	syncutil.Mutex
++	chs []chan<- ctpb.Entry
++}
++
++func (tp *TestProducer) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
++	tp.Lock()
++	tp.chs = append(tp.chs, ch)
++	tp.Unlock()
++}
++
++func (tp *TestProducer) numSubscriptions() int {
++	tp.Lock()
++	defer tp.Unlock()
++	return len(tp.chs)
++}
++
++func (tp *TestProducer) sendAll(entry ctpb.Entry) {
++	tp.Lock()
++	for _, ch := range tp.chs {
++		ch <- entry
++	}
++	tp.Unlock()
++}
++
++type TestNotifyee struct {
++	stopper *stop.Stopper
++	mu      struct {
++		syncutil.Mutex
++		entries map[roachpb.NodeID][]ctpb.Entry
++	}
++}
++
++func newTestNotifyee(stopper *stop.Stopper) *TestNotifyee {
++	tn := &TestNotifyee{
++		stopper: stopper,
++	}
++	tn.mu.entries = make(map[roachpb.NodeID][]ctpb.Entry)
++	return tn
++}
++
++func (tn *TestNotifyee) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
++	ch := make(chan ctpb.Entry)
++	tn.stopper.RunWorker(context.Background(), func(ctx context.Context) {
++		for entry := range ch {
++			tn.mu.Lock()
++			tn.mu.entries[nodeID] = append(tn.mu.entries[nodeID], entry)
++			tn.mu.Unlock()
++		}
++	})
++	return ch
++}
++
++type RefreshTracker struct {
++	syncutil.Mutex
++	rangeIDs []roachpb.RangeID
++}
++
++func (r *RefreshTracker) Get() []roachpb.RangeID {
++	r.Lock()
++	defer r.Unlock()
++	return append([]roachpb.RangeID(nil), r.rangeIDs...)
++}
++
++func (r *RefreshTracker) Add(rangeIDs ...roachpb.RangeID) {
++	r.Lock()
++	r.rangeIDs = append(r.rangeIDs, rangeIDs...)
++	r.Unlock()
++}
+diff --git a/pkg/testutils/soon.go b/pkg/testutils/soon.go
+index 9deb29441d8..f0f5c3e7c3e 100644
+--- a/pkg/testutils/soon.go
++++ b/pkg/testutils/soon.go
+@@ -15,11 +15,16 @@
+ package testutils
+ 
+ import (
++	"context"
+ 	"runtime/debug"
+ 	"testing"
+ 	"time"
+ 
++	"github.com/pkg/errors"
++
++	"github.com/cockroachdb/cockroach/pkg/util/log"
+ 	"github.com/cockroachdb/cockroach/pkg/util/retry"
++	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+ )
+ 
+ // DefaultSucceedsSoonDuration is the maximum amount of time unittests
+@@ -29,11 +34,18 @@ const DefaultSucceedsSoonDuration = 45 * time.Second
+ // SucceedsSoon fails the test (with t.Fatal) unless the supplied
+ // function runs without error within a preset maximum duration. The
+ // function is invoked immediately at first and then successively with
+-// an exponential backoff starting at 1ns and ending at the maximum
+-// duration (currently 15s).
++// an exponential backoff starting at 1ns and ending at around 1s.
+ func SucceedsSoon(t testing.TB, fn func() error) {
+ 	t.Helper()
+-	if err := retry.ForDuration(DefaultSucceedsSoonDuration, fn); err != nil {
++	tBegin := timeutil.Now()
++	wrappedFn := func() error {
++		err := fn()
++		if timeutil.Since(tBegin) > 3*time.Second && err != nil {
++			log.InfoDepth(context.Background(), 3, errors.Wrap(err, "SucceedsSoon"))
++		}
++		return err
++	}
++	if err := retry.ForDuration(DefaultSucceedsSoonDuration, wrappedFn); err != nil {
+ 		t.Fatalf("condition failed to evaluate within %s: %s\n%s",
+ 			DefaultSucceedsSoonDuration, err, string(debug.Stack()))
+ 	}

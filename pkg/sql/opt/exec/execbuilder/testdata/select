@@ -1,5 +1,197 @@
 # LogicTest: local-opt
 
+
+# ------------------------------------------------------------------------------
+# Numeric References Tests.
+# These are put at the beginning of the file to ensure the numeric table
+# reference is 53 (the numeric reference of the first table).
+# If the numbering scheme in cockroach changes, this test will break.
+# These tests replicate the tests at sql/table_ref_test.go. The reason
+# for duplication is to include tests within the opt testing framework
+# TODO(madhavsuresh): get the numeric reference ID in a less brittle fashion
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE num_ref (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
+
+statement ok
+CREATE TABLE num_ref_hidden (a INT, b INT)
+
+statement ok
+ALTER TABLE num_ref RENAME COLUMN b TO d
+
+statement ok
+ALTER TABLE num_ref RENAME COLUMN a TO p
+
+statement ok
+ALTER TABLE num_ref DROP COLUMN xx
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53 AS num_ref_alias]
+----
+scan  ·      ·                (p, d, c)  ·
+·     table  num_ref@primary  ·          ·
+·     spans  ALL              ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]
+----
+scan  ·      ·                (c)  ·
+·     table  num_ref@primary  ·    ·
+·     spans  ALL              ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(1,4) AS num_ref_alias]
+----
+scan  ·      ·                (p, c)  ·
+·     table  num_ref@primary  ·       ·
+·     spans  ALL              ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(1,3,4) AS num_ref_alias]
+----
+scan  ·      ·                (p, d, c)  ·
+·     table  num_ref@primary  ·          ·
+·     spans  ALL              ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4,3,1) AS num_ref_alias]
+----
+render     ·         ·                (c, d, p)  ·
+ │         render 0  c                ·          ·
+ │         render 1  d                ·          ·
+ │         render 2  p                ·          ·
+ └── scan  ·         ·                (p, d, c)  ·
+·          table     num_ref@primary  ·          ·
+·          spans     ALL              ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4,3,1) AS num_ref_alias(col1,col2,col3)]
+----
+render     ·         ·                (col1, col2, col3)  ·
+ │         render 0  c                ·                   ·
+ │         render 1  d                ·                   ·
+ │         render 2  p                ·                   ·
+ └── scan  ·         ·                (p, d, c)           ·
+·          table     num_ref@primary  ·                   ·
+·          spans     ALL              ·                   ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4,3,1) AS num_ref_alias]@bc
+----
+render     ·         ·           (c, d, p)  ·
+ │         render 0  c           ·          ·
+ │         render 1  d           ·          ·
+ │         render 2  p           ·          ·
+ └── scan  ·         ·           (p, d, c)  ·
+·          table     num_ref@bc  ·          ·
+·          spans     ALL         ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]@bc
+----
+scan  ·      ·           (c)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(3) AS num_ref_alias]@bc
+----
+scan  ·      ·           (d)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@bc
+----
+scan  ·      ·           (p)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@[1]
+----
+scan  ·      ·                (p)  ·
+·     table  num_ref@primary  ·    ·
+·     spans  ALL              ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@[2]
+----
+scan  ·      ·           (p)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(3) AS num_ref_alias]@[1]
+----
+scan  ·      ·                (d)  ·
+·     table  num_ref@primary  ·    ·
+·     spans  ALL              ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(3) AS num_ref_alias]@[2]
+----
+scan  ·      ·           (d)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]@[1]
+----
+scan  ·      ·                (c)  ·
+·     table  num_ref@primary  ·    ·
+·     spans  ALL              ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]@[2]
+----
+scan  ·      ·           (c)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [54(1,3) AS num_ref_alias]
+----
+scan  ·      ·                       (a)  ·
+·     table  num_ref_hidden@primary  ·    ·
+·     spans  ALL                     ·    ·
+
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [54(3) AS num_ref_alias]
+----
+scan  ·      ·                       ()  ·
+·     table  num_ref_hidden@primary  ·   ·
+·     spans  ALL                     ·   ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT rowid FROM [54(3) AS num_ref_alias]
+----
+scan  ·      ·                       (rowid[hidden])  ·
+·     table  num_ref_hidden@primary  ·                ·
+·     spans  ALL                     ·                ·
+
+query error pq: \[666\(1\) AS num_ref_alias\]: relation \"\[666\]\" does not exist
+EXPLAIN (VERBOSE) SELECT * FROM [666(1) AS num_ref_alias]
+
+query error pq: column \[666\] does not exist
+EXPLAIN (VERBOSE) SELECT * FROM [53(666) AS num_ref_alias]
+
+query error pq: column \[2\] does not exist
+EXPLAIN (VERBOSE) SELECT * FROM [53(2) AS num_ref_alias]
+
+query error pq: an explicit list of column IDs must include at least one column
+EXPLAIN (VERBOSE) SELECT * FROM [53() AS num_ref_alias]
+
+query error pq: an explicit list of column IDs must include at least one column
+EXPLAIN (VERBOSE) SELECT 1 FROM [53() as num_ref_alias]
+
+statement ok
+DROP TABLE num_ref
+
+query error pq: \[53\(1\) AS num_ref_alias\]: table is being dropped
+EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]
+
 # ------------------------------------------------------------------------------
 # Basic filter combinations.
 # ------------------------------------------------------------------------------
@@ -129,7 +321,7 @@ CREATE TABLE t (
   c INT,
   d INT,
   INDEX b_idx (b) STORING (c, d),
-  UNIQUE INDEX c_idx (c) STORING (a, b, d)
+  UNIQUE INDEX c_idx (c) STORING (b, d)
 )
 
 query TTBITTBB colnames
@@ -142,9 +334,9 @@ t           b_idx       true        2             c            N/A        true  
 t           b_idx       true        3             d            N/A        true     false
 t           b_idx       true        4             a            ASC        false    true
 t           c_idx       false       1             c            ASC        false    false
-t           c_idx       false       2             a            N/A        true     false
-t           c_idx       false       3             b            N/A        true     false
-t           c_idx       false       4             d            N/A        true     false
+t           c_idx       false       2             b            N/A        true     false
+t           c_idx       false       3             d            N/A        true     false
+t           c_idx       false       4             a            ASC        false    true
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
@@ -166,13 +358,13 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /t/c_idx/3 -> /1/2/4
+fetched: /t/c_idx/3/b/d -> /2/4
 output row: [1 2 3 4]
 
 # Test index backfill for UNIQUE and non-UNIQUE indexes with STORING columns.
 
 statement ok
-CREATE INDEX d_idx ON t (d) STORING (a, b)
+CREATE INDEX d_idx ON t (d) STORING (b)
 
 statement ok
 SET tracing = on,kv,results; SELECT a, b, d FROM t@d_idx; SET tracing = off
@@ -345,7 +537,7 @@ CREATE TABLE computed (
   k INT PRIMARY KEY,
   a JSON,
   b TEXT AS (a->>'q') STORED,
-  INDEX (b) STORING (k)
+  INDEX (b)
 )
 
 query TTTTT
@@ -381,7 +573,7 @@ INSERT INTO dt VALUES
   ('2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
 
 statement ok
-SET tracing = on,kv,results; SELECT * FROM dt WHERE a = '2015-08-25 06:45:45.53453+02:00'::timestamp; SET tracing = off
+SET tracing = on,kv,results; SELECT * FROM dt WHERE a = '2015-08-25 04:45:45.53453+02:00'::timestamp; SET tracing = off
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
@@ -389,8 +581,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00' -> NULL
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/b -> '2015-08-25'
-fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/c -> '2h45m2s234ms'
-output row: ['2015-08-25 04:45:45.53453+00:00' '2015-08-25' '2h45m2s234ms']
+fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/c -> '02:45:02.234'
+output row: ['2015-08-25 04:45:45.53453+00:00' '2015-08-25' '02:45:02.234']
 
 statement ok
 SET tracing = on,kv,results; SELECT b FROM dt WHERE b < '2015-08-29'::date; SET tracing = off
@@ -409,10 +601,10 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /dt/dt_c_key/'2h45m2s234ms' -> /'2015-08-25 04:45:45.53453+00:00'
-output row: ['2h45m2s234ms']
-fetched: /dt/dt_c_key/'34h2s' -> /'2015-08-30 03:34:45.34567+00:00'
-output row: ['34h2s']
+fetched: /dt/dt_c_key/'02:45:02.234' -> /'2015-08-25 04:45:45.53453+00:00'
+output row: ['02:45:02.234']
+fetched: /dt/dt_c_key/'34:00:02' -> /'2015-08-30 03:34:45.34567+00:00'
+output row: ['34:00:02']
 
 statement ok
 DROP TABLE dt
@@ -589,9 +781,9 @@ scan  ·      ·                  (d decimal)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT n FROM num WHERE n = -'1h':::INTERVAL
 ----
-scan  ·      ·              (n interval)  ·
-·     table  num@num_n_key  ·             ·
-·     spans  /-1h-/1d-25h   ·             ·
+scan  ·      ·                            (n interval)  ·
+·     table  num@num_n_key                ·             ·
+·     spans  /-01:00:00-/1 day -25:00:00  ·             ·
 
 statement ok
 DROP TABLE num
@@ -600,7 +792,7 @@ DROP TABLE num
 # ANY, ALL tests.
 # ------------------------------------------------------------------------------
 statement ok
-CREATE TABLE abc (a INT, b INT, C INT)
+CREATE TABLE abc (a INT, b INT, c INT)
 
 statement ok
 INSERT INTO abc VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
@@ -784,3 +976,331 @@ query B
 SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 true
+
+statement ok
+CREATE TABLE abcd (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b))
+
+# Ensure that (non-top-level) render nodes get populated with the correct ordering.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b + c AS x FROM abcd) ORDER BY a
+----
+render          ·         ·             ("?column?")  ·
+ │              render 0  a + x         ·             ·
+ └── render     ·         ·             (x, a)        +a
+      │         render 0  b + c         ·             ·
+      │         render 1  a             ·             ·
+      └── scan  ·         ·             (a, b, c)     +a
+·               table     abcd@primary  ·             ·
+·               spans     ALL           ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b, a + b + c AS x FROM abcd) ORDER BY b
+----
+render               ·         ·                  ("?column?")     ·
+ │                   render 0  "?column?"         ·                ·
+ └── sort            ·         ·                  ("?column?", b)  +b
+      │              order     +b                 ·                ·
+      └── render     ·         ·                  ("?column?", b)  ·
+           │         render 0  a + (c + (a + b))  ·                ·
+           │         render 1  b                  ·                ·
+           └── scan  ·         ·                  (a, b, c)        ·
+·                    table     abcd@primary       ·                ·
+·                    spans     ALL                ·                ·
+
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b, a + b + c AS x FROM abcd) ORDER BY a DESC, b DESC
+----
+render             ·         ·             ("?column?")  ·
+ │                 render 0  a + x         ·             ·
+ └── render        ·         ·             (x, a, b)     -a,-b
+      │            render 0  c + (a + b)   ·             ·
+      │            render 1  a             ·             ·
+      │            render 2  b             ·             ·
+      └── revscan  ·         ·             (a, b, c)     -a,-b
+·                  table     abcd@primary  ·             ·
+·                  spans     ALL           ·             ·
+
+# Ensure that filter nodes (and filtered scan nodes) get populated with the correct ordering.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a
+----
+scan  ·       ·             (a, b, c, d)  +a
+·     table   abcd@primary  ·             ·
+·     spans   ALL           ·             ·
+·     filter  a > b         ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a DESC, b DESC
+----
+sort       ·       ·             (a, b, c, d)  -a,-b
+ │         order   -a,-b         ·             ·
+ └── scan  ·       ·             (a, b, c, d)  ·
+·          table   abcd@primary  ·             ·
+·          spans   ALL           ·             ·
+·          filter  a > b         ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, b FROM abcd LIMIT 10) WHERE a > b ORDER BY a
+----
+filter     ·       ·             (a, b)  +a
+ │         filter  a > b         ·       ·
+ └── scan  ·       ·             (a, b)  +a
+·          table   abcd@primary  ·       ·
+·          spans   ALL           ·       ·
+·          limit   10            ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, a+b+c AS x FROM (SELECT * FROM abcd LIMIT 10)) WHERE x > 100 ORDER BY a
+----
+render          ·         ·                    (a, x)     ·
+ │              render 0  a                    ·          ·
+ │              render 1  c + (a + b)          ·          ·
+ └── filter     ·         ·                    (a, b, c)  +a
+      │         filter    (c + (a + b)) > 100  ·          ·
+      └── scan  ·         ·                    (a, b, c)  +a
+·               table     abcd@primary         ·          ·
+·               spans     ALL                  ·          ·
+·               limit     10                   ·          ·
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT, INDEX(x,y,z))
+
+# Verify the scan is configured with the correct ordering +x,+y,+z (#31882).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyz LIMIT 10) WHERE y = 1 ORDER BY x, y, z
+----
+filter     ·       ·                  (x, y, z)  +x,+z
+ │         filter  y = 1              ·          ·
+ └── scan  ·       ·                  (x, y, z)  +x,+y,+z
+·          table   xyz@xyz_x_y_z_idx  ·          ·
+·          spans   ALL                ·          ·
+·          limit   10                 ·          ·
+
+# ------------------------------------------------------
+# Verify that multi-span point lookups are parallelized.
+# ------------------------------------------------------
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, item STRING, price FLOAT, UNIQUE INDEX item (item), UNIQUE INDEX p (price))
+
+statement ok
+CREATE TABLE b (a INT, b INT, c INT NULL, d INT NULL, PRIMARY KEY (a, b))
+
+# No parallel line printed out for single-span selects.
+query TTT
+EXPLAIN SELECT * FROM a WHERE a = 10
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /10-/10/#
+
+query TTT
+EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /10-/10/# /20-/20/#
+·     parallel  ·
+
+query TTT
+EXPLAIN SELECT * FROM a WHERE a IN (10, 20)
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /10-/10/# /20-/20/#
+·     parallel  ·
+
+# Verify that consolidated point spans are still parallelized.
+query TTT
+EXPLAIN SELECT * FROM a WHERE a in (10, 11)
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /10-/11/#
+·     parallel  ·
+
+query TTT
+EXPLAIN SELECT * FROM a WHERE a > 10 AND a < 20
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /11-/19/#
+·     parallel  ·
+
+# This ticks all the boxes for parallelization apart from the fact that there
+# is no end key in the span.
+query TTT
+EXPLAIN SELECT * FROM a WHERE a > 10
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /11-
+
+# Test non-int types.
+
+# Point queries on non-int types are parallel.
+query TTT
+EXPLAIN SELECT price FROM a WHERE item IN ('sock', 'ball')
+----
+render           ·         ·
+ └── index-join  ·         ·
+      ├── scan   ·         ·
+      │          table     a@item
+      │          spans     /"ball"-/"ball"/PrefixEnd /"sock"-/"sock"/PrefixEnd
+      │          parallel  ·
+      └── scan   ·         ·
+·                table     a@primary
+
+# Range queries on non-int types are not parallel due to unbounded number of
+# results.
+query TTT
+EXPLAIN SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND price < 40
+----
+render           ·         ·
+ └── index-join  ·         ·
+      ├── scan   ·         ·
+      │          table     a@p
+      │          spans     /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
+      │          filter    (price < 10.0) OR (price > 20.0)
+      └── scan   ·         ·
+·                table     a@primary
+
+statement ok
+SET CLUSTER SETTING sql.parallel_scans.enabled = false
+
+query TTT
+EXPLAIN SELECT * FROM a WHERE a IN (10, 20)
+----
+scan  ·         ·
+·     table     a@primary
+·     spans     /10-/10/# /20-/20/#
+
+statement ok
+SET CLUSTER SETTING sql.parallel_scans.enabled = true
+
+# TODO(radu): fix this testcase after #31614 is resolved. There should be no filter left.
+query TTT
+EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
+----
+scan  ·         ·
+·     table     b@primary
+·     spans     /10/10-/10/10/# /20/20-/20/20/#
+·     parallel  ·
+·     filter    ((a = 10) AND (b = 10)) OR ((a = 20) AND (b = 20))
+
+# This one isn't parallelizable because it's not a point lookup - only part of
+# the primary key is specified.
+query TTT
+EXPLAIN SELECT * FROM b WHERE a = 10 OR a = 20
+----
+scan  ·      ·
+·     table  b@primary
+·     spans  /10-/11 /20-/21
+
+# This one isn't parallelizable because it has a LIMIT clause.
+query TTT
+EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
+----
+scan  ·      ·
+·     table  a@primary
+·     spans  /10-/10/# /20-/20/#
+·     limit  1
+
+statement ok
+CREATE INDEX on b(b) STORING (c)
+
+# This one isn't parallelizable because its index isn't unique.
+query TTT
+EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
+----
+scan  ·      ·
+·     table  b@b_b_idx
+·     spans  /10-/11 /20-/21
+
+statement ok
+CREATE UNIQUE INDEX on b(c)
+
+# If the index has nullable values, parallelize only when the spans do not
+# specify any nulls.
+query TTT
+EXPLAIN SELECT c FROM b WHERE c = 10 OR c = 20
+----
+scan  ·         ·
+·     table     b@b_c_key
+·     spans     /10-/11 /20-/21
+·     parallel  ·
+
+query TTT
+EXPLAIN SELECT c FROM b WHERE c = 10 OR c < 2
+----
+scan  ·      ·
+·     table  b@b_c_key
+·     spans  /!NULL-/2 /10-/11
+
+statement ok
+CREATE UNIQUE INDEX on b(d DESC)
+
+# This scan is not parallelizable because the second span has a null in its end
+# key.
+query TTT
+EXPLAIN SELECT d FROM b WHERE d = 10 OR d < 2
+----
+scan  ·      ·
+·     table  b@b_d_key
+·     spans  /10-/9 /1-/NULL
+
+statement ok
+CREATE UNIQUE INDEX ON b(c, d)
+
+# This scan is not parallelizable because although the second column is
+# constrained, the first column is null.
+query TTT
+EXPLAIN SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
+----
+render     ·       ·
+ └── scan  ·       ·
+·          table   b@b_c_d_key
+·          spans   /NULL/1-/NULL/2 /10/10-/10/11
+·          filter  ((c = 10) AND (d = 10)) OR ((c IS NULL) AND (d < 2))
+
+statement ok
+DROP INDEX b_b_idx
+
+statement ok
+CREATE UNIQUE INDEX on b(b) STORING (c)
+
+# This one is parallelizable because its index is unique and non-null.
+query TTT
+EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
+----
+scan  ·         ·
+·     table     b@b_b_key
+·     spans     /10-/11 /20-/21
+·     parallel  ·
+
+statement ok
+ALTER TABLE a SPLIT AT VALUES(5)
+
+# Run a select to prime the range cache to simplify the trace below.
+statement ok
+SELECT * FROM a
+
+# Make sure that the scan actually gets parallelized.
+statement ok
+SET tracing = on; SELECT * FROM a WHERE a = 0 OR a = 10; SET tracing = off
+
+# The span "sending partial batch" means that the scan was parallelized.
+# If this test is failing and doesn't have that span, it means that the scanNode
+# was improperly configured to add a limit to the ScanRequest batch.
+# See #30943 for more details.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION]
+WHERE message IN
+    ('querying next range at /Table/73/1/0',
+     'querying next range at /Table/73/1/10',
+     '=== SPAN START: kv.DistSender: sending partial batch ==='
+    )
+----
+querying next range at /Table/73/1/0
+=== SPAN START: kv.DistSender: sending partial batch ===
+querying next range at /Table/73/1/10

@@ -14,9 +14,7 @@
 
 package pprofui
 
-import (
-	"io"
-)
+import "io"
 
 // Storage exposes the methods for storing and accessing profiles.
 type Storage interface {

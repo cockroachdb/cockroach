@@ -71,3 +71,6 @@ SET CLUSTER SETTING version = '1.1'
 
 statement error cannot upgrade to 1.1-999: node running 1.1
 SET CLUSTER SETTING version = '1.1-999'
+
+statement error cannot RESET this cluster setting
+RESET CLUSTER SETTING version

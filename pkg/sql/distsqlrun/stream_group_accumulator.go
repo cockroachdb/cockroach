@@ -117,6 +117,7 @@ func (s *streamGroupAccumulator) nextGroup(
 			n := len(s.curGroup)
 			ret := s.curGroup[:n:n]
 			s.curGroup = s.curGroup[:0]
+			s.memAcc.Empty(evalCtx.Ctx())
 			s.leftoverRow = row
 			return ret, nil
 		}

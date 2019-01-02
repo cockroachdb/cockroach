@@ -15,20 +15,18 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -43,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -62,8 +61,8 @@ const (
 	backupOptRevisionHistory = "revision_history"
 )
 
-var backupOptionExpectValues = map[string]bool{
-	backupOptRevisionHistory: false,
+var backupOptionExpectValues = map[string]sql.KVStringOptValidate{
+	backupOptRevisionHistory: sql.KVStringOptRequireNoValue,
 }
 
 // BackupCheckpointInterval is the interval at which backup progress is saved
@@ -433,12 +432,32 @@ func splitAndFilterSpans(
 	return out
 }
 
+func optsToKVOptions(opts map[string]string) tree.KVOptions {
+	if len(opts) == 0 {
+		return nil
+	}
+	sortedOpts := make([]string, 0, len(opts))
+	for k := range opts {
+		sortedOpts = append(sortedOpts, k)
+	}
+	sort.Strings(sortedOpts)
+	kvopts := make(tree.KVOptions, 0, len(opts))
+	for _, k := range sortedOpts {
+		opt := tree.KVOption{Key: tree.Name(k)}
+		if v := opts[k]; v != "" {
+			opt.Value = tree.NewDString(v)
+		}
+		kvopts = append(kvopts, opt)
+	}
+	return kvopts
+}
+
 func backupJobDescription(
-	backup *tree.Backup, to string, incrementalFrom []string,
+	backup *tree.Backup, to string, incrementalFrom []string, opts map[string]string,
 ) (string, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
-		Options: backup.Options,
+		Options: optsToKVOptions(opts),
 		Targets: backup.Targets,
 	}
 
@@ -461,11 +480,10 @@ func backupJobDescription(
 // clusterNodeCount returns the approximate number of nodes in the cluster.
 func clusterNodeCount(g *gossip.Gossip) int {
 	var nodes int
-	for k := range g.GetInfoStatus().Infos {
-		if gossip.IsNodeIDKey(k) {
-			nodes++
-		}
-	}
+	_ = g.IterateInfos(gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
+		nodes++
+		return nil
+	})
 	return nodes
 }
 
@@ -650,73 +668,81 @@ func backup(
 			return progressLogger.Loop(ctx, requestFinishedCh)
 		})
 	}
+	g.GoCtx(func(ctx context.Context) error {
+		for i := range allSpans {
+			{
+				select {
+				case exportsSem <- struct{}{}:
+				case <-ctx.Done():
+					// Break the for loop to avoid creating more work - the backup
+					// has failed because either the context has been canceled or an
+					// error has been returned. Either way, Wait() is guaranteed to
+					// return an error now.
+					return ctx.Err()
+				}
+			}
 
-	for i := range allSpans {
-		select {
-		case exportsSem <- struct{}{}:
-		case <-g.Done:
-			return mu.exported, g.Err()
+			span := allSpans[i]
+			g.GoCtx(func(ctx context.Context) error {
+				defer func() { <-exportsSem }()
+				header := roachpb.Header{Timestamp: span.end}
+				req := &roachpb.ExportRequest{
+					RequestHeader: roachpb.RequestHeaderFromSpan(span.span),
+					Storage:       exportStore.Conf(),
+					StartTime:     span.start,
+					MVCCFilter:    roachpb.MVCCFilter(backupDesc.MVCCFilter),
+				}
+				rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
+				if pErr != nil {
+					return pErr.GoError()
+				}
+				res := rawRes.(*roachpb.ExportResponse)
+
+				mu.Lock()
+				if backupDesc.RevisionStartTime.Less(res.StartTime) {
+					backupDesc.RevisionStartTime = res.StartTime
+				}
+				for _, file := range res.Files {
+					f := BackupDescriptor_File{
+						Span:        file.Span,
+						Path:        file.Path,
+						Sha512:      file.Sha512,
+						EntryCounts: file.Exported,
+					}
+					if span.start != backupDesc.StartTime {
+						f.StartTime = span.start
+						f.EndTime = span.end
+					}
+					mu.files = append(mu.files, f)
+					mu.exported.Add(file.Exported)
+				}
+				var checkpointFiles BackupFileDescriptors
+				if timeutil.Since(mu.lastCheckpoint) > BackupCheckpointInterval {
+					// We optimistically assume the checkpoint will succeed to prevent
+					// multiple threads from attempting to checkpoint.
+					mu.lastCheckpoint = timeutil.Now()
+					checkpointFiles = append(checkpointFiles, mu.files...)
+				}
+				mu.Unlock()
+
+				requestFinishedCh <- struct{}{}
+
+				if checkpointFiles != nil {
+					checkpointMu.Lock()
+					backupDesc.Files = checkpointFiles
+					err := writeBackupDescriptor(
+						ctx, exportStore, BackupDescriptorCheckpointName, backupDesc,
+					)
+					checkpointMu.Unlock()
+					if err != nil {
+						log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
+					}
+				}
+				return nil
+			})
 		}
-
-		span := allSpans[i]
-		g.GoCtx(func(ctx context.Context) error {
-			defer func() { <-exportsSem }()
-			header := roachpb.Header{Timestamp: span.end}
-			req := &roachpb.ExportRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(span.span),
-				Storage:       exportStore.Conf(),
-				StartTime:     span.start,
-				MVCCFilter:    roachpb.MVCCFilter(backupDesc.MVCCFilter),
-			}
-			rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
-			if pErr != nil {
-				return pErr.GoError()
-			}
-			res := rawRes.(*roachpb.ExportResponse)
-
-			mu.Lock()
-			if backupDesc.RevisionStartTime.Less(res.StartTime) {
-				backupDesc.RevisionStartTime = res.StartTime
-			}
-			for _, file := range res.Files {
-				f := BackupDescriptor_File{
-					Span:        file.Span,
-					Path:        file.Path,
-					Sha512:      file.Sha512,
-					EntryCounts: file.Exported,
-				}
-				if span.start != backupDesc.StartTime {
-					f.StartTime = span.start
-					f.EndTime = span.end
-				}
-				mu.files = append(mu.files, f)
-				mu.exported.Add(file.Exported)
-			}
-			var checkpointFiles BackupFileDescriptors
-			if timeutil.Since(mu.lastCheckpoint) > BackupCheckpointInterval {
-				// We optimistically assume the checkpoint will succeed to prevent
-				// multiple threads from attempting to checkpoint.
-				mu.lastCheckpoint = timeutil.Now()
-				checkpointFiles = append(checkpointFiles, mu.files...)
-			}
-			mu.Unlock()
-
-			requestFinishedCh <- struct{}{}
-
-			if checkpointFiles != nil {
-				checkpointMu.Lock()
-				backupDesc.Files = checkpointFiles
-				err := writeBackupDescriptor(
-					ctx, exportStore, BackupDescriptorCheckpointName, backupDesc,
-				)
-				checkpointMu.Unlock()
-				if err != nil {
-					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
-				}
-			}
-			return nil
-		})
-	}
+		return nil
+	})
 
 	if err := g.Wait(); err != nil {
 		return mu.exported, errors.Wrapf(err, "exporting %d ranges", len(spans))
@@ -1025,7 +1051,7 @@ func backupPlanHook(
 			return err
 		}
 
-		description, err := backupJobDescription(backupStmt, to, incrementalFrom)
+		description, err := backupJobDescription(backupStmt, to, incrementalFrom, opts)
 		if err != nil {
 			return err
 		}
@@ -1189,6 +1215,7 @@ func getAllRevisions(
 		StartTime:     startTime,
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		ReturnSST:     true,
+		OmitChecksum:  true,
 	}
 	resp, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if pErr != nil {

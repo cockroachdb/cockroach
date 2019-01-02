@@ -17,9 +17,11 @@ package cli
 import (
 	"os"
 
-	"github.com/spf13/cobra"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/lib/pq"
+	"github.com/spf13/cobra"
 )
 
 var password bool
@@ -35,6 +37,10 @@ Fetches and displays the user for <username>.
 	RunE: MaybeDecorateGRPCError(runGetUser),
 }
 
+var verGetUser = version.MustParse("v2.0.0-alpha.20180116")
+var verRmUser = version.MustParse("v1.1.0-alpha.20170622")
+var verSetUser = version.MustParse("v1.2.0-alpha.20171113")
+
 func runGetUser(cmd *cobra.Command, args []string) error {
 	conn, err := getPasswordAndMakeSQLClient("cockroach user")
 	if err != nil {
@@ -44,7 +50,7 @@ func runGetUser(cmd *cobra.Command, args []string) error {
 	// NOTE: We too aggressively broke backwards compatibility in this command.
 	// Future changes should maintain compatibility with the last two released
 	// versions of CockroachDB.
-	if err := conn.requireServerVersion(">=v2.0-alpha.20180116"); err != nil {
+	if err := conn.requireServerVersion(verGetUser); err != nil {
 		return err
 	}
 	return runQueryAndFormatResults(conn, os.Stdout,
@@ -96,7 +102,7 @@ func runRmUser(cmd *cobra.Command, args []string) error {
 	// NOTE: We too aggressively broke backwards compatibility in this command.
 	// Future changes should maintain compatibility with the last two released
 	// versions of CockroachDB.
-	if err := conn.requireServerVersion(">=v1.1-alpha.20170622"); err != nil {
+	if err := conn.requireServerVersion(verRmUser); err != nil {
 		return err
 	}
 	return runQueryAndFormatResults(conn, os.Stdout,
@@ -142,14 +148,20 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 	// NOTE: We too aggressively broke backwards compatibility in this command.
 	// Future changes should maintain compatibility with the last two released
 	// versions of CockroachDB.
-	if err := conn.requireServerVersion(">=v1.2-alpha.20171113"); err != nil {
+	if err := conn.requireServerVersion(verSetUser); err != nil {
 		return err
 	}
 
 	if password {
-		return runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`CREATE USER IF NOT EXISTS $1 PASSWORD $2`, args[0], pwdString),
-		)
+		if err := runQueryAndFormatResults(conn, os.Stdout,
+			makeQuery(`CREATE USER $1 PASSWORD $2`, args[0], pwdString),
+		); err != nil {
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == pgerror.CodeDuplicateObjectError {
+				return runQueryAndFormatResults(conn, os.Stdout,
+					makeQuery(`ALTER USER $1 WITH PASSWORD $2`, args[0], pwdString))
+			}
+			return err
+		}
 	}
 	return runQueryAndFormatResults(conn, os.Stdout,
 		makeQuery(`CREATE USER IF NOT EXISTS $1`, args[0]))
@@ -165,9 +177,7 @@ var userCmds = []*cobra.Command{
 var userCmd = &cobra.Command{
 	Use:   "user",
 	Short: "get, set, list and remove users",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Usage()
-	},
+	RunE:  usageAndErr,
 }
 
 func init() {

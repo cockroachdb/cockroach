@@ -1,0 +1,9 @@
+alter_onetable_stmt ::=
+	'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'SET' 'DATA' 'TYPE' typename
+	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name  'TYPE' typename
+	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'SET' 'DATA' 'TYPE' typename
+	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name  'TYPE' typename
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'SET' 'DATA' 'TYPE' typename
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name  'TYPE' typename
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'SET' 'DATA' 'TYPE' typename
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name  'TYPE' typename

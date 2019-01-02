@@ -53,6 +53,7 @@ typedef struct {
 
 typedef struct {
   bool prefix;
+  DBKey lower_bound;
   DBKey upper_bound;
   bool with_stats;
   DBTimestamp min_timestamp_hint;
@@ -99,6 +100,14 @@ void DBReleaseCache(DBCache* cache);
 // exist.
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions options);
 
+// Set a callback to be invoked during DBOpen that can make changes to RocksDB
+// initialization. Used by CCL code to install additional features.
+//
+// The callback must be a pointer to a C++ function of type DBOpenHook. The type
+// is declared in db.cc. It cannot be part of the public C API as it refers to
+// C++ types.
+void DBSetOpenHook(void* hook);
+
 // Destroys the database located in "dir". As the name implies, this
 // operation is destructive. Use with caution.
 DBStatus DBDestroy(DBSlice dir);
@@ -121,6 +130,12 @@ DBStatus DBCompact(DBEngine* db);
 // Note that if start is empty, it indicates the start of the database.
 // If end is empty, it indicates the end of the database.
 DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bottommost);
+
+// Disable/enable automatic compactions. Automatic compactions are
+// enabled by default. Disabling is provided for testing purposes so
+// that automatic compactions do not interfere with test expectations.
+DBStatus DBDisableAutoCompaction(DBEngine *db);
+DBStatus DBEnableAutoCompaction(DBEngine *db);
 
 // Stores the approximate on-disk size of the given key range into the
 // supplied uint64.
@@ -235,6 +250,9 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions);
 // iff the iterator was not positioned at the first key.
 DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions);
 
+// DBIterSetLowerBound updates this iterator's lower bound.
+void DBIterSetLowerBound(DBIterator* iter, DBKey key);
+
 // DBIterSetUpperBound updates this iterator's upper bound.
 void DBIterSetUpperBound(DBIterator* iter, DBKey key);
 
@@ -302,12 +320,13 @@ typedef struct {
   DBChunkedBuffer data;
   DBSlice intents;
   DBTimestamp uncertainty_timestamp;
+  DBSlice resume_key;
 } DBScanResults;
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
-                      bool consistent, bool tombstones);
+                      bool inconsistent, bool tombstones);
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
-                       int64_t max_keys, DBTxn txn, bool consistent, bool reverse, bool tombstones);
+                       int64_t max_keys, DBTxn txn, bool inconsistent, bool reverse, bool tombstones);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {
@@ -338,9 +357,18 @@ typedef struct {
   DBString encryption_status;
 } DBEnvStatsResult;
 
+// DBEncryptionRegistries contains file and key registries.
+typedef struct {
+  // File registry.
+  DBString file_registry;
+  // Key registry (with actual keys scrubbed).
+  DBString key_registry;
+} DBEncryptionRegistries;
+
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats);
 DBString DBGetCompactionStats(DBEngine* db);
 DBStatus DBGetEnvStats(DBEngine* db, DBEnvStatsResult* stats);
+DBStatus DBGetEncryptionRegistries(DBEngine* db, DBEncryptionRegistries* result);
 
 typedef struct {
   int level;
@@ -353,6 +381,15 @@ typedef struct {
 // array must be freed along with the start_key and end_key of each
 // table.
 DBSSTable* DBGetSSTables(DBEngine* db, int* n);
+
+typedef struct {
+  uint64_t log_number;
+  uint64_t size;
+} DBWALFile;
+
+// Retrieve information about all of the write-ahead log files in order from
+// oldest to newest. The files array must be freed.
+DBStatus DBGetSortedWALFiles(DBEngine* db, DBWALFile** files, int* n);
 
 // DBGetUserProperties fetches the user properties stored in each sstable's
 // metadata. These are returned as a serialized SSTUserPropertiesCollection
@@ -382,6 +419,9 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw);
 // cannot have been called.
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
 
+// Adds a deletion tombstone to the sstable being built. See DBSstFileWriterAdd for more.
+DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key);
+
 // Finalizes the writer and stores the constructed file's contents in *data. At
 // least one kv entry must have been added. May only be called once.
 DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data);
@@ -391,6 +431,7 @@ DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data);
 void DBSstFileWriterClose(DBSstFileWriter* fw);
 
 void DBRunLDB(int argc, char** argv);
+void DBRunSSTDump(int argc, char** argv);
 
 // DBEnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);

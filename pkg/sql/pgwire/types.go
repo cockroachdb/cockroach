@@ -16,6 +16,7 @@ package pgwire
 
 import (
 	"context"
+	"encoding/binary"
 	"math"
 	"math/big"
 	"net"
@@ -23,9 +24,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 // pgType contains type metadata used in RowDescription messages.
@@ -67,7 +69,7 @@ func pgTypeForParserType(t types.T) pgType {
 const secondsInDay = 24 * 60 * 60
 
 func (b *writeBuffer) writeTextDatum(
-	ctx context.Context, d tree.Datum, sessionLoc *time.Location, be sessiondata.BytesEncodeFormat,
+	ctx context.Context, d tree.Datum, conv sessiondata.DataConversionConfig,
 ) {
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
@@ -78,13 +80,13 @@ func (b *writeBuffer) writeTextDatum(
 		return
 	}
 	switch v := tree.UnwrapDatum(nil, d).(type) {
+	case *tree.DBitArray:
+		b.textFormatter.FormatNode(v)
+		b.writeLengthPrefixedVariablePutbuf()
+
 	case *tree.DBool:
-		b.putInt32(1)
-		if *v {
-			b.writeByte('t')
-		} else {
-			b.writeByte('f')
-		}
+		b.textFormatter.FormatNode(v)
+		b.writeLengthPrefixedVariablePutbuf()
 
 	case *tree.DInt:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
@@ -94,7 +96,7 @@ func (b *writeBuffer) writeTextDatum(
 
 	case *tree.DFloat:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := strconv.AppendFloat(b.putbuf[4:4], float64(*v), 'f', -1, 64)
+		s := strconv.AppendFloat(b.putbuf[4:4], float64(*v), 'g', conv.GetFloatPrec(), 64)
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
@@ -102,7 +104,8 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedDatum(v)
 
 	case *tree.DBytes:
-		result := lex.EncodeByteArrayToRawBytes(string(*v), be, false /* skipHexPrefix */)
+		result := lex.EncodeByteArrayToRawBytes(
+			string(*v), conv.BytesEncodeFormat, false /* skipHexPrefix */)
 		b.putInt32(int32(len(result)))
 		b.write([]byte(result))
 
@@ -121,19 +124,13 @@ func (b *writeBuffer) writeTextDatum(
 	case *tree.DDate:
 		t := timeutil.Unix(int64(*v)*secondsInDay, 0)
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTs(t, nil, b.putbuf[4:4])
+		s := formatDate(t, nil, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
 	case *tree.DTime:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := formatTime(timeofday.TimeOfDay(*v), b.putbuf[4:4])
-		b.putInt32(int32(len(s)))
-		b.write(s)
-
-	case *tree.DTimeTZ:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTimeTZ(v, sessionLoc, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
@@ -145,7 +142,7 @@ func (b *writeBuffer) writeTextDatum(
 
 	case *tree.DTimestampTZ:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTs(v.Time, sessionLoc, b.putbuf[4:4])
+		s := formatTs(v.Time, conv.Location, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
@@ -156,40 +153,24 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedString(v.JSON.String())
 
 	case *tree.DTuple:
-		b.variablePutbuf.WriteString("(")
-		for i, d := range v.D {
-			if i > 0 {
-				b.variablePutbuf.WriteString(",")
-			}
-			if d == tree.DNull {
-				// Emit nothing on NULL.
-				continue
-			}
-			b.simpleFormatter.FormatNode(d)
-		}
-		b.variablePutbuf.WriteString(")")
+		b.textFormatter.FormatNode(v)
 		b.writeLengthPrefixedVariablePutbuf()
 
 	case *tree.DArray:
-		// Arrays are serialized as a string of comma-separated values, surrounded
-		// by braces.
-		begin, sep, end := "{", ",", "}"
-
 		switch d.ResolvedType().Oid() {
 		case oid.T_int2vector, oid.T_oidvector:
 			// vectors are serialized as a string of space-separated values.
-			begin, sep, end = "", " ", ""
-		}
-
-		b.variablePutbuf.WriteString(begin)
-		for i, d := range v.Array {
-			if i > 0 {
-				b.variablePutbuf.WriteString(sep)
-			}
+			sep := ""
 			// TODO(justin): add a test for nested arrays.
-			b.arrayFormatter.FormatNode(d)
+			for _, d := range v.Array {
+				b.variablePutbuf.WriteString(sep)
+				b.textFormatter.FormatNode(d)
+				sep = " "
+			}
+		default:
+			// Uses the default pgwire text format for arrays.
+			b.textFormatter.FormatNode(v)
 		}
-		b.variablePutbuf.WriteString(end)
 		b.writeLengthPrefixedVariablePutbuf()
 
 	case *tree.DOid:
@@ -212,6 +193,37 @@ func (b *writeBuffer) writeBinaryDatum(
 		return
 	}
 	switch v := tree.UnwrapDatum(nil, d).(type) {
+	case *tree.DBitArray:
+		words, lastBitsUsed := v.EncodingParts()
+		if len(words) == 0 {
+			b.putInt32(4)
+		} else {
+			// Encode the length of the output bytes. It is computed here so we don't
+			// have to keep a buffer.
+			// 4: the int32 of the bitLen.
+			// 8*(len(words)-1): number of 8-byte words except the last one since it's
+			//   partial.
+			// (lastBitsUsed+7)/8: number of bytes that will be written in the last
+			//   partial word. The /8 rounds down, such that the +7 will cause 1-or-more
+			//   bits to use a byte, but 0 will not.
+			b.putInt32(4 + int32(8*(len(words)-1)) + int32((lastBitsUsed+7)/8))
+		}
+		bitLen := v.BitLen()
+		b.putInt32(int32(bitLen))
+		var byteBuf [8]byte
+		for i := 0; i < len(words)-1; i++ {
+			w := words[i]
+			binary.BigEndian.PutUint64(byteBuf[:], w)
+			b.write(byteBuf[:])
+		}
+		if len(words) > 0 {
+			w := words[len(words)-1]
+			for i := uint(0); i < uint(lastBitsUsed); i += 8 {
+				c := byte(w >> (56 - i))
+				b.writeByte(c)
+			}
+		}
+
 	case *tree.DBool:
 		b.putInt32(1)
 		if *v {
@@ -229,6 +241,24 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt64(int64(math.Float64bits(float64(*v))))
 
 	case *tree.DDecimal:
+		if v.Form != apd.Finite {
+			b.putInt32(8)
+			// 0 digits.
+			b.putInt32(0)
+			// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
+			b.write([]byte{0xc0, 0, 0, 0})
+
+			if v.Form == apd.Infinite {
+				// TODO(mjibson): #32489
+				// The above encoding is not correct for Infinity, but since that encoding
+				// doesn't exist in postgres, it's unclear what to do. For now use the NaN
+				// encoding and count it to see if anyone even needs this.
+				telemetry.Count("pgwire.#32489.binary_decimal_infinity")
+			}
+
+			return
+		}
+
 		alloc := struct {
 			pgNum pgwirebase.PGNumeric
 
@@ -358,15 +388,22 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(8)
 		b.putInt64(int64(*v))
 
-	case *tree.DTimeTZ:
-		b.putInt32(8)
-		b.putInt64(int64(timeofday.FromTime(v.ToTime().UTC())))
-
 	case *tree.DInterval:
 		b.putInt32(16)
 		b.putInt64(v.Nanos / int64(time.Microsecond/time.Nanosecond))
 		b.putInt32(int32(v.Days))
 		b.putInt32(int32(v.Months))
+
+	case *tree.DTuple:
+		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
+		subWriter := newWriteBuffer(nil /* bytecount */)
+		// Put the number of datums.
+		subWriter.putInt32(int32(len(v.D)))
+		for _, elem := range v.D {
+			subWriter.putInt32(int32(elem.ResolvedType().Oid()))
+			subWriter.writeBinaryDatum(ctx, elem, sessionLoc)
+		}
+		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 
 	case *tree.DArray:
 		if v.ParamTyp.FamilyEqual(types.AnyArray) {
@@ -404,10 +441,12 @@ func (b *writeBuffer) writeBinaryDatum(
 	}
 }
 
-const pgTimeFormat = "15:04:05.999999"
-const pgTimeTSFormat = pgTimeFormat + "-07:00"
-const pgTimeStampFormatNoOffset = "2006-01-02 " + pgTimeFormat
-const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
+const (
+	pgTimeFormat              = "15:04:05.999999"
+	pgDateFormat              = "2006-01-02"
+	pgTimeStampFormatNoOffset = pgDateFormat + " " + pgTimeFormat
+	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00"
+)
 
 // formatTime formats t into a format lib/pq understands, appending to the
 // provided tmp buffer and reallocating if needed. The function will then return
@@ -416,22 +455,25 @@ func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
 	return t.ToTime().AppendFormat(tmp, pgTimeFormat)
 }
 
-// formatTimeTZ formats ttz into a format lib/pq understands, appending to the
-// provided tmp buffer and reallocating if needed. The function will then return
-// the resulting buffer.
-func formatTimeTZ(ttz *tree.DTimeTZ, offset *time.Location, tmp []byte) []byte {
-	t := ttz.ToTime()
+func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
+	var format string
 	if offset != nil {
-		t = t.In(offset)
+		format = pgTimeStampFormat
+	} else {
+		format = pgTimeStampFormatNoOffset
 	}
-	return t.AppendFormat(tmp, pgTimeTSFormat)
+	return formatTsWithFormat(format, t, offset, tmp)
 }
 
-// formatTs formats t with an optional offset into a format lib/pq understands,
-// appending to the provided tmp buffer and reallocating if needed. The function
-// will then return the resulting buffer. formatTs is mostly cribbed from
-// github.com/lib/pq.
-func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
+func formatDate(t time.Time, offset *time.Location, tmp []byte) []byte {
+	return formatTsWithFormat(pgDateFormat, t, offset, tmp)
+}
+
+// formatTsWithFormat formats t with an optional offset into a format
+// lib/pq understands, appending to the provided tmp buffer and
+// reallocating if needed. The function will then return the resulting
+// buffer. formatTsWithFormat is mostly cribbed from github.com/lib/pq.
+func formatTsWithFormat(format string, t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
 	// minus sign preferred by Go.
 	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
@@ -446,12 +488,7 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 		bc = true
 	}
 
-	if offset != nil {
-		b = t.AppendFormat(tmp, pgTimeStampFormat)
-	} else {
-		b = t.AppendFormat(tmp, pgTimeStampFormatNoOffset)
-	}
-
+	b = t.AppendFormat(tmp, format)
 	if bc {
 		b = append(b, " BC"...)
 	}

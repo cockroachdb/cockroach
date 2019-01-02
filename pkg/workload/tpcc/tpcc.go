@@ -18,23 +18,25 @@ package tpcc
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"net/url"
+	"strings"
 	"sync"
-
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
 
 type tpcc struct {
-	flags workload.Flags
+	flags     workload.Flags
+	connFlags *workload.ConnFlags
 
 	seed             int64
 	warehouses       int
@@ -48,8 +50,8 @@ type tpcc struct {
 	fks        bool
 	dbOverride string
 
-	txs []tx
-	// deck contains indexes into the txs slice.
+	txInfos []txInfo
+	// deck contains indexes into the txInfos slice.
 	deck []int
 
 	auditor *auditor
@@ -62,10 +64,11 @@ type tpcc struct {
 	partitions        int
 	affinityPartition int
 	zones             []string
+	wPart             *partitioner
 
 	usePostgres  bool
 	serializable bool
-	txOpts       *gosql.TxOptions
+	txOpts       *pgx.TxOptions
 
 	expensiveChecks bool
 
@@ -92,6 +95,8 @@ var tpccMeta = workload.Meta{
 	Name: `tpcc`,
 	Description: `TPC-C simulates a transaction processing workload` +
 		` using a rich schema of multiple tables`,
+	// TODO(anyone): when bumping this version and regenerating fixtures, please
+	// address the TODO in PostLoad.
 	Version: `2.0.1`,
 	New: func() workload.Generator {
 		g := &tpcc{}
@@ -128,7 +133,7 @@ var tpccMeta = workload.Meta{
 		g.flags.IntVar(&g.workers, `workers`, 0,
 			`Number of concurrent workers. Defaults to --warehouses * 10`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
-		g.flags.IntVar(&g.partitions, `partitions`, 0, `Partition tables (requires split)`)
+		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables (requires split)`)
 		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
 		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
@@ -137,6 +142,7 @@ var tpccMeta = workload.Meta{
 		g.flags.StringSliceVar(&g.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
 
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
+		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
 }
@@ -151,44 +157,43 @@ func (w *tpcc) Flags() workload.Flags { return w.flags }
 func (w *tpcc) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if w.activeWarehouses > w.warehouses {
-				return errors.Errorf(`--active-warehouses needs to be less than or equal to warehouses`)
+			if w.warehouses < 1 {
+				return errors.Errorf(`--warehouses must be positive`)
 			}
 
-			if w.activeWarehouses == 0 {
+			if w.activeWarehouses > w.warehouses {
+				return errors.Errorf(`--active-warehouses needs to be less than or equal to warehouses`)
+			} else if w.activeWarehouses == 0 {
 				w.activeWarehouses = w.warehouses
 			}
 
-			if w.workers == 0 {
-				w.workers = w.activeWarehouses * numWorkersPerWarehouse
-			}
-			if w.doWaits && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
-				return errors.Errorf(`--waits=true and --warehouses=%d requires --workers=%d`,
-					w.activeWarehouses, w.warehouses*numWorkersPerWarehouse)
-			}
-
-			if w.partitions != 0 && !w.split {
-				return errors.Errorf(`--partitions requires --split`)
-			}
-
-			if w.affinityPartition != -1 && w.partitions == 0 {
-				return errors.Errorf(`--partition-affinity requires --partitions`)
+			if w.partitions < 1 {
+				return errors.Errorf(`--partitions must be positive`)
+			} else if w.partitions > 1 && !w.split {
+				return errors.Errorf(`multiple partitions requires --split`)
 			}
 
 			if w.affinityPartition < -1 {
-				return errors.Errorf(`--partition-affinity should be greater than or equal to 0`)
-			}
-
-			if w.affinityPartition > w.partitions-1 {
-				return errors.Errorf(`--partition-affinity should be less than the total number of partitions.`)
+				return errors.Errorf(`if specified, --partition-affinity should be greater than or equal to 0`)
+			} else if w.affinityPartition >= w.partitions {
+				return errors.Errorf(`--partition-affinity out of bounds of --partitions`)
 			}
 
 			if len(w.zones) > 0 && (len(w.zones) != w.partitions) {
 				return errors.Errorf(`--zones should have the sames length as --partitions.`)
 			}
 
+			if w.workers == 0 {
+				w.workers = w.activeWarehouses * numWorkersPerWarehouse
+			}
+
+			if w.doWaits && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
+				return errors.Errorf(`--wait=true and --warehouses=%d requires --workers=%d`,
+					w.activeWarehouses, w.warehouses*numWorkersPerWarehouse)
+			}
+
 			if w.serializable {
-				w.txOpts = &gosql.TxOptions{Isolation: gosql.LevelSerializable}
+				w.txOpts = &pgx.TxOptions{IsoLevel: pgx.Serializable}
 			}
 
 			w.auditor = newAuditor(w.warehouses)
@@ -196,29 +201,63 @@ func (w *tpcc) Hooks() workload.Hooks {
 			return initializeMix(w)
 		},
 		PostLoad: func(sqlDB *gosql.DB) error {
-			fkStmts := []string{
-				`alter table district add foreign key (d_w_id) references warehouse (w_id)`,
-				`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)`,
-				`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id)`,
-				`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)`,
-				`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)`,
-				`alter table stock add foreign key (s_w_id) references warehouse (w_id)`,
-				`alter table stock add foreign key (s_i_id) references item (i_id)`,
-				`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id)`,
-				`alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`,
-			}
-			for _, fkStmt := range fkStmts {
-				if _, err := sqlDB.Exec(fkStmt); err != nil {
-					return err
+			if w.fks {
+				fkStmts := []string{
+					`alter table district add foreign key (d_w_id) references warehouse (w_id)`,
+					`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)`,
+					`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id)`,
+					`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)`,
+					`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)`,
+					`alter table stock add foreign key (s_w_id) references warehouse (w_id)`,
+					`alter table stock add foreign key (s_i_id) references item (i_id)`,
+					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id)`,
+				}
+
+				// TODO(anyone): Remove this check. Once fixtures are
+				// regenerated and the meta version is bumped on this workload,
+				// we won't need it anymore.
+				{
+					const q = `SELECT column_name
+						       FROM information_schema.statistics
+						       WHERE index_name = 'order_line_fk'
+						         AND seq_in_index = 2`
+					var fkCol string
+					if err := sqlDB.QueryRow(q).Scan(&fkCol); err != nil {
+						return err
+					}
+					var fkStmt string
+					switch fkCol {
+					case "ol_i_id":
+						// The corrected column. When the TODO above is addressed,
+						// this should be moved into fkStmts.
+						fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)`
+					case "ol_d_id":
+						// The old, incorrect column. When the TODO above is addressed,
+						// this should be removed entirely.
+						fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`
+					default:
+						return errors.Errorf("unexpected column %q in order_line_fk", fkCol)
+					}
+					fkStmts = append(fkStmts, fkStmt)
+				}
+
+				for _, fkStmt := range fkStmts {
+					if _, err := sqlDB.Exec(fkStmt); err != nil {
+						// If the statement failed because the fk already exists,
+						// ignore it. Return the error for any other reason.
+						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
+						if !strings.Contains(err.Error(), duplFKErr) {
+							return err
+						}
+					}
 				}
 			}
 			return nil
 		},
-		PostRun: func(start time.Time) error {
+		PostRun: func(startElapsed time.Duration) error {
 			w.auditor.runChecks()
 			const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader)
-			startElapsed := timeutil.Since(start)
 
 			const newOrderName = `newOrder`
 			w.reg.Tick(func(t workload.HistogramTick) {
@@ -365,88 +404,98 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		return workload.QueryLoad{}, err
 	}
 
+	w.reg = reg
 	w.usePostgres = parsedURL.Port() == "5432"
 
-	nConns := w.activeWarehouses / len(urls)
-	dbs := make([]*gosql.DB, len(urls))
+	// If we're not waiting, open up a connection for each worker. If we are
+	// waiting, we only use up to a set number of connections per warehouse.
+	// This isn't mandated by the spec, but opening a connection per worker
+	// when they each spend most of their time waiting is wasteful.
+	nConns := w.workers
+	if w.doWaits {
+		nConns = w.activeWarehouses * numConnsPerWarehouse
+	}
+
+	// We can't use a single MultiConnPool because we want to implement partition
+	// affinity. Instead we have one MultiConnPool per server (we use
+	// MultiConnPool in order to use SQLRunner, but it's otherwise equivalent to a
+	// pgx.ConnPool).
+	nConnsPerURL := (nConns + len(urls) - 1) / len(urls) // round up
+	dbs := make([]*workload.MultiConnPool, len(urls))
 	for i, url := range urls {
-		dbs[i], err = gosql.Open(`postgres`, url)
+		dbs[i], err = workload.NewMultiConnPool(nConnsPerURL, url)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
-		// Allow a maximum of concurrency+1 connections to the database.
-		dbs[i].SetMaxOpenConns(nConns)
-		dbs[i].SetMaxIdleConns(nConns)
+	}
+
+	// Create a partitioner to help us partition the warehouses. The base-case is
+	// where w.warehouses == w.activeWarehouses and w.partitions == 1.
+	w.wPart, err = makePartitioner(w.warehouses, w.activeWarehouses, w.partitions)
+	if err != nil {
+		return workload.QueryLoad{}, err
 	}
 
 	// We're adding this check here because repartitioning a table can take
 	// upwards of 10 minutes so if a cluster is already set up correctly we won't
 	// do this operation again.
-	alreadyPartitioned, err := isTableAlreadyPartitioned(dbs[0])
+	alreadyPartitioned, err := isTableAlreadyPartitioned(dbs[0].Get())
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
 	if !alreadyPartitioned {
 		if w.split {
-			splitTables(dbs[0], w.warehouses)
+			splitTables(dbs[0].Get(), w.warehouses)
 
-			if w.partitions > 0 {
-				partitionTables(dbs[0], w.warehouses, w.partitions, w.zones)
+			if w.partitions > 1 {
+				partitionTables(dbs[0].Get(), w.wPart, w.zones)
 			}
 		}
 	} else {
-		fmt.Println("Tables are not being parititioned because they've been previously partitioned.")
+		fmt.Println("Tables are not being partitioned because they've been previously partitioned.")
 	}
 
 	if w.scatter {
-		scatterRanges(dbs[0])
+		scatterRanges(dbs[0].Get())
 	}
 
-	// If no partitions were specified, pretend there is a single partition
-	// containing all warehouses.
-	if w.partitions == 0 {
-		w.partitions = 1
-	}
-	// Assign each DB connection pool to a partition. This assumes that dbs[i] is
-	// a machine that holds partition "i % *partitions".
-	partitionDBs := make([][]*gosql.DB, w.partitions)
-	if w.affinityPartition == -1 {
+	// Assign each DB connection pool to a local partition. This assumes that
+	// dbs[i] is a machine that holds partition "i % *partitions". If we have an
+	// affinity partition, all connections will be for the same partition.
+	partitionDBs := make([][]*workload.MultiConnPool, w.partitions)
+	if w.affinityPartition >= 0 {
+		// All connections are for our local partition.
+		partitionDBs[w.affinityPartition] = dbs
+	} else {
 		for i, db := range dbs {
 			p := i % w.partitions
 			partitionDBs[p] = append(partitionDBs[p], db)
 		}
-	}
-	for i := range partitionDBs {
-		if partitionDBs[i] == nil {
-			partitionDBs[i] = dbs
+		for i := range partitionDBs {
+			// Possible if we have more partitions than DB connections.
+			if partitionDBs[i] == nil {
+				partitionDBs[i] = dbs
+			}
 		}
 	}
 
-	w.reg = reg
-
-	startWarehouse := 0
-	if w.affinityPartition != -1 {
-		startWarehouse = w.affinityPartition * (w.warehouses / w.partitions)
-	}
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
-		warehouse := workerIdx % w.activeWarehouses
-		// NB: Each partition contains "warehouses / partitions" warehouses. See
-		// partitionTables().
-		p := (warehouse * w.partitions) / w.activeWarehouses
+		warehouse := w.wPart.totalElems[workerIdx%len(w.wPart.totalElems)]
+
+		p := w.wPart.partElemsMap[warehouse]
+		if w.affinityPartition >= 0 && w.affinityPartition != p {
+			// This isn't part of our local partition.
+			continue
+		}
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
-		worker := &worker{
-			config:    w,
-			hists:     reg.GetHandle(),
-			idx:       workerIdx,
-			db:        db,
-			warehouse: warehouse + startWarehouse,
-			deckPerm:  make([]int, len(w.deck)),
-			permIdx:   len(w.deck),
+
+		worker, err := newWorker(context.TODO(), w, db, reg.GetHandle(), warehouse)
+		if err != nil {
+			return workload.QueryLoad{}, err
 		}
-		copy(worker.deckPerm, w.deck)
 
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}

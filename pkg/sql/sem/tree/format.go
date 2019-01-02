@@ -48,6 +48,19 @@ const (
 	// a straightforward representation.
 	FmtSimple FmtFlags = 0
 
+	// FmtBareStrings instructs the pretty-printer to print strings and
+	// other values without wrapping quotes. If the value is a SQL
+	// string, the quotes will only be omitted if the string contains no
+	// special characters. If it does contain special characters, the
+	// string will be escaped and enclosed in e'...' regardless of
+	// whether FmtBareStrings is specified. See FmtRawStrings below for
+	// an alternative.
+	FmtBareStrings FmtFlags = FmtFlags(lex.EncBareStrings)
+
+	// FmtBareIdentifiers instructs the pretty-printer to print
+	// identifiers without wrapping quotes in any case.
+	FmtBareIdentifiers FmtFlags = FmtFlags(lex.EncBareIdentifiers)
+
 	// FmtShowPasswords instructs the pretty-printer to not suppress passwords.
 	// If not set, passwords are replaced by *****.
 	FmtShowPasswords FmtFlags = FmtFlags(lex.EncFirstFreeFlagBit) << iota
@@ -57,7 +70,8 @@ const (
 	FmtShowTypes
 
 	// FmtHideConstants instructs the pretty-printer to produce a
-	// representation that does not disclose query-specific data.
+	// representation that does not disclose query-specific data. It
+	// also shorten long lists in tuples, VALUES and array expressions.
 	FmtHideConstants
 
 	// FmtAnonymize instructs the pretty-printer to remove
@@ -81,9 +95,10 @@ const (
 	// using numeric notation (@S123).
 	FmtSymbolicSubqueries
 
-	// If set, strings will be formatted for being contents of ARRAYs.
-	// Used internally in combination with FmtArrays defined below.
-	fmtWithinArray
+	// If set, strings will be formatted using the postgres datum-to-text
+	// conversion. See comments in pgwire_encode.go.
+	// Used internally in combination with FmtPgwireText defined below.
+	fmtPgwireFormat
 
 	// If set, datums and placeholders will have type annotations (like
 	// :::interval) as necessary to disambiguate between possible type
@@ -94,28 +109,28 @@ const (
 	// using numeric notation (@123).
 	fmtSymbolicVars
 
-	// fmtUnicodeStrings prints strings and JSON in their unicode representation.
-	fmtUnicodeStrings
+	// fmtUnicodeStrings prints strings and JSON using the Go string
+	// formatter. This is used e.g. for emitting values to CSV files.
+	fmtRawStrings
+
+	// FmtParsableNumerics produces decimal and float representations
+	// that are always parsable, even if they require a string
+	// representation like -Inf. Negative values are preserved "inside"
+	// the numeric by enclosing them within parentheses.
+	FmtParsableNumerics
 )
 
 // Composite/derived flag definitions follow.
 const (
-	// FmtBareStrings instructs the pretty-printer to print strings without
-	// wrapping quotes, if the string contains no special characters.
-	FmtBareStrings FmtFlags = FmtFlags(lex.EncBareStrings)
-
-	// FmtBareIdentifiers instructs the pretty-printer to print
-	// identifiers without wrapping quotes in any case.
-	FmtBareIdentifiers FmtFlags = FmtFlags(lex.EncBareIdentifiers)
-
-	// FmtArrays instructs the pretty-printer to print strings without
-	// wrapping quotes, if the string contains no special characters.
-	FmtArrays FmtFlags = fmtWithinArray | FmtFlags(lex.EncBareStrings)
+	// FmtPgwireText instructs the pretty-printer to use
+	// a pg-compatible conversion to strings. See comments
+	// in pgwire_encode.go.
+	FmtPgwireText FmtFlags = fmtPgwireFormat | FmtFlags(lex.EncBareStrings)
 
 	// FmtParsable instructs the pretty-printer to produce a representation that
 	// can be parsed into an equivalent expression (useful for serialization of
 	// expressions).
-	FmtParsable FmtFlags = fmtDisambiguateDatumTypes
+	FmtParsable FmtFlags = fmtDisambiguateDatumTypes | FmtParsableNumerics
 
 	// FmtCheckEquivalence instructs the pretty-printer to produce a representation
 	// that can be used to check equivalence of expressions. Specifically:
@@ -125,12 +140,31 @@ const (
 	//    annotations. This is necessary because datums of different types
 	//    can otherwise be formatted to the same string: (for example the
 	//    DDecimal 1 and the DInt 1).
-	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes
+	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes | FmtParsableNumerics
 
-	// FmtParseDatums, if set, formats datums in a raw form
-	// (e.g. suitable for output into a CSV file) such that they can be
-	// round-tripped with their associated Parse func.
-	FmtParseDatums FmtFlags = FmtBareStrings | fmtUnicodeStrings
+	// FmtArrayToString is a special composite flag suitable
+	// for the output of array_to_string(). This de-quotes
+	// the strings enclosed in the array and skips the normal escaping
+	// of strings. Special characters are hex-escaped.
+	FmtArrayToString FmtFlags = FmtBareStrings | fmtRawStrings
+
+	// FmtExport, if set, formats datums in a raw form suitable for
+	// EXPORT, e.g. suitable for output into a CSV file. The intended
+	// goal for this flag is to ensure values can be read back using the
+	// ParseDatumStringAs() / ParseStringas() functions (IMPORT).
+	//
+	// We do not use FmtParsable for this purpose because FmtParsable
+	// intends to preserve all the information useful to CockroachDB
+	// internally, at the expense of readability by 3rd party tools.
+	//
+	// We also separate this set of flag from fmtArrayToString
+	// because the behavior of array_to_string() is fixed for compatibility
+	// with PostgreSQL, whereas EXPORT may evolve over time to support
+	// other things (eg. fixing #33429).
+	//
+	// TODO(mjibson): Note that this is currently not suitable for
+	// emitting arrays or tuples. See: #33429
+	FmtExport FmtFlags = FmtBareStrings | fmtRawStrings
 )
 
 // FmtCtx is suitable for passing to Format() methods.
@@ -144,9 +178,8 @@ type FmtCtx struct {
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
 	indexedVarFormat func(ctx *FmtCtx, idx int)
-	// tableNameFormatter will be called on all NormalizableTableNames if it is
-	// non-nil.
-	tableNameFormatter func(*FmtCtx, *NormalizableTableName)
+	// tableNameFormatter will be called on all TableNames if it is non-nil.
+	tableNameFormatter func(*FmtCtx, *TableName)
 	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
 	// it can be used to format placeholders differently than normal.
 	placeholderFormat func(ctx *FmtCtx, p *Placeholder)
@@ -159,7 +192,7 @@ func MakeFmtCtx(buf *bytes.Buffer, f FmtFlags) FmtCtx {
 
 // WithReformatTableNames modifies FmtCtx to instructs the pretty-printer
 // to substitute the printing of table names using the provided function.
-func (ctx *FmtCtx) WithReformatTableNames(fn func(*FmtCtx, *NormalizableTableName)) *FmtCtx {
+func (ctx *FmtCtx) WithReformatTableNames(fn func(*FmtCtx, *TableName)) *FmtCtx {
 	ctx.tableNameFormatter = fn
 	return ctx
 }
@@ -284,7 +317,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			ctx.WriteString(":::")
 			colType, err := coltypes.DatumTypeToColumnType(typ)
 			if err != nil {
-				panic(err)
+				panic(fmt.Sprintf("invalid datatype %v", typ))
 			}
 			colType.Format(ctx.Buffer, f.EncodeFlags())
 		}

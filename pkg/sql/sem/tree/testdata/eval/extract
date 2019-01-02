@@ -1,0 +1,172 @@
+# Extract from dates.
+
+eval
+extract(year from '2010-09-28'::date)
+----
+2010
+
+eval
+extract(year from '2010-09-28'::date)
+----
+2010
+
+eval
+extract(month from '2010-09-28'::date)
+----
+9
+
+eval
+extract(day from '2010-09-28'::date)
+----
+28
+
+eval
+extract(dayofyear from '2010-09-28'::date)
+----
+271
+
+eval
+extract(week from '2010-01-14'::date)
+----
+2
+
+eval
+extract(dayofweek from '2010-09-28'::date)
+----
+2
+
+eval
+extract(quarter from '2010-09-28'::date)
+----
+3
+
+# Extract from times.
+
+eval
+extract(hour from '12:00:00'::time)
+----
+12
+
+eval
+extract(minute from '12:30:00'::time)
+----
+30
+
+eval
+extract(second from '12:00:30'::time)
+----
+30
+
+eval
+extract(millisecond from '12:00:00.123456'::time)
+----
+123
+
+eval
+extract(microsecond from '12:00:00.123456'::time)
+----
+123456
+
+# Extract from timestamps.
+
+eval
+extract(year from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+2010
+
+eval
+extract(year from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+2010
+
+eval
+extract(month from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+9
+
+eval
+extract(day from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+28
+
+eval
+extract(dayofyear from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+271
+
+eval
+extract(week from '2010-01-14 12:13:14.1+00:00'::timestamp)
+----
+2
+
+eval
+extract(dayofweek from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+2
+
+eval
+extract(quarter from '2010-09-28 12:13:14.1+00:00'::timestamp)
+----
+3
+
+eval
+extract(hour from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+12
+
+eval
+extract(minute from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+13
+
+eval
+extract(second from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+14
+
+eval
+extract(millisecond from '2010-01-10 12:13:14.123456+00:00'::timestamp)
+----
+123
+
+eval
+extract(microsecond from '2010-01-10 12:13:14.123456+00:00'::timestamp)
+----
+123456
+
+eval
+extract(epoch from '2010-01-10 12:13:14.1+00:00'::timestamp)
+----
+1263125594
+
+# Extract from intervals.
+
+eval
+extract_duration(hour from '123m')
+----
+2
+
+eval
+extract_duration(hour from '123m'::interval)
+----
+2
+
+eval
+extract_duration(minute from '123m10s'::interval)
+----
+123
+
+eval
+extract_duration(second from '10m20s30ms'::interval)
+----
+620
+
+eval
+extract_duration(millisecond from '20s30ms40µs'::interval)
+----
+20030
+
+eval
+extract_duration(microsecond from '12345ns'::interval)
+----
+12

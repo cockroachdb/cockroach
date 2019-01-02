@@ -31,22 +31,23 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/dustin/go-humanize"
-	"github.com/elastic/gosigar"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/dustin/go-humanize"
+	"github.com/elastic/gosigar"
+	"github.com/pkg/errors"
 )
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
@@ -87,9 +88,9 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 const debugIteratorLeak = false
 
 //export rocksDBLog
-func rocksDBLog(s *C.char, n C.int) {
-	if log.V(3) {
-		ctx := log.WithLogTagStr(context.Background(), "rocksdb", "")
+func rocksDBLog(logLevel C.int, s *C.char, n C.int) {
+	if log.V(int32(logLevel)) {
+		ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
 		log.Info(ctx, C.GoStringN(s, n))
 	}
 }
@@ -476,6 +477,7 @@ type RocksDB struct {
 		syncutil.Mutex
 		cond       sync.Cond
 		committing bool
+		groupSize  int
 		pending    []*rocksDBBatch
 	}
 
@@ -493,6 +495,12 @@ type RocksDB struct {
 }
 
 var _ Engine = &RocksDB{}
+
+// SetRocksDBOpenHook sets the DBOpenHook function that will be called during
+// RocksDB initialization. It is intended to be called by CCL code.
+func SetRocksDBOpenHook(fn unsafe.Pointer) {
+	C.DBSetOpenHook(fn)
+}
 
 // NewRocksDB allocates and returns a new RocksDB object.
 // This creates options and opens the database. If the database
@@ -639,7 +647,6 @@ func (r *RocksDB) open() error {
 func (r *RocksDB) syncLoop() {
 	s := &r.syncer
 	s.Lock()
-	defer s.Unlock()
 
 	var lastSync time.Time
 
@@ -648,6 +655,7 @@ func (r *RocksDB) syncLoop() {
 			s.cond.Wait()
 		}
 		if s.closed {
+			s.Unlock()
 			return
 		}
 
@@ -754,6 +762,11 @@ func (r *RocksDB) Merge(key MVCCKey, value []byte) error {
 // LogData is part of the Writer interface.
 func (r *RocksDB) LogData(data []byte) error {
 	panic("unimplemented")
+}
+
+// LogLogicalOp is part of the Writer interface.
+func (r *RocksDB) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	// No-op. Logical logging disabled.
 }
 
 // ApplyBatchRepr atomically applies a set of batched updates. Created by
@@ -887,6 +900,16 @@ func (r *RocksDB) Compact() error {
 // CompactRange forces compaction over a specified range of keys in the database.
 func (r *RocksDB) CompactRange(start, end roachpb.Key, forceBottommost bool) error {
 	return statusToError(C.DBCompactRange(r.rdb, goToCSlice(start), goToCSlice(end), C.bool(forceBottommost)))
+}
+
+// disableAutoCompaction disables automatic compactions. For testing use only.
+func (r *RocksDB) disableAutoCompaction() error {
+	return statusToError(C.DBDisableAutoCompaction(r.rdb))
+}
+
+// enableAutoCompaction enables automatic compactions. For testing use only.
+func (r *RocksDB) enableAutoCompaction() error {
+	return statusToError(C.DBDisableAutoCompaction(r.rdb))
 }
 
 // ApproximateDiskBytes returns the approximate on-disk size of the specified key range.
@@ -1041,6 +1064,10 @@ func (r *rocksDBReadOnly) LogData(data []byte) error {
 	panic("not implemented")
 }
 
+func (r *rocksDBReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	panic("not implemented")
+}
+
 // NewBatch returns a new batch wrapping this rocksdb engine.
 func (r *RocksDB) NewBatch() Batch {
 	return newRocksDBBatch(r, false /* writeOnly */)
@@ -1086,9 +1113,44 @@ func (r *RocksDB) GetSSTables() SSTableInfos {
 	return res
 }
 
-// getUserProperties fetches the user properties stored in each sstable's
+// WALFileInfo contains metadata about a single write-ahead log file. Note this
+// mirrors the C.DBWALFile struct.
+type WALFileInfo struct {
+	LogNumber int64
+	Size      int64
+}
+
+// GetSortedWALFiles retrievews information about all of the write-ahead log
+// files in this engine in order from oldest to newest.
+func (r *RocksDB) GetSortedWALFiles() ([]WALFileInfo, error) {
+	var n C.int
+	var files *C.DBWALFile
+	status := C.DBGetSortedWALFiles(r.rdb, &files, &n)
+	if err := statusToError(status); err != nil {
+		return nil, errors.Wrap(err, "could not get sorted WAL files")
+	}
+	defer C.free(unsafe.Pointer(files))
+
+	// We can't index into files because it is a pointer, not a slice. The hackery
+	// below treats the pointer as an array and then constructs a slice from it.
+
+	structSize := unsafe.Sizeof(C.DBWALFile{})
+	getWALFile := func(i int) *C.DBWALFile {
+		return (*C.DBWALFile)(unsafe.Pointer(uintptr(unsafe.Pointer(files)) + uintptr(i)*structSize))
+	}
+
+	res := make([]WALFileInfo, n)
+	for i := range res {
+		wf := getWALFile(i)
+		res[i].LogNumber = int64(wf.log_number)
+		res[i].Size = int64(wf.size)
+	}
+	return res, nil
+}
+
+// GetUserProperties fetches the user properties stored in each sstable's
 // metadata.
-func (r *RocksDB) getUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
+func (r *RocksDB) GetUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
 	buf := cStringToGoBytes(C.DBGetUserProperties(r.rdb))
 	var ssts enginepb.SSTUserPropertiesCollection
 	if err := protoutil.Unmarshal(buf, &ssts); err != nil {
@@ -1141,6 +1203,20 @@ func (r *RocksDB) GetEnvStats() (*EnvStats, error) {
 		ActiveKeyFiles:   uint64(s.active_key_files),
 		ActiveKeyBytes:   uint64(s.active_key_bytes),
 		EncryptionStatus: cStringToGoBytes(s.encryption_status),
+	}, nil
+}
+
+// GetEncryptionRegistries returns the file and key registries when encryption is enabled
+// on the store.
+func (r *RocksDB) GetEncryptionRegistries() (*EncryptionRegistries, error) {
+	var s C.DBEncryptionRegistries
+	if err := statusToError(C.DBGetEncryptionRegistries(r.rdb, &s)); err != nil {
+		return nil, err
+	}
+
+	return &EncryptionRegistries{
+		FileRegistry: cStringToGoBytes(s.file_registry),
+		KeyRegistry:  cStringToGoBytes(s.key_registry),
 	}, nil
 }
 
@@ -1310,6 +1386,10 @@ func (r *distinctBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error 
 	return dbClearIterRange(r.batch, iter, start, end)
 }
 
+func (r *distinctBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	// No-op. Logical logging disabled.
+}
+
 func (r *distinctBatch) close() {
 	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
 		i.destroy()
@@ -1387,21 +1467,17 @@ func (r *batchIterator) FindSplitKey(
 }
 
 func (r *batchIterator) MVCCGet(
-	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent, tombstones bool,
-) (*roachpb.Value, []roachpb.Intent, error) {
+	key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
+) (*roachpb.Value, *roachpb.Intent, error) {
 	r.batch.flushMutations()
-	return r.iter.MVCCGet(key, timestamp, txn, consistent, tombstones)
+	return r.iter.MVCCGet(key, timestamp, opts)
 }
 
 func (r *batchIterator) MVCCScan(
-	start, end roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	txn *roachpb.Transaction,
-	consistent, reverse, tombstones bool,
-) (kvs []byte, numKvs int64, intents []byte, err error) {
+	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
+) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	r.batch.flushMutations()
-	return r.iter.MVCCScan(start, end, max, timestamp, txn, consistent, reverse, tombstones)
+	return r.iter.MVCCScan(start, end, max, timestamp, opts)
 }
 
 func (r *batchIterator) SetUpperBound(key roachpb.Key) {
@@ -1468,11 +1544,20 @@ type rocksDBBatch struct {
 	commitWG           sync.WaitGroup
 }
 
+var batchPool = sync.Pool{
+	New: func() interface{} {
+		return &rocksDBBatch{}
+	},
+}
+
 func newRocksDBBatch(parent *RocksDB, writeOnly bool) *rocksDBBatch {
-	r := &rocksDBBatch{
-		parent:    parent,
-		writeOnly: writeOnly,
-	}
+	// Get a new batch from the pool. Batches in the pool may have their closed
+	// fields set to true to facilitate some sanity check assertions. Reset this
+	// field and set others.
+	r := batchPool.Get().(*rocksDBBatch)
+	r.closed = false
+	r.parent = parent
+	r.writeOnly = writeOnly
 	r.distinct.rocksDBBatch = r
 	return r
 }
@@ -1498,7 +1583,12 @@ func (r *rocksDBBatch) Close() {
 		C.DBClose(r.batch)
 		r.batch = nil
 	}
-	r.closed = true
+	r.builder.reset()
+	*r = rocksDBBatch{
+		builder: r.builder,
+		closed:  true,
+	}
+	batchPool.Put(r)
 }
 
 // Closed returns true if the engine is closed.
@@ -1609,6 +1699,10 @@ func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 	return dbClearIterRange(r.batch, iter, start, end)
 }
 
+func (r *rocksDBBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	// No-op. Logical logging disabled.
+}
+
 // NewIterator returns an iterator over the batch and underlying engine. Note
 // that the returned iterator is cached and re-used for the lifetime of the
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
@@ -1647,11 +1741,58 @@ func (r *rocksDBBatch) NewIterator(opts IterOptions) Iterator {
 	return iter
 }
 
+const maxBatchGroupSize = 1 << 20 // 1 MiB
+
+// makeBatchGroup add the specified batch to the pending list of batches to
+// commit. Groups are delimited by a nil batch in the pending list. Group
+// leaders are the first batch in the pending list and the first batch after a
+// nil batch. The size of a group is limited by the maxSize parameter which is
+// measured as the number of bytes in the group's batches. The groupSize
+// parameter is the size of the current group being formed. Returns the new
+// list of pending batches, the new size of the current group and whether the
+// batch that was added is the leader of its group.
+func makeBatchGroup(
+	pending []*rocksDBBatch, b *rocksDBBatch, groupSize, maxSize int,
+) (_ []*rocksDBBatch, _ int, leader bool) {
+	leader = len(pending) == 0
+	if n := len(b.unsafeRepr()); leader {
+		groupSize = n
+	} else if groupSize+n > maxSize {
+		leader = true
+		groupSize = n
+		pending = append(pending, nil)
+	} else {
+		groupSize += n
+	}
+	pending = append(pending, b)
+	return pending, groupSize, leader
+}
+
+// nextBatchGroup extracts the group of batches from the pending list. See
+// makeBatchGroup for an explanation of how groups are encoded into the pending
+// list. Returns the next group in the prefix return value, and the remaining
+// groups in the suffix parameter (the next group is always a prefix of the
+// pending argument).
+func nextBatchGroup(pending []*rocksDBBatch) (prefix []*rocksDBBatch, suffix []*rocksDBBatch) {
+	for i := 1; i < len(pending); i++ {
+		if pending[i] == nil {
+			return pending[:i], pending[i+1:]
+		}
+	}
+	return pending, pending[len(pending):]
+}
+
 func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	if r.Closed() {
 		panic("this batch was already committed")
 	}
 	r.distinctOpen = false
+
+	if r.Empty() {
+		// Nothing was written to this batch. Fast path.
+		r.committed = true
+		return nil
+	}
 
 	// Combine multiple write-only batch commits into a single call to
 	// RocksDB. RocksDB is supposed to be performing such batching internally,
@@ -1667,16 +1808,19 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	// slice. Every batch has an associated wait group which is signaled when
 	// the commit is complete.
 	c.Lock()
-	leader := len(c.pending) == 0
-	c.pending = append(c.pending, r)
+
+	var leader bool
+	c.pending, c.groupSize, leader = makeBatchGroup(c.pending, r, c.groupSize, maxBatchGroupSize)
 
 	if leader {
-		// We're the leader. Wait for any running commit to finish.
-		for c.committing {
+		// We're the leader of our group. Wait for any running commit to finish and
+		// for our batch to make it to the head of the pending queue.
+		for c.committing || c.pending[0] != r {
 			c.cond.Wait()
 		}
-		pending := c.pending
-		c.pending = nil
+
+		var pending []*rocksDBBatch
+		pending, c.pending = nextBatchGroup(c.pending)
 		c.committing = true
 		c.Unlock()
 
@@ -1707,14 +1851,19 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 		// proceed.
 		c.Lock()
 		c.committing = false
-		c.cond.Signal()
+		// NB: Multiple leaders can be waiting.
+		c.cond.Broadcast()
 		c.Unlock()
 
 		// Propagate the error to all of the batches involved in the commit. If a
 		// batch requires syncing and the commit was successful, add it to the
 		// syncing list. Note that we're reusing the pending list here for the
-		// syncing list.
-		syncing := pending[:0]
+		// syncing list. We need to be careful to cap the capacity so that
+		// extending this slice past the length of the pending list will result in
+		// reallocation. Otherwise we have a race between appending to this list
+		// while holding the sync lock below, and appending to the commit pending
+		// list while holding the commit lock above.
+		syncing := pending[:0:len(pending)]
 		for _, b := range pending {
 			if err != nil || !b.syncCommit {
 				b.commitErr = err
@@ -1771,6 +1920,8 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 			C.DBClose(r.batch)
 			r.batch = nil
 		}
+	} else {
+		panic("commitInternal called on empty batch")
 	}
 	r.committed = true
 
@@ -1784,16 +1935,11 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 }
 
 func (r *rocksDBBatch) Empty() bool {
-	return r.flushes == 0 && r.builder.Empty()
+	return r.flushes == 0 && r.builder.count == 0 && !r.builder.logData
 }
 
-func (r *rocksDBBatch) Repr() []byte {
-	if r.flushes == 0 {
-		// We've never flushed to C++. Return the mutations only.
-		return r.builder.getRepr()
-	}
-	r.flushMutations()
-	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
+func (r *rocksDBBatch) Len() int {
+	return len(r.unsafeRepr())
 }
 
 func (r *rocksDBBatch) unsafeRepr() []byte {
@@ -1803,6 +1949,20 @@ func (r *rocksDBBatch) unsafeRepr() []byte {
 	}
 	r.flushMutations()
 	return cSliceToUnsafeGoBytes(C.DBBatchRepr(r.batch))
+}
+
+func (r *rocksDBBatch) Repr() []byte {
+	if r.flushes == 0 {
+		// We've never flushed to C++. Return the mutations only. We make a copy
+		// of the builder's byte slice so that the return []byte is valid even
+		// if the builder is reset or finished.
+		repr := r.builder.getRepr()
+		cpy := make([]byte, len(repr))
+		copy(cpy, repr)
+		return cpy
+	}
+	r.flushMutations()
+	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
 }
 
 func (r *rocksDBBatch) Distinct() ReadWriter {
@@ -1884,8 +2044,8 @@ func (r *rocksDBIterator) init(rdb *C.DBEngine, opts IterOptions, engine Reader,
 		r.parent.iters.Unlock()
 	}
 
-	if !opts.Prefix && len(opts.UpperBound) == 0 {
-		panic("iterator must set prefix or upper bound")
+	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
+		panic("iterator must set prefix or upper bound or lower bound")
 	}
 
 	r.iter = C.DBNewIter(rdb, goToCIterOptions(opts))
@@ -1899,9 +2059,10 @@ func (r *rocksDBIterator) setOptions(opts IterOptions) {
 	if opts.MinTimestampHint != (hlc.Timestamp{}) || opts.MaxTimestampHint != (hlc.Timestamp{}) {
 		panic("iterator with timestamp hints cannot be reused")
 	}
-	if !opts.Prefix && len(opts.UpperBound) == 0 {
-		panic("iterator must set prefix or upper bound")
+	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
+		panic("iterator must set prefix or upper bound or lower bound")
 	}
+	C.DBIterSetLowerBound(r.iter, goToCKey(MakeMVCCMetadataKey(opts.LowerBound)))
 	C.DBIterSetUpperBound(r.iter, goToCKey(MakeMVCCMetadataKey(opts.UpperBound)))
 }
 
@@ -2025,6 +2186,14 @@ func (r *rocksDBIterator) UnsafeValue() []byte {
 	return cSliceToUnsafeGoBytes(r.value)
 }
 
+func (r *rocksDBIterator) clearState() {
+	r.valid = false
+	r.reseek = true
+	r.key = C.DBKey{}
+	r.value = C.DBSlice{}
+	r.err = nil
+}
+
 func (r *rocksDBIterator) setState(state C.DBIterState) {
 	r.valid = bool(state.valid)
 	r.reseek = false
@@ -2036,6 +2205,7 @@ func (r *rocksDBIterator) setState(state C.DBIterState) {
 func (r *rocksDBIterator) ComputeStats(
 	start, end MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
+	r.clearState()
 	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
 	stats, err := cStatsToGoStats(result, nowNanos)
 	if util.RaceEnabled {
@@ -2062,6 +2232,7 @@ func (r *rocksDBIterator) FindSplitKey(
 	start, end, minSplitKey MVCCKey, targetSize int64,
 ) (MVCCKey, error) {
 	var splitKey C.DBString
+	r.clearState()
 	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(end), goToCKey(minSplitKey),
 		C.int64_t(targetSize), &splitKey)
 	if err := statusToError(status); err != nil {
@@ -2071,24 +2242,25 @@ func (r *rocksDBIterator) FindSplitKey(
 }
 
 func (r *rocksDBIterator) MVCCGet(
-	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent, tombstones bool,
-) (*roachpb.Value, []roachpb.Intent, error) {
-	if !consistent && txn != nil {
+	key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
+) (*roachpb.Value, *roachpb.Intent, error) {
+	if opts.Inconsistent && opts.Txn != nil {
 		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
 	if len(key) == 0 {
 		return nil, nil, emptyKeyError()
 	}
 
+	r.clearState()
 	state := C.MVCCGet(
 		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
-		goToCTxn(txn), C.bool(consistent), C.bool(tombstones),
+		goToCTxn(opts.Txn), C.bool(opts.Inconsistent), C.bool(opts.Tombstones),
 	)
 
 	if err := statusToError(state.status); err != nil {
 		return nil, nil, err
 	}
-	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
+	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, opts.Txn); err != nil {
 		return nil, nil, err
 	}
 
@@ -2096,11 +2268,18 @@ func (r *rocksDBIterator) MVCCGet(
 	if err != nil {
 		return nil, nil, err
 	}
-	if consistent && len(intents) > 0 {
+	if !opts.Inconsistent && len(intents) > 0 {
 		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
+
+	var intent *roachpb.Intent
+	if len(intents) > 1 {
+		return nil, nil, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
+	} else if len(intents) == 1 {
+		intent = &intents[0]
+	}
 	if state.data.len == 0 {
-		return nil, intents, nil
+		return nil, intent, nil
 	}
 
 	count := state.data.count
@@ -2108,12 +2287,12 @@ func (r *rocksDBIterator) MVCCGet(
 		return nil, nil, errors.Errorf("expected 0 or 1 result, found %d", count)
 	}
 	if count == 0 {
-		return nil, intents, nil
+		return nil, intent, nil
 	}
 
 	// Extract the value from the batch data.
 	repr := copyFromSliceVector(state.data.bufs, state.data.len)
-	mvccKey, rawValue, _, err := mvccScanDecodeKeyValue(repr)
+	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(repr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2121,37 +2300,59 @@ func (r *rocksDBIterator) MVCCGet(
 		RawBytes:  rawValue,
 		Timestamp: mvccKey.Timestamp,
 	}
-	return value, intents, nil
+	return value, intent, nil
 }
 
 func (r *rocksDBIterator) MVCCScan(
-	start, end roachpb.Key,
-	max int64,
-	timestamp hlc.Timestamp,
-	txn *roachpb.Transaction,
-	consistent, reverse, tombstones bool,
-) (kvs []byte, numKvs int64, intents []byte, err error) {
-	if !consistent && txn != nil {
-		return nil, 0, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
+) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
+	if opts.Inconsistent && opts.Txn != nil {
+		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
 	if len(end) == 0 {
-		return nil, 0, nil, emptyKeyError()
+		return nil, 0, nil, nil, emptyKeyError()
+	}
+	if max == 0 {
+		resumeSpan = &roachpb.Span{Key: start, EndKey: end}
+		return nil, 0, resumeSpan, nil, nil
 	}
 
+	r.clearState()
 	state := C.MVCCScan(
 		r.iter, goToCSlice(start), goToCSlice(end),
 		goToCTimestamp(timestamp), C.int64_t(max),
-		goToCTxn(txn), C.bool(consistent), C.bool(reverse), C.bool(tombstones),
+		goToCTxn(opts.Txn), C.bool(opts.Inconsistent), C.bool(opts.Reverse), C.bool(opts.Tombstones),
 	)
 
 	if err := statusToError(state.status); err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil, nil, err
 	}
-	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
-		return nil, 0, nil, err
+	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, opts.Txn); err != nil {
+		return nil, 0, nil, nil, err
 	}
-	kvs = copyFromSliceVector(state.data.bufs, state.data.len)
-	return kvs, int64(state.data.count), cSliceToGoBytes(state.intents), nil
+
+	kvData = copyFromSliceVector(state.data.bufs, state.data.len)
+	numKVs = int64(state.data.count)
+
+	if resumeKey := cSliceToGoBytes(state.resume_key); resumeKey != nil {
+		if opts.Reverse {
+			resumeSpan = &roachpb.Span{Key: start, EndKey: roachpb.Key(resumeKey).Next()}
+		} else {
+			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: end}
+		}
+	}
+
+	intents, err = buildScanIntents(cSliceToGoBytes(state.intents))
+	if err != nil {
+		return nil, 0, nil, nil, err
+	}
+	if !opts.Inconsistent && len(intents) > 0 {
+		// When encountering intents during a consistent scan we still need to
+		// return the resume key.
+		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+
+	return kvData, numKVs, resumeSpan, intents, nil
 }
 
 func (r *rocksDBIterator) SetUpperBound(key roachpb.Key) {
@@ -2306,6 +2507,7 @@ func goToCTxn(txn *roachpb.Transaction) C.DBTxn {
 func goToCIterOptions(opts IterOptions) C.DBIterOptions {
 	return C.DBIterOptions{
 		prefix:             C.bool(opts.Prefix),
+		lower_bound:        goToCKey(MakeMVCCMetadataKey(opts.LowerBound)),
 		upper_bound:        goToCKey(MakeMVCCMetadataKey(opts.UpperBound)),
 		min_timestamp_hint: goToCTimestamp(opts.MinTimestampHint),
 		max_timestamp_hint: goToCTimestamp(opts.MaxTimestampHint),
@@ -2601,6 +2803,16 @@ func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
 	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value)))
 }
 
+// Delete puts a deletion tombstone into the sstable being built. See
+// the Add method for more.
+func (fw *RocksDBSstFileWriter) Delete(k MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Delete on a closed writer")
+	}
+	fw.DataSize += int64(len(k.Key))
+	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(k)))
+}
+
 // Finish finalizes the writer and returns the constructed file's contents. At
 // least one kv entry must have been added.
 func (fw *RocksDBSstFileWriter) Finish() ([]byte, error) {
@@ -2639,6 +2851,24 @@ func RunLDB(args []string) {
 	}()
 
 	C.DBRunLDB(C.int(len(argv)), &argv[0])
+}
+
+// RunSSTDump runs RocksDB's sst_dump command-line tool. The passed
+// command-line arguments should not include argv[0].
+func RunSSTDump(args []string) {
+	// Prepend "sst_dump" as argv[0].
+	args = append([]string{"sst_dump"}, args...)
+	argv := make([]*C.char, len(args))
+	for i := range args {
+		argv[i] = C.CString(args[i])
+	}
+	defer func() {
+		for i := range argv {
+			C.free(unsafe.Pointer(argv[i]))
+		}
+	}()
+
+	C.DBRunSSTDump(C.int(len(argv)), &argv[0])
 }
 
 // GetAuxiliaryDir returns the auxiliary storage path for this engine.
@@ -2738,6 +2968,16 @@ func (r *RocksDB) LinkFile(oldname, newname string) error {
 	return nil
 }
 
+// NewSortedDiskMap implements the MapProvidingEngine interface.
+func (r *RocksDB) NewSortedDiskMap() diskmap.SortedDiskMap {
+	return NewRocksDBMap(r)
+}
+
+// NewSortedDiskMultiMap implements the MapProvidingEngine interface.
+func (r *RocksDB) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
+	return NewRocksDBMultiMap(r)
+}
+
 // IsValidSplitKey returns whether the key is a valid split key. Certain key
 // ranges cannot be split (the meta1 span and the system DB span); split keys
 // chosen within any of these ranges are considered invalid. And a split key
@@ -2762,30 +3002,37 @@ func unlockFile(lock C.DBFileLock) error {
 	return statusToError(C.DBUnlockFile(lock))
 }
 
-// Decode a key/value pair returned in an MVCCScan "batch" (this is not the
-// RocksDB batch repr format), returning both the key/value and the suffix of
-// data remaining in the batch.
-func mvccScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
+// mvccScanSkipKeyValue is like MVCCScanDecodeKeyValue, but doesn't bother
+// actually decoding the kvs. Instead, it skips the kv and returns the rest of
+// the byte buffer.
+func mvccScanSkipKeyValue(repr []byte) ([]byte, error) {
 	if len(repr) < 8 {
-		return key, nil, repr, errors.Errorf("unexpected batch EOF")
+		return repr, errors.Errorf("unexpected batch EOF")
 	}
 	v := binary.LittleEndian.Uint64(repr)
 	keySize := v >> 32
 	valSize := v & ((1 << 32) - 1)
 	if (keySize + valSize) > uint64(len(repr)) {
-		return key, nil, nil, fmt.Errorf("expected %d bytes, but only %d remaining",
+		return nil, fmt.Errorf("expected %d bytes, but only %d remaining",
 			keySize+valSize, len(repr))
 	}
-	repr = repr[8:]
-	rawKey := repr[:keySize]
-	value = repr[keySize : keySize+valSize]
-	repr = repr[keySize+valSize:]
-	key, err = DecodeKey(rawKey)
-	return key, value, repr, err
+	repr = repr[8+keySize+valSize:]
+	return repr, nil
+}
+
+// MVCCScanDecodeKeyValue decodes a key/value pair returned in an MVCCScan
+// "batch" (this is not the RocksDB batch repr format), returning both the
+// key/value and the suffix of data remaining in the batch.
+func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
+	k, ts, value, orepr, err := enginepb.ScanDecodeKeyValue(repr)
+	return MVCCKey{k, ts}, value, orepr, err
 }
 
 func notFoundErrOrDefault(err error) error {
-	if strings.Contains(err.Error(), "No such file or directory") || strings.Contains(err.Error(), "File not found") {
+	errStr := err.Error()
+	if strings.Contains(errStr, "No such file or directory") ||
+		strings.Contains(errStr, "File not found") ||
+		strings.Contains(errStr, "The system cannot find the path specified") {
 		return os.ErrNotExist
 	}
 	return err

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -51,14 +52,23 @@ type FixtureConfig struct {
 	// you run a csv-server next to each CockroachDB node,
 	// `http://localhost:<port>` will work.
 	CSVServerURL string
+
+	// BillingProject if non-empty, is the Google Cloud project to bill for all
+	// storage requests. This is required to be set if using a "requestor pays"
+	// bucket.
+	BillingProject string
 }
 
 func (s FixtureConfig) objectPathToURI(folder string) string {
-	return (&url.URL{
+	u := &url.URL{
 		Scheme: fixtureGCSURIScheme,
 		Host:   s.GCSBucket,
 		Path:   folder,
-	}).String()
+	}
+	if s.BillingProject != `` {
+		u.RawQuery = `GOOGLE_BILLING_PROJECT=` + url.QueryEscape(s.BillingProject)
+	}
+	return u.String()
 }
 
 // Fixture describes pre-computed data for a Generator, allowing quick
@@ -109,7 +119,7 @@ func generatorToGCSFolder(config FixtureConfig, gen workload.Generator) string {
 
 // FixtureURL returns the URL for pre-computed Generator data stored on GCS.
 func FixtureURL(config FixtureConfig, gen workload.Generator) string {
-	return fmt.Sprintf("gs://%s/%s", config.GCSBucket, generatorToGCSFolder(config, gen))
+	return config.objectPathToURI(generatorToGCSFolder(config, gen))
 }
 
 // GetFixture returns a handle for pre-computed Generator data stored on GCS. It
@@ -117,31 +127,46 @@ func FixtureURL(config FixtureConfig, gen workload.Generator) string {
 func GetFixture(
 	ctx context.Context, gcs *storage.Client, config FixtureConfig, gen workload.Generator,
 ) (Fixture, error) {
-	b := gcs.Bucket(config.GCSBucket)
+	var fixture Fixture
+	var err error
+	var notFound bool
+	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 10}); r.Next(); {
+		err = func() error {
+			b := gcs.Bucket(config.GCSBucket)
+			if config.BillingProject != `` {
+				b = b.UserProject(config.BillingProject)
+			}
 
-	fixtureFolder := generatorToGCSFolder(config, gen)
-	_, err := b.Objects(ctx, &storage.Query{Prefix: fixtureFolder, Delimiter: `/`}).Next()
-	if err == iterator.Done {
-		return Fixture{}, errors.Errorf(`fixture not found: %s`, fixtureFolder)
-	} else if err != nil {
-		return Fixture{}, err
-	}
+			fixtureFolder := generatorToGCSFolder(config, gen)
+			_, err := b.Objects(ctx, &storage.Query{Prefix: fixtureFolder, Delimiter: `/`}).Next()
+			if err == iterator.Done {
+				notFound = true
+				return errors.Errorf(`fixture not found: %s`, fixtureFolder)
+			} else if err != nil {
+				return err
+			}
 
-	fixture := Fixture{Config: config, Generator: gen}
-	for _, table := range gen.Tables() {
-		tableFolder := filepath.Join(fixtureFolder, table.Name)
-		_, err := b.Objects(ctx, &storage.Query{Prefix: tableFolder, Delimiter: `/`}).Next()
-		if err == iterator.Done {
-			return Fixture{}, errors.Errorf(`fixture table not found: %s`, tableFolder)
-		} else if err != nil {
-			return Fixture{}, err
+			fixture = Fixture{Config: config, Generator: gen}
+			for _, table := range gen.Tables() {
+				tableFolder := filepath.Join(fixtureFolder, table.Name)
+				_, err := b.Objects(ctx, &storage.Query{Prefix: tableFolder, Delimiter: `/`}).Next()
+				if err == iterator.Done {
+					return errors.Errorf(`fixture table not found: %s`, tableFolder)
+				} else if err != nil {
+					return err
+				}
+				fixture.Tables = append(fixture.Tables, FixtureTable{
+					TableName: table.Name,
+					BackupURI: config.objectPathToURI(tableFolder),
+				})
+			}
+			return nil
+		}()
+		if err == nil || notFound {
+			break
 		}
-		fixture.Tables = append(fixture.Tables, FixtureTable{
-			TableName: table.Name,
-			BackupURI: config.objectPathToURI(tableFolder),
-		})
 	}
-	return fixture, nil
+	return fixture, err
 }
 
 type groupCSVWriter struct {
@@ -193,7 +218,11 @@ func (c *groupCSVWriter) groupWriteCSVs(
 		path := path.Join(c.folder, table.Name, fmt.Sprintf(`%09d.csv`, rowStart))
 		const maxAttempts = 3
 		err := retry.WithMaxAttempts(ctx, defaultRetryOptions(), maxAttempts, func() error {
-			w := c.gcs.Bucket(c.config.GCSBucket).Object(path).NewWriter(ctx)
+			b := c.gcs.Bucket(c.config.GCSBucket)
+			if c.config.BillingProject != `` {
+				b = b.UserProject(c.config.BillingProject)
+			}
+			w := b.Object(path).NewWriter(ctx)
 			var err error
 			rowIdx, err = workload.WriteCSVRows(ctx, w, table, rowStart, rowEnd, c.chunkSizeBytes)
 			closeErr := w.Close()
@@ -288,9 +317,14 @@ func csvServerPaths(
 		params := url.Values{
 			`row-start`: []string{strconv.Itoa(chunkRowStart)},
 			`row-end`:   []string{strconv.Itoa(chunkRowEnd)},
+			`version`:   []string{gen.Meta().Version},
 		}
 		if f, ok := gen.(workload.Flagser); ok {
-			f.Flags().VisitAll(func(f *pflag.Flag) {
+			flags := f.Flags()
+			flags.VisitAll(func(f *pflag.Flag) {
+				if flags.Meta[f.Name].RuntimeOnly {
+					return
+				}
 				params[f.Name] = append(params[f.Name], f.Value.String())
 			})
 		}
@@ -302,6 +336,10 @@ func csvServerPaths(
 	}
 	return paths
 }
+
+// Specify an explicit empty prefix for crdb_internal to avoid an error if
+// the database we're connected to does not exist.
+const numNodesQuery = `SELECT count(node_id) FROM "".crdb_internal.gossip_liveness`
 
 // MakeFixture regenerates a fixture, storing it to GCS. It is expected that the
 // generator will have had Configure called on it.
@@ -337,20 +375,22 @@ func MakeFixture(
 		start:          timeutil.Now(),
 	}
 
-	g, gCtx := errgroup.WithContext(ctx)
+	g := ctxgroup.WithContext(ctx)
 	for _, t := range gen.Tables() {
 		table := t
-		tableCSVPathsCh := make(chan string)
+		if t.InitialRows.Batch == nil {
+			return Fixture{}, errors.Errorf(
+				`make fixture is not supported for workload %s`, gen.Meta().Name)
+		}
 
-		g.Go(func() error {
+		tableCSVPathsCh := make(chan string)
+		g.GoCtx(func(ctx context.Context) error {
 			defer close(tableCSVPathsCh)
 			if len(config.CSVServerURL) == 0 {
 				startRow, endRow := 0, table.InitialRows.NumBatches
-				return c.groupWriteCSVs(gCtx, tableCSVPathsCh, table, startRow, endRow)
+				return c.groupWriteCSVs(ctx, tableCSVPathsCh, table, startRow, endRow)
 			}
-			// Specify an explicit empty prefix for crdb_internal to avoid an error if
-			// the database we're connected to does not exist.
-			const numNodesQuery = `SELECT count(node_id) FROM "".crdb_internal.gossip_liveness`
+
 			var numNodes int
 			if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
 				return err
@@ -361,38 +401,17 @@ func MakeFixture(
 			}
 			return nil
 		})
-		g.Go(func() error {
-			params := []interface{}{
-				config.objectPathToURI(filepath.Join(fixtureFolder, table.Name)),
-			}
+		g.GoCtx(func(ctx context.Context) error {
 			// NB: it's fine to loop over this channel without selecting
 			// ctx.Done because a context cancel will cause the above goroutine
 			// to finish and close tableCSVPathsCh.
+			var paths []string
 			for tableCSVPath := range tableCSVPathsCh {
-				params = append(params, tableCSVPath)
+				paths = append(paths, tableCSVPath)
 			}
-			select {
-			case <-gCtx.Done():
-				return gCtx.Err()
-			default:
-			}
-
-			var buf bytes.Buffer
-			fmt.Fprintf(&buf, `IMPORT TABLE "%s" %s CSV DATA (`, table.Name, table.Schema)
-			// $1 is used for the backup path. Generate $2,...,$N, where N is
-			// the number of params (including the backup path) for use with the
-			// csv paths.
-			for i := 2; i <= len(params); i++ {
-				if i != 2 {
-					buf.WriteString(`,`)
-				}
-				fmt.Fprintf(&buf, `$%d`, i)
-			}
-			buf.WriteString(`) WITH transform=$1, nullif='NULL'`)
-			if _, err := sqlDB.Exec(buf.String(), params...); err != nil {
-				return errors.Wrapf(err, `creating backup for table %s`, table.Name)
-			}
-			return nil
+			output := config.objectPathToURI(filepath.Join(fixtureFolder, table.Name))
+			err := importFixtureTable(ctx, sqlDB, gen.Meta().Name, table, paths, output)
+			return errors.Wrapf(err, `creating backup for table %s`, table.Name)
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -401,6 +420,56 @@ func MakeFixture(
 
 	// TODO(dan): Clean up the CSVs.
 	return GetFixture(ctx, gcs, config, gen)
+}
+
+// ImportFixture works like MakeFixture, but instead of stopping halfway or
+// writing a backup to cloud storage, it finishes ingesting the data.
+func ImportFixture(
+	ctx context.Context, sqlDB *gosql.DB, gen workload.Generator, dbName string,
+) error {
+	var numNodes int
+	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
+		return err
+	}
+
+	g := ctxgroup.WithContext(ctx)
+	for _, t := range gen.Tables() {
+		table := t
+		paths := csvServerPaths(`experimental-workload://`, gen, table, numNodes)
+		g.GoCtx(func(ctx context.Context) error {
+			err := importFixtureTable(ctx, sqlDB, dbName, table, paths, `` /* output */)
+			return errors.Wrapf(err, `importing table %s`, table.Name)
+		})
+	}
+	return g.Wait()
+}
+
+func importFixtureTable(
+	ctx context.Context,
+	sqlDB *gosql.DB,
+	dbName string,
+	table workload.Table,
+	paths []string,
+	output string,
+) error {
+	var buf bytes.Buffer
+	var params []interface{}
+	fmt.Fprintf(&buf, `IMPORT TABLE "%s"."%s" %s CSV DATA (`, dbName, table.Name, table.Schema)
+	// Generate $1,...,$N-1, where N is the number of csv paths.
+	for _, path := range paths {
+		params = append(params, path)
+		if len(params) != 1 {
+			buf.WriteString(`,`)
+		}
+		fmt.Fprintf(&buf, `$%d`, len(params))
+	}
+	buf.WriteString(`) WITH nullif='NULL'`)
+	if len(output) > 0 {
+		params = append(params, output)
+		fmt.Fprintf(&buf, `, transform=$%d`, len(params))
+	}
+	_, err := sqlDB.Exec(buf.String(), params...)
+	return err
 }
 
 // RestoreFixture loads a fixture into a CockroachDB cluster. An enterprise
@@ -451,6 +520,9 @@ func ListFixtures(
 	ctx context.Context, gcs *storage.Client, config FixtureConfig,
 ) ([]string, error) {
 	b := gcs.Bucket(config.GCSBucket)
+	if config.BillingProject != `` {
+		b = b.UserProject(config.BillingProject)
+	}
 
 	var fixtures []string
 	gensPrefix := config.GCSPrefix + `/`

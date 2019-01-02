@@ -21,16 +21,14 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
-
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -39,13 +37,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -53,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -77,7 +76,14 @@ func TestSelfBootstrap(t *testing.T) {
 // TestHealthCheck runs a basic sanity check on the health checker.
 func TestHealthCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	cfg := config.DefaultZoneConfig()
+	cfg.NumReplicas = proto.Int32(1)
+	fnSys := config.TestingSetDefaultSystemZoneConfig(cfg)
+	defer fnSys()
+
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,8 +111,8 @@ func TestHealthCheck(t *testing.T) {
 	{
 		summary := *recorder.GenerateNodeStatus(ctx)
 		result := recorder.CheckHealth(ctx, summary)
-		expAlerts := []status.HealthAlert{
-			{StoreID: 1, Category: status.HealthAlert_METRICS, Description: "ranges.unavailable", Value: 100.0},
+		expAlerts := []statuspb.HealthAlert{
+			{StoreID: 1, Category: statuspb.HealthAlert_METRICS, Description: "ranges.unavailable", Value: 100.0},
 		}
 		if !reflect.DeepEqual(expAlerts, result.Alerts) {
 			t.Fatalf("expected %+v, got %+v", expAlerts, result.Alerts)
@@ -305,12 +311,21 @@ func TestAcceptEncoding(t *testing.T) {
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.Background()
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				// Prevent the merge queue from immediately discarding our splits.
+				DisableMergeQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
 	tds := db.NonTransactionalSender()
 
-	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m", "m"); err != nil {
+	if err := ts.node.storeCfg.DB.AdminSplit(ctx, "m", "m"); err != nil {
 		t.Fatal(err)
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
@@ -318,17 +333,17 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: writes[0]},
 	}
 	get.EndKey = writes[len(writes)-1]
-	if _, err := client.SendWrapped(context.Background(), tds, get); err == nil {
+	if _, err := client.SendWrapped(ctx, tds, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
 	var delTS hlc.Timestamp
 	for i, k := range writes {
 		put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-		if _, err := client.SendWrapped(context.Background(), tds, put); err != nil {
+		if _, err := client.SendWrapped(ctx, tds, put); err != nil {
 			t.Fatal(err)
 		}
 		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
-		reply, err := client.SendWrapped(context.Background(), tds, scan)
+		reply, err := client.SendWrapped(ctx, tds, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -350,7 +365,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		},
 		ReturnKeys: true,
 	}
-	reply, err := client.SendWrappedWith(context.Background(), tds, roachpb.Header{Timestamp: delTS}, del)
+	reply, err := client.SendWrappedWith(ctx, tds, roachpb.Header{Timestamp: delTS}, del)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,14 +377,14 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead", writes, dr.Keys)
 	}
 
-	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, 0, s.Clock().Now(), 0)
-	txn := client.NewTxnWithProto(db, s.NodeID(), client.RootTxn, txnProto)
+	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, s.Clock().Now(), 0)
+	txn := client.NewTxnWithProto(ctx, db, s.NodeID(), client.RootTxn, txnProto)
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
 	ba := roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: &txnProto}
 	ba.Add(scan)
-	br, pErr := txn.Send(context.Background(), ba)
+	br, pErr := txn.Send(ctx, ba)
 	if pErr != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +416,14 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			ctx := context.Background()
-			s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+			s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						// Prevent the merge queue from immediately discarding our splits.
+						DisableMergeQueue: true,
+					},
+				},
+			})
 			defer s.Stopper().Stop(ctx)
 			ts := s.(*TestServer)
 			tds := db.NonTransactionalSender()
@@ -482,10 +504,10 @@ func TestSystemConfigGossip(t *testing.T) {
 	// wrote.
 	testutils.SucceedsSoon(t, func() error {
 		// New system config received.
-		var systemConfig config.SystemConfig
+		var systemConfig *config.SystemConfig
 		select {
 		case <-resultChan:
-			systemConfig, _ = ts.gossip.GetSystemConfig()
+			systemConfig = ts.gossip.GetSystemConfig()
 
 		case <-time.After(500 * time.Millisecond):
 			return errors.Errorf("did not receive gossip message")
@@ -513,108 +535,6 @@ func TestSystemConfigGossip(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-func TestOfficializeAddr(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	host, err := os.Hostname()
-	if err != nil {
-		t.Fatal(err)
-	}
-	addrs, err := net.DefaultResolver.LookupHost(context.TODO(), host)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, network := range []string{"tcp", "tcp4", "tcp6"} {
-		t.Run(fmt.Sprintf("network=%s", network), func(t *testing.T) {
-			for _, tc := range []struct {
-				cfgAddr, lnAddr, expAddr string
-			}{
-				{"localhost:0", "127.0.0.1:1234", "localhost:1234"},
-				{"localhost:1234", "127.0.0.1:2345", "localhost:1234"},
-				{":1234", net.JoinHostPort(addrs[0], "2345"), net.JoinHostPort(host, "1234")},
-				{":0", net.JoinHostPort(addrs[0], "2345"), net.JoinHostPort(host, "2345")},
-			} {
-				t.Run(tc.cfgAddr, func(t *testing.T) {
-					lnAddr := util.NewUnresolvedAddr(network, tc.lnAddr)
-
-					if unresolvedAddr, err := officialAddr(context.TODO(), tc.cfgAddr, lnAddr, os.Hostname); err != nil {
-						t.Fatal(err)
-					} else if retAddrString := unresolvedAddr.String(); retAddrString != tc.expAddr {
-						t.Errorf("officialAddr(%s, %s) was %s; expected %s", tc.cfgAddr, tc.lnAddr, retAddrString, tc.expAddr)
-					}
-				})
-			}
-		})
-	}
-
-	osHostnameError := errors.New("some error")
-
-	t.Run("osHostnameError", func(t *testing.T) {
-		if _, err := officialAddr(
-			context.TODO(),
-			":0",
-			util.NewUnresolvedAddr("tcp", "0.0.0.0:1234"),
-			func() (string, error) { return "", osHostnameError },
-		); errors.Cause(err) != osHostnameError {
-			t.Fatalf("unexpected error %v", err)
-		}
-	})
-
-	t.Run("LookupHostError", func(t *testing.T) {
-		if _, err := officialAddr(
-			context.TODO(),
-			"notarealhost.local.:0",
-			util.NewUnresolvedAddr("tcp", "0.0.0.0:1234"),
-			os.Hostname,
-		); !testutils.IsError(err, "lookup notarealhost.local.(?: on .+)?: no such host") {
-			// On Linux but not on macOS, the error returned from
-			// (*net.Resolver).LookupHost reports the DNS server used; permit
-			// both.
-			t.Fatalf("unexpected error %v", err)
-		}
-	})
-}
-
-func TestListenURLFileCreation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	file, err := ioutil.TempFile(os.TempDir(), t.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := file.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{
-		ListeningURLFile: file.Name(),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Stopper().Stop(context.TODO())
-	defer func() {
-		if err := os.Remove(file.Name()); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	data, err := ioutil.ReadFile(file.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	u, err := url.Parse(string(data))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if s.ServingAddr() != u.Host {
-		t.Fatalf("expected URL %s to match host %s", u, s.ServingAddr())
-	}
 }
 
 func TestListenerFileCreation(t *testing.T) {
@@ -667,57 +587,6 @@ func TestListenerFileCreation(t *testing.T) {
 	for f := range expectedFiles {
 		t.Errorf("never saw expected file %s", f)
 	}
-}
-
-func TestHeartbeatCallbackForDecommissioning(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-	ts := s.(*TestServer)
-	nodeLiveness := ts.nodeLiveness
-
-	for {
-		// Morally this loop only runs once. However, early in the boot
-		// sequence, the own liveness record may not yet exist. This
-		// has not been observed in this test, but was the root cause
-		// of #16656, so consider this part of its documentation.
-		liveness, err := nodeLiveness.Self()
-		if err != nil {
-			if errors.Cause(err) == storage.ErrNoLivenessRecord {
-				continue
-			}
-			t.Fatal(err)
-		}
-		if liveness.Decommissioning {
-			t.Fatal("Decommissioning set already")
-		}
-		if liveness.Draining {
-			t.Fatal("Draining set already")
-		}
-		break
-	}
-	ctx := context.Background()
-	log.Infof(ctx, "test starting decomissioning")
-	var err error
-	if _, err = nodeLiveness.SetDecommissioning(
-		ctx, ts.nodeIDContainer.Get(), true, /* decomission */
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// Node should realize it is decommissioning after next heartbeat update.
-	testutils.SucceedsSoon(t, func() error {
-		nodeLiveness.PauseHeartbeat(false /* pause */) // trigger immediate heartbeat
-		if liveness, err := nodeLiveness.Self(); err != nil {
-			// Record must exist at this point, so any error is fatal now.
-			t.Fatal(err)
-		} else if !liveness.Decommissioning {
-			return errors.Errorf("not decommissioning")
-		} else if !liveness.Draining {
-			return errors.Errorf("not draining")
-		}
-		return nil
-	})
 }
 
 func TestClusterIDMismatch(t *testing.T) {
@@ -998,6 +867,17 @@ func TestServeIndexHTML(t *testing.T) {
 </html>
 `
 
+	linkInFakeUI := func() {
+		ui.Asset = func(string) (_ []byte, _ error) { return }
+		ui.AssetDir = func(name string) (_ []string, _ error) { return }
+		ui.AssetInfo = func(name string) (_ os.FileInfo, _ error) { return }
+	}
+	unlinkFakeUI := func() {
+		ui.Asset = nil
+		ui.AssetDir = nil
+		ui.AssetInfo = nil
+	}
+
 	t.Run("Insecure mode", func(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Insecure: true,
@@ -1014,32 +894,63 @@ func TestServeIndexHTML(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		resp, err := client.Get(s.AdminURL())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if resp.StatusCode != 200 {
-			t.Fatalf("expected status code 200; got %d", resp.StatusCode)
-		}
-		respBytes, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		respString := string(respBytes)
-		expected := fmt.Sprintf(
-			htmlTemplate,
-			fmt.Sprintf(
-				`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s"}`,
-				build.GetInfo().Tag,
-				build.VersionPrefix(),
-			),
-		)
-		if respString != expected {
-			t.Fatalf("expected %s; got %s", expected, respString)
-		}
+		t.Run("short build", func(t *testing.T) {
+			resp, err := client.Get(s.AdminURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := string(respBytes)
+			expected := fmt.Sprintf(`<!DOCTYPE html>
+<title>CockroachDB</title>
+Binary built without web UI.
+<hr>
+<em>%s</em>`,
+				build.GetInfo().Short())
+			if respString != expected {
+				t.Fatalf("expected %s; got %s", expected, respString)
+			}
+		})
+
+		t.Run("non-short build", func(t *testing.T) {
+			linkInFakeUI()
+			defer unlinkFakeUI()
+			resp, err := client.Get(s.AdminURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := string(respBytes)
+			expected := fmt.Sprintf(
+				htmlTemplate,
+				fmt.Sprintf(
+					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
+					build.GetInfo().Tag,
+					build.VersionPrefix(),
+					1,
+				),
+			)
+			if respString != expected {
+				t.Fatalf("expected %s; got %s", expected, respString)
+			}
+		})
 	})
 
 	t.Run("Secure mode", func(t *testing.T) {
+		linkInFakeUI()
+		defer unlinkFakeUI()
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(context.TODO())
 		tsrv := s.(*TestServer)
@@ -1060,17 +971,19 @@ func TestServeIndexHTML(t *testing.T) {
 			{
 				loggedInClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s"}`,
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d"}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
+					1,
 				),
 			},
 			{
 				loggedOutClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s"}`,
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
+					1,
 				),
 			},
 		}

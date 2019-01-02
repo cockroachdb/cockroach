@@ -25,10 +25,6 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/lib/pq"
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,6 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/lib/pq"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 const secondsInDay = 24 * 60 * 60
@@ -190,8 +189,11 @@ func NewProtocolViolationErrorf(format string, args ...interface{}) error {
 }
 
 // DecodeOidDatum decodes bytes with specified Oid and format code into
-// a datum.
-func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
+// a datum. If the ParseTimeContext is nil, reasonable defaults
+// will be applied.
+func DecodeOidDatum(
+	ctx tree.ParseTimeContext, id oid.Oid, code FormatCode, b []byte,
+) (tree.Datum, error) {
 	switch code {
 	case FormatText:
 		switch id {
@@ -201,6 +203,12 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 				return nil, err
 			}
 			return tree.MakeDBool(tree.DBool(t)), nil
+		case oid.T_bit, oid.T_varbit:
+			t, err := tree.ParseDBitArray(string(b))
+			if err != nil {
+				return nil, err
+			}
+			return t, nil
 		case oid.T_int2, oid.T_int4, oid.T_int8:
 			i, err := strconv.ParseInt(string(b), 10, 64)
 			if err != nil {
@@ -232,40 +240,30 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 			return tree.NewDBytes(tree.DBytes(res)), nil
 		case oid.T_timestamp:
-			d, err := tree.ParseDTimestamp(string(b), time.Microsecond)
+			d, err := tree.ParseDTimestamp(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as timestamp", b)
 			}
 			return d, nil
 		case oid.T_timestamptz:
-			d, err := tree.ParseDTimestampTZ(string(b), time.UTC, time.Microsecond)
+			d, err := tree.ParseDTimestampTZ(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as timestamptz", b)
 			}
 			return d, nil
 		case oid.T_date:
-			ts, err := tree.ParseDTimestamp(string(b), time.Microsecond)
+			d, err := tree.ParseDDate(ctx, string(b))
 			if err != nil {
-				res, err := tree.ParseDDate(string(b), time.UTC)
-				if err != nil {
-					return nil, errors.Errorf("could not parse string %q as date", b)
-				}
-				return res, nil
+				return nil, errors.Errorf("could not parse string %q as date", b)
 			}
-			daysSinceEpoch := ts.Unix() / secondsInDay
-			return tree.NewDDate(tree.DDate(daysSinceEpoch)), nil
+			return d, nil
 		case oid.T_time:
-			d, err := tree.ParseDTime(string(b))
+			d, err := tree.ParseDTime(nil, string(b))
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as time", b)
 			}
 			return d, nil
-		case oid.T_timetz:
-			d, err := tree.ParseDTimeTZ(string(b), time.UTC)
-			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as timetz", b)
-			}
-			return d, nil
+
 		case oid.T_interval:
 			d, err := tree.ParseDInterval(string(b))
 			if err != nil {
@@ -439,13 +437,16 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
 					return nil, errors.Errorf("could not parse string %q as decimal", decString)
 				}
-				alloc.dd.SetExponent(-int32(Dscale))
+				alloc.dd.Exponent = -int32(Dscale)
 			}
 
 			switch alloc.pgNum.Sign {
 			case PGNumericPos:
 			case PGNumericNeg:
 				alloc.dd.Neg(&alloc.dd.Decimal)
+			case 0xc000:
+				// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
+				return tree.ParseDDecimal("NaN")
 			default:
 				return nil, errors.Errorf("unsupported numeric sign: %d", alloc.pgNum.Sign)
 			}
@@ -477,12 +478,6 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.MakeDTime(timeofday.TimeOfDay(i)), nil
-		case oid.T_timetz:
-			if len(b) < 8 {
-				return nil, errors.Errorf("timetz requires 8 bytes for binary format")
-			}
-			i := int64(binary.BigEndian.Uint64(b))
-			return tree.MakeDTimeTZ(timeofday.TimeOfDay(i), time.UTC), nil
 		case oid.T_interval:
 			if len(b) < 16 {
 				return nil, errors.Errorf("interval requires 16 bytes for binary format")
@@ -518,7 +513,7 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			return tree.ParseDJSON(string(b))
 		default:
 			if _, ok := types.ArrayOids[id]; ok {
-				return decodeBinaryArray(b, code)
+				return decodeBinaryArray(ctx, b, code)
 			}
 		}
 	default:
@@ -527,7 +522,7 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 
 	// Types with identical text/binary handling.
 	switch id {
-	case oid.T_text, oid.T_varchar:
+	case oid.T_text, oid.T_varchar, oid.T_bpchar:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
@@ -623,7 +618,7 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 	}, nil
 }
 
-func decodeBinaryArray(b []byte, code FormatCode) (tree.Datum, error) {
+func decodeBinaryArray(ctx tree.ParseTimeContext, b []byte, code FormatCode) (tree.Datum, error) {
 	hdr := struct {
 		Ndims int32
 		// Nullflag
@@ -652,8 +647,14 @@ func decodeBinaryArray(b []byte, code FormatCode) (tree.Datum, error) {
 		if err := binary.Read(r, binary.BigEndian, &vlen); err != nil {
 			return nil, err
 		}
+		if vlen < 0 {
+			if err := arr.Append(tree.DNull); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		buf := r.Next(int(vlen))
-		elem, err := DecodeOidDatum(elemOid, code, buf)
+		elem, err := DecodeOidDatum(ctx, elemOid, code, buf)
 		if err != nil {
 			return nil, err
 		}

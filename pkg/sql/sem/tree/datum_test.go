@@ -110,20 +110,20 @@ func TestDatumOrdering(t *testing.T) {
 
 		// Intervals
 		{`'1 day':::interval`, noPrev, noNext,
-			`'-768614336404564650y-8mon-9223372036854775808d-2562047h-47m-16s-854ms-775µs-808ns'`,
-			`'768614336404564650y7mon9223372036854775807d2562047h47m16s854ms775µs807ns'`},
+			`'-768614336404564650 years -8 mons -9223372036854775808 days -2562047:47:16.854775808'`,
+			`'768614336404564650 years 7 mons 9223372036854775807 days 2562047:47:16.854775807'`},
 		// Max interval: we use Postgres syntax, because Go doesn't accept
 		// months/days and ISO8601 doesn't accept nanoseconds.
 		{`'9223372036854775807 months 9223372036854775807 days ` +
 			`2562047 hours 47 minutes 16 seconds 854775807 nanoseconds':::interval`,
 			noPrev, valIsMax,
-			`'-768614336404564650y-8mon-9223372036854775808d-2562047h-47m-16s-854ms-775µs-808ns'`,
-			`'768614336404564650y7mon9223372036854775807d2562047h47m16s854ms775µs807ns'`},
+			`'-768614336404564650 years -8 mons -9223372036854775808 days -2562047:47:16.854775808'`,
+			`'768614336404564650 years 7 mons 9223372036854775807 days 2562047:47:16.854775807'`},
 		{`'-9223372036854775808 months -9223372036854775808 days ` +
 			`-2562047 h -47 m -16 s -854775808 ns':::interval`,
 			valIsMin, noNext,
-			`'-768614336404564650y-8mon-9223372036854775808d-2562047h-47m-16s-854ms-775µs-808ns'`,
-			`'768614336404564650y7mon9223372036854775807d2562047h47m16s854ms775µs807ns'`},
+			`'-768614336404564650 years -8 mons -9223372036854775808 days -2562047:47:16.854775808'`,
+			`'768614336404564650 years 7 mons 9223372036854775807 days 2562047:47:16.854775807'`},
 
 		// UUIDs
 		{`'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid`, `'ffffffff-ffff-ffff-ffff-fffffffffffe'`, valIsMax,
@@ -157,57 +157,57 @@ func TestDatumOrdering(t *testing.T) {
 		// Tuples
 		{`row()`, valIsMin, valIsMax, `()`, `()`},
 
-		{`row(NULL)`, valIsMin, valIsMax, `(NULL)`, `(NULL)`},
+		{`(NULL,)`, valIsMin, valIsMax, `(NULL,)`, `(NULL,)`},
 
-		{`row(true)`, `(false)`, valIsMax, `(false)`, `(true)`},
-		{`row(false)`, valIsMin, `(true)`, `(false)`, `(true)`},
+		{`(true,)`, `(false,)`, valIsMax, `(false,)`, `(true,)`},
+		{`(false,)`, valIsMin, `(true,)`, `(false,)`, `(true,)`},
 
-		{`row(true, false, false)`, `(false, true, true)`, `(true, false, true)`,
+		{`(true, false, false)`, `(false, true, true)`, `(true, false, true)`,
 			`(false, false, false)`, `(true, true, true)`},
-		{`row(false, true, true)`, `(false, true, false)`, `(true, NULL, NULL)`,
+		{`(false, true, true)`, `(false, true, false)`, `(true, NULL, NULL)`,
 			`(false, false, false)`, `(true, true, true)`},
 
-		{`row(0, 0)`, `(0, -1)`, `(0, 1)`,
+		{`(0, 0)`, `(0, -1)`, `(0, 1)`,
 			`(-9223372036854775808, -9223372036854775808)`,
 			`(9223372036854775807, 9223372036854775807)`},
 
-		{`row(0, 9223372036854775807)`,
+		{`(0, 9223372036854775807)`,
 			`(0, 9223372036854775806)`, `(1, NULL)`,
 			`(-9223372036854775808, -9223372036854775808)`,
 			`(9223372036854775807, 9223372036854775807)`},
-		{`row(9223372036854775807, 9223372036854775807)`,
+		{`(9223372036854775807, 9223372036854775807)`,
 			`(9223372036854775807, 9223372036854775806)`, valIsMax,
 			`(-9223372036854775808, -9223372036854775808)`,
 			`(9223372036854775807, 9223372036854775807)`},
 
-		{`row(0, 0:::decimal)`, noPrev, noNext,
+		{`(0, 0:::decimal)`, noPrev, noNext,
 			`(-9223372036854775808, NaN)`,
 			`(9223372036854775807, Infinity)`},
-		{`row(0:::decimal, 0)`, `(0, -1)`, `(0, 1)`,
+		{`(0:::decimal, 0)`, `(0, -1)`, `(0, 1)`,
 			`(NaN, -9223372036854775808)`,
 			`(Infinity, 9223372036854775807)`},
 
-		{`row(10, '')`, noPrev, `(10, e'\x00')`,
+		{`(10, '')`, noPrev, `(10, e'\x00')`,
 			`(-9223372036854775808, '')`, noMax},
-		{`row(-9223372036854775808, '')`, valIsMin, `(-9223372036854775808, e'\x00')`,
+		{`(-9223372036854775808, '')`, valIsMin, `(-9223372036854775808, e'\x00')`,
 			`(-9223372036854775808, '')`, noMax},
-		{`row(-9223372036854775808, 'abc')`, noPrev, `(-9223372036854775808, e'abc\x00')`,
+		{`(-9223372036854775808, 'abc')`, noPrev, `(-9223372036854775808, e'abc\x00')`,
 			`(-9223372036854775808, '')`, noMax},
 
-		{`row(10, NULL)`, `(9, NULL)`, `(11, NULL)`,
+		{`(10, NULL)`, `(9, NULL)`, `(11, NULL)`,
 			`(-9223372036854775808, NULL)`, `(9223372036854775807, NULL)`},
-		{`row(NULL, 10)`, `(NULL, 9)`, `(NULL, 11)`,
+		{`(NULL, 10)`, `(NULL, 9)`, `(NULL, 11)`,
 			`(NULL, -9223372036854775808)`, `(NULL, 9223372036854775807)`},
 
-		{`row(true, NULL, false)`, `(false, NULL, true)`, `(true, NULL, true)`,
+		{`(true, NULL, false)`, `(false, NULL, true)`, `(true, NULL, true)`,
 			`(false, NULL, false)`, `(true, NULL, true)`},
-		{`row(false, NULL, true)`, `(false, NULL, false)`, `(true, NULL, NULL)`,
+		{`(false, NULL, true)`, `(false, NULL, false)`, `(true, NULL, NULL)`,
 			`(false, NULL, false)`, `(true, NULL, true)`},
 
-		{`row(row(true), row(false))`, `((false), (true))`, `((true), (true))`,
-			`((false), (false))`, `((true), (true))`},
-		{`row(row(false), row(true))`, `((false), (false))`, `((true), NULL)`,
-			`((false), (false))`, `((true), (true))`},
+		{`((true,), (false,))`, `((false,), (true,))`, `((true,), (true,))`,
+			`((false,), (false,))`, `((true,), (true,))`},
+		{`((false,), (true,))`, `((false,), (false,))`, `((true,), NULL)`,
+			`((false,), (false,))`, `((true,), (true,))`},
 
 		// Arrays
 
@@ -217,10 +217,10 @@ func TestDatumOrdering(t *testing.T) {
 		{`array[true]`, noPrev, `ARRAY[true,NULL]`, `ARRAY[]`, noMax},
 
 		// Mixed tuple/array datums.
-		{`row(ARRAY[true], row(true))`, `(ARRAY[true], (false))`, `(ARRAY[true,NULL], NULL)`,
-			`(ARRAY[], (false))`, noMax},
-		{`row(row(false), ARRAY[true])`, noPrev, `((false), ARRAY[true,NULL])`,
-			`((false), ARRAY[])`, noMax},
+		{`(ARRAY[true], (true,))`, `(ARRAY[true], (false,))`, `(ARRAY[true,NULL], NULL)`,
+			`(ARRAY[], (false,))`, noMax},
+		{`((false,), ARRAY[true])`, noPrev, `((false,), ARRAY[true,NULL])`,
+			`((false,), ARRAY[])`, noMax},
 	}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, td := range testData {
@@ -396,12 +396,12 @@ func TestParseDDate(t *testing.T) {
 		{"2017-3-3", "2017-03-03"},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDDate(td.str, time.UTC)
+		actual, err := tree.ParseDDate(nil, td.str)
 		if err != nil {
 			t.Errorf("unexpected error while parsing DATE %s: %s", td.str, err)
 			continue
 		}
-		expected, err := tree.ParseDDate(td.expected, time.UTC)
+		expected, err := tree.ParseDDate(nil, td.expected)
 		if err != nil {
 			t.Errorf("unexpected error while parsing expected value DATE %s: %s", td.expected, err)
 			continue
@@ -488,7 +488,7 @@ func TestParseDTime(t *testing.T) {
 		{"4:5:6", timeofday.New(4, 5, 6, 0)},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDTime(td.str)
+		actual, err := tree.ParseDTime(nil, td.str)
 		if err != nil {
 			t.Errorf("unexpected error while parsing TIME %s: %s", td.str, err)
 			continue
@@ -504,55 +504,10 @@ func TestParseDTimeError(t *testing.T) {
 		"",
 		"foo",
 		"01",
-		"2001-02-03 04:05:06",
 		"24:00:00",
 	}
 	for _, s := range testData {
-		actual, _ := tree.ParseDTime(s)
-		if actual != nil {
-			t.Errorf("TIME %s: got %s, expected error", s, actual)
-		}
-	}
-}
-
-func TestParseDTimeTZ(t *testing.T) {
-	// Since ParseDTime mostly delegates parsing logic to ParseDTimestamp, we only test a subset of
-	// the timestamp test cases.
-	l1, _ := time.LoadLocation("America/New_York") // -5
-	l2, _ := time.LoadLocation("Asia/Shanghai")    // +8
-	l3, _ := time.LoadLocation("Europe/Paris")     // +1
-
-	testData := []struct {
-		str      string
-		expected *tree.DTimeTZ
-	}{
-		{"04:05:06+00", tree.MakeDTimeTZ(timeofday.New(4, 5, 6, 0), time.UTC)},
-		{"04:05:06.000001-05", tree.MakeDTimeTZ(timeofday.New(4, 5, 6, 1), l1)},
-		{"04:05:06+08", tree.MakeDTimeTZ(timeofday.New(4, 5, 6, 0), l2)},
-		{"4:5:6+01", tree.MakeDTimeTZ(timeofday.New(4, 5, 6, 0), l3)},
-	}
-	for _, td := range testData {
-		actual, err := tree.ParseDTimeTZ(td.str, time.UTC)
-		if err != nil {
-			t.Errorf("unexpected error while parsing TIME %s: %s", td.str, err)
-			continue
-		}
-		if !actual.ToTime().Equal(td.expected.ToTime()) {
-			t.Errorf("TIME %s: got %s, expected %s", td.str, actual, td.expected)
-		}
-	}
-}
-
-func TestParseDTimeTZError(t *testing.T) {
-	testData := []string{
-		"",
-		"foo",
-		"01",
-		"2001-02-03 04:05:06-07",
-		"24:00:00-07",
-	}
-	for _, s := range testData {
-		actual, _ := tree.ParseDTimeTZ(s, time.UTC)
+		actual, _ := tree.ParseDTime(nil, s)
 		if actual != nil {
 			t.Errorf("TIME %s: got %s, expected error", s, actual)
 		}
@@ -578,15 +533,15 @@ func TestParseDTimestamp(t *testing.T) {
 		{"2001-02-03 04:05:06.12345", time.Date(2001, time.February, 3, 4, 5, 6, 123450000, time.FixedZone("", 0))},
 		{"2001-02-03 04:05:06.123456", time.Date(2001, time.February, 3, 4, 5, 6, 123456000, time.FixedZone("", 0))},
 		{"2001-02-03 04:05:06.123-07", time.Date(2001, time.February, 3, 4, 5, 6, 123000000,
-			time.FixedZone("", -7*60*60))},
+			time.FixedZone("", 0))},
 		{"2001-02-03 04:05:06-07", time.Date(2001, time.February, 3, 4, 5, 6, 0,
-			time.FixedZone("", -7*60*60))},
+			time.FixedZone("", 0))},
 		{"2001-02-03 04:05:06-07:42", time.Date(2001, time.February, 3, 4, 5, 6, 0,
-			time.FixedZone("", -(7*60*60+42*60)))},
+			time.FixedZone("", 0))},
 		{"2001-02-03 04:05:06-07:30:09", time.Date(2001, time.February, 3, 4, 5, 6, 0,
-			time.FixedZone("", -(7*60*60+30*60+9)))},
+			time.FixedZone("", 0))},
 		{"2001-02-03 04:05:06+07", time.Date(2001, time.February, 3, 4, 5, 6, 0,
-			time.FixedZone("", 7*60*60))},
+			time.FixedZone("", 0))},
 		{"2001-02-03 04:0:06", time.Date(2001, time.February, 3, 4, 0, 6, 0,
 			time.FixedZone("", 0))},
 		{"2001-02-03 0:0:06", time.Date(2001, time.February, 3, 0, 0, 6, 0,
@@ -594,12 +549,12 @@ func TestParseDTimestamp(t *testing.T) {
 		{"2001-02-03 4:05:0", time.Date(2001, time.February, 3, 4, 5, 0, 0,
 			time.FixedZone("", 0))},
 		{"2001-02-03 4:05:0-07:0:00", time.Date(2001, time.February, 3, 4, 5, 0, 0,
-			time.FixedZone("", -7*60*60))},
+			time.FixedZone("", 0))},
 		{"2001-02-03 4:0:6 +3:0:0", time.Date(2001, time.February, 3, 4, 0, 6, 0,
-			time.FixedZone("", 3*60*60))},
+			time.FixedZone("", 0))},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDTimestamp(td.str, time.Nanosecond)
+		actual, err := tree.ParseDTimestamp(nil, td.str, time.Nanosecond)
 		if err != nil {
 			t.Errorf("unexpected error while parsing TIMESTAMP %s: %s", td.str, err)
 			continue

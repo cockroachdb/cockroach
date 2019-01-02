@@ -17,9 +17,8 @@ package client
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -243,14 +242,15 @@ func (b *Batch) fillResults(ctx context.Context) {
 						reply, args)
 				}
 
-				// Nothing to do for all methods below as they do not generate
-				// any rows.
+			// Nothing to do for all methods below as they do not generate
+			// any rows.
 			case *roachpb.BeginTransactionRequest:
 			case *roachpb.EndTransactionRequest:
 			case *roachpb.AdminMergeRequest:
 			case *roachpb.AdminSplitRequest:
 			case *roachpb.AdminTransferLeaseRequest:
 			case *roachpb.AdminChangeReplicasRequest:
+			case *roachpb.AdminRelocateRangeRequest:
 			case *roachpb.HeartbeatTxnRequest:
 			case *roachpb.GCRequest:
 			case *roachpb.LeaseInfoRequest:
@@ -516,24 +516,6 @@ func (b *Batch) ReverseScan(s, e interface{}) {
 	b.scan(s, e, true)
 }
 
-// CheckConsistency creates a batch request to check the consistency of the
-// ranges holding the span of keys from s to e. It logs a diff of all the
-// keys that are inconsistent when withDiff is set to true.
-func (b *Batch) CheckConsistency(s, e interface{}, withDiff bool) {
-	begin, err := marshalKey(s)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	end, err := marshalKey(e)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	b.appendReqs(roachpb.NewCheckConsistency(begin, end, withDiff))
-	b.initResult(1, 0, notRaw, nil)
-}
-
 // Del deletes one or more keys.
 //
 // A new result will be appended to the batch and each key will have a
@@ -649,6 +631,24 @@ func (b *Batch) adminChangeReplicas(
 		},
 		ChangeType: changeType,
 		Targets:    targets,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+// adminRelocateRange is only exported on DB. It is here for symmetry with the
+// other operations.
+func (b *Batch) adminRelocateRange(key interface{}, targets []roachpb.ReplicationTarget) {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.AdminRelocateRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: k,
+		},
+		Targets: targets,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

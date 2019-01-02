@@ -17,13 +17,14 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	math "math"
+	"math"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -72,20 +73,28 @@ func TestHashJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		// testFunc is a helper function that runs a hashJoin with the current
-		// test case after running the provided setup function.
-		testFunc := func(t *testing.T, setup func(h *hashJoiner)) error {
-			for _, side := range [2]joinSide{leftSide, rightSide} {
+		// test case.
+		// flowCtxSetup can optionally be provided to set up additional testing
+		// knobs in the flowCtx before instantiating a hashJoiner and hjSetup can
+		// optionally be provided to modify the hashJoiner after instantiation but
+		// before Run().
+		testFunc := func(t *testing.T, flowCtxSetup func(f *FlowCtx), hjSetup func(h *hashJoiner)) error {
+			side := rightSide
+			for i := 0; i < 2; i++ {
 				leftInput := NewRowBuffer(c.leftTypes, c.leftInput, RowBufferArgs{})
 				rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 				out := &RowBuffer{}
 				flowCtx := FlowCtx{
 					Settings:    st,
-					EvalCtx:     evalCtx,
+					EvalCtx:     &evalCtx,
 					TempStorage: tempEngine,
 					diskMonitor: &diskMonitor,
 				}
-				post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-				spec := &HashJoinerSpec{
+				if flowCtxSetup != nil {
+					flowCtxSetup(&flowCtx)
+				}
+				post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+				spec := &distsqlpb.HashJoinerSpec{
 					LeftEqColumns:  c.leftEqCols,
 					RightEqColumns: c.rightEqCols,
 					Type:           c.joinType,
@@ -96,9 +105,15 @@ func TestHashJoiner(t *testing.T) {
 					return err
 				}
 				outTypes := h.OutputTypes()
-				setup(h)
-				h.forcedStoredSide = &side
+				if hjSetup != nil {
+					hjSetup(h)
+				}
+				// Only force the other side after running the buffering logic once.
+				if i == 1 {
+					h.forcedStoredSide = &side
+				}
 				h.Run(context.Background(), nil /* wg */)
+				side = otherSide(h.storedSide)
 
 				if !out.ProducerClosed {
 					return errors.New("output RowReceiver not closed")
@@ -114,7 +129,7 @@ func TestHashJoiner(t *testing.T) {
 		// Run test with a variety of initial buffer sizes.
 		for _, initialBuffer := range []int64{0, 32, 64, 128, 1024 * 1024} {
 			t.Run(fmt.Sprintf("InitialBuffer=%d", initialBuffer), func(t *testing.T) {
-				if err := testFunc(t, func(h *hashJoiner) {
+				if err := testFunc(t, nil, func(h *hashJoiner) {
 					h.initialBufferSize = initialBuffer
 				}); err != nil {
 					t.Fatal(err)
@@ -125,10 +140,14 @@ func TestHashJoiner(t *testing.T) {
 		// Run tests with a probability of the run failing with a memory error.
 		// These verify that the hashJoiner falls back to disk correctly in all
 		// cases.
-		for _, memFailPoint := range []hashJoinPhase{buffer, build} {
+		for _, memFailPoint := range []hashJoinerState{hjBuilding, hjConsumingStoredSide} {
+			name := "Building"
+			if memFailPoint == hjConsumingStoredSide {
+				name = "ConsumingStoredSide"
+			}
 			for i := 0; i < 5; i++ {
-				t.Run(fmt.Sprintf("MemFailPoint=%s", memFailPoint), func(t *testing.T) {
-					if err := testFunc(t, func(h *hashJoiner) {
+				t.Run(fmt.Sprintf("MemFailPoint=%s", name), func(t *testing.T) {
+					if err := testFunc(t, nil, func(h *hashJoiner) {
 						h.testingKnobMemFailPoint = memFailPoint
 						h.testingKnobFailProbability = 0.5
 					}); err != nil {
@@ -141,9 +160,9 @@ func TestHashJoiner(t *testing.T) {
 		// Run test with a variety of memory limits.
 		for _, memLimit := range []int64{1, 256, 512, 1024, 2048} {
 			t.Run(fmt.Sprintf("MemLimit=%d", memLimit), func(t *testing.T) {
-				if err := testFunc(t, func(h *hashJoiner) {
-					h.flowCtx.testingKnobs.MemoryLimitBytes = memLimit
-				}); err != nil {
+				if err := testFunc(t, func(f *FlowCtx) {
+					f.testingKnobs.MemoryLimitBytes = memLimit
+				}, nil); err != nil {
 					t.Fatal(err)
 				}
 			})
@@ -193,13 +212,13 @@ func TestHashJoinerError(t *testing.T) {
 			out := &RowBuffer{}
 			flowCtx := FlowCtx{
 				Settings:    st,
-				EvalCtx:     evalCtx,
+				EvalCtx:     &evalCtx,
 				TempStorage: tempEngine,
 				diskMonitor: &diskMonitor,
 			}
 
-			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-			spec := &HashJoinerSpec{
+			post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+			spec := &distsqlpb.HashJoinerSpec{
 				LeftEqColumns:  c.leftEqCols,
 				RightEqColumns: c.rightEqCols,
 				Type:           c.joinType,
@@ -276,7 +295,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
-	spec := HashJoinerSpec{
+	spec := distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
 		Type:           sqlbase.InnerJoin,
@@ -333,10 +352,10 @@ func TestHashJoinerDrain(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		Settings: settings,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
-	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
+	post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
 	if err != nil {
 		t.Fatal(err)
@@ -380,7 +399,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
-	spec := HashJoinerSpec{
+	spec := distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
 		Type:           sqlbase.InnerJoin,
@@ -456,10 +475,14 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
-	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
+	// Disable external storage for this test to avoid initializing temp storage
+	// infrastructure.
+	settingUseTempStorageJoins.Override(&st.SV, false)
+
+	post := distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
 	if err != nil {
 		t.Fatal(err)
@@ -515,7 +538,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 	defer diskMonitor.Stop(ctx)
 	flowCtx := &FlowCtx{
 		Settings:    st,
-		EvalCtx:     evalCtx,
+		EvalCtx:     &evalCtx,
 		diskMonitor: &diskMonitor,
 	}
 	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
@@ -525,13 +548,13 @@ func BenchmarkHashJoiner(b *testing.B) {
 	defer tempEngine.Close()
 	flowCtx.TempStorage = tempEngine
 
-	spec := &HashJoinerSpec{
+	spec := &distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
 		Type:           sqlbase.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
-	post := &PostProcessSpec{}
+	post := &distsqlpb.PostProcessSpec{}
 
 	const numCols = 1
 	for _, spill := range []bool{true, false} {

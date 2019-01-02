@@ -16,25 +16,23 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
-
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // txnState contains state associated with an ongoing SQL txn; it constitutes
@@ -47,9 +45,11 @@ type txnState struct {
 	// Mutable fields accessed from goroutines not synchronized by this txn's
 	// session, such as when a SHOW SESSIONS statement is executed on another
 	// session.
+	//
 	// Note that reads of mu.txn from the session's main goroutine do not require
 	// acquiring a read lock - since only that goroutine will ever write to
-	// mu.txn.
+	// mu.txn. Writes to mu.txn do require a write lock to guarantee safety with
+	// reads by other goroutines.
 	mu struct {
 		syncutil.RWMutex
 
@@ -81,9 +81,6 @@ type txnState struct {
 	// This must be constant for the lifetime of a SQL transaction.
 	sqlTimestamp time.Time
 
-	// The transaction's isolation level.
-	isolation enginepb.IsolationType
-
 	// The transaction's priority.
 	priority roachpb.UserPriority
 
@@ -108,9 +105,9 @@ type txnState struct {
 	// stateAborted.
 	txnAbortCount *metric.Counter
 
-	// inExternalTxn, if set, means that mu.txn is not owned by the txnState. This
-	// happens for the InternalExecutor.
-	inExternalTxn bool
+	// activeSavepointName stores the name of the active savepoint,
+	// or is empty if no savepoint is active.
+	activeSavepointName tree.Name
 }
 
 // txnType represents the type of a SQL transaction.
@@ -134,7 +131,6 @@ const (
 // 	 used for everything that happens within this SQL transaction.
 // txnType: The type of the starting txn.
 // sqlTimestamp: The timestamp to report for current_timestamp(), now() etc.
-// isolation: The transaction's isolation level.
 // priority: The transaction's priority.
 // readOnly: The read-only character of the new txn.
 // txn: If not nil, this txn will be used instead of creating a new txn. If so,
@@ -144,7 +140,6 @@ func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
 	txnType txnType,
 	sqlTimestamp time.Time,
-	isolation enginepb.IsolationType,
 	priority roachpb.UserPriority,
 	readOnly tree.ReadWriteMode,
 	txn *client.Txn,
@@ -163,13 +158,20 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	// Create a span for the new txn. The span is always Recordable to support the
 	// use of session tracing, which may start recording on it.
+	// TODO(andrei): We should use tracing.EnsureChildSpan() as that's much more
+	// efficient that StartSpan (and also it'd be simpler), but that interface
+	// doesn't current support the Recordable option.
 	if parentSp := opentracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span for this SQL txn.
 		sp = parentSp.Tracer().StartSpan(
-			opName, opentracing.ChildOf(parentSp.Context()), tracing.Recordable)
+			opName,
+			opentracing.ChildOf(parentSp.Context()), tracing.Recordable,
+			tracing.LogTagsFromCtx(connCtx),
+		)
 	} else {
 		// Create a root span for this SQL txn.
-		sp = tranCtx.tracer.StartSpan(opName, tracing.Recordable)
+		sp = tranCtx.tracer.(*tracing.Tracer).StartRootSpan(
+			opName, logtags.FromContext(connCtx), tracing.RecordableSpan)
 	}
 
 	if txnType == implicitTxn {
@@ -198,20 +200,13 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	ts.mu.Lock()
 	if txn == nil {
-		ts.mu.txn = client.NewTxn(tranCtx.db, tranCtx.nodeID, client.RootTxn)
+		ts.mu.txn = client.NewTxn(ts.Ctx, tranCtx.db, tranCtx.nodeID, client.RootTxn)
 		ts.mu.txn.SetDebugName(opName)
 	} else {
 		ts.mu.txn = txn
-		ts.inExternalTxn = true
 	}
 	ts.mu.Unlock()
 
-	if err := ts.mu.txn.SetIsolation(isolation); err != nil {
-		panic(err)
-	}
-	if err := ts.setIsolationLevel(isolation); err != nil {
-		panic(err)
-	}
 	if err := ts.setPriority(priority); err != nil {
 		panic(err)
 	}
@@ -236,11 +231,6 @@ func (ts *txnState) finishSQLTxn() {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
 	}
 
-	if !ts.mu.txn.IsFinalized() && !ts.inExternalTxn {
-		panic(fmt.Sprintf(
-			"attempting to finishSQLTxn(), but KV txn is not finalized: %+v", ts.mu.txn))
-	}
-
 	if ts.recordingThreshold > 0 {
 		if r := tracing.GetRecording(ts.sp); r != nil {
 			if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {
@@ -258,7 +248,9 @@ func (ts *txnState) finishSQLTxn() {
 	ts.sp.Finish()
 	ts.sp = nil
 	ts.Ctx = nil
+	ts.mu.Lock()
 	ts.mu.txn = nil
+	ts.mu.Unlock()
 	ts.recordingThreshold = 0
 }
 
@@ -267,7 +259,11 @@ func (ts *txnState) finishSQLTxn() {
 // InternalExecutor). These guys don't want to mess with the transaction per-se,
 // but still want to clean up other stuff.
 func (ts *txnState) finishExternalTxn() {
-	ts.mon.Stop(ts.Ctx)
+	if ts.Ctx == nil {
+		ts.mon.Stop(ts.connCtx)
+	} else {
+		ts.mon.Stop(ts.Ctx)
+	}
 	if ts.cancel != nil {
 		ts.cancel()
 		ts.cancel = nil
@@ -277,19 +273,16 @@ func (ts *txnState) finishExternalTxn() {
 	}
 	ts.sp = nil
 	ts.Ctx = nil
+	ts.mu.Lock()
 	ts.mu.txn = nil
-}
-
-func (ts *txnState) setIsolationLevel(isolation enginepb.IsolationType) error {
-	if err := ts.mu.txn.SetIsolation(isolation); err != nil {
-		return err
-	}
-	ts.isolation = isolation
-	return nil
+	ts.mu.Unlock()
 }
 
 func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
-	if err := ts.mu.txn.SetUserPriority(userPriority); err != nil {
+	ts.mu.Lock()
+	err := ts.mu.txn.SetUserPriority(userPriority)
+	ts.mu.Unlock()
+	if err != nil {
 		return err
 	}
 	ts.priority = userPriority

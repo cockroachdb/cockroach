@@ -16,10 +16,7 @@ package acceptance
 
 import (
 	"flag"
-	"fmt"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 )
 
 func init() {
@@ -27,21 +24,4 @@ func init() {
 }
 
 var flagDuration = flag.Duration("d", 5*time.Second, "for duration-limited tests, how long to run them for")
-var flagNodes = flag.Int("nodes", 4, "number of nodes")
-var flagStores = flag.Int("stores", 1, "number of stores to use for each node")
 var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
-
-// ReadConfigFromFlags will convert the flags to a TestConfig for the purposes
-// of starting up a cluster.
-func ReadConfigFromFlags() cluster.TestConfig {
-	cfg := cluster.TestConfig{
-		Name:     fmt.Sprintf("AdHoc %dx%d", *flagNodes, *flagStores),
-		Duration: *flagDuration,
-	}
-	for i := 0; i < *flagNodes; i++ {
-		cfg.Nodes = append(cfg.Nodes, cluster.NodeConfig{
-			Stores: make([]cluster.StoreConfig, *flagStores),
-		})
-	}
-	return cfg
-}

@@ -35,10 +35,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kr/pretty"
-
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/kr/pretty"
 )
 
 // Test that shortHostname works as advertised.
@@ -811,4 +810,15 @@ func BenchmarkHeader(b *testing.B) {
 		buf := formatHeader(Severity_INFO, timeutil.Now(), 200, "file.go", 100, nil)
 		logging.putBuffer(buf)
 	}
+}
+
+func BenchmarkVDepthWithVModule(b *testing.B) {
+	if err := SetVModule("craigthecockroach=5"); err != nil {
+		b.Fatal(err)
+	}
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = VDepth(1, 1)
+		}
+	})
 }

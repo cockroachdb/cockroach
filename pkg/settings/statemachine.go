@@ -97,6 +97,16 @@ func (s *StateMachineSetting) Get(sv *Values) string {
 	return string(encV.([]byte))
 }
 
+// Encoded returns the encoded value of the current value of the setting.
+func (s *StateMachineSetting) Encoded(sv *Values) string {
+	return s.Get(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (s *StateMachineSetting) EncodedDefault() string {
+	return "unsupported"
+}
+
 // Validate that the state machine accepts the user input. Returns new encoded
 // state, unencoded state, or an error. If no update is given, round trips
 // current state.

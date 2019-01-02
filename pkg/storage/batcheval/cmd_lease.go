@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 )
 
 func declareKeysRequestLease(
@@ -37,11 +37,11 @@ func declareKeysRequestLease(
 
 func newFailedLeaseTrigger(isTransfer bool) result.Result {
 	var trigger result.Result
-	trigger.Local.LeaseMetricsResult = new(result.LeaseMetricsType)
+	trigger.Local.Metrics = new(result.Metrics)
 	if isTransfer {
-		*trigger.Local.LeaseMetricsResult = result.LeaseTransferError
+		trigger.Local.Metrics.LeaseTransferError = 1
 	} else {
-		*trigger.Local.LeaseMetricsResult = result.LeaseRequestError
+		trigger.Local.Metrics.LeaseRequestError = 1
 	}
 	return trigger
 }
@@ -144,7 +144,7 @@ func evalNewLease(
 	// TODO(tschottdorf): Maybe we shouldn't do this at all. Need to think
 	// through potential consequences.
 	pd.Replicated.BlockReads = !isExtension
-	pd.Replicated.State = &storagebase.ReplicaState{
+	pd.Replicated.State = &storagepb.ReplicaState{
 		Lease: &lease,
 	}
 
@@ -152,16 +152,11 @@ func evalNewLease(
 		pd.Replicated.PrevLeaseProposal = prevLease.ProposedTS
 	}
 
-	// Upon acquisition of a new lease, we're responsible for checking whether
-	// there is a merge in progress. (If there is, we cannot serve traffic unless
-	// the merge aborts.)
-	pd.Local.MaybeWatchForMerge = true
-
-	pd.Local.LeaseMetricsResult = new(result.LeaseMetricsType)
+	pd.Local.Metrics = new(result.Metrics)
 	if isTransfer {
-		*pd.Local.LeaseMetricsResult = result.LeaseTransferSuccess
+		pd.Local.Metrics.LeaseTransferSuccess = 1
 	} else {
-		*pd.Local.LeaseMetricsResult = result.LeaseRequestSuccess
+		pd.Local.Metrics.LeaseRequestSuccess = 1
 	}
 	return pd, nil
 }

@@ -19,16 +19,16 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/kr/pretty"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/kr/pretty"
 )
 
 // byTimeAndName is a slice of tspb.TimeSeriesData.
@@ -69,7 +70,7 @@ func (a byStoreID) Less(i, j int) bool {
 var _ sort.Interface = byStoreID{}
 
 // byStoreDescID is a slice of storage.StoreStatus
-type byStoreDescID []StoreStatus
+type byStoreDescID []statuspb.StoreStatus
 
 // implement sort.Interface for byStoreDescID.
 func (a byStoreDescID) Len() int      { return len(a) }
@@ -209,7 +210,6 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testGauge", "gauge", 20},
 		{"testGaugeFloat64", "floatgauge", 20},
 		{"testCounter", "counter", 5},
-		{"testCounterWithRates", "counterwithrates", 2},
 		{"testHistogram", "histogram", 10},
 		{"testLatency", "latency", 10},
 
@@ -282,11 +282,6 @@ func TestMetricsRecorder(t *testing.T) {
 				reg.reg.AddMetric(c)
 				c.Inc((data.val))
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
-			case "counterwithrates":
-				r := metric.NewCounterWithRates(metric.Metadata{Name: reg.prefix + data.name})
-				reg.reg.AddMetric(r)
-				r.Inc(data.val)
-				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "histogram":
 				h := metric.NewHistogram(metric.Metadata{Name: reg.prefix + data.name}, time.Second, 1000, 2)
 				reg.reg.AddMetric(h)
@@ -322,16 +317,21 @@ func TestMetricsRecorder(t *testing.T) {
 		t.Errorf("recorder did not yield expected time series collection; diff:\n %v", pretty.Diff(e, a))
 	}
 
+	totalMemory, err := GetTotalMemory(context.Background())
+	if err != nil {
+		t.Error("couldn't get total memory", err)
+	}
+
 	// ========================================
 	// Verify node summary generation
 	// ========================================
-	expectedNodeSummary := &NodeStatus{
+	expectedNodeSummary := &statuspb.NodeStatus{
 		Desc:      nodeDesc,
 		BuildInfo: build.GetInfo(),
 		StartedAt: 50,
 		UpdatedAt: 100,
 		Metrics:   expectedNodeSummaryMetrics,
-		StoreStatuses: []StoreStatus{
+		StoreStatuses: []statuspb.StoreStatus{
 			{
 				Desc:    storeDesc1,
 				Metrics: expectedStoreSummaryMetrics,
@@ -341,6 +341,8 @@ func TestMetricsRecorder(t *testing.T) {
 				Metrics: expectedStoreSummaryMetrics,
 			},
 		},
+		TotalSystemMemory: totalMemory,
+		NumCpus:           int32(runtime.NumCPU()),
 	}
 
 	// Make sure there is at least one environment variable that will be

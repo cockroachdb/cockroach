@@ -1,5 +1,8 @@
 # LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
+# NOTE: Keep this table at the beginning of the file to ensure that its numeric
+#       reference is 53 (the numeric reference of the first table). If the
+#       numbering scheme in cockroach changes, this test will break.
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT)
 
@@ -274,6 +277,27 @@ SELECT * FROM v6
 
 user root
 
+# Ensure that views work over tables identified by numeric reference.
+statement ok
+CREATE VIEW num_ref_view AS SELECT a, b FROM [53 AS t]
+
+statement ok
+GRANT SELECT ON num_ref_view TO testuser
+
+user testuser
+
+query II rowsort
+SELECT * FROM num_ref_view
+----
+1 99
+2 98
+3 97
+
+user root
+
+statement ok
+DROP VIEW num_ref_view
+
 statement error pgcode 42809 "v1" is not a table
 DROP TABLE v1
 
@@ -475,3 +499,47 @@ SELECT sum ("QuotedCaps15951". a) FROM "QuotedCaps15951" GROUP BY b ORDER BY b
 1
 3
 6
+
+# Regression tests for #23833
+
+statement ok
+CREATE VIEW w AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
+
+query T
+SELECT create_statement FROM [SHOW CREATE w]
+----
+CREATE VIEW w (x) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
+
+statement ok
+CREATE VIEW w2 AS WITH t AS (SELECT x FROM w) SELECT x FROM t
+
+query T
+SELECT create_statement FROM [SHOW CREATE w2]
+----
+CREATE VIEW w2 (x) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t
+
+statement ok
+CREATE VIEW w3 AS (WITH t AS (SELECT x FROM w) SELECT x FROM t)
+
+query T
+SELECT create_statement FROM [SHOW CREATE w3]
+----
+CREATE VIEW w3 (x) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)
+
+# Test CRUD privilege in view.
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE VIEW crud_view AS SELECT a, b FROM [INSERT INTO t (a, b) VALUES (100, 100) RETURNING a, b]
+
+statement ok
+GRANT SELECT ON crud_view TO testuser
+
+user testuser
+
+query error user testuser does not have INSERT privilege on relation t
+SELECT * FROM crud_view
+
+user root

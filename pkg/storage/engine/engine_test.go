@@ -23,14 +23,13 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/pkg/errors"
 )
 
 func ensureRangeEqual(
@@ -187,7 +186,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 			// result back, we'll see the (newly deleted) value (due to the
 			// failure mode above).
 			if v, _, err := MVCCGet(context.Background(), batch, key,
-				hlc.Timestamp{}, true, nil); err != nil {
+				hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
 				t.Fatal(err)
 			} else if v != nil {
 				t.Fatalf("expected no value, got %+v", v)

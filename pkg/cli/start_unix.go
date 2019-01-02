@@ -22,11 +22,10 @@ import (
 	"os/signal"
 	"strings"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"golang.org/x/sys/unix"
 )
 
 // drainSignals are the signals that will cause the server to drain and exit.
@@ -76,6 +75,10 @@ func maybeRerunBackground() (bool, error) {
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = stderr
+
+		// Notify to ourselves that we're restarting.
+		_ = os.Setenv(backgroundEnvVar, "1")
+
 		return true, sdnotify.Exec(cmd)
 	}
 	return false, nil

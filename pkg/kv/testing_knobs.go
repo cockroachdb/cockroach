@@ -25,6 +25,7 @@ type ClientTestingKnobs struct {
 
 	// The maximum number of times a txn will attempt to refresh its
 	// spans for a single transactional batch.
+	// 0 means use a default. -1 means disable refresh.
 	MaxTxnRefreshAttempts int
 }
 

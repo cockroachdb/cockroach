@@ -63,13 +63,21 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 		if strings.ContainsAny(test.str, ".eE") {
 			tok = token.FLOAT
 		}
-		val := constant.MakeFromLiteral(test.str, tok, 0)
+
+		str := test.str
+		neg := false
+		if str[0] == '-' {
+			neg = true
+			str = str[1:]
+		}
+
+		val := constant.MakeFromLiteral(str, tok, 0)
 		if val.Kind() == constant.Unknown {
 			t.Fatalf("%d: could not parse value string %q", i, test.str)
 		}
 
 		// Check available types.
-		c := &tree.NumVal{Value: val, OrigString: test.str}
+		c := &tree.NumVal{Value: val, OrigString: str, Negative: neg}
 		avail := c.AvailableTypes()
 		if !reflect.DeepEqual(avail, test.avail) {
 			t.Errorf("%d: expected the available type set %v for %v, found %v",
@@ -191,21 +199,28 @@ func mustParseDBool(t *testing.T, s string) tree.Datum {
 	return d
 }
 func mustParseDDate(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDDate(s, time.UTC)
+	d, err := tree.ParseDDate(nil, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+func mustParseDTime(t *testing.T, s string) tree.Datum {
+	d, err := tree.ParseDTime(nil, s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
 }
 func mustParseDTimestamp(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDTimestamp(s, time.Millisecond)
+	d, err := tree.ParseDTimestamp(nil, s, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
 }
 func mustParseDTimestampTZ(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDTimestampTZ(s, time.UTC, time.Millisecond)
+	d, err := tree.ParseDTimestampTZ(nil, s, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,6 +246,7 @@ var parseFuncs = map[types.T]func(*testing.T, string) tree.Datum{
 	types.Bytes:       func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
 	types.Bool:        mustParseDBool,
 	types.Date:        mustParseDDate,
+	types.Time:        mustParseDTime,
 	types.Timestamp:   mustParseDTimestamp,
 	types.TimestampTZ: mustParseDTimestampTZ,
 	types.Interval:    mustParseDInterval,
@@ -269,11 +285,11 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c:            tree.NewStrVal("2010-09-28 12:00:00.1"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Timestamp, types.TimestampTZ, types.Date),
+			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
 			c:            tree.NewStrVal("2006-07-08T00:00:00.000000123Z"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Timestamp, types.TimestampTZ, types.Date),
+			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
 			c:            tree.NewStrVal("PT12H2M"),
@@ -429,11 +445,11 @@ func TestFoldNumericConstants(t *testing.T) {
 		{`2 ^ 3`, `2 ^ 3`},         // Constant folding won't fold power.
 		{`1.3 ^ 3.9`, `1.3 ^ 3.9`},
 		// Shift ops (int only).
-		{`1 << 2`, `4`},
+		{`1 << 2`, `1 << 2`},
 		{`1 << -2`, `1 << -2`},                                                     // Should be caught during evaluation.
 		{`1 << 9999999999999999999999999999`, `1 << 9999999999999999999999999999`}, // Will be caught during type checking.
 		{`1.2 << 2.4`, `1.2 << 2.4`},                                               // Will be caught during type checking.
-		{`4 >> 2`, `1`},
+		{`4 >> 2`, `4 >> 2`},
 		{`4.1 >> 2.9`, `4.1 >> 2.9`}, // Will be caught during type checking.
 		// Comparison ops.
 		{`4 = 2`, `false`},
@@ -471,7 +487,7 @@ func TestFoldNumericConstants(t *testing.T) {
 		{`(((4)))`, `4`},
 		{`(((9 / 3) * (1 / 3)))`, `1`},
 		{`(((9 / 3) % (1 / 3)))`, `((3 % 0.333333))`},
-		{`(1.0) << ((2) + 3 / (1/9))`, `536870912`},
+		{`(1.0) << ((2) + 3 / (1/9))`, `1.0 << 29`},
 		// With non-constants.
 		{`a + 5 * b`, `a + (5 * b)`},
 		{`a + 5 + b + 7`, `((a + 5) + b) + 7`},

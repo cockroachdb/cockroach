@@ -24,18 +24,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kr/pretty"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/kr/pretty"
 )
 
 func makeTS(walltime int64, logical int32) hlc.Timestamp {
@@ -386,7 +386,7 @@ func TestSetGetChecked(t *testing.T) {
 
 func TestTransactionBumpEpoch(t *testing.T) {
 	origNow := makeTS(10, 1)
-	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
+	txn := MakeTransaction("test", Key("a"), 1, origNow, 0)
 	// Advance the txn timestamp.
 	txn.Timestamp.Add(10, 2)
 	txn.BumpEpoch()
@@ -407,7 +407,7 @@ func TestTransactionInclusiveTimeBounds(t *testing.T) {
 		}
 	}
 	origNow := makeTS(1, 1)
-	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
+	txn := MakeTransaction("test", Key("a"), 1, origNow, 0)
 	verify(txn, origNow, origNow)
 	txn.Timestamp.Forward(makeTS(1, 2))
 	verify(txn, origNow, makeTS(1, 2))
@@ -475,7 +475,6 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Isolation: enginepb.SNAPSHOT,
 		Key:       Key("foo"),
 		ID:        uuid.MakeV4(),
 		Epoch:     2,
@@ -492,7 +491,6 @@ var nonZeroTxn = Transaction{
 	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
 	Writing:                  true,
 	WriteTooOld:              true,
-	RetryOnPush:              true,
 	Intents:                  []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	EpochZeroTimestamp:       makeTS(1, 1),
 	OrigTimestampWasObserved: true,
@@ -514,7 +512,6 @@ func TestTransactionUpdate(t *testing.T) {
 	var txn3 Transaction
 	txn3.ID = uuid.MakeV4()
 	txn3.Name = "carl"
-	txn3.Isolation = enginepb.SNAPSHOT
 	txn3.Update(&txn)
 
 	if err := zerofields.NoZeroField(txn3); err != nil {
@@ -597,8 +594,15 @@ func TestMakePriority(t *testing.T) {
 	const trials = 100000
 	values := make([][trials]int32, len(userPs))
 	for i, userPri := range userPs {
-		for t := 0; t < trials; t++ {
-			values[i][t] = MakePriority(userPri)
+		for tr := 0; tr < trials; tr++ {
+			p := MakePriority(userPri)
+			if p == MinTxnPriority {
+				t.Fatalf("unexpected min txn priority")
+			}
+			if p == MaxTxnPriority {
+				t.Fatalf("unexpected max txn priority")
+			}
+			values[i][tr] = p
 		}
 	}
 
@@ -1327,6 +1331,10 @@ func TestValuePrettyPrint(t *testing.T) {
 	bytesValuePrintable.SetBytes([]byte("abc"))
 	bytesValueNonPrintable.SetBytes([]byte{0x89})
 
+	var bitArrayValue Value
+	ba := bitarray.MakeBitArrayFromInt64(8, 58, 7)
+	bitArrayValue.SetBitArray(ba)
+
 	var errValue Value
 	errValue.SetInt(7)
 	errValue.setTag(ValueType_FLOAT)
@@ -1344,12 +1352,13 @@ func TestValuePrettyPrint(t *testing.T) {
 		{floatValue, "/FLOAT/6.28"},
 		{timeValue, "/TIME/2016-06-29T16:02:50.000000005Z"},
 		{decimalValue, "/DECIMAL/6.28"},
-		{durationValue, "/DURATION/1mon2d3ns"},
+		{durationValue, "/DURATION/1 mon 2 days 00:00:00.000000003"},
 		{MakeValueFromBytes([]byte{0x1, 0x2, 0xF, 0xFF}), "/BYTES/0x01020fff"},
 		{MakeValueFromString("foo"), "/BYTES/foo"},
 		{tupleValue, "/TUPLE/1:1:Int/8/2:3:Bytes/foo"},
 		{bytesValuePrintable, "/BYTES/abc"},
 		{bytesValueNonPrintable, "/BYTES/0x89"},
+		{bitArrayValue, "/BITARRAY/B00111010"},
 		{errValue, "/<err: float64 value should be exactly 8 bytes: 1>"},
 		{errTagValue, "/<err: unknown tag: 99>"},
 	}

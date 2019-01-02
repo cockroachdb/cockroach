@@ -33,6 +33,16 @@ func (b *BoolSetting) String(sv *Values) string {
 	return EncodeBool(b.Get(sv))
 }
 
+// Encoded returns the encoded value of the current value of the setting.
+func (b *BoolSetting) Encoded(sv *Values) string {
+	return b.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (b *BoolSetting) EncodedDefault() string {
+	return EncodeBool(b.defaultValue)
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*BoolSetting) Typ() string {
 	return "b"

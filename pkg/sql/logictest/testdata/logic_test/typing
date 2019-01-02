@@ -16,7 +16,7 @@ SELECT * FROM f
 statement ok
 CREATE TABLE i (x INT)
 
-statement error value type decimal doesn't match type INT of column "x"
+statement error value type decimal doesn't match type INT8 of column "x"
 INSERT INTO i(x) VALUES (4.5)
 
 statement ok
@@ -100,7 +100,7 @@ SELECT greatest('2010-09-29', '2010-09-28'::TIMESTAMP)
 query T
 SELECT greatest('PT12H2M', 'PT12H2M'::INTERVAL, '1s')
 ----
-12h2m
+12:02:00
 
 # This is a current limitation where a nested constant that does not get folded (eg. abs(-9))
 # will not be exposed to the same constant type resolution rules as other constants, meaning that
@@ -126,7 +126,7 @@ INSERT INTO untyped VALUES ('f', '42', '4.2', '4.20', '2010-09-28', '2010-09-28 
 query BIRRTTTT
 SELECT * FROM untyped
 ----
-false   42   4.2    4.20    2010-09-28 00:00:00 +0000 +0000   2010-09-28 12:00:00.1 +0000 +0000   2010-09-29 12:00:00.1 +0000 +0000   12h2m
+false  42  4.2  4.20  2010-09-28 00:00:00 +0000 +0000  2010-09-28 12:00:00.1 +0000 +0000  2010-09-29 12:00:00.1 +0000 UTC  12:02:00
 
 # Issue #14527: support string literal coercion during overload resolution
 query T
@@ -136,11 +136,11 @@ SELECT ts FROM untyped WHERE ts != '2015-09-18 00:00:00'
 
 # Regression tests for #15050
 
-statement error error type checking constant value: could not parse "2017-04-18 18:00" as type timestamp
-CREATE TABLE t15050a (c DECIMAL DEFAULT CASE WHEN now() < '2017-04-18 18:00' THEN 2 ELSE 2 END);
+statement error pq: error type checking constant value: could not parse "Not Timestamp" as type timestamp
+CREATE TABLE t15050a (c DECIMAL DEFAULT CASE WHEN now() < 'Not Timestamp' THEN 2 ELSE 2 END);
 
-statement error error type checking constant value: could not parse "2017-04-18 18:00" as type timestamp
-CREATE TABLE t15050b (c DECIMAL DEFAULT IF(now() < '2017-04-18 18:00', 2, 2));
+statement error pq: error type checking constant value: could not parse "Not Timestamp" as type timestamp
+CREATE TABLE t15050b (c DECIMAL DEFAULT IF(now() < 'Not Timestamp', 2, 2));
 
 # Regression tests for #15632
 
@@ -197,4 +197,4 @@ INSERT INTO t1 VALUES (DATE '2018-01-01'); INSERT INTO t2 VALUES (TIMESTAMPTZ '2
 query TT
 SELECT * FROM t1, t2 WHERE a = b AND age(b, TIMESTAMPTZ '2017-01-01') > INTERVAL '1 day'
 ----
-2018-01-01 00:00:00 +0000 +0000  2018-01-01 00:00:00 +0000 +0000
+2018-01-01 00:00:00 +0000 +0000  2018-01-01 00:00:00 +0000 UTC

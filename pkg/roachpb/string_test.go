@@ -21,7 +21,6 @@ import (
 	// Hook up the pretty printer.
 	_ "github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -34,7 +33,6 @@ func TestTransactionString(t *testing.T) {
 	}
 	txn := roachpb.Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			Isolation: enginepb.SERIALIZABLE,
 			Key:       roachpb.Key("foo"),
 			ID:        txnID,
 			Epoch:     2,
@@ -48,8 +46,8 @@ func TestTransactionString(t *testing.T) {
 		OrigTimestamp: hlc.Timestamp{WallTime: 30, Logical: 31},
 		MaxTimestamp:  hlc.Timestamp{WallTime: 40, Logical: 41},
 	}
-	expStr := `"name" id=d7aa0f5e key="foo" rw=false pri=44.58039917 iso=SERIALIZABLE stat=COMMITTED ` +
-		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41 wto=false rop=false seq=15`
+	expStr := `"name" id=d7aa0f5e key="foo" rw=false pri=44.58039917 stat=COMMITTED ` +
+		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41 wto=false seq=15`
 
 	if str := txn.String(); str != expStr {
 		t.Errorf("expected txn %s; got %s", expStr, str)
@@ -62,7 +60,6 @@ func TestBatchRequestString(t *testing.T) {
 		"test",
 		nil, /* baseKey */
 		roachpb.NormalUserPriority,
-		enginepb.SERIALIZABLE,
 		hlc.Timestamp{}, // now
 		0,               // maxOffsetNs
 	)

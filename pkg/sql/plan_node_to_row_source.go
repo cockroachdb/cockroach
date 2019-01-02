@@ -17,23 +17,37 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+type metadataForwarder interface {
+	forwardMetadata(metadata *distsqlrun.ProducerMetadata)
+}
+
 type planNodeToRowSource struct {
-	running bool
+	distsqlrun.ProcessorBase
+
+	started bool
+
+	fastPath bool
 
 	node        planNode
 	params      runParams
 	outputTypes []sqlbase.ColumnType
 
+	firstNotWrapped planNode
+
 	// run time state machine values
-	ctx context.Context
 	row sqlbase.EncDatumRow
 }
 
-func makePlanNodeToRowSource(source planNode, params runParams) (*planNodeToRowSource, error) {
+func makePlanNodeToRowSource(
+	source planNode, params runParams, fastPath bool,
+) (*planNodeToRowSource, error) {
 	nodeColumns := planColumns(source)
 
 	types := make([]sqlbase.ColumnType, len(nodeColumns))
@@ -51,53 +65,177 @@ func makePlanNodeToRowSource(source planNode, params runParams) (*planNodeToRowS
 		params:      params,
 		outputTypes: types,
 		row:         row,
-		running:     true,
+		fastPath:    fastPath,
 	}, nil
 }
 
-var _ distsqlrun.RowSource = &planNodeToRowSource{}
+var _ distsqlrun.LocalProcessor = &planNodeToRowSource{}
 
-func (p *planNodeToRowSource) OutputTypes() []sqlbase.ColumnType {
-	return p.outputTypes
+// InitWithOutput implements the LocalProcessor interface.
+func (p *planNodeToRowSource) InitWithOutput(
+	post *distsqlpb.PostProcessSpec, output distsqlrun.RowReceiver,
+) error {
+	return p.InitWithEvalCtx(
+		p,
+		post,
+		p.outputTypes,
+		nil, /* flowCtx */
+		p.params.EvalContext(),
+		0, /* processorID */
+		output,
+		nil, /* memMonitor */
+		distsqlrun.ProcStateOpts{},
+	)
+}
+
+// SetInput implements the LocalProcessor interface.
+// input is the first upstream RowSource. When we're done executing, we need to
+// drain this row source of its metadata in case the planNode tree we're
+// wrapping returned an error, since planNodes don't know how to drain trailing
+// metadata.
+func (p *planNodeToRowSource) SetInput(ctx context.Context, input distsqlrun.RowSource) error {
+	if p.firstNotWrapped == nil {
+		// Short-circuit if we never set firstNotWrapped - indicating this planNode
+		// tree had no DistSQL-plannable subtrees.
+		return nil
+	}
+	p.AddInputToDrain(input)
+	// Search the plan we're wrapping for firstNotWrapped, which is the planNode
+	// that DistSQL planning resumed in. Replace that planNode with input,
+	// wrapped as a planNode.
+	return walkPlan(ctx, p.node, planObserver{
+		replaceNode: func(ctx context.Context, nodeName string, plan planNode) (planNode, error) {
+			if plan == p.firstNotWrapped {
+				cols := planColumns(p.firstNotWrapped)
+				nOmitted := 0
+				for i := range cols {
+					if cols[i].Omitted {
+						nOmitted++
+					}
+				}
+				if nOmitted > 0 {
+					newCols := make(sqlbase.ResultColumns, 0, len(cols)-nOmitted)
+					for i := range cols {
+						if !cols[i].Omitted {
+							newCols = append(newCols, cols[i])
+						}
+					}
+					cols = newCols
+				}
+				return makeRowSourceToPlanNode(input, p, cols, p.firstNotWrapped), nil
+			}
+			return nil, nil
+		},
+	})
 }
 
 func (p *planNodeToRowSource) Start(ctx context.Context) context.Context {
-	p.ctx = ctx
+	// We do not call p.StartInternal to avoid creating a span. Only the context
+	// needs to be set.
+	p.Ctx = ctx
+	p.params.ctx = ctx
+	if !p.started {
+		p.started = true
+		// This starts all of the nodes below this node.
+		if err := startExec(p.params, p.node); err != nil {
+			p.MoveToDraining(err)
+			return ctx
+		}
+	}
 	return ctx
 }
 
-func (p *planNodeToRowSource) internalClose() {
-	if p.running {
-		p.node.Close(p.ctx)
-		p.running = false
+func (p *planNodeToRowSource) InternalClose() {
+	if p.ProcessorBase.InternalClose() {
+		p.started = true
 	}
+}
+
+func (p *planNodeToRowSource) startExec(_ runParams) error {
+	// If we're getting startExec'd, it means we're running in local mode - so we
+	// mark ourselves already started, since local mode will have taken care of
+	// starting the child nodes of this node.
+	p.started = true
+	return nil
 }
 
 func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerMetadata) {
-	if !p.running {
-		return nil, nil
+	if p.State == distsqlrun.StateRunning && p.fastPath {
+		var count int
+		// If our node is a "fast path node", it means that we're set up to just
+		// return a row count. So trigger the fast path and return the row count as
+		// a row with a single column.
+		fastPath, ok := p.node.(planNodeFastPath)
+
+		if ok {
+			var res bool
+			if count, res = fastPath.FastPathResults(); res {
+				if p.params.extendedEvalCtx.Tracing.Enabled() {
+					log.VEvent(p.params.ctx, 2, "fast path completed")
+				}
+			} else {
+				// Fall back to counting the rows.
+				count = 0
+				ok = false
+			}
+		}
+
+		if !ok {
+			// If we have no fast path to trigger, fall back to counting the rows
+			// by Nexting our source until exhaustion.
+			next, err := p.node.Next(p.params)
+			for ; next; next, err = p.node.Next(p.params) {
+				// If we're tracking memory, clear the previous row's memory account.
+				if p.params.extendedEvalCtx.ActiveMemAcc != nil {
+					p.params.extendedEvalCtx.ActiveMemAcc.Clear(p.params.ctx)
+				}
+				count++
+			}
+			if err != nil {
+				p.MoveToDraining(err)
+				return nil, p.DrainHelper()
+			}
+		}
+		p.MoveToDraining(nil /* err */)
+		// Return the row count the only way we can: as a single-column row with
+		// the count inside.
+		return sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(count))}}, nil
 	}
 
-	valid, err := p.node.Next(p.params)
-	if err != nil {
-		p.internalClose()
-		return nil, &distsqlrun.ProducerMetadata{Err: err}
-	}
-	if !valid {
-		p.internalClose()
-		return nil, nil
-	}
+	for p.State == distsqlrun.StateRunning {
+		valid, err := p.node.Next(p.params)
+		if err != nil || !valid {
+			p.MoveToDraining(err)
+			return nil, p.DrainHelper()
+		}
 
-	for i, datum := range p.node.Values() {
-		p.row[i] = sqlbase.DatumToEncDatum(p.outputTypes[i], datum)
+		for i, datum := range p.node.Values() {
+			if datum != nil {
+				p.row[i] = sqlbase.DatumToEncDatum(p.outputTypes[i], datum)
+			}
+		}
+		// ProcessRow here is required to deal with projections, which won't be
+		// pushed into the wrapped plan.
+		if outRow := p.ProcessRowHelper(p.row); outRow != nil {
+			return outRow, nil
+		}
 	}
-	return p.row, nil
+	return nil, p.DrainHelper()
 }
 
 func (p *planNodeToRowSource) ConsumerDone() {
-	p.internalClose()
+	p.MoveToDraining(nil /* err */)
 }
 
 func (p *planNodeToRowSource) ConsumerClosed() {
-	p.internalClose()
+	// The consumer is done, Next() will not be called again.
+	p.InternalClose()
+}
+
+// forwardMetadata will be called by any upstream rowSourceToPlanNode processors
+// that need to forward metadata to the end of the flow. They can't pass
+// metadata through local processors, so they instead add the metadata to our
+// trailing metadata and expect us to forward it further.
+func (p *planNodeToRowSource) forwardMetadata(metadata *distsqlrun.ProducerMetadata) {
+	p.ProcessorBase.AppendTrailingMeta(*metadata)
 }

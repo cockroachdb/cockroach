@@ -41,7 +41,13 @@ func TestNormalizeExpr(t *testing.T) {
 	}{
 		{`(a)`, `a`},
 		{`((((a))))`, `a`},
-		{`CAST(NULL AS INTEGER)`, `CAST(NULL AS INT)`},
+		// This loss of type information occurs because we wind up trying
+		// to reconstitute a data from from a datum. Ideally, this would
+		// be addressed by future work on
+		// https://github.com/cockroachdb/cockroach/issues/32639
+		{`CAST(NULL AS INT2)`, `CAST(NULL AS INT8)`},
+		{`CAST(NULL AS INT4)`, `CAST(NULL AS INT8)`},
+		{`CAST(NULL AS INT8)`, `CAST(NULL AS INT8)`},
 		{`+a`, `a`},
 		{`-(-a)`, `a`},
 		{`-+-a`, `a`},
@@ -96,6 +102,8 @@ func TestNormalizeExpr(t *testing.T) {
 		{`1 IN (3, 2, 1)`, `true`},
 		{`a IN (3, 2, 1)`, `a IN (1, 2, 3)`},
 		{`1 IN (1, 2, a)`, `1 IN (1, 2, a)`},
+		{`NULL IN ()`, `false`},
+		{`NULL NOT IN ()`, `true`},
 		{`NULL IN (1, 2, 3)`, `NULL`},
 		{`a IN (NULL)`, `NULL`},
 		{`a IN (NULL, NULL)`, `NULL`},
@@ -146,7 +154,6 @@ func TestNormalizeExpr(t *testing.T) {
 		{`random()`, `random()`},
 		{`gen_random_uuid()`, `gen_random_uuid()`},
 		{`current_date()`, `current_date()`},
-		{`current_time()`, `current_time()`},
 		{`clock_timestamp()`, `clock_timestamp()`},
 		{`now()`, `now()`},
 		{`current_timestamp()`, `current_timestamp()`},
@@ -157,7 +164,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`crdb_internal.force_error('a', 'b')`, `crdb_internal.force_error('a', 'b')`},
 		{`crdb_internal.force_panic('a')`, `crdb_internal.force_panic('a')`},
 		{`crdb_internal.force_log_fatal('a')`, `crdb_internal.force_log_fatal('a')`},
-		{`crdb_internal.force_retry('1 day'::interval)`, `crdb_internal.force_retry('1d')`},
+		{`crdb_internal.force_retry('1 day'::interval)`, `crdb_internal.force_retry('1 day')`},
 		{`crdb_internal.no_constant_folding(123)`, `crdb_internal.no_constant_folding(123)`},
 		{`crdb_internal.set_vmodule('a')`, `crdb_internal.set_vmodule('a')`},
 		{`uuid_v4()`, `uuid_v4()`},
@@ -211,9 +218,10 @@ func TestNormalizeExpr(t *testing.T) {
 		{`NULL IS NOT DISTINCT FROM d`, `d IS NULL`},
 		{`NULL IS DISTINCT FROM d`, `d IS NOT NULL`},
 		// #15454: ensure that operators are pretty-printed correctly after normalization.
-		{`(random() + 1.0)::INT`, `(random() + 1.0)::INT`},
-		{`('a' || left('b', random()::INT)) COLLATE en`, `('a' || left('b', random()::INT)) COLLATE en`},
-		{`(1.0 + random()) IS OF (INT)`, `(1.0 + random()) IS OF (INT)`},
+		{`(random() + 1.0)::INT8`, `(random() + 1.0)::INT8`},
+		{`('a' || left('b', random()::INT8)) COLLATE en`, `('a' || left('b', random()::INT8)) COLLATE en`},
+		{`NULL COLLATE en`, `CAST(NULL AS STRING) COLLATE en`},
+		{`(1.0 + random()) IS OF (INT8)`, `(1.0 + random()) IS OF (INT8)`},
 		// #14687: ensure that negative divisors flip the inequality when rotating.
 		{`1 < a / -2`, `a < -2`},
 		{`1 <= a / -2`, `a <= -2`},
@@ -235,11 +243,9 @@ func TestNormalizeExpr(t *testing.T) {
 		{`j->s = jv`, `(j->s) = jv`},
 		{`j->2 = '"jv"'::JSONB`, `(j->2) = '"jv"'`},
 		// We want to check that constant-folded tuples preserve their
-		// labels.  However unfortunately the pretty-printed repr of a
-		// tuple does not include the labels. So use pg_typeof to reveal
-		// them.
-		// TODO(knz): simplify this when bug #26624 is solved.
-		{`pg_typeof((ROW (1) AS a))`, `'tuple{int AS a}'`},
+		// labels.
+		{`(ROW (1) AS a)`, `((1,) AS a)`}, // DTuple
+		{`(ROW (a) AS a)`, `((a,) AS a)`}, // Tuple
 	}
 
 	semaCtx := tree.MakeSemaContext(true /* privileged */)

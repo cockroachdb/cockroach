@@ -79,11 +79,11 @@ func TestingSetZoneConfig(id uint32, zone ZoneConfig) {
 	testingZoneConfig[id] = zone
 }
 
-func testingZoneConfigHook(_ SystemConfig, id uint32, _ []byte) (ZoneConfig, bool, error) {
+func testingZoneConfigHook(_ *SystemConfig, id uint32) (*ZoneConfig, *ZoneConfig, bool, error) {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	if zone, ok := testingZoneConfig[id]; ok {
-		return zone, true, nil
+		return &zone, nil, false, nil
 	}
-	return ZoneConfig{}, false, nil
+	return nil, nil, false, nil
 }

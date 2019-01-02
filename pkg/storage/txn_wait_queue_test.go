@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"reflect"
+	"regexp"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -44,7 +44,7 @@ func writeTxnRecord(ctx context.Context, tc *testContext, txn *roachpb.Transacti
 // createTxnForPushQueue creates a txn struct and writes a "fake"
 // transaction record for it to the underlying engine.
 func createTxnForPushQueue(ctx context.Context, tc *testContext) (*roachpb.Transaction, error) {
-	txn := newTransaction("txn", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+	txn := newTransaction("txn", roachpb.Key("a"), 1, tc.Clock())
 	return txn, writeTxnRecord(ctx, tc, txn)
 }
 
@@ -76,7 +76,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 		t.Fatalf("expected pendingTxn to be in txns map after enqueue")
 	}
 
-	pusher := newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+	pusher := newTransaction("pusher", roachpb.Key("a"), 1, tc.Clock())
 	req := roachpb.PushTxnRequest{
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *pusher,
@@ -141,7 +141,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pusher := newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+	pusher := newTransaction("pusher", roachpb.Key("a"), 1, tc.Clock())
 	req := roachpb.PushTxnRequest{
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *pusher,
@@ -195,8 +195,8 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pusher1 := newTransaction("pusher1", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
-	pusher2 := newTransaction("pusher2", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+	pusher1 := newTransaction("pusher1", roachpb.Key("a"), 1, tc.Clock())
+	pusher2 := newTransaction("pusher2", roachpb.Key("a"), 1, tc.Clock())
 	req1 := roachpb.PushTxnRequest{
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *pusher1,
@@ -246,6 +246,78 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	}
 }
 
+// TestTxnWaitQueueTxnSilentlyCompletes creates a waiter on a txn and verifies
+// that the waiter is eventually unblocked when the txn commits but UpdateTxn is
+// not called.
+//
+// This simulates the following observed sequence of events. A transaction, TA,
+// writes a key K. Another transaction, TB, attempts to read K. It notices the
+// intent on K and sends a PushTxnRequest. The PushTxnRequest fails and returns
+// a TransactionPushError. Before the replica handles the TransactionPushError,
+// TA commits and the replica fully processes its EndTransactionRequest. Only
+// then does the replica notice the TransactionPushError and put TB's
+// PushTxnRequest into TA's wait queue. Updates to TA will never be sent via
+// Queue.UpdateTxn, because Queue.UpdateTxn was already called when the
+// EndTransactionRequest was processed, before TB's PushTxnRequest was in TA's
+// wait queue.
+//
+// This sequence of events was previously mishandled when TA's transaction
+// record was not immediately cleaned up, e.g. because it had non-local intents.
+// The wait queue would continually poll TA's transaction record, notice it
+// still existed, and continue waiting. In production, this meant that the
+// PushTxnRequest would get stuck waiting out the full TxnLivenessThreshold for
+// the transaction record to expire. In unit tests, where the clock might never
+// be advanced, the PushTxnRequest could get stuck forever.
+func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	txn, err := createTxnForPushQueue(ctx, &tc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pusher := newTransaction("pusher", roachpb.Key("a"), 1, tc.Clock())
+	req := &roachpb.PushTxnRequest{
+		PushType:  roachpb.PUSH_ABORT,
+		PusherTxn: *pusher,
+		PusheeTxn: txn.TxnMeta,
+	}
+
+	q := tc.repl.txnWaitQueue
+	q.Enable()
+	q.Enqueue(txn)
+
+	retCh := make(chan RespWithErr, 2)
+	go func() {
+		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, req)
+		retCh <- RespWithErr{resp, pErr}
+	}()
+	testutils.SucceedsSoon(t, func() error {
+		expDeps := []uuid.UUID{pusher.ID}
+		if deps := q.GetDependents(txn.ID); !reflect.DeepEqual(deps, expDeps) {
+			return errors.Errorf("expected GetDependents %+v; got %+v", expDeps, deps)
+		}
+		return nil
+	})
+
+	txn.Status = roachpb.COMMITTED
+	if err := writeTxnRecord(ctx, &tc, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Skip calling q.UpdateTxn to test that the wait queue periodically polls
+	// txn's record and notices when it is no longer pending.
+
+	respWithErr := <-retCh
+	if respWithErr.resp == nil || respWithErr.resp.PusheeTxn.Status != roachpb.COMMITTED {
+		t.Errorf("expected committed txn response; got %+v, err=%v", respWithErr.resp, respWithErr.pErr)
+	}
+}
+
 // TestTxnWaitQueueUpdateNotPushedTxn verifies that no PushTxnResponse
 // is returned in the event that the pushee txn only has its timestamp
 // updated.
@@ -260,7 +332,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pusher := newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+	pusher := newTransaction("pusher", roachpb.Key("a"), 1, tc.Clock())
 	req := roachpb.PushTxnRequest{
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *pusher,
@@ -306,7 +378,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	txn := newTransaction("txn", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, clock)
+	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
 	// Move the clock forward so that when the PushTxn is sent, the txn appears
 	// expired.
 	manual.Set(txnwait.TxnExpiration(txn).WallTime)
@@ -324,8 +396,8 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
-	pusher1 := newTransaction("pusher1", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
-	pusher2 := newTransaction("pusher2", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+	pusher1 := newTransaction("pusher1", roachpb.Key("a"), 1, tc.Clock())
+	pusher2 := newTransaction("pusher2", roachpb.Key("a"), 1, tc.Clock())
 	req1 := roachpb.PushTxnRequest{
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *pusher1,
@@ -405,7 +477,7 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 				t.Fatal(err)
 			}
 		} else {
-			pusher = newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+			pusher = newTransaction("pusher", roachpb.Key("a"), 1, tc.Clock())
 		}
 
 		req := roachpb.PushTxnRequest{
@@ -450,8 +522,9 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 		if respWithErr.resp != nil {
 			t.Errorf("expected nil response; got %+v", respWithErr.resp)
 		}
-		if !testutils.IsPError(respWithErr.pErr, "txn aborted") {
-			t.Errorf("expected transaction aborted error; got %v", respWithErr.pErr)
+		expErr := "TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)"
+		if !testutils.IsPError(respWithErr.pErr, regexp.QuoteMeta(expErr)) {
+			t.Errorf("expected %s; got %v", expErr, respWithErr.pErr)
 		}
 	})
 }
@@ -543,7 +616,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 
 	// Create txnA with a lower priority so it won't think it could push
 	// txnB without updating its priority.
-	txnA := newTransaction("txn", roachpb.Key("a"), -1, enginepb.SERIALIZABLE, tc.Clock())
+	txnA := newTransaction("txn", roachpb.Key("a"), -1, tc.Clock())
 	// However, write an "updated" txnA with higher priority, which it
 	// will need to read via a QueryTxn request in order to realize it
 	// can in fact break the deadlock.
@@ -555,7 +628,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	// Create txnB with priority=2, so txnA won't think it can push, but
 	// when we set up txnB as the pusher, the request will include txnA's
 	// updated priority, making txnB think it can't break a deadlock.
-	txnB := newTransaction("txn", roachpb.Key("a"), -2, enginepb.SERIALIZABLE, tc.Clock())
+	txnB := newTransaction("txn", roachpb.Key("a"), -2, tc.Clock())
 	if err := writeTxnRecord(context.Background(), &tc, txnB); err != nil {
 		t.Fatal(err)
 	}

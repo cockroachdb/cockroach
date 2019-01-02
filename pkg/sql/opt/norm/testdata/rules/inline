@@ -24,7 +24,7 @@ TABLE xy
 # --------------------------------------------------
 
 # Inline comparison.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT k=1 AS expr FROM a) a WHERE expr IS NULL
 ----
 project
@@ -35,13 +35,13 @@ project
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
- │    └── filters [type=bool, outer=(1)]
- │         └── (a.k = 1) IS NULL [type=bool, outer=(1)]
- └── projections [outer=(1)]
-      └── a.k = 1 [type=bool, outer=(1)]
+ │    └── filters
+ │         └── (k = 1) IS NULL [type=bool, outer=(1)]
+ └── projections
+      └── k = 1 [type=bool, outer=(1)]
 
 # Inline arithmetic.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT k*2+1 AS expr FROM a) a WHERE expr > 10
 ----
 project
@@ -52,13 +52,13 @@ project
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
- │    └── filters [type=bool, outer=(1)]
- │         └── ((a.k * 2) + 1) > 10 [type=bool, outer=(1)]
- └── projections [outer=(1)]
-      └── (a.k * 2) + 1 [type=int, outer=(1)]
+ │    └── filters
+ │         └── (k * 2) > 9 [type=bool, outer=(1)]
+ └── projections
+      └── (k * 2) + 1 [type=int, outer=(1)]
 
 # Inline boolean logic.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT NOT(k>1 AND k<=5) AS expr FROM a) a WHERE expr
 ----
 project
@@ -67,11 +67,11 @@ project
  │    ├── columns: k:1(int!null)
  │    ├── constraint: /1: [ - /1] [/6 - ]
  │    └── key: (1)
- └── projections [outer=(1)]
-      └── (a.k <= 1) OR (a.k > 5) [type=bool, outer=(1)]
+ └── projections
+      └── (k <= 1) OR (k > 5) [type=bool, outer=(1)]
 
 # Inline constants.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT (f IS NULL OR f != 10.5) AS expr FROM a) a WHERE expr
 ----
 project
@@ -80,13 +80,13 @@ project
  │    ├── columns: f:3(float)
  │    ├── scan a
  │    │    └── columns: f:3(float)
- │    └── filters [type=bool, outer=(3)]
- │         └── (a.f IS NULL) OR (a.f != 10.5) [type=bool, outer=(3)]
- └── projections [outer=(3)]
-      └── (a.f IS NULL) OR (a.f != 10.5) [type=bool, outer=(3)]
+ │    └── filters
+ │         └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3)]
+ └── projections
+      └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3)]
 
 # Reference the expression to inline multiple times.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT f+1 AS expr FROM a) a WHERE expr=expr
 ----
 project
@@ -95,13 +95,13 @@ project
  │    ├── columns: f:3(float)
  │    ├── scan a
  │    │    └── columns: f:3(float)
- │    └── filters [type=bool, outer=(3)]
- │         └── (a.f + 1.0) = (a.f + 1.0) [type=bool, outer=(3)]
- └── projections [outer=(3)]
-      └── a.f + 1.0 [type=float, outer=(3)]
+ │    └── filters
+ │         └── (f + 1.0) = (f + 1.0) [type=bool, outer=(3)]
+ └── projections
+      └── f + 1.0 [type=float, outer=(3)]
 
 # Use outer references in both inlined expression and in referencing expression.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (SELECT (x-i) AS expr FROM xy) WHERE expr > i*i)
 ----
 semi-join
@@ -115,27 +115,132 @@ semi-join
  ├── scan xy
  │    ├── columns: x:6(int!null)
  │    └── key: (6)
- └── filters [type=bool, outer=(2,6)]
-      └── (xy.x - a.i) > (a.i * a.i) [type=bool, outer=(2,6)]
+ └── filters
+      └── (x - i) > (i * i) [type=bool, outer=(2,6)]
+
+exec-ddl
+CREATE TABLE crdb_internal.zones (
+    zone_id INT NOT NULL,
+    cli_specifier STRING NULL,
+    config_yaml BYTES NOT NULL,
+    config_protobuf BYTES NOT NULL
+)
+----
+TABLE zones
+ ├── zone_id int not null
+ ├── cli_specifier string
+ ├── config_yaml bytes not null
+ ├── config_protobuf bytes not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Regression test for #28827. Ensure that inlining is not applied when there
+# is a correlated subquery in the filter.
+norm
+SELECT
+  subq_0.c0 AS c0
+FROM (SELECT 1 AS c0, 2 as c1) AS subq_0
+WHERE
+  1
+  >= CASE
+    WHEN subq_0.c1 IS NOT NULL
+    THEN pg_catalog.extract(
+      CAST(
+        CASE
+        WHEN
+        (
+            EXISTS(
+              SELECT
+                ref_1.config_yaml AS c0,
+                ref_1.config_yaml AS c1,
+                subq_0.c0 AS c2,
+                ref_1.config_yaml AS c3
+              FROM
+                crdb_internal.zones AS ref_1
+              WHERE
+                subq_0.c0 IS NOT NULL
+              LIMIT
+                52
+            )
+          )
+        THEN pg_catalog.version()
+        ELSE pg_catalog.version()
+        END
+          AS TEXT
+      ),
+      CAST(pg_catalog.current_date() AS DATE)
+    )
+    ELSE 1
+    END
+LIMIT
+  107
+----
+project
+ ├── columns: c0:1(int)
+ ├── cardinality: [0 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: c0:1(int) c1:2(int)
+      ├── cardinality: [0 - 1]
+      ├── side-effects
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── values
+      │    ├── columns: c0:1(int) c1:2(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,2)
+      │    └── (1, 2) [type=tuple{int, int}]
+      └── filters
+           └── le [type=bool, outer=(1,2), side-effects]
+                ├── case [type=int]
+                │    ├── true [type=bool]
+                │    ├── when [type=int]
+                │    │    ├── c1 IS NOT NULL [type=bool]
+                │    │    └── function: extract [type=int]
+                │    │         ├── case [type=string]
+                │    │         │    ├── true [type=bool]
+                │    │         │    ├── when [type=string]
+                │    │         │    │    ├── exists [type=bool]
+                │    │         │    │    │    └── limit
+                │    │         │    │    │         ├── columns: config_yaml:5(bytes!null)
+                │    │         │    │    │         ├── outer: (1)
+                │    │         │    │    │         ├── cardinality: [0 - 52]
+                │    │         │    │    │         ├── select
+                │    │         │    │    │         │    ├── columns: config_yaml:5(bytes!null)
+                │    │         │    │    │         │    ├── outer: (1)
+                │    │         │    │    │         │    ├── scan ref_1
+                │    │         │    │    │         │    │    └── columns: config_yaml:5(bytes!null)
+                │    │         │    │    │         │    └── filters
+                │    │         │    │    │         │         └── c0 IS NOT NULL [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+                │    │         │    │    │         └── const: 52 [type=int]
+                │    │         │    │    └── version() [type=string]
+                │    │         │    └── version() [type=string]
+                │    │         └── current_date() [type=date]
+                │    └── const: 1 [type=int]
+                └── const: 1 [type=int]
 
 # --------------------------------------------------
 # InlineProjectInProject
 # --------------------------------------------------
-opt
-SELECT expr, i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
+opt expect=InlineProjectInProject
+SELECT NOT(expr), i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
 ----
 project
- ├── columns: expr:6(bool) r:7(int)
+ ├── columns: "?column?":7(bool) r:8(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── projections [outer=(1,2)]
-      ├── a.i + 1 [type=int, outer=(2)]
-      └── a.k = 1 [type=bool, outer=(1)]
+ └── projections
+      ├── k != 1 [type=bool, outer=(1)]
+      └── i + 1 [type=int, outer=(2)]
 
 # Inline multiple expressions.
-opt
+opt expect=InlineProjectInProject
 SELECT expr+1 AS r, i, expr2 || 'bar' AS s FROM (SELECT k+1 AS expr, s || 'foo' AS expr2, i FROM a)
 ----
 project
@@ -144,12 +249,12 @@ project
  │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
- └── projections [outer=(1,2,4)]
-      ├── (a.k + 1) + 1 [type=int, outer=(1)]
+ └── projections
+      ├── (k + 1) + 1 [type=int, outer=(1)]
       └── (a.s || 'foo') || 'bar' [type=string, outer=(4)]
 
 # Don't inline when there are multiple references.
-opt
+opt expect-not=InlineProjectInProject
 SELECT expr, expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
@@ -160,13 +265,13 @@ project
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
- │    └── projections [outer=(1)]
- │         └── a.k + 1 [type=int, outer=(1)]
- └── projections [outer=(6)]
+ │    └── projections
+ │         └── k + 1 [type=int, outer=(1)]
+ └── projections
       └── expr * 2 [type=int, outer=(6)]
 
 # Uncorrelated subquery should not block inlining.
-opt
+opt expect=InlineProjectInProject
 SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
@@ -175,23 +280,23 @@ project
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
- └── projections [outer=(1)]
+ └── projections
       ├── exists [type=bool]
       │    └── scan xy
       │         ├── columns: x:7(int!null) y:8(int)
       │         ├── constraint: /7: [/1 - /2]
       │         ├── key: (7)
       │         └── fd: (7)-->(8)
-      └── (a.k + 1) * 2 [type=int, outer=(1)]
+      └── (k + 1) * 2 [type=int, outer=(1)]
 
 # Correlated subquery should be hoisted as usual.
-opt
+opt expect=InlineProjectInProject
 SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
 ----
 project
  ├── columns: exists:9(bool)
  ├── group-by
- │    ├── columns: any_not_null:11(bool) rownum:13(int!null)
+ │    ├── columns: true_agg:11(bool) rownum:13(int!null)
  │    ├── grouping columns: rownum:13(int!null)
  │    ├── key: (13)
  │    ├── fd: (13)-->(11)
@@ -207,18 +312,31 @@ project
  │    │    │         ├── scan a
  │    │    │         │    ├── columns: k:1(int!null)
  │    │    │         │    └── key: (1)
- │    │    │         └── projections [outer=(1)]
- │    │    │              └── a.k + 1 [type=int, outer=(1)]
+ │    │    │         └── projections
+ │    │    │              └── k + 1 [type=int, outer=(1)]
  │    │    ├── project
  │    │    │    ├── columns: true:10(bool!null)
  │    │    │    ├── fd: ()-->(10)
  │    │    │    ├── scan xy
  │    │    │    └── projections
  │    │    │         └── true [type=bool]
- │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - /-1]; tight)]
+ │    │    └── filters
  │    │         └── expr < 0 [type=bool, outer=(6), constraints=(/6: (/NULL - /-1]; tight)]
- │    └── aggregations [outer=(10)]
- │         └── any-not-null [type=bool, outer=(10)]
- │              └── variable: true [type=bool, outer=(10)]
- └── projections [outer=(11)]
-      └── any_not_null IS NOT NULL [type=bool, outer=(11)]
+ │    └── aggregations
+ │         └── const-not-null-agg [type=bool, outer=(10)]
+ │              └── variable: true [type=bool]
+ └── projections
+      └── true_agg IS NOT NULL [type=bool, outer=(11)]
+
+# After c is replaced with k+2, (k+2) > 2 should be simplified to k > 0.
+opt
+SELECT c FROM (SELECT k+2 AS c FROM a) AS t WHERE c > 2;
+----
+project
+ ├── columns: c:6(int)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    ├── constraint: /1: [/1 - ]
+ │    └── key: (1)
+ └── projections
+      └── k + 2 [type=int, outer=(1)]

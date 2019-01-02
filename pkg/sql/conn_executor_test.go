@@ -16,6 +16,7 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
 	"net/url"
@@ -23,8 +24,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq"
 )
 
 func TestAnonymizeStatementsForReporting(t *testing.T) {
@@ -57,11 +57,11 @@ select * from crdb_internal.node_runtime_info;
 
 	const (
 		expMessage = "panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, _, _); SELECT * FROM _._; caused by i'm not safe"
+			"(_, _, __more2__); SELECT * FROM _._; caused by i'm not safe"
 		expSafeRedactedMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, _, _); SELECT * FROM _._: caused by <redacted>"
+			"(_, _, __more2__); SELECT * FROM _._: caused by <redacted>"
 		expSafeSafeMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, _, _); SELECT * FROM _._: caused by something safe"
+			"(_, _, __more2__); SELECT * FROM _._: caused by something safe"
 	)
 
 	actMessage := safeErr.Error()
@@ -93,8 +93,7 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, _ := tests.CreateTestServerParams()
-	var activateKnobs func()
-	params.Knobs.SQLExecutor, activateKnobs = aborter.executorKnobs()
+	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	{
@@ -106,15 +105,9 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 		}
 	}
 
-	// After this point, the abort knob is active. This also means that
-	// the AST is checked for modification. So we have to use fully
-	// qualified table names throughout to avoid a mismatch due to table
-	// qualification.
-	activateKnobs()
-
 	if _, err := mainDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
+CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +210,7 @@ CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 			}
 			ts := timeutil.Now()
 			var count int
-			if err := txCheck.QueryRow("SELECT count(1) FROM t.public.test").Scan(&count); err != nil {
+			if err := txCheck.QueryRow("SELECT count(1) FROM t.test").Scan(&count); err != nil {
 				t.Fatal(err)
 			}
 			// CommitWait actually committed, so we'll need to clean up.
@@ -226,7 +219,7 @@ CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 					t.Fatalf("expected no rows, got: %d", count)
 				}
 			} else {
-				if _, err := txCheck.Exec("DELETE FROM t.public.test"); err != nil {
+				if _, err := txCheck.Exec("DELETE FROM t.test"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -357,5 +350,47 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if atomic.LoadInt64(&injectedErr) == 0 {
 		t.Fatal("test didn't inject the error; it must have failed to find " +
 			"the EndTransaction with the expected key")
+	}
+}
+
+func TestAppNameStatisticsInitialization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Prepare a session with a custom application name.
+	pgURL := url.URL{
+		Scheme:   "postgres",
+		User:     url.User(security.RootUser),
+		Host:     s.ServingAddr(),
+		RawQuery: "sslmode=disable&application_name=mytest",
+	}
+	rawSQL, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rawSQL.Close()
+	sqlDB := sqlutils.MakeSQLRunner(rawSQL)
+
+	// Issue a query to be registered in stats.
+	sqlDB.Exec(t, "SELECT version()")
+
+	// Verify the query shows up in stats.
+	rows := sqlDB.Query(t, "SELECT application_name, key FROM crdb_internal.node_statement_statistics")
+	defer rows.Close()
+
+	counts := map[string]int{}
+	for rows.Next() {
+		var appName, key string
+		if err := rows.Scan(&appName, &key); err != nil {
+			t.Fatal(err)
+		}
+		counts[appName+":"+key]++
+	}
+	if counts["mytest:SELECT version()"] == 0 {
+		t.Fatalf("query was not counted properly: %+v", counts)
 	}
 }

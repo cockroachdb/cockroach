@@ -43,8 +43,8 @@ import (
 //   5. While this works well for normalization rules, exploration rules are
 //      more difficult. This is because exploration rules are not guaranteed to
 //      produce a lower cost tree. Unless extra measures are taken, the returned
-//      ExprView would not include the changed portion of the Memo, since
-//      ExprView only shows the lowest cost path through the Memo.
+//      Expr would not include the changed portion of the Memo, since Expr only
+//      shows the lowest cost path through the Memo.
 //
 //   6. To address this issue, optSteps hooks the optimizer's AppliedRule event
 //      and records the expression(s) that the last transformation has affected.
@@ -63,10 +63,10 @@ type optSteps struct {
 	// during the current iteration.
 	steps int
 
-	// ev is the expression tree produced by the most recent optSteps iteration.
-	ev memo.ExprView
+	// expr is the expression tree produced by the most recent optSteps iteration.
+	expr opt.Expr
 
-	// better is true if ev is lower cost than the expression tree produced by
+	// better is true if expr is lower cost than the expression tree produced by
 	// the previous iteration of optSteps.
 	better bool
 
@@ -79,38 +79,37 @@ func newOptSteps(tester *OptTester) *optSteps {
 	return &optSteps{tester: tester}
 }
 
-// exprView returns the expression tree produced by the most recent optSteps
-// iteration.
-func (os *optSteps) exprView() memo.ExprView {
-	return os.ev
+// Root returns the node tree produced by the most recent optSteps iteration.
+func (os *optSteps) Root() opt.Expr {
+	return os.expr
 }
 
-// lastRuleName returns the name of the rule that was most recently matched by
+// LastRuleName returns the name of the rule that was most recently matched by
 // the optimizer.
-func (os *optSteps) lastRuleName() opt.RuleName {
+func (os *optSteps) LastRuleName() opt.RuleName {
 	return os.fo.lastMatched
 }
 
-// isBetter returns true if exprView is lower cost than the expression tree
+// IsBetter returns true if root is lower cost than the expression tree
 // produced by the previous iteration of optSteps.
-func (os *optSteps) isBetter() bool {
+func (os *optSteps) IsBetter() bool {
 	return os.better
 }
 
-// done returns true if there are no more rules to apply. Further calls to the
+// Done returns true if there are no more rules to apply. Further calls to the
 // next method will result in a panic.
-func (os *optSteps) done() bool {
+func (os *optSteps) Done() bool {
 	// remaining starts out equal to steps, and is decremented each time a rule
 	// is applied. If it never reaches zero, then all possible rules were
 	// already applied, and optimization is complete.
 	return os.fo != nil && os.fo.remaining != 0
 }
 
-// next triggers the next iteration of optSteps. If there is no error, then
-// results of the iteration can be accessed via the exprView, lastRuleName, and
-// isBetter methods.
-func (os *optSteps) next() error {
-	if os.done() {
+// Next triggers the next iteration of optSteps. If there is no error, then
+// results of the iteration can be accessed via the Root, LastRuleName, and
+// IsBetter methods.
+func (os *optSteps) Next() error {
+	if os.Done() {
 		panic("iteration already complete")
 	}
 
@@ -120,14 +119,14 @@ func (os *optSteps) next() error {
 	}
 
 	os.fo = fo
-	os.ev = fo.optimize()
-	text := os.ev.String()
+	os.expr = fo.Optimize()
+	text := os.expr.String()
 
 	// If the expression text changes, then it must have gotten better.
 	os.better = text != os.best
 	if os.better {
 		os.best = text
-	} else if !os.done() {
+	} else if !os.Done() {
 		// The expression is not better, so suppress the lowest cost expressions
 		// so that the changed portions of the tree will be part of the output.
 		fo2, err := newForcingOptimizer(os.tester, os.steps, false /* ignoreNormRules */)
@@ -135,18 +134,24 @@ func (os *optSteps) next() error {
 			return err
 		}
 
-		if fo.lastApplied.IsNormalize() || fo.lastExploreNewExprs.Empty() {
-			// This was a normalization that created a new memo group, or it was
-			// an exploration rule that didn't add any expressions to the group.
-			// Either way, none of the expressions in the group need to be
-			// suppressed.
-			fo2.restrictToGroup(fo.o.Memo(), fo.lastAppliedGroup)
+		if fo.lastAppliedSource == nil {
+			// This was a normalization that created a new memo group. Since there's
+			// just one node in the group, only ancestor groups need to be suppressed.
+			fo2.RestrictToGroup(fo.LookupPath(fo.lastAppliedTarget))
+		} else if fo.lastAppliedTarget == nil {
+			// This was an exploration rule that didn't add any expressions to the
+			// group, so only ancestor groups need to be suppressed.
+			fo2.RestrictToGroup(fo.LookupPath(fo.lastAppliedSource))
 		} else {
 			// This was an exploration rule that added one or more expressions to
-			// an existing group. Suppress all other expressions in the group.
-			fo2.restrictToExprs(fo.o.Memo(), fo.lastAppliedGroup, fo.lastExploreNewExprs)
+			// an existing group. Suppress all other members of the group.
+			member := fo.lastAppliedTarget.(memo.RelExpr)
+			for member != nil {
+				fo2.RestrictToGroup(fo.LookupPath(member))
+				member = member.NextExpr()
+			}
 		}
-		os.ev = fo2.optimize()
+		os.expr = fo2.Optimize()
 	}
 
 	os.steps++

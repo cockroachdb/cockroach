@@ -20,13 +20,12 @@ import (
 	"runtime"
 	"testing"
 
-	raven "github.com/getsentry/raven-go"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	raven "github.com/getsentry/raven-go"
 )
 
 // interceptingTransport is an implementation of raven.Transport that delegates
@@ -103,9 +102,9 @@ func TestCrashReportingPacket(t *testing.T) {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
-				message += "81"
+				message += "80"
 			} else {
-				message += "84"
+				message += "83"
 			}
 			message += ": " + panicPre
 			return message
@@ -114,9 +113,9 @@ func TestCrashReportingPacket(t *testing.T) {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
-				message += "87"
+				message += "86"
 			} else {
-				message += "92"
+				message += "91"
 			}
 			message += ": " + panicPost
 			return message

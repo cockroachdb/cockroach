@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func testInitDummySelectNode(t *testing.T, p *planner, desc *TableDescriptor) *renderNode {
+func testInitDummySelectNode(t *testing.T, p *planner, desc *ImmutableTableDescriptor) *renderNode {
 	scan := &scanNode{}
 	scan.desc = desc
 	if err := scan.initDescDefaults(p.curPlan.deps, publicColumnsCfg); err != nil {
@@ -51,12 +51,9 @@ func TestRetryResolveNames(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	desc := testTableDesc()
+	desc := testTableDesc(t, func(*MutableTableDescriptor) {})
 	p := makeTestPlanner()
 	s := testInitDummySelectNode(t, p, desc)
-	if err := desc.AllocateIDs(); err != nil {
-		t.Fatal(err)
-	}
 
 	for i := 0; i < 2; i++ {
 		newExpr, _, _, err := p.resolveNamesForRender(expr, s)

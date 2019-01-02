@@ -42,11 +42,11 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 				return nil, err
 			}
 		case types.TCollatedString:
-			d = NewDCollatedString(s, t.Locale, &evalCtx.collationEnv)
+			d = NewDCollatedString(s, t.Locale, &evalCtx.CollationEnv)
 		default:
 			d, err = parseStringAs(t, s, evalCtx)
 			if d == nil && err == nil {
-				return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %s (%T)", t, t)
+				return nil, pgerror.NewAssertionErrorf("unknown type %s (%T)", t, t)
 			}
 		}
 	}
@@ -54,7 +54,7 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 }
 
 // ParseDatumStringAs parses s as type t. This function is guaranteed to
-// round-trip when printing a Datum with FmtParseDatums.
+// round-trip when printing a Datum with FmtExport.
 func ParseDatumStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	switch t {
 	case types.Bytes:
@@ -64,21 +64,16 @@ func ParseDatumStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error
 	}
 }
 
-type locationContext interface {
-	GetLocation() *time.Location
-}
-
-var _ locationContext = &EvalContext{}
-var _ locationContext = &SemaContext{}
-
 // parseStringAs parses s as type t for simple types. Bytes, arrays, collated
 // strings are not handled. nil, nil is returned if t is not a supported type.
-func parseStringAs(t types.T, s string, ctx locationContext) (Datum, error) {
+func parseStringAs(t types.T, s string, ctx ParseTimeContext) (Datum, error) {
 	switch t {
+	case types.BitArray:
+		return ParseDBitArray(s)
 	case types.Bool:
 		return ParseDBool(s)
 	case types.Date:
-		return ParseDDate(s, ctx.GetLocation())
+		return ParseDDate(ctx, s)
 	case types.Decimal:
 		return ParseDDecimal(s)
 	case types.Float:
@@ -94,13 +89,11 @@ func parseStringAs(t types.T, s string, ctx locationContext) (Datum, error) {
 	case types.String:
 		return NewDString(s), nil
 	case types.Time:
-		return ParseDTime(s)
-	case types.TimeTZ:
-		return ParseDTimeTZ(s, ctx.GetLocation())
+		return ParseDTime(ctx, s)
 	case types.Timestamp:
-		return ParseDTimestamp(s, time.Microsecond)
+		return ParseDTimestamp(ctx, s, time.Microsecond)
 	case types.TimestampTZ:
-		return ParseDTimestampTZ(s, ctx.GetLocation(), time.Microsecond)
+		return ParseDTimestampTZ(ctx, s, time.Microsecond)
 	case types.UUID:
 		return ParseDUuidFromString(s)
 	default:

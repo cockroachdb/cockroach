@@ -87,21 +87,13 @@ var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_Sem
 		sqlbase.ColumnType_FLOAT: ColumnConversionTrivial.classifier(),
 	},
 	sqlbase.ColumnType_INT: {
-		// Right now, our behavior with respect to handling BIT(n) doesn't
-		// match pgsql behavior.  Converting between INT(n) and BIT(n),
-		// especially regarding negative values, is somewhat dodgy.
-		// The safest thing to do at the moment is to deny this change,
-		// unless the user provides a USING expression.  We can revisit
-		// this once the following issue is worked out:
-		// https://github.com/cockroachdb/cockroach/issues/20991
 		sqlbase.ColumnType_INT: func(from *sqlbase.ColumnType, to *sqlbase.ColumnType) ColumnConversionKind {
-			fromBit := from.VisibleType == sqlbase.ColumnType_BIT
-			toBit := to.VisibleType == sqlbase.ColumnType_BIT
-
-			if fromBit == toBit {
-				return classifierWidth(from, to)
-			}
-			return ColumnConversionDangerous
+			return classifierWidth(from, to)
+		},
+	},
+	sqlbase.ColumnType_BIT: {
+		sqlbase.ColumnType_BIT: func(from *sqlbase.ColumnType, to *sqlbase.ColumnType) ColumnConversionKind {
+			return classifierWidth(from, to)
 		},
 	},
 	sqlbase.ColumnType_STRING: {
@@ -121,18 +113,6 @@ var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_Sem
 			}
 		},
 		sqlbase.ColumnType_STRING: classifierWidth,
-	},
-	// TODO(bob): It looks like TIMETZ is currently in flux and the
-	// implementation, encoding, and semantics may be changing.
-	// We'll disable this change for the moment until these
-	// issues settle:
-	// https://github.com/cockroachdb/cockroach/issues/25224
-	// https://github.com/cockroachdb/cockroach/issues/26097
-	sqlbase.ColumnType_TIME: {
-		sqlbase.ColumnType_TIMETZ: ColumnConversionDangerous.classifier(),
-	},
-	sqlbase.ColumnType_TIMETZ: {
-		sqlbase.ColumnType_TIME: ColumnConversionDangerous.classifier(),
 	},
 	sqlbase.ColumnType_TIMESTAMP: {
 		sqlbase.ColumnType_TIMESTAMPTZ: ColumnConversionTrivial.classifier(),
@@ -190,7 +170,7 @@ func classifierWidth(
 	switch {
 	case oldType.Width == newType.Width:
 		return ColumnConversionTrivial
-	case oldType.Width == 0:
+	case oldType.Width == 0 && newType.Width < 64:
 		return ColumnConversionValidate
 	case newType.Width == 0 || newType.Width > oldType.Width:
 		return ColumnConversionTrivial

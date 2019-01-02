@@ -23,7 +23,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -35,28 +37,25 @@ import (
 
 func makeTestIndex(
 	t *testing.T, columns []string, dirs []encoding.Direction,
-) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
-	desc := testTableDesc()
-	desc.Indexes = append(desc.Indexes, sqlbase.IndexDescriptor{
-		Name:        "foo",
-		ColumnNames: columns,
-	})
-	idx := &desc.Indexes[len(desc.Indexes)-1]
-	// Fill in the directions for the columns.
-	for i := range columns {
-		var dir sqlbase.IndexDescriptor_Direction
-		if dirs[i] == encoding.Ascending {
-			dir = sqlbase.IndexDescriptor_ASC
-		} else {
-			dir = sqlbase.IndexDescriptor_DESC
+) (*sqlbase.ImmutableTableDescriptor, *sqlbase.IndexDescriptor) {
+	desc := testTableDesc(t, func(desc *MutableTableDescriptor) {
+		desc.Indexes = append(desc.Indexes, sqlbase.IndexDescriptor{
+			Name:        "foo",
+			ColumnNames: columns,
+		})
+		idx := &desc.Indexes[len(desc.Indexes)-1]
+		// Fill in the directions for the columns.
+		for i := range columns {
+			var dir sqlbase.IndexDescriptor_Direction
+			if dirs[i] == encoding.Ascending {
+				dir = sqlbase.IndexDescriptor_ASC
+			} else {
+				dir = sqlbase.IndexDescriptor_DESC
+			}
+			idx.ColumnDirections = append(idx.ColumnDirections, dir)
 		}
-		idx.ColumnDirections = append(idx.ColumnDirections, dir)
-	}
-
-	if err := desc.AllocateIDs(); err != nil {
-		t.Fatal(err)
-	}
-	return desc, idx
+	})
+	return desc, &desc.Indexes[len(desc.Indexes)-1]
 }
 
 // makeTestIndexFromStr creates a test index from a string that enumerates the
@@ -64,7 +63,7 @@ func makeTestIndex(
 // it is descending.
 func makeTestIndexFromStr(
 	t *testing.T, columnsStr string,
-) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
+) (*sqlbase.ImmutableTableDescriptor, *sqlbase.IndexDescriptor) {
 	columns := strings.Split(columnsStr, ",")
 	dirs := make([]encoding.Direction, len(columns))
 	for i, c := range columns {
@@ -82,7 +81,7 @@ func makeSpans(
 	t *testing.T,
 	p *planner,
 	sql string,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	sel *renderNode,
 ) (_ *constraint.Constraint, spans roachpb.Spans) {
@@ -92,7 +91,8 @@ func makeSpans(
 		desc:  desc,
 		index: index,
 	}
-	o := xform.NewOptimizer(nil /* Catalog */)
+	var o xform.Optimizer
+	o.Init(p.EvalContext())
 	for _, c := range desc.Columns {
 		o.Memo().Metadata().AddColumn(c.Name, c.Type.ToDatumType())
 	}
@@ -100,17 +100,18 @@ func makeSpans(
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, o.Factory())
 	bld.AllowUnsupportedExpr = true
-	filterGroup, err := bld.Build(expr)
+	err := bld.Build(expr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	filterExpr := memo.MakeNormExprView(o.Memo(), filterGroup)
-	err = c.makeIndexConstraints(o, filterExpr, p.EvalContext())
+	filters := memo.FiltersExpr{{Condition: o.Memo().RootExpr().(opt.ScalarExpr)}}
+	err = c.makeIndexConstraints(&o, filters, p.EvalContext())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	spans, err = spansFromConstraint(desc, index, c.ic.Constraint())
+	spans, err = spansFromConstraint(desc, index, c.ic.Constraint(), exec.ColumnOrdinalSet{},
+		false /* forDelete */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +252,7 @@ func TestMakeSpans(t *testing.T) {
 				span := spans[0]
 				d.expected = d.expected[4:]
 				// Trim the index prefix from the span.
-				prefix := string(sqlbase.MakeIndexKeyPrefix(desc, index.ID))
+				prefix := string(sqlbase.MakeIndexKeyPrefix(desc.TableDesc(), index.ID))
 				got = strings.TrimPrefix(string(span.Key), prefix) + "-" +
 					strings.TrimPrefix(string(span.EndKey), prefix)
 			} else {

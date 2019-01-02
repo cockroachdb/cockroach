@@ -166,13 +166,6 @@ func (ecv *ExposedClusterVersion) Version() ClusterVersion {
 	return v
 }
 
-// HasBeenInitialized returns whether the cluster version has been initialized
-// yet and if Version can be safely called.
-func (ecv *ExposedClusterVersion) HasBeenInitialized() bool {
-	v := *ecv.baseVersion.Load().(*ClusterVersion)
-	return v != ClusterVersion{}
-}
-
 // BootstrapVersion returns the version a newly initialized cluster should have.
 func (ecv *ExposedClusterVersion) BootstrapVersion() ClusterVersion {
 	return ClusterVersion{

@@ -20,11 +20,12 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"runtime"
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
+	"github.com/cenkalti/backoff"
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -45,9 +46,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -169,10 +173,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
 	}
-
-	if params.ListeningURLFile != "" {
-		cfg.ListeningURLFile = params.ListeningURLFile
-	}
 	if params.DisableWebSessionAuthentication {
 		cfg.EnableWebSessionAuthentication = false
 	}
@@ -204,11 +204,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}
 	}
 	cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck = true
-
-	if params.ConnResultsBufferBytes != 0 {
-		cfg.ConnResultsBufferBytes = params.ConnResultsBufferBytes
-	}
-
 	return cfg
 }
 
@@ -322,7 +317,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		// Change the replication requirements so we don't get log spam about ranges
 		// not being replicated enough.
 		cfg := config.DefaultZoneConfig()
-		cfg.NumReplicas = 1
+		cfg.NumReplicas = proto.Int32(1)
 		fn := config.TestingSetDefaultZoneConfig(cfg)
 		params.Stopper.AddCloser(stop.CloserFn(fn))
 	}
@@ -336,6 +331,14 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
 		return err
+	}
+
+	// Create a breaker which never trips and never backs off to avoid
+	// introducing timing-based flakes.
+	ts.rpcContext.BreakerFactory = func() *circuit.Breaker {
+		return circuit.NewBreakerWithOptions(&circuit.Options{
+			BackOff: &backoff.ZeroBackOff{},
+		})
 	}
 
 	// Our context must be shared with our server.
@@ -368,6 +371,14 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 	return ExpectedInitialRangeCount(ts.DB())
 }
 
+// ExpectedInitialUserRangeCount returns the expected number of ranges that should
+// be on the server after initial (asynchronous) splits have been completed,
+// assuming no additional information is added outside of the normal bootstrap
+// process.
+func (ts *TestServer) ExpectedInitialUserRangeCount() int {
+	return ExpectedInitialUserRangeCount(ts.DB())
+}
+
 // ExpectedInitialRangeCount returns the expected number of ranges that should
 // be on the server after initial (asynchronous) splits have been completed,
 // assuming no additional information is added outside of the normal bootstrap
@@ -390,19 +401,16 @@ func ExpectedInitialRangeCount(db *client.DB) (int, error) {
 	}
 	systemTableSplits := int(maxSystemDescriptorID - keys.MaxSystemConfigDescID)
 
-	// User table splits are analogous to system table splits: they occur at every
-	// possible table boundary between the end of the system ID space
-	// (keys.MaxReservedDescID) and the user table with the maximum ID
-	// (maxUserDescriptorID), even when an ID within the span does not have an
-	// associated descriptor.
-	maxUserDescriptorID := descriptorIDs[len(descriptorIDs)-1]
-	userTableSplits := 0
-	if maxUserDescriptorID >= keys.MaxReservedDescID {
-		userTableSplits = int(maxUserDescriptorID - keys.MaxReservedDescID)
-	}
-
 	// `n` splits create `n+1` ranges.
-	return len(config.StaticSplits()) + systemTableSplits + userTableSplits + 1, nil
+	return len(config.StaticSplits()) + systemTableSplits + 1, nil
+}
+
+// ExpectedInitialUserRangeCount returns the expected number of user ranges that should
+// be on the server after initial (asynchronous) splits have been completed,
+// assuming no additional information is added outside of the normal bootstrap
+// process.
+func ExpectedInitialUserRangeCount(db *client.DB) int {
+	return 1
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial
@@ -420,17 +428,36 @@ func WaitForInitialSplits(db *client.DB) error {
 	if err != nil {
 		return err
 	}
-	return retry.ForDuration(initialSplitsTimeout, func() error {
+	err = retry.ForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
 		rows, err := db.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
 			return err
 		}
 		if a, e := len(rows), expectedRanges; a != e {
-			return errors.Errorf("had %d ranges at startup, expected %d", a, e)
+			err := errors.Errorf("had %d ranges at startup, expected %d", a, e)
+			log.InfoDepth(context.Background(), 3, err)
+			return err
 		}
 		return nil
 	})
+	if err == nil {
+		return nil
+	}
+
+	// TODO(peter): This is a debugging aid to track down the difficult to
+	// reproduce failures with the initial splits not finishing promptly.
+	for bufSize := 1 << 20; ; bufSize *= 2 {
+		buf := make([]byte, bufSize)
+		length := runtime.Stack(buf, true)
+		// If this wasn't large enough to accommodate the full set of
+		// stack traces, increase by 2 and try again.
+		if length == bufSize {
+			continue
+		}
+		log.Infof(context.TODO(), "%s\n%s", err, buf[:length])
+		return err
+	}
 }
 
 // Stores returns the collection of stores from this TestServer's node.
@@ -491,7 +518,11 @@ func (ts *TestServer) GetAuthenticatedHTTPClient() (http.Client, error) {
 	return httpClient, err
 }
 
-func (ts *TestServer) getAuthenticatedHTTPClientAndCookie() (http.Client, *serverpb.SessionCookie, error) {
+func (ts *TestServer) getAuthenticatedHTTPClientAndCookie() (
+	http.Client,
+	*serverpb.SessionCookie,
+	error,
+) {
 	ts.authClient.once.Do(func() {
 		// Create an authentication session for an arbitrary user. We do not
 		// currently have an authorization mechanism, so a specific user is not
@@ -506,7 +537,7 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie() (http.Client, *serve
 				Secret: secret,
 			}
 			// Encode a session cookie and store it in a cookie jar.
-			cookie, err := encodeSessionCookie(rawCookie)
+			cookie, err := EncodeSessionCookie(rawCookie)
 			if err != nil {
 				return err
 			}
@@ -540,8 +571,14 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 
 	ts.registry.Each(func(n string, v interface{}) {
 		if name == n {
-			c = v.(*metric.Counter).Count()
-			found = true
+			switch t := v.(type) {
+			case *metric.Counter:
+				c = t.Count()
+				found = true
+			case *metric.Gauge:
+				c = t.Value()
+				found = true
+			}
 		}
 	})
 	if !found {
@@ -556,7 +593,9 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	var found bool
 
 	reg := metric.NewRegistry()
-	reg.AddMetricStruct(ts.pgServer.Metrics())
+	for _, m := range ts.pgServer.Metrics() {
+		reg.AddMetricStruct(m)
+	}
 	reg.Each(func(n string, v interface{}) {
 		if name == n {
 			switch t := v.(type) {
@@ -762,6 +801,20 @@ func (ts *TestServer) GetRangeLease(
 // ExecutorConfig is part of the TestServerInterface.
 func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.execCfg
+}
+
+// GCSystemLog deletes entries in the given system log table between
+// timestamp and timestampUpperBound if the server is the lease holder
+// for range 1.
+// Leaseholder constraint is present so that only one node in the cluster
+// performs gc.
+// The system log table is expected to have a "timestamp" column.
+// It returns the timestampLowerBound to be used in the next iteration, number
+// of rows affected and error (if any).
+func (ts *TestServer) GCSystemLog(
+	ctx context.Context, table string, timestampLowerBound, timestampUpperBound time.Time,
+) (time.Time, int64, error) {
+	return ts.gcSystemLog(ctx, table, timestampLowerBound, timestampUpperBound)
 }
 
 type testServerFactoryImpl struct{}

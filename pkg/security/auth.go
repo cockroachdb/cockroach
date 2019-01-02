@@ -18,8 +18,6 @@ import (
 	"crypto/tls"
 
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 const (
@@ -45,37 +43,6 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	// any following certificates as intermediates. See:
 	// https://github.com/golang/go/blob/go1.8.1/src/crypto/tls/handshake_server.go#L723:L742
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
-}
-
-// RequestWithUser must be implemented by `roachpb.Request`s which are
-// arguments to methods that are not permitted to skip user checks.
-type RequestWithUser interface {
-	GetUser() string
-}
-
-// ProtoAuthHook builds an authentication hook based on the security
-// mode and client certificate.
-// The protoutil.Message passed to the hook must implement RequestWithUser.
-func ProtoAuthHook(
-	insecureMode bool, tlsState *tls.ConnectionState,
-) (func(protoutil.Message, bool) error, error) {
-	userHook, err := UserAuthCertHook(insecureMode, tlsState)
-	if err != nil {
-		return nil, err
-	}
-
-	return func(request protoutil.Message, clientConnection bool) error {
-		// RequestWithUser must be implemented.
-		requestWithUser, ok := request.(RequestWithUser)
-		if !ok {
-			return errors.Errorf("unknown request type: %T", request)
-		}
-
-		if err := userHook(requestWithUser.GetUser(), clientConnection); err != nil {
-			return errors.Errorf("%s error in request: %s", err, request)
-		}
-		return nil
-	}, nil
 }
 
 // UserAuthCertHook builds an authentication hook based on the security
@@ -139,9 +106,14 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 
 		// If the requested user has an empty password, disallow authentication.
 		if len(password) == 0 || CompareHashAndPassword(hashedPassword, password) != nil {
-			return errors.New("invalid password")
+			return errors.Errorf(ErrPasswordUserAuthFailed, requestedUser)
 		}
 
 		return nil
 	}
 }
+
+// ErrPasswordUserAuthFailed is the error template for failed password auth
+// of a user. It should be used when the password is incorrect or the user
+// does not exist.
+const ErrPasswordUserAuthFailed = "password authentication failed for user %s"

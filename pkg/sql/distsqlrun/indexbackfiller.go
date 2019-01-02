@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -32,6 +33,8 @@ type indexBackfiller struct {
 	backfiller
 
 	backfill.IndexBackfiller
+
+	desc *sqlbase.ImmutableTableDescriptor
 }
 
 var _ Processor = &indexBackfiller{}
@@ -40,11 +43,12 @@ var _ chunkBackfiller = &indexBackfiller{}
 func newIndexBackfiller(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec BackfillerSpec,
-	post *PostProcessSpec,
+	spec distsqlpb.BackfillerSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*indexBackfiller, error) {
 	ib := &indexBackfiller{
+		desc: sqlbase.NewImmutableTableDescriptor(spec.Table),
 		backfiller: backfiller{
 			name:        "Index",
 			filter:      backfill.IndexMutationFilter,
@@ -56,7 +60,7 @@ func newIndexBackfiller(
 	}
 	ib.backfiller.chunkBackfiller = ib
 
-	if err := ib.IndexBackfiller.Init(ib.spec.Table); err != nil {
+	if err := ib.IndexBackfiller.Init(ib.desc); err != nil {
 		return nil, err
 	}
 
@@ -82,18 +86,13 @@ func (ib *indexBackfiller) runChunk(
 	ctx, traceSpan := tracing.ChildSpan(tctx, "chunk")
 	defer tracing.FinishSpan(traceSpan)
 
-	added := make([]sqlbase.IndexDescriptor, len(mutations))
-	for i, m := range mutations {
-		added[i] = *m.GetIndex()
-	}
-
 	var key roachpb.Key
 	transactionalChunk := func(ctx context.Context) error {
-		return ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			// TODO(knz): do KV tracing in DistSQL processors.
 			var err error
 			key, err = ib.RunIndexBackfillChunk(
-				ctx, txn, ib.spec.Table, sp, chunkSize, true /*alsoCommit*/, false /*traceKV*/)
+				ctx, txn, ib.desc, sp, chunkSize, true /*alsoCommit*/, false /*traceKV*/)
 			return err
 		})
 	}
@@ -111,12 +110,12 @@ func (ib *indexBackfiller) runChunk(
 	*/
 
 	var entries []sqlbase.IndexEntry
-	if err := ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
 
 		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
-		entries, key, err = ib.BuildIndexEntriesChunk(ctx, txn, ib.spec.Table, sp, chunkSize, false /*traceKV*/)
+		entries, key, err = ib.BuildIndexEntriesChunk(ctx, txn, ib.desc, sp, chunkSize, false /*traceKV*/)
 		return err
 	}); err != nil {
 		return nil, err
@@ -124,7 +123,7 @@ func (ib *indexBackfiller) runChunk(
 
 	retried := false
 	// Write the new index values.
-	if err := ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		batch := txn.NewBatch()
 
 		for _, entry := range entries {

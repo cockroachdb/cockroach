@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import React from "react";
 import _ from "lodash";
 
@@ -57,6 +71,21 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
+    <LineGraph title="Average Queries per Store" tooltip={`Exponentially weighted moving average of the number of KV batch requests processed by leaseholder replicas on each store per second. Tracks roughly the last 30 minutes of requests. Used for load-based rebalancing decisions.`}>
+      <Axis label="queries">
+        {
+          _.map(nodeIDs, (nid) => (
+            <Metric
+              key={nid}
+              name="cr.store.rebalancing.queriespersecond"
+              title={nodeDisplayName(nodesSummary, nid)}
+              sources={storeIDsForNode(nodesSummary, nid)}
+            />
+          ))
+        }
+      </Axis>
+    </LineGraph>,
+
     <LineGraph title="Logical Bytes per Store" tooltip={`The number of logical bytes of data on each store.`}>
       <Axis units={AxisUnits.Bytes} label="logical store size">
         {
@@ -85,6 +114,8 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.store.range.adds" title="Adds" nonNegativeRate />
         <Metric name="cr.store.range.removes" title="Removes" nonNegativeRate />
         <Metric name="cr.store.leases.transfers.success" title="Lease Transfers" nonNegativeRate />
+        <Metric name="cr.store.rebalancing.lease.transfers" title="Load-based Lease Transfers" nonNegativeRate />
+        <Metric name="cr.store.rebalancing.range.rebalances" title="Load-based Range Rebalances" nonNegativeRate />
       </Axis>
     </LineGraph>,
 

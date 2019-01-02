@@ -53,7 +53,7 @@ func (ex *connExecutor) execPrepare(
 	}
 
 	ps, err := ex.addPreparedStmt(
-		ctx, parseCmd.Name, Statement{AST: parseCmd.Stmt}, parseCmd.TypeHints,
+		ctx, parseCmd.Name, Statement{SQL: parseCmd.SQL, AST: parseCmd.Stmt}, parseCmd.TypeHints,
 	)
 	if err != nil {
 		return retErr(err)
@@ -164,6 +164,10 @@ func (ex *connExecutor) prepare(
 	prepared.Statement = stmt.AST
 	prepared.AnonymizedStr = anonymizeStmt(stmt)
 
+	// Point to the prepared state, which can be further populated during query
+	// preparation.
+	stmt.Prepared = prepared
+
 	if err := placeholderHints.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
 		return nil, err
 	}
@@ -172,7 +176,7 @@ func (ex *connExecutor) prepare(
 	// TODO(andrei): Needing a transaction for preparing seems non-sensical, as
 	// the prepared statement outlives the txn. I hope that it's not used for
 	// anything other than getting a timestamp.
-	txn := client.NewTxn(ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
+	txn := client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
 
 	// Create a plan for the statement to figure out the typing, then close the
 	// plan.
@@ -193,11 +197,7 @@ func (ex *connExecutor) prepare(
 			return err
 		}
 		if protoTS != nil {
-			p.asOfSystemTime = true
-			// We can't use cached descriptors anywhere in this query, because
-			// we want the descriptors at the timestamp given, not the latest
-			// known to the cache.
-			p.avoidCachedDescriptors = true
+			p.semaCtx.AsOfTimestamp = protoTS
 			txn.SetFixedTimestamp(ctx, *protoTS)
 		}
 
@@ -209,9 +209,9 @@ func (ex *connExecutor) prepare(
 		// As of right now, the optimizer only works on SELECT statements and will
 		// fallback for all others, so this should be safe for the foreseeable
 		// future.
-		if optimizerPlanned, err := p.optionallyUseOptimizer(ctx, ex.sessionData, stmt); err != nil {
+		if flags, err := p.optionallyUseOptimizer(ctx, ex.sessionData, stmt); err != nil {
 			return err
-		} else if !optimizerPlanned {
+		} else if !flags.IsSet(planFlagOptUsed) {
 			isCorrelated := p.curPlan.isCorrelated
 			log.VEventf(ctx, 1, "query is correlated: %v", isCorrelated)
 			// Fallback if the optimizer was not enabled or used.
@@ -243,16 +243,16 @@ func (ex *connExecutor) prepare(
 		return nil, err
 	}
 
-	// Account for the memory used by this prepared statement: for now we are just
-	// counting the size of the query string (we'll account for the statement name
-	// at a higher layer). When we start storing the prepared query plan during
-	// prepare, this should be tallied up to the monitor as well.
-	if err := prepared.memAcc.Grow(ctx,
-		int64(len(prepared.Str)+int(unsafe.Sizeof(*prepared))),
-	); err != nil {
+	// Account for the memory used by this prepared statement:
+	//   1. Size of the query string and prepared struct.
+	//   2. Size of the prepared memo, if using the cost-based optimizer.
+	size := int64(len(prepared.Str) + int(unsafe.Sizeof(*prepared)))
+	if prepared.Memo != nil {
+		size += prepared.Memo.MemoryEstimate()
+	}
+	if err := prepared.memAcc.Grow(ctx, size); err != nil {
 		return nil, err
 	}
-
 	return prepared, nil
 }
 
@@ -328,6 +328,9 @@ func (ex *connExecutor) execBind(
 					"expected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
 		}
 
+		ptCtx := tree.NewParseTimeContext(ex.sessionData.DurationAdditionMode,
+			ex.state.sqlTimestamp.In(ex.sessionData.DataConversion.Location))
+
 		for i, arg := range bindCmd.Args {
 			k := strconv.Itoa(i + 1)
 			t := ps.InTypes[i]
@@ -335,7 +338,7 @@ func (ex *connExecutor) execBind(
 				// nil indicates a NULL argument value.
 				qargs[k] = tree.DNull
 			} else {
-				d, err := pgwirebase.DecodeOidDatum(t, qArgFormatCodes[i], arg)
+				d, err := pgwirebase.DecodeOidDatum(ptCtx, t, qArgFormatCodes[i], arg)
 				if err != nil {
 					if _, ok := err.(*pgerror.Error); ok {
 						return retErr(err)

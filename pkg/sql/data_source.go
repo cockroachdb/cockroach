@@ -17,14 +17,12 @@ package sql
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // For more detailed documentation on DataSourceInfos, see
@@ -101,14 +99,14 @@ func (p *planner) getVirtualDataSource(
 // getDataSource builds a planDataSource from a single data source clause
 // (TableExpr) in a SelectClause.
 func (p *planner) getDataSource(
-	ctx context.Context, src tree.TableExpr, hints *tree.IndexHints, scanVisibility scanVisibility,
+	ctx context.Context,
+	src tree.TableExpr,
+	indexFlags *tree.IndexFlags,
+	scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	switch t := src.(type) {
-	case *tree.NormalizableTableName:
-		tn, err := t.Normalize()
-		if err != nil {
-			return planDataSource{}, err
-		}
+	case *tree.TableName:
+		tn := t
 
 		// If there's a CTE with this name, it takes priority over the normal flow.
 		ds, foundCTE, err := p.getCTEDataSource(tn)
@@ -120,12 +118,12 @@ func (p *planner) getDataSource(
 		if err != nil {
 			return planDataSource{}, err
 		}
-		if desc.IsVirtualTable() {
+		if desc.IsVirtualTable() && !desc.IsView() {
 			return p.getVirtualDataSource(ctx, tn)
 		}
 
 		colCfg := scanColumnsConfig{visibility: scanVisibility}
-		return p.getPlanForDesc(ctx, desc, tn, hints, colCfg)
+		return p.getPlanForDesc(ctx, desc, tn, indexFlags, colCfg)
 
 	case *tree.RowsFromExpr:
 		return p.getPlanForRowsFrom(ctx, t.Items...)
@@ -161,19 +159,19 @@ func (p *planner) getDataSource(
 		}, nil
 
 	case *tree.ParenTableExpr:
-		return p.getDataSource(ctx, t.Expr, hints, scanVisibility)
+		return p.getDataSource(ctx, t.Expr, indexFlags, scanVisibility)
 
 	case *tree.TableRef:
-		return p.getTableScanByRef(ctx, t, hints, scanVisibility)
+		return p.getTableScanByRef(ctx, t, indexFlags, scanVisibility)
 
 	case *tree.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
 
-		if t.Hints != nil {
-			hints = t.Hints
+		if t.IndexFlags != nil {
+			indexFlags = t.IndexFlags
 		}
 
-		src, err := p.getDataSource(ctx, t.Expr, hints, scanVisibility)
+		src, err := p.getDataSource(ctx, t.Expr, indexFlags, scanVisibility)
 		if err != nil {
 			return src, err
 		}
@@ -193,38 +191,23 @@ func (p *planner) getDataSource(
 	}
 }
 
-// QualifyWithDatabase asserts that the table with the given name
-// exists, and expands its table name with the details about its path.
-func (p *planner) QualifyWithDatabase(
-	ctx context.Context, t *tree.NormalizableTableName,
-) (*tree.TableName, error) {
-	tn, err := t.Normalize()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType); err != nil {
-		return nil, err
-	}
-	return tn, nil
-}
-
-func (p *planner) getTableDescByID(
-	ctx context.Context, tableID sqlbase.ID,
-) (*sqlbase.TableDescriptor, error) {
-	// TODO(knz): replace this by an API on SchemaAccessor/SchemaResolver.
-	descFunc := p.Tables().getTableVersionByID
-	if p.avoidCachedDescriptors {
-		descFunc = sqlbase.GetTableDescFromID
-	}
-	return descFunc(ctx, p.txn, tableID)
-}
-
 func (p *planner) getTableScanByRef(
-	ctx context.Context, tref *tree.TableRef, hints *tree.IndexHints, scanVisibility scanVisibility,
+	ctx context.Context,
+	tref *tree.TableRef,
+	indexFlags *tree.IndexFlags,
+	scanVisibility scanVisibility,
 ) (planDataSource, error) {
-	desc, err := p.getTableDescByID(ctx, sqlbase.ID(tref.TableID))
+	flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{
+		avoidCached: p.avoidCachedDescriptors,
+	}}
+	desc, err := p.Tables().getTableVersionByID(ctx, p.txn, sqlbase.ID(tref.TableID), flags)
 	if err != nil {
 		return planDataSource{}, errors.Wrapf(err, "%s", tree.ErrString(tref))
+	}
+
+	if tref.Columns != nil && len(tref.Columns) == 0 {
+		return planDataSource{}, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"an explicit list of column IDs must include at least one column")
 	}
 
 	// Ideally, we'd like to populate DatabaseName here, however that
@@ -237,12 +220,21 @@ func (p *planner) getTableScanByRef(
 	// error messages (we want `foo` not `"".foo`).
 	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.Name))
 
+	// Add mutation columns to list of wanted columns if they were requested.
+	wantedColumns := tref.Columns
+	if scanVisibility == publicAndNonPublicColumns {
+		wantedColumns = wantedColumns[:len(wantedColumns):len(wantedColumns)]
+		for _, c := range desc.MutationColumns() {
+			wantedColumns = append(wantedColumns, tree.ColumnID(c.ID))
+		}
+	}
+
 	colCfg := scanColumnsConfig{
-		wantedColumns:       tref.Columns,
+		wantedColumns:       wantedColumns,
 		addUnwantedAsHidden: true,
 		visibility:          scanVisibility,
 	}
-	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, colCfg)
+	src, err := p.getPlanForDesc(ctx, desc, &tn, indexFlags, colCfg)
 	if err != nil {
 		return src, err
 	}
@@ -271,24 +263,9 @@ func renameSource(
 		if vg, ok := src.plan.(*projectSetNode); ok &&
 			isAnonymousTable && noColNameSpecified && len(vg.funcs) == 1 {
 			// And we only pluck the name if the projection is done over the
-			// unary table.
-			if _, ok := vg.source.(*unaryNode); ok {
-				shouldRename := false
-				isGenerator := vg.funcs[0] != nil
-				if isGenerator {
-					// And there is just one column in the result.
-					if tType, ok := vg.funcs[0].ResolvedType().(types.TTuple); ok &&
-						len(tType.Types) == 1 {
-						shouldRename = true
-					}
-				} else {
-					// It's also legal to select from a scalar function, and we can
-					// rename the column in that case as well.
-					shouldRename = true
-				}
-				if shouldRename {
-					colAlias = tree.NameList{as.Alias}
-				}
+			// unary table, and there is just one column in the result.
+			if _, ok := vg.source.(*unaryNode); ok && vg.numColsPerGen[0] == 1 {
+				colAlias = tree.NameList{as.Alias}
 			}
 		}
 
@@ -325,9 +302,9 @@ func renameSource(
 
 func (p *planner) getPlanForDesc(
 	ctx context.Context,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	tn *tree.TableName,
-	hints *tree.IndexHints,
+	indexFlags *tree.IndexFlags,
 	colCfg scanColumnsConfig,
 ) (planDataSource, error) {
 	if desc.IsView() {
@@ -347,9 +324,10 @@ func (p *planner) getPlanForDesc(
 
 	// This name designates a real table.
 	scan := p.Scan()
-	if err := scan.initTable(ctx, p, desc, hints, colCfg); err != nil {
+	if err := scan.initTable(ctx, p, desc, indexFlags, colCfg); err != nil {
 		return planDataSource{}, err
 	}
+	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&p.extendedEvalCtx.Settings.SV)
 
 	ds := planDataSource{
 		info: sqlbase.NewSourceInfoForSingleTable(*tn, planColumns(scan)),
@@ -362,7 +340,7 @@ func (p *planner) getPlanForDesc(
 // getViewPlan builds a planDataSource for the view specified by the
 // table name and descriptor, expanding out its subquery plan.
 func (p *planner) getViewPlan(
-	ctx context.Context, tn *tree.TableName, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.TableName, desc *sqlbase.ImmutableTableDescriptor,
 ) (planDataSource, error) {
 	stmt, err := parser.ParseOne(desc.ViewQuery)
 	if err != nil {
@@ -442,7 +420,7 @@ func (p *planner) getPlanForRowsFrom(
 }
 
 func (p *planner) getSequenceSource(
-	ctx context.Context, tn tree.TableName, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn tree.TableName, desc *sqlbase.ImmutableTableDescriptor,
 ) (planDataSource, error) {
 	if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 		return planDataSource{}, err
@@ -471,16 +449,18 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 	if ate, ok := n.(*tree.AliasedTableExpr); ok {
 		n = ate.Expr
 		// It's okay to ignore the As columns here, as they're not permitted in
-		// DML aliases where this function is used.
-		alias = tree.NewUnqualifiedTableName(ate.As.Alias)
+		// DML aliases where this function is used. The grammar does not allow
+		// them, so the parser would have reported an error if they were present.
+		if ate.As.Alias != "" {
+			alias = tree.NewUnqualifiedTableName(ate.As.Alias)
+		}
 	}
-	table, ok := n.(*tree.NormalizableTableName)
+	tn, ok := n.(*tree.TableName)
 	if !ok {
-		return nil, nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
-	}
-	tn, err := table.Normalize()
-	if err != nil {
-		return nil, nil, err
+		return nil, nil, pgerror.Unimplemented(
+			"complex table expression in UPDATE/DELETE",
+			"cannot use a complex table name with DELETE/UPDATE",
+		)
 	}
 	if alias == nil {
 		alias = tn

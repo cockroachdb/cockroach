@@ -17,8 +17,6 @@ package sql
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 type scatterNode struct {
@@ -97,11 +96,11 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			}
 		}
 
-		span.Key, err = getRowKey(tableDesc, index, fromVals)
+		span.Key, err = getRowKey(tableDesc.TableDesc(), index, fromVals)
 		if err != nil {
 			return nil, err
 		}
-		span.EndKey, err = getRowKey(tableDesc, index, toVals)
+		span.EndKey, err = getRowKey(tableDesc.TableDesc(), index, toVals)
 		if err != nil {
 			return nil, err
 		}

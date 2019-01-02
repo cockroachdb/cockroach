@@ -22,8 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -37,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
@@ -50,12 +50,12 @@ type testQueueImpl struct {
 }
 
 func (tq *testQueueImpl) shouldQueue(
-	_ context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+	_ context.Context, now hlc.Timestamp, r *Replica, _ *config.SystemConfig,
 ) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(_ context.Context, _ *Replica, _ config.SystemConfig) error {
+func (tq *testQueueImpl) process(_ context.Context, _ *Replica, _ *config.SystemConfig) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
 }
@@ -101,7 +101,7 @@ func createReplicas(t *testing.T, tc *testContext, num int) []*Replica {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tc.store.RemoveReplica(context.Background(), repl1, *repl1.Desc(), RemoveOptions{
+	if err := tc.store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Fatal(err)
@@ -128,14 +128,15 @@ func TestQueuePriorityQueue(t *testing.T) {
 	// establish the priority queue (heap) invariants.
 	const count = 3
 	expRanges := make([]roachpb.RangeID, count+1)
-	pq := make(priorityQueue, count)
+	pq := priorityQueue{}
+	pq.sl = make([]*replicaItem, count)
 	for i := 0; i < count; {
-		pq[i] = &replicaItem{
+		pq.sl[i] = &replicaItem{
 			value:    roachpb.RangeID(i),
 			priority: float64(i),
 			index:    i,
 		}
-		expRanges[3-i] = pq[i].value
+		expRanges[3-i] = pq.sl[i].value
 		i++
 	}
 	heap.Init(&pq)
@@ -290,6 +291,48 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 	if v := bq.pending.Value(); v != 0 {
 		t.Errorf("expected 0 pending replicas; got %d", v)
+	}
+}
+
+// TestBaseQueueSamePriorityFIFO verifies that if multiple items are queued at
+// the same priority, they will be processes in first-in-first-out order.
+// This avoids starvation scenarios, in particular in the Raft snapshot queue.
+//
+// See:
+// https://github.com/cockroachdb/cockroach/issues/31947#issuecomment-434383267
+func TestBaseQueueSamePriorityFIFO(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	repls := createReplicas(t, &tc, 5)
+
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			t.Fatal("unexpected call to shouldQueue")
+			return false, 0.0
+		},
+	}
+
+	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 100})
+
+	for _, repl := range repls {
+		added, err := bq.Add(repl, 0.0)
+		if err != nil {
+			t.Fatal(errors.Wrap(err, repl.String()))
+		}
+		if !added {
+			t.Fatalf("%v not added", repl)
+		}
+	}
+	for _, expRepl := range repls {
+		actRepl := bq.pop()
+		if actRepl != expRepl {
+			t.Fatalf("expected %v, got %v", expRepl, actRepl)
+		}
 	}
 }
 
@@ -537,7 +580,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := s.RemoveReplica(context.Background(), repl1, *repl1.Desc(), RemoveOptions{
+	if err := s.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -566,11 +609,10 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.Start(stopper)
 
 	// Check our config.
-	var sysCfg config.SystemConfig
+	var sysCfg *config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
-		var ok bool
-		sysCfg, ok = s.cfg.Gossip.GetSystemConfig()
-		if !ok {
+		sysCfg = s.cfg.Gossip.GetSystemConfig()
+		if sysCfg == nil {
 			return errors.New("system config not yet present")
 		}
 		return nil
@@ -606,7 +648,9 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	// Now add a user object, it will trigger a split.
 	// The range willSplit starts at the beginning of the user data range,
 	// which means keys.MaxReservedDescID+1.
-	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, config.ZoneConfig{RangeMaxBytes: 1 << 20})
+	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
+	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, zoneConfig)
 
 	// Check our config.
 	neverSplitsDesc = neverSplits.Desc()
@@ -781,7 +825,7 @@ type processTimeoutQueueImpl struct {
 }
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context, r *Replica, _ config.SystemConfig,
+	ctx context.Context, r *Replica, _ *config.SystemConfig,
 ) error {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -839,7 +883,7 @@ type processTimeQueueImpl struct {
 }
 
 func (pq *processTimeQueueImpl) process(
-	_ context.Context, _ *Replica, _ config.SystemConfig,
+	_ context.Context, _ *Replica, _ *config.SystemConfig,
 ) error {
 	time.Sleep(5 * time.Millisecond)
 	return nil
@@ -970,7 +1014,7 @@ type parallelQueueImpl struct {
 }
 
 func (pq *parallelQueueImpl) process(
-	ctx context.Context, repl *Replica, cfg config.SystemConfig,
+	ctx context.Context, repl *Replica, cfg *config.SystemConfig,
 ) error {
 	atomic.AddInt32(&pq.processing, 1)
 	if pq.processBlocker != nil {

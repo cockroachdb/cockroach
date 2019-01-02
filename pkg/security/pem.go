@@ -20,6 +20,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"io"
 	"os"
 	"strings"
 
@@ -30,7 +31,7 @@ import (
 // The file "path" is created with "mode" and WRONLY|CREATE.
 // If overwrite is true, the file will be overwritten if it exists.
 func WritePEMToFile(path string, mode os.FileMode, overwrite bool, blocks ...*pem.Block) error {
-	flags := os.O_WRONLY | os.O_CREATE
+	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	if !overwrite {
 		flags |= os.O_EXCL
 	}
@@ -48,6 +49,29 @@ func WritePEMToFile(path string, mode os.FileMode, overwrite bool, blocks ...*pe
 	return f.Close()
 }
 
+// SafeWriteToFile writes the passed-in bytes to a file.
+// The file "path" is created with "mode" and WRONLY|CREATE.
+// If overwrite is true, the file will be overwritten if it exists.
+func SafeWriteToFile(path string, mode os.FileMode, overwrite bool, contents []byte) error {
+	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if !overwrite {
+		flags |= os.O_EXCL
+	}
+	f, err := os.OpenFile(path, flags, mode)
+	if err != nil {
+		return err
+	}
+
+	n, err := f.Write(contents)
+	if err == nil && n < len(contents) {
+		err = io.ErrShortWrite
+	}
+	if err1 := f.Close(); err == nil {
+		err = err1
+	}
+	return err
+}
+
 // PrivateKeyToPEM generates a PEM block from a private key.
 func PrivateKeyToPEM(key crypto.PrivateKey) (*pem.Block, error) {
 	switch k := key.(type) {
@@ -62,6 +86,11 @@ func PrivateKeyToPEM(key crypto.PrivateKey) (*pem.Block, error) {
 	default:
 		return nil, errors.Errorf("unknown key type: %v", k)
 	}
+}
+
+// PrivateKeyToPKCS8 encodes a private key into PKCS#8.
+func PrivateKeyToPKCS8(key crypto.PrivateKey) ([]byte, error) {
+	return x509.MarshalPKCS8PrivateKey(key)
 }
 
 // PEMToCertificates parses multiple certificate PEM blocks and returns them.

@@ -18,20 +18,20 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 type planMaker interface {
@@ -189,6 +189,10 @@ var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &projectSetNode{}
 var _ planNode = &relocateNode{}
+var _ planNode = &renameColumnNode{}
+var _ planNode = &renameDatabaseNode{}
+var _ planNode = &renameIndexNode{}
+var _ planNode = &renameTableNode{}
 var _ planNode = &renderNode{}
 var _ planNode = &rowCountNode{}
 var _ planNode = &scanNode{}
@@ -199,11 +203,13 @@ var _ planNode = &showRangesNode{}
 var _ planNode = &showTraceNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
+var _ planNode = &truncateNode{}
 var _ planNode = &unaryNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &updateNode{}
 var _ planNode = &upsertNode{}
 var _ planNode = &valuesNode{}
+var _ planNode = &virtualTableNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &zeroNode{}
 
@@ -278,9 +284,6 @@ type planTop struct {
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
 
-	// plannedExecute is true if this planner has planned an EXECUTE statement.
-	plannedExecute bool
-
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent
@@ -298,7 +301,7 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 	// Reinitialize.
 	p.curPlan = planTop{AST: stmt.AST}
 
-	log.VEvent(ctx, 1, "heuristic planner starts")
+	log.VEvent(ctx, 2, "heuristic planner starts")
 
 	var err error
 	p.curPlan.plan, err = p.newPlan(ctx, stmt.AST, nil /*desiredTypes*/)
@@ -327,7 +330,7 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 		return err
 	}
 
-	log.VEvent(ctx, 1, "heuristic planner optimizes plan")
+	log.VEvent(ctx, 2, "heuristic planner optimizes plan")
 
 	needed := allColumns(p.curPlan.plan)
 	p.curPlan.plan, err = p.optimizePlan(ctx, p.curPlan.plan, needed)
@@ -336,7 +339,7 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 		return err
 	}
 
-	log.VEvent(ctx, 1, "heuristic planner optimizes subqueries")
+	log.VEvent(ctx, 2, "heuristic planner optimizes subqueries")
 
 	// Now do the same work for all sub-queries.
 	for i := range p.curPlan.subqueryPlans {
@@ -354,9 +357,11 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 	return nil
 }
 
-// makeOptimizerPlan is an alternative to makePlan which uses the (experimental)
-// optimizer.
-func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
+// makeOptimizerPlan is an alternative to makePlan which uses the cost-based
+// optimizer. On success, the returned flags always have planFlagOptUsed set.
+func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFlags, error) {
+	flags := planFlagOptUsed
+
 	// Ensure that p.curPlan is populated in case an error occurs early,
 	// so that maybeLogStatement in the error case does not find an empty AST.
 	p.curPlan = planTop{AST: stmt.AST}
@@ -364,64 +369,211 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	// Start with fast check to see if top-level statement is supported.
 	switch stmt.AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
-		*tree.UnionClause, *tree.ValuesClause, *tree.Explain:
+		*tree.UnionClause, *tree.ValuesClause, *tree.Explain,
+		*tree.Insert, *tree.Update:
 
 	default:
-		return pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
+		return 0, pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
 	}
 
 	var catalog optCatalog
 	catalog.init(p.execCfg.TableStatsCache, p)
 
-	o := xform.NewOptimizer(p.EvalContext())
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, o.Factory(), stmt.AST)
-	root, props, err := bld.Build()
+	p.optimizer.Init(p.EvalContext())
+	f := p.optimizer.Factory()
 
-	// Remember whether the plan was correlated before processing the
-	// error. This way, the executor will abort early with a useful error message instead of trying
-	// the heuristic planner.
-	p.curPlan.isCorrelated = bld.IsCorrelated
-
-	if err != nil {
-		return err
+	// If the current transaction has uncommitted DDL statements, we cannot rely
+	// on descriptor versions for detecting a "stale" memo. This is because
+	// descriptor versions are bumped at most once per transaction, even if there
+	// are multiple DDL operations; and transactions can be aborted leading to
+	// potential reuse of versions. To avoid these issues, we prevent saving a
+	// memo (for prepare) or reusing a saved memo (for execute).
+	noMemoReuse := p.Tables().hasUncommittedTables()
+	useCache := !noMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
+	cacheLog := func(msg string) {
+		if log.V(1) {
+			log.Infof(ctx, "%s: %s", msg, stmt)
+		} else {
+			log.Event(ctx, msg)
+		}
 	}
 
-	// If in the PREPARE phase, construct a dummy plan that has correct output
-	// columns. Only output columns and placeholder types are needed.
-	if p.extendedEvalCtx.PrepareOnly {
-		md := o.Memo().Metadata()
-		resultCols := make(sqlbase.ResultColumns, len(props.Presentation))
-		for i, col := range props.Presentation {
-			resultCols[i].Name = col.Label
-			resultCols[i].Typ = md.ColumnType(col.ID)
+	// We have three distinct code paths:
+	//   1. Prepare
+	//   2. Execute a previously prepared statement
+	//   3. Execute without prior Prepare
+	//
+	// A note on the hasUncommittedTables checks below. If the current transaction
+	// has uncommitted DDL statements, then we assume they may have changed schema
+	// on which the prepared state depends; this is a separate check because the
+	// descriptor versions are bumped at most once per transaction, even if there
+	// are multiple DDL operations.
+	if p.EvalContext().PrepareOnly {
+		// 1. We are preparing a statement.
+		//
+		memo, err := p.prepareMemo(ctx, &catalog, stmt)
+		if err != nil {
+			return 0, err
+		}
+		if !noMemoReuse {
+			stmt.Prepared.Memo = memo
+		}
+
+		// Construct a dummy plan that has correct output columns. Only output
+		// columns and placeholder types are needed.
+		md := memo.Metadata()
+		physical := memo.RootProps()
+		resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
+		for i, col := range physical.Presentation {
+			resultCols[i].Name = col.Alias
+			resultCols[i].Typ = md.ColumnMeta(col.ID).Type
 		}
 		p.curPlan.plan = &zeroNode{columns: resultCols}
-		return nil
+		return flags, nil
 	}
 
-	ev := o.Optimize(root, props)
+	var execMemo *memo.Memo
+	var err error
+	if stmt.Prepared != nil && stmt.Prepared.Memo != nil && !noMemoReuse {
+		// 2. We are executing a previously prepared statement.
 
-	factory := makeExecFactory(ctx, p)
-	plan, err := execbuilder.New(&factory, ev).Build()
+		// If the prepared memo has been invalidated by schema or other changes,
+		// re-prepare it.
+		if stmt.Prepared.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
+			stmt.Prepared.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
+			if err != nil {
+				return 0, err
+			}
+		}
+
+		execMemo, err = p.reuseMemo(stmt.Prepared.Memo)
+	} else if useCache {
+		// Consult the query cache.
+		cachedData, ok := p.execCfg.QueryCache.Find(stmt.SQL)
+		if ok {
+			if cachedData.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
+				cachedData.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
+				if err != nil {
+					return 0, err
+				}
+				// Update the plan in the cache.
+				p.execCfg.QueryCache.Add(&cachedData)
+				cacheLog("query cache hit but needed update")
+				flags.Set(planFlagOptCacheMiss)
+			} else {
+				cacheLog("query cache hit")
+				flags.Set(planFlagOptCacheHit)
+			}
+			execMemo, err = p.reuseMemo(cachedData.Memo)
+		} else {
+			flags.Set(planFlagOptCacheMiss)
+			cacheLog("query cache miss")
+		}
+	}
+
 	if err != nil {
-		return err
+		return 0, err
+	}
+
+	if execMemo == nil {
+		// 3. We are executing a statement that was not prepared, we fell back to
+		// the heuristic planner during prepare, or this transaction is changing a
+		// schema.
+		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
+		if err := bld.Build(); err != nil {
+			// isCorrelated is used in the fallback case to create a better error.
+			p.curPlan.isCorrelated = bld.IsCorrelated
+			return 0, err
+		}
+		p.optimizer.Optimize()
+		execMemo = f.Memo()
+
+		// If this statement doesn't have placeholders, add it to the cache. Note
+		// that non-prepared statements from pgwire clients cannot have
+		// placeholders.
+		if useCache && !bld.HadPlaceholders {
+			execMemo = p.optimizer.DetachMemo()
+			cachedData := querycache.CachedData{
+				SQL:  stmt.SQL,
+				Memo: execMemo,
+			}
+			p.execCfg.QueryCache.Add(&cachedData)
+			cacheLog("query cache add")
+		}
+	}
+
+	// Build the plan tree and store it in planner.curPlan.
+	root := execMemo.RootExpr()
+	execFactory := makeExecFactory(p)
+	plan, err := execbuilder.New(&execFactory, execMemo, root, p.EvalContext()).Build()
+	if err != nil {
+		return 0, err
 	}
 
 	p.curPlan = *plan.(*planTop)
-	// Since the assignment above just cleared the AST and isCorrelated
-	// field, we need to set them again.
+	// Since the assignment above just cleared the AST, we need to set it again.
 	p.curPlan.AST = stmt.AST
-	p.curPlan.isCorrelated = bld.IsCorrelated
 
 	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+			return 0, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
 				"cached plan must not change result type")
 		}
 	}
 
-	return nil
+	return flags, nil
+}
+
+// prepareMemo builds the statement into a memo that can be stored for prepared
+// statements and can later be used as a starting point for optimization.
+func (p *planner) prepareMemo(
+	ctx context.Context, catalog *optCatalog, stmt Statement,
+) (*memo.Memo, error) {
+	// Build the Memo (optbuild) and apply normalization rules to it. If the
+	// query contains placeholders, values are not assigned during this phase,
+	// as that only happens during the EXECUTE phase. If the query does not
+	// contain placeholders, then also apply exploration rules to the Memo so
+	// that there's even less to do during the EXECUTE phase.
+	//
+	f := p.optimizer.Factory()
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), catalog, f, stmt.AST)
+	bld.KeepPlaceholders = true
+	if err := bld.Build(); err != nil {
+		// isCorrelated is used in the fallback case to create a better error.
+		// TODO(radu): setting the flag here is a bit hacky, ideally we would return
+		// it some other way.
+		p.curPlan.isCorrelated = bld.IsCorrelated
+		return nil, err
+	}
+	// If the memo doesn't have placeholders, then fully optimize it, since
+	// it can be reused without further changes to build the execution tree.
+	if !f.Memo().HasPlaceholders() {
+		p.optimizer.Optimize()
+	}
+
+	// Detach the prepared memo from the factory and transfer its ownership
+	// to the prepared statement. DetachMemo will re-initialize the optimizer
+	// to an empty memo.
+	return p.optimizer.DetachMemo(), nil
+}
+
+func (p *planner) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
+	if !cachedMemo.HasPlaceholders() {
+		// If there are no placeholders, the query was already fully optimized
+		// (see prepareMemo).
+		return cachedMemo, nil
+	}
+	f := p.optimizer.Factory()
+	// Finish optimization by assigning any remaining placeholders and
+	// applying exploration rules. Reinitialize the optimizer and construct a
+	// new memo that is copied from the prepared memo, but with placeholders
+	// assigned.
+	if err := f.AssignPlaceholders(cachedMemo); err != nil {
+		return nil, err
+	}
+	p.optimizer.Optimize()
+	return f.Memo(), nil
 }
 
 // hideHiddenColumn ensures that if the plan is returning some hidden
@@ -609,7 +761,7 @@ func (p *planner) delegateQuery(
 	initialCheck func(ctx context.Context) error,
 	desiredTypes []types.T,
 ) (planNode, error) {
-	// log.VEventf(ctx, 2, "delegated query: %q", sql)
+	log.VEventf(ctx, 2, "delegated query: %q", sql)
 
 	// Prepare the sub-plan.
 	stmt, err := parser.ParseOne(sql)
@@ -697,6 +849,12 @@ func (p *planner) newPlan(
 		return p.CancelQueries(ctx, n)
 	case *tree.CancelSessions:
 		return p.CancelSessions(ctx, n)
+	case *tree.CommentOnColumn:
+		return p.CommentOnColumn(ctx, n)
+	case *tree.CommentOnDatabase:
+		return p.CommentOnDatabase(ctx, n)
+	case *tree.CommentOnTable:
+		return p.CommentOnTable(ctx, n)
 	case *tree.ControlJobs:
 		return p.ControlJobs(ctx, n)
 	case *tree.Scrub:
@@ -733,8 +891,6 @@ func (p *planner) newPlan(
 		return p.DropSequence(ctx, n)
 	case *tree.DropUser:
 		return p.DropUser(ctx, n)
-	case *tree.Execute:
-		return p.Execute(ctx, n)
 	case *tree.Explain:
 		return p.Explain(ctx, n)
 	case *tree.Grant:
@@ -823,15 +979,14 @@ func (p *planner) newPlan(
 	case *tree.Split:
 		return p.Split(ctx, n)
 	case *tree.Truncate:
-		if err := p.txn.SetSystemConfigTrigger(); err != nil {
-			return nil, err
-		}
 		return p.Truncate(ctx, n)
 	case *tree.UnionClause:
 		return p.Union(ctx, n, desiredTypes)
 	case *tree.Update:
 		return p.Update(ctx, n, desiredTypes)
 	case *tree.ValuesClause:
+		return p.Values(ctx, n, desiredTypes)
+	case *tree.ValuesClauseWithNames:
 		return p.Values(ctx, n, desiredTypes)
 	default:
 		return nil, errors.Errorf("unknown statement type: %T", stmt)
@@ -886,6 +1041,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.Explain(ctx, n)
 	case *tree.Insert:
 		return p.Insert(ctx, n, nil)
+	case *tree.Scrub:
+		return p.Scrub(ctx, n)
 	case *tree.Select:
 		return p.Select(ctx, n, nil)
 	case *tree.SelectClause:
@@ -895,6 +1052,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.SetClusterSetting(ctx, n)
 	case *tree.SetVar:
 		return p.SetVar(ctx, n)
+	case *tree.SetZoneConfig:
+		return p.SetZoneConfig(ctx, n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowVar:
@@ -935,6 +1094,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowRanges(ctx, n)
 	case *tree.Split:
 		return p.Split(ctx, n)
+	case *tree.Truncate:
+		return p.Truncate(ctx, n)
 	case *tree.Relocate:
 		return p.Relocate(ctx, n)
 	case *tree.Scatter:
@@ -957,4 +1118,41 @@ func (p *planner) maybeSetSystemConfig(id sqlbase.ID) error {
 	}
 	// Mark transaction as operating on the system DB.
 	return p.txn.SetSystemConfigTrigger()
+}
+
+// planFlags is used throughout the planning code to keep track of various
+// events or decisions along the way.
+type planFlags uint32
+
+const (
+	// planFlagOptUsed is set if the optimizer was used to create the plan.
+	planFlagOptUsed planFlags = (1 << iota)
+
+	// planFlagOptFallback is set if the optimizer was enabled but did not support the
+	// statement.
+	planFlagOptFallback
+
+	// planFlagOptCacheHit is set if a plan from the query plan cache was used (and
+	// re-optimized).
+	planFlagOptCacheHit
+
+	// planFlagOptCacheMiss is set if we looked for a plan in the query plan cache but
+	// did not find one.
+	planFlagOptCacheMiss
+
+	// planFlagDistributed is set if the plan is for the DistSQL engine, in
+	// distributed mode.
+	planFlagDistributed
+
+	// planFlagDistSQLLocal is set if the plan is for the DistSQL engine,
+	// but in local mode.
+	planFlagDistSQLLocal
+)
+
+func (pf planFlags) IsSet(flag planFlags) bool {
+	return (pf & flag) != 0
+}
+
+func (pf *planFlags) Set(flag planFlags) {
+	*pf |= flag
 }

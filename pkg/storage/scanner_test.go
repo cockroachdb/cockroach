@@ -20,9 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/btree"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -33,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/google/btree"
+	"github.com/pkg/errors"
 )
 
 func makeAmbCtx() log.AmbientContext {
@@ -65,10 +64,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 			KeyCount:  1,
 			LiveCount: 1,
 		}
-
-		if err := repl.setDesc(desc); err != nil {
-			t.Fatal(err)
-		}
+		repl.mu.state.Desc = desc
 		if exRngItem := rs.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
 			t.Fatalf("failed to insert range %s", repl)
 		}
@@ -162,6 +158,14 @@ func (tq *testQueue) MaybeRemove(rangeID roachpb.RangeID) {
 	if index := tq.indexOf(rangeID); index != -1 {
 		tq.ranges = append(tq.ranges[:index], tq.ranges[index+1:]...)
 	}
+}
+
+func (tq *testQueue) Name() string {
+	return "testQueue"
+}
+
+func (tq *testQueue) NeedsLease() bool {
+	return false
 }
 
 func (tq *testQueue) count() int {

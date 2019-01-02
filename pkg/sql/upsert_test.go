@@ -20,17 +20,15 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestUpsertFastPath(t *testing.T) {
@@ -54,7 +52,7 @@ func TestUpsertFastPath(t *testing.T) {
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-			EvalKnobs: batcheval.TestingKnobs{
+			EvalKnobs: storagebase.BatchEvalTestingKnobs{
 				TestingEvalFilter: filter,
 			},
 		}},
@@ -101,7 +99,7 @@ func TestUpsertFastPath(t *testing.T) {
 	// transaction.
 	atomic.StoreUint64(&scans, 0)
 	atomic.StoreUint64(&beginTxn, 0)
-	tx, err := sqlDB.DB.Begin()
+	tx, err := conn.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +129,7 @@ func TestUpsertFastPath(t *testing.T) {
 	}
 }
 
-func TestConcurrentUpsertWithSnapshotIsolation(t *testing.T) {
+func TestConcurrentUpsert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -140,9 +138,6 @@ func TestConcurrentUpsertWithSnapshotIsolation(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`)
-	// TODO(andrei): This test is probably broken: it's setting a default
-	// isolation on a random connection, not on all connections.
-	sqlDB.Exec(t, `SET DEFAULT_TRANSACTION_ISOLATION TO SNAPSHOT`)
 
 	testCases := []struct {
 		name       string

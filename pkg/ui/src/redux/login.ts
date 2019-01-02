@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import { Location } from "history";
 import { Action } from "redux";
 import { ThunkAction } from "redux-thunk";
@@ -17,87 +31,87 @@ const dataFromServer = getDataFromServer();
 // State for application use.
 
 export interface LoginState {
-    useLogin(): boolean;
-    loginEnabled(): boolean;
-    hasAccess(): boolean;
-    loggedInUser(): string;
+  useLogin(): boolean;
+  loginEnabled(): boolean;
+  hasAccess(): boolean;
+  loggedInUser(): string;
 }
 
 class LoginEnabledState {
-    apiState: LoginAPIState;
+  apiState: LoginAPIState;
 
-    constructor(state: LoginAPIState) {
-        this.apiState = state;
-    }
+  constructor(state: LoginAPIState) {
+    this.apiState = state;
+  }
 
-    useLogin(): boolean {
-        return true;
-    }
+  useLogin(): boolean {
+    return true;
+  }
 
-    loginEnabled(): boolean {
-        return true;
-    }
+  loginEnabled(): boolean {
+    return true;
+  }
 
-    hasAccess(): boolean {
-        return this.apiState.loggedInUser != null;
-    }
+  hasAccess(): boolean {
+    return this.apiState.loggedInUser != null;
+  }
 
-    loggedInUser(): string {
-        return this.apiState.loggedInUser;
-    }
+  loggedInUser(): string {
+    return this.apiState.loggedInUser;
+  }
 }
 
 class LoginDisabledState {
-    useLogin(): boolean {
-        return true;
-    }
+  useLogin(): boolean {
+    return true;
+  }
 
-    loginEnabled(): boolean {
-        return false;
-    }
+  loginEnabled(): boolean {
+    return false;
+  }
 
-    hasAccess(): boolean {
-        return true;
-    }
+  hasAccess(): boolean {
+    return true;
+  }
 
-    loggedInUser(): string {
-        return null;
-    }
+  loggedInUser(): string {
+    return null;
+  }
 }
 
 class NoLoginState {
-    useLogin(): boolean {
-        return false;
-    }
+  useLogin(): boolean {
+    return false;
+  }
 
-    loginEnabled(): boolean {
-        return false;
-    }
+  loginEnabled(): boolean {
+    return false;
+  }
 
-    hasAccess(): boolean {
-        return true;
-    }
+  hasAccess(): boolean {
+    return true;
+  }
 
-    loggedInUser(): string {
-        return null;
-    }
+  loggedInUser(): string {
+    return null;
+  }
 }
 
 // Selector
 
 export const selectLoginState = createSelector(
-    (state: AdminUIState) => state.login,
-    (login: LoginAPIState) => {
-        if (!dataFromServer.ExperimentalUseLogin) {
-            return new NoLoginState();
-        }
+  (state: AdminUIState) => state.login,
+  (login: LoginAPIState) => {
+    if (!dataFromServer.ExperimentalUseLogin) {
+      return new NoLoginState();
+    }
 
-        if (!dataFromServer.LoginEnabled) {
-            return new LoginDisabledState();
-        }
+    if (!dataFromServer.LoginEnabled) {
+      return new LoginDisabledState();
+    }
 
-        return new LoginEnabledState(login);
-    },
+    return new LoginEnabledState(login);
+  },
 );
 
 function shouldRedirect(location: Location) {

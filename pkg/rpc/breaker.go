@@ -17,11 +17,10 @@ package rpc
 import (
 	"time"
 
-	"github.com/cenk/backoff"
-	"github.com/facebookgo/clock"
-	"github.com/rubyist/circuitbreaker"
-
+	"github.com/cenkalti/backoff"
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/facebookgo/clock"
 )
 
 const maxBackoff = time.Second

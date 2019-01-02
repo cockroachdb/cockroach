@@ -1,9 +1,22 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 
-import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLocations } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
@@ -98,24 +111,24 @@ class Localities extends React.Component<LocalitiesProps, {}> {
         <section className="section"><h1>Localities</h1></section>
         <Loading
           loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }
-          className="loading-image loading-image__spinner-left"
-          image={ spinner }
-        >
-          <section className="section">
-            <table className="locality-table">
-              <thead>
-                <tr>
-                  <th>Localities</th>
-                  <th>Nodes</th>
-                  <th>Location</th>
-                </tr>
-              </thead>
-              <tbody>
-                { renderLocalityTree(this.props.locationTree, this.props.localityTree) }
-              </tbody>
-            </table>
-          </section>
-        </Loading>
+          error={ [this.props.localityStatus.lastError, this.props.locationStatus.lastError] }
+          render={() => (
+            <section className="section">
+              <table className="locality-table">
+                <thead>
+                  <tr>
+                    <th>Localities</th>
+                    <th>Nodes</th>
+                    <th>Location</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  { renderLocalityTree(this.props.locationTree, this.props.localityTree) }
+                </tbody>
+              </table>
+            </section>
+          )}
+        />
       </div>
     );
   }

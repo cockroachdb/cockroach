@@ -19,19 +19,24 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -49,9 +54,9 @@ func TestShowCreateTable(t *testing.T) {
 		CREATE DATABASE d;
 		SET DATABASE = d;
 		CREATE TABLE items (
-			a int,
-			b int,
-			c int unique,
+			a int8,
+			b int8,
+			c int8 unique,
 			primary key (a, b)
 		);
 		CREATE DATABASE o;
@@ -66,19 +71,19 @@ func TestShowCreateTable(t *testing.T) {
 	}{
 		{
 			stmt: `CREATE TABLE %s (
-	i INT,
+	i INT8,
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP DEFAULT now(),
+	t TIMESTAMP DEFAULT now():::TIMESTAMP,
 	CHECK (i > 0),
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
+	i INT8 NULL,
 	s STRING NULL,
-	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT now(),
+	v FLOAT8 NOT NULL,
+	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0)
@@ -86,18 +91,18 @@ func TestShowCreateTable(t *testing.T) {
 		},
 		{
 			stmt: `CREATE TABLE %s (
-	i INT CHECK (i > 0),
+	i INT8 CHECK (i > 0),
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP DEFAULT now(),
+	t TIMESTAMP DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
+	i INT8 NULL,
 	s STRING NULL,
-	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT now(),
+	v FLOAT8 NOT NULL,
+	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0)
@@ -105,14 +110,14 @@ func TestShowCreateTable(t *testing.T) {
 		},
 		{
 			stmt: `CREATE TABLE %s (
-	i INT NULL,
+	i INT8 NULL,
 	s STRING NULL,
 	CONSTRAINT ck CHECK (i > 0),
 	FAMILY "primary" (i, rowid),
 	FAMILY fam_1_s (s)
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
+	i INT8 NULL,
 	s STRING NULL,
 	FAMILY "primary" (i, rowid),
 	FAMILY fam_1_s (s),
@@ -121,25 +126,25 @@ func TestShowCreateTable(t *testing.T) {
 		},
 		{
 			stmt: `CREATE TABLE %s (
-	i INT PRIMARY KEY
+	i INT8 PRIMARY KEY
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NOT NULL,
+	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	FAMILY "primary" (i)
 )`,
 		},
 		{
 			stmt: `
-				CREATE TABLE %s (i INT, f FLOAT, s STRING, d DATE,
+				CREATE TABLE %s (i INT8, f FLOAT, s STRING, d DATE,
 				  FAMILY "primary" (i, f, d, rowid),
 				  FAMILY fam_1_s (s));
 				CREATE INDEX idx_if on %[1]s (f, i) STORING (s, d);
 				CREATE UNIQUE INDEX on %[1]s (d);
 			`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
-	f FLOAT NULL,
+	i INT8 NULL,
+	f FLOAT8 NULL,
 	s STRING NULL,
 	d DATE NULL,
 	INDEX idx_if (f ASC, i ASC) STORING (s, d),
@@ -150,20 +155,20 @@ func TestShowCreateTable(t *testing.T) {
 		},
 		{
 			stmt: `CREATE TABLE %s (
-	"te""st" INT NOT NULL,
+	"te""st" INT8 NOT NULL,
 	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC),
 	FAMILY "primary" ("te""st")
 )`,
 		},
 		{
 			stmt: `CREATE TABLE %s (
-	a int,
-	b int,
+	a int8,
+	b int8,
 	index c(a asc, b desc)
 )`,
 			expect: `CREATE TABLE %s (
-	a INT NULL,
-	b INT NULL,
+	a INT8 NULL,
+	b INT8 NULL,
 	INDEX c (a ASC, b DESC),
 	FAMILY "primary" (a, b, rowid)
 )`,
@@ -172,19 +177,39 @@ func TestShowCreateTable(t *testing.T) {
 		// have their db name omitted.
 		{
 			stmt: `CREATE TABLE %s (
-	i int,
-	j int,
+	i int8,
+	j int8,
 	FOREIGN KEY (i, j) REFERENCES items (a, b),
 	k int REFERENCES items (c)
 )`,
 			expect: `CREATE TABLE %s (
-	i INT NULL,
-	j INT NULL,
-	k INT NULL,
+	i INT8 NULL,
+	j INT8 NULL,
+	k INT8 NULL,
 	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b),
-	INDEX t7_auto_index_fk_i_ref_items (i ASC, j ASC),
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c),
-	INDEX t7_auto_index_fk_k_ref_items (k ASC),
+	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
+	FAMILY "primary" (i, j, k, rowid)
+)`,
+		},
+		// Check that FK dependencies using MATCH FULL on a non-composite key still
+		// show
+		{
+			stmt: `CREATE TABLE %s (
+	i int8,
+	j int8,
+	k int REFERENCES items (c) MATCH FULL,
+	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH FULL
+)`,
+			expect: `CREATE TABLE %s (
+	i INT8 NULL,
+	j INT8 NULL,
+	k INT8 NULL,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH FULL,
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c) MATCH FULL,
+	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
@@ -192,27 +217,47 @@ func TestShowCreateTable(t *testing.T) {
 		// have their db name prefixed.
 		{
 			stmt: `CREATE TABLE %s (
-	x INT,
+	x INT8,
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.foo (x)
 )`,
 			expect: `CREATE TABLE %s (
-	x INT NULL,
+	x INT8 NULL,
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo (x),
-	INDEX t8_auto_index_fk_ref (x ASC),
+	INDEX %[1]s_auto_index_fk_ref (x ASC),
 	FAMILY "primary" (x, rowid)
+)`,
+		},
+		// Check that FK dependencies using SET NULL or SET DEFAULT
+		// are pretty-printed properly. Regression test for #32529.
+		{
+			stmt: `CREATE TABLE %s (
+	i int8 DEFAULT 123,
+	j int8 DEFAULT 123,
+	FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
+	k int8 REFERENCES items (c) ON DELETE SET NULL
+)`,
+			expect: `CREATE TABLE %s (
+	i INT8 NULL DEFAULT 123:::INT8,
+	j INT8 NULL DEFAULT 123:::INT8,
+	k INT8 NULL,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c) ON DELETE SET NULL,
+	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
+	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
 		// Check that INTERLEAVE dependencies inside the current database
 		// have their db name omitted.
 		{
 			stmt: `CREATE TABLE %s (
-	a INT,
-	b INT,
+	a INT8,
+	b INT8,
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT items (a, b)`,
 			expect: `CREATE TABLE %s (
-	a INT NOT NULL,
-	b INT NOT NULL,
+	a INT8 NOT NULL,
+	b INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
 	FAMILY "primary" (a, b)
 ) INTERLEAVE IN PARENT items (a, b)`,
@@ -221,18 +266,41 @@ func TestShowCreateTable(t *testing.T) {
 		// database are prefixed by their db name.
 		{
 			stmt: `CREATE TABLE %s (
-	x INT PRIMARY KEY
+	x INT8 PRIMARY KEY
 ) INTERLEAVE IN PARENT o.foo (x)`,
 			expect: `CREATE TABLE %s (
-	x INT NOT NULL,
+	x INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (x ASC),
 	FAMILY "primary" (x)
 ) INTERLEAVE IN PARENT o.public.foo (x)`,
 		},
+		// Check that FK dependencies using MATCH FULL and MATCH SIMPLE are both
+		// pretty-printed properly.
+		{
+			stmt: `CREATE TABLE %s (
+	i int DEFAULT 1,
+	j int DEFAULT 2,
+	k int DEFAULT 3,
+	l int DEFAULT 4,
+	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH SIMPLE ON DELETE SET DEFAULT,
+	FOREIGN KEY (k, l) REFERENCES items (a, b) MATCH FULL ON UPDATE CASCADE
+)`,
+			expect: `CREATE TABLE %s (
+	i INT8 NULL DEFAULT 1:::INT8,
+	j INT8 NULL DEFAULT 2:::INT8,
+	k INT8 NULL DEFAULT 3:::INT8,
+	l INT8 NULL DEFAULT 4:::INT8,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k, l) REFERENCES items (a, b) MATCH FULL ON UPDATE CASCADE,
+	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC, l ASC),
+	FAMILY "primary" (i, j, k, l, rowid)
+)`,
+		},
 	}
 	for i, test := range tests {
-		t.Run(fmt.Sprintf("%d/%s", i, strings.Replace(test.stmt, "\n", "", -1)), func(t *testing.T) {
-			name := fmt.Sprintf("t%d", i)
+		name := fmt.Sprintf("t%d", i)
+		t.Run(name, func(t *testing.T) {
 			if test.expect == "" {
 				test.expect = test.stmt
 			}
@@ -277,9 +345,6 @@ func TestShowCreateTable(t *testing.T) {
 
 func TestShowCreateView(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if testing.Short() {
-		t.Skip("short #26969")
-	}
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -318,8 +383,8 @@ func TestShowCreateView(t *testing.T) {
 			`CREATE VIEW %s (count) AS SELECT count(*) FROM d.public.t`,
 		},
 		{
-			`CREATE VIEW %s AS SELECT s, count(*) FROM t GROUP BY s HAVING count(*) > 3:::INT`,
-			`CREATE VIEW %s (s, count) AS SELECT s, count(*) FROM d.public.t GROUP BY s HAVING count(*) > 3:::INT`,
+			`CREATE VIEW %s AS SELECT s, count(*) FROM t GROUP BY s HAVING count(*) > 3:::INT8`,
+			`CREATE VIEW %s (s, count) AS SELECT s, count(*) FROM d.public.t GROUP BY s HAVING count(*) > 3:::INT8`,
 		},
 		{
 			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM t`,
@@ -481,6 +546,62 @@ func TestShowQueries(t *testing.T) {
 
 	execKnobs := &sql.ExecutorTestingKnobs{}
 
+	found := false
+	var failure error
+
+	execKnobs.StatementFilter = func(ctx context.Context, stmt string, err error) {
+		if stmt == selectStmt {
+			found = true
+			const showQuery = "SELECT node_id, (now() - start)::FLOAT8, query FROM [SHOW CLUSTER QUERIES]"
+
+			rows, err := conn1.Query(showQuery)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rows.Close()
+
+			var stmts []string
+			for rows.Next() {
+				var nodeID int
+				var stmt string
+				var delta float64
+				if err := rows.Scan(&nodeID, &delta, &stmt); err != nil {
+					failure = err
+					return
+				}
+				stmts = append(stmts, stmt)
+				if nodeID < 1 || nodeID > 2 {
+					failure = fmt.Errorf("invalid node ID: %d", nodeID)
+					return
+				}
+
+				// The delta measures how long ago or in the future (in
+				// seconds) the start time is. It must be
+				// "close to now", otherwise we have a problem with the time
+				// accounting.
+				if math.Abs(delta) > 10 {
+					failure = fmt.Errorf("start time too far in the past or the future: expected <10s, got %.3fs", delta)
+					return
+				}
+			}
+			fmt.Println("tf", stmts)
+			if err := rows.Err(); err != nil {
+				failure = err
+				return
+			}
+
+			foundSelect := false
+			for _, stmt := range stmts {
+				if stmt == expectedSelectStmt {
+					foundSelect = true
+				}
+			}
+			if !foundSelect {
+				failure = fmt.Errorf("original query not found in SHOW QUERIES. expected: %s\nactual: %v", selectStmt, stmts)
+			}
+		}
+	}
+
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -496,66 +617,6 @@ func TestShowQueries(t *testing.T) {
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
 	sqlutils.CreateTable(t, conn1, tableName, "num INT", 0, nil)
-
-	found := false
-	var failure error
-	execKnobs.StatementFilter = func(ctx context.Context, stmt string, err error) {
-		if stmt == selectStmt {
-			found = true
-			const showQuery = "SELECT node_id, (now() - start)::FLOAT, query FROM [SHOW CLUSTER QUERIES]"
-
-			rows, err := conn1.Query(showQuery)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer rows.Close()
-
-			count := 0
-			for rows.Next() {
-				count++
-
-				var nodeID int
-				var sql string
-				var delta float64
-				if err := rows.Scan(&nodeID, &delta, &sql); err != nil {
-					failure = err
-					return
-				}
-				switch sql {
-				case showQuery, expectedSelectStmt:
-				default:
-					failure = fmt.Errorf(
-						"unexpected query in SHOW QUERIES: %+q, expected: %+q",
-						sql,
-						expectedSelectStmt,
-					)
-					return
-				}
-				if nodeID < 1 || nodeID > 2 {
-					failure = fmt.Errorf("invalid node ID: %d", nodeID)
-					return
-				}
-
-				// The delta measures how long ago or in the future (in
-				// seconds) the start time is. It must be
-				// "close to now", otherwise we have a problem with the time
-				// accounting.
-				if math.Abs(delta) > 10 {
-					failure = fmt.Errorf("start time too far in the past or the future: expected <10s, got %.3fs", delta)
-					return
-				}
-			}
-			if err := rows.Err(); err != nil {
-				failure = err
-				return
-			}
-
-			if expectedCount := 2; count != expectedCount {
-				failure = fmt.Errorf("unexpected number of running queries: %d, expected %d", count, expectedCount)
-				return
-			}
-		}
-	}
 
 	if _, err := conn2.Exec(selectStmt); err != nil {
 		t.Fatal(err)
@@ -614,10 +675,10 @@ func TestShowSessions(t *testing.T) {
 	sqlutils.CreateTable(t, conn, "t", "num INT", 0, nil)
 
 	// We'll skip "internal" sessions, as those are unpredictable.
-	const showSessions = `
+	var showSessions = fmt.Sprintf(`
 	select node_id, (now() - session_start)::float from
-		[show cluster sessions] where application_name not like 'internal-%'
-	`
+		[show cluster sessions] where application_name not like '%s%%'
+	`, sql.InternalAppNamePrefix)
 
 	rows, err := conn.Query(showSessions)
 	if err != nil {
@@ -713,6 +774,76 @@ func TestShowSessions(t *testing.T) {
 	}
 }
 
+func TestShowSessionPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
+	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Prepare a non-root session.
+	_ = sqlDBroot.Exec(t, `CREATE USER nonroot`)
+	pgURL := url.URL{
+		Scheme:   "postgres",
+		User:     url.User("nonroot"),
+		Host:     s.ServingAddr(),
+		RawQuery: "sslmode=disable",
+	}
+	rawSQLDBnonroot, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rawSQLDBnonroot.Close()
+	sqlDBnonroot := sqlutils.MakeSQLRunner(rawSQLDBnonroot)
+
+	// Ensure the non-root session is open.
+	sqlDBnonroot.Exec(t, `SELECT version()`)
+
+	t.Run("root", func(t *testing.T) {
+		// Verify that the root session can use SHOW SESSIONS properly and
+		// can observe other sessions than its own.
+		rows := sqlDBroot.Query(t, `SELECT user_name FROM [SHOW CLUSTER SESSIONS]`)
+		defer rows.Close()
+		counts := map[string]int{}
+		for rows.Next() {
+			var userName string
+			if err := rows.Scan(&userName); err != nil {
+				t.Fatal(err)
+			}
+			counts[userName]++
+		}
+		if counts[security.RootUser] == 0 {
+			t.Fatalf("root session is unable to see its own session: %+v", counts)
+		}
+		if counts["nonroot"] == 0 {
+			t.Fatal("root session is unable to see non-root session")
+		}
+	})
+
+	t.Run("non-root", func(t *testing.T) {
+		// Verify that the non-root session can use SHOW SESSIONS properly
+		// and cannot observe other sessions than its own.
+		rows := sqlDBnonroot.Query(t, `SELECT user_name FROM [SHOW CLUSTER SESSIONS]`)
+		defer rows.Close()
+		counts := map[string]int{}
+		for rows.Next() {
+			var userName string
+			if err := rows.Scan(&userName); err != nil {
+				t.Fatal(err)
+			}
+			counts[userName]++
+		}
+		if counts["nonroot"] == 0 {
+			t.Fatal("non-root session is unable to see its own session")
+		}
+		if len(counts) > 1 {
+			t.Fatalf("non-root session is able to see other sessions: %+v", counts)
+		}
+	})
+}
+
 // TestShowJobs manually inserts a row into system.jobs and checks that the
 // encoded protobuf payload is properly decoded and visible in
 // crdb_internal.jobs.
@@ -738,68 +869,125 @@ func TestShowJobs(t *testing.T) {
 		finished          time.Time
 		modified          time.Time
 		fractionCompleted float32
+		highWater         hlc.Timestamp
 		coordinatorID     roachpb.NodeID
+		details           jobspb.Details
 	}
 
-	in := row{
-		id:          42,
-		typ:         "SCHEMA CHANGE",
-		status:      "superfailed",
-		description: "failjob",
-		username:    "failure",
-		err:         "boom",
-		// lib/pq returns time.Time objects with goofy locations, which breaks
-		// reflect.DeepEqual without this time.FixedZone song and dance.
-		// See: https://github.com/lib/pq/issues/329
-		created:           timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
-		started:           timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
-		finished:          timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
-		modified:          timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
-		fractionCompleted: 0.42,
-		coordinatorID:     7,
-	}
-
-	// system.jobs is part proper SQL columns, part protobuf, so we can't use the
-	// row struct directly.
-	inPayload, err := protoutil.Marshal(&jobspb.Payload{
-		Description:    in.description,
-		StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
-		FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
-		Username:       in.username,
-		Lease: &jobspb.Lease{
-			NodeID: 7,
+	for _, in := range []row{
+		{
+			id:          42,
+			typ:         "SCHEMA CHANGE",
+			status:      "superfailed",
+			description: "failjob",
+			username:    "failure",
+			err:         "boom",
+			// lib/pq returns time.Time objects with goofy locations, which breaks
+			// reflect.DeepEqual without this time.FixedZone song and dance.
+			// See: https://github.com/lib/pq/issues/329
+			created:           timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
+			started:           timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
+			finished:          timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
+			modified:          timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
+			fractionCompleted: 0.42,
+			coordinatorID:     7,
+			details:           jobspb.SchemaChangeDetails{},
 		},
-		Error:   in.err,
-		Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{}),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+		{
+			id:          43,
+			typ:         "CHANGEFEED",
+			status:      "running",
+			description: "persistent feed",
+			username:    "persistent",
+			err:         "",
+			// lib/pq returns time.Time objects with goofy locations, which breaks
+			// reflect.DeepEqual without this time.FixedZone song and dance.
+			// See: https://github.com/lib/pq/issues/329
+			created:  timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
+			started:  timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
+			finished: timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
+			modified: timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
+			highWater: hlc.Timestamp{
+				WallTime: 1533143242000000,
+				Logical:  4,
+			},
+			coordinatorID: 7,
+			details:       jobspb.ChangefeedDetails{},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			// system.jobs is part proper SQL columns, part protobuf, so we can't use the
+			// row struct directly.
+			inPayload, err := protoutil.Marshal(&jobspb.Payload{
+				Description:    in.description,
+				StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
+				FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
+				Username:       in.username,
+				Lease: &jobspb.Lease{
+					NodeID: 7,
+				},
+				Error:   in.err,
+				Details: jobspb.WrapPayloadDetails(in.details),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	inProgress, err := protoutil.Marshal(&jobspb.Progress{
-		ModifiedMicros:    in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
-		FractionCompleted: in.fractionCompleted,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sqlDB.Exec(t,
-		`INSERT INTO system.jobs (id, status, created, payload, progress) VALUES ($1, $2, $3, $4, $5)`,
-		in.id, in.status, in.created, inPayload, inProgress,
-	)
+			progress := &jobspb.Progress{
+				ModifiedMicros: in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
+			}
+			if in.highWater != (hlc.Timestamp{}) {
+				progress.Progress = &jobspb.Progress_HighWater{
+					HighWater: &in.highWater,
+				}
+			} else {
+				progress.Progress = &jobspb.Progress_FractionCompleted{
+					FractionCompleted: in.fractionCompleted,
+				}
+			}
+			inProgress, err := protoutil.Marshal(progress)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sqlDB.Exec(t,
+				`INSERT INTO system.jobs (id, status, created, payload, progress) VALUES ($1, $2, $3, $4, $5)`,
+				in.id, in.status, in.created, inPayload, inProgress,
+			)
 
-	var out row
-	sqlDB.QueryRow(t, `
+			var out row
+			var maybeFractionCompleted *float32
+			var decimalHighWater *apd.Decimal
+			sqlDB.QueryRow(t, `
       SELECT job_id, job_type, status, created, description, started, finished, modified,
-             fraction_completed, user_name, ifnull(error, ''), coordinator_id
-        FROM crdb_internal.jobs`).Scan(
-		&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
-		&out.finished, &out.modified, &out.fractionCompleted, &out.username,
-		&out.err, &out.coordinatorID,
-	)
-	if !reflect.DeepEqual(in, out) {
-		diff := strings.Join(pretty.Diff(in, out), "\n")
-		t.Fatalf("in job did not match out job:\n%s", diff)
+             fraction_completed, high_water_timestamp, user_name, ifnull(error, ''), coordinator_id
+        FROM crdb_internal.jobs WHERE job_id = $1`, in.id).Scan(
+				&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
+				&out.finished, &out.modified, &maybeFractionCompleted, &decimalHighWater, &out.username,
+				&out.err, &out.coordinatorID,
+			)
+
+			if decimalHighWater != nil {
+				var err error
+				out.highWater, err = tree.DecimalToHLC(decimalHighWater)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if maybeFractionCompleted != nil {
+				out.fractionCompleted = *maybeFractionCompleted
+			}
+
+			// details field is not explicitly checked for equality; its value is
+			// confirmed via the job_type field, which is dependent on the details
+			// field.
+			out.details = in.details
+
+			if !reflect.DeepEqual(in, out) {
+				diff := strings.Join(pretty.Diff(in, out), "\n")
+				t.Fatalf("in job did not match out job:\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -818,9 +1006,10 @@ func TestShowJobsWithError(t *testing.T) {
      INSERT INTO system.jobs(id, status, payload, progress) SELECT id+1, status, '\xaaaa'::BYTES, progress FROM system.jobs ORDER BY id LIMIT 1;
      -- Create a corrupted progress field.
      INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+3, status, payload, NULL::BYTES FROM system.jobs ORDER BY id LIMIT 1;
      -- Corrupt both fields.
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, '\xaaaa'::BYTES, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+3, status, '\xaaaa'::BYTES, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
+     -- Test what happens with a NULL progress field (which is a valid value).
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, payload, NULL::BYTES FROM system.jobs ORDER BY id LIMIT 1;
      INSERT INTO system.jobs(id, status, payload, progress) SELECT id+5, status, '\xaaaa'::BYTES, NULL::BYTES FROM system.jobs ORDER BY id LIMIT 1;
 	`); err != nil {
 		t.Fatal(err)
@@ -837,6 +1026,7 @@ func TestShowJobsWithError(t *testing.T) {
 
 	var desc, frac, errStr string
 
+	// Valid row.
 	rowNum := 0
 	if !rows.Next() {
 		t.Fatalf("%d too few rows", rowNum)
@@ -850,6 +1040,7 @@ func TestShowJobsWithError(t *testing.T) {
 	}
 	rowNum++
 
+	// Corrupted payload but valid progress.
 	if !rows.Next() {
 		t.Fatalf("%d: too few rows", rowNum)
 	}
@@ -862,34 +1053,61 @@ func TestShowJobsWithError(t *testing.T) {
 	}
 	rowNum++
 
-	for k := 0; k < 2; k++ {
-		if !rows.Next() {
-			t.Fatalf("%d: too few rows", rowNum)
-		}
-		if err := rows.Scan(&desc, &frac, &errStr); err != nil {
-			t.Fatalf("%d: %v", rowNum, err)
-		}
-		t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
-		if desc == "NULL" || !strings.HasPrefix(errStr, "error decoding progress") || frac[0] != '-' {
-			t.Fatalf("%d: invalid row", rowNum)
-		}
-		rowNum++
+	// Corrupted progress but valid payload.
+	if !rows.Next() {
+		t.Fatalf("%d: too few rows", rowNum)
 	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc == "NULL" || !strings.HasPrefix(errStr, "error decoding progress") || frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
 
-	for k := 0; k < 2; k++ {
-		if !rows.Next() {
-			t.Fatalf("%d: too few rows", rowNum)
-		}
-		if err := rows.Scan(&desc, &frac, &errStr); err != nil {
-			t.Fatalf("%d: %v", rowNum, err)
-		}
-		t.Logf("row: %q %q %v", desc, errStr, frac)
-		if desc != "NULL" ||
-			!strings.Contains(errStr, "error decoding payload") ||
-			!strings.Contains(errStr, "error decoding progress") ||
-			frac[0] != '-' {
-			t.Fatalf("%d: invalid row", rowNum)
-		}
-		rowNum++
+	// Both payload and progress corrupted.
+	if !rows.Next() {
+		t.Fatalf("%d: too few rows", rowNum)
 	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row: %q %q %v", desc, errStr, frac)
+	if desc != "NULL" ||
+		!strings.Contains(errStr, "error decoding payload") ||
+		!strings.Contains(errStr, "error decoding progress") ||
+		frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
+
+	// Valid payload and missing progress.
+	if !rows.Next() {
+		t.Fatalf("%d too few rows", rowNum)
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc == "NULL" || errStr != "" || frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
+
+	// Invalid payload and missing progress.
+	if !rows.Next() {
+		t.Fatalf("%d too few rows", rowNum)
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc != "NULL" ||
+		!strings.Contains(errStr, "error decoding payload") ||
+		strings.Contains(errStr, "error decoding progress") ||
+		frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
 }

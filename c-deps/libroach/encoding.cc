@@ -185,20 +185,6 @@ std::string EncodeKey(const rocksdb::Slice& key, int64_t wall_time, int32_t logi
 // ordering as these keys do not sort lexicographically correctly.
 std::string EncodeKey(DBKey k) { return EncodeKey(ToSlice(k.key), k.wall_time, k.logical); }
 
-WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
-                                 rocksdb::Slice* timestamp) {
-  if (buf.empty()) {
-    return false;
-  }
-  const char ts_size = buf[buf.size() - 1];
-  if (ts_size >= buf.size()) {
-    return false;
-  }
-  *key = rocksdb::Slice(buf.data(), buf.size() - ts_size - 1);
-  *timestamp = rocksdb::Slice(key->data() + key->size(), ts_size);
-  return true;
-}
-
 WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice* timestamp, int64_t* wall_time,
                                         int32_t* logical) {
   uint64_t w;

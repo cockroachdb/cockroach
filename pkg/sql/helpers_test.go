@@ -56,7 +56,7 @@ func NewLeaseRemovalTracker() *LeaseRemovalTracker {
 // TrackRemoval starts monitoring lease removals for a particular lease.
 // This should be called before triggering the operation that (asynchronously)
 // removes the lease.
-func (w *LeaseRemovalTracker) TrackRemoval(table *sqlbase.TableDescriptor) RemovalTracker {
+func (w *LeaseRemovalTracker) TrackRemoval(table *sqlbase.ImmutableTableDescriptor) RemovalTracker {
 	id := tableVersionID{
 		id:      table.ID,
 		version: table.Version,
@@ -80,19 +80,21 @@ func (t RemovalTracker) WaitForRemoval() error {
 // LeaseRemovedNotification has to be called after a lease is removed from the
 // store. This should be hooked up as a callback to
 // LeaseStoreTestingKnobs.LeaseReleasedEvent.
-func (w *LeaseRemovalTracker) LeaseRemovedNotification(table sqlbase.TableDescriptor, err error) {
+func (w *LeaseRemovalTracker) LeaseRemovedNotification(
+	id sqlbase.ID, version sqlbase.DescriptorVersion, err error,
+) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	id := tableVersionID{
-		id:      table.ID,
-		version: table.Version,
+	idx := tableVersionID{
+		id:      id,
+		version: version,
 	}
 
-	if tracker, ok := w.tracking[id]; ok {
+	if tracker, ok := w.tracking[idx]; ok {
 		*tracker.err = err
 		close(tracker.removed)
-		delete(w.tracking, id)
+		delete(w.tracking, idx)
 	}
 }
 
@@ -114,14 +116,14 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 	timestamp hlc.Timestamp,
 	tableID sqlbase.ID,
 	minVersion sqlbase.DescriptorVersion,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
 	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	table, err := t.find(ctx, timestamp, m)
+	table, _, err := t.findForTimestamp(ctx, timestamp)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	return &table.TableDescriptor, table.expiration, nil
+	return &table.ImmutableTableDescriptor, table.expiration, nil
 }

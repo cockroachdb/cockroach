@@ -18,6 +18,7 @@
 #include "db.h"
 #include "encoding.h"
 #include "iterator.h"
+#include "keys.h"
 #include "protos/storage/engine/enginepb/mvcc.pb.h"
 #include "status.h"
 #include "timestamp.h"
@@ -50,7 +51,7 @@ static const int kMaxItersBeforeSeek = 10;
 template <bool reverse> class mvccScanner {
  public:
   mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
-              DBTxn txn, bool consistent, bool tombstones)
+              DBTxn txn, bool inconsistent, bool tombstones)
       : iter_(iter),
         iter_rep_(iter->rep.get()),
         start_key_(ToSlice(start)),
@@ -60,13 +61,12 @@ template <bool reverse> class mvccScanner {
         txn_id_(ToSlice(txn.id)),
         txn_epoch_(txn.epoch),
         txn_max_timestamp_(txn.max_timestamp),
-        consistent_(consistent),
+        inconsistent_(inconsistent),
         tombstones_(tombstones),
         check_uncertainty_(timestamp < txn.max_timestamp),
         kvs_(new chunkedBuffer),
         intents_(new rocksdb::WriteBatch),
         peeked_(false),
-        is_get_(false),
         iters_before_seek_(kMaxItersBeforeSeek / 2) {
     memset(&results_, 0, sizeof(results_));
     results_.status = kSuccess;
@@ -104,13 +104,10 @@ template <bool reverse> class mvccScanner {
   // reading transactionally and we own the intent.
 
   const DBScanResults& get() {
-    is_get_ = true;
     if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
       return results_;
     }
-    if (cur_key_ == start_key_) {
-      getAndAdvance();
-    }
+    getAndAdvance();
     return fillResults();
   }
 
@@ -127,19 +124,25 @@ template <bool reverse> class mvccScanner {
       if (!iterSeekReverse(EncodeKey(start_key_, 0, 0))) {
         return results_;
       }
-      for (; cur_key_.compare(end_key_) >= 0;) {
-        if (!getAndAdvance()) {
-          break;
-        }
-      }
     } else {
       if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
         return results_;
       }
-      for (; cur_key_.compare(end_key_) < 0;) {
-        if (!getAndAdvance()) {
-          break;
-        }
+    }
+
+    while (getAndAdvance()) {
+    }
+
+    if (kvs_->Count() == max_keys_ && advanceKey()) {
+      if (reverse) {
+        // It is possible for cur_key_ to be pointing into mvccScanner.saved_buf_
+        // instead of iter_rep_'s underlying storage if iterating in reverse (see
+        // iterPeekPrev), so copy the key onto the DBIterator struct to ensure it
+        // has a lifetime that outlives the DBScanResults.
+        iter_->rev_resume_key.assign(cur_key_.data(), cur_key_.size());
+        results_.resume_key = ToDBSlice(iter_->rev_resume_key);
+      } else {
+        results_.resume_key = ToDBSlice(cur_key_);
       }
     }
 
@@ -204,6 +207,10 @@ template <bool reverse> class mvccScanner {
       return seekVersion(timestamp_, false);
     }
 
+    if (cur_value_.size() == 0) {
+      return setStatus(FmtStatus("zero-length mvcc metadata"));
+    }
+
     if (!meta_.ParseFromArray(cur_value_.data(), cur_value_.size())) {
       return setStatus(FmtStatus("unable to decode MVCCMetadata"));
     }
@@ -228,23 +235,18 @@ template <bool reverse> class mvccScanner {
       return seekVersion(timestamp_, false);
     }
 
-    if (!consistent_) {
+    if (inconsistent_) {
       // 6. The key contains an intent and we're doing an inconsistent
       // read at a timestamp newer than the intent. We ignore the
       // intent by insisting that the timestamp we're reading at is a
       // historical timestamp < the intent timestamp. However, we
       // return the intent separately; the caller may want to resolve
       // it.
-      if (kvs_->Count() == max_keys_ && !is_get_) {
+      if (kvs_->Count() == max_keys_) {
         // We've already retrieved the desired number of keys and now
         // we're adding the resume key. We don't want to add the
         // intent here as the intents should only correspond to KVs
-        // that lie before the resume key. The "!is_get_" is necessary
-        // to handle MVCCGet which specifies max_keys_==0 in order to
-        // avoid iterating to the next key. In the "get" path we want
-        // to return the intent associated with the key even though
-        // max_keys_==0.
-        kvs_->Put(cur_raw_key_, rocksdb::Slice());
+        // that lie before the resume key.
         return false;
       }
       intents_->Put(cur_raw_key_, cur_value_);
@@ -290,15 +292,6 @@ template <bool reverse> class mvccScanner {
   // greater than cur_key_. Returns false if the iterator is exhausted
   // or an error occurs.
   bool nextKey() {
-    // Check to see if the next key is the end key. This avoids
-    // advancing the iterator unnecessarily. For example, SQL can take
-    // advantage of this when doing single row reads with an
-    // appropriately set end key.
-    if (cur_key_.size() + 1 == end_key_.size() && end_key_.starts_with(cur_key_) &&
-        end_key_[cur_key_.size()] == '\0') {
-      return false;
-    }
-
     key_buf_.assign(cur_key_.data(), cur_key_.size());
 
     for (int i = 0; i < iters_before_seek_; ++i) {
@@ -352,12 +345,6 @@ template <bool reverse> class mvccScanner {
   // than the specified key. Returns false if the iterator is
   // exhausted or an error occurs.
   bool prevKey(const rocksdb::Slice& key) {
-    if (peeked_ && iter_rep_->key().compare(end_key_) < 0) {
-      // No need to look at the previous key if it is less than our
-      // end key.
-      return false;
-    }
-
     key_buf_.assign(key.data(), key.size());
 
     for (int i = 0; i < iters_before_seek_; ++i) {
@@ -423,7 +410,7 @@ template <bool reverse> class mvccScanner {
     // instructed to include tombstones in the results.
     if (value.size() > 0 || tombstones_) {
       kvs_->Put(cur_raw_key_, value);
-      if (kvs_->Count() > max_keys_) {
+      if (kvs_->Count() == max_keys_) {
         return false;
       }
     }
@@ -607,7 +594,7 @@ template <bool reverse> class mvccScanner {
   const rocksdb::Slice txn_id_;
   const uint32_t txn_epoch_;
   const DBTimestamp txn_max_timestamp_;
-  const bool consistent_;
+  const bool inconsistent_;
   const bool tombstones_;
   const bool check_uncertainty_;
   DBScanResults results_;
@@ -616,7 +603,6 @@ template <bool reverse> class mvccScanner {
   std::string key_buf_;
   std::string saved_buf_;
   bool peeked_;
-  bool is_get_;
   cockroach::storage::engine::enginepb::MVCCMetadata meta_;
   // cur_raw_key_ holds either iter_rep_->key() or the saved value of
   // iter_rep_->key() if we've peeked at the previous key (and peeked_

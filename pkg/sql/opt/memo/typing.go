@@ -24,16 +24,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// InferType derives the type of the given scalar expression. Depending upon
-// the operator, the type may be fixed, or it may be dependent upon the
-// operands. InferType is called during initial construction of the expression,
-// so its logical properties are not yet available.
-func InferType(ev ExprView) types.T {
-	fn := typingFuncMap[ev.Operator()]
-	if fn == nil {
-		panic(fmt.Sprintf("type inference for %v is not yet implemented", ev.Operator()))
+// InferType derives the type of the given scalar expression and stores it in
+// the expression's Type field. Depending upon the operator, the type may be
+// fixed, or it may be dependent upon the expression children.
+func InferType(mem *Memo, e opt.ScalarExpr) types.T {
+	// Special-case Variable, since it's the only expression that needs the memo.
+	if e.Op() == opt.VariableOp {
+		return typeVariable(mem, e)
 	}
-	return fn(ev)
+
+	fn := typingFuncMap[e.Op()]
+	if fn == nil {
+		panic(fmt.Sprintf("type inference for %v is not yet implemented", e.Op()))
+	}
+	return fn(e)
 }
 
 // InferUnaryType infers the return type of a unary operator, given the type of
@@ -43,7 +47,7 @@ func InferUnaryType(op opt.Operator, inputType types.T) types.T {
 
 	// Find the unary op that matches the type of the expression's child.
 	for _, op := range tree.UnaryOps[unaryOp] {
-		o := op.(tree.UnaryOp)
+		o := op.(*tree.UnaryOp)
 		if inputType.Equivalent(o.Typ) {
 			return o.ReturnType
 		}
@@ -51,43 +55,56 @@ func InferUnaryType(op opt.Operator, inputType types.T) types.T {
 	panic(fmt.Sprintf("could not find type for unary expression %s", op))
 }
 
-// InferBinaryType infers the return type of a binary operator, given the type
+// InferBinaryType infers the return type of a binary expression, given the type
 // of its inputs.
 func InferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
-	o, ok := findBinaryOverload(op, leftType, rightType)
+	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
 		panic(fmt.Sprintf("could not find type for binary expression %s", op))
 	}
-	return o.returnType
+	return o.ReturnType
 }
 
 // BinaryOverloadExists returns true if the given binary operator exists with the
 // given arguments.
 func BinaryOverloadExists(op opt.Operator, leftType, rightType types.T) bool {
-	_, ok := findBinaryOverload(op, leftType, rightType)
+	_, ok := FindBinaryOverload(op, leftType, rightType)
 	return ok
 }
 
 // BinaryAllowsNullArgs returns true if the given binary operator allows null
 // arguments, and cannot therefore be folded away to null.
 func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType types.T) bool {
-	o, ok := findBinaryOverload(op, leftType, rightType)
+	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
 		panic(fmt.Sprintf("could not find overload for binary expression %s", op))
 	}
-	return o.allowNullArgs
+	return o.NullableArgs
+}
+
+// AggregateOverloadExists returns whether or not the given operator has a
+// unary overload which takes the given type as input.
+func AggregateOverloadExists(agg opt.Operator, typ types.T) bool {
+	name := opt.AggregateOpReverseMap[agg]
+	_, overloads := builtins.GetBuiltinProperties(name)
+	for _, o := range overloads {
+		if o.Types.MatchAt(typ, 0) {
+			return true
+		}
+	}
+	return false
 }
 
 // FindAggregateOverload finds an aggregate function overload that matches the
 // given aggregate function expression. It panics if no match can be found.
-func FindAggregateOverload(ev ExprView) (name string, overload *tree.Overload) {
-	name = opt.AggregateOpReverseMap[ev.Operator()]
+func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overload) {
+	name = opt.AggregateOpReverseMap[e.Op()]
 	_, overloads := builtins.GetBuiltinProperties(name)
 	for o := range overloads {
 		overload = &overloads[o]
 		matches := true
-		for i := 0; i < ev.ChildCount(); i++ {
-			typ := ev.Child(i).Logical().Scalar.Type
+		for i, n := 0, e.ChildCount(); i < n; i++ {
+			typ := e.Child(i).(opt.ScalarExpr).DataType()
 			if !overload.Types.MatchAt(typ, i) {
 				matches = false
 				break
@@ -100,50 +117,41 @@ func FindAggregateOverload(ev ExprView) (name string, overload *tree.Overload) {
 	panic(fmt.Sprintf("could not find overload for %s aggregate", name))
 }
 
-type typingFunc func(ev ExprView) types.T
+type typingFunc func(e opt.ScalarExpr) types.T
 
 // typingFuncMap is a lookup table from scalar operator type to a function
 // which returns the data type of an instance of that operator.
-var typingFuncMap [opt.NumOperators]typingFunc
+var typingFuncMap map[opt.Operator]typingFunc
 
 func init() {
-	typingFuncMap = [opt.NumOperators]typingFunc{
-		opt.VariableOp:        typeVariable,
-		opt.ConstOp:           typeAsTypedExpr,
-		opt.NullOp:            typeAsPrivate,
-		opt.PlaceholderOp:     typeAsTypedExpr,
-		opt.UnsupportedExprOp: typeAsTypedExpr,
-		opt.TupleOp:           typeAsPrivate,
-		opt.ProjectionsOp:     typeAsAny,
-		opt.AggregationsOp:    typeAsAny,
-		opt.MergeOnOp:         typeAsAny,
-		opt.ExistsOp:          typeAsBool,
-		opt.AnyOp:             typeAsBool,
-		opt.FunctionOp:        typeFunction,
-		opt.CoalesceOp:        typeCoalesce,
-		opt.CaseOp:            typeCase,
-		opt.WhenOp:            typeWhen,
-		opt.CastOp:            typeCast,
-		opt.SubqueryOp:        typeSubquery,
-		opt.ArrayOp:           typeAsPrivate,
-		opt.ColumnAccessOp:    typeColumnAccess,
+	typingFuncMap = make(map[opt.Operator]typingFunc)
+	typingFuncMap[opt.ConstOp] = typeAsTypedExpr
+	typingFuncMap[opt.PlaceholderOp] = typeAsTypedExpr
+	typingFuncMap[opt.UnsupportedExprOp] = typeAsTypedExpr
+	typingFuncMap[opt.CoalesceOp] = typeCoalesce
+	typingFuncMap[opt.CaseOp] = typeCase
+	typingFuncMap[opt.WhenOp] = typeWhen
+	typingFuncMap[opt.CastOp] = typeCast
+	typingFuncMap[opt.SubqueryOp] = typeSubquery
+	typingFuncMap[opt.ColumnAccessOp] = typeColumnAccess
+	typingFuncMap[opt.IndirectionOp] = typeIndirection
+	typingFuncMap[opt.CollateOp] = typeCollate
+	typingFuncMap[opt.ArrayFlattenOp] = typeArrayFlatten
+	typingFuncMap[opt.IfErrOp] = typeIfErr
 
-		// Override default typeAsAggregate behavior for aggregate functions with
-		// a large number of possible overloads or where ReturnType depends on
-		// argument types.
-		opt.ArrayAggOp:   typeArrayAgg,
-		opt.MaxOp:        typeAsFirstArg,
-		opt.MinOp:        typeAsFirstArg,
-		opt.AnyNotNullOp: typeAsFirstArg,
-	}
+	// Override default typeAsAggregate behavior for aggregate functions with
+	// a large number of possible overloads or where ReturnType depends on
+	// argument types.
+	typingFuncMap[opt.ArrayAggOp] = typeArrayAgg
+	typingFuncMap[opt.MaxOp] = typeAsFirstArg
+	typingFuncMap[opt.MinOp] = typeAsFirstArg
+	typingFuncMap[opt.ConstAggOp] = typeAsFirstArg
+	typingFuncMap[opt.ConstNotNullAggOp] = typeAsFirstArg
+	typingFuncMap[opt.AnyNotNullAggOp] = typeAsFirstArg
+	typingFuncMap[opt.FirstAggOp] = typeAsFirstArg
 
-	for _, op := range opt.BooleanOperators {
-		typingFuncMap[op] = typeAsBool
-	}
-
-	for _, op := range opt.ComparisonOperators {
-		typingFuncMap[op] = typeAsBool
-	}
+	// Modifiers for aggregations pass through their argument.
+	typingFuncMap[opt.AggDistinctOp] = typeAsFirstArg
 
 	for _, op := range opt.BinaryOperators {
 		typingFuncMap[op] = typeAsBinary
@@ -163,85 +171,96 @@ func init() {
 
 // typeVariable returns the type of a variable expression, which is stored in
 // the query metadata and accessed by column id.
-func typeVariable(ev ExprView) types.T {
-	colID := ev.Private().(opt.ColumnID)
-	typ := ev.Metadata().ColumnType(colID)
+func typeVariable(mem *Memo, e opt.ScalarExpr) types.T {
+	variable := e.(*VariableExpr)
+	typ := mem.Metadata().ColumnMeta(variable.Col).Type
 	if typ == nil {
-		panic(fmt.Sprintf("column %d does not have type", colID))
+		panic(fmt.Sprintf("column %d does not have type", variable.Col))
 	}
 	return typ
 }
 
 // typeArrayAgg returns an array type with element type equal to the type of the
 // aggregate expression's first (and only) argument.
-func typeArrayAgg(ev ExprView) types.T {
-	typ := ev.Child(0).Logical().Scalar.Type
+func typeArrayAgg(e opt.ScalarExpr) types.T {
+	arrayAgg := e.(*ArrayAggExpr)
+	typ := arrayAgg.Input.DataType()
 	return types.TArray{Typ: typ}
 }
 
-// typeAsBool returns the fixed boolean type.
-func typeAsBool(_ ExprView) types.T {
-	return types.Bool
+// typeIndirection returns the type of the element of the array.
+func typeIndirection(e opt.ScalarExpr) types.T {
+	return types.UnwrapType(e.Child(0).(opt.ScalarExpr).DataType()).(types.TArray).Typ
+}
+
+// typeCollate returns the collated string typed with the given locale.
+func typeCollate(e opt.ScalarExpr) types.T {
+	return types.TCollatedString{Locale: e.(*CollateExpr).Locale}
+}
+
+// typeArrayFlatten returns the type of the subquery as an array.
+func typeArrayFlatten(e opt.ScalarExpr) types.T {
+	input := e.Child(0).(RelExpr)
+	colID, _ := input.Relational().OutputCols.Next(0)
+
+	return types.TArray{
+		Typ: input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type,
+	}
+}
+
+// typeIfErr returns the type of the IfErrExpr. The type is boolean if
+// there is no OrElse, and the type of Cond/OrElse otherwise.
+func typeIfErr(e opt.ScalarExpr) types.T {
+	if e.(*IfErrExpr).OrElse.ChildCount() == 0 {
+		return types.Bool
+	}
+	return e.(*IfErrExpr).Cond.DataType()
 }
 
 // typeAsFirstArg returns the type of the expression's 0th argument.
-func typeAsFirstArg(ev ExprView) types.T {
-	return ev.Child(0).Logical().Scalar.Type
+func typeAsFirstArg(e opt.ScalarExpr) types.T {
+	return e.Child(0).(opt.ScalarExpr).DataType()
 }
 
 // typeAsTypedExpr returns the resolved type of the private field, with the
 // assumption that it is a tree.TypedExpr.
-func typeAsTypedExpr(ev ExprView) types.T {
-	return ev.Private().(tree.TypedExpr).ResolvedType()
+func typeAsTypedExpr(e opt.ScalarExpr) types.T {
+	return e.Private().(tree.TypedExpr).ResolvedType()
 }
 
 // typeAsUnary returns the type of a unary expression by hooking into the sql
 // semantics code that searches for unary operator overloads.
-func typeAsUnary(ev ExprView) types.T {
-	return InferUnaryType(ev.Operator(), ev.Child(0).Logical().Scalar.Type)
+func typeAsUnary(e opt.ScalarExpr) types.T {
+	return InferUnaryType(e.Op(), e.Child(0).(opt.ScalarExpr).DataType())
 }
 
 // typeAsBinary returns the type of a binary expression by hooking into the sql
 // semantics code that searches for binary operator overloads.
-func typeAsBinary(ev ExprView) types.T {
-	leftType := ev.Child(0).Logical().Scalar.Type
-	rightType := ev.Child(1).Logical().Scalar.Type
-	return InferBinaryType(ev.Operator(), leftType, rightType)
-}
-
-// typeFunction returns the type of a function expression by extracting it from
-// the function's private field, which is an instance of *opt.FuncOpDef.
-func typeFunction(ev ExprView) types.T {
-	return ev.Private().(*FuncOpDef).Type
+func typeAsBinary(e opt.ScalarExpr) types.T {
+	leftType := e.Child(0).(opt.ScalarExpr).DataType()
+	rightType := e.Child(1).(opt.ScalarExpr).DataType()
+	return InferBinaryType(e.Op(), leftType, rightType)
 }
 
 // typeAsAggregate returns the type of an aggregate expression by hooking into
 // the sql semantics code that searches for aggregate operator overloads.
-func typeAsAggregate(ev ExprView) types.T {
+func typeAsAggregate(e opt.ScalarExpr) types.T {
 	// Only handle cases where the return type is not dependent on argument
 	// types (i.e. pass nil to the ReturnTyper). Aggregates with return types
 	// that depend on argument types are handled separately.
-	_, overload := FindAggregateOverload(ev)
+	_, overload := FindAggregateOverload(e)
 	t := overload.ReturnType(nil)
 	if t == tree.UnknownReturnType {
-		panic("unknown aggregate return type")
+		panic(fmt.Sprintf("unknown aggregate return type. e:\n%s", e))
 	}
 	return t
 }
 
-// typeAsAny returns types.Any for an operator that never has its type used.
-// This avoids wasting time constructing a type that's not not needed. For
-// example, the Projections scalar operator holds a list of expressions on
-// behalf of the Project operator, but its type is never used.
-func typeAsAny(_ ExprView) types.T {
-	return types.Any
-}
-
 // typeCoalesce returns the type of a coalesce expression, which is equal to
 // the type of its first non-null child.
-func typeCoalesce(ev ExprView) types.T {
-	for i := 0; i < ev.ChildCount(); i++ {
-		childType := ev.Child(i).Logical().Scalar.Type
+func typeCoalesce(e opt.ScalarExpr) types.T {
+	for _, arg := range e.(*CoalesceExpr).Args {
+		childType := arg.DataType()
 		if childType != types.Unknown {
 			return childType
 		}
@@ -258,109 +277,116 @@ func typeCoalesce(ev ExprView) types.T {
 //   END
 // The type is equal to the type of the WHEN <condval> THEN <expr> clauses, or
 // the type of the ELSE <expr> value if all the previous types are unknown.
-func typeCase(ev ExprView) types.T {
-	// Skip over the first child since that corresponds to the input <cond>.
-	for i := 1; i < ev.ChildCount(); i++ {
-		childType := ev.Child(i).Logical().Scalar.Type
+func typeCase(e opt.ScalarExpr) types.T {
+	caseExpr := e.(*CaseExpr)
+	for _, when := range caseExpr.Whens {
+		childType := when.DataType()
 		if childType != types.Unknown {
 			return childType
 		}
 	}
-	return types.Unknown
+	return caseExpr.OrElse.DataType()
 }
 
 // typeWhen returns the type of a WHEN <condval> THEN <expr> clause inside a
 // CASE statement.
-func typeWhen(ev ExprView) types.T {
-	val := ev.Child(1)
-	return val.Logical().Scalar.Type
+func typeWhen(e opt.ScalarExpr) types.T {
+	return e.(*WhenExpr).Value.DataType()
 }
 
 // typeCast returns the type of a CAST operator.
-func typeCast(ev ExprView) types.T {
-	return coltypes.CastTargetToDatumType(ev.Private().(coltypes.T))
-}
-
-// typeAsPrivate returns a type extracted from the expression's private field,
-// which is an instance of types.T.
-func typeAsPrivate(ev ExprView) types.T {
-	return ev.Private().(types.T)
+func typeCast(e opt.ScalarExpr) types.T {
+	return coltypes.CastTargetToDatumType(e.(*CastExpr).TargetTyp)
 }
 
 // typeSubquery returns the type of a subquery, which is equal to the type of
 // its first (and only) column.
-func typeSubquery(ev ExprView) types.T {
-	colID, _ := ev.Child(0).Logical().Relational.OutputCols.Next(0)
-	return ev.Metadata().ColumnType(opt.ColumnID(colID))
+func typeSubquery(e opt.ScalarExpr) types.T {
+	input := e.Child(0).(RelExpr)
+	colID, _ := input.Relational().OutputCols.Next(0)
+	return input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type
 }
 
-func typeColumnAccess(ev ExprView) types.T {
-	colIdx := ev.Private().(TupleOrdinal)
-	typ := ev.Child(0).Logical().Scalar.Type.(types.TTuple)
-	return typ.Types[colIdx]
+func typeColumnAccess(e opt.ScalarExpr) types.T {
+	colAccess := e.(*ColumnAccessExpr)
+	typ := colAccess.Input.DataType().(types.TTuple)
+	return typ.Types[colAccess.Idx]
 }
 
-// overload encapsulates information about a binary operator overload, to be
-// used for type inference and null folding. The tree.BinOp struct does not
-// work well for this use case, because it is quite large, and was not defined
-// in a way allowing it to be passed by reference (without extra allocation).
-type overload struct {
-	// returnType of the overload. This depends on the argument types.
-	returnType types.T
-
-	// allowNullArgs is true if the operator allows null arguments, and cannot
-	// therefore be folded away to null.
-	allowNullArgs bool
-}
-
-// findBinaryOverload finds the correct type signature overload for the
+// FindBinaryOverload finds the correct type signature overload for the
 // specified binary operator, given the types of its inputs. If an overload is
-// found, findBinaryOverload returns true, plus information about the overload.
-// If an overload is not found, findBinaryOverload returns false.
-func findBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ overload, ok bool) {
-	binOp := opt.BinaryOpReverseMap[op]
+// found, FindBinaryOverload returns true, plus a pointer to the overload.
+// If an overload is not found, FindBinaryOverload returns false.
+func FindBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ *tree.BinOp, ok bool) {
+	bin := opt.BinaryOpReverseMap[op]
 
 	// Find the binary op that matches the type of the expression's left and
 	// right children. No more than one match should ever be found. The
 	// TestTypingBinaryAssumptions test ensures this will be the case even if
 	// new operators or overloads are added.
-	for _, binOverloads := range tree.BinOps[binOp] {
-		o := binOverloads.(tree.BinOp)
+	for _, binOverloads := range tree.BinOps[bin] {
+		o := binOverloads.(*tree.BinOp)
 
 		if leftType == types.Unknown {
 			if rightType.Equivalent(o.RightType) {
-				return overload{returnType: o.ReturnType, allowNullArgs: o.NullableArgs}, true
+				return o, true
 			}
 		} else if rightType == types.Unknown {
 			if leftType.Equivalent(o.LeftType) {
-				return overload{returnType: o.ReturnType, allowNullArgs: o.NullableArgs}, true
+				return o, true
 			}
 		} else {
 			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
-				return overload{returnType: o.ReturnType, allowNullArgs: o.NullableArgs}, true
+				return o, true
 			}
 		}
 	}
-	return overload{}, false
+	return nil, false
 }
 
-// EvalUnaryOp evaluates a unary expression on top of a constant value, returning
-// a datum referring to the evaluated result. If an appropriate overload is not
-// found, EvalUnaryOp returns an error.
-func EvalUnaryOp(evalCtx *tree.EvalContext, op opt.Operator, ev ExprView) (tree.Datum, error) {
-	if !ev.IsConstValue() {
-		panic("expected const value")
-	}
+// FindUnaryOverload finds the correct type signature overload for the
+// specified unary operator, given the type of its input. If an overload is
+// found, FindUnaryOverload returns true, plus a pointer to the overload.
+// If an overload is not found, FindUnaryOverload returns false.
+func FindUnaryOverload(op opt.Operator, typ types.T) (_ *tree.UnaryOp, ok bool) {
+	unary := opt.UnaryOpReverseMap[op]
 
-	unaryOp := opt.UnaryOpReverseMap[op]
-	datum := ExtractConstDatum(ev)
-
-	typ := datum.ResolvedType()
-	for _, unaryOverloads := range tree.UnaryOps[unaryOp] {
-		o := unaryOverloads.(tree.UnaryOp)
+	for _, unaryOverloads := range tree.UnaryOps[unary] {
+		o := unaryOverloads.(*tree.UnaryOp)
 		if o.Typ.Equivalent(typ) {
-			return o.Fn(evalCtx, datum)
+			return o, true
 		}
 	}
-	return nil, fmt.Errorf("no overload found for %s applied to %s", op, typ)
+	return nil, false
+}
+
+// FindComparisonOverload finds the correct type signature overload for the
+// specified comparison operator, given the types of its inputs. If an overload
+// is found, FindComparisonOverload returns true, plus a pointer to the
+// overload. If an overload is not found, FindComparisonOverload returns false.
+func FindComparisonOverload(op opt.Operator, leftType, rightType types.T) (_ *tree.CmpOp, ok bool) {
+	comp := opt.ComparisonOpReverseMap[op]
+
+	// Find the comparison op that matches the type of the expression's left and
+	// right children. No more than one match should ever be found. The
+	// TestTypingComparisonAssumptions test ensures this will be the case even if
+	// new operators or overloads are added.
+	for _, cmpOverloads := range tree.CmpOps[comp] {
+		o := cmpOverloads.(*tree.CmpOp)
+
+		if leftType == types.Unknown {
+			if rightType.Equivalent(o.RightType) {
+				return o, true
+			}
+		} else if rightType == types.Unknown {
+			if leftType.Equivalent(o.LeftType) {
+				return o, true
+			}
+		} else {
+			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
+				return o, true
+			}
+		}
+	}
+	return nil, false
 }

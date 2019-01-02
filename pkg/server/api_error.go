@@ -17,10 +17,9 @@ package server
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var errAPIInternalError = status.Errorf(

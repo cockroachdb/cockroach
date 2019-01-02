@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -50,8 +51,6 @@ func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) 
 
 // atBatchEnd is part of the extendedTableWriter interface.
 func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
-	tableDesc := tu.tableDesc()
-
 	conflictingRows, err := tu.getConflictingRows(ctx, false)
 	if err != nil {
 		return err
@@ -64,15 +63,20 @@ func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) err
 			continue
 		}
 
-		if err := tu.ri.InsertRow(ctx, tu.b, insertRow, true, sqlbase.CheckFKs, traceKV); err != nil {
+		if err := tu.ri.InsertRow(ctx, tu.b, insertRow, true, row.CheckFKs, traceKV); err != nil {
 			return err
 		}
 
-		// for ... RETURNING clause
-		resultRow := tu.makeResultFromInsertRow(insertRow, tableDesc.Columns)
 		tu.resultCount++
 
+		// for ... RETURNING clause
 		if tu.collectRows {
+			var resultRow tree.Datums
+			if tu.insertReorderingRequired {
+				resultRow = tu.makeResultFromRow(insertRow, tu.ri.InsertColIDtoRowIndex)
+			} else {
+				resultRow = insertRow
+			}
 			_, err = tu.rowsUpserted.AddRow(ctx, resultRow)
 			if err != nil {
 				return err
@@ -123,7 +127,7 @@ func (tu *strictTableUpserter) getConflictingRows(
 
 		// Get the primary key of the insert row.
 		upsertRowPK, _, err := sqlbase.EncodeIndexKey(
-			tableDesc, &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
+			tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +150,7 @@ func (tu *strictTableUpserter) getConflictingRows(
 		// and if not, mark the key to be checked against the table.
 		for _, idx := range tu.conflictIndexes {
 			entries, err := sqlbase.EncodeSecondaryIndex(
-				tableDesc, &idx, tu.ri.InsertColIDtoRowIndex, row)
+				tableDesc.TableDesc(), &idx, tu.ri.InsertColIDtoRowIndex, row)
 			if err != nil {
 				return nil, err
 			}

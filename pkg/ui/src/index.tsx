@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
 import "styl/app.styl";
@@ -35,9 +49,9 @@ import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import JobsPage from "src/views/jobs";
 import Certificates from "src/views/reports/containers/certificates";
-import CommandQueue from "src/views/reports/containers/commandQueue";
 import CustomChart from "src/views/reports/containers/customChart";
 import Debug from "src/views/reports/containers/debug";
+import EnqueueRange from "src/views/reports/containers/enqueueRange";
 import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Localities from "src/views/reports/containers/localities";
 import Network from "src/views/reports/containers/network";
@@ -134,8 +148,9 @@ ReactDOM.render(
         { /* debug pages */ }
         <Route path="debug">
           <IndexRoute component={Debug} />
-          <Route path="redux" component={ReduxDebug} />
-          <Route path="chart" component={CustomChart} />
+          <Route path="redux" component={ ReduxDebug } />
+          <Route path="chart" component={ CustomChart } />
+          <Route path="enqueue_range" component={ EnqueueRange } />
         </Route>
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
@@ -153,7 +168,6 @@ ReactDOM.render(
           <Route path="settings" component={ Settings } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
-          <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
           <Route path={`stores/:${nodeIDAttr}`} component={ Stores } />
         </Route>
 

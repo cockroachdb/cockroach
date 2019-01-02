@@ -23,12 +23,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -82,6 +81,7 @@ var baseNodeColumnHeaders = []string{
 	"build",
 	"started_at",
 	"updated_at",
+	"is_available",
 	"is_live",
 }
 
@@ -111,8 +111,8 @@ var statusNodeCmd = &cobra.Command{
 	Use:   "status [<node id>]",
 	Short: "shows the status of a node or all nodes",
 	Long: `
-	If a node ID is specified, this will show the status for the corresponding node. If no node ID
-	is specified, this will display the status for all nodes in the cluster.
+If a node ID is specified, this will show the status for the corresponding node. If no node ID
+is specified, this will display the status for all nodes in the cluster.
 	`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: MaybeDecorateGRPCError(runStatusNode),
@@ -150,16 +150,23 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
 	}
 
 	baseQuery := joinUsingID(
-		[]string{
-			"SELECT node_id AS id, address, tag AS build, started_at, updated_at from crdb_internal.kv_node_status",
+		[]string{`
+SELECT node_id AS id,
+       address,
+       build_tag AS build,
+       started_at,
+       updated_at
+FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_id)`,
 			maybeAddActiveNodesFilter(
 				`SELECT node_id AS id,
                 CASE WHEN split_part(expiration,',',1)::decimal > now()::decimal
                      THEN true
                      ELSE false
-                     END AS is_live
+                     END AS is_available
          FROM crdb_internal.gossip_liveness`,
 			),
+			`SELECT node_id AS id, is_live
+         FROM crdb_internal.gossip_nodes`,
 		},
 	)
 
@@ -168,8 +175,8 @@ SELECT node_id AS id,
        sum((metrics->>'replicas.leaders')::DECIMAL)::INT AS replicas_leaders,
        sum((metrics->>'replicas.leaseholders')::DECIMAL)::INT AS replicas_leaseholders,
        sum((metrics->>'replicas')::DECIMAL)::INT AS ranges,
-       sum((metrics->>'ranges.underreplicated')::DECIMAL)::INT AS ranges_underreplicated,
-       sum((metrics->>'ranges.unavailable')::DECIMAL)::INT AS ranges_unavailable
+       sum((metrics->>'ranges.unavailable')::DECIMAL)::INT AS ranges_unavailable,
+       sum((metrics->>'ranges.underreplicated')::DECIMAL)::INT AS ranges_underreplicated
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
@@ -183,14 +190,12 @@ SELECT node_id AS id,
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
-	decommissionQuery := joinUsingID(
-		[]string{
-			`SELECT node_id AS id, sum((metrics->>'replicas')::DECIMAL)::INT AS gossiped_replicas
-       FROM crdb_internal.kv_store_status GROUP BY node_id`,
-			`SELECT node_id AS id, decommissioning AS is_decommissioning, draining AS is_draining
-       FROM crdb_internal.gossip_liveness`,
-		},
-	)
+	decommissionQuery := `
+SELECT node_id AS id,
+       ranges AS gossiped_replicas,
+       decommissioning AS is_decommissioning,
+       draining AS is_draining
+FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_id)`
 
 	conn, err := getPasswordAndMakeSQLClient("cockroach node status")
 	if err != nil {
@@ -400,9 +405,8 @@ var recommissionNodeCmd = &cobra.Command{
 	Use:   "recommission <node id 1> [<node id 2> ...]",
 	Short: "recommissions the node(s)",
 	Long: `
-For the nodes with the supplied IDs, resets the decommissioning states.
-The target nodes must be restarted, at which point the change will take
-effect and the nodes will participate in the cluster as regular nodes.
+For the nodes with the supplied IDs, resets the decommissioning states,
+signaling the affected nodes to participate in the cluster again.
 	`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: MaybeDecorateGRPCError(runRecommissionNode),
@@ -436,11 +440,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := printDecommissionStatus(*resp); err != nil {
-		return err
-	}
-	fmt.Fprintln(os.Stdout, "The affected nodes must be restarted for the change to take effect.")
-	return nil
+	return printDecommissionStatus(*resp)
 }
 
 // Sub-commands for node command.
@@ -455,9 +455,7 @@ var nodeCmd = &cobra.Command{
 	Use:   "node [command]",
 	Short: "list, inspect or remove nodes",
 	Long:  "List, inspect or remove nodes.",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Usage()
-	},
+	RunE:  usageAndErr,
 }
 
 func init() {

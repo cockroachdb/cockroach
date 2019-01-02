@@ -24,9 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -34,11 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 var cacheImplConstrs = []func(clock *hlc.Clock) Cache{
 	func(clock *hlc.Clock) Cache { return newTreeImpl(clock) },
-	func(clock *hlc.Clock) Cache { return newSklImpl(clock, TestSklPageSize, MakeMetrics()) },
+	func(clock *hlc.Clock) Cache { return newSklImpl(clock, TestSklPageSize) },
 }
 
 func forEachCacheImpl(
@@ -683,7 +682,7 @@ func identicalAndRatcheted(
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := New(clock, 0, MakeMetrics())
+	tc := New(clock, 0)
 
 	for i := 0; i < b.N; i++ {
 		cdTS := clock.Now()

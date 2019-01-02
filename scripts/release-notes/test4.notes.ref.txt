@@ -1,4 +1,4 @@
-### Bug Fixes
+### Bug fixes
 
 - Feature A release note 1
   
@@ -11,15 +11,17 @@
 - Feature D [#1][#1] [662a10125][662a10125]
 - Feature E [#1][#1] [76bb9f090][76bb9f090]
 
-### Doc Updates
+### Doc updates
 
 Docs team: Please add these manually.
 
 ### Contributors
 
-This release includes 2 merged PRs by 3 authors. We would like to thank the following contributors from the CockroachDB community, with special thanks to first-time contributors bar, and foo.
-- bar
-- foo
+This release includes 2 merged PRs by 3 authors.
+We would like to thank the following contributors from the CockroachDB community:
+
+- bar (first-time contributor)
+- foo (first-time contributor)
 - test4
 
 ### PRs merged by contributors

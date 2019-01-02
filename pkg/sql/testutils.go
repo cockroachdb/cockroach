@@ -40,7 +40,7 @@ func CreateTestTableDescriptor(
 	}
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
 	evalCtx := tree.MakeTestingEvalContext(st)
-	return MakeTableDesc(
+	desc, err := MakeTableDesc(
 		ctx,
 		nil, /* txn */
 		nil, /* vt */
@@ -53,6 +53,7 @@ func CreateTestTableDescriptor(
 		&semaCtx,
 		&evalCtx,
 	)
+	return desc.TableDescriptor, err
 }
 
 func makeTestingExtendedEvalContext(st *cluster.Settings) extendedEvalContext {
@@ -88,4 +89,46 @@ func (r *StmtBufReader) AdvanceOne() {
 // SeekToNextBatch skips to the beginning of the next batch of commands.
 func (r *StmtBufReader) SeekToNextBatch() error {
 	return r.buf.seekToNextBatch()
+}
+
+// Exec is a test utility function that takes a localPlanner (of type
+// interface{} so that external packages can call NewInternalPlanner and pass
+// the result) and executes a sql statement through the DistSQLPlanner.
+func (dsp *DistSQLPlanner) Exec(
+	ctx context.Context, localPlanner interface{}, sql string, distribute bool,
+) error {
+	stmt, err := parser.ParseOne(sql)
+	if err != nil {
+		return err
+	}
+	p := localPlanner.(*planner)
+	if err := p.makePlan(ctx, Statement{SQL: sql, AST: stmt}); err != nil {
+		return err
+	}
+	rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		return nil
+	})
+	execCfg := p.ExecCfg()
+	recv := MakeDistSQLReceiver(
+		ctx,
+		rw,
+		stmt.StatementType(),
+		execCfg.RangeDescriptorCache,
+		execCfg.LeaseHolderCache,
+		p.txn,
+		func(ts hlc.Timestamp) {
+			_ = execCfg.Clock.Update(ts)
+		},
+		p.ExtendedEvalContext().Tracing,
+	)
+	defer recv.Release()
+
+	evalCtx := p.ExtendedEvalContext()
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p.txn)
+	planCtx.isLocal = !distribute
+	planCtx.planner = p
+	planCtx.stmtType = recv.stmtType
+
+	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.plan, recv)
+	return rw.Err()
 }

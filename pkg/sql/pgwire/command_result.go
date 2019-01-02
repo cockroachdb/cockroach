@@ -17,15 +17,15 @@ package pgwire
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 type completionMsgType int
@@ -48,10 +48,8 @@ const (
 type commandResult struct {
 	// conn is the parent connection of this commandResult.
 	conn *conn
-	// loc is the current time zone as set in the SQL session.
-	loc *time.Location
-	// bytesEncodeFormat is the current byte array encoding format as set in the SQL session.
-	bytesEncodeFormat sessiondata.BytesEncodeFormat
+	// conv indicates the conversion settings for SQL values.
+	conv sessiondata.DataConversionConfig
 	// pos identifies the position of the command within the connection.
 	pos sql.CmdPos
 
@@ -86,19 +84,17 @@ func (c *conn) makeCommandResult(
 	pos sql.CmdPos,
 	stmt tree.Statement,
 	formatCodes []pgwirebase.FormatCode,
-	loc *time.Location,
-	be sessiondata.BytesEncodeFormat,
+	conv sessiondata.DataConversionConfig,
 ) commandResult {
 	return commandResult{
-		conn:              c,
-		pos:               pos,
-		descOpt:           descOpt,
-		stmtType:          stmt.StatementType(),
-		formatCodes:       formatCodes,
-		loc:               loc,
-		typ:               commandComplete,
-		cmdCompleteTag:    stmt.StatementTag(),
-		bytesEncodeFormat: be,
+		conn:           c,
+		pos:            pos,
+		descOpt:        descOpt,
+		stmtType:       stmt.StatementType(),
+		formatCodes:    formatCodes,
+		typ:            commandComplete,
+		cmdCompleteTag: stmt.StatementTag(),
+		conv:           conv,
 	}
 }
 
@@ -129,9 +125,11 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 		r.typ == commandComplete &&
 		r.stmtType == tree.Rows {
 
-		r.err = errors.Errorf("execute row count limits not supported: %d of %d",
+		r.err = pgerror.UnimplementedWithIssueErrorf(4035,
+			"execute row count limits not supported: %d of %d",
 			r.limit, r.rowsAffected)
-		r.conn.bufferErr(convertToErrWithPGCode(r.err))
+		telemetry.RecordError(r.err)
+		r.conn.bufferErr(r.err)
 	}
 
 	// Send a completion message, specific to the type of result.
@@ -215,7 +213,7 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	}
 	r.rowsAffected++
 
-	r.conn.bufferRow(ctx, row, r.formatCodes, r.loc, r.bytesEncodeFormat)
+	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv)
 	_ /* flushed */, err := r.conn.maybeFlush(r.pos)
 	return err
 }

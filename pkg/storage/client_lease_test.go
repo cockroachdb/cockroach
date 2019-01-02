@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -38,6 +39,7 @@ func TestStoreRangeLease(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "enableEpoch", func(t *testing.T, enableEpoch bool) {
 		sc := storage.TestStoreConfig(nil)
+		sc.TestingKnobs.DisableMergeQueue = true
 		sc.EnableEpochRangeLeases = enableEpoch
 		mtc := &multiTestContext{storeConfig: &sc}
 		defer mtc.Stop()
@@ -57,7 +59,7 @@ func TestStoreRangeLease(t *testing.T) {
 			}
 		}
 
-		rLeft := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+		rLeft := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
 		lease, _ := rLeft.GetLease()
 		if lt := lease.Type(); lt != roachpb.LeaseExpiration {
 			t.Fatalf("expected lease type expiration; got %d", lt)
@@ -65,7 +67,7 @@ func TestStoreRangeLease(t *testing.T) {
 
 		// After the split, expect an expiration lease for other ranges.
 		for _, key := range splitKeys {
-			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key), nil)
+			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key))
 			lease, _ = repl.GetLease()
 			if lt := lease.Type(); lt != roachpb.LeaseExpiration {
 				t.Fatalf("%s: expected lease type epoch; got %d", key, lt)
@@ -84,7 +86,7 @@ func TestStoreRangeLease(t *testing.T) {
 		// After the expiration, expect an epoch lease for the RHS if
 		// we've enabled epoch based range leases.
 		for _, key := range splitKeys {
-			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key), nil)
+			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key))
 			lease, _ = repl.GetLease()
 			if enableEpoch {
 				if lt := lease.Type(); lt != roachpb.LeaseEpoch {
@@ -104,6 +106,7 @@ func TestStoreRangeLease(t *testing.T) {
 func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
@@ -123,7 +126,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	}
 
 	// We started with epoch ranges enabled, so verify we have an epoch lease.
-	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
+	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
 	lease, _ := repl.GetLease()
 	if lt := lease.Type(); lt != roachpb.LeaseEpoch {
 		t.Fatalf("expected lease type epoch; got %d", lt)
@@ -140,7 +143,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	}
 
 	// Verify we end up with an expiration lease on restart.
-	repl = mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
+	repl = mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
 	lease, _ = repl.GetLease()
 	if lt := lease.Type(); lt != roachpb.LeaseExpiration {
 		t.Fatalf("expected lease type expiration; got %d", lt)
@@ -157,7 +160,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	}
 
 	// Verify we end up with an epoch lease on restart.
-	repl = mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
+	repl = mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
 	lease, _ = repl.GetLease()
 	if lt := lease.Type(); lt != roachpb.LeaseEpoch {
 		t.Fatalf("expected lease type epoch; got %d", lt)
@@ -169,6 +172,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 func TestStoreGossipSystemData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
@@ -185,33 +189,33 @@ func TestStoreGossipSystemData(t *testing.T) {
 
 	mtc.stopStore(0)
 
-	getSystemConfig := func() config.SystemConfig {
-		systemConfig, _ := mtc.gossips[0].GetSystemConfig()
+	getSystemConfig := func() *config.SystemConfig {
+		systemConfig := mtc.gossips[0].GetSystemConfig()
 		return systemConfig
 	}
-	getNodeLiveness := func() storage.Liveness {
-		var liveness storage.Liveness
+	getNodeLiveness := func() storagepb.Liveness {
+		var liveness storagepb.Liveness
 		if err := mtc.gossips[0].GetInfoProto(gossip.MakeNodeLivenessKey(1), &liveness); err == nil {
 			return liveness
 		}
-		return storage.Liveness{}
+		return storagepb.Liveness{}
 	}
 
 	// Clear the system-config and node liveness gossip data. This is necessary
 	// because multiTestContext.restartStore reuse the Gossip structure.
 	if err := mtc.gossips[0].AddInfoProto(
-		gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
+		gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := mtc.gossips[0].AddInfoProto(
-		gossip.MakeNodeLivenessKey(1), &storage.Liveness{}, 0); err != nil {
+		gossip.MakeNodeLivenessKey(1), &storagepb.Liveness{}, 0); err != nil {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
-		if !reflect.DeepEqual(getSystemConfig(), config.SystemConfig{}) {
+		if !reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig()) {
 			return errors.New("system config not empty")
 		}
-		if getNodeLiveness() != (storage.Liveness{}) {
+		if getNodeLiveness() != (storagepb.Liveness{}) {
 			return errors.New("node liveness not empty")
 		}
 		return nil
@@ -221,10 +225,10 @@ func TestStoreGossipSystemData(t *testing.T) {
 	// data is gossiped.
 	mtc.restartStore(0)
 	testutils.SucceedsSoon(t, func() error {
-		if reflect.DeepEqual(getSystemConfig(), config.SystemConfig{}) {
+		if reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig()) {
 			return errors.New("system config not gossiped")
 		}
-		if getNodeLiveness() == (storage.Liveness{}) {
+		if getNodeLiveness() == (storagepb.Liveness{}) {
 			return errors.New("node liveness not gossiped")
 		}
 		return nil
@@ -245,7 +249,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	const numStores = 3
 	mtc.Start(t, numStores)
 
-	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey(keys.SystemConfigSpan.Key), nil).RangeID
+	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey(keys.SystemConfigSpan.Key)).RangeID
 	mtc.replicateRange(rangeID, 1, 2)
 
 	initialStoreIdx := -1

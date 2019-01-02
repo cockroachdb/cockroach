@@ -24,16 +24,33 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestScatterRandomizeLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if testutils.NightlyStress() && util.RaceEnabled {
+		t.Skip("uses too many resources for stressrace")
+	}
+
 	const numHosts = 3
-	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{})
+
+	// Prevent the merge queue from immediately discarding our splits. This is
+	// more foolproof than changing the cluster setting because the cluster
+	// setting change has to be propagated to all nodes via gossip so there's
+	// still a small chance that a non-gateway node will try a merge after we
+	// change the setting.
+	var testClusterArgs base.TestClusterArgs
+	testClusterArgs.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		DisableMergeQueue: true,
+	}
+	tc := serverutils.StartTestCluster(t, numHosts, testClusterArgs)
 	defer tc.Stopper().Stop(context.TODO())
 
 	sqlutils.CreateTable(
@@ -44,6 +61,10 @@ func TestScatterRandomizeLeases(t *testing.T) {
 	)
 
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// Even though we disabled merges via the store testing knob, we must also
+	// disable the setting in order for manual splits to be allowed.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 
 	// Introduce 99 splits to get 100 ranges.
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
@@ -116,6 +137,8 @@ func TestScatterResponse(t *testing.T) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
+	// Prevent the merge queue from immediately discarding our splits.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 	rows := r.Query(t, "ALTER TABLE test.t SCATTER")
 
@@ -131,7 +154,7 @@ func TestScatterResponse(t *testing.T) {
 			expectedKey = keys.MakeTablePrefix(uint32(tableDesc.ID))
 		} else {
 			var err error
-			expectedKey, err = sqlbase.MakePrimaryIndexKey(tableDesc, i*10)
+			expectedKey, err = sqlbase.TestingMakePrimaryIndexKey(tableDesc, i*10)
 			if err != nil {
 				t.Fatal(err)
 			}

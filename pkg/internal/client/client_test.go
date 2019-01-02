@@ -26,17 +26,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -45,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 // testUser has valid client certs.
@@ -118,7 +115,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
-				EvalKnobs: batcheval.TestingKnobs{
+				EvalKnobs: storagebase.BatchEvalTestingKnobs{
 					TestingEvalFilter: filter,
 				},
 			},
@@ -129,20 +126,15 @@ func TestClientRetryNonTxn(t *testing.T) {
 
 	testCases := []struct {
 		args        roachpb.Request
-		isolation   enginepb.IsolationType
 		canPush     bool
 		expAttempts int
 	}{
 		// Write/write conflicts.
-		{&roachpb.PutRequest{}, enginepb.SNAPSHOT, true, 2},
-		{&roachpb.PutRequest{}, enginepb.SERIALIZABLE, true, 2},
-		{&roachpb.PutRequest{}, enginepb.SNAPSHOT, false, 1},
-		{&roachpb.PutRequest{}, enginepb.SERIALIZABLE, false, 1},
+		{&roachpb.PutRequest{}, true, 2},
+		{&roachpb.PutRequest{}, false, 1},
 		// Read/write conflicts.
-		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, true, 1},
-		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, true, 1},
-		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, false, 1},
-		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, false, 1},
+		{&roachpb.GetRequest{}, true, 1},
+		{&roachpb.GetRequest{}, false, 1},
 	}
 	// Lay down a write intent using a txn and attempt to access the same
 	// key from our test client, with priorities set up so that the Push
@@ -160,12 +152,6 @@ func TestClientRetryNonTxn(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if test.isolation == enginepb.SNAPSHOT {
-				if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-					return err
-				}
-			}
-
 			count++
 			// Lay down the intent.
 			if err := txn.Put(ctx, key, "txn-value"); err != nil {
@@ -258,18 +244,15 @@ func TestClientRunTransaction(t *testing.T) {
 		value := []byte("value")
 		key := []byte(fmt.Sprintf("%s/key-%t", testUser, commit))
 
-		// Use snapshot isolation so non-transactional read can always push.
 		err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-				return err
-			}
-
 			// Put transactional value.
 			if err := txn.Put(ctx, key, value); err != nil {
 				return err
 			}
-			// Attempt to read outside of txn.
-			if gr, err := db.Get(ctx, key); err != nil {
+			// Attempt to read in another txn.
+			conflictTxn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+			conflictTxn.InternalSetPriority(roachpb.MaxTxnPriority)
+			if gr, err := conflictTxn.Get(ctx, key); err != nil {
 				return err
 			} else if gr.Value != nil {
 				return errors.Errorf("expected nil value; got %+v", gr.Value)
@@ -322,12 +305,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 			keys[j] = []byte(fmt.Sprintf("%s/key-%t/%s", testUser, commit, string(s)))
 		}
 
-		// Use snapshot isolation so non-transactional read can always push.
 		err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-				return err
-			}
-
 			// We can't use errgroup here because we need to return any TxnAborted
 			// errors if we see them.
 			var wg sync.WaitGroup
@@ -341,9 +319,11 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 						concErrs[i] = err
 						return
 					}
-					// Attempt to read outside of txn. We need to guarantee that the
+					// Attempt to read in another txn. We need to guarantee that the
 					// BeginTxnRequest has finished or we risk aborting the transaction.
-					if gr, err := db.Get(ctx, key); err != nil {
+					conflictTxn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+					conflictTxn.InternalSetPriority(roachpb.MaxTxnPriority)
+					if gr, err := conflictTxn.Get(ctx, key); err != nil {
 						concErrs[i] = err
 						return
 					} else if gr.Value != nil {
@@ -412,10 +392,10 @@ func TestClientGetAndPutProto(t *testing.T) {
 	db := createTestClient(t, s)
 
 	zoneConfig := config.ZoneConfig{
-		NumReplicas:   2,
+		NumReplicas:   proto.Int32(2),
 		Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "mem"}}}},
-		RangeMinBytes: 1 << 10, // 1k
-		RangeMaxBytes: 1 << 18, // 256k
+		RangeMinBytes: proto.Int64(1 << 10), // 1k
+		RangeMaxBytes: proto.Int64(1 << 18), // 256k
 	}
 
 	key := roachpb.Key(testUser + "/zone-config")
@@ -850,42 +830,6 @@ func TestReadConsistencyTypes(t *testing.T) {
 	}
 }
 
-// TestReadOnlyTxnObeysDeadline tests that read-only transactions obey the
-// deadline. Read-only transactions have their EndTransaction elided, so the
-// enforcement of the deadline is done in the client.
-func TestReadOnlyTxnObeysDeadline(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-	db := createTestClient(t, s)
-	ctx := context.TODO()
-
-	if err := db.Put(ctx, "k", "v"); err != nil {
-		t.Fatal(err)
-	}
-
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
-	// Only snapshot transactions can observe deadline errors; serializable ones
-	// get a restart error before the deadline check.
-	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set a deadline, then set a higher commit timestamp for the txn.
-	txn.UpdateDeadlineMaybe(ctx, s.Clock().Now())
-	txn.Proto().Timestamp.Forward(s.Clock().Now())
-	if _, err := txn.Get(ctx, "k"); err != nil {
-		t.Fatal(err)
-	}
-	if err := txn.Commit(ctx); !testutils.IsError(
-		err, "deadline exceeded before transaction finalization") {
-		// We test for TransactionAbortedError. If this was not a read-only txn,
-		// the error returned by the server would have been different - a
-		// TransactionStatusError. This inconsistency is unfortunate.
-		t.Fatal(err)
-	}
-}
-
 // TestTxn_ReverseScan a simple test for Txn.ReverseScan
 func TestTxn_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -904,62 +848,68 @@ func TestTxn_ReverseScan(t *testing.T) {
 		t.Error(err)
 	}
 
-	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		// Try reverse scans for all keys.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/10", 100)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows,
-				keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
-				keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+	// Try reverse scans for all keys.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/10", 100)
+		if err != nil {
+			return err
 		}
-
-		// Try reverse scans for half of the keys.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 100)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
-		}
-
-		// Try limit maximum rows.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 3)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
-		}
-
-		// Try reverse scan with the same start and end key.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/00", 100)
-			if len(rows) > 0 {
-				t.Errorf("expected empty, got %v", rows)
-			}
-			if err == nil {
-				t.Errorf("expected a truncation error, got %s", err)
-			}
-		}
-
-		// Try reverse scan with non-existent key.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/aa", testUser+"/key/bb", 100)
-			if err != nil {
-				return err
-			}
-			if len(rows) > 0 {
-				t.Errorf("expected empty, got %v", rows)
-			}
-		}
-
+		checkKVs(t, rows,
+			keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
+			keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
-	if err != nil {
+	// Try reverse scans for half of the keys.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 100)
+		if err != nil {
+			return err
+		}
+		checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try limit maximum rows.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 3)
+		if err != nil {
+			return err
+		}
+		checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try reverse scan with the same start and end key.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/00", 100)
+		if len(rows) > 0 {
+			t.Errorf("expected empty, got %v", rows)
+		}
+		return err
+	}); err != nil {
+		if err == nil {
+			t.Errorf("expected a truncation error, got %s", err)
+		}
+	}
+
+	// Try reverse scan with non-existent key.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/aa", testUser+"/key/bb", 100)
+		if err != nil {
+			return err
+		}
+		if len(rows) > 0 {
+			t.Errorf("expected empty, got %v", rows)
+		}
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -969,13 +919,10 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 
 	// Mock out sender function to check that created transactions
 	// have the observed timestamp set for the configured node ID.
-	factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
-		return client.TxnSenderFunc(
-			func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-				return ba.CreateReply(), nil
-			},
-		)
-	})
+	factory := client.MakeMockTxnSenderFactory(
+		func(_ context.Context, _ *roachpb.Transaction, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			return ba.CreateReply(), nil
+		})
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	dbCtx := client.DefaultDBContext()
@@ -996,8 +943,9 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	}
 	for i, test := range directCases {
 		t.Run(fmt.Sprintf("direct-txn-%d", i), func(t *testing.T) {
-			txn := client.NewTxn(db, test.nodeID, test.typ)
-			if ots := txn.Proto().ObservedTimestamps; (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
+			txn := client.NewTxn(ctx, db, test.nodeID, test.typ)
+			ots := txn.Serialize().ObservedTimestamps
+			if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
 				t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
 			}
 		})
@@ -1018,7 +966,8 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 			}
 			if err := db.Txn(
 				ctx, func(_ context.Context, txn *client.Txn) error {
-					if ots := txn.Proto().ObservedTimestamps; (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
+					ots := txn.Serialize().ObservedTimestamps
+					if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
 						t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
 					}
 					return nil

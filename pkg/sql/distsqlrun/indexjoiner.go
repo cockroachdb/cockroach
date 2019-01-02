@@ -18,6 +18,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -31,7 +33,7 @@ const indexJoinerBatchSize = 100
 // primary index of the same table, `desc`, to retrieve columns which are not
 // stored in the secondary index.
 type indexJoiner struct {
-	processorBase
+	ProcessorBase
 
 	input RowSource
 	desc  sqlbase.TableDescriptor
@@ -40,7 +42,7 @@ type indexJoiner struct {
 	// to get rows from the fetcher. This enables the indexJoiner to wrap the
 	// fetcherInput with a stat collector when necessary.
 	fetcherInput RowSource
-	fetcher      sqlbase.RowFetcher
+	fetcher      row.Fetcher
 	// fetcherReady indicates that we have started an index scan and there are
 	// potentially more rows to retrieve.
 	fetcherReady bool
@@ -63,9 +65,9 @@ const indexJoinerProcName = "index joiner"
 func newIndexJoiner(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *JoinReaderSpec,
+	spec *distsqlpb.JoinReaderSpec,
 	input RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*indexJoiner, error) {
 	if spec.IndexIdx != 0 {
@@ -77,19 +79,20 @@ func newIndexJoiner(
 		keyPrefix: sqlbase.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIndex.ID),
 		batchSize: indexJoinerBatchSize,
 	}
-	if err := ij.init(
+	needMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	if err := ij.Init(
 		ij,
 		post,
-		ij.desc.ColumnTypes(),
+		ij.desc.ColumnTypesWithMutations(needMutations),
 		flowCtx,
 		processorID,
 		output,
 		nil, /* memMonitor */
-		procStateOpts{
-			inputsToDrain: []RowSource{ij.input},
-			trailingMetaCallback: func() []ProducerMetadata {
-				ij.internalClose()
-				if meta := getTxnCoordMeta(ij.flowCtx.txn); meta != nil {
+		ProcStateOpts{
+			InputsToDrain: []RowSource{ij.input},
+			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
+				ij.InternalClose()
+				if meta := getTxnCoordMeta(ctx, ij.flowCtx.txn); meta != nil {
 					return []ProducerMetadata{{TxnCoordMeta: meta}}
 				}
 				return nil
@@ -102,15 +105,16 @@ func newIndexJoiner(
 		&ij.fetcher,
 		&ij.desc,
 		0, /* primary index */
-		ij.desc.ColumnIdxMap(),
+		ij.desc.ColumnIdxMapWithMutations(needMutations),
 		false, /* reverse */
 		ij.out.neededColumns(),
 		false, /* isCheck */
 		&ij.alloc,
+		spec.Visibility,
 	); err != nil {
 		return nil, err
 	}
-	ij.fetcherInput = &rowFetcherWrapper{RowFetcher: &ij.fetcher}
+	ij.fetcherInput = &rowFetcherWrapper{Fetcher: &ij.fetcher}
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
 		// Enable stats collection.
@@ -125,19 +129,20 @@ func newIndexJoiner(
 // Start is part of the RowSource interface.
 func (ij *indexJoiner) Start(ctx context.Context) context.Context {
 	ij.input.Start(ctx)
-	return ij.startInternal(ctx, indexJoinerProcName)
+	ij.fetcherInput.Start(ctx)
+	return ij.StartInternal(ctx, indexJoinerProcName)
 }
 
 // Next is part of the RowSource interface.
 func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for ij.state == stateRunning {
+	for ij.State == StateRunning {
 		if !ij.fetcherReady {
 			// Retrieve a batch of rows from the input.
 			for len(ij.spans) < ij.batchSize {
 				row, meta := ij.input.Next()
 				if meta != nil {
 					if meta.Err != nil {
-						ij.moveToDraining(nil /* err */)
+						ij.MoveToDraining(nil /* err */)
 					}
 					return nil, meta
 				}
@@ -146,51 +151,46 @@ func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				}
 				span, err := ij.generateSpan(row)
 				if err != nil {
-					ij.moveToDraining(err)
-					return nil, ij.drainHelper()
+					ij.MoveToDraining(err)
+					return nil, ij.DrainHelper()
 				}
 				ij.spans = append(ij.spans, span)
 			}
 			if len(ij.spans) == 0 {
 				// All done.
-				ij.moveToDraining(nil /* err */)
-				return nil, ij.drainHelper()
+				ij.MoveToDraining(nil /* err */)
+				return nil, ij.DrainHelper()
 			}
 			// Scan the primary index for this batch.
 			err := ij.fetcher.StartScan(
-				ij.ctx, ij.flowCtx.txn, ij.spans, false /* limitBatches */, 0, /* limitHint */
-				false /* traceKV */)
+				ij.Ctx, ij.flowCtx.txn, ij.spans, false /* limitBatches */, 0, /* limitHint */
+				ij.flowCtx.traceKV)
 			if err != nil {
-				ij.moveToDraining(err)
-				return nil, ij.drainHelper()
+				ij.MoveToDraining(err)
+				return nil, ij.DrainHelper()
 			}
 			ij.fetcherReady = true
 			ij.spans = ij.spans[:0]
 		}
 		row, meta := ij.fetcherInput.Next()
 		if meta != nil {
-			ij.moveToDraining(scrub.UnwrapScrubError(meta.Err))
-			return nil, ij.drainHelper()
+			ij.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
+			return nil, ij.DrainHelper()
 		}
 		if row == nil {
 			// Done with this batch.
 			ij.fetcherReady = false
-		} else if outRow := ij.processRowHelper(row); outRow != nil {
+		} else if outRow := ij.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
-	return nil, ij.drainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (ij *indexJoiner) ConsumerDone() {
-	ij.moveToDraining(nil /* err */)
+	return nil, ij.DrainHelper()
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (ij *indexJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	ij.internalClose()
+	ij.InternalClose()
 }
 
 func (ij *indexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error) {
@@ -205,7 +205,8 @@ func (ij *indexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, erro
 	keyRow := row[:numKeyCols]
 	types := ij.input.OutputTypes()[:numKeyCols]
 	key, err := sqlbase.MakeKeyFromEncDatums(
-		types, keyRow, &ij.desc, &ij.desc.PrimaryIndex, ij.keyPrefix, &ij.alloc)
+		ij.keyPrefix, keyRow, types, ij.desc.PrimaryIndex.ColumnDirections, &ij.desc,
+		&ij.desc.PrimaryIndex, &ij.alloc)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
@@ -227,7 +228,7 @@ func (ij *indexJoiner) outputStatsToTrace() {
 		InputStats:       is,
 		IndexLookupStats: ils,
 	}
-	if sp := opentracing.SpanFromContext(ij.ctx); sp != nil {
+	if sp := opentracing.SpanFromContext(ij.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, jrs)
 	}
 }

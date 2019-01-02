@@ -1,4 +1,2 @@
 show_backup_stmt ::=
 	'SHOW' 'BACKUP' location
-	| 'SHOW' 'BACKUP' 'RANGES' location
-	| 'SHOW' 'BACKUP' 'FILES' location

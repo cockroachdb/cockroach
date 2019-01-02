@@ -18,14 +18,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/coreos/etcd/raft"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 )
 
 const (
@@ -65,7 +64,7 @@ func newRaftSnapshotQueue(store *Store, g *gossip.Gossip) *raftSnapshotQueue {
 }
 
 func (rq *raftSnapshotQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	// If a follower needs a snapshot, enqueue at the highest priority.
 	if status := repl.RaftStatus(); status != nil {
@@ -83,7 +82,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 }
 
 func (rq *raftSnapshotQueue) process(
-	ctx context.Context, repl *Replica, _ config.SystemConfig,
+	ctx context.Context, repl *Replica, _ *config.SystemConfig,
 ) error {
 	// If a follower requires a Raft snapshot, perform it.
 	if status := repl.RaftStatus(); status != nil {
@@ -111,6 +110,27 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas)
 	}
 	err := repl.sendSnapshot(ctx, repDesc, snapTypeRaft, SnapshotRequest_RECOVERY)
+
+	// NB: if the snapshot fails because of an overlapping replica on the
+	// recipient which is also waiting for a snapshot, the "smart" thing is to
+	// send that other snapshot with higher priority. The problem is that the
+	// leader for the overlapping range may not be this node. This happens
+	// typically during splits and merges when overly aggressive log truncations
+	// occur.
+	//
+	// For splits, the overlapping range will be a replica of the pre-split
+	// range that needs a snapshot to catch it up across the split trigger.
+	//
+	// For merges, the overlapping replicas belong to ranges since subsumed by
+	// this range. In particular, there can be many of them if merges apply in
+	// rapid succession. The leftmost replica is the most important one to catch
+	// up, as it will absorb all of the overlapping replicas when caught up past
+	// all of the merges.
+	//
+	// We're currently not handling this and instead rely on the quota pool to
+	// make sure that log truncations won't require snapshots for healthy
+	// followers.
+
 	// Report the snapshot status to Raft, which expects us to do this once
 	// we finish sending the snapshot.
 	repl.reportSnapshotStatus(ctx, id, err)

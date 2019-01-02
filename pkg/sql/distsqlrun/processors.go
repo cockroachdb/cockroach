@@ -20,20 +20,17 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"fmt"
-
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
-
-// processorIDTagKey is the key used for processor id tags in tracing spans.
-const processorIDTagKey = tracing.TagPrefix + "processorid"
 
 // Processor is a common interface implemented by all processors, used by the
 // higher-level flow orchestration code.
@@ -59,11 +56,12 @@ type ProcOutputHelper struct {
 	rowAlloc sqlbase.EncDatumRowAlloc
 
 	filter *exprHelper
-	// renderExprs is set if we have a rendering. Only one of renderExprs and
-	// outputCols can be set.
+	// renderExprs has length > 0 if we have a rendering. Only one of renderExprs
+	// and outputCols can be set.
 	renderExprs []exprHelper
-	// outputCols is set if we have a projection. Only one of renderExprs and
-	// outputCols can be set.
+	// outputCols is non-nil if we have a projection. Only one of renderExprs and
+	// outputCols can be set. Note that 0-length projections are possible, in
+	// which case outputCols will be 0-length but non-nil.
 	outputCols []uint32
 
 	outputRow sqlbase.EncDatumRow
@@ -87,13 +85,24 @@ type ProcOutputHelper struct {
 	rowIdx uint64
 }
 
+// Reset resets this ProcOutputHelper, retaining allocated memory in its slices.
+func (h *ProcOutputHelper) Reset() {
+	*h = ProcOutputHelper{
+		renderExprs: h.renderExprs[:0],
+		outputTypes: h.outputTypes[:0],
+	}
+}
+
 // Init sets up a ProcOutputHelper. The types describe the internal schema of
 // the processor (as described for each processor core spec); they can be
 // omitted if there is no filtering expression.
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
 func (h *ProcOutputHelper) Init(
-	post *PostProcessSpec, types []sqlbase.ColumnType, evalCtx *tree.EvalContext, output RowReceiver,
+	post *distsqlpb.PostProcessSpec,
+	types []sqlbase.ColumnType,
+	evalCtx *tree.EvalContext,
+	output RowReceiver,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
@@ -103,7 +112,7 @@ func (h *ProcOutputHelper) Init(
 	}
 	h.output = output
 	h.numInternalCols = len(types)
-	if post.Filter.Expr != "" {
+	if post.Filter != (distsqlpb.Expression{}) {
 		h.filter = &exprHelper{}
 		if err := h.filter.init(post.Filter, types, evalCtx); err != nil {
 			return err
@@ -120,14 +129,28 @@ func (h *ProcOutputHelper) Init(
 			// nil indicates no projection; use an empty slice.
 			h.outputCols = make([]uint32, 0)
 		}
-		h.outputTypes = make([]sqlbase.ColumnType, len(h.outputCols))
+		nOutputCols := len(h.outputCols)
+		if cap(h.outputTypes) >= nOutputCols {
+			h.outputTypes = h.outputTypes[:nOutputCols]
+		} else {
+			h.outputTypes = make([]sqlbase.ColumnType, nOutputCols)
+		}
 		for i, c := range h.outputCols {
 			h.outputTypes[i] = types[c]
 		}
-	} else if len(post.RenderExprs) > 0 {
-		h.renderExprs = make([]exprHelper, len(post.RenderExprs))
-		h.outputTypes = make([]sqlbase.ColumnType, len(post.RenderExprs))
+	} else if nRenders := len(post.RenderExprs); nRenders > 0 {
+		if cap(h.renderExprs) >= nRenders {
+			h.renderExprs = h.renderExprs[:nRenders]
+		} else {
+			h.renderExprs = make([]exprHelper, nRenders)
+		}
+		if cap(h.outputTypes) >= nRenders {
+			h.outputTypes = h.outputTypes[:nRenders]
+		} else {
+			h.outputTypes = make([]sqlbase.ColumnType, nRenders)
+		}
 		for i, expr := range post.RenderExprs {
+			h.renderExprs[i] = exprHelper{}
 			if err := h.renderExprs[i].init(expr, types, evalCtx); err != nil {
 				return err
 			}
@@ -138,9 +161,15 @@ func (h *ProcOutputHelper) Init(
 			h.outputTypes[i] = colTyp
 		}
 	} else {
-		h.outputTypes = types
+		// No rendering or projection.
+		if cap(h.outputTypes) >= len(types) {
+			h.outputTypes = h.outputTypes[:len(types)]
+		} else {
+			h.outputTypes = make([]sqlbase.ColumnType, len(types))
+		}
+		copy(h.outputTypes, types)
 	}
-	if h.outputCols != nil || h.renderExprs != nil {
+	if h.outputCols != nil || len(h.renderExprs) > 0 {
 		// We're rendering or projecting, so allocate an output row.
 		h.outputRow = h.rowAlloc.AllocRow(len(h.outputTypes))
 	}
@@ -158,7 +187,7 @@ func (h *ProcOutputHelper) Init(
 // neededColumns calculates the set of internal processor columns that are
 // actually used by the post-processing stage.
 func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
-	if h.outputCols == nil && h.renderExprs == nil {
+	if h.outputCols == nil && len(h.renderExprs) == 0 {
 		// No projection or rendering; all columns are needed.
 		colIdxs.AddRange(0, h.numInternalCols-1)
 		return colIdxs
@@ -177,12 +206,10 @@ func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 		}
 
 		// See if render expressions require this column.
-		if h.renderExprs != nil {
-			for j := range h.renderExprs {
-				if h.renderExprs[j].vars.IndexedVarUsed(i) {
-					colIdxs.Add(i)
-					break
-				}
+		for j := range h.renderExprs {
+			if h.renderExprs[j].vars.IndexedVarUsed(i) {
+				colIdxs.Add(i)
+				break
 			}
 		}
 	}
@@ -345,7 +372,7 @@ func (h *ProcOutputHelper) ProcessRow(
 		return nil, true, nil
 	}
 
-	if h.renderExprs != nil {
+	if len(h.renderExprs) > 0 {
 		// Rendering.
 		for i := range h.renderExprs {
 			datum, err := h.renderExprs[i].eval(row)
@@ -378,7 +405,7 @@ func (h *ProcOutputHelper) consumerClosed() {
 	h.rowIdx = h.maxRowIdx
 }
 
-// processorBase is supposed to be embedded by Processors. It provides
+// ProcessorBase is supposed to be embedded by Processors. It provides
 // facilities for dealing with filtering and projection (through a
 // ProcOutputHelper) and for implementing the RowSource interface (draining,
 // trailing metadata).
@@ -389,7 +416,7 @@ func (h *ProcOutputHelper) consumerClosed() {
 //   // concatProcessor concatenates rows from two sources (first returns rows
 //   // from the left, then from the right).
 //   type concatProcessor struct {
-//     processorBase
+//     ProcessorBase
 //     l, r RowSource
 //
 //     // leftConsumed is set once we've exhausted the left input; once set, we start
@@ -403,13 +430,13 @@ func (h *ProcOutputHelper) consumerClosed() {
 //     p := &concatProcessor{l: l, r: r}
 //     if err := p.init(
 //       post, l.OutputTypes(), flowCtx, output,
-//       // We pass the inputs to the helper, to be consumed by drainHelper() later.
-//       procStateOpts{
-//         inputsToDrain: []RowSource{l, r},
+//       // We pass the inputs to the helper, to be consumed by DrainHelper() later.
+//       ProcStateOpts{
+//         InputsToDrain: []RowSource{l, r},
 //         // If the proc needed to return any metadata at the end other than the
 //         // tracing info, or if it needed to cleanup any resources other than those
-//         // handled by internalClose() (say, close some memory account), it'd pass
-//         // a trailingMetaCallback here.
+//         // handled by InternalClose() (say, close some memory account), it'd pass
+//         // a TrailingMetaCallback here.
 //       },
 //     ); err != nil {
 //       return nil, err
@@ -421,15 +448,14 @@ func (h *ProcOutputHelper) consumerClosed() {
 //   func (p *concatProcessor) Start(ctx context.Context) context.Context {
 //     p.l.Start(ctx)
 //     p.r.Start(ctx)
-//     // Don't forget to declare a name for the proc and add it to procNameToLogTag.
-//     return p.startInternal(ctx, concatProcName)
+//     return p.StartInternal(ctx, concatProcName)
 //   }
 //
 //   // Next is part of the RowSource interface.
 //   func (p *concatProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 //     // Loop while we haven't produced a row or a metadata record. We loop around
 //     // in several cases, including when the filtering rejected a row coming.
-//     for p.state == stateRunning {
+//     for p.State == StateRunning {
 //       var row sqlbase.EncDatumRow
 //       var meta *ProducerMetadata
 //       if !p.leftConsumed {
@@ -442,7 +468,7 @@ func (h *ProcOutputHelper) consumerClosed() {
 //         // If we got an error, we need to forward it along and remember that we're
 //         // draining.
 //         if meta.Err != nil {
-//           p.moveToDraining(nil /* err */)
+//           p.MoveToDraining(nil /* err */)
 //         }
 //         return nil, meta
 //       }
@@ -452,33 +478,33 @@ func (h *ProcOutputHelper) consumerClosed() {
 //         } else {
 //           // In this case we know that both inputs are consumed, so we could
 //           // transition directly to stateTrailingMeta, but implementations are
-//           // encouraged to just use moveToDraining() for uniformity; drainHelper()
+//           // encouraged to just use MoveToDraining() for uniformity; DrainHelper()
 //           // will transition to stateTrailingMeta() quickly.
-//           p.moveToDraining(nil /* err */)
+//           p.MoveToDraining(nil /* err */)
 //           break
 //         }
 //         continue
 //       }
 //
-//       if outRow := p.processRowHelper(row); outRow != nil {
+//       if outRow := p.ProcessRowHelper(row); outRow != nil {
 //         return outRow, nil
 //       }
 //     }
-//     return nil, p.drainHelper()
+//     return nil, p.DrainHelper()
 //   }
 //
 //   // ConsumerDone is part of the RowSource interface.
 //   func (p *concatProcessor) ConsumerDone() {
-//     p.moveToDraining(nil /* err */)
+//     p.MoveToDraining(nil /* err */)
 //   }
 //
 //   // ConsumerClosed is part of the RowSource interface.
 //   func (p *concatProcessor) ConsumerClosed() {
 //     // The consumer is done, Next() will not be called again.
-//     p.internalClose()
+//     p.InternalClose()
 //   }
 //
-type processorBase struct {
+type ProcessorBase struct {
 	self RowSource
 
 	processorID int32
@@ -489,23 +515,23 @@ type processorBase struct {
 	// evalCtx is used for expression evaluation. It overrides the one in flowCtx.
 	evalCtx *tree.EvalContext
 
-	// memMonitor is the processor's memory monitor.
-	memMonitor *mon.BytesMonitor
+	// MemMonitor is the processor's memory monitor.
+	MemMonitor *mon.BytesMonitor
 
-	// closed is set by internalClose(). Once set, the processor's tracing span
+	// closed is set by InternalClose(). Once set, the processor's tracing span
 	// has been closed.
 	closed bool
 
-	// ctx and span contain the tracing state while the processor is active
+	// Ctx and span contain the tracing state while the processor is active
 	// (i.e. hasn't been closed). Initialized using flowCtx.Ctx (which should not be otherwise
 	// used).
-	ctx  context.Context
+	Ctx  context.Context
 	span opentracing.Span
-	// origCtx is the context from which ctx was derived. internalClose() resets
+	// origCtx is the context from which ctx was derived. InternalClose() resets
 	// ctx to this.
 	origCtx context.Context
 
-	state procState
+	State procState
 
 	// finishTrace, if set, will be called before getting the trace data from
 	// the span and adding the recording to the trailing metadata. Useful for
@@ -515,24 +541,24 @@ type processorBase struct {
 
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor
-	// (including calling internalClose()) and generate the trailing meta that
+	// (including calling InternalClose()) and generate the trailing meta that
 	// needs to be returned to the consumer. As a special case,
 	// moveToTrailingMeta() handles getting the tracing information into
 	// trailingMeta, so the callback doesn't need to worry about that.
 	//
-	// If no callback is specified, internalClose() will be called automatically.
+	// If no callback is specified, InternalClose() will be called automatically.
 	// So, if no trailing metadata other than the trace needs to be returned (and
 	// other than what has otherwise been manually put in trailingMeta) and no
-	// closing other than internalClose is needed, then no callback needs to be
+	// closing other than InternalClose is needed, then no callback needs to be
 	// specified.
-	trailingMetaCallback func() []ProducerMetadata
+	trailingMetaCallback func(context.Context) []ProducerMetadata
 	// trailingMeta is scratch space where metadata is stored to be returned
 	// later.
 	trailingMeta []ProducerMetadata
 
 	// inputsToDrain, if not empty, contains inputs to be drained by
-	// drainHelper(). moveToDraining() calls ConsumerDone() on them,
-	// internalClose() calls ConsumerClosed() on then.
+	// DrainHelper(). MoveToDraining() calls ConsumerDone() on them,
+	// InternalClose() calls ConsumerClosed() on then.
 	//
 	// ConsumerDone() is called on all inputs at once and then inputs are drained
 	// one by one (in stateDraining, inputsToDrain[0] is the one currently being
@@ -540,14 +566,24 @@ type processorBase struct {
 	inputsToDrain []RowSource
 }
 
+// Reset resets this ProcessorBase, retaining allocated memory in slices.
+func (pb *ProcessorBase) Reset() {
+	pb.out.Reset()
+	*pb = ProcessorBase{
+		out:           pb.out,
+		trailingMeta:  pb.trailingMeta[:0],
+		inputsToDrain: pb.inputsToDrain[:0],
+	}
+}
+
 // procState represents the standard states that a processor can be in. These
 // states are relevant when the processor is using the draining utilities in
-// processorBase.
+// ProcessorBase.
 type procState int
 
 //go:generate stringer -type=procState
 const (
-	// stateRunning is the common state of a processor: it's producing rows for
+	// StateRunning is the common state of a processor: it's producing rows for
 	// its consumer and forwarding metadata from its input. Different processors
 	// might have sub-states internally.
 	//
@@ -555,11 +591,34 @@ const (
 	// reached, then the processor will transition to stateDraining. If the input
 	// is exhausted, then the processor can transition to stateTrailingMeta
 	// directly, although most always go through stateDraining.
-	stateRunning procState = iota
+	StateRunning procState = iota
 
 	// stateDraining is the state in which the processor is forwarding metadata
 	// from its input and otherwise ignoring all rows. Once the input is
 	// exhausted, the processor will transition to stateTrailingMeta.
+	//
+	// In stateDraining, processors are required to swallow
+	// ReadWithinUncertaintyIntervalErrors received from its sources. We're
+	// already draining, so we don't care about whatever data generated this
+	// uncertainty error. Besides generally seeming like a good idea, doing this
+	// allows us to offer a nice guarantee to SQL clients: a read-only query that
+	// produces at most one row, run as an implicit txn, never produces retriable
+	// errors, regardless of the size of the row being returned (in relation to
+	// the size of the result buffer on the connection). One would naively expect
+	// that to be true: either the error happens before any rows have been
+	// delivered to the client, in which case the auto-retries kick in, or, if a
+	// row has been delivered, then the query is done and so how can there be an
+	// error? What our naive friend is ignoring is that, if it weren't for this
+	// code, it'd be possible for a retriable error to sneak in after the query's
+	// limit has been satisfied but while processors are still draining. Note
+	// that uncertainty errors are not retried automatically by the leaf
+	// TxnCoordSenders (i.e. by refresh txn interceptor).
+	//
+	// Other categories of errors might be safe to ignore too; however we
+	// can't ignore all of them. Generally, we need to ensure that all the
+	// trailing metadata (e.g. TxnCoordMeta's) make it to the gateway for
+	// successful flows. If an error is telling us that some metadata might
+	// have been dropped, we can't ignore that.
 	stateDraining
 
 	// stateTrailingMeta is the state in which the processor is outputting final
@@ -573,24 +632,24 @@ const (
 	stateExhausted
 )
 
-// moveToDraining switches the processor to the stateDraining. Only metadata is
+// MoveToDraining switches the processor to the stateDraining. Only metadata is
 // returned from now on. In this state, the processor is expected to drain its
-// inputs (commonly by using drainHelper()).
+// inputs (commonly by using DrainHelper()).
 //
-// If the processor has no input (procStateOpts.intputToDrain was not specified
+// If the processor has no input (ProcStateOpts.intputToDrain was not specified
 // at init() time), then we move straight to the stateTrailingMeta.
 //
 // An error can be optionally passed. It will be the first piece of metadata
-// returned by drainHelper().
-func (pb *processorBase) moveToDraining(err error) {
-	if pb.state != stateRunning {
-		// Calling moveToDraining in any state is allowed in order to facilitate the
+// returned by DrainHelper().
+func (pb *ProcessorBase) MoveToDraining(err error) {
+	if pb.State != StateRunning {
+		// Calling MoveToDraining in any state is allowed in order to facilitate the
 		// ConsumerDone() implementations that just call this unconditionally.
-		// However, calling it with an error in states other than stateRunning is
+		// However, calling it with an error in states other than StateRunning is
 		// not permitted.
 		if err != nil {
-			log.Fatalf(pb.ctx, "moveToDraining called in state %s with err: %s",
-				pb.state, err)
+			log.Fatalf(pb.Ctx, "MoveToDraining called in state %s with err: %s",
+				pb.State, err)
 		}
 		return
 	}
@@ -599,10 +658,10 @@ func (pb *processorBase) moveToDraining(err error) {
 		pb.trailingMeta = append(pb.trailingMeta, ProducerMetadata{Err: err})
 	}
 	if len(pb.inputsToDrain) > 0 {
-		// We go to stateDraining here. drainHelper() will transition to
+		// We go to stateDraining here. DrainHelper() will transition to
 		// stateTrailingMeta when the inputs are drained (including if the inputs
 		// are already drained).
-		pb.state = stateDraining
+		pb.State = stateDraining
 		for _, input := range pb.inputsToDrain {
 			input.ConsumerDone()
 		}
@@ -611,22 +670,22 @@ func (pb *processorBase) moveToDraining(err error) {
 	}
 }
 
-// drainHelper is supposed to be used in states draining and trailingMetadata.
+// DrainHelper is supposed to be used in states draining and trailingMetadata.
 // It deals with optionally draining an input and returning trailing meta. It
 // also moves from stateDraining to stateTrailingMeta when appropriate.
-func (pb *processorBase) drainHelper() *ProducerMetadata {
-	if pb.state == stateRunning {
-		log.Fatal(pb.ctx, "drain helper called in stateRunning")
+func (pb *ProcessorBase) DrainHelper() *ProducerMetadata {
+	if pb.State == StateRunning {
+		log.Fatal(pb.Ctx, "drain helper called in StateRunning")
 	}
 
 	// trailingMeta always has priority; it seems like a good idea because it
 	// causes metadata to be sent quickly after it is produced (e.g. the error
-	// passed to moveToDraining()).
+	// passed to MoveToDraining()).
 	if len(pb.trailingMeta) > 0 {
 		return pb.popTrailingMeta()
 	}
 
-	if pb.state != stateDraining {
+	if pb.State != stateDraining {
 		return nil
 	}
 
@@ -644,6 +703,19 @@ func (pb *processorBase) drainHelper() *ProducerMetadata {
 			continue
 		}
 		if meta != nil {
+			// Swallow ReadWithinUncertaintyIntervalErrors. See comments on
+			// stateDraining.
+			if err := meta.Err; err != nil {
+				// We only look for UnhandledRetryableErrors. Local reads (which would
+				// be transformed by the Root TxnCoordSender into
+				// HandledRetryableErrors) don't have any uncertainty.
+				if ure, ok := err.(*roachpb.UnhandledRetryableError); ok {
+					uncertain := ure.PErr.Detail.GetReadWithinUncertaintyInterval()
+					if uncertain != nil {
+						continue
+					}
+				}
+			}
 			return meta
 		}
 	}
@@ -651,20 +723,20 @@ func (pb *processorBase) drainHelper() *ProducerMetadata {
 
 // popTrailingMeta peels off one piece of trailing metadata or advances to
 // stateExhausted if there's no more trailing metadata.
-func (pb *processorBase) popTrailingMeta() *ProducerMetadata {
+func (pb *ProcessorBase) popTrailingMeta() *ProducerMetadata {
 	if len(pb.trailingMeta) > 0 {
 		meta := &pb.trailingMeta[0]
 		pb.trailingMeta = pb.trailingMeta[1:]
 		return meta
 	}
-	pb.state = stateExhausted
+	pb.State = stateExhausted
 	return nil
 }
 
 // moveToTrailingMeta switches the processor to the "trailing meta" state: only
 // trailing metadata is returned from now on. For simplicity, processors are
-// encouraged to always use moveToDraining() instead of this method, even when
-// there's nothing to drain. moveToDrain() or drainHelper() will internally call
+// encouraged to always use MoveToDraining() instead of this method, even when
+// there's nothing to drain. moveToDrain() or DrainHelper() will internally call
 // moveToTrailingMeta().
 //
 // trailingMetaCallback, if any, is called; it is expected to close the
@@ -672,30 +744,32 @@ func (pb *processorBase) popTrailingMeta() *ProducerMetadata {
 //
 // This method is to be called when the processor is done producing rows and
 // draining its inputs (if it wants to drain them).
-func (pb *processorBase) moveToTrailingMeta() {
-	if pb.state == stateTrailingMeta || pb.state == stateExhausted {
-		log.Fatalf(pb.ctx, "moveToTrailingMeta called in state: %s", pb.state)
+func (pb *ProcessorBase) moveToTrailingMeta() {
+	if pb.State == stateTrailingMeta || pb.State == stateExhausted {
+		log.Fatalf(pb.Ctx, "moveToTrailingMeta called in state: %s", pb.State)
 	}
 
 	if pb.finishTrace != nil {
 		pb.finishTrace()
 	}
 
-	pb.state = stateTrailingMeta
-	if trace := getTraceData(pb.ctx); trace != nil {
-		pb.trailingMeta = append(pb.trailingMeta, ProducerMetadata{TraceData: trace})
+	pb.State = stateTrailingMeta
+	if pb.span != nil {
+		if trace := getTraceData(pb.Ctx); trace != nil {
+			pb.trailingMeta = append(pb.trailingMeta, ProducerMetadata{TraceData: trace})
+		}
 	}
 	// trailingMetaCallback is called after reading the tracing data because it
-	// generally calls internalClose, indirectly, which switches the context and
+	// generally calls InternalClose, indirectly, which switches the context and
 	// the span.
 	if pb.trailingMetaCallback != nil {
-		pb.trailingMeta = append(pb.trailingMeta, pb.trailingMetaCallback()...)
+		pb.trailingMeta = append(pb.trailingMeta, pb.trailingMetaCallback(pb.Ctx)...)
 	} else {
-		pb.internalClose()
+		pb.InternalClose()
 	}
 }
 
-// processRowHelper is a wrapper on top of ProcOutputHelper.ProcessRow(). It
+// ProcessRowHelper is a wrapper on top of ProcOutputHelper.ProcessRow(). It
 // takes care of handling errors and drain requests by moving the processor to
 // stateDraining.
 //
@@ -703,26 +777,26 @@ func (pb *processorBase) moveToTrailingMeta() {
 // nil, in which case the caller shouldn't return anything to its consumer; it
 // should continue processing other rows, with the awareness that the processor
 // might have been transitioned to the draining phase.
-func (pb *processorBase) processRowHelper(row sqlbase.EncDatumRow) sqlbase.EncDatumRow {
-	outRow, ok, err := pb.out.ProcessRow(pb.ctx, row)
+func (pb *ProcessorBase) ProcessRowHelper(row sqlbase.EncDatumRow) sqlbase.EncDatumRow {
+	outRow, ok, err := pb.out.ProcessRow(pb.Ctx, row)
 	if err != nil {
-		pb.moveToDraining(err)
+		pb.MoveToDraining(err)
 		return nil
 	}
 	if !ok {
-		pb.moveToDraining(nil /* err */)
+		pb.MoveToDraining(nil /* err */)
 	}
 	// Note that outRow might be nil here.
 	return outRow
 }
 
 // OutputTypes is part of the processor interface.
-func (pb *processorBase) OutputTypes() []sqlbase.ColumnType {
+func (pb *ProcessorBase) OutputTypes() []sqlbase.ColumnType {
 	return pb.out.outputTypes
 }
 
 // Run is part of the processor interface.
-func (pb *processorBase) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (pb *ProcessorBase) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if pb.out.output == nil {
 		panic("processor output not initialized for emitting rows")
 	}
@@ -733,89 +807,93 @@ func (pb *processorBase) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-var procNameToLogTag = map[string]string{
-	distinctProcName:                "distinct",
-	hashAggregatorProcName:          "hashAgg",
-	hashJoinerProcName:              "hashJoiner",
-	indexJoinerProcName:             "indexJoiner",
-	interleavedReaderJoinerProcName: "interleaveReaderJoiner",
-	joinReaderProcName:              "joinReader",
-	mergeJoinerProcName:             "mergeJoiner",
-	metadataTestReceiverProcName:    "metaReceiver",
-	metadataTestSenderProcName:      "metaSender",
-	noopProcName:                    "noop",
-	orderedAggregatorProcName:       "orderedAgg",
-	samplerProcName:                 "sampler",
-	scrubTableReaderProcName:        "scrub",
-	sortAllProcName:                 "sortAll",
-	sortTopKProcName:                "sortTopK",
-	sortedDistinctProcName:          "sortedDistinct",
-	sortChunksProcName:              "sortChunks",
-	tableReaderProcName:             "tableReader",
-	valuesProcName:                  "values",
-	zigzagJoinerProcName:            "zigzagJoiner",
-}
-
-// procStateOpts contains fields used by the processorBase's family of functions
-// that deal with draining and trailing metadata: the processorBase implements
+// ProcStateOpts contains fields used by the ProcessorBase's family of functions
+// that deal with draining and trailing metadata: the ProcessorBase implements
 // generic useful functionality that needs to call back into the Processor.
-type procStateOpts struct {
-	// trailingMetaCallback, if specified, is a callback to be called by
-	// moveToTrailingMeta(). See processorBase.trailingMetaCallback.
-	trailingMetaCallback func() []ProducerMetadata
-	// inputsToDrain, if specified, will be drained by drainHelper().
-	// moveToDraining() calls ConsumerDone() on them, internalClose() calls
+type ProcStateOpts struct {
+	// TrailingMetaCallback, if specified, is a callback to be called by
+	// moveToTrailingMeta(). See ProcessorBase.TrailingMetaCallback.
+	TrailingMetaCallback func(context.Context) []ProducerMetadata
+	// InputsToDrain, if specified, will be drained by DrainHelper().
+	// MoveToDraining() calls ConsumerDone() on them, InternalClose() calls
 	// ConsumerClosed() on them.
-	inputsToDrain []RowSource
+	InputsToDrain []RowSource
 }
 
-// init initializes the processorBase.
-func (pb *processorBase) init(
+// Init initializes the ProcessorBase.
+func (pb *ProcessorBase) Init(
 	self RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	types []sqlbase.ColumnType,
 	flowCtx *FlowCtx,
 	processorID int32,
 	output RowReceiver,
 	memMonitor *mon.BytesMonitor,
-	opts procStateOpts,
+	opts ProcStateOpts,
+) error {
+	return pb.InitWithEvalCtx(
+		self, post, types, flowCtx, flowCtx.NewEvalCtx(), processorID, output, memMonitor, opts,
+	)
+}
+
+// InitWithEvalCtx initializes the ProcessorBase with a given EvalContext.
+func (pb *ProcessorBase) InitWithEvalCtx(
+	self RowSource,
+	post *distsqlpb.PostProcessSpec,
+	types []sqlbase.ColumnType,
+	flowCtx *FlowCtx,
+	evalCtx *tree.EvalContext,
+	processorID int32,
+	output RowReceiver,
+	memMonitor *mon.BytesMonitor,
+	opts ProcStateOpts,
 ) error {
 	pb.self = self
 	pb.flowCtx = flowCtx
+	pb.evalCtx = evalCtx
 	pb.processorID = processorID
-	pb.memMonitor = memMonitor
-	pb.evalCtx = flowCtx.NewEvalCtx()
-	pb.trailingMetaCallback = opts.trailingMetaCallback
-	pb.inputsToDrain = opts.inputsToDrain
+	pb.MemMonitor = memMonitor
+	pb.trailingMetaCallback = opts.TrailingMetaCallback
+	pb.inputsToDrain = opts.InputsToDrain
 	return pb.out.Init(post, types, pb.evalCtx, output)
 }
 
-// startInternal prepares the processorBase for execution. It returns the
-// annotated context that's also stored in pb.ctx.
-func (pb *processorBase) startInternal(ctx context.Context, name string) context.Context {
-	pb.ctx = log.WithLogTag(
-		ctx, fmt.Sprintf("%s/%d", procNameToLogTag[name], pb.processorID), nil,
-	)
+// AddInputToDrain adds an input to drain when moving the processor to a
+// draining state.
+func (pb *ProcessorBase) AddInputToDrain(input RowSource) {
+	pb.inputsToDrain = append(pb.inputsToDrain, input)
+}
 
-	pb.origCtx = pb.ctx
-	pb.ctx, pb.span = processorSpan(pb.ctx, name)
+// AppendTrailingMeta appends metadata to the trailing metadata without changing
+// the state to draining (as opposed to MoveToDraining).
+func (pb *ProcessorBase) AppendTrailingMeta(meta ProducerMetadata) {
+	pb.trailingMeta = append(pb.trailingMeta, meta)
+}
+
+// StartInternal prepares the ProcessorBase for execution. It returns the
+// annotated context that's also stored in pb.ctx.
+func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context.Context {
+	pb.Ctx = ctx
+
+	pb.origCtx = pb.Ctx
+	pb.Ctx, pb.span = processorSpan(pb.Ctx, name)
 	if pb.span != nil {
 		pb.span.SetTag(tracing.TagPrefix+"processorid", pb.processorID)
 	}
-	pb.evalCtx.CtxProvider = tree.FixedCtxProvider{Context: pb.ctx}
-	return pb.ctx
+	pb.evalCtx.Context = pb.Ctx
+	return pb.Ctx
 }
 
-// internalClose helps processors implement the RowSource interface, performing
+// InternalClose helps processors implement the RowSource interface, performing
 // common close functionality. Returns true iff the processor was not already
 // closed.
 //
 // Notably, it calls ConsumerClosed() on all the inputsToDrain.
 //
-//   if pb.internalClose() {
+//   if pb.InternalClose() {
 //     // Perform processor specific close work.
 //   }
-func (pb *processorBase) internalClose() bool {
+func (pb *ProcessorBase) InternalClose() bool {
 	closing := !pb.closed
 	// Protection around double closing is useful for allowing ConsumerClosed() to
 	// be called on processors that have already closed themselves by moving to
@@ -830,7 +908,7 @@ func (pb *processorBase) internalClose() bool {
 		pb.span = nil
 		// Reset the context so that any incidental uses after this point do not
 		// access the finished span.
-		pb.ctx = pb.origCtx
+		pb.Ctx = pb.origCtx
 
 		// This prevents Next() from returning more rows.
 		pb.out.consumerClosed()
@@ -838,10 +916,15 @@ func (pb *processorBase) internalClose() bool {
 	return closing
 }
 
-// newMonitor is a utility function used by processors to create a new
+// ConsumerDone is part of the RowSource interface.
+func (pb *ProcessorBase) ConsumerDone() {
+	pb.MoveToDraining(nil /* err */)
+}
+
+// NewMonitor is a utility function used by processors to create a new
 // memory monitor with the given name and start it. The returned monitor must
 // be closed.
-func newMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon.BytesMonitor {
+func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon.BytesMonitor {
 	monitor := mon.MakeMonitorInheritWithLimit(name, 0 /* limit */, parent)
 	monitor.Start(ctx, parent, mon.BoundAccount{})
 	return &monitor
@@ -894,22 +977,18 @@ func (rb *rowSourceBase) consumerClosed(name string) {
 // processorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
 func processorSpan(ctx context.Context, name string) (context.Context, opentracing.Span) {
-	parentSp := opentracing.SpanFromContext(ctx)
-	if parentSp == nil || tracing.IsBlackHoleSpan(parentSp) {
-		return ctx, nil
-	}
-	newSpan := tracing.StartChildSpan(name, parentSp, true /* separateRecording */)
-	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
+	return tracing.ChildSpanSeparateRecording(ctx, name)
 }
 
 func newProcessor(
 	ctx context.Context,
 	flowCtx *FlowCtx,
 	processorID int32,
-	core *ProcessorCoreUnion,
-	post *PostProcessSpec,
+	core *distsqlpb.ProcessorCoreUnion,
+	post *distsqlpb.PostProcessSpec,
 	inputs []RowSource,
 	outputs []RowReceiver,
+	localProcessors []LocalProcessor,
 ) (Processor, error) {
 	if core.Noop != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -976,6 +1055,14 @@ func newProcessor(
 			flowCtx, processorID, core.InterleavedReaderJoiner, post, outputs[0],
 		)
 	}
+	if core.ZigzagJoiner != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return newZigzagJoiner(
+			flowCtx, processorID, core.ZigzagJoiner, nil, post, outputs[0],
+		)
+	}
 	if core.HashJoiner != nil {
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
@@ -987,9 +1074,9 @@ func newProcessor(
 			return nil, err
 		}
 		switch core.Backfiller.Type {
-		case BackfillerSpec_Index:
+		case distsqlpb.BackfillerSpec_Index:
 			return newIndexBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
-		case BackfillerSpec_Column:
+		case distsqlpb.BackfillerSpec_Column:
 			return newColumnBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		}
 	}
@@ -1052,42 +1139,80 @@ func newProcessor(
 		}
 		return newProjectSetProcessor(flowCtx, processorID, core.ProjectSet, inputs[0], post, outputs[0])
 	}
+	if core.Windower != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newWindower(flowCtx, processorID, core.Windower, inputs[0], post, outputs[0])
+	}
+	if core.LocalPlanNode != nil {
+		numInputs := 0
+		if core.LocalPlanNode.NumInputs != nil {
+			numInputs = int(*core.LocalPlanNode.NumInputs)
+		}
+		if err := checkNumInOut(inputs, outputs, numInputs, 1); err != nil {
+			return nil, err
+		}
+		processor := localProcessors[*core.LocalPlanNode.RowSourceIdx]
+		if err := processor.InitWithOutput(post, outputs[0]); err != nil {
+			return nil, err
+		}
+		if numInputs == 1 {
+			if err := processor.SetInput(ctx, inputs[0]); err != nil {
+				return nil, err
+			}
+		} else if numInputs > 1 {
+			return nil, errors.Errorf("invalid localPlanNode core with multiple inputs %+v", core.LocalPlanNode)
+		}
+		return processor, nil
+	}
+	if core.ChangeAggregator != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		if NewChangeAggregatorProcessor == nil {
+			return nil, errors.New("ChangeAggregator processor unimplemented")
+		}
+		return NewChangeAggregatorProcessor(flowCtx, processorID, *core.ChangeAggregator, outputs[0])
+	}
+	if core.ChangeFrontier != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		if NewChangeFrontierProcessor == nil {
+			return nil, errors.New("ChangeFrontier processor unimplemented")
+		}
+		return NewChangeFrontierProcessor(flowCtx, processorID, *core.ChangeFrontier, inputs[0], outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
+}
+
+// LocalProcessor is a RowSourcedProcessor that needs to be initialized with
+// its post processing spec and output row receiver. Most processors can accept
+// these objects at creation time.
+type LocalProcessor interface {
+	RowSourcedProcessor
+	// InitWithOutput initializes this processor.
+	InitWithOutput(post *distsqlpb.PostProcessSpec, output RowReceiver) error
+	// SetInput initializes this LocalProcessor with an input RowSource. Not all
+	// LocalProcessors need inputs, but this needs to be called if a
+	// LocalProcessor expects to get its data from another RowSource.
+	SetInput(ctx context.Context, input RowSource) error
 }
 
 // NewReadImportDataProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewReadImportDataProcessor func(*FlowCtx, int32, ReadImportDataSpec, RowReceiver) (Processor, error)
+var NewReadImportDataProcessor func(*FlowCtx, int32, distsqlpb.ReadImportDataSpec, RowReceiver) (Processor, error)
 
 // NewSSTWriterProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewSSTWriterProcessor func(*FlowCtx, int32, SSTWriterSpec, RowSource, RowReceiver) (Processor, error)
+var NewSSTWriterProcessor func(*FlowCtx, int32, distsqlpb.SSTWriterSpec, RowSource, RowReceiver) (Processor, error)
 
 // NewCSVWriterProcessor is externally implemented.
-var NewCSVWriterProcessor func(*FlowCtx, int32, CSVWriterSpec, RowSource, RowReceiver) (Processor, error)
+var NewCSVWriterProcessor func(*FlowCtx, int32, distsqlpb.CSVWriterSpec, RowSource, RowReceiver) (Processor, error)
 
-// Equals returns true if two aggregation specifiers are identical (and thus
-// will always yield the same result).
-func (a AggregatorSpec_Aggregation) Equals(b AggregatorSpec_Aggregation) bool {
-	if a.Func != b.Func || a.Distinct != b.Distinct {
-		return false
-	}
-	if a.FilterColIdx == nil {
-		if b.FilterColIdx != nil {
-			return false
-		}
-	} else {
-		if b.FilterColIdx == nil || *a.FilterColIdx != *b.FilterColIdx {
-			return false
-		}
-	}
-	if len(a.ColIdx) != len(b.ColIdx) {
-		return false
-	}
-	for i, c := range a.ColIdx {
-		if c != b.ColIdx[i] {
-			return false
-		}
-	}
-	return true
-}
+// NewChangeAggregatorProcessor is externally implemented.
+var NewChangeAggregatorProcessor func(*FlowCtx, int32, distsqlpb.ChangeAggregatorSpec, RowReceiver) (Processor, error)
+
+// NewChangeFrontierProcessor is externally implemented.
+var NewChangeFrontierProcessor func(*FlowCtx, int32, distsqlpb.ChangeFrontierSpec, RowSource, RowReceiver) (Processor, error)

@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import Analytics from "analytics-node";
 import { Location } from "history";
 import _ from "lodash";
@@ -6,6 +20,7 @@ import { Store } from "redux";
 import * as protos from "src/js/protos";
 import { versionsSelector } from "src/redux/alerts";
 import { store, history, AdminUIState } from "src/redux/state";
+import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 
 type ClusterResponse = protos.cockroach.server.serverpb.IClusterResponse;
 
@@ -38,6 +53,11 @@ export const defaultRedactions = [
             }
             return original.replace(localities, redactedLocalities);
         },
+    },
+    // The statement details page, with a full SQL statement in the URL.
+    {
+        match: new RegExp("/statement/.*"),
+        replace: "/statement/[statement]",
     },
 ];
 
@@ -238,7 +258,10 @@ export class AnalyticsSync {
 // Create a global instance of AnalyticsSync which can be used from various
 // packages. If enabled, this instance will push to segment using the following
 // analytics key.
-const analyticsInstance = new Analytics("5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb");
+const analyticsOpts = {
+  host: COCKROACHLABS_ADDR + "/api/segment",
+};
+const analyticsInstance = new Analytics("5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb", analyticsOpts);
 export const analytics = new AnalyticsSync(analyticsInstance, store, defaultRedactions);
 
 // Attach a listener to the history object which will track a 'page' event

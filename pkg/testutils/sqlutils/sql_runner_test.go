@@ -35,7 +35,7 @@ func TestRowsToStrMatrixError(t *testing.T) {
 	// We'll run a query that only fails after returning some rows, so that the
 	// error is discovered by RowsToStrMatrix below.
 	rows, err := db.Query(
-		"select generate_series(1,10) union all select crdb_internal.force_error('00000', 'testing error')")
+		"select case x when 5 then crdb_internal.force_error('00000', 'testing error') else x end from generate_series(1,5) as v(x);")
 	if err != nil {
 		t.Fatal(err)
 	}

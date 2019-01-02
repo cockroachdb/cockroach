@@ -21,17 +21,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coreos/etcd/raft"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 )
 
 const (
@@ -85,6 +85,25 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 )
+
+// quorumError indicates a retryable error condition which sends replicas being
+// processed through the replicate queue into purgatory so that they can be
+// retried quickly as soon as nodes come online.
+type quorumError struct {
+	msg string
+}
+
+func newQuorumError(f string, args ...interface{}) *quorumError {
+	return &quorumError{
+		msg: fmt.Sprintf(f, args...),
+	}
+}
+
+func (e *quorumError) Error() string {
+	return e.msg
+}
+
+func (*quorumError) purgatoryErrorMarker() {}
 
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.
 type ReplicateQueueMetrics struct {
@@ -148,7 +167,16 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 	// Register gossip and node liveness callbacks to signal that
 	// replicas in purgatory might be retried.
 	if g != nil { // gossip is nil for some unittests
-		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) {
+		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ roachpb.Value) {
+			if !rq.store.IsStarted() {
+				return
+			}
+			// Because updates to our store's own descriptor won't affect
+			// replicas in purgatory, skip updating the purgatory channel
+			// in this case.
+			if storeID, err := gossip.StoreIDFromKey(key); err == nil && storeID == rq.store.StoreID() {
+				return
+			}
 			updateFn()
 		})
 	}
@@ -162,7 +190,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 }
 
 func (rq *replicateQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if !repl.store.splitQueue.Disabled() && repl.needsSplitBySize() {
 		// If the range exceeds the split threshold, let that finish first.
@@ -176,16 +204,11 @@ func (rq *replicateQueue) shouldQueue(
 		return
 	}
 
-	// Find the zone config for this range.
-	desc := repl.Desc()
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Error(ctx, err)
-		return
-	}
+	// Get the descriptor and zone config for this range.
+	desc, zone := repl.DescAndZone()
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo, false)
+	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo)
 	if action == AllocatorNoop {
 		log.VEventf(ctx, 2, "no action to take")
 		return false, 0
@@ -195,7 +218,7 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
-		target, _ := rq.allocator.RebalanceTarget(ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled, false)
+		target, _ := rq.allocator.RebalanceTarget(ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled)
 		if target != nil {
 			log.VEventf(ctx, 2, "rebalance target found, enqueuing")
 			return true, 0
@@ -217,7 +240,7 @@ func (rq *replicateQueue) shouldQueue(
 }
 
 func (rq *replicateQueue) process(
-	ctx context.Context, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig,
 ) error {
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
@@ -230,7 +253,7 @@ func (rq *replicateQueue) process(
 	// snapshot errors, usually signaling that a rebalancing
 	// reservation could not be made with the selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease, false /* dryRun */, false /* disableStatsBasedRebalancing */); err != nil {
+		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease, false /* dryRun */); err != nil {
 			if IsSnapshotError(err) {
 				// If ChangeReplicas failed because the preemptive snapshot failed, we
 				// log the error but then return success indicating we should retry the
@@ -246,6 +269,11 @@ func (rq *replicateQueue) process(
 			// Enqueue this replica again to see if there are more changes to be made.
 			rq.MaybeAdd(repl, rq.store.Clock().Now())
 		}
+		if testingAggressiveConsistencyChecks {
+			if err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
+				log.Warning(ctx, err)
+			}
+		}
 		return nil
 	}
 	return errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
@@ -254,12 +282,11 @@ func (rq *replicateQueue) process(
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
-	sysCfg config.SystemConfig,
+	sysCfg *config.SystemConfig,
 	canTransferLease func() bool,
 	dryRun bool,
-	disableStatsBasedRebalancing bool,
 ) (requeue bool, _ error) {
-	desc := repl.Desc()
+	desc, zone := repl.DescAndZone()
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
@@ -267,18 +294,13 @@ func (rq *replicateQueue) processOneChange(
 	{
 		quorum := computeQuorum(len(desc.Replicas))
 		if lr := len(liveReplicas); lr < quorum {
-			return false, errors.Errorf(
+			return false, newQuorumError(
 				"range requires a replication change, but lacks a quorum of live replicas (%d/%d)", lr, quorum)
 		}
 	}
 
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		return false, err
-	}
-
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo, disableStatsBasedRebalancing); action {
+	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo); action {
 	case AllocatorNoop:
 		break
 	case AllocatorAdd:
@@ -286,9 +308,8 @@ func (rq *replicateQueue) processOneChange(
 		newStore, details, err := rq.allocator.AllocateTarget(
 			ctx,
 			zone,
-			desc.Replicas,
+			liveReplicas, // only include liveReplicas, since deadReplicas should soon be removed
 			rangeInfo,
-			disableStatsBasedRebalancing,
 		)
 		if err != nil {
 			return false, err
@@ -298,7 +319,8 @@ func (rq *replicateQueue) processOneChange(
 			StoreID: newStore.StoreID,
 		}
 
-		need := int(zone.NumReplicas)
+		availableNodes := rq.allocator.storePool.AvailableNodeCount()
+		need := GetNeededReplicas(*zone.NumReplicas, availableNodes)
 		willHave := len(desc.Replicas) + 1
 
 		// Only up-replicate if there are suitable allocation targets such
@@ -323,11 +345,11 @@ func (rq *replicateQueue) processOneChange(
 				zone,
 				oldPlusNewReplicas,
 				rangeInfo,
-				disableStatsBasedRebalancing,
 			)
 			if err != nil {
-				// Does not seem possible to go to the next odd replica state. Return an
-				// error so that the operation gets queued into the purgatory.
+				// It does not seem possible to go to the next odd replica state. Note
+				// that AllocateTarget returns an allocatorError (a purgatoryError)
+				// when purgatory is requested.
 				return false, errors.Wrap(err, "avoid up-replicating to fragile quorum")
 			}
 		}
@@ -340,7 +362,7 @@ func (rq *replicateQueue) processOneChange(
 			newReplica,
 			desc,
 			SnapshotRequest_RECOVERY,
-			ReasonRangeUnderReplicated,
+			storagepb.ReasonRangeUnderReplicated,
 			details,
 			dryRun,
 		); err != nil {
@@ -356,10 +378,12 @@ func (rq *replicateQueue) processOneChange(
 		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal",
 			desc.Replicas, candidates)
 		if len(candidates) == 0 {
-			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
-				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
+			// After rapid upreplication, the candidates for removal could still be catching up.
+			// Mark this error as benign so it doesn't create confusion in the logs.
+			return false, &benignError{errors.Errorf("no removable replicas from range that needs a removal: %s",
+				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))}
 		}
-		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, rangeInfo, disableStatsBasedRebalancing)
+		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, rangeInfo)
 		if err != nil {
 			return false, err
 		}
@@ -374,7 +398,7 @@ func (rq *replicateQueue) processOneChange(
 			// out of situations where this store is overfull and yet holds all the
 			// leases. The fullness checks need to be ignored for cases where
 			// a replica needs to be removed for constraint violations.
-			transferred, err := rq.transferLease(
+			transferred, err := rq.findTargetAndTransferLease(
 				ctx,
 				repl,
 				desc,
@@ -399,7 +423,7 @@ func (rq *replicateQueue) processOneChange(
 				StoreID: removeReplica.StoreID,
 			}
 			if err := rq.removeReplica(
-				ctx, repl, target, desc, ReasonRangeOverReplicated, details, dryRun,
+				ctx, repl, target, desc, storagepb.ReasonRangeOverReplicated, details, dryRun,
 			); err != nil {
 				return false, err
 			}
@@ -419,7 +443,7 @@ func (rq *replicateQueue) processOneChange(
 			if dryRun {
 				return false, nil
 			}
-			transferred, err := rq.transferLease(
+			transferred, err := rq.findTargetAndTransferLease(
 				ctx,
 				repl,
 				desc,
@@ -443,7 +467,7 @@ func (rq *replicateQueue) processOneChange(
 				StoreID: decommissioningReplica.StoreID,
 			}
 			if err := rq.removeReplica(
-				ctx, repl, target, desc, ReasonStoreDecommissioning, "", dryRun,
+				ctx, repl, target, desc, storagepb.ReasonStoreDecommissioning, "", dryRun,
 			); err != nil {
 				return false, err
 			}
@@ -462,7 +486,7 @@ func (rq *replicateQueue) processOneChange(
 			StoreID: deadReplica.StoreID,
 		}
 		if err := rq.removeReplica(
-			ctx, repl, target, desc, ReasonStoreDead, "", dryRun,
+			ctx, repl, target, desc, storagepb.ReasonStoreDead, "", dryRun,
 		); err != nil {
 			return false, err
 		}
@@ -473,7 +497,7 @@ func (rq *replicateQueue) processOneChange(
 
 		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 			rebalanceStore, details := rq.allocator.RebalanceTarget(
-				ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled, disableStatsBasedRebalancing)
+				ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled)
 			if rebalanceStore == nil {
 				log.VEventf(ctx, 1, "no suitable rebalance target")
 			} else {
@@ -490,7 +514,7 @@ func (rq *replicateQueue) processOneChange(
 					rebalanceReplica,
 					desc,
 					SnapshotRequest_REBALANCE,
-					ReasonRebalance,
+					storagepb.ReasonRebalance,
 					details,
 					dryRun,
 				); err != nil {
@@ -503,7 +527,7 @@ func (rq *replicateQueue) processOneChange(
 		if canTransferLease() {
 			// We require the lease in order to process replicas, so
 			// repl.store.StoreID() corresponds to the lease-holder's store ID.
-			transferred, err := rq.transferLease(
+			transferred, err := rq.findTargetAndTransferLease(
 				ctx,
 				repl,
 				desc,
@@ -537,15 +561,15 @@ type transferLeaseOptions struct {
 	dryRun                   bool
 }
 
-func (rq *replicateQueue) transferLease(
+func (rq *replicateQueue) findTargetAndTransferLease(
 	ctx context.Context,
 	repl *Replica,
 	desc *roachpb.RangeDescriptor,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	opts transferLeaseOptions,
 ) (bool, error) {
 	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas, 0 /* brandNewReplicaID */)
-	if target := rq.allocator.TransferLeaseTarget(
+	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone,
 		candidates,
@@ -555,19 +579,36 @@ func (rq *replicateQueue) transferLease(
 		opts.checkTransferLeaseSource,
 		opts.checkCandidateFullness,
 		false, /* alwaysAllowDecisionWithoutStats */
-	); target != (roachpb.ReplicaDescriptor{}) {
-		rq.metrics.TransferLeaseCount.Inc(1)
-		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
-		if opts.dryRun {
-			return false, nil
-		}
-		if err := repl.AdminTransferLease(ctx, target.StoreID); err != nil {
-			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
-		}
-		rq.lastLeaseTransfer.Store(timeutil.Now())
-		return true, nil
+	)
+	if target == (roachpb.ReplicaDescriptor{}) {
+		return false, nil
 	}
-	return false, nil
+
+	if opts.dryRun {
+		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
+		return false, nil
+	}
+
+	avgQPS, qpsMeasurementDur := repl.leaseholderStats.avgQPS()
+	if qpsMeasurementDur < MinStatsDuration {
+		avgQPS = 0
+	}
+	err := rq.transferLease(ctx, repl, target, avgQPS)
+	return err == nil, err
+}
+
+func (rq *replicateQueue) transferLease(
+	ctx context.Context, repl *Replica, target roachpb.ReplicaDescriptor, rangeQPS float64,
+) error {
+	rq.metrics.TransferLeaseCount.Inc(1)
+	log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
+	if err := repl.AdminTransferLease(ctx, target.StoreID); err != nil {
+		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
+	}
+	rq.lastLeaseTransfer.Store(timeutil.Now())
+	rq.allocator.storePool.updateLocalStoresAfterLeaseTransfer(
+		repl.store.StoreID(), target.StoreID, rangeQPS)
+	return nil
 }
 
 func (rq *replicateQueue) addReplica(
@@ -576,7 +617,7 @@ func (rq *replicateQueue) addReplica(
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
-	reason RangeLogEventReason,
+	reason storagepb.RangeLogEventReason,
 	details string,
 	dryRun bool,
 ) error {
@@ -596,7 +637,7 @@ func (rq *replicateQueue) removeReplica(
 	repl *Replica,
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
-	reason RangeLogEventReason,
+	reason storagepb.RangeLogEventReason,
 	details string,
 	dryRun bool,
 ) error {
@@ -630,8 +671,10 @@ func (rq *replicateQueue) purgatoryChan() <-chan time.Time {
 // rangeRaftStatus pretty-prints the Raft progress (i.e. Raft log position) of
 // the replicas.
 func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor) string {
-	if raftStatus == nil || len(raftStatus.Progress) == 0 {
-		return "[raft progress unknown]"
+	if raftStatus == nil {
+		return "[no raft status]"
+	} else if len(raftStatus.Progress) == 0 {
+		return "[no raft progress]"
 	}
 	var buf bytes.Buffer
 	buf.WriteString("[")

@@ -31,23 +31,14 @@ import (
 //  - INJECT STATISTICS: imports table statistics from a JSON object.
 //
 func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
-	tn, err := stmt.Table.Normalize()
-	if err != nil {
-		panic(err)
-	}
-
 	// Update the table name to include catalog and schema if not provided.
-	tc.qualifyTableName(tn)
-
-	table, ok := tc.tables[tn.FQString()]
-	if !ok {
-		panic(fmt.Sprintf("cannot find table %q", tree.ErrString(tn)))
-	}
+	tc.qualifyTableName(&stmt.Table)
+	tab := tc.Table(&stmt.Table)
 
 	for _, cmd := range stmt.Cmds {
 		switch t := cmd.(type) {
 		case *tree.AlterTableInjectStats:
-			injectTableStats(table, t.Stats)
+			injectTableStats(tab, t.Stats)
 
 		default:
 			panic(fmt.Sprintf("unsupported ALTER TABLE command %T", t))

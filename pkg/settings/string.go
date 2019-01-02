@@ -14,9 +14,7 @@
 
 package settings
 
-import (
-	"github.com/pkg/errors"
-)
+import "github.com/pkg/errors"
 
 // StringSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
@@ -31,6 +29,16 @@ var _ Setting = &StringSetting{}
 
 func (s *StringSetting) String(sv *Values) string {
 	return s.Get(sv)
+}
+
+// Encoded returns the encoded value of the current value of the setting.
+func (s *StringSetting) Encoded(sv *Values) string {
+	return s.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (s *StringSetting) EncodedDefault() string {
+	return s.defaultValue
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.

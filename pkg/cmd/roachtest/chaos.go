@@ -17,6 +17,8 @@ package main
 import (
 	"context"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // ChaosTimer configures a chaos schedule.
@@ -54,13 +56,19 @@ type Chaos struct {
 // setting off the monitor. The process returns without an error after the chaos
 // duration.
 func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
-	return func(ctx context.Context) error {
-		l, err := c.l.childLogger("CHAOS")
+	return func(ctx context.Context) (err error) {
+		l, err := c.l.ChildLogger("CHAOS")
 		if err != nil {
 			return err
 		}
-		period, downTime := ch.Timer.Timing()
-		t := time.NewTicker(period)
+		defer func() {
+			l.Printf("chaos stopping: %v", err)
+		}()
+		t := timeutil.Timer{}
+		{
+			p, _ := ch.Timer.Timing()
+			t.Reset(p)
+		}
 		for {
 			select {
 			case <-ch.Stopper:
@@ -68,29 +76,34 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-t.C:
+				t.Read = true
 			}
+
+			period, downTime := ch.Timer.Timing()
 
 			target := ch.Target()
 			m.ExpectDeath()
 
 			if ch.DrainAndQuit {
-				l.printf("stopping and draining %v\n", target)
+				l.Printf("stopping and draining %v\n", target)
 				c.Stop(ctx, target, stopArgs("--sig=15"))
 			} else {
-				l.printf("killing %v\n", target)
+				l.Printf("killing %v\n", target)
 				c.Stop(ctx, target)
 			}
 
 			select {
 			case <-ch.Stopper:
+				l.Printf("restarting %v (chaos is done)\n", target)
+				c.Start(ctx, c.t.(*test), target)
 				return nil
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(downTime):
 			}
-
-			c.l.printf("restarting %v after %s of downtime\n", target, downTime)
-			c.Start(ctx, target)
+			l.Printf("restarting %v after %s of downtime\n", target, downTime)
+			t.Reset(period)
+			c.Start(ctx, c.t.(*test), target)
 		}
 	}
 }

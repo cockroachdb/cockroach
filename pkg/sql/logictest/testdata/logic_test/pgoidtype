@@ -288,3 +288,21 @@ query B
 SELECT NOT (prorettype::regtype::text = 'foo') AND proretset FROM pg_proc WHERE proretset=false LIMIT 1
 ----
 false
+
+query TTTTT
+SELECT crdb_internal.create_regtype(10, 'foo'), crdb_internal.create_regclass(10, 'foo'), crdb_internal.create_regproc(10, 'foo'), crdb_internal.create_regprocedure(10, 'foo'), crdb_internal.create_regnamespace(10, 'foo')
+----
+foo foo foo foo foo
+
+query OOOOO
+SELECT crdb_internal.create_regtype(10, 'foo')::oid, crdb_internal.create_regclass(10, 'foo')::oid, crdb_internal.create_regproc(10, 'foo')::oid, crdb_internal.create_regprocedure(10, 'foo')::oid, crdb_internal.create_regnamespace(10, 'foo')::oid
+----
+10 10 10 10 10
+
+# Regression test for #32422: ensure that VALUES nodes properly retain special
+# OID properties.
+
+query OO
+VALUES ('pg_constraint'::REGCLASS, 'pg_catalog.pg_constraint'::REGCLASS)
+----
+pg_constraint  pg_constraint

@@ -17,9 +17,9 @@ package distsqlrun
 import (
 	"context"
 	"errors"
-
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -54,10 +54,10 @@ const mergeJoinerProcName = "merge joiner"
 func newMergeJoiner(
 	flowCtx *FlowCtx,
 	processorID int32,
-	spec *MergeJoinerSpec,
+	spec *distsqlpb.MergeJoinerSpec,
 	leftSource RowSource,
 	rightSource RowSource,
-	post *PostProcessSpec,
+	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*mergeJoiner, error) {
 	leftEqCols := make([]uint32, 0, len(spec.LeftOrdering.Columns))
@@ -84,9 +84,9 @@ func newMergeJoiner(
 	if err := m.joinerBase.init(
 		m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
-		procStateOpts{
-			inputsToDrain: []RowSource{leftSource, rightSource},
-			trailingMetaCallback: func() []ProducerMetadata {
+		ProcStateOpts{
+			InputsToDrain: []RowSource{leftSource, rightSource},
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				m.close()
 				return nil
 			},
@@ -95,16 +95,16 @@ func newMergeJoiner(
 		return nil, err
 	}
 
-	m.memMonitor = newMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "mergejoiner-mem")
+	m.MemMonitor = NewMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "mergejoiner-mem")
 
 	var err error
 	m.streamMerger, err = makeStreamMerger(
 		m.leftSource,
-		convertToColumnOrdering(spec.LeftOrdering),
+		distsqlpb.ConvertToColumnOrdering(spec.LeftOrdering),
 		m.rightSource,
-		convertToColumnOrdering(spec.RightOrdering),
+		distsqlpb.ConvertToColumnOrdering(spec.RightOrdering),
 		spec.NullEquality,
-		m.memMonitor,
+		m.MemMonitor,
 	)
 	if err != nil {
 		return nil, err
@@ -116,31 +116,31 @@ func newMergeJoiner(
 // Start is part of the RowSource interface.
 func (m *mergeJoiner) Start(ctx context.Context) context.Context {
 	m.streamMerger.start(ctx)
-	ctx = m.startInternal(ctx, mergeJoinerProcName)
+	ctx = m.StartInternal(ctx, mergeJoinerProcName)
 	m.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	return ctx
 }
 
 // Next is part of the Processor interface.
 func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for m.state == stateRunning {
+	for m.State == StateRunning {
 		row, meta := m.nextRow()
 		if meta != nil {
 			if meta.Err != nil {
-				m.moveToDraining(nil /* err */)
+				m.MoveToDraining(nil /* err */)
 			}
 			return nil, meta
 		}
 		if row == nil {
-			m.moveToDraining(nil /* err */)
+			m.MoveToDraining(nil /* err */)
 			break
 		}
 
-		if outRow := m.processRowHelper(row); outRow != nil {
+		if outRow := m.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
-	return nil, m.drainHelper()
+	return nil, m.DrainHelper()
 }
 
 func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
@@ -191,7 +191,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			// For INTERSECT ALL and EXCEPT ALL, adjust rightIdx to skip all
 			// previously matched rows on the next right-side iteration, since we
 			// don't want to match them again.
-			if isSetOpJoin(m.joinType) {
+			if m.joinType.IsSetOpJoin() {
 				m.rightIdx = m.leftIdx
 			}
 
@@ -240,16 +240,11 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (m *mergeJoiner) ConsumerDone() {
-	m.moveToDraining(nil /* err */)
-}
-
 func (m *mergeJoiner) close() {
-	if m.internalClose() {
+	if m.InternalClose() {
 		ctx := m.evalCtx.Ctx()
 		m.streamMerger.close(ctx)
-		m.memMonitor.Stop(ctx)
+		m.MemMonitor.Stop(ctx)
 	}
 }
 
@@ -259,7 +254,7 @@ func (m *mergeJoiner) ConsumerClosed() {
 	m.close()
 }
 
-var _ DistSQLSpanStats = &MergeJoinerStats{}
+var _ distsqlpb.DistSQLSpanStats = &MergeJoinerStats{}
 
 const mergeJoinerTagPrefix = "mergejoiner."
 
@@ -296,13 +291,13 @@ func (m *mergeJoiner) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(m.ctx); sp != nil {
+	if sp := opentracing.SpanFromContext(m.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp,
 			&MergeJoinerStats{
 				LeftInputStats:  lis,
 				RightInputStats: ris,
-				MaxAllocatedMem: m.memMonitor.MaximumBytes(),
+				MaxAllocatedMem: m.MemMonitor.MaximumBytes(),
 			},
 		)
 	}

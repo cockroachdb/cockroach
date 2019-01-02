@@ -22,21 +22,26 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/util/causer"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // evaluateCommand delegates to the eval method for the given
@@ -147,6 +152,15 @@ func (r *Replica) AdminSplit(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = 10
 	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
+		// The replica may have been destroyed since the start of the retry loop. We
+		// need to explicitly check this condition. Having a valid lease, as we
+		// verify below, does not imply that the range still exists: even after a
+		// range has been merged into its left-hand neighbor, its final lease (i.e.,
+		// the lease we have in r.mu.state.Lease) can remain valid indefinitely.
+		if _, err := r.IsDestroyed(); err != nil {
+			return reply, roachpb.NewError(err)
+		}
+
 		// Admin commands always require the range lease to begin (see
 		// executeAdminBatch), but we may have lost it while in this retry loop.
 		// Without the lease, a replica's local descriptor can be arbitrarily
@@ -156,13 +170,19 @@ func (r *Replica) AdminSplit(
 			return roachpb.AdminSplitResponse{}, pErr
 		}
 
-		reply, lastErr = r.adminSplitWithDescriptor(ctx, args, r.Desc())
-		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
-		// command with the updated descriptor.
-		switch errors.Cause(lastErr).(type) {
-		case *roachpb.ConditionFailedError:
-		case *roachpb.AmbiguousResultError:
-		default:
+		reply, lastErr = r.adminSplitWithDescriptor(ctx, args, r.Desc(), true /* delayable */)
+		// On seeing a ConditionFailedError or an AmbiguousResultError, retry
+		// the command with the updated descriptor.
+		if retry := causer.Visit(lastErr, func(err error) bool {
+			switch err.(type) {
+			case *roachpb.ConditionFailedError:
+				return true
+			case *roachpb.AmbiguousResultError:
+				return true
+			default:
+				return false
+			}
+		}); !retry {
 			return reply, roachpb.NewError(lastErr)
 		}
 	}
@@ -175,14 +195,48 @@ func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (stri
 		// Provide a better message in the common case that the range being changed
 		// was already changed by a concurrent transaction.
 		var actualDesc roachpb.RangeDescriptor
-		if err := detail.ActualValue.GetProto(&actualDesc); err == nil {
-			if desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
-				return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s",
-					desc, actualDesc), true
-			}
+		if !detail.ActualValue.IsPresent() {
+			return fmt.Sprintf("descriptor changed: expected %s != [actual] nil (range subsumed)", desc), true
+		} else if err := detail.ActualValue.GetProto(&actualDesc); err == nil &&
+			desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
+			return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s", desc, actualDesc), true
 		}
 	}
 	return "", false
+}
+
+func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) string {
+	var s string
+	if status != nil && status.RaftState == raft.StateLeader {
+		for replicaID, pr := range status.Progress {
+			if replicaID == status.Lead {
+				// TODO(tschottdorf): remove this line once we have picked up
+				// https://github.com/etcd-io/etcd/pull/10279
+				continue
+			}
+			if pr.State == raft.ProgressStateReplicate {
+				// This follower is in good working order.
+				continue
+			}
+			s += fmt.Sprintf("; r%d/%d is ", rangeID, replicaID)
+			switch pr.State {
+			case raft.ProgressStateSnapshot:
+				// If the Raft snapshot queue is backed up, replicas can spend
+				// minutes or worse until they are caught up.
+				s += "waiting for a Raft snapshot"
+			case raft.ProgressStateProbe:
+				// Assuming the split has already been delayed for a little bit,
+				// seeing a follower that is probing hints at some problem with
+				// Raft or Raft message delivery. (Of course it's possible that
+				// the follower *just* entered probing state).
+				s += "being probed (may or may not need a Raft snapshot)"
+			default:
+				// Future proofing.
+				s += "in unknown state " + pr.State.String()
+			}
+		}
+	}
+	return s
 }
 
 // adminSplitWithDescriptor divides the range into into two ranges, using
@@ -204,7 +258,10 @@ func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (stri
 //
 // See the comment on splitTrigger for details on the complexities.
 func (r *Replica) adminSplitWithDescriptor(
-	ctx context.Context, args roachpb.AdminSplitRequest, desc *roachpb.RangeDescriptor,
+	ctx context.Context,
+	args roachpb.AdminSplitRequest,
+	desc *roachpb.RangeDescriptor,
+	delayable bool,
 ) (roachpb.AdminSplitResponse, error) {
 	var reply roachpb.AdminSplitResponse
 
@@ -274,10 +331,23 @@ func (r *Replica) adminSplitWithDescriptor(
 
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
+	if r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeMerges) {
+		// To be safe, don't increment the generation counter unless all nodes are
+		// known to be aware of its existence. Since encoded range descriptors are
+		// used in CPut operations, it is theorized that non-nil generation counters
+		// in mixed-version clusters could cause subtle breakage.
+		leftDesc.IncrementGeneration()
+	}
 	leftDesc.EndKey = splitKey
 
-	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
-		splitKey, rightDesc.RangeID)
+	var extra string
+	if delayable {
+		extra += maybeDelaySplitToAvoidSnapshot(ctx, (*splitDelayHelper)(r))
+	}
+	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
+
+	log.Infof(ctx, "initiating a split of this range at key %s [r%d]%s",
+		splitKey, rightDesc.RangeID, extra)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
@@ -289,7 +359,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		{
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, desc, leftDesc); err != nil {
+			if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
 				return err
 			}
 			// Commit this batch first to ensure that the transaction record
@@ -324,7 +394,7 @@ func (r *Replica) adminSplitWithDescriptor(
 
 		// Create range descriptor for right hand side of the split.
 		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
-		if err := updateRangeDescriptor(b, rightDescKey, nil, *rightDesc); err != nil {
+		if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
 			return err
 		}
 
@@ -355,7 +425,9 @@ func (r *Replica) adminSplitWithDescriptor(
 		// ConditionFailedError in the error detail so that the command can be
 		// retried.
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			err = errors.Wrap(err, msg)
+			// NB: we have to wrap the existing error here as consumers of this
+			// code look at the root cause to sniff out the changed descriptor.
+			err = &benignError{errors.Wrap(err, msg)}
 		}
 		return reply, errors.Wrapf(err, "split at key %s failed", splitKey)
 	}
@@ -380,10 +452,23 @@ func (r *Replica) AdminMerge(
 ) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
 
+	if err := r.ClusterSettings().Version.CheckVersion(cluster.VersionRangeMerges, "range merges"); err != nil {
+		return reply, roachpb.NewError(err)
+	}
+
 	origLeftDesc := r.Desc()
 	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
 		// Merging the final range doesn't make sense.
 		return reply, roachpb.NewErrorf("cannot merge final range")
+	}
+
+	// Ensure that every current replica of the LHS has been initialized.
+	// Otherwise there is a rare race where the replica GC queue can GC a
+	// replica of the RHS too early. The comment on
+	// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
+	if err := waitForReplicasInit(ctx, r.store.cfg.NodeDialer, *origLeftDesc); err != nil {
+		return reply, roachpb.NewError(errors.Wrap(
+			err, "waiting for all left-hand replicas to initialize"))
 	}
 
 	updatedLeftDesc := *origLeftDesc
@@ -402,6 +487,7 @@ func (r *Replica) AdminMerge(
 			return reply, roachpb.NewError(err)
 		}
 
+		updatedLeftDesc.IncrementGeneration()
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range", rightDesc)
 	}
@@ -416,11 +502,20 @@ func (r *Replica) AdminMerge(
 		// TODO(benesch): expose a proper API for preventing the fast path.
 		_ = txn.CommitTimestamp()
 
+		// Pipelining might send QueryIntent requests to the RHS after the RHS has
+		// noticed the merge and started blocking all traffic. This causes the merge
+		// transaction to deadlock. Just turn pipelining off; the structure of the
+		// merge transaction means pipelining provides no performance benefit
+		// anyway.
+		if err := txn.DisablePipelining(); err != nil {
+			return err
+		}
+
 		// Update the range descriptor for the receiving range.
 		{
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, updatedLeftDesc); err != nil {
+			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, &updatedLeftDesc); err != nil {
 				return err
 			}
 			// Commit this batch on its own to ensure that the transaction record
@@ -447,6 +542,18 @@ func (r *Replica) AdminMerge(
 			// TODO(bdarnell): needs a test.
 			return errors.Errorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
 		}
+		if !replicaSetsEqual(origLeftDesc.Replicas, rightDesc.Replicas) {
+			return errors.Errorf("ranges not collocated; %s != %s", origLeftDesc.Replicas, rightDesc.Replicas)
+		}
+
+		// Log the merge into the range event log.
+		// TODO(spencer): event logging API should accept a batch
+		// instead of a transaction; there's no reason this logging
+		// shouldn't be done in parallel via the batch with the updated
+		// range addressing.
+		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc); err != nil {
+			return err
+		}
 
 		b := txn.NewBatch()
 
@@ -456,13 +563,14 @@ func (r *Replica) AdminMerge(
 		}
 
 		// Remove the range descriptor for the deleted range.
-		b.Del(rightDescKey)
+		if err := updateRangeDescriptor(b, rightDescKey, &rightDesc, nil); err != nil {
+			return err
+		}
 
 		// Send off this batch, ensuring that intents are placed on both the local
 		// copy and meta2's copy of the right-hand side range descriptor before we
-		// send the GetSnapshotForMerge request below. This is the precondition for
-		// sending a GetSnapshotForMerge request; see the godoc on the
-		// GetSnapshotForMerge request for details.
+		// send the Subsume request below. This is the precondition for sending a
+		// Subsume request; see the godoc on the Subsume request for details.
 		if err := txn.Run(ctx, b); err != nil {
 			return err
 		}
@@ -471,22 +579,20 @@ func (r *Replica) AdminMerge(
 		// a consistent view of the data from the right-hand range. If the merge
 		// commits, we'll write this data to the left-hand range in the merge
 		// trigger.
-		//
-		// We make sure to send this request through the txn so that we can stall
-		// its write pipeline and prevent any reads to the right-hand range when
-		// the EndTransactionRequest is issued.
-		// TODO(nvanbenschoten): this is subtle and it's not clear that its the
-		// best way to achieve this goal. Reconsider.
-		b = txn.NewBatch()
-		b.AddRawRequest(&roachpb.GetSnapshotForMergeRequest{
-			RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
-			LeftRange:     *origLeftDesc,
-		})
-		if err := txn.Run(ctx, b); err != nil {
-			return err
+		br, pErr := client.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
+			&roachpb.SubsumeRequest{
+				RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
+				LeftRange:     *origLeftDesc,
+			})
+		if pErr != nil {
+			return pErr.GoError()
 		}
-		br := b.RawResponse()
-		rhsSnapshotRes := br.Responses[0].GetInner().(*roachpb.GetSnapshotForMergeResponse)
+		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
+
+		err := waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
+		if err != nil {
+			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
+		}
 
 		// Successful subsume, so we're guaranteed that the right-hand range will
 		// not serve another request unless this transaction aborts. End the
@@ -496,9 +602,10 @@ func (r *Replica) AdminMerge(
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				MergeTrigger: &roachpb.MergeTrigger{
-					LeftDesc:  updatedLeftDesc,
-					RightDesc: rightDesc,
-					RightData: rhsSnapshotRes.Data,
+					LeftDesc:       updatedLeftDesc,
+					RightDesc:      rightDesc,
+					RightMVCCStats: rhsSnapshotRes.MVCCStats,
+					FreezeStart:    rhsSnapshotRes.FreezeStart,
 				},
 			},
 		})
@@ -508,20 +615,20 @@ func (r *Replica) AdminMerge(
 
 	// If the merge transaction encounters an error, we need to trigger a full
 	// abort and try again with a new transaction. Why? runMergeTxn has the side
-	// effect of sending a GetSnapshotForMerge request to the right-hand range,
-	// which blocks the right-hand range from serving any traffic until the
-	// transaction commits or aborts. If we retry using the same transaction
-	// (i.e., a "transaction restart"), we'll send requests to the blocked
-	// right-hand range and deadlock. The right-hand range will see that the
-	// transaction is still pending and refuse to respond, but the transaction
-	// cannot commit until the right-hand range responds. By instead marking the
-	// transaction as aborted, we'll unlock the right-hand range, giving the next,
-	// fresh transaction a chance to succeed.
+	// effect of sending a Subsume request to the right-hand range, which blocks
+	// the right-hand range from serving any traffic until the transaction commits
+	// or aborts. If we retry using the same transaction (i.e., a "transaction
+	// restart"), we'll send requests to the blocked right-hand range and
+	// deadlock. The right-hand range will see that the transaction is still
+	// pending and refuse to respond, but the transaction cannot commit until the
+	// right-hand range responds. By instead marking the transaction as aborted,
+	// we'll unlock the right-hand range, giving the next, fresh transaction a
+	// chance to succeed.
 	//
 	// Note that client.DB.Txn performs retries using the same transaction, so we
 	// have to use our own retry loop.
 	for {
-		txn := client.NewTxn(r.store.DB(), r.NodeID(), client.RootTxn)
+		txn := client.NewTxn(ctx, r.store.DB(), r.NodeID(), client.RootTxn)
 		err := runMergeTxn(txn)
 		if err != nil {
 			txn.CleanupOnError(ctx, err)
@@ -536,7 +643,63 @@ func (r *Replica) AdminMerge(
 	}
 }
 
+func waitForApplication(
+	ctx context.Context, dialer *nodedialer.Dialer, desc roachpb.RangeDescriptor, leaseIndex uint64,
+) error {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	g := ctxgroup.WithContext(ctx)
+	for _, repl := range desc.Replicas {
+		repl := repl // copy for goroutine
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := dialer.Dial(ctx, repl.NodeID)
+			if err != nil {
+				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
+			}
+			_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
+				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
+				RangeID:            desc.RangeID,
+				LeaseIndex:         leaseIndex,
+			})
+			return err
+		})
+	}
+	return g.Wait()
+}
+
+// waitForReplicasInit blocks until it has proof that the replicas listed in
+// desc are initialized on their respective stores. It may return a false
+// negative, i.e., claim that a replica is uninitialized when it is, in fact,
+// initialized, but it will never return a false positive.
+func waitForReplicasInit(
+	ctx context.Context, dialer *nodedialer.Dialer, desc roachpb.RangeDescriptor,
+) error {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	g := ctxgroup.WithContext(ctx)
+	for _, repl := range desc.Replicas {
+		repl := repl // copy for goroutine
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := dialer.Dial(ctx, repl.NodeID)
+			if err != nil {
+				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
+			}
+			_, err = NewPerReplicaClient(conn).WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
+				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
+				RangeID:            desc.RangeID,
+			})
+			return err
+		})
+	}
+	return g.Wait()
+}
+
 type snapshotError struct {
+	// NB: don't implement Cause() on this type without also updating IsSnapshotError.
 	cause error
 }
 
@@ -547,8 +710,10 @@ func (s *snapshotError) Error() string {
 // IsSnapshotError returns true iff the error indicates a preemptive
 // snapshot failed.
 func IsSnapshotError(err error) bool {
-	_, ok := err.(*snapshotError)
-	return ok
+	return causer.Visit(err, func(err error) bool {
+		_, ok := errors.Cause(err).(*snapshotError)
+		return ok
+	})
 }
 
 // ChangeReplicas adds or removes a replica of a range. The change is performed
@@ -630,7 +795,7 @@ func (r *Replica) ChangeReplicas(
 	changeType roachpb.ReplicaChangeType,
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
-	reason RangeLogEventReason,
+	reason storagepb.RangeLogEventReason,
 	details string,
 ) error {
 	return r.changeReplicas(ctx, changeType, target, desc, SnapshotRequest_REBALANCE, reason, details)
@@ -642,7 +807,7 @@ func (r *Replica) changeReplicas(
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
-	reason RangeLogEventReason,
+	reason storagepb.RangeLogEventReason,
 	details string,
 ) error {
 	repDesc := roachpb.ReplicaDescriptor{
@@ -676,15 +841,6 @@ func (r *Replica) changeReplicas(
 			}
 			return errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
 		}
-
-		// Prohibit premature raft log truncation. We set the pending index to 1
-		// here until we determine what it is below. This removes a small window of
-		// opportunity for the raft log to get truncated after the snapshot is
-		// generated.
-		if err := r.setPendingSnapshotIndex(1); err != nil {
-			return err
-		}
-		defer r.clearPendingSnapshotIndex()
 
 		// Send a pre-emptive snapshot. Note that the replica to which this
 		// snapshot is addressed has not yet had its replica ID initialized; this
@@ -748,7 +904,7 @@ func (r *Replica) changeReplicas(
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(b, descKey, desc, updatedDesc); err != nil {
+			if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
 				return err
 			}
 
@@ -777,6 +933,9 @@ func (r *Replica) changeReplicas(
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				// TODO(benesch): this trigger should just specify the updated
+				// descriptor, like the split and merge triggers, so that the receiver
+				// doesn't need to reconstruct the range descriptor update.
 				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
 					ChangeType:      changeType,
 					Replica:         repDesc,
@@ -800,7 +959,7 @@ func (r *Replica) changeReplicas(
 	}); err != nil {
 		log.Event(ctx, err.Error())
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			return errors.Wrapf(err, "change replicas of r%d failed: %s", rangeID, msg)
+			err = &benignError{errors.New(msg)}
 		}
 		return errors.Wrapf(err, "change replicas of r%d failed", rangeID)
 	}
@@ -833,15 +992,11 @@ func (r *Replica) sendSnapshot(
 		return errors.Wrapf(err, "%s: change replicas failed", r)
 	}
 
-	if snapType == snapTypePreemptive {
-		if err := r.setPendingSnapshotIndex(snap.RaftSnap.Metadata.Index); err != nil {
-			return err
-		}
-	}
-
 	status := r.RaftStatus()
 	if status == nil {
-		return errors.New("raft status not initialized")
+		// This code path is sometimes hit during scatter for replicas that
+		// haven't woken up yet.
+		return &benignError{errors.New("raft status not initialized")}
 	}
 
 	req := SnapshotRequest_Header{
@@ -868,7 +1023,14 @@ func (r *Replica) sendSnapshot(
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
 	if err := r.store.cfg.Transport.SendSnapshot(
-		ctx, r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch, sent); err != nil {
+		ctx,
+		&r.store.cfg.RaftConfig,
+		r.store.allocator.storePool,
+		req,
+		snap,
+		r.store.Engine().NewBatch,
+		sent,
+	); err != nil {
 		return &snapshotError{err}
 	}
 	return nil
@@ -912,21 +1074,26 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // Note that in addition to using this method to update the on-disk range
 // descriptor, a CommitTrigger must be used to update the in-memory
 // descriptor; it will not automatically be copied from newDesc.
-// TODO(bdarnell): store the entire RangeDescriptor in the CommitTrigger
-// and load it automatically instead of reconstructing individual
-// changes.
 func updateRangeDescriptor(
 	b *client.Batch,
 	descKey roachpb.Key,
 	oldDesc *roachpb.RangeDescriptor,
-	newDesc roachpb.RangeDescriptor,
+	newDesc *roachpb.RangeDescriptor,
 ) error {
-	if err := newDesc.Validate(); err != nil {
-		return err
-	}
 	// This is subtle: []byte(nil) != interface{}(nil). A []byte(nil) refers to
 	// an empty value. An interface{}(nil) refers to a non-existent value. So
-	// we're careful to construct an interface{}(nil) when oldDesc is nil.
+	// we're careful to construct interface{}(nil)s when newDesc/oldDesc are nil.
+	var newValue interface{}
+	if newDesc != nil {
+		if err := newDesc.Validate(); err != nil {
+			return errors.Wrapf(err, "validating new descriptor %+v (old descriptor is %+v)", newDesc, oldDesc)
+		}
+		newBytes, err := protoutil.Marshal(newDesc)
+		if err != nil {
+			return err
+		}
+		newValue = newBytes
+	}
 	var oldValue interface{}
 	if oldDesc != nil {
 		oldBytes, err := protoutil.Marshal(oldDesc)
@@ -935,32 +1102,32 @@ func updateRangeDescriptor(
 		}
 		oldValue = oldBytes
 	}
-	newValue, err := protoutil.Marshal(&newDesc)
-	if err != nil {
-		return err
-	}
 	b.CPut(descKey, newValue, oldValue)
 	return nil
 }
 
-// RelocateRange relocates a given range to a given set of stores. The first
-// store in the slice becomes the new leaseholder.
+// AdminRelocateRange relocates a given range to a given set of stores. The
+// first store in the slice becomes the new leaseholder.
 //
-// This is best-effort; if replication queues are enabled and a change in
-// membership happens at the same time, there will be errors.
-func RelocateRange(
-	ctx context.Context,
-	db *client.DB,
-	rangeDesc roachpb.RangeDescriptor,
-	targets []roachpb.ReplicationTarget,
+// This is best-effort; it's possible that the replicate queue on the
+// leaseholder could take action at the same time, causing errors.
+func (s *Store) AdminRelocateRange(
+	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
-	// Step 1: Add any stores that don't already have a replica of the range.
-	//
-	// TODO(radu): we can't have multiple replicas on different stores on the same
-	// node, which can lead to some odd corner cases where we would have to first
-	// remove some replicas (currently these cases fail).
 
-	var addTargets []roachpb.ReplicationTarget
+	// Deep-copy the Replicas slice (in our shallow copy of the RangeDescriptor)
+	// since we'll mutate it in the loop below.
+	rangeDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), rangeDesc.Replicas...)
+	startKey := rangeDesc.StartKey.AsRawKey()
+
+	// Step 1: Compute which replicas are to be added and which are to be removed.
+	//
+	// TODO(radu): we can't have multiple replicas on different stores on the
+	// same node, and this code doesn't do anything to specifically avoid that
+	// case (although the allocator will avoid even trying to send snapshots to
+	// such stores), so it could cause some failures.
+
+	var addTargets []roachpb.ReplicaDescriptor
 	for _, t := range targets {
 		found := false
 		for _, replicaDesc := range rangeDesc.Replicas {
@@ -970,7 +1137,27 @@ func RelocateRange(
 			}
 		}
 		if !found {
-			addTargets = append(addTargets, t)
+			addTargets = append(addTargets, roachpb.ReplicaDescriptor{
+				NodeID:  t.NodeID,
+				StoreID: t.StoreID,
+			})
+		}
+	}
+
+	var removeTargets []roachpb.ReplicaDescriptor
+	for _, replicaDesc := range rangeDesc.Replicas {
+		found := false
+		for _, t := range targets {
+			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			removeTargets = append(removeTargets, roachpb.ReplicaDescriptor{
+				NodeID:  replicaDesc.NodeID,
+				StoreID: replicaDesc.StoreID,
+			})
 		}
 	}
 
@@ -987,84 +1174,164 @@ func RelocateRange(
 		return false
 	}
 
-	for len(addTargets) > 0 {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		target := addTargets[0]
-		if err := db.AdminChangeReplicas(
-			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
-		); err != nil {
-			returnErr := errors.Wrapf(err, "while adding target %v", target)
-			if !canRetry(err) {
-				return returnErr
-			}
-			log.Warning(ctx, returnErr)
-			continue
-		}
-		addTargets = addTargets[1:]
-	}
-
-	// Step 2: Transfer the lease to the first target. This needs to happen before
-	// we remove replicas or we may try to remove the lease holder.
-
 	transferLease := func() {
-		if err := db.AdminTransferLease(
-			ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
+		if err := s.DB().AdminTransferLease(
+			ctx, startKey, targets[0].StoreID,
 		); err != nil {
 			log.Warningf(ctx, "while transferring lease: %s", err)
 		}
 	}
 
-	transferLease()
-
-	// Step 3: Remove any replicas that are not targets.
-
-	var removeTargets []roachpb.ReplicationTarget
-	for _, replicaDesc := range rangeDesc.Replicas {
-		found := false
-		for _, t := range targets {
-			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			removeTargets = append(removeTargets, roachpb.ReplicationTarget{
-				StoreID: replicaDesc.StoreID,
-				NodeID:  replicaDesc.NodeID,
-			})
-		}
+	sysCfg := s.cfg.Gossip.GetSystemConfig()
+	if sysCfg == nil {
+		return fmt.Errorf("no system config available, unable to perform RelocateRange")
+	}
+	zone, err := sysCfg.GetZoneConfigForKey(rangeDesc.StartKey)
+	if err != nil {
+		return err
 	}
 
-	for len(removeTargets) > 0 {
+	storeList, _, _ := s.allocator.storePool.getStoreList(rangeDesc.RangeID, storeFilterNone)
+	storeMap := storeListToMap(storeList)
+
+	rangeInfo := RangeInfo{Desc: &rangeDesc}
+
+	// Step 2: Repeatedly add a replica then remove a replica until we reach the
+	// desired state.
+	every := log.Every(time.Minute)
+	re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second})
+	for len(addTargets) > 0 || len(removeTargets) > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
-		target := removeTargets[0]
-		transferLease()
-		if err := db.AdminChangeReplicas(
-			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
-		); err != nil {
-			log.Warningf(ctx, "while removing target %v: %s", target, err)
-			if !canRetry(err) {
-				return err
+		if len(addTargets) > 0 && len(addTargets) >= len(removeTargets) {
+			// Each iteration, pick the most desirable replica to add. However,
+			// prefer the first target if it doesn't yet have a replica so that we
+			// can always transfer the lease to it before removing a replica below.
+			// This makes it easier to avoid removing a replica that's still
+			// leaseholder without needing to bounce the lease around a bunch.
+			candidates := addTargets
+			if storeHasReplica(targets[0].StoreID, candidates) {
+				candidates = []roachpb.ReplicaDescriptor{
+					{NodeID: targets[0].NodeID, StoreID: targets[0].StoreID},
+				}
 			}
-			continue
+
+			// The storeList's list of stores is used to constrain which stores the
+			// allocator considers putting a new replica on. We want it to only
+			// consider the stores in candidates.
+			candidateDescs := make([]roachpb.StoreDescriptor, 0, len(candidates))
+			for _, candidate := range candidates {
+				store, ok := storeMap[candidate.StoreID]
+				if !ok {
+					return fmt.Errorf("cannot up-replicate to s%d; missing gossiped StoreDescriptor", candidate.StoreID)
+				}
+				candidateDescs = append(candidateDescs, *store)
+			}
+			storeList = makeStoreList(candidateDescs)
+
+			targetStore, _ := s.allocator.allocateTargetFromList(
+				ctx,
+				storeList,
+				zone,
+				rangeInfo.Desc.Replicas,
+				rangeInfo,
+				s.allocator.scorerOptions())
+			if targetStore == nil {
+				return fmt.Errorf("none of the remaining targets %v are legal additions to %v",
+					addTargets, rangeInfo.Desc.Replicas)
+			}
+
+			target := roachpb.ReplicationTarget{
+				NodeID:  targetStore.Node.NodeID,
+				StoreID: targetStore.StoreID,
+			}
+			if err := s.DB().AdminChangeReplicas(
+				ctx, startKey, roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
+			); err != nil {
+				returnErr := errors.Wrapf(err, "while adding target %v", target)
+				if !canRetry(err) {
+					return returnErr
+				}
+				if every.ShouldLog() {
+					log.Warning(ctx, returnErr)
+				}
+				re.Next()
+				continue
+			}
+
+			// Upon success, remove the target from our to-do list and add it to our
+			// local copy of the range descriptor such that future allocator
+			// decisions take it into account.
+			addTargets = removeTargetFromSlice(addTargets, target)
+			rangeInfo.Desc.Replicas = append(rangeInfo.Desc.Replicas, roachpb.ReplicaDescriptor{
+				NodeID:  target.NodeID,
+				StoreID: target.StoreID,
+			})
 		}
-		removeTargets = removeTargets[1:]
+
+		if len(removeTargets) > 0 && len(removeTargets) > len(addTargets) {
+			targetStore, _, err := s.allocator.RemoveTarget(ctx, zone, removeTargets, rangeInfo)
+			if err != nil {
+				return errors.Wrapf(err, "unable to select removal target from %v; current replicas %v",
+					removeTargets, rangeInfo.Desc.Replicas)
+			}
+			target := roachpb.ReplicationTarget{
+				NodeID:  targetStore.NodeID,
+				StoreID: targetStore.StoreID,
+			}
+			// Note that attempting to remove the leaseholder won't work, so transfer
+			// the lease first in such scenarios. The first specified target should be
+			// the leaseholder now, so we can always transfer the lease there.
+			transferLease()
+			if err := s.DB().AdminChangeReplicas(
+				ctx, startKey, roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
+			); err != nil {
+				log.Warningf(ctx, "while removing target %v: %s", target, err)
+				if !canRetry(err) {
+					return err
+				}
+				re.Next()
+				continue
+			}
+
+			// Upon success, remove the target from our to-do list and from our local
+			// copy of the range descriptor such that future allocator decisions take
+			// its absence into account.
+			removeTargets = removeTargetFromSlice(removeTargets, target)
+			rangeInfo.Desc.Replicas = removeTargetFromSlice(rangeInfo.Desc.Replicas, target)
+		}
 	}
+
+	// Step 3: Transfer the lease to the first listed target, as the API specifies.
+	transferLease()
+
 	return ctx.Err()
+}
+
+// Modifies the underlying storage of the slice rather than copying.
+// Don't use on a shared slice where the order matters.
+func removeTargetFromSlice(
+	targets []roachpb.ReplicaDescriptor, target roachpb.ReplicationTarget,
+) []roachpb.ReplicaDescriptor {
+	for i, t := range targets {
+		if t.NodeID == target.NodeID && t.StoreID == target.StoreID {
+			// Swap the removed target with the last element in the slice and return
+			// a slice that's 1 element shorter than before.
+			targets[i], targets[len(targets)-1] = targets[len(targets)-1], targets[i]
+			return targets[:len(targets)-1]
+		}
+	}
+	return targets
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.
 func (r *Replica) adminScatter(
 	ctx context.Context, args roachpb.AdminScatterRequest,
 ) (roachpb.AdminScatterResponse, error) {
-	sysCfg, ok := r.store.cfg.Gossip.GetSystemConfig()
-	if !ok {
+	sysCfg := r.store.cfg.Gossip.GetSystemConfig()
+	if sysCfg == nil {
 		log.Infof(ctx, "scatter failed (system config not yet available)")
 		return roachpb.AdminScatterResponse{}, errors.New("system config not yet available")
 	}
@@ -1083,7 +1350,7 @@ func (r *Replica) adminScatter(
 	var allowLeaseTransfer bool
 	canTransferLease := func() bool { return allowLeaseTransfer }
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
-		requeue, err := rq.processOneChange(ctx, r, sysCfg, canTransferLease, false /* dryRun */, true /* disableStatsBasedRebalancing */)
+		requeue, err := rq.processOneChange(ctx, r, sysCfg, canTransferLease, false /* dryRun */)
 		if err != nil {
 			if IsSnapshotError(err) {
 				continue

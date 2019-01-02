@@ -32,19 +32,29 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 		}
 
 		// RESET ALL
-		for _, v := range varGen {
-			if v.Reset != nil {
-				if err := v.Reset(p.sessionDataMutator); err != nil {
-					return nil, err
-				}
-			}
+		if err := resetSessionVars(ctx, p.sessionDataMutator); err != nil {
+			return nil, err
 		}
 
 		// DEALLOCATE ALL
 		p.preparedStatements.DeleteAll(ctx)
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"unknown mode for DISCARD: %d", s.Mode)
+		return nil, pgerror.NewAssertionErrorf("unknown mode for DISCARD: %d", s.Mode)
 	}
 	return newZeroNode(nil /* columns */), nil
+}
+
+func resetSessionVars(ctx context.Context, m *sessionDataMutator) error {
+	for _, varName := range varNames {
+		v := varGen[varName]
+		if v.Set != nil {
+			hasDefault, defVal := getSessionVarDefaultString(varName, v, m)
+			if hasDefault {
+				if err := v.Set(ctx, m, defVal); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }

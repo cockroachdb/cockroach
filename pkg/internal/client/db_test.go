@@ -17,14 +17,12 @@ package client_test
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func setup(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
@@ -376,28 +374,4 @@ func TestDB_Put_insecure(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkResult(t, []byte("1"), result.ValueBytes())
-}
-
-func TestDebugName(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
-
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		// Manually override the txn ID, to make the DebugName below deterministic.
-		id := "00000000-b33f-b33f-b33f-000000000000"
-		uuid, err := uuid.FromString(id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		txn.Proto().ID = uuid
-
-		expected := fmt.Sprintf("unnamed (id: %s)", id)
-		if txn.DebugName() != expected {
-			t.Fatalf("expected \"%s\", but found \"%s\"", expected, txn.DebugName())
-		}
-		return nil
-	}); err != nil {
-		t.Errorf("txn failed: %s", err)
-	}
 }

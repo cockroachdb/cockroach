@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -37,48 +37,6 @@ func declareKeysExport(
 ) {
 	batcheval.DefaultDeclareKeys(desc, header, req, spans)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
-}
-
-type rowCounter struct {
-	prev roachpb.Key
-	roachpb.BulkOpSummary
-}
-
-func (r *rowCounter) count(key roachpb.Key) error {
-	// EnsureSafeSplitKey is usually used to avoid splitting a row across ranges,
-	// by returning the row's key prefix.
-	// We reuse it here to count "rows" by counting when it changes.
-	// Non-SQL keys are returned unchanged or may error -- we ignore them, since
-	// non-SQL keys are obviously thus not SQL rows.
-	row, err := keys.EnsureSafeSplitKey(key)
-	if err != nil || len(key) == len(row) {
-		return nil
-	}
-
-	// no change key prefix => no new row.
-	if bytes.Equal(row, r.prev) {
-		return nil
-	}
-	r.prev = append(r.prev[:0], row...)
-
-	rest, tbl, err := keys.DecodeTablePrefix(row)
-	if err != nil {
-		return err
-	}
-
-	if tbl < keys.MaxReservedDescID {
-		r.SystemRecords++
-	} else {
-		if _, indexID, err := encoding.DecodeUvarintAscending(rest); err != nil {
-			return err
-		} else if indexID == 1 {
-			r.Rows++
-		} else {
-			r.IndexEntries++
-		}
-	}
-
-	return nil
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges
@@ -152,7 +110,9 @@ func evalExport(
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
-	var rows rowCounter
+	debugLog := log.V(3)
+
+	var rows bulk.RowCounter
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
 	iter := engineccl.NewMVCCIncrementalIterator(batch, engineccl.IterOptions{
@@ -175,21 +135,17 @@ func evalExport(
 		// Skip tombstone (len=0) records when startTime is zero
 		// (non-incremental) and we're not exporting all versions.
 		if skipTombstones && args.StartTime.IsEmpty() && len(iter.UnsafeValue()) == 0 {
-			iter.NextKey()
-			if ok, err := iter.Valid(); err != nil {
-				return result.Result{}, err
-			} else if !ok {
-				break
-			}
 			continue
 		}
 
-		if log.V(3) {
+		if debugLog {
+			// Calling log.V is more expensive than you'd think. Keep it out of
+			// the hot path.
 			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
 			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
 		}
 
-		if err := rows.count(iter.UnsafeKey().Key); err != nil {
+		if err := rows.Count(iter.UnsafeKey().Key); err != nil {
 			return result.Result{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
 		}
 		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
@@ -209,10 +165,13 @@ func evalExport(
 		return result.Result{}, err
 	}
 
-	// Compute the checksum before we upload and remove the local file.
-	checksum, err := SHA512ChecksumData(sstContents)
-	if err != nil {
-		return result.Result{}, err
+	var checksum []byte
+	if !args.OmitChecksum {
+		// Compute the checksum before we upload and remove the local file.
+		checksum, err = SHA512ChecksumData(sstContents)
+		if err != nil {
+			return result.Result{}, err
+		}
 	}
 
 	exported := roachpb.ExportResponse_File{

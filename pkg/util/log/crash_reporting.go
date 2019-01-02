@@ -25,9 +25,6 @@ import (
 	"strings"
 	"time"
 
-	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -35,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	raven "github.com/getsentry/raven-go"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -256,7 +255,7 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 
 var crdbPaths = []string{
 	"github.com/cockroachdb/cockroach",
-	"github.com/coreos/etcd/raft",
+	"go.etcd.io/etcd/raft",
 }
 
 func uptimeTag(now time.Time) string {
@@ -292,7 +291,7 @@ func (e *safeError) Error() string {
 // anonymized reporting.
 func Redact(r interface{}) string {
 	typAnd := func(i interface{}, text string) string {
-		typ := util.ErrorSource(i)
+		typ := ErrorSource(i)
 		if typ == "" {
 			typ = fmt.Sprintf("%T", i)
 		}
@@ -517,4 +516,19 @@ var tagFns []tagFn
 // This is intended to be called by other packages at init time.
 func RegisterTagFn(key string, value func(context.Context) string) {
 	tagFns = append(tagFns, tagFn{key, value})
+}
+
+// ErrorSource attempts to return the file:line where `i` was created if `i` has
+// that information (i.e. if it is an errors.withStack). Returns "" otherwise.
+func ErrorSource(i interface{}) string {
+	type stackTracer interface {
+		StackTrace() errors.StackTrace
+	}
+	if e, ok := i.(stackTracer); ok {
+		tr := e.StackTrace()
+		if len(tr) > 0 {
+			return fmt.Sprintf("%v", tr[0]) // prints file:line
+		}
+	}
+	return ""
 }

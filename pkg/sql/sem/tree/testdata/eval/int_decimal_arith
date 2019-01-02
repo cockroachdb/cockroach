@@ -1,0 +1,61 @@
+# Heterogeneous int/decimal arithmetic is valid.
+
+eval
+1.1:::decimal + 2:::int
+----
+3.1
+
+eval
+1.1:::decimal - 2:::int
+----
+-0.9
+
+eval
+1.1:::decimal * 2:::int
+----
+2.2
+
+eval
+1.1:::decimal % 2:::int
+----
+1.1
+
+eval
+4.1:::decimal // 2:::int
+----
+2
+
+eval
+1.1:::decimal ^ 2:::int
+----
+1.21
+
+eval
+2:::int +  2.1:::decimal
+----
+4.1
+
+eval
+2:::int -  2.1:::decimal
+----
+-0.1
+
+eval
+2:::int *  2.1:::decimal
+----
+4.2
+
+eval
+2:::int %  2.1:::decimal
+----
+2.0
+
+eval
+4:::int // 2.1:::decimal
+----
+1
+
+eval
+2:::int ^ 2.1:::decimal
+----
+4.2870938501451726569

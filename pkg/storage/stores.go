@@ -157,7 +157,7 @@ func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) (*Replica, error
 		return nil, err
 	}
 	if replica == nil {
-		return nil, roachpb.NewRangeNotFoundError(rangeID)
+		return nil, roachpb.NewRangeNotFoundError(rangeID, 0)
 	}
 	return replica, nil
 }
@@ -189,6 +189,26 @@ func (ls *Stores) Send(
 	return br, pErr
 }
 
+// RangeFeed registers a rangefeed over the specified span. It sends updates to
+// the provided stream and returns with an optional error when the rangefeed is
+// complete.
+func (ls *Stores) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+) *roachpb.Error {
+	if args.RangeID == 0 {
+		log.Fatal(ctx, "rangefeed request missing range ID")
+	} else if args.Replica.StoreID == 0 {
+		log.Fatal(ctx, "rangefeed request missing store ID")
+	}
+
+	store, err := ls.GetStore(args.Replica.StoreID)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+
+	return store.RangeFeed(ctx, args, stream)
+}
+
 // ReadBootstrapInfo implements the gossip.Storage interface. Read
 // attempts to read gossip bootstrap info from every known store and
 // finds the most recent from all stores to initialize the bootstrap
@@ -206,7 +226,8 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 		s := (*Store)(v)
 		var storeBI gossip.BootstrapInfo
 		var ok bool
-		ok, err = engine.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.Timestamp{}, true, nil, &storeBI)
+		ok, err = engine.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.Timestamp{}, &storeBI,
+			engine.MVCCGetOptions{})
 		if err != nil {
 			return false
 		}

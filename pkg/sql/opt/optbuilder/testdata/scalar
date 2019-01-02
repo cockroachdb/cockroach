@@ -201,6 +201,35 @@ case [type=int]
  │    └── const: 1 [type=int]
  └── const: 2 [type=int]
 
+build-scalar
+if(true, 1, 2)
+----
+case [type=int]
+ ├── true [type=bool]
+ ├── when [type=int]
+ │    ├── true [type=bool]
+ │    └── const: 1 [type=int]
+ └── const: 2 [type=int]
+
+build-scalar
+if(false, null, 1)
+----
+case [type=int]
+ ├── false [type=bool]
+ ├── when [type=unknown]
+ │    ├── true [type=bool]
+ │    └── null [type=unknown]
+ └── const: 1 [type=int]
+
+build-scalar
+nullif(1, 2)
+----
+case [type=int]
+ ├── const: 1 [type=int]
+ ├── when [type=unknown]
+ │    ├── const: 2 [type=int]
+ │    └── null [type=unknown]
+ └── const: 1 [type=int]
 
 build-scalar vars=(string)
 length(@1) = 2
@@ -272,13 +301,13 @@ cast: DECIMAL [type=decimal]
 build-scalar
 1::float
 ----
-cast: FLOAT [type=float]
+cast: FLOAT8 [type=float]
  └── const: 1.0 [type=float]
 
 build-scalar
 1.1::int
 ----
-cast: INT [type=int]
+cast: INT8 [type=int]
  └── const: 1.1 [type=decimal]
 
 build-scalar
@@ -289,7 +318,7 @@ const: '2010-05-12 00:00:00+00:00' [type=timestamp]
 build-scalar
 '123'::int
 ----
-cast: INT [type=int]
+cast: INT8 [type=int]
  └── const: 123 [type=int]
 
 build-scalar vars=(int, int)
@@ -317,8 +346,7 @@ case [type=int]
  │    │    ├── variable: @1 [type=int]
  │    │    └── const: 5 [type=int]
  │    └── const: 1 [type=int]
- └── unary-minus [type=int]
-      └── const: 1 [type=int]
+ └── const: -1 [type=int]
 
 build-scalar vars=(int)
 CASE WHEN @1 > 5 THEN 1 WHEN @1 < 0 THEN 2 ELSE -1 END
@@ -335,8 +363,7 @@ case [type=int]
  │    │    ├── variable: @1 [type=int]
  │    │    └── const: 0 [type=int]
  │    └── const: 2 [type=int]
- └── unary-minus [type=int]
-      └── const: 1 [type=int]
+ └── const: -1 [type=int]
 
 build-scalar vars=(int)
 CASE @1 WHEN 5 THEN 1 ELSE -1 END
@@ -346,8 +373,7 @@ case [type=int]
  ├── when [type=int]
  │    ├── const: 5 [type=int]
  │    └── const: 1 [type=int]
- └── unary-minus [type=int]
-      └── const: 1 [type=int]
+ └── const: -1 [type=int]
 
 build-scalar vars=(int, int)
 CASE @1 + 3 WHEN 5 * @2 THEN 1 % @2 WHEN 6 THEN 2 ELSE -1 END
@@ -366,8 +392,7 @@ case [type=int]
  ├── when [type=int]
  │    ├── const: 6 [type=int]
  │    └── const: 2 [type=int]
- └── unary-minus [type=int]
-      └── const: 1 [type=int]
+ └── const: -1 [type=int]
 
 # Tests for CASE with no ELSE statement
 build-scalar vars=(int)
@@ -582,7 +607,7 @@ null [type=unknown]
 build-scalar
 NULL::int
 ----
-cast: INT [type=int]
+cast: INT8 [type=int]
  └── null [type=unknown]
 
 build-scalar vars=(int[])
@@ -680,12 +705,13 @@ concat [type=jsonb]
 build-scalar allow-unsupported
 'hello' COLLATE en
 ----
-unsupported-expr: 'hello' COLLATE en [type=collatedstring{en}]
+collate [type=collatedstring{en}]
+ └── const: 'hello' [type=string]
 
 build-scalar
 random()
 ----
-error: impure functions are not supported
+function: random [type=float]
 
 build-scalar
 ARRAY[1, 2] || NULL
@@ -694,14 +720,14 @@ concat [type=int[]]
  ├── array: [type=int[]]
  │    ├── const: 1 [type=int]
  │    └── const: 2 [type=int]
- └── cast: INT[] [type=int[]]
+ └── cast: INT8[] [type=int[]]
       └── null [type=unknown]
 
 build-scalar
 NULL || ARRAY[1, 2]
 ----
 concat [type=int[]]
- ├── cast: INT[] [type=int[]]
+ ├── cast: INT8[] [type=int[]]
  │    └── null [type=unknown]
  └── array: [type=int[]]
       ├── const: 1 [type=int]
@@ -714,7 +740,7 @@ concat [type=int[]]
  ├── array: [type=int[]]
  │    ├── const: 1 [type=int]
  │    └── const: 2 [type=int]
- └── cast: SMALLINT [type=int]
+ └── cast: INT2 [type=int]
       └── null [type=unknown]
 
 build-scalar
@@ -740,10 +766,412 @@ error: arrays of jsonb not allowed
 opt
 SELECT -((-9223372036854775808):::int)
 ----
-project
+values
  ├── columns: "?column?":1(int)
+ └── tuple [type=tuple{int}]
+      └── unary-minus [type=int]
+           └── const: -9223372036854775808 [type=int]
+
+# TODO(justin): modify build-scalar to handle subqueries
+# so this can use it.
+build
+SELECT ARRAY(SELECT 1)
+----
+project
+ ├── columns: array:2(int[])
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── unary-minus [type=int]
-           └── const: -9223372036854775808 [type=int]
+      └── array-flatten [type=int[]]
+           └── project
+                ├── columns: "?column?":1(int!null)
+                ├── values
+                │    └── tuple [type=tuple]
+                └── projections
+                     └── const: 1 [type=int]
+
+exec-ddl
+CREATE TABLE x (a INT PRIMARY KEY)
+----
+TABLE x
+ ├── a int not null
+ └── INDEX primary
+      └── a int not null
+
+exec-ddl
+CREATE TABLE y (b INT PRIMARY KEY)
+----
+TABLE y
+ ├── b int not null
+ └── INDEX primary
+      └── b int not null
+
+build
+SELECT b, ARRAY(SELECT a FROM x WHERE x.a = y.b) FROM y
+----
+project
+ ├── columns: b:1(int!null) array:3(int[])
+ ├── scan y
+ │    └── columns: b:1(int!null)
+ └── projections
+      └── array-flatten [type=int[]]
+           └── select
+                ├── columns: a:2(int!null)
+                ├── scan x
+                │    └── columns: a:2(int!null)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: a [type=int]
+                          └── variable: b [type=int]
+
+build
+SELECT b, ARRAY(SELECT a FROM x ORDER BY a) FROM y
+----
+project
+ ├── columns: b:1(int!null) array:3(int[])
+ ├── scan y
+ │    └── columns: b:1(int!null)
+ └── projections
+      └── array-flatten [type=int[]]
+           └── scan x
+                ├── columns: a:2(int!null)
+                └── ordering: +2
+
+build
+SELECT ARRAY(VALUES ('foo'), ('bar'), ('baz'))
+----
+project
+ ├── columns: array:2(string[])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── array-flatten [type=string[]]
+           └── values
+                ├── columns: column1:1(string)
+                ├── tuple [type=tuple{string}]
+                │    └── const: 'foo' [type=string]
+                ├── tuple [type=tuple{string}]
+                │    └── const: 'bar' [type=string]
+                └── tuple [type=tuple{string}]
+                     └── const: 'baz' [type=string]
+
+build
+SELECT ARRAY(VALUES (ARRAY[1]))
+----
+project
+ ├── columns: array:2(int[][])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── array-flatten [type=int[][]]
+           └── values
+                ├── columns: column1:1(int[])
+                └── tuple [type=tuple{int[]}]
+                     └── array: [type=int[]]
+                          └── const: 1 [type=int]
+
+build
+SELECT ARRAY(SELECT (1, 2))
+----
+project
+ ├── columns: array:2(tuple{int, int}[])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── array-flatten [type=tuple{int, int}[]]
+           └── project
+                ├── columns: "?column?":1(tuple{int, int})
+                ├── values
+                │    └── tuple [type=tuple]
+                └── projections
+                     └── tuple [type=tuple{int, int}]
+                          ├── const: 1 [type=int]
+                          └── const: 2 [type=int]
+
+build
+SELECT ARRAY(VALUES ((1, 2)))
+----
+project
+ ├── columns: array:2(tuple{int, int}[])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── array-flatten [type=tuple{int, int}[]]
+           └── values
+                ├── columns: column1:1(tuple{int, int})
+                └── tuple [type=tuple{tuple{int, int}}]
+                     └── tuple [type=tuple{int, int}]
+                          ├── const: 1 [type=int]
+                          └── const: 2 [type=int]
+
+build
+SELECT ARRAY(VALUES ('{}'::JSONB))
+----
+error: arrays of jsonb not allowed
+
+build
+SELECT ARRAY(SELECT 1, 2)
+----
+error (42601): subquery must return only one column, found 2
+
+build
+SELECT ARRAY(SELECT generate_series(1,100) ORDER BY 1 DESC)
+----
+project
+ ├── columns: array:2(int[])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── array-flatten [type=int[]]
+           └── sort
+                ├── columns: generate_series:1(int)
+                ├── ordering: -1
+                └── project-set
+                     ├── columns: generate_series:1(int)
+                     ├── values
+                     │    └── tuple [type=tuple]
+                     └── zip
+                          └── function: generate_series [type=int]
+                               ├── const: 1 [type=int]
+                               └── const: 100 [type=int]
+
+build-scalar
+1 = ANY ARRAY[1, 2, 3]
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+1 > ANY ARRAY[1, 2, 3]
+----
+any-scalar: gt [type=bool]
+ ├── const: 1 [type=int]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+1 = ALL ARRAY[1, 2, 3]
+----
+not [type=bool]
+ └── any-scalar: ne [type=bool]
+      ├── const: 1 [type=int]
+      └── array: [type=int[]]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]
+
+build-scalar
+1 > ALL ARRAY[1, 2, 3]
+----
+not [type=bool]
+ └── any-scalar: le [type=bool]
+      ├── const: 1 [type=int]
+      └── array: [type=int[]]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]
+
+build-scalar
+1 = ANY (1, 2, 3)
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── tuple [type=tuple{int, int, int}]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+'foo' = ANY ('foo', 'bar', 'baz')
+----
+any-scalar: eq [type=bool]
+ ├── const: 'foo' [type=string]
+ └── tuple [type=tuple{string, string, string}]
+      ├── const: 'foo' [type=string]
+      ├── const: 'bar' [type=string]
+      └── const: 'baz' [type=string]
+
+
+build-scalar
+1 = ANY ()
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── tuple [type=tuple{}]
+
+build
+SELECT 1 > ALL ARRAY['foo']
+----
+error (22023): unsupported comparison operator: 1 > ALL ARRAY['foo']: could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
+
+build-scalar vars=(int[], string[], float[], int)
+(@1[1], @2[1+1], @3[@4])
+----
+tuple [type=tuple{int, string, float}]
+ ├── indirection [type=int]
+ │    ├── variable: @1 [type=int[]]
+ │    └── const: 1 [type=int]
+ ├── indirection [type=string]
+ │    ├── variable: @2 [type=string[]]
+ │    └── plus [type=int]
+ │         ├── const: 1 [type=int]
+ │         └── const: 1 [type=int]
+ └── indirection [type=float]
+      ├── variable: @3 [type=float[]]
+      └── variable: @4 [type=int]
+
+build-scalar vars=(int,string,int[])
+(
+    (@1 IS OF (INT), @1 IS OF (INT, STRING), @1 IS OF (STRING)),
+    (@1 IS NOT OF (INT), @1 IS NOT OF (INT, STRING), @1 IS NOT OF (STRING)),
+    (@2 IS NOT OF (INT), @2 IS NOT OF (INT, STRING), @2 IS NOT OF (STRING)),
+    (@3 IS NOT OF (INT[]), @3 IS OF (INT[]), @3 IS OF (STRING[]))
+)
+----
+tuple [type=tuple{tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, bool, bool}}]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── true [type=bool]
+ │    ├── true [type=bool]
+ │    └── false [type=bool]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── false [type=bool]
+ │    ├── false [type=bool]
+ │    └── true [type=bool]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── true [type=bool]
+ │    ├── false [type=bool]
+ │    └── false [type=bool]
+ └── tuple [type=tuple{bool, bool, bool}]
+      ├── false [type=bool]
+      ├── true [type=bool]
+      └── false [type=bool]
+
+build-scalar vars=(string)
+@1 COLLATE en
+----
+collate [type=collatedstring{en}]
+ └── variable: @1 [type=string]
+
+exec-ddl
+CREATE TABLE u (x INT)
+----
+TABLE u
+ ├── x int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE v (y INT[])
+----
+TABLE v
+ ├── y int[]
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT ARRAY(SELECT x FROM u ORDER BY x)
+----
+project
+ ├── columns: array:3(int[])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── array-flatten [type=int[]]
+           └── sort
+                ├── columns: x:1(int)
+                ├── ordering: +1
+                └── project
+                     ├── columns: x:1(int)
+                     └── scan u
+                          └── columns: x:1(int) rowid:2(int!null)
+
+build
+SELECT * FROM v WHERE y = ARRAY(SELECT x FROM u ORDER BY x)
+----
+project
+ ├── columns: y:1(int[]!null)
+ └── select
+      ├── columns: y:1(int[]!null) v.rowid:2(int!null)
+      ├── scan v
+      │    └── columns: y:1(int[]) v.rowid:2(int!null)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: y [type=int[]]
+                └── array-flatten [type=int[]]
+                     └── sort
+                          ├── columns: x:3(int)
+                          ├── ordering: +3
+                          └── project
+                               ├── columns: x:3(int)
+                               └── scan u
+                                    └── columns: x:3(int) u.rowid:4(int!null)
+
+build
+SELECT ARRAY(SELECT (y, 2) FROM u ORDER BY x) FROM v
+----
+error: can't execute a correlated ARRAY(...) over tuple{int[], int}
+
+build
+SELECT ARRAY(SELECT y FROM u ORDER BY x) FROM v
+----
+error: can't execute a correlated ARRAY(...) over int[]
+
+build-scalar
+ISERROR(1/0)
+----
+if-err [type=bool]
+ └── div [type=decimal]
+      ├── const: 1 [type=int]
+      └── const: 0 [type=int]
+
+build-scalar
+ISERROR(1/0, '22012')
+----
+if-err [type=bool]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ └── err-code
+      └── const: '22012' [type=string]
+
+build-scalar vars=(decimal)
+IFERROR(1/0, @1)
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ └── else
+      └── variable: @1 [type=decimal]
+
+build-scalar vars=(decimal, string)
+IFERROR(1/0, @1, @2)
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ ├── else
+ │    └── variable: @1 [type=decimal]
+ └── err-code
+      └── variable: @2 [type=string]
+
+build-scalar vars=(decimal)
+IFERROR(1/0, @1, '10000')
+----
+if-err [type=decimal]
+ ├── div [type=decimal]
+ │    ├── const: 1 [type=int]
+ │    └── const: 0 [type=int]
+ ├── else
+ │    └── variable: @1 [type=decimal]
+ └── err-code
+      └── const: '10000' [type=string]

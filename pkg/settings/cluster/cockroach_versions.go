@@ -14,9 +14,7 @@
 
 package cluster
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 // VersionKey is a unique identifier for a version of CockroachDB.
 type VersionKey int
@@ -66,6 +64,15 @@ const (
 	VersionColumnarTimeSeries
 	VersionTxnCoordMetaInvalidField
 	VersionAsyncConsensus
+	VersionBatchResponse
+	VersionCreateChangefeed
+	VersionRangeMerges
+	VersionBitArrayColumns
+	VersionLoadBasedRebalancing
+	Version2_1
+	VersionCascadingZoneConfigs
+	VersionLoadSplits
+	VersionExportStorageWorkload
 
 	// Add new versions here (step one of two).
 
@@ -252,6 +259,51 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionAsyncConsensus is https://github.com/cockroachdb/cockroach/pull/26599.
 		Key:     VersionAsyncConsensus,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 9},
+	},
+	{
+		// VersionBatchResponse is https://github.com/cockroachdb/cockroach/pull/26553.
+		Key:     VersionBatchResponse,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 10},
+	},
+	{
+		// VersionCreateChangefeed is https://github.com/cockroachdb/cockroach/pull/27962.
+		Key:     VersionCreateChangefeed,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 11},
+	},
+	{
+		// VersionRangeMerges is https://github.com/cockroachdb/cockroach/pull/28865.
+		Key:     VersionRangeMerges,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 12},
+	},
+	{
+		// VersionBitArrayColumns is https://github.com/cockroachdb/cockroach/pull/28807.
+		Key:     VersionBitArrayColumns,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 13},
+	},
+	{
+		// VersionLoadBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/28852.
+		Key:     VersionLoadBasedRebalancing,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 14},
+	},
+	{
+		// Version2_1 is CockroachDB v2.1. It's used for all v2.1.x patch releases.
+		Key:     Version2_1,
+		Version: roachpb.Version{Major: 2, Minor: 1},
+	},
+	{
+		// VersionCascadingZoneConfigs is https://github.com/cockroachdb/cockroach/pull/30611.
+		Key:     VersionCascadingZoneConfigs,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 1},
+	},
+	{
+		// VersionLoadSplits is https://github.com/cockroachdb/cockroach/pull/31413.
+		Key:     VersionLoadSplits,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 2},
+	},
+	{
+		// VersionExportStorageWorkload is https://github.com/cockroachdb/cockroach/pull/31899.
+		Key:     VersionExportStorageWorkload,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 3},
 	},
 
 	// Add new versions here (step two of two).

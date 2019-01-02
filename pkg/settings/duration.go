@@ -40,6 +40,16 @@ func (d *DurationSetting) String(sv *Values) string {
 	return EncodeDuration(d.Get(sv))
 }
 
+// Encoded returns the encoded value of the current value of the setting.
+func (d *DurationSetting) Encoded(sv *Values) string {
+	return d.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (d *DurationSetting) EncodedDefault() string {
+	return EncodeDuration(d.defaultValue)
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*DurationSetting) Typ() string {
 	return "d"

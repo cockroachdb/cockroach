@@ -16,14 +16,12 @@ package sql_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
-
 	"time"
 
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -37,10 +35,10 @@ func TestGossipAlertsTable(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
-	if err := s.Gossip().AddInfoProto(gossip.MakeNodeHealthAlertKey(456), &status.HealthCheckResult{
-		Alerts: []status.HealthAlert{{
+	if err := s.Gossip().AddInfoProto(gossip.MakeNodeHealthAlertKey(456), &statuspb.HealthCheckResult{
+		Alerts: []statuspb.HealthAlert{{
 			StoreID:     123,
-			Category:    status.HealthAlert_METRICS,
+			Category:    statuspb.HealthAlert_METRICS,
 			Description: "foo",
 			Value:       100.0,
 		}},
@@ -49,7 +47,7 @@ func TestGossipAlertsTable(t *testing.T) {
 	}
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
-	row, err := ie.QueryRow(ctx, "test", nil /* txn */, "SELECT * FROM crdb_internal.gossip_alerts")
+	row, err := ie.QueryRow(ctx, "test", nil /* txn */, "SELECT * FROM crdb_internal.gossip_alerts WHERE store_id = 123")
 	if err != nil {
 		t.Fatal(err)
 	}

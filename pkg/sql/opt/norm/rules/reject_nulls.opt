@@ -63,7 +63,7 @@
         $right:*
         $on:*
     )
-    $filter:(Filters) & (HasNullRejectingFilter $filter (OutputCols $right))
+    $filters:* & (HasNullRejectingFilter $filters (OutputCols $right))
 )
 =>
 (Select
@@ -73,7 +73,7 @@
         $right
         $on
     )
-    $filter
+    $filters
 )
 
 # RejectNullsRightJoin is symmetric with RejectNullsLeftJoin. It reduces a
@@ -89,7 +89,7 @@
         $right:*
         $on:*
     )
-    $filter:(Filters) & (HasNullRejectingFilter $filter (OutputCols $left))
+    $filters:* & (HasNullRejectingFilter $filters (OutputCols $left))
 )
 =>
 (Select
@@ -99,7 +99,7 @@
         $right
         $on
     )
-    $filter
+    $filters
 )
 
 # RejectNullsGroupBy pushes a "col IS NOT NULL" null-rejecting filter below the
@@ -116,27 +116,31 @@
 # up in the right side of a LeftJoin operator, thus enabling it to be mapped to
 # an InnerJoin operator.
 #
+# This rule is not useful for DistinctOn: it can only fire if there are no
+# FirstAgg aggregates, but in that case the filter would have gotten pushed
+# through DistinctOn.
+#
 # This rule is marked as low priority so that it runs after Select filter
 # pushdown rules. If a filter can be pushed down in its entirety, that's
 # preferable to synthesizing a new "col IS NOT NULL" filter.
 [RejectNullsGroupBy, Normalize, LowPriority]
 (Select
-    $input:(GroupBy
+    $input:(GroupBy | ScalarGroupBy
         $innerInput:*
         $aggregations:*
-        $def:*
+        $groupingPrivate:*
     )
-    $filter:(Filters) & (HasNullRejectingFilter $filter (NullRejectCols $input))
+    $filters:* & (HasNullRejectingFilter $filters $rejectCols:(RejectNullCols $input))
 )
 =>
 (Select
-    (GroupBy
+    ((OpName $input)
         (Select
             $innerInput
-            (Filters [(IsNot (NullRejectAggVar $aggregations) (Null (AnyType)))])
+            [ (FiltersItem (IsNot (NullRejectAggVar $aggregations $rejectCols) (Null (AnyType)))) ]
         )
         $aggregations
-        $def
+        $groupingPrivate
     )
-    $filter
+    $filters
 )

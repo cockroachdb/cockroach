@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
@@ -162,50 +163,84 @@ func (d Duration) AsBigInt(dst *big.Int) {
 	dst.Add(dst, big.NewInt(d.Nanos))
 }
 
+const (
+	hourNanos   = uint64(time.Hour / time.Nanosecond)
+	minuteNanos = uint64(time.Minute / time.Nanosecond)
+	secondNanos = uint64(time.Second / time.Nanosecond)
+)
+
 // Format emits a string representation of a Duration to a Buffer.
 func (d Duration) Format(buf *bytes.Buffer) {
 	if d.Nanos == 0 && d.Days == 0 && d.Months == 0 {
-		buf.WriteString("0s")
+		buf.WriteString("00:00:00")
 		return
 	}
 
-	if absGE(d.Months, 11) {
-		fmt.Fprintf(buf, "%dy", d.Months/12)
+	wrote := false
+	// Defining both arguments in the signature gives a 10% speedup.
+	wrotePrev := func(wrote bool, buf *bytes.Buffer) bool {
+		if wrote {
+			buf.WriteString(" ")
+		}
+		return true
+	}
+
+	negDays := d.Months < 0 || d.Days < 0
+	if absGE(d.Months, 12) {
+		years := d.Months / 12
+		wrote = wrotePrev(wrote, buf)
+		fmt.Fprintf(buf, "%d year%s", years, isPlural(years))
 		d.Months %= 12
 	}
 	if d.Months != 0 {
-		fmt.Fprintf(buf, "%dmon", d.Months)
+		wrote = wrotePrev(wrote, buf)
+		fmt.Fprintf(buf, "%d mon%s", d.Months, isPlural(d.Months))
 	}
 	if d.Days != 0 {
-		fmt.Fprintf(buf, "%dd", d.Days)
+		wrote = wrotePrev(wrote, buf)
+		fmt.Fprintf(buf, "%d day%s", d.Days, isPlural(d.Days))
 	}
 
-	// The following comparisons are careful to preserve the sign in
-	// case the value is MinInt64, and thus cannot be made positive lest
-	// an overflow occur.
-	if absGE(d.Nanos, time.Hour.Nanoseconds()) {
-		fmt.Fprintf(buf, "%dh", d.Nanos/time.Hour.Nanoseconds())
-		d.Nanos %= time.Hour.Nanoseconds()
+	if d.Nanos == 0 {
+		return
 	}
-	if absGE(d.Nanos, time.Minute.Nanoseconds()) {
-		fmt.Fprintf(buf, "%dm", d.Nanos/time.Minute.Nanoseconds())
-		d.Nanos %= time.Minute.Nanoseconds()
+
+	wrotePrev(wrote, buf)
+
+	if d.Nanos < 0 {
+		buf.WriteString("-")
+	} else if negDays {
+		buf.WriteString("+")
 	}
-	if absGE(d.Nanos, time.Second.Nanoseconds()) {
-		fmt.Fprintf(buf, "%ds", d.Nanos/time.Second.Nanoseconds())
-		d.Nanos %= time.Second.Nanoseconds()
+
+	// Extract abs(d.Nanos). See https://play.golang.org/p/U3_gNMpyUew.
+	var nanos uint64
+	if d.Nanos >= 0 {
+		nanos = uint64(d.Nanos)
+	} else {
+
+		nanos = uint64(-d.Nanos)
 	}
-	if absGE(d.Nanos, time.Millisecond.Nanoseconds()) {
-		fmt.Fprintf(buf, "%dms", d.Nanos/time.Millisecond.Nanoseconds())
-		d.Nanos %= time.Millisecond.Nanoseconds()
+
+	hn := nanos / hourNanos
+	nanos %= hourNanos
+	mn := nanos / minuteNanos
+	nanos %= minuteNanos
+	sn := nanos / secondNanos
+	nanos %= secondNanos
+	fmt.Fprintf(buf, "%02d:%02d:%02d", hn, mn, sn)
+
+	if nanos != 0 {
+		s := fmt.Sprintf(".%09d", nanos)
+		buf.WriteString(strings.TrimRight(s, "0"))
 	}
-	if absGE(d.Nanos, time.Microsecond.Nanoseconds()) {
-		fmt.Fprintf(buf, "%dµs", d.Nanos/time.Microsecond.Nanoseconds())
-		d.Nanos %= time.Microsecond.Nanoseconds()
+}
+
+func isPlural(i int64) string {
+	if i == 1 {
+		return ""
 	}
-	if d.Nanos != 0 {
-		fmt.Fprintf(buf, "%dns", d.Nanos)
-	}
+	return "s"
 }
 
 // absGE returns whether x is greater than or equal to y in magnitude.
@@ -265,10 +300,95 @@ func Decode(sortNanos int64, months int64, days int64) (Duration, error) {
 
 // TODO(dan): Write DecodeBigInt.
 
-// Add returns the time t+d.
-func Add(t time.Time, d Duration) time.Time {
-	// TODO(dan): Overflow handling.
-	return t.AddDate(0, int(d.Months), int(d.Days)).Add(time.Duration(d.Nanos) * time.Nanosecond)
+// AdditionMode controls date normalization behaviors in Add().
+type AdditionMode bool
+
+const (
+	// AdditionModeCompatible applies a date-normalization strategy
+	// which produces results which are more compatible with
+	// PostgreSQL in which adding a month "rounds down" to the last
+	// day of a month instead of producing a value in the following
+	// month.
+	//
+	// See PostgreSQL 10.5: src/backend/utils/adt/timestamp.c timestamp_pl_interval().
+	AdditionModeCompatible AdditionMode = false
+	// AdditionModeLegacy delegates to time.Time.AddDate() for
+	// performing Time+Duration math.
+	AdditionModeLegacy AdditionMode = true
+)
+
+func (m AdditionMode) String() string {
+	switch m {
+	case AdditionModeLegacy:
+		return "legacy"
+	default:
+		return "compatible"
+	}
+}
+
+// Context is used to prevent a package-dependency cycle via tree.EvalContext.
+type Context interface {
+	GetAdditionMode() AdditionMode
+}
+
+// GetAdditionMode allows an AdditionMode to be used as its own context.
+func (m AdditionMode) GetAdditionMode() AdditionMode {
+	return m
+}
+
+// Add returns the time t+d, using a configurable mode.
+func Add(ctx Context, t time.Time, d Duration) time.Time {
+	var mode AdditionMode
+	if ctx != nil {
+		mode = ctx.GetAdditionMode()
+	}
+
+	// We can fast-path if the duration is always a fixed amount of time,
+	// or if the day number that we're starting from can never result
+	// in normalization.
+	if mode == AdditionModeLegacy || d.Months == 0 || t.Day() <= 28 {
+		return t.AddDate(0, int(d.Months), int(d.Days)).Add(time.Duration(d.Nanos))
+	}
+
+	// Adjustments for 1-based math.
+	expectedMonth := time.Month((int(t.Month())-1+int(d.Months))%12 + 1)
+
+	// Use AddDate() to get a rough value.  This might overshoot the
+	// end of the expected month by multiple days.  We could iteratively
+	// subtract a day until we jump a month backwards, but that's
+	// at least twice as slow as computing the correct value ourselves.
+	res := t.AddDate(0 /* years */, int(d.Months), 0 /* days */)
+
+	// Unpack fields as little as possible.
+	year, month, _ := res.Date()
+	hour, min, sec := res.Clock()
+
+	if month != expectedMonth {
+		// Pro-tip: Count across your knuckles and the divots between
+		// them, wrapping around when you hit July. Knuckle == 31 days.
+		var lastDayOfMonth int
+		switch expectedMonth {
+		case time.February:
+			// Leap year if divisible by 4, but not centuries unless also divisible by 400.
+			// Adjust the earth's orbital parameters?
+			if year%4 == 0 && (year%100 != 0 || year%400 == 0) {
+				lastDayOfMonth = 29
+			} else {
+				lastDayOfMonth = 28
+			}
+		case time.January, time.March, time.May, time.July, time.August, time.October, time.December:
+			lastDayOfMonth = 31
+		default:
+			lastDayOfMonth = 30
+		}
+
+		res = time.Date(
+			year, expectedMonth, lastDayOfMonth,
+			hour, min, sec,
+			res.Nanosecond(), res.Location())
+	}
+
+	return res.AddDate(0, 0, int(d.Days)).Add(time.Duration(d.Nanos))
 }
 
 // Add returns a Duration representing a time length of d+x.

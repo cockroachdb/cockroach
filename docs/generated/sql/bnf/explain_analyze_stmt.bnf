@@ -1,0 +1,3 @@
+explain_stmt ::=
+	'EXPLAIN' 'ANALYZE' preparable_stmt
+	| 'EXPLAIN' 'ANALYZE' '(' 'DISTSQL' ')' preparable_stmt

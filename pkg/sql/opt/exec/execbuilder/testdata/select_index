@@ -3,9 +3,9 @@
 statement ok
 CREATE TABLE t (
   a INT,
-  b CHAR,
+  b VARCHAR,
   c INT,
-  d CHAR,
+  d VARCHAR,
   PRIMARY KEY (a, b),
   INDEX bc (b, c),
   INDEX dc (d, c),
@@ -133,11 +133,6 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
 output row: [2 'two' 22 'bar']
 
-# TODO(radu): Need to select "dc" index
-# The where-clause does not contain columns matching a prefix of any
-# index. Note that the index "dc" was chosen because it contains fewer
-# keys per row than the primary key index while still containing all
-# of the needed columns.
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE c = 22; SET tracing = off
 
@@ -145,13 +140,16 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /t/bc/'one'/11/1 -> NULL
-fetched: /t/bc/'three'/33/3 -> NULL
-fetched: /t/bc/'two'/22/2 -> NULL
+fetched: /t/primary/1/'one' -> NULL
+fetched: /t/primary/1/'one'/c -> 11
+fetched: /t/primary/1/'one'/d -> 'foo'
 fetched: /t/primary/2/'two' -> NULL
 fetched: /t/primary/2/'two'/c -> 22
 fetched: /t/primary/2/'two'/d -> 'bar'
 output row: [2 'two' 22 'bar']
+fetched: /t/primary/3/'three' -> NULL
+fetched: /t/primary/3/'three'/c -> 33
+fetched: /t/primary/3/'three'/d -> 'blah'
 
 # Use the descending index
 statement ok
@@ -182,29 +180,33 @@ fetched: /t/a_desc/2/'two' -> NULL
 output row: [2]
 
 # Index selection occurs in direct join operands too.
-# TODO(radu): except that it doesn't in this case with new optimizer
 query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
+EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
-render          ·         ·          (b, a, c, d, a, c, d)     ·
- │              render 0  b          ·                         ·
- │              render 1  a          ·                         ·
- │              render 2  c          ·                         ·
- │              render 3  d          ·                         ·
- │              render 4  a          ·                         ·
- │              render 5  c          ·                         ·
- │              render 6  d          ·                         ·
- └── join       ·         ·          (a, b, c, d, a, b, c, d)  ·
-      │         type      inner      ·                         ·
-      │         equality  (b) = (b)  ·                         ·
-      ├── scan  ·         ·          (a, b, c, d)              ·
-      │         table     t@primary  ·                         ·
-      │         spans     ALL        ·                         ·
-      │         filter    b < '3'    ·                         ·
-      └── scan  ·         ·          (a, b, c, d)              ·
-·               table     t@primary  ·                         ·
-·               spans     ALL        ·                         ·
-·               filter    b < '3'    ·                         ·
+render                ·               ·                    (b, a, c, d, a, c, d)     ·
+ │                    render 0        b                    ·                         ·
+ │                    render 1        a                    ·                         ·
+ │                    render 2        c                    ·                         ·
+ │                    render 3        d                    ·                         ·
+ │                    render 4        a                    ·                         ·
+ │                    render 5        c                    ·                         ·
+ │                    render 6        d                    ·                         ·
+ └── join             ·               ·                    (a, b, c, d, a, b, c, d)  ·
+      │               type            inner                ·                         ·
+      │               equality        (b) = (b)            ·                         ·
+      │               mergeJoinOrder  +"(b=b)"             ·                         ·
+      ├── index-join  ·               ·                    (a, b, c, d)              ·
+      │    ├── scan   ·               ·                    (a, b, c)                 ·
+      │    │          table           t@bc                 ·                         ·
+      │    │          spans           /"3"-/"3"/PrefixEnd  ·                         ·
+      │    └── scan   ·               ·                    (a, b, c, d)              ·
+      │               table           t@primary            ·                         ·
+      └── index-join  ·               ·                    (a, b, c, d)              ·
+           ├── scan   ·               ·                    (a, b, c)                 ·
+           │          table           t@bc                 ·                         ·
+           │          spans           /"3"-/"3"/PrefixEnd  ·                         ·
+           └── scan   ·               ·                    (a, b, c, d)              ·
+·                     table           t@primary            ·                         ·
 
 statement ok
 TRUNCATE TABLE t
@@ -578,13 +580,13 @@ CREATE INDEX baz ON ab (i, s)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
-render     ·         ·                  (i, s)                         ·
- │         render 0  test.public.ab.i   ·                              ·
- │         render 1  test.public.ab.s   ·                              ·
- └── scan  ·         ·                  (s, i, rowid[hidden,omitted])  rowid!=NULL; weak-key(s,i,rowid)
-·          table     ab@baz             ·                              ·
-·          spans     /!NULL-/1/"c"      ·                              ·
-·          filter    (i, s) < (1, 'c')  ·                              ·
+render     ·         ·                  (i, s)  ·
+ │         render 0  i                  ·       ·
+ │         render 1  s                  ·       ·
+ └── scan  ·         ·                  (s, i)  ·
+·          table     ab@baz             ·       ·
+·          spans     /!NULL-/1/"c"      ·       ·
+·          filter    (i, s) < (1, 'c')  ·       ·
 
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
@@ -626,12 +628,12 @@ CREATE TABLE tab0(
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
-render     ·         ·                                     (k)        ·
- │         render 0  k                                     ·          ·
- └── scan  ·         ·                                     (k, a, b)  ·
-·          table     tab0@primary                          ·          ·
-·          spans     ALL                                   ·          ·
-·          filter    ((a IN (6)) AND (a > 6)) OR (b >= 4)  ·          ·
+render     ·         ·                                      (k)        ·
+ │         render 0  k                                      ·          ·
+ └── scan  ·         ·                                      (k, a, b)  ·
+·          table     tab0@primary                           ·          ·
+·          spans     ALL                                    ·          ·
+·          filter    ((a IN (6,)) AND (a > 6)) OR (b >= 4)  ·          ·
 
 # Check that no extraneous rows are fetched due to excessive batching (#15910)
 # The test is composed of three parts: populate a table, check
@@ -648,7 +650,6 @@ INSERT INTO test2(k)
 # Plan check:
 # The query is using an index-join and the limit is propagated to the scan.
 
-# TODO(radu): need revscan.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
@@ -758,15 +759,16 @@ AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
 GROUP BY resource_key
 ORDER BY total DESC
 ----
-sort            ·            ·
- │              order        -total
- └── group      ·            ·
-      │         aggregate 0  resource_key
-      │         aggregate 1  count(resource_key)
-      │         group by     @2
-      └── scan  ·            ·
-·               table        favorites@favorites_glob_fav_idx
-·               spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
+sort                 ·            ·
+ │                   order        -total
+ └── group           ·            ·
+      │              aggregate 0  resource_key
+      │              aggregate 1  count(resource_key)
+      │              group by     @1
+      └── render     ·            ·
+           └── scan  ·            ·
+·                    table        favorites@favorites_glob_fav_idx
+·                    spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
 
 query TI rowsort
 SELECT
@@ -782,7 +784,7 @@ AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
 GROUP BY resource_key
 ORDER BY total DESC
 ----
-ts 1
+ts  1
 ts2 1
 ts3 1
 
@@ -790,50 +792,30 @@ ts3 1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
 ----
-render     ·         ·                   (a, b, c, d)                         a=CONST; b!=NULL
- │         render 0  test.public.abcd.a  ·                                    ·
- │         render 1  test.public.abcd.b  ·                                    ·
- │         render 2  test.public.abcd.c  ·                                    ·
- │         render 3  test.public.abcd.d  ·                                    ·
- └── scan  ·         ·                   (a, b, c, d, rowid[hidden,omitted])  a=CONST; b!=NULL; rowid!=NULL; weak-key(b,c,d,rowid)
-·          table     abcd@abcd           ·                                    ·
-·          spans     /NULL/6-/!NULL      ·                                    ·
+scan  ·      ·               (a, b, c, d)  ·
+·     table  abcd@abcd       ·             ·
+·     spans  /NULL/6-/!NULL  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
 ----
-render     ·         ·                    (a, b, c, d)                         a=CONST; b!=NULL
- │         render 0  test.public.abcd.a   ·                                    ·
- │         render 1  test.public.abcd.b   ·                                    ·
- │         render 2  test.public.abcd.c   ·                                    ·
- │         render 3  test.public.abcd.d   ·                                    ·
- └── scan  ·         ·                    (a, b, c, d, rowid[hidden,omitted])  a=CONST; b!=NULL; rowid!=NULL; weak-key(b,c,d,rowid)
-·          table     abcd@abcd            ·                                    ·
-·          spans     /NULL/!NULL-/NULL/5  ·                                    ·
+scan  ·      ·                    (a, b, c, d)  ·
+·     table  abcd@abcd            ·             ·
+·     spans  /NULL/!NULL-/NULL/5  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
 ----
-render     ·         ·                   (a, b, c, d)                         a=CONST; +b
- │         render 0  test.public.abcd.a  ·                                    ·
- │         render 1  test.public.abcd.b  ·                                    ·
- │         render 2  test.public.abcd.c  ·                                    ·
- │         render 3  test.public.abcd.d  ·                                    ·
- └── scan  ·         ·                   (a, b, c, d, rowid[hidden,omitted])  a=CONST; rowid!=NULL; weak-key(b,c,d,rowid); +b
-·          table     abcd@abcd           ·                                    ·
-·          spans     /NULL-/!NULL        ·                                    ·
+scan  ·      ·             (a, b, c, d)  +b
+·     table  abcd@abcd     ·             ·
+·     spans  /NULL-/!NULL  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
 ----
-render     ·         ·                     (a, b, c, d)                         a=CONST; b=CONST; c!=NULL; +c
- │         render 0  test.public.abcd.a    ·                                    ·
- │         render 1  test.public.abcd.b    ·                                    ·
- │         render 2  test.public.abcd.c    ·                                    ·
- │         render 3  test.public.abcd.d    ·                                    ·
- └── scan  ·         ·                     (a, b, c, d, rowid[hidden,omitted])  a=CONST; b=CONST; c!=NULL; rowid!=NULL; weak-key(c,d,rowid); +c
-·          table     abcd@abcd             ·                                    ·
-·          spans     /1/NULL/1-/1/NULL/10  ·                                    ·
+scan  ·      ·                     (a, b, c, d)  +c
+·     table  abcd@abcd             ·             ·
+·     spans  /1/NULL/1-/1/NULL/10  ·             ·
 
 # Regression test for #3548: verify we create constraints on implicit columns
 # when they are part of the key (non-unique index).
@@ -1344,13 +1326,133 @@ statement ok
 CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 100 ORDER BY v
+EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 10 ORDER BY v
 ----
 render           ·         ·           (w)     ·
  │               render 0  w           ·       ·
  └── index-join  ·         ·           (v, w)  +v
       ├── scan   ·         ·           (k, v)  +v
       │          table     t3@v        ·       ·
-      │          spans     /1-/100     ·       ·
+      │          spans     /1-/10      ·       ·
       └── scan   ·         ·           (v, w)  ·
 ·                table     t3@primary  ·       ·
+
+# ------------------------------------------------------------------------------
+# These tests are for the point lookup optimization: for single row lookups on
+# a table with multiple column families, we only scan the relevant column
+# families. Note that this applies to SELECTs and UPDATEs but not DELETEs, since
+# we need to ensure that we delete across all column families.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE t4 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  PRIMARY KEY (a, b),
+  FAMILY (a, b),
+  FAMILY (c),
+  FAMILY (d),
+  FAMILY (e)
+)
+
+statement ok
+INSERT INTO t4 VALUES (10, 20, 30, 40, 50)
+
+# Point lookup on c does not touch the d or e families.
+query TTT
+EXPLAIN SELECT c FROM t4 WHERE a = 10 and b = 20
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t4@primary
+·          spans  /10/20/0-/10/20/1/2
+
+statement ok
+SET tracing = on,kv,results; SELECT c FROM t4 WHERE a = 10 and b = 20; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t4/primary/10/20 -> NULL
+fetched: /t4/primary/10/20/c -> 30
+output row: [30]
+
+# Point lookup on d does not touch the c or e families.
+query TTT
+EXPLAIN SELECT d FROM t4 WHERE a = 10 and b = 20
+----
+render     ·         ·
+ └── scan  ·         ·
+·          table     t4@primary
+·          spans     /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
+·          parallel  ·
+
+statement ok
+SET tracing = on,kv,results; SELECT d FROM t4 WHERE a = 10 and b = 20; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t4/primary/10/20 -> NULL
+fetched: /t4/primary/10/20/c -> 40
+output row: [40]
+
+# Point lookup on both d and e uses a single span for the two adjacent column
+# families.
+query TTT
+EXPLAIN SELECT d, e FROM t4 WHERE a = 10 and b = 20
+----
+render     ·         ·
+ └── scan  ·         ·
+·          table     t4@primary
+·          spans     /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
+·          parallel  ·
+
+# Optimization should also be applied for updates.
+# TODO(andyk): Need to do needed column analysis with column families.
+query TTT
+EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
+----
+count                ·      ·
+ └── update          ·      ·
+      │              table  t4
+      │              set    c
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  t4@primary
+·                    spans  /10/20-/10/20/#
+
+# Optimization should not be applied for deletes.
+query TTT
+EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
+----
+count                ·      ·
+ └── delete          ·      ·
+      │              from   t4
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  t4@primary
+·                    spans  /10/20-/10/20/#
+
+# Optimization should not be applied for non point lookups.
+query TTT
+EXPLAIN SELECT c FROM t4 WHERE a = 10 and b >= 20 and b < 22
+----
+render     ·         ·
+ └── scan  ·         ·
+·          table     t4@primary
+·          spans     /10/20-/10/21/#
+·          parallel  ·
+
+# Optimization should not be applied for partial primary key filter.
+query TTT
+EXPLAIN SELECT c FROM t4 WHERE a = 10
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t4@primary
+·          spans  /10-/11

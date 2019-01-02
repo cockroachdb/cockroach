@@ -18,11 +18,10 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 func makeKey(keys ...[]byte) []byte {
@@ -75,8 +74,8 @@ func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)
 }
 
-// StoreHLCUpperBoundKey returns the key for storing an upper bound to the
-// wall time used by HLC
+// StoreHLCUpperBoundKey returns the store-local key for storing an upper bound
+// to the wall time used by HLC.
 func StoreHLCUpperBoundKey() roachpb.Key {
 	return MakeStoreKey(localHLCUpperBoundSuffix, nil)
 }

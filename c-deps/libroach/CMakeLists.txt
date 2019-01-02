@@ -39,6 +39,8 @@ add_library(roach
   mvcc.cc
   options.cc
   snapshot.cc
+  sst_dump.cc
+  table_props.cc
   utils.cc
   protos/roachpb/data.pb.cc
   protos/roachpb/internal.pb.cc
@@ -89,6 +91,7 @@ enable_testing()
 # List of tests to build and run. Tests in `ccl/` are linked against roachccl, all others
 # are linked against roach only.
 set(tests
+  chunked_buffer_test.cc
   db_test.cc
   encoding_test.cc
   file_registry_test.cc
@@ -154,7 +157,6 @@ foreach(tsrc ${tests})
     roach
     gtest_main
     pthread
-    stdc++fs
     ${ROCKSDB_LIB}
     ${PROTOBUF_LIB}
     ${JEMALLOC_LIB}

@@ -19,6 +19,12 @@
 		MVCCStatsDelta
 		MVCCPersistentStats
 		RangeAppliedState
+		MVCCWriteValueOp
+		MVCCWriteIntentOp
+		MVCCUpdateIntentOp
+		MVCCCommitIntentOp
+		MVCCAbortIntentOp
+		MVCCLogicalOp
 		SSTUserProperties
 		SSTUserPropertiesCollection
 */

@@ -10,6 +10,7 @@ package backupccl_test
 
 import (
 	"bytes"
+	gosql "database/sql"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -37,6 +38,9 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 }
 
 func BenchmarkClusterBackup(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
@@ -91,6 +95,9 @@ func BenchmarkClusterRestore(b *testing.B) {
 }
 
 func BenchmarkLoadRestore(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
@@ -103,7 +110,7 @@ func BenchmarkLoadRestore(b *testing.B) {
 	b.SetBytes(int64(buf.Len() / b.N))
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
 	b.ResetTimer()
-	if _, err := importccl.Load(ctx, sqlDB.DB, buf, "data", dir, ts, 0, dir); err != nil {
+	if _, err := importccl.Load(ctx, sqlDB.DB.(*gosql.DB), buf, "data", dir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
 	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, dir))
@@ -139,6 +146,9 @@ func BenchmarkLoadSQL(b *testing.B) {
 }
 
 func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	const numStatements = 100000
 
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)

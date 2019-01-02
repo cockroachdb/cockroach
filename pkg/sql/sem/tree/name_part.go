@@ -14,9 +14,7 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/lex"
 
 // A Name is an SQL identifier.
 //
@@ -33,7 +31,7 @@ type Name string
 // Format implements the NodeFormatter interface.
 func (n *Name) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if f.HasFlags(FmtAnonymize) {
+	if f.HasFlags(FmtAnonymize) && !isArityIndicatorString(string(*n)) {
 		ctx.WriteByte('_')
 	} else {
 		lex.EncodeRestrictedSQLIdent(ctx.Buffer, string(*n), f.EncodeFlags())

@@ -101,6 +101,13 @@ func (p *planner) Select(
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		wrapped = s.Select.Select
+		if s.Select.With != nil {
+			if with != nil {
+				return nil, pgerror.UnimplementedWithIssueError(24303,
+					"multiple WITH clauses in parentheses")
+			}
+			with = s.Select.With
+		}
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
 				return nil, pgerror.NewErrorf(
@@ -179,7 +186,7 @@ func (p *planner) SelectClause(
 	with *tree.With,
 	desiredTypes []types.T,
 	scanVisibility scanVisibility,
-) (planNode, error) {
+) (result planNode, err error) {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
 	// context.
@@ -193,7 +200,16 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 	if resetter != nil {
-		defer resetter(p)
+		defer func() {
+			if cteErr := resetter(p); cteErr != nil && err == nil {
+				// If no error was found in the inner planning but a CTE error
+				// is occurring during the final checks on the way back from
+				// the recursion, use that error as final error for this
+				// stage.
+				err = cteErr
+				result = nil
+			}
+		}()
 	}
 
 	if err := p.initFrom(ctx, r, parsed, scanVisibility); err != nil {
@@ -271,7 +287,7 @@ func (p *planner) SelectClause(
 			if !distinct.distinctOnColIdxs.Contains(order.ColIdx) {
 				return nil, pgerror.NewErrorf(
 					pgerror.CodeSyntaxError,
-					"SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions",
+					"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 				)
 			}
 		}
@@ -302,7 +318,7 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	result := planNode(r)
+	result = planNode(r)
 	if groupComplex != nil {
 		// group.plan is already r.
 		result = groupComplex
@@ -472,7 +488,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		// table readers at arbitrary timestamps, and each FROM clause
 		// can have its own timestamp. In that case, the timestamp
 		// would not be set globally for the entire txn.
-		if !p.asOfSystemTime {
+		if p.semaCtx.AsOfTimestamp == nil {
 			return hlc.MaxTimestamp, false,
 				fmt.Errorf("AS OF SYSTEM TIME must be provided on a top-level statement")
 		}
@@ -485,7 +501,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		if err != nil {
 			return hlc.MaxTimestamp, false, err
 		}
-		if ts != p.txn.OrigTimestamp() {
+		if ts != *p.semaCtx.AsOfTimestamp {
 			return hlc.MaxTimestamp, false,
 				fmt.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")
 		}

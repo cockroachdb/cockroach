@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc/stats"
-
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"google.golang.org/grpc/stats"
 )
 
 func TestStatsHandlerBasic(t *testing.T) {

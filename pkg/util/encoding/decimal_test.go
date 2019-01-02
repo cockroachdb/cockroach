@@ -439,6 +439,43 @@ func TestNonsortingEncodeDecimalRand(t *testing.T) {
 	}
 }
 
+// TestNonsortingEncodeDecimalRoundtrip tests that decimals can round trip
+// through EncodeNonsortingDecimal and DecodeNonsortingDecimal with an expected
+// coefficient and exponent.
+func TestNonsortingEncodeDecimalRoundtrip(t *testing.T) {
+	tests := map[string]string{
+		"0":         "0E+0",
+		"0.0":       "0E-1",
+		"0.00":      "0E-2",
+		"0e-10":     "0E-10",
+		"0.00e-10":  "0E-12",
+		"00":        "0E+0",
+		"-0":        "-0E+0",
+		"-0.0":      "-0E-1",
+		"-0.00":     "-0E-2",
+		"-0e-10":    "-0E-10",
+		"-0.00e-10": "-0E-12",
+		"-00":       "-0E+0",
+	}
+	for tc, expect := range tests {
+		t.Run(tc, func(t *testing.T) {
+			d, _, err := apd.NewFromString(tc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			enc := EncodeNonsortingDecimal(nil, d)
+			res, err := DecodeNonsortingDecimal(enc, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := res.Text('E')
+			if expect != s {
+				t.Fatalf("expected %s, got %s", expect, s)
+			}
+		})
+	}
+}
+
 func TestUpperBoundNonsortingDecimalUnscaledSize(t *testing.T) {
 	x := make([]byte, 100)
 	d := new(apd.Decimal)

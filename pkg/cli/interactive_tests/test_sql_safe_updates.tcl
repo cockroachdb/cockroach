@@ -30,7 +30,7 @@ send "$argv sql | cat\r"
 eexpect "brief introduction"
 sleep 0.4
 send "show sql_safe_updates;\r"
-eexpect "true"
+eexpect "on"
 eexpect "\r\n"
 send "delete from d.t;\r"
 eexpect "rejected: DELETE without WHERE clause (sql_safe_updates = true)"

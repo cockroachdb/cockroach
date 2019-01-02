@@ -236,14 +236,16 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	if _, err := conn1.Exec("ALTER TABLE nums SPLIT AT VALUES (50)"); err != nil {
 		t.Fatal(err)
 	}
-	// Make the second node the leaseholder for the first range to distribute
-	// the query.
-	if _, err := conn1.Exec(fmt.Sprintf(
-		"ALTER TABLE nums EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1)",
-		tc.Server(1).GetFirstStoreID(),
-	)); err != nil {
-		t.Fatal(err)
-	}
+
+	// Make the second node the leaseholder for the first range to distribute the
+	// query. This may have to retry if the second store's descriptor has not yet
+	// propagated to the first store's StorePool.
+	testutils.SucceedsSoon(t, func() error {
+		_, err := conn1.Exec(fmt.Sprintf(
+			"ALTER TABLE nums EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1)",
+			tc.Server(1).GetFirstStoreID()))
+		return err
+	})
 
 	// Run queryToCancel to be able to get an estimate of how long it should
 	// take. The goroutine in charge of cancellation will sleep a random
@@ -300,7 +302,7 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 	}
 
 	// Wait for node 2 to know about both sessions.
-	if err := retry.ForDuration(250*time.Millisecond, func() error {
+	if err := retry.ForDuration(10*time.Second, func() error {
 		rows, err := conn2.QueryContext(ctx, "SHOW CLUSTER SESSIONS")
 		if err != nil {
 			return err
@@ -448,9 +450,11 @@ func TestCancelIfExists(t *testing.T) {
 }
 
 func isClientsideQueryCanceledErr(err error) bool {
-	pqErr, ok := err.(*pq.Error)
-	if !ok {
-		return false
+	if pgErr, ok := pgerror.GetPGCause(err); ok {
+		return pgErr.Code == pgerror.CodeQueryCanceledError
 	}
-	return pqErr.Code == pgerror.CodeQueryCanceledError
+	if pqErr, ok := err.(*pq.Error); ok {
+		return pqErr.Code == pgerror.CodeQueryCanceledError
+	}
+	return false
 }

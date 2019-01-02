@@ -3,7 +3,6 @@
 define VALID_VARS
   .DEFAULT_GOAL
   ACCEPTANCETIMEOUT
-  AES_FLAGS
   ARCHIVE
   ARCHIVE_BASE
   ARCHIVE_EXTRAS
@@ -23,6 +22,7 @@ define VALID_VARS
   CGO_PKGS
   CGO_SUFFIXED_FLAGS_FILES
   CGO_UNSUFFIXED_FLAGS_FILES
+  CLUSTER
   COCKROACH
   COCKROACHOSS
   COCKROACHSHORT
@@ -44,6 +44,7 @@ define VALID_VARS
   C_LIBS_OSS
   DOCGEN_TARGETS
   DUPLFLAGS
+  EXECGEN_TARGETS
   EXTRA_XCMAKE_FLAGS
   EXTRA_XCONFIGURE_FLAGS
   FILES
@@ -122,6 +123,7 @@ define VALID_VARS
   TARGET
   TARGET_TRIPLE
   TAR_XFORM_FLAG
+  TESTCONFIG
   TESTFLAGS
   TESTS
   TESTTIMEOUT
@@ -140,6 +142,7 @@ define VALID_VARS
   UI_TS_OSS
   UNAME
   USE_ROCKSDB_ASSERTIONS
+  VERBOSE
   WEBPACK
   WEBPACK_DASHBOARD
   WEBPACK_DEV_SERVER
@@ -148,13 +151,14 @@ define VALID_VARS
   XCXX
   XGOARCH
   XGOOS
+  aes
   bindir
   bins
   build-mode
-  build-output
   cmake-flags
   configure-flags
   cyan
+  execgen-package
   go-targets
   go-targets-ccl
   have-defs
@@ -163,8 +167,11 @@ define VALID_VARS
   is-cross-compile
   langgen-package
   libroach-inputs
+  logic-test-selector
+  logictest-bins
   logictest-package
   logictestccl-package
+  logictestopt-package
   macos-version
   native-tag
   optgen-defs
@@ -172,6 +179,7 @@ define VALID_VARS
   optgen-package
   optgen-xform-rules
   prefix
+  settings-doc-gen
   sig
   space
   sse

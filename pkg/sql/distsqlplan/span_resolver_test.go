@@ -21,8 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -34,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 // Test that resolving spans uses a node's range cache and lease holder cache.
@@ -41,7 +40,6 @@ import (
 // state of caches.
 func TestSpanResolverUsesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13525")
 	tc := testcluster.StartTestCluster(t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -174,7 +172,7 @@ func splitRangeAtVal(
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.Errorf("expected table with just a PK, got: %+v", tableDesc)
 	}
-	pik, err := sqlbase.MakePrimaryIndexKey(tableDesc, pk)
+	pik, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, pk)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}
@@ -316,6 +314,11 @@ func TestMixedDirections(t *testing.T) {
 func setupRanges(
 	db *gosql.DB, s *server.TestServer, cdb *client.DB, t *testing.T,
 ) ([]roachpb.RangeDescriptor, *sqlbase.TableDescriptor) {
+	// Prevent the merge queue from immediately discarding our splits.
+	if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +455,7 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 
 func makeSpan(tableDesc *sqlbase.TableDescriptor, i, j int) roachpb.Span {
 	makeKey := func(val int) roachpb.Key {
-		key, err := sqlbase.MakePrimaryIndexKey(tableDesc, val)
+		key, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, val)
 		if err != nil {
 			panic(err)
 		}

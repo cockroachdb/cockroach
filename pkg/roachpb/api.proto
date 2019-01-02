@@ -120,7 +120,7 @@ message GetRequest {
 }
 
 // A GetResponse is the return value from the Get() method.
-// If the key doesn't exist, returns nil for Value.Bytes.
+// If the key doesn't exist, Value will be nil.
 message GetResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Value value = 2;
@@ -334,6 +334,19 @@ message ScanOptions {
   int64 min_results = 2;
 }
 
+// ScanFormat is an enumeration of the available response formats for MVCCScan
+// operations.
+enum ScanFormat {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // The standard MVCCScan format: a slice of KeyValue messages.
+  KEY_VALUES = 0;
+  // The batch_response format: a byte slice of alternating keys and values,
+  // each prefixed by their length as a varint.
+  BATCH_RESPONSE = 1;
+}
+
+
 // A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for an ascending scan of [start,end) and the maximum
 // number of results (unbounded if zero).
@@ -343,6 +356,11 @@ message ScanRequest {
   reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The desired format for the response. If set to BATCH_RESPONSE, the server
+  // will set the batch_responses field in the ScanResponse instead of the rows
+  // field.
+  ScanFormat scan_format = 4;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -354,6 +372,14 @@ message ScanResponse {
   // consistency level. These rows do not count against the MaxSpanRequestKeys
   // count.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
+
+  // If set, each item in this repeated bytes field contains part of the results
+  // in batch format - the key/value pairs are a buffer of varint-prefixed
+  // slices, alternating from key to value. Each entry in this field is
+  // complete - there are no key/value pairs that are split across more than one
+  // entry. There are num_keys total pairs across all entries, as defined by the
+  // ResponseHeader. If set, rows will not be set and vice versa.
+  repeated bytes batch_responses = 4;
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -365,6 +391,11 @@ message ReverseScanRequest {
   reserved 2, 3;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The desired format for the response. If set to BATCH_RESPONSE, the server
+  // will set the batch_responses field in the ScanResponse instead of the rows
+  // field.
+  ScanFormat scan_format = 4;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -376,6 +407,14 @@ message ReverseScanResponse {
   // consistency level. These rows do not count against the MaxSpanRequestKeys
   // count.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
+
+  // If set, each item in this repeated bytes field contains part of the results
+  // in batch format - the key/value pairs are a buffer of varint-prefixed
+  // slices, alternating from key to value. Each entry in this field is
+  // complete - there are no key/value pairs that are split across more than one
+  // entry. There are num_keys total pairs across all entries, as defined by the
+  // ResponseHeader. If set, rows will not be set and vice versa.
+  repeated bytes batch_responses = 4;
 }
 
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.
@@ -581,6 +620,21 @@ message AdminChangeReplicasRequest {
 }
 
 message AdminChangeReplicasResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// An AdminRelocateRangeRequest is the argument to the AdminRelocateRange()
+// method. Relocates the replicas for a range to the specified target stores.
+// The first store in the list of targets becomes the new leaseholder.
+message AdminRelocateRangeRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated ReplicationTarget targets = 2 [(gogoproto.nullable) = false];
+  // TODO(a-robinson): Add "reason"/"details" string fields?
+}
+
+message AdminRelocateRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
@@ -956,11 +1010,7 @@ message ComputeChecksumRequest {
   // The version used to pick the checksum method. It allows us to use a
   // consistent checksumming method across replicas.
   uint32 version = 2;
-  // A unique identifier to match a future storage.CollectChecksumRequest with
-  // this request.
-  bytes checksum_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ChecksumID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  reserved 3;
   // Compute a checksum along with a snapshot of the entire range, that will be
   // used in logging a diff during checksum verification.
   bool snapshot = 4;
@@ -969,6 +1019,12 @@ message ComputeChecksumRequest {
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.
 message ComputeChecksumResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // ChecksumID is the unique identifier that can be used to get the computed
+  // checksum in a future storage.CollectChecksumRequest.
+  bytes checksum_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ChecksumID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 enum ExportStorageProvider {
@@ -978,6 +1034,7 @@ enum ExportStorageProvider {
   S3 = 3;
   GoogleCloud = 4;
   Azure = 5;
+  Workload = 6;
 }
 
 message ExportStorage {
@@ -1013,6 +1070,12 @@ message ExportStorage {
     string bucket = 1;
     string prefix = 2;
     string auth = 3;
+
+    // BillingProject if non-empty, is the Google Cloud project to bill for all storage requests.
+    // This is required to be set if using a "requestor pays" bucket.
+    string billing_project = 4;
+
+    string credentials = 5;
   }
   message Azure {
     option (gogoproto.equal) = true;
@@ -1023,11 +1086,23 @@ message ExportStorage {
     string account_name = 3;
     string account_key = 4;
   }
+  message Workload {
+    option (gogoproto.equal) = true;
+
+    string generator = 1;
+    string version = 2;
+    string table = 3;
+    repeated string flags = 4;
+    string format = 5;
+    int64 batch_begin = 6;
+    int64 batch_end = 7;
+  }
   LocalFilePath LocalFile = 2 [(gogoproto.nullable) = false];
   Http HttpPath = 3 [(gogoproto.nullable) = false];
   GCS GoogleCloudConfig = 4;
   S3 S3Config = 5;
   Azure AzureConfig = 6;
+  Workload WorkloadConfig = 7;
 }
 
 // WriteBatchRequest is arguments to the WriteBatch() method, to apply the
@@ -1065,6 +1140,11 @@ message ExportRequest {
 
   // Return the exported SST data in the response.
   bool return_sst = 5 [(gogoproto.customname) = "ReturnSST"];
+  // OmitChecksum, if true, will skip checksumming the sst and leave the
+  // `Sha512` field empty in the response. During a rolling upgrade to 2.1, it
+  // may still be set if the request is served by an old node, but since the
+  // caller has declare they're not going to use it, that's okay.
+  bool omit_checksum = 6;
 }
 
 message BulkOpSummary {
@@ -1218,19 +1298,17 @@ message RefreshRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// GetSnapshotForMerge is the argument to the GetSnapshotForMerge() method,
-// which notifies a range that its left-hand neighbor has initiated a merge and
-// needs a snapshot of its data.
+// SubsumeRequest is the argument to the Subsume() method, which freezes a range
+// for merging with its left-hand neighbor.
 //
-// GetSnapshotForMerge, when called correctly, provides important guarantees
-// that ensure there is no moment in time where the ranges involved in the merge
-// could both process commands for the same keys. See the comment on
-// GetSnapshotForMerge for details.
+// Subsume, when called correctly, provides important guarantees that ensure
+// there is no moment in time where the ranges involved in the merge could both
+// process commands for the same keys. See the comment on Subsume for details.
 //
-// GetSnapshotForMerge may return stale data when used outside of a merge
-// transaction. As a rule of thumb, it is incorrect to call GetSnapshotForMerge,
-// except from its carefully-chosen location within a merge transaction.
-message GetSnapshotForMergeRequest {
+// Subsume may return stale MVCC statistics when used outside of a merge
+// transaction. As a rule of thumb, it is incorrect to call Subsume, except from
+// its carefully-chosen location within a merge transaction.
+message SubsumeRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -1240,19 +1318,51 @@ message GetSnapshotForMergeRequest {
   RangeDescriptor left_range = 2 [(gogoproto.nullable) = false];
 }
 
-// GetSnapshotForMergeResponse is the response to a GetSnapshotForMergeRequest.
-message GetSnapshotForMergeResponse {
+// SubsumeResponse is the response to a SubsumeRequest.
+message SubsumeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  // Data is a snapshot of the right-hand range's data in the form of a
-  // BatchRepr, a serialized RocksDB Batch.
-  bytes data = 2;
+  reserved 2;
 
-  // MVCCStats are the MVCC statistics for data.
+  // MVCCStats are the MVCC statistics for the range.
   storage.engine.enginepb.MVCCStats mvcc_stats = 3 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "MVCCStats"
   ];
+
+  // LeaseAppliedIndex is the lease index of the last applied command at the
+  // time that the Subsume request executed.
+  uint64 lease_applied_index = 4;
+
+  // FreezeStart is a timestamp that is guaranteed to be greater than the
+  // timestamps at which any requests were serviced by the responding replica
+  // before it stopped responding to requests altogether (in anticipation of
+  // being subsumed). It is suitable for use as the timestamp cache's low water
+  // mark for the keys previously owned by the subsumed range.
+  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false];
+}
+
+// RangeStatsRequest is the argument to the RangeStats() method. It requests the
+// MVCC statistics of the receiving range.
+message RangeStatsRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// RangeStatsResponse is the response to a RangeStatsRequest.
+message RangeStatsResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // MVCCStats are the MVCC statistics for the range that processed the
+  // request.
+  storage.engine.enginepb.MVCCStats mvcc_stats = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "MVCCStats"
+  ];
+
+  // QueriesPerSecond is the rate of request/s or QPS for the range.
+  double queries_per_second = 3;
 }
 
 // A RequestUnion contains exactly one of the requests.
@@ -1276,6 +1386,7 @@ message RequestUnion {
     AdminMergeRequest admin_merge = 11;
     AdminTransferLeaseRequest admin_transfer_lease = 29;
     AdminChangeReplicasRequest admin_change_replicas = 35;
+    AdminRelocateRangeRequest admin_relocate_range = 45;
     HeartbeatTxnRequest heartbeat_txn = 12;
     GCRequest gc = 13;
     PushTxnRequest push_txn = 14;
@@ -1300,7 +1411,8 @@ message RequestUnion {
     RecomputeStatsRequest recompute_stats = 39;
     RefreshRequest refresh = 40;
     RefreshRangeRequest refresh_range = 41;
-    GetSnapshotForMergeRequest get_snapshot_for_merge = 43;
+    SubsumeRequest subsume = 43;
+    RangeStatsRequest range_stats = 44;
   }
   reserved 15, 23, 25, 27;
 }
@@ -1323,6 +1435,7 @@ message ResponseUnion {
     AdminMergeResponse admin_merge = 11;
     AdminTransferLeaseResponse admin_transfer_lease = 29;
     AdminChangeReplicasResponse admin_change_replicas = 35;
+    AdminRelocateRangeResponse admin_relocate_range = 45;
     HeartbeatTxnResponse heartbeat_txn = 12;
     GCResponse gc = 13;
     PushTxnResponse push_txn = 14;
@@ -1346,7 +1459,8 @@ message ResponseUnion {
     RecomputeStatsResponse recompute_stats = 39;
     RefreshResponse refresh = 40;
     RefreshRangeResponse refresh_range = 41;
-    GetSnapshotForMergeResponse get_snapshot_for_merge = 43;
+    SubsumeResponse subsume = 43;
+    RangeStatsResponse range_stats = 44;
   }
   reserved 15, 23, 25, 27, 28;
 }
@@ -1439,7 +1553,18 @@ message BatchResponse {
 
   message Header {
     reserved 4;
-    // error is non-nil if an error occurred.
+    // error communicates a structured error (i.e. one originating from a Node)
+    // while the BatchResponse is sent over the network. If the code were
+    // written today, the RPC endpoint would return a message containing both a
+    // BatchResponse and an Error, and this embedding would go away. However, it
+    // returns only a BatchResponse, and so the Error needs to be tucked away
+    // somewhere (the structured error cannot be communicated via an RPC-level
+    // error).
+    //
+    // Outside of the RPC boundaries, this field is nil and must neither be
+    // checked nor populated (it is reset by the DistSender, which extracts this
+    // error and returns it separately). In effect, nearly no usage of
+    // BatchResponse needs to care about this field.
     Error error = 1;
     // timestamp is set only for non-transactional responses and denotes the
     // timestamp at which the batch executed. The timestamp cache is updated
@@ -1461,7 +1586,50 @@ message BatchResponse {
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 
-// Batch service implemeted by nodes for KV API requests.
+// RangeFeedRequest is a request that expresses the intention to establish a
+// RangeFeed stream over the provided span, starting at the specified timestamp.
+message RangeFeedRequest {
+  Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span   span   = 2 [(gogoproto.nullable) = false];
+}
+
+// RangeFeedValue is a variant of RangeFeedEvent that represents an update to
+// the specified key with the provided value.
+message RangeFeedValue {
+  bytes key   = 1 [(gogoproto.casttype) = "Key"];
+  Value value = 2 [(gogoproto.nullable) = false];
+}
+
+// RangeFeedCheckpoint is a variant of RangeFeedEvent that represents the
+// promise that no more RangeFeedValue events with keys in the specified span
+// with timestamps less than or equal to the specified resolved timestamp will
+// be emitted on the RangeFeed response stream.
+message RangeFeedCheckpoint {
+  Span               span        = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp resolved_ts = 2 [
+    (gogoproto.nullable) = false, (gogoproto.customname) = "ResolvedTS"];
+}
+
+// RangeFeedError is a variant of RangeFeedEvent that indicates that an error
+// occurred during the processing of the RangeFeed. If emitted, a RangeFeedError
+// event will always be the final event on a RangeFeed response stream before
+// it is torn down.
+message RangeFeedError {
+  Error error = 1 [(gogoproto.nullable) = false];
+}
+
+// RangeFeedEvent is a union of all event types that may be returned on a
+// RangeFeed response stream.
+message RangeFeedEvent {
+  option (gogoproto.onlyone) = true;
+
+  RangeFeedValue      val        = 1;
+  RangeFeedCheckpoint checkpoint = 2;
+  RangeFeedError      error      = 3;
+}
+
+// Batch and RangeFeed service implemeted by nodes for KV API requests.
 service Internal {
-  rpc Batch (BatchRequest) returns (BatchResponse) {}
+  rpc Batch     (BatchRequest)     returns (BatchResponse)         {}
+  rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
 }

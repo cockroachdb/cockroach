@@ -109,18 +109,32 @@ func (ss *diskSideloadStorage) filename(ctx context.Context, index, term uint64)
 	return filepath.Join(ss.dir, fmt.Sprintf("i%d.t%d", index, term))
 }
 
-func (ss *diskSideloadStorage) Purge(ctx context.Context, index, term uint64) error {
+func (ss *diskSideloadStorage) Purge(ctx context.Context, index, term uint64) (int64, error) {
 	return ss.purgeFile(ctx, ss.filename(ctx, index, term))
 }
 
-func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) error {
+func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (int64, error) {
+	// TODO(tschottdorf): this should all be done through the env. As written,
+	// the sizes returned here will be wrong if encryption is on. We want the
+	// size of the unencrypted payload.
+	//
+	// See #31913.
+	info, err := os.Stat(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, errSideloadedFileNotFound
+		}
+		return 0, err
+	}
+	size := info.Size()
+
 	if err := ss.eng.DeleteFile(filename); err != nil {
 		if os.IsNotExist(err) {
-			return errSideloadedFileNotFound
+			return 0, errSideloadedFileNotFound
 		}
-		return err
+		return 0, err
 	}
-	return nil
+	return size, nil
 }
 
 func (ss *diskSideloadStorage) Clear(_ context.Context) error {
@@ -129,12 +143,13 @@ func (ss *diskSideloadStorage) Clear(_ context.Context) error {
 	return err
 }
 
-func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) error {
+func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) (int64, error) {
 	matches, err := filepath.Glob(filepath.Join(ss.dir, "i*.t*"))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	var deleted int
+	var size int64
 	for _, match := range matches {
 		base := filepath.Base(match)
 		if len(base) < 1 || base[0] != 'i' {
@@ -144,22 +159,24 @@ func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) err
 		upToDot := strings.SplitN(base, ".", 2)
 		i, err := strconv.ParseUint(upToDot[0], 10, 64)
 		if err != nil {
-			return errors.Wrapf(err, "while parsing %q during TruncateTo", match)
+			return size, errors.Wrapf(err, "while parsing %q during TruncateTo", match)
 		}
 		if i >= index {
 			continue
 		}
-		if err := ss.purgeFile(ctx, match); err != nil {
-			return errors.Wrapf(err, "while purging %q", match)
+		fileSize, err := ss.purgeFile(ctx, match)
+		if err != nil {
+			return size, errors.Wrapf(err, "while purging %q", match)
 		}
 		deleted++
+		size += fileSize
 	}
 
 	if deleted == len(matches) {
 		err = os.Remove(ss.dir)
 		if !os.IsNotExist(err) {
-			return errors.Wrapf(err, "while purging %q", ss.dir)
+			return size, errors.Wrapf(err, "while purging %q", ss.dir)
 		}
 	}
-	return nil
+	return size, nil
 }

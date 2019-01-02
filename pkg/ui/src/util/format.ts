@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 export const kibi = 1024;
 const byteUnits: string[] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
 const durationUnits: string[] = ["ns", "µs", "ms", "s"];
@@ -55,11 +69,19 @@ export function BytesToUnitValue(bytes: number): UnitValue {
  * https://stackoverflow.com/questions/10420352/converting-file-size-in-bytes-to-human-readable
  */
 export function Bytes(bytes: number): string {
+  return BytesWithPrecision(bytes, 1);
+}
+
+/**
+ * BytesWithPrecision is like Bytes, but accepts a precision parameter
+ * indicating how many digits after the decimal point are desired.
+ */
+export function BytesWithPrecision(bytes: number, precision: number): string {
   const unitVal = BytesToUnitValue(bytes);
   if (!unitVal.value) {
     return "0 B";
   }
-  return unitVal.value.toFixed(1) + " " + unitVal.units;
+  return unitVal.value.toFixed(precision) + " " + unitVal.units;
 }
 
 /**
@@ -67,7 +89,7 @@ export function Bytes(bytes: number): string {
  */
 export function Percentage(numerator: number, denominator: number): string {
   if (denominator === 0) {
-    return "100%";
+    return "--%";
   }
   return Math.floor(numerator / denominator * 100).toString() + "%";
 }

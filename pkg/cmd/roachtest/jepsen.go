@@ -24,21 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
-
-var jepsenTests = []string{
-	"bank",
-	"bank-multitable",
-	// The comments test is expected to fail because it requires linearizability.
-	// "comments",
-	"g2",
-	"monotonic",
-	"register",
-	"sequential",
-	"sets",
-}
 
 var jepsenNemeses = []struct {
 	name, config string
@@ -77,25 +63,27 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 
 	// Check to see if the cluster has already been initialized.
 	if err := c.RunE(ctx, c.Node(1), "test -e jepsen_initialized"); err == nil {
-		c.l.printf("cluster already initialized\n")
+		t.l.Printf("cluster already initialized\n")
 		return
 	}
-	c.l.printf("initializing cluster\n")
+	t.l.Printf("initializing cluster\n")
 	t.Status("initializing cluster")
 	defer func() {
 		c.Run(ctx, c.Node(1), "touch jepsen_initialized")
 	}()
 
+	// Roachprod collects this directory by default. If we fail early,
+	// this is the only log collection that is done. Otherwise, we
+	// perform a second log collection in this test that varies
+	// depending on whether the test passed or not.
+	c.Run(ctx, c.All(), "mkdir", "-p", "logs")
+
 	// TODO(bdarnell): Does this blanket apt update matter? I just
 	// copied it from the old jepsen scripts. It's slow, so we should
 	// probably either remove it or use a new base image with more of
 	// these preinstalled.
-	//
-	// In spite of -qqy, these produce huge amounts of output, so we
-	// send it all to /dev/null. I apologize to whoever debugs this in
-	// the future if these start to fail.
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -qqy update > /dev/null 2>&1"`)
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -qqy upgrade -o Dpkg::Options::='--force-confold' > /dev/null 2>&1"`)
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y update > logs/apt-upgrade.log 2>&1"`)
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y upgrade -o Dpkg::Options::='--force-confold' > logs/apt-upgrade.log 2>&1"`)
 
 	// Install the binary on all nodes and package it as jepsen expects.
 	// TODO(bdarnell): copying the raw binary and compressing it on the
@@ -145,27 +133,20 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
 
-	// Wrap roachtest's primitive logging in something more like util/log
-	logf := func(f string, args ...interface{}) {
-		// This log prefix matches the one (sometimes) used in roachprod
-		c.l.printf(timeutil.Now().Format("2006/01/02 15:04:05 "))
-		c.l.printf(f, args...)
-		c.l.printf("\n")
-	}
 	run := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) {
 		if !c.isLocal() {
 			c.Run(ctx, node, args...)
 			return
 		}
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
-		c.l.printf("> %s\n", strings.Join(args, " "))
+		t.l.Printf("> %s\n", strings.Join(args, " "))
 	}
 	runE := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) error {
 		if !c.isLocal() {
 			return c.RunE(ctx, node, args...)
 		}
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
-		c.l.printf("> %s\n", strings.Join(args, " "))
+		t.l.Printf("> %s\n", strings.Join(args, " "))
 		return nil
 	}
 
@@ -198,7 +179,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 "`, nodesStr, testName, nemesis))
 	}()
 
-	outputDir := filepath.Join(artifacts, t.Name())
+	outputDir := t.ArtifactsDir()
 	if err := os.MkdirAll(outputDir, 0777); err != nil {
 		t.Fatal(err)
 	}
@@ -206,9 +187,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	select {
 	case testErr = <-errCh:
 		if testErr == nil {
-			logf("passed, grabbing minimal logs")
+			t.l.Printf("passed, grabbing minimal logs")
 		} else {
-			logf("failed: %s", testErr)
+			t.l.Printf("failed: %s", testErr)
 		}
 
 	case <-time.After(20 * time.Minute):
@@ -223,13 +204,34 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		run(c, ctx, controller, "pkill -QUIT java")
 		time.Sleep(10 * time.Second)
 		run(c, ctx, controller, "pkill java")
-		logf("timed out")
+		t.l.Printf("timed out")
 		testErr = fmt.Errorf("timed out")
 	}
 
 	if testErr != nil {
-		logf("grabbing artifacts from controller. Tail of controller log:")
+		t.l.Printf("grabbing artifacts from controller. Tail of controller log:")
 		run(c, ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
+		// We recognize some errors and ignore them.
+		// We're looking for the "Oh jeez" message that Jepsen prints as the test's
+		// outcome, followed by some known exceptions on the next line. If we don't find
+		// either one, we consider the error unrecognized.
+		// TODO(andrei): The known errors are tracked in #30527 (BrokenBarrier and
+		// Interrupted) and #26082 (JSch). Remove errors from this unfortunate list
+		// once the respective issues are fixed.
+		ignoreErr := false
+		if err := runE(c, ctx, controller,
+			`grep "Oh jeez, I'm sorry, Jepsen broke. Here's why" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 `+
+				`| grep -e BrokenBarrierException -e InterruptedException -e com.jcraft.jsch.JSchException `+
+				// And one more ssh failure we've seen, apparently encountered when
+				// downloading logs.
+				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure"`,
+		); err == nil {
+			t.l.Printf("Recognized BrokenBarrier or other known exceptions (see grep output above). " +
+				"Ignoring it and considering the test successful. " +
+				"See #30527 or #26082 for some of the ignored exceptions.")
+			ignoreErr = true
+		}
+
 		cmd := exec.CommandContext(ctx, roachprod, "run", c.makeNodes(controller),
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
@@ -241,7 +243,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
 			t.Fatal(err)
 		}
-		t.Fatal(testErr)
+		if !ignoreErr {
+			t.Fatal(testErr)
+		}
 	} else {
 		collectFiles := []string{
 			"test.fressian", "results.edn", "latency-quantiles.png", "latency-raw.png", "rate.png",
@@ -251,10 +255,10 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			cmd := c.LoggedCommand(ctx, roachprod, "get", c.makeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
 				filepath.Join(outputDir, file))
-			cmd.Stdout = c.l.stdout
-			cmd.Stderr = c.l.stderr
+			cmd.Stdout = t.l.stdout
+			cmd.Stderr = t.l.stderr
 			if err := cmd.Run(); err != nil {
-				logf("failed to retrieve %s: %s", file, err)
+				t.l.Printf("failed to retrieve %s: %s", file, err)
 			}
 		}
 		if anyFailed {
@@ -262,35 +266,52 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			cmd := c.LoggedCommand(ctx, roachprod, "get", c.makeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/invoke.log",
 				filepath.Join(outputDir, "invoke.log"))
-			cmd.Stdout = c.l.stdout
-			cmd.Stderr = c.l.stderr
+			cmd.Stdout = t.l.stdout
+			cmd.Stderr = t.l.stderr
 			if err := cmd.Run(); err != nil {
-				logf("failed to retrieve invoke.log: %s", err)
+				t.l.Printf("failed to retrieve invoke.log: %s", err)
 			}
 		}
 	}
 }
 
 func registerJepsen(r *registry) {
-	spec := testSpec{
-		Name:  "jepsen",
-		Nodes: nodes(6),
+	// We're splitting the tests arbitrarily into a number of "batches" - top
+	// level tests. We do this so that we can different groups can run in parallel
+	// (as subtests don't run concurrently with each other). We put more than one
+	// test in a group so that Jepsen's lengthy cluster initialization step can be
+	// amortized (the individual tests are smart enough to not do it if it has
+	// been done already).
+	//
+	// NB: the "comments" test is not included because it requires
+	// linearizability.
+	groups := [][]string{
+		{"bank", "bank-multitable"},
+		{"g2", "monotonic"},
+		{"register", "sequential", "sets"},
 	}
 
-	for _, testName := range jepsenTests {
-		testName := testName
-		sub := testSpec{Name: testName}
-		for _, nemesis := range jepsenNemeses {
-			nemesis := nemesis
-			sub.SubTests = append(sub.SubTests, testSpec{
-				Name: nemesis.name,
-				Run: func(ctx context.Context, t *test, c *cluster) {
-					runJepsen(ctx, t, c, testName, nemesis.config)
-				},
-			})
+	for i := range groups {
+		spec := testSpec{
+			Name:  fmt.Sprintf("jepsen-batch%d", i+1),
+			Nodes: nodes(6),
 		}
-		spec.SubTests = append(spec.SubTests, sub)
-	}
 
-	r.Add(spec)
+		for _, testName := range groups[i] {
+			testName := testName
+			sub := testSpec{Name: testName}
+			for _, nemesis := range jepsenNemeses {
+				nemesis := nemesis
+				sub.SubTests = append(sub.SubTests, testSpec{
+					Name: nemesis.name,
+					Run: func(ctx context.Context, t *test, c *cluster) {
+						runJepsen(ctx, t, c, testName, nemesis.config)
+					},
+				})
+			}
+			spec.SubTests = append(spec.SubTests, sub)
+		}
+
+		r.Add(spec)
+	}
 }

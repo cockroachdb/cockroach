@@ -17,10 +17,11 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "config/zone.proto";
-import "sql/jobs/jobspb/jobs.proto";
+import "jobs/jobspb/jobs.proto";
+import "server/serverpb/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
-import "storage/liveness.proto";
-import "storage/log.proto";
+import "storage/storagepb/liveness.proto";
+import "storage/storagepb/log.proto";
 import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
@@ -119,6 +120,9 @@ message TableDetailsResponse {
 
     // generation_expression is the generator expression if the column is computed.
     string generation_expression = 5;
+
+    // hidden is whether this column is hidden.
+    bool hidden = 6;
   }
 
   message Index {
@@ -221,8 +225,10 @@ message NonTableStatsRequest {
 // that do not belong to SQL tables. The statistics for each range are returned
 // as a TableStatsResponse.
 message NonTableStatsResponse {
-  // Information on time series ranges,
+  // Information on time series ranges.
   TableStatsResponse time_series_stats = 1;
+  // Information for remaining (non-table, non-time-series) ranges.
+  TableStatsResponse internal_use_stats = 2;
 }
 
 // UsersRequest requests a list of users.
@@ -453,6 +459,14 @@ message JobsResponse {
     google.protobuf.Timestamp modified = 10 [(gogoproto.stdtime) = true];
     float fraction_completed = 11;
     string error = 12;
+    // highwater_timestamp is the highwater timestamp returned as normal
+    // timestamp. This is appropriate for display to humans.
+    google.protobuf.Timestamp highwater_timestamp = 13 [(gogoproto.stdtime) = true];
+    // highwater_decimal is the highwater timestamp in the proprietary decimal
+    // form used by logical timestamps internally. This is appropriate to pass
+    // to a "AS OF SYSTEM TIME" SQL statement.
+    string highwater_decimal = 14;
+    string running_status = 15;
   }
 
   repeated Job jobs = 1 [(gogoproto.nullable) = false];
@@ -524,20 +538,23 @@ message DataDistributionRequest {
 
 message DataDistributionResponse {
   message ZoneConfig {
-    // cli_specifier is ".default" for the default zone config.
+    // zone_name is ".default" for the default zone config.
     // Otherwise, it's of the form [database.]table[@index[.partition]]
-    string cli_specifier = 1;
+    string zone_name = 1;
 
     config.ZoneConfig config = 2 [(gogoproto.nullable) = false];
 
-    // config_yaml is the YAML representation of config.
-    string config_yaml = 3;
+    reserved 3;
+
+    // config_sql is the SQL representation of config.
+    string config_sql = 4 [(gogoproto.customname) = "ConfigSQL"];
   }
 
   message TableInfo {
     map<int32, int64> replica_count_by_node_id = 1 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
     int64 zone_config_id = 2;
+    google.protobuf.Timestamp dropped_at = 3 [(gogoproto.stdtime) = true];
   }
 
   message DatabaseInfo {
@@ -548,8 +565,10 @@ message DataDistributionResponse {
   // By database name.
   map<string, DatabaseInfo> database_info = 1 [(gogoproto.nullable) = false];
 
-  // By zone config id.
-  map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
+  reserved 2;
+
+  // By zone name.
+  map<string, ZoneConfig> zone_configs = 3 [(gogoproto.nullable) = false];
 }
 
   // MetricMetadataRequest requests metadata for all metrics.
@@ -559,6 +578,34 @@ message MetricMetadataRequest {
 // MetricMetadataResponse contains the metadata for all metics.
 message MetricMetadataResponse {
   map<string, cockroach.util.metric.Metadata> metadata = 1 [(gogoproto.nullable) = false];
+}
+
+message EnqueueRangeRequest {
+  // The node on which the queue should process the range. If node_id is 0,
+  // the request will be forwarded to all other nodes.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // The name of the replica queue to run the range through. Matched against
+  // each queue's name field. See the implementation of baseQueue for details.
+  string queue = 2;
+  // The ID of the range to run through the queue.
+  int32 range_id = 3 [(gogoproto.customname) = "RangeID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // If set, run the queue's process method without first checking whether the
+  // replica should be processed by calling shouldQueue.
+  bool skip_should_queue = 4;
+}
+
+message EnqueueRangeResponse {
+  message Details {
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    // All trace events collected while processing the range in the queue.
+    repeated TraceEvent events = 2;
+    // The error message from the queue's processing, if any.
+    string error = 3;
+  }
+  repeated Details details = 1;
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
@@ -740,11 +787,29 @@ service Admin {
       get: "/_admin/v1/data_distribution"
     };
   }
-  
+
   // URL: /_admin/v1/metricmetadata
   rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/metricmetadata"
+    };
+  }
+
+
+  // EnqueueRange runs the specified range through the specified queue on the
+  // range's leaseholder store, returning the detailed trace and error
+  // information from doing so. Parameters must be provided in the body of the
+  // POST request.
+  // For example:
+  //
+  // {
+  //   "queue": "raftlog",
+  //   "rangeId": 10
+  // }
+  rpc EnqueueRange(EnqueueRangeRequest) returns (EnqueueRangeResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/enqueue_range"
+      body : "*"
     };
   }
 }

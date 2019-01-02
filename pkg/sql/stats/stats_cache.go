@@ -105,9 +105,12 @@ func NewTableStatisticsCache(
 		Policy:      cache.CacheLRU,
 		ShouldEvict: func(s int, key, value interface{}) bool { return s > cacheSize },
 	})
+	// The stat cache requires redundant callbacks as it is using gossip to
+	// signal the presence of new stats, not to actually propagate them.
 	g.RegisterCallback(
 		gossip.MakePrefixPattern(gossip.KeyTableStatAddedPrefix),
 		tableStatsCache.tableStatAddedGossipUpdate,
+		gossip.Redundant,
 	)
 	return tableStatsCache
 }

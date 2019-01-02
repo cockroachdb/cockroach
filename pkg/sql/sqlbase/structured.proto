@@ -21,11 +21,101 @@ import "util/hlc/timestamp.proto";
 import "sql/sqlbase/privilege.proto";
 import "gogoproto/gogo.proto";
 
+
+// Protobuf encoding for scalar values
+// ===================================
+//
+// Simple (unary) scalars types
+// ----------------------------
+//
+// | SQL type          | Semantic Type  | Visible Type | Precision | Width | Notes            |
+// |-------------------|----------------|--------------|-----------|-------|------------------|
+// | NULL (unknown)    | NULL           | NONE         | 0         | 0     |                  |
+// | BOOL              | BOOL           | NONE         | 0         | 0     |                  |
+// | DATE              | DATE           | NONE         | 0         | 0     |                  |
+// | TIMESTAMP         | TIMESTAMP      | NONE         | 0         | 0     |                  |
+// | TIMESTAMPTZ       | TIMESTAMPTZ    | NONE         | 0         | 0     |                  |
+// | INTERVAL          | INTERVAL       | NONE         | 0         | 0     |                  |
+// | NAME              | NAME           | NONE         | 0         | 0     |                  |
+// | OID               | OID            | NONE         | 0         | 0     |                  |
+// | UUID              | UUID           | NONE         | 0         | 0     |                  |
+// | INET              | INET           | NONE         | 0         | 0     |                  |
+// | TIME              | TIME           | NONE         | 0         | 0     |                  |
+// | JSON              | JSON           | NONE         | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | BYTES             | BYTES          | NONE         | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | STRING            | STRING         | NONE         | 0         | 0     |                  |
+// | STRING(N)         | STRING         | NONE         | 0         | N     |                  |
+// | VARCHAR           | STRING         | VARCHAR      | 0         | 0     |                  |
+// | VARCHAR(N)        | STRING         | VARCHAR      | 0         | N     |                  |
+// | CHAR              | STRING         | CHAR         | 0         | 1     |                  |
+// | CHAR(N)           | STRING         | CHAR         | 0         | N     |                  |
+// | "char"            | STRING         | QCHAR        | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | COLLATEDSTRING    | COLLATEDSTRING | NONE         | 0         | 0     | also uses Locale |
+// | COLLATEDSTRING(N) | COLLATEDSTRING | NONE         | 0         | N     | also uses Locale |
+// |                   |                |              |           |       |                  |
+// | DECIMAL           | DECIMAL        | NONE         | 0         | 0     |                  |
+// | DECIMAL(N)        | DECIMAL        | NONE         | N         | 0     |                  |
+// | DECIMAL(N,M)      | DECIMAL        | NONE         | N         | M     |                  |
+// |                   |                |              |           |       |                  |
+// | FLOAT8            | FLOAT          | NONE         | 0         | 0     |                  |
+// | FLOAT4            | FLOAT          | REAL         | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | BIT               | BIT            | NONE         | 0         | 1     |                  |
+// | BIT(N)            | BIT            | NONE         | 0         | N     |                  |
+// | VARBIT            | BIT            | VARBIT       | 0         | 0     |                  |
+// | VARBIT(N)         | BIT            | VARBIT       | 0         | N     |                  |
+// |                   |                |              |           |       |                  |
+// | INT,INTEGER       | INT            | NONE         | 0         | 0     |                  |
+// | INT2,SMALLINT     | INT            | NONE         | 0         | 16    |                  |
+// | INT4              | INT            | NONE         | 0         | 32    |                  |
+// | INT8,INT64,BIGINT | INT            | NONE         | 0         | 64    |                  |
+//
+// Tuple columns
+// -------------
+//
+// These cannot (yet) be used in tables but are used in DistSQL flow
+// processors for queries that have tuple-typed intermediate results.
+//
+// - SemanticType is set to TUPLE.
+// - TupleContents contains the tuple element types. These can be recursively defined.
+// - TupleLabels contains the tuple labels, if any.
+//
+// Array values
+// ------------
+//
+// | Field           | Description                                                         |
+// |-----------------|---------------------------------------------------------------------|
+// | SemanticType    | ARRAY (with 2 exceptions, see below)                                |
+// | ArrayDimensions | array sizes in each dimension.                                      |
+// | ArrayContents   | semantic type of the array elements, as per the two sections above. |
+// | VisibleType     | describes the element type like above.                              |
+// | Width           | describes the element type like above.                              |
+// | Precision       | describes the element type like above.                              |
+// | TupleContents   | describes the element type like above. (Arrays of tuples)           |
+// | TupleLabels     | describes the element type like above. (Arrays of tuples)           |
+//
+// If the original type was INT2VECTOR or OIDVECTOR, the semantic type is set to that. The
+// other fields are set as per regular arrays:
+//
+// - INT2VECTOR: SemanticType=INT2VECTOR, ArrayContents=INT,
+//   VisibleType=NONE, Width=0, Prec=0, TupleContents/Labels=nil
+// - OIDVECTOR: SemanticType=OIDVECTOR, ArrayContents=OID,
+//   VisibleType=NONE, Width=0, Prec=0, TupleContents/Labels=nil
+//
+
 message ColumnType {
   option (gogoproto.equal) = true;
 
-  // These mirror the types supported by the sql/parser. See
-  // sql/parser/col_types.go.
+  // These mirror the types supported by sql/coltypes.
+  //
+  // Note: when adding constants to this list or renaming constants,
+  // verify with PostgreSQL what the type name should be in
+  // information_schema.columns.data_type, and modify
+  // (*ColumnType).InformationSchemaVisibleType() accordingly.
+  //
   enum SemanticType {
     BOOL = 0;
     INT = 1;        // INT(width)
@@ -55,9 +145,10 @@ message ColumnType {
     ARRAY = 15;
     INET = 16;
     TIME = 17;
-    JSON = 18;
-    TIMETZ = 19;
+    JSONB = 18;
+    reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
     TUPLE = 20;
+	BIT = 21;
 
     INT2VECTOR = 200;
     OIDVECTOR = 201;
@@ -65,18 +156,23 @@ message ColumnType {
 
   enum VisibleType {
     NONE = 0;
-    INTEGER = 1;
-    SMALLINT = 2;
-    BIGINT = 3;
-    BIT = 4;
+    INTEGER = 1;   // Deprecated, remove post-2.2.
+    SMALLINT = 2;  // Deprecated, remove post-2.2.
+    BIGINT = 3;    // Deprecated, remove post-2.2.
+    reserved 4;
     REAL = 5;
-    DOUBLE_PRECISION = 6;
+    DOUBLE_PRECISION = 6; // Deprecated, remove post-2.2.
+    VARCHAR = 7;
+    CHAR = 8;
+    QCHAR = 9;
+	VARBIT = 10;
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
-  // BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
+  // INT, DECIMAL, CHAR and BINARY
   optional int32 width = 2 [(gogoproto.nullable) = false];
-  // FLOAT and DECIMAL.
+  // DECIMAL
+  // Also FLOAT pre-2.1 (this was incorrect.)
   optional int32 precision = 3 [(gogoproto.nullable) = false];
   // The length of each dimension in the array. A dimension of -1 means that
   // no bound was specified for that dimension.
@@ -91,6 +187,7 @@ message ColumnType {
   optional SemanticType array_contents = 7;
   // Only used if the kind is TUPLE
   repeated ColumnType tuple_contents = 8 [(gogoproto.nullable) = false];
+  repeated string tuple_labels = 9;
 }
 
 enum ConstraintValidity {
@@ -100,11 +197,19 @@ enum ConstraintValidity {
 
 message ForeignKeyReference {
   enum Action {
+    option (gogoproto.goproto_enum_stringer) = false;
     NO_ACTION = 0;
     RESTRICT = 1;
     SET_NULL = 2;
     SET_DEFAULT = 3;
     CASCADE = 4;
+  }
+
+  // Match is the algorithm used to compare composite keys.
+  enum Match {
+    option (gogoproto.goproto_enum_stringer) = false;
+    SIMPLE = 0;
+    FULL = 1;
   }
 
   optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
@@ -116,6 +221,9 @@ message ForeignKeyReference {
   optional int32 shared_prefix_len = 5 [(gogoproto.nullable) = false];
   optional Action on_delete = 6 [(gogoproto.nullable) = false];
   optional Action on_update = 7 [(gogoproto.nullable) = false];
+  // This is only important for composite keys. For all prior matches before
+  // the addition of this value, MATCH SIMPLE will be used.
+  optional Match match = 8 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
@@ -188,6 +296,8 @@ message InterleaveDescriptor {
     // grandparent. Thus, the sum of SharedPrefixLens in the components of an
     // InterleaveDescriptor is never more than the number of fields in the index
     // being interleaved.
+    // In cockroach 1.0, this value did not exist and thus a check for > 0
+    // must be performed prior to its use.
     optional uint32 shared_prefix_len = 3 [(gogoproto.nullable) = false,
         (gogoproto.customname) = "SharedPrefixLen"];
   }
@@ -477,8 +587,7 @@ message TableDescriptor {
   // particular version increment.
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
 
-  // Do not use. On the path to deprecation.
-  optional bool up_version = 6 [(gogoproto.nullable) = false];
+  reserved 6;
 
   // Last modification time of the table descriptor.
   optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
@@ -695,6 +804,8 @@ message TableDescriptor {
     optional int64 max_value = 3 [(gogoproto.nullable) = false];
     // Start value of the sequence.
     optional int64 start = 4 [(gogoproto.nullable) = false];
+    // Whether the sequence is virtual.
+    optional bool virtual = 5 [(gogoproto.nullable) = false];
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.
@@ -726,6 +837,35 @@ message TableDescriptor {
     READWRITE = 1;
   }
   optional AuditMode audit_mode = 31 [(gogoproto.nullable) = false];
+
+  // The job id for a drop job is the id in the system.jobs table of the
+  // dropping of this table.
+  optional int64 drop_job_id = 32 [(gogoproto.nullable) = false, (gogoproto.customname) = "DropJobID"];
+
+  message GCDescriptorMutation {
+    optional int64 index_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID",
+                                (gogoproto.casttype) = "IndexID"];
+
+    optional int64 drop_time = 2 [(gogoproto.nullable) = false];
+
+    // The job id for a mutation job is the id in the system.jobs table of the
+    // schema change job executing the mutation referenced by mutation_id.
+    optional int64 job_id = 3 [(gogoproto.nullable) = false,
+                              (gogoproto.customname) = "JobID"];
+  }
+
+  // The schema elements that have been dropped and whose underlying
+  // data needs to be gc-ed. These schema elements have already transitioned
+  // through the drop state machine when they were in the above mutations
+  // list, and can be safely deleted. The names for these schema elements
+  // can be reused. This list is separate because mutations can
+  // lie in this list for a long time (gc deadline) and should not block
+  // the execution of other schema changes on the table.
+  //
+  // TODO(vivekmenezes): This is currently only used by the non-interleaved drop
+  // index case. Also use for dropped interleaved indexes and columns.
+  repeated GCDescriptorMutation gc_mutations = 33 [(gogoproto.nullable) = false,
+                                                  (gogoproto.customname) = "GCMutations"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

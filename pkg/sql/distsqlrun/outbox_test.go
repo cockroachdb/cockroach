@@ -22,17 +22,17 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 const staticNodeID roachpb.NodeID = 3
@@ -63,11 +63,11 @@ func TestOutbox(t *testing.T) {
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
-		EvalCtx:    evalCtx,
+		EvalCtx:    &evalCtx,
 		nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 	}
-	flowID := FlowID{uuid.MakeV4()}
-	streamID := StreamID(42)
+	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	streamID := distsqlpb.StreamID(42)
 	outbox := newOutbox(&flowCtx, staticNodeID, "", flowID, streamID)
 	outbox.init(oneIntCol)
 	var outboxWG sync.WaitGroup
@@ -163,7 +163,7 @@ func TestOutbox(t *testing.T) {
 
 		// After we receive one row, we're going to ask the producer to drain.
 		if !drainSignalSent && len(rows) > 0 {
-			sig := ConsumerSignal{DrainRequest: &DrainRequest{}}
+			sig := distsqlpb.ConsumerSignal{DrainRequest: &distsqlpb.DrainRequest{}}
 			if err := serverStream.Send(&sig); err != nil {
 				t.Fatal(err)
 			}
@@ -198,7 +198,7 @@ func TestOutbox(t *testing.T) {
 // Test that an outbox connects its stream as soon as possible (i.e. before
 // receiving any rows). This is important, since there's a timeout on waiting on
 // the server-side for the streams to be connected.
-func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
+func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
@@ -214,11 +214,11 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
-		EvalCtx:    evalCtx,
+		EvalCtx:    &evalCtx,
 		nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 	}
-	flowID := FlowID{uuid.MakeV4()}
-	streamID := StreamID(42)
+	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	streamID := distsqlpb.StreamID(42)
 	outbox := newOutbox(&flowCtx, staticNodeID, "", flowID, streamID)
 
 	var outboxWG sync.WaitGroup
@@ -283,11 +283,11 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			flowCtx := FlowCtx{
 				Settings:   st,
 				stopper:    stopper,
-				EvalCtx:    evalCtx,
+				EvalCtx:    &evalCtx,
 				nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 			}
-			flowID := FlowID{uuid.MakeV4()}
-			streamID := StreamID(42)
+			flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+			streamID := distsqlpb.StreamID(42)
 			var outbox *outbox
 			var wg sync.WaitGroup
 			var expectedErr error
@@ -324,8 +324,8 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				client := NewDistSQLClient(conn)
-				var outStream DistSQL_RunSyncFlowClient
+				client := distsqlpb.NewDistSQLClient(conn)
+				var outStream distsqlpb.DistSQL_RunSyncFlowClient
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				expectedErr = errors.Errorf("context canceled")
@@ -409,11 +409,11 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
-		EvalCtx:    evalCtx,
+		EvalCtx:    &evalCtx,
 		nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 	}
-	flowID := FlowID{uuid.MakeV4()}
-	streamID := StreamID(42)
+	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	streamID := distsqlpb.StreamID(42)
 	var outbox *outbox
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -465,11 +465,11 @@ func TestOutboxCancelsFlowOnErrorLegacyInterface(t *testing.T) {
 	flowCtx := FlowCtx{
 		Settings: st,
 		stopper:  stopper,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		rpcCtx:   newInsecureRPCContext(stopper),
 	}
-	flowID := FlowID{uuid.MakeV4()}
-	streamID := StreamID(42)
+	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	streamID := distsqlpb.StreamID(42)
 	var outbox *outbox
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -517,14 +517,14 @@ func BenchmarkOutbox(b *testing.B) {
 			row = append(row, sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(2))))
 		}
 		b.Run(fmt.Sprintf("numCols=%d", numCols), func(b *testing.B) {
-			flowID := FlowID{uuid.MakeV4()}
-			streamID := StreamID(42)
+			flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+			streamID := distsqlpb.StreamID(42)
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Settings:   st,
 				stopper:    stopper,
-				EvalCtx:    evalCtx,
+				EvalCtx:    &evalCtx,
 				nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 			}
 			outbox := newOutbox(&flowCtx, staticNodeID, "", flowID, streamID)

@@ -20,8 +20,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"math"
 	"os"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -31,19 +35,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/dustin/go-humanize"
+	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
 
 const (
+	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	// storeTimeSeriesPrefix is the common prefix for time series keys which
 	// record store-specific data.
 	storeTimeSeriesPrefix = "cr.store.%s"
@@ -363,8 +372,8 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 // latency. Throughputs are stored as bytes, and latencies as nanos.
 func (mr *MetricsRecorder) getNetworkActivity(
 	ctx context.Context,
-) map[roachpb.NodeID]NodeStatus_NetworkActivity {
-	activity := make(map[roachpb.NodeID]NodeStatus_NetworkActivity)
+) map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity {
+	activity := make(map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity)
 	if mr.nodeLiveness != nil && mr.gossip != nil {
 		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
 
@@ -373,22 +382,22 @@ func (mr *MetricsRecorder) getNetworkActivity(
 		if mr.rpcContext.RemoteClocks != nil {
 			currentAverages = mr.rpcContext.RemoteClocks.AllLatencies()
 		}
-		for nodeID, alive := range isLiveMap {
+		for nodeID, entry := range isLiveMap {
 			address, err := mr.gossip.GetNodeIDAddress(nodeID)
 			if err != nil {
-				if alive {
+				if entry.IsLive {
 					log.Warning(ctx, err.Error())
 				}
 				continue
 			}
-			na := NodeStatus_NetworkActivity{}
+			na := statuspb.NodeStatus_NetworkActivity{}
 			key := address.String()
 			if tp, ok := throughputMap.Load(key); ok {
 				stats := tp.(*rpc.Stats)
 				na.Incoming = stats.Incoming()
 				na.Outgoing = stats.Outgoing()
 			}
-			if alive {
+			if entry.IsLive {
 				if latency, ok := currentAverages[key]; ok {
 					na.Latency = latency.Nanoseconds()
 				}
@@ -402,7 +411,7 @@ func (mr *MetricsRecorder) getNetworkActivity(
 // GenerateNodeStatus returns a status summary message for the node. The summary
 // includes the recent values of metrics for both the node and all of its
 // component stores. When the node isn't initialized yet, nil is returned.
-func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
+func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus {
 	activity := mr.getNetworkActivity(ctx)
 
 	mr.mu.RLock()
@@ -422,17 +431,24 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 	lastNodeMetricCount := atomic.LoadInt64(&mr.lastNodeMetricCount)
 	lastStoreMetricCount := atomic.LoadInt64(&mr.lastStoreMetricCount)
 
+	systemMemory, _, err := GetTotalMemoryWithoutLogging()
+	if err != nil {
+		log.Error(ctx, "could not get total system memory:", err)
+	}
+
 	// Generate a node status with no store data.
-	nodeStat := &NodeStatus{
-		Desc:          mr.mu.desc,
-		BuildInfo:     build.GetInfo(),
-		UpdatedAt:     now,
-		StartedAt:     mr.mu.startedAt,
-		StoreStatuses: make([]StoreStatus, 0, lastSummaryCount),
-		Metrics:       make(map[string]float64, lastNodeMetricCount),
-		Args:          os.Args,
-		Env:           envutil.GetEnvVarsUsed(),
-		Activity:      activity,
+	nodeStat := &statuspb.NodeStatus{
+		Desc:              mr.mu.desc,
+		BuildInfo:         build.GetInfo(),
+		UpdatedAt:         now,
+		StartedAt:         mr.mu.startedAt,
+		StoreStatuses:     make([]statuspb.StoreStatus, 0, lastSummaryCount),
+		Metrics:           make(map[string]float64, lastNodeMetricCount),
+		Args:              os.Args,
+		Env:               envutil.GetEnvVarsUsed(),
+		Activity:          activity,
+		NumCpus:           int32(runtime.NumCPU()),
+		TotalSystemMemory: systemMemory,
 	}
 
 	// If the cluster hasn't yet been definitively moved past the network stats
@@ -458,11 +474,11 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 		// Gather descriptor from store.
 		descriptor, err := mr.mu.stores[storeID].Descriptor(false /* useCached */)
 		if err != nil {
-			log.Errorf(context.TODO(), "Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
+			log.Errorf(ctx, "Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 			continue
 		}
 
-		nodeStat.StoreStatuses = append(nodeStat.StoreStatuses, StoreStatus{
+		nodeStat.StoreStatuses = append(nodeStat.StoreStatuses, statuspb.StoreStatus{
 			Desc:    *descriptor,
 			Metrics: storeMetrics,
 		})
@@ -482,7 +498,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 
 // WriteNodeStatus writes the supplied summary to the given client.
 func (mr *MetricsRecorder) WriteNodeStatus(
-	ctx context.Context, db *client.DB, nodeStatus NodeStatus,
+	ctx context.Context, db *client.DB, nodeStatus statuspb.NodeStatus,
 ) error {
 	mr.writeSummaryMu.Lock()
 	defer mr.writeSummaryMu.Unlock()
@@ -521,8 +537,6 @@ func extractValue(mtr interface{}) (float64, error) {
 	switch mtr := mtr.(type) {
 	case float64:
 		return mtr, nil
-	case *metric.CounterWithRates:
-		return float64(mtr.Count()), nil
 	case *metric.Counter:
 		return float64(mtr.Count()), nil
 	case *metric.Gauge:
@@ -583,4 +597,74 @@ func (rr registryRecorder) record(dest *[]tspb.TimeSeriesData) {
 			},
 		})
 	})
+}
+
+// GetTotalMemory returns either the total system memory or if possible the
+// cgroups available memory.
+func GetTotalMemory(ctx context.Context) (int64, error) {
+	memory, warning, err := GetTotalMemoryWithoutLogging()
+	if err != nil {
+		return 0, err
+	}
+	if warning != "" {
+		log.Infof(ctx, warning)
+	}
+	return memory, nil
+}
+
+// GetTotalMemoryWithoutLogging is the same as GetTotalMemory, but returns any warning
+// as a string instead of logging it.
+func GetTotalMemoryWithoutLogging() (int64, string, error) {
+	totalMem, err := func() (int64, error) {
+		mem := gosigar.Mem{}
+		if err := mem.Get(); err != nil {
+			return 0, err
+		}
+		if mem.Total > math.MaxInt64 {
+			return 0, fmt.Errorf("inferred memory size %s exceeds maximum supported memory size %s",
+				humanize.IBytes(mem.Total), humanize.Bytes(math.MaxInt64))
+		}
+		return int64(mem.Total), nil
+	}()
+	if err != nil {
+		return 0, "", err
+	}
+	checkTotal := func(x int64, warning string) (int64, string, error) {
+		if x <= 0 {
+			// https://github.com/elastic/gosigar/issues/72
+			return 0, warning, fmt.Errorf("inferred memory size %d is suspicious, considering invalid", x)
+		}
+		return x, warning, nil
+	}
+	if runtime.GOOS != "linux" {
+		return checkTotal(totalMem, "")
+	}
+
+	var buf []byte
+	if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
+		warning := fmt.Sprintf("can't read available memory from cgroups (%s), using system memory %s instead",
+			err, humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
+	}
+
+	cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
+	if err != nil {
+		warning := fmt.Sprintf("can't parse available memory from cgroups (%s), using system memory %s instead",
+			err, humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
+	}
+
+	if cgAvlMem == 0 || cgAvlMem > math.MaxInt64 {
+		warning := fmt.Sprintf("available memory from cgroups (%s) is unsupported, using system memory %s instead",
+			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
+	}
+
+	if totalMem > 0 && int64(cgAvlMem) > totalMem {
+		warning := fmt.Sprintf("available memory from cgroups (%s) exceeds system memory %s, using system memory",
+			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
+	}
+
+	return checkTotal(int64(cgAvlMem), "")
 }

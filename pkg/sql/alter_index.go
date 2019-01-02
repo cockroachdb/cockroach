@@ -18,23 +18,22 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/gogo/protobuf/proto"
 )
 
 type alterIndexNode struct {
 	n         *tree.AlterIndex
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.MutableTableDescriptor
 	indexDesc *sqlbase.IndexDescriptor
 }
 
 // AlterIndex applies a schema change on an index.
 // Privileges: CREATE on table.
 func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode, error) {
-	tableDesc, indexDesc, err := p.getTableAndIndex(ctx, &n.Index.Table, n.Index, privilege.CREATE)
+	tableDesc, indexDesc, err := p.getTableAndIndex(ctx, nil, n.Index, privilege.CREATE)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +71,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			)
 			err = deleteRemovedPartitionZoneConfigs(
 				params.ctx, params.p.txn,
-				n.tableDesc, n.indexDesc,
+				n.tableDesc.TableDesc(), n.indexDesc,
 				&n.indexDesc.Partitioning, &partitioning,
 				params.extendedEvalCtx.ExecCfg,
 			)
@@ -93,7 +92,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	mutationID := sqlbase.InvalidMutationID
 	var err error
 	if addedMutations {
-		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
+		mutationID, err = params.p.createOrUpdateSchemaChangeJob(params.ctx, n.tableDesc,
 			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
 	} else if !descriptorChanged {
 		// Nothing to be done
@@ -123,7 +122,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			User       string
 			MutationID uint32
 		}{
-			n.n.Index.Table.TableName().FQString(), n.indexDesc.Name, n.n.String(),
+			n.n.Index.Table.FQString(), n.indexDesc.Name, n.n.String(),
 			params.SessionData().User, uint32(mutationID),
 		},
 	)

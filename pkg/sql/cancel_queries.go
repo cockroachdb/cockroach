@@ -18,12 +18,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/pkg/errors"
 )
 
 type cancelQueriesNode struct {
@@ -67,8 +66,7 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 	statusServer := params.extendedEvalCtx.StatusServer
 	queryIDString, ok := tree.AsDString(datum)
 	if !ok {
-		return false, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: %q: expected *DString, found %T", datum, datum)
+		return false, pgerror.NewAssertionErrorf("%q: expected *DString, found %T", datum, datum)
 	}
 
 	queryID, err := StringToClusterWideID(string(queryIDString))

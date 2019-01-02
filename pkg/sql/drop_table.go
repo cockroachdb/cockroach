@@ -18,14 +18,16 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 type dropTableNode struct {
@@ -35,7 +37,7 @@ type dropTableNode struct {
 
 type toDelete struct {
 	tn   *tree.TableName
-	desc *sqlbase.TableDescriptor
+	desc *sqlbase.MutableTableDescriptor
 }
 
 // DropTable drops a table.
@@ -45,11 +47,7 @@ type toDelete struct {
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
 	td := make([]toDelete, 0, len(n.Names))
 	for i := range n.Names {
-		name := &n.Names[i]
-		tn, err := name.Normalize()
-		if err != nil {
-			return nil, err
-		}
+		tn := &n.Names[i]
 		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, requireTableDesc)
 		if err != nil {
 			return nil, err
@@ -106,6 +104,18 @@ func (n *dropTableNode) startExec(params runParams) error {
 		if droppedDesc == nil {
 			continue
 		}
+
+		droppedDetails := jobspb.DroppedTableDetails{Name: toDel.tn.FQString(), ID: toDel.desc.ID}
+		if _, err := params.p.createDropTablesJob(
+			ctx,
+			[]*sqlbase.MutableTableDescriptor{droppedDesc},
+			[]jobspb.DroppedTableDetails{droppedDetails},
+			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
+			true, /* drainNames */
+			sqlbase.InvalidID /* droppedDatabaseID */); err != nil {
+			return err
+		}
+
 		droppedViews, err := params.p.dropTableImpl(params, droppedDesc)
 		if err != nil {
 			return err
@@ -151,12 +161,8 @@ func (*dropTableNode) Close(context.Context)        {}
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) prepareDrop(
 	ctx context.Context, name *tree.TableName, required bool, requiredType requiredType,
-) (tableDesc *sqlbase.TableDescriptor, err error) {
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, name, required, requiredType)
-	})
+) (*sqlbase.MutableTableDescriptor, error) {
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {
 		return nil, err
 	}
@@ -172,8 +178,8 @@ func (p *planner) prepareDrop(
 
 func (p *planner) canRemoveFK(
 	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
-) (*sqlbase.TableDescriptor, error) {
-	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
+) (*sqlbase.MutableTableDescriptor, error) {
+	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +195,7 @@ func (p *planner) canRemoveFK(
 func (p *planner) canRemoveInterleave(
 	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
 ) error {
-	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
+	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
 		return err
 	}
@@ -207,11 +213,11 @@ func (p *planner) canRemoveInterleave(
 }
 
 func (p *planner) removeFK(
-	ctx context.Context, ref sqlbase.ForeignKeyReference, table *sqlbase.TableDescriptor,
+	ctx context.Context, ref sqlbase.ForeignKeyReference, table *sqlbase.MutableTableDescriptor,
 ) error {
 	if table == nil {
 		var err error
-		table, err = sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
+		table, err = p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
 		if err != nil {
 			return err
 		}
@@ -225,11 +231,11 @@ func (p *planner) removeFK(
 		return err
 	}
 	idx.ForeignKey = sqlbase.ForeignKeyReference{}
-	return p.saveNonmutationAndNotify(ctx, table)
+	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
-	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
+	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
 		return err
 	}
@@ -242,14 +248,14 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 		return err
 	}
 	idx.Interleave.Ancestors = nil
-	return p.saveNonmutationAndNotify(ctx, table)
+	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
 // dropTableImpl does the work of dropping a table (and everything that depends
 // on it if `cascade` is enabled). It returns a list of view names that were
 // dropped due to `cascade` behavior.
 func (p *planner) dropTableImpl(
-	params runParams, tableDesc *sqlbase.TableDescriptor,
+	params runParams, tableDesc *sqlbase.MutableTableDescriptor,
 ) ([]string, error) {
 	ctx := params.ctx
 
@@ -308,7 +314,12 @@ func (p *planner) dropTableImpl(
 		droppedViews = append(droppedViews, viewDesc.Name)
 	}
 
-	err := p.initiateDropTable(ctx, tableDesc, true /* drain name */)
+	err := p.removeTableComment(ctx, tableDesc)
+	if err != nil {
+		return droppedViews, err
+	}
+
+	err = p.initiateDropTable(ctx, tableDesc, true /* drain name */)
 	return droppedViews, err
 }
 
@@ -317,7 +328,7 @@ func (p *planner) dropTableImpl(
 // TRUNCATE which directly deletes the old name to id map and doesn't need
 // drain the old map.
 func (p *planner) initiateDropTable(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, drainName bool,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, drainName bool,
 ) error {
 	if tableDesc.Dropped() {
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
@@ -332,12 +343,12 @@ func (p *planner) initiateDropTable(
 	//
 	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be
 	// able to use this faster mechanism.
-	if !tableDesc.IsInterleaved() &&
+	if tableDesc.IsTable() && !tableDesc.IsInterleaved() &&
 		p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
 		// Get the zone config applying to this table in order to
 		// ensure there is a GC TTL.
 		_, _, _, err := GetZoneConfigInTxn(
-			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "",
+			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "", false, /* getInheritedDefault */
 		)
 		if err != nil {
 			return err
@@ -354,6 +365,34 @@ func (p *planner) initiateDropTable(
 			Name:     tableDesc.Name}
 		tableDesc.DrainingNames = append(tableDesc.DrainingNames, nameDetails)
 	}
+
+	// Mark all jobs scheduled for schema changes as successful.
+	jobIDs := make(map[int64]struct{})
+	var id sqlbase.MutationID
+	for _, m := range tableDesc.Mutations {
+		if id != m.MutationID {
+			id = m.MutationID
+			jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc.TableDesc(), id)
+			if err != nil {
+				return err
+			}
+			jobIDs[jobID] = struct{}{}
+		}
+	}
+	for _, gcm := range tableDesc.GCMutations {
+		jobIDs[gcm.JobID] = struct{}{}
+	}
+	for jobID := range jobIDs {
+		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
+		if err != nil {
+			return err
+		}
+
+		if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+			return errors.Wrapf(err, "failed to mark job %d as as successful", jobID)
+		}
+	}
+
 	// Initiate an immediate schema change. When dropping a table
 	// in a session, the data and the descriptor are not deleted.
 	// Instead, that is taken care of asynchronously by the schema
@@ -364,14 +403,14 @@ func (p *planner) initiateDropTable(
 }
 
 func (p *planner) removeFKBackReference(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
-	var t *sqlbase.TableDescriptor
+	var t *sqlbase.MutableTableDescriptor
 	// We don't want to lookup/edit a second copy of the same table.
 	if tableDesc.ID == idx.ForeignKey.Table {
 		t = tableDesc
 	} else {
-		lookup, err := sqlbase.GetTableDescFromID(ctx, p.txn, idx.ForeignKey.Table)
+		lookup, err := p.Tables().getMutableTableVersionByID(ctx, idx.ForeignKey.Table, p.txn)
 		if err != nil {
 			return errors.Errorf("error resolving referenced table ID %d: %v", idx.ForeignKey.Table, err)
 		}
@@ -390,21 +429,21 @@ func (p *planner) removeFKBackReference(
 			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
 		}
 	}
-	return p.saveNonmutationAndNotify(ctx, t)
+	return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) removeInterleaveBackReference(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
 	}
 	ancestor := idx.Interleave.Ancestors[len(idx.Interleave.Ancestors)-1]
-	var t *sqlbase.TableDescriptor
+	var t *sqlbase.MutableTableDescriptor
 	if ancestor.TableID == tableDesc.ID {
 		t = tableDesc
 	} else {
-		lookup, err := sqlbase.GetTableDescFromID(ctx, p.txn, ancestor.TableID)
+		lookup, err := p.Tables().getMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
 		if err != nil {
 			return errors.Errorf("error resolving referenced table ID %d: %v", ancestor.TableID, err)
 		}
@@ -424,7 +463,7 @@ func (p *planner) removeInterleaveBackReference(
 		}
 	}
 	if t != tableDesc {
-		return p.saveNonmutationAndNotify(ctx, t)
+		return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
 	}
 	return nil
 }
@@ -441,4 +480,29 @@ func removeMatchingReferences(
 		}
 	}
 	return updatedRefs
+}
+
+func (p *planner) removeTableComment(
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
+) error {
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		ctx,
+		"delete-table-comment",
+		p.txn,
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
+		keys.TableCommentType,
+		tableDesc.ID)
+	if err != nil {
+		return err
+	}
+
+	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		ctx,
+		"delete-comment",
+		p.txn,
+		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2",
+		keys.ColumnCommentType,
+		tableDesc.ID)
+
+	return err
 }

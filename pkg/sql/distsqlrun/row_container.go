@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
@@ -311,7 +311,7 @@ type diskBackedRowContainer struct {
 
 	// The following fields are used to create a diskRowContainer when spilling
 	// to disk.
-	engine      engine.Engine
+	engine      diskmap.Factory
 	diskMonitor *mon.BytesMonitor
 }
 
@@ -333,7 +333,7 @@ func (f *diskBackedRowContainer) init(
 	ordering sqlbase.ColumnOrdering,
 	types []sqlbase.ColumnType,
 	evalCtx *tree.EvalContext,
-	engine engine.Engine,
+	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 ) {

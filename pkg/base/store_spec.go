@@ -23,13 +23,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dustin/go-humanize"
-	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
-
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/dustin/go-humanize"
+	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 )
 
 // This file implements method receivers for members of server.Config struct

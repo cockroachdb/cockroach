@@ -21,29 +21,32 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
-func registerSchemaChange(r *registry) {
+func registerSchemaChangeKV(r *registry) {
 	r.Add(testSpec{
-		Name:   `schemachange`,
-		Nodes:  nodes(5),
-		Stable: true, // DO NOT COPY to new tests
+		Name:  `schemachange/mixed/kv`,
+		Nodes: nodes(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
 
-			c.Start(ctx, c.All())
+			c.Start(ctx, t, c.All())
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
 			m := newMonitor(ctx, c, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("loading fixture")
-				if _, err := db.Exec(`RESTORE DATABASE workload FROM $1`, fixturePath); err != nil {
+				if _, err := db.Exec(`RESTORE DATABASE tpch FROM $1`, fixturePath); err != nil {
 					t.Fatal(err)
 				}
 				return nil
@@ -57,19 +60,19 @@ func registerSchemaChange(r *registry) {
 				// but we can't put it in monitor as-is because the test deadlocks.
 				go func() {
 					const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --db=test`
-					l, err := c.l.childLogger(fmt.Sprintf(`kv-%d`, node))
+					l, err := t.l.ChildLogger(fmt.Sprintf(`kv-%d`, node))
 					if err != nil {
 						t.Fatal(err)
 					}
 					defer l.close()
-					_ = execCmd(ctx, c.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
+					_ = execCmd(ctx, t.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
 				}()
 			}
 
 			m = newMonitor(ctx, c, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("running schema change tests")
-				return waitForSchemaChanges(ctx, c.l, db)
+				return waitForSchemaChanges(ctx, t.l, db)
 			})
 			m.Wait()
 		},
@@ -81,10 +84,10 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 
 	// These schema changes are over a table that is not actively
 	// being updated.
-	l.printf("running schema changes over workload.customer\n")
+	l.Printf("running schema changes over tpch.customer\n")
 	schemaChanges := []string{
-		"ALTER TABLE workload.customer ADD COLUMN newcol INT DEFAULT 23456",
-		"CREATE INDEX foo ON workload.customer (c_name)",
+		"ALTER TABLE tpch.customer ADD COLUMN newcol INT DEFAULT 23456",
+		"CREATE INDEX foo ON tpch.customer (c_name)",
 	}
 	if err := runSchemaChanges(ctx, l, db, schemaChanges); err != nil {
 		return err
@@ -97,9 +100,9 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 
 	// All these return the same result.
 	validationQueries := []string{
-		"SELECT count(*) FROM workload.customer AS OF SYSTEM TIME %s",
-		"SELECT count(newcol) FROM workload.customer AS OF SYSTEM TIME %s",
-		"SELECT count(c_name) FROM workload.customer@foo AS OF SYSTEM TIME %s",
+		"SELECT count(*) FROM tpch.customer AS OF SYSTEM TIME %s",
+		"SELECT count(newcol) FROM tpch.customer AS OF SYSTEM TIME %s",
+		"SELECT count(c_name) FROM tpch.customer@foo AS OF SYSTEM TIME %s",
 	}
 	if err := runValidationQueries(ctx, l, db, start, validationQueries, nil); err != nil {
 		return err
@@ -110,7 +113,7 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 	// an opportunity to get populate through the load generator. These
 	// schema changes are acting upon a decent sized table that is also
 	// being updated.
-	l.printf("running schema changes over test.kv\n")
+	l.Printf("running schema changes over test.kv\n")
 	schemaChanges = []string{
 		"ALTER TABLE test.kv ADD COLUMN created_at TIMESTAMP DEFAULT now()",
 		"CREATE INDEX foo ON test.kv (v)",
@@ -141,12 +144,12 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 func runSchemaChanges(ctx context.Context, l *logger, db *gosql.DB, schemaChanges []string) error {
 	for _, cmd := range schemaChanges {
 		start := timeutil.Now()
-		l.printf("starting schema change: %s\n", cmd)
+		l.Printf("starting schema change: %s\n", cmd)
 		if _, err := db.Exec(cmd); err != nil {
-			l.errorf("hit schema change error: %s, for %s, in %s\n", err, cmd, timeutil.Since(start))
+			l.Errorf("hit schema change error: %s, for %s, in %s\n", err, cmd, timeutil.Since(start))
 			return err
 		}
-		l.printf("completed schema change: %s, in %s\n", cmd, timeutil.Since(start))
+		l.Printf("completed schema change: %s, in %s\n", cmd, timeutil.Since(start))
 		// TODO(vivek): Monitor progress of schema changes and log progress.
 	}
 
@@ -189,7 +192,7 @@ func runValidationQueries(
 		if err := db.QueryRow(q).Scan(&count); err != nil {
 			return err
 		}
-		l.printf("query: %s, found %d rows\n", q, count)
+		l.Printf("query: %s, found %d rows\n", q, count)
 		if count == 0 {
 			return errors.Errorf("%s: %d rows found", q, count)
 		}
@@ -236,7 +239,7 @@ func checkIndexOverTimeSpan(
 	if err := db.QueryRow(q, s.start, s.end).Scan(&count); err != nil {
 		return false, err
 	}
-	l.printf("counts seen %d, %d, over [%s, %s]\n", count, eCount, s.start, s.end)
+	l.Printf("counts seen %d, %d, over [%s, %s]\n", count, eCount, s.start, s.end)
 	return count != eCount, nil
 }
 
@@ -259,7 +262,7 @@ func findIndexProblem(
 		leftSpan, rightSpan := s, s
 		d := s.end.Sub(s.start) / 2
 		if d < 50*time.Millisecond {
-			l.printf("problem seen over [%s, %s]\n", s.start, s.end)
+			l.Printf("problem seen over [%s, %s]\n", s.start, s.end)
 			continue
 		}
 		m := s.start.Add(d)
@@ -283,8 +286,162 @@ func findIndexProblem(
 			spans = append(spans, rightSpan)
 		}
 		if !(leftState || rightState) {
-			l.printf("no problem seen over [%s, %s]\n", s.start, s.end)
+			l.Printf("no problem seen over [%s, %s]\n", s.start, s.end)
 		}
 	}
+	return nil
+}
+
+func registerSchemaChangeIndexTPCC1000(r *registry) {
+	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2))
+}
+
+func registerSchemaChangeIndexTPCC100(r *registry) {
+	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15))
+}
+
+func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
+	return testSpec{
+		Name:    fmt.Sprintf("schemachange/index/tpcc-%d", warehouses),
+		Nodes:   nodes(numNodes),
+		Timeout: length * 2,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses,
+				Extra:      "--wait=false --tolerate-errors",
+				During: func(ctx context.Context) error {
+					return runAndLogStmts(ctx, t, c, "addindex", []string{
+						`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
+						// TODO(vivek): Enable these once ADD INDEX performance has improved.
+						//	`CREATE INDEX ON tpcc.order (o_carrier_id);`,
+						//	`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
+					})
+				},
+				Duration: length,
+			})
+		},
+	}
+}
+
+func registerSchemaChangeCancelIndexTPCC1000(r *registry) {
+	r.Add(makeIndexAddRollbackTpccTest(5, 1000, time.Hour*2))
+}
+
+// Creates an index and job, returning the job ID and a notify channel for
+// when the schema change completes or rolls back.
+func createIndexAddJob(
+	ctx context.Context, c *cluster, prefix string,
+) (int64, <-chan error, error) {
+	setup := func(db *gosql.DB) (txn *gosql.Tx, jobID int64, err error) {
+		txn, err = db.Begin()
+		if err != nil {
+			return nil, 0, err
+		}
+		if _, err = txn.Exec(`CREATE INDEX foo ON tpcc.order (o_carrier_id);`); err != nil {
+			return nil, 0, err
+		}
+		if err = txn.QueryRow(`SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1`).Scan(&jobID); err != nil {
+			return nil, 0, err
+		}
+
+		return txn, jobID, nil
+	}
+
+	conn := c.Conn(ctx, 1)
+
+	txn, jobID, err := setup(conn)
+	if err != nil {
+		conn.Close()
+		return 0, nil, err
+	}
+
+	c.l.Printf("%s: created index add job %d\n", prefix, jobID)
+
+	notifyCommit := make(chan error)
+	go func() {
+		defer conn.Close()
+		notifyCommit <- txn.Commit()
+	}()
+
+	return jobID, notifyCommit, nil
+}
+
+func makeIndexAddRollbackTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
+	return testSpec{
+		Name:    fmt.Sprintf("schemachange/indexrollback/tpcc-%d", warehouses),
+		Nodes:   nodes(numNodes),
+		Timeout: length * 2,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses,
+				Extra:      "--wait=false --tolerate-errors",
+				During: func(ctx context.Context) error {
+					gcTTL := 10 * time.Minute
+					prefix := "indexrollback"
+
+					createID, notifyCommit, err := createIndexAddJob(ctx, c, prefix)
+					if err != nil {
+						return err
+					}
+
+					conn := c.Conn(ctx, 1)
+					defer conn.Close()
+
+					if _, err := conn.Exec("ALTER INDEX tpcc.order@foo CONFIGURE ZONE USING gc.ttlseconds = $1", int64(gcTTL.Seconds())); err != nil {
+						return err
+					}
+
+					retryOpts := retry.Options{InitialBackoff: 10 * time.Second, MaxBackoff: time.Minute}
+					if err := jobutils.WaitForFractionalProgress(
+						ctx,
+						conn,
+						createID,
+						0.25,
+						retryOpts,
+					); err != nil {
+						return err
+					}
+
+					if _, err := conn.Exec(`CANCEL JOB $1`, createID); err != nil {
+						return err
+					}
+					c.l.Printf("%s: canceled job %d\n", prefix, createID)
+
+					if schemaChangeErr := <-notifyCommit; !testutils.IsError(schemaChangeErr, "job canceled") {
+						return errors.Errorf("expected 'job canceled' error, but got %+v", schemaChangeErr)
+					}
+
+					c.l.Printf("%s: rollback began %d\n", prefix, createID)
+					rollbackID, err := jobutils.QueryRecentJobID(conn, 0)
+					if err != nil {
+						return err
+					} else if rollbackID == createID {
+						return errors.Errorf("no rollback job created")
+					}
+
+					rollbackTimeoutSecs := int((gcTTL + (15 * time.Minute)).Seconds())
+					retryOpts = retry.Options{InitialBackoff: 5 * time.Second, Multiplier: 1, MaxRetries: rollbackTimeoutSecs / 5}
+					return jobutils.WaitForStatus(ctx, conn, rollbackID, jobs.StatusSucceeded, retryOpts)
+				},
+				Duration: length,
+			})
+		},
+	}
+}
+
+func runAndLogStmts(ctx context.Context, t *test, c *cluster, prefix string, stmts []string) error {
+	db := c.Conn(ctx, 1)
+	defer db.Close()
+	c.l.Printf("%s: running %d statements\n", prefix, len(stmts))
+	start := timeutil.Now()
+	for i, stmt := range stmts {
+		c.l.Printf("%s: running statement %d...\n", prefix, i+1)
+		before := timeutil.Now()
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+		c.l.Printf("%s: statement %d: %q took %v\n", prefix, i+1, stmt, timeutil.Since(before))
+	}
+	c.l.Printf("%s: ran %d statements in %v\n", prefix, len(stmts), timeutil.Since(start))
 	return nil
 }

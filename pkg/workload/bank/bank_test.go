@@ -55,7 +55,7 @@ func TestBank(t *testing.T) {
 			bankTable := bank.Tables()[0]
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, bankTable.Name, bankTable.Schema))
 
-			if err := workload.Split(ctx, sqlDB.DB, bankTable, 1 /* concurrency */); err != nil {
+			if err := workload.Split(ctx, db, bankTable, 1 /* concurrency */); err != nil {
 				t.Fatalf("%+v", err)
 			}
 

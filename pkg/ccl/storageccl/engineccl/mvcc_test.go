@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func iterateExpectErr(
@@ -34,6 +35,7 @@ func iterateExpectErr(
 	errString string,
 ) func(*testing.T) {
 	return func(t *testing.T) {
+		t.Helper()
 		iter := NewMVCCIncrementalIterator(e, IterOptions{
 			StartTime:  startTime,
 			EndTime:    endTime,
@@ -49,7 +51,6 @@ func iterateExpectErr(
 		if _, err := iter.Valid(); !testutils.IsError(err, errString) {
 			t.Fatalf("expected error %q but got %v", errString, err)
 		}
-
 	}
 }
 
@@ -61,6 +62,7 @@ func assertEqualKVs(
 	expected []engine.MVCCKeyValue,
 ) func(*testing.T) {
 	return func(t *testing.T) {
+		t.Helper()
 		iter := NewMVCCIncrementalIterator(e, IterOptions{
 			StartTime:  startTime,
 			EndTime:    endTime,
@@ -159,25 +161,31 @@ func TestMVCCIterateIncremental(t *testing.T) {
 
 		// Exercise intent handling.
 		txn1ID := uuid.MakeV4()
-		txn1 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
-			Key:       testKey1,
-			ID:        txn1ID,
-			Epoch:     1,
-			Timestamp: ts4,
-		}}
+		txn1 := roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Key:       testKey1,
+				ID:        txn1ID,
+				Epoch:     1,
+				Timestamp: ts4,
+			},
+			OrigTimestamp: ts4,
+		}
 		txn1Val := roachpb.Value{RawBytes: testValue4}
-		if err := engine.MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.TxnMeta.Timestamp, txn1Val, &txn1); err != nil {
+		if err := engine.MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.OrigTimestamp, txn1Val, &txn1); err != nil {
 			t.Fatal(err)
 		}
 		txn2ID := uuid.MakeV4()
-		txn2 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
-			Key:       testKey2,
-			ID:        txn2ID,
-			Epoch:     1,
-			Timestamp: ts4,
-		}}
+		txn2 := roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Key:       testKey2,
+				ID:        txn2ID,
+				Epoch:     1,
+				Timestamp: ts4,
+			},
+			OrigTimestamp: ts4,
+		}
 		txn2Val := roachpb.Value{RawBytes: testValue4}
-		if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.TxnMeta.Timestamp, txn2Val, &txn2); err != nil {
+		if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("intents1",
@@ -231,25 +239,31 @@ func TestMVCCIterateIncremental(t *testing.T) {
 
 		// Exercise intent handling.
 		txn1ID := uuid.MakeV4()
-		txn1 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
-			Key:       testKey1,
-			ID:        txn1ID,
-			Epoch:     1,
-			Timestamp: ts4,
-		}}
+		txn1 := roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Key:       testKey1,
+				ID:        txn1ID,
+				Epoch:     1,
+				Timestamp: ts4,
+			},
+			OrigTimestamp: ts4,
+		}
 		txn1Val := roachpb.Value{RawBytes: testValue4}
-		if err := engine.MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.TxnMeta.Timestamp, txn1Val, &txn1); err != nil {
+		if err := engine.MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.OrigTimestamp, txn1Val, &txn1); err != nil {
 			t.Fatal(err)
 		}
 		txn2ID := uuid.MakeV4()
-		txn2 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
-			Key:       testKey2,
-			ID:        txn2ID,
-			Epoch:     1,
-			Timestamp: ts4,
-		}}
+		txn2 := roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Key:       testKey2,
+				ID:        txn2ID,
+				Epoch:     1,
+				Timestamp: ts4,
+			},
+			OrigTimestamp: ts4,
+		}
 		txn2Val := roachpb.Value{RawBytes: testValue4}
-		if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.TxnMeta.Timestamp, txn2Val, &txn2); err != nil {
+		if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("intents1",
@@ -339,4 +353,257 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 			assertEqualKVs(eng, fn, keys.MinKey, keys.MaxKey, testCase.start, testCase.end, expectedKVs)(t)
 		})
 	}
+}
+
+func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Create a DB containing 2 keys, a and b, where b has an intent. We use the
+	// regular MVCCPut operation to generate these keys, which we'll later be
+	// copying into manually created sstables.
+	ctx := context.Background()
+	db1 := engine.NewInMem(roachpb.Attributes{}, 10<<20 /* 10 MB */)
+	defer db1.Close()
+
+	put := func(key, value string, ts int64, txn *roachpb.Transaction) {
+		v := roachpb.MakeValueFromString(value)
+		if err := engine.MVCCPut(
+			ctx, db1, nil, roachpb.Key(key), hlc.Timestamp{WallTime: ts}, v, txn,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	put("a", "a value", 1, nil)
+	put("b", "b value", 2, &roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{
+			Key:       roachpb.Key("b"),
+			ID:        uuid.MakeV4(),
+			Epoch:     1,
+			Timestamp: hlc.Timestamp{WallTime: 2},
+		},
+		OrigTimestamp: hlc.Timestamp{WallTime: 2},
+	})
+
+	// Create a second DB in which we'll create a specific SSTable structure: the
+	// first SSTable contains 2 KVs where the first is a regular versioned key
+	// and the second is the MVCC metadata entry (i.e. an intent). The next
+	// SSTable contains the provisional value for the intent. The effect is that
+	// the metadata entry is separated from the entry it is metadata for.
+	//
+	//   SSTable 1:
+	//     a@1
+	//     b@<meta>
+	//
+	//   SSTable 2:
+	//     b@2
+	db2 := engine.NewInMem(roachpb.Attributes{}, 10<<20 /* 10 MB */)
+	defer db2.Close()
+
+	ingest := func(it engine.Iterator, count int) {
+		sst, err := engine.MakeRocksDBSstFileWriter()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer sst.Close()
+
+		for i := 0; i < count; i++ {
+			ok, err := it.Valid()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatal("expected key")
+			}
+			if err := sst.Add(engine.MVCCKeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
+				t.Fatal(err)
+			}
+			it.Next()
+		}
+		sstContents, err := sst.Finish()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db2.WriteFile(`ingest`, sstContents); err != nil {
+			t.Fatal(err)
+		}
+		if err := db2.IngestExternalFiles(ctx, []string{`ingest`}, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	{
+		// Iterate over the entries in the first DB, ingesting them into SSTables
+		// in the second DB.
+		it := db1.NewIterator(engine.IterOptions{
+			UpperBound: keys.MaxKey,
+		})
+		it.Seek(engine.MVCCKey{Key: keys.MinKey})
+		ingest(it, 2)
+		ingest(it, 1)
+		it.Close()
+	}
+
+	{
+		// Use an incremental iterator to simulate an incremental backup from (1,
+		// 2]. Note that incremental iterators are exclusive on the start time and
+		// inclusive on the end time. The expectation is that we'll see a write
+		// intent error.
+		it := NewMVCCIncrementalIterator(db2, IterOptions{
+			StartTime:  hlc.Timestamp{WallTime: 1},
+			EndTime:    hlc.Timestamp{WallTime: 2},
+			UpperBound: keys.MaxKey,
+		})
+		defer it.Close()
+		for it.Seek(engine.MVCCKey{Key: keys.MinKey}); ; it.Next() {
+			ok, err := it.Valid()
+			if err != nil {
+				if _, ok = err.(*roachpb.WriteIntentError); ok {
+					// This is the write intent error we were expecting.
+					return
+				}
+				t.Fatalf("%T: %s", err, err)
+			}
+			if !ok {
+				break
+			}
+		}
+		t.Fatalf("expected write intent error, but found success")
+	}
+}
+
+// TestMVCCIncrementalIteratorIntentDeletion checks a workaround in
+// MVCCIncrementalIterator for a bug in time-bound iterators, where an intent
+// has been deleted, but the time-bound iterator doesn't see the deletion.
+func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	txn := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.Transaction {
+		return &roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Key:       key,
+				ID:        uuid.MakeV4(),
+				Epoch:     1,
+				Timestamp: ts,
+			},
+			OrigTimestamp: ts,
+		}
+	}
+	intent := func(txn *roachpb.Transaction) roachpb.Intent {
+		return roachpb.Intent{
+			Span:   roachpb.Span{Key: txn.Key},
+			Txn:    txn.TxnMeta,
+			Status: roachpb.COMMITTED,
+		}
+	}
+	slurpKVs := func(
+		e engine.Reader, prefix roachpb.Key, startTime, endTime hlc.Timestamp,
+	) ([]engine.MVCCKeyValue, error) {
+		endKey := prefix.PrefixEnd()
+		iter := NewMVCCIncrementalIterator(e, IterOptions{
+			StartTime:  startTime,
+			EndTime:    endTime,
+			UpperBound: endKey,
+		})
+		defer iter.Close()
+		var kvs []engine.MVCCKeyValue
+		for iter.Seek(engine.MakeMVCCMetadataKey(prefix)); ; iter.Next() {
+			if ok, err := iter.Valid(); err != nil {
+				return nil, err
+			} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
+				break
+			}
+			kvs = append(kvs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+		}
+		return kvs, nil
+	}
+
+	ctx := context.Background()
+	kA := roachpb.Key("kA")
+	vA1 := roachpb.MakeValueFromString("vA1")
+	vA2 := roachpb.MakeValueFromString("vA2")
+	vA3 := roachpb.MakeValueFromString("vA3")
+	kB := roachpb.Key("kB")
+	vB1 := roachpb.MakeValueFromString("vB1")
+	kC := roachpb.Key("kC")
+	vC1 := roachpb.MakeValueFromString("vC1")
+	ts0 := hlc.Timestamp{WallTime: 0}
+	ts1 := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+	ts3 := hlc.Timestamp{WallTime: 3}
+	txnA1 := txn(kA, ts1)
+	txnA3 := txn(kA, ts3)
+	txnB1 := txn(kB, ts1)
+	txnC1 := txn(kC, ts1)
+
+	db := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	defer db.Close()
+
+	// Set up two sstables very specifically:
+	//
+	// sst1 (time-bound metadata ts1->ts1)
+	// kA -> (intent)
+	// kA:1 -> vA1
+	// kB -> (intent)
+	// kB:1 -> vB1
+	// kC -> (intent)
+	// kC:1 -> vC1
+	//
+	// sst2 (time-bound metadata ts2->ts3) the intent deletions are for the
+	// intents at ts1, but there's no way know that when constructing the
+	// metadata (hence the time-bound iterator bug)
+	// kA -> (intent) [NB this overwrites the intent deletion]
+	// kA:3 -> vA3
+	// kA:2 -> vA2
+	// kB -> (intent deletion)
+	require.NoError(t, engine.MVCCPut(ctx, db, nil, kA, txnA1.OrigTimestamp, vA1, txnA1))
+	require.NoError(t, engine.MVCCPut(ctx, db, nil, kB, txnB1.OrigTimestamp, vB1, txnB1))
+	require.NoError(t, engine.MVCCPut(ctx, db, nil, kC, txnC1.OrigTimestamp, vC1, txnC1))
+	require.NoError(t, db.Flush())
+	require.NoError(t, db.Compact())
+	require.NoError(t, engine.MVCCResolveWriteIntent(ctx, db, nil, intent(txnA1)))
+	require.NoError(t, engine.MVCCResolveWriteIntent(ctx, db, nil, intent(txnB1)))
+	require.NoError(t, engine.MVCCPut(ctx, db, nil, kA, ts2, vA2, nil))
+	require.NoError(t, engine.MVCCPut(ctx, db, nil, kA, txnA3.Timestamp, vA3, txnA3))
+	require.NoError(t, db.Flush())
+
+	// Double-check that we've created the SSTs we intended to.
+	userProps, err := db.GetUserProperties()
+	require.NoError(t, err)
+	require.Len(t, userProps.Sst, 2)
+	require.Equal(t, userProps.Sst[0].TsMin, &ts1)
+	require.Equal(t, userProps.Sst[0].TsMax, &ts1)
+	require.Equal(t, userProps.Sst[1].TsMin, &ts2)
+	require.Equal(t, userProps.Sst[1].TsMax, &ts3)
+
+	// The kA ts1 intent has been resolved. There's now a new intent on kA, but
+	// the timestamp (ts3) is too new so it should be ignored.
+	kvs, err := slurpKVs(db, kA, ts0, ts1)
+	require.NoError(t, err)
+	require.Equal(t, []engine.MVCCKeyValue{
+		{Key: engine.MVCCKey{Key: kA, Timestamp: ts1}, Value: vA1.RawBytes},
+	}, kvs)
+	// kA has a value at ts2. Again the intent is too new (ts3), so ignore.
+	kvs, err = slurpKVs(db, kA, ts0, ts2)
+	require.NoError(t, err)
+	require.Equal(t, []engine.MVCCKeyValue{
+		{Key: engine.MVCCKey{Key: kA, Timestamp: ts2}, Value: vA2.RawBytes},
+		{Key: engine.MVCCKey{Key: kA, Timestamp: ts1}, Value: vA1.RawBytes},
+	}, kvs)
+	// At ts3, we should see the new intent
+	_, err = slurpKVs(db, kA, ts0, ts3)
+	require.EqualError(t, err, `conflicting intents on "kA"`)
+
+	// Similar to the kA ts1 check, but there is no newer intent. We expect to
+	// pick up the intent deletion and it should cancel out the intent, leaving
+	// only the value at ts1.
+	kvs, err = slurpKVs(db, kB, ts0, ts1)
+	require.NoError(t, err)
+	require.Equal(t, []engine.MVCCKeyValue{
+		{Key: engine.MVCCKey{Key: kB, Timestamp: ts1}, Value: vB1.RawBytes},
+	}, kvs)
+
+	// Sanity check that we see the still unresolved intent for kC ts1.
+	_, err = slurpKVs(db, kC, ts0, ts1)
+	require.EqualError(t, err, `conflicting intents on "kC"`)
 }

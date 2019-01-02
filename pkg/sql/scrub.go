@@ -20,14 +20,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 type scrubNode struct {
@@ -101,18 +100,14 @@ type scrubRun struct {
 func (n *scrubNode) startExec(params runParams) error {
 	switch n.n.Typ {
 	case tree.ScrubTable:
-		tableName, err := n.n.Table.Normalize()
-		if err != nil {
-			return err
-		}
 		// If the tableName provided refers to a view and error will be
 		// returned here.
 		tableDesc, err := ResolveExistingObject(
-			params.ctx, params.p, tableName, true /*required*/, requireTableDesc)
+			params.ctx, params.p, &n.n.Table, true /*required*/, requireTableDesc)
 		if err != nil {
 			return err
 		}
-		if err := n.startScrubTable(params.ctx, params.p, tableDesc, tableName); err != nil {
+		if err := n.startScrubTable(params.ctx, params.p, tableDesc, &n.n.Table); err != nil {
 			return err
 		}
 	case tree.ScrubDatabase:
@@ -120,8 +115,7 @@ func (n *scrubNode) startExec(params runParams) error {
 			return err
 		}
 	default:
-		return pgerror.NewErrorf(pgerror.CodeInternalError,
-			"unexpected SCRUB type received, got: %v", n.n.Typ)
+		return pgerror.NewAssertionErrorf("unexpected SCRUB type received, got: %v", n.n.Typ)
 	}
 	return nil
 }
@@ -171,22 +165,23 @@ func (n *scrubNode) Close(ctx context.Context) {
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
-	dbDesc, err := ResolveDatabase(ctx, p, database, true /*required*/)
+	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, database, true /*required*/)
 	if err != nil {
 		return err
 	}
-	tbNames, err := GetObjectNames(ctx, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
+	tbNames, err := GetObjectNames(ctx, p.txn, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
 	if err != nil {
 		return err
 	}
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		tableDesc, _, err := p.LogicalSchemaAccessor().GetObjectDesc(
-			tableName, p.ObjectLookupFlags(ctx, true /*required*/))
+		objDesc, _, err := p.LogicalSchemaAccessor().GetObjectDesc(ctx, p.txn,
+			tableName, p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/))
 		if err != nil {
 			return err
 		}
+		tableDesc := objDesc.(*sqlbase.ImmutableTableDescriptor)
 		// Skip non-tables and don't throw an error if we encounter one.
 		if !tableDesc.IsTable() {
 			continue
@@ -199,7 +194,10 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 }
 
 func (n *scrubNode) startScrubTable(
-	ctx context.Context, p *planner, tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
+	ctx context.Context,
+	p *planner,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableName *tree.TableName,
 ) error {
 	ts, hasTS, err := p.getTimestamp(n.n.AsOf)
 	if err != nil {
@@ -277,7 +275,7 @@ func (n *scrubNode) startScrubTable(
 // getColumns returns the columns that are stored in an index k/v. The
 // column names and types are also returned.
 func getColumns(
-	tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor, indexDesc *sqlbase.IndexDescriptor,
 ) (columns []*sqlbase.ColumnDescriptor, columnNames []string, columnTypes []sqlbase.ColumnType) {
 	colToIdx := make(map[sqlbase.ColumnID]int)
 	for i, col := range tableDesc.Columns {
@@ -308,7 +306,7 @@ func getColumns(
 // getPrimaryColIdxs returns a list of the primary index columns and
 // their corresponding index in the columns list.
 func getPrimaryColIdxs(
-	tableDesc *sqlbase.TableDescriptor, columns []*sqlbase.ColumnDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor, columns []*sqlbase.ColumnDescriptor,
 ) (primaryColIdxs []int, err error) {
 	for i, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		rowIdx := -1
@@ -403,7 +401,7 @@ func tableColumnsProjection(tableName string, columns []string) string {
 // createPhysicalCheckOperations will return the physicalCheckOperation
 // for all indexes on a table.
 func createPhysicalCheckOperations(
-	tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
+	tableDesc *sqlbase.ImmutableTableDescriptor, tableName *tree.TableName,
 ) (checks []checkOperation) {
 	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.PrimaryIndex))
 	for i := range tableDesc.Indexes {
@@ -420,7 +418,7 @@ func createPhysicalCheckOperations(
 // first invalid index.
 func createIndexCheckOperations(
 	indexNames tree.NameList,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
@@ -478,7 +476,7 @@ func createConstraintCheckOperations(
 	ctx context.Context,
 	p *planner,
 	constraintNames tree.NameList,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
@@ -526,14 +524,14 @@ func createConstraintCheckOperations(
 
 // scrubPlanDistSQL will prepare and run the plan in distSQL.
 func scrubPlanDistSQL(
-	ctx context.Context, planCtx *planningCtx, plan planNode,
-) (*physicalPlan, error) {
+	ctx context.Context, planCtx *PlanningCtx, plan planNode,
+) (*PhysicalPlan, error) {
 	log.VEvent(ctx, 1, "creating DistSQL plan")
-	physPlan, err := planCtx.extendedEvalCtx.DistSQLPlanner.createPlanForNode(planCtx, plan)
+	physPlan, err := planCtx.ExtendedEvalCtx.DistSQLPlanner.createPlanForNode(planCtx, plan)
 	if err != nil {
 		return nil, err
 	}
-	planCtx.extendedEvalCtx.DistSQLPlanner.FinalizePlan(planCtx, &physPlan)
+	planCtx.ExtendedEvalCtx.DistSQLPlanner.FinalizePlan(planCtx, &physPlan)
 	return &physPlan, nil
 }
 
@@ -541,15 +539,15 @@ func scrubPlanDistSQL(
 // RowContainer is returned, the caller must close it.
 func scrubRunDistSQL(
 	ctx context.Context,
-	planCtx *planningCtx,
+	planCtx *PlanningCtx,
 	p *planner,
-	plan *physicalPlan,
+	plan *PhysicalPlan,
 	columnTypes []sqlbase.ColumnType,
 ) (*sqlbase.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
 	rows := sqlbase.NewRowContainer(*p.extendedEvalCtx.ActiveMemAcc, ci, 0 /* rowCapacity */)
 	rowResultWriter := NewRowResultWriter(rows)
-	recv := makeDistSQLReceiver(
+	recv := MakeDistSQLReceiver(
 		ctx,
 		rowResultWriter,
 		tree.Rows,
@@ -561,8 +559,12 @@ func scrubRunDistSQL(
 		},
 		p.extendedEvalCtx.Tracing,
 	)
+	defer recv.Release()
 
-	p.extendedEvalCtx.DistSQLPlanner.Run(planCtx, p.txn, plan, recv, &p.extendedEvalCtx)
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := p.extendedEvalCtx
+	p.extendedEvalCtx.DistSQLPlanner.Run(
+		planCtx, p.txn, plan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	if rowResultWriter.Err() != nil {
 		return rows, rowResultWriter.Err()
 	} else if rows.Len() == 0 {

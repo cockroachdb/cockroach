@@ -17,6 +17,7 @@ package tracing
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -135,7 +136,7 @@ func TestStartChildSpan(t *testing.T) {
 	tr := NewTracer()
 	sp1 := tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 := StartChildSpan("child", sp1, false /*!separateRecording*/)
+	sp2 := StartChildSpan("child", sp1, nil /* logTags */, false /*separateRecording*/)
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
@@ -147,7 +148,7 @@ func TestStartChildSpan(t *testing.T) {
 
 	sp1 = tr.StartSpan("parent", Recordable)
 	StartRecording(sp1, SingleNodeRecording)
-	sp2 = StartChildSpan("child", sp1, true /*separateRecording*/)
+	sp2 = StartChildSpan("child", sp1, nil /* logTags */, true /*separateRecording*/)
 	sp2.Finish()
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
@@ -157,6 +158,21 @@ func TestStartChildSpan(t *testing.T) {
 	}
 	if err := TestingCheckRecordedSpans(GetRecording(sp2), `
 		span child:
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	sp1 = tr.StartSpan("parent", Recordable)
+	StartRecording(sp1, SingleNodeRecording)
+	sp2 = StartChildSpan(
+		"child", sp1, logtags.SingleTagBuffer("key", "val"), false, /*separateRecording*/
+	)
+	sp2.Finish()
+	sp1.Finish()
+	if err := TestingCheckRecordedSpans(GetRecording(sp1), `
+		span parent:
+			span child:
+				tags: key=val
 	`); err != nil {
 		t.Fatal(err)
 	}

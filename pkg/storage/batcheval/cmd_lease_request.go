@@ -32,7 +32,7 @@ func init() {
 // of the previous lease (or zero). If this range replica is already the lease
 // holder, the expiration will be extended or shortened as indicated. For a new
 // lease, all duties required of the range lease holder are commenced, including
-// clearing the command queue and timestamp cache.
+// releasing all latches and clearing the timestamp cache.
 func RequestLease(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -76,7 +76,7 @@ func RequestLease(
 		// If the lease holder promised to not propose any commands below
 		// MinProposedTS, it must also not be allowed to extend a lease before that
 		// timestamp. We make sure that when a node restarts, its earlier in-flight
-		// commands (which are not tracked by the command queue post restart)
+		// commands (which are not tracked by the spanlatch manager post restart)
 		// receive an error under the new lease by making sure the sequence number
 		// of that lease is higher. This in turn is achieved by forwarding its start
 		// time here, which makes it not Equivalent() to the preceding lease for the

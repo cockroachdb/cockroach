@@ -6,8 +6,8 @@ BEGIN TRANSACTION
 
 statement ok
 CREATE TABLE kv (
-  k CHAR PRIMARY KEY,
-  v CHAR
+  k VARCHAR PRIMARY KEY,
+  v VARCHAR
 )
 
 statement ok
@@ -255,7 +255,7 @@ COMMIT
 
 # We can't set isolation level to an unsupported one.
 
-statement error unsupported isolation level "read committed"
+statement error invalid value for parameter "transaction_isolation": "read committed"
 SET transaction_isolation = 'read committed'
 
 # We can explicitly start a transaction with isolation level
@@ -661,7 +661,7 @@ SHOW TRANSACTION STATUS
 ----
 RestartWait
 
-statement error SAVEPOINT not supported except for COCKROACH_RESTART
+statement error pq: SAVEPOINT "cockroach_restart" is in use
 ROLLBACK TO SAVEPOINT bogus_name
 
 query T
@@ -676,7 +676,7 @@ ROLLBACK
 statement ok
 BEGIN TRANSACTION
 
-statement error SAVEPOINT not supported except for COCKROACH_RESTART
+statement error SAVEPOINT not supported except for cockroach_restart
 SAVEPOINT other
 
 statement ok
@@ -685,7 +685,7 @@ ROLLBACK
 statement ok
 BEGIN TRANSACTION
 
-statement error SAVEPOINT not supported except for COCKROACH_RESTART
+statement error SAVEPOINT not supported except for cockroach_restart
 RELEASE SAVEPOINT other
 
 statement ok
@@ -694,7 +694,7 @@ ROLLBACK
 statement ok
 BEGIN TRANSACTION
 
-statement error SAVEPOINT not supported except for COCKROACH_RESTART
+statement error SAVEPOINT not supported except for cockroach_restart
 ROLLBACK TO SAVEPOINT other
 
 statement ok
@@ -704,7 +704,7 @@ ROLLBACK
 statement ok
 BEGIN TRANSACTION; UPSERT INTO kv VALUES('savepoint', 'true')
 
-statement error SAVEPOINT COCKROACH_RESTART needs to be the first statement in a transaction
+statement error SAVEPOINT cockroach_restart needs to be the first statement in a transaction
 SAVEPOINT cockroach_restart
 
 statement ok
@@ -766,7 +766,7 @@ ROLLBACK
 statement ok
 BEGIN
 
-statement error pgcode 3B000 savepoint COCKROACH_RESTART has not been used
+statement error pgcode 3B000 savepoint cockroach_restart has not been used
 ROLLBACK TO SAVEPOINT cockroach_restart
 
 statement ok
@@ -780,7 +780,7 @@ BEGIN
 statement error pq: relation "bogus_name" does not exist
 SELECT * from bogus_name
 
-statement error pgcode 3B000 savepoint COCKROACH_RESTART has not been used
+statement error pgcode 3B000 savepoint cockroach_restart has not been used
 ROLLBACK TO SAVEPOINT cockroach_restart
 
 statement ok
@@ -931,19 +931,19 @@ statement ok
 COMMIT
 
 statement error cannot execute CREATE TABLE in a read-only transaction
-CREATE TABLE a (a int)
+CREATE TABLE tab (a int)
 
 statement error cannot execute INSERT in a read-only transaction
-INSERT INTO a VALUES(1)
+INSERT INTO kv VALUES('foo')
 
 statement error cannot execute UPDATE in a read-only transaction
-UPDATE a SET a = 1
+UPDATE kv SET v = 'foo'
 
 statement error cannot execute INSERT in a read-only transaction
-UPSERT INTO a VALUES(2)
+UPSERT INTO kv VALUES('foo')
 
 statement error cannot execute DELETE in a read-only transaction
-DELETE FROM a
+DELETE FROM kv
 
 statement error cannot execute nextval\(\) in a read-only transaction
 SELECT nextval('a')
@@ -980,7 +980,7 @@ ROLLBACK
 
 # Check that we don't crash when doing a release that wasn't preceded by a
 # savepoint.
-statement error pgcode 3B000 savepoint COCKROACH_RESTART has not been used
+statement error pgcode 3B000 savepoint cockroach_restart has not been used
 BEGIN; RELEASE SAVEPOINT cockroach_restart
 
 statement ok

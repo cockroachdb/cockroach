@@ -80,7 +80,7 @@ func MakeDefaultExprs(
 // and returns the defaultExprs for cols.
 func ProcessDefaultColumns(
 	cols []ColumnDescriptor,
-	tableDesc *TableDescriptor,
+	tableDesc *ImmutableTableDescriptor,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
 ) ([]ColumnDescriptor, []tree.TypedExpr, error) {
@@ -92,31 +92,21 @@ func ProcessDefaultColumns(
 }
 
 func processColumnSet(
-	cols []ColumnDescriptor, tableDesc *TableDescriptor, inSet func(ColumnDescriptor) bool,
+	cols []ColumnDescriptor, tableDesc *ImmutableTableDescriptor, inSet func(ColumnDescriptor) bool,
 ) []ColumnDescriptor {
 	colIDSet := make(map[ColumnID]struct{}, len(cols))
 	for _, col := range cols {
 		colIDSet[col.ID] = struct{}{}
 	}
 
-	addIf := func(col ColumnDescriptor) {
+	// Add all public or columns in DELETE_AND_WRITE_ONLY state
+	// that satisfy the condition.
+	for _, col := range tableDesc.WritableColumns() {
 		if inSet(col) {
 			if _, ok := colIDSet[col.ID]; !ok {
 				colIDSet[col.ID] = struct{}{}
 				cols = append(cols, col)
 			}
-		}
-	}
-
-	// Add any column that has a DEFAULT expression.
-	for _, col := range tableDesc.Columns {
-		addIf(col)
-	}
-	// Also add any column in a mutation that is DELETE_AND_WRITE_ONLY.
-	for _, m := range tableDesc.Mutations {
-		if col := m.GetColumn(); col != nil &&
-			m.State == DescriptorMutation_DELETE_AND_WRITE_ONLY {
-			addIf(*col)
 		}
 	}
 	return cols

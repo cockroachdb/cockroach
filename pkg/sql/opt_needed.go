@@ -45,6 +45,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *limitNode:
 		setNeededColumns(n.plan, needed)
 
+	case *max1RowNode:
+		setNeededColumns(n.plan, needed)
+
 	case *spoolNode:
 		setNeededColumns(n.source, needed)
 
@@ -88,6 +91,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.columns[:len(needed)-1], needed[:len(needed)-1])
 
 	case *valuesNode:
+		markOmitted(n.columns, needed)
+
+	case *virtualTableNode:
 		markOmitted(n.columns, needed)
 
 	case *projectSetNode:
@@ -252,7 +258,15 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
+	case *renameColumnNode:
+	case *renameDatabaseNode:
+	case *renameIndexNode:
+	case *renameTableNode:
 	case *scrubNode:
+	case *truncateNode:
+	case *commentOnColumnNode:
+	case *commentOnDatabaseNode:
+	case *commentOnTableNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:

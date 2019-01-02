@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,8 +40,8 @@ func TestFormatStatement(t *testing.T) {
 		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtShowPasswords,
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 
-		{`CREATE TABLE foo (x INT)`, tree.FmtAnonymize,
-			`CREATE TABLE _ (_ INT)`},
+		{`CREATE TABLE foo (x INT8)`, tree.FmtAnonymize,
+			`CREATE TABLE _ (_ INT8)`},
 		{`INSERT INTO foo(x) TABLE bar`, tree.FmtAnonymize,
 			`INSERT INTO _(_) TABLE _`},
 		{`UPDATE foo SET x = y`, tree.FmtAnonymize,
@@ -57,6 +58,25 @@ func TestFormatStatement(t *testing.T) {
 			`SHOW CREATE _`},
 		{`GRANT SELECT ON bar TO foo`, tree.FmtAnonymize,
 			`GRANT SELECT ON TABLE _ TO _`},
+
+		{`INSERT INTO a VALUES (-2, +3)`,
+			tree.FmtHideConstants,
+			`INSERT INTO a VALUES (_, _)`},
+
+		{`INSERT INTO a VALUES (0), (0), (0), (0), (0), (0)`,
+			tree.FmtHideConstants,
+			`INSERT INTO a VALUES (_), (__more5__)`},
+		{`INSERT INTO a VALUES (0, 0, 0, 0, 0, 0)`,
+			tree.FmtHideConstants,
+			`INSERT INTO a VALUES (_, _, __more4__)`},
+		{`INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0])`,
+			tree.FmtHideConstants,
+			`INSERT INTO a VALUES (ARRAY[_, _, __more5__])`},
+		{`INSERT INTO a VALUES (ARRAY[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ` +
+			`0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ` +
+			`0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])`,
+			tree.FmtHideConstants,
+			`INSERT INTO a VALUES (ARRAY[_, _, __more30__])`},
 
 		{`SELECT 1+COALESCE(NULL, 'a', x)-ARRAY[3.14]`, tree.FmtHideConstants,
 			`SELECT (_ + COALESCE(_, _, x)) - ARRAY[_]`},
@@ -100,8 +120,8 @@ func TestFormatTableName(t *testing.T) {
 		stmt     string
 		expected string
 	}{
-		{`CREATE TABLE foo (x INT)`,
-			`CREATE TABLE xoxoxo (x INT)`},
+		{`CREATE TABLE foo (x INT8)`,
+			`CREATE TABLE xoxoxo (x INT8)`},
 		{`INSERT INTO foo(x) TABLE bar`,
 			`INSERT INTO xoxoxo(x) TABLE xoxoxo`},
 		{`UPDATE foo SET x = y`,
@@ -125,7 +145,7 @@ func TestFormatTableName(t *testing.T) {
 
 	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
 	defer f.Close()
-	f.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.NormalizableTableName) {
+	f.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.TableName) {
 		ctx.WriteString("xoxoxo")
 	})
 
@@ -163,8 +183,10 @@ func TestFormatExpr(t *testing.T) {
 			`('abc')[string]`},
 		{`b'abc'`, tree.FmtShowTypes,
 			`('\x616263')[bytes]`},
+		{`B'10010'`, tree.FmtShowTypes,
+			`(B'10010')[varbit]`},
 		{`interval '3s'`, tree.FmtShowTypes,
-			`('3s')[interval]`},
+			`('00:00:03')[interval]`},
 		{`date '2003-01-01'`, tree.FmtShowTypes,
 			`('2003-01-01')[date]`},
 		{`timestamp '2003-01-01 00:00:00'`, tree.FmtShowTypes,
@@ -183,22 +205,40 @@ func TestFormatExpr(t *testing.T) {
 		// {`ARRAY[e'j\x10k']`, tree.FmtBareStrings,
 		//	 `ARRAY[j\x10k]`},
 
-		{`1`, tree.FmtParsable, "1:::INT"},
-		{`9223372036854775807`, tree.FmtParsable, "9223372036854775807:::INT"},
+		{`(-1):::INT`, tree.FmtParsableNumerics, "(-1)"},
+		{`'NaN':::FLOAT`, tree.FmtParsableNumerics, "'NaN'"},
+		{`'-Infinity':::FLOAT`, tree.FmtParsableNumerics, "'-Inf'"},
+		{`'Infinity':::FLOAT`, tree.FmtParsableNumerics, "'+Inf'"},
+		{`3.00:::FLOAT`, tree.FmtParsableNumerics, "3.0"},
+		{`(-3.00):::FLOAT`, tree.FmtParsableNumerics, "(-3.0)"},
+		{`'NaN':::DECIMAL`, tree.FmtParsableNumerics, "'NaN'"},
+		{`'-Infinity':::DECIMAL`, tree.FmtParsableNumerics, "'-Infinity'"},
+		{`'Infinity':::DECIMAL`, tree.FmtParsableNumerics, "'Infinity'"},
+		{`3.00:::DECIMAL`, tree.FmtParsableNumerics, "3.00"},
+		{`(-3.00):::DECIMAL`, tree.FmtParsableNumerics, "(-3.00)"},
+
+		{`1`, tree.FmtParsable, "1:::INT8"},
+		{`1:::INT`, tree.FmtParsable, "1:::INT8"},
+		{`9223372036854775807`, tree.FmtParsable, "9223372036854775807:::INT8"},
 		{`9223372036854775808`, tree.FmtParsable, "9223372036854775808:::DECIMAL"},
-		{`-1`, tree.FmtParsable, "(-1):::INT"},
-		{`-9223372036854775808`, tree.FmtParsable, "(-9223372036854775808):::INT"},
-		{`-9223372036854775809`, tree.FmtParsable, "-9223372036854775809:::DECIMAL"},
+		{`-1`, tree.FmtParsable, "(-1):::INT8"},
+		{`(-1):::INT`, tree.FmtParsable, "(-1):::INT8"},
+		{`-9223372036854775808`, tree.FmtParsable, "(-9223372036854775808):::INT8"},
+		{`-9223372036854775809`, tree.FmtParsable, "(-9223372036854775809):::DECIMAL"},
+		{`(-92233.1):::FLOAT`, tree.FmtParsable, "(-92233.1):::FLOAT8"},
+		{`92233.00:::DECIMAL`, tree.FmtParsable, "92233.00:::DECIMAL"},
+
+		{`B'00100'`, tree.FmtParsable, "B'00100'"},
 
 		{`unique_rowid() + 123`, tree.FmtParsable,
-			`unique_rowid() + 123:::INT`},
+			`unique_rowid() + 123:::INT8`},
 		{`sqrt(123.0) + 456`, tree.FmtParsable,
 			`sqrt(123.0:::DECIMAL) + 456:::DECIMAL`},
-		{`ROW()`, tree.FmtParsable, `ROW()`},
+		{`ROW()`, tree.FmtParsable, `()`},
 		{`now() + interval '3s'`, tree.FmtSimple,
-			`now() + '3s'`},
+			`now() + '00:00:03'`},
 		{`now() + interval '3s'`, tree.FmtParsable,
-			`now() + '3s':::INTERVAL`},
+			`now():::TIMESTAMPTZ + '00:00:03':::INTERVAL`},
 		{`current_date() - date '2003-01-01'`, tree.FmtSimple,
 			`current_date() - '2003-01-01'`},
 		{`current_date() - date '2003-01-01'`, tree.FmtParsable,
@@ -206,14 +246,18 @@ func TestFormatExpr(t *testing.T) {
 		{`now() - timestamp '2003-01-01'`, tree.FmtSimple,
 			`now() - '2003-01-01 00:00:00+00:00'`},
 		{`now() - timestamp '2003-01-01'`, tree.FmtParsable,
-			`now() - '2003-01-01 00:00:00+00:00':::TIMESTAMP`},
+			`now():::TIMESTAMPTZ - '2003-01-01 00:00:00+00:00':::TIMESTAMP`},
 		{`'+Inf':::DECIMAL + '-Inf':::DECIMAL + 'NaN':::DECIMAL`, tree.FmtParsable,
 			`('Infinity':::DECIMAL + '-Infinity':::DECIMAL) + 'NaN':::DECIMAL`},
-		{`'+Inf':::FLOAT + '-Inf':::FLOAT + 'NaN':::FLOAT`, tree.FmtParsable,
-			`('+Inf':::FLOAT + '-Inf':::FLOAT) + 'NaN':::FLOAT`},
+		{`'+Inf':::FLOAT8 + '-Inf':::FLOAT8 + 'NaN':::FLOAT8`, tree.FmtParsable,
+			`('+Inf':::FLOAT8 + '-Inf':::FLOAT8) + 'NaN':::FLOAT8`},
+		{`'12:00:00':::TIME`, tree.FmtParsable,
+			`'12:00:00':::TIME`},
+		{`'63616665-6630-3064-6465-616462656562':::UUID`, tree.FmtParsable,
+			`'63616665-6630-3064-6465-616462656562':::UUID`},
 
 		{`(123:::INT, 123:::DECIMAL)`, tree.FmtCheckEquivalence,
-			`(123:::INT, 123:::DECIMAL)`},
+			`(123:::INT8, 123:::DECIMAL)`},
 
 		{`(1, COALESCE(NULL, 123), ARRAY[45.6])`, tree.FmtHideConstants,
 			`(_, COALESCE(_, _), ARRAY[_])`},
@@ -233,6 +277,122 @@ func TestFormatExpr(t *testing.T) {
 			exprStr := tree.AsStringWithFlags(typeChecked, test.f)
 			if exprStr != test.expected {
 				t.Fatalf("expected %q, got %q", test.expected, exprStr)
+			}
+		})
+	}
+}
+
+func TestFormatExpr2(t *testing.T) {
+	// This tests formatting from an expr AST. Suitable for use if your input
+	// isn't easily creatable from a string without running an Eval.
+	testData := []struct {
+		expr     tree.Expr
+		f        tree.FmtFlags
+		expected string
+	}{
+		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegClass, "foo"),
+			tree.FmtParsable, `crdb_internal.create_REGCLASS(10,'foo'):::REGCLASS`},
+		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegProc, "foo"),
+			tree.FmtParsable, `crdb_internal.create_REGPROC(10,'foo'):::REGPROC`},
+		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegType, "foo"),
+			tree.FmtParsable, `crdb_internal.create_REGTYPE(10,'foo'):::REGTYPE`},
+		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegNamespace, "foo"),
+			tree.FmtParsable, `crdb_internal.create_REGNAMESPACE(10,'foo'):::REGNAMESPACE`},
+
+		// Ensure that nulls get properly type annotated when printed in an
+		// enclosing tuple that has a type for their position within the tuple.
+		{tree.NewDTuple(
+			types.TTuple{
+				Types: []types.T{
+					types.Int,
+					types.String,
+				},
+			}, tree.DNull, tree.NewDString("foo")),
+			tree.FmtParsable,
+			`(NULL::INT8, 'foo':::STRING)`,
+		},
+		{tree.NewDTuple(
+			types.TTuple{
+				Types: []types.T{
+					types.Unknown,
+					types.String,
+				},
+			}, tree.DNull, tree.NewDString("foo")),
+			tree.FmtParsable,
+			`(NULL, 'foo':::STRING)`,
+		},
+	}
+
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
+			ctx := tree.MakeSemaContext(false)
+			typeChecked, err := tree.TypeCheck(test.expr, &ctx, types.Any)
+			if err != nil {
+				t.Fatal(err)
+			}
+			exprStr := tree.AsStringWithFlags(typeChecked, test.f)
+			if exprStr != test.expected {
+				t.Fatalf("expected %q, got %q", test.expected, exprStr)
+			}
+		})
+	}
+}
+
+func TestFormatPgwireText(t *testing.T) {
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		{`true`, `t`},
+		{`false`, `f`},
+		{`ROW(1)`, `(1)`},
+		{`ROW(1, NULL)`, `(1,)`},
+		{`ROW(1, true, 3)`, `(1,t,3)`},
+		{`ROW(1, (2, 3))`, `(1,"(2,3)")`},
+		{`ROW(1, (2, 'a b'))`, `(1,"(2,""a b"")")`},
+		{`ROW(1, (2, 'a"b'))`, `(1,"(2,""a""""b"")")`},
+		{`ROW(1, 2, ARRAY[1,2,3])`, `(1,2,"{1,2,3}")`},
+		{`ROW(1, 2, ARRAY[1,NULL,3])`, `(1,2,"{1,NULL,3}")`},
+		{`ROW(1, 2, ARRAY['a','b','c'])`, `(1,2,"{a,b,c}")`},
+		{`ROW(1, 2, ARRAY[true,false,true])`, `(1,2,"{t,f,t}")`},
+		{`ARRAY[(1,2),(3,4)]`, `{"(1,2)","(3,4)"}`},
+		{`ARRAY[(false,'a'),(true,'b')]`, `{"(f,a)","(t,b)"}`},
+		{`ARRAY[(1,ARRAY[2,NULL])]`, `{"(1,\"{2,NULL}\")"}`},
+		{`ARRAY[(1,(1,2)),(2,(3,4))]`, `{"(1,\"(1,2)\")","(2,\"(3,4)\")"}`},
+
+		{`(((1, 'a b', 3), (4, 'c d'), ROW(6)), (7, 8), ROW('e f'))`,
+			`("(""(1,""""a b"""",3)"",""(4,""""c d"""")"",""(6)"")","(7,8)","(""e f"")")`},
+
+		{`(((1, '2', 3), (4, '5'), ROW(6)), (7, 8), ROW('9'))`,
+			`("(""(1,2,3)"",""(4,5)"",""(6)"")","(7,8)","(9)")`},
+
+		{`ARRAY[('a b',ARRAY['c d','e f']), ('g h',ARRAY['i j','k l'])]`,
+			`{"(\"a b\",\"{\"\"c d\"\",\"\"e f\"\"}\")","(\"g h\",\"{\"\"i j\"\",\"\"k l\"\"}\")"}`},
+
+		{`ARRAY[('1',ARRAY['2','3']), ('4',ARRAY['5','6'])]`,
+			`{"(1,\"{2,3}\")","(4,\"{5,6}\")"}`},
+
+		{`ARRAY[e'\U00002001☃']`, `{ ☃}`},
+	}
+	var evalCtx tree.EvalContext
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
+			expr, err := parser.ParseExpr(test.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := tree.MakeSemaContext(false)
+			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
+			if err != nil {
+				t.Fatal(err)
+			}
+			typeChecked, err = evalCtx.NormalizeExpr(typeChecked)
+			if err != nil {
+				t.Fatal(err)
+			}
+			exprStr := tree.AsStringWithFlags(typeChecked, tree.FmtPgwireText)
+			if exprStr != test.expected {
+				t.Fatalf("expected %s, got %s", test.expected, exprStr)
 			}
 		})
 	}

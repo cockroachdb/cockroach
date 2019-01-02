@@ -21,35 +21,11 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
-// TODO(tschottdorf): Should not live in enginepb (but can't live in roachpb
-// either).
-type IsolationType int32
-
-const (
-	SERIALIZABLE IsolationType = 0
-	SNAPSHOT     IsolationType = 1
-)
-
-var IsolationType_name = map[int32]string{
-	0: "SERIALIZABLE",
-	1: "SNAPSHOT",
-}
-var IsolationType_value = map[string]int32{
-	"SERIALIZABLE": 0,
-	"SNAPSHOT":     1,
-}
-
-func (x IsolationType) String() string {
-	return proto.EnumName(IsolationType_name, int32(x))
-}
-func (IsolationType) EnumDescriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{0} }
-
 // TxnMeta is the metadata of a Transaction record.
 type TxnMeta struct {
 	// id is a unique UUID value which identifies the transaction.
 	// This field is always filled in.
-	ID        github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=id,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"id"`
-	Isolation IsolationType                                       `protobuf:"varint,2,opt,name=isolation,proto3,enum=cockroach.storage.engine.enginepb.IsolationType" json:"isolation,omitempty"`
+	ID github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=id,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"id"`
 	// key is the key which anchors the transaction. This is typically
 	// the first key read or written during the transaction and
 	// determines which range in the cluster will hold the transaction
@@ -57,15 +33,61 @@ type TxnMeta struct {
 	Key []byte `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	// Incremented on txn retry.
 	Epoch uint32 `protobuf:"varint,4,opt,name=epoch,proto3" json:"epoch,omitempty"`
-	// The proposed timestamp for the transaction. This starts as the
-	// current wall time on the txn coordinator. This is the timestamp
-	// at which all of the transaction's writes are performed: even if
-	// intents have been laid down at different timestamps, the process
-	// of resolving them (e.g. when the txn commits) will bump them to
-	// this timestamp. SERIALIZABLE transactions only commit when
-	// timestamp == orig_timestamp. SNAPSHOT transactions can commit
-	// even when they've performed their reads (at orig_timestamp) at a
-	// different timestamp than their writes (at timestamp).
+	// The proposed timestamp for the transaction. This starts as the current wall
+	// time on the txn coordinator, and is forwarded by the timestamp cache if the
+	// txn attempts to write "beneath" another txn's writes.
+	//
+	// Writes within the txn are performed using the most up-to-date value of this
+	// timestamp that is available. For example, suppose a txn starts at some
+	// timestamp, writes a key/value, and has its timestamp forwarded while doing
+	// so because a later version already exists at that key. As soon as the txn
+	// coordinator learns of the updated timestamp, it will begin performing
+	// writes at the updated timestamp. The coordinator may, however, continue
+	// issuing writes at the original timestamp before it learns about the
+	// forwarded timestamp. The process of resolving the intents when the txn
+	// commits will bump any intents written at an older timestamp to the final
+	// commit timestamp.
+	//
+	// Note that reads do not occur at this timestamp; they instead occur at
+	// OrigTimestamp, which is tracked in the containing roachpb.Transaction.
+	//
+	// Writes used to be performed at the txn's original timestamp, which was
+	// necessary to avoid lost update anomalies in snapshot isolation mode. We no
+	// longer support snapshot isolation mode, and there are now several important
+	// reasons that writes are performed at this timestamp instead of the txn's
+	// original timestamp:
+	//
+	//    1. This timestamp is forwarded by the timestamp cache when this
+	//       transaction attempts to write beneath a more recent read. Leaving the
+	//       intent at the original timestamp would write beneath that read, which
+	//       would violate an invariant that time-bound iterators rely on.
+	//
+	//       For example, consider a client that uses a time-bound iterator to
+	//       poll for changes to a key. The client reads (ts5, ts10], sees no
+	//       writes, and reports that no changes have occurred up to t10. Then a
+	//       txn writes an intent at its original timestamp ts7. The txn's
+	//       timestamp is forwarded to ts11 by the timestamp cache thanks to the
+	//       client's read. Meanwhile, the client reads (ts10, ts15] and, again
+	//       seeing no intents, reports that no changes have occurred to the key
+	//       up to t15. Now the txn commits at ts11 and bumps the intent to ts11.
+	//       But the client thinks it has seen all changes up to t15, and so never
+	//       sees the intent! We avoid this problem by writing intents at the
+	//       provisional commit timestamp insteadr. In this example, the intent
+	//       would instead be written at ts11 and picked up by the client's next
+	//       read from (ts10, ts15].
+	//
+	//    2. Unnecessary PushTxn roundtrips are avoided. If a transaction is
+	//       forwarded from ts5 to ts10, the rest of its intents will be written
+	//       at ts10. Reads at t < ts10 that encounter these intents can ignore
+	//       them; if the intents had instead been left at ts5, these reads would
+	//       have needed to send PushTxn requests just to find out that the txn
+	//       had, in fact, been forwarded to a non-conflicting time.
+	//
+	//    3. Unnecessary intent rewriting is avoided. Writing at the original
+	//       timestamp when this timestamp has been forwarded guarantees that the
+	//       value will need to be rewritten at the forwarded timestamp if the
+	//       transaction commits.
+	//
 	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=timestamp" json:"timestamp"`
 	Priority  int32                        `protobuf:"varint,6,opt,name=priority,proto3" json:"priority,omitempty"`
 	// A one-indexed sequence number which is increased on each request
@@ -74,20 +96,6 @@ type TxnMeta struct {
 	// last request. Used to prevent replay and out-of-order application
 	// protection (by means of a transaction retry).
 	Sequence int32 `protobuf:"varint,7,opt,name=sequence,proto3" json:"sequence,omitempty"`
-	// A zero-indexed sequence number indicating the index of a command
-	// within a batch. This disambiguate Raft replays of a batch from
-	// multiple commands in a batch which modify the same key. The field
-	// has now been deprecated because each request in a batch is now
-	// given its own sequence number.
-	//
-	// TODO(nvanbenschoten): Remove this field and its uses entirely
-	// in 2.2. This is safe because the field is only set on pending
-	// intents by transactions with 2.0 coordinators. 2.1 nodes need
-	// to be able to handle the field so they can interop with 2.0 nodes.
-	// However, 2.2 nodes will not, because all transactions started by
-	// 2.0 nodes will necessarily be abandoned for 2.2 nodes to join a
-	// cluster.
-	DeprecatedBatchIndex int32 `protobuf:"varint,8,opt,name=deprecated_batch_index,json=deprecatedBatchIndex,proto3" json:"deprecated_batch_index,omitempty"`
 }
 
 func (m *TxnMeta) Reset()                    { *m = TxnMeta{} }
@@ -170,12 +178,94 @@ func (m *RangeAppliedState) String() string            { return proto.CompactTex
 func (*RangeAppliedState) ProtoMessage()               {}
 func (*RangeAppliedState) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{3} }
 
+// MVCCWriteValueOp corresponds to a value being written outside of a
+// transaction.
+type MVCCWriteValueOp struct {
+	Key       []byte                       `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Value     []byte                       `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+}
+
+func (m *MVCCWriteValueOp) Reset()                    { *m = MVCCWriteValueOp{} }
+func (m *MVCCWriteValueOp) String() string            { return proto.CompactTextString(m) }
+func (*MVCCWriteValueOp) ProtoMessage()               {}
+func (*MVCCWriteValueOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{4} }
+
+// MVCCUpdateIntentOp corresponds to an intent being written for a given
+// transaction.
+type MVCCWriteIntentOp struct {
+	TxnID     github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
+	TxnKey    []byte                                              `protobuf:"bytes,2,opt,name=txn_key,json=txnKey,proto3" json:"txn_key,omitempty"`
+	Timestamp cockroach_util_hlc.Timestamp                        `protobuf:"bytes,3,opt,name=timestamp" json:"timestamp"`
+}
+
+func (m *MVCCWriteIntentOp) Reset()                    { *m = MVCCWriteIntentOp{} }
+func (m *MVCCWriteIntentOp) String() string            { return proto.CompactTextString(m) }
+func (*MVCCWriteIntentOp) ProtoMessage()               {}
+func (*MVCCWriteIntentOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{5} }
+
+// MVCCUpdateIntentOp corresponds to an intent being updates at a larger
+// timestamp for a given transaction.
+type MVCCUpdateIntentOp struct {
+	TxnID     github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
+	Timestamp cockroach_util_hlc.Timestamp                        `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+}
+
+func (m *MVCCUpdateIntentOp) Reset()                    { *m = MVCCUpdateIntentOp{} }
+func (m *MVCCUpdateIntentOp) String() string            { return proto.CompactTextString(m) }
+func (*MVCCUpdateIntentOp) ProtoMessage()               {}
+func (*MVCCUpdateIntentOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{6} }
+
+// MVCCCommitIntentOp corresponds to an intent being committed for a given
+// transaction.
+type MVCCCommitIntentOp struct {
+	TxnID     github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
+	Key       []byte                                              `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Timestamp cockroach_util_hlc.Timestamp                        `protobuf:"bytes,3,opt,name=timestamp" json:"timestamp"`
+	Value     []byte                                              `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
+}
+
+func (m *MVCCCommitIntentOp) Reset()                    { *m = MVCCCommitIntentOp{} }
+func (m *MVCCCommitIntentOp) String() string            { return proto.CompactTextString(m) }
+func (*MVCCCommitIntentOp) ProtoMessage()               {}
+func (*MVCCCommitIntentOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{7} }
+
+// MVCCAbortIntentOp corresponds to an intent being aborted for a given
+// transaction.
+type MVCCAbortIntentOp struct {
+	TxnID github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
+}
+
+func (m *MVCCAbortIntentOp) Reset()                    { *m = MVCCAbortIntentOp{} }
+func (m *MVCCAbortIntentOp) String() string            { return proto.CompactTextString(m) }
+func (*MVCCAbortIntentOp) ProtoMessage()               {}
+func (*MVCCAbortIntentOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{8} }
+
+// MVCCLogicalOp is a union of all logical MVCC operation types.
+type MVCCLogicalOp struct {
+	WriteValue   *MVCCWriteValueOp   `protobuf:"bytes,1,opt,name=write_value,json=writeValue" json:"write_value,omitempty"`
+	WriteIntent  *MVCCWriteIntentOp  `protobuf:"bytes,2,opt,name=write_intent,json=writeIntent" json:"write_intent,omitempty"`
+	UpdateIntent *MVCCUpdateIntentOp `protobuf:"bytes,3,opt,name=update_intent,json=updateIntent" json:"update_intent,omitempty"`
+	CommitIntent *MVCCCommitIntentOp `protobuf:"bytes,4,opt,name=commit_intent,json=commitIntent" json:"commit_intent,omitempty"`
+	AbortIntent  *MVCCAbortIntentOp  `protobuf:"bytes,5,opt,name=abort_intent,json=abortIntent" json:"abort_intent,omitempty"`
+}
+
+func (m *MVCCLogicalOp) Reset()                    { *m = MVCCLogicalOp{} }
+func (m *MVCCLogicalOp) String() string            { return proto.CompactTextString(m) }
+func (*MVCCLogicalOp) ProtoMessage()               {}
+func (*MVCCLogicalOp) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{9} }
+
 func init() {
 	proto.RegisterType((*TxnMeta)(nil), "cockroach.storage.engine.enginepb.TxnMeta")
 	proto.RegisterType((*MVCCStatsDelta)(nil), "cockroach.storage.engine.enginepb.MVCCStatsDelta")
 	proto.RegisterType((*MVCCPersistentStats)(nil), "cockroach.storage.engine.enginepb.MVCCPersistentStats")
 	proto.RegisterType((*RangeAppliedState)(nil), "cockroach.storage.engine.enginepb.RangeAppliedState")
-	proto.RegisterEnum("cockroach.storage.engine.enginepb.IsolationType", IsolationType_name, IsolationType_value)
+	proto.RegisterType((*MVCCWriteValueOp)(nil), "cockroach.storage.engine.enginepb.MVCCWriteValueOp")
+	proto.RegisterType((*MVCCWriteIntentOp)(nil), "cockroach.storage.engine.enginepb.MVCCWriteIntentOp")
+	proto.RegisterType((*MVCCUpdateIntentOp)(nil), "cockroach.storage.engine.enginepb.MVCCUpdateIntentOp")
+	proto.RegisterType((*MVCCCommitIntentOp)(nil), "cockroach.storage.engine.enginepb.MVCCCommitIntentOp")
+	proto.RegisterType((*MVCCAbortIntentOp)(nil), "cockroach.storage.engine.enginepb.MVCCAbortIntentOp")
+	proto.RegisterType((*MVCCLogicalOp)(nil), "cockroach.storage.engine.enginepb.MVCCLogicalOp")
 }
 func (this *TxnMeta) Equal(that interface{}) bool {
 	if that == nil {
@@ -199,9 +289,6 @@ func (this *TxnMeta) Equal(that interface{}) bool {
 	if !this.ID.Equal(that1.ID) {
 		return false
 	}
-	if this.Isolation != that1.Isolation {
-		return false
-	}
 	if !bytes.Equal(this.Key, that1.Key) {
 		return false
 	}
@@ -215,9 +302,6 @@ func (this *TxnMeta) Equal(that interface{}) bool {
 		return false
 	}
 	if this.Sequence != that1.Sequence {
-		return false
-	}
-	if this.DeprecatedBatchIndex != that1.DeprecatedBatchIndex {
 		return false
 	}
 	return true
@@ -401,11 +485,6 @@ func (m *TxnMeta) MarshalTo(dAtA []byte) (int, error) {
 		return 0, err
 	}
 	i += n1
-	if m.Isolation != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintMvcc3(dAtA, i, uint64(m.Isolation))
-	}
 	if len(m.Key) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -434,11 +513,6 @@ func (m *TxnMeta) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x38
 		i++
 		i = encodeVarintMvcc3(dAtA, i, uint64(m.Sequence))
-	}
-	if m.DeprecatedBatchIndex != 0 {
-		dAtA[i] = 0x40
-		i++
-		i = encodeVarintMvcc3(dAtA, i, uint64(m.DeprecatedBatchIndex))
 	}
 	return i, nil
 }
@@ -671,6 +745,258 @@ func (m *RangeAppliedState) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *MVCCWriteValueOp) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MVCCWriteValueOp) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Key) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(len(m.Key)))
+		i += copy(dAtA[i:], m.Key)
+	}
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintMvcc3(dAtA, i, uint64(m.Timestamp.Size()))
+	n4, err := m.Timestamp.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
+	if len(m.Value) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(len(m.Value)))
+		i += copy(dAtA[i:], m.Value)
+	}
+	return i, nil
+}
+
+func (m *MVCCWriteIntentOp) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MVCCWriteIntentOp) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintMvcc3(dAtA, i, uint64(m.TxnID.Size()))
+	n5, err := m.TxnID.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n5
+	if len(m.TxnKey) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(len(m.TxnKey)))
+		i += copy(dAtA[i:], m.TxnKey)
+	}
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintMvcc3(dAtA, i, uint64(m.Timestamp.Size()))
+	n6, err := m.Timestamp.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n6
+	return i, nil
+}
+
+func (m *MVCCUpdateIntentOp) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MVCCUpdateIntentOp) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintMvcc3(dAtA, i, uint64(m.TxnID.Size()))
+	n7, err := m.TxnID.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n7
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintMvcc3(dAtA, i, uint64(m.Timestamp.Size()))
+	n8, err := m.Timestamp.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n8
+	return i, nil
+}
+
+func (m *MVCCCommitIntentOp) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MVCCCommitIntentOp) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintMvcc3(dAtA, i, uint64(m.TxnID.Size()))
+	n9, err := m.TxnID.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n9
+	if len(m.Key) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(len(m.Key)))
+		i += copy(dAtA[i:], m.Key)
+	}
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintMvcc3(dAtA, i, uint64(m.Timestamp.Size()))
+	n10, err := m.Timestamp.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n10
+	if len(m.Value) > 0 {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(len(m.Value)))
+		i += copy(dAtA[i:], m.Value)
+	}
+	return i, nil
+}
+
+func (m *MVCCAbortIntentOp) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MVCCAbortIntentOp) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintMvcc3(dAtA, i, uint64(m.TxnID.Size()))
+	n11, err := m.TxnID.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n11
+	return i, nil
+}
+
+func (m *MVCCLogicalOp) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MVCCLogicalOp) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.WriteValue != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.WriteValue.Size()))
+		n12, err := m.WriteValue.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n12
+	}
+	if m.WriteIntent != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.WriteIntent.Size()))
+		n13, err := m.WriteIntent.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n13
+	}
+	if m.UpdateIntent != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.UpdateIntent.Size()))
+		n14, err := m.UpdateIntent.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n14
+	}
+	if m.CommitIntent != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.CommitIntent.Size()))
+		n15, err := m.CommitIntent.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n15
+	}
+	if m.AbortIntent != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.AbortIntent.Size()))
+		n16, err := m.AbortIntent.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n16
+	}
+	return i, nil
+}
+
 func encodeVarintMvcc3(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -684,7 +1010,6 @@ func NewPopulatedTxnMeta(r randyMvcc3, easy bool) *TxnMeta {
 	this := &TxnMeta{}
 	v1 := github_com_cockroachdb_cockroach_pkg_util_uuid.NewPopulatedUUID(r)
 	this.ID = *v1
-	this.Isolation = IsolationType([]int32{0, 1}[r.Intn(2)])
 	v2 := r.Intn(100)
 	this.Key = make([]byte, v2)
 	for i := 0; i < v2; i++ {
@@ -700,10 +1025,6 @@ func NewPopulatedTxnMeta(r randyMvcc3, easy bool) *TxnMeta {
 	this.Sequence = int32(r.Int31())
 	if r.Intn(2) == 0 {
 		this.Sequence *= -1
-	}
-	this.DeprecatedBatchIndex = int32(r.Int31())
-	if r.Intn(2) == 0 {
-		this.DeprecatedBatchIndex *= -1
 	}
 	if !easy && r.Intn(10) != 0 {
 	}
@@ -858,9 +1179,6 @@ func (m *TxnMeta) Size() (n int) {
 	_ = l
 	l = m.ID.Size()
 	n += 1 + l + sovMvcc3(uint64(l))
-	if m.Isolation != 0 {
-		n += 1 + sovMvcc3(uint64(m.Isolation))
-	}
 	l = len(m.Key)
 	if l > 0 {
 		n += 1 + l + sovMvcc3(uint64(l))
@@ -875,9 +1193,6 @@ func (m *TxnMeta) Size() (n int) {
 	}
 	if m.Sequence != 0 {
 		n += 1 + sovMvcc3(uint64(m.Sequence))
-	}
-	if m.DeprecatedBatchIndex != 0 {
-		n += 1 + sovMvcc3(uint64(m.DeprecatedBatchIndex))
 	}
 	return n
 }
@@ -992,6 +1307,98 @@ func (m *RangeAppliedState) Size() (n int) {
 	return n
 }
 
+func (m *MVCCWriteValueOp) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Key)
+	if l > 0 {
+		n += 1 + l + sovMvcc3(uint64(l))
+	}
+	l = m.Timestamp.Size()
+	n += 1 + l + sovMvcc3(uint64(l))
+	l = len(m.Value)
+	if l > 0 {
+		n += 1 + l + sovMvcc3(uint64(l))
+	}
+	return n
+}
+
+func (m *MVCCWriteIntentOp) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TxnID.Size()
+	n += 1 + l + sovMvcc3(uint64(l))
+	l = len(m.TxnKey)
+	if l > 0 {
+		n += 1 + l + sovMvcc3(uint64(l))
+	}
+	l = m.Timestamp.Size()
+	n += 1 + l + sovMvcc3(uint64(l))
+	return n
+}
+
+func (m *MVCCUpdateIntentOp) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TxnID.Size()
+	n += 1 + l + sovMvcc3(uint64(l))
+	l = m.Timestamp.Size()
+	n += 1 + l + sovMvcc3(uint64(l))
+	return n
+}
+
+func (m *MVCCCommitIntentOp) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TxnID.Size()
+	n += 1 + l + sovMvcc3(uint64(l))
+	l = len(m.Key)
+	if l > 0 {
+		n += 1 + l + sovMvcc3(uint64(l))
+	}
+	l = m.Timestamp.Size()
+	n += 1 + l + sovMvcc3(uint64(l))
+	l = len(m.Value)
+	if l > 0 {
+		n += 1 + l + sovMvcc3(uint64(l))
+	}
+	return n
+}
+
+func (m *MVCCAbortIntentOp) Size() (n int) {
+	var l int
+	_ = l
+	l = m.TxnID.Size()
+	n += 1 + l + sovMvcc3(uint64(l))
+	return n
+}
+
+func (m *MVCCLogicalOp) Size() (n int) {
+	var l int
+	_ = l
+	if m.WriteValue != nil {
+		l = m.WriteValue.Size()
+		n += 1 + l + sovMvcc3(uint64(l))
+	}
+	if m.WriteIntent != nil {
+		l = m.WriteIntent.Size()
+		n += 1 + l + sovMvcc3(uint64(l))
+	}
+	if m.UpdateIntent != nil {
+		l = m.UpdateIntent.Size()
+		n += 1 + l + sovMvcc3(uint64(l))
+	}
+	if m.CommitIntent != nil {
+		l = m.CommitIntent.Size()
+		n += 1 + l + sovMvcc3(uint64(l))
+	}
+	if m.AbortIntent != nil {
+		l = m.AbortIntent.Size()
+		n += 1 + l + sovMvcc3(uint64(l))
+	}
+	return n
+}
+
 func sovMvcc3(x uint64) (n int) {
 	for {
 		n++
@@ -1004,6 +1411,42 @@ func sovMvcc3(x uint64) (n int) {
 }
 func sozMvcc3(x uint64) (n int) {
 	return sovMvcc3(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (this *MVCCLogicalOp) GetValue() interface{} {
+	if this.WriteValue != nil {
+		return this.WriteValue
+	}
+	if this.WriteIntent != nil {
+		return this.WriteIntent
+	}
+	if this.UpdateIntent != nil {
+		return this.UpdateIntent
+	}
+	if this.CommitIntent != nil {
+		return this.CommitIntent
+	}
+	if this.AbortIntent != nil {
+		return this.AbortIntent
+	}
+	return nil
+}
+
+func (this *MVCCLogicalOp) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *MVCCWriteValueOp:
+		this.WriteValue = vt
+	case *MVCCWriteIntentOp:
+		this.WriteIntent = vt
+	case *MVCCUpdateIntentOp:
+		this.UpdateIntent = vt
+	case *MVCCCommitIntentOp:
+		this.CommitIntent = vt
+	case *MVCCAbortIntentOp:
+		this.AbortIntent = vt
+	default:
+		return false
+	}
+	return true
 }
 func (m *TxnMeta) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -1064,25 +1507,6 @@ func (m *TxnMeta) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Isolation", wireType)
-			}
-			m.Isolation = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc3
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Isolation |= (IsolationType(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
@@ -1197,25 +1621,6 @@ func (m *TxnMeta) Unmarshal(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.Sequence |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 8:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DeprecatedBatchIndex", wireType)
-			}
-			m.DeprecatedBatchIndex = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc3
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.DeprecatedBatchIndex |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1959,6 +2364,866 @@ func (m *RangeAppliedState) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *MVCCWriteValueOp) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc3
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCWriteValueOp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCWriteValueOp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
+			if m.Key == nil {
+				m.Key = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Value = append(m.Value[:0], dAtA[iNdEx:postIndex]...)
+			if m.Value == nil {
+				m.Value = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMvcc3(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MVCCWriteIntentOp) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc3
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCWriteIntentOp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCWriteIntentOp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TxnID", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TxnID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TxnKey", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TxnKey = append(m.TxnKey[:0], dAtA[iNdEx:postIndex]...)
+			if m.TxnKey == nil {
+				m.TxnKey = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMvcc3(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MVCCUpdateIntentOp) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc3
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCUpdateIntentOp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCUpdateIntentOp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TxnID", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TxnID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMvcc3(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MVCCCommitIntentOp) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc3
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCCommitIntentOp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCCommitIntentOp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TxnID", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TxnID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
+			if m.Key == nil {
+				m.Key = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Timestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Value = append(m.Value[:0], dAtA[iNdEx:postIndex]...)
+			if m.Value == nil {
+				m.Value = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMvcc3(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MVCCAbortIntentOp) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc3
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCAbortIntentOp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCAbortIntentOp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TxnID", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TxnID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMvcc3(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MVCCLogicalOp) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc3
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCLogicalOp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCLogicalOp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field WriteValue", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.WriteValue == nil {
+				m.WriteValue = &MVCCWriteValueOp{}
+			}
+			if err := m.WriteValue.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field WriteIntent", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.WriteIntent == nil {
+				m.WriteIntent = &MVCCWriteIntentOp{}
+			}
+			if err := m.WriteIntent.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UpdateIntent", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.UpdateIntent == nil {
+				m.UpdateIntent = &MVCCUpdateIntentOp{}
+			}
+			if err := m.UpdateIntent.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommitIntent", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.CommitIntent == nil {
+				m.CommitIntent = &MVCCCommitIntentOp{}
+			}
+			if err := m.CommitIntent.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AbortIntent", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AbortIntent == nil {
+				m.AbortIntent = &MVCCAbortIntentOp{}
+			}
+			if err := m.AbortIntent.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMvcc3(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipMvcc3(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2067,56 +3332,67 @@ var (
 func init() { proto.RegisterFile("storage/engine/enginepb/mvcc3.proto", fileDescriptorMvcc3) }
 
 var fileDescriptorMvcc3 = []byte{
-	// 814 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x55, 0xcf, 0x8e, 0xe3, 0x34,
-	0x18, 0x6f, 0x9a, 0xce, 0x4c, 0xeb, 0x76, 0x86, 0xd4, 0x3b, 0x42, 0x51, 0xd1, 0xb6, 0xdd, 0xe5,
-	0x52, 0xad, 0x20, 0x59, 0xcd, 0x00, 0x87, 0xbd, 0xa5, 0x9d, 0x11, 0x54, 0xda, 0x1d, 0x96, 0xb4,
-	0xc3, 0x01, 0x09, 0x45, 0xae, 0x63, 0x52, 0xab, 0x69, 0x12, 0x62, 0xb7, 0xda, 0xbc, 0x01, 0x37,
-	0x78, 0x84, 0x95, 0x78, 0x09, 0x1e, 0x61, 0x8e, 0x1c, 0xd1, 0x1e, 0x2a, 0x28, 0x17, 0x1e, 0x80,
-	0x2b, 0x12, 0xb2, 0x9d, 0xa4, 0xbb, 0x08, 0xb5, 0x88, 0xd3, 0x9e, 0x6a, 0xff, 0xfe, 0x7c, 0x9f,
-	0xed, 0x9f, 0xeb, 0x80, 0xf7, 0x19, 0x8f, 0x53, 0x14, 0x10, 0x9b, 0x44, 0x01, 0x8d, 0x8a, 0x9f,
-	0x64, 0x66, 0x2f, 0xd7, 0x18, 0x5f, 0x5a, 0x49, 0x1a, 0xf3, 0x18, 0x3e, 0xc0, 0x31, 0x5e, 0xa4,
-	0x31, 0xc2, 0x73, 0x2b, 0x97, 0x5b, 0x4a, 0x67, 0x15, 0xf2, 0x8e, 0xb9, 0xe2, 0x34, 0xb4, 0xe7,
-	0x21, 0xb6, 0x39, 0x5d, 0x12, 0xc6, 0xd1, 0x32, 0x51, 0xe6, 0xce, 0x79, 0x10, 0x07, 0xb1, 0x1c,
-	0xda, 0x62, 0xa4, 0xd0, 0x87, 0xdf, 0xeb, 0xe0, 0x64, 0xfa, 0x22, 0x7a, 0x46, 0x38, 0x82, 0x5f,
-	0x80, 0x2a, 0xf5, 0x4d, 0xad, 0xaf, 0x0d, 0x5a, 0x43, 0xe7, 0x6e, 0xd3, 0xab, 0xbc, 0xda, 0xf4,
-	0x2e, 0x03, 0xca, 0xe7, 0xab, 0x99, 0x85, 0xe3, 0xa5, 0x5d, 0x76, 0xf7, 0x67, 0xbb, 0xb1, 0x9d,
-	0x2c, 0x02, 0x5b, 0x36, 0x5d, 0xad, 0xa8, 0x6f, 0xdd, 0xde, 0x8e, 0xaf, 0xb6, 0x9b, 0x5e, 0x75,
-	0x7c, 0xe5, 0x56, 0xa9, 0x0f, 0x6f, 0x40, 0x83, 0xb2, 0x38, 0x44, 0x9c, 0xc6, 0x91, 0x59, 0xed,
-	0x6b, 0x83, 0xb3, 0x8b, 0xc7, 0xd6, 0xc1, 0x5d, 0x58, 0xe3, 0xc2, 0x33, 0xcd, 0x12, 0xe2, 0xee,
-	0x4a, 0x40, 0x03, 0xe8, 0x0b, 0x92, 0x99, 0xba, 0x58, 0xa3, 0x2b, 0x86, 0xf0, 0x1c, 0x1c, 0x91,
-	0x24, 0xc6, 0x73, 0xb3, 0xd6, 0xd7, 0x06, 0xa7, 0xae, 0x9a, 0x40, 0x07, 0x34, 0xca, 0xfd, 0x9b,
-	0x47, 0x7d, 0x6d, 0xd0, 0xbc, 0xb8, 0xff, 0x5a, 0x5f, 0xb1, 0x5e, 0x6b, 0x1e, 0x62, 0x6b, 0x5a,
-	0x88, 0x86, 0x35, 0xb1, 0x61, 0x77, 0xe7, 0x82, 0x1d, 0x50, 0x4f, 0x52, 0x1a, 0xa7, 0x94, 0x67,
-	0xe6, 0x71, 0x5f, 0x1b, 0x1c, 0xb9, 0xe5, 0x5c, 0x70, 0x8c, 0x7c, 0xbb, 0x22, 0x11, 0x26, 0xe6,
-	0x89, 0xe2, 0x8a, 0x39, 0xfc, 0x08, 0xbc, 0xeb, 0x93, 0x24, 0x25, 0x18, 0x71, 0xe2, 0x7b, 0x33,
-	0xc4, 0xf1, 0xdc, 0xa3, 0x91, 0x4f, 0x5e, 0x98, 0x75, 0xa9, 0x3c, 0xdf, 0xb1, 0x43, 0x41, 0x8e,
-	0x05, 0xf7, 0xa4, 0xfe, 0xd3, 0xcb, 0x9e, 0xf6, 0xc7, 0xcb, 0x9e, 0xf6, 0xf0, 0x4f, 0x1d, 0x9c,
-	0x3d, 0xfb, 0x72, 0x34, 0x9a, 0x70, 0xc4, 0xd9, 0x15, 0x09, 0x39, 0x82, 0x8f, 0x40, 0x3b, 0x44,
-	0x8c, 0x7b, 0xab, 0xc4, 0x47, 0x9c, 0x78, 0x11, 0x8a, 0x62, 0x26, 0x73, 0x32, 0xdc, 0x77, 0x04,
-	0x71, 0x2b, 0xf1, 0x1b, 0x01, 0xc3, 0xfb, 0x00, 0xd0, 0x88, 0x93, 0x88, 0x7b, 0x28, 0x20, 0xf2,
-	0xc8, 0x0d, 0xb7, 0xa1, 0x10, 0x27, 0x20, 0xf0, 0x31, 0x68, 0x05, 0xd8, 0x9b, 0x65, 0x9c, 0x30,
-	0x29, 0x10, 0x27, 0x69, 0x0c, 0xcf, 0xb6, 0x9b, 0x1e, 0xf8, 0x74, 0x34, 0x14, 0xb0, 0x13, 0x10,
-	0x17, 0x04, 0xb8, 0x18, 0x8b, 0x82, 0x21, 0x5d, 0x13, 0xe5, 0x91, 0xa7, 0x0c, 0xdd, 0x86, 0x40,
-	0xa4, 0xa2, 0xa4, 0x71, 0xbc, 0x8a, 0xb8, 0x3c, 0xea, 0x9c, 0x1e, 0x09, 0x00, 0xbe, 0x07, 0x1a,
-	0x0b, 0x92, 0xe5, 0xe6, 0x63, 0xc9, 0xd6, 0x17, 0x24, 0x53, 0xde, 0x9c, 0x54, 0xd6, 0x93, 0x92,
-	0x2c, 0x9d, 0x6b, 0x14, 0xe6, 0xce, 0xba, 0x22, 0xd7, 0x28, 0x2c, 0x9d, 0x82, 0x54, 0xce, 0x46,
-	0x49, 0x2a, 0xe7, 0x03, 0xd0, 0xca, 0x8f, 0x40, 0x99, 0x81, 0xe4, 0x9b, 0x0a, 0x53, 0xfe, 0x9d,
-	0x44, 0x95, 0x68, 0xbe, 0x2e, 0x29, 0xfb, 0xb3, 0x8c, 0xe5, 0x25, 0x5a, 0xaa, 0x05, 0xcb, 0x58,
-	0xd9, 0x5f, 0x90, 0xca, 0x7c, 0x5a, 0x92, 0xca, 0xf9, 0x21, 0x80, 0x38, 0x8e, 0x38, 0xa2, 0x11,
-	0xf3, 0x08, 0xe3, 0x74, 0x89, 0x44, 0x89, 0xb3, 0xbe, 0x36, 0xa8, 0xbb, 0xed, 0x82, 0xb9, 0x2e,
-	0x88, 0x27, 0x35, 0x19, 0xfb, 0x5f, 0x3a, 0xb8, 0x27, 0x62, 0x7f, 0x4e, 0x52, 0x46, 0x99, 0x58,
-	0x86, 0xbc, 0x00, 0x6f, 0x5b, 0xf6, 0xfa, 0xfe, 0xec, 0xf5, 0xbd, 0xd9, 0xeb, 0xfb, 0xb2, 0xd7,
-	0xf7, 0x65, 0xaf, 0xef, 0xcb, 0x5e, 0x3f, 0x90, 0xbd, 0x7e, 0x38, 0x7b, 0xfd, 0x40, 0xf6, 0xfa,
-	0xbe, 0xec, 0xf5, 0xff, 0x9f, 0xfd, 0xee, 0x6f, 0xff, 0x4a, 0x03, 0x6d, 0x17, 0x45, 0x01, 0x71,
-	0x92, 0x24, 0xa4, 0xc4, 0x17, 0xe9, 0x13, 0xf8, 0x01, 0x80, 0x29, 0xfa, 0x86, 0x7b, 0x48, 0x81,
-	0xf9, 0x43, 0x22, 0xe2, 0xaf, 0xb9, 0x86, 0x60, 0x72, 0xb5, 0x7c, 0x44, 0xa0, 0x05, 0xee, 0x85,
-	0x04, 0x31, 0xf2, 0x0f, 0x79, 0x55, 0xca, 0xdb, 0x92, 0x7a, 0x43, 0xff, 0x35, 0x68, 0xa6, 0xa2,
-	0xa5, 0xc7, 0xc4, 0x55, 0x93, 0xf7, 0xa1, 0x79, 0xf1, 0xc9, 0x7f, 0x78, 0x9f, 0xff, 0xe5, 0xa2,
-	0xe6, 0x0f, 0x28, 0x90, 0x05, 0x25, 0xb2, 0xdb, 0xdc, 0xa3, 0x8f, 0xc1, 0xe9, 0x1b, 0x4f, 0x3a,
-	0x34, 0x40, 0x6b, 0x72, 0xed, 0x8e, 0x9d, 0xa7, 0xe3, 0xaf, 0x9c, 0xe1, 0xd3, 0x6b, 0xa3, 0x02,
-	0x5b, 0xa0, 0x3e, 0xb9, 0x71, 0x9e, 0x4f, 0x3e, 0xfb, 0x7c, 0x6a, 0x68, 0x9d, 0xda, 0x77, 0x3f,
-	0x76, 0x2b, 0x43, 0xf3, 0xee, 0xb7, 0x6e, 0xe5, 0x6e, 0xdb, 0xd5, 0x7e, 0xde, 0x76, 0xb5, 0x5f,
-	0xb6, 0x5d, 0xed, 0xd7, 0x6d, 0x57, 0xfb, 0xe1, 0xf7, 0x6e, 0x65, 0x76, 0x2c, 0xbf, 0x5e, 0x97,
-	0x7f, 0x07, 0x00, 0x00, 0xff, 0xff, 0xef, 0xd8, 0xe1, 0x73, 0x37, 0x07, 0x00, 0x00,
+	// 990 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0x4f, 0x6f, 0xe3, 0x44,
+	0x14, 0xef, 0x78, 0x92, 0x36, 0x99, 0xa4, 0x25, 0x9d, 0xad, 0x84, 0x55, 0xb4, 0x49, 0x36, 0x5c,
+	0x22, 0x04, 0x0e, 0xda, 0x02, 0x87, 0xde, 0xf2, 0x07, 0xa1, 0x2c, 0x2c, 0x05, 0xd3, 0xee, 0x4a,
+	0x20, 0x64, 0x4d, 0x9c, 0xc1, 0x19, 0xc5, 0xb1, 0x8d, 0x3d, 0xce, 0x26, 0x07, 0xbe, 0x03, 0x17,
+	0xee, 0xfd, 0x10, 0x1c, 0xf8, 0x08, 0x3d, 0x70, 0xe0, 0x82, 0x84, 0x56, 0xa8, 0x82, 0x70, 0xe1,
+	0x03, 0x70, 0x45, 0x42, 0x33, 0x63, 0x3b, 0xc9, 0x0a, 0xd2, 0x6d, 0x2b, 0x55, 0x9c, 0x3a, 0xef,
+	0xfd, 0xde, 0xfb, 0xbd, 0x79, 0xf3, 0x7b, 0x79, 0x2e, 0x7a, 0x3d, 0xe2, 0x7e, 0x48, 0x1c, 0xda,
+	0xa2, 0x9e, 0xc3, 0xbc, 0xf4, 0x4f, 0x30, 0x68, 0x4d, 0xa6, 0xb6, 0x7d, 0x64, 0x04, 0xa1, 0xcf,
+	0x7d, 0xfc, 0xc0, 0xf6, 0xed, 0x71, 0xe8, 0x13, 0x7b, 0x64, 0x24, 0xe1, 0x86, 0x8a, 0x33, 0xd2,
+	0xf0, 0x43, 0x3d, 0xe6, 0xcc, 0x6d, 0x8d, 0x5c, 0xbb, 0xc5, 0xd9, 0x84, 0x46, 0x9c, 0x4c, 0x02,
+	0x95, 0x7c, 0x78, 0xe0, 0xf8, 0x8e, 0x2f, 0x8f, 0x2d, 0x71, 0x52, 0xde, 0xc6, 0x77, 0x1a, 0xda,
+	0x39, 0x9d, 0x79, 0x8f, 0x29, 0x27, 0xf8, 0x53, 0xa4, 0xb1, 0xa1, 0x0e, 0xea, 0xa0, 0x59, 0xee,
+	0xb4, 0x2f, 0x2e, 0x6b, 0x5b, 0xcf, 0x2f, 0x6b, 0x47, 0x0e, 0xe3, 0xa3, 0x78, 0x60, 0xd8, 0xfe,
+	0xa4, 0x95, 0x55, 0x1f, 0x0e, 0x96, 0xe7, 0x56, 0x30, 0x76, 0x5a, 0xb2, 0x68, 0x1c, 0xb3, 0xa1,
+	0x71, 0x76, 0xd6, 0xef, 0x2d, 0x2e, 0x6b, 0x5a, 0xbf, 0x67, 0x6a, 0x6c, 0x88, 0x2b, 0x08, 0x8e,
+	0xe9, 0x5c, 0x87, 0x82, 0xd3, 0x14, 0x47, 0x7c, 0x80, 0xf2, 0x34, 0xf0, 0xed, 0x91, 0x9e, 0xab,
+	0x83, 0xe6, 0xae, 0xa9, 0x0c, 0xdc, 0x46, 0xc5, 0xec, 0xbe, 0x7a, 0xbe, 0x0e, 0x9a, 0xa5, 0x87,
+	0xf7, 0x8d, 0x65, 0xb7, 0x82, 0xdf, 0x18, 0xb9, 0xb6, 0x71, 0x9a, 0x06, 0x75, 0x72, 0xe2, 0x82,
+	0xe6, 0x32, 0x0b, 0x1f, 0xa2, 0x42, 0x10, 0x32, 0x3f, 0x64, 0x7c, 0xae, 0x6f, 0xd7, 0x41, 0x33,
+	0x6f, 0x66, 0xb6, 0xc0, 0x22, 0xfa, 0x75, 0x4c, 0x3d, 0x9b, 0xea, 0x3b, 0x0a, 0x4b, 0xed, 0xe3,
+	0xc2, 0x0f, 0xe7, 0x35, 0xf0, 0xe7, 0x79, 0x0d, 0x3c, 0xca, 0x15, 0xb4, 0x0a, 0x7c, 0x94, 0x2b,
+	0x14, 0x2a, 0xc5, 0xc6, 0x5f, 0x10, 0xed, 0x3d, 0x7e, 0xd2, 0xed, 0x7e, 0xc6, 0x09, 0x8f, 0x7a,
+	0xd4, 0xe5, 0x04, 0xbf, 0x81, 0xf6, 0x5d, 0x12, 0x71, 0x2b, 0x0e, 0x86, 0x84, 0x53, 0xcb, 0x23,
+	0x9e, 0x1f, 0xc9, 0xd7, 0xaa, 0x98, 0xaf, 0x08, 0xe0, 0x4c, 0xfa, 0x3f, 0x16, 0x6e, 0x7c, 0x1f,
+	0x21, 0xe6, 0x71, 0xea, 0x71, 0x8b, 0x38, 0x54, 0xd7, 0x64, 0x50, 0x51, 0x79, 0xda, 0x0e, 0xc5,
+	0x6f, 0xa3, 0xb2, 0x63, 0x5b, 0x83, 0x39, 0xa7, 0x91, 0x0c, 0x10, 0xef, 0x53, 0xe9, 0xec, 0x2d,
+	0x2e, 0x6b, 0xe8, 0x83, 0x6e, 0x47, 0xb8, 0xdb, 0x0e, 0x35, 0x91, 0x63, 0xa7, 0x67, 0x41, 0xe8,
+	0xb2, 0x29, 0x55, 0x39, 0xf2, 0xed, 0xb0, 0x59, 0x14, 0x1e, 0x19, 0x91, 0xc1, 0xb6, 0x1f, 0x7b,
+	0x5c, 0x3e, 0x60, 0x02, 0x77, 0x85, 0x03, 0xbf, 0x86, 0x8a, 0x63, 0x3a, 0x4f, 0x92, 0xb7, 0x25,
+	0x5a, 0x18, 0xd3, 0xb9, 0xca, 0x4d, 0x40, 0x95, 0xba, 0x93, 0x81, 0x59, 0xe6, 0x94, 0xb8, 0x49,
+	0x66, 0x41, 0x81, 0x53, 0xe2, 0x66, 0x99, 0x02, 0x54, 0x99, 0xc5, 0x0c, 0x54, 0x99, 0x0f, 0x50,
+	0x39, 0x79, 0x02, 0x95, 0x8c, 0x24, 0x5e, 0x52, 0x3e, 0x95, 0xbf, 0x0c, 0x51, 0x14, 0xa5, 0xd5,
+	0x90, 0xac, 0x7e, 0x34, 0x8f, 0x12, 0x8a, 0xb2, 0x2a, 0x11, 0xcd, 0xa3, 0xac, 0xbe, 0x00, 0x55,
+	0xf2, 0x6e, 0x06, 0xaa, 0xcc, 0xb7, 0x10, 0xb6, 0x7d, 0x8f, 0x13, 0xe6, 0x45, 0x16, 0x8d, 0x38,
+	0x9b, 0x10, 0x41, 0xb1, 0x57, 0x07, 0xcd, 0x82, 0xb9, 0x9f, 0x22, 0xef, 0xa7, 0xc0, 0x71, 0x4e,
+	0x8c, 0x40, 0xe3, 0x6f, 0x88, 0xee, 0x09, 0xd9, 0x3f, 0xa1, 0x61, 0xc4, 0x22, 0x71, 0x0d, 0x39,
+	0x00, 0xff, 0x37, 0xed, 0xe1, 0x66, 0xed, 0xe1, 0x46, 0xed, 0xe1, 0x26, 0xed, 0xe1, 0x26, 0xed,
+	0xe1, 0x26, 0xed, 0xe1, 0x15, 0xda, 0xc3, 0xab, 0xb5, 0x87, 0x57, 0x68, 0x0f, 0x37, 0x69, 0x0f,
+	0x6f, 0xae, 0x7d, 0xb6, 0x02, 0x1a, 0xcf, 0x01, 0xda, 0x37, 0x89, 0xe7, 0xd0, 0x76, 0x10, 0xb8,
+	0x8c, 0x0e, 0x85, 0xfa, 0x14, 0xbf, 0x89, 0x70, 0x48, 0xbe, 0xe2, 0x16, 0x51, 0x4e, 0x8b, 0x79,
+	0x43, 0x3a, 0x93, 0xf2, 0xe7, 0xcc, 0x8a, 0x40, 0x92, 0xe8, 0xbe, 0xf0, 0x63, 0x03, 0xdd, 0x73,
+	0x29, 0x89, 0xe8, 0x0b, 0xe1, 0x9a, 0x0c, 0xdf, 0x97, 0xd0, 0x5a, 0xfc, 0x97, 0xa8, 0x14, 0x8a,
+	0x92, 0x56, 0x24, 0x46, 0x4d, 0xce, 0x43, 0xe9, 0xe1, 0x7b, 0xc6, 0x95, 0xbb, 0xde, 0xf8, 0x97,
+	0x41, 0x4d, 0xd6, 0x22, 0x92, 0x84, 0xd2, 0xb3, 0xd2, 0xdc, 0x37, 0xa8, 0x22, 0x52, 0x9e, 0x86,
+	0x8c, 0xd3, 0x27, 0xc4, 0x8d, 0xe9, 0x49, 0x90, 0x2e, 0x68, 0xb0, 0x5c, 0xd0, 0x6b, 0xab, 0x58,
+	0xbb, 0xd1, 0x2a, 0x3e, 0x40, 0xf9, 0xa9, 0xe0, 0x4f, 0xf6, 0xbe, 0x32, 0x1a, 0x3f, 0x02, 0xb4,
+	0x9f, 0xd5, 0xef, 0x4b, 0x9d, 0x4f, 0x02, 0xfc, 0x05, 0xda, 0xe6, 0x33, 0xcf, 0xca, 0x3e, 0x3c,
+	0xbd, 0xdb, 0x7d, 0x78, 0xf2, 0xa7, 0x33, 0xaf, 0xdf, 0x33, 0xf3, 0x7c, 0xe6, 0xf5, 0x87, 0xf8,
+	0x55, 0xb4, 0x23, 0xc8, 0x45, 0x87, 0x9a, 0xbc, 0x8a, 0xa8, 0xf5, 0xe1, 0x8b, 0x4d, 0xc2, 0x9b,
+	0x34, 0xd9, 0xf8, 0x1e, 0x20, 0x2c, 0xda, 0x51, 0x3f, 0xfd, 0xbb, 0xe9, 0xe7, 0xf6, 0xda, 0x34,
+	0x7e, 0x4d, 0xae, 0xdd, 0xf5, 0x27, 0x13, 0xc6, 0xef, 0xe6, 0xda, 0xc9, 0x90, 0x69, 0xff, 0x31,
+	0x64, 0xf0, 0x76, 0x43, 0x96, 0x5b, 0x1d, 0xb2, 0x40, 0xcd, 0x58, 0x7b, 0xe0, 0x87, 0x77, 0xd3,
+	0x5c, 0xe3, 0x67, 0x88, 0x76, 0x45, 0xc9, 0x8f, 0x7c, 0x87, 0xd9, 0xc4, 0x3d, 0x09, 0xf0, 0x29,
+	0x2a, 0x3d, 0x13, 0x33, 0x6e, 0xa9, 0xfb, 0x01, 0xd9, 0xde, 0xd1, 0x4b, 0xfe, 0xa0, 0x57, 0x7f,
+	0x9d, 0x26, 0x7a, 0x96, 0x59, 0xf8, 0x29, 0x2a, 0x2b, 0x56, 0xb5, 0x22, 0x13, 0xf9, 0xdf, 0xb9,
+	0x0e, 0x6d, 0xfa, 0x20, 0xa6, 0xba, 0x9f, 0x32, 0xf1, 0xe7, 0x68, 0x37, 0xf9, 0xac, 0x25, 0xcc,
+	0x4a, 0x8f, 0x77, 0x5f, 0x92, 0x79, 0x7d, 0xfe, 0xcd, 0x72, 0xbc, 0x62, 0x0b, 0x6e, 0x5b, 0x0e,
+	0x5a, 0xca, 0x9d, 0xbb, 0x16, 0xf7, 0xfa, 0x90, 0x9a, 0x65, 0x7b, 0xc5, 0x16, 0x0f, 0x42, 0x84,
+	0xcc, 0x29, 0x75, 0xfe, 0x5a, 0x0f, 0xb2, 0x36, 0x21, 0x66, 0x89, 0x2c, 0xcd, 0xe3, 0xdc, 0xc5,
+	0x79, 0x0d, 0x74, 0xf4, 0x8b, 0xdf, 0xab, 0x5b, 0x17, 0x8b, 0x2a, 0xf8, 0x69, 0x51, 0x05, 0xbf,
+	0x2c, 0xaa, 0xe0, 0xb7, 0x45, 0x15, 0x7c, 0xfb, 0x47, 0x75, 0x6b, 0xb0, 0x2d, 0xff, 0x75, 0x3e,
+	0xfa, 0x27, 0x00, 0x00, 0xff, 0xff, 0xdc, 0xcb, 0x02, 0x8b, 0xb4, 0x0b, 0x00, 0x00,
 }

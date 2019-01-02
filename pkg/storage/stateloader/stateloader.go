@@ -15,23 +15,21 @@
 package stateloader
 
 import (
-	"bytes"
 	"context"
 	"math"
-
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // StateLoader contains accessor methods to read or write the
@@ -66,28 +64,28 @@ func Make(st *cluster.Settings, rangeID roachpb.RangeID) StateLoader {
 // under the convention that that is the latest committed version.
 func (rsl StateLoader) Load(
 	ctx context.Context, reader engine.Reader, desc *roachpb.RangeDescriptor,
-) (storagebase.ReplicaState, error) {
-	var s storagebase.ReplicaState
+) (storagepb.ReplicaState, error) {
+	var s storagepb.ReplicaState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
 	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
 	// Read the range lease.
 	lease, err := rsl.LoadLease(ctx, reader)
 	if err != nil {
-		return storagebase.ReplicaState{}, err
+		return storagepb.ReplicaState{}, err
 	}
 	s.Lease = &lease
 
 	if s.GCThreshold, err = rsl.LoadGCThreshold(ctx, reader); err != nil {
-		return storagebase.ReplicaState{}, err
+		return storagepb.ReplicaState{}, err
 	}
 
 	if s.TxnSpanGCThreshold, err = rsl.LoadTxnSpanGCThreshold(ctx, reader); err != nil {
-		return storagebase.ReplicaState{}, err
+		return storagepb.ReplicaState{}, err
 	}
 
 	if as, err := rsl.LoadRangeAppliedState(ctx, reader); err != nil {
-		return storagebase.ReplicaState{}, err
+		return storagepb.ReplicaState{}, err
 	} else if as != nil {
 		s.UsingAppliedStateKey = true
 
@@ -98,12 +96,12 @@ func (rsl StateLoader) Load(
 		s.Stats = &ms
 	} else {
 		if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = rsl.LoadAppliedIndex(ctx, reader); err != nil {
-			return storagebase.ReplicaState{}, err
+			return storagepb.ReplicaState{}, err
 		}
 
 		ms, err := rsl.LoadMVCCStats(ctx, reader)
 		if err != nil {
-			return storagebase.ReplicaState{}, err
+			return storagepb.ReplicaState{}, err
 		}
 		s.Stats = &ms
 	}
@@ -112,7 +110,7 @@ func (rsl StateLoader) Load(
 	// pointless), but it is and the migration is not worth it.
 	truncState, err := rsl.LoadTruncatedState(ctx, reader)
 	if err != nil {
-		return storagebase.ReplicaState{}, err
+		return storagepb.ReplicaState{}, err
 	}
 	s.TruncatedState = &truncState
 
@@ -131,7 +129,7 @@ func (rsl StateLoader) Load(
 // missing whenever save is called. Optional values should be reserved
 // strictly for use in Result. Do before merge.
 func (rsl StateLoader) Save(
-	ctx context.Context, eng engine.ReadWriter, state storagebase.ReplicaState,
+	ctx context.Context, eng engine.ReadWriter, state storagepb.ReplicaState,
 ) (enginepb.MVCCStats, error) {
 	ms := state.Stats
 	if err := rsl.SetLease(ctx, eng, ms, *state.Lease); err != nil {
@@ -168,7 +166,7 @@ func (rsl StateLoader) Save(
 func (rsl StateLoader) LoadLease(ctx context.Context, reader engine.Reader) (roachpb.Lease, error) {
 	var lease roachpb.Lease
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeLeaseKey(),
-		hlc.Timestamp{}, true, nil, &lease)
+		hlc.Timestamp{}, &lease, engine.MVCCGetOptions{})
 	return lease, err
 }
 
@@ -186,8 +184,8 @@ func (rsl StateLoader) LoadRangeAppliedState(
 	ctx context.Context, reader engine.Reader,
 ) (*enginepb.RangeAppliedState, error) {
 	var as enginepb.RangeAppliedState
-	found, err := engine.MVCCGetProto(ctx, reader, rsl.RangeAppliedStateKey(), hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, &as)
+	found, err := engine.MVCCGetProto(ctx, reader, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, &as,
+		engine.MVCCGetOptions{})
 	if !found {
 		return nil, err
 	}
@@ -219,7 +217,7 @@ func (rsl StateLoader) LoadAppliedIndex(
 	// index and the lease applied index keys. This is where these indices were
 	// stored before the range applied state was introduced.
 	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftAppliedIndexLegacyKey(),
-		hlc.Timestamp{}, true, nil)
+		hlc.Timestamp{}, engine.MVCCGetOptions{})
 	if err != nil {
 		return 0, 0, err
 	}
@@ -232,7 +230,7 @@ func (rsl StateLoader) LoadAppliedIndex(
 	}
 	// TODO(tschottdorf): code duplication.
 	v, _, err = engine.MVCCGet(ctx, reader, rsl.LeaseAppliedIndexLegacyKey(),
-		hlc.Timestamp{}, true, nil)
+		hlc.Timestamp{}, engine.MVCCGetOptions{})
 	if err != nil {
 		return 0, 0, err
 	}
@@ -261,8 +259,8 @@ func (rsl StateLoader) LoadMVCCStats(
 	// key. This is where stats were stored before the range applied
 	// state was introduced.
 	var ms enginepb.MVCCStats
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsLegacyKey(), hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, &ms)
+	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, &ms,
+		engine.MVCCGetOptions{})
 	return ms, err
 }
 
@@ -426,9 +424,9 @@ func (rsl StateLoader) LoadTruncatedState(
 	ctx context.Context, reader engine.Reader,
 ) (roachpb.RaftTruncatedState, error) {
 	var truncState roachpb.RaftTruncatedState
-	if _, err := engine.MVCCGetProto(ctx, reader,
-		rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, true,
-		nil, &truncState); err != nil {
+	if _, err := engine.MVCCGetProto(
+		ctx, reader, rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState, engine.MVCCGetOptions{},
+	); err != nil {
 		return roachpb.RaftTruncatedState{}, err
 	}
 	return truncState, nil
@@ -454,7 +452,7 @@ func (rsl StateLoader) LoadGCThreshold(
 ) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeLastGCKey(),
-		hlc.Timestamp{}, true, nil, &t)
+		hlc.Timestamp{}, &t, engine.MVCCGetOptions{})
 	return &t, err
 }
 
@@ -475,7 +473,7 @@ func (rsl StateLoader) LoadTxnSpanGCThreshold(
 ) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeTxnSpanGCThresholdKey(),
-		hlc.Timestamp{}, true, nil, &t)
+		hlc.Timestamp{}, &t, engine.MVCCGetOptions{})
 	return &t, err
 }
 
@@ -499,20 +497,18 @@ func (rsl StateLoader) SetTxnSpanGCThreshold(
 
 // LoadLastIndex loads the last index.
 func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader engine.Reader) (uint64, error) {
-	iter := reader.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+	prefix := rsl.RaftLogPrefix()
+	iter := reader.NewIterator(engine.IterOptions{LowerBound: prefix})
 	defer iter.Close()
 
 	var lastIndex uint64
 	iter.SeekReverse(engine.MakeMVCCMetadataKey(rsl.RaftLogKey(math.MaxUint64)))
 	if ok, _ := iter.Valid(); ok {
 		key := iter.Key()
-		prefix := rsl.RaftLogPrefix()
-		if bytes.HasPrefix(key.Key, prefix) {
-			var err error
-			_, lastIndex, err = encoding.DecodeUint64Ascending(key.Key[len(prefix):])
-			if err != nil {
-				log.Fatalf(ctx, "unable to decode Raft log index key: %s", key)
-			}
+		var err error
+		_, lastIndex, err = encoding.DecodeUint64Ascending(key.Key[len(prefix):])
+		if err != nil {
+			log.Fatalf(ctx, "unable to decode Raft log index key: %s", key)
 		}
 	}
 
@@ -549,7 +545,7 @@ func (rsl StateLoader) LoadReplicaDestroyedError(
 	var v roachpb.Error
 	found, err := engine.MVCCGetProto(ctx, reader,
 		rsl.RangeReplicaDestroyedErrorKey(),
-		hlc.Timestamp{}, true /* consistent */, nil, &v)
+		hlc.Timestamp{}, &v, engine.MVCCGetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -573,9 +569,8 @@ func (rsl StateLoader) LoadHardState(
 	ctx context.Context, reader engine.Reader,
 ) (raftpb.HardState, error) {
 	var hs raftpb.HardState
-	found, err := engine.MVCCGetProto(ctx, reader,
-		rsl.RaftHardStateKey(),
-		hlc.Timestamp{}, true, nil, &hs)
+	found, err := engine.MVCCGetProto(ctx, reader, rsl.RaftHardStateKey(),
+		hlc.Timestamp{}, &hs, engine.MVCCGetOptions{})
 
 	if !found || err != nil {
 		return raftpb.HardState{}, err
@@ -631,8 +626,8 @@ func (rsl StateLoader) SynthesizeHardState(
 	}
 
 	if oldHS.Commit > newHS.Commit {
-		return errors.Errorf("can't decrease HardState.Commit from %d to %d",
-			oldHS.Commit, newHS.Commit)
+		return log.Safe(errors.Errorf("can't decrease HardState.Commit from %d to %d",
+			oldHS.Commit, newHS.Commit))
 	}
 	if oldHS.Term > newHS.Term {
 		// The existing HardState is allowed to be ahead of us, which is

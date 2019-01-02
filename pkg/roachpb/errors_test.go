@@ -18,7 +18,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -47,10 +46,11 @@ func TestNewErrorNil(t *testing.T) {
 
 // TestSetTxn vefifies that SetTxn updates the error message.
 func TestSetTxn(t *testing.T) {
-	e := NewError(NewTransactionAbortedError())
-	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, hlc.Timestamp{}, 0)
+	e := NewError(NewTransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND))
+	txn := MakeTransaction("test", Key("a"), 1, hlc.Timestamp{}, 0)
 	e.SetTxn(&txn)
-	if !strings.HasPrefix(e.Message, "TransactionAbortedError: txn aborted \"test\"") {
+	if !strings.HasPrefix(
+		e.Message, "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND): \"test\"") {
 		t.Errorf("unexpected message: %s", e.Message)
 	}
 }

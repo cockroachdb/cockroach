@@ -83,7 +83,8 @@ func TestIndexConstraints(t *testing.T) {
 			var normalizeTypedExpr bool
 			var err error
 
-			f := norm.NewFactory(&evalCtx)
+			var f norm.Factory
+			f.Init(&evalCtx)
 			md := f.Metadata()
 
 			for _, arg := range d.CmdArgs {
@@ -142,25 +143,25 @@ func TestIndexConstraints(t *testing.T) {
 				for i := range varNames {
 					varNames[i] = fmt.Sprintf("@%d", i+1)
 				}
-				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, f)
+				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, &f)
 				b.AllowUnsupportedExpr = true
-				group, err := b.Build(typedExpr)
+				err = b.Build(typedExpr)
 				if err != nil {
 					return fmt.Sprintf("error: %v\n", err)
 				}
-				ev := memo.MakeNormExprView(f.Memo(), group)
+				root := f.Memo().RootExpr().(opt.ScalarExpr)
+				filters := memo.FiltersExpr{{Condition: root}}
 
 				var ic idxconstraint.Instance
-				ic.Init(ev, indexCols, notNullCols, invertedIndex, &evalCtx, f)
+				ic.Init(filters, indexCols, notNullCols, invertedIndex, &evalCtx, &f)
 				result := ic.Constraint()
 				var buf bytes.Buffer
 				for i := 0; i < result.Spans.Count(); i++ {
 					fmt.Fprintf(&buf, "%s\n", result.Spans.Get(i))
 				}
-				remainingFilter := ic.RemainingFilter()
-				remEv := memo.MakeNormExprView(f.Memo(), remainingFilter)
-				if remEv.Operator() != opt.TrueOp {
-					execBld := execbuilder.New(nil /* execFactory */, remEv)
+				remainingFilter := ic.RemainingFilters()
+				if !remainingFilter.IsTrue() {
+					execBld := execbuilder.New(nil /* execFactory */, f.Memo(), &remainingFilter, &evalCtx)
 					expr, err := execBld.BuildScalar(&iVarHelper)
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
@@ -231,13 +232,16 @@ func BenchmarkIndexConstraints(b *testing.B) {
 		testCases = append(testCases, tc)
 	}
 
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			varTypes, err := testutils.ParseTypes(strings.Split(tc.varTypes, ", "))
 			if err != nil {
 				b.Fatal(err)
 			}
-			f := norm.NewFactory(nil /* evalCtx */)
+			var f norm.Factory
+			f.Init(&evalCtx)
 			md := f.Metadata()
 			for i, typ := range varTypes {
 				md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
@@ -252,19 +256,21 @@ func BenchmarkIndexConstraints(b *testing.B) {
 
 			semaCtx := tree.MakeSemaContext(false /* privileged */)
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, f)
+			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
 
-			group, err := bld.Build(typedExpr)
+			err = bld.Build(typedExpr)
 			if err != nil {
 				b.Fatal(err)
 			}
-			ev := memo.MakeNormExprView(f.Memo(), group)
+			nd := f.Memo().RootExpr()
+			filters := memo.FiltersExpr{{Condition: nd.(opt.ScalarExpr)}}
+
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var ic idxconstraint.Instance
-				ic.Init(ev, indexCols, notNullCols, false /*isInverted */, &evalCtx, f)
+				ic.Init(filters, indexCols, notNullCols, false /*isInverted */, &evalCtx, &f)
 				_ = ic.Constraint()
-				_ = ic.RemainingFilter()
+				_ = ic.RemainingFilters()
 			}
 		})
 	}

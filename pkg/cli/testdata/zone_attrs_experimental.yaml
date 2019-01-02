@@ -1,0 +1,3 @@
+num_replicas: 3
+constraints: {"+zone=us-east-1a,+ssd": 1, "+region=us-east-1": 1}
+experimental_lease_preferences: [[+zone=us-east-1a]]

@@ -1,0 +1,959 @@
+# Cast from bytes to string uses the current value of bytea_output.
+
+eval
+x'636174'::bytes::string
+----
+e'\\x636174'
+
+eval
+e'\\x636174'::BYTES
+----
+'\x636174'
+
+eval
+e'\\X636174'::BYTES
+----
+'\x636174'
+
+eval
+e'\\x636174'::STRING::BYTES
+----
+'\x636174'
+
+eval
+e'\\x636174'::STRING
+----
+e'\\x636174'
+
+# Cast expressions.
+eval
+true::boolean
+----
+true
+
+eval
+true::int
+----
+1
+
+eval
+true::float
+----
+1.0
+
+eval
+length(true::text)
+----
+4
+
+eval
+false::boolean
+----
+false
+
+eval
+false::int
+----
+0
+
+eval
+false::float
+----
+0.0
+
+eval
+true::decimal
+----
+1
+
+eval
+false::decimal
+----
+0
+
+eval
+length(false::text)
+----
+5
+
+eval
+1::boolean
+----
+true
+
+eval
+0::boolean
+----
+false
+
+eval
+1::int
+----
+1
+
+eval
+'1'::int
+----
+1
+
+eval
+1::float
+----
+1.0
+
+eval
+'1'::float
+----
+1.0
+
+eval
+1::decimal
+----
+1
+
+eval
+'1'::decimal
+----
+1
+
+eval
+length(123::text)
+----
+3
+
+eval
+1.1::boolean
+----
+true
+
+eval
+0.0::boolean
+----
+false
+
+eval
+(1.1::decimal)::int
+----
+1
+
+eval
+(1.9::decimal)::int
+----
+2
+
+eval
+(1.1::decimal)::float
+----
+1.1
+
+eval
+(1.1::decimal)::boolean
+----
+true
+
+eval
+(0.0::decimal)::boolean
+----
+false
+
+eval
+(1e300::decimal)::float
+----
+1e+300
+
+eval
+(9223372036854775807::decimal)::int
+----
+9223372036854775807
+
+# The two largest floats that can be converted to an int, albeit inexactly.
+eval
+9223372036854775295::float::int
+----
+9223372036854774784
+
+eval
+-9223372036854775295::float::int
+----
+-9223372036854774784
+
+eval
+1.1::int
+----
+1
+
+eval
+1.5::int
+----
+2
+
+eval
+1.9::int
+----
+2
+
+eval
+2.5::int
+----
+3
+
+eval
+3.5::int
+----
+4
+
+eval
+-1.5::int
+----
+-2
+
+eval
+-2.5::int
+----
+-3
+
+eval
+1.1::float
+----
+1.1
+
+eval
+'1.1'::float
+----
+1.1
+
+eval
+-1e+06::float
+----
+-1e+06
+
+eval
+-9.99999e+05
+----
+-999999
+
+eval
+999999.0
+----
+999999.0
+
+eval
+1000000.0
+----
+1000000.0
+
+eval
+-1e+06
+----
+-1E+6
+
+eval
+-9.99999e+05::decimal
+----
+-999999
+
+eval
+999999.0::decimal
+----
+999999.0
+
+eval
+'999999.0'::decimal
+----
+999999.0
+
+eval
+1000000.0::decimal
+----
+1000000.0
+
+eval
+length(1.23::text)
+----
+4
+
+eval
+'t'::boolean
+----
+true
+
+eval
+'T'::boolean
+----
+true
+
+eval
+'true'::boolean
+----
+true
+
+eval
+'True'::boolean
+----
+true
+
+eval
+'TRUE'::boolean
+----
+true
+
+eval
+'1'::boolean
+----
+true
+
+eval
+'f'::boolean
+----
+false
+
+eval
+'F'::boolean
+----
+false
+
+eval
+'false'::boolean
+----
+false
+
+eval
+'False'::boolean
+----
+false
+
+eval
+'FALSE'::boolean
+----
+false
+
+eval
+'0'::boolean
+----
+false
+
+eval
+'123'::int + 1
+----
+124
+
+eval
+NULL::int
+----
+NULL
+
+eval
+'0x123'::int + 1
+----
+292
+
+eval
+'0123'::int + 1
+----
+84
+
+eval
+'1.23'::float + 1.0
+----
+2.23
+
+eval
+'hello'::text
+----
+'hello'
+
+eval
+CAST('123' AS int) + 1
+----
+124
+
+eval
+CAST(NULL AS int)
+----
+NULL
+
+eval
+'hello'::char(2)
+----
+'he'
+
+eval
+'hello'::bytes
+----
+'\x68656c6c6f'
+
+eval
+b'hello'::string
+----
+'hello'
+
+# Casting a byte array to string uses the current value of
+# bytea_output, which is hex by default in this test.
+eval
+b'hello'::bytes::string
+----
+e'\\x68656c6c6f'
+
+eval
+b'\xff'
+----
+'\xff'
+
+eval
+123::text
+----
+'123'
+
+eval
+date '2010-09-28'
+----
+'2010-09-28'
+
+eval
+CAST('2010-09-28' AS date)
+----
+'2010-09-28'
+
+eval
+'2010-09-28'::date
+----
+'2010-09-28'
+
+eval
+'2010-09-28'::date::text
+----
+'2010-09-28'
+
+eval
+('2010-09-28'::date)::date
+----
+'2010-09-28'
+
+eval
+'2010-09-28T12:00:00Z'::date
+----
+'2010-09-28'
+
+eval
+time '12:00:00'
+----
+'12:00:00'
+
+eval
+CAST('12:00:00' AS time)
+----
+'12:00:00'
+
+eval
+'12:00:00'::time
+----
+'12:00:00'
+
+eval
+'12:00:00'::time::text
+----
+'12:00:00'
+
+eval
+timestamp '2010-09-28'
+----
+'2010-09-28 00:00:00+00:00'
+
+eval
+CAST('2010-09-28' AS timestamp)
+----
+'2010-09-28 00:00:00+00:00'
+
+eval
+'2010-09-28'::timestamp
+----
+'2010-09-28 00:00:00+00:00'
+
+eval
+timestamptz '2010-09-28'
+----
+'2010-09-28 00:00:00+00:00'
+
+eval
+CAST('2010-09-28' AS timestamptz)
+----
+'2010-09-28 00:00:00+00:00'
+
+eval
+'2010-09-28'::timestamptz
+----
+'2010-09-28 00:00:00+00:00'
+
+eval
+('2010-09-28 12:00:00.1'::timestamp)::date
+----
+'2010-09-28'
+
+eval
+'2010-09-28 12:00:00.1'::timestamp
+----
+'2010-09-28 12:00:00.1+00:00'
+
+eval
+'2010-09-28 12:00:00.1+02:00'::timestamp
+----
+'2010-09-28 12:00:00.1+00:00'
+
+eval
+'2010-09-28 12:00:00.524000 +02:00:00'::timestamp
+----
+'2010-09-28 12:00:00.524+00:00'
+
+eval
+'2010-09-28 12:00:00.1-07:00'::timestamp
+----
+'2010-09-28 12:00:00.1+00:00'
+
+eval
+'2010-09-28T12:00:00'::timestamp
+----
+'2010-09-28 12:00:00+00:00'
+
+eval
+'2010-09-28T12:00:00Z'::timestamp
+----
+'2010-09-28 12:00:00+00:00'
+
+eval
+'2010-09-28T12:00:00.1'::timestamp
+----
+'2010-09-28 12:00:00.1+00:00'
+
+eval
+('2010-09-28'::date)::timestamp
+----
+'2010-09-28 00:00:00+00:00'
+
+eval
+'2010-09-28 12:00:00.1-04'::timestamp
+----
+'2010-09-28 12:00:00.1+00:00'
+
+eval
+'2010-09-28 12:00:00.1-04'::timestamp::text
+----
+'2010-09-28 12:00:00.1+00:00'
+
+eval
+'2010-09-28 12:00:00.1-04'::timestamptz::text
+----
+'2010-09-28 12:00:00.1-04:00'
+
+eval
+'12h2m1s23ms'::interval
+----
+'12:02:01.023'
+
+eval
+'12h2m1s23ms'::interval::text
+----
+'12:02:01.023'
+
+eval
+interval '1'
+----
+'00:00:01'
+
+eval
+CAST('1' AS interval)
+----
+'00:00:01'
+
+eval
+'1'::interval
+----
+'00:00:01'
+
+eval
+1::interval
+----
+'00:00:01'
+
+eval
+(1::interval)::interval
+----
+'00:00:01'
+
+eval
+'2010-09-28'::date + 3
+----
+'2010-10-01'
+
+eval
+3 + '2010-09-28'::date
+----
+'2010-10-01'
+
+eval
+'2010-09-28'::date - 3
+----
+'2010-09-25'
+
+eval
+'2010-09-28'::date - '2010-10-21'::date
+----
+-23
+
+eval
+'12:00:00'::time + '1s'::interval
+----
+'12:00:01'
+
+eval
+'1s'::interval + '12:00:00'::time
+----
+'12:00:01'
+
+eval
+'12:00:01'::time - '12:00:00'::time
+----
+'00:00:01'
+
+eval
+'2010-09-28 12:00:00.1-04:00'::timestamp + '12h2m'::interval
+----
+'2010-09-29 00:02:00.1+00:00'
+
+eval
+'12h2m'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp
+----
+'2010-09-29 00:02:00.1+00:00'
+
+eval
+'12 hours 2 minutes'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp
+----
+'2010-09-29 00:02:00.1+00:00'
+
+eval
+'PT12H2M'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp
+----
+'2010-09-29 00:02:00.1+00:00'
+
+eval
+'12:2'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp
+----
+'2010-09-29 00:02:00.1+00:00'
+
+eval
+'2010-09-28 12:00:00.1-04:00'::timestamp - '12h2m'::interval
+----
+'2010-09-27 23:58:00.1+00:00'
+
+eval
+'2010-09-28 12:00:00.1-04:00'::timestamp - '12 hours 2 minutes'::interval
+----
+'2010-09-27 23:58:00.1+00:00'
+
+eval
+'2010-09-28 12:00:00.1-04:00'::timestamp - 'PT12H2M'::interval
+----
+'2010-09-27 23:58:00.1+00:00'
+
+eval
+'2010-09-28 12:00:00.1-04:00'::timestamp - '12:2'::interval
+----
+'2010-09-27 23:58:00.1+00:00'
+
+eval
+'2010-09-28 12:00:00.1-04:00'::timestamp - '2010-09-28 12:00:00.1+00:00'::timestamp
+----
+'00:00:00'
+
+eval
+'2010-09-28 12:00:00.1-04:00'::timestamptz - '2010-09-28 16:00:00.1+00:00'::timestamp
+----
+'00:00:00'
+
+eval
+'2010-09-28 12:00:00.1-04:00'::timestamp - '2010-09-28 12:00:00.1+00:00'::timestamptz
+----
+'00:00:00'
+
+eval
+'1970-01-01 00:01:00.123456-00:00'::timestamp::int
+----
+60
+
+eval
+'1970-01-01 00:01:00.123456-00:00'::timestamptz::int
+----
+60
+
+# Ensure timezone is stripped when casting to timestamp.
+eval
+'1970-01-01 00:01:00.1-01:00'::timestamptz::timestamp
+----
+'1970-01-01 01:01:00.1+00:00'
+
+eval
+'1970-01-01 00:01:00.1-01:00'::timestamp
+----
+'1970-01-01 00:01:00.1+00:00'
+
+eval
+'1970-01-10'::date::int
+----
+9
+
+eval
+'2h3s4us5ns'::interval::int
+----
+7203
+
+eval
+'2h3s4us5ns'::interval::int::interval
+----
+'02:00:03'
+
+eval
+'-2h-3s-4us-5ns'::interval::int::interval
+----
+'-02:00:03'
+
+eval
+'1mon2d3h4s5us'::interval::int
+----
+2775604
+
+eval
+(-2775604)::int::interval
+----
+'-1 mons -2 days -03:00:04'
+
+eval
+'1mon2d3h4s5us'::interval::int::interval
+----
+'1 mon 2 days 03:00:04'
+
+eval
+'-1mon-2d-3h-4s-5us'::interval::int::interval
+----
+'-1 mons -2 days -03:00:04'
+
+# MaxInt64
+eval
+9223372036854775807::int::interval::int
+----
+9223372036854775807
+
+# MinInt64
+eval
+(-9223372036854775808)::int::interval::int
+----
+-9223372036854775808
+
+# MaxInt64
+eval
+'296533308798y20d15h30m7s'::interval::int::interval
+----
+'296533308798 years 20 days 15:30:07'
+
+# MinInt64
+eval
+'-296533308798y-20d-15h-30m-8s'::interval::int::interval
+----
+'-296533308798 years -20 days -15:30:08'
+
+eval
+'1970-01-01 00:01:00.123456-00:00'::timestamp::decimal
+----
+60.123456
+
+eval
+'1970-01-01 00:01:00.123456-00:00'::timestamptz::decimal
+----
+60.123456
+
+eval
+'1970-01-10'::date::decimal
+----
+9
+
+eval
+'2h3s4us5ns'::interval::decimal
+----
+7203.000004005
+
+eval
+7203.000004005::decimal::interval
+----
+'02:00:03.000004005'
+
+eval
+'2h3s4us5ns'::interval::decimal::interval
+----
+'02:00:03.000004005'
+
+eval
+'-2h-3s-4us-5ns'::interval::decimal::interval
+----
+'-02:00:03.000004005'
+
+eval
+'1mon2d3h4s5us6ns'::interval::decimal
+----
+2775604.000005006
+
+eval
+'1mon2d3h4s5us6ns'::interval::decimal::interval
+----
+'1 mon 2 days 03:00:04.000005006'
+
+eval
+(-2775604.000005006)::decimal::interval
+----
+'-1 mons -2 days -03:00:04.000005006'
+
+eval
+'-1mon-2d-3h-4s-5us-6ns'::interval::decimal::interval
+----
+'-1 mons -2 days -03:00:04.000005006'
+
+# MaxInt64
+eval
+(decimal '9223372036854775807.000000001')::interval::decimal
+----
+9223372036854775807.000000001
+
+# MinInt64
+eval
+(decimal '-9223372036854775808.000000001')::interval::decimal
+----
+-9223372036854775808.000000001
+
+# MaxInt64
+eval
+'296533308798y20d15h30m7s1ns'::interval::decimal::interval
+----
+'296533308798 years 20 days 15:30:07.000000001'
+
+# MinInt64
+eval
+'-296533308798y-20d-15h-30m-8s-1ns'::interval::decimal::interval
+----
+'-296533308798 years -20 days -15:30:08.000000001'
+
+eval
+'1970-01-01 00:01:00.123456-00:00'::timestamp::float
+----
+60.123456
+
+eval
+'1970-01-01 00:01:00.123456-00:00'::timestamptz::float
+----
+60.123456
+
+eval
+'1970-01-10'::date::float
+----
+9.0
+
+eval
+'2h3s4us5ns'::interval::float
+----
+7203.000004005
+
+eval
+'2h3s4us5ns'::interval::float::interval
+----
+'02:00:03.000004005'
+
+eval
+'1mon2d3h4s5us'::interval::float
+----
+2.775604000005e+06
+
+eval
+'1mon2d3h4s5us'::interval::float::interval
+----
+'1 mon 2 days 03:00:04.000004999'
+
+eval
+(-2775604.000005006)::float::interval
+----
+'-1 mons -2 days -03:00:04.000005005'
+
+eval
+'-1mon-2d-3h-4s-5us-6ns'::interval::float::interval
+----
+'-1 mons -2 days -03:00:04.000005005'
+
+eval
+10::int::date
+----
+'1970-01-11'
+
+eval
+10::int::timestamp
+----
+'1970-01-01 00:00:10+00:00'
+
+eval
+10::int::timestamptz
+----
+'1970-01-01 00:00:10+00:00'
+
+eval
+10123456::int::interval
+----
+'3 mons 27 days 04:04:16'
+
+eval
+ARRAY[NULL]::string[]
+----
+ARRAY[NULL]
+
+eval
+ARRAY[1,2,3]::string[]
+----
+ARRAY['1','2','3']
+
+eval
+ARRAY['1','2','3']::int[]
+----
+ARRAY[1,2,3]
+
+eval
+ARRAY['1','2','3']::name[]
+----
+ARRAY['1','2','3']
+
+eval
+ARRAY[1,2,3]::decimal[]
+----
+ARRAY[1,2,3]
+
+eval
+ARRAY[1.2,2.4,3.5]::float[]
+----
+ARRAY[1.2,2.4,3.5]
+
+eval
+ARRAY[19620326,19931223]::timestamp[]
+----
+ARRAY['1970-08-16 02:05:26+00:00','1970-08-19 16:27:03+00:00']
+
+eval
+ARRAY[1.2,2.4,3.5]::decimal[]::float[]
+----
+ARRAY[1.2,2.4,3.5]
+
+eval
+ARRAY['3h3us']::interval[]::decimal[]
+----
+ARRAY[10800.000003000]
+
+eval
+ARRAY[1,NULL,3]::string[]
+----
+ARRAY['1',NULL,'3']
+
+eval
+ARRAY['hello','world']::char(2)[]
+----
+ARRAY['he','wo']

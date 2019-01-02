@@ -80,7 +80,7 @@ TEST(FileKeyManager, ReadKeyFiles) {
   for (auto t : test_cases) {
     SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
 
-    FileKeyManager fkm(env.get(), t.active_file, t.old_file);
+    FileKeyManager fkm(env.get(), nullptr, t.active_file, t.old_file);
     auto status = fkm.LoadKeys();
     EXPECT_ERR(status, t.error);
   }
@@ -231,7 +231,7 @@ TEST(FileKeyManager, BuildKeyFromFile) {
   for (auto t : test_cases) {
     SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
 
-    FileKeyManager fkm(env.get(), t.active_file, t.old_file);
+    FileKeyManager fkm(env.get(), nullptr, t.active_file, t.old_file);
     ASSERT_OK(fkm.LoadKeys());
 
     testKey ki;
@@ -266,7 +266,7 @@ TEST(DataKeyManager, LoadKeys) {
 
   // Test a missing file first.
   {
-    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
+    DataKeyManager dkm(env.get(), nullptr, "", 0, false /* read-only */);
     EXPECT_OK(dkm.LoadKeys());
     ASSERT_EQ(dkm.CurrentKey(), nullptr);
   }
@@ -274,7 +274,7 @@ TEST(DataKeyManager, LoadKeys) {
   // Now a file with random data.
   {
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), "blah blah", registry_path));
-    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
+    DataKeyManager dkm(env.get(), nullptr, "", 0, false /* read-only */);
     EXPECT_ERR(dkm.LoadKeys(), "failed to parse key registry " + registry_path);
     ASSERT_OK(env->DeleteFile(registry_path));
   }
@@ -282,7 +282,7 @@ TEST(DataKeyManager, LoadKeys) {
   // Empty file.
   {
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), "", registry_path));
-    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
+    DataKeyManager dkm(env.get(), nullptr, "", 0, false /* read-only */);
     EXPECT_OK(dkm.LoadKeys());
     ASSERT_OK(env->DeleteFile(registry_path));
   }
@@ -293,7 +293,7 @@ TEST(DataKeyManager, LoadKeys) {
     std::string contents;
     ASSERT_TRUE(registry.SerializeToString(&contents));
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
-    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
+    DataKeyManager dkm(env.get(), nullptr, "", 0, false /* read-only */);
     EXPECT_OK(dkm.LoadKeys());
     ASSERT_OK(env->DeleteFile(registry_path));
   }
@@ -301,13 +301,13 @@ TEST(DataKeyManager, LoadKeys) {
   // Active store key not found.
   {
     enginepbccl::DataKeysRegistry registry;
-    registry.set_active_store_key("foobar");
+    registry.set_active_store_key_id("foobar");
 
     std::string contents;
     ASSERT_TRUE(registry.SerializeToString(&contents));
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
 
-    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
+    DataKeyManager dkm(env.get(), nullptr, "", 0, false /* read-only */);
     EXPECT_ERR(dkm.LoadKeys(), "active store key foobar not found");
     ASSERT_OK(env->DeleteFile(registry_path));
   }
@@ -315,13 +315,13 @@ TEST(DataKeyManager, LoadKeys) {
   // Active data key not found.
   {
     enginepbccl::DataKeysRegistry registry;
-    registry.set_active_data_key("foobar");
+    registry.set_active_data_key_id("foobar");
 
     std::string contents;
     ASSERT_TRUE(registry.SerializeToString(&contents));
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
 
-    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
+    DataKeyManager dkm(env.get(), nullptr, "", 0, false /* read-only */);
     EXPECT_ERR(dkm.LoadKeys(), "active data key foobar not found");
     ASSERT_OK(env->DeleteFile(registry_path));
   }
@@ -331,18 +331,18 @@ TEST(DataKeyManager, LoadKeys) {
     enginepbccl::DataKeysRegistry registry;
     (*registry.mutable_store_keys())["foo"] = keyInfoFromTestKey(testKey("foo"));
     (*registry.mutable_store_keys())["bar"] = keyInfoFromTestKey(testKey("bar"));
-    registry.set_active_store_key("foo");
+    registry.set_active_store_key_id("foo");
 
     testKey foo2 = testKey("foo2");
     (*registry.mutable_data_keys())["foo2"] = secretKeyFromTestKey(foo2);
     testKey bar2 = testKey("bar2");
     (*registry.mutable_data_keys())["bar2"] = secretKeyFromTestKey(bar2);
-    registry.set_active_data_key("bar2");
+    registry.set_active_data_key_id("bar2");
 
     std::string contents;
     ASSERT_TRUE(registry.SerializeToString(&contents));
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
-    DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
+    DataKeyManager dkm(env.get(), nullptr, "", 0, false /* read-only */);
     EXPECT_OK(dkm.LoadKeys());
 
     auto k = dkm.CurrentKey();
@@ -492,7 +492,7 @@ TEST(DataKeyManager, SetStoreKey) {
           testKey("plain", "", enginepbccl::Plaintext, now, "data key manager", true, "plain"),
       }};
 
-  DataKeyManager dkm(env.get(), "", 0, false /* read-only */);
+  DataKeyManager dkm(env.get(), nullptr, "", 0, false /* read-only */);
   ASSERT_OK(dkm.LoadKeys());
 
   int test_num = 0;
@@ -502,7 +502,7 @@ TEST(DataKeyManager, SetStoreKey) {
     // Set new active store key.
     auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(
         new enginepbccl::KeyInfo(keyInfoFromTestKey(t.store_info)));
-    auto status = dkm.SetActiveStoreKey(std::move(store_info));
+    auto status = dkm.SetActiveStoreKeyInfo(std::move(store_info));
     EXPECT_ERR(status, t.error);
     if (status.ok()) {
       // New key generated. Check active data key.
@@ -532,7 +532,7 @@ TEST(DataKeyManager, SetStoreKey) {
     }
 
     // Initialize a new data key manager to load the file.
-    DataKeyManager tmp_dkm(env.get(), "", 0, false /* read-only */);
+    DataKeyManager tmp_dkm(env.get(), nullptr, "", 0, false /* read-only */);
     ASSERT_OK(tmp_dkm.LoadKeys());
 
     if (status.ok()) {
@@ -551,7 +551,7 @@ TEST(DataKeyManager, SetStoreKey) {
   }
 }
 
-TEST(DataKeyManager, RotateKey) {
+TEST(DataKeyManager, RotateKeyAtStartup) {
   // MemEnv returns a MockEnv, but use `new mockEnv` to access FakeSleepForMicroseconds.
   // We need to wrap it around a memenv for memory files.
   std::unique_ptr<rocksdb::Env> memenv(rocksdb::NewMemEnv(rocksdb::Env::Default()));
@@ -559,7 +559,7 @@ TEST(DataKeyManager, RotateKey) {
 
   struct TestCase {
     testKey store_info;    // Active store key info.
-    int64_t current_time;  // We update the fake env time before the call to SetActiveStoreKey.
+    int64_t current_time;  // We update the fake env time before the call to SetActiveStoreKeyInfo.
     testKey active_key;    // We call compareNonRandomKeyInfo against the active data key.
   };
 
@@ -599,7 +599,8 @@ TEST(DataKeyManager, RotateKey) {
       },
   };
 
-  DataKeyManager dkm(env.get(), "", 10 /* 10 second rotation period */, false /* read-only */);
+  DataKeyManager dkm(env.get(), nullptr, "", 10 /* 10 second rotation period */,
+                     false /* read-only */);
   ASSERT_OK(dkm.LoadKeys());
 
   int test_num = 0;
@@ -610,7 +611,7 @@ TEST(DataKeyManager, RotateKey) {
     // Set new active store key.
     auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(
         new enginepbccl::KeyInfo(keyInfoFromTestKey(t.store_info)));
-    auto status = dkm.SetActiveStoreKey(std::move(store_info));
+    auto status = dkm.SetActiveStoreKeyInfo(std::move(store_info));
     ASSERT_OK(status);
 
     auto active_info = dkm.CurrentKey();
@@ -620,7 +621,7 @@ TEST(DataKeyManager, RotateKey) {
 
   {
     // Now try a read-only data key manager.
-    DataKeyManager ro_dkm(env.get(), "", 10, true);
+    DataKeyManager ro_dkm(env.get(), nullptr, "", 10, true);
     ASSERT_OK(ro_dkm.LoadKeys());
     // Verify that the key matches the last test case.
     auto tc = test_cases.back();
@@ -632,10 +633,70 @@ TEST(DataKeyManager, RotateKey) {
     env->SetCurrentTime(tc.current_time + 100);
     auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(
         new enginepbccl::KeyInfo(keyInfoFromTestKey(tc.store_info)));
-    EXPECT_ERR(ro_dkm.SetActiveStoreKey(std::move(store_info)),
+    EXPECT_ERR(ro_dkm.SetActiveStoreKeyInfo(std::move(store_info)),
                "key manager is read-only, keys cannot be rotated");
     active_info = ro_dkm.CurrentKey();
     ASSERT_NE(active_info, nullptr);
     EXPECT_OK(compareNonRandomKeyInfo(active_info->info(), tc.active_key));
   }
+}
+
+TEST(DataKeyManager, RotateKeyWhileRunning) {
+  // MemEnv returns a MockEnv, but use `new mockEnv` to access FakeSleepForMicroseconds.
+  // We need to wrap it around a memenv for memory files.
+  std::unique_ptr<rocksdb::Env> memenv(rocksdb::NewMemEnv(rocksdb::Env::Default()));
+  std::unique_ptr<testutils::FakeTimeEnv> env(new testutils::FakeTimeEnv(memenv.get()));
+
+  DataKeyManager dkm(env.get(), nullptr, "", 10 /* 10 second rotation period */,
+                     false /* read-only */);
+  ASSERT_OK(dkm.LoadKeys());
+
+  // Set new active store key.
+  auto plain_key = testKey("plain", "", enginepbccl::Plaintext, 0, "plain");
+  auto plain_info = std::unique_ptr<enginepbccl::KeyInfo>(
+      new enginepbccl::KeyInfo(keyInfoFromTestKey(plain_key)));
+  ASSERT_OK(dkm.SetActiveStoreKeyInfo(std::move(plain_info)));
+
+  auto key1 = dkm.CurrentKeyInfo();
+  EXPECT_EQ(plain_key.id, key1->key_id());
+
+  // Try as we might, we don't rotate plaintext.
+  env->IncCurrentTime(60);
+  auto key2 = dkm.CurrentKeyInfo();
+  EXPECT_EQ(key1->key_id(), key2->key_id());
+  EXPECT_EQ(key1->creation_time(), key2->creation_time());
+
+  // Switch to actual encryption.
+  auto aes_key = testKey(key_id_128, "", enginepbccl::AES128_CTR, 0, "128.key");
+  auto aes_info =
+      std::unique_ptr<enginepbccl::KeyInfo>(new enginepbccl::KeyInfo(keyInfoFromTestKey(aes_key)));
+  ASSERT_OK(dkm.SetActiveStoreKeyInfo(std::move(aes_info)));
+
+  auto aes_key1 = dkm.CurrentKeyInfo();
+  EXPECT_EQ(aes_key.id, aes_key1->parent_key_id());
+  EXPECT_EQ(aes_key1->encryption_type(), enginepbccl::AES128_CTR);
+
+  // Let's grab the key a few times.
+  for (int i = 0; i < 9; i++) {
+    env->IncCurrentTime(1);
+    auto aes_key2 = dkm.CurrentKeyInfo();
+    EXPECT_EQ(aes_key1->key_id(), aes_key2->key_id());
+    EXPECT_EQ(aes_key1->creation_time(), aes_key2->creation_time());
+    EXPECT_EQ(aes_key2->encryption_type(), enginepbccl::AES128_CTR);
+  }
+
+  // Go over the 10s lifetime.
+  env->IncCurrentTime(2);
+  auto aes_key2 = dkm.CurrentKeyInfo();
+  EXPECT_NE(aes_key1->key_id(), aes_key2->key_id());
+  EXPECT_GT(aes_key2->creation_time(), aes_key1->creation_time());
+  EXPECT_EQ(aes_key2->encryption_type(), enginepbccl::AES128_CTR);
+
+  // And again.
+  env->IncCurrentTime(11);
+  auto aes_key3 = dkm.CurrentKeyInfo();
+  EXPECT_NE(aes_key3->key_id(), aes_key2->key_id());
+  EXPECT_NE(aes_key3->key_id(), aes_key1->key_id());
+  EXPECT_GT(aes_key3->creation_time(), aes_key2->creation_time());
+  EXPECT_EQ(aes_key3->encryption_type(), enginepbccl::AES128_CTR);
 }

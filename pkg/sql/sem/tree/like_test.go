@@ -64,7 +64,7 @@ func benchmarkLike(b *testing.B, ctx *EvalContext, caseInsensitive bool) {
 	likeFn, _ := CmpOps[op].lookupImpl(types.String, types.String)
 	iter := func() {
 		for _, p := range benchmarkLikePatterns {
-			if _, err := likeFn.fn(ctx, NewDString("test"), NewDString(p)); err != nil {
+			if _, err := likeFn.Fn(ctx, NewDString("test"), NewDString(p)); err != nil {
 				b.Fatalf("LIKE evaluation failed with error: %v", err)
 			}
 		}

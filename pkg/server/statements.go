@@ -18,12 +18,11 @@ import (
 	"context"
 	"fmt"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func (s *statusServer) Statements(
@@ -56,11 +55,17 @@ func (s *statusServer) Statements(
 		return status.Statements(ctx, localReq)
 	}
 
-	nodeStatement := func(ctx context.Context, status serverpb.StatusClient) (interface{}, error) {
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeStatement := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		status := client.(serverpb.StatusClient)
 		return status.Statements(ctx, localReq)
 	}
 
 	if err := s.iterateNodes(ctx, fmt.Sprintf("statement statistics for node %s", req.NodeID),
+		dialFn,
 		nodeStatement,
 		func(nodeID roachpb.NodeID, resp interface{}) {
 			statementsResp := resp.(*serverpb.StatementsResponse)
@@ -90,12 +95,9 @@ func (s *statusServer) StatementsLocal(ctx context.Context) (*serverpb.Statement
 
 	for i, stmt := range stmtStats {
 		resp.Statements[i] = serverpb.StatementsResponse_CollectedStatementStatistics{
-			Key: serverpb.StatementsResponse_StatementStatisticsKey{
-				Statement: stmt.Key.Query,
-				App:       stmt.Key.App,
-				NodeID:    s.gossip.NodeID.Get(),
-				DistSQL:   stmt.Key.DistSQL,
-				Failed:    stmt.Key.Failed,
+			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{
+				KeyData: stmt.Key,
+				NodeID:  s.gossip.NodeID.Get(),
 			},
 			Stats: stmt.Stats,
 		}

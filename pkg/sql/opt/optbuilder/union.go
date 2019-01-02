@@ -29,9 +29,11 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope *scope) {
-	leftScope := b.buildSelect(clause.Left, inScope)
-	rightScope := b.buildSelect(clause.Right, inScope)
+func (b *Builder) buildUnion(
+	clause *tree.UnionClause, desiredTypes []types.T, inScope *scope,
+) (outScope *scope) {
+	leftScope := b.buildSelect(clause.Left, desiredTypes, inScope)
+	rightScope := b.buildSelect(clause.Right, desiredTypes, inScope)
 
 	// Remove any hidden columns, as they are not included in the Union.
 	leftScope.removeHiddenCols()
@@ -47,7 +49,7 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 	}
 
 	outScope = inScope.push()
-	outScope.appendColumns(leftScope)
+	outScope.appendColumnsFromScope(leftScope)
 
 	// newColsNeeded indicates whether or not we need to synthesize output
 	// columns. This is always required for a UNION, because the output columns
@@ -94,7 +96,7 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 				typ = r.typ
 			}
 
-			b.synthesizeColumn(outScope, string(l.name), typ, nil, 0 /* group */)
+			b.synthesizeColumn(outScope, string(l.name), typ, nil, nil /* scalar */)
 		}
 	}
 
@@ -108,26 +110,28 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 	} else {
 		newCols = leftCols
 	}
-	setOpColMap := memo.SetOpColMap{Left: leftCols, Right: rightCols, Out: newCols}
-	private := b.factory.InternSetOpColMap(&setOpColMap)
+
+	left := leftScope.expr.(memo.RelExpr)
+	right := rightScope.expr.(memo.RelExpr)
+	private := memo.SetPrivate{LeftCols: leftCols, RightCols: rightCols, OutCols: newCols}
 
 	if clause.All {
 		switch clause.Type {
 		case tree.UnionOp:
-			outScope.group = b.factory.ConstructUnionAll(leftScope.group, rightScope.group, private)
+			outScope.expr = b.factory.ConstructUnionAll(left, right, &private)
 		case tree.IntersectOp:
-			outScope.group = b.factory.ConstructIntersectAll(leftScope.group, rightScope.group, private)
+			outScope.expr = b.factory.ConstructIntersectAll(left, right, &private)
 		case tree.ExceptOp:
-			outScope.group = b.factory.ConstructExceptAll(leftScope.group, rightScope.group, private)
+			outScope.expr = b.factory.ConstructExceptAll(left, right, &private)
 		}
 	} else {
 		switch clause.Type {
 		case tree.UnionOp:
-			outScope.group = b.factory.ConstructUnion(leftScope.group, rightScope.group, private)
+			outScope.expr = b.factory.ConstructUnion(left, right, &private)
 		case tree.IntersectOp:
-			outScope.group = b.factory.ConstructIntersect(leftScope.group, rightScope.group, private)
+			outScope.expr = b.factory.ConstructIntersect(left, right, &private)
 		case tree.ExceptOp:
-			outScope.group = b.factory.ConstructExcept(leftScope.group, rightScope.group, private)
+			outScope.expr = b.factory.ConstructExcept(left, right, &private)
 		}
 	}
 

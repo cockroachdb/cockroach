@@ -20,8 +20,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -39,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -189,6 +188,13 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// TODO(dt): Bake into v2.2.
 		name:   "add progress to system.jobs",
 		workFn: addJobsProgress,
+	},
+	{
+		// Introduced in v2.2.
+		// TODO(knz): bake this migration into v2.3.
+		name:             "create system.comment table",
+		workFn:           createCommentTable,
+		newDescriptorIDs: staticIDs(keys.CommentsTableID),
 	},
 }
 
@@ -367,7 +373,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 		if err == nil {
 			break
 		}
-		log.Errorf(ctx, "failed attempt to acquire migration lease: %s", err)
+		log.Infof(ctx, "failed attempt to acquire migration lease: %s", err)
 	}
 	if err != nil {
 		return errors.Wrapf(err, "failed to acquire lease for running necessary migrations")
@@ -501,6 +507,10 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 		}
 	}
 	return err
+}
+
+func createCommentTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.CommentsTable)
 }
 
 var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
@@ -683,7 +693,7 @@ func upgradeDescsWithFn(
 							return err
 						} else if upgraded {
 							// It's safe to ignore the DROP state here and
-							// unconditionally set UpVersion. For proof, see
+							// unconditionally increment the version. For proof, see
 							// TestDropTableWhileUpgradingFormat.
 							//
 							// In fact, it's of the utmost importance that this migration
@@ -695,12 +705,9 @@ func upgradeDescsWithFn(
 							// concern: consider that dropping a large table can take several
 							// days, while upgrading to a new version can take as little as a
 							// few minutes.
-							table.Version++
 							now = txn.CommitTimestamp()
-							idVersions = append(idVersions,
-								sql.NewIDVersion(
-									table.Name, table.ID, table.Version-2,
-								))
+							idVersions = append(idVersions, sql.NewIDVersionPrev(table))
+							table.Version++
 							// Use ValidateTable() instead of Validate()
 							// because of #26422. We still do not know why
 							// a table can reference a dropped database.
@@ -820,7 +827,7 @@ func addJobsProgress(ctx context.Context, r runner) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		desc, err := sqlbase.GetTableDescFromID(ctx, txn, keys.JobsTableID)
+		desc, err := sqlbase.GetMutableTableDescFromID(ctx, txn, keys.JobsTableID)
 		if err != nil {
 			return err
 		}

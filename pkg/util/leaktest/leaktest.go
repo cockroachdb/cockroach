@@ -31,9 +31,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/petermattis/goid"
-
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/petermattis/goid"
 )
 
 // interestingGoroutines returns all goroutines we care about for the purpose
@@ -55,6 +54,9 @@ func interestingGoroutines() map[int64]string {
 		if stack == "" ||
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/pkg/util/log.init") ||
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/pkg/util/log.NewSecondaryLogger") ||
+			// Ignore HTTP keep alives
+			strings.Contains(stack, ").readLoop(") ||
+			strings.Contains(stack, ").writeLoop(") ||
 			// Seems to be gccgo specific.
 			(runtime.Compiler == "gccgo" && strings.Contains(stack, "testing.T.Parallel")) ||
 			// Below are the stacks ignored by the upstream leaktest code.

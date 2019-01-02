@@ -1,10 +1,11 @@
-### Doc Updates
+### Doc updates
 
 Docs team: Please add these manually.
 
 ### Contributors
 
-This release includes 4 merged PRs by 1 author. We would like to thank the following contributors from the CockroachDB community:
+This release includes 4 merged PRs by 1 author.
+We would like to thank the following contributors from the CockroachDB community:
 
 - test6
 

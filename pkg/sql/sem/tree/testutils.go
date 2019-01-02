@@ -39,6 +39,9 @@ func MockNameTypes(types map[string]types.T) func() {
 // when you just need one consistent example of a datum.
 func SampleDatum(t types.T) Datum {
 	switch t {
+	case types.BitArray:
+		a, _ := NewDBitArrayFromInt(123, 40)
+		return a
 	case types.Bool:
 		return MakeDBool(true)
 	case types.Int:
@@ -48,9 +51,8 @@ func SampleDatum(t types.T) Datum {
 		return &f
 	case types.Decimal:
 		d := &DDecimal{}
-		d.Decimal.SetExponent(6)
 		// int64(rng.Uint64()) to get negative numbers, too
-		d.Decimal.SetCoefficient(3)
+		d.Decimal.SetFinite(3, 6)
 		return d
 	case types.String:
 		return NewDString("Carl")
@@ -60,8 +62,6 @@ func SampleDatum(t types.T) Datum {
 		return NewDDate(123123)
 	case types.Time:
 		return MakeDTime(timeofday.FromInt(789))
-	case types.TimeTZ:
-		return MakeDTimeTZ(timeofday.FromInt(789), time.UTC)
 	case types.Timestamp:
 		return MakeDTimestamp(timeutil.Unix(123, 123), time.Second)
 	case types.TimestampTZ:

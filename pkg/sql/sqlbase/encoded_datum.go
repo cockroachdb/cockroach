@@ -17,7 +17,6 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
-
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -70,6 +69,16 @@ func (ed *EncDatum) stringWithAlloc(typ *ColumnType, a *DatumAlloc) string {
 
 func (ed *EncDatum) String(typ *ColumnType) string {
 	return ed.stringWithAlloc(typ, nil)
+}
+
+// BytesEqual is true if the EncDatum's encoded field is equal to the input.
+func (ed *EncDatum) BytesEqual(b []byte) bool {
+	return bytes.Equal(ed.encoded, b)
+}
+
+// EncodedString returns an immutable copy of this EncDatum's encoded field.
+func (ed *EncDatum) EncodedString() string {
+	return string(ed.encoded)
 }
 
 // EncDatumOverhead is the overhead of EncDatum in bytes.
@@ -227,7 +236,7 @@ func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
 	}
 	if len(rem) != 0 {
 		ed.Datum = nil
-		return errors.Errorf("%d trailing bytes in encoded value", len(rem))
+		return errors.Errorf("%d trailing bytes in encoded value: %+v", len(rem), rem)
 	}
 	return nil
 }

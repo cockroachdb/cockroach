@@ -20,9 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/pkg/errors"
 )
 
 //go:generate go run -tags gen-batch gen_batch.go
@@ -39,9 +38,22 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 			return errors.New("transactional request must not set batch timestamp")
 		}
 
-		// Always use the original timestamp for reads and writes, even
-		// though some intents may be written at higher timestamps in the
-		// event of a WriteTooOldError.
+		// The batch timestamp is the timestamp at which reads are performed. We set
+		// this to the txn's original timestamp, even if the txn's provisional
+		// commit timestamp has been forwarded, so that all reads within a txn
+		// observe the same snapshot of the database.
+		//
+		// In other words, we want to preserve the invariant that reading the same
+		// key multiple times in the same transaction will always return the same
+		// value. If we were to read at the latest provisional commit timestamp,
+		// txn.Timestamp, instead, reading the same key twice in the same txn might
+		// yield different results, e.g., if an intervening write caused the
+		// provisional commit timestamp to be advanced. Such a txn would fail to
+		// commit, as its reads would not successfully be refreshed, but only after
+		// confusing the client with spurious data.
+		//
+		// Note that writes will be performed at the provisional commit timestamp,
+		// txn.Timestamp, regardless of the batch timestamp.
 		ba.Timestamp = txn.OrigTimestamp
 		// If a refreshed timestamp is set for the transaction, forward
 		// the batch timestamp to it. The refreshed timestamp indicates a
@@ -101,6 +113,13 @@ func (ba *BatchRequest) IsReadOnly() bool {
 	return len(ba.Requests) > 0 && !ba.hasFlag(isWrite|isAdmin)
 }
 
+// RequiresLeaseHolder returns true if the request can only be served by the
+// leaseholders of the ranges it addresses.
+func (ba *BatchRequest) RequiresLeaseHolder() bool {
+	return !ba.IsReadOnly() || ba.Header.ReadConsistency.RequiresReadLease()
+
+}
+
 // IsReverse returns true iff the BatchRequest contains a reverse request.
 func (ba *BatchRequest) IsReverse() bool {
 	return ba.hasFlag(isReverse)
@@ -115,11 +134,6 @@ func (ba *BatchRequest) IsPossibleTransaction() bool {
 // IsTransactionWrite returns true iff the BatchRequest contains a txn write.
 func (ba *BatchRequest) IsTransactionWrite() bool {
 	return ba.hasFlag(isTxnWrite)
-}
-
-// IsRange returns true iff the BatchRequest contains range-based requests.
-func (ba *BatchRequest) IsRange() bool {
-	return ba.hasFlag(isRange)
 }
 
 // IsUnsplittable returns true iff the BatchRequest an un-splittable request.
@@ -158,6 +172,16 @@ func (ba *BatchRequest) IsSingleQueryTxnRequest() bool {
 	return false
 }
 
+// IsSingleHeartbeatTxnRequest returns true iff the batch contains a single
+// request, and that request is a HeartbeatTxn.
+func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*HeartbeatTxnRequest)
+		return ok
+	}
+	return false
+}
+
 // IsSingleEndTransactionRequest returns true iff the batch contains a single
 // request, and that request is an EndTransactionRequest.
 func (ba *BatchRequest) IsSingleEndTransactionRequest() bool {
@@ -168,11 +192,21 @@ func (ba *BatchRequest) IsSingleEndTransactionRequest() bool {
 	return false
 }
 
-// IsSingleGetSnapshotForMergeRequest returns true iff the batch contains a
-// single request, and that request is an GetSnapshotForMergeRequest.
-func (ba *BatchRequest) IsSingleGetSnapshotForMergeRequest() bool {
+// IsSingleSubsumeRequest returns true iff the batch contains a single request,
+// and that request is an SubsumeRequest.
+func (ba *BatchRequest) IsSingleSubsumeRequest() bool {
 	if ba.IsSingleRequest() {
-		_, ok := ba.Requests[0].GetInner().(*GetSnapshotForMergeRequest)
+		_, ok := ba.Requests[0].GetInner().(*SubsumeRequest)
+		return ok
+	}
+	return false
+}
+
+// IsSingleComputeChecksumRequest returns true iff the batch contains a single
+// request, and that request is a ComputeChecksumRequest.
+func (ba *BatchRequest) IsSingleComputeChecksumRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*ComputeChecksumRequest)
 		return ok
 	}
 	return false
@@ -221,7 +255,15 @@ func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 func (br *BatchResponse) String() string {
 	var str []string
 	str = append(str, fmt.Sprintf("(err: %v)", br.Error))
-	for _, union := range br.Responses {
+	for count, union := range br.Responses {
+		// Limit the strings to provide just a summary. Without this limit a log
+		// message with a BatchResponse can be very long.
+		if count >= 20 && count < len(br.Responses)-5 {
+			if count == 20 {
+				str = append(str, fmt.Sprintf("... %d skipped ...", len(br.Responses)-25))
+			}
+			continue
+		}
 		str = append(str, fmt.Sprintf("%T", union.GetInner()))
 	}
 	return strings.Join(str, ", ")
@@ -257,7 +299,10 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
 // minimal span of keys affected by the request. The supplied function
 // is called with each span and a bool indicating whether the span
 // updates the write timestamp cache.
-func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool)) {
+//
+// The function can return false if it wants the iteration to break. In that
+// case, RefreshSpanIterate also returns false.
+func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool) bool) bool {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !NeedsRefresh(req) {
@@ -268,9 +313,12 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool
 			resp = br.Responses[i].GetInner()
 		}
 		if span, ok := actualSpan(req, resp); ok {
-			fn(span, UpdatesWriteTimestampCache(req))
+			if !fn(span, UpdatesWriteTimestampCache(req)) {
+				return false
+			}
 		}
 	}
+	return true
 }
 
 // actualSpan returns the actual request span which was operated on,
@@ -296,11 +344,13 @@ func actualSpan(req Request, resp Response) (Span, bool) {
 	return h.Span(), true
 }
 
-// Combine implements the Combinable interface. It combines each slot of the
-// given request into the corresponding slot of the base response. The number
-// of slots must be equal and the respective slots must be combinable.
+// Combine combines each slot of the given request into the corresponding slot
+// of the base response. The number of slots must be equal and the respective
+// slots must be combinable.
 // On error, the receiver BatchResponse is in an invalid state. In either case,
 // the supplied BatchResponse must not be used any more.
+// It is an error to call Combine on responses with errors in them. The
+// DistSender strips the errors from any responses that it combines.
 func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) error {
 	if err := br.BatchResponse_Header.combine(otherBatch.BatchResponse_Header); err != nil {
 		return err
@@ -460,19 +510,15 @@ func (ba BatchRequest) String() string {
 			str = append(str, fmt.Sprintf("%s(commit:%t) [%s]", req.Method(), et.Commit, h.Key))
 		} else {
 			h := req.Header()
-			str = append(str, fmt.Sprintf("%s [%s,%s)", req.Method(), h.Key, h.EndKey))
+			var s string
+			if req.Method() == PushTxn {
+				pushReq := req.(*PushTxnRequest)
+				s = fmt.Sprintf("PushTxn(%s->%s)", pushReq.PusherTxn.Short(), pushReq.PusheeTxn.Short())
+			} else {
+				s = req.Method().String()
+			}
+			str = append(str, fmt.Sprintf("%s [%s,%s)", s, h.Key, h.EndKey))
 		}
 	}
 	return strings.Join(str, ", ")
-}
-
-// TODO(marc): we should assert
-// var _ security.RequestWithUser = &BatchRequest{}
-// here, but we need to break cycles first.
-
-// GetUser implements security.RequestWithUser.
-// KV messages are always sent by the node user.
-func (*BatchRequest) GetUser() string {
-	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
-	return "node"
 }

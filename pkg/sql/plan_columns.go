@@ -69,6 +69,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *valuesNode:
 		return n.columns
+	case *virtualTableNode:
+		return n.columns
 	case *explainPlanNode:
 		return n.run.results.columns
 	case *windowNode:
@@ -90,6 +92,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 	case *projectSetNode:
 		return n.columns
 	case *lookupJoinNode:
+		return n.columns
+	case *zigzagJoinNode:
 		return n.columns
 
 	// Nodes with a fixed schema.
@@ -120,12 +124,17 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.plan, mut)
 	case *filterNode:
 		return getPlanColumns(n.source.plan, mut)
+	case *max1RowNode:
+		return getPlanColumns(n.plan, mut)
 	case *limitNode:
 		return getPlanColumns(n.plan, mut)
 	case *spoolNode:
 		return getPlanColumns(n.source, mut)
 	case *serializeNode:
 		return getPlanColumns(n.source, mut)
+
+	case *rowSourceToPlanNode:
+		return n.planCols
 	}
 
 	// Every other node has no columns in their results.

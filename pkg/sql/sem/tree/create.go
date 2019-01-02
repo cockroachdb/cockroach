@@ -29,10 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-
-	"golang.org/x/text/language"
-
 	"github.com/pkg/errors"
+	"golang.org/x/text/language"
 )
 
 // CreateDatabase represents a CREATE DATABASE statement.
@@ -102,7 +100,7 @@ func (l *IndexElemList) Format(ctx *FmtCtx) {
 // CreateIndex represents a CREATE INDEX statement.
 type CreateIndex struct {
 	Name        Name
-	Table       NormalizableTableName
+	Table       TableName
 	Unique      bool
 	Inverted    bool
 	IfNotExists bool
@@ -207,10 +205,11 @@ type ColumnTableDef struct {
 	}
 	CheckExprs []ColumnTableDefCheckExpr
 	References struct {
-		Table          NormalizableTableName
+		Table          *TableName
 		Col            Name
 		ConstraintName Name
 		Actions        ReferenceActions
+		Match          CompositeKeyMatchMethod
 	}
 	Computed struct {
 		Computed bool
@@ -234,7 +233,10 @@ func processCollationOnType(name Name, typ coltypes.T, c ColumnCollation) (colty
 	locale := string(c)
 	switch s := typ.(type) {
 	case *coltypes.TString:
-		return &coltypes.TCollatedString{Name: s.Name, N: s.N, Locale: locale}, nil
+		return &coltypes.TCollatedString{
+			TString: coltypes.TString{Variant: s.Variant, N: s.N},
+			Locale:  locale,
+		}, nil
 	case *coltypes.TCollatedString:
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"multiple COLLATE declarations for column %q", name)
@@ -309,10 +311,11 @@ func NewColumnTableDef(
 				return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
 					"multiple foreign key constraints specified for column %q", name)
 			}
-			d.References.Table = t.Table
+			d.References.Table = &t.Table
 			d.References.Col = t.Col
 			d.References.ConstraintName = c.Name
 			d.References.Actions = t.Actions
+			d.References.Match = t.Match
 		case *ColumnComputedDef:
 			d.Computed.Computed = true
 			d.Computed.Expr = t.Expr
@@ -343,7 +346,7 @@ func (node *ColumnTableDef) HasDefaultExpr() bool {
 
 // HasFKConstraint returns if the ColumnTableDef has a foreign key constraint.
 func (node *ColumnTableDef) HasFKConstraint() bool {
-	return node.References.Table.TableNameReference != nil
+	return node.References.Table != nil
 }
 
 // IsComputed returns if the ColumnTableDef is a computed column.
@@ -371,10 +374,16 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	case NotNull:
 		ctx.WriteString(" NOT NULL")
 	}
-	if node.PrimaryKey {
-		ctx.WriteString(" PRIMARY KEY")
-	} else if node.Unique {
-		ctx.WriteString(" UNIQUE")
+	if node.PrimaryKey || node.Unique {
+		if node.UniqueConstraintName != "" {
+			ctx.WriteString(" CONSTRAINT ")
+			ctx.FormatNode(&node.UniqueConstraintName)
+		}
+		if node.PrimaryKey {
+			ctx.WriteString(" PRIMARY KEY")
+		} else if node.Unique {
+			ctx.WriteString(" UNIQUE")
+		}
 	}
 	if node.HasDefaultExpr() {
 		if node.DefaultExpr.ConstraintName != "" {
@@ -399,11 +408,15 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&node.References.ConstraintName)
 		}
 		ctx.WriteString(" REFERENCES ")
-		ctx.FormatNode(&node.References.Table)
+		ctx.FormatNode(node.References.Table)
 		if node.References.Col != "" {
 			ctx.WriteString(" (")
 			ctx.FormatNode(&node.References.Col)
 			ctx.WriteByte(')')
+		}
+		if node.References.Match != MatchSimple {
+			ctx.WriteByte(' ')
+			ctx.WriteString(node.References.Match.String())
 		}
 		ctx.FormatNode(&node.References.Actions)
 	}
@@ -426,6 +439,9 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 		}
 	}
 }
+
+// String implements the fmt.Stringer interface.
+func (node *ColumnTableDef) String() string { return AsString(node) }
 
 // NamedColumnQualification wraps a NamedColumnQualification with a name.
 type NamedColumnQualification struct {
@@ -476,9 +492,10 @@ type ColumnCheckConstraint struct {
 
 // ColumnFKConstraint represents a FK-constaint on a column.
 type ColumnFKConstraint struct {
-	Table   NormalizableTableName
+	Table   TableName
 	Col     Name // empty-string means use PK
 	Actions ReferenceActions
+	Match   CompositeKeyMatchMethod
 }
 
 // ColumnComputedDef represents the description of a computed column.
@@ -625,13 +642,35 @@ func (node *ReferenceActions) Format(ctx *FmtCtx) {
 	}
 }
 
+// CompositeKeyMatchMethod is the algorithm use when matching composite keys.
+// See https://github.com/cockroachdb/cockroach/issues/20305 or
+// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
+// different composite foreign key matching methods.
+type CompositeKeyMatchMethod int
+
+// The values for CompositeKeyMatchMethod.
+const (
+	MatchSimple CompositeKeyMatchMethod = iota
+	MatchFull
+)
+
+var compositeKeyMatchMethodName = [...]string{
+	MatchSimple: "MATCH SIMPLE",
+	MatchFull:   "MATCH FULL",
+}
+
+func (c CompositeKeyMatchMethod) String() string {
+	return compositeKeyMatchMethodName[c]
+}
+
 // ForeignKeyConstraintTableDef represents a FOREIGN KEY constraint in the AST.
 type ForeignKeyConstraintTableDef struct {
 	Name     Name
-	Table    NormalizableTableName
+	Table    TableName
 	FromCols NameList
 	ToCols   NameList
 	Actions  ReferenceActions
+	Match    CompositeKeyMatchMethod
 }
 
 // Format implements the NodeFormatter interface.
@@ -651,6 +690,11 @@ func (node *ForeignKeyConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteByte('(')
 		ctx.FormatNode(&node.ToCols)
 		ctx.WriteByte(')')
+	}
+
+	if node.Match != MatchSimple {
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.Match.String())
 	}
 
 	ctx.FormatNode(&node.Actions)
@@ -718,7 +762,7 @@ func (node *FamilyTableDef) Format(ctx *FmtCtx) {
 // InterleaveDef represents an interleave definition within a CREATE TABLE
 // or CREATE INDEX statement.
 type InterleaveDef struct {
-	Parent       *NormalizableTableName
+	Parent       TableName
 	Fields       NameList
 	DropBehavior DropBehavior
 }
@@ -726,7 +770,7 @@ type InterleaveDef struct {
 // Format implements the NodeFormatter interface.
 func (node *InterleaveDef) Format(ctx *FmtCtx) {
 	ctx.WriteString(" INTERLEAVE IN PARENT ")
-	ctx.FormatNode(node.Parent)
+	ctx.FormatNode(&node.Parent)
 	ctx.WriteString(" (")
 	for i := range node.Fields {
 		if i > 0 {
@@ -810,8 +854,8 @@ func (node *ListPartition) Format(ctx *FmtCtx) {
 // RangePartition represents a PARTITION definition within a PARTITION BY RANGE.
 type RangePartition struct {
 	Name         UnrestrictedName
-	From         Expr
-	To           Expr
+	From         Exprs
+	To           Exprs
 	Subpartition *PartitionBy
 }
 
@@ -819,10 +863,11 @@ type RangePartition struct {
 func (node *RangePartition) Format(ctx *FmtCtx) {
 	ctx.WriteString(`PARTITION `)
 	ctx.FormatNode(&node.Name)
-	ctx.WriteString(` VALUES FROM `)
-	ctx.FormatNode(node.From)
-	ctx.WriteString(` TO `)
-	ctx.FormatNode(node.To)
+	ctx.WriteString(` VALUES FROM (`)
+	ctx.FormatNode(&node.From)
+	ctx.WriteString(`) TO (`)
+	ctx.FormatNode(&node.To)
+	ctx.WriteByte(')')
 	if node.Subpartition != nil {
 		ctx.FormatNode(node.Subpartition)
 	}
@@ -831,7 +876,7 @@ func (node *RangePartition) Format(ctx *FmtCtx) {
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists   bool
-	Table         NormalizableTableName
+	Table         TableName
 	Interleave    *InterleaveDef
 	PartitionBy   *PartitionBy
 	Defs          TableDefs
@@ -852,6 +897,12 @@ func (node *CreateTable) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 	ctx.FormatNode(&node.Table)
+	node.FormatBody(ctx)
+}
+
+// FormatBody formats the "body" of the create table definition - everything
+// but the CREATE TABLE tableName part.
+func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 	if node.As() {
 		if len(node.AsColumnNames) > 0 {
 			ctx.WriteString(" (")
@@ -873,10 +924,67 @@ func (node *CreateTable) Format(ctx *FmtCtx) {
 	}
 }
 
+// HoistConstraints finds column constraints defined inline with their columns
+// and makes them table-level constraints, stored in n.Defs. For example, the
+// foreign key constraint in
+//
+//     CREATE TABLE foo (a INT REFERENCES bar(a))
+//
+// gets pulled into a top-level constraint like:
+//
+//     CREATE TABLE foo (a INT, FOREIGN KEY (a) REFERENCES bar(a))
+//
+// Similarly, the CHECK constraint in
+//
+//    CREATE TABLE foo (a INT CHECK (a < 1), b INT)
+//
+// gets pulled into a top-level constraint like:
+//
+//    CREATE TABLE foo (a INT, b INT, CHECK (a < 1))
+//
+// Note that some SQL databases require that a constraint attached to a column
+// to refer only to the column it is attached to. We follow Postgres' behavior,
+// however, in omitting this restriction by blindly hoisting all column
+// constraints. For example, the following table definition is accepted in
+// CockroachDB and Postgres, but not necessarily other SQL databases:
+//
+//    CREATE TABLE foo (a INT CHECK (a < b), b INT)
+//
+func (node *CreateTable) HoistConstraints() {
+	for _, d := range node.Defs {
+		if col, ok := d.(*ColumnTableDef); ok {
+			for _, checkExpr := range col.CheckExprs {
+				node.Defs = append(node.Defs,
+					&CheckConstraintTableDef{
+						Expr: checkExpr.Expr,
+						Name: checkExpr.ConstraintName,
+					},
+				)
+			}
+			col.CheckExprs = nil
+			if col.HasFKConstraint() {
+				var targetCol NameList
+				if col.References.Col != "" {
+					targetCol = append(targetCol, col.References.Col)
+				}
+				node.Defs = append(node.Defs, &ForeignKeyConstraintTableDef{
+					Table:    *col.References.Table,
+					FromCols: NameList{col.Name},
+					ToCols:   targetCol,
+					Name:     col.References.ConstraintName,
+					Actions:  col.References.Actions,
+					Match:    col.References.Match,
+				})
+				col.References.Table = nil
+			}
+		}
+	}
+}
+
 // CreateSequence represents a CREATE SEQUENCE statement.
 type CreateSequence struct {
 	IfNotExists bool
-	Name        NormalizableTableName
+	Name        TableName
 	Options     SequenceOptions
 }
 
@@ -928,6 +1036,8 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 				ctx.WriteString("BY ")
 			}
 			ctx.Printf("%d", *option.IntVal)
+		case SeqOptVirtual:
+			ctx.WriteString(option.Name)
 		default:
 			panic(fmt.Sprintf("unexpected SequenceOption: %v", option))
 		}
@@ -954,6 +1064,7 @@ const (
 	SeqOptMinValue  = "MINVALUE"
 	SeqOptMaxValue  = "MAXVALUE"
 	SeqOptStart     = "START"
+	SeqOptVirtual   = "VIRTUAL"
 
 	// Avoid unused warning for constants.
 	_ = SeqOptAs
@@ -1028,7 +1139,7 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
-	Name        NormalizableTableName
+	Name        TableName
 	ColumnNames NameList
 	AsSource    *Select
 }
@@ -1053,7 +1164,8 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 type CreateStats struct {
 	Name        Name
 	ColumnNames NameList
-	Table       NormalizableTableName
+	Table       TableExpr
+	AsOf        AsOfClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -1061,9 +1173,16 @@ func (node *CreateStats) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE STATISTICS ")
 	ctx.FormatNode(&node.Name)
 
-	ctx.WriteString(" ON ")
-	ctx.FormatNode(&node.ColumnNames)
+	if len(node.ColumnNames) > 0 {
+		ctx.WriteString(" ON ")
+		ctx.FormatNode(&node.ColumnNames)
+	}
 
 	ctx.WriteString(" FROM ")
-	ctx.FormatNode(&node.Table)
+	ctx.FormatNode(node.Table)
+
+	if node.AsOf.Expr != nil {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(&node.AsOf)
+	}
 }

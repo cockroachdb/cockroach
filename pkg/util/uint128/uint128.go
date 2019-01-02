@@ -94,6 +94,7 @@ func (u Uint128) Xor(o Uint128) Uint128 {
 }
 
 // FromBytes parses the byte slice as a 128 bit big-endian unsigned integer.
+// The caller is responsible for ensuring the byte slice contains 16 bytes.
 func FromBytes(b []byte) Uint128 {
 	hi := binary.BigEndian.Uint64(b[:8])
 	lo := binary.BigEndian.Uint64(b[8:])

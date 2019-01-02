@@ -216,7 +216,7 @@ INSERT INTO t VALUES
   ('x' COLLATE en),
   ('ü' COLLATE en)
 
-statement error locale "de" doesn't match locale "en" of column "a"
+statement error value type collatedstring{de} doesn't match type STRING COLLATE en of column "a"
 INSERT INTO t VALUES ('X' COLLATE de)
 
 query T
@@ -280,14 +280,14 @@ SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMP
 2017-01-10 16:05:50.734049 +0000 +0000
 
 query T
-SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMP WITH TIME ZONE
+SELECT '2017-01-10 16:05:50.734049+00:00' COLLATE en::TIMESTAMPTZ
 ----
-2017-01-10 16:05:50.734049 +0000 +0000
+2017-01-10 16:05:50.734049 +0000 UTC
 
 query T
 SELECT '40 days' COLLATE en::INTERVAL
 ----
-40d
+40 days
 
 statement ok
 CREATE TABLE foo(a STRING COLLATE en_u_ks_level2)

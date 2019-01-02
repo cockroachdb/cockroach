@@ -13,22 +13,24 @@ import (
 	"compress/gzip"
 	"context"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"strings"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,14 +39,6 @@ import (
 )
 
 type readFileFunc func(context.Context, io.Reader, int32, string, progressFn) error
-
-type ctxProvider struct {
-	context.Context
-}
-
-func (c ctxProvider) Ctx() context.Context {
-	return c
-}
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -112,22 +106,11 @@ func readInputFiles(
 			}
 			defer f.Close()
 			bc := &byteCounter{r: f}
-
-			var src io.Reader
-			compression := guessCompressionFromName(dataFile, format.Compression)
-			switch compression {
-			case roachpb.IOFileFormat_Gzip:
-				r, err := gzip.NewReader(bc)
-				if err != nil {
-					return err
-				}
-				defer r.Close()
-				src = r
-			case roachpb.IOFileFormat_Bzip:
-				src = bzip2.NewReader(bc)
-			default:
-				src = bc
+			src, err := decompressingReader(bc, dataFile, format.Compression)
+			if err != nil {
+				return err
 			}
+			defer src.Close()
 
 			wrappedProgressFn := func(finished bool) error { return nil }
 			if updateFromBytes {
@@ -161,6 +144,19 @@ func readInputFiles(
 		}
 	}
 	return nil
+}
+
+func decompressingReader(
+	in io.Reader, name string, hint roachpb.IOFileFormat_Compression,
+) (io.ReadCloser, error) {
+	switch guessCompressionFromName(name, hint) {
+	case roachpb.IOFileFormat_Gzip:
+		return gzip.NewReader(in)
+	case roachpb.IOFileFormat_Bzip:
+		return ioutil.NopCloser(bzip2.NewReader(in)), nil
+	default:
+		return ioutil.NopCloser(in), nil
+	}
 }
 
 func guessCompressionFromName(
@@ -201,11 +197,11 @@ type rowConverter struct {
 	kvBatch  kvBatch
 	batchCap int
 
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.ImmutableTableDescriptor
 
 	// The rest of these are derived from tableDesc, just cached here.
 	hidden                int
-	ri                    sqlbase.RowInserter
+	ri                    row.Inserter
 	evalCtx               *tree.EvalContext
 	cols                  []sqlbase.ColumnDescriptor
 	visibleCols           []sqlbase.ColumnDescriptor
@@ -219,14 +215,15 @@ const kvBatchSize = 1000
 func newRowConverter(
 	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- kvBatch,
 ) (*rowConverter, error) {
+	immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc)
 	c := &rowConverter{
-		tableDesc: tableDesc,
+		tableDesc: immutDesc,
 		kvCh:      kvCh,
 		evalCtx:   evalCtx,
 	}
 
-	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
-		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
+	ri, err := row.MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
+		immutDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")
 	}
@@ -236,14 +233,14 @@ func newRowConverter(
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, c.evalCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(immutDesc.Columns, immutDesc, &txCtx, c.evalCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
 	}
 	c.cols = cols
 	c.defaultExprs = defaultExprs
 
-	c.visibleCols = tableDesc.VisibleColumns()
+	c.visibleCols = immutDesc.VisibleColumns()
 	c.visibleColTypes = make([]types.T, len(c.visibleCols))
 	for i := range c.visibleCols {
 		c.visibleColTypes[i] = c.visibleCols[i].DatumType()
@@ -265,13 +262,13 @@ func newRowConverter(
 		return nil, errors.New("unexpected hidden column")
 	}
 
-	padding := 2 * (len(tableDesc.Indexes) + len(tableDesc.Families))
+	padding := 2 * (len(immutDesc.Indexes) + len(immutDesc.Families))
 	c.batchCap = kvBatchSize + padding
 	c.kvBatch = make(kvBatch, 0, c.batchCap)
 
 	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    tableDesc.Columns,
+		Cols:    immutDesc.Columns,
 	}
 	return c, nil
 }
@@ -298,7 +295,7 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 	var computeExprs []tree.TypedExpr
 	var computedCols []sqlbase.ColumnDescriptor
 
-	row, err := sql.GenerateInsertRow(
+	insertRow, err := sql.GenerateInsertRow(
 		c.defaultExprs, computeExprs, c.cols, computedCols, *c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
 	if err != nil {
 		return errors.Wrapf(err, "generate insert row")
@@ -309,9 +306,9 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 			kv.Value.InitChecksum(kv.Key)
 			c.kvBatch = append(c.kvBatch, kv)
 		}),
-		row,
+		insertRow,
 		true, /* ignoreConflicts */
-		sqlbase.SkipFKs,
+		row.SkipFKs,
 		false, /* traceKV */
 	); err != nil {
 		return errors.Wrapf(err, "insert row")
@@ -346,7 +343,7 @@ var csvOutputTypes = []sqlbase.ColumnType{
 func newReadImportDataProcessor(
 	flowCtx *distsqlrun.FlowCtx,
 	processorID int32,
-	spec distsqlrun.ReadImportDataSpec,
+	spec distsqlpb.ReadImportDataSpec,
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readImportDataProcessor{
@@ -356,7 +353,7 @@ func newReadImportDataProcessor(
 		output:      output,
 	}
 
-	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
+	if err := cp.out.Init(&distsqlpb.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return cp, nil
@@ -373,7 +370,7 @@ type inputConverter interface {
 type readImportDataProcessor struct {
 	flowCtx     *distsqlrun.FlowCtx
 	processorID int32
-	spec        distsqlrun.ReadImportDataSpec
+	spec        distsqlpb.ReadImportDataSpec
 	out         distsqlrun.ProcOutputHelper
 	output      distsqlrun.RowReceiver
 }
@@ -431,7 +428,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup
 	var err error
 	switch cp.spec.Format.Format {
 	case roachpb.IOFileFormat_CSV:
-		conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, evalCtx)
+		conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, cp.flowCtx)
 	case roachpb.IOFileFormat_MysqlOutfile:
 		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
@@ -460,7 +457,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup
 		}
 
 		progFn := func(pct float32) error {
-			return job.Progressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			return job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				d := details.(*jobspb.Progress_Import).Import
 				slotpct := pct * cp.spec.Progress.Contribution
 				if len(d.SamplingProgress) > 0 {
@@ -512,10 +509,21 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup
 				if completedSpans.Contains(kv.Key) {
 					continue
 				}
-				if sampleAll || keys.IsDescriptorKey(kv.Key) || fn(kv) {
-					row := sqlbase.EncDatumRow{
-						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
+
+				rowRequired := sampleAll || keys.IsDescriptorKey(kv.Key)
+				if rowRequired || fn(kv) {
+					var row sqlbase.EncDatumRow
+					if rowRequired {
+						row = sqlbase.EncDatumRow{
+							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
+						}
+					} else {
+						// Don't send the value for rows returned for sampling
+						row = sqlbase.EncDatumRow{
+							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+						}
 					}
 
 					cs, err := cp.out.EmitRow(ctx, row)

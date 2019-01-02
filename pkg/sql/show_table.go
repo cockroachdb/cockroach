@@ -31,21 +31,11 @@ import (
 // %[4]s the database name as SQL identifier.
 // %[5]s the schema name as SQL string literal.
 func (p *planner) showTableDetails(
-	ctx context.Context, showType string, t tree.NormalizableTableName, query string,
+	ctx context.Context, showType string, tn *tree.TableName, query string,
 ) (planNode, error) {
-	tn, err := t.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	var desc *TableDescriptor
 	// We avoid the cache so that we can observe the details without
 	// taking a lease, like other SHOW commands.
-	//
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
-	})
+	desc, err := p.ResolveUncachedTableDescriptor(ctx, tn, true /*required*/, anyDescType)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +57,7 @@ func (p *planner) showTableDetails(
 
 // checkDBExists checks if the database exists by using the security.RootUser.
 func checkDBExists(ctx context.Context, p *planner, db string) error {
-	_, err := p.PhysicalSchemaAccessor().GetDatabaseDesc(db,
-		p.CommonLookupFlags(ctx, true /*required*/))
+	_, err := p.PhysicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, db,
+		p.CommonLookupFlags(true /*required*/))
 	return err
 }

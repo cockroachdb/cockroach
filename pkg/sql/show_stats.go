@@ -27,7 +27,7 @@ import (
 )
 
 var showTableStatsColumns = sqlbase.ResultColumns{
-	{Name: "table_name", Typ: types.String},
+	{Name: "statistics_name", Typ: types.String},
 	{Name: "column_names", Typ: types.TArray{Typ: types.String}},
 	{Name: "created", Typ: types.Timestamp},
 	{Name: "row_count", Typ: types.Int},
@@ -43,19 +43,9 @@ var showTableStatsJSONColumns = sqlbase.ResultColumns{
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
 // Privileges: Any privilege on table.
 func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
-	tn, err := n.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	var desc *TableDescriptor
 	// We avoid the cache so that we can observe the stats without
 	// taking a lease, like other SHOW commands.
-	//
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-	})
+	desc, err := p.ResolveUncachedTableDescriptor(ctx, &n.Table, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +173,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	}, nil
 }
 
-func statColumnString(desc *TableDescriptor, colID tree.Datum) string {
+func statColumnString(desc *ImmutableTableDescriptor, colID tree.Datum) string {
 	id := sqlbase.ColumnID(*colID.(*tree.DInt))
 	colDesc, err := desc.FindColumnByID(id)
 	if err != nil {

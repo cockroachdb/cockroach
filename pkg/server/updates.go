@@ -24,12 +24,10 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/mitchellh/reflectwalk"
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -46,6 +44,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/gogo/protobuf/proto"
+	"github.com/mitchellh/reflectwalk"
+	"github.com/pkg/errors"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/host"
+	"github.com/shirou/gopsutil/load"
+	"github.com/shirou/gopsutil/mem"
 )
 
 const baseUpdatesURL = `https://register.cockroachdb.com/api/clusters/updates`
@@ -186,6 +191,37 @@ func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time
 	url.RawQuery = q.Encode()
 }
 
+func fillHardwareInfo(ctx context.Context, report *diagnosticspb.DiagnosticReport) {
+	if platform, family, version, err := host.PlatformInformation(); err == nil {
+		report.Node.Os.Family = family
+		report.Node.Os.Platform = platform
+		report.Node.Os.Version = version
+	}
+
+	if virt, role, err := host.Virtualization(); err == nil && role == "guest" {
+		report.Node.Hardware.Virtualization = virt
+	}
+
+	if m, err := mem.VirtualMemory(); err == nil {
+		report.Node.Hardware.Mem.Available = m.Available
+		report.Node.Hardware.Mem.Total = m.Total
+	}
+
+	report.Node.Hardware.Cpu.Numcpu = int32(runtime.NumCPU())
+	if cpus, err := cpu.InfoWithContext(ctx); err == nil && len(cpus) > 0 {
+		report.Node.Hardware.Cpu.Sockets = int32(len(cpus))
+		c := cpus[0]
+		report.Node.Hardware.Cpu.Cores = c.Cores
+		report.Node.Hardware.Cpu.Model = c.ModelName
+		report.Node.Hardware.Cpu.Mhz = float32(c.Mhz)
+		report.Node.Hardware.Cpu.Features = c.Flags
+	}
+
+	if l, err := load.AvgWithContext(ctx); err == nil {
+		report.Node.Hardware.Loadavg15 = float32(l.Load15)
+	}
+}
+
 // checkForUpdates calls home to check for new versions for the current platform
 // and logs messages if it finds them, as well as if it encounters any errors.
 // The returned boolean indicates if the check succeeded (and thus does not need
@@ -251,7 +287,6 @@ func (s *Server) maybeReportDiagnostics(
 		s.reportDiagnostics(ctx, running)
 	}
 	s.pgServer.SQLServer.ResetStatementStats(ctx)
-	s.pgServer.SQLServer.ResetErrorCounts()
 
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
@@ -260,6 +295,7 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	info := diagnosticspb.DiagnosticReport{}
 	n := s.node.recorder.GenerateNodeStatus(ctx)
 	info.Node = diagnosticspb.NodeInfo{NodeID: s.node.Descriptor.NodeID}
+	fillHardwareInfo(ctx, &info)
 
 	secret := sql.ClusterSecret.Get(&s.cfg.Settings.SV)
 	// Add in the localities.
@@ -275,6 +311,9 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		info.Stores[i].NodeID = r.Desc.Node.NodeID
 		info.Stores[i].StoreID = r.Desc.StoreID
 		info.Stores[i].KeyCount = int64(r.Metrics["keycount"])
+		info.Stores[i].Capacity = int64(r.Metrics["capacity"])
+		info.Stores[i].Available = int64(r.Metrics["capacity.available"])
+		info.Stores[i].Used = int64(r.Metrics["capacity.used"])
 		info.Node.KeyCount += info.Stores[i].KeyCount
 		info.Stores[i].RangeCount = int64(r.Metrics["replicas"])
 		info.Node.RangeCount += info.Stores[i].RangeCount
@@ -290,10 +329,7 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	}
 	info.Schema = schema
 
-	info.FeatureUsage = telemetry.GetAndResetFeatureCounts()
-
-	info.ErrorCounts = make(map[string]int64)
-	info.UnimplementedErrors = make(map[string]int64)
+	info.FeatureUsage = telemetry.GetAndResetFeatureCounts(true /* quantize */)
 
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
@@ -337,15 +373,22 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	}
 
 	info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
-	s.pgServer.SQLServer.FillErrorCounts(info.ErrorCounts, info.UnimplementedErrors)
 	return &info
 }
 
 func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret string) {
-	dst.RangeMinBytes = src.RangeMinBytes
-	dst.RangeMaxBytes = src.RangeMaxBytes
-	dst.GC.TTLSeconds = src.GC.TTLSeconds
-	dst.NumReplicas = src.NumReplicas
+	if src.RangeMinBytes != nil {
+		dst.RangeMinBytes = proto.Int64(*src.RangeMinBytes)
+	}
+	if src.RangeMaxBytes != nil {
+		dst.RangeMaxBytes = proto.Int64(*src.RangeMaxBytes)
+	}
+	if src.GC != nil {
+		dst.GC = &config.GCPolicy{TTLSeconds: src.GC.TTLSeconds}
+	}
+	if src.NumReplicas != nil {
+		dst.NumReplicas = proto.Int32(*src.NumReplicas)
+	}
 	dst.Constraints = make([]config.Constraints, len(src.Constraints))
 	for i := range src.Constraints {
 		dst.Constraints[i].NumReplicas = src.Constraints[i].NumReplicas

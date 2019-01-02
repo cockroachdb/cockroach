@@ -23,8 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 type indexKeyTest struct {
@@ -108,13 +107,7 @@ func decodeIndex(
 		return nil, err
 	}
 	values := make([]EncDatum, len(index.ColumnIDs))
-	colDirs := make([]encoding.Direction, len(index.ColumnDirections))
-	for i, dir := range index.ColumnDirections {
-		colDirs[i], err = dir.ToEncodingDirection()
-		if err != nil {
-			return nil, err
-		}
-	}
+	colDirs := index.ColumnDirections
 	_, ok, err := DecodeIndexKey(tableDesc, index, types, values, colDirs, key)
 	if err != nil {
 		return nil, err
@@ -361,6 +354,10 @@ func TestArrayEncoding(t *testing.T) {
 			enc = append(enc, byte(len(test.encoding)))
 			enc = append(enc, test.encoding...)
 			d, _, err := decodeArray(&DatumAlloc{}, test.datum.ParamTyp, enc)
+			hasNulls := d.(*tree.DArray).HasNulls
+			if test.datum.HasNulls != hasNulls {
+				t.Fatalf("expected %v to have HasNulls=%t, got %t", enc, test.datum.HasNulls, hasNulls)
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -441,11 +438,6 @@ func TestMarshalColumnValue(t *testing.T) {
 		{
 			kind:  ColumnType_TIME,
 			datum: tree.MakeDTime(timeofday.FromInt(314159)),
-			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
-		},
-		{
-			kind:  ColumnType_TIMETZ,
-			datum: tree.MakeDTimeTZ(timeofday.FromInt(314159), time.UTC),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
 		},
 		{

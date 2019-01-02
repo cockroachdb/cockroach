@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -39,8 +40,6 @@ import (
 	"github.com/docker/go-connections/nat"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Retrieve the IP address of docker itself.
@@ -69,11 +68,6 @@ type Container struct {
 	id      string
 	name    string
 	cluster *DockerCluster
-}
-
-// ID returns the container's id.
-func (c Container) ID() string {
-	return c.id
 }
 
 // Name returns the container's name.

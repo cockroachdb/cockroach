@@ -15,20 +15,18 @@ import (
 	"sort"
 	"sync/atomic"
 
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/ccl/gossipccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,9 +39,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
-type tableRewriteMap map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite
+// TableRewriteMap maps old table IDs to new table and parent IDs.
+type TableRewriteMap map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite
 
 const (
 	restoreOptIntoDB               = "into_db"
@@ -51,10 +52,10 @@ const (
 	restoreOptSkipMissingSequences = "skip_missing_sequences"
 )
 
-var restoreOptionExpectValues = map[string]bool{
-	restoreOptIntoDB:               true,
-	restoreOptSkipMissingFKs:       false,
-	restoreOptSkipMissingSequences: false,
+var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
+	restoreOptIntoDB:               sql.KVStringOptRequireValue,
+	restoreOptSkipMissingFKs:       sql.KVStringOptRequireNoValue,
+	restoreOptSkipMissingSequences: sql.KVStringOptRequireNoValue,
 }
 
 func loadBackupDescs(
@@ -166,16 +167,14 @@ func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error
 	// Re-format to change all DB names to `newDB`.
 	f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
 	f.WithReformatTableNames(
-		func(ctx *tree.FmtCtx, t *tree.NormalizableTableName) {
-			tn, err := t.Normalize()
-			if err != nil {
-				return
-			}
+		func(ctx *tree.FmtCtx, tn *tree.TableName) {
 			// empty catalog e.g. ``"".information_schema.tables` should stay empty.
 			if tn.CatalogName != "" {
 				tn.CatalogName = tree.Name(newDB)
 			}
-			ctx.FormatNode(tn)
+			ctxCopy := *ctx
+			ctxCopy.WithReformatTableNames(nil)
+			ctxCopy.FormatNode(tn)
 		})
 	f.FormatNode(stmt)
 	table.ViewQuery = f.CloseAndGetString()
@@ -193,8 +192,8 @@ func allocateTableRewrites(
 	sqlDescs []sqlbase.Descriptor,
 	restoreDBs []*sqlbase.DatabaseDescriptor,
 	opts map[string]string,
-) (tableRewriteMap, error) {
-	tableRewrites := make(tableRewriteMap)
+) (TableRewriteMap, error) {
+	tableRewrites := make(TableRewriteMap)
 	overrideDB, renaming := opts[restoreOptIntoDB]
 
 	restoreDBNames := make(map[string]*sqlbase.DatabaseDescriptor, len(restoreDBs))
@@ -389,11 +388,11 @@ func CheckTableExists(
 	return nil
 }
 
-// rewriteTableDescs mutates tables to match the ID and privilege specified in
-// tableRewrites, as well as adjusting cross-table references to use the new
-// IDs.
-func rewriteTableDescs(
-	tables []*sqlbase.TableDescriptor, tableRewrites tableRewriteMap, overrideDB string,
+// RewriteTableDescs mutates tables to match the ID and privilege specified
+// in tableRewrites, as well as adjusting cross-table references to use the
+// new IDs. overrideDB can be specified to set database names in views.
+func RewriteTableDescs(
+	tables []*sqlbase.TableDescriptor, tableRewrites TableRewriteMap, overrideDB string,
 ) error {
 	for _, table := range tables {
 		tableRewrite, ok := tableRewrites[table.ID]
@@ -810,8 +809,8 @@ func splitAndScatter(
 			}
 
 			select {
-			case <-g.Done:
-				return g.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			case importSpanChunksCh <- importSpanChunk:
 			}
 		}
@@ -854,8 +853,8 @@ func splitAndScatter(
 					}
 
 					select {
-					case <-g.Done:
-						return g.Err()
+					case <-ctx.Done():
+						return ctx.Err()
 					case readyForImportCh <- importSpan:
 					}
 				}
@@ -879,6 +878,7 @@ func WriteTableDescs(
 	tables []*sqlbase.TableDescriptor,
 	user string,
 	settings *cluster.Settings,
+	extra []roachpb.KeyValue,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "WriteTableDescs")
 	defer tracing.FinishSpan(span)
@@ -911,6 +911,9 @@ func WriteTableDescs(
 			b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(table), nil)
 			b.CPut(table.GetNameMetadataKey(), table.ID, nil)
 		}
+		for _, kv := range extra {
+			b.InitPut(kv.Key, &kv.Value, false)
+		}
 		if err := txn.Run(ctx, b); err != nil {
 			if _, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok {
 				return errors.New("table already exists")
@@ -928,10 +931,12 @@ func WriteTableDescs(
 	return errors.Wrap(err, "restoring table desc and namespace entries")
 }
 
-func restoreJobDescription(restore *tree.Restore, from []string) (string, error) {
+func restoreJobDescription(
+	restore *tree.Restore, from []string, opts map[string]string,
+) (string, error) {
 	r := &tree.Restore{
 		AsOf:    restore.AsOf,
-		Options: restore.Options,
+		Options: optsToKVOptions(opts),
 		Targets: restore.Targets,
 		From:    make(tree.Exprs, len(restore.From)),
 	}
@@ -956,7 +961,7 @@ func restore(
 	backupDescs []BackupDescriptor,
 	endTime hlc.Timestamp,
 	sqlDescs []sqlbase.Descriptor,
-	tableRewrites tableRewriteMap,
+	tableRewrites TableRewriteMap,
 	overrideDB string,
 	job *jobs.Job,
 	resultsCh chan<- tree.Datums,
@@ -969,9 +974,9 @@ func restore(
 		syncutil.Mutex
 		res               roachpb.BulkOpSummary
 		requestsCompleted []bool
-		lowWaterMark      int
+		highWaterMark     int
 	}{
-		lowWaterMark: -1,
+		highWaterMark: -1,
 	}
 
 	var databases []*sqlbase.DatabaseDescriptor
@@ -998,8 +1003,20 @@ func restore(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := rewriteTableDescs(tables, tableRewrites, overrideDB); err != nil {
+	if err := RewriteTableDescs(tables, tableRewrites, overrideDB); err != nil {
 		return mu.res, nil, nil, err
+	}
+
+	{
+		// Disable merging for the table IDs being restored into. We don't want the
+		// merge queue undoing the splits performed during RESTORE.
+		tableIDs := make([]uint32, 0, len(tables))
+		for _, t := range tables {
+			tableIDs = append(tableIDs, uint32(t.ID))
+		}
+		disableCtx, cancel := context.WithCancel(restoreCtx)
+		defer cancel()
+		gossipccl.DisableMerges(disableCtx, gossip, tableIDs)
 	}
 
 	// Get TableRekeys to use when importing raw data.
@@ -1021,8 +1038,8 @@ func restore(
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
-	lowWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.LowWaterMark
-	importSpans, _, err := makeImportSpans(spans, backupDescs, lowWaterMark, errOnMissingRange)
+	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
+	importSpans, _, err := makeImportSpans(spans, backupDescs, highWaterMark, errOnMissingRange)
 	if err != nil {
 		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
@@ -1040,8 +1057,8 @@ func restore(
 			switch d := details.(type) {
 			case *jobspb.Progress_Restore:
 				mu.Lock()
-				if mu.lowWaterMark >= 0 {
-					d.Restore.LowWaterMark = importSpans[mu.lowWaterMark].Key
+				if mu.highWaterMark >= 0 {
+					d.Restore.HighWater = importSpans[mu.highWaterMark].Key
 				}
 				mu.Unlock()
 			default:
@@ -1092,68 +1109,70 @@ func restore(
 		defer tracing.FinishSpan(progressSpan)
 		return progressLogger.Loop(ctx, requestFinishedCh)
 	})
+	g.GoCtx(func(ctx context.Context) error {
+		log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
+		for readyForImportSpan := range readyForImportCh {
+			newSpan, err := kr.RewriteSpan(readyForImportSpan.Span)
+			if err != nil {
+				return err
+			}
+			idx := readyForImportSpan.progressIdx
 
-	log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
-	for readyForImportSpan := range readyForImportCh {
-		newSpan, err := kr.RewriteSpan(readyForImportSpan.Span)
-		if err != nil {
-			return mu.res, nil, nil, err
-		}
-		idx := readyForImportSpan.progressIdx
-
-		importRequest := &roachpb.ImportRequest{
-			// Import is a point request because we don't want DistSender to split
-			// it. Assume (but don't require) the entire post-rewrite span is on the
-			// same range.
-			RequestHeader: roachpb.RequestHeader{Key: newSpan.Key},
-			DataSpan:      readyForImportSpan.Span,
-			Files:         readyForImportSpan.files,
-			EndTime:       endTime,
-			Rekeys:        rekeys,
-		}
-
-		log.VEventf(restoreCtx, 1, "importing %d of %d", idx, len(importSpans))
-
-		select {
-		case importsSem <- struct{}{}:
-		case <-g.Done:
-			return mu.res, nil, nil, errors.Wrapf(g.Wait(), "importing %d ranges", len(importSpans))
-		}
-
-		g.GoCtx(func(ctx context.Context) error {
-			ctx, importSpan := tracing.ChildSpan(ctx, "import")
-			log.Event(ctx, "acquired semaphore")
-			defer tracing.FinishSpan(importSpan)
-			defer func() { <-importsSem }()
-
-			importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
-			if pErr != nil {
-				return pErr.GoError()
+			importRequest := &roachpb.ImportRequest{
+				// Import is a point request because we don't want DistSender to split
+				// it. Assume (but don't require) the entire post-rewrite span is on the
+				// same range.
+				RequestHeader: roachpb.RequestHeader{Key: newSpan.Key},
+				DataSpan:      readyForImportSpan.Span,
+				Files:         readyForImportSpan.files,
+				EndTime:       endTime,
+				Rekeys:        rekeys,
 			}
 
-			mu.Lock()
-			mu.res.Add(importRes.(*roachpb.ImportResponse).Imported)
+			log.VEventf(restoreCtx, 1, "importing %d of %d", idx, len(importSpans))
 
-			// Assert that we're actually marking the correct span done. See #23977.
-			if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
+			select {
+			case importsSem <- struct{}{}:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			g.GoCtx(func(ctx context.Context) error {
+				ctx, importSpan := tracing.ChildSpan(ctx, "import")
+				log.Event(ctx, "acquired semaphore")
+				defer tracing.FinishSpan(importSpan)
+				defer func() { <-importsSem }()
+
+				importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
+				if pErr != nil {
+					return pErr.GoError()
+				}
+
+				mu.Lock()
+				mu.res.Add(importRes.(*roachpb.ImportResponse).Imported)
+
+				// Assert that we're actually marking the correct span done. See #23977.
+				if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
+					mu.Unlock()
+					return errors.Errorf(
+						"request %d for span %v (to %v) does not match import span for same idx: %v",
+						idx, importRequest.DataSpan, newSpan, importSpans[idx],
+					)
+				}
+				mu.requestsCompleted[idx] = true
+				for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
+					mu.highWaterMark = j
+				}
 				mu.Unlock()
-				return errors.Errorf(
-					"request %d for span %v (to %v) does not match import span for same idx: %v",
-					idx, importRequest.DataSpan, newSpan, importSpans[idx],
-				)
-			}
-			mu.requestsCompleted[idx] = true
-			for j := mu.lowWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
-				mu.lowWaterMark = j
-			}
-			mu.Unlock()
 
-			requestFinishedCh <- struct{}{}
-			return nil
-		})
-	}
+				requestFinishedCh <- struct{}{}
+				return nil
+			})
+		}
+		log.Event(restoreCtx, "wait for outstanding imports to finish")
+		return nil
+	})
 
-	log.Event(restoreCtx, "wait for outstanding imports to finish")
 	if err := g.Wait(); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
@@ -1307,7 +1326,7 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(restoreStmt, from)
+	description, err := restoreJobDescription(restoreStmt, from, opts)
 	if err != nil {
 		return err
 	}
@@ -1318,7 +1337,7 @@ func doRestorePlan(
 			tables = append(tables, tableDesc)
 		}
 	}
-	if err := rewriteTableDescs(tables, tableRewrites, opts[restoreOptIntoDB]); err != nil {
+	if err := RewriteTableDescs(tables, tableRewrites, opts[restoreOptIntoDB]); err != nil {
 		return err
 	}
 
@@ -1426,7 +1445,7 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jo
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
-	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Payload().Username, r.settings); err != nil {
+	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Payload().Username, r.settings, nil); err != nil {
 		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
 	}
 

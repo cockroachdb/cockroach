@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 import { assert } from "chai";
 import fetchMock from "src/util/fetch-mock";
 import { Store } from "redux";
@@ -308,7 +322,7 @@ describe("alerts", function() {
         const alert = disconnectedAlertSelector(state());
         assert.isObject(alert);
         assert.equal(alert.level, AlertLevel.CRITICAL);
-        assert.equal(alert.title, "Connection to CockroachDB node lost.");
+        assert.equal(alert.title, "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.");
       });
 
       it("does not display if dismissed locally", function () {

@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -26,11 +27,14 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"golang.org/x/oauth2/google"
-
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2/google"
 )
 
 func appendPath(t *testing.T, s, add string) string {
@@ -395,9 +399,6 @@ func TestPutS3(t *testing.T) {
 		t.Skip("AWS_S3_BUCKET env var must be set")
 	}
 
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
 	testExportStore(t,
 		fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
@@ -432,9 +433,6 @@ func TestPutS3Endpoint(t *testing.T) {
 		t.Skip("AWS_S3_ENDPOINT_BUCKET env var must be set")
 	}
 
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
 	u := url.URL{
 		Scheme:   "s3",
 		Host:     bucket,
@@ -453,14 +451,29 @@ func TestPutGoogleCloud(t *testing.T) {
 		t.Skip("GS_BUCKET env var must be set")
 	}
 
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
 	t.Run("empty", func(t *testing.T) {
 		testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test-empty"), false)
 	})
 	t.Run("default", func(t *testing.T) {
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-default", AuthParam, authParamDefault), false)
+	})
+	t.Run("specified", func(t *testing.T) {
+		credentials := os.Getenv("GS_JSONKEY")
+		if credentials == "" {
+			t.Skip("GS_JSONKEY env var must be set")
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
+		testExportStore(t,
+			fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s",
+				bucket,
+				"backup-test-specified",
+				AuthParam,
+				authParamSpecified,
+				CredentialsParam,
+				url.QueryEscape(encoded),
+			),
+			false,
+		)
 	})
 	t.Run("implicit", func(t *testing.T) {
 		// Only test these if they exist.
@@ -484,9 +497,6 @@ func TestPutAzure(t *testing.T) {
 		t.Skip("AZURE_CONTAINER env var must be set")
 	}
 
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
 	testExportStore(t,
 		fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test",
@@ -495,4 +505,84 @@ func TestPutAzure(t *testing.T) {
 		),
 		false,
 	)
+}
+
+func TestWorkloadStorage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	settings := cluster.MakeTestingClusterSettings()
+
+	rows, payloadBytes, ranges := 4, 12, 1
+	gen := bank.FromConfig(rows, payloadBytes, ranges)
+	bankTable := gen.Tables()[0]
+	bankURL := func(extraParams ...map[string]string) *url.URL {
+		params := url.Values{`version`: []string{gen.Meta().Version}}
+		flags := gen.(workload.Flagser).Flags()
+		flags.VisitAll(func(f *pflag.Flag) {
+			if flags.Meta[f.Name].RuntimeOnly {
+				return
+			}
+			params[f.Name] = append(params[f.Name], f.Value.String())
+		})
+		for _, p := range extraParams {
+			for key, value := range p {
+				params.Add(key, value)
+			}
+		}
+		return &url.URL{
+			Scheme:   `experimental-workload`,
+			Path:     `/` + path.Join(`csv`, gen.Meta().Name, bankTable.Name),
+			RawQuery: params.Encode(),
+		}
+	}
+
+	ctx := context.Background()
+
+	{
+		s, err := ExportStorageFromURI(ctx, bankURL().String(), settings)
+		require.NoError(t, err)
+		r, err := s.ReadFile(ctx, ``)
+		require.NoError(t, err)
+		bytes, err := ioutil.ReadAll(r)
+		require.NoError(t, err)
+		require.Equal(t, strings.TrimSpace(`
+0,0,initial-58
+1,0,initial-49
+2,0,initial-6d
+3,0,initial-6e
+		`), strings.TrimSpace(string(bytes)))
+	}
+
+	{
+		params := map[string]string{`row-start`: `1`, `row-end`: `3`, `payload-bytes`: `14`}
+		s, err := ExportStorageFromURI(ctx, bankURL(params).String(), settings)
+		require.NoError(t, err)
+		r, err := s.ReadFile(ctx, ``)
+		require.NoError(t, err)
+		bytes, err := ioutil.ReadAll(r)
+		require.NoError(t, err)
+		require.Equal(t, strings.TrimSpace(`
+1,0,initial-494d
+2,0,initial-6d54
+		`), strings.TrimSpace(string(bytes)))
+	}
+
+	_, err := ExportStorageFromURI(ctx, `experimental-workload:///nope`, settings)
+	require.EqualError(t, err, `path must be of the form /<format>/<generator>/<table>: /nope`)
+	_, err = ExportStorageFromURI(ctx, `experimental-workload:///fmt/bank/bank?version=`, settings)
+	require.EqualError(t, err, `unsupported format: fmt`)
+	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/nope/nope?version=`, settings)
+	require.EqualError(t, err, `unknown generator: nope`)
+	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/bank/bank`, settings)
+	require.EqualError(t, err, `parameter version is required`)
+	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/bank/bank?version=`, settings)
+	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
+	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/bank/bank?version=nope`, settings)
+	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
+
+	tooOldSettings := cluster.MakeTestingClusterSettingsWithVersion(
+		cluster.VersionByKey(cluster.Version2_1), cluster.VersionByKey(cluster.Version2_1))
+	_, err = ExportStorageFromURI(ctx, bankURL().String(), tooOldSettings)
+	require.EqualError(t, err,
+		`cluster version does not support experimental-workload (>= 2.1-3 required)`)
 }

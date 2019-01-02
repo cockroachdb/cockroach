@@ -16,9 +16,11 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -26,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// optCatalog implements the opt.Catalog interface over the SchemaResolver
+// optCatalog implements the cat.Catalog interface over the SchemaResolver
 // interface for the use of the new optimizer. The interfaces are simplified to
 // only include what the optimizer needs, and certain common lookups are cached
 // for faster performance.
@@ -36,46 +38,208 @@ type optCatalog struct {
 
 	statsCache *stats.TableStatisticsCache
 
-	// wrappers is a cache of table wrappers that's used to satisfy repeated
-	// calls to the FindTable method for the same table.
-	wrappers map[*sqlbase.TableDescriptor]*optTable
+	// dataSources is a cache of table and view objects that's used to satisfy
+	// repeated calls for the same data source. The same underlying descriptor
+	// will always return the same data source wrapper object.
+	dataSources map[*sqlbase.ImmutableTableDescriptor]cat.DataSource
 }
 
-var _ opt.Catalog = &optCatalog{}
+var _ cat.Catalog = &optCatalog{}
 
-// init allows the optCatalog wrapper to be inlined.
+// init allows the caller to pre-allocate optCatalog.
 func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver LogicalSchema) {
 	oc.resolver = resolver
 	oc.statsCache = statsCache
+	oc.dataSources = nil
 }
 
-// FindTable is part of the opt.Catalog interface.
-func (oc *optCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
-	desc, err := ResolveExistingObject(ctx, oc.resolver, name, true /*required*/, requireTableDesc)
+// ResolveDataSource is part of the cat.Catalog interface.
+func (oc *optCatalog) ResolveDataSource(
+	ctx context.Context, name *tree.TableName,
+) (cat.DataSource, error) {
+	desc, err := ResolveExistingObject(ctx, oc.resolver, name, true /* required */, anyDescType)
+	if err != nil {
+		return nil, err
+	}
+	return oc.newDataSource(desc, name)
+}
+
+// ResolveDataSourceByID is part of the cat.Catalog interface.
+func (oc *optCatalog) ResolveDataSourceByID(
+	ctx context.Context, dataSourceID cat.StableID,
+) (cat.DataSource, error) {
+
+	tableLookup, err := oc.resolver.LookupTableByID(ctx, sqlbase.ID(dataSourceID))
+
+	if err != nil || tableLookup.IsAdding {
+		if err == sqlbase.ErrDescriptorNotFound || tableLookup.IsAdding {
+			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
+		}
+		return nil, err
+	}
+	desc := tableLookup.Table
+
+	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.resolver.Txn(), desc.ParentID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := oc.resolver.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-		return nil, err
-	}
-
-	// Check to see if there's already a wrapper for this table descriptor.
-	if oc.wrappers == nil {
-		oc.wrappers = make(map[*sqlbase.TableDescriptor]*optTable)
-	}
-	wrapper, ok := oc.wrappers[desc]
-	if !ok {
-		wrapper = newOptTable(name, oc.statsCache, desc)
-		oc.wrappers[desc] = wrapper
-	}
-	return wrapper, nil
+	name := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
+	return oc.newDataSource(desc, &name)
 }
 
-// optTable is a wrapper around sqlbase.TableDescriptor that caches index
+// CheckPrivilege is part of the cat.Catalog interface.
+func (oc *optCatalog) CheckPrivilege(
+	ctx context.Context, ds cat.DataSource, priv privilege.Kind,
+) error {
+	switch t := ds.(type) {
+	case *optTable:
+		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
+	case *optView:
+		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
+	case *optSequence:
+		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
+	default:
+		panic("invalid DataSource")
+	}
+}
+
+// newDataSource returns a data source wrapper for the given table descriptor.
+// The wrapper might come from the cache, or it may be created now.
+func (oc *optCatalog) newDataSource(
+	desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName,
+) (cat.DataSource, error) {
+	// Check to see if there's already a data source wrapper for this descriptor.
+	if oc.dataSources == nil {
+		oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
+	} else {
+		if ds, ok := oc.dataSources[desc]; ok {
+			return ds, nil
+		}
+	}
+
+	// Create wrapper for the data source now.
+	var ds cat.DataSource
+	switch {
+	case desc.IsTable():
+		stats, err := oc.statsCache.GetTableStats(context.TODO(), desc.ID)
+		if err != nil {
+			// Ignore any error. We still want to be able to run queries even if we lose
+			// access to the statistics table.
+			// TODO(radu): at least log the error.
+			stats = nil
+		}
+		ds = newOptTable(desc, name, stats)
+
+	case desc.IsView():
+		ds = newOptView(desc, name)
+
+	case desc.IsSequence():
+		ds = newOptSequence(desc, name)
+
+	default:
+		panic(fmt.Sprintf("unexpected table descriptor: %+v", desc))
+	}
+
+	oc.dataSources[desc] = ds
+	return ds, nil
+}
+
+// optView is a wrapper around sqlbase.ImmutableTableDescriptor that implements
+// the cat.DataSource and cat.View interfaces.
+type optView struct {
+	desc *sqlbase.ImmutableTableDescriptor
+
+	// name is the fully qualified, fully resolved, fully normalized name of
+	// the view.
+	name tree.TableName
+}
+
+var _ cat.View = &optView{}
+
+func newOptView(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName) *optView {
+	ov := &optView{desc: desc, name: *name}
+
+	// The cat.View interface requires that view names be fully qualified.
+	ov.name.ExplicitSchema = true
+	ov.name.ExplicitCatalog = true
+
+	return ov
+}
+
+// ID is part of the cat.DataSource interface.
+func (ov *optView) ID() cat.StableID {
+	return cat.StableID(ov.desc.ID)
+}
+
+// Version is part of the cat.DataSource interface.
+func (ov *optView) Version() cat.Version {
+	return cat.Version(ov.desc.Version)
+}
+
+// Name is part of the cat.View interface.
+func (ov *optView) Name() *tree.TableName {
+	return &ov.name
+}
+
+// Query is part of the cat.View interface.
+func (ov *optView) Query() string {
+	return ov.desc.ViewQuery
+}
+
+// ColumnNameCount is part of the cat.View interface.
+func (ov *optView) ColumnNameCount() int {
+	return len(ov.desc.Columns)
+}
+
+// ColumnName is part of the cat.View interface.
+func (ov *optView) ColumnName(i int) tree.Name {
+	return tree.Name(ov.desc.Columns[i].Name)
+}
+
+// optSequence is a wrapper around sqlbase.ImmutableTableDescriptor that implements the
+// cat.DataSource interface.
+//
+// TODO(andyk): This should implement cat.Sequence once we have it.
+type optSequence struct {
+	desc *sqlbase.ImmutableTableDescriptor
+
+	// name is the fully qualified, fully resolved, fully normalized name of the
+	// sequence.
+	name tree.TableName
+}
+
+var _ cat.DataSource = &optSequence{}
+
+func newOptSequence(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName) *optSequence {
+	ot := &optSequence{desc: desc, name: *name}
+
+	// The cat.Sequence interface requires that table names be fully qualified.
+	ot.name.ExplicitSchema = true
+	ot.name.ExplicitCatalog = true
+
+	return ot
+}
+
+// ID is part of the cat.DataSource interface.
+func (os *optSequence) ID() cat.StableID {
+	return cat.StableID(os.desc.ID)
+}
+
+// Version is part of the cat.DataSource interface.
+func (os *optSequence) Version() cat.Version {
+	return cat.Version(os.desc.Version)
+}
+
+// Name is part of the cat.DataSource interface.
+func (os *optSequence) Name() *tree.TableName {
+	return &os.name
+}
+
+// optTable is a wrapper around sqlbase.ImmutableTableDescriptor that caches index
 // wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
-	desc *sqlbase.TableDescriptor
+	desc *sqlbase.ImmutableTableDescriptor
 
 	// name is the fully qualified, fully resolved, fully normalized name of the
 	// table.
@@ -83,8 +247,6 @@ type optTable struct {
 
 	// primary is the inlined wrapper for the table's primary index.
 	primary optIndex
-
-	statsCache *stats.TableStatisticsCache
 
 	// stats is nil until StatisticCount is called. After that it will not be nil,
 	// even when there are no statistics.
@@ -97,46 +259,96 @@ type optTable struct {
 	// wrappers is a cache of index wrappers that's used to satisfy repeated
 	// calls to the SecondaryIndex method for the same index.
 	wrappers map[*sqlbase.IndexDescriptor]*optIndex
+
+	// mutations is a list of mutation columns associated with this table. These
+	// are present when the table is undergoing an online schema change where one
+	// or more columns are being added or dropped.
+	mutations []cat.MutationColumn
 }
 
-var _ opt.Table = &optTable{}
+var _ cat.Table = &optTable{}
 
 func newOptTable(
-	name *tree.TableName, statsCache *stats.TableStatisticsCache, desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName, stats []*stats.TableStatistic,
 ) *optTable {
-	ot := &optTable{name: *name}
-	ot.init(statsCache, desc)
+	ot := &optTable{desc: desc, name: *name}
+	if stats != nil {
+		ot.stats = make([]optTableStat, len(stats))
+		n := 0
+		for i := range stats {
+			// We skip any stats that have columns that don't exist in the table anymore.
+			if ot.stats[n].init(ot, stats[i]) {
+				n++
+			}
+		}
+		ot.stats = ot.stats[:n]
+	}
+
+	ot.prepareMutationColumns(desc)
+
+	// The cat.Table interface requires that table names be fully qualified.
+	ot.name.ExplicitSchema = true
+	ot.name.ExplicitCatalog = true
+
+	ot.primary.init(ot, &desc.PrimaryIndex)
+
 	return ot
 }
 
-// init allows the optTable wrapper to be inlined.
-func (ot *optTable) init(statsCache *stats.TableStatisticsCache, desc *sqlbase.TableDescriptor) {
-	ot.desc = desc
-	ot.primary.init(ot, &desc.PrimaryIndex)
-	ot.statsCache = statsCache
+func (ot *optTable) prepareMutationColumns(desc *sqlbase.ImmutableTableDescriptor) {
+	if len(desc.MutationColumns()) != 0 {
+		ot.mutations = make([]cat.MutationColumn, 0, len(ot.desc.MutationColumns()))
+		writeCols := ot.desc.WriteOnlyColumns()
+		delCols := ot.desc.DeleteOnlyColumns()
+		for i := range writeCols {
+			ot.mutations = append(ot.mutations, cat.MutationColumn{
+				Column:       &writeCols[i],
+				IsDeleteOnly: false,
+			})
+		}
+		for i := range delCols {
+			ot.mutations = append(ot.mutations, cat.MutationColumn{
+				Column:       &delCols[i],
+				IsDeleteOnly: true,
+			})
+		}
+	}
 }
 
-// TabName is part of the opt.Table interface.
-func (ot *optTable) TabName() *tree.TableName {
+// ID is part of the cat.DataSource interface.
+func (ot *optTable) ID() cat.StableID {
+	return cat.StableID(ot.desc.ID)
+}
+
+// Version is part of the cat.DataSource interface.
+func (ot *optTable) Version() cat.Version {
+	return cat.Version(ot.desc.Version)
+}
+
+// Name is part of the cat.DataSource interface.
+func (ot *optTable) Name() *tree.TableName {
 	return &ot.name
 }
 
-// IsVirtualTable is part of the opt.Table interface.
+// IsVirtualTable is part of the cat.Table interface.
 func (ot *optTable) IsVirtualTable() bool {
 	return ot.desc.IsVirtualTable()
 }
 
-// ColumnCount is part of the opt.Table interface.
+// ColumnCount is part of the cat.Table interface.
 func (ot *optTable) ColumnCount() int {
-	return len(ot.desc.Columns)
+	return len(ot.desc.Columns) + len(ot.mutations)
 }
 
-// Column is part of the opt.Table interface.
-func (ot *optTable) Column(i int) opt.Column {
-	return &ot.desc.Columns[i]
+// Column is part of the cat.Table interface.
+func (ot *optTable) Column(i int) cat.Column {
+	if i < len(ot.desc.Columns) {
+		return &ot.desc.Columns[i]
+	}
+	return &ot.mutations[i-len(ot.desc.Columns)]
 }
 
-// IndexCount is part of the opt.Table interface.
+// IndexCount is part of the cat.Table interface.
 func (ot *optTable) IndexCount() int {
 	if ot.desc.IsVirtualTable() {
 		return 0
@@ -145,10 +357,10 @@ func (ot *optTable) IndexCount() int {
 	return 1 + len(ot.desc.Indexes)
 }
 
-// Index is part of the opt.Table interface.
-func (ot *optTable) Index(i int) opt.Index {
+// Index is part of the cat.Table interface.
+func (ot *optTable) Index(i int) cat.Index {
 	// Primary index is always 0th index.
-	if i == opt.PrimaryIndex {
+	if i == cat.PrimaryIndex {
 		return &ot.primary
 	}
 
@@ -167,34 +379,13 @@ func (ot *optTable) Index(i int) opt.Index {
 	return wrapper
 }
 
-// StatisticCount is part of the opt.Table interface.
+// StatisticCount is part of the cat.Table interface.
 func (ot *optTable) StatisticCount() int {
-	if ot.stats != nil {
-		return len(ot.stats)
-	}
-	stats, err := ot.statsCache.GetTableStats(context.TODO(), ot.desc.ID)
-	if err != nil {
-		// Ignore any error. We still want to be able to run queries even if we lose
-		// access to the statistics table.
-		// TODO(radu): at least log the error.
-		ot.stats = make([]optTableStat, 0)
-		return 0
-	}
-	ot.stats = make([]optTableStat, len(stats))
-	n := 0
-	for i := range stats {
-		// We skip any stats that have columns that don't exist in
-		// the table anymore.
-		if ot.stats[n].init(ot, stats[i]) {
-			n++
-		}
-	}
-	ot.stats = ot.stats[:n]
-	return n
+	return len(ot.stats)
 }
 
-// Statistic is part of the opt.Table interface.
-func (ot *optTable) Statistic(i int) opt.TableStatistic {
+// Statistic is part of the cat.Table interface.
+func (ot *optTable) Statistic(i int) cat.TableStatistic {
 	return &ot.stats[i]
 }
 
@@ -209,9 +400,14 @@ func (ot *optTable) ensureColMap() {
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
-func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) int {
+func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
 	ot.ensureColMap()
-	return ot.colMap[colID]
+	col, ok := ot.colMap[colID]
+	if ok {
+		return col, nil
+	}
+	return col, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+		"column [%d] does not exist", colID)
 }
 
 // optIndex is a wrapper around sqlbase.IndexDescriptor that caches some
@@ -226,9 +422,13 @@ type optIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
+
+	// foreignKey stores IDs of another table and one of its indexes,
+	// if this index is part of an outbound foreign key relation.
+	foreignKey cat.ForeignKeyReference
 }
 
-var _ opt.Index = &optIndex{}
+var _ cat.Index = &optIndex{}
 
 func newOptIndex(tab *optTable, desc *sqlbase.IndexDescriptor) *optIndex {
 	oi := &optIndex{}
@@ -236,7 +436,8 @@ func newOptIndex(tab *optTable, desc *sqlbase.IndexDescriptor) *optIndex {
 	return oi
 }
 
-// init allows the optIndex wrapper to be inlined.
+// init can be used instead of newOptIndex when we have a pre-allocated instance
+// (e.g. as part of a bigger struct).
 func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 	oi.tab = tab
 	oi.desc = desc
@@ -261,7 +462,7 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 	if desc.Unique {
 		notNull := true
 		for _, id := range desc.ColumnIDs {
-			ord := tab.lookupColumnOrdinal(id)
+			ord, _ := tab.lookupColumnOrdinal(id)
 			if tab.desc.Columns[ord].Nullable {
 				notNull = false
 				break
@@ -287,39 +488,50 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 		oi.numLaxKeyCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs)
 		oi.numKeyCols = oi.numLaxKeyCols
 	}
+
+	if desc.ForeignKey.IsSet() {
+		oi.foreignKey.TableID = cat.StableID(desc.ForeignKey.Table)
+		oi.foreignKey.IndexID = cat.StableID(desc.ForeignKey.Index)
+		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
+	}
 }
 
-// IdxName is part of the opt.Index interface.
-func (oi *optIndex) IdxName() string {
+// ID is part of the cat.Index interface.
+func (oi *optIndex) ID() cat.StableID {
+	return cat.StableID(oi.desc.ID)
+}
+
+// Name is part of the cat.Index interface.
+func (oi *optIndex) Name() string {
 	return oi.desc.Name
 }
 
-// IsInverted is part of the opt.Index interface.
+// IsInverted is part of the cat.Index interface.
 func (oi *optIndex) IsInverted() bool {
 	return oi.desc.Type == sqlbase.IndexDescriptor_INVERTED
 }
 
-// ColumnCount is part of the opt.Index interface.
+// ColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
 }
 
-// KeyColumnCount is part of the opt.Index interface.
+// KeyColumnCount is part of the cat.Index interface.
 func (oi *optIndex) KeyColumnCount() int {
 	return oi.numKeyCols
 }
 
-// LaxKeyColumnCount is part of the opt.Index interface.
+// LaxKeyColumnCount is part of the cat.Index interface.
 func (oi *optIndex) LaxKeyColumnCount() int {
 	return oi.numLaxKeyCols
 }
 
-// Column is part of the opt.Index interface.
-func (oi *optIndex) Column(i int) opt.IndexColumn {
+// Column is part of the cat.Index interface.
+func (oi *optIndex) Column(i int) cat.IndexColumn {
 	length := len(oi.desc.ColumnIDs)
 	if i < length {
-		ord := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
-		return opt.IndexColumn{
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+		return cat.IndexColumn{
 			Column:     oi.tab.Column(ord),
 			Ordinal:    ord,
 			Descending: oi.desc.ColumnDirections[i] == sqlbase.IndexDescriptor_DESC,
@@ -329,13 +541,30 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 	i -= length
 	length = len(oi.desc.ExtraColumnIDs)
 	if i < length {
-		ord := oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
-		return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
+		return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 	}
 
 	i -= length
-	ord := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
-	return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
+	return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+}
+
+// ForeignKey is part of the cat.Index interface.
+func (oi *optIndex) ForeignKey() (cat.ForeignKeyReference, bool) {
+	desc := oi.desc
+	if desc.ForeignKey.IsSet() {
+		oi.foreignKey.TableID = cat.StableID(desc.ForeignKey.Table)
+		oi.foreignKey.IndexID = cat.StableID(desc.ForeignKey.Index)
+		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
+		oi.foreignKey.Match = sqlbase.ForeignKeyReferenceMatchValue[desc.ForeignKey.Match]
+	}
+	return oi.foreignKey, oi.desc.ForeignKey.IsSet()
+}
+
+// Table is part of the cat.Index interface.
+func (oi *optIndex) Table() cat.Table {
+	return oi.tab
 }
 
 type optTableStat struct {
@@ -346,7 +575,7 @@ type optTableStat struct {
 	nullCount      uint64
 }
 
-var _ opt.TableStatistic = &optTableStat{}
+var _ cat.TableStatistic = &optTableStat{}
 
 func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool) {
 	os.createdAt = stat.CreatedAt
@@ -367,32 +596,32 @@ func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool
 	return true
 }
 
-// CreatedAt is part of the opt.TableStatistic interface.
+// CreatedAt is part of the cat.TableStatistic interface.
 func (os *optTableStat) CreatedAt() time.Time {
 	return os.createdAt
 }
 
-// ColumnCount is part of the opt.TableStatistic interface.
+// ColumnCount is part of the cat.TableStatistic interface.
 func (os *optTableStat) ColumnCount() int {
 	return len(os.columnOrdinals)
 }
 
-// ColumnOrdinal is part of the opt.TableStatistic interface.
+// ColumnOrdinal is part of the cat.TableStatistic interface.
 func (os *optTableStat) ColumnOrdinal(i int) int {
 	return os.columnOrdinals[i]
 }
 
-// RowCount is part of the opt.TableStatistic interface.
+// RowCount is part of the cat.TableStatistic interface.
 func (os *optTableStat) RowCount() uint64 {
 	return os.rowCount
 }
 
-// DistinctCount is part of the opt.TableStatistic interface.
+// DistinctCount is part of the cat.TableStatistic interface.
 func (os *optTableStat) DistinctCount() uint64 {
 	return os.distinctCount
 }
 
-// NullCount is part of the opt.TableStatistic interface.
+// NullCount is part of the cat.TableStatistic interface.
 func (os *optTableStat) NullCount() uint64 {
 	return os.nullCount
 }

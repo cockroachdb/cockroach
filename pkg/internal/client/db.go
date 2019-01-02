@@ -19,8 +19,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // KeyValue represents a single key/value pair. This is similar to
@@ -266,6 +265,11 @@ func (db *DB) GetFactory() TxnSenderFactory {
 	return db.factory
 }
 
+// Clock returns the DB's hlc.Clock.
+func (db *DB) Clock() *hlc.Clock {
+	return db.clock
+}
+
 // NewDB returns a new DB.
 func NewDB(actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock) *DB {
 	return NewDBWithContext(actx, factory, clock, DefaultDBContext())
@@ -501,12 +505,13 @@ func (db *DB) AdminChangeReplicas(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// CheckConsistency runs a consistency check on all the ranges containing
-// the key span. It logs a diff of all the keys that are inconsistent
-// when withDiff is set to true.
-func (db *DB) CheckConsistency(ctx context.Context, begin, end interface{}, withDiff bool) error {
+// AdminRelocateRange relocates the replicas for a range onto the specified
+// list of stores.
+func (db *DB) AdminRelocateRange(
+	ctx context.Context, key interface{}, targets []roachpb.ReplicationTarget,
+) error {
 	b := &Batch{}
-	b.CheckConsistency(begin, end, withDiff)
+	b.adminRelocateRange(key, targets)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
@@ -574,7 +579,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
 
-	txn := NewTxn(db, db.ctx.NodeID.Get(), RootTxn)
+	txn := NewTxn(ctx, db, db.ctx.NodeID.Get(), RootTxn)
 	txn.SetDebugName("unnamed")
 	err := txn.exec(ctx, func(ctx context.Context, txn *Txn) error {
 		return retryable(ctx, txn)

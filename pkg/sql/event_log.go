@@ -19,10 +19,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // EventLogType represents an event type that can be recorded in the event log.
@@ -44,6 +43,12 @@ const (
 	EventLogTruncateTable EventLogType = "truncate_table"
 	// EventLogAlterTable is recorded when a table is altered.
 	EventLogAlterTable EventLogType = "alter_table"
+	// EventLogCommentOnColumn is recorded when a column is commented.
+	EventLogCommentOnColumn EventLogType = "comment_on_column"
+	// EventLogCommentOnTable is recorded when a table is commented.
+	EventLogCommentOnDatabase EventLogType = "comment_on_database"
+	// EventLogCommentOnTable is recorded when a table is commented.
+	EventLogCommentOnTable EventLogType = "comment_on_table"
 
 	// EventLogCreateIndex is recorded when an index is created.
 	EventLogCreateIndex EventLogType = "create_index"
@@ -122,7 +127,7 @@ func (ev EventLogger) InsertEventRecord(
 	info interface{},
 ) error {
 	// Record event record insertion in local log output.
-	txn.AddCommitTrigger(func() {
+	txn.AddCommitTrigger(func(ctx context.Context) {
 		log.Infof(
 			ctx, "Event: %q, target: %d, info: %+v",
 			eventType,

@@ -73,7 +73,6 @@ func (p *planner) Returning(
 		// Ensure there are no special functions in the RETURNING clause.
 		p.semaCtx.Properties.Require("RETURNING", tree.RejectSpecial)
 
-		r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.source.info.SourceColumns))
 		err := p.initTargets(ctx, r, tree.SelectExprs(*t), desiredTypes)
 		if err != nil {
 			return nil, err
@@ -82,7 +81,6 @@ func (p *planner) Returning(
 		return r, nil
 
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: unexpected ReturningClause type: %T", t)
+		return nil, pgerror.NewAssertionErrorf("unexpected ReturningClause type: %T", t)
 	}
 }

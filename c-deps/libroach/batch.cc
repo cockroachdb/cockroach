@@ -417,20 +417,35 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
  public:
   DBBatchInserter(rocksdb::WriteBatchBase* batch) : batch_(batch) {}
 
-  virtual void Put(const rocksdb::Slice& key, const rocksdb::Slice& value) {
-    batch_->Put(key, value);
+  virtual rocksdb::Status PutCF(uint32_t column_family_id, const rocksdb::Slice& key,
+    const rocksdb::Slice& value) {
+    if (column_family_id != 0) {
+      return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
+    }
+    return batch_->Put(key, value);
   }
-  virtual void Delete(const rocksdb::Slice& key) { batch_->Delete(key); }
-  virtual void Merge(const rocksdb::Slice& key, const rocksdb::Slice& value) {
-    batch_->Merge(key, value);
+  virtual rocksdb::Status DeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) {
+    if (column_family_id != 0) {
+      return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
+    }
+    return batch_->Delete(key);
+  }
+  virtual rocksdb::Status SingleDeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) {
+    return rocksdb::Status::InvalidArgument("DBBatchInserter: SingleDelete not supported");
+  }
+  virtual rocksdb::Status MergeCF(uint32_t column_family_id, const rocksdb::Slice& key,
+    const rocksdb::Slice& value) {
+    if (column_family_id != 0) {
+      return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
+    }
+    return batch_->Merge(key, value);
   }
   virtual rocksdb::Status DeleteRangeCF(uint32_t column_family_id, const rocksdb::Slice& begin_key,
                                         const rocksdb::Slice& end_key) {
-    if (column_family_id == 0) {
-      batch_->DeleteRange(begin_key, end_key);
-      return rocksdb::Status::OK();
+    if (column_family_id != 0) {
+      return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
     }
-    return rocksdb::Status::InvalidArgument("DeleteRangeCF not implemented");
+    return batch_->DeleteRange(begin_key, end_key);
   }
   virtual void LogData(const rocksdb::Slice& blob) { batch_->PutLogData(blob); }
 
@@ -532,6 +547,10 @@ DBString DBBatch::GetCompactionStats() { return ToDBString("unsupported"); }
 
 DBStatus DBBatch::GetEnvStats(DBEnvStatsResult* stats) { return FmtStatus("unsupported"); }
 
+DBStatus DBBatch::GetEncryptionRegistries(DBEncryptionRegistries* result) {
+  return FmtStatus("unsupported");
+}
+
 DBStatus DBBatch::EnvWriteFile(DBSlice path, DBSlice contents) { return FmtStatus("unsupported"); }
 
 DBStatus DBBatch::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
@@ -611,15 +630,17 @@ DBStatus DBWriteOnlyBatch::ApplyBatchRepr(DBSlice repr, bool sync) {
 
 DBSlice DBWriteOnlyBatch::BatchRepr() { return ToDBSlice(batch.GetWriteBatch()->Data()); }
 
-DBIterator* DBWriteOnlyBatch::NewIter(DBIterOptions) {
-  return NULL;
-}
+DBIterator* DBWriteOnlyBatch::NewIter(DBIterOptions) { return NULL; }
 
 DBStatus DBWriteOnlyBatch::GetStats(DBStatsResult* stats) { return FmtStatus("unsupported"); }
 
 DBString DBWriteOnlyBatch::GetCompactionStats() { return ToDBString("unsupported"); }
 
 DBStatus DBWriteOnlyBatch::GetEnvStats(DBEnvStatsResult* stats) { return FmtStatus("unsupported"); }
+
+DBStatus DBWriteOnlyBatch::GetEncryptionRegistries(DBEncryptionRegistries* result) {
+  return FmtStatus("unsupported");
+}
 
 DBStatus DBWriteOnlyBatch::EnvWriteFile(DBSlice path, DBSlice contents) {
   return FmtStatus("unsupported");
@@ -649,7 +670,9 @@ DBStatus DBWriteOnlyBatch::EnvDeleteFile(DBSlice path) { return FmtStatus("unsup
 
 DBStatus DBWriteOnlyBatch::EnvDeleteDirAndFiles(DBSlice dir) { return FmtStatus("unsupported"); }
 
-DBStatus DBWriteOnlyBatch::EnvLinkFile(DBSlice oldname, DBSlice newname) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvLinkFile(DBSlice oldname, DBSlice newname) {
+  return FmtStatus("unsupported");
+}
 
 rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch) {
   return new DBBatchInserter(batch);

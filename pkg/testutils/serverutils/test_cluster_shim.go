@@ -92,6 +92,10 @@ type TestClusterInterface interface {
 
 	// Target returns a roachpb.ReplicationTarget for the specified server.
 	Target(serverIdx int) roachpb.ReplicationTarget
+
+	// ReplicationMode returns the ReplicationMode that the test cluster was
+	// configured with.
+	ReplicationMode() base.TestClusterReplicationMode
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim

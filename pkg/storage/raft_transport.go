@@ -25,10 +25,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -37,6 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -69,14 +69,23 @@ type RaftMessageResponseStream interface {
 // Send. Note that the default implementation of grpc.Stream for server
 // responses (grpc.serverStream) is not safe for concurrent calls to Send.
 type lockedRaftMessageResponseStream struct {
-	MultiRaft_RaftMessageBatchServer
-	sendMu syncutil.Mutex
+	wrapped MultiRaft_RaftMessageBatchServer
+	sendMu  syncutil.Mutex
+}
+
+func (s *lockedRaftMessageResponseStream) Context() context.Context {
+	return s.wrapped.Context()
 }
 
 func (s *lockedRaftMessageResponseStream) Send(resp *RaftMessageResponse) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
-	return s.MultiRaft_RaftMessageBatchServer.Send(resp)
+	return s.wrapped.Send(resp)
+}
+
+func (s *lockedRaftMessageResponseStream) Recv() (*RaftMessageRequestBatch, error) {
+	// No need for lock. gRPC.Stream.RecvMsg is safe for concurrent use.
+	return s.wrapped.Recv()
 }
 
 // SnapshotResponseStream is the subset of the
@@ -90,11 +99,10 @@ type SnapshotResponseStream interface {
 // RaftMessageHandler is the interface that must be implemented by
 // arguments to RaftTransport.Listen.
 type RaftMessageHandler interface {
-	// HandleRaftRequest is called for each incoming Raft message. If it returns
-	// an error it will be streamed back to the sender of the message as a
-	// RaftMessageResponse. If the stream parameter is nil the request should be
-	// processed synchronously. If the stream is non-nil the request can be
-	// processed asynchronously and any error should be sent on the stream.
+	// HandleRaftRequest is called for each incoming Raft message. The request is
+	// always processed asynchronously and the response is sent over respStream.
+	// If an error is encountered during asynchronous processing, it will be
+	// streamed back to the sender of the message as a RaftMessageResponse.
 	HandleRaftRequest(ctx context.Context, req *RaftMessageRequest,
 		respStream RaftMessageResponseStream) *roachpb.Error
 
@@ -313,7 +321,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 			t.stopper.RunWorker(ctx, func(ctx context.Context) {
 				errCh <- func() error {
 					var stats *raftTransportStats
-					stream := &lockedRaftMessageResponseStream{MultiRaft_RaftMessageBatchServer: stream}
+					stream := &lockedRaftMessageResponseStream{wrapped: stream}
 					for {
 						batch, err := stream.Recv()
 						if err != nil {
@@ -607,6 +615,7 @@ func (t *RaftTransport) startProcessNewQueue(
 // for closing the OutgoingSnapshot.
 func (t *RaftTransport) SendSnapshot(
 	ctx context.Context,
+	raftCfg *base.RaftConfig,
 	storePool *StorePool,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
@@ -632,5 +641,5 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %s", err)
 		}
 	}()
-	return sendSnapshot(ctx, t.st, stream, storePool, header, snap, newBatch, sent)
+	return sendSnapshot(ctx, raftCfg, t.st, stream, storePool, header, snap, newBatch, sent)
 }

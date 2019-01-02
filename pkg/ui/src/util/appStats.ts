@@ -1,3 +1,17 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 // This file significantly duplicates the algorithms available in
 // pkg/roachpb/app_stats.go, in particular the functions on NumericStats
 // to compute variance and add together NumericStats.
@@ -56,7 +70,7 @@ export function aggregateStatementStats(statementStats: CollectedStatementStatis
   const statementsMap: { [statement: string]: CollectedStatementStatistics[] } = {};
   statementStats.forEach(
     (statement: CollectedStatementStatistics) => {
-      const matches = statementsMap[statement.key.statement] || (statementsMap[statement.key.statement] = []);
+      const matches = statementsMap[statement.key.key_data.query] || (statementsMap[statement.key.key_data.query] = []);
       matches.push(statement);
   });
 
@@ -72,6 +86,7 @@ export interface ExecutionStatistics {
   statement: string;
   app: string;
   distSQL: boolean;
+  opt: boolean;
   failed: boolean;
   node_id: number;
   stats: StatementStatistics;
@@ -79,12 +94,13 @@ export interface ExecutionStatistics {
 
 export function flattenStatementStats(statementStats: CollectedStatementStatistics[]): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
-    statement: stmt.key.statement,
-    app: stmt.key.app,
-    distSQL: stmt.key.distSQL,
-    failed: stmt.key.failed,
-    node_id: stmt.key.node_id,
-    stats: stmt.stats,
+    statement: stmt.key.key_data.query,
+    app:       stmt.key.key_data.app,
+    distSQL:   stmt.key.key_data.distSQL,
+    opt:       stmt.key.key_data.opt,
+    failed:    stmt.key.key_data.failed,
+    node_id:   stmt.key.node_id,
+    stats:     stmt.stats,
   }));
 }
 

@@ -78,7 +78,7 @@ spec:
       hostNetwork: true
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v2.0.4
+        image: cockroachdb/cockroach:v2.1.3
         imagePullPolicy: IfNotPresent
         # TODO: If you configured taints to give CockroachDB exclusive access to nodes, feel free
         # to remove the requests and limits sections. If you didn't, you'll need to change these to
@@ -122,6 +122,9 @@ spec:
         volumeMounts:
         - name: datadir
           mountPath: /cockroach/cockroach-data
+        env:
+        - name: COCKROACH_CHANNEL
+          value: kubernetes-insecure
         command:
           - "/bin/bash"
           - "-ecx"

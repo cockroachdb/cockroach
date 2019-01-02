@@ -18,9 +18,13 @@ package main
 import (
 	"context"
 	"fmt"
-
+	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -33,7 +37,7 @@ func registerKV(r *registry) {
 		nodes := c.nodes - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes), encryption)
+		c.Start(ctx, t, c.Range(1, nodes), encryption)
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -54,14 +58,11 @@ func registerKV(r *registry) {
 	for _, p := range []int{0, 95} {
 		p := p
 		for _, n := range []int{1, 3} {
-			// Run kv with encryption turned off because of recently found
-			// checksum mismatch when running workload against encrypted
-			// cluster.
 			for _, e := range []bool{false, true} {
 				e := e
-				minVersion := "2.0.0"
+				minVersion := "v2.0.0"
 				if e {
-					minVersion = "2.1.0"
+					minVersion = "v2.1.0"
 				}
 				r.Add(testSpec{
 					Name:       fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
@@ -80,8 +81,7 @@ func registerKVQuiescenceDead(r *registry) {
 	r.Add(testSpec{
 		Name:       "kv/quiescence/nodes=3",
 		Nodes:      nodes(4),
-		MinVersion: "2.1.0",
-		Stable:     false, // added 6/7/2018
+		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if !c.isLocal() {
 				c.RemountNoBarrier(ctx)
@@ -90,7 +90,7 @@ func registerKVQuiescenceDead(r *registry) {
 			nodes := c.nodes - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, c.Range(1, nodes))
+			c.Start(ctx, t, c.Range(1, nodes))
 
 			run := func(cmd string, lastDown bool) {
 				n := nodes
@@ -109,18 +109,7 @@ func registerKVQuiescenceDead(r *registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			for {
-				fullReplicated := false
-				if err := db.QueryRow(
-					"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
-				).Scan(&fullReplicated); err != nil {
-					t.Fatal(err)
-				}
-				if fullReplicated {
-					break
-				}
-				time.Sleep(time.Second)
-			}
+			waitForFullReplication(t, db)
 
 			qps := func(f func()) float64 {
 
@@ -152,7 +141,7 @@ func registerKVQuiescenceDead(r *registry) {
 				run(kv+" --seed 1 {pgurl:1}", true)
 			})
 			// Gracefully shut down third node (doesn't matter whether it's graceful or not).
-			c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --port {pgport:3}")
+			c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --host=:{pgport:3}")
 			c.Stop(ctx, c.Node(nodes))
 			// Measure qps with node down (i.e. without quiescence).
 			qpsOneDown := qps(func() {
@@ -167,38 +156,167 @@ func registerKVQuiescenceDead(r *registry) {
 					qpsAllUp, qpsOneDown, actFrac, minFrac,
 				)
 			}
-			c.l.printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
+			t.l.Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
+		},
+	})
+}
+
+func registerKVGracefulDraining(r *registry) {
+	r.Add(testSpec{
+		Name:  "kv/gracefuldraining/nodes=3",
+		Nodes: nodes(4),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			if !c.isLocal() {
+				c.RemountNoBarrier(ctx)
+			}
+
+			nodes := c.nodes - 1
+			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Start(ctx, t, c.Range(1, nodes))
+
+			db := c.Conn(ctx, 1)
+			defer db.Close()
+
+			waitForFullReplication(t, db)
+
+			// Initialize the database with a lot of ranges so that there are
+			// definitely a large number of leases on the node that we shut down
+			// before it starts draining.
+			splitCmd := "./workload run kv --init --max-ops=1 --splits 100 {pgurl:1}"
+			c.Run(ctx, c.Node(nodes+1), splitCmd)
+
+			m := newMonitor(ctx, c, c.Range(1, nodes))
+
+			// Run kv for 5 minutes, during which we can gracefully kill nodes and
+			// determine whether doing so affects the cluster-wide qps.
+			const expectedQPS = 1000
+			m.Go(func(ctx context.Context) error {
+				cmd := fmt.Sprintf(
+					"./workload run kv --duration=5m --read-percent=0 --tolerate-errors --max-rate=%d {pgurl:1-%d}",
+					expectedQPS, nodes-1)
+				t.WorkerStatus(cmd)
+				defer t.WorkerStatus()
+				return c.RunE(ctx, c.Node(nodes+1), cmd)
+			})
+
+			m.Go(func(ctx context.Context) error {
+				// Gracefully shut down the third node, let the cluster run for a
+				// while, then restart it. Then repeat for good measure.
+				for i := 0; i < 2; i++ {
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-time.After(1 * time.Minute):
+					}
+					c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --host=:{pgport:3}")
+					c.Stop(ctx, c.Node(nodes))
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-time.After(1 * time.Minute):
+					}
+					c.Start(ctx, t, c.Node(nodes))
+				}
+				return nil
+			})
+
+			// Let the test run for nearly the entire duration of the kv command.
+			runDuration := 4*time.Minute + 30*time.Second
+			time.Sleep(runDuration)
+
+			// Check that the QPS has been at the expected max rate for the entire
+			// test duration, even as one of the nodes was being stopped and started.
+			adminURLs := c.ExternalAdminUIAddr(ctx, c.Node(1))
+			url := "http://" + adminURLs[0] + "/ts/query"
+			now := timeutil.Now()
+			request := tspb.TimeSeriesQueryRequest{
+				StartNanos: now.Add(-runDuration).UnixNano(),
+				EndNanos:   now.UnixNano(),
+				// Check the performance in each timeseries sample interval.
+				SampleNanos: server.DefaultMetricsSampleInterval.Nanoseconds(),
+				Queries: []tspb.Query{
+					{
+						Name:             "cr.node.sql.query.count",
+						Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+						SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+						Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
+					},
+				},
+			}
+			var response tspb.TimeSeriesQueryResponse
+			if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
+				t.Fatal(err)
+			}
+			if len(response.Results[0].Datapoints) <= 1 {
+				t.Fatalf("not enough datapoints in timeseries query response: %+v", response)
+			}
+			datapoints := response.Results[0].Datapoints
+
+			// Because we're specifying a --max-rate well less than what cockroach
+			// should be capable of, draining one of the three nodes should have no
+			// effect on performance at all, meaning that a fairly aggressive
+			// threshold here should be ok.
+			minQPS := expectedQPS * 0.9
+
+			// Examine every data point except the first one, because at that time
+			// splits may still have been happening or the cluster may still have
+			// been initializing.
+			for i := 1; i < len(datapoints); i++ {
+				if qps := datapoints[i].Value; qps < minQPS {
+					t.Fatalf(
+						"QPS of %.2f at time %v is below minimum allowable QPS of %.2f; entire timeseries: %+v",
+						qps, timeutil.Unix(0, datapoints[i].TimestampNanos), minQPS, datapoints)
+				}
+			}
+
+			m.Wait()
 		},
 	})
 }
 
 func registerKVSplits(r *registry) {
-	r.Add(testSpec{
-		Name:   "kv/splits/nodes=3",
-		Nodes:  nodes(4),
-		Stable: true, // DO NOT COPY to new tests
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			nodes := c.nodes - 1
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, c.Range(1, nodes), startArgs("--env=COCKROACH_MEMPROF_INTERVAL=1m"))
+	for _, item := range []struct {
+		quiesce bool
+		splits  int
+		timeout time.Duration
+	}{
+		{true, 500000, 2 * time.Hour},
+		{false, 100000, 2 * time.Hour},
+	} {
+		item := item // for use in closure below
+		r.Add(testSpec{
+			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", item.quiesce),
+			Timeout: item.timeout,
+			Nodes:   nodes(4),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				nodes := c.nodes - 1
+				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+				c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+				c.Start(ctx, t, c.Range(1, nodes),
+					startArgs(
+						"--env=COCKROACH_MEMPROF_INTERVAL=1m",
+						"--env=COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce),
+						"--args=--cache=256MiB",
+					))
 
-			t.Status("running workload")
-			m := newMonitor(ctx, c, c.Range(1, nodes))
-			m.Go(func(ctx context.Context) error {
-				concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-				splits := " --splits=" + ifLocal("2000", "500000")
-				cmd := fmt.Sprintf(
-					"./workload run kv --init --max-ops=1"+
-						concurrency+splits+
-						" {pgurl:1-%d}",
-					nodes)
-				c.Run(ctx, c.Node(nodes+1), cmd)
-				return nil
-			})
-			m.Wait()
-		},
-	})
+				t.Status("running workload")
+				m := newMonitor(ctx, c, c.Range(1, nodes))
+				m.Go(func(ctx context.Context) error {
+					concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+					splits := " --splits=" + ifLocal("2000", fmt.Sprint(item.splits))
+					cmd := fmt.Sprintf(
+						"./workload run kv --init --max-ops=1"+
+							concurrency+splits+
+							" {pgurl:1-%d}",
+						nodes)
+					c.Run(ctx, c.Node(nodes+1), cmd)
+					return nil
+				})
+				m.Wait()
+			},
+		})
+	}
 }
 
 func registerKVScalability(r *registry) {
@@ -215,7 +333,7 @@ func registerKVScalability(r *registry) {
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
 			c.Wipe(ctx, c.Range(1, nodes))
-			c.Start(ctx, c.Range(1, nodes))
+			c.Start(ctx, t, c.Range(1, nodes))
 
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -225,7 +343,7 @@ func registerKVScalability(r *registry) {
 					" {pgurl:1-%d}",
 					percent, nodes)
 
-				l, err := c.l.childLogger(fmt.Sprint(i))
+				l, err := t.l.ChildLogger(fmt.Sprint(i))
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -17,22 +17,17 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"github.com/rubyist/circuitbreaker"
-	"golang.org/x/sync/syncmap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -43,6 +38,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/syncmap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 )
 
 func init() {
@@ -89,6 +92,33 @@ func spanInclusionFunc(
 	parentSpanCtx opentracing.SpanContext, method string, req, resp interface{},
 ) bool {
 	return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
+}
+
+func requireSuperUser(ctx context.Context) error {
+	// TODO(marc): grpc's authentication model (which gives credential access in
+	// the request handler) doesn't really fit with the current design of the
+	// security package (which assumes that TLS state is only given at connection
+	// time) - that should be fixed.
+	if grpcutil.IsLocalRequestContext(ctx) {
+		// This is an in-process request. Bypass authentication check.
+	} else if peer, ok := peer.FromContext(ctx); ok {
+		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
+			certUser, err := security.GetCertificateUser(&tlsInfo.State)
+			if err != nil {
+				return err
+			}
+			// TODO(benesch): the vast majority of RPCs should be limited to just
+			// NodeUser. This is not a security concern, as RootUser has access to
+			// read and write all data, merely good hygiene. For example, there is
+			// no reason to permit the root user to send raw Raft RPCs.
+			if certUser != security.NodeUser && certUser != security.RootUser {
+				return errors.Errorf("user %s is not allowed to perform this RPC", certUser)
+			}
+		}
+	} else {
+		return errors.New("internal authentication error: TLSInfo is not available in request context")
+	}
+	return nil
 }
 
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
@@ -175,6 +205,33 @@ func NewServerWithInterceptor(
 			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 		) error {
 			if err := interceptor(info.FullMethod); err != nil {
+				return err
+			}
+			if prevStreamInterceptor != nil {
+				return prevStreamInterceptor(srv, stream, info, handler)
+			}
+			return handler(srv, stream)
+		}
+	}
+
+	if !ctx.Insecure {
+		prevUnaryInterceptor := unaryInterceptor
+		unaryInterceptor = func(
+			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+		) (interface{}, error) {
+			if err := requireSuperUser(ctx); err != nil {
+				return nil, err
+			}
+			if prevUnaryInterceptor != nil {
+				return prevUnaryInterceptor(ctx, req, info, handler)
+			}
+			return handler(ctx, req)
+		}
+		prevStreamInterceptor := streamInterceptor
+		streamInterceptor = func(
+			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+		) error {
+			if err := requireSuperUser(stream.Context()); err != nil {
 				return err
 			}
 			if prevStreamInterceptor != nil {
@@ -282,7 +339,7 @@ type Context struct {
 
 	rpcCompression bool
 
-	localInternalServer roachpb.InternalServer
+	localInternalClient roachpb.InternalClient
 
 	conns syncmap.Map
 
@@ -354,18 +411,111 @@ func (ctx *Context) GetStatsMap() *syncmap.Map {
 	return &ctx.stats.stats
 }
 
-// GetLocalInternalServerForAddr returns the context's internal batch server
+// GetLocalInternalClientForAddr returns the context's internal batch client
 // for target, if it exists.
-func (ctx *Context) GetLocalInternalServerForAddr(target string) roachpb.InternalServer {
+func (ctx *Context) GetLocalInternalClientForAddr(target string) roachpb.InternalClient {
 	if target == ctx.AdvertiseAddr {
-		return ctx.localInternalServer
+		return ctx.localInternalClient
 	}
 	return nil
 }
 
+type internalClientAdapter struct {
+	roachpb.InternalServer
+}
+
+func (a internalClientAdapter) Batch(
+	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
+) (*roachpb.BatchResponse, error) {
+	return a.InternalServer.Batch(ctx, ba)
+}
+
+type rangeFeedClientAdapter struct {
+	ctx    context.Context
+	eventC chan *roachpb.RangeFeedEvent
+	errC   chan error
+}
+
+// roachpb.Internal_RangeFeedServer methods.
+func (a rangeFeedClientAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
+	// Prioritize eventC. Both channels are buffered and the only guarantee we
+	// have is that once an error is sent on errC no other events will be sent
+	// on eventC again.
+	select {
+	case e := <-a.eventC:
+		return e, nil
+	case err := <-a.errC:
+		select {
+		case e := <-a.eventC:
+			a.errC <- err
+			return e, nil
+		default:
+			return nil, err
+		}
+	}
+}
+
+// roachpb.Internal_RangeFeedServer methods.
+func (a rangeFeedClientAdapter) Send(e *roachpb.RangeFeedEvent) error {
+	select {
+	case a.eventC <- e:
+		return nil
+	case <-a.ctx.Done():
+		return a.ctx.Err()
+	}
+}
+
+// grpc.ClientStream methods.
+func (rangeFeedClientAdapter) Header() (metadata.MD, error) { panic("unimplemented") }
+func (rangeFeedClientAdapter) Trailer() metadata.MD         { panic("unimplemented") }
+func (rangeFeedClientAdapter) CloseSend() error             { panic("unimplemented") }
+
+// grpc.ServerStream methods.
+func (rangeFeedClientAdapter) SetHeader(metadata.MD) error  { panic("unimplemented") }
+func (rangeFeedClientAdapter) SendHeader(metadata.MD) error { panic("unimplemented") }
+func (rangeFeedClientAdapter) SetTrailer(metadata.MD)       { panic("unimplemented") }
+
+// grpc.Stream methods.
+func (a rangeFeedClientAdapter) Context() context.Context  { return a.ctx }
+func (rangeFeedClientAdapter) SendMsg(m interface{}) error { panic("unimplemented") }
+func (rangeFeedClientAdapter) RecvMsg(m interface{}) error { panic("unimplemented") }
+
+var _ roachpb.Internal_RangeFeedClient = rangeFeedClientAdapter{}
+var _ roachpb.Internal_RangeFeedServer = rangeFeedClientAdapter{}
+
+func (a internalClientAdapter) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
+) (roachpb.Internal_RangeFeedClient, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	rfAdapter := rangeFeedClientAdapter{
+		ctx:    ctx,
+		eventC: make(chan *roachpb.RangeFeedEvent, 128),
+		errC:   make(chan error, 1),
+	}
+
+	go func() {
+		defer cancel()
+		err := a.InternalServer.RangeFeed(args, rfAdapter)
+		if err == nil {
+			err = io.EOF
+		}
+		rfAdapter.errC <- err
+	}()
+
+	return rfAdapter, nil
+}
+
+var _ roachpb.InternalClient = internalClientAdapter{}
+
+// IsLocal returns true if the given InternalClient is local.
+func IsLocal(iface roachpb.InternalClient) bool {
+	_, ok := iface.(internalClientAdapter)
+	return ok // internalClientAdapter is used for local connections.
+}
+
 // SetLocalInternalServer sets the context's local internal batch server.
 func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer) {
-	ctx.localInternalServer = internalServer
+	ctx.localInternalClient = internalClientAdapter{internalServer}
 }
 
 func (ctx *Context) removeConn(key string, conn *Connection) {
@@ -438,6 +588,7 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 // ensures that our initial heartbeat (and its version/clusterID
 // validation) occurs on every new connection.
 type onlyOnceDialer struct {
+	ctx context.Context
 	syncutil.Mutex
 	dialed     bool
 	closed     bool
@@ -453,7 +604,7 @@ func (ood *onlyOnceDialer) dial(addr string, timeout time.Duration) (net.Conn, e
 			Timeout:   timeout,
 			LocalAddr: sourceAddr,
 		}
-		return dialer.Dial("tcp", addr)
+		return dialer.DialContext(ood.ctx, "tcp", addr)
 	} else if !ood.closed {
 		ood.closed = true
 		close(ood.redialChan)
@@ -481,6 +632,7 @@ func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{
 		grpc.WithInitialConnWindowSize(initialConnWindowSize))
 
 	dialer := onlyOnceDialer{
+		ctx:        ctx.masterCtx,
 		redialChan: make(chan struct{}),
 	}
 	dialOpts = append(dialOpts, grpc.WithDialer(dialer.dial))
@@ -551,7 +703,7 @@ var ErrNotHeartbeated = errors.New("not yet heartbeated")
 // prioritize among a list of candidate nodes, but not to filter out
 // "unhealthy" nodes.
 func (ctx *Context) ConnHealth(target string) error {
-	if ctx.GetLocalInternalServerForAddr(target) != nil {
+	if ctx.GetLocalInternalClientForAddr(target) != nil {
 		// The local server is always considered healthy.
 		return nil
 	}

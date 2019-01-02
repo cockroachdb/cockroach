@@ -18,13 +18,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"runtime"
 	"time"
 
-	_ "github.com/lib/pq"
-
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	_ "github.com/lib/pq"
 )
 
 func registerUpgrade(r *registry) {
@@ -45,17 +47,7 @@ func registerUpgrade(r *registry) {
 		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
 		// Force disable encryption.
 		// TODO(mberhault): allow it once oldVersion >= 2.1.
-		start := func() {
-			c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
-		}
-		start()
-		time.Sleep(5 * time.Second)
-
-		// TODO(tschottdorf): this is a hack similar to the one in the mixed version
-		// test. Remove it when we have a 2.0.x binary that has #27639 fixed.
-		c.Stop(ctx, c.Range(1, nodes))
-		start()
-		time.Sleep(5 * time.Second)
+		c.Start(ctx, t, c.Range(1, nodes), startArgsDontEncrypt)
 
 		const stageDuration = 30 * time.Second
 		const timeUntilStoreDead = 90 * time.Second
@@ -86,7 +78,10 @@ func registerUpgrade(r *registry) {
 
 		stop := func(node int) error {
 			port := fmt.Sprintf("{pgport:%d}", node)
-			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port "+port); err != nil {
+			// Note that the following command line needs to run against both v2.0
+			// and the current branch. Do not change it in a manner that is
+			// incompatible with 2.0.
+			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port="+port); err != nil {
 				return err
 			}
 			c.Stop(ctx, c.Node(node))
@@ -95,7 +90,10 @@ func registerUpgrade(r *registry) {
 
 		decommissionAndStop := func(node int) error {
 			port := fmt.Sprintf("{pgport:%d}", node)
-			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --decommission --insecure --port "+port); err != nil {
+			// Note that the following command line needs to run against both v2.0
+			// and the current branch. Do not change it in a manner that is
+			// incompatible with 2.0.
+			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --decommission --insecure --port="+port); err != nil {
 				return err
 			}
 			c.Stop(ctx, c.Node(node))
@@ -141,7 +139,7 @@ func registerUpgrade(r *registry) {
 				t.Fatal(err)
 			}
 			c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-			c.Start(ctx, c.Node(i), startArgsDontEncrypt)
+			c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
 			}
@@ -163,7 +161,7 @@ func registerUpgrade(r *registry) {
 			t.Fatal(err)
 		}
 		c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
-		c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
+		c.Start(ctx, t, c.Node(nodes), startArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -204,7 +202,7 @@ func registerUpgrade(r *registry) {
 		}
 
 		// Restart the previously stopped node.
-		c.Start(ctx, c.Node(nodes-1), startArgsDontEncrypt)
+		c.Start(ctx, t, c.Node(nodes-1), startArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -257,7 +255,7 @@ func registerUpgrade(r *registry) {
 		}
 	}
 
-	const oldVersion = "v2.0.0"
+	const oldVersion = "v2.0.5"
 	for _, n := range []int{5} {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("upgrade/oldVersion=%s/nodes=%d", oldVersion, n),
@@ -268,4 +266,315 @@ func registerUpgrade(r *registry) {
 			},
 		})
 	}
+}
+
+func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
+	// This is ugly, but we can't pass `--encrypt=false` to old versions of
+	// Cockroach.
+	c.encryptDefault = false
+
+	nodes := c.Range(1, 3)
+	goos := ifLocal(runtime.GOOS, "linux")
+	const headVersion = "HEAD"
+
+	// versionStep is an isolated version migration on a running cluster.
+	type versionStep struct {
+		clusterVersion string // if empty, use crdb_internal.node_executable_version
+		run            func()
+	}
+
+	uploadVersion := func(newVersion string) option {
+		var binary string
+		if newVersion == headVersion {
+			binary = cockroach
+		} else {
+			var err error
+			binary, err = binfetcher.Download(ctx, binfetcher.Options{
+				Binary:  "cockroach",
+				Version: newVersion,
+				GOOS:    goos,
+				GOARCH:  "amd64",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		target := "./cockroach-" + newVersion
+		c.Put(ctx, binary, target, nodes)
+		return startArgs("--binary=" + target)
+	}
+
+	checkNode := func(nodeIdx int, newVersion string) {
+		err := retry.ForDuration(30*time.Second, func() error {
+			db := c.Conn(ctx, nodeIdx)
+			defer db.Close()
+
+			// 'Version' for 1.1, 'Tag' in 1.0.x.
+			var version string
+			if err := db.QueryRow(
+				`SELECT value FROM crdb_internal.node_build_info where field IN ('Version' , 'Tag')`,
+			).Scan(&version); err != nil {
+				return err
+			}
+			if version != newVersion && newVersion != headVersion {
+				t.Fatalf("created node at v%s, but it is %s", newVersion, version)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// binaryVersionUpgrade performs a rolling upgrade of the specified nodes in
+	// the cluster.
+	binaryVersionUpgrade := func(newVersion string, nodes nodeListOption) versionStep {
+		return versionStep{
+			run: func() {
+				t.l.Printf("%s: binary\n", newVersion)
+				args := uploadVersion(newVersion)
+
+				// Restart nodes in a random order; otherwise node 1 would be running all
+				// the migrations and it probably also has all the leases.
+				rand.Shuffle(len(nodes), func(i, j int) {
+					nodes[i], nodes[j] = nodes[j], nodes[i]
+				})
+				for _, node := range nodes {
+					t.l.Printf("%s: upgrading node %d\n", newVersion, node)
+					c.Stop(ctx, c.Node(node))
+					c.Start(ctx, t, c.Node(node), args)
+
+					checkNode(node, newVersion)
+
+					// TODO(nvanbenschoten): add upgrade qualification step. What should we
+					// test? We could run logictests. We could add custom logic here. Maybe
+					// this should all be pushed to nightly migration tests instead.
+					time.Sleep(1 * time.Second)
+				}
+			},
+		}
+	}
+
+	// clusterVersionUpgrade performs a cluster version upgrade to its version.
+	// It waits until all nodes have seen the upgraded cluster version.
+	var currentVersion string
+	clusterVersionUpgrade := func(newVersion string, manual bool) versionStep {
+		return versionStep{
+			clusterVersion: newVersion,
+			run: func() {
+				func() {
+					if newVersion != "" {
+						return
+					}
+					db1 := c.Conn(ctx, 1)
+					defer db1.Close()
+					if err := db1.QueryRow(`SELECT crdb_internal.node_executable_version()`).Scan(&newVersion); err != nil {
+						t.Fatal(err)
+					}
+				}()
+				t.l.Printf("%s: cluster\n", newVersion)
+
+				// hasShowSettingBug is true when we're working around
+				// https://github.com/cockroachdb/cockroach/issues/22796.
+				//
+				// The problem there is that `SHOW CLUSTER SETTING version` does not
+				// take into account the gossiped value of that setting but reads it
+				// straight from the KV store. This means that even though a node may
+				// report a certain version, it may not actually have processed it yet,
+				// which leads to illegal upgrades in this test. When this flag is set
+				// to true, we query `crdb_internal.cluster_settings` instead, which
+				// *does* take everything from Gossip.
+				v, err := roachpb.ParseVersion(newVersion)
+				if err != nil {
+					t.Fatal(err)
+				}
+				hasShowSettingBug := v.Less(roachpb.Version{Major: 1, Minor: 1, Unstable: 1})
+
+				if manual {
+					func() {
+						node := nodes.randNode()[0]
+						db := c.Conn(ctx, node)
+						defer db.Close()
+
+						t.l.Printf("%s: upgrading cluster version (node %d)\n", newVersion, node)
+						if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING version = '%s'`, newVersion)); err != nil {
+							t.Fatal(err)
+						}
+					}()
+				}
+
+				if hasShowSettingBug {
+					t.l.Printf("%s: using workaround for upgrade\n", newVersion)
+				}
+
+				for i := 1; i < c.nodes; i++ {
+					err := retry.ForDuration(30*time.Second, func() error {
+						db := c.Conn(ctx, i)
+						defer db.Close()
+
+						if !hasShowSettingBug {
+							if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&currentVersion); err != nil {
+								t.Fatalf("%d: %s", i, err)
+							}
+						} else {
+							// This uses the receiving node's Gossip and as such allows us to verify that all of the
+							// nodes have gotten wind of the version bump.
+							if err := db.QueryRow(
+								`SELECT current_value FROM crdb_internal.cluster_settings WHERE name = 'version'`,
+							).Scan(&currentVersion); err != nil {
+								t.Fatalf("%d: %s", i, err)
+							}
+						}
+						if currentVersion != newVersion {
+							return fmt.Errorf("%d: expected version %s, got %s", i, newVersion, currentVersion)
+						}
+						return nil
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				t.l.Printf("%s: cluster is upgraded\n", newVersion)
+
+				// TODO(nvanbenschoten): add upgrade qualification step.
+				time.Sleep(1 * time.Second)
+			},
+		}
+	}
+
+	const baseVersion = "v1.0.6"
+	steps := []versionStep{
+		// v1.1.0 is the first binary version that knows about cluster versions.
+		binaryVersionUpgrade("v1.1.9", nodes),
+		clusterVersionUpgrade("1.1", true /* manual */),
+
+		// NB: v2.0.6 doesn't have https://github.com/cockroachdb/cockroach/issues/31380,
+		// so this acceptance test will fail on OSX Mojave. v2.0.7 will have the patch.
+		binaryVersionUpgrade("v2.0.6", nodes),
+		clusterVersionUpgrade("2.0", true /* manual */),
+
+		binaryVersionUpgrade("v2.1.2", nodes),
+		clusterVersionUpgrade("2.1", true /* manual */),
+
+		binaryVersionUpgrade("HEAD", nodes),
+		clusterVersionUpgrade("", false /* manual */),
+	}
+
+	type feature struct {
+		name              string
+		minAllowedVersion string
+		query             string
+	}
+
+	features := []feature{
+		{
+			name:              "JSONB",
+			minAllowedVersion: "2.0-0",
+			query: `
+	CREATE DATABASE IF NOT EXISTS test;
+	CREATE TABLE test.t (j JSONB);
+	DROP TABLE test.t;
+	`,
+		}, {
+			name:              "Sequences",
+			minAllowedVersion: "2.0-0",
+			query: `
+	 CREATE DATABASE IF NOT EXISTS test;
+	 CREATE SEQUENCE test.test_sequence;
+	 DROP SEQUENCE test.test_sequence;
+	`,
+		}, {
+			name:              "Computed Columns",
+			minAllowedVersion: "2.0-0",
+			query: `
+	CREATE DATABASE IF NOT EXISTS test;
+	CREATE TABLE test.t (x INT AS (3) STORED);
+	DROP TABLE test.t;
+	`,
+		},
+	}
+
+	testFeature := func(f feature, cv string) {
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+
+		minAllowedVersion, err := roachpb.ParseVersion(f.minAllowedVersion)
+		if err != nil {
+			t.Fatal(err)
+		}
+		actualVersion, err := roachpb.ParseVersion(cv)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = db.Exec(f.query)
+		if actualVersion.Less(minAllowedVersion) {
+			if err == nil {
+				t.Fatalf("expected %s to fail on cluster version %s", f.name, cv)
+			}
+			t.l.Printf("%s: %s fails expected\n", cv, f.name)
+		} else {
+			if err != nil {
+				t.Fatalf("expected %s to succeed on cluster version %s, got %s", f.name, cv, err)
+			}
+			t.l.Printf("%s: %s works as expected\n", cv, f.name)
+		}
+	}
+
+	args := uploadVersion(baseVersion)
+	// Hack to skip initializing settings which doesn't work on very old versions
+	// of cockroach.
+	c.Run(ctx, c.Node(1), "mkdir -p {store-dir} && touch {store-dir}/settings-initialized")
+	c.Start(ctx, t, nodes, args)
+
+	func() {
+		// Create a bunch of tables, over the batch size on which some migrations
+		// operate. It generally seems like a good idea to have a bunch of tables in
+		// the cluster, and we had a bug about migrations on large numbers of tables:
+		// #22370.
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+		if _, err := db.Exec(fmt.Sprintf("create database lotsatables")); err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < 100; i++ {
+			_, err := db.Exec(fmt.Sprintf("create table lotsatables.t%d (x int primary key)", i))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}()
+
+	for _, node := range nodes {
+		checkNode(node, baseVersion)
+	}
+
+	for _, step := range steps {
+		step.run()
+		if step.clusterVersion != "" {
+			for _, feature := range features {
+				testFeature(feature, step.clusterVersion)
+			}
+		}
+	}
+
+	func() {
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+
+		var nodeVersion string
+		if err := db.QueryRow(
+			`SELECT crdb_internal.node_executable_version()`,
+		).Scan(&nodeVersion); err != nil {
+			t.Fatal(err)
+		}
+		if nodeVersion != currentVersion {
+			clusterVersionUpgrade(nodeVersion, false /* manual */).run()
+			for _, feature := range features {
+				testFeature(feature, nodeVersion)
+			}
+		}
+	}()
 }

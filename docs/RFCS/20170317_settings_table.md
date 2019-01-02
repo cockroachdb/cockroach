@@ -55,7 +55,7 @@ A new system.settings table, keyed by string settings names would be created.
 CREATE TABLE system.settings (
   name STRING PRIMARY KEY,
   value STRING,
-  updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  updated TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   valueType char NOT NULL DEFAULT 's',
 )
 ```

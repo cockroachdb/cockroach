@@ -47,6 +47,7 @@ func StringToClusterWideID(s string) (ClusterWideID, error) {
 }
 
 // BytesToClusterWideID converts raw bytes into a ClusterWideID.
+// The caller is responsible for ensuring the byte slice contains 16 bytes.
 func BytesToClusterWideID(b []byte) ClusterWideID {
 	id := uint128.FromBytes(b)
 	return ClusterWideID{Uint128: id}

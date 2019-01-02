@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,7 +30,7 @@ import (
 type planDependencyInfo struct {
 	// desc is a reference to the descriptor for the table being
 	// depended on.
-	desc *sqlbase.TableDescriptor
+	desc *sqlbase.ImmutableTableDescriptor
 	// deps is the list of ways in which the current plan depends on
 	// that table. There can be more than one entries when the same
 	// table is used in different places. The entries can also be
@@ -71,12 +72,6 @@ func (d planDependencies) String() string {
 func (p *planner) analyzeViewQuery(
 	ctx context.Context, viewSelect *tree.Select,
 ) (planDependencies, sqlbase.ResultColumns, error) {
-	// To avoid races with ongoing schema changes to tables that the view
-	// depends on, make sure we use the most recent versions of table
-	// descriptors rather than the copies in the lease cache.
-	defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
-	p.avoidCachedDescriptors = true
-
 	// Request dependency tracking.
 	defer func(prev planDependencies) { p.curPlan.deps = prev }(p.curPlan.deps)
 	p.curPlan.deps = make(planDependencies)
@@ -95,7 +90,7 @@ func (p *planner) analyzeViewQuery(
 
 	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
 	if p.curPlan.hasStar {
-		return nil, nil, fmt.Errorf("views do not currently support * expressions")
+		return nil, nil, pgerror.UnimplementedWithIssueError(10028, "views do not currently support * expressions")
 	}
 
 	return p.curPlan.deps, planColumns(sourcePlan), nil

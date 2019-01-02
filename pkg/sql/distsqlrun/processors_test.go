@@ -16,14 +16,25 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/jackc/pgx"
 )
 
 func TestPostProcess(t *testing.T) {
@@ -49,13 +60,13 @@ func TestPostProcess(t *testing.T) {
 	}
 
 	testCases := []struct {
-		post          PostProcessSpec
+		post          distsqlpb.PostProcessSpec
 		outputTypes   []sqlbase.ColumnType
 		expNeededCols []int
 		expected      string
 	}{
 		{
-			post:          PostProcessSpec{},
+			post:          distsqlpb.PostProcessSpec{},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -63,8 +74,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter.
 		{
-			post: PostProcessSpec{
-				Filter: Expression{Expr: "@1 = 1"},
+			post: distsqlpb.PostProcessSpec{
+				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
 			},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
@@ -73,7 +84,7 @@ func TestPostProcess(t *testing.T) {
 
 		// Projection.
 		{
-			post: PostProcessSpec{
+			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -84,8 +95,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter and projection; filter only refers to projected column.
 		{
-			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@1 = 1"},
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@1 = 1"},
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -96,8 +107,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter and projection; filter refers to non-projected column.
 		{
-			post: PostProcessSpec{
-				Filter:        Expression{Expr: "@2 = 2"},
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@2 = 2"},
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
@@ -108,8 +119,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Rendering.
 		{
-			post: PostProcessSpec{
-				RenderExprs: []Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
+			post: distsqlpb.PostProcessSpec{
+				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1},
@@ -118,9 +129,9 @@ func TestPostProcess(t *testing.T) {
 
 		// Rendering and filtering; filter refers to column used in rendering.
 		{
-			post: PostProcessSpec{
-				Filter:      Expression{Expr: "@2 = 2"},
-				RenderExprs: []Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
+			post: distsqlpb.PostProcessSpec{
+				Filter:      distsqlpb.Expression{Expr: "@2 = 2"},
+				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1},
@@ -129,9 +140,9 @@ func TestPostProcess(t *testing.T) {
 
 		// Rendering and filtering; filter refers to column not used in rendering.
 		{
-			post: PostProcessSpec{
-				Filter:      Expression{Expr: "@3 = 4"},
-				RenderExprs: []Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
+			post: distsqlpb.PostProcessSpec{
+				Filter:      distsqlpb.Expression{Expr: "@3 = 4"},
+				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
@@ -140,8 +151,8 @@ func TestPostProcess(t *testing.T) {
 
 		// More complex rendering expressions.
 		{
-			post: PostProcessSpec{
-				RenderExprs: []Expression{
+			post: distsqlpb.PostProcessSpec{
+				RenderExprs: []distsqlpb.Expression{
 					{Expr: "@1 - @2"},
 					{Expr: "@1 + @2 * @3"},
 					{Expr: "@1 >= 2"},
@@ -168,7 +179,7 @@ func TestPostProcess(t *testing.T) {
 
 		// Offset.
 		{
-			post:          PostProcessSpec{Offset: 3},
+			post:          distsqlpb.PostProcessSpec{Offset: 3},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -176,25 +187,25 @@ func TestPostProcess(t *testing.T) {
 
 		// Limit.
 		{
-			post:          PostProcessSpec{Limit: 3},
+			post:          distsqlpb.PostProcessSpec{Limit: 3},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4]]",
 		},
 		{
-			post:          PostProcessSpec{Limit: 9},
+			post:          distsqlpb.PostProcessSpec{Limit: 9},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
-			post:          PostProcessSpec{Limit: 10},
+			post:          distsqlpb.PostProcessSpec{Limit: 10},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
-			post:          PostProcessSpec{Limit: 11},
+			post:          distsqlpb.PostProcessSpec{Limit: 11},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -202,25 +213,25 @@ func TestPostProcess(t *testing.T) {
 
 		// Offset + limit.
 		{
-			post:          PostProcessSpec{Offset: 3, Limit: 2},
+			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 2},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4]]",
 		},
 		{
-			post:          PostProcessSpec{Offset: 3, Limit: 6},
+			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 6},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
-			post:          PostProcessSpec{Offset: 3, Limit: 7},
+			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 7},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
-			post:          PostProcessSpec{Offset: 3, Limit: 8},
+			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 8},
 			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
@@ -228,8 +239,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter + offset.
 		{
-			post: PostProcessSpec{
-				Filter: Expression{Expr: "@1 = 1"},
+			post: distsqlpb.PostProcessSpec{
+				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
 				Offset: 1,
 			},
 			outputTypes:   threeIntCols,
@@ -239,8 +250,8 @@ func TestPostProcess(t *testing.T) {
 
 		// Filter + limit.
 		{
-			post: PostProcessSpec{
-				Filter: Expression{Expr: "@1 = 1"},
+			post: distsqlpb.PostProcessSpec{
+				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
 				Limit:  2,
 			},
 			outputTypes:   threeIntCols,
@@ -310,74 +321,74 @@ func TestAggregatorSpecAggregationEquals(t *testing.T) {
 	colIdx2 := uint32(1)
 
 	for i, tc := range []struct {
-		a, b     AggregatorSpec_Aggregation
+		a, b     distsqlpb.AggregatorSpec_Aggregation
 		expected bool
 	}{
 		// Func tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_AVG},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_AVG},
 			expected: false,
 		},
 
 		// ColIdx tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1}},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1}},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
 			expected: false,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
 			expected: false,
 		},
 
 		// FilterColIdx tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
 			expected: false,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx2},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx2},
 			expected: false,
 		},
 
 		// Distinct tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: true},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: false},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: false},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: true},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
+			a:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			b:        distsqlpb.AggregatorSpec_Aggregation{Func: distsqlpb.AggregatorSpec_ANY_NOT_NULL},
 			expected: false,
 		},
 	} {
@@ -399,30 +410,31 @@ func TestProcessorBaseContext(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	runTest := func(t *testing.T, f func(noop *noopProcessor)) {
+		evalCtx := tree.MakeTestingEvalContext(st)
 		flowCtx := &FlowCtx{
 			Settings: st,
-			EvalCtx:  tree.MakeTestingEvalContext(st),
+			EvalCtx:  &evalCtx,
 		}
 		defer flowCtx.EvalCtx.Stop(ctx)
 
 		input := NewRepeatableRowSource(oneIntCol, makeIntRows(10, 1))
-		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &PostProcessSpec{}, &RowDisposer{})
+		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &distsqlpb.PostProcessSpec{}, &RowDisposer{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		noop.Start(ctx)
-		origCtx := noop.ctx
+		origCtx := noop.Ctx
 
 		// The context should be valid after Start but before Next is called in case
 		// ConsumerDone or ConsumerClosed are called without calling Next.
-		if noop.ctx == nil {
-			t.Fatalf("processorBase.ctx not initialized")
+		if noop.Ctx == nil {
+			t.Fatalf("ProcessorBase.ctx not initialized")
 		}
 		f(noop)
 		// The context should be reset after ConsumerClosed is called so that any
 		// subsequent logging calls will not operate on closed spans.
-		if noop.ctx != origCtx {
-			t.Fatalf("processorBase.ctx not reset on close")
+		if noop.Ctx != origCtx {
+			t.Fatalf("ProcessorBase.ctx not reset on close")
 		}
 	}
 
@@ -465,5 +477,182 @@ func TestProcessorBaseContext(t *testing.T) {
 			noop.ConsumerClosed()
 			noop.ConsumerClosed()
 		})
+	})
+}
+
+// Test that processors swallow ReadWithinUncertaintyIntervalErrors once they
+// started draining. The code that this test is checking is in ProcessorBase.
+// The test is written using high-level interfaces since what's truly
+// interesting to test is the integration between DistSQL and KV.
+func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We're going to test by running a query that selects rows 1..10 with limit
+	// 5. Out of these, rows 1..5 are on node 2, 6..10 on node 1. We're going to
+	// block the read on node 1 until the client gets the 5 rows from node 2. Then
+	// we're going to inject an uncertainty error in the blocked read. The point
+	// of the test is to check that the error is swallowed, because the processor
+	// on the gateway is already draining.
+	// We need to construct this scenario with multiple nodes since you can't have
+	// uncertainty errors if all the data is on the gateway. Then, we'll use a
+	// UNION query to force DistSQL to plan multiple TableReaders (otherwise it
+	// plans just one for LIMIT queries). The point of the test is to force one
+	// extra batch to be read without its rows actually being needed. This is not
+	// entirely easy to cause given the current implementation details.
+
+	// trapRead is set, atomically, once the test wants to block a read on the
+	// first node.
+	var trapRead int64
+	blockedRead := make(chan roachpb.BatchRequest)
+	unblockRead := make(chan *roachpb.Error)
+
+	tc := serverutils.StartTestCluster(t, 3, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+				// Andrei is too lazy to figure out the incantation for telling pgx about
+				// our test certs.
+				Insecure: true,
+			},
+			ServerArgsPerNode: map[int]base.TestServerArgs{
+				0: {
+					Knobs: base.TestingKnobs{
+						Store: &storage.StoreTestingKnobs{
+							TestingRequestFilter: func(ba roachpb.BatchRequest) *roachpb.Error {
+								if atomic.LoadInt64(&trapRead) == 0 {
+									return nil
+								}
+								// We're going to trap a read for the rows [1,5].
+								req, ok := ba.GetArg(roachpb.Scan)
+								if !ok {
+									return nil
+								}
+								key := req.(*roachpb.ScanRequest).Key.String()
+								endKey := req.(*roachpb.ScanRequest).EndKey.String()
+								if strings.Contains(key, "/1") && strings.Contains(endKey, "5/") {
+									blockedRead <- ba
+									return <-unblockRead
+								}
+								return nil
+							},
+						},
+					},
+					UseDatabase: "test",
+					// Andrei is too lazy to figure out the incantation for telling pgx about
+					// our test certs.
+					Insecure: true,
+				},
+			},
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	origDB0 := tc.ServerConn(0)
+	sqlutils.CreateTable(t, origDB0, "t",
+		"x INT PRIMARY KEY",
+		10, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	// Split the table and move half of the rows to the 2nd node. We'll block the
+	// read on the first node, and so the rows we're going to be expecting are the
+	// ones from the second node.
+	_, err := origDB0.Exec(fmt.Sprintf(`
+	ALTER TABLE "t" SPLIT AT VALUES (6);
+	ALTER TABLE "t" EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 0), (ARRAY[%d], 6);
+	`,
+		tc.Server(0).GetFirstStoreID(),
+		tc.Server(1).GetFirstStoreID()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure that the range cache is populated.
+	if _, err = origDB0.Exec(`SELECT count(1) FROM t`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Disable results buffering - we want to ensure that the server doesn't do
+	// any automatic retries, and also we use the client to know when to unblock
+	// the read.
+	if _, err := origDB0.Exec(
+		`SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	host, ports, err := net.SplitHostPort(tc.Server(0).ServingAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(ports)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conn, err := pgx.Connect(
+		pgx.ConnConfig{
+			Host:     host,
+			Port:     uint16(port),
+			User:     "root",
+			Database: "test",
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	atomic.StoreInt64(&trapRead, 1)
+
+	// We're going to run the test twice. Once in "dummy" node, which just
+	// verifies that the test is not fooling itself by increasing the limit from 5
+	// to 6 and checking that we get the injected error in that case.
+	testutils.RunTrueAndFalse(t, "dummy", func(t *testing.T, dummy bool) {
+		// Force DistSQL to distribute the query. Otherwise, as of Nov 2018, it's hard
+		// to convince it to distribute a query that uses an index.
+		if _, err := conn.Exec("set distsql='always'"); err != nil {
+			t.Fatal(err)
+		}
+		limit := 5
+		if dummy {
+			limit = 6
+		}
+		query := fmt.Sprintf(
+			"select x from t where x <= 5 union all select x from t where x > 5 limit %d",
+			limit)
+		rows, err := conn.Query(query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		i := 6
+		for rows.Next() {
+			var n int
+			if err := rows.Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			if n != i {
+				t.Fatalf("expected row: %d but got: %d", i, n)
+			}
+			i++
+			// After we've gotten all the rows from the second node, let the first node
+			// return an uncertainty error.
+			if n == 10 {
+				ba := <-blockedRead
+				unblockRead <- roachpb.NewError(
+					roachpb.NewReadWithinUncertaintyIntervalError(
+						ba.Timestamp,           /* readTs */
+						ba.Timestamp.Add(1, 0), /* existingTs */
+						ba.Txn))
+			}
+		}
+		err = rows.Err()
+		if !dummy {
+			if err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if !testutils.IsError(err, "ReadWithinUncertaintyIntervalError") {
+				t.Fatalf("expected injected error, got: %v", err)
+			}
+		}
 	})
 }

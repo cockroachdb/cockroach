@@ -16,7 +16,7 @@ statement ok
 INSERT INTO xy VALUES (2, 200), (3, 300), (4, 400)
 
 statement ok
-SET EXPERIMENTAL_OPT = ON
+SET OPTIMIZER = ON
 
 # ParenSelect
 query II rowsort
@@ -27,7 +27,7 @@ query II rowsort
 3  30
 
 # Select
-query II rowsort
+query II
 SELECT * FROM test.t ORDER BY 1-t.k
 ----
 3  30
@@ -91,30 +91,24 @@ query I rowsort
 SELECT job_id FROM crdb_internal.jobs
 ----
 
-query I rowsort
-SELECT generate_series(1, 2)
-----
-1
-2
+statement ok
+CREATE SEQUENCE seq
 
 statement ok
-SET EXPERIMENTAL_OPT = ALWAYS
+SET OPTIMIZER = ALWAYS
 
-query error pq: unsupported statement: \*tree\.Insert
-INSERT INTO test (k, v) VALUES (5, 50)
+query error pq: unsupported statement: \*tree\.Delete
+DELETE FROM test WHERE k=5
 
 # Don't fall back to heuristic planner in ALWAYS mode.
 query error pq: aggregates with FILTER are not supported yet
 SELECT count(*) FILTER (WHERE v>10) FROM t
 
-query error pq: views and sequences are not supported
-SELECT * FROM tview
-
-query error pq: generator functions are not supported
-SELECT generate_series(1, 2)
+query error pq: sequences are not supported
+SELECT * FROM seq
 
 statement ok
-SET EXPERIMENTAL_OPT = LOCAL
+SET OPTIMIZER = LOCAL
 
 # In local mode, we should always get the results in order (no rowsort).
 query II
@@ -124,3 +118,16 @@ SELECT * FROM test.t
 2  20
 3  30
 4  40
+
+# Test the experimental_optimizer_updates flag.
+statement ok
+SET experimental_optimizer_updates = false
+
+statement error pq: no data source matches prefix: t
+UPDATE t SET v=(SELECT v+1 FROM t AS t2 WHERE t2.k=t.k)
+
+statement ok
+SET experimental_optimizer_updates = true
+
+statement ok
+UPDATE t SET v=(SELECT v+1 FROM t AS t2 WHERE t2.k=t.k)

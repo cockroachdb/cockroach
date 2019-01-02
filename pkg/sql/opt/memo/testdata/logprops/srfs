@@ -1,0 +1,93 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE uv (u INT, v INT NOT NULL)
+----
+TABLE uv
+ ├── u int
+ ├── v int not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+opt
+SELECT generate_series(0,1) FROM (SELECT * FROM xy LIMIT 0)
+----
+project-set
+ ├── columns: generate_series:3(int)
+ ├── cardinality: [0 - 0]
+ ├── side-effects
+ ├── values
+ │    ├── cardinality: [0 - 0]
+ │    └── key: ()
+ └── zip
+      └── function: generate_series [type=int, side-effects]
+           ├── const: 0 [type=int]
+           └── const: 1 [type=int]
+
+opt
+SELECT (SELECT unnest(ARRAY[1,2,y,v]) FROM xy WHERE x = u) FROM uv
+----
+project
+ ├── columns: unnest:7(int)
+ ├── side-effects
+ ├── prune: (7)
+ ├── left-join-apply
+ │    ├── columns: u:1(int) v:2(int!null) unnest:6(int)
+ │    ├── side-effects
+ │    ├── reject-nulls: (6)
+ │    ├── scan uv
+ │    │    ├── columns: u:1(int) v:2(int!null)
+ │    │    └── prune: (1,2)
+ │    ├── max1-row
+ │    │    ├── columns: unnest:6(int)
+ │    │    ├── outer: (1,2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── side-effects
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(6)
+ │    │    └── project
+ │    │         ├── columns: unnest:6(int)
+ │    │         ├── outer: (1,2)
+ │    │         ├── side-effects
+ │    │         ├── prune: (6)
+ │    │         └── project-set
+ │    │              ├── columns: x:4(int!null) y:5(int) unnest:6(int)
+ │    │              ├── outer: (1,2)
+ │    │              ├── side-effects
+ │    │              ├── fd: ()-->(4,5)
+ │    │              ├── select
+ │    │              │    ├── columns: x:4(int!null) y:5(int)
+ │    │              │    ├── outer: (1)
+ │    │              │    ├── cardinality: [0 - 1]
+ │    │              │    ├── key: ()
+ │    │              │    ├── fd: ()-->(4,5)
+ │    │              │    ├── prune: (5)
+ │    │              │    ├── interesting orderings: (+4)
+ │    │              │    ├── scan xy
+ │    │              │    │    ├── columns: x:4(int!null) y:5(int)
+ │    │              │    │    ├── key: (4)
+ │    │              │    │    ├── fd: (4)-->(5)
+ │    │              │    │    ├── prune: (4,5)
+ │    │              │    │    └── interesting orderings: (+4)
+ │    │              │    └── filters
+ │    │              │         └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │    │              │              ├── variable: x [type=int]
+ │    │              │              └── variable: u [type=int]
+ │    │              └── zip
+ │    │                   └── function: unnest [type=int, outer=(2,5), side-effects]
+ │    │                        └── array: [type=int[]]
+ │    │                             ├── const: 1 [type=int]
+ │    │                             ├── const: 2 [type=int]
+ │    │                             ├── variable: y [type=int]
+ │    │                             └── variable: v [type=int]
+ │    └── filters (true)
+ └── projections
+      └── variable: unnest [type=int, outer=(6)]

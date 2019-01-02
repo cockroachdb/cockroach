@@ -20,13 +20,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/btree"
-	"github.com/stretchr/testify/require"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/google/btree"
+	"github.com/stretchr/testify/require"
 )
 
 // mockLockedSender implements the lockedSender interface and provides a way to
@@ -56,7 +55,7 @@ func makeMockTxnPipeliner() (txnPipeliner, *mockLockedSender) {
 }
 
 func makeTxnProto() roachpb.Transaction {
-	return roachpb.MakeTransaction("test", []byte("key"), 0, 0, hlc.Timestamp{}, 0)
+	return roachpb.MakeTransaction("test", []byte("key"), 0, hlc.Timestamp{}, 0)
 }
 
 // TestTxnPipeliner1PCTransaction tests that 1PC transactions pass through the
@@ -459,7 +458,7 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 	// all outstanding writes, even if its header doesn't imply any interaction.
 	keyRangeDesc := roachpb.Key("rangeDesc")
 	ba.Requests = nil
-	ba.Add(&roachpb.GetSnapshotForMergeRequest{
+	ba.Add(&roachpb.SubsumeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: keyRangeDesc},
 	})
 
@@ -468,7 +467,7 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
-		require.IsType(t, &roachpb.GetSnapshotForMergeRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &roachpb.SubsumeRequest{}, ba.Requests[2].GetInner())
 
 		qiReq1 := ba.Requests[0].GetInner().(*roachpb.QueryIntentRequest)
 		qiReq2 := ba.Requests[1].GetInner().(*roachpb.QueryIntentRequest)
@@ -494,6 +493,9 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
+
+	// Disable maxBatchSize limit.
+	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 0)
 
 	const writes = 2048
 	keyBuf := roachpb.Key(strings.Repeat("a", writes+1))

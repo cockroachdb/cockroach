@@ -18,11 +18,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 var errSideloadedFileNotFound = errors.New("sideloaded file not found")
@@ -43,12 +45,14 @@ type sideloadStorage interface {
 	// remove any leftover files at the same index and earlier terms, but
 	// is not required to do so. When no file at the given index and term
 	// exists, returns errSideloadedFileNotFound.
-	Purge(_ context.Context, index, term uint64) error
+	//
+	// Returns the total size of the purged payloads.
+	Purge(_ context.Context, index, term uint64) (int64, error)
 	// Clear files that may have been written by this sideloadStorage.
 	Clear(context.Context) error
 	// TruncateTo removes all files belonging to an index strictly smaller than
-	// the given one.
-	TruncateTo(_ context.Context, index uint64) error
+	// the given one. Returns the number of bytes freed.
+	TruncateTo(_ context.Context, index uint64) (int64, error)
 	// Returns an absolute path to the file that Get() would return the contents
 	// of. Does not check whether the file actually exists.
 	Filename(_ context.Context, index, term uint64) (string, error)
@@ -67,14 +71,14 @@ func (r *Replica) maybeSideloadEntriesRaftMuLocked(
 ) (_ []raftpb.Entry, sideloadedEntriesSize int64, _ error) {
 	// TODO(tschottdorf): allocating this closure could be expensive. If so make
 	// it a method on Replica.
-	maybeRaftCommand := func(cmdID storagebase.CmdIDKey) (storagebase.RaftCommand, bool) {
+	maybeRaftCommand := func(cmdID storagebase.CmdIDKey) (storagepb.RaftCommand, bool) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		cmd, ok := r.mu.proposals[cmdID]
 		if ok {
 			return *cmd.command, true
 		}
-		return storagebase.RaftCommand{}, false
+		return storagepb.RaftCommand{}, false
 	}
 	return maybeSideloadEntriesImpl(ctx, entriesToAppend, r.raftMu.sideloaded, maybeRaftCommand)
 }
@@ -89,7 +93,7 @@ func maybeSideloadEntriesImpl(
 	ctx context.Context,
 	entriesToAppend []raftpb.Entry,
 	sideloaded sideloadStorage,
-	maybeRaftCommand func(storagebase.CmdIDKey) (storagebase.RaftCommand, bool),
+	maybeRaftCommand func(storagebase.CmdIDKey) (storagepb.RaftCommand, bool),
 ) (_ []raftpb.Entry, sideloadedEntriesSize int64, _ error) {
 
 	cow := false
@@ -176,7 +180,7 @@ func maybeInlineSideloadedRaftCommand(
 	rangeID roachpb.RangeID,
 	ent raftpb.Entry,
 	sideloaded sideloadStorage,
-	entryCache *raftEntryCache,
+	entryCache *raftentry.Cache,
 ) (*raftpb.Entry, error) {
 	if !sniffSideloadedRaftCommand(ent.Data) {
 		return nil, nil
@@ -185,7 +189,7 @@ func maybeInlineSideloadedRaftCommand(
 	// We could unmarshal this yet again, but if it's committed we
 	// are very likely to have appended it recently, in which case
 	// we can save work.
-	cachedSingleton, _, _ := entryCache.getEntries(
+	cachedSingleton, _, _, _ := entryCache.Scan(
 		nil, rangeID, ent.Index, ent.Index+1, 1<<20,
 	)
 
@@ -202,7 +206,7 @@ func maybeInlineSideloadedRaftCommand(
 	// Out of luck, for whatever reason the inlined proposal isn't in the cache.
 	cmdID, data := DecodeRaftCommand(ent.Data)
 
-	var command storagebase.RaftCommand
+	var command storagepb.RaftCommand
 	if err := protoutil.Unmarshal(data, &command); err != nil {
 		return nil, err
 	}
@@ -239,7 +243,7 @@ func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 		return
 	}
 
-	var command storagebase.RaftCommand
+	var command storagepb.RaftCommand
 	_, data := DecodeRaftCommand(ent.Data)
 	if err := protoutil.Unmarshal(data, &command); err != nil {
 		log.Fatal(ctx, err)
@@ -249,4 +253,21 @@ func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 		// The entry is "thin", which is what this assertion is checking for.
 		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", command)
 	}
+}
+
+// maybePurgeSideloaded removes [firstIndex, ..., lastIndex] at the given term
+// and returns the total number of bytes removed. Nonexistent entries are
+// silently skipped over.
+func maybePurgeSideloaded(
+	ctx context.Context, ss sideloadStorage, firstIndex, lastIndex uint64, term uint64,
+) (int64, error) {
+	var totalSize int64
+	for i := firstIndex; i <= lastIndex; i++ {
+		size, err := ss.Purge(ctx, i, term)
+		if err != nil && errors.Cause(err) != errSideloadedFileNotFound {
+			return totalSize, err
+		}
+		totalSize += size
+	}
+	return totalSize, nil
 }

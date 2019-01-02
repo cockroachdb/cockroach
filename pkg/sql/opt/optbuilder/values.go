@@ -28,35 +28,44 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (outScope *scope) {
+func (b *Builder) buildValuesClause(
+	values *tree.ValuesClause, desiredTypes []types.T, inScope *scope,
+) (outScope *scope) {
 	var numCols int
-	if len(values.Tuples) > 0 {
-		numCols = len(values.Tuples[0].Exprs)
+	if len(values.Rows) > 0 {
+		numCols = len(values.Rows[0])
 	}
 
 	colTypes := make([]types.T, numCols)
 	for i := range colTypes {
 		colTypes[i] = types.Unknown
 	}
-	rows := make([]memo.GroupID, 0, len(values.Tuples))
+	rows := make(memo.ScalarListExpr, 0, len(values.Rows))
 
-	// elems is used to store tuple values, and can be allocated once and reused
-	// repeatedly, since InternList will copy values to memo storage.
-	elems := make([]memo.GroupID, numCols)
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 
-	for _, tuple := range values.Tuples {
-		if numCols != len(tuple.Exprs) {
-			panic(builderError{pgerror.NewErrorf(
-				pgerror.CodeSyntaxError,
-				"VALUES lists must all be the same length, expected %d columns, found %d",
-				numCols, len(tuple.Exprs))})
+	// Ensure there are no special functions in the clause.
+	b.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
+	inScope.context = "VALUES"
+
+	for _, tuple := range values.Rows {
+		if numCols != len(tuple) {
+			reportValuesLenError(numCols, len(tuple))
 		}
 
-		for i, expr := range tuple.Exprs {
-			b.assertNoAggregationOrWindowing(expr, "VALUES")
-			texpr := inScope.resolveType(expr, types.Any)
+		elems := make(memo.ScalarListExpr, numCols)
+		for i, expr := range tuple {
+			desired := types.Any
+			if i < len(desiredTypes) {
+				desired = desiredTypes[i]
+			}
+
+			texpr := inScope.resolveType(expr, desired)
 			typ := texpr.ResolvedType()
-			elems[i] = b.buildScalar(texpr, inScope)
+			elems[i] = b.buildScalar(texpr, inScope, nil, nil, nil)
 
 			// Verify that types of each tuple match one another.
 			if colTypes[i] == types.Unknown {
@@ -67,21 +76,24 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 			}
 		}
 
-		rows = append(rows, b.factory.ConstructTuple(
-			b.factory.InternList(elems), b.factory.InternType(types.TTuple{Types: colTypes})),
-		)
+		rows = append(rows, b.factory.ConstructTuple(elems, types.TTuple{Types: colTypes}))
 	}
 
 	outScope = inScope.push()
 	for i := 0; i < numCols; i++ {
 		// The column names for VALUES are column1, column2, etc.
 		label := fmt.Sprintf("column%d", i+1)
-		b.synthesizeColumn(outScope, label, colTypes[i], nil, 0 /* group */)
+		b.synthesizeColumn(outScope, label, colTypes[i], nil, nil /* scalar */)
 	}
 
 	colList := colsToColList(outScope.cols)
-	outScope.group = b.factory.ConstructValues(
-		b.factory.InternList(rows), b.factory.InternColList(colList),
-	)
+	outScope.expr = b.factory.ConstructValues(rows, colList)
 	return outScope
+}
+
+func reportValuesLenError(expected, actual int) {
+	panic(builderError{pgerror.NewErrorf(
+		pgerror.CodeSyntaxError,
+		"VALUES lists must all be the same length, expected %d columns, found %d",
+		expected, actual)})
 }

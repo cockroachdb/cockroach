@@ -15,6 +15,7 @@
 package jobutils
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"reflect"
@@ -23,9 +24,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -37,33 +38,28 @@ import (
 )
 
 // WaitForJob waits for the specified job ID to terminate.
-func WaitForJob(db *gosql.DB, jobID int64) error {
-	var jobFailedErr error
-	err := retry.ForDuration(time.Minute*2, func() error {
+func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID int64) {
+	t.Helper()
+	if err := retry.ForDuration(time.Minute*2, func() error {
 		var status string
 		var payloadBytes []byte
-		if err := db.QueryRow(
-			`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
-		).Scan(&status, &payloadBytes); err != nil {
-			return errors.Wrap(err, "could not query job table")
-		}
+		db.QueryRow(
+			t, `SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&status, &payloadBytes)
 		if jobs.Status(status) == jobs.StatusFailed {
-			jobFailedErr = errors.New("job failed")
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
-				jobFailedErr = errors.Errorf("job failed: %s", payload.Error)
+				t.Fatalf("job failed: %s", payload.Error)
 			}
-			return nil
+			t.Fatalf("job failed")
 		}
 		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
-	})
-	if jobFailedErr != nil {
-		return jobFailedErr
+	}); err != nil {
+		t.Fatal(err)
 	}
-	return err
 }
 
 // RunJob runs the provided job control statement, intializing, notifying and
@@ -89,7 +85,7 @@ func RunJob(
 	*allowProgressIota = make(chan struct{})
 	errCh := make(chan error)
 	go func() {
-		_, err := db.DB.Exec(query, args...)
+		_, err := db.DB.ExecContext(context.TODO(), query, args...)
 		errCh <- err
 	}()
 	select {
@@ -129,25 +125,35 @@ func GetSystemJobsCount(t testing.TB, db *sqlutils.SQLRunner) int {
 	return jobCount
 }
 
-// VerifySystemJob checks that that job records are created as expected.
-func VerifySystemJob(
-	t testing.TB, db *sqlutils.SQLRunner, offset int, expectedType jobspb.Type, expected jobs.Record,
+func verifySystemJob(
+	t testing.TB,
+	db *sqlutils.SQLRunner,
+	offset int,
+	expectedType jobspb.Type,
+	expectedStatus string,
+	expectedRunningStatus string,
+	expected jobs.Record,
 ) error {
 	var actual jobs.Record
 	var rawDescriptorIDs pq.Int64Array
 	var actualType string
 	var statusString string
+	var runningStatus gosql.NullString
+	var runningStatusString string
 	// We have to query for the nth job created rather than filtering by ID,
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
 	// the job ID.
 	db.QueryRow(t, `
-		SELECT job_type, description, user_name, descriptor_ids, status
+		SELECT job_type, description, user_name, descriptor_ids, status, running_status
 		FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`,
 		offset,
 	).Scan(
 		&actualType, &actual.Description, &actual.Username, &rawDescriptorIDs,
-		&statusString,
+		&statusString, &runningStatus,
 	)
+	if runningStatus.Valid {
+		runningStatusString = runningStatus.String
+	}
 
 	for _, id := range rawDescriptorIDs {
 		actual.DescriptorIDs = append(actual.DescriptorIDs, sqlbase.ID(id))
@@ -160,14 +166,52 @@ func VerifySystemJob(
 			offset, strings.Join(pretty.Diff(e, a), "\n"))
 	}
 
-	if e, a := jobs.StatusSucceeded, jobs.Status(statusString); e != a {
-		return errors.Errorf("job %d: expected status %v, got %v", offset, e, a)
+	if expectedStatus != statusString {
+		return errors.Errorf("job %d: expected status %v, got %v", offset, expectedStatus, statusString)
+	}
+	if expectedRunningStatus != runningStatusString {
+		return errors.Errorf("job %d: expected running status %v, got %v",
+			offset, expectedRunningStatus, runningStatusString)
 	}
 	if e, a := expectedType.String(), actualType; e != a {
 		return errors.Errorf("job %d: expected type %v, got type %v", offset, e, a)
 	}
 
 	return nil
+}
+
+// VerifyRunningSystemJob checks that job records are created as expected
+// and is marked as running.
+func VerifyRunningSystemJob(
+	t testing.TB,
+	db *sqlutils.SQLRunner,
+	offset int,
+	expectedType jobspb.Type,
+	expectedRunningStatus jobs.RunningStatus,
+	expected jobs.Record,
+) error {
+	return verifySystemJob(t, db, offset, expectedType, "running", string(expectedRunningStatus), expected)
+}
+
+// VerifySystemJob checks that job records are created as expected.
+func VerifySystemJob(
+	t testing.TB,
+	db *sqlutils.SQLRunner,
+	offset int,
+	expectedType jobspb.Type,
+	expectedStatus jobs.Status,
+	expected jobs.Record,
+) error {
+	return verifySystemJob(t, db, offset, expectedType, string(expectedStatus), "", expected)
+}
+
+// GetJobID gets a particular job's ID.
+func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) int64 {
+	var jobID int64
+	db.QueryRow(t, `
+	SELECT job_id FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`, offset,
+	).Scan(&jobID)
+	return jobID
 }
 
 // GetJobProgress loads the Progress message associated with the job.
@@ -181,13 +225,55 @@ func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobspb.P
 	return ret
 }
 
-// GetJobPayload loads the Payload message associated with the job.
-func GetJobPayload(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobspb.Payload {
-	ret := &jobspb.Payload{}
-	var buf []byte
-	db.QueryRow(t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
-	if err := protoutil.Unmarshal(buf, ret); err != nil {
-		t.Fatal(err)
+// QueryRecentJobID queries a particular job's ID ordered by latest creation time.
+func QueryRecentJobID(db *gosql.DB, offset int) (int64, error) {
+	var jobID int64
+	err := db.QueryRow(
+		`SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1 OFFSET $1`, offset,
+	).Scan(&jobID)
+	return jobID, err
+}
+
+// WaitForFractionalProgress waits for a job to progress past a certain point.
+func WaitForFractionalProgress(
+	ctx context.Context, db *gosql.DB, jobID int64, fractionalProgress float32, options retry.Options,
+) error {
+	var currProg float32
+	var currStatus string
+	for r := retry.StartWithCtx(ctx, options); r.Next(); {
+		if err := db.QueryRow(
+			`SELECT fraction_completed, status FROM [SHOW JOBS] WHERE job_id = $1`,
+			jobID,
+		).Scan(&currProg, &currStatus); err != nil {
+			return err
+		}
+
+		if status := jobs.Status(currStatus); status.Terminal() && status != jobs.StatusSucceeded {
+			return errors.Errorf("got non-success terminal status %q", status)
+		}
+
+		if currProg >= fractionalProgress {
+			return nil
+		}
 	}
-	return ret
+
+	return errors.Errorf("timeout with current progress: %.2f", currProg)
+}
+
+// WaitForStatus waits for a job to have a certain status.
+func WaitForStatus(
+	ctx context.Context, db *gosql.DB, jobID int64, status jobs.Status, options retry.Options,
+) error {
+	var currStatus string
+	for r := retry.StartWithCtx(ctx, options); r.Next(); {
+		if err := db.QueryRow(`SELECT status FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&currStatus); err != nil {
+			return err
+		}
+
+		if currStatus == string(status) {
+			return nil
+		}
+	}
+
+	return errors.Errorf("timeout with current status: %q", currStatus)
 }

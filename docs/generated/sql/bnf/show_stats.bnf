@@ -1,0 +1,2 @@
+show_stats_stmt ::=
+	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name
