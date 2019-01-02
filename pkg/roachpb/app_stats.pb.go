@@ -40,10 +40,11 @@ type StatementStatistics struct {
 	// When transmitted to the reporting server, this value gets
 	// quantized into buckets (few <10, dozens 10+, 100 or more).
 	MaxRetries int64 `protobuf:"varint,3,opt,name=max_retries,json=maxRetries" json:"max_retries"`
-	// LastErr collects the last error encountered.
-	LastErr string `protobuf:"bytes,4,opt,name=last_err,json=lastErr" json:"last_err"`
-	// LastErrRedacted collects the last error, redacted for reporting.
-	LastErrRedacted string `protobuf:"bytes,11,opt,name=last_err_redacted,json=lastErrRedacted" json:"last_err_redacted"`
+	// DEPRECATED: LastErr collects the last error encountered.
+	// Use sensitive_info.last_err instead.
+	LegacyLastErr string `protobuf:"bytes,4,opt,name=legacy_last_err,json=legacyLastErr" json:"legacy_last_err"`
+	// DEPRECATED: LastErrRedacted collects the last error, redacted for reporting.
+	LegacyLastErrRedacted string `protobuf:"bytes,11,opt,name=legacy_last_err_redacted,json=legacyLastErrRedacted" json:"legacy_last_err_redacted"`
 	// NumRows collects the number of rows returned or observed.
 	NumRows NumericStat `protobuf:"bytes,5,opt,name=num_rows,json=numRows" json:"num_rows"`
 	// ParseLat is the time to transform the SQL string into an AST.
@@ -58,12 +59,28 @@ type StatementStatistics struct {
 	// We store it separately (as opposed to computing it post-hoc) because the combined
 	// variance for the overhead cannot be derived from the variance of the separate latencies.
 	OverheadLat NumericStat `protobuf:"bytes,10,opt,name=overhead_lat,json=overheadLat" json:"overhead_lat"`
+	// SensitiveInfo is info that needs to be scrubbed or redacted before being
+	// sent to the reg cluster.
+	SensitiveInfo SensitiveInfo `protobuf:"bytes,12,opt,name=sensitive_info,json=sensitiveInfo" json:"sensitive_info"`
 }
 
 func (m *StatementStatistics) Reset()                    { *m = StatementStatistics{} }
 func (m *StatementStatistics) String() string            { return proto.CompactTextString(m) }
 func (*StatementStatistics) ProtoMessage()               {}
 func (*StatementStatistics) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{0} }
+
+type SensitiveInfo struct {
+	// LastErr collects the last error encountered.
+	// It is only reported once it's been redacted.
+	LastErr string `protobuf:"bytes,1,opt,name=last_err,json=lastErr" json:"last_err"`
+	// MostRecentPlanDescription is a serialized representation of the logical plan most recently captured for this query.
+	MostRecentPlanDescription ExplainTreePlanNode `protobuf:"bytes,2,opt,name=most_recent_plan_description,json=mostRecentPlanDescription" json:"most_recent_plan_description"`
+}
+
+func (m *SensitiveInfo) Reset()                    { *m = SensitiveInfo{} }
+func (m *SensitiveInfo) String() string            { return proto.CompactTextString(m) }
+func (*SensitiveInfo) ProtoMessage()               {}
+func (*SensitiveInfo) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{1} }
 
 type NumericStat struct {
 	// NumericStat keeps track of two running values --- the running mean and
@@ -79,7 +96,7 @@ type NumericStat struct {
 func (m *NumericStat) Reset()                    { *m = NumericStat{} }
 func (m *NumericStat) String() string            { return proto.CompactTextString(m) }
 func (*NumericStat) ProtoMessage()               {}
-func (*NumericStat) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{1} }
+func (*NumericStat) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{2} }
 
 type StatementStatisticsKey struct {
 	Query   string `protobuf:"bytes,1,opt,name=query" json:"query"`
@@ -92,7 +109,7 @@ type StatementStatisticsKey struct {
 func (m *StatementStatisticsKey) Reset()                    { *m = StatementStatisticsKey{} }
 func (m *StatementStatisticsKey) String() string            { return proto.CompactTextString(m) }
 func (*StatementStatisticsKey) ProtoMessage()               {}
-func (*StatementStatisticsKey) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{2} }
+func (*StatementStatisticsKey) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{3} }
 
 // CollectedStats wraps collected timings and metadata for some query's execution.
 type CollectedStatementStatistics struct {
@@ -104,14 +121,45 @@ func (m *CollectedStatementStatistics) Reset()         { *m = CollectedStatement
 func (m *CollectedStatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*CollectedStatementStatistics) ProtoMessage()    {}
 func (*CollectedStatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptorAppStats, []int{3}
+	return fileDescriptorAppStats, []int{4}
+}
+
+// ExplainTreePlanNode is a serialized representation of an EXPLAIN tree for a logical plan.
+type ExplainTreePlanNode struct {
+	// Name is the type of node this is, e.g. "scan" or "index-join".
+	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
+	// Attrs are attributes of this plan node.
+	// Often there are many attributes with the same key, e.g. "render".
+	Attrs []*ExplainTreePlanNode_Attr `protobuf:"bytes,2,rep,name=attrs" json:"attrs,omitempty"`
+	// Children are the nodes that feed into this one, e.g. two scans for a join.
+	Children []*ExplainTreePlanNode `protobuf:"bytes,3,rep,name=children" json:"children,omitempty"`
+}
+
+func (m *ExplainTreePlanNode) Reset()                    { *m = ExplainTreePlanNode{} }
+func (m *ExplainTreePlanNode) String() string            { return proto.CompactTextString(m) }
+func (*ExplainTreePlanNode) ProtoMessage()               {}
+func (*ExplainTreePlanNode) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{5} }
+
+type ExplainTreePlanNode_Attr struct {
+	Key   string `protobuf:"bytes,1,opt,name=key" json:"key"`
+	Value string `protobuf:"bytes,2,opt,name=value" json:"value"`
+}
+
+func (m *ExplainTreePlanNode_Attr) Reset()         { *m = ExplainTreePlanNode_Attr{} }
+func (m *ExplainTreePlanNode_Attr) String() string { return proto.CompactTextString(m) }
+func (*ExplainTreePlanNode_Attr) ProtoMessage()    {}
+func (*ExplainTreePlanNode_Attr) Descriptor() ([]byte, []int) {
+	return fileDescriptorAppStats, []int{5, 0}
 }
 
 func init() {
 	proto.RegisterType((*StatementStatistics)(nil), "cockroach.sql.StatementStatistics")
+	proto.RegisterType((*SensitiveInfo)(nil), "cockroach.sql.SensitiveInfo")
 	proto.RegisterType((*NumericStat)(nil), "cockroach.sql.NumericStat")
 	proto.RegisterType((*StatementStatisticsKey)(nil), "cockroach.sql.StatementStatisticsKey")
 	proto.RegisterType((*CollectedStatementStatistics)(nil), "cockroach.sql.CollectedStatementStatistics")
+	proto.RegisterType((*ExplainTreePlanNode)(nil), "cockroach.sql.ExplainTreePlanNode")
+	proto.RegisterType((*ExplainTreePlanNode_Attr)(nil), "cockroach.sql.ExplainTreePlanNode.Attr")
 }
 func (m *StatementStatistics) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -139,8 +187,8 @@ func (m *StatementStatistics) MarshalTo(dAtA []byte) (int, error) {
 	i = encodeVarintAppStats(dAtA, i, uint64(m.MaxRetries))
 	dAtA[i] = 0x22
 	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LastErr)))
-	i += copy(dAtA[i:], m.LastErr)
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LegacyLastErr)))
+	i += copy(dAtA[i:], m.LegacyLastErr)
 	dAtA[i] = 0x2a
 	i++
 	i = encodeVarintAppStats(dAtA, i, uint64(m.NumRows.Size()))
@@ -191,8 +239,46 @@ func (m *StatementStatistics) MarshalTo(dAtA []byte) (int, error) {
 	i += n6
 	dAtA[i] = 0x5a
 	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LastErrRedacted)))
-	i += copy(dAtA[i:], m.LastErrRedacted)
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LegacyLastErrRedacted)))
+	i += copy(dAtA[i:], m.LegacyLastErrRedacted)
+	dAtA[i] = 0x62
+	i++
+	i = encodeVarintAppStats(dAtA, i, uint64(m.SensitiveInfo.Size()))
+	n7, err := m.SensitiveInfo.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n7
+	return i, nil
+}
+
+func (m *SensitiveInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SensitiveInfo) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.LastErr)))
+	i += copy(dAtA[i:], m.LastErr)
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintAppStats(dAtA, i, uint64(m.MostRecentPlanDescription.Size()))
+	n8, err := m.MostRecentPlanDescription.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n8
 	return i, nil
 }
 
@@ -290,19 +376,91 @@ func (m *CollectedStatementStatistics) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintAppStats(dAtA, i, uint64(m.Key.Size()))
-	n7, err := m.Key.MarshalTo(dAtA[i:])
+	n9, err := m.Key.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n7
+	i += n9
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintAppStats(dAtA, i, uint64(m.Stats.Size()))
-	n8, err := m.Stats.MarshalTo(dAtA[i:])
+	n10, err := m.Stats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n8
+	i += n10
+	return i, nil
+}
+
+func (m *ExplainTreePlanNode) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ExplainTreePlanNode) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	if len(m.Attrs) > 0 {
+		for _, msg := range m.Attrs {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintAppStats(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Children) > 0 {
+		for _, msg := range m.Children {
+			dAtA[i] = 0x1a
+			i++
+			i = encodeVarintAppStats(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *ExplainTreePlanNode_Attr) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ExplainTreePlanNode_Attr) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.Key)))
+	i += copy(dAtA[i:], m.Key)
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintAppStats(dAtA, i, uint64(len(m.Value)))
+	i += copy(dAtA[i:], m.Value)
 	return i, nil
 }
 
@@ -321,7 +479,7 @@ func (m *StatementStatistics) Size() (n int) {
 	n += 1 + sovAppStats(uint64(m.Count))
 	n += 1 + sovAppStats(uint64(m.FirstAttemptCount))
 	n += 1 + sovAppStats(uint64(m.MaxRetries))
-	l = len(m.LastErr)
+	l = len(m.LegacyLastErr)
 	n += 1 + l + sovAppStats(uint64(l))
 	l = m.NumRows.Size()
 	n += 1 + l + sovAppStats(uint64(l))
@@ -335,7 +493,19 @@ func (m *StatementStatistics) Size() (n int) {
 	n += 1 + l + sovAppStats(uint64(l))
 	l = m.OverheadLat.Size()
 	n += 1 + l + sovAppStats(uint64(l))
-	l = len(m.LastErrRedacted)
+	l = len(m.LegacyLastErrRedacted)
+	n += 1 + l + sovAppStats(uint64(l))
+	l = m.SensitiveInfo.Size()
+	n += 1 + l + sovAppStats(uint64(l))
+	return n
+}
+
+func (m *SensitiveInfo) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.LastErr)
+	n += 1 + l + sovAppStats(uint64(l))
+	l = m.MostRecentPlanDescription.Size()
 	n += 1 + l + sovAppStats(uint64(l))
 	return n
 }
@@ -367,6 +537,36 @@ func (m *CollectedStatementStatistics) Size() (n int) {
 	l = m.Key.Size()
 	n += 1 + l + sovAppStats(uint64(l))
 	l = m.Stats.Size()
+	n += 1 + l + sovAppStats(uint64(l))
+	return n
+}
+
+func (m *ExplainTreePlanNode) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Name)
+	n += 1 + l + sovAppStats(uint64(l))
+	if len(m.Attrs) > 0 {
+		for _, e := range m.Attrs {
+			l = e.Size()
+			n += 1 + l + sovAppStats(uint64(l))
+		}
+	}
+	if len(m.Children) > 0 {
+		for _, e := range m.Children {
+			l = e.Size()
+			n += 1 + l + sovAppStats(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ExplainTreePlanNode_Attr) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Key)
+	n += 1 + l + sovAppStats(uint64(l))
+	l = len(m.Value)
 	n += 1 + l + sovAppStats(uint64(l))
 	return n
 }
@@ -472,7 +672,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 			}
 		case 4:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LastErr", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field LegacyLastErr", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -497,7 +697,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LastErr = string(dAtA[iNdEx:postIndex])
+			m.LegacyLastErr = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -681,7 +881,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 11:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LastErrRedacted", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field LegacyLastErrRedacted", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -706,7 +906,146 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LastErrRedacted = string(dAtA[iNdEx:postIndex])
+			m.LegacyLastErrRedacted = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 12:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SensitiveInfo", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAppStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.SensitiveInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAppStats(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SensitiveInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAppStats
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SensitiveInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SensitiveInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LastErr", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAppStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.LastErr = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MostRecentPlanDescription", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAppStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.MostRecentPlanDescription.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -1079,6 +1418,255 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *ExplainTreePlanNode) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAppStats
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ExplainTreePlanNode: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ExplainTreePlanNode: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAppStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Attrs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAppStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Attrs = append(m.Attrs, &ExplainTreePlanNode_Attr{})
+			if err := m.Attrs[len(m.Attrs)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Children", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAppStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Children = append(m.Children, &ExplainTreePlanNode{})
+			if err := m.Children[len(m.Children)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAppStats(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ExplainTreePlanNode_Attr) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAppStats
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Attr: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Attr: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAppStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAppStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Value = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAppStats(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAppStats
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipAppStats(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1187,39 +1775,51 @@ var (
 func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptorAppStats) }
 
 var fileDescriptorAppStats = []byte{
-	// 538 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x94, 0xcf, 0x6e, 0xd3, 0x40,
-	0x10, 0xc6, 0xbb, 0xe4, 0xff, 0xb8, 0x15, 0xea, 0x16, 0x15, 0x2b, 0xaa, 0xdc, 0x10, 0xa9, 0x52,
-	0xb8, 0xa4, 0x28, 0xe2, 0x82, 0x50, 0x91, 0xda, 0xc0, 0x89, 0x0a, 0x89, 0xf4, 0xc6, 0xc5, 0x5a,
-	0xec, 0x49, 0x6b, 0xc5, 0xf6, 0x6e, 0x76, 0xd7, 0x6d, 0xf3, 0x16, 0xbc, 0x00, 0x17, 0x9e, 0x26,
-	0x47, 0x8e, 0x5c, 0x40, 0x10, 0x5e, 0x04, 0xed, 0xda, 0x2b, 0x05, 0x14, 0x89, 0xdc, 0xac, 0xef,
-	0x9b, 0xdf, 0xb7, 0x3b, 0x9e, 0xb1, 0xe1, 0xb1, 0xe4, 0x2c, 0xba, 0x11, 0x1f, 0x4f, 0x99, 0x10,
-	0xa1, 0xd2, 0x4c, 0xab, 0xa1, 0x90, 0x5c, 0x73, 0xba, 0x17, 0xf1, 0x68, 0x66, 0xcd, 0xa1, 0x9a,
-	0xa7, 0xdd, 0x47, 0xd7, 0xfc, 0x9a, 0x5b, 0xe7, 0xd4, 0x3c, 0x95, 0x45, 0xfd, 0xef, 0x75, 0x38,
-	0xb8, 0xd2, 0x4c, 0x63, 0x86, 0xb9, 0x36, 0x0f, 0x89, 0xd2, 0x49, 0xa4, 0x68, 0x17, 0x1a, 0x11,
-	0x2f, 0x72, 0xed, 0x93, 0x1e, 0x19, 0xd4, 0x2e, 0xea, 0xcb, 0x1f, 0xc7, 0x3b, 0x93, 0x52, 0xa2,
-	0xcf, 0xe1, 0x60, 0x9a, 0x48, 0xa5, 0x43, 0xa6, 0x35, 0x66, 0x42, 0x87, 0x65, 0xe5, 0x83, 0xb5,
-	0xca, 0x7d, 0x5b, 0x70, 0x5e, 0xfa, 0x63, 0x4b, 0x9d, 0x80, 0x97, 0xb1, 0xfb, 0x50, 0xa2, 0x96,
-	0x09, 0x2a, 0xbf, 0xb6, 0x56, 0x0d, 0x19, 0xbb, 0x9f, 0x94, 0x3a, 0x3d, 0x86, 0x76, 0xca, 0x94,
-	0x0e, 0x51, 0x4a, 0xbf, 0xde, 0x23, 0x83, 0x4e, 0x55, 0xd3, 0x32, 0xea, 0x1b, 0x29, 0xe9, 0x4b,
-	0x68, 0xe7, 0x45, 0x16, 0x4a, 0x7e, 0xa7, 0xfc, 0x46, 0x8f, 0x0c, 0xbc, 0x51, 0x77, 0xf8, 0x57,
-	0xa7, 0xc3, 0x77, 0x45, 0x86, 0x32, 0x89, 0x4c, 0x37, 0x0e, 0xce, 0x8b, 0x6c, 0xc2, 0xef, 0x14,
-	0x3d, 0x83, 0x8e, 0x60, 0x52, 0x61, 0x98, 0x32, 0xed, 0x37, 0xb7, 0xa4, 0xdb, 0x16, 0xb9, 0x64,
-	0xda, 0x9c, 0x2d, 0x52, 0x96, 0x5b, 0xba, 0xb5, 0xed, 0xd9, 0x86, 0x30, 0xf0, 0x0b, 0x68, 0xc9,
-	0xa2, 0x64, 0xdb, 0x5b, 0xb2, 0x4d, 0x59, 0x58, 0xf4, 0x1c, 0x3c, 0x85, 0xf2, 0x36, 0x89, 0xca,
-	0x8b, 0x77, 0xb6, 0xc4, 0xa1, 0x82, 0x4c, 0xc4, 0x18, 0x76, 0xf9, 0x2d, 0xca, 0x1b, 0x64, 0xb1,
-	0xcd, 0x80, 0x2d, 0x33, 0x3c, 0x47, 0x99, 0x90, 0x67, 0xb0, 0xef, 0x86, 0x13, 0x4a, 0x8c, 0x59,
-	0xa4, 0x31, 0xf6, 0xbd, 0xb5, 0x29, 0x3d, 0xac, 0xa6, 0x34, 0xa9, 0xcc, 0xfe, 0x04, 0xbc, 0xb5,
-	0x4c, 0xea, 0x43, 0x3d, 0x43, 0x96, 0xdb, 0xad, 0x22, 0x15, 0x63, 0x15, 0xfa, 0x14, 0xf6, 0xd4,
-	0xbc, 0x60, 0x12, 0xe3, 0x30, 0x4e, 0xa6, 0x53, 0x65, 0xd7, 0xc9, 0x95, 0xec, 0x56, 0xd6, 0x6b,
-	0xe3, 0xf4, 0xbf, 0x10, 0x38, 0xdc, 0xb0, 0xb3, 0x6f, 0x71, 0x61, 0xd6, 0x76, 0x5e, 0xa0, 0x5c,
-	0xd8, 0x03, 0xdc, 0xa5, 0x4a, 0x89, 0x1e, 0x42, 0x8d, 0x09, 0x61, 0x73, 0x9d, 0x63, 0x04, 0x1a,
-	0x40, 0x2b, 0x4e, 0x94, 0xbe, 0x7a, 0x7f, 0x69, 0x97, 0xb2, 0xed, 0xe6, 0x56, 0x89, 0xf4, 0x08,
-	0x9a, 0x53, 0x96, 0xa4, 0x18, 0xdb, 0x7d, 0x74, 0x76, 0xa5, 0x99, 0x54, 0x2e, 0xb4, 0xdd, 0x44,
-	0x67, 0x19, 0xa1, 0xff, 0x99, 0xc0, 0xd1, 0x98, 0xa7, 0x29, 0x9a, 0xd7, 0xb0, 0xe9, 0x0b, 0x3b,
-	0x83, 0xda, 0x0c, 0xcb, 0x8b, 0x7a, 0xa3, 0x93, 0x7f, 0xe6, 0xb0, 0xb9, 0x3d, 0x97, 0x3f, 0xc3,
-	0x05, 0x7d, 0x05, 0x0d, 0xfb, 0xb1, 0xdb, 0x7e, 0xbc, 0x51, 0xff, 0xff, 0x01, 0xee, 0x6d, 0x58,
-	0xec, 0xe2, 0xc9, 0xf2, 0x57, 0xb0, 0xb3, 0x5c, 0x05, 0xe4, 0xeb, 0x2a, 0x20, 0xdf, 0x56, 0x01,
-	0xf9, 0xb9, 0x0a, 0xc8, 0xa7, 0xdf, 0xc1, 0xce, 0x87, 0x56, 0xf5, 0x43, 0xf9, 0x13, 0x00, 0x00,
-	0xff, 0xff, 0x4d, 0xe7, 0x67, 0x54, 0x5a, 0x04, 0x00, 0x00,
+	// 733 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x55, 0x4d, 0x6f, 0xd3, 0x4a,
+	0x14, 0xad, 0x5f, 0x92, 0x26, 0xb9, 0x6e, 0xde, 0xd3, 0x9b, 0xbe, 0xd7, 0xe7, 0x17, 0x45, 0x69,
+	0x89, 0x54, 0x11, 0x24, 0x94, 0x4a, 0x11, 0x1b, 0x40, 0xa9, 0xd4, 0xaf, 0x45, 0x45, 0x55, 0x81,
+	0xcb, 0x8a, 0x8d, 0x35, 0xd8, 0x37, 0xed, 0xa8, 0xb6, 0xc7, 0x9d, 0x19, 0xa7, 0xcd, 0xbf, 0x60,
+	0x8f, 0xd8, 0xf0, 0x53, 0x58, 0x75, 0xc9, 0x92, 0x15, 0x82, 0xb0, 0xe3, 0x57, 0xa0, 0x19, 0xdb,
+	0x25, 0x89, 0x82, 0xc8, 0x2e, 0x3a, 0xf7, 0x9c, 0x33, 0x77, 0xee, 0xb9, 0xe3, 0xc0, 0x7f, 0x82,
+	0x53, 0xff, 0x22, 0x79, 0xbd, 0x43, 0x93, 0xc4, 0x93, 0x8a, 0x2a, 0xd9, 0x4b, 0x04, 0x57, 0x9c,
+	0x34, 0x7c, 0xee, 0x5f, 0x9a, 0x62, 0x4f, 0x5e, 0x85, 0xcd, 0x7f, 0xce, 0xf9, 0x39, 0x37, 0x95,
+	0x1d, 0xfd, 0x2b, 0x23, 0x75, 0x3e, 0x54, 0x60, 0xfd, 0x4c, 0x51, 0x85, 0x11, 0xc6, 0x4a, 0xff,
+	0x60, 0x52, 0x31, 0x5f, 0x92, 0x26, 0x54, 0x7c, 0x9e, 0xc6, 0xca, 0xb1, 0xb6, 0xac, 0x6e, 0x69,
+	0xbf, 0x7c, 0xfb, 0x79, 0x73, 0xc5, 0xcd, 0x20, 0xf2, 0x08, 0xd6, 0x87, 0x4c, 0x48, 0xe5, 0x51,
+	0xa5, 0x30, 0x4a, 0x94, 0x97, 0x31, 0xff, 0x98, 0x62, 0xfe, 0x6d, 0x08, 0x7b, 0x59, 0xfd, 0xc0,
+	0xa8, 0xb6, 0xc1, 0x8e, 0xe8, 0x8d, 0x27, 0x50, 0x09, 0x86, 0xd2, 0x29, 0x4d, 0xb1, 0x21, 0xa2,
+	0x37, 0x6e, 0x86, 0x93, 0x87, 0xf0, 0x57, 0x88, 0xe7, 0xd4, 0x1f, 0x7b, 0x21, 0x95, 0xca, 0x43,
+	0x21, 0x9c, 0xf2, 0x96, 0xd5, 0xad, 0xe7, 0xd4, 0x46, 0x56, 0x3c, 0xa1, 0x52, 0x1d, 0x09, 0x41,
+	0x9e, 0x42, 0x2d, 0x4e, 0x23, 0x4f, 0xf0, 0x6b, 0xe9, 0x54, 0xb6, 0xac, 0xae, 0xdd, 0x6f, 0xf6,
+	0x66, 0xae, 0xdd, 0x3b, 0x4d, 0x23, 0x14, 0xcc, 0xd7, 0x57, 0xcb, 0x2d, 0xaa, 0x71, 0x1a, 0xb9,
+	0xfc, 0x5a, 0x92, 0x01, 0xd4, 0x13, 0x2a, 0x24, 0x7a, 0x21, 0x55, 0xce, 0xea, 0x92, 0xea, 0x9a,
+	0x91, 0x9c, 0x50, 0xa5, 0xcf, 0x4e, 0x42, 0x1a, 0x1b, 0x75, 0x75, 0xd9, 0xb3, 0xb5, 0x42, 0x8b,
+	0x1f, 0x43, 0x55, 0xa4, 0x99, 0xb6, 0xb6, 0xa4, 0x76, 0x55, 0xa4, 0x46, 0xba, 0x07, 0xb6, 0x44,
+	0x31, 0x62, 0x7e, 0xd6, 0x78, 0x7d, 0x49, 0x39, 0xe4, 0x22, 0x6d, 0x71, 0x00, 0x6b, 0x7c, 0x84,
+	0xe2, 0x02, 0x69, 0x60, 0x3c, 0x60, 0x49, 0x0f, 0xbb, 0x50, 0x69, 0x93, 0x01, 0x38, 0x73, 0x49,
+	0x79, 0x02, 0x03, 0xea, 0x2b, 0x0c, 0x1c, 0x7b, 0x2a, 0xb2, 0x7f, 0x67, 0x22, 0x73, 0x73, 0x0a,
+	0x39, 0x86, 0x3f, 0x25, 0xc6, 0x92, 0x29, 0x36, 0x42, 0x8f, 0xc5, 0x43, 0xee, 0xac, 0x99, 0x2e,
+	0x5a, 0x73, 0x5d, 0x9c, 0x15, 0xa4, 0xe3, 0x78, 0xc8, 0x8b, 0x2d, 0x90, 0xd3, 0x60, 0xe7, 0xad,
+	0x05, 0x8d, 0x19, 0x1a, 0xd9, 0x84, 0xda, 0xdd, 0xfa, 0x58, 0x53, 0xbd, 0x54, 0xc3, 0x7c, 0x71,
+	0x18, 0xb4, 0x22, 0x2e, 0x95, 0x27, 0xd0, 0xc7, 0x58, 0x79, 0x26, 0xc8, 0x00, 0xa5, 0x2f, 0x58,
+	0xa2, 0x18, 0x8f, 0xcd, 0x32, 0xdb, 0xfd, 0xce, 0x5c, 0x2f, 0x47, 0x37, 0x49, 0x48, 0x59, 0xfc,
+	0x52, 0x20, 0x3e, 0x0f, 0x69, 0x7c, 0xca, 0x03, 0xcc, 0x8d, 0xff, 0xd7, 0x6e, 0xae, 0x31, 0xd3,
+	0x95, 0xc3, 0x9f, 0x56, 0x1d, 0x17, 0xec, 0xa9, 0x49, 0x12, 0x07, 0xca, 0x11, 0xd2, 0xd8, 0xb4,
+	0x65, 0xe5, 0x6a, 0x83, 0x90, 0x07, 0xd0, 0x90, 0x57, 0x29, 0x15, 0x18, 0x78, 0x01, 0x1b, 0x0e,
+	0xa5, 0x69, 0xa2, 0xa0, 0xac, 0xe5, 0xa5, 0x43, 0x5d, 0xe9, 0xbc, 0xb7, 0x60, 0x63, 0xc1, 0xb3,
+	0x7d, 0x86, 0x63, 0xfd, 0x72, 0xaf, 0x52, 0x14, 0xe3, 0x99, 0x7b, 0x67, 0x10, 0xd9, 0x80, 0x12,
+	0x4d, 0x12, 0xe3, 0x5b, 0x54, 0x34, 0x40, 0xda, 0x50, 0x0d, 0x98, 0x54, 0x67, 0x2f, 0x4e, 0xcc,
+	0xbb, 0xac, 0x15, 0xd3, 0xca, 0x41, 0xd2, 0x82, 0xd5, 0x21, 0x65, 0x21, 0x06, 0xe6, 0x2d, 0x16,
+	0xe5, 0x1c, 0xd3, 0xae, 0x3c, 0x51, 0xe6, 0xfd, 0x15, 0x25, 0x0d, 0x74, 0xde, 0x59, 0xd0, 0x3a,
+	0xe0, 0x61, 0x88, 0x3a, 0xef, 0x45, 0x1f, 0x99, 0x01, 0x94, 0x2e, 0x31, 0x6b, 0xd4, 0xee, 0x6f,
+	0xcf, 0xe7, 0xbe, 0xf0, 0x7a, 0x85, 0xff, 0x25, 0x8e, 0xc9, 0x2e, 0x54, 0xcc, 0xf7, 0xee, 0x17,
+	0x61, 0x2d, 0x30, 0x28, 0xa6, 0x61, 0x64, 0x9d, 0xef, 0x16, 0xac, 0x2f, 0x48, 0x54, 0x27, 0x14,
+	0xd3, 0x08, 0x67, 0x06, 0x68, 0x10, 0x32, 0x80, 0x0a, 0x55, 0x4a, 0xe8, 0x13, 0x4b, 0x5d, 0xbb,
+	0x7f, 0xff, 0xf7, 0xeb, 0xd1, 0xdb, 0x53, 0x4a, 0xb8, 0x99, 0x8a, 0xec, 0x42, 0xcd, 0xbf, 0x60,
+	0x61, 0x20, 0x30, 0x76, 0x4a, 0xc6, 0x61, 0x89, 0x05, 0x73, 0xef, 0x34, 0xcd, 0x27, 0x50, 0xd6,
+	0x76, 0x7a, 0xe0, 0xc5, 0xdc, 0xea, 0xd3, 0x03, 0x69, 0x42, 0x65, 0x44, 0xc3, 0x14, 0x67, 0x02,
+	0xce, 0xa0, 0xfd, 0x7b, 0xb7, 0x5f, 0xdb, 0x2b, 0xb7, 0x93, 0xb6, 0xf5, 0x71, 0xd2, 0xb6, 0x3e,
+	0x4d, 0xda, 0xd6, 0x97, 0x49, 0xdb, 0x7a, 0xf3, 0xad, 0xbd, 0xf2, 0xaa, 0x9a, 0xff, 0x81, 0xfc,
+	0x08, 0x00, 0x00, 0xff, 0xff, 0x08, 0x36, 0xba, 0xf1, 0x4a, 0x06, 0x00, 0x00,
 }

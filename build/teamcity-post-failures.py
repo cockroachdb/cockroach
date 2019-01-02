@@ -63,7 +63,7 @@ def collect_build_results(build_id):
 
 def get_probable_milestone():
     try:
-        tag = subprocess.check_output(['git', 'describe', '--abbrev=0', '--tags'],
+        tag = subprocess.check_output(['git', 'describe', '--abbrev=0', '--tags', '--match=v[0-9]*'],
             universal_newlines=True)
     except subprocess.CalledProcessError as e:
         print('warning: unable to load latest tag: {0}'.format(e))

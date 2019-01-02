@@ -165,8 +165,6 @@ function randomStats(): StatementStatistics {
     run_lat: randomStat(),
     service_lat: randomStat(),
     overhead_lat: randomStat(),
-    last_err: "",
-    last_err_redacted: "",
   };
 }
 

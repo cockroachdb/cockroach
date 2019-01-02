@@ -113,9 +113,11 @@
 		RangeFeedError
 		RangeFeedEvent
 		StatementStatistics
+		SensitiveInfo
 		NumericStat
 		StatementStatisticsKey
 		CollectedStatementStatistics
+		ExplainTreePlanNode
 		Span
 		Value
 		KeyValue

@@ -17,6 +17,7 @@ package sql
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -88,6 +89,7 @@ func (EngineMetrics) MetricStruct() {}
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.
+// - samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
 // - distSQLUsed reports whether the query was distributed.
 // - automaticRetryCount is the count of implicit txn retries
 //   so far.
@@ -96,6 +98,7 @@ func (EngineMetrics) MetricStruct() {}
 func (ex *connExecutor) recordStatementSummary(
 	planner *planner,
 	stmt Statement,
+	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	planFlags planFlags,
 	automaticRetryCount int,
 	rowsAffected int,
@@ -149,7 +152,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	planner.statsCollector.RecordStatement(
-		stmt,
+		stmt, samplePlanDescription,
 		planFlags.IsSet(planFlagDistributed), planFlags.IsSet(planFlagOptUsed),
 		automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,

@@ -79,6 +79,12 @@ var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 	false,
 )
 
+var sampleLogicalPlans = settings.RegisterBoolSetting(
+	"sql.metrics.statement_details.sample_logical_plans",
+	"periodically save a logical plan for each fingerprint",
+	true,
+)
+
 func (s stmtKey) String() string {
 	return s.flags() + s.stmt
 }
@@ -97,8 +103,16 @@ func (s stmtKey) flags() string {
 	return b.String()
 }
 
+// saveFingerprintPlanOnceEvery is the number of queries for a given fingerprint that go by before
+// we save the plan again.
+const saveFingerprintPlanOnceEvery = 1000
+
+// recordStatement saves per-statement statistics.
+//
+// samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
 func (a *appStats) recordStatement(
 	stmt Statement,
+	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
 	optUsed bool,
 	automaticRetryCount int,
@@ -114,27 +128,18 @@ func (a *appStats) recordStatement(
 		return
 	}
 
-	// Extend the statement key with a character that indicated whether
-	// there was an error and/or whether the query was distributed, so
-	// that we use separate buckets for the different situations.
-	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optUsed}
-
-	if stmt.AnonymizedStr != "" {
-		// Use the cached anonymized string.
-		key.stmt = stmt.AnonymizedStr
-	} else {
-		key.stmt = anonymizeStmt(stmt)
-	}
-
 	// Get the statistics object.
-	s := a.getStatsForStmt(key)
+	s := a.getStatsForStmt(stmt, distSQLUsed, optUsed, err, true /* createIfNonexistent */)
 
 	// Collect the per-statement statistics.
 	s.Lock()
 	s.data.Count++
 	if err != nil {
-		s.data.LastErr = err.Error()
-		s.data.LastErrRedacted = log.Redact(err)
+		s.data.SensitiveInfo.LastErr = err.Error()
+	}
+	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
+	if samplePlanDescription != nil {
+		s.data.SensitiveInfo.MostRecentPlanDescription = *samplePlanDescription
 	}
 	if automaticRetryCount == 0 {
 		s.data.FirstAttemptCount++
@@ -151,12 +156,28 @@ func (a *appStats) recordStatement(
 }
 
 // getStatsForStmt retrieves the per-stmt stat object.
-func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
+func (a *appStats) getStatsForStmt(
+	stmt Statement, distSQLUsed bool, optimizerUsed bool, err error, createIfNonexistent bool,
+) *stmtStats {
+	// Extend the statement key with various characteristics, so
+	// that we use separate buckets for the different situations.
+	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optimizerUsed}
+	if stmt.AnonymizedStr != "" {
+		// Use the cached anonymized string.
+		key.stmt = stmt.AnonymizedStr
+	} else {
+		key.stmt = anonymizeStmt(stmt)
+	}
+
+	return a.getStatsForStmtWithKey(key, createIfNonexistent)
+}
+
+func (a *appStats) getStatsForStmtWithKey(key stmtKey, createIfNonexistent bool) *stmtStats {
 	a.Lock()
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
 	s, ok := a.stmts[key]
-	if !ok {
+	if !ok && createIfNonexistent {
 		s = &stmtStats{}
 		a.stmts[key] = s
 	}
@@ -343,15 +364,10 @@ func (s *sqlStats) getStmtStats(
 				data := stats.data
 				stats.Unlock()
 
-				if data.LastErr != "" {
-					// We have a redacted version in lastErrRedacted -- this one is not ok
-					// to report as-in though.
-					data.LastErr = "scrubbed"
-				}
-
 				if scrub {
 					// Quantize the counts to avoid leaking information that way.
 					quantizeCounts(&data)
+					data.SensitiveInfo = data.SensitiveInfo.GetScrubbedCopy()
 				}
 
 				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: data})

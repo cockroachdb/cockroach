@@ -14,6 +14,8 @@
 
 package roachpb
 
+import "github.com/cockroachdb/cockroach/pkg/util/log"
+
 // GetVariance retrieves the variance of the values.
 func (l *NumericStat) GetVariance(count int64) float64 {
 	return l.SquaredDiffs / (float64(count) - 1)
@@ -44,4 +46,15 @@ func AddNumericStats(a, b NumericStat, countA, countB int64) NumericStat {
 		SquaredDiffs: (a.SquaredDiffs + b.SquaredDiffs) +
 			delta*delta*float64(countA)*float64(countB)/total,
 	}
+}
+
+// GetScrubbedCopy returns a copy of the given SensitiveInfo with its fields redacted
+// or omitted entirely. By default, fields are omitted: if a new field is
+// added to the SensitiveInfo proto, it must be added here to make it to the
+// reg cluster.
+func (si SensitiveInfo) GetScrubbedCopy() SensitiveInfo {
+	output := SensitiveInfo{}
+	output.LastErr = log.Redact(si.LastErr)
+	// Not copying over MostRecentPlanDescription until we have an algorithm to scrub plan nodes.
+	return output
 }
