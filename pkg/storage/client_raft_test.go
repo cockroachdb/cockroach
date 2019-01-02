@@ -1377,6 +1377,12 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	var exitStatus int
+	log.SetExitFunc(true /* hideStack */, func(i int) {
+		exitStatus = i
+	})
+	defer log.ResetExitFunc()
+
 	const numReplicas = 5
 	const extraStores = 3
 
@@ -1490,6 +1496,10 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 			}
 			return nil
 		})
+	}
+
+	if exitStatus != 255 {
+		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 }
 
