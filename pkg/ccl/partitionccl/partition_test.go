@@ -1146,10 +1146,6 @@ func setupPartitioningTestCluster(
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.declined_reservation_timeout = '0s'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.failed_reservation_timeout = '0s'`)
 
-	// Make sure all stores are present in the NodeStatus endpoint or else zone
-	// config changes may flake (#25488).
-	tc.WaitForNodeStatuses(t)
-
 	return tc.Conns[0], sqlDB, func() {
 		tc.Stopper().Stop(context.Background())
 		resetZoneConfig()
