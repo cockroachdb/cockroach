@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -528,9 +528,9 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	return f.setupProcessors(ctx, inputSyncs)
 }
 
-// startInternal starts the flow. All processors apart from the last one are
-// started, each in their own goroutine. The caller must forward any returned
-// error to syncFlowConsumer if set.
+// startInternal starts the flow. All processors are started, each in their own
+// goroutine. The caller must forward any returned error to syncFlowConsumer if
+// set.
 func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	f.doneFn = doneFn
 	log.VEventf(
@@ -564,11 +564,11 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	for _, s := range f.startables {
 		s.start(ctx, &f.waitGroup, f.ctxCancel)
 	}
-	for i := 0; i < len(f.processors)-1; i++ {
+	for i := 0; i < len(f.processors); i++ {
 		f.waitGroup.Add(1)
 		go f.processors[i].Run(ctx, &f.waitGroup)
 	}
-	f.startedGoroutines = len(f.startables) > 0 || len(f.processors) > 1 || !f.isLocal()
+	f.startedGoroutines = len(f.startables) > 0 || len(f.processors) > 0 || !f.isLocal()
 	return nil
 }
 
@@ -577,13 +577,15 @@ func (f *Flow) isLocal() bool {
 	return len(f.inboundStreams) == 0
 }
 
-// StartAsync starts the flow. Each processor runs in their own goroutine.
+// Start starts the flow. Processors run asynchronously in their own goroutines.
+// Wait() needs to be called to wait for the flow to finish.
+// See Run() for a synchronous version.
 //
 // Generally if errors are encountered during the setup part, they're returned.
 // But if the flow is a synchronous one, then no error is returned; instead the
 // setup error is pushed to the syncFlowConsumer. In this case, a subsequent
 // call to f.Wait() will not block.
-func (f *Flow) StartAsync(ctx context.Context, doneFn func()) error {
+func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	if err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
@@ -592,19 +594,26 @@ func (f *Flow) StartAsync(ctx context.Context, doneFn func()) error {
 			return nil
 		}
 		return err
-	}
-	if len(f.processors) > 0 {
-		f.waitGroup.Add(1)
-		go f.processors[len(f.processors)-1].Run(ctx, &f.waitGroup)
-		f.startedGoroutines = true
 	}
 	return nil
 }
 
-// StartSync starts the flow just like StartAsync but the last processor is run
-// from the main goroutine. Wait() must still be called afterwards as other
-// goroutines might be spawned.
-func (f *Flow) StartSync(ctx context.Context, doneFn func()) error {
+// Run runs the flow to completion. The last processor is run in the current
+// goroutine; others may run in different goroutines depending on how the flow
+// was configured.
+// f.Wait() is called internally, so the call blocks until all the flow's
+// goroutines are done.
+// The caller needs to call f.Cleanup().
+func (f *Flow) Run(ctx context.Context, doneFn func()) error {
+	defer f.Wait()
+
+	// We'll take care of the last processor in particular.
+	var headProc Processor
+	if len(f.processors) > 0 {
+		headProc = f.processors[len(f.processors)-1]
+		f.processors = f.processors[:len(f.processors)-1]
+	}
+
 	if err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
@@ -614,8 +623,8 @@ func (f *Flow) StartSync(ctx context.Context, doneFn func()) error {
 		}
 		return err
 	}
-	if len(f.processors) > 0 {
-		f.processors[len(f.processors)-1].Run(ctx, nil)
+	if headProc != nil {
+		headProc.Run(ctx, nil)
 	}
 	return nil
 }

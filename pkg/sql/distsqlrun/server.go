@@ -537,11 +537,10 @@ func (ds *ServerImpl) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) er
 		defer ctxCancel()
 		f.startables = append(f.startables, mbox)
 		ds.Metrics.FlowStart()
-		if err := f.StartSync(ctx, func() {}); err != nil {
+		if err := f.Run(ctx, func() {}); err != nil {
 			log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 				"The error should have gone to the consumer.", err)
 		}
-		f.Wait()
 		f.Cleanup(ctx)
 		ds.Metrics.FlowStop()
 	}); err != nil {
