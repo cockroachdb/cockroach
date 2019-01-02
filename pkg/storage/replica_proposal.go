@@ -465,8 +465,6 @@ func (r *Replica) handleReplicatedEvalResult(
 	{
 		rResult.IsLeaseRequest = false
 		rResult.Timestamp = hlc.Timestamp{}
-		rResult.DeprecatedStartKey = nil
-		rResult.DeprecatedEndKey = nil
 		rResult.PrevLeaseProposal = nil
 	}
 
