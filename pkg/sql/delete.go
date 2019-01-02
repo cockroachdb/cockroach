@@ -155,6 +155,18 @@ func (p *planner) Delete(
 	var columns sqlbase.ResultColumns
 	if rowsNeeded {
 		columns = planColumns(rows)
+		// If rowsNeeded is set, we have requested from the source above
+		// all the columns from the descriptor. However, to ensure that
+		// modified rows include all columns, the construction of the
+		// source has used publicAndNonPublicColumns so the source may
+		// contain additional columns for every newly dropped column not
+		// visible.
+		// We do not want these to be available for RETURNING below.
+		//
+		// In the case where rowsNeeded is true, the requested columns are
+		// requestedCols. So we can truncate to the length of that to
+		// only see public columns.
+		columns = columns[:len(requestedCols)]
 	}
 
 	// Now make a delete node. We use a pool.
@@ -326,7 +338,15 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 	// If result rows need to be accumulated, do it.
 	if d.run.rows != nil {
-		if _, err := d.run.rows.AddRow(params.ctx, sourceVals); err != nil {
+		// The new values can include all columns, the construction of the
+		// values has used publicAndNonPublicColumns so the values may
+		// contain additional columns for every newly dropped column not
+		// visible. We do not want them to be available for RETURNING.
+		//
+		// d.columns is guaranteed to only contain the requested
+		// public columns.
+		resultValues := sourceVals[:len(d.columns)]
+		if _, err := d.run.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}
 	}

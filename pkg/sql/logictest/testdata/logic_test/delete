@@ -219,3 +219,25 @@ DELETE FROM t29494 RETURNING *
 
 statement ok
 COMMIT
+
+subtest regression_33361
+
+statement ok
+CREATE TABLE t33361(x INT PRIMARY KEY, y INT UNIQUE, z INT); INSERT INTO t33361 VALUES (1, 2, 3)
+
+statement ok
+BEGIN; ALTER TABLE t33361 DROP COLUMN y
+
+statement error column "y" does not exist
+DELETE FROM t33361 RETURNING y
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN; ALTER TABLE t33361 DROP COLUMN y
+
+query II
+DELETE FROM t33361 RETURNING *; COMMIT
+----
+1 3
