@@ -48,7 +48,7 @@ func downloadStoreDumps(ctx context.Context, c *cluster, storeDirPath string, no
 		node := node
 		g.Go(func() error {
 			path := fmt.Sprintf("%s/%d/*", storeDirPath, node)
-			return c.RunE(ctx, c.Node(node), `mkdir -p {store-dir} && gsutil -m -q cp -r `+path+` {store-dir}`)
+			return c.RunE(ctx, c.Node(node), `mkdir -p {store-dir} && gsutil -m cp -r `+path+` {store-dir}`)
 		})
 	}
 	return g.Wait()
