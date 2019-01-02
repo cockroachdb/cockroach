@@ -1261,7 +1261,7 @@ var debugMergeLogsOpts = struct {
 	file    *regexp.Regexp
 	prefix  string
 }{
-	program: regexp.MustCompile("^cockroach$"),
+	program: regexp.MustCompile("^cockroach.*$"),
 	file:    regexp.MustCompile(log.FilePattern),
 }
 
