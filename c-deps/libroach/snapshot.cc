@@ -35,6 +35,8 @@ DBStatus DBSnapshot::Get(DBKey key, DBString* value) {
 
 DBStatus DBSnapshot::Delete(DBKey key) { return FmtStatus("unsupported"); }
 
+DBStatus DBSnapshot::SingleDelete(DBKey key) { return FmtStatus("unsupported"); }
+
 DBStatus DBSnapshot::DeleteRange(DBKey start, DBKey end) { return FmtStatus("unsupported"); }
 
 DBStatus DBSnapshot::CommitBatch(bool sync) { return FmtStatus("unsupported"); }

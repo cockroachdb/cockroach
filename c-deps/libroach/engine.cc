@@ -159,6 +159,11 @@ DBStatus DBImpl::Delete(DBKey key) {
   return ToDBStatus(rep->Delete(options, EncodeKey(key)));
 }
 
+DBStatus DBImpl::SingleDelete(DBKey key) {
+  rocksdb::WriteOptions options;
+  return ToDBStatus(rep->SingleDelete(options, EncodeKey(key)));
+}
+
 DBStatus DBImpl::DeleteRange(DBKey start, DBKey end) {
   rocksdb::WriteOptions options;
   return ToDBStatus(
