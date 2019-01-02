@@ -676,7 +676,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	ctx := context.Background()
 	origTS := makeTS(123, 0)
 	plus10 := origTS.Add(10, 10)
-	plus20 := plus10.Add(10, 0)
+	plus20 := origTS.Add(20, 0)
 	testCases := []struct {
 		// The test's name.
 		name             string
@@ -778,6 +778,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				if pErr == nil {
 					reply = ba.CreateReply()
 					reply.Txn = ba.Txn
+				} else if txn := pErr.GetTxn(); txn != nil {
+					// Update the manual clock to simulate an
+					// error updating a local hlc clock.
+					manual.Set(txn.Timestamp.WallTime)
 				}
 				return reply, pErr
 			}
