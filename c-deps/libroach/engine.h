@@ -33,6 +33,7 @@ struct DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value) = 0;
   virtual DBStatus Merge(DBKey key, DBSlice value) = 0;
   virtual DBStatus Delete(DBKey key) = 0;
+  virtual DBStatus SingleDelete(DBKey key) = 0;
   virtual DBStatus DeleteRange(DBKey start, DBKey end) = 0;
   virtual DBStatus CommitBatch(bool sync) = 0;
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync) = 0;
@@ -80,6 +81,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);
+  virtual DBStatus SingleDelete(DBKey key);
   virtual DBStatus DeleteRange(DBKey start, DBKey end);
   virtual DBStatus CommitBatch(bool sync);
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);

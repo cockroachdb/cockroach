@@ -86,6 +86,10 @@ DBStatus ProcessDeltaKey(Getter* base, rocksdb::WBWIIterator* delta, rocksdb::Sl
       }
       break;
     }
+    case rocksdb::kSingleDeleteRecord:
+      // These semantics don't quite mirror SingleDelete's expected
+      // implementation, but they don't violate the its contract from
+      // https://github.com/facebook/rocksdb/wiki/Single-Delete.
     case rocksdb::kDeleteRecord:
       if (value->data != NULL) {
         free(value->data);
@@ -418,7 +422,7 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
   DBBatchInserter(rocksdb::WriteBatchBase* batch) : batch_(batch) {}
 
   virtual rocksdb::Status PutCF(uint32_t column_family_id, const rocksdb::Slice& key,
-    const rocksdb::Slice& value) {
+                                const rocksdb::Slice& value) {
     if (column_family_id != 0) {
       return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
     }
@@ -431,10 +435,13 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
     return batch_->Delete(key);
   }
   virtual rocksdb::Status SingleDeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) {
-    return rocksdb::Status::InvalidArgument("DBBatchInserter: SingleDelete not supported");
+    if (column_family_id != 0) {
+      return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
+    }
+    return batch_->SingleDelete(key);
   }
   virtual rocksdb::Status MergeCF(uint32_t column_family_id, const rocksdb::Slice& key,
-    const rocksdb::Slice& value) {
+                                  const rocksdb::Slice& value) {
     if (column_family_id != 0) {
       return rocksdb::Status::InvalidArgument("DBBatchInserter: column families not supported");
     }
@@ -491,6 +498,12 @@ DBStatus DBBatch::Get(DBKey key, DBString* value) {
 DBStatus DBBatch::Delete(DBKey key) {
   ++updates;
   batch.Delete(EncodeKey(key));
+  return kSuccess;
+}
+
+DBStatus DBBatch::SingleDelete(DBKey key) {
+  ++updates;
+  batch.SingleDelete(EncodeKey(key));
   return kSuccess;
 }
 
@@ -594,6 +607,12 @@ DBStatus DBWriteOnlyBatch::Get(DBKey key, DBString* value) { return FmtStatus("u
 DBStatus DBWriteOnlyBatch::Delete(DBKey key) {
   ++updates;
   batch.Delete(EncodeKey(key));
+  return kSuccess;
+}
+
+DBStatus DBWriteOnlyBatch::SingleDelete(DBKey key) {
+  ++updates;
+  batch.SingleDelete(EncodeKey(key));
   return kSuccess;
 }
 
