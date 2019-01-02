@@ -155,7 +155,7 @@ func registerTPCC(r *registry) {
 		Tags:  []string{`weekly`},
 		Nodes: nodes(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			warehouses := 1500
+			warehouses := 1400
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				Duration:   6 * 24 * time.Hour,
