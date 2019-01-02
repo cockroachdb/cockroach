@@ -347,7 +347,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d]%s",
-		splitKey, rightDesc.RangeID, extra)
+		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightDesc.RangeID, extra)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
