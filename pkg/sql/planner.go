@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -578,8 +579,11 @@ type sqlStatsCollector interface {
 	PhaseTimes() *phaseTimes
 
 	// RecordStatement record stats for one statement.
+	//
+	// samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
 	RecordStatement(
 		stmt Statement,
+		samplePlanDescription *roachpb.ExplainTreePlanNode,
 		distSQLUsed bool,
 		optUsed bool,
 		automaticRetryCount int,

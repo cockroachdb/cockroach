@@ -719,8 +719,8 @@ sys.stderr.flush()
 
 # Start with known sections.
 
-current_version = subprocess.check_output(["git", "describe", "--tags", options.until_commit], universal_newlines=True).strip()
-previous_version = subprocess.check_output(["git", "describe", "--tags", options.from_commit], universal_newlines=True).strip()
+current_version = subprocess.check_output(["git", "describe", "--tags", "--match=v[0-9]*", options.until_commit], universal_newlines=True).strip()
+previous_version = subprocess.check_output(["git", "describe", "--tags", "--match=v[0-9]*", options.from_commit], universal_newlines=True).strip()
 
 if not hideheader:
     print("---")

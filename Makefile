@@ -1004,7 +1004,7 @@ $(ARCHIVE).tmp: $(ARCHIVE_EXTRAS)
 # For details, see the "Possible timestamp problems with diff-files?" thread on
 # the Git mailing list (http://marc.info/?l=git&m=131687596307197).
 .buildinfo/tag: | .buildinfo
-	@{ git describe --tags --dirty 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
+	@{ git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
 
 .buildinfo/rev: | .buildinfo
 	@git rev-parse HEAD > $@
