@@ -91,11 +91,16 @@ func TestParseDatumStringAs(t *testing.T) {
 			"1",
 			"1.0",
 			`""`,
+			`"abc"`,
+			`"ab\u0000c"`,
+			`"ab\u0001c"`,
+			`"ab⚣ cd"`,
 		},
 		types.String: {
 			"",
 			"abc",
 			"abc\x00",
+			"ab⚣ cd",
 		},
 		types.Time: {
 			"01:02:03",
