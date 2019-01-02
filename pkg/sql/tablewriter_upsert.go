@@ -414,8 +414,7 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 			existingRow := existingRows[conflictingRowIdx]
 
 			// Check the ON CONFLICT DO UPDATE WHERE ... clause.
-			conflictingRowValues := existingRow[:len(tu.ru.FetchCols)]
-			shouldUpdate, err := tu.evaler.shouldUpdate(insertRow, conflictingRowValues)
+			shouldUpdate, err := tu.evaler.shouldUpdate(insertRow, existingRow)
 			if err != nil {
 				return err
 			}
@@ -430,7 +429,7 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 			// We know there was a row already, and we know we need to update it. Do it.
 			resultRow, existingRows, err = tu.updateConflictingRow(
 				ctx, tu.b, insertRow,
-				conflictingRowPK, conflictingRowIdx, conflictingRowValues,
+				conflictingRowPK, conflictingRowIdx, existingRow,
 				existingRows, pkToRowIdx,
 				tableDesc, traceKV)
 			if err != nil {
@@ -609,7 +608,7 @@ func (tu *tableUpserter) updateConflictingRow(
 		pkChanged = true
 
 		// Now add the new one.
-		existingRows = appendKnownConflictingRow(updatedRow, updatedConflictingRowPK, existingRows, pkToRowIdx)
+		existingRows = tu.appendKnownConflictingRow(updatedRow, updatedConflictingRowPK, existingRows, pkToRowIdx)
 	}
 
 	if pkChanged {
@@ -668,7 +667,7 @@ func (tu *tableUpserter) insertNonConflictingRow(
 	}
 
 	// Then remember it for further upserts.
-	existingRows = appendKnownConflictingRow(insertRow, conflictingRowPK, existingRows, pkToRowIdx)
+	existingRows = tu.appendKnownConflictingRow(insertRow, conflictingRowPK, existingRows, pkToRowIdx)
 
 	if !tu.collectRows {
 		return nil, existingRows, nil
@@ -683,11 +682,22 @@ func (tu *tableUpserter) insertNonConflictingRow(
 
 // appendKnownConflictingRow adds a new row to existingRows and
 // remembers its position in pkToRowIdx.
-func appendKnownConflictingRow(
+func (tu *tableUpserter) appendKnownConflictingRow(
 	newRow tree.Datums, newRowPK roachpb.Key, existingRows []tree.Datums, pkToRowIdx map[string]int,
 ) (newExistingRows []tree.Datums) {
 	pkToRowIdx[string(newRowPK)] = len(existingRows)
-	return append(existingRows, newRow)
+	// We need to convert the new row to match the fetch columns required for
+	// checking if there is a conflict.
+	cleanedRow := make(tree.Datums, len(tu.fetchColIDtoRowIndex))
+	for fetchColID, fetchRowIndex := range tu.fetchColIDtoRowIndex {
+		insertRowIndex, ok := tu.ri.InsertColIDtoRowIndex[fetchColID]
+		if ok {
+			cleanedRow[fetchRowIndex] = newRow[insertRowIndex]
+		} else {
+			cleanedRow[fetchRowIndex] = tree.DNull
+		}
+	}
+	return append(existingRows, cleanedRow)
 }
 
 // getConflictingRowPK returns the primary key of the row that may
