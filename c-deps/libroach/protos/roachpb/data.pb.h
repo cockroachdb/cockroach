@@ -2487,12 +2487,6 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
   bool refresh_invalid() const;
   void set_refresh_invalid(bool value);
 
-  // bool deprecated_refresh_valid = 6;
-  void clear_deprecated_refresh_valid();
-  static const int kDeprecatedRefreshValidFieldNumber = 6;
-  bool deprecated_refresh_valid() const;
-  void set_deprecated_refresh_valid(bool value);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.TxnCoordMeta)
  private:
 
@@ -2504,7 +2498,6 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::cockroach::roachpb::Transaction* txn_;
   ::google::protobuf::int32 command_count_;
   bool refresh_invalid_;
-  bool deprecated_refresh_valid_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -5050,20 +5043,6 @@ inline void TxnCoordMeta::set_refresh_invalid(bool value) {
   
   refresh_invalid_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.TxnCoordMeta.refresh_invalid)
-}
-
-// bool deprecated_refresh_valid = 6;
-inline void TxnCoordMeta::clear_deprecated_refresh_valid() {
-  deprecated_refresh_valid_ = false;
-}
-inline bool TxnCoordMeta::deprecated_refresh_valid() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.deprecated_refresh_valid)
-  return deprecated_refresh_valid_;
-}
-inline void TxnCoordMeta::set_deprecated_refresh_valid(bool value) {
-  
-  deprecated_refresh_valid_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.TxnCoordMeta.deprecated_refresh_valid)
 }
 
 inline int TxnCoordMeta::outstanding_writes_size() const {
