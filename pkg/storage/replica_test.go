@@ -2927,6 +2927,13 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 // not decodable.
 func TestReplicaAbortSpanReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	var exitStatus int
+	log.SetExitFunc(true /* hideStack */, func(i int) {
+		exitStatus = i
+	})
+	defer log.ResetExitFunc()
+
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -2956,6 +2963,9 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	}, &args)
 	if !testutils.IsPError(pErr, "replica corruption") {
 		t.Fatal(pErr)
+	}
+	if exitStatus != 255 {
+		t.Fatalf("did not fatal (exit status %d)", exitStatus)
 	}
 }
 
@@ -3337,6 +3347,13 @@ func Test1PCTransactionWriteTimestamp(t *testing.T) {
 // EndTransaction call with a malformed commit trigger fails.
 func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	var exitStatus int
+	log.SetExitFunc(true /* hideStack */, func(i int) {
+		exitStatus = i
+	})
+	defer log.ResetExitFunc()
+
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -3371,8 +3388,13 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	}
 
 	assignSeqNumsForReqs(txn, &args)
-	if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, "range does not match splits") {
-		t.Errorf("expected range does not match splits error; got %s", pErr)
+	expErr := regexp.QuoteMeta("replica corruption (processed=true): range does not match splits")
+	if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, expErr) {
+		t.Errorf("unexpected error: %s", pErr)
+	}
+
+	if exitStatus != 255 {
+		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 }
 
@@ -5714,6 +5736,12 @@ func TestAppliedIndex(t *testing.T) {
 func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	var exitStatus int
+	log.SetExitFunc(true /* hideStack */, func(i int) {
+		exitStatus = i
+	})
+	defer log.ResetExitFunc()
+
 	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
@@ -5762,6 +5790,10 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 	if r.mu.destroyStatus.err.Error() != pErr.GetDetail().Error() {
 		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyStatus.err, pErr.GetDetail())
+	}
+
+	if exitStatus != 255 {
+		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 
 	// TODO(bdarnell): when maybeSetCorrupt is finished verify that future commands fail too.
