@@ -3450,19 +3450,6 @@ func (r *Replica) evaluateProposal(
 		} else {
 			res.Replicated.DeprecatedDelta = &ms
 		}
-		// If the cluster version is and always will be VersionNoRaftProposalKeys or
-		// greater, we don't need to send the key range through Raft. This decision
-		// is based on the minimum supported version and not the active version
-		// because Raft entries need to be usable even across allowable version
-		// downgrades.
-		if !r.ClusterSettings().Version.IsMinSupported(cluster.VersionNoRaftProposalKeys) {
-			rSpan, err := keys.Range(ba)
-			if err != nil {
-				return &res, false /* needConsensus */, roachpb.NewError(err)
-			}
-			res.Replicated.DeprecatedStartKey = rSpan.Key
-			res.Replicated.DeprecatedEndKey = rSpan.EndKey
-		}
 		// If the RangeAppliedState key is not being used and the cluster version is
 		// high enough to guarantee that all current and future binaries will
 		// understand the key, we send the migration flag through Raft. Because
