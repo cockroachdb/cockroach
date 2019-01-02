@@ -4194,7 +4194,7 @@ func stringToArray(str string, delimPtr *string, nullStr *string) (tree.Datum, e
 // delim. If nullStr is non-nil, NULL values in the array will be replaced by
 // it.
 func arrayToString(arr *tree.DArray, delim string, nullStr *string) (tree.Datum, error) {
-	f := tree.NewFmtCtxWithBuf(tree.FmtParseDatums)
+	f := tree.NewFmtCtxWithBuf(tree.FmtArrayToString)
 
 	for i := range arr.Array {
 		if arr.Array[i] == tree.DNull {

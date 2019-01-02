@@ -25,7 +25,7 @@ import (
 )
 
 // TestParseDatumStringAs tests that datums are roundtrippable between
-// printing with FmtParseDatums and ParseDatumStringAs.
+// printing with FmtExport and ParseDatumStringAs.
 func TestParseDatumStringAs(t *testing.T) {
 	tests := map[types.T][]string{
 		types.Bool: {
@@ -125,7 +125,7 @@ func TestParseDatumStringAs(t *testing.T) {
 					if d.ResolvedType() != typ {
 						t.Fatalf("unexpected type: %s", d.ResolvedType())
 					}
-					ds := AsStringWithFlags(d, FmtParseDatums)
+					ds := AsStringWithFlags(d, FmtExport)
 					if s != ds {
 						t.Fatalf("unexpected string: %q, expected: %q", ds, s)
 					}
