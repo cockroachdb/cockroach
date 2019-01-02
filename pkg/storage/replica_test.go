@@ -3780,7 +3780,6 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 // enjoy protection from "Raft retries".
 func TestRaftRetryProtectionInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer setTxnAutoGC(true)()
 	cfg := TestStoreConfig(nil)
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -3887,7 +3886,6 @@ func TestReplicaLaziness(t *testing.T) {
 // batch.WillNotBeRetried bit.
 func TestRaftRetryCantCommitIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer setTxnAutoGC(true)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -4010,7 +4008,6 @@ func TestDuplicateBeginTransaction(t *testing.T) {
 // local relative to the transaction record's location.
 func TestEndTransactionLocalGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer setTxnAutoGC(true)()
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
