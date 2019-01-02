@@ -793,6 +793,11 @@ func (r *RocksDB) Clear(key MVCCKey) error {
 	return dbClear(r.rdb, key)
 }
 
+// SingleClear removes the most recent item from the db with the given key.
+func (r *RocksDB) SingleClear(key MVCCKey) error {
+	return dbSingleClear(r.rdb, key)
+}
+
 // ClearRange removes a set of entries, from start (inclusive) to end
 // (exclusive).
 func (r *RocksDB) ClearRange(start, end MVCCKey) error {
@@ -1041,6 +1046,10 @@ func (r *rocksDBReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
 }
 
 func (r *rocksDBReadOnly) Clear(key MVCCKey) error {
+	panic("not implemented")
+}
+
+func (r *rocksDBReadOnly) SingleClear(key MVCCKey) error {
 	panic("not implemented")
 }
 
@@ -1369,6 +1378,11 @@ func (r *distinctBatch) Clear(key MVCCKey) error {
 	return nil
 }
 
+func (r *distinctBatch) SingleClear(key MVCCKey) error {
+	r.builder.SingleClear(key)
+	return nil
+}
+
 func (r *distinctBatch) ClearRange(start, end MVCCKey) error {
 	if !r.writeOnly {
 		panic("readable batch")
@@ -1676,6 +1690,15 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 	}
 	r.distinctNeedsFlush = true
 	r.builder.Clear(key)
+	return nil
+}
+
+func (r *rocksDBBatch) SingleClear(key MVCCKey) error {
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
+	r.distinctNeedsFlush = true
+	r.builder.SingleClear(key)
 	return nil
 }
 
@@ -2639,6 +2662,13 @@ func dbClear(rdb *C.DBEngine, key MVCCKey) error {
 		return emptyKeyError()
 	}
 	return statusToError(C.DBDelete(rdb, goToCKey(key)))
+}
+
+func dbSingleClear(rdb *C.DBEngine, key MVCCKey) error {
+	if len(key.Key) == 0 {
+		return emptyKeyError()
+	}
+	return statusToError(C.DBSingleDelete(rdb, goToCKey(key)))
 }
 
 func dbClearRange(rdb *C.DBEngine, start, end MVCCKey) error {
