@@ -111,7 +111,7 @@ func IndexKeyValDirs(index *IndexDescriptor) []encoding.Direction {
 // currently true for the fields we care about stripping (the table and index
 // ID).
 func PrettyKey(valDirs []encoding.Direction, key roachpb.Key, skip int) string {
-	p := key.StringWithDirs(valDirs)
+	p := key.StringWithDirs(valDirs, 0 /* maxLen */)
 	for i := 0; i <= skip; i++ {
 		n := strings.IndexByte(p[1:], '/')
 		if n == -1 {
