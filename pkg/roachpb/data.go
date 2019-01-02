@@ -1153,20 +1153,17 @@ func PrepareTransactionForRetry(
 		// TODO(andrei): Should we preserve the ObservedTimestamps across the
 		// restart?
 		errTxnPri := txn.Priority
-		// The OrigTimestamp of the new transaction is going to be the greater of
-		// two the current clock and the timestamp received in the error.
-		// TODO(andrei): Can we just use the clock since it has already been
-		// advanced to at least the error's timestamp?
+		// Start the new transaction at the current time from the local clock.
+		// The local hlc should have been advanced to at least the error's
+		// timestamp already.
 		now := clock.Now()
-		newTxnTimestamp := now
-		newTxnTimestamp.Forward(txn.Timestamp)
 		txn = MakeTransaction(
 			txn.Name,
 			nil, // baseKey
 			// We have errTxnPri, but this wants a UserPriority. So we're going to
 			// overwrite the priority below.
 			NormalUserPriority,
-			newTxnTimestamp,
+			now,
 			clock.MaxOffset().Nanoseconds(),
 		)
 		// Use the priority communicated back by the server.
