@@ -38,6 +38,10 @@ type strictTableUpserter struct {
 	conflictIndexes []sqlbase.IndexDescriptor
 }
 
+// desc is part of the tableWriter interface.
+func (*strictTableUpserter) desc() string { return "strict upserter" }
+
+// init is part of the tableWriter interface.
 func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	tu.tableWriterBase.init(txn)
 

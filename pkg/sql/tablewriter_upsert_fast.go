@@ -36,6 +36,9 @@ type fastTableUpserter struct {
 	tableUpserterBase
 }
 
+// desc is part of the tableWriter interface.
+func (*fastTableUpserter) desc() string { return "fast upserter" }
+
 // init is part of the tableWriter interface.
 func (tu *fastTableUpserter) init(txn *client.Txn, _ *tree.EvalContext) error {
 	tu.tableWriterBase.init(txn)

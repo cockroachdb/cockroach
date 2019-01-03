@@ -38,6 +38,9 @@ type tableDeleter struct {
 	alloc *sqlbase.DatumAlloc
 }
 
+// desc is part of the tableWriter interface.
+func (*tableDeleter) desc() string { return "deleter" }
+
 // walkExprs is part of the tableWriter interface.
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 

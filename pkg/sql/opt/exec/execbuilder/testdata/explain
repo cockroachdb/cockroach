@@ -326,11 +326,12 @@ CREATE TABLE t (
 query TTT
 EXPLAIN INSERT INTO t VALUES (1, 2)
 ----
-count             ·     ·
- └── insert       ·     ·
-      │           into  t(k, v)
-      └── values  ·     ·
-·                 size  2 columns, 1 row
+count             ·         ·
+ └── insert       ·         ·
+      │           into      t(k, v)
+      │           strategy  inserter
+      └── values  ·         ·
+·                 size      2 columns, 1 row
 
 query I
 SELECT max(level) FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
@@ -436,6 +437,7 @@ tree              field          description       columns                     o
 count             ·              ·                 ()                          ·
  └── insert       ·              ·                 ()                          ·
       │           into           t(k, v)           ·                           ·
+      │           strategy       inserter          ·                           ·
       └── values  ·              ·                 (column1 int, column2 int)  ·
 ·                 size           2 columns, 1 row  ·                           ·
 ·                 row 0, expr 0  (1)[int]          ·                           ·
@@ -513,6 +515,7 @@ EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 count                ·         ·                            ()              ·
  └── delete          ·         ·                            ()              ·
       │              from      t                            ·               ·
+      │              strategy  deleter                      ·               ·
       └── render     ·         ·                            (k int)         k!=NULL; key(k)
            │         render 0  (k)[int]                     ·               ·
            └── scan  ·         ·                            (k int, v int)  k!=NULL; v!=NULL; key(k)
@@ -527,6 +530,7 @@ count                ·         ·                              ()              
  └── update          ·         ·                              ()                           ·
       │              table     t                              ·                            ·
       │              set       v                              ·                            ·
+      │              strategy  updater                        ·                            ·
       └── render     ·         ·                              (k int, v int, column5 int)  ·
            │         render 0  (k)[int]                       ·                            ·
            │         render 1  (v)[int]                       ·                            ·

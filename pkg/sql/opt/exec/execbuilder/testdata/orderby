@@ -487,6 +487,7 @@ render                 ·              ·                 (b)              ·
  └── run               ·              ·                 (a, b, c)        ·
       └── insert       ·              ·                 (a, b, c)        ·
            │           into           t(a, b, c)        ·                ·
+           │           strategy       inserter          ·                ·
            └── values  ·              ·                 (x, y, column6)  ·
 ·                      size           3 columns, 1 row  ·                ·
 ·                      row 0, expr 0  1                 ·                ·
@@ -501,6 +502,7 @@ render               ·         ·                (b)        key()
  └── run             ·         ·                (a, b, c)  a=CONST; key()
       └── delete     ·         ·                (a, b, c)  a=CONST; key()
            │         from      t                ·          ·
+           │         strategy  deleter          ·          ·
            └── scan  ·         ·                (a, b, c)  a=CONST; key()
 ·                    table     t@primary        ·          ·
 ·                    spans     /3-/3/#          ·          ·
@@ -514,6 +516,7 @@ render                    ·         ·          (b)                 ·
       └── update          ·         ·          (a, b, c)           ·
            │              table     t          ·                   ·
            │              set       c          ·                   ·
+           │              strategy  updater    ·                   ·
            └── render     ·         ·          (a, b, c, column7)  ·
                 │         render 0  a          ·                   ·
                 │         render 1  b          ·                   ·

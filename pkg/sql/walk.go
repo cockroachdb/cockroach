@@ -424,6 +424,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			}
 			buf.WriteByte(')')
 			v.observer.attr(name, "into", buf.String())
+			v.observer.attr(name, "strategy", n.run.ti.desc())
 		}
 
 		if v.observer.expr != nil {
@@ -449,6 +450,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			}
 			buf.WriteByte(')')
 			v.observer.attr(name, "into", buf.String())
+			v.observer.attr(name, "strategy", n.run.tw.desc())
 		}
 
 		if v.observer.expr != nil {
@@ -477,6 +479,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				}
 				v.observer.attr(name, "set", buf.String())
 			}
+			v.observer.attr(name, "strategy", n.run.tu.desc())
 		}
 		if v.observer.expr != nil {
 			for i, cexpr := range n.run.computeExprs {
@@ -492,6 +495,11 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *deleteNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "from", n.run.td.tableDesc().Name)
+			ext := ""
+			if _, fast := canDeleteFast(v.ctx, n.source, &n.run); fast {
+				ext = "fast "
+			}
+			v.observer.attr(name, "strategy", ext+n.run.td.desc())
 		}
 		// A deleter has no sub-expressions, so nothing special to do here.
 		n.source = v.visit(n.source)

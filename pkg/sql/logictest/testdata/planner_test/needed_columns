@@ -169,6 +169,7 @@ EXPLAIN (VERBOSE) INSERT INTO kv(k, v) SELECT 1 AS a, 2 AS b FROM (SELECT 3 AS x
 count                         ·         ·         ()                        ·
  └── insert                   ·         ·         ()                        ·
       │                       into      kv(k, v)  ·                         ·
+      │                       strategy  inserter  ·                         ·
       └── render              ·         ·         (a, b)                    a=CONST; b=CONST
            │                  render 0  1         ·                         ·
            │                  render 1  2         ·                         ·
@@ -184,6 +185,7 @@ EXPLAIN (VERBOSE) DELETE FROM kv WHERE k = 3
 count                ·         ·                 ()               ·
  └── delete          ·         ·                 ()               ·
       │              from      kv                ·                ·
+      │              strategy  fast deleter      ·                ·
       └── render     ·         ·                 (k)              k=CONST; key()
            │         render 0  test.public.kv.k  ·                ·
            └── scan  ·         ·                 (k, v[omitted])  k=CONST; key()

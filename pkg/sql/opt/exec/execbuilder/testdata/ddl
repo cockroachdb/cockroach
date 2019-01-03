@@ -245,6 +245,7 @@ render                    ·         ·            (k)                 ·
       └── update          ·         ·            (k, v, z)           ·
            │              table     kv           ·                   ·
            │              set       v            ·                   ·
+           │              strategy  updater      ·                   ·
            └── render     ·         ·            (k, v, z, column7)  ·
                 │         render 0  k            ·                   ·
                 │         render 1  v            ·                   ·

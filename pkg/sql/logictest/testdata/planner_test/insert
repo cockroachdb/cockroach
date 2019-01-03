@@ -301,6 +301,7 @@ EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
 count                     ·          ·
  └── insert               ·          ·
       │                   into       insert_t(x, v, rowid)
+      │                   strategy   inserter
       │                   default 0  NULL
       │                   default 1  NULL
       │                   default 2  unique_rowid()
@@ -322,6 +323,7 @@ EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 count                     ·          ·
  └── insert               ·          ·
       │                   into       insert_t(x, v, rowid)
+      │                   strategy   inserter
       │                   default 0  NULL
       │                   default 1  NULL
       │                   default 2  unique_rowid()
@@ -339,13 +341,14 @@ count                     ·          ·
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
 ----
-count                  ·      ·
- └── insert            ·      ·
-      │                into   insert_t(x, v, rowid)
-      └── limit        ·      ·
-           │           count  1
-           └── values  ·      ·
-·                      size   2 columns, 2 rows
+count                  ·         ·
+ └── insert            ·         ·
+      │                into      insert_t(x, v, rowid)
+      │                strategy  inserter
+      └── limit        ·         ·
+           │           count     1
+           └── values  ·         ·
+·                      size      2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
@@ -353,6 +356,7 @@ EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 count                       ·         ·
  └── insert                 ·         ·
       │                     into      insert_t(x, v, rowid)
+      │                     strategy  inserter
       └── limit             ·         ·
            │                count     1
            └── sort         ·         ·
@@ -367,6 +371,7 @@ EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 count                       ·         ·
  └── insert                 ·         ·
       │                     into      insert_t(x, v, rowid)
+      │                     strategy  inserter
       └── limit             ·         ·
            │                count     1
            └── sort         ·         ·
@@ -381,6 +386,7 @@ EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
 count                       ·         ·
  └── insert                 ·         ·
       │                     into      insert_t(x, v, rowid)
+      │                     strategy  inserter
       └── limit             ·         ·
            │                count     1
            └── sort         ·         ·
@@ -388,3 +394,4 @@ count                       ·         ·
                 │           strategy  top 1
                 └── values  ·         ·
 ·                           size      2 columns, 2 rows
+

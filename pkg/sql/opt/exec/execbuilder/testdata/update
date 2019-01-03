@@ -97,14 +97,15 @@ CREATE TABLE xyz (
 query TTT
 EXPLAIN UPDATE xyz SET y = x
 ----
-count                ·      ·
- └── update          ·      ·
-      │              table  xyz
-      │              set    y
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  xyz@primary
-·                    spans  ALL
+count                ·         ·
+ └── update          ·         ·
+      │              table     xyz
+      │              set       y
+      │              strategy  updater
+      └── render     ·         ·
+           └── scan  ·         ·
+·                    table     xyz@primary
+·                    spans     ALL
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
@@ -113,6 +114,7 @@ count                ·         ·            ()                           ·
  └── update          ·         ·            ()                           ·
       │              table     xyz          ·                            ·
       │              set       x, y         ·                            ·
+      │              strategy  updater      ·                            ·
       └── render     ·         ·            (x, y, z, column7, column8)  ·
            │         render 0  x            ·                            ·
            │         render 1  y            ·                            ·
@@ -130,6 +132,7 @@ count                ·         ·            ()               ·
  └── update          ·         ·            ()               ·
       │              table     xyz          ·                ·
       │              set       x, y         ·                ·
+      │              strategy  updater      ·                ·
       └── render     ·         ·            (x, y, z, y, x)  ·
            │         render 0  x            ·                ·
            │         render 1  y            ·                ·
@@ -147,6 +150,7 @@ count                     ·         ·            ()                           
  └── update               ·         ·            ()                           ·
       │                   table     xyz          ·                            ·
       │                   set       x, y         ·                            ·
+      │                   strategy  updater      ·                            ·
       └── render          ·         ·            (x, y, z, column7, column7)  ·
            │              render 0  x            ·                            ·
            │              render 1  y            ·                            ·
@@ -206,32 +210,34 @@ CREATE TABLE kv (
 query TTT
 EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 10
 ----
-count                          ·      ·
- └── update                    ·      ·
-      │                        table  kv
-      │                        set    v
-      └── render               ·      ·
-           └── limit           ·      ·
-                │              count  10
-                └── sort       ·      ·
-                     │         order  -v
-                     └── scan  ·      ·
-·                              table  kv@primary
-·                              spans  ALL
+count                          ·         ·
+ └── update                    ·         ·
+      │                        table     kv
+      │                        set       v
+      │                        strategy  updater
+      └── render               ·         ·
+           └── limit           ·         ·
+                │              count     10
+                └── sort       ·         ·
+                     │         order     -v
+                     └── scan  ·         ·
+·                              table     kv@primary
+·                              spans     ALL
 
 # Use case for UPDATE ... ORDER BY: renumbering a PK without unique violation.
 query TTT
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 ----
-count                ·      ·
- └── update          ·      ·
-      │              table  kv
-      │              set    v
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  kv@primary
-·                    spans  -/2/#
-·                    limit  1
+count                ·         ·
+ └── update          ·         ·
+      │              table     kv
+      │              set       v
+      │              strategy  updater
+      └── render     ·         ·
+           └── scan  ·         ·
+·                    table     kv@primary
+·                    spans     -/2/#
+·                    limit     1
 
 # Check that updates on tables with multiple column families behave as
 # they should.
