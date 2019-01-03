@@ -250,7 +250,13 @@ func mergeWithData(t *testing.T, retries int64) {
 		return nil
 	}
 
-	mtc = &multiTestContext{storeConfig: &storeCfg}
+	mtc = &multiTestContext{
+		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 
 	var store1, store2 *storage.Store
 	mtc.Start(t, 1)
@@ -620,7 +626,12 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	var mtc multiTestContext
+	mtc := multiTestContext{
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
 	store := mtc.Store(0)
@@ -724,7 +735,6 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 // merged range has stats consistent with recomputations.
 func TestStoreRangeMergeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -813,7 +823,9 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	}
 
 	// Merged stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, mtc.manualClock.UnixNano()); err != nil {
+	nowNanos := mtc.manualClock.UnixNano()
+	msMerged.AgeTo(nowNanos)
+	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, nowNanos); err != nil {
 		t.Errorf("failed to verify range's stats after merge: %v", err)
 	}
 }
@@ -1216,7 +1228,14 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 		return nil
 	}
 
-	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc := &multiTestContext{
+		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
+
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 
@@ -1480,7 +1499,8 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	defer mtc.Stop()
 	store0, store1 := mtc.Store(0), mtc.Store(1)
 
-	mtc.replicateRange(roachpb.RangeID(1), 1)
+	rngID := store0.LookupReplica(roachpb.RKey("a")).Desc().RangeID
+	mtc.replicateRange(rngID, 1)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -1617,7 +1637,14 @@ func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 
-	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc := &multiTestContext{
+		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
+
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 	store0, store1 := mtc.Store(0), mtc.Store(1)
@@ -1719,7 +1746,7 @@ func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
 	})
 
 	err = mtc.replicateRangeNonFatal(lhsDesc.RangeID, 1)
-	if exp := "change replicas of r1 failed: descriptor changed"; !testutils.IsError(err, exp) {
+	if exp := "change replicas of r.* failed: descriptor changed"; !testutils.IsError(err, exp) {
 		t.Fatalf("expected error %q, got %v", exp, err)
 	}
 }
@@ -1736,7 +1763,8 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	defer mtc.Stop()
 	store0, store2 := mtc.Store(0), mtc.Store(2)
 
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := store0.LookupReplica(roachpb.RKey("a")).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -1745,7 +1773,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	// Wait for store2 to hear about the split.
 	testutils.SucceedsSoon(t, func() error {
 		if rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsInitialized() {
-			return errors.New("store2 has not yet processed split")
+			return errors.Errorf("store2 has not yet processed split. err: %v", err)
 		}
 		return nil
 	})
@@ -1795,7 +1823,8 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 	defer mtc.Stop()
 	store0, store2 := mtc.Store(0), mtc.Store(2)
 
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := store0.LookupReplica(roachpb.RKey("a")).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -1862,7 +1891,8 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	defer mtc.Stop()
 	store0, store2 := mtc.Store(0), mtc.Store(2)
 
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := store0.LookupReplica(roachpb.RKey("a")).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -1933,7 +1963,8 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	defer mtc.Stop()
 	store2 := mtc.Store(2)
 
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := mtc.Store(0).LookupReplica(roachpb.RKey("a")).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 
 	// Split off three ranges.
 	keys := []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b"), roachpb.RKey("c")}
@@ -2032,7 +2063,8 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 	defer mtc.Stop()
 	store0, store2 := mtc.Store(0), mtc.Store(2)
 
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := store0.LookupReplica(roachpb.RKey("a")).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -2100,7 +2132,8 @@ func TestStoreRangeMergeDeadFollowerBeforeTxn(t *testing.T) {
 	defer mtc.Stop()
 	store0 := mtc.Store(0)
 
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := store0.LookupReplica(roachpb.RKey("a")).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 	lhsDesc, _, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -2134,7 +2167,8 @@ func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
 	defer mtc.Stop()
 	store0 := mtc.Store(0)
 
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := store0.LookupReplica(roachpb.RKey("a")).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 	lhsDesc, _, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -2142,7 +2176,7 @@ func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
-	expErr := "merge of range into 1 failed: waiting for all right-hand replicas to catch up"
+	expErr := "merge of range into .* failed: waiting for all right-hand replicas to catch up"
 	if !testutils.IsPError(pErr, expErr) {
 		t.Fatalf("expected %q error, but got %v", expErr, pErr)
 	}
@@ -2163,7 +2197,8 @@ func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
 	distSender := mtc.distSenders[0]
 
 	// Create two ranges on all nodes.
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := store0.LookupReplica(roachpb.RKey("a")).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -2420,7 +2455,8 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	aKey, bKey := roachpb.RKey("a"), roachpb.RKey("b")
 
 	// Put range 1 on all three stores.
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := store0.LookupReplica(aKey).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 
 	// Create range B and wait for store2 to process the split.
 	bRangeID := split(bKey)
@@ -2438,7 +2474,7 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	// of range 1 never processes the split trigger, which would create an
 	// initialized replica of A.
 	unreliableHandler := &unreliableRaftHandler{
-		rangeID:            roachpb.RangeID(1),
+		rangeID:            rngID,
 		RaftMessageHandler: store2,
 	}
 	mtc.transport.Listen(store2.Ident.StoreID, unreliableHandler)
@@ -2463,16 +2499,16 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	// (Remember that we refused to let it process the split of A.) So we need to
 	// remove it so that C has no left neighbor and thus will be eligible for GC.
 	{
-		r1Repl2, err := store2.GetReplica(roachpb.RangeID(1))
+		r1Repl2, err := store2.GetReplica(rngID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		mtc.unreplicateRange(roachpb.RangeID(1), 2)
+		mtc.unreplicateRange(rngID, 2)
 		testutils.SucceedsSoon(t, func() error {
 			if err := store2.ManualReplicaGC(r1Repl2); err != nil {
 				return err
 			}
-			if _, err := store2.GetReplica(roachpb.RangeID(1)); err == nil {
+			if _, err := store2.GetReplica(rngID); err == nil {
 				return errors.New("r1Repl2 still exists")
 			}
 			return nil
@@ -2571,7 +2607,14 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 		return nil
 	}
 
-	mtc = &multiTestContext{storeConfig: &storeCfg}
+	mtc = &multiTestContext{
+		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
+
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 	store0, store2 := mtc.Store(0), mtc.Store(2)
@@ -2580,7 +2623,8 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 	// RHS. We'll be forcing store2's LHS to fall behind. This creates an
 	// interesting scenario in which the leaseholder for the RHS has very
 	// out-of-date information about the status of the merge.
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := store0.LookupReplica(roachpb.RKey("a")).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -2710,7 +2754,8 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	store0, store1 = mtc.Store(0), mtc.Store(1)
 
 	// Create and place the ranges as described in the comment on this test.
-	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	rngID := store0.LookupReplica(aKey).Desc().RangeID
+	mtc.replicateRange(rngID, 1, 2)
 	keys := []roachpb.RKey{aKey, bKey, cKey}
 	for _, key := range keys {
 		splitArgs := adminSplitArgs(key.AsRawKey())
@@ -2817,7 +2862,13 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
-	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc := &multiTestContext{
+		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 	store0, store2 := mtc.Store(0), mtc.Store(2)
@@ -2962,7 +3013,13 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 		return nil
 	}
 
-	mtc = &multiTestContext{storeConfig: &storeCfg}
+	mtc = &multiTestContext{
+		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	mtc.Start(t, 1)
 	store := mtc.Store(0)
 	stopper := mtc.engineStoppers[0]
@@ -3016,6 +3073,10 @@ func TestMergeQueue(t *testing.T) {
 	storagebase.MergeQueueEnabled.Override(sv, true)
 	storage.MergeQueueInterval.Override(sv, 0) // process greedily
 	var mtc multiTestContext
+	// This test was written before the multiTestContext started creating many
+	// system ranges at startup, and hasn't been update to take that into account.
+	mtc.startWithSingleRange = true
+
 	mtc.storeConfig = &storeCfg
 	mtc.Start(t, 2)
 	defer mtc.Stop()
@@ -3067,7 +3128,7 @@ func TestMergeQueue(t *testing.T) {
 			}
 		}
 		setZones(config.DefaultZoneConfig())
-		store.ForceMergeScanAndProcess() // drain any merges that might already be queued
+		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
 		split(t, roachpb.Key("b"))
 	}
 
@@ -3090,17 +3151,17 @@ func TestMergeQueue(t *testing.T) {
 	t.Run("sanity", func(t *testing.T) {
 		// Check that ranges are not trivially merged after reset.
 		reset(t)
-		store.ForceMergeScanAndProcess()
+		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)
 		reset(t)
-		store.ForceMergeScanAndProcess()
+		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)
 	})
 
 	t.Run("both-empty", func(t *testing.T) {
 		reset(t)
 		clearRange(t, lhsStartKey, rhsEndKey)
-		store.ForceMergeScanAndProcess()
+		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
 
@@ -3109,7 +3170,7 @@ func TestMergeQueue(t *testing.T) {
 		zone := config.DefaultZoneConfig()
 		*zone.RangeMinBytes *= 2
 		lhs().SetZoneConfig(&zone)
-		store.ForceMergeScanAndProcess()
+		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
 
@@ -3122,14 +3183,14 @@ func TestMergeQueue(t *testing.T) {
 		zone.RangeMinBytes = proto.Int64(lhs().GetMVCCStats().Total() + 1)
 		zone.RangeMaxBytes = proto.Int64(lhs().GetMVCCStats().Total()*2 - 1)
 		setZones(zone)
-		store.ForceMergeScanAndProcess()
+		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
 		// Once the maximum size threshold is increased, the merge can occur.
 		zone = *protoutil.Clone(&zone).(*config.ZoneConfig)
 		*zone.RangeMaxBytes += 1
 		setZones(zone)
-		store.ForceMergeScanAndProcess()
+		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
 
@@ -3140,7 +3201,7 @@ func TestMergeQueue(t *testing.T) {
 		mtc.transferLease(ctx, rhs().RangeID, 0, 1)
 		mtc.unreplicateRange(rhs().RangeID, 0)
 		clearRange(t, lhsStartKey, rhsEndKey)
-		store.ForceMergeScanAndProcess()
+		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
 }
@@ -3219,7 +3280,13 @@ func TestStoreRangeMergeClusterVersion(t *testing.T) {
 	storeCfg.Settings = cluster.MakeTestingClusterSettingsWithVersion(
 		cluster.VersionByKey(cluster.Version2_0), /* minVersion */
 		cluster.BinaryServerVersion /* serverVersion */)
-	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc := &multiTestContext{
+		storeConfig: &storeCfg,
+		// This test was written before the multiTestContext started creating many
+		// system ranges at startup, and hasn't been update to take that into
+		// account.
+		startWithSingleRange: true,
+	}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
 	store := mtc.Store(0)

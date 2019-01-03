@@ -1396,6 +1396,21 @@ func (s *Server) Start(ctx context.Context) error {
 		if err := s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
 			return err
 		}
+		// Force all the system ranges through the replication queue so they
+		// upreplicate as quickly as possible when a new node joins. Without this
+		// code, the upreplication would be up to the whim of the scanner, which
+		// might be too slow for new clusters.
+		done := false
+		if err := s.node.stores.VisitStores(func(store *storage.Store) error {
+			if !done {
+				done = true
+				return store.ForceReplicationScanAndProcess()
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
 		if s.cfg.ReadyFn != nil {

@@ -254,13 +254,13 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
 Scan /Table/57/{1-2}
 querying next range at /Table/57/1
-r1: sending batch 1 Scan to (n1,s1):1
+r19: sending batch 1 Scan to (n1,s1):1
 fetched: /tu/primary/1 -> NULL
 fetched: /tu/primary/1/b -> 2
 fetched: /tu/primary/1/c/d -> /3/4
 Del /Table/57/1/1/1/1
 Del /Table/57/1/1/2/1
 querying next range at /Table/57/1/1/1/1
-r1: sending batch 2 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+r19: sending batch 2 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 fast path completed
 rows affected: 1

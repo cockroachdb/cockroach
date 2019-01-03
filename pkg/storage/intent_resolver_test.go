@@ -91,7 +91,7 @@ func TestContendedIntent(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, stopper)
+	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	key := roachpb.Key("a")
@@ -173,7 +173,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, stopper)
+	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 	ctx := context.Background()
 
 	keyA := roachpb.Key("a")
@@ -313,7 +313,7 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, stopper)
+	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 	ctx := context.Background()
 
 	keyA := roachpb.Key("a")

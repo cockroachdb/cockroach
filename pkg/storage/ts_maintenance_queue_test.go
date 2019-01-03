@@ -139,7 +139,9 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 
 	// Force replica scan to run, which will populate the model.
 	now := store.Clock().Now()
-	store.ForceTimeSeriesMaintenanceQueueProcess()
+	if err := store.ForceTimeSeriesMaintenanceQueueProcess(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Wait for processing to complete.
 	testutils.SucceedsSoon(t, func() error {
@@ -181,7 +183,9 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 
 	// Force replica scan to run. But because we haven't moved the
 	// clock forward, no pruning will take place on second invocation.
-	store.ForceTimeSeriesMaintenanceQueueProcess()
+	if err := store.ForceTimeSeriesMaintenanceQueueProcess(); err != nil {
+		t.Fatal(err)
+	}
 	model.Lock()
 	if a, e := model.containsCalled, len(expectedStartKeys); a < e {
 		t.Errorf("ContainsTimeSeries called %d times; expected %d", a, e)
@@ -193,7 +197,9 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 
 	// Move clock forward and force to scan again.
 	manual.Increment(storage.TimeSeriesMaintenanceInterval.Nanoseconds())
-	store.ForceTimeSeriesMaintenanceQueueProcess()
+	if err := store.ForceTimeSeriesMaintenanceQueueProcess(); err != nil {
+		t.Fatal(err)
+	}
 	testutils.SucceedsSoon(t, func() error {
 		model.Lock()
 		defer model.Unlock()
@@ -325,7 +331,9 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error retrieving store %d: %s", storeID, err)
 	}
-	store.ForceTimeSeriesMaintenanceQueueProcess()
+	if err := store.ForceTimeSeriesMaintenanceQueueProcess(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Verify the older datapoint has been pruned.
 	testutils.SucceedsSoon(t, func() error {

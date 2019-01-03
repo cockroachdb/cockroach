@@ -140,7 +140,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	// Make sure the range is removed from the store.
 	testutils.SucceedsSoon(t, func() error {
 		store := mtc.stores[1]
-		store.ForceReplicaGCScanAndProcess()
+		store.MustForceReplicaGCScanAndProcess()
 		if _, err := store.GetReplica(rangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
 			return errors.Errorf("expected range removal: %v", err) // NB: errors.Wrapf(nil, ...) returns nil.
 		}
