@@ -45,7 +45,7 @@ Store 1    Store 2     Store 3     Store 4
 ```
 
 By requiring replica set alignment, the merge operation is reduced to a metadata
-update, albiet a tricky one, as the stores that will have a copy of the merged
+update, albeit a tricky one, as the stores that will have a copy of the merged
 range PQ already have all the constituent data, by virtue of having a copy of
 both P and Q before the merge begins.
 
@@ -62,7 +62,7 @@ _every_ replica of the RHS, indicating that no traffic is possibly being served
 on the RHS, does the coordinator commit the merge transaction.
 
 Like with splits, the merge transaction is committed with a special "commit
-trigger" that instructs the receiving store to update its in-memory bookkeping
+trigger" that instructs the receiving store to update its in-memory bookkeeping
 to match the updates to the range descriptors in the transaction. The moment the
 merge transaction is considered committed, the merge is complete!
 
@@ -180,23 +180,63 @@ additional code was needed to enforce this, as our standard transaction
 conflict detection mechanisms kick in here (write intents, the timestamp cache,
 the command queue, etc.).
 
-Note that there was one surprising edge case that was not immediately handled by
-serializability. See [Range descriptor
+Note that there was one surprising synchronization problem that was not
+immediately handled by serializability. See [Range descriptor
 generations](#range-descriptor-generations) for details.
 
-TODO(benesch): flesh out.
+The standard KV operations that the merge transaction performs are:
 
-* Updating the descriptors is simple puts/deletes to the relevant keys.
-* Wait for all LHS replicas to initialize to avoid a weird replica GC problem.
-  (Point at subtle complexity section.)
-* Tell the RHS to freeze. Then wait for _all_ RHS replicas to freeze.
-* Then the hardest part is updating the in-memory state. That happens with an
-  "internal commit trigger." Whenever a replica applies a txn commit command
-  that contains a trigger, it runs some special code.
-* The merge commit trigger delicately grabs a bunch of locks for the LHS and
-  the RHS (remember, we've guaranteed that both replicas exist on this store
-  and are initialized), and then makes the RHS replica go poof. No data
-  on disk needs to be rewritten!
+  * Reading the LHS descriptor and RHS descriptor, and verifying that their
+    replica sets are aligned.
+  * Updating the local and meta copy of the LHS descriptor to reflect
+    the widened end key.
+  * Deleting the local and meta copy of the RHS descriptor.
+  * Writing an entry to the `system.rangelog` table.
+
+These operations are the essence of a merge, and in fact update all necessary
+on-disk data! All the remaining complexity exists to update in-memory metadata
+while the cluster is live.
+
+Note that the merge transaction's KV operations are not fundamentally dependent
+and so could theoretically be performed in any order. There are, however,
+several implementation details that enforce some ordering constraints.
+
+First, the merge transaction record needs to be located on the LHS.
+Specifically, the transaction record needs to live on the subsuming range,
+as the "internal commit trigger" that actually applies the merge to the
+replica's in-memory state runs on the range where the transaction record lives.
+The transaction record is created on the range that the transaction writes
+first; therefore, the merge transaction is careful to update the local copy of
+the LHS descriptor as its first operation, since the local copy of the LHS
+descriptor lives on the LHS.
+
+Second, the merge transaction must ensure that, when it issues the delete
+request to remove the local copy of the RHS descriptor, the resulting intent is
+actually written to disk. (See [Transfer of power](#transfer-of-power) for why
+this is required.) Thanks to [transactional pipelining][#26599], KV writes can
+return early, before their intents have actually been laid down. The intents are
+not required to make it to disk until the moment before the transaction commits.
+The merge transaction simply disables pipelining to avoid this hazard.
+
+As the last step before the commit, the merge transaction needs to freeze the
+RHS, then wait for _every_ replica of the RHS to apply all outstanding commands.
+This ensures that, when the merge commits, every LHS replica can blindly assume
+that it has perfectly up-to-date data for the RHS. To quickly recap, this is
+guaranteed because 1) the replica sets were aligned when the merge transaction
+started, 2) rebalances that would misalign the replica sets will conflict with
+the merge transaction, causing one of the transactions to abort, 3) the RHS
+is frozen and cannot process any new commands, and 4) every replica of the RHS
+is caught up on all commands. The process of freezing the RHS and waiting for
+every replica to catch up is covered more thoroughly in the next section,
+[Transfer of power](#transfer-of-power).
+
+Finally, the merge transaction commits with an "internal commit trigger" that
+indicates a merge has completed. When applying a commit with a merge trigger,
+the receiving replica runs additional code to update in-memory bookkeeping.
+Specifically, it instructs the store to remove its right neighbor, the subsumed
+replica, and widen its end key. (TODO: pronouns here are confused)
+
+[#26599]: https://github.com/cockroachdb/cockroach/pull/26599
 
 ### Transfer of power
 
@@ -316,10 +356,70 @@ Per the discussion in the last section, we use the replica of the RHS as a lock
 on the keyspace extension. This means that we need to be careful not to GC this
 replica too early.
 
+It's easiest to see why this is a problem if we consider the case where one
+replica is extremely slow in applying a merge:
+
+```
+Store 1    Store 2     Store 3     Store 4
++-----+    +-----+     +-----+     +-----+
+| PQ  |    | PQ  |     |     |     | P Q |
++-----+    +-----+     +-----+     +-----+
+
+PQ: (s1, s2, s4)
+```
+
+Here, _P_ and _Q_ have just merged. Store 4 hasn't yet processed the merge while
+stores 1 and 2 have.
+
+Now, the replica GC queue is continually scanning for replicas that are no
+longer a member of their range. What if the replica GC queue on store 4 scans
+its replica of _Q_ at this very moment? It would notice that the _Q_ range has
+been merged away and, conceivably, conclude that _Q_ could be garbage collected.
+This would be disastrous, as when _P_ finally applied the merge trigger it would
+no longer have a replica of _Q_ to subsume!
+
+One potential solution would be for the replica GC queue to refuse to garbage
+collect replicas for ranges that had been merged away. But that could result
+in replicas getting permanently stuck. Suppose that, before store 4 applies
+the merge transaction, the _PQ_ range is rebalanced away to store 3:
+
+```
+Store 1    Store 2     Store 3     Store 4
++-----+    +-----+     +-----+     +-----+
+| PQ  |    | PQ  |     | PQ  |     | P Q |
++-----+    +-----+     +-----+     +-----+
+
+PQ: (s1, s2, s3)
+```
+
+Store 4's replica of _P_ will likely never hear about the merge, as it is no
+longer a member of the range and therefore not receiving any additional Raft
+messages from the leader, so it will never subsume _Q_. The replica GC queue
+_must_ be capable of garbage collecting _Q_ in this case.
+
+Solving this problem turns out to be quite tricky. What _Q_ wants to know is
+whether it might possibly be subsumed by its left neighbor. _Q_ can't just ask
+its local left neighbor (in this case, _P_) whether it's about to apply a merge,
+as in this case _P_ is lagging and has no idea that a merge is about to occur.
+
+Instead, the replica GC queue asks the question "is _Q_'s left neighbor
+generationally up to date"? In other words, does the meta range descriptor
+indicate that a split or merge has occurred on _P_ that is not reflected in the
+local copy of _P_? If _P_ is generationally up to date, then we know there is
+no merge that could possibly subsume _Q_, and it is therefore safe to GC _Q_.
+Otherwise, we need to hold off on GC'ing _Q_. In this case, the situation is
+resolved when _P_ a) applies a merge that subsumes _Q_, b) applies a series
+of splits/merges that don't subsume _Q_ but make _P_ generationally up to date
+and thus make _Q_ eligible for GC, or c) _P_ is itself GC'd, which also makes
+_Q_ eligible for GC.
+
+Note that it is possible to form long chains of replicas that can only be GC'd
+from left to right; the GC queue is not aware of these dependencies and
+therefore processes such chains extremely inefficiently. This turns out to be
+extremely rare in practice.
+
 TODO(benesch): TestStoreRangeMergeUninitializedLHSFollower and the uninitialized
 replica problem.
-
-TODO(benesch): Maybe we should add a range ID graveyard.
 
 ### Range descriptor generations
 
