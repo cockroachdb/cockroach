@@ -14,6 +14,26 @@ surrounding comments, but those pieces are necessarily split across several
 files and packages. That scattered knowledge is centralized here, without
 excessive detail that is likely to become stale.
 
+## Table of Contents
+
+* [Overview](#overview)
+* [Implementation details](#implementation-details)
+  * [Preconditions](#preconditions)
+  * [Initiating a merge](#initiating-a-merge)
+    * [AdminMerge race](#adminmerge-race)
+  * [Merge transaction](#merge-transaction)
+  * [Transfer of power](#transfer-of-power)
+  * [Snapshots](#snapshots)
+  * [Merge queue](#merge-queue)
+* [Subtle complexities](#subtle-complexities)
+  * [Range descriptor generation](#range-descriptor-generation)
+  * [Misaligned replica sets](#misaligned-replica-sets)
+  * [Replica GC](#replica-gc)
+  * [Unanimity](#unanimity)
+* [Safety recap](#safety-recap)
+* [Appendix](#appendix)
+  * [Key encoding oddities](#key-encoding-oddities)
+
 ## Overview
 
 A range merge begins when two adjacent ranges are selected to be merged
@@ -77,9 +97,9 @@ the two ranges must be adjacent. Suppose a simplified cluster that has only
 three ranges, A, B, and C:
 
 ```
-+-----------+-----+
++-----+-----+-----+
 |  A  |  B  |  C  |
-+-----------+-----+
++-----+-----+-----+
 ```
 
 Ranges A and B can be merged, as can ranges B and C, but not ranges A and C, as
@@ -136,7 +156,7 @@ due to an oddity of key encoding and range bounds. It is trivial for a range to
 send a request to its right neighbor, as it simply addresses the request to its
 end key, but it is difficult to send a request to its left neighbor, as there
 is no function to get the key that immediately precedes the range's start key.
-See the [Key encoding oddities](#key-encoding-oddities) section of the appendix
+See the [key encoding oddities](#key-encoding-oddities) section of the appendix
 for details.
 
 At the time of writing, only the [merge queue](#merge-queue) initiates merges,
@@ -170,18 +190,18 @@ compatibility.
 
 ### Merge transaction
 
-The merge transaction piggybacks on CockroachDB's strict serializability to
-provide much of the necessary synchronization for the bookkeeping updates. For
-example, merges cannot occur concurrently with any splits or replica changes on
-the implicated ranges, because the merge transaction will naturally conflict
-with those split transaction and change replicas transactions, as both
-transactions will attempt to write updated range descriptors and conflict. No
-additional code was needed to enforce this, as our standard transaction
-conflict detection mechanisms kick in here (write intents, the timestamp cache,
-the command queue, etc.).
+The merge transaction piggybacks on CockroachDB's serializability to provide
+much of the necessary synchronization for the bookkeeping updates. For example,
+merges cannot occur concurrently with any splits or replica changes on the
+implicated ranges, because the merge transaction will naturally conflict with
+those split transaction and change replicas transactions, as both transactions
+will attempt to write updated range descriptors and conflict. No additional code
+was needed to enforce this, as our standard transaction conflict detection
+mechanisms kick in here (write intents, the timestamp cache, the command queue,
+etc.).
 
 Note that there was one surprising synchronization problem that was not
-immediately handled by serializability. See [Range descriptor
+immediately handled by serializability. See [range descriptor
 generations](#range-descriptor-generations) for details.
 
 The standard KV operations that the merge transaction performs are:
@@ -212,7 +232,7 @@ descriptor lives on the LHS.
 
 Second, the merge transaction must ensure that, when it issues the delete
 request to remove the local copy of the RHS descriptor, the resulting intent is
-actually written to disk. (See [Transfer of power](#transfer-of-power) for why
+actually written to disk. (See [transfer of power](#transfer-of-power) for why
 this is required.) Thanks to [transactional pipelining][#26599], KV writes can
 return early, before their intents have actually been laid down. The intents are
 not required to make it to disk until the moment before the transaction commits.
@@ -228,7 +248,7 @@ the merge transaction, causing one of the transactions to abort, 3) the RHS
 is frozen and cannot process any new commands, and 4) every replica of the RHS
 is caught up on all commands. The process of freezing the RHS and waiting for
 every replica to catch up is covered more thoroughly in the next section,
-[Transfer of power](#transfer-of-power).
+[transfer of power](#transfer-of-power).
 
 Finally, the merge transaction commits with an "internal commit trigger" that
 indicates a merge has completed. When applying a commit with a merge trigger,
@@ -262,7 +282,114 @@ TODO(benesch): flesh out.
 * Determining when the merge txn is actually committed is really, really hard
   thanks to txn record GC. TODO: Add a subtle complexity section about this?
 
+### Snapshots
+
+The LHS might be advanced over a merge with a snapshot. This requires subsuming
+during snapshot application instead of merge trigger application, which is
+somewhat strange but actually straightforward.
+
+TODO(benesch): flesh out.
+
+### Merge queue
+
+TODO(benesch): flesh out.
+
+* Continually scanning all ranges in the system looking for neighbors to merge
+  together.
+
+* Conceptually simple: ask whether the proposed combined range would be
+  immediately split; if not, it's good to merge.
+
+* To prevent thrashing, only consider for merge if one of the halves is beneath
+  the minimum size threshold (8MB at the time of writing).
+
+* Unfortunately generates a lot of RPC noise, as the leaseholders for any two
+  neighboring ranges are unlikely to be aligned, especially in large clusters.
+  So determining whether _P_ and _Q_ can be merged requires that _P_ ask _Q_'s
+  leaseholder, which is typically an RPC.
+
+* Various tricks to avoid sending RPCs unnecessarily. For example if _P_ is
+  above the minimum size, it doesn't bother asking about _Q_. This isn't
+  perfect, as it's possible that _Q_ is 7MB, _R_ is 61MB, and _P_ is 9MB. _Q_
+  can't merge with _R_ because the resulting range would be too large, but it
+  could merge with _P_, except that _P_ doesn't bother to check. (For simplicity
+  and the reasons described in the key encoding oddities, when the merge queue
+  considers _P_, it only looks at _Q_, and not _O_.)
+
 ## Subtle complexities
+
+### Range descriptor generations
+
+There was one knotty race that was not immediately eliminated by transaction
+serializability. Suppose we have our standard aligned replica set situation:
+
+```
+Store 1    Store 2     Store 3     Store 4
++-----+    +-----+     +-----+     +-----+
+| P Q |    | P Q |     |     |     | P Q |
++-----+    +-----+     +-----+     +-----+
+```
+
+In an unfortunate twist of fate, a rebalance of P from store 2 to store 3
+begins at the same time as a merge of P and Q begins. Let's quickly cover the
+valid outcomes of this race.
+
+  1. The rebalance commits before the merge commits. The merge must abort, as
+     the replica sets of P and Q are no longer aligned.
+
+  2. The merge commits before the rebalance starts. The rebalance should
+     voluntarily abort, as the decision to rebalance P needs to be updated in
+     light of the merge. It is not, however, a correctness problem if the
+     rebalance commits; it simply results in rebalancing a larger range than
+     may have been intended.
+
+  3. The merge commits before the rebalance commits, but after the rebalance has
+     sent a preemptive snapshot to store 3. The rebalance must abort, as
+     otherwise the preemptive snapshot it sent to store 3 is a ticking time
+     bomb.
+
+     To see why, suppose the rebalance commits. Since the preemptive snapshot
+     predates the commit of the merge transaction, the new replica on store 3
+     will need to be streamed the Raft command that commits the merge
+     transaction. But applying this merge command is disastrous, as store 3
+     does not have a replica of Q to merge! This is a very subtle way in which
+     replica set alignment can be subverted.
+
+Guaranteeing the correct outcome in case 1 is easy. The merge transaction simply
+checks for replica set alignment by transactionally reading the range descriptor
+for _P_ and the range descriptor for _Q_ and verifying that they list the same
+replicas. Serializability guarantees the rest.
+
+Case 2 is similarly easy to handle. The rebalance transaction simply verifies
+that the range descriptor used to make the rebalance decision matches the range
+descriptor that it reads transactionally.
+
+Case 3, however, has an extremely subtle pitfall. It seems like the solution for
+case 2 should apply: simply abort the transaction if the range descriptor
+changes between when the preemptive snapshot is sent and when the rebalance
+transaction starts. But, as it turns out, this is not quite foolproof. What if,
+between when the preemptive snapshot is sent and when the rebalance transaction
+starts, _P_ and _Q_ merge together and then split at exactly the same key? The
+range descriptor for _P_ will look entirely unchanged to the rebalance
+transaction!
+
+The solution was to add a generation counter to the range descriptor:
+
+```protobuf
+message RangeDescriptor {
+    // ...
+
+    // generation is incremented on every split and every merge, i.e., whenever
+    // the end_key of this range changes. It is initialized to zero when the range
+    // is first created.
+    optional int64 generation = 6;
+}
+```
+
+It is no longer possible for a range descriptor to be unchanged by a sequence of
+splits and merges, as every split and merge will bump the generation counter.
+Rebalances can thus detect if a merge commits between when the preemptive
+snapshot is sent and when the transaction begins, and abort accordingly.
 
 ### Misaligned replica sets
 
@@ -284,7 +411,7 @@ Q: (s1, s3, s4)
 Note that there are two perspectives shown here. The store boxes represent the
 replicas that are *actually* present on that store, from the perspective of the
 store itself. The descriptor tuples at the bottom represent the stores that are
-considered to be members of the range, from the prespective of the most recently
+considered to be members of the range, from the perspective of the most recently
 committed range descriptor.
 
 Now, to merge P and Q in this situation without aligning their replica sets,
@@ -371,17 +498,17 @@ PQ: (s1, s2, s4)
 Here, _P_ and _Q_ have just merged. Store 4 hasn't yet processed the merge while
 stores 1 and 2 have.
 
-Now, the replica GC queue is continually scanning for replicas that are no
-longer a member of their range. What if the replica GC queue on store 4 scans
-its replica of _Q_ at this very moment? It would notice that the _Q_ range has
-been merged away and, conceivably, conclude that _Q_ could be garbage collected.
-This would be disastrous, as when _P_ finally applied the merge trigger it would
-no longer have a replica of _Q_ to subsume!
+The replica GC queue is continually scanning for replicas that are no longer a
+member of their range. What if the replica GC queue on store 4 scans its replica
+of _Q_ at this very moment? It would notice that the _Q_ range has been merged
+away and, conceivably, conclude that _Q_ could be garbage collected. This would
+be disastrous, as when _P_ finally applied the merge trigger it would no longer
+have a replica of _Q_ to subsume!
 
-One potential solution would be for the replica GC queue to refuse to garbage
-collect replicas for ranges that had been merged away. But that could result
-in replicas getting permanently stuck. Suppose that, before store 4 applies
-the merge transaction, the _PQ_ range is rebalanced away to store 3:
+One potential solution would be for the replica GC queue to refuse to GC
+replicas for ranges that have been merged away. But that could result in
+replicas getting permanently stuck. Suppose that, before store 4 applies the
+merge transaction, the _PQ_ range is rebalanced away to store 3:
 
 ```
 Store 1    Store 2     Store 3     Store 4
@@ -395,104 +522,167 @@ PQ: (s1, s2, s3)
 Store 4's replica of _P_ will likely never hear about the merge, as it is no
 longer a member of the range and therefore not receiving any additional Raft
 messages from the leader, so it will never subsume _Q_. The replica GC queue
-_must_ be capable of garbage collecting _Q_ in this case.
+_must_ be capable of garbage collecting _Q_ in this case. Otherwise _Q_ will
+be stuck on store 4 forever, permanently preventing the store from ever
+acquiring a new replica that overlaps with that keyspace.
 
-Solving this problem turns out to be quite tricky. What _Q_ wants to know is
-whether it might possibly be subsumed by its left neighbor. _Q_ can't just ask
-its local left neighbor (in this case, _P_) whether it's about to apply a merge,
-as in this case _P_ is lagging and has no idea that a merge is about to occur.
+Solving this problem turns out to be quite tricky. What the replica GC queue
+wants to know when it discovers that _Q_'s range has been subsumed is whether
+the local replica of _Q_ might possibly still be subsumed by its local left
+neighbor _P_. It can't just ask the local _P_ whether it's about to apply a
+merge, since _P_ might be lagging behind, as it is here, and have no idea that a
+merge is about to occur.
 
-Instead, the replica GC queue asks the question "is _Q_'s left neighbor
-generationally up to date"? In other words, does the meta range descriptor
-indicate that a split or merge has occurred on _P_ that is not reflected in the
-local copy of _P_? If _P_ is generationally up to date, then we know there is
-no merge that could possibly subsume _Q_, and it is therefore safe to GC _Q_.
-Otherwise, we need to hold off on GC'ing _Q_. In this case, the situation is
-resolved when _P_ a) applies a merge that subsumes _Q_, b) applies a series
-of splits/merges that don't subsume _Q_ but make _P_ generationally up to date
-and thus make _Q_ eligible for GC, or c) _P_ is itself GC'd, which also makes
-_Q_ eligible for GC.
+So the problem reduces to proving that _P_ cannot apply a merge trigger that
+will subsume _Q_. The chosen approach is to fetch the current range descriptor
+for _P_ from the meta index. If that descriptor exactly matches the local
+descriptor, thanks to [range descriptor generations](#range-descriptor-generations),
+we are assured that there are no merge triggers that _P_ has yet to apply, and
+_Q_ can safely be GC'd.
 
 Note that it is possible to form long chains of replicas that can only be GC'd
 from left to right; the GC queue is not aware of these dependencies and
-therefore processes such chains extremely inefficiently. This turns out to be
-extremely rare in practice.
+therefore processes such chains extremely inefficiently (i.e., by processing
+replicas in an arbitrary order instead of the necessary order). These chains
+turn out to be extremely rare in practice.
 
-TODO(benesch): TestStoreRangeMergeUninitializedLHSFollower and the uninitialized
-replica problem.
-
-### Range descriptor generations
-
-There was one knotty race that was not immediately eliminated by transaction
-serializability. Suppose we have our standard aligned replica set situation:
+There is one additional subtlety here. Suppose we have two adjacent ranges, _O_
+and _Q_. _O_ has just split into _O_ and _P_, but store 3 is lagging and has not
+yet processed the split.
 
 ```
-Store 1    Store 2     Store 3     Store 4
-+-----+    +-----+     +-----+     +-----+
-| P Q |    | P Q |     |     |     | P Q |
-+-----+    +-----+     +-----+     +-----+
+STATE 1
+
+ Store 1      Store 2      Store 3     Store 4
++-------+    +-------+    +-------+   +-------+
+| O P Q |    | O P Q |    | O   Q |   |       |
++-------+    +-------+    +-------+   +-------+
+
+O: (s1, s2, s3)
+P: (s1, s2, s3)
+Q: (s1, s2, s3)
 ```
 
-In an unfortunate twist of fate, a rebalance of P from store 2 to store 3
-begins at the same time as a merge of P and Q begins. Let's quickly cover the
-valid outcomes of this race.
+At this point, suppose the leader for the new range _P_ decides that store 3
+will need a snapshot to catch up, and starts sending the snapshot over the
+network. This will be important later. At the same time, _P_ and _Q_ merge while
+store 3 is still lagging.
 
-  1. The rebalance commits before the merge commits. The merge must abort, as
-     the replica sets of P and Q are no longer aligned.
+It may seem strange that this merge is permitted, but notice how the replica
+sets are aligned according to the descriptors, even though store 3 does not
+physically have a replica of _P_ yet. Here's the new state of the world:
 
-  2. The merge commits before the rebalance starts. The rebalance should
-     voluntarily abort, as the decision to rebalance P needs to be updated in
-     light of the merge. It is not, however, a correctness problem if the
-     rebalance commits; it simply results in rebalancing a larger range than
-     may have been intended.
+```
+STATE 2
 
-  3. The merge commits before the rebalance commits, but after the rebalance has
-     sent a preemptive snapshot to store 3. The rebalance must abort, as
-     otherwise the preemptive snapshot it sent to store 3 is a ticking time
-     bomb.
+ Store 1      Store 2      Store 3     Store 4
++-------+    +-------+    +-------+   +-------+
+| O  PQ |    | O  PQ |    | O   Q |   |       |
++-------+    +-------+    +-------+   +-------+
 
-     To see why, suppose the rebalance commits. Since the preemptive snapshot
-     predates the commit of the merge transaction, the new replica on store 3
-     will need to be streamed the Raft command that commits the merge
-     transaction. But applying this merge command is disastrous, as store 3
-     does not have a replica of Q to merge! This is a very subtle way in which
-     replica set alignment can be subverted.
-
-Guaranteeing the correct outcome in case 1 is easy. The merge transaction simply
-checks for replica set alignment by transactionally reading the range descriptor
-for _P_ and the range descriptor for _Q_ and verifying that they list the same
-replicas. Serializability guarantees the rest.
-
-Case 2 is similarly easy to handle. The rebalance transaction simply verifies
-that the range descriptor used to make the rebalance decision matches the range
-descriptor that it reads transactionally.
-
-Case 3, however, has an extremely subtle pitfall. It seems like the solution for
-case 2 should apply: simply abort the transaction if the range descriptor
-changes between when the preemptive snapshot is sent and when the rebalance
-transaction starts. But, as it turns out, this is not quite foolproof. What if,
-between when the preemptive snapshot is sent and when the rebalance transaction
-starts, _P_ and _Q_ merge together and then split at exactly the same key? The
-range descriptor for _P_ will look entirely unchanged to the rebalance
-transaction!
-
-The solution was to add a generation counter to the range descriptor:
-
-```protobuf
-message RangeDescriptor {
-    // ...
-
-    // generation is incremented on every split and every merge, i.e., whenever
-    // the end_key of this range changes. It is initialized to zero when the range
-    // is first created.
-    optional int64 generation = 6;
-}
+O:  (s1, s2, s3)
+PQ: (s1, s2, s3)
 ```
 
-It is no longer possible for a range descriptor to be unchanged by a sequence of
-splits and merges, as every split and merge will bump the generation counter.
-Rebalances can thus detect if a merge commits between when the preemptive
-snapshot is sent and when the transaction begins, and abort accordingly.
+Finally, _O_ is rebalanced from store 3 to store 4 and garbage collected on
+store 4:
+
+```
+STATE 3
+
+ Store 1      Store 2      Store 3     Store 4
++-------+    +-------+    +-------+   +-------+
+| O  PQ |    | O  PQ |    |     Q |   | O     |
++-------+    +-------+    +-------+   +-------+
+
+O:  (s1, s2, s4)
+PQ: (s1, s2, s3)
+```
+
+The replica GC queue might reasonably think that store 3's replica of _Q_ is out
+of date, as _Q_ has no left neighbor that could subsume it. But, at any moment
+in time, store 3 could finish receiving the snapshot for _P_ that was started
+between state 1 and state 2. Crucially, this snapshot predates the merge, so it
+will need to apply the merge trigger... and the replica for _Q_ had better be
+present on the store!
+
+This hazard is avoided by requiring that all replicas of the LHS are initialized
+before a merge begins. This prevents a transition from state 1 to state 2, as
+the merge of _P_ and _Q_ cannot occur until store 3 initializes its replica of
+_P_. The AdminMerge command will wait a few seconds in the hope that store 3
+catches up quickly; otherwise, it will refuse to launch the merge transaction.
+It is therefore impossible to end up in a dangerous state, like state 3, and it
+is thus safe for the replica GC queue to GC _Q_ if its left neighbor is
+generationally up to date.
+
+### Unanimity
+
+The largest conceptual incongruity with the current merge implementation is the
+fact that it requires unanimous consent from all replicas, instead of a majority
+quorum, like everything else in Raft. Further confusing matters, only the RHS
+needs unanimous consent; a merge can proceed with only majority consent from the
+LHS. In fact, it's even a bit more subtle: while only a majority of the LHS
+replicas need to vote on the merge command, all LHS replicas need to confirm
+that they are initialized for the merge to start.
+
+There is no theoretical reason that merges need unanimous consent, but the
+complexity of the implementation quickly skyrockets without it. For example,
+suppose you adjusted the transfer of power so that only a majority of replicas
+on the RHS need to be fully up to date before the merge commits. Now, when
+applying the merge trigger, the LHS needs to check to see if its copy of the RHS
+is up to date; if it's not, the LHS needs to throw away its entire Raft state
+and demand a snapshot from the leader. This is both unsightly—our code is worse
+off every time we reach into Raft—and less efficient than the existing
+implementation, as it requires sending a potentially multi-megabyte snapshot if
+one replica of the RHS is just a little bit behind in applying the latest
+commands.
+
+It's possible that these problems could be mitigated while retaining the ability
+to merge with a minority of replicas offline, but an obvious solution did not
+present itself. On the bright side, having too many ranges is unlikely to cause
+acute performance problems; that is, a situation where a merge is critical to
+the health of a cluster is difficult to imagine. Unlike large ranges, which can
+appear suddenly and require an immediate split or log truncation, merges are
+only required when there are on the order of tens of thousands of excessively
+small ranges, which takes a long time to build up.
+
+## Safety recap
+
+This section is a recap of the various mechanisms, which are described in
+detail above, that work together to ensure that merges do not violate
+consistency.
+
+The first broad safety mechanism is replica set alignment, which is required so
+that every store participating in the merge has a copy of both halves of the
+data in the merged range. Replica sets are first optimistically by the merge
+queue. The replicas might drift apart, e.g., because the ranges in question were
+also targeted for a rebalance by the replicate queue, so the merge transaction
+verifies that the replica sets are still aligned from within the transaction. If
+a concurrent split or rebalance were to occur on the implicated ranges,
+transactional isolation kicks in and aborts one of the transactions, so we know
+that the replica sets are still aligned at the moment that the merge commits.
+
+Crucially, we need to maintain alignment until the merge applies on all replicas
+that were present at the time of the merge. This is enforced by refusing to
+GC a replica of the RHS of a merge unless it can be proven that the store does
+not have a replica of the LHS that predates the merge, _nor_ will it acquire
+a replica of the LHS that predates the merge. Proving that it does not currently
+have a replica of the LHS that predates the merge is fairly straightforward:
+we simply prove that the local left neighbor's generation is the newest
+generation, as indicated by the LHS's meta descriptor. Proving that the store
+will _never_ acquire a replica of the LHS that predates the merge is harder—
+there could be a snapshot in flight that the LHS is entirely unaware of. So
+instead we require that replicas of the LHS in a merge are initialized on every
+store before the merge can begin.
+
+The second broad safety mechanism is the range freeze. This ensures that the
+subsuming range and the subsumed range do not serve traffic at the same time,
+which would lead to clear consistency violations. The mechanism works by tying
+the freeze to the lifetime of the merge transaction; the merge will not commit
+until all replicas of the RHS are verified to be frozen, and the replicas of the
+RHS will not unfreeze unless the merge transaction is verified to be aborted.
+Lease transfers are freeze-aware, so the freeze will persist even if the lease
+moves around on the RHS during the merge or if the leaseholder restarts.
 
 ## Appendix
 
