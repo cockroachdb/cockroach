@@ -1060,8 +1060,14 @@ func (r *registry) runAsync(
 
 		timeout := time.Hour
 		defer func() {
-			if err := c.FetchLogs(ctx); err != nil {
-				c.l.Printf("failed to download logs: %s", err)
+			if t.Failed() {
+				if err := c.FetchDebugZip(ctx); err != nil {
+					c.l.Printf("failed to download debug zip: %s", err)
+				}
+			} else {
+				if err := c.FetchLogs(ctx); err != nil {
+					c.l.Printf("failed to download logs: %s", err)
+				}
 			}
 		}()
 
@@ -1076,9 +1082,7 @@ func (r *registry) runAsync(
 		}
 
 		done := make(chan struct{})
-		defer func() {
-			close(done)
-		}()
+		defer close(done)
 
 		runCtx, cancel := context.WithCancel(ctx)
 		t.mu.Lock()
@@ -1092,7 +1096,7 @@ func (r *registry) runAsync(
 			select {
 			case <-time.After(timeout):
 				t.printfAndFail("test timed out (%s)\n", timeout)
-				if err := c.FetchLogs(ctx); err != nil {
+				if err := c.FetchDebugZip(ctx); err != nil {
 					c.l.Printf("failed to download logs: %s", err)
 				}
 				// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
