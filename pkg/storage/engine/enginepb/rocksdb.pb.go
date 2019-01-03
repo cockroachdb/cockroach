@@ -6,7 +6,7 @@ package enginepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import io "io"
 
@@ -15,33 +15,89 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
 // SSTUserProperties contains the user-added properties of a single sstable.
 type SSTUserProperties struct {
 	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	// ts_min is the minimum mvcc timestamp present in this sstable.
-	TsMin *cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=ts_min,json=tsMin" json:"ts_min,omitempty"`
+	TsMin *hlc.Timestamp `protobuf:"bytes,2,opt,name=ts_min,json=tsMin,proto3" json:"ts_min,omitempty"`
 	// ts_max is the maximum mvcc timestamp present in this sstable.
-	TsMax *cockroach_util_hlc.Timestamp `protobuf:"bytes,3,opt,name=ts_max,json=tsMax" json:"ts_max,omitempty"`
+	TsMax                *hlc.Timestamp `protobuf:"bytes,3,opt,name=ts_max,json=tsMax,proto3" json:"ts_max,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *SSTUserProperties) Reset()                    { *m = SSTUserProperties{} }
-func (m *SSTUserProperties) String() string            { return proto.CompactTextString(m) }
-func (*SSTUserProperties) ProtoMessage()               {}
-func (*SSTUserProperties) Descriptor() ([]byte, []int) { return fileDescriptorRocksdb, []int{0} }
+func (m *SSTUserProperties) Reset()         { *m = SSTUserProperties{} }
+func (m *SSTUserProperties) String() string { return proto.CompactTextString(m) }
+func (*SSTUserProperties) ProtoMessage()    {}
+func (*SSTUserProperties) Descriptor() ([]byte, []int) {
+	return fileDescriptor_rocksdb_8b195a1167228ff1, []int{0}
+}
+func (m *SSTUserProperties) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SSTUserProperties) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SSTUserProperties) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SSTUserProperties.Merge(dst, src)
+}
+func (m *SSTUserProperties) XXX_Size() int {
+	return m.Size()
+}
+func (m *SSTUserProperties) XXX_DiscardUnknown() {
+	xxx_messageInfo_SSTUserProperties.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SSTUserProperties proto.InternalMessageInfo
 
 // SSTUserPropertiesCollection contains the user-added properties of every
 // sstable in a RocksDB instance.
 type SSTUserPropertiesCollection struct {
-	Sst   []SSTUserProperties `protobuf:"bytes,1,rep,name=sst" json:"sst"`
-	Error string              `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	Sst                  []SSTUserProperties `protobuf:"bytes,1,rep,name=sst,proto3" json:"sst"`
+	Error                string              `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
 func (m *SSTUserPropertiesCollection) Reset()         { *m = SSTUserPropertiesCollection{} }
 func (m *SSTUserPropertiesCollection) String() string { return proto.CompactTextString(m) }
 func (*SSTUserPropertiesCollection) ProtoMessage()    {}
 func (*SSTUserPropertiesCollection) Descriptor() ([]byte, []int) {
-	return fileDescriptorRocksdb, []int{1}
+	return fileDescriptor_rocksdb_8b195a1167228ff1, []int{1}
 }
+func (m *SSTUserPropertiesCollection) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SSTUserPropertiesCollection) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SSTUserPropertiesCollection) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SSTUserPropertiesCollection.Merge(dst, src)
+}
+func (m *SSTUserPropertiesCollection) XXX_Size() int {
+	return m.Size()
+}
+func (m *SSTUserPropertiesCollection) XXX_DiscardUnknown() {
+	xxx_messageInfo_SSTUserPropertiesCollection.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SSTUserPropertiesCollection proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*SSTUserProperties)(nil), "cockroach.storage.engine.enginepb.SSTUserProperties")
@@ -137,6 +193,9 @@ func encodeVarintRocksdb(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *SSTUserProperties) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Path)
@@ -155,6 +214,9 @@ func (m *SSTUserProperties) Size() (n int) {
 }
 
 func (m *SSTUserPropertiesCollection) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Sst) > 0 {
@@ -268,7 +330,7 @@ func (m *SSTUserProperties) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TsMin == nil {
-				m.TsMin = &cockroach_util_hlc.Timestamp{}
+				m.TsMin = &hlc.Timestamp{}
 			}
 			if err := m.TsMin.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -301,7 +363,7 @@ func (m *SSTUserProperties) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TsMax == nil {
-				m.TsMax = &cockroach_util_hlc.Timestamp{}
+				m.TsMax = &hlc.Timestamp{}
 			}
 			if err := m.TsMax.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -543,9 +605,11 @@ var (
 	ErrIntOverflowRocksdb   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/engine/enginepb/rocksdb.proto", fileDescriptorRocksdb) }
+func init() {
+	proto.RegisterFile("storage/engine/enginepb/rocksdb.proto", fileDescriptor_rocksdb_8b195a1167228ff1)
+}
 
-var fileDescriptorRocksdb = []byte{
+var fileDescriptor_rocksdb_8b195a1167228ff1 = []byte{
 	// 295 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x90, 0xc1, 0x4a, 0xc3, 0x30,
 	0x1c, 0xc6, 0x17, 0xbb, 0x0d, 0x97, 0x9d, 0x0c, 0x3b, 0x94, 0x89, 0xb1, 0x16, 0x84, 0x9e, 0x52,

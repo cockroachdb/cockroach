@@ -6,12 +6,12 @@ package storagepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 import time "time"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-import types "github.com/gogo/protobuf/types"
+import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -20,6 +20,12 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 var _ = time.Kitchen
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 type RangeLogEventType int32
 
@@ -52,36 +58,90 @@ var RangeLogEventType_value = map[string]int32{
 func (x RangeLogEventType) String() string {
 	return proto.EnumName(RangeLogEventType_name, int32(x))
 }
-func (RangeLogEventType) EnumDescriptor() ([]byte, []int) { return fileDescriptorLog, []int{0} }
+func (RangeLogEventType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_log_ec9647c2a5c91039, []int{0}
+}
 
 type RangeLogEvent struct {
-	Timestamp    time.Time                                            `protobuf:"bytes,1,opt,name=timestamp,stdtime" json:"timestamp"`
-	RangeID      github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,2,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
-	StoreID      github_com_cockroachdb_cockroach_pkg_roachpb.StoreID `protobuf:"varint,3,opt,name=store_id,json=storeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.StoreID" json:"store_id,omitempty"`
-	EventType    RangeLogEventType                                    `protobuf:"varint,4,opt,name=event_type,json=eventType,proto3,enum=cockroach.storage.RangeLogEventType" json:"event_type,omitempty"`
-	OtherRangeID github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,5,opt,name=other_range_id,json=otherRangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"other_range_id,omitempty"`
-	Info         *RangeLogEvent_Info                                  `protobuf:"bytes,6,opt,name=info" json:"info,omitempty"`
+	Timestamp            time.Time                                            `protobuf:"bytes,1,opt,name=timestamp,proto3,stdtime" json:"timestamp"`
+	RangeID              github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,2,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
+	StoreID              github_com_cockroachdb_cockroach_pkg_roachpb.StoreID `protobuf:"varint,3,opt,name=store_id,json=storeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.StoreID" json:"store_id,omitempty"`
+	EventType            RangeLogEventType                                    `protobuf:"varint,4,opt,name=event_type,json=eventType,proto3,enum=cockroach.storage.RangeLogEventType" json:"event_type,omitempty"`
+	OtherRangeID         github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,5,opt,name=other_range_id,json=otherRangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"other_range_id,omitempty"`
+	Info                 *RangeLogEvent_Info                                  `protobuf:"bytes,6,opt,name=info,proto3" json:"info,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                             `json:"-"`
+	XXX_sizecache        int32                                                `json:"-"`
 }
 
-func (m *RangeLogEvent) Reset()                    { *m = RangeLogEvent{} }
-func (m *RangeLogEvent) String() string            { return proto.CompactTextString(m) }
-func (*RangeLogEvent) ProtoMessage()               {}
-func (*RangeLogEvent) Descriptor() ([]byte, []int) { return fileDescriptorLog, []int{0} }
+func (m *RangeLogEvent) Reset()         { *m = RangeLogEvent{} }
+func (m *RangeLogEvent) String() string { return proto.CompactTextString(m) }
+func (*RangeLogEvent) ProtoMessage()    {}
+func (*RangeLogEvent) Descriptor() ([]byte, []int) {
+	return fileDescriptor_log_ec9647c2a5c91039, []int{0}
+}
+func (m *RangeLogEvent) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeLogEvent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeLogEvent) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeLogEvent.Merge(dst, src)
+}
+func (m *RangeLogEvent) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeLogEvent) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeLogEvent.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeLogEvent proto.InternalMessageInfo
 
 type RangeLogEvent_Info struct {
-	UpdatedDesc    *cockroach_roachpb.RangeDescriptor   `protobuf:"bytes,1,opt,name=updated_desc,json=updatedDesc" json:"UpdatedDesc,omitempty"`
-	NewDesc        *cockroach_roachpb.RangeDescriptor   `protobuf:"bytes,2,opt,name=new_desc,json=newDesc" json:"NewDesc,omitempty"`
-	RemovedDesc    *cockroach_roachpb.RangeDescriptor   `protobuf:"bytes,7,opt,name=removed_desc,json=removedDesc" json:"RemovedDesc,omitempty"`
-	AddedReplica   *cockroach_roachpb.ReplicaDescriptor `protobuf:"bytes,3,opt,name=added_replica,json=addedReplica" json:"AddReplica,omitempty"`
-	RemovedReplica *cockroach_roachpb.ReplicaDescriptor `protobuf:"bytes,4,opt,name=removed_replica,json=removedReplica" json:"RemovedReplica,omitempty"`
-	Reason         RangeLogEventReason                  `protobuf:"bytes,5,opt,name=reason,proto3,casttype=RangeLogEventReason" json:"Reason,omitempty"`
-	Details        string                               `protobuf:"bytes,6,opt,name=details,proto3" json:"Details,omitempty"`
+	UpdatedDesc          *roachpb.RangeDescriptor   `protobuf:"bytes,1,opt,name=updated_desc,json=updatedDesc,proto3" json:"UpdatedDesc,omitempty"`
+	NewDesc              *roachpb.RangeDescriptor   `protobuf:"bytes,2,opt,name=new_desc,json=newDesc,proto3" json:"NewDesc,omitempty"`
+	RemovedDesc          *roachpb.RangeDescriptor   `protobuf:"bytes,7,opt,name=removed_desc,json=removedDesc,proto3" json:"RemovedDesc,omitempty"`
+	AddedReplica         *roachpb.ReplicaDescriptor `protobuf:"bytes,3,opt,name=added_replica,json=addedReplica,proto3" json:"AddReplica,omitempty"`
+	RemovedReplica       *roachpb.ReplicaDescriptor `protobuf:"bytes,4,opt,name=removed_replica,json=removedReplica,proto3" json:"RemovedReplica,omitempty"`
+	Reason               RangeLogEventReason        `protobuf:"bytes,5,opt,name=reason,proto3,casttype=RangeLogEventReason" json:"Reason,omitempty"`
+	Details              string                     `protobuf:"bytes,6,opt,name=details,proto3" json:"Details,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                   `json:"-"`
+	XXX_sizecache        int32                      `json:"-"`
 }
 
-func (m *RangeLogEvent_Info) Reset()                    { *m = RangeLogEvent_Info{} }
-func (m *RangeLogEvent_Info) String() string            { return proto.CompactTextString(m) }
-func (*RangeLogEvent_Info) ProtoMessage()               {}
-func (*RangeLogEvent_Info) Descriptor() ([]byte, []int) { return fileDescriptorLog, []int{0, 0} }
+func (m *RangeLogEvent_Info) Reset()         { *m = RangeLogEvent_Info{} }
+func (m *RangeLogEvent_Info) String() string { return proto.CompactTextString(m) }
+func (*RangeLogEvent_Info) ProtoMessage()    {}
+func (*RangeLogEvent_Info) Descriptor() ([]byte, []int) {
+	return fileDescriptor_log_ec9647c2a5c91039, []int{0, 0}
+}
+func (m *RangeLogEvent_Info) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeLogEvent_Info) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeLogEvent_Info) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeLogEvent_Info.Merge(dst, src)
+}
+func (m *RangeLogEvent_Info) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeLogEvent_Info) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeLogEvent_Info.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeLogEvent_Info proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*RangeLogEvent)(nil), "cockroach.storage.RangeLogEvent")
@@ -105,8 +165,8 @@ func (m *RangeLogEvent) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0xa
 	i++
-	i = encodeVarintLog(dAtA, i, uint64(types.SizeOfStdTime(m.Timestamp)))
-	n1, err := types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
+	i = encodeVarintLog(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
+	n1, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -234,9 +294,12 @@ func encodeVarintLog(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *RangeLogEvent) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
-	l = types.SizeOfStdTime(m.Timestamp)
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)
 	n += 1 + l + sovLog(uint64(l))
 	if m.RangeID != 0 {
 		n += 1 + sovLog(uint64(m.RangeID))
@@ -258,6 +321,9 @@ func (m *RangeLogEvent) Size() (n int) {
 }
 
 func (m *RangeLogEvent_Info) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.UpdatedDesc != nil {
@@ -359,7 +425,7 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -549,7 +615,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.UpdatedDesc == nil {
-				m.UpdatedDesc = &cockroach_roachpb.RangeDescriptor{}
+				m.UpdatedDesc = &roachpb.RangeDescriptor{}
 			}
 			if err := m.UpdatedDesc.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -582,7 +648,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.NewDesc == nil {
-				m.NewDesc = &cockroach_roachpb.RangeDescriptor{}
+				m.NewDesc = &roachpb.RangeDescriptor{}
 			}
 			if err := m.NewDesc.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -615,7 +681,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.AddedReplica == nil {
-				m.AddedReplica = &cockroach_roachpb.ReplicaDescriptor{}
+				m.AddedReplica = &roachpb.ReplicaDescriptor{}
 			}
 			if err := m.AddedReplica.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -648,7 +714,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.RemovedReplica == nil {
-				m.RemovedReplica = &cockroach_roachpb.ReplicaDescriptor{}
+				m.RemovedReplica = &roachpb.ReplicaDescriptor{}
 			}
 			if err := m.RemovedReplica.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -739,7 +805,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.RemovedDesc == nil {
-				m.RemovedDesc = &cockroach_roachpb.RangeDescriptor{}
+				m.RemovedDesc = &roachpb.RangeDescriptor{}
 			}
 			if err := m.RemovedDesc.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -871,9 +937,9 @@ var (
 	ErrIntOverflowLog   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/storagepb/log.proto", fileDescriptorLog) }
+func init() { proto.RegisterFile("storage/storagepb/log.proto", fileDescriptor_log_ec9647c2a5c91039) }
 
-var fileDescriptorLog = []byte{
+var fileDescriptor_log_ec9647c2a5c91039 = []byte{
 	// 638 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x94, 0xcd, 0x6e, 0xd3, 0x40,
 	0x14, 0x85, 0xe3, 0x26, 0xad, 0x93, 0x69, 0x5a, 0xd2, 0xa1, 0x45, 0x21, 0xa0, 0x38, 0x2a, 0x20,

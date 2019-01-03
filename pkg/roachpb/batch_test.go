@@ -85,15 +85,20 @@ func TestBatchSplit(t *testing.T) {
 }
 
 func TestBatchRequestGetArg(t *testing.T) {
+	get := RequestUnion{
+		Value: &RequestUnion_Get{Get: &GetRequest{}},
+	}
+	end := RequestUnion{
+		Value: &RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}},
+	}
 	testCases := []struct {
 		bu         []RequestUnion
 		expB, expG bool
 	}{
 		{[]RequestUnion{}, false, false},
-		{[]RequestUnion{{&RequestUnion_Get{Get: &GetRequest{}}}}, false, true},
-		{[]RequestUnion{{&RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}}}, {&RequestUnion_Get{Get: &GetRequest{}}}}, false, true},
-		{[]RequestUnion{{&RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}}}}, true, false},
-		{[]RequestUnion{{&RequestUnion_Get{Get: &GetRequest{}}}, {&RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}}}}, true, true},
+		{[]RequestUnion{get}, false, true},
+		{[]RequestUnion{end, get}, false, true},
+		{[]RequestUnion{get, end}, true, true},
 	}
 
 	for i, c := range testCases {
@@ -168,12 +173,9 @@ func TestIntentSpanIterate(t *testing.T) {
 		span   Span
 		resume Span
 	}{
-		{&ScanRequest{}, &ScanResponse{},
-			Span{Key("a"), Key("c")}, Span{Key("b"), Key("c")}},
-		{&ReverseScanRequest{}, &ReverseScanResponse{},
-			Span{Key("d"), Key("f")}, Span{Key("d"), Key("e")}},
-		{&DeleteRangeRequest{}, &DeleteRangeResponse{},
-			Span{Key("g"), Key("i")}, Span{Key("h"), Key("i")}},
+		{&ScanRequest{}, &ScanResponse{}, sp("a", "c"), sp("b", "c")},
+		{&ReverseScanRequest{}, &ReverseScanResponse{}, sp("d", "f"), sp("d", "e")},
+		{&DeleteRangeRequest{}, &DeleteRangeResponse{}, sp("g", "i"), sp("h", "i")},
 	}
 
 	// A batch request with a batch response with no ResumeSpan.
@@ -214,7 +216,7 @@ func TestIntentSpanIterate(t *testing.T) {
 	if e := 1; len(spans) != e {
 		t.Fatalf("unexpected number of spans: e = %d, found = %d", e, len(spans))
 	}
-	if e := (Span{Key("g"), Key("h")}); !reflect.DeepEqual(e, spans[0]) {
+	if e := sp("g", "h"); !reflect.DeepEqual(e, spans[0]) {
 		t.Fatalf("unexpected spans: e = %+v, found = %+v", e, spans[0])
 	}
 }
@@ -224,24 +226,16 @@ func TestRefreshSpanIterate(t *testing.T) {
 		req    Request
 		resp   Response
 		span   Span
-		resume *Span
+		resume Span
 	}{
-		{&ConditionalPutRequest{}, &ConditionalPutResponse{},
-			Span{Key: Key("a")}, nil},
-		{&PutRequest{}, &PutResponse{},
-			Span{Key: Key("a-put")}, nil},
-		{&InitPutRequest{}, &InitPutResponse{},
-			Span{Key: Key("a-initput")}, nil},
-		{&IncrementRequest{}, &IncrementResponse{},
-			Span{Key: Key("a-inc")}, nil},
-		{&ScanRequest{}, &ScanResponse{},
-			Span{Key("a"), Key("c")}, &Span{Key("b"), Key("c")}},
-		{&GetRequest{}, &GetResponse{},
-			Span{Key: Key("b")}, nil},
-		{&ReverseScanRequest{}, &ReverseScanResponse{},
-			Span{Key("d"), Key("f")}, &Span{Key("d"), Key("e")}},
-		{&DeleteRangeRequest{}, &DeleteRangeResponse{},
-			Span{Key("g"), Key("i")}, &Span{Key("h"), Key("i")}},
+		{&ConditionalPutRequest{}, &ConditionalPutResponse{}, sp("a", ""), Span{}},
+		{&PutRequest{}, &PutResponse{}, sp("a-put", ""), Span{}},
+		{&InitPutRequest{}, &InitPutResponse{}, sp("a-initput", ""), Span{}},
+		{&IncrementRequest{}, &IncrementResponse{}, sp("a-inc", ""), Span{}},
+		{&ScanRequest{}, &ScanResponse{}, sp("a", "c"), sp("b", "c")},
+		{&GetRequest{}, &GetResponse{}, sp("b", ""), Span{}},
+		{&ReverseScanRequest{}, &ReverseScanResponse{}, sp("d", "f"), sp("d", "e")},
+		{&DeleteRangeRequest{}, &DeleteRangeResponse{}, sp("g", "i"), sp("h", "i")},
 	}
 
 	// A batch request with a batch response with no ResumeSpan.
@@ -280,8 +274,9 @@ func TestRefreshSpanIterate(t *testing.T) {
 	for _, tc := range testCases {
 		tc.req.SetHeader(RequestHeaderFromSpan(tc.span))
 		ba.Add(tc.req)
-		if tc.resume != nil {
-			tc.resp.SetHeader(ResponseHeader{ResumeSpan: tc.resume})
+		if tc.resume.Key != nil {
+			resume := tc.resume
+			tc.resp.SetHeader(ResponseHeader{ResumeSpan: &resume})
 		}
 		br.Add(tc.resp)
 	}
@@ -290,12 +285,12 @@ func TestRefreshSpanIterate(t *testing.T) {
 	writeSpans = []Span{}
 	ba.RefreshSpanIterate(&br, fn)
 	expReadSpans = []Span{
-		{Key("a"), Key("b")},
-		{Key: Key("b")},
-		{Key("e"), Key("f")},
+		sp("a", "b"),
+		sp("b", ""),
+		sp("e", "f"),
 	}
 	expWriteSpans = []Span{
-		{Key("g"), Key("h")},
+		sp("g", "h"),
 	}
 	if !reflect.DeepEqual(expReadSpans, readSpans) {
 		t.Fatalf("unexpected read spans: expected %+v, found = %+v", expReadSpans, readSpans)
@@ -377,4 +372,12 @@ func TestBatchResponseCombine(t *testing.T) {
 		`can not combine *roachpb.PutResponse and *roachpb.ScanResponse` {
 		t.Fatal(err)
 	}
+}
+
+func sp(start, end string) Span {
+	res := Span{Key: Key(start)}
+	if end != "" {
+		res.EndKey = Key(end)
+	}
+	return res
 }

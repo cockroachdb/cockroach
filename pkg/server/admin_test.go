@@ -1334,7 +1334,7 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 
 		for _, exp := range testCase.exp {
 			if !strings.Contains(res.DistSQLPhysicalQueryPlan, exp) {
-				t.Errorf("%d: expected response %s to contain %s", i, res, exp)
+				t.Errorf("%d: expected response %v to contain %s", i, res, exp)
 			}
 		}
 	}

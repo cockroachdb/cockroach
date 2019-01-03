@@ -6,11 +6,9 @@ package storagepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+import enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import io "io"
 
@@ -18,6 +16,12 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // ReplicaState is the part of the Range Raft state machine which is cached in
 // memory and which is manipulated exclusively through consensus.
@@ -41,26 +45,26 @@ type ReplicaState struct {
 	//
 	// Changes of the descriptor should always go through one of the
 	// (*Replica).setDesc* methods.
-	Desc *cockroach_roachpb.RangeDescriptor `protobuf:"bytes,3,opt,name=desc" json:"desc,omitempty"`
+	Desc *roachpb.RangeDescriptor `protobuf:"bytes,3,opt,name=desc,proto3" json:"desc,omitempty"`
 	// The latest range lease.
 	//
 	// Note that this message is both sent over the network and used to model
 	// replica state in memory. In memory (storage.Replica.mu.state), the lease
 	// is never nil (and never zero-valued), but it may be nil when sent over
 	// the network as part of ReplicatedEvalResult.
-	Lease *cockroach_roachpb1.Lease `protobuf:"bytes,4,opt,name=lease" json:"lease,omitempty"`
+	Lease *roachpb.Lease `protobuf:"bytes,4,opt,name=lease,proto3" json:"lease,omitempty"`
 	// The truncation state of the Raft log.
-	TruncatedState *cockroach_roachpb2.RaftTruncatedState `protobuf:"bytes,5,opt,name=truncated_state,json=truncatedState" json:"truncated_state,omitempty"`
+	TruncatedState *roachpb.RaftTruncatedState `protobuf:"bytes,5,opt,name=truncated_state,json=truncatedState,proto3" json:"truncated_state,omitempty"`
 	// gcThreshold is the GC threshold of the Range, typically updated when keys
 	// are garbage collected. Reads and writes at timestamps <= this time will
 	// not be served.
-	GCThreshold *cockroach_util_hlc.Timestamp                 `protobuf:"bytes,6,opt,name=gc_threshold,json=gcThreshold" json:"gc_threshold,omitempty" cockroachdb:"randnullable"`
-	Stats       *cockroach_storage_engine_enginepb1.MVCCStats `protobuf:"bytes,7,opt,name=stats" json:"stats,omitempty"`
+	GCThreshold *hlc.Timestamp      `protobuf:"bytes,6,opt,name=gc_threshold,json=gcThreshold,proto3" json:"gc_threshold,omitempty" cockroachdb:"randnullable"`
+	Stats       *enginepb.MVCCStats `protobuf:"bytes,7,opt,name=stats,proto3" json:"stats,omitempty"`
 	// txn_span_gc_threshold is the (maximum) timestamp below which transaction
 	// records may have been garbage collected (as measured by txn.LastActive()).
 	// Transaction at lower timestamps must not be allowed to write their initial
 	// transaction entry.
-	TxnSpanGCThreshold *cockroach_util_hlc.Timestamp `protobuf:"bytes,9,opt,name=txn_span_gc_threshold,json=txnSpanGcThreshold" json:"txn_span_gc_threshold,omitempty" cockroachdb:"randnullable"`
+	TxnSpanGCThreshold *hlc.Timestamp `protobuf:"bytes,9,opt,name=txn_span_gc_threshold,json=txnSpanGcThreshold,proto3" json:"txn_span_gc_threshold,omitempty" cockroachdb:"randnullable"`
 	// using_applied_state_key specifies whether the Range has been upgraded
 	// to begin using the RangeAppliedState key. This key holds a combination
 	// of the Raft applied index, the lease applied index, and the MVCC stats.
@@ -69,18 +73,44 @@ type ReplicaState struct {
 	// range should begin using the RangeAppliedState key. Handling of this flag
 	// is idempotent by Replica state machines, meaning that it is ok for multiple
 	// Raft commands to set it to true.
-	UsingAppliedStateKey bool `protobuf:"varint,11,opt,name=using_applied_state_key,json=usingAppliedStateKey,proto3" json:"using_applied_state_key,omitempty"`
+	UsingAppliedStateKey bool     `protobuf:"varint,11,opt,name=using_applied_state_key,json=usingAppliedStateKey,proto3" json:"using_applied_state_key,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ReplicaState) Reset()                    { *m = ReplicaState{} }
-func (m *ReplicaState) String() string            { return proto.CompactTextString(m) }
-func (*ReplicaState) ProtoMessage()               {}
-func (*ReplicaState) Descriptor() ([]byte, []int) { return fileDescriptorState, []int{0} }
+func (m *ReplicaState) Reset()         { *m = ReplicaState{} }
+func (m *ReplicaState) String() string { return proto.CompactTextString(m) }
+func (*ReplicaState) ProtoMessage()    {}
+func (*ReplicaState) Descriptor() ([]byte, []int) {
+	return fileDescriptor_state_ac40414024a1cc3f, []int{0}
+}
+func (m *ReplicaState) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicaState) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ReplicaState) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicaState.Merge(dst, src)
+}
+func (m *ReplicaState) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReplicaState) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicaState.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicaState proto.InternalMessageInfo
 
 // RangeInfo is used for reporting status information about a range out through
 // the status server.
 type RangeInfo struct {
-	ReplicaState `protobuf:"bytes,1,opt,name=state,embedded=state" json:"state"`
+	ReplicaState `protobuf:"bytes,1,opt,name=state,proto3,embedded=state" json:"state"`
 	// The highest (and last) index in the Raft log.
 	LastIndex  uint64 `protobuf:"varint,2,opt,name=last_index,json=lastIndex,proto3" json:"last_index,omitempty"`
 	NumPending uint64 `protobuf:"varint,3,opt,name=num_pending,json=numPending,proto3" json:"num_pending,omitempty"`
@@ -91,25 +121,77 @@ type RangeInfo struct {
 	// Approximately the amount of quota available.
 	ApproximateProposalQuota int64 `protobuf:"varint,7,opt,name=approximate_proposal_quota,json=approximateProposalQuota,proto3" json:"approximate_proposal_quota,omitempty"`
 	// The max size the range can grow to before it will be split.
-	RangeMaxBytes int64 `protobuf:"varint,8,opt,name=range_max_bytes,json=rangeMaxBytes,proto3" json:"range_max_bytes,omitempty"`
+	RangeMaxBytes        int64    `protobuf:"varint,8,opt,name=range_max_bytes,json=rangeMaxBytes,proto3" json:"range_max_bytes,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *RangeInfo) Reset()                    { *m = RangeInfo{} }
-func (m *RangeInfo) String() string            { return proto.CompactTextString(m) }
-func (*RangeInfo) ProtoMessage()               {}
-func (*RangeInfo) Descriptor() ([]byte, []int) { return fileDescriptorState, []int{1} }
+func (m *RangeInfo) Reset()         { *m = RangeInfo{} }
+func (m *RangeInfo) String() string { return proto.CompactTextString(m) }
+func (*RangeInfo) ProtoMessage()    {}
+func (*RangeInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_state_ac40414024a1cc3f, []int{1}
+}
+func (m *RangeInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeInfo.Merge(dst, src)
+}
+func (m *RangeInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeInfo proto.InternalMessageInfo
 
 // LatchManagerInfo is used for reporting status information about a spanlatch
 // manager out through the status server.
 type LatchManagerInfo struct {
-	ReadCount  int64 `protobuf:"varint,1,opt,name=read_count,json=readCount,proto3" json:"read_count,omitempty"`
-	WriteCount int64 `protobuf:"varint,2,opt,name=write_count,json=writeCount,proto3" json:"write_count,omitempty"`
+	ReadCount            int64    `protobuf:"varint,1,opt,name=read_count,json=readCount,proto3" json:"read_count,omitempty"`
+	WriteCount           int64    `protobuf:"varint,2,opt,name=write_count,json=writeCount,proto3" json:"write_count,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *LatchManagerInfo) Reset()                    { *m = LatchManagerInfo{} }
-func (m *LatchManagerInfo) String() string            { return proto.CompactTextString(m) }
-func (*LatchManagerInfo) ProtoMessage()               {}
-func (*LatchManagerInfo) Descriptor() ([]byte, []int) { return fileDescriptorState, []int{2} }
+func (m *LatchManagerInfo) Reset()         { *m = LatchManagerInfo{} }
+func (m *LatchManagerInfo) String() string { return proto.CompactTextString(m) }
+func (*LatchManagerInfo) ProtoMessage()    {}
+func (*LatchManagerInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_state_ac40414024a1cc3f, []int{2}
+}
+func (m *LatchManagerInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LatchManagerInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *LatchManagerInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LatchManagerInfo.Merge(dst, src)
+}
+func (m *LatchManagerInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *LatchManagerInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_LatchManagerInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LatchManagerInfo proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*ReplicaState)(nil), "cockroach.storage.storagepb.ReplicaState")
@@ -398,6 +480,9 @@ func encodeVarintState(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *ReplicaState) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RaftAppliedIndex != 0 {
@@ -437,6 +522,9 @@ func (m *ReplicaState) Size() (n int) {
 }
 
 func (m *RangeInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.ReplicaState.Size()
@@ -463,6 +551,9 @@ func (m *RangeInfo) Size() (n int) {
 }
 
 func (m *LatchManagerInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.ReadCount != 0 {
@@ -581,7 +672,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Desc == nil {
-				m.Desc = &cockroach_roachpb.RangeDescriptor{}
+				m.Desc = &roachpb.RangeDescriptor{}
 			}
 			if err := m.Desc.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -614,7 +705,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Lease == nil {
-				m.Lease = &cockroach_roachpb1.Lease{}
+				m.Lease = &roachpb.Lease{}
 			}
 			if err := m.Lease.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -647,7 +738,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TruncatedState == nil {
-				m.TruncatedState = &cockroach_roachpb2.RaftTruncatedState{}
+				m.TruncatedState = &roachpb.RaftTruncatedState{}
 			}
 			if err := m.TruncatedState.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -680,7 +771,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.GCThreshold == nil {
-				m.GCThreshold = &cockroach_util_hlc.Timestamp{}
+				m.GCThreshold = &hlc.Timestamp{}
 			}
 			if err := m.GCThreshold.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -713,7 +804,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Stats == nil {
-				m.Stats = &cockroach_storage_engine_enginepb1.MVCCStats{}
+				m.Stats = &enginepb.MVCCStats{}
 			}
 			if err := m.Stats.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -746,7 +837,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TxnSpanGCThreshold == nil {
-				m.TxnSpanGCThreshold = &cockroach_util_hlc.Timestamp{}
+				m.TxnSpanGCThreshold = &hlc.Timestamp{}
 			}
 			if err := m.TxnSpanGCThreshold.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1180,9 +1271,11 @@ var (
 	ErrIntOverflowState   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/storagepb/state.proto", fileDescriptorState) }
+func init() {
+	proto.RegisterFile("storage/storagepb/state.proto", fileDescriptor_state_ac40414024a1cc3f)
+}
 
-var fileDescriptorState = []byte{
+var fileDescriptor_state_ac40414024a1cc3f = []byte{
 	// 756 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x54, 0xcf, 0x6e, 0xdb, 0x36,
 	0x1c, 0x8e, 0x62, 0x39, 0xb3, 0xa9, 0x64, 0xf1, 0xb8, 0x6c, 0x13, 0x1c, 0xd8, 0x0e, 0x34, 0x6c,
