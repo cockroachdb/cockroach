@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -162,7 +163,19 @@ func (ae *allocatorError) Error() string {
 		}
 		return baseMsg + "; likely not enough nodes in cluster"
 	}
-	return fmt.Sprintf("%s; must match constraints %v", baseMsg, ae.constraints)
+	var b strings.Builder
+	b.WriteString(baseMsg)
+	b.WriteString("; must match constraints [")
+	for i := range ae.constraints {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteByte('{')
+		b.WriteString(ae.constraints[i].String())
+		b.WriteByte('}')
+	}
+	b.WriteString("]")
+	return b.String()
 }
 
 func (*allocatorError) purgatoryErrorMarker() {}

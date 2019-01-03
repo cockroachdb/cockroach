@@ -572,7 +572,8 @@
   revision = "60d456a402782453be397030407e34decaf04d73"
 
 [[projects]]
-  digest = "1:aba848b77ff362b03db51ac06379c36a120bc05b4cc6c5c74f6e6fa310454fa5"
+  branch = "v1.2.0-with-clone-fix"
+  digest = "1:c6e7d6ec253d51e58ec35b760f33b344946fe87d62dcbce6274b3100e4b08573"
   name = "github.com/gogo/protobuf"
   packages = [
     "gogoproto",
@@ -596,6 +597,7 @@
     "proto",
     "protoc-gen-gogo/descriptor",
     "protoc-gen-gogo/generator",
+    "protoc-gen-gogo/generator/internal/remap",
     "protoc-gen-gogo/grpc",
     "protoc-gen-gogo/plugin",
     "sortkeys",
@@ -604,8 +606,8 @@
     "vanity/command",
   ]
   pruneopts = "T"
-  revision = "1adfc126b41513cc696b209667c8656ea7aac67c"
-  version = "v1.0.0"
+  revision = "ca10b809dba0aa7ed3e43b8202027f20e3d40608"
+  source = "https://github.com/cockroachdb/gogoproto"
 
 [[projects]]
   branch = "master"
@@ -1579,7 +1581,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:532c984ea59063abc959da8bbdb0548d9426c30ac0cd241aff484f9bceca5727"
+  digest = "1:a7d48ca460ca1b4f6ccd8c95502443afa05df88aee84de7dbeb667a8754e8fa6"
   name = "google.golang.org/genproto"
   packages = [
     "googleapis/api/annotations",
@@ -1588,7 +1590,7 @@
     "googleapis/rpc/status",
   ]
   pruneopts = "UT"
-  revision = "f676e0f3ac6395ff1a529ae59a6670878a8371a6"
+  revision = "a1fde740824669f161e97af4237fb80b8734444d"
 
 [[projects]]
   digest = "1:3a98314fd2e43bbd905b33125dad80b10111ba6e5e541db8ed2a953fe01fbb31"

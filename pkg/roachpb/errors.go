@@ -17,6 +17,7 @@ package roachpb
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -513,10 +514,20 @@ func (e *ReadWithinUncertaintyIntervalError) Error() string {
 }
 
 func (e *ReadWithinUncertaintyIntervalError) message(_ *Error) string {
+	var ts strings.Builder
+	ts.WriteByte('[')
+	for i, ot := range observedTimestampSlice(e.ObservedTimestamps) {
+		if i > 0 {
+			ts.WriteByte(' ')
+		}
+		fmt.Fprintf(&ts, "{%d %v}", ot.NodeID, ot.Timestamp)
+	}
+	ts.WriteByte(']')
+
 	return fmt.Sprintf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
 		"previous write with future timestamp %s within uncertainty interval `t <= %v`; "+
-		"observed timestamps: %v",
-		e.ReadTimestamp, e.ExistingTimestamp, e.MaxTimestamp, observedTimestampSlice(e.ObservedTimestamps))
+		"observed timestamps: %s",
+		e.ReadTimestamp, e.ExistingTimestamp, e.MaxTimestamp, ts.String())
 }
 
 var _ ErrorDetailInterface = &ReadWithinUncertaintyIntervalError{}

@@ -14,6 +14,12 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
 // Timestamp represents a state of the hybrid logical clock.
 type Timestamp struct {
 	// Holds a wall time, typically a unix epoch time expressed in
@@ -23,12 +29,38 @@ type Timestamp struct {
 	// times are equal. It is effectively bounded by (maximum clock
 	// skew)/(minimal ns between events) and nearly impossible to
 	// overflow.
-	Logical int32 `protobuf:"varint,2,opt,name=logical,proto3" json:"logical,omitempty"`
+	Logical              int32    `protobuf:"varint,2,opt,name=logical,proto3" json:"logical,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Timestamp) Reset()                    { *m = Timestamp{} }
-func (*Timestamp) ProtoMessage()               {}
-func (*Timestamp) Descriptor() ([]byte, []int) { return fileDescriptorTimestamp, []int{0} }
+func (m *Timestamp) Reset()      { *m = Timestamp{} }
+func (*Timestamp) ProtoMessage() {}
+func (*Timestamp) Descriptor() ([]byte, []int) {
+	return fileDescriptor_timestamp_c5e946b21c98d098, []int{0}
+}
+func (m *Timestamp) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Timestamp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Timestamp) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Timestamp.Merge(dst, src)
+}
+func (m *Timestamp) XXX_Size() int {
+	return m.Size()
+}
+func (m *Timestamp) XXX_DiscardUnknown() {
+	xxx_messageInfo_Timestamp.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Timestamp proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*Timestamp)(nil), "cockroach.util.hlc.Timestamp")
@@ -185,6 +217,9 @@ func encodeVarintPopulateTimestamp(dAtA []byte, v uint64) []byte {
 	return dAtA
 }
 func (m *Timestamp) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.WallTime != 0 {
@@ -402,9 +437,9 @@ var (
 	ErrIntOverflowTimestamp   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptorTimestamp) }
+func init() { proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_c5e946b21c98d098) }
 
-var fileDescriptorTimestamp = []byte{
+var fileDescriptor_timestamp_c5e946b21c98d098 = []byte{
 	// 183 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x28, 0x2d, 0xc9, 0xcc,
 	0xd1, 0xcf, 0xc8, 0x49, 0xd6, 0x2f, 0xc9, 0xcc, 0x4d, 0x2d, 0x2e, 0x49, 0xcc, 0x2d, 0xd0, 0x2b,

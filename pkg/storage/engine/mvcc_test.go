@@ -1000,7 +1000,7 @@ func TestMVCCInlineWithTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(value1, *value) {
-		t.Errorf("the inline value should be %s; got %s", value1, *value)
+		t.Errorf("the inline value should be %v; got %v", value1, *value)
 	}
 
 	// Verify inline get with txn does still work (this will happen on a

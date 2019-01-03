@@ -6,15 +6,16 @@ package storage
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_storage_storagepb "github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 import raftpb "go.etcd.io/etcd/raft/raftpb"
+import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+import storagepb "github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-import context "context"
-import grpc "google.golang.org/grpc"
+import (
+	context "context"
+	grpc "google.golang.org/grpc"
+)
 
 import io "io"
 
@@ -22,6 +23,12 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 type SnapshotRequest_Priority int32
 
@@ -63,7 +70,7 @@ func (x *SnapshotRequest_Priority) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SnapshotRequest_Priority) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorRaft, []int{5, 0}
+	return fileDescriptor_raft_460a63b017d715a3, []int{5, 0}
 }
 
 type SnapshotRequest_Strategy int32
@@ -100,7 +107,7 @@ func (x *SnapshotRequest_Strategy) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SnapshotRequest_Strategy) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorRaft, []int{5, 1}
+	return fileDescriptor_raft_460a63b017d715a3, []int{5, 1}
 }
 
 type SnapshotResponse_Status int32
@@ -145,7 +152,7 @@ func (x *SnapshotResponse_Status) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SnapshotResponse_Status) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorRaft, []int{6, 0}
+	return fileDescriptor_raft_460a63b017d715a3, []int{6, 0}
 }
 
 // RaftHeartbeat is a request that contains the barebones information for a
@@ -153,18 +160,44 @@ func (SnapshotResponse_Status) EnumDescriptor() ([]byte, []int) {
 // in a RaftMessageRequest, and reconstructed by the receiver into individual
 // raftpb.Message protos.
 type RaftHeartbeat struct {
-	RangeID       github_com_cockroachdb_cockroach_pkg_roachpb.RangeID   `protobuf:"varint,1,opt,name=range_id,json=rangeId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id"`
-	FromReplicaID github_com_cockroachdb_cockroach_pkg_roachpb.ReplicaID `protobuf:"varint,2,opt,name=from_replica_id,json=fromReplicaId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID" json:"from_replica_id"`
-	ToReplicaID   github_com_cockroachdb_cockroach_pkg_roachpb.ReplicaID `protobuf:"varint,3,opt,name=to_replica_id,json=toReplicaId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID" json:"to_replica_id"`
-	Term          uint64                                                 `protobuf:"varint,4,opt,name=term" json:"term"`
-	Commit        uint64                                                 `protobuf:"varint,5,opt,name=commit" json:"commit"`
-	Quiesce       bool                                                   `protobuf:"varint,6,opt,name=quiesce" json:"quiesce"`
+	RangeID              github_com_cockroachdb_cockroach_pkg_roachpb.RangeID   `protobuf:"varint,1,opt,name=range_id,json=rangeId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id"`
+	FromReplicaID        github_com_cockroachdb_cockroach_pkg_roachpb.ReplicaID `protobuf:"varint,2,opt,name=from_replica_id,json=fromReplicaId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID" json:"from_replica_id"`
+	ToReplicaID          github_com_cockroachdb_cockroach_pkg_roachpb.ReplicaID `protobuf:"varint,3,opt,name=to_replica_id,json=toReplicaId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID" json:"to_replica_id"`
+	Term                 uint64                                                 `protobuf:"varint,4,opt,name=term" json:"term"`
+	Commit               uint64                                                 `protobuf:"varint,5,opt,name=commit" json:"commit"`
+	Quiesce              bool                                                   `protobuf:"varint,6,opt,name=quiesce" json:"quiesce"`
+	XXX_NoUnkeyedLiteral struct{}                                               `json:"-"`
+	XXX_sizecache        int32                                                  `json:"-"`
 }
 
-func (m *RaftHeartbeat) Reset()                    { *m = RaftHeartbeat{} }
-func (m *RaftHeartbeat) String() string            { return proto.CompactTextString(m) }
-func (*RaftHeartbeat) ProtoMessage()               {}
-func (*RaftHeartbeat) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{0} }
+func (m *RaftHeartbeat) Reset()         { *m = RaftHeartbeat{} }
+func (m *RaftHeartbeat) String() string { return proto.CompactTextString(m) }
+func (*RaftHeartbeat) ProtoMessage()    {}
+func (*RaftHeartbeat) Descriptor() ([]byte, []int) {
+	return fileDescriptor_raft_460a63b017d715a3, []int{0}
+}
+func (m *RaftHeartbeat) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftHeartbeat) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftHeartbeat) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftHeartbeat.Merge(dst, src)
+}
+func (m *RaftHeartbeat) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftHeartbeat) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftHeartbeat.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftHeartbeat proto.InternalMessageInfo
 
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec. If a RaftMessageRequest has a non-empty number of
@@ -176,8 +209,8 @@ type RaftMessageRequest struct {
 	// Optionally, the start key of the sending replica. This is only populated
 	// as a "hint" under certain conditions.
 	RangeStartKey github_com_cockroachdb_cockroach_pkg_roachpb.RKey `protobuf:"bytes,8,opt,name=range_start_key,json=rangeStartKey,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RKey" json:"range_start_key,omitempty"`
-	FromReplica   cockroach_roachpb.ReplicaDescriptor               `protobuf:"bytes,2,opt,name=from_replica,json=fromReplica" json:"from_replica"`
-	ToReplica     cockroach_roachpb.ReplicaDescriptor               `protobuf:"bytes,3,opt,name=to_replica,json=toReplica" json:"to_replica"`
+	FromReplica   roachpb.ReplicaDescriptor                         `protobuf:"bytes,2,opt,name=from_replica,json=fromReplica" json:"from_replica"`
+	ToReplica     roachpb.ReplicaDescriptor                         `protobuf:"bytes,3,opt,name=to_replica,json=toReplica" json:"to_replica"`
 	Message       raftpb.Message                                    `protobuf:"bytes,4,opt,name=message" json:"message"`
 	// Is this a quiesce request? A quiesce request is a MsgHeartbeat
 	// which is requesting the recipient to stop ticking its local
@@ -189,32 +222,110 @@ type RaftMessageRequest struct {
 	Quiesce bool `protobuf:"varint,5,opt,name=quiesce" json:"quiesce"`
 	// A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
 	// heartbeats or heartbeat_resps.
-	Heartbeats     []RaftHeartbeat `protobuf:"bytes,6,rep,name=heartbeats" json:"heartbeats"`
-	HeartbeatResps []RaftHeartbeat `protobuf:"bytes,7,rep,name=heartbeat_resps,json=heartbeatResps" json:"heartbeat_resps"`
+	Heartbeats           []RaftHeartbeat `protobuf:"bytes,6,rep,name=heartbeats" json:"heartbeats"`
+	HeartbeatResps       []RaftHeartbeat `protobuf:"bytes,7,rep,name=heartbeat_resps,json=heartbeatResps" json:"heartbeat_resps"`
+	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
+	XXX_sizecache        int32           `json:"-"`
 }
 
-func (m *RaftMessageRequest) Reset()                    { *m = RaftMessageRequest{} }
-func (m *RaftMessageRequest) String() string            { return proto.CompactTextString(m) }
-func (*RaftMessageRequest) ProtoMessage()               {}
-func (*RaftMessageRequest) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{1} }
+func (m *RaftMessageRequest) Reset()         { *m = RaftMessageRequest{} }
+func (m *RaftMessageRequest) String() string { return proto.CompactTextString(m) }
+func (*RaftMessageRequest) ProtoMessage()    {}
+func (*RaftMessageRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_raft_460a63b017d715a3, []int{1}
+}
+func (m *RaftMessageRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftMessageRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftMessageRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftMessageRequest.Merge(dst, src)
+}
+func (m *RaftMessageRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftMessageRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftMessageRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftMessageRequest proto.InternalMessageInfo
 
 type RaftMessageRequestBatch struct {
-	Requests []RaftMessageRequest `protobuf:"bytes,1,rep,name=requests" json:"requests"`
+	Requests             []RaftMessageRequest `protobuf:"bytes,1,rep,name=requests" json:"requests"`
+	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
+	XXX_sizecache        int32                `json:"-"`
 }
 
-func (m *RaftMessageRequestBatch) Reset()                    { *m = RaftMessageRequestBatch{} }
-func (m *RaftMessageRequestBatch) String() string            { return proto.CompactTextString(m) }
-func (*RaftMessageRequestBatch) ProtoMessage()               {}
-func (*RaftMessageRequestBatch) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{2} }
+func (m *RaftMessageRequestBatch) Reset()         { *m = RaftMessageRequestBatch{} }
+func (m *RaftMessageRequestBatch) String() string { return proto.CompactTextString(m) }
+func (*RaftMessageRequestBatch) ProtoMessage()    {}
+func (*RaftMessageRequestBatch) Descriptor() ([]byte, []int) {
+	return fileDescriptor_raft_460a63b017d715a3, []int{2}
+}
+func (m *RaftMessageRequestBatch) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftMessageRequestBatch) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftMessageRequestBatch) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftMessageRequestBatch.Merge(dst, src)
+}
+func (m *RaftMessageRequestBatch) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftMessageRequestBatch) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftMessageRequestBatch.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftMessageRequestBatch proto.InternalMessageInfo
 
 type RaftMessageResponseUnion struct {
-	Error *cockroach_roachpb3.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error                *roachpb.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *RaftMessageResponseUnion) Reset()                    { *m = RaftMessageResponseUnion{} }
-func (m *RaftMessageResponseUnion) String() string            { return proto.CompactTextString(m) }
-func (*RaftMessageResponseUnion) ProtoMessage()               {}
-func (*RaftMessageResponseUnion) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{3} }
+func (m *RaftMessageResponseUnion) Reset()         { *m = RaftMessageResponseUnion{} }
+func (m *RaftMessageResponseUnion) String() string { return proto.CompactTextString(m) }
+func (*RaftMessageResponseUnion) ProtoMessage()    {}
+func (*RaftMessageResponseUnion) Descriptor() ([]byte, []int) {
+	return fileDescriptor_raft_460a63b017d715a3, []int{3}
+}
+func (m *RaftMessageResponseUnion) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftMessageResponseUnion) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftMessageResponseUnion) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftMessageResponseUnion.Merge(dst, src)
+}
+func (m *RaftMessageResponseUnion) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftMessageResponseUnion) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftMessageResponseUnion.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftMessageResponseUnion proto.InternalMessageInfo
 
 // RaftMessageResponse may be sent to the sender of a
 // RaftMessageRequest. RaftMessage does not use the usual
@@ -224,16 +335,42 @@ func (*RaftMessageResponseUnion) Descriptor() ([]byte, []int) { return fileDescr
 // RaftMessageResponse is not sent for every RaftMessageRequest, but
 // may be used for certain error conditions.
 type RaftMessageResponse struct {
-	RangeID     github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id"`
-	FromReplica cockroach_roachpb.ReplicaDescriptor                  `protobuf:"bytes,2,opt,name=from_replica,json=fromReplica" json:"from_replica"`
-	ToReplica   cockroach_roachpb.ReplicaDescriptor                  `protobuf:"bytes,3,opt,name=to_replica,json=toReplica" json:"to_replica"`
-	Union       RaftMessageResponseUnion                             `protobuf:"bytes,4,opt,name=union" json:"union"`
+	RangeID              github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id"`
+	FromReplica          roachpb.ReplicaDescriptor                            `protobuf:"bytes,2,opt,name=from_replica,json=fromReplica" json:"from_replica"`
+	ToReplica            roachpb.ReplicaDescriptor                            `protobuf:"bytes,3,opt,name=to_replica,json=toReplica" json:"to_replica"`
+	Union                RaftMessageResponseUnion                             `protobuf:"bytes,4,opt,name=union" json:"union"`
+	XXX_NoUnkeyedLiteral struct{}                                             `json:"-"`
+	XXX_sizecache        int32                                                `json:"-"`
 }
 
-func (m *RaftMessageResponse) Reset()                    { *m = RaftMessageResponse{} }
-func (m *RaftMessageResponse) String() string            { return proto.CompactTextString(m) }
-func (*RaftMessageResponse) ProtoMessage()               {}
-func (*RaftMessageResponse) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{4} }
+func (m *RaftMessageResponse) Reset()         { *m = RaftMessageResponse{} }
+func (m *RaftMessageResponse) String() string { return proto.CompactTextString(m) }
+func (*RaftMessageResponse) ProtoMessage()    {}
+func (*RaftMessageResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_raft_460a63b017d715a3, []int{4}
+}
+func (m *RaftMessageResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftMessageResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftMessageResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftMessageResponse.Merge(dst, src)
+}
+func (m *RaftMessageResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftMessageResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftMessageResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftMessageResponse proto.InternalMessageInfo
 
 // SnapshotRequest is the request used to send streaming snapshot requests.
 type SnapshotRequest struct {
@@ -243,14 +380,40 @@ type SnapshotRequest struct {
 	// These are really raftpb.Entry, but we model them as raw bytes to avoid
 	// roundtripping through memory. They are separate from the kv_batch to
 	// allow flexibility in log implementations.
-	LogEntries [][]byte `protobuf:"bytes,3,rep,name=log_entries,json=logEntries" json:"log_entries,omitempty"`
-	Final      bool     `protobuf:"varint,4,opt,name=final" json:"final"`
+	LogEntries           [][]byte `protobuf:"bytes,3,rep,name=log_entries,json=logEntries" json:"log_entries,omitempty"`
+	Final                bool     `protobuf:"varint,4,opt,name=final" json:"final"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *SnapshotRequest) Reset()                    { *m = SnapshotRequest{} }
-func (m *SnapshotRequest) String() string            { return proto.CompactTextString(m) }
-func (*SnapshotRequest) ProtoMessage()               {}
-func (*SnapshotRequest) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{5} }
+func (m *SnapshotRequest) Reset()         { *m = SnapshotRequest{} }
+func (m *SnapshotRequest) String() string { return proto.CompactTextString(m) }
+func (*SnapshotRequest) ProtoMessage()    {}
+func (*SnapshotRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_raft_460a63b017d715a3, []int{5}
+}
+func (m *SnapshotRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SnapshotRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SnapshotRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SnapshotRequest.Merge(dst, src)
+}
+func (m *SnapshotRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *SnapshotRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_SnapshotRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SnapshotRequest proto.InternalMessageInfo
 
 type SnapshotRequest_Header struct {
 	// The replica state at the time the snapshot was generated. Note
@@ -258,7 +421,7 @@ type SnapshotRequest_Header struct {
 	// field which holds the updated descriptor after the new replica
 	// has been added while ReplicaState.Desc holds the descriptor
 	// before the new replica has been added.
-	State cockroach_storage_storagepb.ReplicaState `protobuf:"bytes,5,opt,name=state" json:"state"`
+	State storagepb.ReplicaState `protobuf:"bytes,5,opt,name=state" json:"state"`
 	// The inner raft message is of type MsgSnap, and its snapshot data contains a UUID.
 	RaftMessageRequest RaftMessageRequest `protobuf:"bytes,2,opt,name=raft_message_request,json=raftMessageRequest" json:"raft_message_request"`
 	// The estimated size of the range, to be used in reservation decisions.
@@ -270,23 +433,75 @@ type SnapshotRequest_Header struct {
 	// The priority of the snapshot.
 	Priority SnapshotRequest_Priority `protobuf:"varint,6,opt,name=priority,enum=cockroach.storage.SnapshotRequest_Priority" json:"priority"`
 	// The strategy of the snapshot.
-	Strategy SnapshotRequest_Strategy `protobuf:"varint,7,opt,name=strategy,enum=cockroach.storage.SnapshotRequest_Strategy" json:"strategy"`
+	Strategy             SnapshotRequest_Strategy `protobuf:"varint,7,opt,name=strategy,enum=cockroach.storage.SnapshotRequest_Strategy" json:"strategy"`
+	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
+	XXX_sizecache        int32                    `json:"-"`
 }
 
-func (m *SnapshotRequest_Header) Reset()                    { *m = SnapshotRequest_Header{} }
-func (m *SnapshotRequest_Header) String() string            { return proto.CompactTextString(m) }
-func (*SnapshotRequest_Header) ProtoMessage()               {}
-func (*SnapshotRequest_Header) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{5, 0} }
+func (m *SnapshotRequest_Header) Reset()         { *m = SnapshotRequest_Header{} }
+func (m *SnapshotRequest_Header) String() string { return proto.CompactTextString(m) }
+func (*SnapshotRequest_Header) ProtoMessage()    {}
+func (*SnapshotRequest_Header) Descriptor() ([]byte, []int) {
+	return fileDescriptor_raft_460a63b017d715a3, []int{5, 0}
+}
+func (m *SnapshotRequest_Header) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SnapshotRequest_Header) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SnapshotRequest_Header) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SnapshotRequest_Header.Merge(dst, src)
+}
+func (m *SnapshotRequest_Header) XXX_Size() int {
+	return m.Size()
+}
+func (m *SnapshotRequest_Header) XXX_DiscardUnknown() {
+	xxx_messageInfo_SnapshotRequest_Header.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SnapshotRequest_Header proto.InternalMessageInfo
 
 type SnapshotResponse struct {
-	Status  SnapshotResponse_Status `protobuf:"varint,1,opt,name=status,enum=cockroach.storage.SnapshotResponse_Status" json:"status"`
-	Message string                  `protobuf:"bytes,2,opt,name=message" json:"message"`
+	Status               SnapshotResponse_Status `protobuf:"varint,1,opt,name=status,enum=cockroach.storage.SnapshotResponse_Status" json:"status"`
+	Message              string                  `protobuf:"bytes,2,opt,name=message" json:"message"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
 }
 
-func (m *SnapshotResponse) Reset()                    { *m = SnapshotResponse{} }
-func (m *SnapshotResponse) String() string            { return proto.CompactTextString(m) }
-func (*SnapshotResponse) ProtoMessage()               {}
-func (*SnapshotResponse) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{6} }
+func (m *SnapshotResponse) Reset()         { *m = SnapshotResponse{} }
+func (m *SnapshotResponse) String() string { return proto.CompactTextString(m) }
+func (*SnapshotResponse) ProtoMessage()    {}
+func (*SnapshotResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_raft_460a63b017d715a3, []int{6}
+}
+func (m *SnapshotResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SnapshotResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SnapshotResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SnapshotResponse.Merge(dst, src)
+}
+func (m *SnapshotResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *SnapshotResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_SnapshotResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SnapshotResponse proto.InternalMessageInfo
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
 type ConfChangeContext struct {
@@ -295,13 +510,39 @@ type ConfChangeContext struct {
 	// storagepb.RaftCommand).
 	Payload []byte `protobuf:"bytes,2,opt,name=payload" json:"payload,omitempty"`
 	// Replica contains full details about the replica being added or removed.
-	Replica cockroach_roachpb.ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
+	Replica              roachpb.ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
+	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
+	XXX_sizecache        int32                     `json:"-"`
 }
 
-func (m *ConfChangeContext) Reset()                    { *m = ConfChangeContext{} }
-func (m *ConfChangeContext) String() string            { return proto.CompactTextString(m) }
-func (*ConfChangeContext) ProtoMessage()               {}
-func (*ConfChangeContext) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{7} }
+func (m *ConfChangeContext) Reset()         { *m = ConfChangeContext{} }
+func (m *ConfChangeContext) String() string { return proto.CompactTextString(m) }
+func (*ConfChangeContext) ProtoMessage()    {}
+func (*ConfChangeContext) Descriptor() ([]byte, []int) {
+	return fileDescriptor_raft_460a63b017d715a3, []int{7}
+}
+func (m *ConfChangeContext) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ConfChangeContext) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ConfChangeContext) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ConfChangeContext.Merge(dst, src)
+}
+func (m *ConfChangeContext) XXX_Size() int {
+	return m.Size()
+}
+func (m *ConfChangeContext) XXX_DiscardUnknown() {
+	xxx_messageInfo_ConfChangeContext.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ConfChangeContext proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*RaftHeartbeat)(nil), "cockroach.storage.RaftHeartbeat")
@@ -326,8 +567,9 @@ var _ grpc.ClientConn
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion4
 
-// Client API for MultiRaft service
-
+// MultiRaftClient is the client API for MultiRaft service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type MultiRaftClient interface {
 	RaftMessageBatch(ctx context.Context, opts ...grpc.CallOption) (MultiRaft_RaftMessageBatchClient, error)
 	RaftSnapshot(ctx context.Context, opts ...grpc.CallOption) (MultiRaft_RaftSnapshotClient, error)
@@ -342,7 +584,7 @@ func NewMultiRaftClient(cc *grpc.ClientConn) MultiRaftClient {
 }
 
 func (c *multiRaftClient) RaftMessageBatch(ctx context.Context, opts ...grpc.CallOption) (MultiRaft_RaftMessageBatchClient, error) {
-	stream, err := grpc.NewClientStream(ctx, &_MultiRaft_serviceDesc.Streams[0], c.cc, "/cockroach.storage.MultiRaft/RaftMessageBatch", opts...)
+	stream, err := c.cc.NewStream(ctx, &_MultiRaft_serviceDesc.Streams[0], "/cockroach.storage.MultiRaft/RaftMessageBatch", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +615,7 @@ func (x *multiRaftRaftMessageBatchClient) Recv() (*RaftMessageResponse, error) {
 }
 
 func (c *multiRaftClient) RaftSnapshot(ctx context.Context, opts ...grpc.CallOption) (MultiRaft_RaftSnapshotClient, error) {
-	stream, err := grpc.NewClientStream(ctx, &_MultiRaft_serviceDesc.Streams[1], c.cc, "/cockroach.storage.MultiRaft/RaftSnapshot", opts...)
+	stream, err := c.cc.NewStream(ctx, &_MultiRaft_serviceDesc.Streams[1], "/cockroach.storage.MultiRaft/RaftSnapshot", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -403,8 +645,7 @@ func (x *multiRaftRaftSnapshotClient) Recv() (*SnapshotResponse, error) {
 	return m, nil
 }
 
-// Server API for MultiRaft service
-
+// MultiRaftServer is the server API for MultiRaft service.
 type MultiRaftServer interface {
 	RaftMessageBatch(MultiRaft_RaftMessageBatchServer) error
 	RaftSnapshot(MultiRaft_RaftSnapshotServer) error
@@ -886,6 +1127,9 @@ func encodeVarintRaft(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *RaftHeartbeat) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovRaft(uint64(m.RangeID))
@@ -898,6 +1142,9 @@ func (m *RaftHeartbeat) Size() (n int) {
 }
 
 func (m *RaftMessageRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovRaft(uint64(m.RangeID))
@@ -928,6 +1175,9 @@ func (m *RaftMessageRequest) Size() (n int) {
 }
 
 func (m *RaftMessageRequestBatch) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Requests) > 0 {
@@ -940,6 +1190,9 @@ func (m *RaftMessageRequestBatch) Size() (n int) {
 }
 
 func (m *RaftMessageResponseUnion) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Error != nil {
@@ -950,6 +1203,9 @@ func (m *RaftMessageResponseUnion) Size() (n int) {
 }
 
 func (m *RaftMessageResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovRaft(uint64(m.RangeID))
@@ -963,6 +1219,9 @@ func (m *RaftMessageResponse) Size() (n int) {
 }
 
 func (m *SnapshotRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Header != nil {
@@ -984,6 +1243,9 @@ func (m *SnapshotRequest) Size() (n int) {
 }
 
 func (m *SnapshotRequest_Header) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.RaftMessageRequest.Size()
@@ -998,6 +1260,9 @@ func (m *SnapshotRequest_Header) Size() (n int) {
 }
 
 func (m *SnapshotResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovRaft(uint64(m.Status))
@@ -1007,6 +1272,9 @@ func (m *SnapshotResponse) Size() (n int) {
 }
 
 func (m *ConfChangeContext) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.CommandID)
@@ -1042,7 +1310,7 @@ func (this *RaftMessageResponseUnion) GetValue() interface{} {
 
 func (this *RaftMessageResponseUnion) SetValue(value interface{}) bool {
 	switch vt := value.(type) {
-	case *cockroach_roachpb3.Error:
+	case *roachpb.Error:
 		this.Error = vt
 	default:
 		return false
@@ -1623,7 +1891,7 @@ func (m *RaftMessageResponseUnion) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Error == nil {
-				m.Error = &cockroach_roachpb3.Error{}
+				m.Error = &roachpb.Error{}
 			}
 			if err := m.Error.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2502,9 +2770,9 @@ var (
 	ErrIntOverflowRaft   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/raft.proto", fileDescriptorRaft) }
+func init() { proto.RegisterFile("storage/raft.proto", fileDescriptor_raft_460a63b017d715a3) }
 
-var fileDescriptorRaft = []byte{
+var fileDescriptor_raft_460a63b017d715a3 = []byte{
 	// 1147 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe4, 0x56, 0xdd, 0x6e, 0x1b, 0xc5,
 	0x17, 0xf7, 0xc6, 0xdf, 0xc7, 0x76, 0xb3, 0x9d, 0x7f, 0xf5, 0x67, 0x65, 0xc0, 0x36, 0x5b, 0x5a,

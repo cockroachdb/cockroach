@@ -6,19 +6,17 @@ package distsqlpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_sql_jobs_jobspb "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-import cockroach_sql_sqlbase3 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import jobspb "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+import sqlbase "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import time "time"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import github_com_cockroachdb_cockroach_pkg_sql_sqlbase "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
-import sortkeys "github.com/gogo/protobuf/sortkeys"
-import binary "encoding/binary"
+import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+import encoding_binary "encoding/binary"
 
 import io "io"
 
@@ -27,6 +25,12 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 var _ = time.Kitchen
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // ScanVisibility controls which columns are seen by scans - just normal
 // columns, or normal columns and also in-progress schema change columns.
@@ -62,7 +66,9 @@ func (x *ScanVisibility) UnmarshalJSON(data []byte) error {
 	*x = ScanVisibility(value)
 	return nil
 }
-func (ScanVisibility) EnumDescriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{0} }
+func (ScanVisibility) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{0}
+}
 
 type SketchType int32
 
@@ -95,7 +101,9 @@ func (x *SketchType) UnmarshalJSON(data []byte) error {
 	*x = SketchType(value)
 	return nil
 }
-func (SketchType) EnumDescriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{1} }
+func (SketchType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{1}
+}
 
 // These mirror the aggregate functions supported by sql/parser. See
 // sql/parser/aggregate_builtins.go.
@@ -190,7 +198,7 @@ func (x *AggregatorSpec_Func) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (AggregatorSpec_Func) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{17, 0}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{17, 0}
 }
 
 type AggregatorSpec_Type int32
@@ -236,7 +244,7 @@ func (x *AggregatorSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (AggregatorSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{17, 1}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{17, 1}
 }
 
 type BackfillerSpec_Type int32
@@ -275,7 +283,7 @@ func (x *BackfillerSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (BackfillerSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{18, 0}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{18, 0}
 }
 
 type WindowerSpec_WindowFunc int32
@@ -339,7 +347,7 @@ func (x *WindowerSpec_WindowFunc) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (WindowerSpec_WindowFunc) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{29, 0}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{29, 0}
 }
 
 // Mode indicates which mode of framing is used.
@@ -383,7 +391,7 @@ func (x *WindowerSpec_Frame_Mode) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (WindowerSpec_Frame_Mode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{29, 1, 0}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{29, 1, 0}
 }
 
 // BoundType indicates which type of boundary is used.
@@ -430,7 +438,7 @@ func (x *WindowerSpec_Frame_BoundType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (WindowerSpec_Frame_BoundType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{29, 1, 1}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{29, 1, 1}
 }
 
 // Each processor has the following components:
@@ -470,13 +478,39 @@ type ProcessorSpec struct {
 	// has no consequence on the running of flows, but is useful for plan
 	// diagrams and linking information like tracing spans and log messages to
 	// processors.
-	ProcessorID int32 `protobuf:"varint,6,opt,name=processor_id,json=processorId" json:"processor_id"`
+	ProcessorID          int32    `protobuf:"varint,6,opt,name=processor_id,json=processorId" json:"processor_id"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ProcessorSpec) Reset()                    { *m = ProcessorSpec{} }
-func (m *ProcessorSpec) String() string            { return proto.CompactTextString(m) }
-func (*ProcessorSpec) ProtoMessage()               {}
-func (*ProcessorSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{0} }
+func (m *ProcessorSpec) Reset()         { *m = ProcessorSpec{} }
+func (m *ProcessorSpec) String() string { return proto.CompactTextString(m) }
+func (*ProcessorSpec) ProtoMessage()    {}
+func (*ProcessorSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{0}
+}
+func (m *ProcessorSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProcessorSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ProcessorSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProcessorSpec.Merge(dst, src)
+}
+func (m *ProcessorSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProcessorSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProcessorSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProcessorSpec proto.InternalMessageInfo
 
 // PostProcessSpec describes the processing required to obtain the output
 // (filtering, projection). It operates on the internal schema of the processor
@@ -505,13 +539,39 @@ type PostProcessSpec struct {
 	Offset uint64 `protobuf:"varint,5,opt,name=offset" json:"offset"`
 	// If nonzero, the processor will stop after emitting this many rows. The rows
 	// suppressed by <offset>, if any, do not count towards this limit.
-	Limit uint64 `protobuf:"varint,6,opt,name=limit" json:"limit"`
+	Limit                uint64   `protobuf:"varint,6,opt,name=limit" json:"limit"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *PostProcessSpec) Reset()                    { *m = PostProcessSpec{} }
-func (m *PostProcessSpec) String() string            { return proto.CompactTextString(m) }
-func (*PostProcessSpec) ProtoMessage()               {}
-func (*PostProcessSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{1} }
+func (m *PostProcessSpec) Reset()         { *m = PostProcessSpec{} }
+func (m *PostProcessSpec) String() string { return proto.CompactTextString(m) }
+func (*PostProcessSpec) ProtoMessage()    {}
+func (*PostProcessSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{1}
+}
+func (m *PostProcessSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PostProcessSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *PostProcessSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PostProcessSpec.Merge(dst, src)
+}
+func (m *PostProcessSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *PostProcessSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_PostProcessSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PostProcessSpec proto.InternalMessageInfo
 
 type ProcessorCoreUnion struct {
 	Noop                    *NoopCoreSpec                `protobuf:"bytes,1,opt,name=noop" json:"noop,omitempty"`
@@ -538,43 +598,145 @@ type ProcessorCoreUnion struct {
 	LocalPlanNode           *LocalPlanNodeSpec           `protobuf:"bytes,24,opt,name=localPlanNode" json:"localPlanNode,omitempty"`
 	ChangeAggregator        *ChangeAggregatorSpec        `protobuf:"bytes,25,opt,name=changeAggregator" json:"changeAggregator,omitempty"`
 	ChangeFrontier          *ChangeFrontierSpec          `protobuf:"bytes,26,opt,name=changeFrontier" json:"changeFrontier,omitempty"`
+	XXX_NoUnkeyedLiteral    struct{}                     `json:"-"`
+	XXX_sizecache           int32                        `json:"-"`
 }
 
-func (m *ProcessorCoreUnion) Reset()                    { *m = ProcessorCoreUnion{} }
-func (m *ProcessorCoreUnion) String() string            { return proto.CompactTextString(m) }
-func (*ProcessorCoreUnion) ProtoMessage()               {}
-func (*ProcessorCoreUnion) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{2} }
+func (m *ProcessorCoreUnion) Reset()         { *m = ProcessorCoreUnion{} }
+func (m *ProcessorCoreUnion) String() string { return proto.CompactTextString(m) }
+func (*ProcessorCoreUnion) ProtoMessage()    {}
+func (*ProcessorCoreUnion) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{2}
+}
+func (m *ProcessorCoreUnion) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProcessorCoreUnion) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ProcessorCoreUnion) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProcessorCoreUnion.Merge(dst, src)
+}
+func (m *ProcessorCoreUnion) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProcessorCoreUnion) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProcessorCoreUnion.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProcessorCoreUnion proto.InternalMessageInfo
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
 // need post-processing or when only a synchronizer is required (e.g. at the
 // final endpoint).
 type NoopCoreSpec struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *NoopCoreSpec) Reset()                    { *m = NoopCoreSpec{} }
-func (m *NoopCoreSpec) String() string            { return proto.CompactTextString(m) }
-func (*NoopCoreSpec) ProtoMessage()               {}
-func (*NoopCoreSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{3} }
+func (m *NoopCoreSpec) Reset()         { *m = NoopCoreSpec{} }
+func (m *NoopCoreSpec) String() string { return proto.CompactTextString(m) }
+func (*NoopCoreSpec) ProtoMessage()    {}
+func (*NoopCoreSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{3}
+}
+func (m *NoopCoreSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *NoopCoreSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *NoopCoreSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_NoopCoreSpec.Merge(dst, src)
+}
+func (m *NoopCoreSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *NoopCoreSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_NoopCoreSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_NoopCoreSpec proto.InternalMessageInfo
 
 type MetadataTestSenderSpec struct {
-	ID string `protobuf:"bytes,1,opt,name=id" json:"id"`
+	ID                   string   `protobuf:"bytes,1,opt,name=id" json:"id"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *MetadataTestSenderSpec) Reset()                    { *m = MetadataTestSenderSpec{} }
-func (m *MetadataTestSenderSpec) String() string            { return proto.CompactTextString(m) }
-func (*MetadataTestSenderSpec) ProtoMessage()               {}
-func (*MetadataTestSenderSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{4} }
+func (m *MetadataTestSenderSpec) Reset()         { *m = MetadataTestSenderSpec{} }
+func (m *MetadataTestSenderSpec) String() string { return proto.CompactTextString(m) }
+func (*MetadataTestSenderSpec) ProtoMessage()    {}
+func (*MetadataTestSenderSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{4}
+}
+func (m *MetadataTestSenderSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MetadataTestSenderSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MetadataTestSenderSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MetadataTestSenderSpec.Merge(dst, src)
+}
+func (m *MetadataTestSenderSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *MetadataTestSenderSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_MetadataTestSenderSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MetadataTestSenderSpec proto.InternalMessageInfo
 
 type MetadataTestReceiverSpec struct {
-	SenderIDs []string `protobuf:"bytes,1,rep,name=sender_ids,json=senderIds" json:"sender_ids,omitempty"`
+	SenderIDs            []string `protobuf:"bytes,1,rep,name=sender_ids,json=senderIds" json:"sender_ids,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MetadataTestReceiverSpec) Reset()         { *m = MetadataTestReceiverSpec{} }
 func (m *MetadataTestReceiverSpec) String() string { return proto.CompactTextString(m) }
 func (*MetadataTestReceiverSpec) ProtoMessage()    {}
 func (*MetadataTestReceiverSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{5}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{5}
 }
+func (m *MetadataTestReceiverSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MetadataTestReceiverSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MetadataTestReceiverSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MetadataTestReceiverSpec.Merge(dst, src)
+}
+func (m *MetadataTestReceiverSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *MetadataTestReceiverSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_MetadataTestReceiverSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MetadataTestReceiverSpec proto.InternalMessageInfo
 
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
 // "pre-canned" rows. This is not intended to be used for very large datasets.
@@ -586,25 +748,77 @@ type ValuesCoreSpec struct {
 	NumRows uint64 `protobuf:"varint,3,opt,name=num_rows,json=numRows" json:"num_rows"`
 	// Each raw block encodes one or more data rows; each datum is encoded
 	// according to the corresponding DatumInfo.
-	RawBytes [][]byte `protobuf:"bytes,2,rep,name=raw_bytes,json=rawBytes" json:"raw_bytes,omitempty"`
+	RawBytes             [][]byte `protobuf:"bytes,2,rep,name=raw_bytes,json=rawBytes" json:"raw_bytes,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ValuesCoreSpec) Reset()                    { *m = ValuesCoreSpec{} }
-func (m *ValuesCoreSpec) String() string            { return proto.CompactTextString(m) }
-func (*ValuesCoreSpec) ProtoMessage()               {}
-func (*ValuesCoreSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{6} }
+func (m *ValuesCoreSpec) Reset()         { *m = ValuesCoreSpec{} }
+func (m *ValuesCoreSpec) String() string { return proto.CompactTextString(m) }
+func (*ValuesCoreSpec) ProtoMessage()    {}
+func (*ValuesCoreSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{6}
+}
+func (m *ValuesCoreSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ValuesCoreSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ValuesCoreSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ValuesCoreSpec.Merge(dst, src)
+}
+func (m *ValuesCoreSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *ValuesCoreSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_ValuesCoreSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ValuesCoreSpec proto.InternalMessageInfo
 
 type TableReaderSpan struct {
 	// TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
 	// KVs. The span should be described as starting and ending lists of values
 	// for a prefix of the index columns, along with inclusive/exclusive flags.
-	Span cockroach_roachpb1.Span `protobuf:"bytes,1,opt,name=span" json:"span"`
+	Span                 roachpb.Span `protobuf:"bytes,1,opt,name=span" json:"span"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
 }
 
-func (m *TableReaderSpan) Reset()                    { *m = TableReaderSpan{} }
-func (m *TableReaderSpan) String() string            { return proto.CompactTextString(m) }
-func (*TableReaderSpan) ProtoMessage()               {}
-func (*TableReaderSpan) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{7} }
+func (m *TableReaderSpan) Reset()         { *m = TableReaderSpan{} }
+func (m *TableReaderSpan) String() string { return proto.CompactTextString(m) }
+func (*TableReaderSpan) ProtoMessage()    {}
+func (*TableReaderSpan) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{7}
+}
+func (m *TableReaderSpan) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableReaderSpan) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableReaderSpan) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableReaderSpan.Merge(dst, src)
+}
+func (m *TableReaderSpan) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableReaderSpan) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableReaderSpan.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TableReaderSpan proto.InternalMessageInfo
 
 // TableReaderSpec is the specification for a "table reader". A table reader
 // performs KV operations to retrieve rows for a table and outputs the desired
@@ -619,7 +833,7 @@ func (*TableReaderSpan) Descriptor() ([]byte, []int) { return fileDescriptorProc
 //  - Primary key as a string, if it was obtainable.
 //  - JSON of all decoded column values.
 type TableReaderSpec struct {
-	Table cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,1,opt,name=table" json:"table"`
+	Table sqlbase.TableDescriptor `protobuf:"bytes,1,opt,name=table" json:"table"`
 	// If 0, we use the primary index. If non-zero, we use the index_idx-th index,
 	// i.e. table.indexes[index_idx-1]
 	IndexIdx uint32            `protobuf:"varint,2,opt,name=index_idx,json=indexIdx" json:"index_idx"`
@@ -642,13 +856,39 @@ type TableReaderSpec struct {
 	Visibility ScanVisibility `protobuf:"varint,7,opt,name=visibility,enum=cockroach.sql.distsqlpb.ScanVisibility" json:"visibility"`
 	// If non-zero, this is a guarantee for the upper bound of rows a TableReader
 	// will read. If 0, the number of results is unbounded.
-	MaxResults uint64 `protobuf:"varint,8,opt,name=max_results,json=maxResults" json:"max_results"`
+	MaxResults           uint64   `protobuf:"varint,8,opt,name=max_results,json=maxResults" json:"max_results"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *TableReaderSpec) Reset()                    { *m = TableReaderSpec{} }
-func (m *TableReaderSpec) String() string            { return proto.CompactTextString(m) }
-func (*TableReaderSpec) ProtoMessage()               {}
-func (*TableReaderSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{8} }
+func (m *TableReaderSpec) Reset()         { *m = TableReaderSpec{} }
+func (m *TableReaderSpec) String() string { return proto.CompactTextString(m) }
+func (*TableReaderSpec) ProtoMessage()    {}
+func (*TableReaderSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{8}
+}
+func (m *TableReaderSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableReaderSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableReaderSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableReaderSpec.Merge(dst, src)
+}
+func (m *TableReaderSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableReaderSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableReaderSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TableReaderSpec proto.InternalMessageInfo
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
 // performs KV operations to retrieve specific rows that correspond to the
@@ -670,7 +910,7 @@ func (*TableReaderSpec) Descriptor() ([]byte, []int) { return fileDescriptorProc
 // If performing an index join (where a = c and b = d) (lookup columns is []):
 //        Internal columns: | c | d | e |
 type JoinReaderSpec struct {
-	Table cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,1,opt,name=table" json:"table"`
+	Table sqlbase.TableDescriptor `protobuf:"bytes,1,opt,name=table" json:"table"`
 	// If 0, we use the primary index; each row in the input stream has a value
 	// for each primary key.
 	// TODO(radu): figure out the correct semantics when joining with an index.
@@ -696,19 +936,45 @@ type JoinReaderSpec struct {
 	IndexFilterExpr Expression `protobuf:"bytes,5,opt,name=index_filter_expr,json=indexFilterExpr" json:"index_filter_expr"`
 	// For lookup joins. Only JoinType_INNER and JoinType_LEFT_OUTER are
 	// supported.
-	Type cockroach_sql_sqlbase3.JoinType `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
+	Type sqlbase.JoinType `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
 	// For index joins that are sources to mutation statements - what visibility
 	// of columns should we return? Mutations sometimes need to see in-progress
 	// schema change columns, in which case this field will be changed from its
 	// default PUBLIC state. Causes the index join to return these schema change
 	// columns.
-	Visibility ScanVisibility `protobuf:"varint,7,opt,name=visibility,enum=cockroach.sql.distsqlpb.ScanVisibility" json:"visibility"`
+	Visibility           ScanVisibility `protobuf:"varint,7,opt,name=visibility,enum=cockroach.sql.distsqlpb.ScanVisibility" json:"visibility"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *JoinReaderSpec) Reset()                    { *m = JoinReaderSpec{} }
-func (m *JoinReaderSpec) String() string            { return proto.CompactTextString(m) }
-func (*JoinReaderSpec) ProtoMessage()               {}
-func (*JoinReaderSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{9} }
+func (m *JoinReaderSpec) Reset()         { *m = JoinReaderSpec{} }
+func (m *JoinReaderSpec) String() string { return proto.CompactTextString(m) }
+func (*JoinReaderSpec) ProtoMessage()    {}
+func (*JoinReaderSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{9}
+}
+func (m *JoinReaderSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *JoinReaderSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *JoinReaderSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_JoinReaderSpec.Merge(dst, src)
+}
+func (m *JoinReaderSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *JoinReaderSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_JoinReaderSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_JoinReaderSpec proto.InternalMessageInfo
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
 // processor sorts elements in the input stream providing a certain output
@@ -722,13 +988,39 @@ type SorterSpec struct {
 	// Ordering match length, specifying that the input is already sorted by the
 	// first 'n' output ordering columns, can be optionally specified for
 	// possible speed-ups taking advantage of the partial orderings.
-	OrderingMatchLen uint32 `protobuf:"varint,2,opt,name=ordering_match_len,json=orderingMatchLen" json:"ordering_match_len"`
+	OrderingMatchLen     uint32   `protobuf:"varint,2,opt,name=ordering_match_len,json=orderingMatchLen" json:"ordering_match_len"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *SorterSpec) Reset()                    { *m = SorterSpec{} }
-func (m *SorterSpec) String() string            { return proto.CompactTextString(m) }
-func (*SorterSpec) ProtoMessage()               {}
-func (*SorterSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{10} }
+func (m *SorterSpec) Reset()         { *m = SorterSpec{} }
+func (m *SorterSpec) String() string { return proto.CompactTextString(m) }
+func (*SorterSpec) ProtoMessage()    {}
+func (*SorterSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{10}
+}
+func (m *SorterSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SorterSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SorterSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SorterSpec.Merge(dst, src)
+}
+func (m *SorterSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *SorterSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_SorterSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SorterSpec proto.InternalMessageInfo
 
 type DistinctSpec struct {
 	// The ordered columns in the input stream can be optionally specified for
@@ -742,13 +1034,39 @@ type DistinctSpec struct {
 	// 4th column D which is not included in distinct_columns, its values are not
 	// considered, so rows A1,B1,C1,D1 and A1,B1,C1,D2 are considered equal and
 	// only one of them (the first) is output.
-	DistinctColumns []uint32 `protobuf:"varint,2,rep,name=distinct_columns,json=distinctColumns" json:"distinct_columns,omitempty"`
+	DistinctColumns      []uint32 `protobuf:"varint,2,rep,name=distinct_columns,json=distinctColumns" json:"distinct_columns,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *DistinctSpec) Reset()                    { *m = DistinctSpec{} }
-func (m *DistinctSpec) String() string            { return proto.CompactTextString(m) }
-func (*DistinctSpec) ProtoMessage()               {}
-func (*DistinctSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{11} }
+func (m *DistinctSpec) Reset()         { *m = DistinctSpec{} }
+func (m *DistinctSpec) String() string { return proto.CompactTextString(m) }
+func (*DistinctSpec) ProtoMessage()    {}
+func (*DistinctSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{11}
+}
+func (m *DistinctSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DistinctSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *DistinctSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DistinctSpec.Merge(dst, src)
+}
+func (m *DistinctSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *DistinctSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_DistinctSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DistinctSpec proto.InternalMessageInfo
 
 // ZigzagJoinerSpec is the specification for a zigzag join processor. The
 // processor's current implementation fetches the rows using internal
@@ -760,7 +1078,7 @@ func (*DistinctSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcess
 type ZigzagJoinerSpec struct {
 	// TODO(pbardea): Replace these with inputs that conform to a RowSource-like
 	// interface.
-	Tables []cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,1,rep,name=tables" json:"tables"`
+	Tables []sqlbase.TableDescriptor `protobuf:"bytes,1,rep,name=tables" json:"tables"`
 	// An array of arrays. The array at eq_columns[side_idx] contains the
 	// equality columns for that side. All arrays in eq_columns should have
 	// equal length.
@@ -773,14 +1091,40 @@ type ZigzagJoinerSpec struct {
 	// columns in the right stream.
 	OnExpr Expression `protobuf:"bytes,4,opt,name=on_expr,json=onExpr" json:"on_expr"`
 	// Fixed values at the start of indices.
-	FixedValues []*ValuesCoreSpec               `protobuf:"bytes,5,rep,name=fixed_values,json=fixedValues" json:"fixed_values,omitempty"`
-	Type        cockroach_sql_sqlbase3.JoinType `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
+	FixedValues          []*ValuesCoreSpec `protobuf:"bytes,5,rep,name=fixed_values,json=fixedValues" json:"fixed_values,omitempty"`
+	Type                 sqlbase.JoinType  `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
-func (m *ZigzagJoinerSpec) Reset()                    { *m = ZigzagJoinerSpec{} }
-func (m *ZigzagJoinerSpec) String() string            { return proto.CompactTextString(m) }
-func (*ZigzagJoinerSpec) ProtoMessage()               {}
-func (*ZigzagJoinerSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{12} }
+func (m *ZigzagJoinerSpec) Reset()         { *m = ZigzagJoinerSpec{} }
+func (m *ZigzagJoinerSpec) String() string { return proto.CompactTextString(m) }
+func (*ZigzagJoinerSpec) ProtoMessage()    {}
+func (*ZigzagJoinerSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{12}
+}
+func (m *ZigzagJoinerSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ZigzagJoinerSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ZigzagJoinerSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZigzagJoinerSpec.Merge(dst, src)
+}
+func (m *ZigzagJoinerSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *ZigzagJoinerSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_ZigzagJoinerSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ZigzagJoinerSpec proto.InternalMessageInfo
 
 // LocalPlanNodeSpec is the specification for a local planNode wrapping
 // processor. It's created for situations where a planNode has no DistSQL
@@ -790,24 +1134,76 @@ func (*ZigzagJoinerSpec) Descriptor() ([]byte, []int) { return fileDescriptorPro
 // planNodes. See LocalProcessors and LocalProcessorIndexes on
 // distsqlplan.PhysicalPlan.
 type LocalPlanNodeSpec struct {
-	RowSourceIdx *uint32 `protobuf:"varint,1,opt,name=RowSourceIdx" json:"RowSourceIdx,omitempty"`
-	NumInputs    *uint32 `protobuf:"varint,2,opt,name=NumInputs" json:"NumInputs,omitempty"`
-	Name         *string `protobuf:"bytes,3,opt,name=Name" json:"Name,omitempty"`
+	RowSourceIdx         *uint32  `protobuf:"varint,1,opt,name=RowSourceIdx" json:"RowSourceIdx,omitempty"`
+	NumInputs            *uint32  `protobuf:"varint,2,opt,name=NumInputs" json:"NumInputs,omitempty"`
+	Name                 *string  `protobuf:"bytes,3,opt,name=Name" json:"Name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *LocalPlanNodeSpec) Reset()                    { *m = LocalPlanNodeSpec{} }
-func (m *LocalPlanNodeSpec) String() string            { return proto.CompactTextString(m) }
-func (*LocalPlanNodeSpec) ProtoMessage()               {}
-func (*LocalPlanNodeSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{13} }
+func (m *LocalPlanNodeSpec) Reset()         { *m = LocalPlanNodeSpec{} }
+func (m *LocalPlanNodeSpec) String() string { return proto.CompactTextString(m) }
+func (*LocalPlanNodeSpec) ProtoMessage()    {}
+func (*LocalPlanNodeSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{13}
+}
+func (m *LocalPlanNodeSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LocalPlanNodeSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *LocalPlanNodeSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LocalPlanNodeSpec.Merge(dst, src)
+}
+func (m *LocalPlanNodeSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *LocalPlanNodeSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_LocalPlanNodeSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LocalPlanNodeSpec proto.InternalMessageInfo
 
 type Columns struct {
-	Columns []uint32 `protobuf:"varint,1,rep,packed,name=columns" json:"columns,omitempty"`
+	Columns              []uint32 `protobuf:"varint,1,rep,packed,name=columns" json:"columns,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Columns) Reset()                    { *m = Columns{} }
-func (m *Columns) String() string            { return proto.CompactTextString(m) }
-func (*Columns) ProtoMessage()               {}
-func (*Columns) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{14} }
+func (m *Columns) Reset()         { *m = Columns{} }
+func (m *Columns) String() string { return proto.CompactTextString(m) }
+func (*Columns) ProtoMessage()    {}
+func (*Columns) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{14}
+}
+func (m *Columns) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Columns) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Columns) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Columns.Merge(dst, src)
+}
+func (m *Columns) XXX_Size() int {
+	return m.Size()
+}
+func (m *Columns) XXX_DiscardUnknown() {
+	xxx_messageInfo_Columns.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Columns proto.InternalMessageInfo
 
 // MergeJoinerSpec is the specification for a merge join processor. The processor
 // has two inputs and one output. The inputs must have the same ordering on the
@@ -840,18 +1236,44 @@ type MergeJoinerSpec struct {
 	// stream has M columns, in this expression ordinal references @1 to @N refer
 	// to columns of the left stream and variables @(N+1) to @(N+M) refer to
 	// columns in the right stream.
-	OnExpr Expression                      `protobuf:"bytes,5,opt,name=on_expr,json=onExpr" json:"on_expr"`
-	Type   cockroach_sql_sqlbase3.JoinType `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
+	OnExpr Expression       `protobuf:"bytes,5,opt,name=on_expr,json=onExpr" json:"on_expr"`
+	Type   sqlbase.JoinType `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
 	// NullEquality indicates that NULL = NULL should be considered true.
 	// This allows OUTER JOINs to consider NULL values meaningfully. An
 	// example of this is during SCRUB checks on secondary indexes.
-	NullEquality bool `protobuf:"varint,7,opt,name=null_equality,json=nullEquality" json:"null_equality"`
+	NullEquality         bool     `protobuf:"varint,7,opt,name=null_equality,json=nullEquality" json:"null_equality"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *MergeJoinerSpec) Reset()                    { *m = MergeJoinerSpec{} }
-func (m *MergeJoinerSpec) String() string            { return proto.CompactTextString(m) }
-func (*MergeJoinerSpec) ProtoMessage()               {}
-func (*MergeJoinerSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{15} }
+func (m *MergeJoinerSpec) Reset()         { *m = MergeJoinerSpec{} }
+func (m *MergeJoinerSpec) String() string { return proto.CompactTextString(m) }
+func (*MergeJoinerSpec) ProtoMessage()    {}
+func (*MergeJoinerSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{15}
+}
+func (m *MergeJoinerSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MergeJoinerSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MergeJoinerSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MergeJoinerSpec.Merge(dst, src)
+}
+func (m *MergeJoinerSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *MergeJoinerSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_MergeJoinerSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MergeJoinerSpec proto.InternalMessageInfo
 
 // HashJoinerSpec is the specification for a hash join processor. The processor
 // has two inputs and one output.
@@ -889,8 +1311,8 @@ type HashJoinerSpec struct {
 	// columns of the left stream and variables @N to @(N+M) refer to columns in
 	// the right stream.
 	// Having "ON" expression implies no merged columns.
-	OnExpr Expression                      `protobuf:"bytes,5,opt,name=on_expr,json=onExpr" json:"on_expr"`
-	Type   cockroach_sql_sqlbase3.JoinType `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
+	OnExpr Expression       `protobuf:"bytes,5,opt,name=on_expr,json=onExpr" json:"on_expr"`
+	Type   sqlbase.JoinType `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
 	// If true, it is guaranteed that the left equality columns form a key for
 	// the left input. In other words, no two rows from the left input have the
 	// same set of values on the left equality columns.
@@ -908,13 +1330,39 @@ type HashJoinerSpec struct {
 	//
 	// This has been deprecated; the distsqlrun layer still supports it for
 	// backward compatibility during upgrade.
-	MergedColumns bool `protobuf:"varint,7,opt,name=merged_columns,json=mergedColumns" json:"merged_columns"`
+	MergedColumns        bool     `protobuf:"varint,7,opt,name=merged_columns,json=mergedColumns" json:"merged_columns"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *HashJoinerSpec) Reset()                    { *m = HashJoinerSpec{} }
-func (m *HashJoinerSpec) String() string            { return proto.CompactTextString(m) }
-func (*HashJoinerSpec) ProtoMessage()               {}
-func (*HashJoinerSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{16} }
+func (m *HashJoinerSpec) Reset()         { *m = HashJoinerSpec{} }
+func (m *HashJoinerSpec) String() string { return proto.CompactTextString(m) }
+func (*HashJoinerSpec) ProtoMessage()    {}
+func (*HashJoinerSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{16}
+}
+func (m *HashJoinerSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HashJoinerSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *HashJoinerSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HashJoinerSpec.Merge(dst, src)
+}
+func (m *HashJoinerSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *HashJoinerSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_HashJoinerSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HashJoinerSpec proto.InternalMessageInfo
 
 // AggregatorSpec is the specification for an "aggregator" (processor core
 // type, not the logical plan computation stage). An aggregator performs
@@ -930,13 +1378,39 @@ type AggregatorSpec struct {
 	GroupCols    []uint32                     `protobuf:"varint,2,rep,packed,name=group_cols,json=groupCols" json:"group_cols,omitempty"`
 	Aggregations []AggregatorSpec_Aggregation `protobuf:"bytes,3,rep,name=aggregations" json:"aggregations"`
 	// A subset of the GROUP BY columns which are ordered in the input.
-	OrderedGroupCols []uint32 `protobuf:"varint,4,rep,packed,name=ordered_group_cols,json=orderedGroupCols" json:"ordered_group_cols,omitempty"`
+	OrderedGroupCols     []uint32 `protobuf:"varint,4,rep,packed,name=ordered_group_cols,json=orderedGroupCols" json:"ordered_group_cols,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *AggregatorSpec) Reset()                    { *m = AggregatorSpec{} }
-func (m *AggregatorSpec) String() string            { return proto.CompactTextString(m) }
-func (*AggregatorSpec) ProtoMessage()               {}
-func (*AggregatorSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{17} }
+func (m *AggregatorSpec) Reset()         { *m = AggregatorSpec{} }
+func (m *AggregatorSpec) String() string { return proto.CompactTextString(m) }
+func (*AggregatorSpec) ProtoMessage()    {}
+func (*AggregatorSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{17}
+}
+func (m *AggregatorSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AggregatorSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AggregatorSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AggregatorSpec.Merge(dst, src)
+}
+func (m *AggregatorSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *AggregatorSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_AggregatorSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AggregatorSpec proto.InternalMessageInfo
 
 type AggregatorSpec_Aggregation struct {
 	Func AggregatorSpec_Func `protobuf:"varint,1,opt,name=func,enum=cockroach.sql.distsqlpb.AggregatorSpec_Func" json:"func"`
@@ -957,15 +1431,39 @@ type AggregatorSpec_Aggregation struct {
 	//   SELECT SUM(x) FILTER (WHERE y > 1), SUM(x) FILTER (WHERE y < 1) FROM t
 	FilterColIdx *uint32 `protobuf:"varint,4,opt,name=filter_col_idx,json=filterColIdx" json:"filter_col_idx,omitempty"`
 	// Arguments are const expressions passed to aggregation functions.
-	Arguments []Expression `protobuf:"bytes,6,rep,name=arguments" json:"arguments"`
+	Arguments            []Expression `protobuf:"bytes,6,rep,name=arguments" json:"arguments"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
 }
 
 func (m *AggregatorSpec_Aggregation) Reset()         { *m = AggregatorSpec_Aggregation{} }
 func (m *AggregatorSpec_Aggregation) String() string { return proto.CompactTextString(m) }
 func (*AggregatorSpec_Aggregation) ProtoMessage()    {}
 func (*AggregatorSpec_Aggregation) Descriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{17, 0}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{17, 0}
 }
+func (m *AggregatorSpec_Aggregation) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AggregatorSpec_Aggregation) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AggregatorSpec_Aggregation) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AggregatorSpec_Aggregation.Merge(dst, src)
+}
+func (m *AggregatorSpec_Aggregation) XXX_Size() int {
+	return m.Size()
+}
+func (m *AggregatorSpec_Aggregation) XXX_DiscardUnknown() {
+	xxx_messageInfo_AggregatorSpec_Aggregation.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AggregatorSpec_Aggregation proto.InternalMessageInfo
 
 // BackfillerSpec is the specification for a "schema change backfiller".
 // The created backfill processor runs a backfill for the first mutations in
@@ -976,8 +1474,8 @@ func (*AggregatorSpec_Aggregation) Descriptor() ([]byte, []int) {
 // descriptor in the database, and doesn't emit any rows nor support
 // any post-processing.
 type BackfillerSpec struct {
-	Type  BackfillerSpec_Type                    `protobuf:"varint,1,opt,name=type,enum=cockroach.sql.distsqlpb.BackfillerSpec_Type" json:"type"`
-	Table cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,2,opt,name=table" json:"table"`
+	Type  BackfillerSpec_Type     `protobuf:"varint,1,opt,name=type,enum=cockroach.sql.distsqlpb.BackfillerSpec_Type" json:"type"`
+	Table sqlbase.TableDescriptor `protobuf:"bytes,2,opt,name=table" json:"table"`
 	// Sections of the table to be backfilled.
 	Spans []TableReaderSpan `protobuf:"bytes,3,rep,name=spans" json:"spans"`
 	// Run the backfill for approximately this duration.
@@ -991,29 +1489,81 @@ type BackfillerSpec struct {
 	// Any other (leased) table descriptors necessary for the
 	// backfiller to do its job, such as the descriptors for tables with fk
 	// relationships to the table being modified.
-	OtherTables []cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,6,rep,name=other_tables,json=otherTables" json:"other_tables"`
+	OtherTables []sqlbase.TableDescriptor `protobuf:"bytes,6,rep,name=other_tables,json=otherTables" json:"other_tables"`
 	// The timestamp to perform index backfill historical scans at.
-	ReadAsOf cockroach_util_hlc.Timestamp `protobuf:"bytes,7,opt,name=readAsOf" json:"readAsOf"`
+	ReadAsOf             hlc.Timestamp `protobuf:"bytes,7,opt,name=readAsOf" json:"readAsOf"`
+	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
+	XXX_sizecache        int32         `json:"-"`
 }
 
-func (m *BackfillerSpec) Reset()                    { *m = BackfillerSpec{} }
-func (m *BackfillerSpec) String() string            { return proto.CompactTextString(m) }
-func (*BackfillerSpec) ProtoMessage()               {}
-func (*BackfillerSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{18} }
+func (m *BackfillerSpec) Reset()         { *m = BackfillerSpec{} }
+func (m *BackfillerSpec) String() string { return proto.CompactTextString(m) }
+func (*BackfillerSpec) ProtoMessage()    {}
+func (*BackfillerSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{18}
+}
+func (m *BackfillerSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BackfillerSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *BackfillerSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BackfillerSpec.Merge(dst, src)
+}
+func (m *BackfillerSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *BackfillerSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_BackfillerSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BackfillerSpec proto.InternalMessageInfo
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
 // computation consisting of processors and streams.
 type FlowSpec struct {
 	FlowID FlowID `protobuf:"bytes,1,opt,name=flow_id,json=flowId,customtype=FlowID" json:"flow_id"`
 	// The NodeID of the gateway that planned this Flow. Used for debugging.
-	Gateway    github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,3,opt,name=gateway,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"gateway"`
-	Processors []ProcessorSpec                                     `protobuf:"bytes,2,rep,name=processors" json:"processors"`
+	Gateway              github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,3,opt,name=gateway,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"gateway"`
+	Processors           []ProcessorSpec                                     `protobuf:"bytes,2,rep,name=processors" json:"processors"`
+	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
+	XXX_sizecache        int32                                               `json:"-"`
 }
 
-func (m *FlowSpec) Reset()                    { *m = FlowSpec{} }
-func (m *FlowSpec) String() string            { return proto.CompactTextString(m) }
-func (*FlowSpec) ProtoMessage()               {}
-func (*FlowSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{19} }
+func (m *FlowSpec) Reset()         { *m = FlowSpec{} }
+func (m *FlowSpec) String() string { return proto.CompactTextString(m) }
+func (*FlowSpec) ProtoMessage()    {}
+func (*FlowSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{19}
+}
+func (m *FlowSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *FlowSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *FlowSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_FlowSpec.Merge(dst, src)
+}
+func (m *FlowSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *FlowSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_FlowSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_FlowSpec proto.InternalMessageInfo
 
 // JobProgress identifies the job to report progress on. This reporting
 // happens outside this package.
@@ -1023,16 +1573,42 @@ type JobProgress struct {
 	// process.
 	Contribution float32 `protobuf:"fixed32,2,opt,name=contribution" json:"contribution"`
 	// slot is the index into the job details for this processor's completion.
-	Slot int32 `protobuf:"varint,3,opt,name=slot" json:"slot"`
+	Slot                 int32    `protobuf:"varint,3,opt,name=slot" json:"slot"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *JobProgress) Reset()                    { *m = JobProgress{} }
-func (m *JobProgress) String() string            { return proto.CompactTextString(m) }
-func (*JobProgress) ProtoMessage()               {}
-func (*JobProgress) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{20} }
+func (m *JobProgress) Reset()         { *m = JobProgress{} }
+func (m *JobProgress) String() string { return proto.CompactTextString(m) }
+func (*JobProgress) ProtoMessage()    {}
+func (*JobProgress) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{20}
+}
+func (m *JobProgress) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *JobProgress) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *JobProgress) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_JobProgress.Merge(dst, src)
+}
+func (m *JobProgress) XXX_Size() int {
+	return m.Size()
+}
+func (m *JobProgress) XXX_DiscardUnknown() {
+	xxx_messageInfo_JobProgress.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_JobProgress proto.InternalMessageInfo
 
 type ReadImportDataSpec struct {
-	Format cockroach_roachpb4.IOFileFormat `protobuf:"bytes,8,opt,name=format" json:"format"`
+	Format roachpb.IOFileFormat `protobuf:"bytes,8,opt,name=format" json:"format"`
 	// sample_size is the rate at which to output rows, based on an input row's size.
 	SampleSize int32 `protobuf:"varint,2,opt,name=sample_size,json=sampleSize" json:"sample_size"`
 	// tables is an alternative to table_desc for input formats that can read
@@ -1046,18 +1622,44 @@ type ReadImportDataSpec struct {
 	// TableDescriptor with the corresponding descriptor ID key. If tables is
 	// empty (and table_desc above is not specified), the processor should read
 	// all tables in the input, determining their schemas on the fly.
-	Tables map[string]*cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,9,rep,name=tables" json:"tables,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Tables map[string]*sqlbase.TableDescriptor `protobuf:"bytes,9,rep,name=tables" json:"tables,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// uri is a storageccl.ExportStorage URI pointing to the CSV files to be
 	// read. The map key must be unique across the entire IMPORT job.
 	Uri                    map[int32]string `protobuf:"bytes,7,rep,name=uri" json:"uri,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Progress               JobProgress      `protobuf:"bytes,6,opt,name=progress" json:"progress"`
 	SkipMissingForeignKeys bool             `protobuf:"varint,10,opt,name=skip_missing_foreign_keys,json=skipMissingForeignKeys" json:"skip_missing_foreign_keys"`
+	XXX_NoUnkeyedLiteral   struct{}         `json:"-"`
+	XXX_sizecache          int32            `json:"-"`
 }
 
-func (m *ReadImportDataSpec) Reset()                    { *m = ReadImportDataSpec{} }
-func (m *ReadImportDataSpec) String() string            { return proto.CompactTextString(m) }
-func (*ReadImportDataSpec) ProtoMessage()               {}
-func (*ReadImportDataSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{21} }
+func (m *ReadImportDataSpec) Reset()         { *m = ReadImportDataSpec{} }
+func (m *ReadImportDataSpec) String() string { return proto.CompactTextString(m) }
+func (*ReadImportDataSpec) ProtoMessage()    {}
+func (*ReadImportDataSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{21}
+}
+func (m *ReadImportDataSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReadImportDataSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ReadImportDataSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReadImportDataSpec.Merge(dst, src)
+}
+func (m *ReadImportDataSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReadImportDataSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReadImportDataSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReadImportDataSpec proto.InternalMessageInfo
 
 // SSTWriterSpec is the specification for a processor that consumes rows, uses
 // tempStorage to sort them, then writes them to SST files at uri. walltime is
@@ -1071,28 +1673,78 @@ type SSTWriterSpec struct {
 	// walltimeNanos is the MVCC time at which the created KVs will be written.
 	WalltimeNanos int64 `protobuf:"varint,3,opt,name=walltimeNanos" json:"walltimeNanos"`
 	// spans is an array of span boundaries and corresponding filenames.
-	Spans    []SSTWriterSpec_SpanName `protobuf:"bytes,4,rep,name=spans" json:"spans"`
-	Progress JobProgress              `protobuf:"bytes,5,opt,name=progress" json:"progress"`
+	Spans                []SSTWriterSpec_SpanName `protobuf:"bytes,4,rep,name=spans" json:"spans"`
+	Progress             JobProgress              `protobuf:"bytes,5,opt,name=progress" json:"progress"`
+	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
+	XXX_sizecache        int32                    `json:"-"`
 }
 
-func (m *SSTWriterSpec) Reset()                    { *m = SSTWriterSpec{} }
-func (m *SSTWriterSpec) String() string            { return proto.CompactTextString(m) }
-func (*SSTWriterSpec) ProtoMessage()               {}
-func (*SSTWriterSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{22} }
+func (m *SSTWriterSpec) Reset()         { *m = SSTWriterSpec{} }
+func (m *SSTWriterSpec) String() string { return proto.CompactTextString(m) }
+func (*SSTWriterSpec) ProtoMessage()    {}
+func (*SSTWriterSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{22}
+}
+func (m *SSTWriterSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SSTWriterSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SSTWriterSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SSTWriterSpec.Merge(dst, src)
+}
+func (m *SSTWriterSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *SSTWriterSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_SSTWriterSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SSTWriterSpec proto.InternalMessageInfo
 
 type SSTWriterSpec_SpanName struct {
 	// name is the file name that will be written by the export store.
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// end is the end key of a span.
-	End []byte `protobuf:"bytes,2,opt,name=end" json:"end,omitempty"`
+	End                  []byte   `protobuf:"bytes,2,opt,name=end" json:"end,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *SSTWriterSpec_SpanName) Reset()         { *m = SSTWriterSpec_SpanName{} }
 func (m *SSTWriterSpec_SpanName) String() string { return proto.CompactTextString(m) }
 func (*SSTWriterSpec_SpanName) ProtoMessage()    {}
 func (*SSTWriterSpec_SpanName) Descriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{22, 0}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{22, 0}
 }
+func (m *SSTWriterSpec_SpanName) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SSTWriterSpec_SpanName) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SSTWriterSpec_SpanName) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SSTWriterSpec_SpanName.Merge(dst, src)
+}
+func (m *SSTWriterSpec_SpanName) XXX_Size() int {
+	return m.Size()
+}
+func (m *SSTWriterSpec_SpanName) XXX_DiscardUnknown() {
+	xxx_messageInfo_SSTWriterSpec_SpanName.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SSTWriterSpec_SpanName proto.InternalMessageInfo
 
 // CSVWriterSpec is the specification for a processor that consumes rows and
 // writes them to CSV files at uri. It outputs a row per file written with
@@ -1100,17 +1752,43 @@ func (*SSTWriterSpec_SpanName) Descriptor() ([]byte, []int) {
 type CSVWriterSpec struct {
 	// destination as a storageccl.ExportStorage URI pointing to an export store
 	// location (directory).
-	Destination string                        `protobuf:"bytes,1,opt,name=destination" json:"destination"`
-	NamePattern string                        `protobuf:"bytes,2,opt,name=name_pattern,json=namePattern" json:"name_pattern"`
-	Options     cockroach_roachpb4.CSVOptions `protobuf:"bytes,3,opt,name=options" json:"options"`
+	Destination string             `protobuf:"bytes,1,opt,name=destination" json:"destination"`
+	NamePattern string             `protobuf:"bytes,2,opt,name=name_pattern,json=namePattern" json:"name_pattern"`
+	Options     roachpb.CSVOptions `protobuf:"bytes,3,opt,name=options" json:"options"`
 	// chunk_rows is num rows to write per file. 0 = no limit.
-	ChunkRows int64 `protobuf:"varint,4,opt,name=chunk_rows,json=chunkRows" json:"chunk_rows"`
+	ChunkRows            int64    `protobuf:"varint,4,opt,name=chunk_rows,json=chunkRows" json:"chunk_rows"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *CSVWriterSpec) Reset()                    { *m = CSVWriterSpec{} }
-func (m *CSVWriterSpec) String() string            { return proto.CompactTextString(m) }
-func (*CSVWriterSpec) ProtoMessage()               {}
-func (*CSVWriterSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{23} }
+func (m *CSVWriterSpec) Reset()         { *m = CSVWriterSpec{} }
+func (m *CSVWriterSpec) String() string { return proto.CompactTextString(m) }
+func (*CSVWriterSpec) ProtoMessage()    {}
+func (*CSVWriterSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{23}
+}
+func (m *CSVWriterSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CSVWriterSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CSVWriterSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CSVWriterSpec.Merge(dst, src)
+}
+func (m *CSVWriterSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *CSVWriterSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_CSVWriterSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CSVWriterSpec proto.InternalMessageInfo
 
 // SketchSpec contains the specification for a generated statistic.
 type SketchSpec struct {
@@ -1125,13 +1803,39 @@ type SketchSpec struct {
 	// Only used by the SampleAggregator.
 	HistogramMaxBuckets uint32 `protobuf:"varint,4,opt,name=histogram_max_buckets,json=histogramMaxBuckets" json:"histogram_max_buckets"`
 	// Only used by the SampleAggregator.
-	StatName string `protobuf:"bytes,5,opt,name=stat_name,json=statName" json:"stat_name"`
+	StatName             string   `protobuf:"bytes,5,opt,name=stat_name,json=statName" json:"stat_name"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *SketchSpec) Reset()                    { *m = SketchSpec{} }
-func (m *SketchSpec) String() string            { return proto.CompactTextString(m) }
-func (*SketchSpec) ProtoMessage()               {}
-func (*SketchSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{24} }
+func (m *SketchSpec) Reset()         { *m = SketchSpec{} }
+func (m *SketchSpec) String() string { return proto.CompactTextString(m) }
+func (*SketchSpec) ProtoMessage()    {}
+func (*SketchSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{24}
+}
+func (m *SketchSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SketchSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SketchSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SketchSpec.Merge(dst, src)
+}
+func (m *SketchSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *SketchSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_SketchSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SketchSpec proto.InternalMessageInfo
 
 // SamplerSpec is the specification of a "sampler" processor which
 // returns a sample (random subset) of the input columns and computes
@@ -1165,14 +1869,40 @@ func (*SketchSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessor
 // Rows have NULLs on either all the sampled row columns or on all the
 // sketch columns.
 type SamplerSpec struct {
-	Sketches   []SketchSpec `protobuf:"bytes,1,rep,name=sketches" json:"sketches"`
-	SampleSize uint32       `protobuf:"varint,2,opt,name=sample_size,json=sampleSize" json:"sample_size"`
+	Sketches             []SketchSpec `protobuf:"bytes,1,rep,name=sketches" json:"sketches"`
+	SampleSize           uint32       `protobuf:"varint,2,opt,name=sample_size,json=sampleSize" json:"sample_size"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
 }
 
-func (m *SamplerSpec) Reset()                    { *m = SamplerSpec{} }
-func (m *SamplerSpec) String() string            { return proto.CompactTextString(m) }
-func (*SamplerSpec) ProtoMessage()               {}
-func (*SamplerSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{25} }
+func (m *SamplerSpec) Reset()         { *m = SamplerSpec{} }
+func (m *SamplerSpec) String() string { return proto.CompactTextString(m) }
+func (*SamplerSpec) ProtoMessage()    {}
+func (*SamplerSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{25}
+}
+func (m *SamplerSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SamplerSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SamplerSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SamplerSpec.Merge(dst, src)
+}
+func (m *SamplerSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *SamplerSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_SamplerSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SamplerSpec proto.InternalMessageInfo
 
 // SampleAggregatorSpec is the specification of a processor that aggregates the
 // results from multiple sampler processors and writes out the statistics to
@@ -1196,14 +1926,40 @@ type SampleAggregatorSpec struct {
 	SampleSize uint32 `protobuf:"varint,2,opt,name=sample_size,json=sampleSize" json:"sample_size"`
 	// The i-th value indicates the ColumnID of the i-th sampled row column.
 	// These are necessary for writing out the statistic data.
-	SampledColumnIDs []github_com_cockroachdb_cockroach_pkg_sql_sqlbase.ColumnID `protobuf:"varint,3,rep,name=sampled_column_ids,json=sampledColumnIds,casttype=github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID" json:"sampled_column_ids,omitempty"`
-	TableID          github_com_cockroachdb_cockroach_pkg_sql_sqlbase.ID         `protobuf:"varint,4,opt,name=table_id,json=tableId,casttype=github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID" json:"table_id"`
+	SampledColumnIDs     []github_com_cockroachdb_cockroach_pkg_sql_sqlbase.ColumnID `protobuf:"varint,3,rep,name=sampled_column_ids,json=sampledColumnIds,casttype=github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID" json:"sampled_column_ids,omitempty"`
+	TableID              github_com_cockroachdb_cockroach_pkg_sql_sqlbase.ID         `protobuf:"varint,4,opt,name=table_id,json=tableId,casttype=github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID" json:"table_id"`
+	XXX_NoUnkeyedLiteral struct{}                                                    `json:"-"`
+	XXX_sizecache        int32                                                       `json:"-"`
 }
 
-func (m *SampleAggregatorSpec) Reset()                    { *m = SampleAggregatorSpec{} }
-func (m *SampleAggregatorSpec) String() string            { return proto.CompactTextString(m) }
-func (*SampleAggregatorSpec) ProtoMessage()               {}
-func (*SampleAggregatorSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{26} }
+func (m *SampleAggregatorSpec) Reset()         { *m = SampleAggregatorSpec{} }
+func (m *SampleAggregatorSpec) String() string { return proto.CompactTextString(m) }
+func (*SampleAggregatorSpec) ProtoMessage()    {}
+func (*SampleAggregatorSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{26}
+}
+func (m *SampleAggregatorSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SampleAggregatorSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SampleAggregatorSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SampleAggregatorSpec.Merge(dst, src)
+}
+func (m *SampleAggregatorSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *SampleAggregatorSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_SampleAggregatorSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SampleAggregatorSpec proto.InternalMessageInfo
 
 // InterleavedReaderJoinerSpec is the specification for a processor that performs
 // KV operations to retrieve rows from 2+ tables from an interleaved hierarchy,
@@ -1235,19 +1991,43 @@ type InterleavedReaderJoinerSpec struct {
 	// table stream has M columns, in this expression ordinal references @1 to @N
 	// refer to columns of the left table and variables @(N+1) to @(N+M) refer to
 	// columns in the right table.
-	OnExpr Expression                      `protobuf:"bytes,4,opt,name=on_expr,json=onExpr" json:"on_expr"`
-	Type   cockroach_sql_sqlbase3.JoinType `protobuf:"varint,5,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
+	OnExpr               Expression       `protobuf:"bytes,4,opt,name=on_expr,json=onExpr" json:"on_expr"`
+	Type                 sqlbase.JoinType `protobuf:"varint,5,opt,name=type,enum=cockroach.sql.sqlbase.JoinType" json:"type"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
 }
 
 func (m *InterleavedReaderJoinerSpec) Reset()         { *m = InterleavedReaderJoinerSpec{} }
 func (m *InterleavedReaderJoinerSpec) String() string { return proto.CompactTextString(m) }
 func (*InterleavedReaderJoinerSpec) ProtoMessage()    {}
 func (*InterleavedReaderJoinerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{27}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{27}
+}
+func (m *InterleavedReaderJoinerSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *InterleavedReaderJoinerSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *InterleavedReaderJoinerSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InterleavedReaderJoinerSpec.Merge(dst, src)
+}
+func (m *InterleavedReaderJoinerSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *InterleavedReaderJoinerSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_InterleavedReaderJoinerSpec.DiscardUnknown(m)
 }
 
+var xxx_messageInfo_InterleavedReaderJoinerSpec proto.InternalMessageInfo
+
 type InterleavedReaderJoinerSpec_Table struct {
-	Desc cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
+	Desc sqlbase.TableDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
 	// If 0, we use the primary index. If non-zero, we use the index_idx-th index,
 	// i.e. desc.indexes[index_idx-1]
 	IndexIdx uint32 `protobuf:"varint,2,opt,name=index_idx,json=indexIdx" json:"index_idx"`
@@ -1270,15 +2050,39 @@ type InterleavedReaderJoinerSpec_Table struct {
 	// all tables to do a single pass-through scan. InterleavedReaderJoiner will
 	// then check if a given row for a table is within any of its spans.
 	// There must exist at least one non-empty set of spans for some table.
-	Spans []TableReaderSpan `protobuf:"bytes,5,rep,name=spans" json:"spans"`
+	Spans                []TableReaderSpan `protobuf:"bytes,5,rep,name=spans" json:"spans"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
 func (m *InterleavedReaderJoinerSpec_Table) Reset()         { *m = InterleavedReaderJoinerSpec_Table{} }
 func (m *InterleavedReaderJoinerSpec_Table) String() string { return proto.CompactTextString(m) }
 func (*InterleavedReaderJoinerSpec_Table) ProtoMessage()    {}
 func (*InterleavedReaderJoinerSpec_Table) Descriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{27, 0}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{27, 0}
 }
+func (m *InterleavedReaderJoinerSpec_Table) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *InterleavedReaderJoinerSpec_Table) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *InterleavedReaderJoinerSpec_Table) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InterleavedReaderJoinerSpec_Table.Merge(dst, src)
+}
+func (m *InterleavedReaderJoinerSpec_Table) XXX_Size() int {
+	return m.Size()
+}
+func (m *InterleavedReaderJoinerSpec_Table) XXX_DiscardUnknown() {
+	xxx_messageInfo_InterleavedReaderJoinerSpec_Table.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_InterleavedReaderJoinerSpec_Table proto.InternalMessageInfo
 
 // ProjectSetSpec is the specification of a processor which applies a set of
 // expressions, which may be set-returning functions, to its input.
@@ -1286,15 +2090,41 @@ type ProjectSetSpec struct {
 	// Expressions to be applied
 	Exprs []Expression `protobuf:"bytes,1,rep,name=exprs" json:"exprs"`
 	// Column types for the generated values
-	GeneratedColumns []cockroach_sql_sqlbase1.ColumnType `protobuf:"bytes,2,rep,name=generated_columns,json=generatedColumns" json:"generated_columns"`
+	GeneratedColumns []sqlbase.ColumnType `protobuf:"bytes,2,rep,name=generated_columns,json=generatedColumns" json:"generated_columns"`
 	// The number of columns each expression returns. Same length as exprs.
-	NumColsPerGen []uint32 `protobuf:"varint,3,rep,name=num_cols_per_gen,json=numColsPerGen" json:"num_cols_per_gen,omitempty"`
+	NumColsPerGen        []uint32 `protobuf:"varint,3,rep,name=num_cols_per_gen,json=numColsPerGen" json:"num_cols_per_gen,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ProjectSetSpec) Reset()                    { *m = ProjectSetSpec{} }
-func (m *ProjectSetSpec) String() string            { return proto.CompactTextString(m) }
-func (*ProjectSetSpec) ProtoMessage()               {}
-func (*ProjectSetSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{28} }
+func (m *ProjectSetSpec) Reset()         { *m = ProjectSetSpec{} }
+func (m *ProjectSetSpec) String() string { return proto.CompactTextString(m) }
+func (*ProjectSetSpec) ProtoMessage()    {}
+func (*ProjectSetSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{28}
+}
+func (m *ProjectSetSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProjectSetSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ProjectSetSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProjectSetSpec.Merge(dst, src)
+}
+func (m *ProjectSetSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProjectSetSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProjectSetSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProjectSetSpec proto.InternalMessageInfo
 
 // WindowerSpec is the specification of a processor that performs computations
 // of window functions that have the same PARTITION BY clause. For a particular
@@ -1306,36 +2136,114 @@ type WindowerSpec struct {
 	// PartitionBy specifies how to partition rows for all window functions.
 	PartitionBy []uint32 `protobuf:"varint,1,rep,name=partitionBy" json:"partitionBy,omitempty"`
 	// WindowFns is the specification of all window functions to be computed.
-	WindowFns []WindowerSpec_WindowFn `protobuf:"bytes,2,rep,name=windowFns" json:"windowFns"`
+	WindowFns            []WindowerSpec_WindowFn `protobuf:"bytes,2,rep,name=windowFns" json:"windowFns"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
 }
 
-func (m *WindowerSpec) Reset()                    { *m = WindowerSpec{} }
-func (m *WindowerSpec) String() string            { return proto.CompactTextString(m) }
-func (*WindowerSpec) ProtoMessage()               {}
-func (*WindowerSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{29} }
+func (m *WindowerSpec) Reset()         { *m = WindowerSpec{} }
+func (m *WindowerSpec) String() string { return proto.CompactTextString(m) }
+func (*WindowerSpec) ProtoMessage()    {}
+func (*WindowerSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{29}
+}
+func (m *WindowerSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *WindowerSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *WindowerSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WindowerSpec.Merge(dst, src)
+}
+func (m *WindowerSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *WindowerSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_WindowerSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_WindowerSpec proto.InternalMessageInfo
 
 // Func specifies which function to compute. It can either be built-in
 // aggregate or built-in window function.
 type WindowerSpec_Func struct {
-	AggregateFunc *AggregatorSpec_Func     `protobuf:"varint,1,opt,name=aggregateFunc,enum=cockroach.sql.distsqlpb.AggregatorSpec_Func" json:"aggregateFunc,omitempty"`
-	WindowFunc    *WindowerSpec_WindowFunc `protobuf:"varint,2,opt,name=windowFunc,enum=cockroach.sql.distsqlpb.WindowerSpec_WindowFunc" json:"windowFunc,omitempty"`
+	AggregateFunc        *AggregatorSpec_Func     `protobuf:"varint,1,opt,name=aggregateFunc,enum=cockroach.sql.distsqlpb.AggregatorSpec_Func" json:"aggregateFunc,omitempty"`
+	WindowFunc           *WindowerSpec_WindowFunc `protobuf:"varint,2,opt,name=windowFunc,enum=cockroach.sql.distsqlpb.WindowerSpec_WindowFunc" json:"windowFunc,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
+	XXX_sizecache        int32                    `json:"-"`
 }
 
-func (m *WindowerSpec_Func) Reset()                    { *m = WindowerSpec_Func{} }
-func (m *WindowerSpec_Func) String() string            { return proto.CompactTextString(m) }
-func (*WindowerSpec_Func) ProtoMessage()               {}
-func (*WindowerSpec_Func) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{29, 0} }
+func (m *WindowerSpec_Func) Reset()         { *m = WindowerSpec_Func{} }
+func (m *WindowerSpec_Func) String() string { return proto.CompactTextString(m) }
+func (*WindowerSpec_Func) ProtoMessage()    {}
+func (*WindowerSpec_Func) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{29, 0}
+}
+func (m *WindowerSpec_Func) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *WindowerSpec_Func) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *WindowerSpec_Func) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WindowerSpec_Func.Merge(dst, src)
+}
+func (m *WindowerSpec_Func) XXX_Size() int {
+	return m.Size()
+}
+func (m *WindowerSpec_Func) XXX_DiscardUnknown() {
+	xxx_messageInfo_WindowerSpec_Func.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_WindowerSpec_Func proto.InternalMessageInfo
 
 // Frame is the specification of a single window frame for a window function.
 type WindowerSpec_Frame struct {
-	Mode   WindowerSpec_Frame_Mode   `protobuf:"varint,1,opt,name=mode,enum=cockroach.sql.distsqlpb.WindowerSpec_Frame_Mode" json:"mode"`
-	Bounds WindowerSpec_Frame_Bounds `protobuf:"bytes,2,opt,name=bounds" json:"bounds"`
+	Mode                 WindowerSpec_Frame_Mode   `protobuf:"varint,1,opt,name=mode,enum=cockroach.sql.distsqlpb.WindowerSpec_Frame_Mode" json:"mode"`
+	Bounds               WindowerSpec_Frame_Bounds `protobuf:"bytes,2,opt,name=bounds" json:"bounds"`
+	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
+	XXX_sizecache        int32                     `json:"-"`
 }
 
-func (m *WindowerSpec_Frame) Reset()                    { *m = WindowerSpec_Frame{} }
-func (m *WindowerSpec_Frame) String() string            { return proto.CompactTextString(m) }
-func (*WindowerSpec_Frame) ProtoMessage()               {}
-func (*WindowerSpec_Frame) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{29, 1} }
+func (m *WindowerSpec_Frame) Reset()         { *m = WindowerSpec_Frame{} }
+func (m *WindowerSpec_Frame) String() string { return proto.CompactTextString(m) }
+func (*WindowerSpec_Frame) ProtoMessage()    {}
+func (*WindowerSpec_Frame) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{29, 1}
+}
+func (m *WindowerSpec_Frame) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *WindowerSpec_Frame) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *WindowerSpec_Frame) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WindowerSpec_Frame.Merge(dst, src)
+}
+func (m *WindowerSpec_Frame) XXX_Size() int {
+	return m.Size()
+}
+func (m *WindowerSpec_Frame) XXX_DiscardUnknown() {
+	xxx_messageInfo_WindowerSpec_Frame.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_WindowerSpec_Frame proto.InternalMessageInfo
 
 // Bound specifies the type of boundary and the offset (if present).
 type WindowerSpec_Frame_Bound struct {
@@ -1343,31 +2251,79 @@ type WindowerSpec_Frame_Bound struct {
 	// For UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING, and CURRENT_ROW offset
 	// is ignored. Integer offset for ROWS mode is stored in int_offset while
 	// an encoded datum and the type information are stored for RANGE mode.
-	IntOffset   uint32    `protobuf:"varint,2,opt,name=int_offset,json=intOffset" json:"int_offset"`
-	TypedOffset []byte    `protobuf:"bytes,3,opt,name=typed_offset,json=typedOffset" json:"typed_offset,omitempty"`
-	OffsetType  DatumInfo `protobuf:"bytes,4,opt,name=offset_type,json=offsetType" json:"offset_type"`
+	IntOffset            uint32    `protobuf:"varint,2,opt,name=int_offset,json=intOffset" json:"int_offset"`
+	TypedOffset          []byte    `protobuf:"bytes,3,opt,name=typed_offset,json=typedOffset" json:"typed_offset,omitempty"`
+	OffsetType           DatumInfo `protobuf:"bytes,4,opt,name=offset_type,json=offsetType" json:"offset_type"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
 }
 
 func (m *WindowerSpec_Frame_Bound) Reset()         { *m = WindowerSpec_Frame_Bound{} }
 func (m *WindowerSpec_Frame_Bound) String() string { return proto.CompactTextString(m) }
 func (*WindowerSpec_Frame_Bound) ProtoMessage()    {}
 func (*WindowerSpec_Frame_Bound) Descriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{29, 1, 0}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{29, 1, 0}
 }
+func (m *WindowerSpec_Frame_Bound) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *WindowerSpec_Frame_Bound) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *WindowerSpec_Frame_Bound) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WindowerSpec_Frame_Bound.Merge(dst, src)
+}
+func (m *WindowerSpec_Frame_Bound) XXX_Size() int {
+	return m.Size()
+}
+func (m *WindowerSpec_Frame_Bound) XXX_DiscardUnknown() {
+	xxx_messageInfo_WindowerSpec_Frame_Bound.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_WindowerSpec_Frame_Bound proto.InternalMessageInfo
 
 // Bounds specifies boundaries of the window frame.
 type WindowerSpec_Frame_Bounds struct {
 	// Start bound must always be present whereas end bound might be omitted.
-	Start WindowerSpec_Frame_Bound  `protobuf:"bytes,1,opt,name=start" json:"start"`
-	End   *WindowerSpec_Frame_Bound `protobuf:"bytes,2,opt,name=end" json:"end,omitempty"`
+	Start                WindowerSpec_Frame_Bound  `protobuf:"bytes,1,opt,name=start" json:"start"`
+	End                  *WindowerSpec_Frame_Bound `protobuf:"bytes,2,opt,name=end" json:"end,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
+	XXX_sizecache        int32                     `json:"-"`
 }
 
 func (m *WindowerSpec_Frame_Bounds) Reset()         { *m = WindowerSpec_Frame_Bounds{} }
 func (m *WindowerSpec_Frame_Bounds) String() string { return proto.CompactTextString(m) }
 func (*WindowerSpec_Frame_Bounds) ProtoMessage()    {}
 func (*WindowerSpec_Frame_Bounds) Descriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{29, 1, 1}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{29, 1, 1}
 }
+func (m *WindowerSpec_Frame_Bounds) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *WindowerSpec_Frame_Bounds) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *WindowerSpec_Frame_Bounds) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WindowerSpec_Frame_Bounds.Merge(dst, src)
+}
+func (m *WindowerSpec_Frame_Bounds) XXX_Size() int {
+	return m.Size()
+}
+func (m *WindowerSpec_Frame_Bounds) XXX_DiscardUnknown() {
+	xxx_messageInfo_WindowerSpec_Frame_Bounds.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_WindowerSpec_Frame_Bounds proto.InternalMessageInfo
 
 // WindowFn is the specification of a single window function.
 type WindowerSpec_WindowFn struct {
@@ -1385,40 +2341,114 @@ type WindowerSpec_WindowFn struct {
 	Frame *WindowerSpec_Frame `protobuf:"bytes,5,opt,name=frame" json:"frame,omitempty"`
 	// Optional index of a column over which filtering of rows will be done.
 	// Special value -1 indicates that filter is not present.
-	FilterColIdx int32 `protobuf:"varint,6,opt,name=filterColIdx" json:"filterColIdx"`
+	FilterColIdx         int32    `protobuf:"varint,6,opt,name=filterColIdx" json:"filterColIdx"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *WindowerSpec_WindowFn) Reset()         { *m = WindowerSpec_WindowFn{} }
 func (m *WindowerSpec_WindowFn) String() string { return proto.CompactTextString(m) }
 func (*WindowerSpec_WindowFn) ProtoMessage()    {}
 func (*WindowerSpec_WindowFn) Descriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{29, 2}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{29, 2}
 }
+func (m *WindowerSpec_WindowFn) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *WindowerSpec_WindowFn) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *WindowerSpec_WindowFn) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WindowerSpec_WindowFn.Merge(dst, src)
+}
+func (m *WindowerSpec_WindowFn) XXX_Size() int {
+	return m.Size()
+}
+func (m *WindowerSpec_WindowFn) XXX_DiscardUnknown() {
+	xxx_messageInfo_WindowerSpec_WindowFn.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_WindowerSpec_WindowFn proto.InternalMessageInfo
 
 // ChangeAggregatorSpec is the specification for a processor that watches for
 // changes in a set of spans. Each span may cross multiple ranges.
 type ChangeAggregatorSpec struct {
 	Watches []ChangeAggregatorSpec_Watch `protobuf:"bytes,1,rep,name=watches" json:"watches"`
 	// Feed is the specification for this changefeed.
-	Feed cockroach_sql_jobs_jobspb.ChangefeedDetails `protobuf:"bytes,2,opt,name=feed" json:"feed"`
+	Feed                 jobspb.ChangefeedDetails `protobuf:"bytes,2,opt,name=feed" json:"feed"`
+	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
+	XXX_sizecache        int32                    `json:"-"`
 }
 
-func (m *ChangeAggregatorSpec) Reset()                    { *m = ChangeAggregatorSpec{} }
-func (m *ChangeAggregatorSpec) String() string            { return proto.CompactTextString(m) }
-func (*ChangeAggregatorSpec) ProtoMessage()               {}
-func (*ChangeAggregatorSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{30} }
+func (m *ChangeAggregatorSpec) Reset()         { *m = ChangeAggregatorSpec{} }
+func (m *ChangeAggregatorSpec) String() string { return proto.CompactTextString(m) }
+func (*ChangeAggregatorSpec) ProtoMessage()    {}
+func (*ChangeAggregatorSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{30}
+}
+func (m *ChangeAggregatorSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ChangeAggregatorSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ChangeAggregatorSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChangeAggregatorSpec.Merge(dst, src)
+}
+func (m *ChangeAggregatorSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *ChangeAggregatorSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChangeAggregatorSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChangeAggregatorSpec proto.InternalMessageInfo
 
 type ChangeAggregatorSpec_Watch struct {
-	InitialResolved cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=initial_resolved,json=initialResolved" json:"initial_resolved"`
-	Span            cockroach_roachpb1.Span      `protobuf:"bytes,2,opt,name=span" json:"span"`
+	InitialResolved      hlc.Timestamp `protobuf:"bytes,1,opt,name=initial_resolved,json=initialResolved" json:"initial_resolved"`
+	Span                 roachpb.Span  `protobuf:"bytes,2,opt,name=span" json:"span"`
+	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
+	XXX_sizecache        int32         `json:"-"`
 }
 
 func (m *ChangeAggregatorSpec_Watch) Reset()         { *m = ChangeAggregatorSpec_Watch{} }
 func (m *ChangeAggregatorSpec_Watch) String() string { return proto.CompactTextString(m) }
 func (*ChangeAggregatorSpec_Watch) ProtoMessage()    {}
 func (*ChangeAggregatorSpec_Watch) Descriptor() ([]byte, []int) {
-	return fileDescriptorProcessors, []int{30, 0}
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{30, 0}
 }
+func (m *ChangeAggregatorSpec_Watch) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ChangeAggregatorSpec_Watch) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ChangeAggregatorSpec_Watch) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChangeAggregatorSpec_Watch.Merge(dst, src)
+}
+func (m *ChangeAggregatorSpec_Watch) XXX_Size() int {
+	return m.Size()
+}
+func (m *ChangeAggregatorSpec_Watch) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChangeAggregatorSpec_Watch.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChangeAggregatorSpec_Watch proto.InternalMessageInfo
 
 // ChangeFrontierSpec is the specification for a processor that receives
 // span-level resolved timestamps, track them, and emits the changefeed-level
@@ -1427,17 +2457,43 @@ type ChangeFrontierSpec struct {
 	// TrackedSpans is the entire span set being watched. Once all these spans
 	// have been resolved at a certain timestamp, then it's safe to resolve the
 	// changefeed at that timestamp.
-	TrackedSpans []cockroach_roachpb1.Span `protobuf:"bytes,1,rep,name=tracked_spans,json=trackedSpans" json:"tracked_spans"`
+	TrackedSpans []roachpb.Span `protobuf:"bytes,1,rep,name=tracked_spans,json=trackedSpans" json:"tracked_spans"`
 	// Feed is the specification for this changefeed.
-	Feed cockroach_sql_jobs_jobspb.ChangefeedDetails `protobuf:"bytes,2,opt,name=feed" json:"feed"`
+	Feed jobspb.ChangefeedDetails `protobuf:"bytes,2,opt,name=feed" json:"feed"`
 	// JobID is the id of this changefeed in the system jobs.
-	JobID int64 `protobuf:"varint,3,opt,name=job_id,json=jobId" json:"job_id"`
+	JobID                int64    `protobuf:"varint,3,opt,name=job_id,json=jobId" json:"job_id"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ChangeFrontierSpec) Reset()                    { *m = ChangeFrontierSpec{} }
-func (m *ChangeFrontierSpec) String() string            { return proto.CompactTextString(m) }
-func (*ChangeFrontierSpec) ProtoMessage()               {}
-func (*ChangeFrontierSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{31} }
+func (m *ChangeFrontierSpec) Reset()         { *m = ChangeFrontierSpec{} }
+func (m *ChangeFrontierSpec) String() string { return proto.CompactTextString(m) }
+func (*ChangeFrontierSpec) ProtoMessage()    {}
+func (*ChangeFrontierSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_processors_bf707fc3f8e6bbc6, []int{31}
+}
+func (m *ChangeFrontierSpec) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ChangeFrontierSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ChangeFrontierSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChangeFrontierSpec.Merge(dst, src)
+}
+func (m *ChangeFrontierSpec) XXX_Size() int {
+	return m.Size()
+}
+func (m *ChangeFrontierSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChangeFrontierSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChangeFrontierSpec proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*ProcessorSpec)(nil), "cockroach.sql.distsqlpb.ProcessorSpec")
@@ -1463,6 +2519,8 @@ func init() {
 	proto.RegisterType((*FlowSpec)(nil), "cockroach.sql.distsqlpb.FlowSpec")
 	proto.RegisterType((*JobProgress)(nil), "cockroach.sql.distsqlpb.JobProgress")
 	proto.RegisterType((*ReadImportDataSpec)(nil), "cockroach.sql.distsqlpb.ReadImportDataSpec")
+	proto.RegisterMapType((map[string]*sqlbase.TableDescriptor)(nil), "cockroach.sql.distsqlpb.ReadImportDataSpec.TablesEntry")
+	proto.RegisterMapType((map[int32]string)(nil), "cockroach.sql.distsqlpb.ReadImportDataSpec.UriEntry")
 	proto.RegisterType((*SSTWriterSpec)(nil), "cockroach.sql.distsqlpb.SSTWriterSpec")
 	proto.RegisterType((*SSTWriterSpec_SpanName)(nil), "cockroach.sql.distsqlpb.SSTWriterSpec.SpanName")
 	proto.RegisterType((*CSVWriterSpec)(nil), "cockroach.sql.distsqlpb.CSVWriterSpec")
@@ -2777,7 +3835,7 @@ func (m *JobProgress) MarshalTo(dAtA []byte) (int, error) {
 	i = encodeVarintProcessors(dAtA, i, uint64(m.JobID))
 	dAtA[i] = 0x15
 	i++
-	binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.Contribution))))
+	encoding_binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.Contribution))))
 	i += 4
 	dAtA[i] = 0x18
 	i++
@@ -2816,7 +3874,7 @@ func (m *ReadImportDataSpec) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Uri {
 			keysForUri = append(keysForUri, int32(k))
 		}
-		sortkeys.Int32s(keysForUri)
+		github_com_gogo_protobuf_sortkeys.Int32s(keysForUri)
 		for _, k := range keysForUri {
 			dAtA[i] = 0x3a
 			i++
@@ -2845,7 +3903,7 @@ func (m *ReadImportDataSpec) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Tables {
 			keysForTables = append(keysForTables, string(k))
 		}
-		sortkeys.Strings(keysForTables)
+		github_com_gogo_protobuf_sortkeys.Strings(keysForTables)
 		for _, k := range keysForTables {
 			dAtA[i] = 0x4a
 			i++
@@ -3615,6 +4673,9 @@ func encodeVarintProcessors(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *ProcessorSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Input) > 0 {
@@ -3639,6 +4700,9 @@ func (m *ProcessorSpec) Size() (n int) {
 }
 
 func (m *PostProcessSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Filter.Size()
@@ -3663,6 +4727,9 @@ func (m *PostProcessSpec) Size() (n int) {
 }
 
 func (m *ProcessorCoreUnion) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Noop != nil {
@@ -3765,12 +4832,18 @@ func (m *ProcessorCoreUnion) Size() (n int) {
 }
 
 func (m *NoopCoreSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *MetadataTestSenderSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.ID)
@@ -3779,6 +4852,9 @@ func (m *MetadataTestSenderSpec) Size() (n int) {
 }
 
 func (m *MetadataTestReceiverSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.SenderIDs) > 0 {
@@ -3791,6 +4867,9 @@ func (m *MetadataTestReceiverSpec) Size() (n int) {
 }
 
 func (m *ValuesCoreSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Columns) > 0 {
@@ -3810,6 +4889,9 @@ func (m *ValuesCoreSpec) Size() (n int) {
 }
 
 func (m *TableReaderSpan) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Span.Size()
@@ -3818,6 +4900,9 @@ func (m *TableReaderSpan) Size() (n int) {
 }
 
 func (m *TableReaderSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Table.Size()
@@ -3838,6 +4923,9 @@ func (m *TableReaderSpec) Size() (n int) {
 }
 
 func (m *JoinReaderSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Table.Size()
@@ -3860,6 +4948,9 @@ func (m *JoinReaderSpec) Size() (n int) {
 }
 
 func (m *SorterSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.OutputOrdering.Size()
@@ -3869,6 +4960,9 @@ func (m *SorterSpec) Size() (n int) {
 }
 
 func (m *DistinctSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.OrderedColumns) > 0 {
@@ -3885,6 +4979,9 @@ func (m *DistinctSpec) Size() (n int) {
 }
 
 func (m *ZigzagJoinerSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Tables) > 0 {
@@ -3919,6 +5016,9 @@ func (m *ZigzagJoinerSpec) Size() (n int) {
 }
 
 func (m *LocalPlanNodeSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RowSourceIdx != nil {
@@ -3935,6 +5035,9 @@ func (m *LocalPlanNodeSpec) Size() (n int) {
 }
 
 func (m *Columns) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Columns) > 0 {
@@ -3948,6 +5051,9 @@ func (m *Columns) Size() (n int) {
 }
 
 func (m *MergeJoinerSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.LeftOrdering.Size()
@@ -3962,6 +5068,9 @@ func (m *MergeJoinerSpec) Size() (n int) {
 }
 
 func (m *HashJoinerSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.LeftEqColumns) > 0 {
@@ -3988,6 +5097,9 @@ func (m *HashJoinerSpec) Size() (n int) {
 }
 
 func (m *AggregatorSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.GroupCols) > 0 {
@@ -4015,6 +5127,9 @@ func (m *AggregatorSpec) Size() (n int) {
 }
 
 func (m *AggregatorSpec_Aggregation) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovProcessors(uint64(m.Func))
@@ -4037,6 +5152,9 @@ func (m *AggregatorSpec_Aggregation) Size() (n int) {
 }
 
 func (m *BackfillerSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovProcessors(uint64(m.Type))
@@ -4062,6 +5180,9 @@ func (m *BackfillerSpec) Size() (n int) {
 }
 
 func (m *FlowSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.FlowID.Size()
@@ -4077,6 +5198,9 @@ func (m *FlowSpec) Size() (n int) {
 }
 
 func (m *JobProgress) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovProcessors(uint64(m.JobID))
@@ -4086,6 +5210,9 @@ func (m *JobProgress) Size() (n int) {
 }
 
 func (m *ReadImportDataSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovProcessors(uint64(m.SampleSize))
@@ -4119,6 +5246,9 @@ func (m *ReadImportDataSpec) Size() (n int) {
 }
 
 func (m *SSTWriterSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Destination)
@@ -4136,6 +5266,9 @@ func (m *SSTWriterSpec) Size() (n int) {
 }
 
 func (m *SSTWriterSpec_SpanName) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -4148,6 +5281,9 @@ func (m *SSTWriterSpec_SpanName) Size() (n int) {
 }
 
 func (m *CSVWriterSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Destination)
@@ -4161,6 +5297,9 @@ func (m *CSVWriterSpec) Size() (n int) {
 }
 
 func (m *SketchSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovProcessors(uint64(m.SketchType))
@@ -4177,6 +5316,9 @@ func (m *SketchSpec) Size() (n int) {
 }
 
 func (m *SamplerSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Sketches) > 0 {
@@ -4190,6 +5332,9 @@ func (m *SamplerSpec) Size() (n int) {
 }
 
 func (m *SampleAggregatorSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Sketches) > 0 {
@@ -4209,6 +5354,9 @@ func (m *SampleAggregatorSpec) Size() (n int) {
 }
 
 func (m *InterleavedReaderJoinerSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Tables) > 0 {
@@ -4226,6 +5374,9 @@ func (m *InterleavedReaderJoinerSpec) Size() (n int) {
 }
 
 func (m *InterleavedReaderJoinerSpec_Table) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Desc.Size()
@@ -4245,6 +5396,9 @@ func (m *InterleavedReaderJoinerSpec_Table) Size() (n int) {
 }
 
 func (m *ProjectSetSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Exprs) > 0 {
@@ -4268,6 +5422,9 @@ func (m *ProjectSetSpec) Size() (n int) {
 }
 
 func (m *WindowerSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.PartitionBy) > 0 {
@@ -4285,6 +5442,9 @@ func (m *WindowerSpec) Size() (n int) {
 }
 
 func (m *WindowerSpec_Func) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.AggregateFunc != nil {
@@ -4297,6 +5457,9 @@ func (m *WindowerSpec_Func) Size() (n int) {
 }
 
 func (m *WindowerSpec_Frame) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovProcessors(uint64(m.Mode))
@@ -4306,6 +5469,9 @@ func (m *WindowerSpec_Frame) Size() (n int) {
 }
 
 func (m *WindowerSpec_Frame_Bound) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovProcessors(uint64(m.BoundType))
@@ -4320,6 +5486,9 @@ func (m *WindowerSpec_Frame_Bound) Size() (n int) {
 }
 
 func (m *WindowerSpec_Frame_Bounds) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Start.Size()
@@ -4332,6 +5501,9 @@ func (m *WindowerSpec_Frame_Bounds) Size() (n int) {
 }
 
 func (m *WindowerSpec_WindowFn) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Func.Size()
@@ -4349,6 +5521,9 @@ func (m *WindowerSpec_WindowFn) Size() (n int) {
 }
 
 func (m *ChangeAggregatorSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Watches) > 0 {
@@ -4363,6 +5538,9 @@ func (m *ChangeAggregatorSpec) Size() (n int) {
 }
 
 func (m *ChangeAggregatorSpec_Watch) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.InitialResolved.Size()
@@ -4373,6 +5551,9 @@ func (m *ChangeAggregatorSpec_Watch) Size() (n int) {
 }
 
 func (m *ChangeFrontierSpec) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.TrackedSpans) > 0 {
@@ -4881,6 +6062,17 @@ func (m *PostProcessSpec) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.OutputColumns) == 0 {
+					m.OutputColumns = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -6598,6 +7790,17 @@ func (m *JoinReaderSpec) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.LookupColumns) == 0 {
+					m.LookupColumns = make([]uint32, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint32
 					for shift := uint(0); ; shift += 7 {
@@ -6693,7 +7896,7 @@ func (m *JoinReaderSpec) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= (cockroach_sql_sqlbase3.JoinType(b) & 0x7F) << shift
+				m.Type |= (sqlbase.JoinType(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -6907,6 +8110,17 @@ func (m *DistinctSpec) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.OrderedColumns) == 0 {
+					m.OrderedColumns = make([]uint32, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint32
 					for shift := uint(0); ; shift += 7 {
@@ -6968,6 +8182,17 @@ func (m *DistinctSpec) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.DistinctColumns) == 0 {
+					m.DistinctColumns = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -7066,7 +8291,7 @@ func (m *ZigzagJoinerSpec) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Tables = append(m.Tables, cockroach_sql_sqlbase1.TableDescriptor{})
+			m.Tables = append(m.Tables, sqlbase.TableDescriptor{})
 			if err := m.Tables[len(m.Tables)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -7142,6 +8367,17 @@ func (m *ZigzagJoinerSpec) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.IndexIds) == 0 {
+					m.IndexIds = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -7239,7 +8475,7 @@ func (m *ZigzagJoinerSpec) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= (cockroach_sql_sqlbase3.JoinType(b) & 0x7F) << shift
+				m.Type |= (sqlbase.JoinType(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -7455,6 +8691,17 @@ func (m *Columns) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Columns) == 0 {
+					m.Columns = make([]uint32, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint32
 					for shift := uint(0); ; shift += 7 {
@@ -7630,7 +8877,7 @@ func (m *MergeJoinerSpec) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= (cockroach_sql_sqlbase3.JoinType(b) & 0x7F) << shift
+				m.Type |= (sqlbase.JoinType(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -7746,6 +8993,17 @@ func (m *HashJoinerSpec) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.LeftEqColumns) == 0 {
+					m.LeftEqColumns = make([]uint32, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint32
 					for shift := uint(0); ; shift += 7 {
@@ -7807,6 +9065,17 @@ func (m *HashJoinerSpec) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.RightEqColumns) == 0 {
+					m.RightEqColumns = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -7873,7 +9142,7 @@ func (m *HashJoinerSpec) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= (cockroach_sql_sqlbase3.JoinType(b) & 0x7F) << shift
+				m.Type |= (sqlbase.JoinType(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -8029,6 +9298,17 @@ func (m *AggregatorSpec) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.GroupCols) == 0 {
+					m.GroupCols = make([]uint32, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint32
 					for shift := uint(0); ; shift += 7 {
@@ -8121,6 +9401,17 @@ func (m *AggregatorSpec) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.OrderedGroupCols) == 0 {
+					m.OrderedGroupCols = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -8311,6 +9602,17 @@ func (m *AggregatorSpec_Aggregation) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.ColIdx) == 0 {
+					m.ColIdx = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -8558,7 +9860,7 @@ func (m *BackfillerSpec) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.OtherTables = append(m.OtherTables, cockroach_sql_sqlbase1.TableDescriptor{})
+			m.OtherTables = append(m.OtherTables, sqlbase.TableDescriptor{})
 			if err := m.OtherTables[len(m.OtherTables)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -8800,7 +10102,7 @@ func (m *JobProgress) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 4) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint32(binary.LittleEndian.Uint32(dAtA[iNdEx:]))
+			v = uint32(encoding_binary.LittleEndian.Uint32(dAtA[iNdEx:]))
 			iNdEx += 4
 			m.Contribution = float32(math.Float32frombits(v))
 		case 3:
@@ -9085,10 +10387,10 @@ func (m *ReadImportDataSpec) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Tables == nil {
-				m.Tables = make(map[string]*cockroach_sql_sqlbase1.TableDescriptor)
+				m.Tables = make(map[string]*sqlbase.TableDescriptor)
 			}
 			var mapkey string
-			var mapvalue *cockroach_sql_sqlbase1.TableDescriptor
+			var mapvalue *sqlbase.TableDescriptor
 			for iNdEx < postIndex {
 				entryPreIndex := iNdEx
 				var wire uint64
@@ -9159,7 +10461,7 @@ func (m *ReadImportDataSpec) Unmarshal(dAtA []byte) error {
 					if postmsgIndex > l {
 						return io.ErrUnexpectedEOF
 					}
-					mapvalue = &cockroach_sql_sqlbase1.TableDescriptor{}
+					mapvalue = &sqlbase.TableDescriptor{}
 					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
 						return err
 					}
@@ -9737,6 +11039,17 @@ func (m *SketchSpec) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Columns) == 0 {
+					m.Columns = make([]uint32, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v uint32
 					for shift := uint(0); ; shift += 7 {
@@ -10067,6 +11380,17 @@ func (m *SampleAggregatorSpec) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.SampledColumnIDs) == 0 {
+					m.SampledColumnIDs = make([]github_com_cockroachdb_cockroach_pkg_sql_sqlbase.ColumnID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_sql_sqlbase.ColumnID
 					for shift := uint(0); ; shift += 7 {
@@ -10271,7 +11595,7 @@ func (m *InterleavedReaderJoinerSpec) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= (cockroach_sql_sqlbase3.JoinType(b) & 0x7F) << shift
+				m.Type |= (sqlbase.JoinType(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -10573,7 +11897,7 @@ func (m *ProjectSetSpec) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.GeneratedColumns = append(m.GeneratedColumns, cockroach_sql_sqlbase1.ColumnType{})
+			m.GeneratedColumns = append(m.GeneratedColumns, sqlbase.ColumnType{})
 			if err := m.GeneratedColumns[len(m.GeneratedColumns)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -10618,6 +11942,17 @@ func (m *ProjectSetSpec) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.NumColsPerGen) == 0 {
+					m.NumColsPerGen = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -10730,6 +12065,17 @@ func (m *WindowerSpec) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.PartitionBy) == 0 {
+					m.PartitionBy = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -11731,7 +13077,7 @@ func (m *ChangeFrontierSpec) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.TrackedSpans = append(m.TrackedSpans, cockroach_roachpb1.Span{})
+			m.TrackedSpans = append(m.TrackedSpans, roachpb.Span{})
 			if err := m.TrackedSpans[len(m.TrackedSpans)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11911,9 +13257,11 @@ var (
 	ErrIntOverflowProcessors   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/distsqlpb/processors.proto", fileDescriptorProcessors) }
+func init() {
+	proto.RegisterFile("sql/distsqlpb/processors.proto", fileDescriptor_processors_bf707fc3f8e6bbc6)
+}
 
-var fileDescriptorProcessors = []byte{
+var fileDescriptor_processors_bf707fc3f8e6bbc6 = []byte{
 	// 4047 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x5a, 0x3d, 0x70, 0x1b, 0x59,
 	0x72, 0x16, 0x80, 0xc1, 0x5f, 0xe3, 0x87, 0xb3, 0x4f, 0xd4, 0x0a, 0xcb, 0x5d, 0x8b, 0xd2, 0xec,

@@ -1158,7 +1158,7 @@ func removeDeadReplicas(
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Scanning replicas on store %s for dead peers %v\n", storeIdent,
+	fmt.Printf("Scanning replicas on store %s for dead peers %v\n", storeIdent.String(),
 		removeDeadReplicasOpts.deadStoreIDs)
 
 	if _, ok := deadStoreIDs[storeIdent.StoreID]; ok {

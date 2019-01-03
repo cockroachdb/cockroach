@@ -1025,7 +1025,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				}
 
 				if l := len(rows); l != 1 {
-					t.Fatalf("%d: expected 1 row; got %d\n%s", i, l, rows)
+					t.Fatalf("%d: expected 1 row; got %d\n%v", i, l, rows)
 				}
 				if key := string(rows[0].Key); keys[0] != key {
 					t.Errorf("expected key %q; got %q", keys[0], key)

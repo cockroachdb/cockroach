@@ -6,29 +6,29 @@ package serverpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_build "github.com/cockroachdb/cockroach/pkg/build"
-import cockroach_gossip "github.com/cockroachdb/cockroach/pkg/gossip"
-import cockroach_sql "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_server_diagnosticspb "github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
-import cockroach_server_status_statuspb "github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
-import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import cockroach_storage1 "github.com/cockroachdb/cockroach/pkg/storage/storagepb"
-import cockroach_storage_storagepb "github.com/cockroachdb/cockroach/pkg/storage/storagepb"
-import cockroach_util_log "github.com/cockroachdb/cockroach/pkg/util/log"
-import cockroach_util "github.com/cockroachdb/cockroach/pkg/util"
+import build "github.com/cockroachdb/cockroach/pkg/build"
 import raftpb "go.etcd.io/etcd/raft/raftpb"
+import gossip "github.com/cockroachdb/cockroach/pkg/gossip"
+import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+import diagnosticspb "github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+import statuspb "github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+import enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+import storagepb "github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+import util "github.com/cockroachdb/cockroach/pkg/util"
+import log "github.com/cockroachdb/cockroach/pkg/util/log"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import time "time"
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 
-import context "context"
-import grpc "google.golang.org/grpc"
+import (
+	context "context"
+	grpc "google.golang.org/grpc"
+)
 
-import sortkeys "github.com/gogo/protobuf/sortkeys"
-import binary "encoding/binary"
-import types "github.com/gogo/protobuf/types"
+import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+import encoding_binary "encoding/binary"
+import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -37,6 +37,12 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 var _ = time.Kitchen
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 // Represents the type of file.
 // TODO(ridwanmsharif): Add support for log files. They're currently served
@@ -58,7 +64,9 @@ var FileType_value = map[string]int32{
 func (x FileType) String() string {
 	return proto.EnumName(FileType_name, int32(x))
 }
-func (FileType) EnumDescriptor() ([]byte, []int) { return fileDescriptorStatus, []int{0} }
+func (FileType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{0}
+}
 
 // We use an enum to allow reporting of client certs and potential others (eg:
 // UI).
@@ -94,7 +102,7 @@ func (x CertificateDetails_CertificateType) String() string {
 	return proto.EnumName(CertificateDetails_CertificateType_name, int32(x))
 }
 func (CertificateDetails_CertificateType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStatus, []int{1, 0}
+	return fileDescriptor_status_0de29a344bd79652, []int{1, 0}
 }
 
 type ProfileRequest_Type int32
@@ -113,7 +121,9 @@ var ProfileRequest_Type_value = map[string]int32{
 func (x ProfileRequest_Type) String() string {
 	return proto.EnumName(ProfileRequest_Type_name, int32(x))
 }
-func (ProfileRequest_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorStatus, []int{33, 0} }
+func (ProfileRequest_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{33, 0}
+}
 
 // Enum for phase of execution.
 type ActiveQuery_Phase int32
@@ -135,18 +145,46 @@ var ActiveQuery_Phase_value = map[string]int32{
 func (x ActiveQuery_Phase) String() string {
 	return proto.EnumName(ActiveQuery_Phase_name, int32(x))
 }
-func (ActiveQuery_Phase) EnumDescriptor() ([]byte, []int) { return fileDescriptorStatus, []int{40, 0} }
+func (ActiveQuery_Phase) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{40, 0}
+}
 
 type CertificatesRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *CertificatesRequest) Reset()                    { *m = CertificatesRequest{} }
-func (m *CertificatesRequest) String() string            { return proto.CompactTextString(m) }
-func (*CertificatesRequest) ProtoMessage()               {}
-func (*CertificatesRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{0} }
+func (m *CertificatesRequest) Reset()         { *m = CertificatesRequest{} }
+func (m *CertificatesRequest) String() string { return proto.CompactTextString(m) }
+func (*CertificatesRequest) ProtoMessage()    {}
+func (*CertificatesRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{0}
+}
+func (m *CertificatesRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CertificatesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CertificatesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CertificatesRequest.Merge(dst, src)
+}
+func (m *CertificatesRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *CertificatesRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_CertificatesRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CertificatesRequest proto.InternalMessageInfo
 
 type CertificateDetails struct {
 	Type CertificateDetails_CertificateType `protobuf:"varint,1,opt,name=type,proto3,enum=cockroach.server.serverpb.CertificateDetails_CertificateType" json:"type,omitempty"`
@@ -154,42 +192,118 @@ type CertificateDetails struct {
 	ErrorMessage string `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	// data is the raw file contents of the certificate. This means PEM-encoded
 	// DER data.
-	Data   []byte                      `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
-	Fields []CertificateDetails_Fields `protobuf:"bytes,4,rep,name=fields" json:"fields"`
+	Data                 []byte                      `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	Fields               []CertificateDetails_Fields `protobuf:"bytes,4,rep,name=fields,proto3" json:"fields"`
+	XXX_NoUnkeyedLiteral struct{}                    `json:"-"`
+	XXX_sizecache        int32                       `json:"-"`
 }
 
-func (m *CertificateDetails) Reset()                    { *m = CertificateDetails{} }
-func (m *CertificateDetails) String() string            { return proto.CompactTextString(m) }
-func (*CertificateDetails) ProtoMessage()               {}
-func (*CertificateDetails) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{1} }
+func (m *CertificateDetails) Reset()         { *m = CertificateDetails{} }
+func (m *CertificateDetails) String() string { return proto.CompactTextString(m) }
+func (*CertificateDetails) ProtoMessage()    {}
+func (*CertificateDetails) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{1}
+}
+func (m *CertificateDetails) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CertificateDetails) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CertificateDetails) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CertificateDetails.Merge(dst, src)
+}
+func (m *CertificateDetails) XXX_Size() int {
+	return m.Size()
+}
+func (m *CertificateDetails) XXX_DiscardUnknown() {
+	xxx_messageInfo_CertificateDetails.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CertificateDetails proto.InternalMessageInfo
 
 type CertificateDetails_Fields struct {
-	Issuer             string   `protobuf:"bytes,1,opt,name=issuer,proto3" json:"issuer,omitempty"`
-	Subject            string   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	ValidFrom          int64    `protobuf:"varint,3,opt,name=valid_from,json=validFrom,proto3" json:"valid_from,omitempty"`
-	ValidUntil         int64    `protobuf:"varint,4,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"`
-	Addresses          []string `protobuf:"bytes,5,rep,name=addresses" json:"addresses,omitempty"`
-	SignatureAlgorithm string   `protobuf:"bytes,6,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
-	PublicKey          string   `protobuf:"bytes,7,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
-	KeyUsage           []string `protobuf:"bytes,8,rep,name=key_usage,json=keyUsage" json:"key_usage,omitempty"`
-	ExtendedKeyUsage   []string `protobuf:"bytes,9,rep,name=extended_key_usage,json=extendedKeyUsage" json:"extended_key_usage,omitempty"`
+	Issuer               string   `protobuf:"bytes,1,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	Subject              string   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	ValidFrom            int64    `protobuf:"varint,3,opt,name=valid_from,json=validFrom,proto3" json:"valid_from,omitempty"`
+	ValidUntil           int64    `protobuf:"varint,4,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"`
+	Addresses            []string `protobuf:"bytes,5,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	SignatureAlgorithm   string   `protobuf:"bytes,6,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
+	PublicKey            string   `protobuf:"bytes,7,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	KeyUsage             []string `protobuf:"bytes,8,rep,name=key_usage,json=keyUsage,proto3" json:"key_usage,omitempty"`
+	ExtendedKeyUsage     []string `protobuf:"bytes,9,rep,name=extended_key_usage,json=extendedKeyUsage,proto3" json:"extended_key_usage,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *CertificateDetails_Fields) Reset()         { *m = CertificateDetails_Fields{} }
 func (m *CertificateDetails_Fields) String() string { return proto.CompactTextString(m) }
 func (*CertificateDetails_Fields) ProtoMessage()    {}
 func (*CertificateDetails_Fields) Descriptor() ([]byte, []int) {
-	return fileDescriptorStatus, []int{1, 0}
+	return fileDescriptor_status_0de29a344bd79652, []int{1, 0}
 }
+func (m *CertificateDetails_Fields) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CertificateDetails_Fields) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CertificateDetails_Fields) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CertificateDetails_Fields.Merge(dst, src)
+}
+func (m *CertificateDetails_Fields) XXX_Size() int {
+	return m.Size()
+}
+func (m *CertificateDetails_Fields) XXX_DiscardUnknown() {
+	xxx_messageInfo_CertificateDetails_Fields.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CertificateDetails_Fields proto.InternalMessageInfo
 
 type CertificatesResponse struct {
-	Certificates []CertificateDetails `protobuf:"bytes,1,rep,name=certificates" json:"certificates"`
+	Certificates         []CertificateDetails `protobuf:"bytes,1,rep,name=certificates,proto3" json:"certificates"`
+	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
+	XXX_sizecache        int32                `json:"-"`
 }
 
-func (m *CertificatesResponse) Reset()                    { *m = CertificatesResponse{} }
-func (m *CertificatesResponse) String() string            { return proto.CompactTextString(m) }
-func (*CertificatesResponse) ProtoMessage()               {}
-func (*CertificatesResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{2} }
+func (m *CertificatesResponse) Reset()         { *m = CertificatesResponse{} }
+func (m *CertificatesResponse) String() string { return proto.CompactTextString(m) }
+func (*CertificatesResponse) ProtoMessage()    {}
+func (*CertificatesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{2}
+}
+func (m *CertificatesResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CertificatesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CertificatesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CertificatesResponse.Merge(dst, src)
+}
+func (m *CertificatesResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *CertificatesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_CertificatesResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CertificatesResponse proto.InternalMessageInfo
 
 // DetailsRequest requests a nodes details.
 type DetailsRequest struct {
@@ -198,100 +312,308 @@ type DetailsRequest struct {
 	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	// ready specifies whether the client wants to know whether a node is ready to
 	// receive traffic. If a node is unready, an error will be returned.
-	Ready bool `protobuf:"varint,2,opt,name=ready,proto3" json:"ready,omitempty"`
+	Ready                bool     `protobuf:"varint,2,opt,name=ready,proto3" json:"ready,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *DetailsRequest) Reset()                    { *m = DetailsRequest{} }
-func (m *DetailsRequest) String() string            { return proto.CompactTextString(m) }
-func (*DetailsRequest) ProtoMessage()               {}
-func (*DetailsRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{3} }
+func (m *DetailsRequest) Reset()         { *m = DetailsRequest{} }
+func (m *DetailsRequest) String() string { return proto.CompactTextString(m) }
+func (*DetailsRequest) ProtoMessage()    {}
+func (*DetailsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{3}
+}
+func (m *DetailsRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DetailsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *DetailsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DetailsRequest.Merge(dst, src)
+}
+func (m *DetailsRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *DetailsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_DetailsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DetailsRequest proto.InternalMessageInfo
 
 // SystemInfo contains information about the host system.
 type SystemInfo struct {
 	// system_info is the output from `uname -a`
 	SystemInfo string `protobuf:"bytes,1,opt,name=system_info,json=systemInfo,proto3" json:"system_info,omitempty"`
 	// kernel_info is the output from `uname -r`.
-	KernelInfo string `protobuf:"bytes,2,opt,name=kernel_info,json=kernelInfo,proto3" json:"kernel_info,omitempty"`
+	KernelInfo           string   `protobuf:"bytes,2,opt,name=kernel_info,json=kernelInfo,proto3" json:"kernel_info,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *SystemInfo) Reset()                    { *m = SystemInfo{} }
-func (m *SystemInfo) String() string            { return proto.CompactTextString(m) }
-func (*SystemInfo) ProtoMessage()               {}
-func (*SystemInfo) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{4} }
+func (m *SystemInfo) Reset()         { *m = SystemInfo{} }
+func (m *SystemInfo) String() string { return proto.CompactTextString(m) }
+func (*SystemInfo) ProtoMessage()    {}
+func (*SystemInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{4}
+}
+func (m *SystemInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SystemInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SystemInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SystemInfo.Merge(dst, src)
+}
+func (m *SystemInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *SystemInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_SystemInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SystemInfo proto.InternalMessageInfo
 
 type DetailsResponse struct {
-	NodeID     github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
-	Address    cockroach_util.UnresolvedAddr                       `protobuf:"bytes,2,opt,name=address" json:"address"`
-	BuildInfo  cockroach_build.Info                                `protobuf:"bytes,3,opt,name=build_info,json=buildInfo" json:"build_info"`
-	SystemInfo SystemInfo                                          `protobuf:"bytes,4,opt,name=system_info,json=systemInfo" json:"system_info"`
+	NodeID               github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
+	Address              util.UnresolvedAddr                                 `protobuf:"bytes,2,opt,name=address,proto3" json:"address"`
+	BuildInfo            build.Info                                          `protobuf:"bytes,3,opt,name=build_info,json=buildInfo,proto3" json:"build_info"`
+	SystemInfo           SystemInfo                                          `protobuf:"bytes,4,opt,name=system_info,json=systemInfo,proto3" json:"system_info"`
+	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
+	XXX_sizecache        int32                                               `json:"-"`
 }
 
-func (m *DetailsResponse) Reset()                    { *m = DetailsResponse{} }
-func (m *DetailsResponse) String() string            { return proto.CompactTextString(m) }
-func (*DetailsResponse) ProtoMessage()               {}
-func (*DetailsResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{5} }
+func (m *DetailsResponse) Reset()         { *m = DetailsResponse{} }
+func (m *DetailsResponse) String() string { return proto.CompactTextString(m) }
+func (*DetailsResponse) ProtoMessage()    {}
+func (*DetailsResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{5}
+}
+func (m *DetailsResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DetailsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *DetailsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DetailsResponse.Merge(dst, src)
+}
+func (m *DetailsResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *DetailsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_DetailsResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DetailsResponse proto.InternalMessageInfo
 
 type NodesRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *NodesRequest) Reset()                    { *m = NodesRequest{} }
-func (m *NodesRequest) String() string            { return proto.CompactTextString(m) }
-func (*NodesRequest) ProtoMessage()               {}
-func (*NodesRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{6} }
+func (m *NodesRequest) Reset()         { *m = NodesRequest{} }
+func (m *NodesRequest) String() string { return proto.CompactTextString(m) }
+func (*NodesRequest) ProtoMessage()    {}
+func (*NodesRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{6}
+}
+func (m *NodesRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *NodesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *NodesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_NodesRequest.Merge(dst, src)
+}
+func (m *NodesRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *NodesRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_NodesRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_NodesRequest proto.InternalMessageInfo
 
 type NodesResponse struct {
-	Nodes []cockroach_server_status_statuspb.NodeStatus `protobuf:"bytes,1,rep,name=nodes" json:"nodes"`
+	Nodes                []statuspb.NodeStatus `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes"`
+	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
+	XXX_sizecache        int32                 `json:"-"`
 }
 
-func (m *NodesResponse) Reset()                    { *m = NodesResponse{} }
-func (m *NodesResponse) String() string            { return proto.CompactTextString(m) }
-func (*NodesResponse) ProtoMessage()               {}
-func (*NodesResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{7} }
+func (m *NodesResponse) Reset()         { *m = NodesResponse{} }
+func (m *NodesResponse) String() string { return proto.CompactTextString(m) }
+func (*NodesResponse) ProtoMessage()    {}
+func (*NodesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{7}
+}
+func (m *NodesResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *NodesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *NodesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_NodesResponse.Merge(dst, src)
+}
+func (m *NodesResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *NodesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_NodesResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_NodesResponse proto.InternalMessageInfo
 
 type NodeRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *NodeRequest) Reset()                    { *m = NodeRequest{} }
-func (m *NodeRequest) String() string            { return proto.CompactTextString(m) }
-func (*NodeRequest) ProtoMessage()               {}
-func (*NodeRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{8} }
+func (m *NodeRequest) Reset()         { *m = NodeRequest{} }
+func (m *NodeRequest) String() string { return proto.CompactTextString(m) }
+func (*NodeRequest) ProtoMessage()    {}
+func (*NodeRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{8}
+}
+func (m *NodeRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *NodeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *NodeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_NodeRequest.Merge(dst, src)
+}
+func (m *NodeRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *NodeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_NodeRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_NodeRequest proto.InternalMessageInfo
 
 // RaftState gives internal details about a Raft group's state.
 // Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 type RaftState struct {
 	ReplicaID uint64           `protobuf:"varint,1,opt,name=replica_id,json=replicaId,proto3" json:"replica_id,omitempty"`
-	HardState raftpb.HardState `protobuf:"bytes,2,opt,name=hard_state,json=hardState" json:"hard_state"`
+	HardState raftpb.HardState `protobuf:"bytes,2,opt,name=hard_state,json=hardState,proto3" json:"hard_state"`
 	// Lead is part of Raft's SoftState.
 	Lead uint64 `protobuf:"varint,3,opt,name=lead,proto3" json:"lead,omitempty"`
 	// State is part of Raft's SoftState.
 	// It's not an enum because this is primarily for ui consumption and there
 	// are issues associated with them.
-	State          string                        `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
-	Applied        uint64                        `protobuf:"varint,5,opt,name=applied,proto3" json:"applied,omitempty"`
-	Progress       map[uint64]RaftState_Progress `protobuf:"bytes,6,rep,name=progress" json:"progress" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
-	LeadTransferee uint64                        `protobuf:"varint,7,opt,name=lead_transferee,json=leadTransferee,proto3" json:"lead_transferee,omitempty"`
+	State                string                        `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	Applied              uint64                        `protobuf:"varint,5,opt,name=applied,proto3" json:"applied,omitempty"`
+	Progress             map[uint64]RaftState_Progress `protobuf:"bytes,6,rep,name=progress,proto3" json:"progress" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	LeadTransferee       uint64                        `protobuf:"varint,7,opt,name=lead_transferee,json=leadTransferee,proto3" json:"lead_transferee,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                      `json:"-"`
+	XXX_sizecache        int32                         `json:"-"`
 }
 
-func (m *RaftState) Reset()                    { *m = RaftState{} }
-func (m *RaftState) String() string            { return proto.CompactTextString(m) }
-func (*RaftState) ProtoMessage()               {}
-func (*RaftState) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{9} }
+func (m *RaftState) Reset()         { *m = RaftState{} }
+func (m *RaftState) String() string { return proto.CompactTextString(m) }
+func (*RaftState) ProtoMessage()    {}
+func (*RaftState) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{9}
+}
+func (m *RaftState) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftState) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftState) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftState.Merge(dst, src)
+}
+func (m *RaftState) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftState) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftState.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftState proto.InternalMessageInfo
 
 type RaftState_Progress struct {
-	Match           uint64 `protobuf:"varint,1,opt,name=match,proto3" json:"match,omitempty"`
-	Next            uint64 `protobuf:"varint,2,opt,name=next,proto3" json:"next,omitempty"`
-	State           string `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
-	Paused          bool   `protobuf:"varint,4,opt,name=paused,proto3" json:"paused,omitempty"`
-	PendingSnapshot uint64 `protobuf:"varint,5,opt,name=pending_snapshot,json=pendingSnapshot,proto3" json:"pending_snapshot,omitempty"`
+	Match                uint64   `protobuf:"varint,1,opt,name=match,proto3" json:"match,omitempty"`
+	Next                 uint64   `protobuf:"varint,2,opt,name=next,proto3" json:"next,omitempty"`
+	State                string   `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	Paused               bool     `protobuf:"varint,4,opt,name=paused,proto3" json:"paused,omitempty"`
+	PendingSnapshot      uint64   `protobuf:"varint,5,opt,name=pending_snapshot,json=pendingSnapshot,proto3" json:"pending_snapshot,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *RaftState_Progress) Reset()                    { *m = RaftState_Progress{} }
-func (m *RaftState_Progress) String() string            { return proto.CompactTextString(m) }
-func (*RaftState_Progress) ProtoMessage()               {}
-func (*RaftState_Progress) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{9, 0} }
+func (m *RaftState_Progress) Reset()         { *m = RaftState_Progress{} }
+func (m *RaftState_Progress) String() string { return proto.CompactTextString(m) }
+func (*RaftState_Progress) ProtoMessage()    {}
+func (*RaftState_Progress) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{9, 0}
+}
+func (m *RaftState_Progress) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftState_Progress) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftState_Progress) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftState_Progress.Merge(dst, src)
+}
+func (m *RaftState_Progress) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftState_Progress) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftState_Progress.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftState_Progress proto.InternalMessageInfo
 
 type RangeProblems struct {
 	Unavailable          bool `protobuf:"varint,1,opt,name=unavailable,proto3" json:"unavailable,omitempty"`
@@ -305,238 +627,784 @@ type RangeProblems struct {
 	// list of replicas that are ticking, warn about it.
 	QuiescentEqualsTicking bool `protobuf:"varint,6,opt,name=quiescent_equals_ticking,json=quiescentEqualsTicking,proto3" json:"quiescent_equals_ticking,omitempty"`
 	// When the raft log is too large, it can be a symptom of other issues.
-	RaftLogTooLarge bool `protobuf:"varint,7,opt,name=raft_log_too_large,json=raftLogTooLarge,proto3" json:"raft_log_too_large,omitempty"`
+	RaftLogTooLarge      bool     `protobuf:"varint,7,opt,name=raft_log_too_large,json=raftLogTooLarge,proto3" json:"raft_log_too_large,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *RangeProblems) Reset()                    { *m = RangeProblems{} }
-func (m *RangeProblems) String() string            { return proto.CompactTextString(m) }
-func (*RangeProblems) ProtoMessage()               {}
-func (*RangeProblems) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{10} }
+func (m *RangeProblems) Reset()         { *m = RangeProblems{} }
+func (m *RangeProblems) String() string { return proto.CompactTextString(m) }
+func (*RangeProblems) ProtoMessage()    {}
+func (*RangeProblems) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{10}
+}
+func (m *RangeProblems) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeProblems) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeProblems) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeProblems.Merge(dst, src)
+}
+func (m *RangeProblems) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeProblems) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeProblems.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeProblems proto.InternalMessageInfo
 
 type RangeStatistics struct {
 	// Note that queries per second will only be known by the leaseholder.
 	// All other replicas will report it as 0.
-	QueriesPerSecond float64 `protobuf:"fixed64,1,opt,name=queries_per_second,json=queriesPerSecond,proto3" json:"queries_per_second,omitempty"`
-	WritesPerSecond  float64 `protobuf:"fixed64,2,opt,name=writes_per_second,json=writesPerSecond,proto3" json:"writes_per_second,omitempty"`
+	QueriesPerSecond     float64  `protobuf:"fixed64,1,opt,name=queries_per_second,json=queriesPerSecond,proto3" json:"queries_per_second,omitempty"`
+	WritesPerSecond      float64  `protobuf:"fixed64,2,opt,name=writes_per_second,json=writesPerSecond,proto3" json:"writes_per_second,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *RangeStatistics) Reset()                    { *m = RangeStatistics{} }
-func (m *RangeStatistics) String() string            { return proto.CompactTextString(m) }
-func (*RangeStatistics) ProtoMessage()               {}
-func (*RangeStatistics) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{11} }
+func (m *RangeStatistics) Reset()         { *m = RangeStatistics{} }
+func (m *RangeStatistics) String() string { return proto.CompactTextString(m) }
+func (*RangeStatistics) ProtoMessage()    {}
+func (*RangeStatistics) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{11}
+}
+func (m *RangeStatistics) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeStatistics) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeStatistics) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeStatistics.Merge(dst, src)
+}
+func (m *RangeStatistics) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeStatistics) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeStatistics.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeStatistics proto.InternalMessageInfo
 
 type PrettySpan struct {
-	StartKey string `protobuf:"bytes,1,opt,name=start_key,json=startKey,proto3" json:"start_key,omitempty"`
-	EndKey   string `protobuf:"bytes,2,opt,name=end_key,json=endKey,proto3" json:"end_key,omitempty"`
+	StartKey             string   `protobuf:"bytes,1,opt,name=start_key,json=startKey,proto3" json:"start_key,omitempty"`
+	EndKey               string   `protobuf:"bytes,2,opt,name=end_key,json=endKey,proto3" json:"end_key,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *PrettySpan) Reset()                    { *m = PrettySpan{} }
-func (m *PrettySpan) String() string            { return proto.CompactTextString(m) }
-func (*PrettySpan) ProtoMessage()               {}
-func (*PrettySpan) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{12} }
+func (m *PrettySpan) Reset()         { *m = PrettySpan{} }
+func (m *PrettySpan) String() string { return proto.CompactTextString(m) }
+func (*PrettySpan) ProtoMessage()    {}
+func (*PrettySpan) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{12}
+}
+func (m *PrettySpan) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PrettySpan) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *PrettySpan) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PrettySpan.Merge(dst, src)
+}
+func (m *PrettySpan) XXX_Size() int {
+	return m.Size()
+}
+func (m *PrettySpan) XXX_DiscardUnknown() {
+	xxx_messageInfo_PrettySpan.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PrettySpan proto.InternalMessageInfo
 
 type RangeInfo struct {
-	Span          PrettySpan                                           `protobuf:"bytes,1,opt,name=span" json:"span"`
-	RaftState     RaftState                                            `protobuf:"bytes,2,opt,name=raft_state,json=raftState" json:"raft_state"`
-	State         cockroach_storage_storagepb.RangeInfo                `protobuf:"bytes,4,opt,name=state" json:"state"`
-	SourceNodeID  github_com_cockroachdb_cockroach_pkg_roachpb.NodeID  `protobuf:"varint,5,opt,name=source_node_id,json=sourceNodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"source_node_id,omitempty"`
-	SourceStoreID github_com_cockroachdb_cockroach_pkg_roachpb.StoreID `protobuf:"varint,6,opt,name=source_store_id,json=sourceStoreId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.StoreID" json:"source_store_id,omitempty"`
-	ErrorMessage  string                                               `protobuf:"bytes,7,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	LeaseHistory  []cockroach_roachpb1.Lease                           `protobuf:"bytes,8,rep,name=lease_history,json=leaseHistory" json:"lease_history"`
-	Problems      RangeProblems                                        `protobuf:"bytes,9,opt,name=problems" json:"problems"`
-	Stats         RangeStatistics                                      `protobuf:"bytes,10,opt,name=stats" json:"stats"`
-	LatchesLocal  cockroach_storage_storagepb.LatchManagerInfo         `protobuf:"bytes,11,opt,name=latches_local,json=latchesLocal" json:"latches_local"`
-	LatchesGlobal cockroach_storage_storagepb.LatchManagerInfo         `protobuf:"bytes,12,opt,name=latches_global,json=latchesGlobal" json:"latches_global"`
-	LeaseStatus   cockroach_storage1.LeaseStatus                       `protobuf:"bytes,13,opt,name=lease_status,json=leaseStatus" json:"lease_status"`
-	Quiescent     bool                                                 `protobuf:"varint,14,opt,name=quiescent,proto3" json:"quiescent,omitempty"`
-	Ticking       bool                                                 `protobuf:"varint,15,opt,name=ticking,proto3" json:"ticking,omitempty"`
+	Span                 PrettySpan                                           `protobuf:"bytes,1,opt,name=span,proto3" json:"span"`
+	RaftState            RaftState                                            `protobuf:"bytes,2,opt,name=raft_state,json=raftState,proto3" json:"raft_state"`
+	State                storagepb.RangeInfo                                  `protobuf:"bytes,4,opt,name=state,proto3" json:"state"`
+	SourceNodeID         github_com_cockroachdb_cockroach_pkg_roachpb.NodeID  `protobuf:"varint,5,opt,name=source_node_id,json=sourceNodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"source_node_id,omitempty"`
+	SourceStoreID        github_com_cockroachdb_cockroach_pkg_roachpb.StoreID `protobuf:"varint,6,opt,name=source_store_id,json=sourceStoreId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.StoreID" json:"source_store_id,omitempty"`
+	ErrorMessage         string                                               `protobuf:"bytes,7,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	LeaseHistory         []roachpb.Lease                                      `protobuf:"bytes,8,rep,name=lease_history,json=leaseHistory,proto3" json:"lease_history"`
+	Problems             RangeProblems                                        `protobuf:"bytes,9,opt,name=problems,proto3" json:"problems"`
+	Stats                RangeStatistics                                      `protobuf:"bytes,10,opt,name=stats,proto3" json:"stats"`
+	LatchesLocal         storagepb.LatchManagerInfo                           `protobuf:"bytes,11,opt,name=latches_local,json=latchesLocal,proto3" json:"latches_local"`
+	LatchesGlobal        storagepb.LatchManagerInfo                           `protobuf:"bytes,12,opt,name=latches_global,json=latchesGlobal,proto3" json:"latches_global"`
+	LeaseStatus          storagepb.LeaseStatus                                `protobuf:"bytes,13,opt,name=lease_status,json=leaseStatus,proto3" json:"lease_status"`
+	Quiescent            bool                                                 `protobuf:"varint,14,opt,name=quiescent,proto3" json:"quiescent,omitempty"`
+	Ticking              bool                                                 `protobuf:"varint,15,opt,name=ticking,proto3" json:"ticking,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                             `json:"-"`
+	XXX_sizecache        int32                                                `json:"-"`
 }
 
-func (m *RangeInfo) Reset()                    { *m = RangeInfo{} }
-func (m *RangeInfo) String() string            { return proto.CompactTextString(m) }
-func (*RangeInfo) ProtoMessage()               {}
-func (*RangeInfo) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{13} }
+func (m *RangeInfo) Reset()         { *m = RangeInfo{} }
+func (m *RangeInfo) String() string { return proto.CompactTextString(m) }
+func (*RangeInfo) ProtoMessage()    {}
+func (*RangeInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{13}
+}
+func (m *RangeInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeInfo.Merge(dst, src)
+}
+func (m *RangeInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeInfo proto.InternalMessageInfo
 
 type RangesRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId   string                                                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	RangeIDs []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,2,rep,packed,name=range_ids,json=rangeIds,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_ids,omitempty"`
+	NodeId               string                                                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	RangeIDs             []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,2,rep,packed,name=range_ids,json=rangeIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_ids,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                               `json:"-"`
+	XXX_sizecache        int32                                                  `json:"-"`
 }
 
-func (m *RangesRequest) Reset()                    { *m = RangesRequest{} }
-func (m *RangesRequest) String() string            { return proto.CompactTextString(m) }
-func (*RangesRequest) ProtoMessage()               {}
-func (*RangesRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{14} }
+func (m *RangesRequest) Reset()         { *m = RangesRequest{} }
+func (m *RangesRequest) String() string { return proto.CompactTextString(m) }
+func (*RangesRequest) ProtoMessage()    {}
+func (*RangesRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{14}
+}
+func (m *RangesRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangesRequest.Merge(dst, src)
+}
+func (m *RangesRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangesRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangesRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangesRequest proto.InternalMessageInfo
 
 type RangesResponse struct {
-	Ranges []RangeInfo `protobuf:"bytes,1,rep,name=ranges" json:"ranges"`
+	Ranges               []RangeInfo `protobuf:"bytes,1,rep,name=ranges,proto3" json:"ranges"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
-func (m *RangesResponse) Reset()                    { *m = RangesResponse{} }
-func (m *RangesResponse) String() string            { return proto.CompactTextString(m) }
-func (*RangesResponse) ProtoMessage()               {}
-func (*RangesResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{15} }
+func (m *RangesResponse) Reset()         { *m = RangesResponse{} }
+func (m *RangesResponse) String() string { return proto.CompactTextString(m) }
+func (*RangesResponse) ProtoMessage()    {}
+func (*RangesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{15}
+}
+func (m *RangesResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangesResponse.Merge(dst, src)
+}
+func (m *RangesResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangesResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangesResponse proto.InternalMessageInfo
 
 type GossipRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *GossipRequest) Reset()                    { *m = GossipRequest{} }
-func (m *GossipRequest) String() string            { return proto.CompactTextString(m) }
-func (*GossipRequest) ProtoMessage()               {}
-func (*GossipRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{16} }
+func (m *GossipRequest) Reset()         { *m = GossipRequest{} }
+func (m *GossipRequest) String() string { return proto.CompactTextString(m) }
+func (*GossipRequest) ProtoMessage()    {}
+func (*GossipRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{16}
+}
+func (m *GossipRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GossipRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *GossipRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GossipRequest.Merge(dst, src)
+}
+func (m *GossipRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *GossipRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GossipRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GossipRequest proto.InternalMessageInfo
 
 type TraceEvent struct {
-	Time    time.Time `protobuf:"bytes,1,opt,name=time,stdtime" json:"time"`
-	Message string    `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Time                 time.Time `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
+	Message              string    `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
 }
 
-func (m *TraceEvent) Reset()                    { *m = TraceEvent{} }
-func (m *TraceEvent) String() string            { return proto.CompactTextString(m) }
-func (*TraceEvent) ProtoMessage()               {}
-func (*TraceEvent) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{17} }
+func (m *TraceEvent) Reset()         { *m = TraceEvent{} }
+func (m *TraceEvent) String() string { return proto.CompactTextString(m) }
+func (*TraceEvent) ProtoMessage()    {}
+func (*TraceEvent) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{17}
+}
+func (m *TraceEvent) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TraceEvent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TraceEvent) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TraceEvent.Merge(dst, src)
+}
+func (m *TraceEvent) XXX_Size() int {
+	return m.Size()
+}
+func (m *TraceEvent) XXX_DiscardUnknown() {
+	xxx_messageInfo_TraceEvent.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TraceEvent proto.InternalMessageInfo
 
 type AllocatorDryRun struct {
-	RangeID github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
-	Events  []*TraceEvent                                        `protobuf:"bytes,2,rep,name=events" json:"events,omitempty"`
+	RangeID              github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
+	Events               []*TraceEvent                                        `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                             `json:"-"`
+	XXX_sizecache        int32                                                `json:"-"`
 }
 
-func (m *AllocatorDryRun) Reset()                    { *m = AllocatorDryRun{} }
-func (m *AllocatorDryRun) String() string            { return proto.CompactTextString(m) }
-func (*AllocatorDryRun) ProtoMessage()               {}
-func (*AllocatorDryRun) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{18} }
+func (m *AllocatorDryRun) Reset()         { *m = AllocatorDryRun{} }
+func (m *AllocatorDryRun) String() string { return proto.CompactTextString(m) }
+func (*AllocatorDryRun) ProtoMessage()    {}
+func (*AllocatorDryRun) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{18}
+}
+func (m *AllocatorDryRun) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AllocatorDryRun) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AllocatorDryRun) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AllocatorDryRun.Merge(dst, src)
+}
+func (m *AllocatorDryRun) XXX_Size() int {
+	return m.Size()
+}
+func (m *AllocatorDryRun) XXX_DiscardUnknown() {
+	xxx_messageInfo_AllocatorDryRun.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AllocatorDryRun proto.InternalMessageInfo
 
 type AllocatorRangeRequest struct {
-	RangeId int64 `protobuf:"varint,1,opt,name=range_id,json=rangeId,proto3" json:"range_id,omitempty"`
+	RangeId              int64    `protobuf:"varint,1,opt,name=range_id,json=rangeId,proto3" json:"range_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *AllocatorRangeRequest) Reset()                    { *m = AllocatorRangeRequest{} }
-func (m *AllocatorRangeRequest) String() string            { return proto.CompactTextString(m) }
-func (*AllocatorRangeRequest) ProtoMessage()               {}
-func (*AllocatorRangeRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{19} }
+func (m *AllocatorRangeRequest) Reset()         { *m = AllocatorRangeRequest{} }
+func (m *AllocatorRangeRequest) String() string { return proto.CompactTextString(m) }
+func (*AllocatorRangeRequest) ProtoMessage()    {}
+func (*AllocatorRangeRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{19}
+}
+func (m *AllocatorRangeRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AllocatorRangeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AllocatorRangeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AllocatorRangeRequest.Merge(dst, src)
+}
+func (m *AllocatorRangeRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *AllocatorRangeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_AllocatorRangeRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AllocatorRangeRequest proto.InternalMessageInfo
 
 type AllocatorRangeResponse struct {
 	// The NodeID of the store whose dry run is returned. Only the leaseholder
 	// for a given range will do an allocator dry run for it.
-	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
-	DryRun *AllocatorDryRun                                    `protobuf:"bytes,2,opt,name=dry_run,json=dryRun" json:"dry_run,omitempty"`
+	NodeID               github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
+	DryRun               *AllocatorDryRun                                    `protobuf:"bytes,2,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
+	XXX_sizecache        int32                                               `json:"-"`
 }
 
-func (m *AllocatorRangeResponse) Reset()                    { *m = AllocatorRangeResponse{} }
-func (m *AllocatorRangeResponse) String() string            { return proto.CompactTextString(m) }
-func (*AllocatorRangeResponse) ProtoMessage()               {}
-func (*AllocatorRangeResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{20} }
+func (m *AllocatorRangeResponse) Reset()         { *m = AllocatorRangeResponse{} }
+func (m *AllocatorRangeResponse) String() string { return proto.CompactTextString(m) }
+func (*AllocatorRangeResponse) ProtoMessage()    {}
+func (*AllocatorRangeResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{20}
+}
+func (m *AllocatorRangeResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AllocatorRangeResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AllocatorRangeResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AllocatorRangeResponse.Merge(dst, src)
+}
+func (m *AllocatorRangeResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *AllocatorRangeResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_AllocatorRangeResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AllocatorRangeResponse proto.InternalMessageInfo
 
 type AllocatorRequest struct {
-	NodeId   string                                                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	RangeIDs []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,2,rep,packed,name=range_ids,json=rangeIds,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_ids,omitempty"`
+	NodeId               string                                                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	RangeIDs             []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,2,rep,packed,name=range_ids,json=rangeIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_ids,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                               `json:"-"`
+	XXX_sizecache        int32                                                  `json:"-"`
 }
 
-func (m *AllocatorRequest) Reset()                    { *m = AllocatorRequest{} }
-func (m *AllocatorRequest) String() string            { return proto.CompactTextString(m) }
-func (*AllocatorRequest) ProtoMessage()               {}
-func (*AllocatorRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{21} }
+func (m *AllocatorRequest) Reset()         { *m = AllocatorRequest{} }
+func (m *AllocatorRequest) String() string { return proto.CompactTextString(m) }
+func (*AllocatorRequest) ProtoMessage()    {}
+func (*AllocatorRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{21}
+}
+func (m *AllocatorRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AllocatorRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AllocatorRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AllocatorRequest.Merge(dst, src)
+}
+func (m *AllocatorRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *AllocatorRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_AllocatorRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AllocatorRequest proto.InternalMessageInfo
 
 type AllocatorResponse struct {
-	DryRuns []*AllocatorDryRun `protobuf:"bytes,1,rep,name=dry_runs,json=dryRuns" json:"dry_runs,omitempty"`
+	DryRuns              []*AllocatorDryRun `protobuf:"bytes,1,rep,name=dry_runs,json=dryRuns,proto3" json:"dry_runs,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
+	XXX_sizecache        int32              `json:"-"`
 }
 
-func (m *AllocatorResponse) Reset()                    { *m = AllocatorResponse{} }
-func (m *AllocatorResponse) String() string            { return proto.CompactTextString(m) }
-func (*AllocatorResponse) ProtoMessage()               {}
-func (*AllocatorResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{22} }
+func (m *AllocatorResponse) Reset()         { *m = AllocatorResponse{} }
+func (m *AllocatorResponse) String() string { return proto.CompactTextString(m) }
+func (*AllocatorResponse) ProtoMessage()    {}
+func (*AllocatorResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{22}
+}
+func (m *AllocatorResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AllocatorResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AllocatorResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AllocatorResponse.Merge(dst, src)
+}
+func (m *AllocatorResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *AllocatorResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_AllocatorResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AllocatorResponse proto.InternalMessageInfo
 
 type JSONResponse struct {
-	Data []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Data                 []byte   `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *JSONResponse) Reset()                    { *m = JSONResponse{} }
-func (m *JSONResponse) String() string            { return proto.CompactTextString(m) }
-func (*JSONResponse) ProtoMessage()               {}
-func (*JSONResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{23} }
+func (m *JSONResponse) Reset()         { *m = JSONResponse{} }
+func (m *JSONResponse) String() string { return proto.CompactTextString(m) }
+func (*JSONResponse) ProtoMessage()    {}
+func (*JSONResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{23}
+}
+func (m *JSONResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *JSONResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *JSONResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_JSONResponse.Merge(dst, src)
+}
+func (m *JSONResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *JSONResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_JSONResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_JSONResponse proto.InternalMessageInfo
 
 type LogsRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId    string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	Level     string `protobuf:"bytes,2,opt,name=level,proto3" json:"level,omitempty"`
-	StartTime string `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime   string `protobuf:"bytes,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	Max       string `protobuf:"bytes,5,opt,name=max,proto3" json:"max,omitempty"`
-	Pattern   string `protobuf:"bytes,6,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Level                string   `protobuf:"bytes,2,opt,name=level,proto3" json:"level,omitempty"`
+	StartTime            string   `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime              string   `protobuf:"bytes,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	Max                  string   `protobuf:"bytes,5,opt,name=max,proto3" json:"max,omitempty"`
+	Pattern              string   `protobuf:"bytes,6,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *LogsRequest) Reset()                    { *m = LogsRequest{} }
-func (m *LogsRequest) String() string            { return proto.CompactTextString(m) }
-func (*LogsRequest) ProtoMessage()               {}
-func (*LogsRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{24} }
+func (m *LogsRequest) Reset()         { *m = LogsRequest{} }
+func (m *LogsRequest) String() string { return proto.CompactTextString(m) }
+func (*LogsRequest) ProtoMessage()    {}
+func (*LogsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{24}
+}
+func (m *LogsRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *LogsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogsRequest.Merge(dst, src)
+}
+func (m *LogsRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *LogsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogsRequest proto.InternalMessageInfo
 
 type LogEntriesResponse struct {
-	Entries []cockroach_util_log.Entry `protobuf:"bytes,1,rep,name=entries" json:"entries"`
+	Entries              []log.Entry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
-func (m *LogEntriesResponse) Reset()                    { *m = LogEntriesResponse{} }
-func (m *LogEntriesResponse) String() string            { return proto.CompactTextString(m) }
-func (*LogEntriesResponse) ProtoMessage()               {}
-func (*LogEntriesResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{25} }
+func (m *LogEntriesResponse) Reset()         { *m = LogEntriesResponse{} }
+func (m *LogEntriesResponse) String() string { return proto.CompactTextString(m) }
+func (*LogEntriesResponse) ProtoMessage()    {}
+func (*LogEntriesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{25}
+}
+func (m *LogEntriesResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogEntriesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *LogEntriesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogEntriesResponse.Merge(dst, src)
+}
+func (m *LogEntriesResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *LogEntriesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogEntriesResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogEntriesResponse proto.InternalMessageInfo
 
 type LogFilesListRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *LogFilesListRequest) Reset()                    { *m = LogFilesListRequest{} }
-func (m *LogFilesListRequest) String() string            { return proto.CompactTextString(m) }
-func (*LogFilesListRequest) ProtoMessage()               {}
-func (*LogFilesListRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{26} }
+func (m *LogFilesListRequest) Reset()         { *m = LogFilesListRequest{} }
+func (m *LogFilesListRequest) String() string { return proto.CompactTextString(m) }
+func (*LogFilesListRequest) ProtoMessage()    {}
+func (*LogFilesListRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{26}
+}
+func (m *LogFilesListRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogFilesListRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *LogFilesListRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogFilesListRequest.Merge(dst, src)
+}
+func (m *LogFilesListRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *LogFilesListRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogFilesListRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogFilesListRequest proto.InternalMessageInfo
 
 type LogFilesListResponse struct {
-	Files []cockroach_util_log.FileInfo `protobuf:"bytes,1,rep,name=files" json:"files"`
+	Files                []log.FileInfo `protobuf:"bytes,1,rep,name=files,proto3" json:"files"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *LogFilesListResponse) Reset()                    { *m = LogFilesListResponse{} }
-func (m *LogFilesListResponse) String() string            { return proto.CompactTextString(m) }
-func (*LogFilesListResponse) ProtoMessage()               {}
-func (*LogFilesListResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{27} }
+func (m *LogFilesListResponse) Reset()         { *m = LogFilesListResponse{} }
+func (m *LogFilesListResponse) String() string { return proto.CompactTextString(m) }
+func (*LogFilesListResponse) ProtoMessage()    {}
+func (*LogFilesListResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{27}
+}
+func (m *LogFilesListResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogFilesListResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *LogFilesListResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogFilesListResponse.Merge(dst, src)
+}
+func (m *LogFilesListResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *LogFilesListResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogFilesListResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogFilesListResponse proto.InternalMessageInfo
 
 type LogFileRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	File   string `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	File                 string   `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *LogFileRequest) Reset()                    { *m = LogFileRequest{} }
-func (m *LogFileRequest) String() string            { return proto.CompactTextString(m) }
-func (*LogFileRequest) ProtoMessage()               {}
-func (*LogFileRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{28} }
+func (m *LogFileRequest) Reset()         { *m = LogFileRequest{} }
+func (m *LogFileRequest) String() string { return proto.CompactTextString(m) }
+func (*LogFileRequest) ProtoMessage()    {}
+func (*LogFileRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{28}
+}
+func (m *LogFileRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogFileRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *LogFileRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogFileRequest.Merge(dst, src)
+}
+func (m *LogFileRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *LogFileRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogFileRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogFileRequest proto.InternalMessageInfo
 
 type StacksRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *StacksRequest) Reset()                    { *m = StacksRequest{} }
-func (m *StacksRequest) String() string            { return proto.CompactTextString(m) }
-func (*StacksRequest) ProtoMessage()               {}
-func (*StacksRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{29} }
+func (m *StacksRequest) Reset()         { *m = StacksRequest{} }
+func (m *StacksRequest) String() string { return proto.CompactTextString(m) }
+func (*StacksRequest) ProtoMessage()    {}
+func (*StacksRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{29}
+}
+func (m *StacksRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StacksRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StacksRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StacksRequest.Merge(dst, src)
+}
+func (m *StacksRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *StacksRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_StacksRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StacksRequest proto.InternalMessageInfo
 
 type File struct {
 	Name     string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	FileSize int64  `protobuf:"varint,2,opt,name=file_size,json=fileSize,proto3" json:"file_size,omitempty"`
 	// Contents may not be populated if only a list of Files are requested.
-	Contents []byte `protobuf:"bytes,3,opt,name=contents,proto3" json:"contents,omitempty"`
+	Contents             []byte   `protobuf:"bytes,3,opt,name=contents,proto3" json:"contents,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *File) Reset()                    { *m = File{} }
-func (m *File) String() string            { return proto.CompactTextString(m) }
-func (*File) ProtoMessage()               {}
-func (*File) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{30} }
+func (m *File) Reset()         { *m = File{} }
+func (m *File) String() string { return proto.CompactTextString(m) }
+func (*File) ProtoMessage()    {}
+func (*File) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{30}
+}
+func (m *File) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *File) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *File) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_File.Merge(dst, src)
+}
+func (m *File) XXX_Size() int {
+	return m.Size()
+}
+func (m *File) XXX_DiscardUnknown() {
+	xxx_messageInfo_File.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_File proto.InternalMessageInfo
 
 type GetFilesRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
@@ -550,95 +1418,329 @@ type GetFilesRequest struct {
 	// using filepath.Glob(). The patterns only match to filenames and so path
 	// separators cannot be used.
 	// Example: * will match all files of requested type.
-	Patterns []string `protobuf:"bytes,6,rep,name=patterns" json:"patterns,omitempty"`
+	Patterns             []string `protobuf:"bytes,6,rep,name=patterns,proto3" json:"patterns,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *GetFilesRequest) Reset()                    { *m = GetFilesRequest{} }
-func (m *GetFilesRequest) String() string            { return proto.CompactTextString(m) }
-func (*GetFilesRequest) ProtoMessage()               {}
-func (*GetFilesRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{31} }
+func (m *GetFilesRequest) Reset()         { *m = GetFilesRequest{} }
+func (m *GetFilesRequest) String() string { return proto.CompactTextString(m) }
+func (*GetFilesRequest) ProtoMessage()    {}
+func (*GetFilesRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{31}
+}
+func (m *GetFilesRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetFilesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *GetFilesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetFilesRequest.Merge(dst, src)
+}
+func (m *GetFilesRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetFilesRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetFilesRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetFilesRequest proto.InternalMessageInfo
 
 type GetFilesResponse struct {
-	Files []*File `protobuf:"bytes,1,rep,name=files" json:"files,omitempty"`
+	Files                []*File  `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *GetFilesResponse) Reset()                    { *m = GetFilesResponse{} }
-func (m *GetFilesResponse) String() string            { return proto.CompactTextString(m) }
-func (*GetFilesResponse) ProtoMessage()               {}
-func (*GetFilesResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{32} }
+func (m *GetFilesResponse) Reset()         { *m = GetFilesResponse{} }
+func (m *GetFilesResponse) String() string { return proto.CompactTextString(m) }
+func (*GetFilesResponse) ProtoMessage()    {}
+func (*GetFilesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{32}
+}
+func (m *GetFilesResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetFilesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *GetFilesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetFilesResponse.Merge(dst, src)
+}
+func (m *GetFilesResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetFilesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetFilesResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetFilesResponse proto.InternalMessageInfo
 
 type ProfileRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
 	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	// The type of profile to retrieve.
-	Type ProfileRequest_Type `protobuf:"varint,5,opt,name=type,proto3,enum=cockroach.server.serverpb.ProfileRequest_Type" json:"type,omitempty"`
+	Type                 ProfileRequest_Type `protobuf:"varint,5,opt,name=type,proto3,enum=cockroach.server.serverpb.ProfileRequest_Type" json:"type,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
-func (m *ProfileRequest) Reset()                    { *m = ProfileRequest{} }
-func (m *ProfileRequest) String() string            { return proto.CompactTextString(m) }
-func (*ProfileRequest) ProtoMessage()               {}
-func (*ProfileRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{33} }
+func (m *ProfileRequest) Reset()         { *m = ProfileRequest{} }
+func (m *ProfileRequest) String() string { return proto.CompactTextString(m) }
+func (*ProfileRequest) ProtoMessage()    {}
+func (*ProfileRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{33}
+}
+func (m *ProfileRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProfileRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ProfileRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProfileRequest.Merge(dst, src)
+}
+func (m *ProfileRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProfileRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProfileRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProfileRequest proto.InternalMessageInfo
 
 type MetricsRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *MetricsRequest) Reset()                    { *m = MetricsRequest{} }
-func (m *MetricsRequest) String() string            { return proto.CompactTextString(m) }
-func (*MetricsRequest) ProtoMessage()               {}
-func (*MetricsRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{34} }
+func (m *MetricsRequest) Reset()         { *m = MetricsRequest{} }
+func (m *MetricsRequest) String() string { return proto.CompactTextString(m) }
+func (*MetricsRequest) ProtoMessage()    {}
+func (*MetricsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{34}
+}
+func (m *MetricsRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *MetricsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *MetricsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MetricsRequest.Merge(dst, src)
+}
+func (m *MetricsRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *MetricsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_MetricsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MetricsRequest proto.InternalMessageInfo
 
 type RaftRangeNode struct {
-	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
-	Range  RangeInfo                                           `protobuf:"bytes,2,opt,name=range" json:"range"`
+	NodeID               github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
+	Range                RangeInfo                                           `protobuf:"bytes,2,opt,name=range,proto3" json:"range"`
+	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
+	XXX_sizecache        int32                                               `json:"-"`
 }
 
-func (m *RaftRangeNode) Reset()                    { *m = RaftRangeNode{} }
-func (m *RaftRangeNode) String() string            { return proto.CompactTextString(m) }
-func (*RaftRangeNode) ProtoMessage()               {}
-func (*RaftRangeNode) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{35} }
+func (m *RaftRangeNode) Reset()         { *m = RaftRangeNode{} }
+func (m *RaftRangeNode) String() string { return proto.CompactTextString(m) }
+func (*RaftRangeNode) ProtoMessage()    {}
+func (*RaftRangeNode) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{35}
+}
+func (m *RaftRangeNode) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftRangeNode) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftRangeNode) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftRangeNode.Merge(dst, src)
+}
+func (m *RaftRangeNode) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftRangeNode) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftRangeNode.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftRangeNode proto.InternalMessageInfo
 
 type RaftRangeError struct {
-	Message string `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Message              string   `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *RaftRangeError) Reset()                    { *m = RaftRangeError{} }
-func (m *RaftRangeError) String() string            { return proto.CompactTextString(m) }
-func (*RaftRangeError) ProtoMessage()               {}
-func (*RaftRangeError) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{36} }
+func (m *RaftRangeError) Reset()         { *m = RaftRangeError{} }
+func (m *RaftRangeError) String() string { return proto.CompactTextString(m) }
+func (*RaftRangeError) ProtoMessage()    {}
+func (*RaftRangeError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{36}
+}
+func (m *RaftRangeError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftRangeError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftRangeError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftRangeError.Merge(dst, src)
+}
+func (m *RaftRangeError) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftRangeError) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftRangeError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftRangeError proto.InternalMessageInfo
 
 type RaftRangeStatus struct {
-	RangeID github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
-	Errors  []RaftRangeError                                     `protobuf:"bytes,2,rep,name=errors" json:"errors"`
-	Nodes   []RaftRangeNode                                      `protobuf:"bytes,3,rep,name=nodes" json:"nodes"`
+	RangeID              github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
+	Errors               []RaftRangeError                                     `protobuf:"bytes,2,rep,name=errors,proto3" json:"errors"`
+	Nodes                []RaftRangeNode                                      `protobuf:"bytes,3,rep,name=nodes,proto3" json:"nodes"`
+	XXX_NoUnkeyedLiteral struct{}                                             `json:"-"`
+	XXX_sizecache        int32                                                `json:"-"`
 }
 
-func (m *RaftRangeStatus) Reset()                    { *m = RaftRangeStatus{} }
-func (m *RaftRangeStatus) String() string            { return proto.CompactTextString(m) }
-func (*RaftRangeStatus) ProtoMessage()               {}
-func (*RaftRangeStatus) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{37} }
+func (m *RaftRangeStatus) Reset()         { *m = RaftRangeStatus{} }
+func (m *RaftRangeStatus) String() string { return proto.CompactTextString(m) }
+func (*RaftRangeStatus) ProtoMessage()    {}
+func (*RaftRangeStatus) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{37}
+}
+func (m *RaftRangeStatus) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftRangeStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftRangeStatus) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftRangeStatus.Merge(dst, src)
+}
+func (m *RaftRangeStatus) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftRangeStatus) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftRangeStatus.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftRangeStatus proto.InternalMessageInfo
 
 type RaftDebugRequest struct {
-	RangeIDs []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,rep,packed,name=range_ids,json=rangeIds,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_ids,omitempty"`
+	RangeIDs             []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,1,rep,packed,name=range_ids,json=rangeIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_ids,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                               `json:"-"`
+	XXX_sizecache        int32                                                  `json:"-"`
 }
 
-func (m *RaftDebugRequest) Reset()                    { *m = RaftDebugRequest{} }
-func (m *RaftDebugRequest) String() string            { return proto.CompactTextString(m) }
-func (*RaftDebugRequest) ProtoMessage()               {}
-func (*RaftDebugRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{38} }
+func (m *RaftDebugRequest) Reset()         { *m = RaftDebugRequest{} }
+func (m *RaftDebugRequest) String() string { return proto.CompactTextString(m) }
+func (*RaftDebugRequest) ProtoMessage()    {}
+func (*RaftDebugRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{38}
+}
+func (m *RaftDebugRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftDebugRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftDebugRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftDebugRequest.Merge(dst, src)
+}
+func (m *RaftDebugRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftDebugRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftDebugRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftDebugRequest proto.InternalMessageInfo
 
 type RaftDebugResponse struct {
-	Ranges map[github_com_cockroachdb_cockroach_pkg_roachpb.RangeID]RaftRangeStatus `protobuf:"bytes,1,rep,name=ranges,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"ranges" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
-	Errors []RaftRangeError                                                         `protobuf:"bytes,2,rep,name=errors" json:"errors"`
+	Ranges               map[github_com_cockroachdb_cockroach_pkg_roachpb.RangeID]RaftRangeStatus `protobuf:"bytes,1,rep,name=ranges,proto3,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"ranges" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Errors               []RaftRangeError                                                         `protobuf:"bytes,2,rep,name=errors,proto3" json:"errors"`
+	XXX_NoUnkeyedLiteral struct{}                                                                 `json:"-"`
+	XXX_sizecache        int32                                                                    `json:"-"`
 }
 
-func (m *RaftDebugResponse) Reset()                    { *m = RaftDebugResponse{} }
-func (m *RaftDebugResponse) String() string            { return proto.CompactTextString(m) }
-func (*RaftDebugResponse) ProtoMessage()               {}
-func (*RaftDebugResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{39} }
+func (m *RaftDebugResponse) Reset()         { *m = RaftDebugResponse{} }
+func (m *RaftDebugResponse) String() string { return proto.CompactTextString(m) }
+func (*RaftDebugResponse) ProtoMessage()    {}
+func (*RaftDebugResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{39}
+}
+func (m *RaftDebugResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RaftDebugResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RaftDebugResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RaftDebugResponse.Merge(dst, src)
+}
+func (m *RaftDebugResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *RaftDebugResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RaftDebugResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RaftDebugResponse proto.InternalMessageInfo
 
 // ActiveQuery represents a query in flight on some Session.
 type ActiveQuery struct {
@@ -647,28 +1749,80 @@ type ActiveQuery struct {
 	// SQL query string specified by the user.
 	Sql string `protobuf:"bytes,2,opt,name=sql,proto3" json:"sql,omitempty"`
 	// Start timestamp of this query.
-	Start time.Time `protobuf:"bytes,3,opt,name=start,stdtime" json:"start"`
+	Start time.Time `protobuf:"bytes,3,opt,name=start,proto3,stdtime" json:"start"`
 	// True if this query is distributed.
 	IsDistributed bool `protobuf:"varint,4,opt,name=is_distributed,json=isDistributed,proto3" json:"is_distributed,omitempty"`
 	// phase stores the current phase of execution for this query.
-	Phase ActiveQuery_Phase `protobuf:"varint,5,opt,name=phase,proto3,enum=cockroach.server.serverpb.ActiveQuery_Phase" json:"phase,omitempty"`
+	Phase                ActiveQuery_Phase `protobuf:"varint,5,opt,name=phase,proto3,enum=cockroach.server.serverpb.ActiveQuery_Phase" json:"phase,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
-func (m *ActiveQuery) Reset()                    { *m = ActiveQuery{} }
-func (m *ActiveQuery) String() string            { return proto.CompactTextString(m) }
-func (*ActiveQuery) ProtoMessage()               {}
-func (*ActiveQuery) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{40} }
+func (m *ActiveQuery) Reset()         { *m = ActiveQuery{} }
+func (m *ActiveQuery) String() string { return proto.CompactTextString(m) }
+func (*ActiveQuery) ProtoMessage()    {}
+func (*ActiveQuery) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{40}
+}
+func (m *ActiveQuery) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ActiveQuery) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ActiveQuery) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ActiveQuery.Merge(dst, src)
+}
+func (m *ActiveQuery) XXX_Size() int {
+	return m.Size()
+}
+func (m *ActiveQuery) XXX_DiscardUnknown() {
+	xxx_messageInfo_ActiveQuery.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ActiveQuery proto.InternalMessageInfo
 
 // Request object for ListSessions and ListLocalSessions.
 type ListSessionsRequest struct {
 	// Username of the user making this request.
-	Username string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Username             string   `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ListSessionsRequest) Reset()                    { *m = ListSessionsRequest{} }
-func (m *ListSessionsRequest) String() string            { return proto.CompactTextString(m) }
-func (*ListSessionsRequest) ProtoMessage()               {}
-func (*ListSessionsRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{41} }
+func (m *ListSessionsRequest) Reset()         { *m = ListSessionsRequest{} }
+func (m *ListSessionsRequest) String() string { return proto.CompactTextString(m) }
+func (*ListSessionsRequest) ProtoMessage()    {}
+func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{41}
+}
+func (m *ListSessionsRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ListSessionsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ListSessionsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ListSessionsRequest.Merge(dst, src)
+}
+func (m *ListSessionsRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *ListSessionsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ListSessionsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ListSessionsRequest proto.InternalMessageInfo
 
 // Session represents one SQL session.
 type Session struct {
@@ -681,9 +1835,9 @@ type Session struct {
 	// Application name specified by the client.
 	ApplicationName string `protobuf:"bytes,4,opt,name=application_name,json=applicationName,proto3" json:"application_name,omitempty"`
 	// Queries in progress on this session.
-	ActiveQueries []ActiveQuery `protobuf:"bytes,5,rep,name=active_queries,json=activeQueries" json:"active_queries"`
+	ActiveQueries []ActiveQuery `protobuf:"bytes,5,rep,name=active_queries,json=activeQueries,proto3" json:"active_queries"`
 	// Timestamp of session's start.
-	Start time.Time `protobuf:"bytes,6,opt,name=start,stdtime" json:"start"`
+	Start time.Time `protobuf:"bytes,6,opt,name=start,proto3,stdtime" json:"start"`
 	// ID of the current KV transaction for this session. Nil if the session
 	// doesn't currently have a transaction.
 	KvTxnID *github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,7,opt,name=kv_txn_id,json=kvTxnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"kv_txn_id,omitempty"`
@@ -694,39 +1848,117 @@ type Session struct {
 	// Number of currently allocated bytes in the session memory monitor.
 	AllocBytes int64 `protobuf:"varint,10,opt,name=alloc_bytes,json=allocBytes,proto3" json:"alloc_bytes,omitempty"`
 	// High water mark of allocated bytes in the session memory monitor.
-	MaxAllocBytes int64 `protobuf:"varint,11,opt,name=max_alloc_bytes,json=maxAllocBytes,proto3" json:"max_alloc_bytes,omitempty"`
+	MaxAllocBytes        int64    `protobuf:"varint,11,opt,name=max_alloc_bytes,json=maxAllocBytes,proto3" json:"max_alloc_bytes,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Session) Reset()                    { *m = Session{} }
-func (m *Session) String() string            { return proto.CompactTextString(m) }
-func (*Session) ProtoMessage()               {}
-func (*Session) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{42} }
+func (m *Session) Reset()         { *m = Session{} }
+func (m *Session) String() string { return proto.CompactTextString(m) }
+func (*Session) ProtoMessage()    {}
+func (*Session) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{42}
+}
+func (m *Session) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Session) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Session) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Session.Merge(dst, src)
+}
+func (m *Session) XXX_Size() int {
+	return m.Size()
+}
+func (m *Session) XXX_DiscardUnknown() {
+	xxx_messageInfo_Session.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Session proto.InternalMessageInfo
 
 // An error wrapper object for ListSessionsResponse.
 type ListSessionsError struct {
 	// ID of node that was being contacted when this error occurred
 	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
 	// Error message.
-	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Message              string   `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ListSessionsError) Reset()                    { *m = ListSessionsError{} }
-func (m *ListSessionsError) String() string            { return proto.CompactTextString(m) }
-func (*ListSessionsError) ProtoMessage()               {}
-func (*ListSessionsError) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{43} }
+func (m *ListSessionsError) Reset()         { *m = ListSessionsError{} }
+func (m *ListSessionsError) String() string { return proto.CompactTextString(m) }
+func (*ListSessionsError) ProtoMessage()    {}
+func (*ListSessionsError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{43}
+}
+func (m *ListSessionsError) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ListSessionsError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ListSessionsError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ListSessionsError.Merge(dst, src)
+}
+func (m *ListSessionsError) XXX_Size() int {
+	return m.Size()
+}
+func (m *ListSessionsError) XXX_DiscardUnknown() {
+	xxx_messageInfo_ListSessionsError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ListSessionsError proto.InternalMessageInfo
 
 // Response object for ListSessions and ListLocalSessions.
 type ListSessionsResponse struct {
 	// A list of sessions on this node or cluster.
-	Sessions []Session `protobuf:"bytes,1,rep,name=sessions" json:"sessions"`
+	Sessions []Session `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions"`
 	// Any errors that occurred during fan-out calls to other nodes.
-	Errors []ListSessionsError `protobuf:"bytes,2,rep,name=errors" json:"errors"`
+	Errors               []ListSessionsError `protobuf:"bytes,2,rep,name=errors,proto3" json:"errors"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
-func (m *ListSessionsResponse) Reset()                    { *m = ListSessionsResponse{} }
-func (m *ListSessionsResponse) String() string            { return proto.CompactTextString(m) }
-func (*ListSessionsResponse) ProtoMessage()               {}
-func (*ListSessionsResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{44} }
+func (m *ListSessionsResponse) Reset()         { *m = ListSessionsResponse{} }
+func (m *ListSessionsResponse) String() string { return proto.CompactTextString(m) }
+func (*ListSessionsResponse) ProtoMessage()    {}
+func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{44}
+}
+func (m *ListSessionsResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ListSessionsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ListSessionsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ListSessionsResponse.Merge(dst, src)
+}
+func (m *ListSessionsResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *ListSessionsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ListSessionsResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ListSessionsResponse proto.InternalMessageInfo
 
 // Request object for issing a query cancel request.
 type CancelQueryRequest struct {
@@ -741,26 +1973,78 @@ type CancelQueryRequest struct {
 	// ID of query to be canceled (converted to string).
 	QueryID string `protobuf:"bytes,2,opt,name=query_id,json=queryId,proto3" json:"query_id,omitempty"`
 	// Username of the user making this cancellation request.
-	Username string `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	Username             string   `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *CancelQueryRequest) Reset()                    { *m = CancelQueryRequest{} }
-func (m *CancelQueryRequest) String() string            { return proto.CompactTextString(m) }
-func (*CancelQueryRequest) ProtoMessage()               {}
-func (*CancelQueryRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{45} }
+func (m *CancelQueryRequest) Reset()         { *m = CancelQueryRequest{} }
+func (m *CancelQueryRequest) String() string { return proto.CompactTextString(m) }
+func (*CancelQueryRequest) ProtoMessage()    {}
+func (*CancelQueryRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{45}
+}
+func (m *CancelQueryRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CancelQueryRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CancelQueryRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CancelQueryRequest.Merge(dst, src)
+}
+func (m *CancelQueryRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *CancelQueryRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_CancelQueryRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CancelQueryRequest proto.InternalMessageInfo
 
 // Response returned by target query's gateway node.
 type CancelQueryResponse struct {
 	// Whether the cancellation request succeeded and the query was canceled.
 	Canceled bool `protobuf:"varint,1,opt,name=canceled,proto3" json:"canceled,omitempty"`
 	// Error message (accompanied with canceled = false).
-	Error string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	Error                string   `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *CancelQueryResponse) Reset()                    { *m = CancelQueryResponse{} }
-func (m *CancelQueryResponse) String() string            { return proto.CompactTextString(m) }
-func (*CancelQueryResponse) ProtoMessage()               {}
-func (*CancelQueryResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{46} }
+func (m *CancelQueryResponse) Reset()         { *m = CancelQueryResponse{} }
+func (m *CancelQueryResponse) String() string { return proto.CompactTextString(m) }
+func (*CancelQueryResponse) ProtoMessage()    {}
+func (*CancelQueryResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{46}
+}
+func (m *CancelQueryResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CancelQueryResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CancelQueryResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CancelQueryResponse.Merge(dst, src)
+}
+func (m *CancelQueryResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *CancelQueryResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_CancelQueryResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CancelQueryResponse proto.InternalMessageInfo
 
 type CancelSessionRequest struct {
 	// TODO(abhimadan): use [(gogoproto.customname) = "NodeID"] below. Need to
@@ -768,142 +2052,450 @@ type CancelSessionRequest struct {
 	//
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId    string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	SessionID []byte `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Username  string `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	SessionID            []byte   `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Username             string   `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *CancelSessionRequest) Reset()                    { *m = CancelSessionRequest{} }
-func (m *CancelSessionRequest) String() string            { return proto.CompactTextString(m) }
-func (*CancelSessionRequest) ProtoMessage()               {}
-func (*CancelSessionRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{47} }
+func (m *CancelSessionRequest) Reset()         { *m = CancelSessionRequest{} }
+func (m *CancelSessionRequest) String() string { return proto.CompactTextString(m) }
+func (*CancelSessionRequest) ProtoMessage()    {}
+func (*CancelSessionRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{47}
+}
+func (m *CancelSessionRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CancelSessionRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CancelSessionRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CancelSessionRequest.Merge(dst, src)
+}
+func (m *CancelSessionRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *CancelSessionRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_CancelSessionRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CancelSessionRequest proto.InternalMessageInfo
 
 type CancelSessionResponse struct {
-	Canceled bool   `protobuf:"varint,1,opt,name=canceled,proto3" json:"canceled,omitempty"`
-	Error    string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	Canceled             bool     `protobuf:"varint,1,opt,name=canceled,proto3" json:"canceled,omitempty"`
+	Error                string   `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *CancelSessionResponse) Reset()                    { *m = CancelSessionResponse{} }
-func (m *CancelSessionResponse) String() string            { return proto.CompactTextString(m) }
-func (*CancelSessionResponse) ProtoMessage()               {}
-func (*CancelSessionResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{48} }
+func (m *CancelSessionResponse) Reset()         { *m = CancelSessionResponse{} }
+func (m *CancelSessionResponse) String() string { return proto.CompactTextString(m) }
+func (*CancelSessionResponse) ProtoMessage()    {}
+func (*CancelSessionResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{48}
+}
+func (m *CancelSessionResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CancelSessionResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *CancelSessionResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CancelSessionResponse.Merge(dst, src)
+}
+func (m *CancelSessionResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *CancelSessionResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_CancelSessionResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CancelSessionResponse proto.InternalMessageInfo
 
 type SpanStatsRequest struct {
-	NodeID   string                                            `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	StartKey github_com_cockroachdb_cockroach_pkg_roachpb.RKey `protobuf:"bytes,2,opt,name=start_key,json=startKey,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RKey" json:"start_key,omitempty"`
-	EndKey   github_com_cockroachdb_cockroach_pkg_roachpb.RKey `protobuf:"bytes,3,opt,name=end_key,json=endKey,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RKey" json:"end_key,omitempty"`
+	NodeID               string                                            `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	StartKey             github_com_cockroachdb_cockroach_pkg_roachpb.RKey `protobuf:"bytes,2,opt,name=start_key,json=startKey,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RKey" json:"start_key,omitempty"`
+	EndKey               github_com_cockroachdb_cockroach_pkg_roachpb.RKey `protobuf:"bytes,3,opt,name=end_key,json=endKey,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RKey" json:"end_key,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
+	XXX_sizecache        int32                                             `json:"-"`
 }
 
-func (m *SpanStatsRequest) Reset()                    { *m = SpanStatsRequest{} }
-func (m *SpanStatsRequest) String() string            { return proto.CompactTextString(m) }
-func (*SpanStatsRequest) ProtoMessage()               {}
-func (*SpanStatsRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{49} }
+func (m *SpanStatsRequest) Reset()         { *m = SpanStatsRequest{} }
+func (m *SpanStatsRequest) String() string { return proto.CompactTextString(m) }
+func (*SpanStatsRequest) ProtoMessage()    {}
+func (*SpanStatsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{49}
+}
+func (m *SpanStatsRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SpanStatsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SpanStatsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SpanStatsRequest.Merge(dst, src)
+}
+func (m *SpanStatsRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *SpanStatsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_SpanStatsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SpanStatsRequest proto.InternalMessageInfo
 
 type SpanStatsResponse struct {
-	RangeCount           int32                                        `protobuf:"varint,2,opt,name=range_count,json=rangeCount,proto3" json:"range_count,omitempty"`
-	ApproximateDiskBytes uint64                                       `protobuf:"varint,3,opt,name=approximate_disk_bytes,json=approximateDiskBytes,proto3" json:"approximate_disk_bytes,omitempty"`
-	TotalStats           cockroach_storage_engine_enginepb1.MVCCStats `protobuf:"bytes,1,opt,name=total_stats,json=totalStats" json:"total_stats"`
+	RangeCount           int32              `protobuf:"varint,2,opt,name=range_count,json=rangeCount,proto3" json:"range_count,omitempty"`
+	ApproximateDiskBytes uint64             `protobuf:"varint,3,opt,name=approximate_disk_bytes,json=approximateDiskBytes,proto3" json:"approximate_disk_bytes,omitempty"`
+	TotalStats           enginepb.MVCCStats `protobuf:"bytes,1,opt,name=total_stats,json=totalStats,proto3" json:"total_stats"`
+	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
+	XXX_sizecache        int32              `json:"-"`
 }
 
-func (m *SpanStatsResponse) Reset()                    { *m = SpanStatsResponse{} }
-func (m *SpanStatsResponse) String() string            { return proto.CompactTextString(m) }
-func (*SpanStatsResponse) ProtoMessage()               {}
-func (*SpanStatsResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{50} }
+func (m *SpanStatsResponse) Reset()         { *m = SpanStatsResponse{} }
+func (m *SpanStatsResponse) String() string { return proto.CompactTextString(m) }
+func (*SpanStatsResponse) ProtoMessage()    {}
+func (*SpanStatsResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{50}
+}
+func (m *SpanStatsResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SpanStatsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SpanStatsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SpanStatsResponse.Merge(dst, src)
+}
+func (m *SpanStatsResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *SpanStatsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_SpanStatsResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SpanStatsResponse proto.InternalMessageInfo
 
 type ProblemRangesRequest struct {
-	NodeID string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeID               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ProblemRangesRequest) Reset()                    { *m = ProblemRangesRequest{} }
-func (m *ProblemRangesRequest) String() string            { return proto.CompactTextString(m) }
-func (*ProblemRangesRequest) ProtoMessage()               {}
-func (*ProblemRangesRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{51} }
+func (m *ProblemRangesRequest) Reset()         { *m = ProblemRangesRequest{} }
+func (m *ProblemRangesRequest) String() string { return proto.CompactTextString(m) }
+func (*ProblemRangesRequest) ProtoMessage()    {}
+func (*ProblemRangesRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{51}
+}
+func (m *ProblemRangesRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProblemRangesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ProblemRangesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProblemRangesRequest.Merge(dst, src)
+}
+func (m *ProblemRangesRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProblemRangesRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProblemRangesRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProblemRangesRequest proto.InternalMessageInfo
 
 type ProblemRangesResponse struct {
 	// NodeID is the node that submitted all the requests.
-	NodeID           github_com_cockroachdb_cockroach_pkg_roachpb.NodeID                                        `protobuf:"varint,8,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
-	ProblemsByNodeID map[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID]ProblemRangesResponse_NodeProblems `protobuf:"bytes,9,rep,name=problems_by_node_id,json=problemsByNodeId,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"problems_by_node_id" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	NodeID               github_com_cockroachdb_cockroach_pkg_roachpb.NodeID                                        `protobuf:"varint,8,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
+	ProblemsByNodeID     map[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID]ProblemRangesResponse_NodeProblems `protobuf:"bytes,9,rep,name=problems_by_node_id,json=problemsByNodeId,proto3,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"problems_by_node_id" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}                                                                                   `json:"-"`
+	XXX_sizecache        int32                                                                                      `json:"-"`
 }
 
-func (m *ProblemRangesResponse) Reset()                    { *m = ProblemRangesResponse{} }
-func (m *ProblemRangesResponse) String() string            { return proto.CompactTextString(m) }
-func (*ProblemRangesResponse) ProtoMessage()               {}
-func (*ProblemRangesResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{52} }
+func (m *ProblemRangesResponse) Reset()         { *m = ProblemRangesResponse{} }
+func (m *ProblemRangesResponse) String() string { return proto.CompactTextString(m) }
+func (*ProblemRangesResponse) ProtoMessage()    {}
+func (*ProblemRangesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{52}
+}
+func (m *ProblemRangesResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProblemRangesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ProblemRangesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProblemRangesResponse.Merge(dst, src)
+}
+func (m *ProblemRangesResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProblemRangesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProblemRangesResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProblemRangesResponse proto.InternalMessageInfo
 
 type ProblemRangesResponse_NodeProblems struct {
 	ErrorMessage                     string                                                 `protobuf:"bytes,1,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	UnavailableRangeIDs              []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,2,rep,packed,name=unavailable_range_ids,json=unavailableRangeIds,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"unavailable_range_ids,omitempty"`
-	RaftLeaderNotLeaseHolderRangeIDs []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,3,rep,packed,name=raft_leader_not_lease_holder_range_ids,json=raftLeaderNotLeaseHolderRangeIds,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"raft_leader_not_lease_holder_range_ids,omitempty"`
-	NoRaftLeaderRangeIDs             []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,4,rep,packed,name=no_raft_leader_range_ids,json=noRaftLeaderRangeIds,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"no_raft_leader_range_ids,omitempty"`
-	NoLeaseRangeIDs                  []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,5,rep,packed,name=no_lease_range_ids,json=noLeaseRangeIds,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"no_lease_range_ids,omitempty"`
-	UnderreplicatedRangeIDs          []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,6,rep,packed,name=underreplicated_range_ids,json=underreplicatedRangeIds,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"underreplicated_range_ids,omitempty"`
-	QuiescentEqualsTickingRangeIDs   []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,7,rep,packed,name=quiescent_equals_ticking_range_ids,json=quiescentEqualsTickingRangeIds,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"quiescent_equals_ticking_range_ids,omitempty"`
-	RaftLogTooLargeRangeIDs          []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,8,rep,packed,name=raft_log_too_large_range_ids,json=raftLogTooLargeRangeIds,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"raft_log_too_large_range_ids,omitempty"`
+	UnavailableRangeIDs              []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,2,rep,packed,name=unavailable_range_ids,json=unavailableRangeIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"unavailable_range_ids,omitempty"`
+	RaftLeaderNotLeaseHolderRangeIDs []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,3,rep,packed,name=raft_leader_not_lease_holder_range_ids,json=raftLeaderNotLeaseHolderRangeIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"raft_leader_not_lease_holder_range_ids,omitempty"`
+	NoRaftLeaderRangeIDs             []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,4,rep,packed,name=no_raft_leader_range_ids,json=noRaftLeaderRangeIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"no_raft_leader_range_ids,omitempty"`
+	NoLeaseRangeIDs                  []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,5,rep,packed,name=no_lease_range_ids,json=noLeaseRangeIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"no_lease_range_ids,omitempty"`
+	UnderreplicatedRangeIDs          []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,6,rep,packed,name=underreplicated_range_ids,json=underreplicatedRangeIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"underreplicated_range_ids,omitempty"`
+	QuiescentEqualsTickingRangeIDs   []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,7,rep,packed,name=quiescent_equals_ticking_range_ids,json=quiescentEqualsTickingRangeIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"quiescent_equals_ticking_range_ids,omitempty"`
+	RaftLogTooLargeRangeIDs          []github_com_cockroachdb_cockroach_pkg_roachpb.RangeID `protobuf:"varint,8,rep,packed,name=raft_log_too_large_range_ids,json=raftLogTooLargeRangeIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"raft_log_too_large_range_ids,omitempty"`
+	XXX_NoUnkeyedLiteral             struct{}                                               `json:"-"`
+	XXX_sizecache                    int32                                                  `json:"-"`
 }
 
 func (m *ProblemRangesResponse_NodeProblems) Reset()         { *m = ProblemRangesResponse_NodeProblems{} }
 func (m *ProblemRangesResponse_NodeProblems) String() string { return proto.CompactTextString(m) }
 func (*ProblemRangesResponse_NodeProblems) ProtoMessage()    {}
 func (*ProblemRangesResponse_NodeProblems) Descriptor() ([]byte, []int) {
-	return fileDescriptorStatus, []int{52, 0}
+	return fileDescriptor_status_0de29a344bd79652, []int{52, 0}
 }
+func (m *ProblemRangesResponse_NodeProblems) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ProblemRangesResponse_NodeProblems) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ProblemRangesResponse_NodeProblems) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProblemRangesResponse_NodeProblems.Merge(dst, src)
+}
+func (m *ProblemRangesResponse_NodeProblems) XXX_Size() int {
+	return m.Size()
+}
+func (m *ProblemRangesResponse_NodeProblems) XXX_DiscardUnknown() {
+	xxx_messageInfo_ProblemRangesResponse_NodeProblems.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ProblemRangesResponse_NodeProblems proto.InternalMessageInfo
 
 type RangeRequest struct {
-	RangeId int64 `protobuf:"varint,1,opt,name=range_id,json=rangeId,proto3" json:"range_id,omitempty"`
+	RangeId              int64    `protobuf:"varint,1,opt,name=range_id,json=rangeId,proto3" json:"range_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *RangeRequest) Reset()                    { *m = RangeRequest{} }
-func (m *RangeRequest) String() string            { return proto.CompactTextString(m) }
-func (*RangeRequest) ProtoMessage()               {}
-func (*RangeRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{53} }
+func (m *RangeRequest) Reset()         { *m = RangeRequest{} }
+func (m *RangeRequest) String() string { return proto.CompactTextString(m) }
+func (*RangeRequest) ProtoMessage()    {}
+func (*RangeRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{53}
+}
+func (m *RangeRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeRequest.Merge(dst, src)
+}
+func (m *RangeRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeRequest proto.InternalMessageInfo
 
 type RangeResponse struct {
 	// NodeID is the node that submitted all the requests.
-	NodeID            github_com_cockroachdb_cockroach_pkg_roachpb.NodeID                                `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
-	RangeID           github_com_cockroachdb_cockroach_pkg_roachpb.RangeID                               `protobuf:"varint,2,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
-	ResponsesByNodeID map[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID]RangeResponse_NodeResponse `protobuf:"bytes,3,rep,name=responses_by_node_id,json=responsesByNodeId,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"responses_by_node_id" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	NodeID               github_com_cockroachdb_cockroach_pkg_roachpb.NodeID                                `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
+	RangeID              github_com_cockroachdb_cockroach_pkg_roachpb.RangeID                               `protobuf:"varint,2,opt,name=range_id,json=rangeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.RangeID" json:"range_id,omitempty"`
+	ResponsesByNodeID    map[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID]RangeResponse_NodeResponse `protobuf:"bytes,3,rep,name=responses_by_node_id,json=responsesByNodeId,proto3,castkey=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"responses_by_node_id" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}                                                                           `json:"-"`
+	XXX_sizecache        int32                                                                              `json:"-"`
 }
 
-func (m *RangeResponse) Reset()                    { *m = RangeResponse{} }
-func (m *RangeResponse) String() string            { return proto.CompactTextString(m) }
-func (*RangeResponse) ProtoMessage()               {}
-func (*RangeResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{54} }
+func (m *RangeResponse) Reset()         { *m = RangeResponse{} }
+func (m *RangeResponse) String() string { return proto.CompactTextString(m) }
+func (*RangeResponse) ProtoMessage()    {}
+func (*RangeResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{54}
+}
+func (m *RangeResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeResponse.Merge(dst, src)
+}
+func (m *RangeResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeResponse proto.InternalMessageInfo
 
 type RangeResponse_NodeResponse struct {
-	Response     bool        `protobuf:"varint,1,opt,name=response,proto3" json:"response,omitempty"`
-	ErrorMessage string      `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	Infos        []RangeInfo `protobuf:"bytes,3,rep,name=infos" json:"infos"`
+	Response             bool        `protobuf:"varint,1,opt,name=response,proto3" json:"response,omitempty"`
+	ErrorMessage         string      `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	Infos                []RangeInfo `protobuf:"bytes,3,rep,name=infos,proto3" json:"infos"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
 func (m *RangeResponse_NodeResponse) Reset()         { *m = RangeResponse_NodeResponse{} }
 func (m *RangeResponse_NodeResponse) String() string { return proto.CompactTextString(m) }
 func (*RangeResponse_NodeResponse) ProtoMessage()    {}
 func (*RangeResponse_NodeResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptorStatus, []int{54, 0}
+	return fileDescriptor_status_0de29a344bd79652, []int{54, 0}
 }
+func (m *RangeResponse_NodeResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeResponse_NodeResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeResponse_NodeResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeResponse_NodeResponse.Merge(dst, src)
+}
+func (m *RangeResponse_NodeResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeResponse_NodeResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeResponse_NodeResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeResponse_NodeResponse proto.InternalMessageInfo
 
 // DiagnosticsRequest requests a diagnostics report.
 type DiagnosticsRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *DiagnosticsRequest) Reset()                    { *m = DiagnosticsRequest{} }
-func (m *DiagnosticsRequest) String() string            { return proto.CompactTextString(m) }
-func (*DiagnosticsRequest) ProtoMessage()               {}
-func (*DiagnosticsRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{55} }
+func (m *DiagnosticsRequest) Reset()         { *m = DiagnosticsRequest{} }
+func (m *DiagnosticsRequest) String() string { return proto.CompactTextString(m) }
+func (*DiagnosticsRequest) ProtoMessage()    {}
+func (*DiagnosticsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{55}
+}
+func (m *DiagnosticsRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DiagnosticsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *DiagnosticsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DiagnosticsRequest.Merge(dst, src)
+}
+func (m *DiagnosticsRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *DiagnosticsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_DiagnosticsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DiagnosticsRequest proto.InternalMessageInfo
 
 type StoresRequest struct {
 	// node_id is a string so that "local" can be used to specify that no
 	// forwarding is necessary.
-	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeId               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *StoresRequest) Reset()                    { *m = StoresRequest{} }
-func (m *StoresRequest) String() string            { return proto.CompactTextString(m) }
-func (*StoresRequest) ProtoMessage()               {}
-func (*StoresRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{56} }
+func (m *StoresRequest) Reset()         { *m = StoresRequest{} }
+func (m *StoresRequest) String() string { return proto.CompactTextString(m) }
+func (*StoresRequest) ProtoMessage()    {}
+func (*StoresRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{56}
+}
+func (m *StoresRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StoresRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StoresRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StoresRequest.Merge(dst, src)
+}
+func (m *StoresRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *StoresRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_StoresRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StoresRequest proto.InternalMessageInfo
 
 type StoreDetails struct {
 	StoreID github_com_cockroachdb_cockroach_pkg_roachpb.StoreID `protobuf:"varint,1,opt,name=store_id,json=storeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.StoreID" json:"store_id,omitempty"`
@@ -915,47 +2507,153 @@ type StoreDetails struct {
 	TotalFiles uint64 `protobuf:"varint,3,opt,name=total_files,json=totalFiles,proto3" json:"total_files,omitempty"`
 	TotalBytes uint64 `protobuf:"varint,4,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
 	// Files/bytes using the active data key.
-	ActiveKeyFiles uint64 `protobuf:"varint,5,opt,name=active_key_files,json=activeKeyFiles,proto3" json:"active_key_files,omitempty"`
-	ActiveKeyBytes uint64 `protobuf:"varint,6,opt,name=active_key_bytes,json=activeKeyBytes,proto3" json:"active_key_bytes,omitempty"`
+	ActiveKeyFiles       uint64   `protobuf:"varint,5,opt,name=active_key_files,json=activeKeyFiles,proto3" json:"active_key_files,omitempty"`
+	ActiveKeyBytes       uint64   `protobuf:"varint,6,opt,name=active_key_bytes,json=activeKeyBytes,proto3" json:"active_key_bytes,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *StoreDetails) Reset()                    { *m = StoreDetails{} }
-func (m *StoreDetails) String() string            { return proto.CompactTextString(m) }
-func (*StoreDetails) ProtoMessage()               {}
-func (*StoreDetails) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{57} }
+func (m *StoreDetails) Reset()         { *m = StoreDetails{} }
+func (m *StoreDetails) String() string { return proto.CompactTextString(m) }
+func (*StoreDetails) ProtoMessage()    {}
+func (*StoreDetails) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{57}
+}
+func (m *StoreDetails) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StoreDetails) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StoreDetails) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StoreDetails.Merge(dst, src)
+}
+func (m *StoreDetails) XXX_Size() int {
+	return m.Size()
+}
+func (m *StoreDetails) XXX_DiscardUnknown() {
+	xxx_messageInfo_StoreDetails.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StoreDetails proto.InternalMessageInfo
 
 type StoresResponse struct {
-	Stores []StoreDetails `protobuf:"bytes,1,rep,name=stores" json:"stores"`
+	Stores               []StoreDetails `protobuf:"bytes,1,rep,name=stores,proto3" json:"stores"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *StoresResponse) Reset()                    { *m = StoresResponse{} }
-func (m *StoresResponse) String() string            { return proto.CompactTextString(m) }
-func (*StoresResponse) ProtoMessage()               {}
-func (*StoresResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{58} }
+func (m *StoresResponse) Reset()         { *m = StoresResponse{} }
+func (m *StoresResponse) String() string { return proto.CompactTextString(m) }
+func (*StoresResponse) ProtoMessage()    {}
+func (*StoresResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{58}
+}
+func (m *StoresResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StoresResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StoresResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StoresResponse.Merge(dst, src)
+}
+func (m *StoresResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *StoresResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_StoresResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StoresResponse proto.InternalMessageInfo
 
 type StatementsRequest struct {
-	NodeID string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeID               string   `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *StatementsRequest) Reset()                    { *m = StatementsRequest{} }
-func (m *StatementsRequest) String() string            { return proto.CompactTextString(m) }
-func (*StatementsRequest) ProtoMessage()               {}
-func (*StatementsRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{59} }
+func (m *StatementsRequest) Reset()         { *m = StatementsRequest{} }
+func (m *StatementsRequest) String() string { return proto.CompactTextString(m) }
+func (*StatementsRequest) ProtoMessage()    {}
+func (*StatementsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{59}
+}
+func (m *StatementsRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StatementsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StatementsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatementsRequest.Merge(dst, src)
+}
+func (m *StatementsRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *StatementsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_StatementsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StatementsRequest proto.InternalMessageInfo
 
 type StatementsResponse struct {
-	Statements []StatementsResponse_CollectedStatementStatistics `protobuf:"bytes,1,rep,name=statements" json:"statements"`
+	Statements []StatementsResponse_CollectedStatementStatistics `protobuf:"bytes,1,rep,name=statements,proto3" json:"statements"`
 	// Timestamp of the last stats reset.
-	LastReset time.Time `protobuf:"bytes,3,opt,name=last_reset,json=lastReset,stdtime" json:"last_reset"`
+	LastReset            time.Time `protobuf:"bytes,3,opt,name=last_reset,json=lastReset,proto3,stdtime" json:"last_reset"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
 }
 
-func (m *StatementsResponse) Reset()                    { *m = StatementsResponse{} }
-func (m *StatementsResponse) String() string            { return proto.CompactTextString(m) }
-func (*StatementsResponse) ProtoMessage()               {}
-func (*StatementsResponse) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{60} }
+func (m *StatementsResponse) Reset()         { *m = StatementsResponse{} }
+func (m *StatementsResponse) String() string { return proto.CompactTextString(m) }
+func (*StatementsResponse) ProtoMessage()    {}
+func (*StatementsResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_status_0de29a344bd79652, []int{60}
+}
+func (m *StatementsResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StatementsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StatementsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatementsResponse.Merge(dst, src)
+}
+func (m *StatementsResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *StatementsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_StatementsResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StatementsResponse proto.InternalMessageInfo
 
 type StatementsResponse_ExtendedStatementStatisticsKey struct {
-	KeyData cockroach_sql.StatementStatisticsKey                `protobuf:"bytes,1,opt,name=key_data,json=keyData" json:"key_data"`
-	NodeID  github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,2,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
+	KeyData              roachpb.StatementStatisticsKey                      `protobuf:"bytes,1,opt,name=key_data,json=keyData,proto3" json:"key_data"`
+	NodeID               github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,2,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
+	XXX_sizecache        int32                                               `json:"-"`
 }
 
 func (m *StatementsResponse_ExtendedStatementStatisticsKey) Reset() {
@@ -966,12 +2664,36 @@ func (m *StatementsResponse_ExtendedStatementStatisticsKey) String() string {
 }
 func (*StatementsResponse_ExtendedStatementStatisticsKey) ProtoMessage() {}
 func (*StatementsResponse_ExtendedStatementStatisticsKey) Descriptor() ([]byte, []int) {
-	return fileDescriptorStatus, []int{60, 0}
+	return fileDescriptor_status_0de29a344bd79652, []int{60, 0}
+}
+func (m *StatementsResponse_ExtendedStatementStatisticsKey) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StatementsResponse_ExtendedStatementStatisticsKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StatementsResponse_ExtendedStatementStatisticsKey) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatementsResponse_ExtendedStatementStatisticsKey.Merge(dst, src)
+}
+func (m *StatementsResponse_ExtendedStatementStatisticsKey) XXX_Size() int {
+	return m.Size()
+}
+func (m *StatementsResponse_ExtendedStatementStatisticsKey) XXX_DiscardUnknown() {
+	xxx_messageInfo_StatementsResponse_ExtendedStatementStatisticsKey.DiscardUnknown(m)
 }
 
+var xxx_messageInfo_StatementsResponse_ExtendedStatementStatisticsKey proto.InternalMessageInfo
+
 type StatementsResponse_CollectedStatementStatistics struct {
-	Key   StatementsResponse_ExtendedStatementStatisticsKey `protobuf:"bytes,1,opt,name=key" json:"key"`
-	Stats cockroach_sql.StatementStatistics                 `protobuf:"bytes,2,opt,name=stats" json:"stats"`
+	Key                  StatementsResponse_ExtendedStatementStatisticsKey `protobuf:"bytes,1,opt,name=key,proto3" json:"key"`
+	Stats                roachpb.StatementStatistics                       `protobuf:"bytes,2,opt,name=stats,proto3" json:"stats"`
+	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
+	XXX_sizecache        int32                                             `json:"-"`
 }
 
 func (m *StatementsResponse_CollectedStatementStatistics) Reset() {
@@ -982,8 +2704,30 @@ func (m *StatementsResponse_CollectedStatementStatistics) String() string {
 }
 func (*StatementsResponse_CollectedStatementStatistics) ProtoMessage() {}
 func (*StatementsResponse_CollectedStatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptorStatus, []int{60, 1}
+	return fileDescriptor_status_0de29a344bd79652, []int{60, 1}
 }
+func (m *StatementsResponse_CollectedStatementStatistics) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StatementsResponse_CollectedStatementStatistics) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StatementsResponse_CollectedStatementStatistics) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatementsResponse_CollectedStatementStatistics.Merge(dst, src)
+}
+func (m *StatementsResponse_CollectedStatementStatistics) XXX_Size() int {
+	return m.Size()
+}
+func (m *StatementsResponse_CollectedStatementStatistics) XXX_DiscardUnknown() {
+	xxx_messageInfo_StatementsResponse_CollectedStatementStatistics.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StatementsResponse_CollectedStatementStatistics proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*CertificatesRequest)(nil), "cockroach.server.serverpb.CertificatesRequest")
@@ -997,6 +2741,7 @@ func init() {
 	proto.RegisterType((*NodesResponse)(nil), "cockroach.server.serverpb.NodesResponse")
 	proto.RegisterType((*NodeRequest)(nil), "cockroach.server.serverpb.NodeRequest")
 	proto.RegisterType((*RaftState)(nil), "cockroach.server.serverpb.RaftState")
+	proto.RegisterMapType((map[uint64]RaftState_Progress)(nil), "cockroach.server.serverpb.RaftState.ProgressEntry")
 	proto.RegisterType((*RaftState_Progress)(nil), "cockroach.server.serverpb.RaftState.Progress")
 	proto.RegisterType((*RangeProblems)(nil), "cockroach.server.serverpb.RangeProblems")
 	proto.RegisterType((*RangeStatistics)(nil), "cockroach.server.serverpb.RangeStatistics")
@@ -1028,6 +2773,7 @@ func init() {
 	proto.RegisterType((*RaftRangeStatus)(nil), "cockroach.server.serverpb.RaftRangeStatus")
 	proto.RegisterType((*RaftDebugRequest)(nil), "cockroach.server.serverpb.RaftDebugRequest")
 	proto.RegisterType((*RaftDebugResponse)(nil), "cockroach.server.serverpb.RaftDebugResponse")
+	proto.RegisterMapType((map[github_com_cockroachdb_cockroach_pkg_roachpb.RangeID]RaftRangeStatus)(nil), "cockroach.server.serverpb.RaftDebugResponse.RangesEntry")
 	proto.RegisterType((*ActiveQuery)(nil), "cockroach.server.serverpb.ActiveQuery")
 	proto.RegisterType((*ListSessionsRequest)(nil), "cockroach.server.serverpb.ListSessionsRequest")
 	proto.RegisterType((*Session)(nil), "cockroach.server.serverpb.Session")
@@ -1041,9 +2787,11 @@ func init() {
 	proto.RegisterType((*SpanStatsResponse)(nil), "cockroach.server.serverpb.SpanStatsResponse")
 	proto.RegisterType((*ProblemRangesRequest)(nil), "cockroach.server.serverpb.ProblemRangesRequest")
 	proto.RegisterType((*ProblemRangesResponse)(nil), "cockroach.server.serverpb.ProblemRangesResponse")
+	proto.RegisterMapType((map[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID]ProblemRangesResponse_NodeProblems)(nil), "cockroach.server.serverpb.ProblemRangesResponse.ProblemsByNodeIdEntry")
 	proto.RegisterType((*ProblemRangesResponse_NodeProblems)(nil), "cockroach.server.serverpb.ProblemRangesResponse.NodeProblems")
 	proto.RegisterType((*RangeRequest)(nil), "cockroach.server.serverpb.RangeRequest")
 	proto.RegisterType((*RangeResponse)(nil), "cockroach.server.serverpb.RangeResponse")
+	proto.RegisterMapType((map[github_com_cockroachdb_cockroach_pkg_roachpb.NodeID]RangeResponse_NodeResponse)(nil), "cockroach.server.serverpb.RangeResponse.ResponsesByNodeIdEntry")
 	proto.RegisterType((*RangeResponse_NodeResponse)(nil), "cockroach.server.serverpb.RangeResponse.NodeResponse")
 	proto.RegisterType((*DiagnosticsRequest)(nil), "cockroach.server.serverpb.DiagnosticsRequest")
 	proto.RegisterType((*StoresRequest)(nil), "cockroach.server.serverpb.StoresRequest")
@@ -1094,16 +2842,17 @@ var _ grpc.ClientConn
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion4
 
-// Client API for Status service
-
+// StatusClient is the client API for Status service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type StatusClient interface {
 	Certificates(ctx context.Context, in *CertificatesRequest, opts ...grpc.CallOption) (*CertificatesResponse, error)
 	Details(ctx context.Context, in *DetailsRequest, opts ...grpc.CallOption) (*DetailsResponse, error)
 	Nodes(ctx context.Context, in *NodesRequest, opts ...grpc.CallOption) (*NodesResponse, error)
-	Node(ctx context.Context, in *NodeRequest, opts ...grpc.CallOption) (*cockroach_server_status_statuspb.NodeStatus, error)
+	Node(ctx context.Context, in *NodeRequest, opts ...grpc.CallOption) (*statuspb.NodeStatus, error)
 	RaftDebug(ctx context.Context, in *RaftDebugRequest, opts ...grpc.CallOption) (*RaftDebugResponse, error)
 	Ranges(ctx context.Context, in *RangesRequest, opts ...grpc.CallOption) (*RangesResponse, error)
-	Gossip(ctx context.Context, in *GossipRequest, opts ...grpc.CallOption) (*cockroach_gossip.InfoStatus, error)
+	Gossip(ctx context.Context, in *GossipRequest, opts ...grpc.CallOption) (*gossip.InfoStatus, error)
 	Allocator(ctx context.Context, in *AllocatorRequest, opts ...grpc.CallOption) (*AllocatorResponse, error)
 	AllocatorRange(ctx context.Context, in *AllocatorRangeRequest, opts ...grpc.CallOption) (*AllocatorRangeResponse, error)
 	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
@@ -1125,7 +2874,7 @@ type StatusClient interface {
 	Logs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogEntriesResponse, error)
 	ProblemRanges(ctx context.Context, in *ProblemRangesRequest, opts ...grpc.CallOption) (*ProblemRangesResponse, error)
 	Range(ctx context.Context, in *RangeRequest, opts ...grpc.CallOption) (*RangeResponse, error)
-	Diagnostics(ctx context.Context, in *DiagnosticsRequest, opts ...grpc.CallOption) (*cockroach_server_diagnosticspb.DiagnosticReport, error)
+	Diagnostics(ctx context.Context, in *DiagnosticsRequest, opts ...grpc.CallOption) (*diagnosticspb.DiagnosticReport, error)
 	Stores(ctx context.Context, in *StoresRequest, opts ...grpc.CallOption) (*StoresResponse, error)
 	Statements(ctx context.Context, in *StatementsRequest, opts ...grpc.CallOption) (*StatementsResponse, error)
 }
@@ -1140,7 +2889,7 @@ func NewStatusClient(cc *grpc.ClientConn) StatusClient {
 
 func (c *statusClient) Certificates(ctx context.Context, in *CertificatesRequest, opts ...grpc.CallOption) (*CertificatesResponse, error) {
 	out := new(CertificatesResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Certificates", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Certificates", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1149,7 +2898,7 @@ func (c *statusClient) Certificates(ctx context.Context, in *CertificatesRequest
 
 func (c *statusClient) Details(ctx context.Context, in *DetailsRequest, opts ...grpc.CallOption) (*DetailsResponse, error) {
 	out := new(DetailsResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Details", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Details", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1158,16 +2907,16 @@ func (c *statusClient) Details(ctx context.Context, in *DetailsRequest, opts ...
 
 func (c *statusClient) Nodes(ctx context.Context, in *NodesRequest, opts ...grpc.CallOption) (*NodesResponse, error) {
 	out := new(NodesResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Nodes", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Nodes", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *statusClient) Node(ctx context.Context, in *NodeRequest, opts ...grpc.CallOption) (*cockroach_server_status_statuspb.NodeStatus, error) {
-	out := new(cockroach_server_status_statuspb.NodeStatus)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Node", in, out, c.cc, opts...)
+func (c *statusClient) Node(ctx context.Context, in *NodeRequest, opts ...grpc.CallOption) (*statuspb.NodeStatus, error) {
+	out := new(statuspb.NodeStatus)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Node", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1176,7 +2925,7 @@ func (c *statusClient) Node(ctx context.Context, in *NodeRequest, opts ...grpc.C
 
 func (c *statusClient) RaftDebug(ctx context.Context, in *RaftDebugRequest, opts ...grpc.CallOption) (*RaftDebugResponse, error) {
 	out := new(RaftDebugResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/RaftDebug", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/RaftDebug", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1185,16 +2934,16 @@ func (c *statusClient) RaftDebug(ctx context.Context, in *RaftDebugRequest, opts
 
 func (c *statusClient) Ranges(ctx context.Context, in *RangesRequest, opts ...grpc.CallOption) (*RangesResponse, error) {
 	out := new(RangesResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Ranges", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Ranges", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *statusClient) Gossip(ctx context.Context, in *GossipRequest, opts ...grpc.CallOption) (*cockroach_gossip.InfoStatus, error) {
-	out := new(cockroach_gossip.InfoStatus)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Gossip", in, out, c.cc, opts...)
+func (c *statusClient) Gossip(ctx context.Context, in *GossipRequest, opts ...grpc.CallOption) (*gossip.InfoStatus, error) {
+	out := new(gossip.InfoStatus)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Gossip", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1203,7 +2952,7 @@ func (c *statusClient) Gossip(ctx context.Context, in *GossipRequest, opts ...gr
 
 func (c *statusClient) Allocator(ctx context.Context, in *AllocatorRequest, opts ...grpc.CallOption) (*AllocatorResponse, error) {
 	out := new(AllocatorResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Allocator", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Allocator", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1212,7 +2961,7 @@ func (c *statusClient) Allocator(ctx context.Context, in *AllocatorRequest, opts
 
 func (c *statusClient) AllocatorRange(ctx context.Context, in *AllocatorRangeRequest, opts ...grpc.CallOption) (*AllocatorRangeResponse, error) {
 	out := new(AllocatorRangeResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/AllocatorRange", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/AllocatorRange", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1221,7 +2970,7 @@ func (c *statusClient) AllocatorRange(ctx context.Context, in *AllocatorRangeReq
 
 func (c *statusClient) ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error) {
 	out := new(ListSessionsResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/ListSessions", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/ListSessions", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1230,7 +2979,7 @@ func (c *statusClient) ListSessions(ctx context.Context, in *ListSessionsRequest
 
 func (c *statusClient) ListLocalSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error) {
 	out := new(ListSessionsResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/ListLocalSessions", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/ListLocalSessions", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1239,7 +2988,7 @@ func (c *statusClient) ListLocalSessions(ctx context.Context, in *ListSessionsRe
 
 func (c *statusClient) CancelQuery(ctx context.Context, in *CancelQueryRequest, opts ...grpc.CallOption) (*CancelQueryResponse, error) {
 	out := new(CancelQueryResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/CancelQuery", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/CancelQuery", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1248,7 +2997,7 @@ func (c *statusClient) CancelQuery(ctx context.Context, in *CancelQueryRequest, 
 
 func (c *statusClient) CancelSession(ctx context.Context, in *CancelSessionRequest, opts ...grpc.CallOption) (*CancelSessionResponse, error) {
 	out := new(CancelSessionResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/CancelSession", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/CancelSession", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1257,7 +3006,7 @@ func (c *statusClient) CancelSession(ctx context.Context, in *CancelSessionReque
 
 func (c *statusClient) SpanStats(ctx context.Context, in *SpanStatsRequest, opts ...grpc.CallOption) (*SpanStatsResponse, error) {
 	out := new(SpanStatsResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/SpanStats", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/SpanStats", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1266,7 +3015,7 @@ func (c *statusClient) SpanStats(ctx context.Context, in *SpanStatsRequest, opts
 
 func (c *statusClient) Stacks(ctx context.Context, in *StacksRequest, opts ...grpc.CallOption) (*JSONResponse, error) {
 	out := new(JSONResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Stacks", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Stacks", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1275,7 +3024,7 @@ func (c *statusClient) Stacks(ctx context.Context, in *StacksRequest, opts ...gr
 
 func (c *statusClient) Profile(ctx context.Context, in *ProfileRequest, opts ...grpc.CallOption) (*JSONResponse, error) {
 	out := new(JSONResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Profile", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Profile", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1284,7 +3033,7 @@ func (c *statusClient) Profile(ctx context.Context, in *ProfileRequest, opts ...
 
 func (c *statusClient) Metrics(ctx context.Context, in *MetricsRequest, opts ...grpc.CallOption) (*JSONResponse, error) {
 	out := new(JSONResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Metrics", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Metrics", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1293,7 +3042,7 @@ func (c *statusClient) Metrics(ctx context.Context, in *MetricsRequest, opts ...
 
 func (c *statusClient) GetFiles(ctx context.Context, in *GetFilesRequest, opts ...grpc.CallOption) (*GetFilesResponse, error) {
 	out := new(GetFilesResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/GetFiles", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/GetFiles", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1302,7 +3051,7 @@ func (c *statusClient) GetFiles(ctx context.Context, in *GetFilesRequest, opts .
 
 func (c *statusClient) LogFilesList(ctx context.Context, in *LogFilesListRequest, opts ...grpc.CallOption) (*LogFilesListResponse, error) {
 	out := new(LogFilesListResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/LogFilesList", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/LogFilesList", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1311,7 +3060,7 @@ func (c *statusClient) LogFilesList(ctx context.Context, in *LogFilesListRequest
 
 func (c *statusClient) LogFile(ctx context.Context, in *LogFileRequest, opts ...grpc.CallOption) (*LogEntriesResponse, error) {
 	out := new(LogEntriesResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/LogFile", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/LogFile", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1320,7 +3069,7 @@ func (c *statusClient) LogFile(ctx context.Context, in *LogFileRequest, opts ...
 
 func (c *statusClient) Logs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogEntriesResponse, error) {
 	out := new(LogEntriesResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Logs", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Logs", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1329,7 +3078,7 @@ func (c *statusClient) Logs(ctx context.Context, in *LogsRequest, opts ...grpc.C
 
 func (c *statusClient) ProblemRanges(ctx context.Context, in *ProblemRangesRequest, opts ...grpc.CallOption) (*ProblemRangesResponse, error) {
 	out := new(ProblemRangesResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/ProblemRanges", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/ProblemRanges", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1338,16 +3087,16 @@ func (c *statusClient) ProblemRanges(ctx context.Context, in *ProblemRangesReque
 
 func (c *statusClient) Range(ctx context.Context, in *RangeRequest, opts ...grpc.CallOption) (*RangeResponse, error) {
 	out := new(RangeResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Range", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Range", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *statusClient) Diagnostics(ctx context.Context, in *DiagnosticsRequest, opts ...grpc.CallOption) (*cockroach_server_diagnosticspb.DiagnosticReport, error) {
-	out := new(cockroach_server_diagnosticspb.DiagnosticReport)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Diagnostics", in, out, c.cc, opts...)
+func (c *statusClient) Diagnostics(ctx context.Context, in *DiagnosticsRequest, opts ...grpc.CallOption) (*diagnosticspb.DiagnosticReport, error) {
+	out := new(diagnosticspb.DiagnosticReport)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Diagnostics", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1356,7 +3105,7 @@ func (c *statusClient) Diagnostics(ctx context.Context, in *DiagnosticsRequest, 
 
 func (c *statusClient) Stores(ctx context.Context, in *StoresRequest, opts ...grpc.CallOption) (*StoresResponse, error) {
 	out := new(StoresResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Stores", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Stores", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1365,23 +3114,22 @@ func (c *statusClient) Stores(ctx context.Context, in *StoresRequest, opts ...gr
 
 func (c *statusClient) Statements(ctx context.Context, in *StatementsRequest, opts ...grpc.CallOption) (*StatementsResponse, error) {
 	out := new(StatementsResponse)
-	err := grpc.Invoke(ctx, "/cockroach.server.serverpb.Status/Statements", in, out, c.cc, opts...)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Status/Statements", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// Server API for Status service
-
+// StatusServer is the server API for Status service.
 type StatusServer interface {
 	Certificates(context.Context, *CertificatesRequest) (*CertificatesResponse, error)
 	Details(context.Context, *DetailsRequest) (*DetailsResponse, error)
 	Nodes(context.Context, *NodesRequest) (*NodesResponse, error)
-	Node(context.Context, *NodeRequest) (*cockroach_server_status_statuspb.NodeStatus, error)
+	Node(context.Context, *NodeRequest) (*statuspb.NodeStatus, error)
 	RaftDebug(context.Context, *RaftDebugRequest) (*RaftDebugResponse, error)
 	Ranges(context.Context, *RangesRequest) (*RangesResponse, error)
-	Gossip(context.Context, *GossipRequest) (*cockroach_gossip.InfoStatus, error)
+	Gossip(context.Context, *GossipRequest) (*gossip.InfoStatus, error)
 	Allocator(context.Context, *AllocatorRequest) (*AllocatorResponse, error)
 	AllocatorRange(context.Context, *AllocatorRangeRequest) (*AllocatorRangeResponse, error)
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
@@ -1403,7 +3151,7 @@ type StatusServer interface {
 	Logs(context.Context, *LogsRequest) (*LogEntriesResponse, error)
 	ProblemRanges(context.Context, *ProblemRangesRequest) (*ProblemRangesResponse, error)
 	Range(context.Context, *RangeRequest) (*RangeResponse, error)
-	Diagnostics(context.Context, *DiagnosticsRequest) (*cockroach_server_diagnosticspb.DiagnosticReport, error)
+	Diagnostics(context.Context, *DiagnosticsRequest) (*diagnosticspb.DiagnosticReport, error)
 	Stores(context.Context, *StoresRequest) (*StoresResponse, error)
 	Statements(context.Context, *StatementsRequest) (*StatementsResponse, error)
 }
@@ -2423,7 +4171,7 @@ func (m *RaftState) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Progress {
 			keysForProgress = append(keysForProgress, uint64(k))
 		}
-		sortkeys.Uint64s(keysForProgress)
+		github_com_gogo_protobuf_sortkeys.Uint64s(keysForProgress)
 		for _, k := range keysForProgress {
 			dAtA[i] = 0x32
 			i++
@@ -2611,13 +4359,13 @@ func (m *RangeStatistics) MarshalTo(dAtA []byte) (int, error) {
 	if m.QueriesPerSecond != 0 {
 		dAtA[i] = 0x9
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.QueriesPerSecond))))
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.QueriesPerSecond))))
 		i += 8
 	}
 	if m.WritesPerSecond != 0 {
 		dAtA[i] = 0x11
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.WritesPerSecond))))
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.WritesPerSecond))))
 		i += 8
 	}
 	return i, nil
@@ -2896,8 +4644,8 @@ func (m *TraceEvent) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0xa
 	i++
-	i = encodeVarintStatus(dAtA, i, uint64(types.SizeOfStdTime(m.Time)))
-	n16, err := types.StdTimeMarshalTo(m.Time, dAtA[i:])
+	i = encodeVarintStatus(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Time)))
+	n16, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Time, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3620,7 +5368,7 @@ func (m *RaftDebugResponse) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Ranges {
 			keysForRanges = append(keysForRanges, int64(k))
 		}
-		sortkeys.Int64s(keysForRanges)
+		github_com_gogo_protobuf_sortkeys.Int64s(keysForRanges)
 		for _, k := range keysForRanges {
 			dAtA[i] = 0xa
 			i++
@@ -3689,8 +5437,8 @@ func (m *ActiveQuery) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintStatus(dAtA, i, uint64(types.SizeOfStdTime(m.Start)))
-	n24, err := types.StdTimeMarshalTo(m.Start, dAtA[i:])
+	i = encodeVarintStatus(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Start)))
+	n24, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Start, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3789,8 +5537,8 @@ func (m *Session) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x32
 	i++
-	i = encodeVarintStatus(dAtA, i, uint64(types.SizeOfStdTime(m.Start)))
-	n25, err := types.StdTimeMarshalTo(m.Start, dAtA[i:])
+	i = encodeVarintStatus(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Start)))
+	n25, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Start, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -4162,7 +5910,7 @@ func (m *ProblemRangesResponse) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.ProblemsByNodeID {
 			keysForProblemsByNodeID = append(keysForProblemsByNodeID, int32(k))
 		}
-		sortkeys.Int32s(keysForProblemsByNodeID)
+		github_com_gogo_protobuf_sortkeys.Int32s(keysForProblemsByNodeID)
 		for _, k := range keysForProblemsByNodeID {
 			dAtA[i] = 0x4a
 			i++
@@ -4393,7 +6141,7 @@ func (m *RangeResponse) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.ResponsesByNodeID {
 			keysForResponsesByNodeID = append(keysForResponsesByNodeID, int32(k))
 		}
-		sortkeys.Int32s(keysForResponsesByNodeID)
+		github_com_gogo_protobuf_sortkeys.Int32s(keysForResponsesByNodeID)
 		for _, k := range keysForResponsesByNodeID {
 			dAtA[i] = 0x1a
 			i++
@@ -4647,8 +6395,8 @@ func (m *StatementsResponse) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintStatus(dAtA, i, uint64(types.SizeOfStdTime(m.LastReset)))
-	n44, err := types.StdTimeMarshalTo(m.LastReset, dAtA[i:])
+	i = encodeVarintStatus(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.LastReset)))
+	n44, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.LastReset, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -4731,6 +6479,9 @@ func encodeVarintStatus(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *CertificatesRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -4741,6 +6492,9 @@ func (m *CertificatesRequest) Size() (n int) {
 }
 
 func (m *CertificateDetails) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Type != 0 {
@@ -4764,6 +6518,9 @@ func (m *CertificateDetails) Size() (n int) {
 }
 
 func (m *CertificateDetails_Fields) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Issuer)
@@ -4810,6 +6567,9 @@ func (m *CertificateDetails_Fields) Size() (n int) {
 }
 
 func (m *CertificatesResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Certificates) > 0 {
@@ -4822,6 +6582,9 @@ func (m *CertificatesResponse) Size() (n int) {
 }
 
 func (m *DetailsRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -4835,6 +6598,9 @@ func (m *DetailsRequest) Size() (n int) {
 }
 
 func (m *SystemInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.SystemInfo)
@@ -4849,6 +6615,9 @@ func (m *SystemInfo) Size() (n int) {
 }
 
 func (m *DetailsResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.NodeID != 0 {
@@ -4864,12 +6633,18 @@ func (m *DetailsResponse) Size() (n int) {
 }
 
 func (m *NodesRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	return n
 }
 
 func (m *NodesResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Nodes) > 0 {
@@ -4882,6 +6657,9 @@ func (m *NodesResponse) Size() (n int) {
 }
 
 func (m *NodeRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -4892,6 +6670,9 @@ func (m *NodeRequest) Size() (n int) {
 }
 
 func (m *RaftState) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.ReplicaID != 0 {
@@ -4925,6 +6706,9 @@ func (m *RaftState) Size() (n int) {
 }
 
 func (m *RaftState_Progress) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Match != 0 {
@@ -4947,6 +6731,9 @@ func (m *RaftState_Progress) Size() (n int) {
 }
 
 func (m *RangeProblems) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Unavailable {
@@ -4974,6 +6761,9 @@ func (m *RangeProblems) Size() (n int) {
 }
 
 func (m *RangeStatistics) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.QueriesPerSecond != 0 {
@@ -4986,6 +6776,9 @@ func (m *RangeStatistics) Size() (n int) {
 }
 
 func (m *PrettySpan) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.StartKey)
@@ -5000,6 +6793,9 @@ func (m *PrettySpan) Size() (n int) {
 }
 
 func (m *RangeInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Span.Size()
@@ -5044,6 +6840,9 @@ func (m *RangeInfo) Size() (n int) {
 }
 
 func (m *RangesRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5061,6 +6860,9 @@ func (m *RangesRequest) Size() (n int) {
 }
 
 func (m *RangesResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Ranges) > 0 {
@@ -5073,6 +6875,9 @@ func (m *RangesResponse) Size() (n int) {
 }
 
 func (m *GossipRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5083,9 +6888,12 @@ func (m *GossipRequest) Size() (n int) {
 }
 
 func (m *TraceEvent) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
-	l = types.SizeOfStdTime(m.Time)
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Time)
 	n += 1 + l + sovStatus(uint64(l))
 	l = len(m.Message)
 	if l > 0 {
@@ -5095,6 +6903,9 @@ func (m *TraceEvent) Size() (n int) {
 }
 
 func (m *AllocatorDryRun) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RangeID != 0 {
@@ -5110,6 +6921,9 @@ func (m *AllocatorDryRun) Size() (n int) {
 }
 
 func (m *AllocatorRangeRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RangeId != 0 {
@@ -5119,6 +6933,9 @@ func (m *AllocatorRangeRequest) Size() (n int) {
 }
 
 func (m *AllocatorRangeResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.NodeID != 0 {
@@ -5132,6 +6949,9 @@ func (m *AllocatorRangeResponse) Size() (n int) {
 }
 
 func (m *AllocatorRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5149,6 +6969,9 @@ func (m *AllocatorRequest) Size() (n int) {
 }
 
 func (m *AllocatorResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.DryRuns) > 0 {
@@ -5161,6 +6984,9 @@ func (m *AllocatorResponse) Size() (n int) {
 }
 
 func (m *JSONResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Data)
@@ -5171,6 +6997,9 @@ func (m *JSONResponse) Size() (n int) {
 }
 
 func (m *LogsRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5201,6 +7030,9 @@ func (m *LogsRequest) Size() (n int) {
 }
 
 func (m *LogEntriesResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Entries) > 0 {
@@ -5213,6 +7045,9 @@ func (m *LogEntriesResponse) Size() (n int) {
 }
 
 func (m *LogFilesListRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5223,6 +7058,9 @@ func (m *LogFilesListRequest) Size() (n int) {
 }
 
 func (m *LogFilesListResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Files) > 0 {
@@ -5235,6 +7073,9 @@ func (m *LogFilesListResponse) Size() (n int) {
 }
 
 func (m *LogFileRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5249,6 +7090,9 @@ func (m *LogFileRequest) Size() (n int) {
 }
 
 func (m *StacksRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5259,6 +7103,9 @@ func (m *StacksRequest) Size() (n int) {
 }
 
 func (m *File) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -5276,6 +7123,9 @@ func (m *File) Size() (n int) {
 }
 
 func (m *GetFilesRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5298,6 +7148,9 @@ func (m *GetFilesRequest) Size() (n int) {
 }
 
 func (m *GetFilesResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Files) > 0 {
@@ -5310,6 +7163,9 @@ func (m *GetFilesResponse) Size() (n int) {
 }
 
 func (m *ProfileRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5323,6 +7179,9 @@ func (m *ProfileRequest) Size() (n int) {
 }
 
 func (m *MetricsRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5333,6 +7192,9 @@ func (m *MetricsRequest) Size() (n int) {
 }
 
 func (m *RaftRangeNode) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.NodeID != 0 {
@@ -5344,6 +7206,9 @@ func (m *RaftRangeNode) Size() (n int) {
 }
 
 func (m *RaftRangeError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Message)
@@ -5354,6 +7219,9 @@ func (m *RaftRangeError) Size() (n int) {
 }
 
 func (m *RaftRangeStatus) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RangeID != 0 {
@@ -5375,6 +7243,9 @@ func (m *RaftRangeStatus) Size() (n int) {
 }
 
 func (m *RaftDebugRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.RangeIDs) > 0 {
@@ -5388,6 +7259,9 @@ func (m *RaftDebugRequest) Size() (n int) {
 }
 
 func (m *RaftDebugResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Ranges) > 0 {
@@ -5409,6 +7283,9 @@ func (m *RaftDebugResponse) Size() (n int) {
 }
 
 func (m *ActiveQuery) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.ID)
@@ -5419,7 +7296,7 @@ func (m *ActiveQuery) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovStatus(uint64(l))
 	}
-	l = types.SizeOfStdTime(m.Start)
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Start)
 	n += 1 + l + sovStatus(uint64(l))
 	if m.IsDistributed {
 		n += 2
@@ -5431,6 +7308,9 @@ func (m *ActiveQuery) Size() (n int) {
 }
 
 func (m *ListSessionsRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Username)
@@ -5441,6 +7321,9 @@ func (m *ListSessionsRequest) Size() (n int) {
 }
 
 func (m *Session) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.NodeID != 0 {
@@ -5464,7 +7347,7 @@ func (m *Session) Size() (n int) {
 			n += 1 + l + sovStatus(uint64(l))
 		}
 	}
-	l = types.SizeOfStdTime(m.Start)
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Start)
 	n += 1 + l + sovStatus(uint64(l))
 	if m.KvTxnID != nil {
 		l = m.KvTxnID.Size()
@@ -5488,6 +7371,9 @@ func (m *Session) Size() (n int) {
 }
 
 func (m *ListSessionsError) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.NodeID != 0 {
@@ -5501,6 +7387,9 @@ func (m *ListSessionsError) Size() (n int) {
 }
 
 func (m *ListSessionsResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Sessions) > 0 {
@@ -5519,6 +7408,9 @@ func (m *ListSessionsResponse) Size() (n int) {
 }
 
 func (m *CancelQueryRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5537,6 +7429,9 @@ func (m *CancelQueryRequest) Size() (n int) {
 }
 
 func (m *CancelQueryResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Canceled {
@@ -5550,6 +7445,9 @@ func (m *CancelQueryResponse) Size() (n int) {
 }
 
 func (m *CancelSessionRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5568,6 +7466,9 @@ func (m *CancelSessionRequest) Size() (n int) {
 }
 
 func (m *CancelSessionResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Canceled {
@@ -5581,6 +7482,9 @@ func (m *CancelSessionResponse) Size() (n int) {
 }
 
 func (m *SpanStatsRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeID)
@@ -5599,6 +7503,9 @@ func (m *SpanStatsRequest) Size() (n int) {
 }
 
 func (m *SpanStatsResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.TotalStats.Size()
@@ -5613,6 +7520,9 @@ func (m *SpanStatsResponse) Size() (n int) {
 }
 
 func (m *ProblemRangesRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeID)
@@ -5623,6 +7533,9 @@ func (m *ProblemRangesRequest) Size() (n int) {
 }
 
 func (m *ProblemRangesResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.NodeID != 0 {
@@ -5641,6 +7554,9 @@ func (m *ProblemRangesResponse) Size() (n int) {
 }
 
 func (m *ProblemRangesResponse_NodeProblems) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.ErrorMessage)
@@ -5700,6 +7616,9 @@ func (m *ProblemRangesResponse_NodeProblems) Size() (n int) {
 }
 
 func (m *RangeRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.RangeId != 0 {
@@ -5709,6 +7628,9 @@ func (m *RangeRequest) Size() (n int) {
 }
 
 func (m *RangeResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.NodeID != 0 {
@@ -5730,6 +7652,9 @@ func (m *RangeResponse) Size() (n int) {
 }
 
 func (m *RangeResponse_NodeResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Response {
@@ -5749,6 +7674,9 @@ func (m *RangeResponse_NodeResponse) Size() (n int) {
 }
 
 func (m *DiagnosticsRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5759,6 +7687,9 @@ func (m *DiagnosticsRequest) Size() (n int) {
 }
 
 func (m *StoresRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeId)
@@ -5769,6 +7700,9 @@ func (m *StoresRequest) Size() (n int) {
 }
 
 func (m *StoreDetails) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.StoreID != 0 {
@@ -5794,6 +7728,9 @@ func (m *StoreDetails) Size() (n int) {
 }
 
 func (m *StoresResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Stores) > 0 {
@@ -5806,6 +7743,9 @@ func (m *StoresResponse) Size() (n int) {
 }
 
 func (m *StatementsRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.NodeID)
@@ -5816,6 +7756,9 @@ func (m *StatementsRequest) Size() (n int) {
 }
 
 func (m *StatementsResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Statements) > 0 {
@@ -5824,12 +7767,15 @@ func (m *StatementsResponse) Size() (n int) {
 			n += 1 + l + sovStatus(uint64(l))
 		}
 	}
-	l = types.SizeOfStdTime(m.LastReset)
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.LastReset)
 	n += 1 + l + sovStatus(uint64(l))
 	return n
 }
 
 func (m *StatementsResponse_ExtendedStatementStatisticsKey) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.KeyData.Size()
@@ -5841,6 +7787,9 @@ func (m *StatementsResponse_ExtendedStatementStatisticsKey) Size() (n int) {
 }
 
 func (m *StatementsResponse_CollectedStatementStatistics) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Key.Size()
@@ -6945,7 +8894,7 @@ func (m *NodesResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Nodes = append(m.Nodes, cockroach_server_status_statuspb.NodeStatus{})
+			m.Nodes = append(m.Nodes, statuspb.NodeStatus{})
 			if err := m.Nodes[len(m.Nodes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -7730,7 +9679,7 @@ func (m *RangeStatistics) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.QueriesPerSecond = float64(math.Float64frombits(v))
 		case 2:
@@ -7741,7 +9690,7 @@ func (m *RangeStatistics) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.WritesPerSecond = float64(math.Float64frombits(v))
 		default:
@@ -8085,7 +10034,7 @@ func (m *RangeInfo) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LeaseHistory = append(m.LeaseHistory, cockroach_roachpb1.Lease{})
+			m.LeaseHistory = append(m.LeaseHistory, roachpb.Lease{})
 			if err := m.LeaseHistory[len(m.LeaseHistory)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -8400,6 +10349,17 @@ func (m *RangesRequest) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.RangeIDs) == 0 {
+					m.RangeIDs = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
 					for shift := uint(0); ; shift += 7 {
@@ -8657,7 +10617,7 @@ func (m *TraceEvent) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := types.StdTimeUnmarshal(&m.Time, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Time, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9080,6 +11040,17 @@ func (m *AllocatorRequest) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.RangeIDs) == 0 {
+					m.RangeIDs = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
@@ -9564,7 +11535,7 @@ func (m *LogEntriesResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Entries = append(m.Entries, cockroach_util_log.Entry{})
+			m.Entries = append(m.Entries, log.Entry{})
 			if err := m.Entries[len(m.Entries)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -9724,7 +11695,7 @@ func (m *LogFilesListResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Files = append(m.Files, cockroach_util_log.FileInfo{})
+			m.Files = append(m.Files, log.FileInfo{})
 			if err := m.Files[len(m.Files)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -10850,6 +12821,17 @@ func (m *RaftDebugRequest) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.RangeIDs) == 0 {
+					m.RangeIDs = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
 					for shift := uint(0); ; shift += 7 {
@@ -11198,7 +13180,7 @@ func (m *ActiveQuery) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := types.StdTimeUnmarshal(&m.Start, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Start, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -11533,7 +13515,7 @@ func (m *Session) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := types.StdTimeUnmarshal(&m.Start, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Start, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -12990,6 +14972,17 @@ func (m *ProblemRangesResponse_NodeProblems) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.UnavailableRangeIDs) == 0 {
+					m.UnavailableRangeIDs = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
 					for shift := uint(0); ; shift += 7 {
@@ -13051,6 +15044,17 @@ func (m *ProblemRangesResponse_NodeProblems) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.RaftLeaderNotLeaseHolderRangeIDs) == 0 {
+					m.RaftLeaderNotLeaseHolderRangeIDs = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
@@ -13114,6 +15118,17 @@ func (m *ProblemRangesResponse_NodeProblems) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.NoRaftLeaderRangeIDs) == 0 {
+					m.NoRaftLeaderRangeIDs = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
 					for shift := uint(0); ; shift += 7 {
@@ -13175,6 +15190,17 @@ func (m *ProblemRangesResponse_NodeProblems) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.NoLeaseRangeIDs) == 0 {
+					m.NoLeaseRangeIDs = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
@@ -13238,6 +15264,17 @@ func (m *ProblemRangesResponse_NodeProblems) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.UnderreplicatedRangeIDs) == 0 {
+					m.UnderreplicatedRangeIDs = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
 					for shift := uint(0); ; shift += 7 {
@@ -13300,6 +15337,17 @@ func (m *ProblemRangesResponse_NodeProblems) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.QuiescentEqualsTickingRangeIDs) == 0 {
+					m.QuiescentEqualsTickingRangeIDs = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
 					for shift := uint(0); ; shift += 7 {
@@ -13361,6 +15409,17 @@ func (m *ProblemRangesResponse_NodeProblems) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.RaftLogTooLargeRangeIDs) == 0 {
+					m.RaftLogTooLargeRangeIDs = make([]github_com_cockroachdb_cockroach_pkg_roachpb.RangeID, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v github_com_cockroachdb_cockroach_pkg_roachpb.RangeID
@@ -14383,7 +16442,7 @@ func (m *StatementsResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := types.StdTimeUnmarshal(&m.LastReset, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.LastReset, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -14722,9 +16781,11 @@ var (
 	ErrIntOverflowStatus   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("server/serverpb/status.proto", fileDescriptorStatus) }
+func init() {
+	proto.RegisterFile("server/serverpb/status.proto", fileDescriptor_status_0de29a344bd79652)
+}
 
-var fileDescriptorStatus = []byte{
+var fileDescriptor_status_0de29a344bd79652 = []byte{
 	// 4627 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x5b, 0x5f, 0x6c, 0x1c, 0x49,
 	0x5a, 0x4f, 0xdb, 0x33, 0xe3, 0x99, 0xcf, 0xff, 0xc6, 0x65, 0x27, 0x99, 0x4c, 0xb2, 0x9e, 0x6c,

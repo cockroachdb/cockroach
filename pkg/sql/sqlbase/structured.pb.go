@@ -6,7 +6,7 @@ package sqlbase
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
@@ -16,6 +16,12 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 type ConstraintValidity int32
 
@@ -49,7 +55,9 @@ func (x *ConstraintValidity) UnmarshalJSON(data []byte) error {
 	*x = ConstraintValidity(value)
 	return nil
 }
-func (ConstraintValidity) EnumDescriptor() ([]byte, []int) { return fileDescriptorStructured, []int{0} }
+func (ConstraintValidity) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{0}
+}
 
 // These mirror the types supported by sql/coltypes.
 //
@@ -156,7 +164,7 @@ func (x *ColumnType_SemanticType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ColumnType_SemanticType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{0, 0}
+	return fileDescriptor_structured_712cb25350946e6b, []int{0, 0}
 }
 
 type ColumnType_VisibleType int32
@@ -216,7 +224,7 @@ func (x *ColumnType_VisibleType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ColumnType_VisibleType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{0, 1}
+	return fileDescriptor_structured_712cb25350946e6b, []int{0, 1}
 }
 
 type ForeignKeyReference_Action int32
@@ -261,7 +269,7 @@ func (x *ForeignKeyReference_Action) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ForeignKeyReference_Action) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{1, 0}
+	return fileDescriptor_structured_712cb25350946e6b, []int{1, 0}
 }
 
 // Match is the algorithm used to compare composite keys.
@@ -298,7 +306,7 @@ func (x *ForeignKeyReference_Match) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ForeignKeyReference_Match) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{1, 1}
+	return fileDescriptor_structured_712cb25350946e6b, []int{1, 1}
 }
 
 // The direction of a column in the index.
@@ -335,7 +343,7 @@ func (x *IndexDescriptor_Direction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IndexDescriptor_Direction) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{6, 0}
+	return fileDescriptor_structured_712cb25350946e6b, []int{6, 0}
 }
 
 // The direction of a column in the index.
@@ -372,7 +380,7 @@ func (x *IndexDescriptor_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IndexDescriptor_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{6, 1}
+	return fileDescriptor_structured_712cb25350946e6b, []int{6, 1}
 }
 
 // A descriptor within a mutation is unavailable for reads, writes
@@ -437,7 +445,7 @@ func (x *DescriptorMutation_State) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (DescriptorMutation_State) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{7, 0}
+	return fileDescriptor_structured_712cb25350946e6b, []int{7, 0}
 }
 
 // Direction of mutation.
@@ -480,7 +488,7 @@ func (x *DescriptorMutation_Direction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (DescriptorMutation_Direction) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{7, 1}
+	return fileDescriptor_structured_712cb25350946e6b, []int{7, 1}
 }
 
 // State is set if this TableDescriptor is in the process of being added or deleted.
@@ -527,7 +535,7 @@ func (x *TableDescriptor_State) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (TableDescriptor_State) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{8, 0}
+	return fileDescriptor_structured_712cb25350946e6b, []int{8, 0}
 }
 
 // AuditMode indicates which auditing actions to take when this table is used.
@@ -564,7 +572,7 @@ func (x *TableDescriptor_AuditMode) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (TableDescriptor_AuditMode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{8, 1}
+	return fileDescriptor_structured_712cb25350946e6b, []int{8, 1}
 }
 
 type ColumnType struct {
@@ -586,14 +594,40 @@ type ColumnType struct {
 	// Only used if the kind is ARRAY.
 	ArrayContents *ColumnType_SemanticType `protobuf:"varint,7,opt,name=array_contents,json=arrayContents,enum=cockroach.sql.sqlbase.ColumnType_SemanticType" json:"array_contents,omitempty"`
 	// Only used if the kind is TUPLE
-	TupleContents []ColumnType `protobuf:"bytes,8,rep,name=tuple_contents,json=tupleContents" json:"tuple_contents"`
-	TupleLabels   []string     `protobuf:"bytes,9,rep,name=tuple_labels,json=tupleLabels" json:"tuple_labels,omitempty"`
+	TupleContents        []ColumnType `protobuf:"bytes,8,rep,name=tuple_contents,json=tupleContents" json:"tuple_contents"`
+	TupleLabels          []string     `protobuf:"bytes,9,rep,name=tuple_labels,json=tupleLabels" json:"tuple_labels,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
 }
 
-func (m *ColumnType) Reset()                    { *m = ColumnType{} }
-func (m *ColumnType) String() string            { return proto.CompactTextString(m) }
-func (*ColumnType) ProtoMessage()               {}
-func (*ColumnType) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{0} }
+func (m *ColumnType) Reset()         { *m = ColumnType{} }
+func (m *ColumnType) String() string { return proto.CompactTextString(m) }
+func (*ColumnType) ProtoMessage()    {}
+func (*ColumnType) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{0}
+}
+func (m *ColumnType) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ColumnType) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ColumnType) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ColumnType.Merge(dst, src)
+}
+func (m *ColumnType) XXX_Size() int {
+	return m.Size()
+}
+func (m *ColumnType) XXX_DiscardUnknown() {
+	xxx_messageInfo_ColumnType.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ColumnType proto.InternalMessageInfo
 
 type ForeignKeyReference struct {
 	Table    ID                 `protobuf:"varint,1,opt,name=table,casttype=ID" json:"table"`
@@ -607,13 +641,39 @@ type ForeignKeyReference struct {
 	OnUpdate        ForeignKeyReference_Action `protobuf:"varint,7,opt,name=on_update,json=onUpdate,enum=cockroach.sql.sqlbase.ForeignKeyReference_Action" json:"on_update"`
 	// This is only important for composite keys. For all prior matches before
 	// the addition of this value, MATCH SIMPLE will be used.
-	Match ForeignKeyReference_Match `protobuf:"varint,8,opt,name=match,enum=cockroach.sql.sqlbase.ForeignKeyReference_Match" json:"match"`
+	Match                ForeignKeyReference_Match `protobuf:"varint,8,opt,name=match,enum=cockroach.sql.sqlbase.ForeignKeyReference_Match" json:"match"`
+	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
+	XXX_sizecache        int32                     `json:"-"`
 }
 
-func (m *ForeignKeyReference) Reset()                    { *m = ForeignKeyReference{} }
-func (m *ForeignKeyReference) String() string            { return proto.CompactTextString(m) }
-func (*ForeignKeyReference) ProtoMessage()               {}
-func (*ForeignKeyReference) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{1} }
+func (m *ForeignKeyReference) Reset()         { *m = ForeignKeyReference{} }
+func (m *ForeignKeyReference) String() string { return proto.CompactTextString(m) }
+func (*ForeignKeyReference) ProtoMessage()    {}
+func (*ForeignKeyReference) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{1}
+}
+func (m *ForeignKeyReference) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ForeignKeyReference) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ForeignKeyReference) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ForeignKeyReference.Merge(dst, src)
+}
+func (m *ForeignKeyReference) XXX_Size() int {
+	return m.Size()
+}
+func (m *ForeignKeyReference) XXX_DiscardUnknown() {
+	xxx_messageInfo_ForeignKeyReference.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ForeignKeyReference proto.InternalMessageInfo
 
 type ColumnDescriptor struct {
 	Name     string     `protobuf:"bytes,1,opt,name=name" json:"name"`
@@ -628,13 +688,39 @@ type ColumnDescriptor struct {
 	UsesSequenceIds []ID `protobuf:"varint,10,rep,name=uses_sequence_ids,json=usesSequenceIds,casttype=ID" json:"uses_sequence_ids,omitempty"`
 	// Expression to use to compute the value of this column if this is a
 	// computed column.
-	ComputeExpr *string `protobuf:"bytes,11,opt,name=compute_expr,json=computeExpr" json:"compute_expr,omitempty"`
+	ComputeExpr          *string  `protobuf:"bytes,11,opt,name=compute_expr,json=computeExpr" json:"compute_expr,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ColumnDescriptor) Reset()                    { *m = ColumnDescriptor{} }
-func (m *ColumnDescriptor) String() string            { return proto.CompactTextString(m) }
-func (*ColumnDescriptor) ProtoMessage()               {}
-func (*ColumnDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{2} }
+func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
+func (m *ColumnDescriptor) String() string { return proto.CompactTextString(m) }
+func (*ColumnDescriptor) ProtoMessage()    {}
+func (*ColumnDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{2}
+}
+func (m *ColumnDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ColumnDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ColumnDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ColumnDescriptor.Merge(dst, src)
+}
+func (m *ColumnDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *ColumnDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_ColumnDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ColumnDescriptor proto.InternalMessageInfo
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.
 type ColumnFamilyDescriptor struct {
@@ -655,13 +741,39 @@ type ColumnFamilyDescriptor struct {
 	// column is written without the column id prefix. Because more columns could
 	// be added, it would be ambiguous which column was stored when read back in,
 	// so this field supplies it.
-	DefaultColumnID ColumnID `protobuf:"varint,5,opt,name=default_column_id,json=defaultColumnId,casttype=ColumnID" json:"default_column_id"`
+	DefaultColumnID      ColumnID `protobuf:"varint,5,opt,name=default_column_id,json=defaultColumnId,casttype=ColumnID" json:"default_column_id"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ColumnFamilyDescriptor) Reset()                    { *m = ColumnFamilyDescriptor{} }
-func (m *ColumnFamilyDescriptor) String() string            { return proto.CompactTextString(m) }
-func (*ColumnFamilyDescriptor) ProtoMessage()               {}
-func (*ColumnFamilyDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{3} }
+func (m *ColumnFamilyDescriptor) Reset()         { *m = ColumnFamilyDescriptor{} }
+func (m *ColumnFamilyDescriptor) String() string { return proto.CompactTextString(m) }
+func (*ColumnFamilyDescriptor) ProtoMessage()    {}
+func (*ColumnFamilyDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{3}
+}
+func (m *ColumnFamilyDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ColumnFamilyDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ColumnFamilyDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ColumnFamilyDescriptor.Merge(dst, src)
+}
+func (m *ColumnFamilyDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *ColumnFamilyDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_ColumnFamilyDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ColumnFamilyDescriptor proto.InternalMessageInfo
 
 // InterleaveDescriptor represents an index (either primary or secondary) that
 // is interleaved into another table's data.
@@ -677,13 +789,39 @@ type InterleaveDescriptor struct {
 	// Ancestors contains the nesting of interleaves in the order they appear in
 	// an encoded key. This means they are always in the far-to-near ancestor
 	// order (e.g. grand-grand-parent, grand-parent, parent).
-	Ancestors []InterleaveDescriptor_Ancestor `protobuf:"bytes,1,rep,name=ancestors" json:"ancestors"`
+	Ancestors            []InterleaveDescriptor_Ancestor `protobuf:"bytes,1,rep,name=ancestors" json:"ancestors"`
+	XXX_NoUnkeyedLiteral struct{}                        `json:"-"`
+	XXX_sizecache        int32                           `json:"-"`
 }
 
-func (m *InterleaveDescriptor) Reset()                    { *m = InterleaveDescriptor{} }
-func (m *InterleaveDescriptor) String() string            { return proto.CompactTextString(m) }
-func (*InterleaveDescriptor) ProtoMessage()               {}
-func (*InterleaveDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{4} }
+func (m *InterleaveDescriptor) Reset()         { *m = InterleaveDescriptor{} }
+func (m *InterleaveDescriptor) String() string { return proto.CompactTextString(m) }
+func (*InterleaveDescriptor) ProtoMessage()    {}
+func (*InterleaveDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{4}
+}
+func (m *InterleaveDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *InterleaveDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *InterleaveDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InterleaveDescriptor.Merge(dst, src)
+}
+func (m *InterleaveDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *InterleaveDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_InterleaveDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_InterleaveDescriptor proto.InternalMessageInfo
 
 type InterleaveDescriptor_Ancestor struct {
 	// TableID the ID of the table being interleaved into.
@@ -697,15 +835,39 @@ type InterleaveDescriptor_Ancestor struct {
 	// being interleaved.
 	// In cockroach 1.0, this value did not exist and thus a check for > 0
 	// must be performed prior to its use.
-	SharedPrefixLen uint32 `protobuf:"varint,3,opt,name=shared_prefix_len,json=sharedPrefixLen" json:"shared_prefix_len"`
+	SharedPrefixLen      uint32   `protobuf:"varint,3,opt,name=shared_prefix_len,json=sharedPrefixLen" json:"shared_prefix_len"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *InterleaveDescriptor_Ancestor) Reset()         { *m = InterleaveDescriptor_Ancestor{} }
 func (m *InterleaveDescriptor_Ancestor) String() string { return proto.CompactTextString(m) }
 func (*InterleaveDescriptor_Ancestor) ProtoMessage()    {}
 func (*InterleaveDescriptor_Ancestor) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{4, 0}
+	return fileDescriptor_structured_712cb25350946e6b, []int{4, 0}
 }
+func (m *InterleaveDescriptor_Ancestor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *InterleaveDescriptor_Ancestor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *InterleaveDescriptor_Ancestor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InterleaveDescriptor_Ancestor.Merge(dst, src)
+}
+func (m *InterleaveDescriptor_Ancestor) XXX_Size() int {
+	return m.Size()
+}
+func (m *InterleaveDescriptor_Ancestor) XXX_DiscardUnknown() {
+	xxx_messageInfo_InterleaveDescriptor_Ancestor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_InterleaveDescriptor_Ancestor proto.InternalMessageInfo
 
 // PartitioningDescriptor represents the partitioning of an index into spans
 // of keys addressable by a zone config. The key encoding is unchanged. Each
@@ -719,14 +881,40 @@ type PartitioningDescriptor struct {
 	NumColumns uint32 `protobuf:"varint,1,opt,name=num_columns,json=numColumns" json:"num_columns"`
 	// Exactly one of List or Range is required to be non-empty if NumColumns is
 	// non-zero.
-	List  []PartitioningDescriptor_List  `protobuf:"bytes,2,rep,name=list" json:"list"`
-	Range []PartitioningDescriptor_Range `protobuf:"bytes,3,rep,name=range" json:"range"`
+	List                 []PartitioningDescriptor_List  `protobuf:"bytes,2,rep,name=list" json:"list"`
+	Range                []PartitioningDescriptor_Range `protobuf:"bytes,3,rep,name=range" json:"range"`
+	XXX_NoUnkeyedLiteral struct{}                       `json:"-"`
+	XXX_sizecache        int32                          `json:"-"`
 }
 
-func (m *PartitioningDescriptor) Reset()                    { *m = PartitioningDescriptor{} }
-func (m *PartitioningDescriptor) String() string            { return proto.CompactTextString(m) }
-func (*PartitioningDescriptor) ProtoMessage()               {}
-func (*PartitioningDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{5} }
+func (m *PartitioningDescriptor) Reset()         { *m = PartitioningDescriptor{} }
+func (m *PartitioningDescriptor) String() string { return proto.CompactTextString(m) }
+func (*PartitioningDescriptor) ProtoMessage()    {}
+func (*PartitioningDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{5}
+}
+func (m *PartitioningDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PartitioningDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *PartitioningDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PartitioningDescriptor.Merge(dst, src)
+}
+func (m *PartitioningDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *PartitioningDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_PartitioningDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PartitioningDescriptor proto.InternalMessageInfo
 
 // List represents a list partitioning, which maps individual tuples to
 // partitions.
@@ -739,15 +927,39 @@ type PartitioningDescriptor_List struct {
 	// uvarint.
 	Values [][]byte `protobuf:"bytes,2,rep,name=values" json:"values,omitempty"`
 	// Subpartitioning represents a further partitioning of this list partition.
-	Subpartitioning PartitioningDescriptor `protobuf:"bytes,3,opt,name=subpartitioning" json:"subpartitioning"`
+	Subpartitioning      PartitioningDescriptor `protobuf:"bytes,3,opt,name=subpartitioning" json:"subpartitioning"`
+	XXX_NoUnkeyedLiteral struct{}               `json:"-"`
+	XXX_sizecache        int32                  `json:"-"`
 }
 
 func (m *PartitioningDescriptor_List) Reset()         { *m = PartitioningDescriptor_List{} }
 func (m *PartitioningDescriptor_List) String() string { return proto.CompactTextString(m) }
 func (*PartitioningDescriptor_List) ProtoMessage()    {}
 func (*PartitioningDescriptor_List) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{5, 0}
+	return fileDescriptor_structured_712cb25350946e6b, []int{5, 0}
 }
+func (m *PartitioningDescriptor_List) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PartitioningDescriptor_List) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *PartitioningDescriptor_List) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PartitioningDescriptor_List.Merge(dst, src)
+}
+func (m *PartitioningDescriptor_List) XXX_Size() int {
+	return m.Size()
+}
+func (m *PartitioningDescriptor_List) XXX_DiscardUnknown() {
+	xxx_messageInfo_PartitioningDescriptor_List.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PartitioningDescriptor_List proto.InternalMessageInfo
 
 // Range represents a range partitioning, which maps ranges of tuples to
 // partitions by specifying exclusive upper bounds. The range partitions in a
@@ -762,15 +974,39 @@ type PartitioningDescriptor_Range struct {
 	FromInclusive []byte `protobuf:"bytes,3,opt,name=from_inclusive,json=fromInclusive" json:"from_inclusive,omitempty"`
 	// ToExclusive is the exclusive upper bound of this range partition. It is
 	// encoded in the same way as From.
-	ToExclusive []byte `protobuf:"bytes,2,opt,name=to_exclusive,json=toExclusive" json:"to_exclusive,omitempty"`
+	ToExclusive          []byte   `protobuf:"bytes,2,opt,name=to_exclusive,json=toExclusive" json:"to_exclusive,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *PartitioningDescriptor_Range) Reset()         { *m = PartitioningDescriptor_Range{} }
 func (m *PartitioningDescriptor_Range) String() string { return proto.CompactTextString(m) }
 func (*PartitioningDescriptor_Range) ProtoMessage()    {}
 func (*PartitioningDescriptor_Range) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{5, 1}
+	return fileDescriptor_structured_712cb25350946e6b, []int{5, 1}
 }
+func (m *PartitioningDescriptor_Range) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PartitioningDescriptor_Range) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *PartitioningDescriptor_Range) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PartitioningDescriptor_Range.Merge(dst, src)
+}
+func (m *PartitioningDescriptor_Range) XXX_Size() int {
+	return m.Size()
+}
+func (m *PartitioningDescriptor_Range) XXX_DiscardUnknown() {
+	xxx_messageInfo_PartitioningDescriptor_Range.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PartitioningDescriptor_Range proto.InternalMessageInfo
 
 // IndexDescriptor describes an index (primary or secondary).
 //
@@ -872,13 +1108,39 @@ type IndexDescriptor struct {
 	// is partitioned into spans of keys each addressable by zone configs.
 	Partitioning PartitioningDescriptor `protobuf:"bytes,15,opt,name=partitioning" json:"partitioning"`
 	// Type is the type of index, inverted or forward.
-	Type IndexDescriptor_Type `protobuf:"varint,16,opt,name=type,enum=cockroach.sql.sqlbase.IndexDescriptor_Type" json:"type"`
+	Type                 IndexDescriptor_Type `protobuf:"varint,16,opt,name=type,enum=cockroach.sql.sqlbase.IndexDescriptor_Type" json:"type"`
+	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
+	XXX_sizecache        int32                `json:"-"`
 }
 
-func (m *IndexDescriptor) Reset()                    { *m = IndexDescriptor{} }
-func (m *IndexDescriptor) String() string            { return proto.CompactTextString(m) }
-func (*IndexDescriptor) ProtoMessage()               {}
-func (*IndexDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{6} }
+func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
+func (m *IndexDescriptor) String() string { return proto.CompactTextString(m) }
+func (*IndexDescriptor) ProtoMessage()    {}
+func (*IndexDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{6}
+}
+func (m *IndexDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *IndexDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *IndexDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IndexDescriptor.Merge(dst, src)
+}
+func (m *IndexDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *IndexDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_IndexDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_IndexDescriptor proto.InternalMessageInfo
 
 // A DescriptorMutation represents a column or an index that
 // has either been added or dropped and hasn't yet transitioned
@@ -899,13 +1161,39 @@ type DescriptorMutation struct {
 	// unique constraint index.
 	MutationID MutationID `protobuf:"varint,5,opt,name=mutation_id,json=mutationId,casttype=MutationID" json:"mutation_id"`
 	// Indicates that this mutation is a rollback.
-	Rollback bool `protobuf:"varint,7,opt,name=rollback" json:"rollback"`
+	Rollback             bool     `protobuf:"varint,7,opt,name=rollback" json:"rollback"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *DescriptorMutation) Reset()                    { *m = DescriptorMutation{} }
-func (m *DescriptorMutation) String() string            { return proto.CompactTextString(m) }
-func (*DescriptorMutation) ProtoMessage()               {}
-func (*DescriptorMutation) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{7} }
+func (m *DescriptorMutation) Reset()         { *m = DescriptorMutation{} }
+func (m *DescriptorMutation) String() string { return proto.CompactTextString(m) }
+func (*DescriptorMutation) ProtoMessage()    {}
+func (*DescriptorMutation) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{7}
+}
+func (m *DescriptorMutation) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DescriptorMutation) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *DescriptorMutation) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DescriptorMutation.Merge(dst, src)
+}
+func (m *DescriptorMutation) XXX_Size() int {
+	return m.Size()
+}
+func (m *DescriptorMutation) XXX_DiscardUnknown() {
+	xxx_messageInfo_DescriptorMutation.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DescriptorMutation proto.InternalMessageInfo
 
 type isDescriptorMutation_Descriptor_ interface {
 	isDescriptorMutation_Descriptor_()
@@ -1003,12 +1291,12 @@ func _DescriptorMutation_OneofSizer(msg proto.Message) (n int) {
 	switch x := m.Descriptor_.(type) {
 	case *DescriptorMutation_Column:
 		s := proto.Size(x.Column)
-		n += proto.SizeVarint(1<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *DescriptorMutation_Index:
 		s := proto.Size(x.Index)
-		n += proto.SizeVarint(2<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case nil:
@@ -1046,8 +1334,8 @@ type TableDescriptor struct {
 	// particular version increment.
 	Version DescriptorVersion `protobuf:"varint,5,opt,name=version,casttype=DescriptorVersion" json:"version"`
 	// Last modification time of the table descriptor.
-	ModificationTime cockroach_util_hlc.Timestamp `protobuf:"bytes,7,opt,name=modification_time,json=modificationTime" json:"modification_time"`
-	Columns          []ColumnDescriptor           `protobuf:"bytes,8,rep,name=columns" json:"columns"`
+	ModificationTime hlc.Timestamp      `protobuf:"bytes,7,opt,name=modification_time,json=modificationTime" json:"modification_time"`
+	Columns          []ColumnDescriptor `protobuf:"bytes,8,rep,name=columns" json:"columns"`
 	// next_column_id is used to ensure that deleted column ids are not reused.
 	NextColumnID ColumnID                 `protobuf:"varint,9,opt,name=next_column_id,json=nextColumnId,casttype=ColumnID" json:"next_column_id"`
 	Families     []ColumnFamilyDescriptor `protobuf:"bytes,22,rep,name=families" json:"families"`
@@ -1127,13 +1415,39 @@ type TableDescriptor struct {
 	//
 	// TODO(vivekmenezes): This is currently only used by the non-interleaved drop
 	// index case. Also use for dropped interleaved indexes and columns.
-	GCMutations []TableDescriptor_GCDescriptorMutation `protobuf:"bytes,33,rep,name=gc_mutations,json=gcMutations" json:"gc_mutations"`
+	GCMutations          []TableDescriptor_GCDescriptorMutation `protobuf:"bytes,33,rep,name=gc_mutations,json=gcMutations" json:"gc_mutations"`
+	XXX_NoUnkeyedLiteral struct{}                               `json:"-"`
+	XXX_sizecache        int32                                  `json:"-"`
 }
 
-func (m *TableDescriptor) Reset()                    { *m = TableDescriptor{} }
-func (m *TableDescriptor) String() string            { return proto.CompactTextString(m) }
-func (*TableDescriptor) ProtoMessage()               {}
-func (*TableDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{8} }
+func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
+func (m *TableDescriptor) String() string { return proto.CompactTextString(m) }
+func (*TableDescriptor) ProtoMessage()    {}
+func (*TableDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{8}
+}
+func (m *TableDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableDescriptor.Merge(dst, src)
+}
+func (m *TableDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TableDescriptor proto.InternalMessageInfo
 
 func (m *TableDescriptor) GetName() string {
 	if m != nil {
@@ -1163,11 +1477,11 @@ func (m *TableDescriptor) GetVersion() DescriptorVersion {
 	return 0
 }
 
-func (m *TableDescriptor) GetModificationTime() cockroach_util_hlc.Timestamp {
+func (m *TableDescriptor) GetModificationTime() hlc.Timestamp {
 	if m != nil {
 		return m.ModificationTime
 	}
-	return cockroach_util_hlc.Timestamp{}
+	return hlc.Timestamp{}
 }
 
 func (m *TableDescriptor) GetColumns() []ColumnDescriptor {
@@ -1353,30 +1667,78 @@ func (m *TableDescriptor) GetGCMutations() []TableDescriptor_GCDescriptorMutatio
 type TableDescriptor_SchemaChangeLease struct {
 	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id"`
 	// Nanoseconds since the Unix epoch.
-	ExpirationTime int64 `protobuf:"varint,2,opt,name=expiration_time,json=expirationTime" json:"expiration_time"`
+	ExpirationTime       int64    `protobuf:"varint,2,opt,name=expiration_time,json=expirationTime" json:"expiration_time"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *TableDescriptor_SchemaChangeLease) Reset()         { *m = TableDescriptor_SchemaChangeLease{} }
 func (m *TableDescriptor_SchemaChangeLease) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_SchemaChangeLease) ProtoMessage()    {}
 func (*TableDescriptor_SchemaChangeLease) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{8, 0}
+	return fileDescriptor_structured_712cb25350946e6b, []int{8, 0}
 }
+func (m *TableDescriptor_SchemaChangeLease) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableDescriptor_SchemaChangeLease) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableDescriptor_SchemaChangeLease) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableDescriptor_SchemaChangeLease.Merge(dst, src)
+}
+func (m *TableDescriptor_SchemaChangeLease) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableDescriptor_SchemaChangeLease) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableDescriptor_SchemaChangeLease.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TableDescriptor_SchemaChangeLease proto.InternalMessageInfo
 
 type TableDescriptor_CheckConstraint struct {
 	Expr     string             `protobuf:"bytes,1,opt,name=expr" json:"expr"`
 	Name     string             `protobuf:"bytes,2,opt,name=name" json:"name"`
 	Validity ConstraintValidity `protobuf:"varint,3,opt,name=validity,enum=cockroach.sql.sqlbase.ConstraintValidity" json:"validity"`
 	// An ordered list of column IDs used by the check constraint.
-	ColumnIDs []ColumnID `protobuf:"varint,5,rep,name=column_ids,json=columnIds,casttype=ColumnID" json:"column_ids,omitempty"`
+	ColumnIDs            []ColumnID `protobuf:"varint,5,rep,name=column_ids,json=columnIds,casttype=ColumnID" json:"column_ids,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
+	XXX_sizecache        int32      `json:"-"`
 }
 
 func (m *TableDescriptor_CheckConstraint) Reset()         { *m = TableDescriptor_CheckConstraint{} }
 func (m *TableDescriptor_CheckConstraint) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_CheckConstraint) ProtoMessage()    {}
 func (*TableDescriptor_CheckConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{8, 1}
+	return fileDescriptor_structured_712cb25350946e6b, []int{8, 1}
 }
+func (m *TableDescriptor_CheckConstraint) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableDescriptor_CheckConstraint) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableDescriptor_CheckConstraint) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableDescriptor_CheckConstraint.Merge(dst, src)
+}
+func (m *TableDescriptor_CheckConstraint) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableDescriptor_CheckConstraint) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableDescriptor_CheckConstraint.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TableDescriptor_CheckConstraint proto.InternalMessageInfo
 
 // A table descriptor is named through a name map stored in the
 // system.namespace table: a map from {parent_id, table_name} -> id.
@@ -1448,16 +1810,40 @@ func (*TableDescriptor_CheckConstraint) Descriptor() ([]byte, []int) {
 type TableDescriptor_NameInfo struct {
 	// The database that the table belonged to before the rename (tables can be
 	// renamed from one db to another).
-	ParentID ID     `protobuf:"varint,1,opt,name=parent_id,json=parentId,casttype=ID" json:"parent_id"`
-	Name     string `protobuf:"bytes,2,opt,name=name" json:"name"`
+	ParentID             ID       `protobuf:"varint,1,opt,name=parent_id,json=parentId,casttype=ID" json:"parent_id"`
+	Name                 string   `protobuf:"bytes,2,opt,name=name" json:"name"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *TableDescriptor_NameInfo) Reset()         { *m = TableDescriptor_NameInfo{} }
 func (m *TableDescriptor_NameInfo) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_NameInfo) ProtoMessage()    {}
 func (*TableDescriptor_NameInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{8, 2}
+	return fileDescriptor_structured_712cb25350946e6b, []int{8, 2}
 }
+func (m *TableDescriptor_NameInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableDescriptor_NameInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableDescriptor_NameInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableDescriptor_NameInfo.Merge(dst, src)
+}
+func (m *TableDescriptor_NameInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableDescriptor_NameInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableDescriptor_NameInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TableDescriptor_NameInfo proto.InternalMessageInfo
 
 type TableDescriptor_Reference struct {
 	// The ID of the relation that depends on this one.
@@ -1467,30 +1853,78 @@ type TableDescriptor_Reference struct {
 	IndexID IndexID `protobuf:"varint,2,opt,name=index_id,json=indexId,casttype=IndexID" json:"index_id"`
 	// The IDs of this table's columns that are referenced by the dependent
 	// relation.
-	ColumnIDs []ColumnID `protobuf:"varint,3,rep,name=column_ids,json=columnIds,casttype=ColumnID" json:"column_ids,omitempty"`
+	ColumnIDs            []ColumnID `protobuf:"varint,3,rep,name=column_ids,json=columnIds,casttype=ColumnID" json:"column_ids,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
+	XXX_sizecache        int32      `json:"-"`
 }
 
 func (m *TableDescriptor_Reference) Reset()         { *m = TableDescriptor_Reference{} }
 func (m *TableDescriptor_Reference) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_Reference) ProtoMessage()    {}
 func (*TableDescriptor_Reference) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{8, 3}
+	return fileDescriptor_structured_712cb25350946e6b, []int{8, 3}
 }
+func (m *TableDescriptor_Reference) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableDescriptor_Reference) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableDescriptor_Reference) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableDescriptor_Reference.Merge(dst, src)
+}
+func (m *TableDescriptor_Reference) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableDescriptor_Reference) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableDescriptor_Reference.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TableDescriptor_Reference proto.InternalMessageInfo
 
 type TableDescriptor_MutationJob struct {
 	// The mutation id of this mutation job.
 	MutationID MutationID `protobuf:"varint,1,opt,name=mutation_id,json=mutationId,casttype=MutationID" json:"mutation_id"`
 	// The job id for a mutation job is the id in the system.jobs table of the
 	// schema change job executing the mutation referenced by mutation_id.
-	JobID int64 `protobuf:"varint,2,opt,name=job_id,json=jobId" json:"job_id"`
+	JobID                int64    `protobuf:"varint,2,opt,name=job_id,json=jobId" json:"job_id"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *TableDescriptor_MutationJob) Reset()         { *m = TableDescriptor_MutationJob{} }
 func (m *TableDescriptor_MutationJob) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_MutationJob) ProtoMessage()    {}
 func (*TableDescriptor_MutationJob) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{8, 4}
+	return fileDescriptor_structured_712cb25350946e6b, []int{8, 4}
 }
+func (m *TableDescriptor_MutationJob) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableDescriptor_MutationJob) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableDescriptor_MutationJob) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableDescriptor_MutationJob.Merge(dst, src)
+}
+func (m *TableDescriptor_MutationJob) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableDescriptor_MutationJob) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableDescriptor_MutationJob.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TableDescriptor_MutationJob proto.InternalMessageInfo
 
 type TableDescriptor_SequenceOpts struct {
 	// How much to increment the sequence by when nextval() is called.
@@ -1502,57 +1936,155 @@ type TableDescriptor_SequenceOpts struct {
 	// Start value of the sequence.
 	Start int64 `protobuf:"varint,4,opt,name=start" json:"start"`
 	// Whether the sequence is virtual.
-	Virtual bool `protobuf:"varint,5,opt,name=virtual" json:"virtual"`
+	Virtual              bool     `protobuf:"varint,5,opt,name=virtual" json:"virtual"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *TableDescriptor_SequenceOpts) Reset()         { *m = TableDescriptor_SequenceOpts{} }
 func (m *TableDescriptor_SequenceOpts) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_SequenceOpts) ProtoMessage()    {}
 func (*TableDescriptor_SequenceOpts) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{8, 5}
+	return fileDescriptor_structured_712cb25350946e6b, []int{8, 5}
+}
+func (m *TableDescriptor_SequenceOpts) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableDescriptor_SequenceOpts) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableDescriptor_SequenceOpts) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableDescriptor_SequenceOpts.Merge(dst, src)
+}
+func (m *TableDescriptor_SequenceOpts) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableDescriptor_SequenceOpts) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableDescriptor_SequenceOpts.DiscardUnknown(m)
 }
 
+var xxx_messageInfo_TableDescriptor_SequenceOpts proto.InternalMessageInfo
+
 type TableDescriptor_Replacement struct {
-	ID   ID                           `protobuf:"varint,1,opt,name=id,casttype=ID" json:"id"`
-	Time cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=time" json:"time"`
+	ID                   ID            `protobuf:"varint,1,opt,name=id,casttype=ID" json:"id"`
+	Time                 hlc.Timestamp `protobuf:"bytes,2,opt,name=time" json:"time"`
+	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
+	XXX_sizecache        int32         `json:"-"`
 }
 
 func (m *TableDescriptor_Replacement) Reset()         { *m = TableDescriptor_Replacement{} }
 func (m *TableDescriptor_Replacement) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_Replacement) ProtoMessage()    {}
 func (*TableDescriptor_Replacement) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{8, 6}
+	return fileDescriptor_structured_712cb25350946e6b, []int{8, 6}
 }
+func (m *TableDescriptor_Replacement) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableDescriptor_Replacement) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableDescriptor_Replacement) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableDescriptor_Replacement.Merge(dst, src)
+}
+func (m *TableDescriptor_Replacement) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableDescriptor_Replacement) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableDescriptor_Replacement.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TableDescriptor_Replacement proto.InternalMessageInfo
 
 type TableDescriptor_GCDescriptorMutation struct {
 	IndexID  IndexID `protobuf:"varint,1,opt,name=index_id,json=indexId,casttype=IndexID" json:"index_id"`
 	DropTime int64   `protobuf:"varint,2,opt,name=drop_time,json=dropTime" json:"drop_time"`
 	// The job id for a mutation job is the id in the system.jobs table of the
 	// schema change job executing the mutation referenced by mutation_id.
-	JobID int64 `protobuf:"varint,3,opt,name=job_id,json=jobId" json:"job_id"`
+	JobID                int64    `protobuf:"varint,3,opt,name=job_id,json=jobId" json:"job_id"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *TableDescriptor_GCDescriptorMutation) Reset()         { *m = TableDescriptor_GCDescriptorMutation{} }
 func (m *TableDescriptor_GCDescriptorMutation) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_GCDescriptorMutation) ProtoMessage()    {}
 func (*TableDescriptor_GCDescriptorMutation) Descriptor() ([]byte, []int) {
-	return fileDescriptorStructured, []int{8, 7}
+	return fileDescriptor_structured_712cb25350946e6b, []int{8, 7}
 }
+func (m *TableDescriptor_GCDescriptorMutation) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TableDescriptor_GCDescriptorMutation) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TableDescriptor_GCDescriptorMutation) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TableDescriptor_GCDescriptorMutation.Merge(dst, src)
+}
+func (m *TableDescriptor_GCDescriptorMutation) XXX_Size() int {
+	return m.Size()
+}
+func (m *TableDescriptor_GCDescriptorMutation) XXX_DiscardUnknown() {
+	xxx_messageInfo_TableDescriptor_GCDescriptorMutation.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TableDescriptor_GCDescriptorMutation proto.InternalMessageInfo
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
 // in a structured metadata key. The DatabaseDescriptor has a globally-unique
 // ID shared with the TableDescriptor ID.
 // Permissions are applied to all tables in the namespace.
 type DatabaseDescriptor struct {
-	Name       string               `protobuf:"bytes,1,opt,name=name" json:"name"`
-	ID         ID                   `protobuf:"varint,2,opt,name=id,casttype=ID" json:"id"`
-	Privileges *PrivilegeDescriptor `protobuf:"bytes,3,opt,name=privileges" json:"privileges,omitempty"`
+	Name                 string               `protobuf:"bytes,1,opt,name=name" json:"name"`
+	ID                   ID                   `protobuf:"varint,2,opt,name=id,casttype=ID" json:"id"`
+	Privileges           *PrivilegeDescriptor `protobuf:"bytes,3,opt,name=privileges" json:"privileges,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
+	XXX_sizecache        int32                `json:"-"`
 }
 
-func (m *DatabaseDescriptor) Reset()                    { *m = DatabaseDescriptor{} }
-func (m *DatabaseDescriptor) String() string            { return proto.CompactTextString(m) }
-func (*DatabaseDescriptor) ProtoMessage()               {}
-func (*DatabaseDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{9} }
+func (m *DatabaseDescriptor) Reset()         { *m = DatabaseDescriptor{} }
+func (m *DatabaseDescriptor) String() string { return proto.CompactTextString(m) }
+func (*DatabaseDescriptor) ProtoMessage()    {}
+func (*DatabaseDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{9}
+}
+func (m *DatabaseDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DatabaseDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *DatabaseDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DatabaseDescriptor.Merge(dst, src)
+}
+func (m *DatabaseDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *DatabaseDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_DatabaseDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DatabaseDescriptor proto.InternalMessageInfo
 
 func (m *DatabaseDescriptor) GetName() string {
 	if m != nil {
@@ -1580,13 +2112,39 @@ type Descriptor struct {
 	// Types that are valid to be assigned to Union:
 	//	*Descriptor_Table
 	//	*Descriptor_Database
-	Union isDescriptor_Union `protobuf_oneof:"union"`
+	Union                isDescriptor_Union `protobuf_oneof:"union"`
+	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
+	XXX_sizecache        int32              `json:"-"`
 }
 
-func (m *Descriptor) Reset()                    { *m = Descriptor{} }
-func (m *Descriptor) String() string            { return proto.CompactTextString(m) }
-func (*Descriptor) ProtoMessage()               {}
-func (*Descriptor) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{10} }
+func (m *Descriptor) Reset()         { *m = Descriptor{} }
+func (m *Descriptor) String() string { return proto.CompactTextString(m) }
+func (*Descriptor) ProtoMessage()    {}
+func (*Descriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_structured_712cb25350946e6b, []int{10}
+}
+func (m *Descriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Descriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Descriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Descriptor.Merge(dst, src)
+}
+func (m *Descriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *Descriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_Descriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Descriptor proto.InternalMessageInfo
 
 type isDescriptor_Union interface {
 	isDescriptor_Union()
@@ -1684,12 +2242,12 @@ func _Descriptor_OneofSizer(msg proto.Message) (n int) {
 	switch x := m.Union.(type) {
 	case *Descriptor_Table:
 		s := proto.Size(x.Table)
-		n += proto.SizeVarint(1<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case *Descriptor_Database:
 		s := proto.Size(x.Database)
-		n += proto.SizeVarint(2<<3 | proto.WireBytes)
+		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
 	case nil:
@@ -3037,6 +3595,9 @@ func encodeVarintStructured(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *ColumnType) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.SemanticType))
@@ -3071,6 +3632,9 @@ func (m *ColumnType) Size() (n int) {
 }
 
 func (m *ForeignKeyReference) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.Table))
@@ -3086,6 +3650,9 @@ func (m *ForeignKeyReference) Size() (n int) {
 }
 
 func (m *ColumnDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -3112,6 +3679,9 @@ func (m *ColumnDescriptor) Size() (n int) {
 }
 
 func (m *ColumnFamilyDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -3133,6 +3703,9 @@ func (m *ColumnFamilyDescriptor) Size() (n int) {
 }
 
 func (m *InterleaveDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Ancestors) > 0 {
@@ -3145,6 +3718,9 @@ func (m *InterleaveDescriptor) Size() (n int) {
 }
 
 func (m *InterleaveDescriptor_Ancestor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.TableID))
@@ -3154,6 +3730,9 @@ func (m *InterleaveDescriptor_Ancestor) Size() (n int) {
 }
 
 func (m *PartitioningDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.NumColumns))
@@ -3173,6 +3752,9 @@ func (m *PartitioningDescriptor) Size() (n int) {
 }
 
 func (m *PartitioningDescriptor_List) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -3189,6 +3771,9 @@ func (m *PartitioningDescriptor_List) Size() (n int) {
 }
 
 func (m *PartitioningDescriptor_Range) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -3205,6 +3790,9 @@ func (m *PartitioningDescriptor_Range) Size() (n int) {
 }
 
 func (m *IndexDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -3271,6 +3859,9 @@ func (m *IndexDescriptor) Size() (n int) {
 }
 
 func (m *DescriptorMutation) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Descriptor_ != nil {
@@ -3284,6 +3875,9 @@ func (m *DescriptorMutation) Size() (n int) {
 }
 
 func (m *DescriptorMutation_Column) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Column != nil {
@@ -3293,6 +3887,9 @@ func (m *DescriptorMutation_Column) Size() (n int) {
 	return n
 }
 func (m *DescriptorMutation_Index) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Index != nil {
@@ -3302,6 +3899,9 @@ func (m *DescriptorMutation_Index) Size() (n int) {
 	return n
 }
 func (m *TableDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -3401,6 +4001,9 @@ func (m *TableDescriptor) Size() (n int) {
 }
 
 func (m *TableDescriptor_SchemaChangeLease) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.NodeID))
@@ -3409,6 +4012,9 @@ func (m *TableDescriptor_SchemaChangeLease) Size() (n int) {
 }
 
 func (m *TableDescriptor_CheckConstraint) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Expr)
@@ -3425,6 +4031,9 @@ func (m *TableDescriptor_CheckConstraint) Size() (n int) {
 }
 
 func (m *TableDescriptor_NameInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.ParentID))
@@ -3434,6 +4043,9 @@ func (m *TableDescriptor_NameInfo) Size() (n int) {
 }
 
 func (m *TableDescriptor_Reference) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.ID))
@@ -3447,6 +4059,9 @@ func (m *TableDescriptor_Reference) Size() (n int) {
 }
 
 func (m *TableDescriptor_MutationJob) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.MutationID))
@@ -3455,6 +4070,9 @@ func (m *TableDescriptor_MutationJob) Size() (n int) {
 }
 
 func (m *TableDescriptor_SequenceOpts) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.Increment))
@@ -3466,6 +4084,9 @@ func (m *TableDescriptor_SequenceOpts) Size() (n int) {
 }
 
 func (m *TableDescriptor_Replacement) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.ID))
@@ -3475,6 +4096,9 @@ func (m *TableDescriptor_Replacement) Size() (n int) {
 }
 
 func (m *TableDescriptor_GCDescriptorMutation) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovStructured(uint64(m.IndexID))
@@ -3484,6 +4108,9 @@ func (m *TableDescriptor_GCDescriptorMutation) Size() (n int) {
 }
 
 func (m *DatabaseDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -3497,6 +4124,9 @@ func (m *DatabaseDescriptor) Size() (n int) {
 }
 
 func (m *Descriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Union != nil {
@@ -3506,6 +4136,9 @@ func (m *Descriptor) Size() (n int) {
 }
 
 func (m *Descriptor_Table) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Table != nil {
@@ -3515,6 +4148,9 @@ func (m *Descriptor_Table) Size() (n int) {
 	return n
 }
 func (m *Descriptor_Database) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Database != nil {
@@ -3663,6 +4299,17 @@ func (m *ColumnType) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.ArrayDimensions) == 0 {
+					m.ArrayDimensions = make([]int32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int32
@@ -4265,6 +4912,17 @@ func (m *ColumnDescriptor) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.UsesSequenceIds) == 0 {
+					m.UsesSequenceIds = make([]ID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v ID
 					for shift := uint(0); ; shift += 7 {
@@ -4483,6 +5141,17 @@ func (m *ColumnFamilyDescriptor) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.ColumnIDs) == 0 {
+					m.ColumnIDs = make([]ColumnID, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v ColumnID
@@ -5339,6 +6008,17 @@ func (m *IndexDescriptor) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.ColumnIDs) == 0 {
+					m.ColumnIDs = make([]ColumnID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v ColumnID
 					for shift := uint(0); ; shift += 7 {
@@ -5401,6 +6081,17 @@ func (m *IndexDescriptor) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.ExtraColumnIDs) == 0 {
+					m.ExtraColumnIDs = make([]ColumnID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v ColumnID
 					for shift := uint(0); ; shift += 7 {
@@ -5462,6 +6153,10 @@ func (m *IndexDescriptor) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				if elementCount != 0 && len(m.ColumnDirections) == 0 {
+					m.ColumnDirections = make([]IndexDescriptor_Direction, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v IndexDescriptor_Direction
@@ -5647,6 +6342,17 @@ func (m *IndexDescriptor) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.CompositeColumnIDs) == 0 {
+					m.CompositeColumnIDs = make([]ColumnID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v ColumnID
 					for shift := uint(0); ; shift += 7 {
@@ -5708,6 +6414,17 @@ func (m *IndexDescriptor) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.StoreColumnIDs) == 0 {
+					m.StoreColumnIDs = make([]ColumnID, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v ColumnID
@@ -6602,6 +7319,17 @@ func (m *TableDescriptor) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.DependsOn) == 0 {
+					m.DependsOn = make([]ID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v ID
 					for shift := uint(0); ; shift += 7 {
@@ -7092,6 +7820,17 @@ func (m *TableDescriptor_CheckConstraint) Unmarshal(dAtA []byte) error {
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.ColumnIDs) == 0 {
+					m.ColumnIDs = make([]ColumnID, 0, elementCount)
+				}
 				for iNdEx < postIndex {
 					var v ColumnID
 					for shift := uint(0); ; shift += 7 {
@@ -7339,6 +8078,17 @@ func (m *TableDescriptor_Reference) Unmarshal(dAtA []byte) error {
 				postIndex := iNdEx + packedLen
 				if postIndex > l {
 					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.ColumnIDs) == 0 {
+					m.ColumnIDs = make([]ColumnID, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v ColumnID
@@ -8172,9 +8922,11 @@ var (
 	ErrIntOverflowStructured   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/sqlbase/structured.proto", fileDescriptorStructured) }
+func init() {
+	proto.RegisterFile("sql/sqlbase/structured.proto", fileDescriptor_structured_712cb25350946e6b)
+}
 
-var fileDescriptorStructured = []byte{
+var fileDescriptor_structured_712cb25350946e6b = []byte{
 	// 3170 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x59, 0xcd, 0x6f, 0x1b, 0x47,
 	0x96, 0x57, 0x93, 0x4d, 0xb2, 0xf9, 0xf8, 0xd5, 0x2a, 0xcb, 0x0e, 0xcd, 0x38, 0x92, 0xcc, 0xc4,

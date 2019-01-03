@@ -6,11 +6,11 @@ package roachpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util "github.com/cockroachdb/cockroach/pkg/util"
+import util "github.com/cockroachdb/cockroach/pkg/util"
 
 import bytes "bytes"
 
-import binary "encoding/binary"
+import encoding_binary "encoding/binary"
 
 import io "io"
 
@@ -19,25 +19,83 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
 // Attributes specifies a list of arbitrary strings describing
 // node topology, store type, and machine capabilities.
 type Attributes struct {
-	Attrs []string `protobuf:"bytes,1,rep,name=attrs" json:"attrs,omitempty" yaml:"attrs,flow"`
+	Attrs                []string `protobuf:"bytes,1,rep,name=attrs" json:"attrs,omitempty" yaml:"attrs,flow"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Attributes) Reset()                    { *m = Attributes{} }
-func (*Attributes) ProtoMessage()               {}
-func (*Attributes) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{0} }
+func (m *Attributes) Reset()      { *m = Attributes{} }
+func (*Attributes) ProtoMessage() {}
+func (*Attributes) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{0}
+}
+func (m *Attributes) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Attributes) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Attributes) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Attributes.Merge(dst, src)
+}
+func (m *Attributes) XXX_Size() int {
+	return m.Size()
+}
+func (m *Attributes) XXX_DiscardUnknown() {
+	xxx_messageInfo_Attributes.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Attributes proto.InternalMessageInfo
 
 // ReplicationTarget identifies a node/store pair.
 type ReplicationTarget struct {
-	NodeID  NodeID  `protobuf:"varint,1,opt,name=node_id,json=nodeId,casttype=NodeID" json:"node_id"`
-	StoreID StoreID `protobuf:"varint,2,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
+	NodeID               NodeID   `protobuf:"varint,1,opt,name=node_id,json=nodeId,casttype=NodeID" json:"node_id"`
+	StoreID              StoreID  `protobuf:"varint,2,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ReplicationTarget) Reset()                    { *m = ReplicationTarget{} }
-func (*ReplicationTarget) ProtoMessage()               {}
-func (*ReplicationTarget) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{1} }
+func (m *ReplicationTarget) Reset()      { *m = ReplicationTarget{} }
+func (*ReplicationTarget) ProtoMessage() {}
+func (*ReplicationTarget) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{1}
+}
+func (m *ReplicationTarget) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicationTarget) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ReplicationTarget) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicationTarget.Merge(dst, src)
+}
+func (m *ReplicationTarget) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReplicationTarget) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicationTarget.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicationTarget proto.InternalMessageInfo
 
 // ReplicaDescriptor describes a replica location by node ID
 // (corresponds to a host:port via lookup on gossip network) and store
@@ -48,23 +106,75 @@ type ReplicaDescriptor struct {
 	// replica_id uniquely identifies a replica instance. If a range is removed from
 	// a store and then re-added to the same store, the new instance will have a
 	// higher replica_id.
-	ReplicaID ReplicaID `protobuf:"varint,3,opt,name=replica_id,json=replicaId,casttype=ReplicaID" json:"replica_id"`
+	ReplicaID            ReplicaID `protobuf:"varint,3,opt,name=replica_id,json=replicaId,casttype=ReplicaID" json:"replica_id"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
 }
 
-func (m *ReplicaDescriptor) Reset()                    { *m = ReplicaDescriptor{} }
-func (*ReplicaDescriptor) ProtoMessage()               {}
-func (*ReplicaDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{2} }
+func (m *ReplicaDescriptor) Reset()      { *m = ReplicaDescriptor{} }
+func (*ReplicaDescriptor) ProtoMessage() {}
+func (*ReplicaDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{2}
+}
+func (m *ReplicaDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicaDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ReplicaDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicaDescriptor.Merge(dst, src)
+}
+func (m *ReplicaDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReplicaDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicaDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicaDescriptor proto.InternalMessageInfo
 
 // ReplicaIdent uniquely identifies a specific replica.
 type ReplicaIdent struct {
-	RangeID RangeID           `protobuf:"varint,1,opt,name=range_id,json=rangeId,casttype=RangeID" json:"range_id"`
-	Replica ReplicaDescriptor `protobuf:"bytes,2,opt,name=replica" json:"replica"`
+	RangeID              RangeID           `protobuf:"varint,1,opt,name=range_id,json=rangeId,casttype=RangeID" json:"range_id"`
+	Replica              ReplicaDescriptor `protobuf:"bytes,2,opt,name=replica" json:"replica"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
-func (m *ReplicaIdent) Reset()                    { *m = ReplicaIdent{} }
-func (m *ReplicaIdent) String() string            { return proto.CompactTextString(m) }
-func (*ReplicaIdent) ProtoMessage()               {}
-func (*ReplicaIdent) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{3} }
+func (m *ReplicaIdent) Reset()         { *m = ReplicaIdent{} }
+func (m *ReplicaIdent) String() string { return proto.CompactTextString(m) }
+func (*ReplicaIdent) ProtoMessage()    {}
+func (*ReplicaIdent) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{3}
+}
+func (m *ReplicaIdent) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicaIdent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ReplicaIdent) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicaIdent.Merge(dst, src)
+}
+func (m *ReplicaIdent) XXX_Size() int {
+	return m.Size()
+}
+func (m *ReplicaIdent) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicaIdent.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicaIdent proto.InternalMessageInfo
 
 // RangeDescriptor is the value stored in a range metadata key.
 // A range is described using an inclusive start key, a non-inclusive end key,
@@ -94,27 +204,79 @@ type RangeDescriptor struct {
 	// Cockroach prior to v2.1. To maintain backwards compatibility with these old
 	// versions of Cockroach, we cannot enable the gogoproto.nullable option, as
 	// we need to be able to encode this mesage with the generation field unset.
-	Generation *int64 `protobuf:"varint,6,opt,name=generation" json:"generation,omitempty"`
+	Generation           *int64   `protobuf:"varint,6,opt,name=generation" json:"generation,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *RangeDescriptor) Reset()                    { *m = RangeDescriptor{} }
-func (*RangeDescriptor) ProtoMessage()               {}
-func (*RangeDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{4} }
+func (m *RangeDescriptor) Reset()      { *m = RangeDescriptor{} }
+func (*RangeDescriptor) ProtoMessage() {}
+func (*RangeDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{4}
+}
+func (m *RangeDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RangeDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *RangeDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RangeDescriptor.Merge(dst, src)
+}
+func (m *RangeDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *RangeDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_RangeDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RangeDescriptor proto.InternalMessageInfo
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize
 // a distribution.
 type Percentiles struct {
-	P10  float64 `protobuf:"fixed64,1,opt,name=p10" json:"p10"`
-	P25  float64 `protobuf:"fixed64,2,opt,name=p25" json:"p25"`
-	P50  float64 `protobuf:"fixed64,3,opt,name=p50" json:"p50"`
-	P75  float64 `protobuf:"fixed64,4,opt,name=p75" json:"p75"`
-	P90  float64 `protobuf:"fixed64,5,opt,name=p90" json:"p90"`
-	PMax float64 `protobuf:"fixed64,6,opt,name=pMax" json:"pMax"`
+	P10                  float64  `protobuf:"fixed64,1,opt,name=p10" json:"p10"`
+	P25                  float64  `protobuf:"fixed64,2,opt,name=p25" json:"p25"`
+	P50                  float64  `protobuf:"fixed64,3,opt,name=p50" json:"p50"`
+	P75                  float64  `protobuf:"fixed64,4,opt,name=p75" json:"p75"`
+	P90                  float64  `protobuf:"fixed64,5,opt,name=p90" json:"p90"`
+	PMax                 float64  `protobuf:"fixed64,6,opt,name=pMax" json:"pMax"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Percentiles) Reset()                    { *m = Percentiles{} }
-func (*Percentiles) ProtoMessage()               {}
-func (*Percentiles) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{5} }
+func (m *Percentiles) Reset()      { *m = Percentiles{} }
+func (*Percentiles) ProtoMessage() {}
+func (*Percentiles) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{5}
+}
+func (m *Percentiles) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Percentiles) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Percentiles) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Percentiles.Merge(dst, src)
+}
+func (m *Percentiles) XXX_Size() int {
+	return m.Size()
+}
+func (m *Percentiles) XXX_DiscardUnknown() {
+	xxx_messageInfo_Percentiles.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Percentiles proto.InternalMessageInfo
 
 // StoreCapacity contains capacity information for a storage device.
 type StoreCapacity struct {
@@ -146,91 +308,273 @@ type StoreCapacity struct {
 	// bytes_per_replica and writes_per_replica contain percentiles for the
 	// number of bytes and writes-per-second to each replica in the store.
 	// This information can be used for rebalancing decisions.
-	BytesPerReplica  Percentiles `protobuf:"bytes,6,opt,name=bytes_per_replica,json=bytesPerReplica" json:"bytes_per_replica"`
-	WritesPerReplica Percentiles `protobuf:"bytes,7,opt,name=writes_per_replica,json=writesPerReplica" json:"writes_per_replica"`
+	BytesPerReplica      Percentiles `protobuf:"bytes,6,opt,name=bytes_per_replica,json=bytesPerReplica" json:"bytes_per_replica"`
+	WritesPerReplica     Percentiles `protobuf:"bytes,7,opt,name=writes_per_replica,json=writesPerReplica" json:"writes_per_replica"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
-func (m *StoreCapacity) Reset()                    { *m = StoreCapacity{} }
-func (*StoreCapacity) ProtoMessage()               {}
-func (*StoreCapacity) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{6} }
+func (m *StoreCapacity) Reset()      { *m = StoreCapacity{} }
+func (*StoreCapacity) ProtoMessage() {}
+func (*StoreCapacity) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{6}
+}
+func (m *StoreCapacity) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StoreCapacity) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StoreCapacity) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StoreCapacity.Merge(dst, src)
+}
+func (m *StoreCapacity) XXX_Size() int {
+	return m.Size()
+}
+func (m *StoreCapacity) XXX_DiscardUnknown() {
+	xxx_messageInfo_StoreCapacity.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StoreCapacity proto.InternalMessageInfo
 
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
-	NodeID          NodeID                        `protobuf:"varint,1,opt,name=node_id,json=nodeId,casttype=NodeID" json:"node_id"`
-	Address         cockroach_util.UnresolvedAddr `protobuf:"bytes,2,opt,name=address" json:"address"`
-	Attrs           Attributes                    `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
-	Locality        Locality                      `protobuf:"bytes,4,opt,name=locality" json:"locality"`
-	ServerVersion   Version                       `protobuf:"bytes,5,opt,name=ServerVersion" json:"ServerVersion"`
-	BuildTag        string                        `protobuf:"bytes,6,opt,name=build_tag,json=buildTag" json:"build_tag"`
-	StartedAt       int64                         `protobuf:"varint,7,opt,name=started_at,json=startedAt" json:"started_at"`
-	LocalityAddress []LocalityAddress             `protobuf:"bytes,8,rep,name=locality_address,json=localityAddress" json:"locality_address"`
+	NodeID               NodeID              `protobuf:"varint,1,opt,name=node_id,json=nodeId,casttype=NodeID" json:"node_id"`
+	Address              util.UnresolvedAddr `protobuf:"bytes,2,opt,name=address" json:"address"`
+	Attrs                Attributes          `protobuf:"bytes,3,opt,name=attrs" json:"attrs"`
+	Locality             Locality            `protobuf:"bytes,4,opt,name=locality" json:"locality"`
+	ServerVersion        Version             `protobuf:"bytes,5,opt,name=ServerVersion" json:"ServerVersion"`
+	BuildTag             string              `protobuf:"bytes,6,opt,name=build_tag,json=buildTag" json:"build_tag"`
+	StartedAt            int64               `protobuf:"varint,7,opt,name=started_at,json=startedAt" json:"started_at"`
+	LocalityAddress      []LocalityAddress   `protobuf:"bytes,8,rep,name=locality_address,json=localityAddress" json:"locality_address"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
-func (m *NodeDescriptor) Reset()                    { *m = NodeDescriptor{} }
-func (m *NodeDescriptor) String() string            { return proto.CompactTextString(m) }
-func (*NodeDescriptor) ProtoMessage()               {}
-func (*NodeDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{7} }
+func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
+func (m *NodeDescriptor) String() string { return proto.CompactTextString(m) }
+func (*NodeDescriptor) ProtoMessage()    {}
+func (*NodeDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{7}
+}
+func (m *NodeDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *NodeDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *NodeDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_NodeDescriptor.Merge(dst, src)
+}
+func (m *NodeDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *NodeDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_NodeDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_NodeDescriptor proto.InternalMessageInfo
 
 // LocalityAddress holds the private address accessible only from other nodes
 // in the corresponding locality.
 type LocalityAddress struct {
-	Address      cockroach_util.UnresolvedAddr `protobuf:"bytes,1,opt,name=address" json:"address"`
-	LocalityTier Tier                          `protobuf:"bytes,2,opt,name=locality_tier,json=localityTier" json:"locality_tier"`
+	Address              util.UnresolvedAddr `protobuf:"bytes,1,opt,name=address" json:"address"`
+	LocalityTier         Tier                `protobuf:"bytes,2,opt,name=locality_tier,json=localityTier" json:"locality_tier"`
+	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
+	XXX_sizecache        int32               `json:"-"`
 }
 
-func (m *LocalityAddress) Reset()                    { *m = LocalityAddress{} }
-func (m *LocalityAddress) String() string            { return proto.CompactTextString(m) }
-func (*LocalityAddress) ProtoMessage()               {}
-func (*LocalityAddress) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{8} }
+func (m *LocalityAddress) Reset()         { *m = LocalityAddress{} }
+func (m *LocalityAddress) String() string { return proto.CompactTextString(m) }
+func (*LocalityAddress) ProtoMessage()    {}
+func (*LocalityAddress) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{8}
+}
+func (m *LocalityAddress) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LocalityAddress) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *LocalityAddress) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LocalityAddress.Merge(dst, src)
+}
+func (m *LocalityAddress) XXX_Size() int {
+	return m.Size()
+}
+func (m *LocalityAddress) XXX_DiscardUnknown() {
+	xxx_messageInfo_LocalityAddress.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LocalityAddress proto.InternalMessageInfo
 
 // StoreDescriptor holds store information including store attributes, node
 // descriptor and store capacity.
 type StoreDescriptor struct {
-	StoreID  StoreID        `protobuf:"varint,1,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
-	Attrs    Attributes     `protobuf:"bytes,2,opt,name=attrs" json:"attrs"`
-	Node     NodeDescriptor `protobuf:"bytes,3,opt,name=node" json:"node"`
-	Capacity StoreCapacity  `protobuf:"bytes,4,opt,name=capacity" json:"capacity"`
+	StoreID              StoreID        `protobuf:"varint,1,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
+	Attrs                Attributes     `protobuf:"bytes,2,opt,name=attrs" json:"attrs"`
+	Node                 NodeDescriptor `protobuf:"bytes,3,opt,name=node" json:"node"`
+	Capacity             StoreCapacity  `protobuf:"bytes,4,opt,name=capacity" json:"capacity"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *StoreDescriptor) Reset()                    { *m = StoreDescriptor{} }
-func (m *StoreDescriptor) String() string            { return proto.CompactTextString(m) }
-func (*StoreDescriptor) ProtoMessage()               {}
-func (*StoreDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{9} }
+func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
+func (m *StoreDescriptor) String() string { return proto.CompactTextString(m) }
+func (*StoreDescriptor) ProtoMessage()    {}
+func (*StoreDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{9}
+}
+func (m *StoreDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StoreDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StoreDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StoreDescriptor.Merge(dst, src)
+}
+func (m *StoreDescriptor) XXX_Size() int {
+	return m.Size()
+}
+func (m *StoreDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_StoreDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StoreDescriptor proto.InternalMessageInfo
 
 // StoreDeadReplicas holds a storeID and a list of dead replicas on that store.
 // Used to let the range lease holder know about corrupted or otherwise
 // destroyed replicas that should be transferred to a different store.
 type StoreDeadReplicas struct {
-	StoreID  StoreID        `protobuf:"varint,1,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
-	Replicas []ReplicaIdent `protobuf:"bytes,2,rep,name=replicas" json:"replicas"`
+	StoreID              StoreID        `protobuf:"varint,1,opt,name=store_id,json=storeId,casttype=StoreID" json:"store_id"`
+	Replicas             []ReplicaIdent `protobuf:"bytes,2,rep,name=replicas" json:"replicas"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *StoreDeadReplicas) Reset()                    { *m = StoreDeadReplicas{} }
-func (m *StoreDeadReplicas) String() string            { return proto.CompactTextString(m) }
-func (*StoreDeadReplicas) ProtoMessage()               {}
-func (*StoreDeadReplicas) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{10} }
+func (m *StoreDeadReplicas) Reset()         { *m = StoreDeadReplicas{} }
+func (m *StoreDeadReplicas) String() string { return proto.CompactTextString(m) }
+func (*StoreDeadReplicas) ProtoMessage()    {}
+func (*StoreDeadReplicas) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{10}
+}
+func (m *StoreDeadReplicas) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StoreDeadReplicas) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StoreDeadReplicas) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StoreDeadReplicas.Merge(dst, src)
+}
+func (m *StoreDeadReplicas) XXX_Size() int {
+	return m.Size()
+}
+func (m *StoreDeadReplicas) XXX_DiscardUnknown() {
+	xxx_messageInfo_StoreDeadReplicas.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StoreDeadReplicas proto.InternalMessageInfo
 
 // Locality is an ordered set of key value Tiers that describe a node's
 // location. The tier keys should be the same across all nodes.
 type Locality struct {
-	Tiers []Tier `protobuf:"bytes,1,rep,name=tiers" json:"tiers"`
+	Tiers                []Tier   `protobuf:"bytes,1,rep,name=tiers" json:"tiers"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Locality) Reset()                    { *m = Locality{} }
-func (*Locality) ProtoMessage()               {}
-func (*Locality) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{11} }
+func (m *Locality) Reset()      { *m = Locality{} }
+func (*Locality) ProtoMessage() {}
+func (*Locality) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{11}
+}
+func (m *Locality) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Locality) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Locality) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Locality.Merge(dst, src)
+}
+func (m *Locality) XXX_Size() int {
+	return m.Size()
+}
+func (m *Locality) XXX_DiscardUnknown() {
+	xxx_messageInfo_Locality.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Locality proto.InternalMessageInfo
 
 // Tier represents one level of the locality hierarchy.
 type Tier struct {
 	// Key is the name of tier and should match all other nodes.
 	Key string `protobuf:"bytes,1,opt,name=key" json:"key"`
 	// Value is node specific value corresponding to the key.
-	Value string `protobuf:"bytes,2,opt,name=value" json:"value"`
+	Value                string   `protobuf:"bytes,2,opt,name=value" json:"value"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Tier) Reset()                    { *m = Tier{} }
-func (*Tier) ProtoMessage()               {}
-func (*Tier) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{12} }
+func (m *Tier) Reset()      { *m = Tier{} }
+func (*Tier) ProtoMessage() {}
+func (*Tier) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{12}
+}
+func (m *Tier) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Tier) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Tier) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Tier.Merge(dst, src)
+}
+func (m *Tier) XXX_Size() int {
+	return m.Size()
+}
+func (m *Tier) XXX_DiscardUnknown() {
+	xxx_messageInfo_Tier.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Tier proto.InternalMessageInfo
 
 type Version struct {
 	// The names "major" and "minor" are reserved in C in
@@ -242,12 +586,38 @@ type Version struct {
 	// The unstable version is used to migrate during development.
 	// Users of stable, public releases will only use binaries
 	// with unstable set to 0.
-	Unstable int32 `protobuf:"varint,4,opt,name=unstable" json:"unstable"`
+	Unstable             int32    `protobuf:"varint,4,opt,name=unstable" json:"unstable"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Version) Reset()                    { *m = Version{} }
-func (*Version) ProtoMessage()               {}
-func (*Version) Descriptor() ([]byte, []int) { return fileDescriptorMetadata, []int{13} }
+func (m *Version) Reset()      { *m = Version{} }
+func (*Version) ProtoMessage() {}
+func (*Version) Descriptor() ([]byte, []int) {
+	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{13}
+}
+func (m *Version) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Version) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Version) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Version.Merge(dst, src)
+}
+func (m *Version) XXX_Size() int {
+	return m.Size()
+}
+func (m *Version) XXX_DiscardUnknown() {
+	xxx_messageInfo_Version.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Version proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*Attributes)(nil), "cockroach.roachpb.Attributes")
@@ -555,27 +925,27 @@ func (m *Percentiles) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0x9
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P10))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P10))))
 	i += 8
 	dAtA[i] = 0x11
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P25))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P25))))
 	i += 8
 	dAtA[i] = 0x19
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P50))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P50))))
 	i += 8
 	dAtA[i] = 0x21
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P75))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P75))))
 	i += 8
 	dAtA[i] = 0x29
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P90))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P90))))
 	i += 8
 	dAtA[i] = 0x31
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.PMax))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.PMax))))
 	i += 8
 	return i, nil
 }
@@ -609,7 +979,7 @@ func (m *StoreCapacity) MarshalTo(dAtA []byte) (int, error) {
 	i = encodeVarintMetadata(dAtA, i, uint64(m.LeaseCount))
 	dAtA[i] = 0x29
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.WritesPerSecond))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.WritesPerSecond))))
 	i += 8
 	dAtA[i] = 0x32
 	i++
@@ -635,7 +1005,7 @@ func (m *StoreCapacity) MarshalTo(dAtA []byte) (int, error) {
 	i = encodeVarintMetadata(dAtA, i, uint64(m.LogicalBytes))
 	dAtA[i] = 0x51
 	i++
-	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.QueriesPerSecond))))
+	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.QueriesPerSecond))))
 	i += 8
 	return i, nil
 }
@@ -1055,6 +1425,9 @@ func encodeVarintPopulateMetadata(dAtA []byte, v uint64) []byte {
 	return dAtA
 }
 func (m *Attributes) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Attrs) > 0 {
@@ -1067,6 +1440,9 @@ func (m *Attributes) Size() (n int) {
 }
 
 func (m *ReplicationTarget) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovMetadata(uint64(m.NodeID))
@@ -1075,6 +1451,9 @@ func (m *ReplicationTarget) Size() (n int) {
 }
 
 func (m *ReplicaDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovMetadata(uint64(m.NodeID))
@@ -1084,6 +1463,9 @@ func (m *ReplicaDescriptor) Size() (n int) {
 }
 
 func (m *ReplicaIdent) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovMetadata(uint64(m.RangeID))
@@ -1093,6 +1475,9 @@ func (m *ReplicaIdent) Size() (n int) {
 }
 
 func (m *RangeDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovMetadata(uint64(m.RangeID))
@@ -1118,6 +1503,9 @@ func (m *RangeDescriptor) Size() (n int) {
 }
 
 func (m *Percentiles) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 9
@@ -1130,6 +1518,9 @@ func (m *Percentiles) Size() (n int) {
 }
 
 func (m *StoreCapacity) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovMetadata(uint64(m.Capacity))
@@ -1148,6 +1539,9 @@ func (m *StoreCapacity) Size() (n int) {
 }
 
 func (m *NodeDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovMetadata(uint64(m.NodeID))
@@ -1172,6 +1566,9 @@ func (m *NodeDescriptor) Size() (n int) {
 }
 
 func (m *LocalityAddress) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = m.Address.Size()
@@ -1182,6 +1579,9 @@ func (m *LocalityAddress) Size() (n int) {
 }
 
 func (m *StoreDescriptor) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovMetadata(uint64(m.StoreID))
@@ -1195,6 +1595,9 @@ func (m *StoreDescriptor) Size() (n int) {
 }
 
 func (m *StoreDeadReplicas) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovMetadata(uint64(m.StoreID))
@@ -1208,6 +1611,9 @@ func (m *StoreDeadReplicas) Size() (n int) {
 }
 
 func (m *Locality) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Tiers) > 0 {
@@ -1220,6 +1626,9 @@ func (m *Locality) Size() (n int) {
 }
 
 func (m *Tier) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Key)
@@ -1230,6 +1639,9 @@ func (m *Tier) Size() (n int) {
 }
 
 func (m *Version) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	n += 1 + sovMetadata(uint64(m.Major))
@@ -1863,7 +2275,7 @@ func (m *Percentiles) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.P10 = float64(math.Float64frombits(v))
 		case 2:
@@ -1874,7 +2286,7 @@ func (m *Percentiles) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.P25 = float64(math.Float64frombits(v))
 		case 3:
@@ -1885,7 +2297,7 @@ func (m *Percentiles) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.P50 = float64(math.Float64frombits(v))
 		case 4:
@@ -1896,7 +2308,7 @@ func (m *Percentiles) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.P75 = float64(math.Float64frombits(v))
 		case 5:
@@ -1907,7 +2319,7 @@ func (m *Percentiles) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.P90 = float64(math.Float64frombits(v))
 		case 6:
@@ -1918,7 +2330,7 @@ func (m *Percentiles) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.PMax = float64(math.Float64frombits(v))
 		default:
@@ -2055,7 +2467,7 @@ func (m *StoreCapacity) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.WritesPerSecond = float64(math.Float64frombits(v))
 		case 6:
@@ -2164,7 +2576,7 @@ func (m *StoreCapacity) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.QueriesPerSecond = float64(math.Float64frombits(v))
 		default:
@@ -3245,9 +3657,9 @@ var (
 	ErrIntOverflowMetadata   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/metadata.proto", fileDescriptorMetadata) }
+func init() { proto.RegisterFile("roachpb/metadata.proto", fileDescriptor_metadata_a25ba028f2b3ac41) }
 
-var fileDescriptorMetadata = []byte{
+var fileDescriptor_metadata_a25ba028f2b3ac41 = []byte{
 	// 1162 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x56, 0xcf, 0x6f, 0x1b, 0x45,
 	0x14, 0xce, 0xda, 0xeb, 0x78, 0xfd, 0x1a, 0x93, 0x7a, 0x04, 0xc5, 0x32, 0xc2, 0x4e, 0x16, 0x2a,
