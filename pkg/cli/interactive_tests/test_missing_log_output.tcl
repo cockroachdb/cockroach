@@ -31,8 +31,7 @@ start_test "Check that a broken log file prints a message to stderr."
 system "mkdir -p logs"
 system "touch logs/broken"
 send "$argv start -s=path=logs/db --log-dir=logs/broken --insecure --logtostderr\r"
-eexpect "log: exiting because of error: log: cannot create log: open"
-eexpect "not a directory"
+eexpect "unable to create log directory"
 eexpect ":/# "
 end_test
 
