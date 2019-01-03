@@ -30,6 +30,7 @@ import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
 import { intersperse } from "src/util/intersperse";
 import { Pick } from "src/util/pick";
+import { PlanView } from "src/views/statements/planView";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
@@ -224,12 +225,18 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
     const { parseBarChart, planBarChart, runBarChart, overheadBarChart, overallBarChart } = latencyBreakdown(this.props.statement);
 
     const statsByNode = this.props.statement.byNode;
+    const logicalPlan = stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
 
     return (
       <div className="content l-columns">
         <div className="l-columns__left">
           <section className="section section--heading">
             <SqlBox value={ statement } />
+          </section>
+          <section className="section">
+            <PlanView
+              title="Logical Plan"
+              plan={logicalPlan} />
           </section>
           <section className="section">
             <NumericStatTable
