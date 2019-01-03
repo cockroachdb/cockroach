@@ -84,6 +84,31 @@ message DatabaseDetailsResponse {
   ZoneConfigurationLevel zone_config_level = 5;
 }
 
+// DatabasesTableStatsRequest requests table stats for all tables for all
+// databases.
+message DatabaseTableStatsRequest {
+}
+
+// DatabasesTableStatsResponse contains table stats for all tables for all
+// databases.
+message DatabaseTableStatsResponse {
+  message Database {
+    message Table {
+      message Stats {
+        uint64 approximate_disk_bytes = 2;
+        int64 range_count = 3;
+        int64 column_count = 4;
+        int64 index_count = 5;
+      }
+      string table_name = 1;
+      Stats stats = 2;
+    }
+    string database_name = 1;
+    repeated Table tables = 2;
+  }
+  repeated Database databases = 1;
+}
+
 // TableDetailsRequest is a request for detailed information about a table.
 message TableDetailsRequest {
   // database is the database that contains the table we're interested in.
@@ -615,6 +640,13 @@ service Admin {
   rpc Users(UsersRequest) returns (UsersResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/users"
+    };
+  }
+
+  // URL: /_admin/v1/databasetablestats
+  rpc DatabaseTableStats(DatabaseTableStatsRequest) returns (DatabaseTableStatsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/databasetablestats"
     };
   }
 
