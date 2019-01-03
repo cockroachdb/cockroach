@@ -257,6 +257,13 @@ const dataDistributionReducerObj = new CachedDataReducer(
 );
 export const refreshDataDistribution = dataDistributionReducerObj.refresh;
 
+const alertsReducerObj = new CachedDataReducer(
+  api.getAlerts,
+  "alerts",
+  moment.duration(1, "m"),
+);
+export const refreshAlerts = alertsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -283,6 +290,7 @@ export interface APIReducersState {
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
+  alerts: CachedDataReducerState<api.AlertsResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -311,6 +319,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]: dataDistributionReducerObj.reducer,
+  [alertsReducerObj.actionNamespace]: alertsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

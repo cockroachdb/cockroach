@@ -34,10 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -1737,6 +1739,78 @@ func (s *adminServer) enqueueRangeLocal(
 	return response, nil
 }
 
+func (s *adminServer) Alerts(
+	ctx context.Context, req *serverpb.AlertsRequest,
+) (*serverpb.AlertsResponse, error) {
+	// TODO(vilterp): might be easier to just unmarshal this out of gossip, rather than
+	// selecting from crdb_internal...
+	userName := s.getUser(req)
+	tablesQuery := `
+		SELECT node_id, store_id, category, description, value FROM "".crdb_internal.gossip_alerts
+	`
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-replica-matrix", nil /* txn */, userName, tablesQuery,
+	)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+
+	scanner := makeResultScanner([]sqlbase.ResultColumn{
+		{
+			Name: "node_id",
+			Typ:  types.Int,
+		},
+		{
+			Name: "store_id",
+			Typ:  types.Int,
+		},
+		{
+			Name: "category",
+			Typ:  types.String,
+		},
+		{
+			Name: "description",
+			Typ:  types.String,
+		},
+		{
+			Name: "value",
+			Typ:  types.Float,
+		},
+	})
+
+	resp := &serverpb.AlertsResponse{
+		Alerts: make(map[roachpb.NodeID]statuspb.HealthCheckResult),
+	}
+
+	for _, row := range rows {
+		// Scan the row into a HealthAlert.
+		var nodeID int64
+		var storeID int64
+		var category string
+		alert := statuspb.HealthAlert{}
+		if err := scanner.ScanAll(
+			row,
+			&nodeID,
+			&storeID,
+			&category,
+			&alert.Description,
+			&alert.Value,
+		); err != nil {
+			return nil, err
+		}
+		alert.StoreID = roachpb.StoreID(storeID)
+		alert.Category = statuspb.HealthAlert_Category(statuspb.HealthAlert_Category_value[category])
+		// Insert it into the result.
+		nodeAlerts := resp.Alerts[roachpb.NodeID(nodeID)]
+		nodeAlerts.Alerts = append(nodeAlerts.Alerts, alert)
+		resp.Alerts[roachpb.NodeID(nodeID)] = nodeAlerts
+	}
+
+	return resp, nil
+}
+
+// TODO(vilterp): move everything below here into a util file...
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.
@@ -1845,7 +1919,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 	case *string:
 		s, ok := tree.AsDString(src)
 		if !ok {
-			return errors.Errorf("source type assertion failed")
+			return errors.Errorf("source type assertion failed for *string")
 		}
 		*d = string(s)
 
@@ -1853,7 +1927,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		s, ok := tree.AsDString(src)
 		if !ok {
 			if src != tree.DNull {
-				return errors.Errorf("source type assertion failed")
+				return errors.Errorf("source type assertion failed for **string")
 			}
 			*d = nil
 			break
@@ -1864,14 +1938,14 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 	case *bool:
 		s, ok := src.(*tree.DBool)
 		if !ok {
-			return errors.Errorf("source type assertion failed")
+			return errors.Errorf("source type assertion failed for *bool")
 		}
 		*d = bool(*s)
 
 	case *float32:
 		s, ok := src.(*tree.DFloat)
 		if !ok {
-			return errors.Errorf("source type assertion failed")
+			return errors.Errorf("source type assertion failed for *float32")
 		}
 		*d = float32(*s)
 
@@ -1879,7 +1953,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		s, ok := src.(*tree.DFloat)
 		if !ok {
 			if src != tree.DNull {
-				return errors.Errorf("source type assertion failed")
+				return errors.Errorf("source type assertion failed for **float32")
 			}
 			*d = nil
 			break
@@ -1887,17 +1961,24 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		val := float32(*s)
 		*d = &val
 
+	case *float64:
+		s, ok := src.(*tree.DFloat)
+		if !ok {
+			return errors.Errorf("source type assertion failed for *float64")
+		}
+		*d = float64(*s)
+
 	case *int64:
 		s, ok := tree.AsDInt(src)
 		if !ok {
-			return errors.Errorf("source type assertion failed")
+			return errors.Errorf("source type assertion failed for *int64")
 		}
 		*d = int64(s)
 
 	case *[]sqlbase.ID:
 		s, ok := tree.AsDArray(src)
 		if !ok {
-			return errors.Errorf("source type assertion failed")
+			return errors.Errorf("source type assertion failed *[]sqlbase.ID")
 		}
 		for i := 0; i < s.Len(); i++ {
 			id, ok := tree.AsDInt(s.Array[i])
@@ -1910,7 +1991,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 	case *time.Time:
 		s, ok := src.(*tree.DTimestamp)
 		if !ok {
-			return errors.Errorf("source type assertion failed")
+			return errors.Errorf("source type assertion failed for *time.Time")
 		}
 		*d = s.Time
 
@@ -1920,7 +2001,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		s, ok := src.(*tree.DTimestamp)
 		if !ok {
 			if src != tree.DNull {
-				return errors.Errorf("source type assertion failed")
+				return errors.Errorf("source type assertion failed for **time.Time")
 			}
 			*d = nil
 			break
@@ -1930,7 +2011,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 	case *[]byte:
 		s, ok := src.(*tree.DBytes)
 		if !ok {
-			return errors.Errorf("source type assertion failed")
+			return errors.Errorf("source type assertion failed for *[]byte")
 		}
 		// Yes, this copies, but this probably isn't in the critical path.
 		*d = []byte(*s)
@@ -1938,7 +2019,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 	case *apd.Decimal:
 		s, ok := src.(*tree.DDecimal)
 		if !ok {
-			return errors.Errorf("source type assertion failed")
+			return errors.Errorf("source type assertion failed for *apd.Decimal")
 		}
 		*d = s.Decimal
 
@@ -1946,7 +2027,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		s, ok := src.(*tree.DDecimal)
 		if !ok {
 			if src != tree.DNull {
-				return errors.Errorf("source type assertion failed")
+				return errors.Errorf("source type assertion failed for **apd.Decimal")
 			}
 			*d = nil
 			break
