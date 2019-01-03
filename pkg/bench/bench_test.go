@@ -356,6 +356,7 @@ func BenchmarkSQL(b *testing.B) {
 			runBenchmarkInsertFK,
 			runBenchmarkInsertSecondaryIndex,
 			runBenchmarkInterleavedSelect,
+			runBenchmarkInterleavedFK,
 			runBenchmarkTrackChoices,
 			runBenchmarkUpdate,
 			runBenchmarkUpsert,
@@ -711,6 +712,43 @@ func runBenchmarkInterleavedSelect(b *testing.B, db *gosql.DB, count int) {
 		}
 	}
 	b.StopTimer()
+}
+
+func runBenchmarkInterleavedFK(b *testing.B, db *gosql.DB, count int) {
+	defer func() {
+		if _, err := db.Exec(`DROP TABLE IF EXISTS bench.parent CASCADE; DROP TABLE IF EXISTS bench.child CASCADE`); err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	if _, err := db.Exec(`
+CREATE TABLE bench.parent (a INT PRIMARY KEY);
+INSERT INTO bench.parent VALUES(0);
+CREATE TABLE bench.child
+  (a INT REFERENCES bench.parent(a),
+   b INT, PRIMARY KEY(a, b))
+INTERLEAVE IN PARENT bench.parent (a)
+`); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	var buf bytes.Buffer
+	val := 0
+	for i := 0; i < b.N; i++ {
+		buf.Reset()
+		buf.WriteString(`INSERT INTO bench.child VALUES `)
+		for j := 0; j < count; j++ {
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, "(0, %d)", val)
+			val++
+		}
+		if _, err := db.Exec(buf.String()); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 // runBenchmarkOrderBy benchmarks scanning a table and sorting the results.

@@ -204,13 +204,9 @@ func (ij *indexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, erro
 	// numKeyCols.
 	keyRow := row[:numKeyCols]
 	types := ij.input.OutputTypes()[:numKeyCols]
-	key, err := sqlbase.MakeKeyFromEncDatums(
+	return sqlbase.MakeSpanFromEncDatums(
 		ij.keyPrefix, keyRow, types, ij.desc.PrimaryIndex.ColumnDirections, &ij.desc,
 		&ij.desc.PrimaryIndex, &ij.alloc)
-	if err != nil {
-		return roachpb.Span{}, err
-	}
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
 }
 
 // outputStatsToTrace outputs the collected indexJoiner stats to the trace. Will

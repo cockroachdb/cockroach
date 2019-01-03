@@ -159,8 +159,8 @@ query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE 'FKScan%'
 ----
-FKScan /Table/53/1/{2-3}
-FKScan /Table/54/1/"fake"{-/PrefixEnd}
+FKScan /Table/54/1/"fake"{-/#}
+FKScan /Table/53/1/2{-/#}
 
 statement error pgcode 23503 foreign key violation: values \['780'\] in columns \[sku\] referenced in table "orders"
 DELETE FROM products
@@ -628,6 +628,22 @@ DELETE FROM pairs WHERE id = 2
 statement error pgcode 23503 foreign key violation: values \[100 'one'\] in columns \[src dest\] referenced in table "refpairs"
 DELETE FROM pairs WHERE id = 1
 
+statement error foreign key violation: values \[100 'one'\] in columns \[src dest\] referenced in table "refpairs"
+SET tracing = on,kv; DELETE FROM pairs WHERE id = 1
+
+statement ok
+SET tracing=off
+
+# Test that fk scans on indexes that are longer than the foreign key use
+# PrefixEnd instead of interleave end.
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE 'FKScan%'
+----
+FKScan /Table/85/3/100/"one"{-/#}
+FKScan /Table/86/3/100/"one"{-/#}
+FKScan /Table/87/2/100/"one"{-/PrefixEnd}
+
 # since PKs are handled differently than other indexes, check pk<->pk ref with no other indexes in play.
 statement ok
 CREATE TABLE foo (id INT PRIMARY KEY)
@@ -697,6 +713,22 @@ domain_modules  domain_modules_domain_id_fk  FOREIGN KEY  FOREIGN KEY (domain_id
 domain_modules  domain_modules_module_id_fk  FOREIGN KEY  FOREIGN KEY (module_id) REFERENCES modules (id)  true
 domain_modules  domain_modules_uq            UNIQUE       UNIQUE (domain_id ASC, module_id ASC)            true
 domain_modules  primary                      PRIMARY KEY  PRIMARY KEY (id ASC)                             true
+
+statement ok
+INSERT INTO modules VALUES(3)
+
+statement error foreign key violation: value \[2\] not found in domains@primary
+SET tracing = on,kv; INSERT INTO domain_modules VALUES (1, 2, 3)
+
+statement ok
+SET tracing=off
+
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE 'FKScan%'
+----
+FKScan /Table/93/1/3{-/#}
+FKScan /Table/94/1/2{-/#}
 
 statement ok
 CREATE TABLE tx (

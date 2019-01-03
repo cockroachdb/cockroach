@@ -446,12 +446,13 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 	}
 
 	info.prefix = sqlbase.MakeIndexKeyPrefix(info.table, info.index.ID)
-	info.key, err = z.produceKeyFromBaseRow()
+	span, err := z.produceSpanFromBaseRow()
 
 	if err != nil {
 		return err
 	}
-	info.endKey = info.key.PrefixEnd()
+	info.key = span.Key
+	info.endKey = span.EndKey
 	return nil
 }
 
@@ -535,7 +536,7 @@ func (z *zigzagJoiner) extractEqDatums(row sqlbase.EncDatumRow, side int) sqlbas
 // info. Used by produceKeyFromBaseRow.
 func (z *zigzagJoiner) produceInvertedIndexKey(
 	info *zigzagJoinerInfo, datums sqlbase.EncDatumRow,
-) (roachpb.Key, error) {
+) (roachpb.Span, error) {
 	// For inverted indexes, the JSON field (first column in the index) is
 	// encoded a little differently. We need to explicitly call
 	// EncodeInvertedIndexKeys to generate the prefix. The rest of the
@@ -548,7 +549,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 	for i, encDatum := range datums {
 		err := encDatum.EnsureDecoded(&info.indexTypes[i], info.alloc)
 		if err != nil {
-			return nil, err
+			return roachpb.Span{}, err
 		}
 
 		decodedDatums[i] = encDatum.Datum
@@ -569,26 +570,27 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 		info.prefix,
 	)
 	if err != nil {
-		return nil, err
+		return roachpb.Span{}, err
 	}
 	if len(keys) != 1 {
-		return nil, errors.Errorf("%d fixed values passed in for inverted index", len(keys))
+		return roachpb.Span{}, errors.Errorf("%d fixed values passed in for inverted index", len(keys))
 	}
 
 	// Append remaining (non-JSON) datums to the key.
-	key, _, err := sqlbase.EncodeColumns(
+	keyBytes, _, err := sqlbase.EncodeColumns(
 		info.index.ExtraColumnIDs[:len(datums)-1],
 		info.indexDirs[1:],
 		colMap,
 		decodedDatums,
 		keys[0],
 	)
-	return key, err
+	key := roachpb.Key(keyBytes)
+	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, err
 }
 
 // Generates a Key, corresponding to the current `z.baseRow` in
 // the index on the current side.
-func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
+func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 	info := z.infos[z.side]
 	neededDatums := info.fixedValues
 	if z.baseRow != nil {
@@ -602,7 +604,7 @@ func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
 		return z.produceInvertedIndexKey(info, neededDatums)
 	}
 
-	key, err := sqlbase.MakeKeyFromEncDatums(
+	return sqlbase.MakeSpanFromEncDatums(
 		info.prefix,
 		neededDatums,
 		info.indexTypes[:len(neededDatums)],
@@ -611,7 +613,6 @@ func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
 		info.index,
 		info.alloc,
 	)
-	return key, err
 }
 
 // Returns the column types of the equality columns.
@@ -741,13 +742,13 @@ func (z *zigzagJoiner) nextRow(
 
 		curInfo := z.infos[z.side]
 
-		var err error
 		// Generate a key from the last row seen from the last side. We're about to
 		// use it to jump to the next possible match on the current side.
-		curInfo.key, err = z.produceKeyFromBaseRow()
+		span, err := z.produceSpanFromBaseRow()
 		if err != nil {
 			return nil, z.producerMeta(err)
 		}
+		curInfo.key = span.Key
 
 		err = curInfo.fetcher.StartScan(
 			ctx,

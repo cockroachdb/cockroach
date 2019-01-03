@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -233,15 +232,11 @@ func spanForIndexValues(
 	default:
 		return roachpb.Span{}, pgerror.NewAssertionErrorf("unknown composite key match type: %v", match)
 	}
-	keyBytes, _, err := sqlbase.EncodePartialIndexKey(table.TableDesc(), index, prefixLen, indexColIDs, values, keyPrefix)
+	span, _, err := sqlbase.EncodePartialIndexSpan(table.TableDesc(), index, prefixLen, indexColIDs, values, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
-	key := roachpb.Key(keyBytes)
-	if index.ID == table.PrimaryIndex.ID {
-		return roachpb.Span{Key: key, EndKey: encoding.EncodeInterleavedSentinel(key)}, nil
-	}
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
+	return span, nil
 }
 
 // batchRequestForIndexValues creates a batch request against an index to
@@ -255,6 +250,7 @@ func batchRequestForIndexValues(
 	referencingIndex *sqlbase.IndexDescriptor,
 	match sqlbase.ForeignKeyReference_Match,
 	values cascadeQueueElement,
+	traceKV bool,
 ) (roachpb.BatchRequest, map[sqlbase.ColumnID]int, error) {
 
 	//TODO(bram): consider caching some of these values
@@ -291,6 +287,9 @@ func batchRequestForIndexValues(
 		}
 		if span.EndKey != nil {
 			req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
+			if traceKV {
+				log.VEventf(ctx, 2, "CascadeScan %s", span)
+			}
 		}
 	}
 	return req, colIDtoRowIndex, nil
@@ -317,9 +316,11 @@ func spanForPKValues(
 // batchRequestForPKValues creates a batch request against the primary index of
 // a table and is used to fetch rows for cascading.
 func batchRequestForPKValues(
+	ctx context.Context,
 	table *sqlbase.ImmutableTableDescriptor,
 	fetchColIDtoRowIndex map[sqlbase.ColumnID]int,
 	values *sqlbase.RowContainer,
+	traceKV bool,
 ) (roachpb.BatchRequest, error) {
 	var req roachpb.BatchRequest
 	for i := 0; i < values.Len(); i++ {
@@ -328,6 +329,9 @@ func batchRequestForPKValues(
 			return roachpb.BatchRequest{}, err
 		}
 		if span.EndKey != nil {
+			if traceKV {
+				log.VEventf(ctx, 2, "CascadeScan %s", span)
+			}
 			req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
 		}
 	}
@@ -524,7 +528,7 @@ func (c *cascader) deleteRows(
 		)
 	}
 	req, _, err := batchRequestForIndexValues(
-		ctx, referencedIndex, referencingTable, referencingIndex, match, values,
+		ctx, referencedIndex, referencingTable, referencingIndex, match, values, traceKV,
 	)
 	if err != nil {
 		return nil, nil, 0, err
@@ -588,7 +592,7 @@ func (c *cascader) deleteRows(
 	// Create a batch request to get all the spans of the primary keys that need
 	// to be deleted.
 	pkLookupReq, err := batchRequestForPKValues(
-		referencingTable, indexPKRowFetcherColIDToRowIndex, primaryKeysToDelete,
+		ctx, referencingTable, indexPKRowFetcherColIDToRowIndex, primaryKeysToDelete, traceKV,
 	)
 	if err != nil {
 		return nil, nil, 0, err
@@ -755,6 +759,7 @@ func (c *cascader) updateRows(
 				table:           values.table,
 				colIDtoRowIndex: values.colIDtoRowIndex,
 			},
+			traceKV,
 		)
 		if err != nil {
 			return nil, nil, nil, 0, err
@@ -812,7 +817,7 @@ func (c *cascader) updateRows(
 		// Create a batch request to get all the spans of the primary keys that need
 		// to be updated.
 		pkLookupReq, err := batchRequestForPKValues(
-			referencingTable, indexPKRowFetcherColIDToRowIndex, primaryKeysToUpdate,
+			ctx, referencingTable, indexPKRowFetcherColIDToRowIndex, primaryKeysToUpdate, traceKV,
 		)
 		if err != nil {
 			return nil, nil, nil, 0, err
