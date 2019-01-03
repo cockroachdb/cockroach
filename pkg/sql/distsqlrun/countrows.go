@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -110,17 +109,6 @@ func (ag *countAggregator) ConsumerDone() {
 
 func (ag *countAggregator) ConsumerClosed() {
 	ag.InternalClose()
-}
-
-func (ag *countAggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if ag.out.output == nil {
-		panic("aggregator output not initialized for emitting rows")
-	}
-	ctx = ag.Start(ctx)
-	Run(ctx, ag, ag.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 // outputStatsToTrace outputs the collected distinct stats to the trace. Will

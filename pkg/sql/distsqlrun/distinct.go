@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -147,18 +146,6 @@ func (d *Distinct) Start(ctx context.Context) context.Context {
 func (d *SortedDistinct) Start(ctx context.Context) context.Context {
 	d.input.Start(ctx)
 	return d.StartInternal(ctx, sortedDistinctProcName)
-}
-
-// Run is part of the processor interface.
-func (d *SortedDistinct) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if d.out.output == nil {
-		panic("distinct output not initialized for emitting rows")
-	}
-	ctx = d.Start(ctx)
-	Run(ctx, d, d.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 func (d *Distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {

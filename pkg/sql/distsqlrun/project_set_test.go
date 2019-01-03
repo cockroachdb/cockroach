@@ -173,7 +173,7 @@ func BenchmarkProjectSet(b *testing.B) {
 					b.Fatal(err)
 				}
 
-				p.Run(context.Background(), nil /* wg */)
+				p.Run(context.Background())
 			}
 		})
 	}

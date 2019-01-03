@@ -152,7 +152,7 @@ func TestTableReader(t *testing.T) {
 					tr.Start(ctx)
 					results = tr
 				} else {
-					tr.Run(ctx, nil /* wg */)
+					tr.Run(ctx)
 					if !buf.ProducerClosed {
 						t.Fatalf("output RowReceiver not closed")
 					}
@@ -246,7 +246,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 			tr.Start(ctx)
 			results = tr
 		} else {
-			tr.Run(ctx, nil /* wg */)
+			tr.Run(ctx)
 			if !buf.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
 			}

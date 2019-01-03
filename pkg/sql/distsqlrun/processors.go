@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"math"
-	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,8 +39,7 @@ type Processor interface {
 	OutputTypes() []sqlbase.ColumnType
 
 	// Run is the main loop of the processor.
-	// If wg is non-nil, wg.Done is called before exiting.
-	Run(_ context.Context, wg *sync.WaitGroup)
+	Run(context.Context)
 }
 
 // ProcOutputHelper is a helper type that performs filtering and projection on
@@ -796,15 +794,12 @@ func (pb *ProcessorBase) OutputTypes() []sqlbase.ColumnType {
 }
 
 // Run is part of the processor interface.
-func (pb *ProcessorBase) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (pb *ProcessorBase) Run(ctx context.Context) {
 	if pb.out.output == nil {
 		panic("processor output not initialized for emitting rows")
 	}
 	ctx = pb.self.Start(ctx)
 	Run(ctx, pb.self, pb.out.output)
-	if wg != nil {
-		wg.Done()
-	}
 }
 
 // ProcStateOpts contains fields used by the ProcessorBase's family of functions

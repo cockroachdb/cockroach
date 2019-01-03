@@ -83,7 +83,7 @@ func TestValuesProcessor(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					v.Run(context.Background(), nil)
+					v.Run(context.Background())
 					if !out.ProducerClosed {
 						t.Fatalf("output RowReceiver not closed")
 					}
@@ -155,7 +155,7 @@ func BenchmarkValuesProcessor(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					v.Run(context.Background(), nil /* wg */)
+					v.Run(context.Background())
 				}
 			})
 		}

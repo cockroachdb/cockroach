@@ -119,7 +119,8 @@ func TestClusterFlow(t *testing.T) {
 		Flow: distsqlpb.FlowSpec{
 			FlowID: fid,
 			Processors: []distsqlpb.ProcessorSpec{{
-				Core: distsqlpb.ProcessorCoreUnion{TableReader: &tr1},
+				ProcessorID: 1,
+				Core:        distsqlpb.ProcessorCoreUnion{TableReader: &tr1},
 				Post: distsqlpb.PostProcessSpec{
 					Projection:    true,
 					OutputColumns: []uint32{0, 1},
@@ -140,7 +141,8 @@ func TestClusterFlow(t *testing.T) {
 		Flow: distsqlpb.FlowSpec{
 			FlowID: fid,
 			Processors: []distsqlpb.ProcessorSpec{{
-				Core: distsqlpb.ProcessorCoreUnion{TableReader: &tr2},
+				ProcessorID: 2,
+				Core:        distsqlpb.ProcessorCoreUnion{TableReader: &tr2},
 				Post: distsqlpb.PostProcessSpec{
 					Projection:    true,
 					OutputColumns: []uint32{0, 1},
@@ -162,7 +164,8 @@ func TestClusterFlow(t *testing.T) {
 			FlowID: fid,
 			Processors: []distsqlpb.ProcessorSpec{
 				{
-					Core: distsqlpb.ProcessorCoreUnion{TableReader: &tr3},
+					ProcessorID: 3,
+					Core:        distsqlpb.ProcessorCoreUnion{TableReader: &tr3},
 					Post: distsqlpb.PostProcessSpec{
 						Projection:    true,
 						OutputColumns: []uint32{0, 1},
@@ -175,6 +178,7 @@ func TestClusterFlow(t *testing.T) {
 					}},
 				},
 				{
+					ProcessorID: 4,
 					Input: []distsqlpb.InputSyncSpec{{
 						Type: distsqlpb.InputSyncSpec_ORDERED,
 						Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{

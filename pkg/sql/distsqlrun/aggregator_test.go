@@ -444,7 +444,7 @@ func BenchmarkAggregation(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				d.Run(context.TODO(), nil)
+				d.Run(context.TODO())
 				input.Reset()
 			}
 			b.StopTimer()
@@ -483,7 +483,7 @@ func BenchmarkCountRows(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		d.Run(context.TODO(), nil)
+		d.Run(context.TODO())
 		input.Reset()
 	}
 }
@@ -515,7 +515,7 @@ func BenchmarkGrouping(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		d.Run(context.Background(), nil /* wg */)
+		d.Run(context.Background())
 		input.Reset()
 	}
 	b.StopTimer()
@@ -573,7 +573,7 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				d.Run(context.Background(), nil /* wg */)
+				d.Run(context.Background())
 				input.Reset()
 			}
 			b.StopTimer()
