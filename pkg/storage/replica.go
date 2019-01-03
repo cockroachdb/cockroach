@@ -95,10 +95,12 @@ const (
 
 var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
-var syncRaftLog = settings.RegisterBoolSetting(
-	"kv.raft_log.synchronize",
-	"set to true to synchronize on Raft log writes to persistent storage ('false' risks data loss)",
-	true,
+var disableSyncRaftLog = settings.RegisterBoolSetting(
+	"kv.raft_log.disable_synchronization_unsafe",
+	"set to true to disable synchronization on Raft log writes to persistent storage. "+
+		"Setting to true risks data loss or data corruption on server crashes. "+
+		"The setting is meant for internal testing only and SHOULD NOT be used in production.",
+	false,
 )
 
 // MaxCommandSizeFloor is the minimum allowed value for the MaxCommandSize
@@ -4186,7 +4188,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
 	start := timeutil.Now()
-	if err := batch.Commit(syncRaftLog.Get(&r.store.cfg.Settings.SV) && rd.MustSync); err != nil {
+	if err := batch.Commit(rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
 		const expl = "while committing batch"
 		return stats, expl, errors.Wrap(err, expl)
 	}
