@@ -148,7 +148,7 @@ message ColumnType {
     JSONB = 18;
     reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
     TUPLE = 20;
-	BIT = 21;
+    BIT = 21;
 
     INT2VECTOR = 200;
     OIDVECTOR = 201;
@@ -165,7 +165,7 @@ message ColumnType {
     VARCHAR = 7;
     CHAR = 8;
     QCHAR = 9;
-	VARBIT = 10;
+    VARBIT = 10;
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];

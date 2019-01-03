@@ -96,9 +96,6 @@ func PushTxn(
 	if args.Now == (hlc.Timestamp{}) {
 		return result.Result{}, errors.Errorf("the field Now must be provided")
 	}
-	if args.PushType == roachpb.PUSH_QUERY {
-		return result.Result{}, errors.Errorf("PUSH_QUERY no longer supported")
-	}
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		return result.Result{}, errors.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)

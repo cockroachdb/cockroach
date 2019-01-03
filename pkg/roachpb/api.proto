@@ -685,7 +685,7 @@ message GCResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// TxnPushType determines what action to take when pushing a transaction.
+// PushTxnType determines what action to take when pushing a transaction.
 enum PushTxnType {
   option (gogoproto.goproto_enum_prefix) = false;
 
@@ -696,8 +696,8 @@ enum PushTxnType {
   // Abort the transaction if it's abandoned, but don't attempt to mutate it
   // otherwise.
   PUSH_TOUCH = 2;
-  // Deprecated. Use QueryTxn instead.
-  PUSH_QUERY = 3;
+
+  reserved 3;
 }
 
 // A PushTxnRequest is arguments to the PushTxn() method. It's sent by
