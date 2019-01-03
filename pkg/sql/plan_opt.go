@@ -31,8 +31,6 @@ import (
 // makeOptimizerPlan is an alternative to makePlan which uses the cost-based
 // optimizer. On success, the returned flags always have planFlagOptUsed set.
 func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFlags, error) {
-	flags := planFlagOptUsed
-
 	// Ensure that p.curPlan is populated in case an error occurs early,
 	// so that maybeLogStatement in the error case does not find an empty AST.
 	p.curPlan = planTop{AST: stmt.AST}
@@ -47,51 +45,16 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFl
 		return 0, pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
 	}
 
-	var catalog optCatalog
-	catalog.init(p.execCfg.TableStatsCache, p)
+	var opc optPlanningCtx
+	opc.init(p, stmt)
 
-	p.optimizer.Init(p.EvalContext())
-	f := p.optimizer.Factory()
-
-	// If the current transaction has uncommitted DDL statements, we cannot rely
-	// on descriptor versions for detecting a "stale" memo. This is because
-	// descriptor versions are bumped at most once per transaction, even if there
-	// are multiple DDL operations; and transactions can be aborted leading to
-	// potential reuse of versions. To avoid these issues, we prevent saving a
-	// memo (for prepare) or reusing a saved memo (for execute).
-	noMemoReuse := p.Tables().hasUncommittedTables()
-	useCache := !noMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
-	cacheLog := func(msg string) {
-		if log.V(1) {
-			log.Infof(ctx, "%s: %s", msg, stmt)
-		} else {
-			log.Event(ctx, msg)
-		}
-	}
-
-	// We have three distinct code paths:
-	//   1. Prepare
-	//   2. Execute a previously prepared statement
-	//   3. Execute without prior Prepare
-	//
-	// A note on the hasUncommittedTables checks below. If the current transaction
-	// has uncommitted DDL statements, then we assume they may have changed schema
-	// on which the prepared state depends; this is a separate check because the
-	// descriptor versions are bumped at most once per transaction, even if there
-	// are multiple DDL operations.
 	if p.EvalContext().PrepareOnly {
-		// 1. We are preparing a statement.
-		//
-		memo, err := p.prepareMemo(ctx, &catalog, stmt)
+		// We are preparing a statement.
+		memo, err := opc.buildReusableMemo(ctx)
 		if err != nil {
 			return 0, err
 		}
-		if !noMemoReuse {
-			stmt.Prepared.Memo = memo
-		}
 
-		// Construct a dummy plan that has correct output columns. Only output
-		// columns and placeholder types are needed.
 		md := memo.Metadata()
 		physical := memo.RootProps()
 		resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
@@ -99,82 +62,19 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFl
 			resultCols[i].Name = col.Alias
 			resultCols[i].Typ = md.ColumnMeta(col.ID).Type
 		}
+		if opc.allowMemoReuse {
+			stmt.Prepared.Memo = memo
+		}
+		// Construct a dummy plan that has correct output columns. Only output
+		// columns and placeholder types are needed.
 		p.curPlan.plan = &zeroNode{columns: resultCols}
-		return flags, nil
+		return opc.flags, nil
 	}
 
-	var execMemo *memo.Memo
-	var err error
-	if stmt.Prepared != nil && stmt.Prepared.Memo != nil && !noMemoReuse {
-		// 2. We are executing a previously prepared statement.
-
-		// If the prepared memo has been invalidated by schema or other changes,
-		// re-prepare it.
-		if isStale, err := stmt.Prepared.Memo.IsStale(ctx, p.EvalContext(), &catalog); err != nil {
-			return 0, err
-		} else if isStale {
-			stmt.Prepared.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
-			if err != nil {
-				return 0, err
-			}
-		}
-
-		execMemo, err = p.reuseMemo(stmt.Prepared.Memo)
-	} else if useCache {
-		// Consult the query cache.
-		cachedData, ok := p.execCfg.QueryCache.Find(stmt.SQL)
-		if ok {
-			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), &catalog); err != nil {
-				return 0, err
-			} else if isStale {
-				cachedData.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
-				if err != nil {
-					return 0, err
-				}
-				// Update the plan in the cache.
-				p.execCfg.QueryCache.Add(&cachedData)
-				cacheLog("query cache hit but needed update")
-				flags.Set(planFlagOptCacheMiss)
-			} else {
-				cacheLog("query cache hit")
-				flags.Set(planFlagOptCacheHit)
-			}
-			execMemo, err = p.reuseMemo(cachedData.Memo)
-		} else {
-			flags.Set(planFlagOptCacheMiss)
-			cacheLog("query cache miss")
-		}
-	}
-
+	// We are executing a statement.
+	execMemo, err := opc.buildExecMemo(ctx)
 	if err != nil {
 		return 0, err
-	}
-
-	if execMemo == nil {
-		// 3. We are executing a statement that was not prepared, we fell back to
-		// the heuristic planner during prepare, or this transaction is changing a
-		// schema.
-		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
-		if err := bld.Build(); err != nil {
-			// isCorrelated is used in the fallback case to create a better error.
-			p.curPlan.isCorrelated = bld.IsCorrelated
-			return 0, err
-		}
-		p.optimizer.Optimize()
-		execMemo = f.Memo()
-
-		// If this statement doesn't have placeholders, add it to the cache. Note
-		// that non-prepared statements from pgwire clients cannot have
-		// placeholders.
-		if useCache && !bld.HadPlaceholders {
-			execMemo = p.optimizer.DetachMemo()
-			cachedData := querycache.CachedData{
-				SQL:  stmt.SQL,
-				Memo: execMemo,
-			}
-			p.execCfg.QueryCache.Add(&cachedData)
-			cacheLog("query cache add")
-		}
 	}
 
 	// Build the plan tree and store it in planner.curPlan.
@@ -197,14 +97,55 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFl
 		}
 	}
 
-	return flags, nil
+	return opc.flags, nil
 }
 
-// prepareMemo builds the statement into a memo that can be stored for prepared
-// statements and can later be used as a starting point for optimization.
-func (p *planner) prepareMemo(
-	ctx context.Context, catalog *optCatalog, stmt Statement,
-) (*memo.Memo, error) {
+type optPlanningCtx struct {
+	p    *planner
+	stmt Statement
+
+	catalog optCatalog
+
+	// When set, we are allowed to reuse a memo, or store a memo for later reuse.
+	allowMemoReuse bool
+
+	// When set, we consult and update the query cache. Never set if
+	// allowMemoReuse is false.
+	useCache bool
+
+	flags planFlags
+}
+
+func (opc *optPlanningCtx) init(p *planner, stmt Statement) {
+	opc.p = p
+	opc.stmt = stmt
+	opc.catalog.init(p.execCfg.TableStatsCache, p)
+	p.optimizer.Init(p.EvalContext())
+
+	// If the current transaction has uncommitted DDL statements, we cannot rely
+	// on descriptor versions for detecting a "stale" memo. This is because
+	// descriptor versions are bumped at most once per transaction, even if there
+	// are multiple DDL operations; and transactions can be aborted leading to
+	// potential reuse of versions. To avoid these issues, we prevent saving a
+	// memo (for prepare) or reusing a saved memo (for execute).
+	opc.allowMemoReuse = !p.Tables().hasUncommittedTables()
+	opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
+	opc.flags = planFlagOptUsed
+}
+
+func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
+	if log.VDepth(1, 1) {
+		log.InfofDepth(ctx, 1, "%s: %s", msg, opc.stmt)
+	} else {
+		log.Event(ctx, msg)
+	}
+}
+
+// buildReusableMemo builds the statement into a memo that can be stored for
+// prepared statements and can later be used as a starting point for
+// optimization.
+func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (*memo.Memo, error) {
+	p := opc.p
 	// Build the Memo (optbuild) and apply normalization rules to it. If the
 	// query contains placeholders, values are not assigned during this phase,
 	// as that only happens during the EXECUTE phase. If the query does not
@@ -212,7 +153,7 @@ func (p *planner) prepareMemo(
 	// that there's even less to do during the EXECUTE phase.
 	//
 	f := p.optimizer.Factory()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), catalog, f, stmt.AST)
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.stmt.AST)
 	bld.KeepPlaceholders = true
 	if err := bld.Build(); err != nil {
 		// isCorrelated is used in the fallback case to create a better error.
@@ -233,13 +174,14 @@ func (p *planner) prepareMemo(
 	return p.optimizer.DetachMemo(), nil
 }
 
-func (p *planner) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
+// reuseMemo returns an optimized memo using a cached memo as a starting point.
+func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
 	if !cachedMemo.HasPlaceholders() {
 		// If there are no placeholders, the query was already fully optimized
-		// (see prepareMemo).
+		// (see buildReusableMemo).
 		return cachedMemo, nil
 	}
-	f := p.optimizer.Factory()
+	f := opc.p.optimizer.Factory()
 	// Finish optimization by assigning any remaining placeholders and
 	// applying exploration rules. Reinitialize the optimizer and construct a
 	// new memo that is copied from the prepared memo, but with placeholders
@@ -247,6 +189,79 @@ func (p *planner) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
 	if err := f.AssignPlaceholders(cachedMemo); err != nil {
 		return nil, err
 	}
+	opc.p.optimizer.Optimize()
+	return f.Memo(), nil
+}
+
+func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (*memo.Memo, error) {
+	prepared := opc.stmt.Prepared
+	p := opc.p
+	if opc.allowMemoReuse && prepared != nil && prepared.Memo != nil {
+		// We are executing a previously prepared statement and a reusable memo is
+		// available.
+
+		// If the prepared memo has been invalidated by schema or other changes,
+		// re-prepare it.
+		if isStale, err := prepared.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog); err != nil {
+			return nil, err
+		} else if isStale {
+			prepared.Memo, err = opc.buildReusableMemo(ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return opc.reuseMemo(prepared.Memo)
+	}
+
+	if opc.useCache {
+		// Consult the query cache.
+		cachedData, ok := p.execCfg.QueryCache.Find(opc.stmt.SQL)
+		if ok {
+			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog); err != nil {
+				return nil, err
+			} else if isStale {
+				cachedData.Memo, err = opc.buildReusableMemo(ctx)
+				if err != nil {
+					return nil, err
+				}
+				// Update the plan in the cache.
+				p.execCfg.QueryCache.Add(&cachedData)
+				opc.log(ctx, "query cache hit but needed update")
+				opc.flags.Set(planFlagOptCacheMiss)
+			} else {
+				opc.log(ctx, "query cache hit")
+				opc.flags.Set(planFlagOptCacheHit)
+			}
+			return opc.reuseMemo(cachedData.Memo)
+		}
+		opc.flags.Set(planFlagOptCacheMiss)
+		opc.log(ctx, "query cache miss")
+	}
+
+	// We are executing a statement for which there is no reusable memo
+	// available.
+	f := opc.p.optimizer.Factory()
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.stmt.AST)
+	if err := bld.Build(); err != nil {
+		// isCorrelated is used in the fallback case to create a better error.
+		p.curPlan.isCorrelated = bld.IsCorrelated
+		return nil, err
+	}
 	p.optimizer.Optimize()
+
+	// If this statement doesn't have placeholders, add it to the cache. Note
+	// that non-prepared statements from pgwire clients cannot have
+	// placeholders.
+	if opc.useCache && !bld.HadPlaceholders {
+		memo := p.optimizer.DetachMemo()
+		cachedData := querycache.CachedData{
+			SQL:  opc.stmt.SQL,
+			Memo: memo,
+		}
+		p.execCfg.QueryCache.Add(&cachedData)
+		opc.log(ctx, "query cache add")
+		return memo, nil
+	}
+
 	return f.Memo(), nil
 }
