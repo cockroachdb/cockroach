@@ -28,7 +28,7 @@
 <tr><td><code>kv.closed_timestamp.follower_reads_enabled</code></td><td>boolean</td><td><code>false</code></td><td>allow (all) replicas to serve consistent historical reads based on closed timestamp information</td></tr>
 <tr><td><code>kv.closed_timestamp.target_duration</code></td><td>duration</td><td><code>30s</code></td><td>if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration</td></tr>
 <tr><td><code>kv.raft.command.max_size</code></td><td>byte size</td><td><code>64 MiB</code></td><td>maximum size of a raft command</td></tr>
-<tr><td><code>kv.raft_log.synchronize</code></td><td>boolean</td><td><code>true</code></td><td>set to true to synchronize on Raft log writes to persistent storage ('false' risks data loss)</td></tr>
+<tr><td><code>kv.raft_log.disable_synchronization_unsafe</code></td><td>boolean</td><td><code>false</code></td><td>set to true to disable synchronization on Raft log writes to persistent storage. Setting to true risks data loss or data corruption on server crashes. The setting is meant for internal testing only and SHOULD NOT be used in production.</td></tr>
 <tr><td><code>kv.range.backpressure_range_size_multiplier</code></td><td>float</td><td><code>2</code></td><td>multiple of range_max_bytes that a range is allowed to grow to without splitting before writes to that range are blocked, or 0 to disable</td></tr>
 <tr><td><code>kv.range_descriptor_cache.size</code></td><td>integer</td><td><code>1000000</code></td><td>maximum number of entries in the range descriptor and leaseholder caches</td></tr>
 <tr><td><code>kv.range_merge.queue_enabled</code></td><td>boolean</td><td><code>true</code></td><td>whether the automatic merge queue is enabled</td></tr>
