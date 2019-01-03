@@ -107,8 +107,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.getColumns(mut, scatterNodeColumns)
 	case *showZoneConfigNode:
 		return n.getColumns(mut, showZoneConfigNodeColumns)
-	case *showRangesNode:
-		return n.getColumns(mut, showRangesColumns)
 	case *showFingerprintsNode:
 		return n.getColumns(mut, showFingerprintsColumns)
 	case *splitNode:
