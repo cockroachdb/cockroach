@@ -39,12 +39,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/petermattis/goid"
 )
+
+var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_LOG_MAX_SYNC_DURATION", 10*time.Second)
 
 const fatalErrorPostamble = `
 
@@ -1247,11 +1250,22 @@ func (l *loggingT) lockAndSetSync(sync bool) {
 // attempts to sync its data to disk.
 // l.mu is held.
 func (l *loggingT) flushAndSync(doSync bool) {
-	if l.file != nil {
-		_ = l.file.Flush() // ignore error
-		if doSync {
-			_ = l.file.Sync() // ignore error
-		}
+	if l.file == nil {
+		return
+	}
+
+	// If we can't sync within this duration, exit the process.
+	t := time.AfterFunc(maxSyncDuration, func() {
+		// NB: the disk-stall-detected roachtest matches on this message.
+		Shout(context.Background(), Severity_FATAL, fmt.Sprintf(
+			"disk stall detected: unable to sync log files within %s", maxSyncDuration,
+		))
+	})
+	defer t.Stop()
+
+	_ = l.file.Flush() // ignore error
+	if doSync {
+		_ = l.file.Sync() // ignore error
 	}
 }
 

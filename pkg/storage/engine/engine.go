@@ -242,9 +242,7 @@ type Writer interface {
 	// Put sets the given key to the value provided.
 	Put(key MVCCKey, value []byte) error
 	// LogData adds the specified data to the RocksDB WAL. The data is
-	// uninterpreted by RocksDB (i.e. not added to the memtable or
-	// sstables). Currently only used for performance testing of appending to the
-	// RocksDB WAL.
+	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
 	LogData(data []byte) error
 	// LogLogicalOp logs the specified logical mvcc operation with the provided
 	// details to the writer, if it has logical op logging enabled. For most
@@ -454,4 +452,19 @@ func Scan(engine Reader, start, end MVCCKey, max int64) ([]MVCCKeyValue, error) 
 		return false, nil
 	})
 	return kvs, err
+}
+
+// WriteSyncNoop carries out a synchronous no-op write to the engine.
+func WriteSyncNoop(ctx context.Context, eng Engine) error {
+	batch := eng.NewBatch()
+	defer batch.Close()
+
+	if err := batch.LogData(nil); err != nil {
+		return err
+	}
+
+	if err := batch.Commit(true /* sync */); err != nil {
+		return err
+	}
+	return nil
 }

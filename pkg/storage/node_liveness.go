@@ -767,21 +767,6 @@ func (nl *NodeLiveness) updateLiveness(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		for _, eng := range nl.engines {
-			// Synchronously writing to all disks before updating node liveness because
-			// we don't want any excessively slow disks to prevent the lease from
-			// shifting to other nodes. If the disk is slow, batch.Commit() will block.
-			batch := eng.NewBatch()
-			defer batch.Close()
-
-			if err := batch.LogData(nil); err != nil {
-				return errors.Wrapf(err, "couldn't update node liveness because LogData to disk fails")
-			}
-
-			if err := batch.Commit(true /* sync */); err != nil {
-				return errors.Wrapf(err, "couldn't update node liveness because Commit to disk fails")
-			}
-		}
 		if err := nl.updateLivenessAttempt(ctx, update, oldLiveness, handleCondFailed); err != nil {
 			// Intentionally don't errors.Cause() the error, or we'd hop past errRetryLiveness.
 			if _, ok := err.(*errRetryLiveness); ok {
