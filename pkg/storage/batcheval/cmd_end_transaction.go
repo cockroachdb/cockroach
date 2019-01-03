@@ -760,10 +760,8 @@ func splitTrigger(
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
 ) (enginepb.MVCCStats, result.Result, error) {
-	// TODO(tschottdorf): should have an incoming context from the corresponding
-	// EndTransaction, but the plumbing has not been done yet.
 	// TODO(andrei): should this span be a child of the ctx's (if any)?
-	sp := rec.Tracer().(*tracing.Tracer).StartRootSpan(
+	sp := rec.ClusterSettings().Tracer.StartRootSpan(
 		"split", logtags.FromContext(ctx), tracing.NonRecordableSpan,
 	)
 	defer sp.Finish()
