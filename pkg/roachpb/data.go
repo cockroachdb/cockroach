@@ -813,9 +813,7 @@ func (t Transaction) Clone() Transaction {
 
 // AssertInitialized crashes if the transaction is not initialized.
 func (t *Transaction) AssertInitialized(ctx context.Context) {
-	if t.ID == (uuid.UUID{}) ||
-		t.OrigTimestamp == (hlc.Timestamp{}) ||
-		t.Timestamp == (hlc.Timestamp{}) {
+	if t.ID == (uuid.UUID{}) || t.Timestamp == (hlc.Timestamp{}) {
 		log.Fatalf(ctx, "uninitialized txn: %s", t)
 	}
 }
@@ -1075,9 +1073,32 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.Timestamp
 // given node's clock during the transaction. The returned boolean is false if
 // no observation about the requested node was found. Otherwise, MaxTimestamp
 // can be lowered to the returned timestamp when reading from nodeID.
-func (t Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) {
+func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) {
 	s := observedTimestampSlice(t.ObservedTimestamps)
 	return s.get(nodeID)
+}
+
+// AsRecord returns a TransactionRecord object containing only the subset of
+// fields from the receiver that must be persisted in the transaction record.
+func (t *Transaction) AsRecord() TransactionRecord {
+	var tr TransactionRecord
+	tr.TxnMeta = t.TxnMeta
+	tr.Status = t.Status
+	tr.LastHeartbeat = t.LastHeartbeat
+	tr.Intents = t.Intents
+	return tr
+}
+
+// AsTransaction returns a Transaction object containing populated fields for
+// state in the transaction record and empty fields for state omitted from the
+// transaction record.
+func (tr *TransactionRecord) AsTransaction() Transaction {
+	var t Transaction
+	t.TxnMeta = tr.TxnMeta
+	t.Status = tr.Status
+	t.LastHeartbeat = tr.LastHeartbeat
+	t.Intents = tr.Intents
+	return t
 }
 
 // PrepareTransactionForRetry returns a new Transaction to be used for retrying
