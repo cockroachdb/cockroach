@@ -40,10 +40,13 @@ debconf-set-selections <<< "oracle-java8-installer shared/accepted-oracle-licens
 apt-get install --yes \
   docker-ce \
   docker-compose \
+  gnome-keyring \
   git \
   golang-${GOVERS} \
   oracle-java8-installer \
   unzip
+# Installing gnome-keyring prevents the error described in
+# https://github.com/moby/moby/issues/34048
 
 # Link Go into the PATH; the PPA installs it into /usr/lib/go-1.x/bin.
 ln -s /usr/lib/go-${GOVERS}/bin/go /usr/bin/go
