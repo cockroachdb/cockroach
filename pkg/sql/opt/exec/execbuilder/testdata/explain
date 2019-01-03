@@ -605,11 +605,9 @@ values  ·              ·                (a int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
-render       ·              ·                                           (x int)    ·
- │           render 0       ((x)[int[]][(1)[int]])[int]                 ·          ·
- └── values  ·              ·                                           (x int[])  ·
-·            size           1 column, 1 row                             ·          ·
-·            row 0, expr 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]  ·          ·
+values  ·              ·                (x int)  ·
+·       size           1 column, 1 row  ·        ·
+·       row 0, expr 0  (1)[int]         ·        ·
 
 query T
 EXPLAIN (OPT) SELECT 1 AS r

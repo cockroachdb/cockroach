@@ -247,29 +247,36 @@ func (m *Memo) HasPlaceholders() bool {
 //   5. Data source privileges: current user may no longer have access to one or
 //      more data sources.
 //
-func (m *Memo) IsStale(ctx context.Context, evalCtx *tree.EvalContext, catalog cat.Catalog) bool {
+// This function cannot swallow errors and return only a boolean, as it may
+// perform KV operations on behalf of the transaction associated with the
+// provided catalog, and those errors are required to be propagated.
+func (m *Memo) IsStale(
+	ctx context.Context, evalCtx *tree.EvalContext, catalog cat.Catalog,
+) (bool, error) {
 	// Memo is stale if the current database has changed.
 	if m.dbName != evalCtx.SessionData.Database {
-		return true
+		return true, nil
 	}
 
 	// Memo is stale if the search path has changed.
 	if !m.searchPath.Equals(&evalCtx.SessionData.SearchPath) {
-		return true
+		return true, nil
 	}
 
 	// Memo is stale if the location has changed.
 	if m.locName != evalCtx.GetLocation().String() {
-		return true
+		return true, nil
 	}
 
 	// Memo is stale if the fingerprint of any data source in the memo's metadata
 	// has changed, or if the current user no longer has sufficient privilege to
 	// access the data source.
-	if !m.Metadata().CheckDependencies(ctx, catalog) {
-		return true
+	if depsUpToDate, err := m.Metadata().CheckDependencies(ctx, catalog); err != nil {
+		return false, err
+	} else if !depsUpToDate {
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 // InternPhysicalProps adds the given physical props to the memo if they haven't
