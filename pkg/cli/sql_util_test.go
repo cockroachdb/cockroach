@@ -17,11 +17,13 @@ package cli
 import (
 	"bytes"
 	"database/sql/driver"
+	"fmt"
 	"net/url"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -51,10 +53,21 @@ func TestConnRecover(t *testing.T) {
 	// Check that Query detects a connection close.
 	defer simulateServerRestart(&c, p, conn)()
 
-	_, err = conn.Query(`SELECT 1`, nil)
-	if err == nil || err != driver.ErrBadConn {
-		t.Fatalf("conn.Query(): expected bad conn, got %v", err)
-	}
+	// When the server restarts, the next Query() attempt may encounter a
+	// TCP reset error before the SQL driver realizes there is a problem
+	// and starts delivering ErrBadConn. We don't know the timing of
+	// this however.
+	testutils.SucceedsSoon(t, func() error {
+		if sqlRows, err := conn.Query(`SELECT 1`, nil); err != driver.ErrBadConn {
+			return fmt.Errorf("expected ErrBadConn, got %v", err)
+		} else if err == nil {
+			if closeErr := sqlRows.Close(); closeErr != nil {
+				t.Fatal(closeErr)
+			}
+		}
+		return nil
+	})
+
 	// Check that Query recovers from a connection close by re-connecting.
 	rows, err = conn.Query(`SELECT 1`, nil)
 	if err != nil {
@@ -67,9 +80,14 @@ func TestConnRecover(t *testing.T) {
 	// Check that Exec detects a connection close.
 	defer simulateServerRestart(&c, p, conn)()
 
-	if err := conn.Exec(`SELECT 1`, nil); err == nil || err != driver.ErrBadConn {
-		t.Fatalf("conn.Exec(): expected bad conn, got %v", err)
-	}
+	// Ditto from Query().
+	testutils.SucceedsSoon(t, func() error {
+		if err := conn.Exec(`SELECT 1`, nil); err != driver.ErrBadConn {
+			return fmt.Errorf("expected ErrBadConn, got %v", err)
+		}
+		return nil
+	})
+
 	// Check that Exec recovers from a connection close by re-connecting.
 	if err := conn.Exec(`SELECT 1`, nil); err != nil {
 		t.Fatalf("conn.Exec(): expected no error after reconnect, got %v", err)
