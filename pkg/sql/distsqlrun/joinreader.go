@@ -313,15 +313,15 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 	return neededRightCols
 }
 
-// Generate a key to create a span for a given row.
+// Generate a span for a given row.
 // If lookup columns are specified will use those to collect the relevant
 // columns. Otherwise the first rows are assumed to correspond with the index.
-func (jr *joinReader) generateKey(row sqlbase.EncDatumRow) (roachpb.Key, error) {
+func (jr *joinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error) {
 	numKeyCols := len(jr.indexTypes)
 	numLookupCols := len(jr.lookupCols)
 
 	if numLookupCols > numKeyCols {
-		return nil, errors.Errorf(
+		return roachpb.Span{}, errors.Errorf(
 			"%d lookup columns specified, expecting at most %d", numLookupCols, numKeyCols)
 	}
 
@@ -329,7 +329,7 @@ func (jr *joinReader) generateKey(row sqlbase.EncDatumRow) (roachpb.Key, error) 
 	for _, id := range jr.lookupCols {
 		jr.indexKeyRow = append(jr.indexKeyRow, row[id])
 	}
-	return sqlbase.MakeKeyFromEncDatums(
+	return sqlbase.MakeSpanFromEncDatums(
 		jr.indexKeyPrefix, jr.indexKeyRow, jr.indexTypes[:numLookupCols], jr.indexDirs, &jr.desc,
 		jr.index, &jr.alloc)
 }
@@ -414,16 +414,16 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 		if jr.hasNullLookupColumn(inputRow) {
 			continue
 		}
-		key, err := jr.generateKey(inputRow)
+		span, err := jr.generateSpan(inputRow)
 		if err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, jr.DrainHelper()
 		}
-		inputRowIndices := jr.keyToInputRowIndices[string(key)]
+		inputRowIndices := jr.keyToInputRowIndices[string(span.Key)]
 		if inputRowIndices == nil {
-			spans = append(spans, roachpb.Span{Key: key, EndKey: key.PrefixEnd()})
+			spans = append(spans, span)
 		}
-		jr.keyToInputRowIndices[string(key)] = append(inputRowIndices, i)
+		jr.keyToInputRowIndices[string(span.Key)] = append(inputRowIndices, i)
 	}
 	if len(spans) == 0 {
 		// All of the input rows were filtered out. Skip the index lookup.
@@ -452,7 +452,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 	for len(jr.lookupRows) < jr.batchSize {
 		// Construct a "partial key" of nCols, so we can match the key format that
 		// was stored in our keyToInputRowIndices map. This matches the format that
-		// is output in jr.generateKey.
+		// is output in jr.generateSpan.
 		key, err := jr.fetcher.PartialKey(nCols)
 		if err != nil {
 			jr.MoveToDraining(err)
@@ -603,14 +603,14 @@ func (jr *joinReader) primaryLookup(
 		for i, columnID := range jr.desc.PrimaryIndex.ColumnIDs {
 			values[i] = row[jr.colIdxMap[columnID]]
 		}
-		key, err := sqlbase.MakeKeyFromEncDatums(
+		span, err := sqlbase.MakeSpanFromEncDatums(
 			jr.primaryKeyPrefix, values, jr.primaryColumnTypes, jr.desc.PrimaryIndex.ColumnDirections,
 			&jr.desc, &jr.desc.PrimaryIndex, &jr.alloc)
 		if err != nil {
 			return nil, err
 		}
-		keyToInputRowIdx[string(key)] = rowIdx
-		spans[rowIdx] = roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
+		keyToInputRowIdx[string(span.Key)] = rowIdx
+		spans[rowIdx] = span
 	}
 
 	// Perform the primary index scan.

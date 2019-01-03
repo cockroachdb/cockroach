@@ -150,6 +150,35 @@ SELECT count(*) FROM data as d1 NATURAL JOIN data as d2
 ----
 10000
 
+# A lookup join that doesn't fully constrain the lookup side uses PrefixEnd, not
+# the interleave marker, to form the lookup span.
+query IIIIII
+SET TRACING = on,kv; SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a > 1 AND e > 1; SET TRACING=off
+----
+2  1  1  NULL  2  1
+
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Scan%'
+----
+Scan /Table/54/{1/2-2}
+Scan /Table/55/1/{1-2}
+
+# A lookup join that fully constrains the lookup side uses the interleave marker
+# to form the lookup span.
+query IIIIII
+SET TRACING = on,kv; SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b AND e = a; SET TRACING=off
+----
+1  1  2  2     1  1
+2  1  1  NULL  2  1
+
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Scan%'
+----
+Scan /Table/54/{1-2}
+Scan /Table/55/1/1/1{-/#}, /Table/55/1/1/2{-/#}
+
 statement ok
 CREATE TABLE foo (a int, b int); INSERT INTO foo VALUES (0, 1), (0, 2), (1, 1)
 
@@ -270,6 +299,19 @@ SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
 6   12
 8   16
 10  20
+
+# The final primary index lookup uses the interleave marker to constrain its
+# span, because it was fully specified and might contain interleaves.
+statement ok
+SET TRACING = on,kv; SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b AND t1.a=2; SET TRACING=off
+
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Scan%'
+----
+Scan /Table/62/1/{2-3}
+Scan /Table/62/2/{2-3}
+Scan /Table/62/1/1/2{-/#}
 
 ############################
 #  LEFT OUTER LOOKUP JOIN  #
