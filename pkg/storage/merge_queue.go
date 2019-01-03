@@ -291,6 +291,7 @@ func (mq *mergeQueue) process(
 		}
 	}
 
+	log.VEventf(ctx, 2, "merging to produce range: %s-%s", mergedDesc.StartKey, mergedDesc.EndKey)
 	_, pErr := lhsRepl.AdminMerge(ctx, roachpb.AdminMergeRequest{})
 	switch err := pErr.GoError(); err.(type) {
 	case nil:

@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// TestStoreRangeLease verifies that ranges after range 0 get
-// epoch-based range leases if enabled and expiration-based
-// otherwise.
+// TestStoreRangeLease verifies that regular ranges (not some special ones at
+// the start of the key space) get epoch-based range leases if enabled and
+// expiration-based otherwise.
 func TestStoreRangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -65,25 +65,7 @@ func TestStoreRangeLease(t *testing.T) {
 			t.Fatalf("expected lease type expiration; got %d", lt)
 		}
 
-		// After the split, expect an expiration lease for other ranges.
-		for _, key := range splitKeys {
-			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key))
-			lease, _ = repl.GetLease()
-			if lt := lease.Type(); lt != roachpb.LeaseExpiration {
-				t.Fatalf("%s: expected lease type epoch; got %d", key, lt)
-			}
-		}
-
-		// Allow leases to expire and send commands to ensure we
-		// re-acquire, then check types again.
-		mtc.advanceClock(context.TODO())
-		for _, key := range splitKeys {
-			if _, err := mtc.dbs[0].Inc(context.TODO(), key, 1); err != nil {
-				t.Fatalf("%s failed to increment: %s", key, err)
-			}
-		}
-
-		// After the expiration, expect an epoch lease for the RHS if
+		// After the expiration, expect an epoch lease for all the ranges if
 		// we've enabled epoch based range leases.
 		for _, key := range splitKeys {
 			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key))

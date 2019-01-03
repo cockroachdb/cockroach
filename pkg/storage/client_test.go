@@ -36,6 +36,7 @@ import (
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -72,34 +73,55 @@ import (
 func createTestStore(t testing.TB, stopper *stop.Stopper) (*storage.Store, *hlc.ManualClock) {
 	manual := hlc.NewManualClock(123)
 	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	store := createTestStoreWithConfig(t, stopper, cfg)
+	store := createTestStoreWithOpts(t, testStoreOpts{cfg: &cfg}, stopper)
 	return store, manual
 }
 
+// DEPRECATED. Use createTestStoreWithOpts().
 func createTestStoreWithConfig(
 	t testing.TB, stopper *stop.Stopper, storeCfg storage.StoreConfig,
 ) *storage.Store {
-	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
-	stopper.AddCloser(eng)
-	store := createTestStoreWithEngine(t,
-		eng,
-		true,
-		storeCfg,
+	store := createTestStoreWithOpts(t,
+		testStoreOpts{
+			cfg: &storeCfg,
+		},
 		stopper,
 	)
 	return store
 }
 
+// testStoreOpts affords control over aspects of store creation.
+type testStoreOpts struct {
+	// dontBootstrap, if set, means that the engine will not be bootstrapped.
+	dontBootstrap bool
+	// dontCreateSystemRanges is relevant only if dontBootstrap is not set.
+	// If set, the store will have a single range. If not set, the store will have
+	// all the system ranges that are generally created for a cluster at boostrap.
+	dontCreateSystemRanges bool
+
+	cfg *storage.StoreConfig
+	eng engine.Engine
+}
+
 // createTestStoreWithEngine creates a test store using the given engine and clock.
 // TestStoreConfig() can be used for creating a config suitable for most
 // tests.
-func createTestStoreWithEngine(
-	t testing.TB,
-	eng engine.Engine,
-	bootstrap bool,
-	storeCfg storage.StoreConfig,
-	stopper *stop.Stopper,
+func createTestStoreWithOpts(
+	t testing.TB, opts testStoreOpts, stopper *stop.Stopper,
 ) *storage.Store {
+	var storeCfg storage.StoreConfig
+	if opts.cfg == nil {
+		manual := hlc.NewManualClock(123)
+		storeCfg = storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	} else {
+		storeCfg = *opts.cfg
+	}
+	eng := opts.eng
+	if eng == nil {
+		eng = engine.NewInMem(roachpb.Attributes{}, 10<<20)
+		stopper.AddCloser(eng)
+	}
+
 	tracer := storeCfg.Settings.Tracer
 	ac := log.AmbientContext{Tracer: tracer}
 	storeCfg.AmbientCtx = ac
@@ -146,14 +168,31 @@ func createTestStoreWithEngine(
 	storeCfg.Transport = storage.NewDummyRaftTransport(storeCfg.Settings)
 	// TODO(bdarnell): arrange to have the transport closed.
 	ctx := context.Background()
-	if bootstrap {
-		if err := storage.Bootstrap(ctx, eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1}, storeCfg.Settings.Version.BootstrapVersion()); err != nil {
+	if !opts.dontBootstrap {
+		if err := storage.Bootstrap(
+			ctx, eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
+			storeCfg.Settings.Version.BootstrapVersion(),
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
 	store := storage.NewStore(storeCfg, eng, nodeDesc)
-	if bootstrap {
-		err := store.BootstrapRange(sqlbase.MakeMetadataSchema().GetInitialValues(), storeCfg.Settings.Version.ServerVersion)
+	if !opts.dontBootstrap {
+		var kvs []roachpb.KeyValue
+		var splits []roachpb.RKey
+		kvs, tableSplits := sqlbase.MakeMetadataSchema().GetInitialValues()
+		if !opts.dontCreateSystemRanges {
+			splits = config.StaticSplits()
+			splits = append(splits, tableSplits...)
+			sort.Slice(splits, func(i, j int) bool {
+				return splits[i].Less(splits[j])
+			})
+		}
+		err := store.WriteInitialData(
+			ctx,
+			kvs,
+			storeCfg.Settings.Version.ServerVersion,
+			1 /* numStores */, splits)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -186,6 +225,13 @@ func createTestStoreWithEngine(
 		return nil
 	})
 
+	// Make all the initial ranges part of replication queue purgatory. This is
+	// similar to what a real cluster does after bootstrap - we want the initial
+	// ranges to up-replicate as soon as other nodes join.
+	if err := store.ForceReplicationScanAndProcess(); err != nil {
+		t.Fatal(err)
+	}
+
 	return store
 }
 
@@ -196,6 +242,11 @@ type multiTestContext struct {
 	clock       *hlc.Clock
 	rpcContext  *rpc.Context
 	injEngines  bool
+	// By default, a multiTestContext starts with a bunch of system ranges, just
+	// like a regular Server after bootstrap. If startWithSingleRange is set,
+	// we'll start with a single range spanning all the key space. The split
+	// queue, if not disabled, might then create other range system ranges.
+	startWithSingleRange bool
 
 	nodeIDtoAddrMu struct {
 		*syncutil.RWMutex
@@ -253,6 +304,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		mCopy.engines = nil
 		mCopy.engineStoppers = nil
 		mCopy.injEngines = false
+		mCopy.startWithSingleRange = false
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
 			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
@@ -777,8 +829,21 @@ func (m *multiTestContext) addStore(idx int) {
 	}
 	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap && idx == 0 {
-		// Bootstrap the initial range on the first store
-		err := store.BootstrapRange(sqlbase.MakeMetadataSchema().GetInitialValues(), cfg.Settings.Version.ServerVersion)
+		// Bootstrap the initial range on the first store.
+		var splits []roachpb.RKey
+		kvs, tableSplits := sqlbase.MakeMetadataSchema().GetInitialValues()
+		if !m.startWithSingleRange {
+			splits = config.StaticSplits()
+			splits = append(splits, tableSplits...)
+			sort.Slice(splits, func(i, j int) bool {
+				return splits[i].Less(splits[j])
+			})
+		}
+		err := store.WriteInitialData(
+			ctx,
+			kvs,
+			cfg.Settings.Version.ServerVersion,
+			len(m.engines), splits)
 		if err != nil {
 			m.t.Fatal(err)
 		}
@@ -853,6 +918,7 @@ func (m *multiTestContext) addStore(idx int) {
 	})
 
 	store.WaitForInit()
+
 	// Wait until we see the first heartbeat by waiting for the callback (which
 	// fires *after* the node becomes live).
 	<-ran.ch

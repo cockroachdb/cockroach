@@ -32,9 +32,6 @@ func TestValidations(t *testing.T) {
 		if strings.Contains(t.Name(), `rangefeed`) {
 			t.Skip(`#32946`)
 		}
-		// HACK: remove this once #32495 is fixed.
-		maybeWaitForEpochLeases(t, f.Server())
-
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		t.Run("bank", func(t *testing.T) {

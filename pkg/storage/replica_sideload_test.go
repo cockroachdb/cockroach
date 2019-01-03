@@ -783,7 +783,7 @@ func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloade
 	if _, err := tc.store.raftLogQueue.Add(tc.repl, 99.99 /* priority */); err != nil {
 		t.Fatal(err)
 	}
-	tc.store.ForceRaftLogScanAndProcess()
+	tc.store.MustForceRaftLogScanAndProcess()
 	// SST is definitely truncated now, so recomputing the Raft log keys should match up with
 	// the tracked size.
 	verifyLogSizeInSync(t, tc.repl)
