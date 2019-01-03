@@ -345,7 +345,6 @@ message Transaction {
   // error so that intents can continue to be laid down, minimizing
   // work required on txn restart.
   bool write_too_old = 12;
-  reserved 13;
   repeated Span intents = 11 [(gogoproto.nullable) = false];
   // Epoch zero timestamp is used to keep track of the earliest timestamp
   // that any epoch of the transaction used. This is set only if the
@@ -358,6 +357,34 @@ message Transaction {
   // which commit at a higher timestamp without resorting to a
   // client-side retry.
   bool orig_timestamp_was_observed = 16;
+
+  reserved 3, 13;
+}
+
+// A TransactionRecord message contains the subset of the fields in a
+// Transaction message that must be persisted in a transaction record.
+// It can be thought of as a mask for the fields in Transaction that
+// end up persisted in a transaction record.
+//
+// The message type is wire-compatible with persisted Transaction protos,
+// but avoids the overhead of the fields in Transaction that don't need to
+// be persisted in a transaction record. It also serves as a specification
+// for the fields that must be present in a transaction record.
+//
+// NOTE: any changes to this type must be reflected in the AsRecord and
+// AsTransaction methods.
+message TransactionRecord {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // See comments on Transaction proto.
+  storage.engine.enginepb.TxnMeta meta = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  TransactionStatus status             = 4;
+  util.hlc.Timestamp last_heartbeat    = 5  [(gogoproto.nullable) = false];
+  repeated Span intents                = 11 [(gogoproto.nullable) = false];
+
+  // Fields on Transaction that are not present in a transaction record.
+  reserved 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16;
 }
 
 // A Intent is a Span together with a Transaction metadata and its status.
