@@ -19,6 +19,9 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -75,6 +78,7 @@ func registerImportTPCH(r *registry) {
 		{8, 4 * time.Hour}, // typically 3h
 		{32, 3 * time.Hour},
 	} {
+		item := item
 		r.Add(testSpec{
 			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
 			Nodes:   nodes(item.nodes),
@@ -87,6 +91,20 @@ func registerImportTPCH(r *registry) {
 					CREATE DATABASE csv;
 					SET CLUSTER SETTING jobs.registry.leniency = '5m';
 				`); err != nil {
+					t.Fatal(err)
+				}
+				// Wait for all nodes to be ready.
+				if err := retry.ForDuration(time.Second*30, func() error {
+					var nodes int
+					if err := conn.
+						QueryRowContext(ctx, `select count(*) from crdb_internal.gossip_liveness where updated_at > now() - interval '8s'`).
+						Scan(&nodes); err != nil {
+						t.Fatal(err)
+					} else if nodes != item.nodes {
+						return errors.Errorf("expected %d nodes, got %d", item.nodes, nodes)
+					}
+					return nil
+				}); err != nil {
 					t.Fatal(err)
 				}
 				m := newMonitor(ctx, c)
