@@ -112,7 +112,7 @@ func TestHashJoiner(t *testing.T) {
 				if i == 1 {
 					h.forcedStoredSide = &side
 				}
-				h.Run(context.Background(), nil /* wg */)
+				h.Run(context.Background())
 				side = otherSide(h.storedSide)
 
 				if !out.ProducerClosed {
@@ -230,7 +230,7 @@ func TestHashJoinerError(t *testing.T) {
 			}
 			outTypes := h.OutputTypes()
 			setup(h)
-			h.Run(context.Background(), nil /* wg */)
+			h.Run(context.Background())
 
 			if !out.ProducerClosed {
 				return errors.New("output RowReceiver not closed")
@@ -366,7 +366,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	h.initialBufferSize = 0
 
 	out.ConsumerDone()
-	h.Run(context.Background(), nil /* wg */)
+	h.Run(context.Background())
 
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
@@ -490,7 +490,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	// Disable initial buffering. We always store the right stream in this case.
 	h.initialBufferSize = 0
 
-	h.Run(context.Background(), nil /* wg */)
+	h.Run(context.Background())
 
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
@@ -582,7 +582,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 						if err != nil {
 							b.Fatal(err)
 						}
-						h.Run(context.Background(), nil /* wg */)
+						h.Run(context.Background())
 						leftInput.Reset()
 						rightInput.Reset()
 					}
