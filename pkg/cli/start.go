@@ -1004,6 +1004,11 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 			}
 		}
 
+		// Make sure the path exists.
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return nil, errors.Wrap(err, "unable to create log directory")
+		}
+
 		// Note that we configured the --log-dir flag to set
 		// startContext.logDir. This is the point at which we set log-dir for the
 		// util/log package. We don't want to set it earlier to avoid spuriously
@@ -1014,11 +1019,10 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 			return nil, err
 		}
 
-		// Make sure the path exists.
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			return nil, err
-		}
-		log.Eventf(ctx, "created log directory %s", logDir)
+		// NB: this message is a crutch until #33458 is addressed. Without it,
+		// the calls to log.Shout below can be the first use of logging, hitting
+		// the bug described in the issue.
+		log.Infof(ctx, "logging to directory %s", logDir)
 
 		// Start the log file GC daemon to remove files that make the log
 		// directory too large.

@@ -18,10 +18,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/petermattis/goid"
 )
 
@@ -72,11 +74,19 @@ func logDepth(ctx context.Context, depth int, sev Severity, format string, args 
 // Shout logs to the specified severity's log, and also to the real
 // stderr if logging is currently redirected to a file.
 func Shout(ctx context.Context, sev Severity, args ...interface{}) {
-	logDepth(ctx, 1, sev, "", args)
+	if sev == Severity_FATAL {
+		// Fatal error handling later already tries to exit even if I/O should
+		// block, but crash reporting might also be in the way.
+		t := time.AfterFunc(10*time.Second, func() {
+			os.Exit(1)
+		})
+		defer t.Stop()
+	}
 	if stderrRedirected {
 		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(),
 			strings.Replace(MakeMessage(ctx, "", args), "\n", "\n* ", -1))
 	}
+	logDepth(ctx, 1, sev, "", args)
 }
 
 // Infof logs to the INFO log.
