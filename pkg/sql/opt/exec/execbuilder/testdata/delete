@@ -57,84 +57,90 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 query TTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-tree                 field  description
-count                ·      ·
- └── delete          ·      ·
-      │              from   unindexed
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  unindexed@primary
-·                    spans  ALL
+tree                 field     description
+count                ·         ·
+ └── delete          ·         ·
+      │              from      unindexed
+      │              strategy  fast deleter
+      └── render     ·         ·
+           └── scan  ·         ·
+·                    table     unindexed@primary
+·                    spans     ALL
 
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
 ----
-count                ·       ·
- └── delete          ·       ·
-      │              from    unindexed
-      └── nosort     ·       ·
-           │         order   +v
-           └── scan  ·       ·
-·                    table   unindexed@primary
-·                    spans   ALL
-·                    filter  v = 7
+count                ·         ·
+ └── delete          ·         ·
+      │              from      unindexed
+      │              strategy  deleter
+      └── nosort     ·         ·
+           │         order     +v
+           └── scan  ·         ·
+·                    table     unindexed@primary
+·                    spans     ALL
+·                    filter    v = 7
 
 # Check DELETE with LIMIT clause (MySQL extension)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-count                     ·       ·
- └── delete               ·       ·
-      │                   from    unindexed
-      └── limit           ·       ·
-           │              count   10
-           └── render     ·       ·
-                └── scan  ·       ·
-·                         table   unindexed@primary
-·                         spans   ALL
-·                         filter  v = 5
+count                     ·         ·
+ └── delete               ·         ·
+      │                   from      unindexed
+      │                   strategy  deleter
+      └── limit           ·         ·
+           │              count     10
+           └── render     ·         ·
+                └── scan  ·         ·
+·                         table     unindexed@primary
+·                         spans     ALL
+·                         filter    v = 5
 
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
-count                     ·      ·
- └── delete               ·      ·
-      │                   from   indexed
-      └── limit           ·      ·
-           │              count  10
-           └── render     ·      ·
-                └── scan  ·      ·
-·                         table  indexed@indexed_value_idx
-·                         spans  /5-/6
-·                         limit  10
+count                     ·         ·
+ └── delete               ·         ·
+      │                   from      indexed
+      │                   strategy  deleter
+      └── limit           ·         ·
+           │              count     10
+           └── render     ·         ·
+                └── scan  ·         ·
+·                         table     indexed@indexed_value_idx
+·                         spans     /5-/6
+·                         limit     10
 
 query TTT
 EXPLAIN DELETE FROM indexed LIMIT 10
 ----
-count                     ·      ·
- └── delete               ·      ·
-      │                   from   indexed
-      └── limit           ·      ·
-           │              count  10
-           └── render     ·      ·
-                └── scan  ·      ·
-·                         table  indexed@primary
-·                         spans  ALL
-·                         limit  10
+count                     ·         ·
+ └── delete               ·         ·
+      │                   from      indexed
+      │                   strategy  deleter
+      └── limit           ·         ·
+           │              count     10
+           └── render     ·         ·
+                └── scan  ·         ·
+·                         table     indexed@primary
+·                         spans     ALL
+·                         limit     10
 
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-render                          ·      ·
- └── run                        ·      ·
-      └── delete                ·      ·
-           │                    from   indexed
-           └── limit            ·      ·
-                │               count  10
-                └── index-join  ·      ·
-                     ├── scan   ·      ·
-                     │          table  indexed@indexed_value_idx
-                     │          spans  /5-/6
-                     │          limit  10
-                     └── scan   ·      ·
-·                               table  indexed@primary
+render                          ·         ·
+ └── run                        ·         ·
+      └── delete                ·         ·
+           │                    from      indexed
+           │                    strategy  deleter
+           └── limit            ·         ·
+                │               count     10
+                └── index-join  ·         ·
+                     ├── scan   ·         ·
+                     │          table     indexed@indexed_value_idx
+                     │          spans     /5-/6
+                     │          limit     10
+                     └── scan   ·         ·
+·                               table     indexed@primary

@@ -11,14 +11,15 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC
 ]
 ----
-count                ·      ·
- └── upsert          ·      ·
-      │              into   kv(k, v)
-      └── sort       ·      ·
-           │         order  -v
-           └── scan  ·      ·
-·                    table  kv@primary
-·                    spans  ALL
+count                ·         ·
+ └── upsert          ·         ·
+      │              into      kv(k, v)
+      │              strategy  fast upserter
+      └── sort       ·         ·
+           │         order     -v
+           └── scan  ·         ·
+·                    table     kv@primary
+·                    spans     ALL
 
 # Regression test for #25726.
 # UPSERT over tables with column families, on the fast path, use the
