@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type mockEvalCtx struct {
@@ -53,9 +52,6 @@ func (m *mockEvalCtx) ClusterSettings() *cluster.Settings {
 	return m.clusterSettings
 }
 func (m *mockEvalCtx) EvalKnobs() storagebase.BatchEvalTestingKnobs {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) Tracer() opentracing.Tracer {
 	panic("unimplemented")
 }
 func (m *mockEvalCtx) Engine() engine.Engine {

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
-	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/time/rate"
 )
 
@@ -45,9 +44,6 @@ type EvalContext interface {
 	fmt.Stringer
 	ClusterSettings() *cluster.Settings
 	EvalKnobs() storagebase.BatchEvalTestingKnobs
-
-	// TODO(tschottdorf): available through ClusterSettings().
-	Tracer() opentracing.Tracer
 
 	Engine() engine.Engine
 	Clock() *hlc.Clock
