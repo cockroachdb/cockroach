@@ -8,12 +8,81 @@
 #
 #   SELECT (x+1)+1 FROM a
 #
-# Inlining variables can result in the complete elimination of Project
-# operators, or at least in the ability to more freely reorder them within the
-# larger relational expression tree. This allows pushing filters further down
-# the tree, as well as with pulling them up in the decorrelation case.
+# Inlining variables can result in the simplification or even complete
+# elimination of operators, or at least in the ability to more freely reorder
+# them within the larger relational expression tree. This allows pushing filters
+# further down the tree, as well as with pulling them up in the decorrelation
+# case.
 # =============================================================================
 
+
+# InlineProjectConstants finds variable references in Projections expressions
+# that refer to constant input values, and then inlines those constant values
+# in place of the corresponding variable references. This sometimes allows
+# further simplifications such as constant folding or Project merging.
+[InlineProjectConstants, Normalize]
+(Project
+    $input:* & ^(ColsAreEmpty $constCols:(FindInlinableConstants $input))
+    $projections:[ ... $item:* & (ColsIntersect (OuterCols $item) $constCols) ... ]
+    $passthrough:*
+)
+=>
+(Project
+    $input
+    (InlineProjectionConstants $projections $input $constCols)
+    $passthrough
+)
+
+# InlineSelectConstants finds variable references in Filters expressions that
+# refer to constant input values, and then inlines those constant values in
+# place of the corresponding variable references. This sometimes allows further
+# simplifications such as constant folding or generation of constrained scans.
+[InlineSelectConstants, Normalize]
+(Select
+    $input:* & ^(ColsAreEmpty $constCols:(FindInlinableConstants $input))
+    $filters:[ ... $item:* & (ColsIntersect (OuterCols $item) $constCols) ... ]
+)
+=>
+(Select
+    $input
+    (InlineFilterConstants $filters $input $constCols)
+)
+
+# InlineJoinConstantsLeft finds variable references in a join condition that
+# refers to constant values projected by the left input. It then inlines those
+# constant values in place of the corresponding variable references. This
+# sometimes allows further simplifications such as constant folding or filter
+# pushdown.
+[InlineJoinConstantsLeft, Normalize]
+(Join
+    $left:* & ^(ColsAreEmpty $constCols:(FindInlinableConstants $left))
+    $right:*
+    $on:[ ... $item:* & (ColsIntersect (OuterCols $item) $constCols) ... ]
+)
+=>
+((OpName)
+    $left
+    $right
+    (InlineFilterConstants $on $left $constCols)
+)
+
+# InlineJoinConstantsRight finds variable references in a join condition that
+# refers to constant values projected by the right input. It then inlines those
+# constant values in place of the corresponding variable references. This
+# sometimes allows further simplifications such as constant folding or filter
+# pushdown.
+[InlineJoinConstantsRight, Normalize]
+(Join
+    $left:*
+    $right:* & ^(ColsAreEmpty $constCols:(FindInlinableConstants $right))
+    $on:[ ... $item:* & (ColsIntersect (OuterCols $item) $constCols) ... ]
+)
+=>
+((OpName)
+    $left
+    $right
+    (InlineFilterConstants $on $right $constCols)
+)
 
 # PushSelectIntoInlinableProject pushes the Select operator into a Project, even
 # though the filter references it. This is made possible by inlining the
@@ -50,13 +119,13 @@
 )
 
 # InlineProjectInProject folds an inner Project operator into an outer Project
-# that references each inner column no more than one time. If there are no
-# duplicate references, then there's no benefit to keeping the multiple nested
-# projections. This rule simplifies the relational expression tree and makes it
-# more likely that other normalization rules will match.
+# that references each inner synthesized column no more than one time. If there
+# are no duplicate references, then there's no benefit to keeping the multiple
+# nested projections. This rule simplifies the relational expression tree and
+# makes it more likely that other normalization rules will match.
 #
-# This rule is low priority so that it runs after the EliminateProjectProject
-# rule, since that rule is cheaper to match and replace.
+# This rule is low priority so that it runs after the MergeProjects rule, since
+# that rule is cheaper to match and replace.
 #
 # Example:
 #   SELECT x2*2 FROM (SELECT x+1 AS x2 FROM xy)
@@ -65,9 +134,10 @@
 #
 [InlineProjectInProject, Normalize, LowPriority]
 (Project
-    $input:(Project)
+    $input:(Project * $innerProjections:*)
     $projections:*
-    $passthrough:* & ^(HasDuplicateRefs $projections $passthrough)
+    $passthrough:* &
+        ^(HasDuplicateRefs $projections $passthrough (ProjectionCols $innerProjections))
 )
 =>
 (InlineProjectProject $input $projections $passthrough)

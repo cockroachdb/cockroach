@@ -19,21 +19,117 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
+// FindInlinableConstants returns the set of input columns that are synthesized
+// constant value expressions: ConstOp, TrueOp, FalseOp, or NullOp. Constant
+// value expressions can often be inlined into referencing expressions. Only
+// Project and Values operators synthesize constant value expressions.
+func (c *CustomFuncs) FindInlinableConstants(input memo.RelExpr) opt.ColSet {
+	var cols opt.ColSet
+	if project, ok := input.(*memo.ProjectExpr); ok {
+		for i := range project.Projections {
+			item := &project.Projections[i]
+			if opt.IsConstValueOp(item.Element) {
+				cols.Add(int(item.Col))
+			}
+		}
+	} else if values, ok := input.(*memo.ValuesExpr); ok && len(values.Rows) == 1 {
+		tup := values.Rows[0].(*memo.TupleExpr)
+		for i, scalar := range tup.Elems {
+			if opt.IsConstValueOp(scalar) {
+				cols.Add(int(values.Cols[i]))
+			}
+		}
+	}
+	return cols
+}
+
+// InlineProjectionConstants recursively searches each projection expression and
+// replaces any references to input columns that are constant. It returns a new
+// Projections list containing the replaced expressions.
+func (c *CustomFuncs) InlineProjectionConstants(
+	projections memo.ProjectionsExpr, input memo.RelExpr, constCols opt.ColSet,
+) memo.ProjectionsExpr {
+	newProjections := make(memo.ProjectionsExpr, len(projections))
+	for i := range projections {
+		item := &projections[i]
+		newProjections[i].Col = item.Col
+		newProjections[i].Element = c.inlineConstants(item.Element, input, constCols).(opt.ScalarExpr)
+	}
+	return newProjections
+}
+
+// InlineFilterConstants recursively searches each filter expression and
+// replaces any references to input columns that are constant. It returns a new
+// Filters list containing the replaced expressions.
+func (c *CustomFuncs) InlineFilterConstants(
+	filters memo.FiltersExpr, input memo.RelExpr, constCols opt.ColSet,
+) memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, len(filters))
+	for i := range filters {
+		item := &filters[i]
+		newFilters[i].Condition = c.inlineConstants(item.Condition, input, constCols).(opt.ScalarExpr)
+	}
+	return newFilters
+}
+
+// inlineConstants recursively searches the given expression and replaces any
+// references to input columns that are constant. It returns the replaced
+// expression.
+func (c *CustomFuncs) inlineConstants(
+	e opt.Expr, input memo.RelExpr, constCols opt.ColSet,
+) opt.Expr {
+	var replace ReconstructFunc
+	replace = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			if constCols.Contains(int(t.Col)) {
+				return c.extractColumn(input, t.Col)
+			}
+			return t
+		}
+		return c.f.Reconstruct(e, replace)
+	}
+	return replace(e)
+}
+
+// extractColumn searches a Project or Values input expression for the column
+// having the given id. It returns the expression for that column.
+func (c *CustomFuncs) extractColumn(input memo.RelExpr, col opt.ColumnID) opt.ScalarExpr {
+	if project, ok := input.(*memo.ProjectExpr); ok {
+		for i := range project.Projections {
+			item := &project.Projections[i]
+			if item.Col == col {
+				return item.Element
+			}
+		}
+	} else if values, ok := input.(*memo.ValuesExpr); ok && len(values.Rows) == 1 {
+		tup := values.Rows[0].(*memo.TupleExpr)
+		for i, scalar := range tup.Elems {
+			if values.Cols[i] == col {
+				return scalar
+			}
+		}
+	}
+	panic("could not find column to extract")
+}
+
 // HasDuplicateRefs returns true if the target projection expressions or
-// passthrough columns reference any outer column more than one time, or if the
-// projection expressions contain a correlated subquery. For example:
+// passthrough columns reference any column in the given target set more than
+// one time, or if the projection expressions contain a correlated subquery.
+// For example:
 //
 //   SELECT x+1, x+2, y FROM a
 //
 // HasDuplicateRefs would be true, since the x column is referenced twice.
 //
 // Correlated subqueries are disallowed since it introduces additional
-// complexity for a case that's not too important for inlining.
+// complexity for a case that's not too important for inlining. Also, skipping
+// correlated subqueries minimizes expensive searching in deep trees.
 func (c *CustomFuncs) HasDuplicateRefs(
-	projections memo.ProjectionsExpr, passthrough opt.ColSet,
+	projections memo.ProjectionsExpr, passthrough opt.ColSet, targetCols opt.ColSet,
 ) bool {
-	// Start with copy of passthrough columns, as they each count as a ref.
-	refs := passthrough.Copy()
+	// Passthrough columns that reference a target column count as refs.
+	refs := passthrough.Intersection(targetCols)
 	for i := range projections {
 		item := &projections[i]
 		if item.ScalarProps(c.mem).HasCorrelatedSubquery {
@@ -41,13 +137,19 @@ func (c *CustomFuncs) HasDuplicateRefs(
 			return true
 		}
 
-		// When a column reference is found, add it to the refs set. If the set
-		// already contains a reference to that column, then there is a duplicate.
-		// findDupRefs returns true if the subtree contains at least one duplicate.
+		// When a target column reference is found, add it to the refs set. If
+		// the set already contains a reference to that column, then there is a
+		// duplicate. findDupRefs returns true if the subtree contains at least
+		// one duplicate.
 		var findDupRefs func(e opt.Expr) bool
 		findDupRefs = func(e opt.Expr) bool {
 			switch t := e.(type) {
 			case *memo.VariableExpr:
+				// Ignore references to non-target columns.
+				if !targetCols.Contains(int(t.Col)) {
+					return false
+				}
+
 				// Count Variable references.
 				if refs.Contains(int(t.Col)) {
 					return true

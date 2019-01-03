@@ -984,14 +984,11 @@ CREATE TABLE abcd (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b + c AS x FROM abcd) ORDER BY a
 ----
-render          ·         ·             ("?column?")  ·
- │              render 0  a + x         ·             ·
- └── render     ·         ·             (x, a)        +a
-      │         render 0  b + c         ·             ·
-      │         render 1  a             ·             ·
-      └── scan  ·         ·             (a, b, c)     +a
-·               table     abcd@primary  ·             ·
-·               spans     ALL           ·             ·
+render     ·         ·             ("?column?")  ·
+ │         render 0  a + (b + c)   ·             ·
+ └── scan  ·         ·             (a, b, c)     +a
+·          table     abcd@primary  ·             ·
+·          spans     ALL           ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b, a + b + c AS x FROM abcd) ORDER BY b
@@ -1011,15 +1008,11 @@ render               ·         ·                  ("?column?")     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b, a + b + c AS x FROM abcd) ORDER BY a DESC, b DESC
 ----
-render             ·         ·             ("?column?")  ·
- │                 render 0  a + x         ·             ·
- └── render        ·         ·             (x, a, b)     -a,-b
-      │            render 0  c + (a + b)   ·             ·
-      │            render 1  a             ·             ·
-      │            render 2  b             ·             ·
-      └── revscan  ·         ·             (a, b, c)     -a,-b
-·                  table     abcd@primary  ·             ·
-·                  spans     ALL           ·             ·
+render        ·         ·                  ("?column?")  ·
+ │            render 0  a + (c + (a + b))  ·             ·
+ └── revscan  ·         ·                  (a, b, c)     -a,-b
+·             table     abcd@primary       ·             ·
+·             spans     ALL                ·             ·
 
 # Ensure that filter nodes (and filtered scan nodes) get populated with the correct ordering.
 query TTTTT

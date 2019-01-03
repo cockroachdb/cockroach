@@ -119,17 +119,21 @@ func (md *Metadata) AddDependency(ds cat.DataSource, priv privilege.Kind) {
 // in order to check that the fully qualified data source names still resolve to
 // the same version of the same data source, and that the user still has
 // sufficient privileges to access the data source.
-func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) bool {
+//
+// This function cannot swallow errors and return only a boolean, as it may
+// perform KV operations on behalf of the transaction associated with the
+// provided catalog, and those errors are required to be propagated.
+func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) (bool, error) {
 	for dep, privs := range md.deps {
 		ds, err := catalog.ResolveDataSource(ctx, dep.Name())
 		if err != nil {
-			return false
+			return false, err
 		}
 		if dep.ID() != ds.ID() {
-			return false
+			return false, nil
 		}
 		if dep.Version() != ds.Version() {
-			return false
+			return false, nil
 		}
 
 		for privs != 0 {
@@ -140,7 +144,7 @@ func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) 
 			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
 			if priv != 0 {
 				if err = catalog.CheckPrivilege(ctx, ds, priv); err != nil {
-					return false
+					return false, err
 				}
 			}
 
@@ -148,7 +152,7 @@ func (md *Metadata) CheckDependencies(ctx context.Context, catalog cat.Catalog) 
 			privs &= ^(1 << priv)
 		}
 	}
-	return true
+	return true, nil
 }
 
 // AddTable indexes a new reference to a table within the query. Separate

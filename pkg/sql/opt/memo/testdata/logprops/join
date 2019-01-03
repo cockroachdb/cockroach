@@ -838,21 +838,19 @@ semi-join-apply
 
 # Calculate anti-join cardinality when left side has non-zero cardinality.
 opt
-SELECT * FROM (SELECT * FROM (VALUES (1))) WHERE NOT EXISTS(SELECT * FROM uv WHERE u=column1)
+SELECT * FROM (SELECT * FROM (VALUES (1), (2))) WHERE NOT EXISTS(SELECT * FROM uv WHERE u=column1)
 ----
 anti-join
  ├── columns: column1:1(int)
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(1)
+ ├── cardinality: [0 - 2]
  ├── values
  │    ├── columns: column1:1(int)
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(1)
+ │    ├── cardinality: [2 - 2]
  │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
  │    └── tuple [type=tuple{int}]
- │         └── const: 1 [type=int]
+ │         └── const: 2 [type=int]
  ├── scan uv
  │    ├── columns: u:2(int) v:3(int!null)
  │    └── prune: (2,3)

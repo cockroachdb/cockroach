@@ -22,12 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	opttestutils "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	testutils "github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
@@ -121,31 +122,41 @@ func TestMemoIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Memo().IsStale(ctx, &evalCtx, catalog) {
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
 		t.Errorf("memo should not be stale")
 	}
 
 	// Stale current database.
 	evalCtx.SessionData.Database = "newdb"
-	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if !isStale {
 		t.Errorf("expected stale current database")
 	}
 	evalCtx.SessionData.Database = "t"
 
 	// Stale search path.
 	evalCtx.SessionData.SearchPath = sessiondata.SearchPath{}
-	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if !isStale {
 		t.Errorf("expected stale search path")
 	}
 	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath([]string{"path1", "path2"})
-	if o.Memo().IsStale(ctx, &evalCtx, catalog) {
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
 		t.Errorf("memo should not be stale")
 	}
 	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath(searchPath)
 
 	// Stale location.
 	evalCtx.SessionData.DataConversion.Location = time.FixedZone("PST", -8*60*60)
-	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if !isStale {
 		t.Errorf("expected stale location")
 	}
 	evalCtx.SessionData.DataConversion.Location = time.UTC
@@ -159,7 +170,9 @@ func TestMemoIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if !isStale {
 		t.Errorf("expected stale schema")
 	}
 	catalog = testcat.New()
@@ -168,13 +181,16 @@ func TestMemoIsStale(t *testing.T) {
 
 	// User no longer has access to view.
 	catalog.View(tree.NewTableName("t", "abcview")).Revoked = true
-	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
-		t.Errorf("expected user not to have SELECT privilege on view")
+	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
+	if exp := "user does not have privilege"; !testutils.IsError(err, exp) {
+		t.Fatalf("expected %q error, but got %+v", exp, err)
 	}
 	catalog.View(tree.NewTableName("t", "abcview")).Revoked = false
 
 	// Ensure that memo is not stale after restoring to original state.
-	if o.Memo().IsStale(ctx, &evalCtx, catalog) {
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
 		t.Errorf("memo should not be stale")
 	}
 }
@@ -190,7 +206,7 @@ func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-			tester := testutils.NewOptTester(catalog, d.Input)
+			tester := opttestutils.NewOptTester(catalog, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
 			return tester.RunCommand(t, d)
 		})
