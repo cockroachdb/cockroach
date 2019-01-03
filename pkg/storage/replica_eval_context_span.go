@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // SpanSetReplicaEvalContext is a testing-only implementation of
@@ -85,11 +84,6 @@ func (rec *SpanSetReplicaEvalContext) GetTxnWaitQueue() *txnwait.Queue {
 // NodeID returns the NodeID.
 func (rec *SpanSetReplicaEvalContext) NodeID() roachpb.NodeID {
 	return rec.i.NodeID()
-}
-
-// Tracer returns the tracer.
-func (rec *SpanSetReplicaEvalContext) Tracer() opentracing.Tracer {
-	return rec.i.Tracer()
 }
 
 // Engine returns the engine.

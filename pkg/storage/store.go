@@ -65,7 +65,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/google/btree"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -2110,9 +2109,6 @@ func (s *Store) Compactor() *compactor.Compactor { return s.compactor }
 
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
-
-// Tracer accessor.
-func (s *Store) Tracer() opentracing.Tracer { return s.cfg.AmbientCtx.Tracer }
 
 // TestingKnobs accessor.
 func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.cfg.TestingKnobs }
