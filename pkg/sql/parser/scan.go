@@ -23,7 +23,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -656,17 +655,14 @@ func (s *scanner) scanPlaceholder(lval *sqlSymType) {
 	}
 	lval.str = s.in[start:s.pos]
 
-	uval, err := strconv.ParseUint(lval.str, 10, 64)
-	if err == nil && uval > 1<<63 {
-		err = pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError, "integer value out of range: %d", uval)
-	}
+	placeholder, err := tree.NewPlaceholder(lval.str)
 	if err != nil {
 		lval.id = ERROR
 		lval.str = err.Error()
 		return
 	}
-
 	lval.id = PLACEHOLDER
+	lval.union.val = placeholder
 }
 
 // scanHexString scans the content inside x'....'.

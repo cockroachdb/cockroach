@@ -17,13 +17,13 @@ package sql
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
@@ -68,14 +68,9 @@ func (ex *connExecutor) execPrepare(
 				pgwirebase.MaxPreparedStatementArgs, len(ps.TypeHints)))
 	}
 	for k, t := range ps.TypeHints {
-		i, err := strconv.Atoi(k)
-		if err != nil || i < 1 {
-			return retErr(pgerror.NewErrorf(
-				pgerror.CodeUndefinedParameterError, "invalid placeholder name: $%s", k))
-		}
 		// Placeholder names are 1-indexed; the arrays in the protocol are
 		// 0-indexed.
-		i--
+		i := int(k - 1)
 		// Grow inTypes to be at least as large as i. Prepopulate all
 		// slots with the hints provided, if any.
 		for j := len(inTypes); j <= i; j++ {
@@ -301,8 +296,7 @@ func (ex *connExecutor) execBind(
 					pgwirebase.NewProtocolViolationErrorf(
 						"for argument %d expected OID %d, got %d", i, t, oid))
 			}
-			k := strconv.Itoa(i + 1)
-			qargs[k] = datum
+			qargs[types.PlaceholderID(i+1)] = datum
 		}
 	} else {
 		qArgFormatCodes := bindCmd.ArgFormatCodes
@@ -332,7 +326,7 @@ func (ex *connExecutor) execBind(
 			ex.state.sqlTimestamp.In(ex.sessionData.DataConversion.Location))
 
 		for i, arg := range bindCmd.Args {
-			k := strconv.Itoa(i + 1)
+			k := types.PlaceholderID(i + 1)
 			t := ps.InTypes[i]
 			if arg == nil {
 				// nil indicates a NULL argument value.

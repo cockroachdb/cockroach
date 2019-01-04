@@ -26,12 +26,12 @@ import (
 )
 
 // PlaceholderTypes relates placeholder names to their resolved type.
-type PlaceholderTypes map[string]types.T
+type PlaceholderTypes map[types.PlaceholderID]types.T
 
 // QueryArguments relates placeholder names to their provided query argument.
 //
 // A nil value represents a NULL argument.
-type QueryArguments map[string]TypedExpr
+type QueryArguments map[types.PlaceholderID]TypedExpr
 
 var emptyQueryArgumentStr = "{}"
 
@@ -43,7 +43,7 @@ func (qa *QueryArguments) String() string {
 	buf.WriteByte('{')
 	sep := ""
 	for k, v := range *qa {
-		fmt.Fprintf(&buf, "%s$%s:%q", sep, k, v)
+		fmt.Fprintf(&buf, "%s$%d:%q", sep, k, v)
 		sep = ", "
 	}
 	buf.WriteByte('}')
@@ -107,7 +107,7 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 	var missing []string
 	for pn := range p.Types {
 		if _, ok := p.Values[pn]; !ok {
-			missing = append(missing, "$"+pn)
+			missing = append(missing, fmt.Sprintf("$%d", pn))
 		}
 	}
 	if len(missing) > 0 {
@@ -124,10 +124,10 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 // Type returns the known type of a placeholder. If allowHints is true, will
 // return a type hint if there's no known type yet but there is a type hint.
 // Returns false in the 2nd value if the placeholder is not typed.
-func (p *PlaceholderInfo) Type(name string, allowHints bool) (types.T, bool) {
-	if t, ok := p.Types[name]; ok {
+func (p *PlaceholderInfo) Type(id types.PlaceholderID, allowHints bool) (types.T, bool) {
+	if t, ok := p.Types[id]; ok {
 		return t, true
-	} else if t, ok := p.TypeHints[name]; ok {
+	} else if t, ok := p.TypeHints[id]; ok {
 		return t, true
 	}
 	return nil, false
@@ -135,8 +135,8 @@ func (p *PlaceholderInfo) Type(name string, allowHints bool) (types.T, bool) {
 
 // Value returns the known value of a placeholder.  Returns false in
 // the 2nd value if the placeholder does not have a value.
-func (p *PlaceholderInfo) Value(name string) (TypedExpr, bool) {
-	if v, ok := p.Values[name]; ok {
+func (p *PlaceholderInfo) Value(id types.PlaceholderID) (TypedExpr, bool) {
+	if v, ok := p.Values[id]; ok {
 		return v, true
 	}
 	return nil, false
@@ -144,20 +144,20 @@ func (p *PlaceholderInfo) Value(name string) (TypedExpr, bool) {
 
 // SetType assigns a known type to a placeholder.
 // Reports an error if another type was previously assigned.
-func (p *PlaceholderInfo) SetType(name string, typ types.T) error {
-	if t, ok := p.Types[name]; ok {
+func (p *PlaceholderInfo) SetType(id types.PlaceholderID, typ types.T) error {
+	if t, ok := p.Types[id]; ok {
 		if !typ.Equivalent(t) {
 			return pgerror.NewErrorf(
 				pgerror.CodeDatatypeMismatchError,
-				"placeholder %s already has type %s, cannot assign %s", name, t, typ)
+				"placeholder %d already has type %s, cannot assign %s", id, t, typ)
 		}
 		return nil
 	}
-	p.Types[name] = typ
-	if _, ok := p.TypeHints[name]; !ok {
+	p.Types[id] = typ
+	if _, ok := p.TypeHints[id]; !ok {
 		// If the client didn't give us a type hint, we must communicate our
 		// inferred type to pgwire so it can know how to parse incoming data.
-		p.TypeHints[name] = typ
+		p.TypeHints[id] = typ
 	}
 	return nil
 }
@@ -183,7 +183,7 @@ func (p *PlaceholderInfo) SetTypeHints(src PlaceholderTypes) {
 // whether the placeholder's type remains unset in the PlaceholderInfo.
 func (p *PlaceholderInfo) IsUnresolvedPlaceholder(expr Expr) bool {
 	if t, ok := StripParens(expr).(*Placeholder); ok {
-		_, res := p.TypeHints[t.Name]
+		_, res := p.TypeHints[t.ID]
 		return !res
 	}
 	return false

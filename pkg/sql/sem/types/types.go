@@ -17,6 +17,7 @@ package types
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/lib/pq/oid"
 )
@@ -392,13 +393,19 @@ func (t TTuple) IsAmbiguous() bool {
 	return len(t.Types) == 0
 }
 
+// PlaceholderID is the 1-based index of a placeholder.
+type PlaceholderID uint16
+
+// MaxPlaceholderID is the maximum allowed value of a PlacholderID.
+const MaxPlaceholderID = math.MaxUint16
+
 // TPlaceholder is the type of a placeholder.
 type TPlaceholder struct {
-	Name string
+	ID PlaceholderID
 }
 
 // String implements the fmt.Stringer interface.
-func (t TPlaceholder) String() string { return fmt.Sprintf("placeholder{%s}", t.Name) }
+func (t TPlaceholder) String() string { return fmt.Sprintf("placeholder{%d}", t.ID) }
 
 // Equivalent implements the T interface.
 func (t TPlaceholder) Equivalent(other T) bool {
@@ -409,7 +416,7 @@ func (t TPlaceholder) Equivalent(other T) bool {
 		return true
 	}
 	u, ok := UnwrapType(other).(TPlaceholder)
-	return ok && t.Name == u.Name
+	return ok && t.ID == u.ID
 }
 
 // FamilyEqual implements the T interface.
