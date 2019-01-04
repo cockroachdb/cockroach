@@ -2455,6 +2455,27 @@ EXPLAIN EXECUTE a
         ^
 HINT: try \h EXPLAIN`,
 		},
+		{
+			`SELECT $0`,
+			`placeholder index must be between 1 and 65536
+SELECT $0
+       ^
+HINT: try \h SELECT`,
+		},
+		{
+			`SELECT $-1`,
+			`syntax error at or near "$"
+SELECT $-1
+       ^
+HINT: try \h SELECT`,
+		},
+		{
+			`SELECT $123456789`,
+			`placeholder index must be between 1 and 65536
+SELECT $123456789
+       ^
+HINT: try \h SELECT`,
+		},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
