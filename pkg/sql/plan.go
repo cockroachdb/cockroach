@@ -199,7 +199,6 @@ var _ planNode = &scanNode{}
 var _ planNode = &scatterNode{}
 var _ planNode = &serializeNode{}
 var _ planNode = &showFingerprintsNode{}
-var _ planNode = &showRangesNode{}
 var _ planNode = &showTraceNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}

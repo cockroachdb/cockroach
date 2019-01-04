@@ -130,7 +130,6 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *setVarNode:
 	case *setZoneConfigNode:
 	case *showFingerprintsNode:
-	case *showRangesNode:
 	case *showTraceNode:
 	case *showTraceReplicaNode:
 	case *showZoneConfigNode:

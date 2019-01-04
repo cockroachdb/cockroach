@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -2913,6 +2914,28 @@ may increase either contention or retry errors, or both.`,
 			ReturnType: tree.IdentityReturnType(0),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return args[0], nil
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+	),
+
+	// Return a pretty key for a given raw key, skipping the specified number of
+	// fields.
+	"crdb_internal.pretty_key": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"raw_key", types.Bytes},
+				{"skip_fields", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(sqlbase.PrettyKey(
+					nil, /* valDirs */
+					roachpb.Key(tree.MustBeDBytes(args[0])),
+					int(tree.MustBeDInt(args[1])))), nil
 			},
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},
