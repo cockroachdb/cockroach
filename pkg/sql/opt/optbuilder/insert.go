@@ -147,12 +147,16 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	// Find which table we're working on, check the permissions.
 	tab := b.resolveTable(tn, privilege.INSERT)
 
-	// Table resolution checked the INSERT permission, but if OnConflict is
-	// defined, then check the SELECT and UPDATE permissions as well, since
-	// Upsert can read and update existing rows.
-	if ins.OnConflict != nil && !ins.OnConflict.DoNothing {
+	if ins.OnConflict != nil {
+		// UPSERT and INDEX ON CONFLICT will read from the table to check for
+		// duplicates.
 		b.checkPrivilege(tab, privilege.SELECT)
-		b.checkPrivilege(tab, privilege.UPDATE)
+
+		if !ins.OnConflict.DoNothing {
+			// UPSERT and INDEX ON CONFLICT DO UPDATE may modify rows if the
+			// DO NOTHING clause is not present.
+			b.checkPrivilege(tab, privilege.UPDATE)
+		}
 	}
 
 	var mb mutationBuilder

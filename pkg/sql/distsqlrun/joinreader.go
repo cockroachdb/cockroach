@@ -162,7 +162,7 @@ func newJoinReader(
 	columnIDs, jr.indexDirs = jr.index.FullColumnIDs()
 	indexCols := make([]uint32, len(columnIDs))
 	jr.indexTypes = make([]sqlbase.ColumnType, len(columnIDs))
-	columnTypes := jr.desc.ColumnTypes()
+	columnTypes := jr.desc.ColumnTypesWithMutations(true)
 	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)
 		jr.indexTypes[i] = columnTypes[jr.colIdxMap[columnID]]
