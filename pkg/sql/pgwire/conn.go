@@ -554,7 +554,7 @@ func (c *conn) handleParse(
 			err := pgwirebase.NewProtocolViolationErrorf("unknown oid type: %v", t)
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
-		sqlTypeHints[strconv.Itoa(i+1)] = v
+		sqlTypeHints[types.PlaceholderIdx(i)] = v
 	}
 
 	startParse := timeutil.Now()

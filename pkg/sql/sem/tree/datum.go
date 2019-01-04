@@ -3411,7 +3411,7 @@ func (d *Placeholder) AmbiguousFormat() bool {
 }
 
 func (d *Placeholder) mustGetValue(ctx *EvalContext) Datum {
-	e, ok := ctx.Placeholders.Value(d.Name)
+	e, ok := ctx.Placeholders.Value(d.Idx)
 	if !ok {
 		panic("fail")
 	}

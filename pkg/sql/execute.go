@@ -15,10 +15,9 @@
 package sql
 
 import (
-	"strconv"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -39,7 +38,7 @@ func fillInPlaceholders(
 	qArgs := make(tree.QueryArguments, len(params))
 	var semaCtx tree.SemaContext
 	for i, e := range params {
-		idx := strconv.Itoa(i + 1)
+		idx := types.PlaceholderIdx(i)
 
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(
 			e, ps.TypeHints[idx], "EXECUTE parameter", /* context */
