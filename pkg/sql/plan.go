@@ -272,10 +272,6 @@ type planTop struct {
 	// #10028 is addressed.
 	hasStar bool
 
-	// isCorrelated collects whether the query was found to be correlated.
-	// Used to produce better error messages.
-	isCorrelated bool
-
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
 

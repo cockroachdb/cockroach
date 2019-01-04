@@ -28,76 +28,101 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// makeOptimizerPlan is an alternative to makePlan which uses the cost-based
-// optimizer. On success, the returned flags always have planFlagOptUsed set.
-func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFlags, error) {
-	// Ensure that p.curPlan is populated in case an error occurs early,
-	// so that maybeLogStatement in the error case does not find an empty AST.
-	p.curPlan = planTop{AST: stmt.AST}
-
-	// Start with fast check to see if top-level statement is supported.
-	switch stmt.AST.(type) {
-	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
-		*tree.UnionClause, *tree.ValuesClause, *tree.Explain,
-		*tree.Insert, *tree.Update, *tree.CreateTable:
-
-	default:
-		return 0, pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
+// prepareUsingOptimizer builds a memo for a prepared statement and populates
+// the following stmt.Prepared fields:
+//  - Columns
+//  - Types
+//  - Memo (for reuse during exec, if appropriate).
+//
+// isCorrelated is set in error cases if we detect a correlated subquery; it is
+// used in the fallback case to create a better error.
+func (p *planner) prepareUsingOptimizer(
+	ctx context.Context, stmt Statement,
+) (isCorrelated bool, _ error) {
+	if err := checkOptSupportForTopStatement(stmt.AST); err != nil {
+		return false, err
 	}
 
 	var opc optPlanningCtx
 	opc.init(p, stmt)
 
-	if p.EvalContext().PrepareOnly {
-		// We are preparing a statement.
-		memo, err := opc.buildReusableMemo(ctx)
-		if err != nil {
-			return 0, err
-		}
-
-		md := memo.Metadata()
-		physical := memo.RootProps()
-		resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
-		for i, col := range physical.Presentation {
-			resultCols[i].Name = col.Alias
-			resultCols[i].Typ = md.ColumnMeta(col.ID).Type
-		}
-		if opc.allowMemoReuse {
-			stmt.Prepared.Memo = memo
-		}
-		// Construct a dummy plan that has correct output columns. Only output
-		// columns and placeholder types are needed.
-		p.curPlan.plan = &zeroNode{columns: resultCols}
-		return opc.flags, nil
-	}
-
-	// We are executing a statement.
-	execMemo, err := opc.buildExecMemo(ctx)
+	memo, isCorrelated, err := opc.buildReusableMemo(ctx)
 	if err != nil {
-		return 0, err
+		return isCorrelated, err
 	}
 
-	// Build the plan tree and store it in planner.curPlan.
+	md := memo.Metadata()
+	physical := memo.RootProps()
+	resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
+	for i, col := range physical.Presentation {
+		resultCols[i].Name = col.Alias
+		resultCols[i].Typ = md.ColumnMeta(col.ID).Type
+		if err := checkResultType(resultCols[i].Typ); err != nil {
+			return false, err
+		}
+	}
+	stmt.Prepared.Columns = resultCols
+	stmt.Prepared.Types = p.semaCtx.Placeholders.Types
+	if opc.allowMemoReuse {
+		stmt.Prepared.Memo = memo
+	}
+	return false, nil
+}
+
+// makeOptimizerPlan is an alternative to makePlan which uses the cost-based
+// optimizer. On success, the returned flags always have planFlagOptUsed set.
+//
+// isCorrelated is set in error cases if we detect a correlated subquery; it is
+// used in the fallback case to create a better error.
+func (p *planner) makeOptimizerPlan(
+	ctx context.Context, stmt Statement,
+) (_ *planTop, _ planFlags, isCorrelated bool, _ error) {
+	if err := checkOptSupportForTopStatement(stmt.AST); err != nil {
+		return nil, 0, false, err
+	}
+
+	var opc optPlanningCtx
+	opc.init(p, stmt)
+
+	execMemo, isCorrelated, err := opc.buildExecMemo(ctx)
+	if err != nil {
+		return nil, 0, isCorrelated, err
+	}
+
+	// Build the plan tree.
 	root := execMemo.RootExpr()
 	execFactory := makeExecFactory(p)
 	plan, err := execbuilder.New(&execFactory, execMemo, root, p.EvalContext()).Build()
 	if err != nil {
-		return 0, err
+		return nil, 0, false, err
 	}
 
-	p.curPlan = *plan.(*planTop)
-	// Since the assignment above just cleared the AST, we need to set it again.
-	p.curPlan.AST = stmt.AST
+	result := plan.(*planTop)
+	result.AST = stmt.AST
 
-	cols := planColumns(p.curPlan.plan)
+	cols := planColumns(result.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return 0, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
-				"cached plan must not change result type")
+			return nil, 0, false, pgerror.NewError(
+				pgerror.CodeFeatureNotSupportedError, "cached plan must not change result type",
+			)
 		}
 	}
 
-	return opc.flags, nil
+	return result, opc.flags, false, nil
+}
+
+func checkOptSupportForTopStatement(AST tree.Statement) error {
+	// Start with fast check to see if top-level statement is supported.
+	switch AST.(type) {
+	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
+		*tree.UnionClause, *tree.ValuesClause, *tree.Explain,
+		*tree.Insert, *tree.Update, *tree.CreateTable:
+		return nil
+
+	default:
+		return pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", AST))
+	}
 }
 
 type optPlanningCtx struct {
@@ -143,8 +168,14 @@ func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
 
 // buildReusableMemo builds the statement into a memo that can be stored for
 // prepared statements and can later be used as a starting point for
-// optimization.
-func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (*memo.Memo, error) {
+// optimization. The returned memo is fully detached from the planner and can be
+// used with reuseMemo independently and concurrently by multiple threads.
+//
+// isCorrelated is set in error cases if we detect a correlated subquery; it is
+// used in the fallback case to create a better error.
+func (opc *optPlanningCtx) buildReusableMemo(
+	ctx context.Context,
+) (_ *memo.Memo, isCorrelated bool, _ error) {
 	p := opc.p
 	// Build the Memo (optbuild) and apply normalization rules to it. If the
 	// query contains placeholders, values are not assigned during this phase,
@@ -156,11 +187,7 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (*memo.Memo, e
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.stmt.AST)
 	bld.KeepPlaceholders = true
 	if err := bld.Build(); err != nil {
-		// isCorrelated is used in the fallback case to create a better error.
-		// TODO(radu): setting the flag here is a bit hacky, ideally we would return
-		// it some other way.
-		p.curPlan.isCorrelated = bld.IsCorrelated
-		return nil, err
+		return nil, bld.IsCorrelated, err
 	}
 	// If the memo doesn't have placeholders, then fully optimize it, since
 	// it can be reused without further changes to build the execution tree.
@@ -171,10 +198,16 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (*memo.Memo, e
 	// Detach the prepared memo from the factory and transfer its ownership
 	// to the prepared statement. DetachMemo will re-initialize the optimizer
 	// to an empty memo.
-	return p.optimizer.DetachMemo(), nil
+	return p.optimizer.DetachMemo(), false, nil
 }
 
 // reuseMemo returns an optimized memo using a cached memo as a starting point.
+//
+// The cached memo is not modified; it is safe to call reuseMemo on the same
+// cachedMemo from multiple threads concurrently.
+//
+// The returned memo is only safe to use in one thread, during execution of the
+// current statement.
 func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
 	if !cachedMemo.HasPlaceholders() {
 		// If there are no placeholders, the query was already fully optimized
@@ -193,7 +226,17 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 	return f.Memo(), nil
 }
 
-func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (*memo.Memo, error) {
+// buildExecMemo creates a fully optimized memo, possibly reusing a previously
+// cached memo as a starting point.
+//
+// The returned memo is only safe to use in one thread, during execution of the
+// current statement.
+//
+// isCorrelated is set in error cases if we detect a correlated subquery; it is
+// used in the fallback case to create a better error.
+func (opc *optPlanningCtx) buildExecMemo(
+	ctx context.Context,
+) (_ *memo.Memo, isCorrelated bool, _ error) {
 	prepared := opc.stmt.Prepared
 	p := opc.p
 	if opc.allowMemoReuse && prepared != nil && prepared.Memo != nil {
@@ -203,14 +246,15 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (*memo.Memo, error
 		// If the prepared memo has been invalidated by schema or other changes,
 		// re-prepare it.
 		if isStale, err := prepared.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog); err != nil {
-			return nil, err
+			return nil, false, err
 		} else if isStale {
-			prepared.Memo, err = opc.buildReusableMemo(ctx)
+			prepared.Memo, isCorrelated, err = opc.buildReusableMemo(ctx)
 			if err != nil {
-				return nil, err
+				return nil, isCorrelated, err
 			}
 		}
-		return opc.reuseMemo(prepared.Memo)
+		memo, err := opc.reuseMemo(prepared.Memo)
+		return memo, false, err
 	}
 
 	if opc.useCache {
@@ -218,11 +262,11 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (*memo.Memo, error
 		cachedData, ok := p.execCfg.QueryCache.Find(opc.stmt.SQL)
 		if ok {
 			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog); err != nil {
-				return nil, err
+				return nil, false, err
 			} else if isStale {
-				cachedData.Memo, err = opc.buildReusableMemo(ctx)
+				cachedData.Memo, _, err = opc.buildReusableMemo(ctx)
 				if err != nil {
-					return nil, err
+					return nil, false, err
 				}
 				// Update the plan in the cache.
 				p.execCfg.QueryCache.Add(&cachedData)
@@ -232,7 +276,8 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (*memo.Memo, error
 				opc.log(ctx, "query cache hit")
 				opc.flags.Set(planFlagOptCacheHit)
 			}
-			return opc.reuseMemo(cachedData.Memo)
+			memo, err := opc.reuseMemo(cachedData.Memo)
+			return memo, false, err
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
 		opc.log(ctx, "query cache miss")
@@ -243,9 +288,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (*memo.Memo, error
 	f := opc.p.optimizer.Factory()
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.stmt.AST)
 	if err := bld.Build(); err != nil {
-		// isCorrelated is used in the fallback case to create a better error.
-		p.curPlan.isCorrelated = bld.IsCorrelated
-		return nil, err
+		return nil, bld.IsCorrelated, err
 	}
 	p.optimizer.Optimize()
 
@@ -260,8 +303,8 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (*memo.Memo, error
 		}
 		p.execCfg.QueryCache.Add(&cachedData)
 		opc.log(ctx, "query cache add")
-		return memo, nil
+		return memo, false, nil
 	}
 
-	return f.Memo(), nil
+	return f.Memo(), false, nil
 }
