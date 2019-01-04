@@ -8,18 +8,30 @@ CREATE TABLE kv (
 
 query TTT
 SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC
+EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC LIMIT 2
 ]
 ----
-count                ·         ·
- └── upsert          ·         ·
-      │              into      kv(k, v)
-      │              strategy  fast upserter
-      └── sort       ·         ·
-           │         order     -v
-           └── scan  ·         ·
-·                    table     kv@primary
-·                    spans     ALL
+count                               ·         ·
+ └── upsert                         ·         ·
+      │                             into      kv(k, v)
+      │                             strategy  opt upserter
+      └── render                    ·         ·
+           │                        render 0  k
+           │                        render 1  v
+           │                        render 2  k
+           │                        render 3  v
+           │                        render 4  v
+           └── lookup-join          ·         ·
+                │                   type      inner
+                ├── limit           ·         ·
+                │    │              count     2
+                │    └── sort       ·         ·
+                │         │         order     -v
+                │         └── scan  ·         ·
+                │                   table     kv@primary
+                │                   spans     ALL
+                └── scan            ·         ·
+·                                   table     kv@primary
 
 # Regression test for #25726.
 # UPSERT over tables with column families, on the fast path, use the
@@ -28,6 +40,8 @@ count                ·         ·
 # columns. The special casing is only for families that do not include
 # the primary key. So we need a table with 3 families: 1 for the PK, 1
 # with just 1 col, and 1 with 2+ cols.
+#
+# TODO(andyk): Need to implement CBO fast path using PUT.
 statement ok
 CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
   INSERT INTO tu VALUES (1, 2, 3, 4)
@@ -38,10 +52,15 @@ SET tracing = on,kv,results; UPSERT INTO tu VALUES (1, NULL, NULL, NULL); SET tr
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
-Put /Table/54/1/1/0 -> /TUPLE/
+Scan /Table/54/1/1{-/#}
+querying next range at /Table/54/1/1
+r19: sending batch 1 Scan to (n1,s1):1
+fetched: /tu/primary/1 -> NULL
+fetched: /tu/primary/1/b -> 2
+fetched: /tu/primary/1/c/d -> /3/4
 Del /Table/54/1/1/1/1
 Del /Table/54/1/1/2/1
-querying next range at /Table/54/1/1/0
-r19: sending batch 1 Put, 2 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+querying next range at /Table/54/1/1/1/1
+r19: sending batch 2 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 fast path completed
 rows affected: 1
