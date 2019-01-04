@@ -322,7 +322,8 @@ func TestScanError(t *testing.T) {
 		{`x'beef\x41'`, "invalid hexadecimal bytes literal"},
 		{`X'beef\x41\x41'`, "invalid hexadecimal bytes literal"},
 		{`x'a'`, "invalid hexadecimal bytes literal"},
-		{`$9223372036854775809`, "integer value out of range"},
+		{`$0`, "placeholder index must be between 1 and 65536"},
+		{`$9223372036854775809`, "placeholder index must be between 1 and 65536"},
 		{`B'123'`, `"2" is not a valid binary digit`},
 	}
 	for _, d := range testData {

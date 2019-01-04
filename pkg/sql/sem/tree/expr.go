@@ -17,9 +17,11 @@ package tree
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -752,14 +754,26 @@ func (node PartitionMinVal) Format(ctx *FmtCtx) {
 
 // Placeholder represents a named placeholder.
 type Placeholder struct {
-	Name string
+	Idx types.PlaceholderIdx
 
 	typeAnnotation
 }
 
 // NewPlaceholder allocates a Placeholder.
-func NewPlaceholder(name string) *Placeholder {
-	return &Placeholder{Name: name}
+func NewPlaceholder(name string) (*Placeholder, error) {
+	uval, err := strconv.ParseUint(name, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	// The string is the number that follows $ which is a 1-based index ($1, $2,
+	// etc), while PlaceholderIdx is 0-based.
+	if uval == 0 || uval > types.MaxPlaceholderIdx+1 {
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeNumericValueOutOfRangeError,
+			"placeholder index must be between 1 and %d", types.MaxPlaceholderIdx+1,
+		)
+	}
+	return &Placeholder{Idx: types.PlaceholderIdx(uval - 1)}, nil
 }
 
 // Format implements the NodeFormatter interface.
@@ -768,14 +782,13 @@ func (node *Placeholder) Format(ctx *FmtCtx) {
 		ctx.placeholderFormat(ctx, node)
 		return
 	}
-	ctx.WriteByte('$')
-	ctx.WriteString(node.Name)
+	fmt.Fprintf(ctx.Buffer, "$%d", node.Idx+1)
 }
 
 // ResolvedType implements the TypedExpr interface.
 func (node *Placeholder) ResolvedType() types.T {
 	if node.typ == nil {
-		node.typ = &types.TPlaceholder{Name: node.Name}
+		node.typ = &types.TPlaceholder{Idx: node.Idx}
 	}
 	return node.typ
 }

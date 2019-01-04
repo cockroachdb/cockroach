@@ -3981,17 +3981,17 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 		// placeholder evaluates to itself at this point.
 		return t, nil
 	}
-	e, ok := ctx.Placeholders.Value(t.Name)
+	e, ok := ctx.Placeholders.Value(t.Idx)
 	if !ok {
 		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedParameterError,
-			"no value provided for placeholder: $%s", t.Name)
+			"no value provided for placeholder: %s", t)
 	}
 	// Placeholder expressions cannot contain other placeholders, so we do
 	// not need to recurse.
-	typ, typed := ctx.Placeholders.Type(t.Name, false)
+	typ, typed := ctx.Placeholders.Type(t.Idx, false)
 	if !typed {
 		// All placeholders should be typed at this point.
-		return nil, pgerror.NewAssertionErrorf("missing type for placeholder %s", t.Name)
+		return nil, pgerror.NewAssertionErrorf("missing type for placeholder %s", t)
 	}
 	if !e.ResolvedType().Equivalent(typ) {
 		// This happens when we overrode the placeholder's type during type

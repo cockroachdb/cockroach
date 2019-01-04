@@ -17,7 +17,6 @@ package sql
 import (
 	"context"
 	"math"
-	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -495,10 +495,10 @@ func (ie *internalExecutorImpl) execInternal(
 	// Transforms the args to datums. The datum types will be passed as type hints
 	// to the PrepareStmt command.
 	datums := golangFillQueryArguments(qargs...)
-	types := make(tree.PlaceholderTypes, len(datums))
+	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
 		// Arg numbers start from 1.
-		types[strconv.Itoa(i+1)] = d.ResolvedType()
+		typeHints[types.PlaceholderIdx(i)] = d.ResolvedType()
 	}
 	if len(qargs) == 0 {
 		resPos = 0
@@ -522,7 +522,7 @@ func (ie *internalExecutorImpl) execInternal(
 				Stmt:       s,
 				ParseStart: parseStart,
 				ParseEnd:   parseEnd,
-				TypeHints:  types,
+				TypeHints:  typeHints,
 			},
 		); err != nil {
 			return result{}, err
