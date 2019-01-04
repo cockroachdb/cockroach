@@ -787,14 +787,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
 
-	flags, err := planner.optionallyUseOptimizer(ctx, ex.sessionData, stmt)
-	if err == nil && !flags.IsSet(planFlagOptUsed) {
-		isCorrelated := planner.curPlan.isCorrelated
-		log.VEventf(ctx, 1, "query is correlated: %v", isCorrelated)
-		// Fallback if the optimizer was not enabled or used.
-		err = planner.makePlan(ctx, stmt)
-		enhanceErrWithCorrelation(err, isCorrelated)
-	}
+	flags, err := ex.makeExecPlan(ctx, stmt, planner)
 	defer planner.curPlan.close(ctx)
 
 	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
@@ -871,6 +864,41 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	return nil
+}
+
+// makeExecPlan creates an execution plan and populates planner.curPlan, using
+// either the optimizer or the heuristic planner.
+func (ex *connExecutor) makeExecPlan(
+	ctx context.Context, stmt Statement, planner *planner,
+) (planFlags, error) {
+	// Initialize planner.curPlan.AST early; it might be used by maybeLogStatement
+	// in error cases.
+	planner.curPlan = planTop{AST: stmt.AST}
+
+	var flags planFlags
+	var isCorrelated bool
+	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
+		log.VEvent(ctx, 2, "generating optimizer plan")
+		var result *planTop
+		var err error
+		result, flags, isCorrelated, err = planner.makeOptimizerPlan(ctx, stmt)
+		if err == nil {
+			planner.curPlan = *result
+			return flags, nil
+		}
+		log.VEventf(ctx, 1, "optimizer plan failed (isCorrelated=%t): %v", isCorrelated, err)
+		if !canFallbackFromOpt(err, optMode, stmt) {
+			return 0, err
+		}
+		flags = planFlagOptFallback
+		log.VEvent(ctx, 1, "optimizer falls back on heuristic planner")
+	} else {
+		log.VEvent(ctx, 2, "optimizer disabled")
+	}
+	// Use the heuristic planner.
+	err := planner.makePlan(ctx, stmt)
+	enhanceErrWithCorrelation(err, isCorrelated)
+	return flags, err
 }
 
 // sampleLogicalPlanDescription returns a serialized representation of a statement's logical plan.
