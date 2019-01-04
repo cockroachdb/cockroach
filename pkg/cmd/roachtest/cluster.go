@@ -881,7 +881,7 @@ func (c *cluster) Node(i int) nodeListOption {
 // The logs will be placed in the test's artifacts dir.
 func (c *cluster) FetchLogs(ctx context.Context) error {
 	if c.nodes == 0 {
-		// For tests.
+		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
 	}
 
@@ -900,9 +900,36 @@ func (c *cluster) FetchLogs(ctx context.Context) error {
 	return execCmd(execCtx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */)
 }
 
+// FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
+// The logs will be placed in the test's artifacts dir.
+func (c *cluster) FetchDebugZip(ctx context.Context) error {
+	if c.nodes == 0 {
+		// No nodes can happen during unit tests and implies nothing to do.
+		return nil
+	}
+
+	c.l.Printf("fetching debug zip\n")
+	c.status("fetching debug zip")
+
+	// Don't hang forever if we can't fetch the debug zip.
+	execCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	const zipName = "debug.zip"
+	path := filepath.Join(c.t.ArtifactsDir(), zipName)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	err := execCmd(execCtx, c.l, roachprod, "ssh", c.name+":1", "--",
+		"./cockroach", "debug", "zip", "--url", "{pgurl:1}", zipName)
+	if err != nil {
+		return err
+	}
+	return execCmd(execCtx, c.l, roachprod, "get", c.name+":1", zipName /* src */, path /* dest */)
+}
+
 func (c *cluster) Destroy(ctx context.Context) {
 	if c.nodes == 0 {
-		// For tests.
+		// No nodes can happen during unit tests and implies nothing to do.
 		return
 	}
 
