@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -160,10 +161,19 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 			}
 		},
 	}
+	clusterParams := base.TestClusterArgs{
+		ServerArgs: params,
+		// We need to disable replication so that the async range lease manager
+		// does not cause background queries and tickle the race detector when
+		// SHOW QUERIES is ran below.
+		ReplicationMode: base.ReplicationManual,
+	}
 
 	t.Run("root internal exec", func(t *testing.T) {
-		s, _, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.TODO())
+		t.Log("starting server")
+		tc := serverutils.StartTestCluster(t, 1, clusterParams)
+		defer tc.Stopper().Stop(context.TODO())
+		s := tc.Server(0)
 
 		testInternalExecutorAppNameInitialization(t, sem,
 			sql.InternalAppNamePrefix+"internal-test-query", // app name in SHOW
@@ -174,9 +184,12 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 	// We are running the second test with a new server so
 	// as to reset the statement statistics properly.
 	t.Run("session bound exec", func(t *testing.T) {
-		s, _, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.TODO())
+		t.Log("starting server")
+		tc := serverutils.StartTestCluster(t, 1, clusterParams)
+		defer tc.Stopper().Stop(context.TODO())
+		s := tc.Server(0)
 
+		t.Log("creating executor")
 		ie := sql.MakeSessionBoundInternalExecutor(
 			context.TODO(),
 			&sessiondata.SessionData{
@@ -211,7 +224,7 @@ func testInternalExecutorAppNameInitialization(
 	expectedAppName, expectedAppNameInStats string,
 	ie testInternalExecutor,
 ) {
-	// Check that the application_name is set properly in the executor.
+	t.Log("Check that the application_name is set properly in the executor.")
 	if rows, _, err := ie.Query(context.TODO(), "test-query", nil,
 		"SHOW application_name"); err != nil {
 		t.Fatal(err)
@@ -221,8 +234,8 @@ func testInternalExecutorAppNameInitialization(
 		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
 	}
 
-	// Start a background query using the internal executor. We want to
-	// have this keep running until we cancel it below.
+	t.Log("Start a background query using the internal executor.")
+	// We want to have this keep running until we cancel it below.
 	errChan := make(chan error)
 	go func() {
 		_, _, err := ie.Query(context.TODO(),
@@ -237,7 +250,7 @@ func testInternalExecutorAppNameInitialization(
 
 	<-sem
 
-	// We'll wait until the query appears in SHOW QUERIES.
+	t.Log("Wait until the query appears in SHOW QUERIES.")
 	// When it does, we capture the query ID.
 	var queryID string
 	testutils.SucceedsSoon(t, func() error {
@@ -246,7 +259,7 @@ func testInternalExecutorAppNameInitialization(
 			nil, /* txn */
 			// We need to assemble the magic string so that this SELECT
 			// does not find itself.
-			"SELECT query_id, application_name FROM [SHOW QUERIES] WHERE query LIKE '%337' || '666%'")
+			"SELECT query_id, application_name FROM [SHOW CLUSTER QUERIES] WHERE query LIKE '%337' || '666%'")
 		if err != nil {
 			return err
 		}
@@ -269,9 +282,9 @@ func testInternalExecutorAppNameInitialization(
 		}
 	})
 
-	// Check that the query shows up in the internal tables without error.
+	t.Log("Check that the query shows up in the internal tables without error.")
 	if rows, _, err := ie.Query(context.TODO(), "find-query", nil,
-		"SELECT application_name FROM crdb_internal.node_queries WHERE query LIKE '%337' || '666%'"); err != nil {
+		`SELECT application_name FROM "".crdb_internal.node_queries WHERE query LIKE '%337' || '666%'`); err != nil {
 		t.Fatal(err)
 	} else if len(rows) != 1 {
 		t.Fatalf("expected 1 query, got: %+v", rows)
@@ -279,6 +292,7 @@ func testInternalExecutorAppNameInitialization(
 		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
 	}
 
+	t.Log("Cancel the query and wait for it to terminate.")
 	// We'll want to look at statistics below, and finish the test with
 	// no goroutine leakage. To achieve this, cancel the query. and
 	// drain the goroutine.
@@ -294,9 +308,9 @@ func testInternalExecutorAppNameInitialization(
 		t.Fatal("no error received from query supposed to be canceled")
 	}
 
-	// Now check that it was properly registered in statistics.
+	t.Log("Check that it was properly registered in statistics.")
 	if rows, _, err := ie.Query(context.TODO(), "find-query", nil,
-		"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep(%'"); err != nil {
+		`SELECT application_name FROM "".crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep(%'`); err != nil {
 		t.Fatal(err)
 	} else if len(rows) != 1 {
 		t.Fatalf("expected 1 query, got: %+v", rows)

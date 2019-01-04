@@ -48,6 +48,9 @@ func TestCancelSelectQuery(t *testing.T) {
 
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
+			// We need to disable replication so that the async range lease manager
+			// does not cause background queries and tickle the race detector when
+			// SHOW QUERIES is ran below.
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(context.TODO())
@@ -115,6 +118,9 @@ func TestCancelParallelQuery(t *testing.T) {
 
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
+			// We need to disable replication so that the async range lease manager
+			// does not cause background queries and tickle the race detector when
+			// SHOW QUERIES is ran below.
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
@@ -203,6 +209,9 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
+			// We need to disable replication so that the async range lease manager
+			// does not cause background queries and tickle the race detector when
+			// SHOW QUERIES is ran below.
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
@@ -285,6 +294,9 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 	numNodes := 2
 	tc := serverutils.StartTestCluster(t, numNodes,
 		base.TestClusterArgs{
+			// We need to disable replication so that the async range lease manager
+			// does not cause background queries and tickle the race detector when
+			// SHOW SESSIONS is ran below.
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(ctx)
@@ -376,6 +388,9 @@ func TestCancelMultipleSessions(t *testing.T) {
 
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
+			// We need to disable replication so that the async range lease manager
+			// does not cause background queries and tickle the race detector when
+			// SHOW SESSIONS is ran below.
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(ctx)
@@ -428,6 +443,9 @@ func TestCancelIfExists(t *testing.T) {
 
 	tc := serverutils.StartTestCluster(t, 1, /* numNodes */
 		base.TestClusterArgs{
+			// We need to disable replication so that the async range lease manager
+			// does not cause background queries and tickle the race detector when
+			// CANCEL QUERIES/SESSIONS is ran below.
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(context.TODO())
