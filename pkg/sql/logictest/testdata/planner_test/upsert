@@ -45,3 +45,98 @@ querying next range at /Table/54/1/1/0
 r19: sending batch 1 Put, 2 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 fast path completed
 rows affected: 1
+subtest regression_32834
+
+statement ok
+CREATE TABLE test_table (
+  id BIGINT PRIMARY KEY,
+  a BIGINT,
+  b BIGINT
+);
+
+statement ok
+INSERT INTO test_table (id, a) VALUES
+  (123, 456), (123, 456)
+  ON CONFLICT (id) DO UPDATE SET a = EXCLUDED.a;
+
+query II colnames
+SELECT id, a
+FROM test_table
+----
+id   a
+123  456
+
+statement ok
+INSERT INTO test_table (id, a) VALUES
+  (123, 1), (123, 2), (123, 1)
+  ON CONFLICT (id) DO UPDATE SET a = EXCLUDED.a;
+
+query II colnames
+SELECT id, a
+FROM test_table
+----
+id   a
+123  1
+
+statement ok
+INSERT INTO test_table (id, a) VALUES
+  (123, 1), (123, 2), (123, 3)
+  ON CONFLICT (id) DO UPDATE SET a = EXCLUDED.a;
+
+query II colnames
+SELECT id, a
+FROM test_table
+----
+id   a
+123  3
+
+statement ok
+DROP TABLE test_table;
+
+subtest regression_32834
+
+statement ok
+CREATE TABLE test_table (
+  id BIGINT PRIMARY KEY,
+  a BIGINT,
+  b BIGINT
+);
+
+statement ok
+INSERT INTO test_table (id, a) VALUES
+  (123, 456), (123, 456)
+  ON CONFLICT (id) DO UPDATE SET a = EXCLUDED.a;
+
+query II colnames
+SELECT id, a
+FROM test_table
+----
+id   a
+123  456
+
+statement ok
+INSERT INTO test_table (id, a) VALUES
+  (123, 1), (123, 2), (123, 1)
+  ON CONFLICT (id) DO UPDATE SET a = EXCLUDED.a;
+
+query II colnames
+SELECT id, a
+FROM test_table
+----
+id   a
+123  1
+
+statement ok
+INSERT INTO test_table (id, a) VALUES
+  (123, 1), (123, 2), (123, 3)
+  ON CONFLICT (id) DO UPDATE SET a = EXCLUDED.a;
+
+query II colnames
+SELECT id, a
+FROM test_table
+----
+id   a
+123  3
+
+statement ok
+DROP TABLE test_table;

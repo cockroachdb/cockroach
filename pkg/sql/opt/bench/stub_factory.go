@@ -210,3 +210,15 @@ func (f *stubFactory) ConstructCreateTable(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructUpsert(
+	input exec.Node,
+	table cat.Table,
+	canaryCol exec.ColumnOrdinal,
+	insertCols exec.ColumnOrdinalSet,
+	fetchCols exec.ColumnOrdinalSet,
+	updateCols exec.ColumnOrdinalSet,
+	rowsNeeded bool,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
