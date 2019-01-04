@@ -115,6 +115,11 @@ func (rk RKey) String() string {
 	return Key(rk).String()
 }
 
+// StringWithDirs - see Key.String.WithDirs.
+func (rk RKey) StringWithDirs(valDirs []encoding.Direction, maxLen int) string {
+	return Key(rk).StringWithDirs(valDirs, maxLen)
+}
+
 // Key is a custom type for a byte string in proto
 // messages which refer to Cockroach keys.
 type Key []byte
@@ -187,18 +192,28 @@ func (k Key) Compare(b Key) int {
 
 // String returns a string-formatted version of the key.
 func (k Key) String() string {
-	// Leave valDirs unspecified such that values are pretty-printed
-	// with default encoding direction.
-	return k.StringWithDirs(nil /* valDirs */)
+	return k.StringWithDirs(nil /* valDirs */, 0 /* maxLen */)
 }
 
 // StringWithDirs is the value encoding direction-aware version of String.
-func (k Key) StringWithDirs(valDirs []encoding.Direction) string {
+//
+// Args:
+// valDirs: The direction for the key's components, generally needed for correct
+// 	decoding. If nil, the values are pretty-printed with default encoding
+// 	direction.
+// maxLen: If not 0, only the first maxLen chars from the decoded key are
+//   returned, plus a "..." suffix.
+func (k Key) StringWithDirs(valDirs []encoding.Direction, maxLen int) string {
+	var s string
 	if PrettyPrintKey != nil {
-		return PrettyPrintKey(valDirs, k)
+		s = PrettyPrintKey(valDirs, k)
+	} else {
+		s = fmt.Sprintf("%q", []byte(k))
 	}
-
-	return fmt.Sprintf("%q", []byte(k))
+	if maxLen != 0 && len(s) > maxLen {
+		return s[0:maxLen] + "..."
+	}
+	return s
 }
 
 // Format implements the fmt.Formatter interface.
