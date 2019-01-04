@@ -294,7 +294,9 @@ func (txn *Txn) DisablePipelining() error {
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
-	return &Batch{txn: txn}
+	b := newBatch()
+	b.txn = txn
+	return b
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
@@ -307,7 +309,9 @@ func (txn *Txn) NewBatch() *Batch {
 func (txn *Txn) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Get(key)
-	return getOneRow(txn.Run(ctx, b), b)
+	kv, err := getOneRow(txn.Run(ctx, b), b)
+	b.release()
+	return kv, err
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
@@ -329,7 +333,9 @@ func (txn *Txn) GetProto(ctx context.Context, key interface{}, msg protoutil.Mes
 func (txn *Txn) Put(ctx context.Context, key, value interface{}) error {
 	b := txn.NewBatch()
 	b.Put(key, value)
-	return getOneErr(txn.Run(ctx, b), b)
+	err := getOneErr(txn.Run(ctx, b), b)
+	b.release()
+	return err
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -344,7 +350,9 @@ func (txn *Txn) Put(ctx context.Context, key, value interface{}) error {
 func (txn *Txn) CPut(ctx context.Context, key, value, expValue interface{}) error {
 	b := txn.NewBatch()
 	b.CPut(key, value, expValue)
-	return getOneErr(txn.Run(ctx, b), b)
+	err := getOneErr(txn.Run(ctx, b), b)
+	b.release()
+	return err
 }
 
 // InitPut sets the first value for a key to value. An error is reported if a
@@ -358,7 +366,9 @@ func (txn *Txn) CPut(ctx context.Context, key, value, expValue interface{}) erro
 func (txn *Txn) InitPut(ctx context.Context, key, value interface{}, failOnTombstones bool) error {
 	b := txn.NewBatch()
 	b.InitPut(key, value, failOnTombstones)
-	return getOneErr(txn.Run(ctx, b), b)
+	err := getOneErr(txn.Run(ctx, b), b)
+	b.release()
+	return err
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -372,7 +382,9 @@ func (txn *Txn) InitPut(ctx context.Context, key, value interface{}, failOnTombs
 func (txn *Txn) Inc(ctx context.Context, key interface{}, value int64) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Inc(key, value)
-	return getOneRow(txn.Run(ctx, b), b)
+	kv, err := getOneRow(txn.Run(ctx, b), b)
+	b.release()
+	return kv, err
 }
 
 func (txn *Txn) scan(
@@ -388,6 +400,7 @@ func (txn *Txn) scan(
 		b.ReverseScan(begin, end)
 	}
 	r, err := getOneResult(txn.Run(ctx, b), b)
+	b.release()
 	return r.Rows, err
 }
 
@@ -448,7 +461,9 @@ func (txn *Txn) Iterate(
 func (txn *Txn) Del(ctx context.Context, keys ...interface{}) error {
 	b := txn.NewBatch()
 	b.Del(keys...)
-	return getOneErr(txn.Run(ctx, b), b)
+	err := getOneErr(txn.Run(ctx, b), b)
+	b.release()
+	return err
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -460,7 +475,9 @@ func (txn *Txn) Del(ctx context.Context, keys ...interface{}) error {
 func (txn *Txn) DelRange(ctx context.Context, begin, end interface{}) error {
 	b := txn.NewBatch()
 	b.DelRange(begin, end, false)
-	return getOneErr(txn.Run(ctx, b), b)
+	err := getOneErr(txn.Run(ctx, b), b)
+	b.release()
+	return err
 }
 
 // Run executes the operations queued up within a batch. Before executing any
