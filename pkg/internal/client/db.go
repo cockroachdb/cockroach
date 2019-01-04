@@ -217,6 +217,7 @@ func (s *CrossRangeTxnWrapperSender) Send(
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
 		txn.SetDebugName("auto-wrap")
 		b := txn.NewBatch()
+		defer b.Release()
 		b.Header = ba.Header
 		for _, arg := range ba.Requests {
 			req := arg.GetInner().ShallowCopy()
@@ -303,9 +304,11 @@ func NewDBWithContext(
 //
 // key can be either a byte slice or a string.
 func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
-	b := &Batch{}
+	b := newBatch()
 	b.Get(key)
-	return getOneRow(db.Run(ctx, b), b)
+	kv, err := getOneRow(db.Run(ctx, b), b)
+	b.Release()
+	return kv, err
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
@@ -325,9 +328,11 @@ func (db *DB) GetProto(ctx context.Context, key interface{}, msg protoutil.Messa
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
 func (db *DB) Put(ctx context.Context, key, value interface{}) error {
-	b := &Batch{}
+	b := newBatch()
 	b.Put(key, value)
-	return getOneErr(db.Run(ctx, b), b)
+	err := getOneErr(db.Run(ctx, b), b)
+	b.Release()
+	return err
 }
 
 // PutInline sets the value for a key, but does not maintain
@@ -338,9 +343,11 @@ func (db *DB) Put(ctx context.Context, key, value interface{}) error {
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
 func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
-	b := &Batch{}
+	b := newBatch()
 	b.PutInline(key, value)
-	return getOneErr(db.Run(ctx, b), b)
+	err := getOneErr(db.Run(ctx, b), b)
+	b.Release()
+	return err
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -353,9 +360,11 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
 func (db *DB) CPut(ctx context.Context, key, value, expValue interface{}) error {
-	b := &Batch{}
+	b := newBatch()
 	b.CPut(key, value, expValue)
-	return getOneErr(db.Run(ctx, b), b)
+	err := getOneErr(db.Run(ctx, b), b)
+	b.Release()
+	return err
 }
 
 // InitPut sets the first value for a key to value. A ConditionFailedError is
@@ -367,9 +376,11 @@ func (db *DB) CPut(ctx context.Context, key, value, expValue interface{}) error 
 // protoutil.Message or any Go primitive type (bool, int, etc). It is illegal to
 // set value to nil.
 func (db *DB) InitPut(ctx context.Context, key, value interface{}, failOnTombstones bool) error {
-	b := &Batch{}
+	b := newBatch()
 	b.InitPut(key, value, failOnTombstones)
-	return getOneErr(db.Run(ctx, b), b)
+	err := getOneErr(db.Run(ctx, b), b)
+	b.Release()
+	return err
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -378,9 +389,11 @@ func (db *DB) InitPut(ctx context.Context, key, value interface{}, failOnTombsto
 //
 // key can be either a byte slice or a string.
 func (db *DB) Inc(ctx context.Context, key interface{}, value int64) (KeyValue, error) {
-	b := &Batch{}
+	b := newBatch()
 	b.Inc(key, value)
-	return getOneRow(db.Run(ctx, b), b)
+	kv, err := getOneRow(db.Run(ctx, b), b)
+	b.Release()
+	return kv, err
 }
 
 func (db *DB) scan(
@@ -390,7 +403,7 @@ func (db *DB) scan(
 	isReverse bool,
 	readConsistency roachpb.ReadConsistencyType,
 ) ([]KeyValue, error) {
-	b := &Batch{}
+	b := newBatch()
 	b.Header.ReadConsistency = readConsistency
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
@@ -401,6 +414,7 @@ func (db *DB) scan(
 		b.ReverseScan(begin, end)
 	}
 	r, err := getOneResult(db.Run(ctx, b), b)
+	b.Release()
 	return r.Rows, err
 }
 
@@ -430,9 +444,11 @@ func (db *DB) ReverseScan(
 //
 // key can be either a byte slice or a string.
 func (db *DB) Del(ctx context.Context, keys ...interface{}) error {
-	b := &Batch{}
+	b := newBatch()
 	b.Del(keys...)
-	return getOneErr(db.Run(ctx, b), b)
+	err := getOneErr(db.Run(ctx, b), b)
+	b.Release()
+	return err
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -441,9 +457,11 @@ func (db *DB) Del(ctx context.Context, keys ...interface{}) error {
 //
 // key can be either a byte slice or a string.
 func (db *DB) DelRange(ctx context.Context, begin, end interface{}) error {
-	b := &Batch{}
+	b := newBatch()
 	b.DelRange(begin, end, false)
-	return getOneErr(db.Run(ctx, b), b)
+	err := getOneErr(db.Run(ctx, b), b)
+	b.Release()
+	return err
 }
 
 // AdminMerge merges the range containing key and the subsequent
@@ -453,7 +471,8 @@ func (db *DB) DelRange(ctx context.Context, begin, end interface{}) error {
 //
 // key can be either a byte slice or a string.
 func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
-	b := &Batch{}
+	b := newBatch()
+	defer b.Release()
 	b.adminMerge(key)
 	return getOneErr(db.Run(ctx, b), b)
 }
@@ -470,7 +489,8 @@ func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 //
 // The keys can be either byte slices or a strings.
 func (db *DB) AdminSplit(ctx context.Context, spanKey, splitKey interface{}) error {
-	b := &Batch{}
+	b := newBatch()
+	defer b.Release()
 	b.adminSplit(spanKey, splitKey)
 	return getOneErr(db.Run(ctx, b), b)
 }
@@ -488,7 +508,8 @@ func (db *DB) AdminSplit(ctx context.Context, spanKey, splitKey interface{}) err
 func (db *DB) AdminTransferLease(
 	ctx context.Context, key interface{}, target roachpb.StoreID,
 ) error {
-	b := &Batch{}
+	b := newBatch()
+	defer b.Release()
 	b.adminTransferLease(key, target)
 	return getOneErr(db.Run(ctx, b), b)
 }
@@ -500,7 +521,8 @@ func (db *DB) AdminChangeReplicas(
 	changeType roachpb.ReplicaChangeType,
 	targets []roachpb.ReplicationTarget,
 ) error {
-	b := &Batch{}
+	b := newBatch()
+	defer b.Release()
 	b.adminChangeReplicas(key, changeType, targets)
 	return getOneErr(db.Run(ctx, b), b)
 }
@@ -510,7 +532,8 @@ func (db *DB) AdminChangeReplicas(
 func (db *DB) AdminRelocateRange(
 	ctx context.Context, key interface{}, targets []roachpb.ReplicationTarget,
 ) error {
-	b := &Batch{}
+	b := newBatch()
+	defer b.Release()
 	b.adminRelocateRange(key, targets)
 	return getOneErr(db.Run(ctx, b), b)
 }
@@ -519,7 +542,8 @@ func (db *DB) AdminRelocateRange(
 // serialized form of a RocksDB Batch. The command cannot span Ranges and must
 // be run on an empty keyrange.
 func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byte) error {
-	b := &Batch{}
+	b := newBatch()
+	defer b.Release()
 	b.writeBatch(begin, end, data)
 	return getOneErr(db.Run(ctx, b), b)
 }
@@ -527,7 +551,8 @@ func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byt
 // AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
 // data in the range is cleared.
 func (db *DB) AddSSTable(ctx context.Context, begin, end interface{}, data []byte) error {
-	b := &Batch{}
+	b := newBatch()
+	defer b.Release()
 	b.addSSTable(begin, end, data)
 	return getOneErr(db.Run(ctx, b), b)
 }

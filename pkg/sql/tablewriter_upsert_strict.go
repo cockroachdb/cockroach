@@ -129,6 +129,7 @@ func (tu *strictTableUpserter) getConflictingRows(
 	// The first phase will issue KV requests.
 	// For every row there will be 1 + len(tu.conflictIndexes) requests/responses.
 	b := tu.txn.NewBatch()
+	defer b.Release()
 
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		row := tu.insertRows.At(i)

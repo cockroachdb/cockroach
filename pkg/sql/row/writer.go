@@ -604,6 +604,7 @@ func (ru *Updater) UpdateRow(
 	batch := b
 	if ru.cascader != nil {
 		batch = ru.cascader.txn.NewBatch()
+		defer batch.Release()
 	}
 
 	if len(oldValues) != len(ru.FetchCols) {

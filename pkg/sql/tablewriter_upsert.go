@@ -819,6 +819,7 @@ func (tu *tableUpserter) upsertRowPKSpans(
 	// case, some spots in the slice will be nil (indicating no conflict) and the
 	// others will be conflicting rows.
 	b := tu.txn.NewBatch()
+	defer b.Release()
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		insertRow := tu.insertRows.At(i)
 		entries, err := sqlbase.EncodeSecondaryIndex(

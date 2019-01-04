@@ -846,6 +846,7 @@ func (p *planner) writeTableDesc(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, mutationID sqlbase.MutationID,
 ) error {
 	b := p.txn.NewBatch()
+	defer b.Release()
 	if err := p.writeTableDescToBatch(ctx, tableDesc, mutationID, b); err != nil {
 		return err
 	}

@@ -146,6 +146,7 @@ func (tb *tableWriterBase) flushAndStartNewBatch(
 	if err := tb.txn.Run(ctx, tb.b); err != nil {
 		return row.ConvertBatchError(ctx, tableDesc, tb.b)
 	}
+	tb.b.Release()
 	tb.b = tb.txn.NewBatch()
 	tb.batchSize = 0
 	return nil

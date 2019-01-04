@@ -16,6 +16,7 @@ package client
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/pkg/errors"
@@ -66,6 +67,16 @@ type Batch struct {
 	rowsStaticIdx int
 }
 
+var batchPool = sync.Pool{
+	New: func() interface{} {
+		return &Batch{}
+	},
+}
+
+func newBatch() *Batch {
+	return batchPool.Get().(*Batch)
+}
+
 // RawResponse returns the BatchResponse which was the result of a successful
 // execution of the batch, and nil otherwise.
 func (b *Batch) RawResponse() *roachpb.BatchResponse {
@@ -88,6 +99,12 @@ func (b *Batch) prepare() error {
 		}
 	}
 	return nil
+}
+
+// Release releases a batch to the pool. It must not be used again.
+func (b *Batch) Release() {
+	*b = Batch{}
+	batchPool.Put(b)
 }
 
 func (b *Batch) initResult(calls, numRows int, raw bool, err error) {
