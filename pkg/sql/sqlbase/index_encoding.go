@@ -711,7 +711,7 @@ func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, e
 // EncodeSecondaryIndex encodes key/values for a secondary
 // index. colMap maps ColumnIDs to indices in `values`. This returns a
 // slice of IndexEntry. Forward indexes will return one value, while
-// inverted indicies can return multiple values.
+// inverted indices can return multiple values.
 func EncodeSecondaryIndex(
 	tableDesc *TableDescriptor,
 	secondaryIndex *IndexDescriptor,
