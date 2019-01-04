@@ -87,9 +87,7 @@ end_test
 start_test "Check that the host flag overrides the host if URL is already set."
 spawn $argv sql --url "postgresql://root@localhost:26257?sslmode=disable" --host nonexistent.invalid -e "select 1"
 eexpect "cannot dial server"
-eexpect "nonexistent"
 eexpect eof
 end_test
 
 stop_server $argv
-
