@@ -3012,7 +3012,13 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaRebalancing = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// TODO(andrei): This test was written before multiTestContexts started with
+		// multiple ranges by default. For some unknown reason, it becomes flaky if
+		// startWithSingleRange is not set, although it doesn't look like it should.
+		startWithSingleRange: true,
+	}
 
 	storage.TimeUntilStoreDead.Override(&sc.Settings.SV, storage.TestTimeUntilStoreDead)
 	// Disable declined and failed reservations. Their default values are on
