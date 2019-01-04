@@ -1045,6 +1045,10 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	}
 }
 
+func (b *logicalPropsBuilder) buildCreateTableProps(ct *CreateTableExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, ct, &rel.Shared)
+}
+
 func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *props.Scalar) {
 	BuildSharedProps(b.mem, item.Condition, &scalar.Shared)
 
@@ -1123,7 +1127,7 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 			shared.CanHaveSideEffects = true
 		}
 
-	case *InsertExpr, *UpdateExpr:
+	case *InsertExpr, *UpdateExpr, *CreateTableExpr:
 		shared.CanHaveSideEffects = true
 		shared.CanMutate = true
 	}

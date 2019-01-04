@@ -15,14 +15,83 @@
 package opt_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
+
+func TestMetadata(t *testing.T) {
+	var md opt.Metadata
+	schID := md.AddSchema(&testcat.Schema{})
+	colID := md.AddColumn("col", types.Int)
+	tabID := md.AddTable(&testcat.Table{})
+
+	// Call Init and add objects from catalog, verifying that IDs have been reset.
+	testCat := testcat.New()
+	tab := &testcat.Table{Revoked: true}
+	testCat.AddTable(tab)
+
+	md.Init()
+	if md.AddSchema(testCat.Schema()) != schID {
+		t.Fatalf("unexpected schema id")
+	}
+	if md.AddColumn("col2", types.Int) != colID {
+		t.Fatalf("unexpected column id")
+	}
+	if md.AddTable(tab) != tabID {
+		t.Fatalf("unexpected table id")
+	}
+
+	md.AddDependency(tab, privilege.CREATE)
+	depsUpToDate, err := md.CheckDependencies(context.TODO(), testCat)
+	if err == nil || depsUpToDate {
+		t.Fatalf("expected table privilege to be revoked")
+	}
+
+	// Call AddMetadata and verify that same objects are present in new metadata.
+	var mdNew opt.Metadata
+	mdNew.AddMetadata(&md)
+	if mdNew.Schema(schID) != testCat.Schema() {
+		t.Fatalf("unexpected schema")
+	}
+	if mdNew.ColumnMeta(colID).Alias != "col2" {
+		t.Fatalf("unexpected column")
+	}
+
+	if mdNew.TableMeta(tabID).Table != tab {
+		t.Fatalf("unexpected table")
+	}
+
+	depsUpToDate, err = md.CheckDependencies(context.TODO(), testCat)
+	if err == nil || depsUpToDate {
+		t.Fatalf("expected table privilege to be revoked in metadata copy")
+	}
+}
+
+func TestMetadataSchemas(t *testing.T) {
+	var md opt.Metadata
+
+	sch := &testcat.Schema{
+		SchemaID:   1,
+		SchemaName: cat.SchemaName{CatalogName: "db", SchemaName: "schema"},
+	}
+
+	schID := md.AddSchema(sch)
+	lookup := md.Schema(schID)
+	if lookup.ID() != 1 {
+		t.Fatalf("unexpected schema id: %d", lookup.ID())
+	}
+	if lookup.Name().String() != sch.SchemaName.String() {
+		t.Fatalf("unexpected schema name: %s", lookup.Name())
+	}
+}
 
 func TestMetadataColumns(t *testing.T) {
 	var md opt.Metadata
@@ -70,7 +139,7 @@ func TestMetadataTables(t *testing.T) {
 	var md opt.Metadata
 
 	// Add a table reference to the metadata.
-	a := &testcat.Table{StableID: 1}
+	a := &testcat.Table{TabID: 1}
 	a.TabName = tree.MakeUnqualifiedTableName(tree.Name("a"))
 	x := &testcat.Column{Name: "x"}
 	y := &testcat.Column{Name: "y"}
@@ -97,7 +166,7 @@ func TestMetadataTables(t *testing.T) {
 	}
 
 	// Add another table reference to the metadata.
-	b := &testcat.Table{StableID: 1}
+	b := &testcat.Table{TabID: 1}
 	b.TabName = tree.MakeUnqualifiedTableName(tree.Name("b"))
 	b.Columns = append(b.Columns, &testcat.Column{Name: "x"})
 

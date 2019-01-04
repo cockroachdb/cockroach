@@ -463,7 +463,7 @@ func (c *CustomFuncs) EnsureCanary(in memo.RelExpr, canaryCol opt.ColumnID) memo
 	if canaryCol == 0 || c.OutputCols(in).Contains(int(canaryCol)) {
 		return in
 	}
-	result := c.f.projectExtraCol(in, c.f.ConstructTrue(), canaryCol)
+	result := c.ProjectExtraCol(in, c.f.ConstructTrue(), canaryCol)
 	return result
 }
 
@@ -953,7 +953,7 @@ func (r *subqueryHoister) constructGroupByAny(
 	if scalar.Op() != opt.VariableOp && !opt.IsConstValueOp(scalar) {
 		typ := scalar.DataType()
 		scalarColID := r.f.Metadata().AddColumn("scalar", typ)
-		r.hoisted = r.f.projectExtraCol(r.hoisted, scalar, scalarColID)
+		r.hoisted = r.c.ProjectExtraCol(r.hoisted, scalar, scalarColID)
 		scalar = r.f.ConstructVariable(scalarColID)
 	}
 

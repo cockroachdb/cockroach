@@ -268,11 +268,11 @@ func (m *Memo) IsStale(
 		return true, nil
 	}
 
-	// Memo is stale if the fingerprint of any data source in the memo's metadata
-	// has changed, or if the current user no longer has sufficient privilege to
-	// access the data source.
+	// Memo is stale if the fingerprint of any object in the memo's metadata has
+	// changed, or if the current user no longer has sufficient privilege to
+	// access the object.
 	if depsUpToDate, err := m.Metadata().CheckDependencies(ctx, catalog); err != nil {
-		return false, err
+		return true, err
 	} else if !depsUpToDate {
 		return true, nil
 	}

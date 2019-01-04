@@ -296,6 +296,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		f.formatColList(e, tp, "fetch columns:", t.FetchCols)
 		tpChild := tp.Child("update-mapping:")
 		f.formatMutation(e, tpChild, t.UpdateCols, t.Table)
+
+	case *CreateTableExpr:
+		tp.Child(t.Syntax.String())
 	}
 
 	if !f.HasFlags(ExprFmtHideMiscProps) {
@@ -382,6 +385,14 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 		if len(r.InterestingOrderings) > 0 {
 			tp.Childf("interesting orderings: %s", r.InterestingOrderings.String())
+		}
+	}
+
+	switch t := e.(type) {
+	case *CreateTableExpr:
+		// Do not print dummy input expression if there was no AS clause.
+		if !t.Syntax.As() {
+			return
 		}
 	}
 

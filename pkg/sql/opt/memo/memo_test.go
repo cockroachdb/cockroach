@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	testutils "github.com/cockroachdb/cockroach/pkg/testutils"
@@ -122,6 +123,9 @@ func TestMemoIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	o.Memo().Metadata().AddDependency(catalog.Schema(), privilege.CREATE)
+	o.Memo().Metadata().AddSchema(catalog.Schema())
+
 	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
 		t.Fatal(err)
 	} else if isStale {
@@ -161,23 +165,17 @@ func TestMemoIsStale(t *testing.T) {
 	}
 	evalCtx.SessionData.DataConversion.Location = time.UTC
 
-	// Stale schema.
-	_, err = catalog.ExecuteDDL("DROP TABLE abc")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if !isStale {
-		t.Errorf("expected stale schema")
-	}
+	// Stale data sources and schema. Create new catalog so that data sources are
+	// recreated and can be modified independently.
 	catalog = testcat.New()
-	_, _ = catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
-	_, _ = catalog.ExecuteDDL("CREATE VIEW abcview AS SELECT a, b, c FROM abc")
+	_, err = catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = catalog.ExecuteDDL("CREATE VIEW abcview AS SELECT a, b, c FROM abc")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// User no longer has access to view.
 	catalog.View(tree.NewTableName("t", "abcview")).Revoked = true
@@ -186,6 +184,47 @@ func TestMemoIsStale(t *testing.T) {
 		t.Fatalf("expected %q error, but got %+v", exp, err)
 	}
 	catalog.View(tree.NewTableName("t", "abcview")).Revoked = false
+
+	// Ensure that memo is not stale after restoring to original state.
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
+		t.Errorf("memo should not be stale")
+	}
+
+	// Table ID changes.
+	catalog.Table(tree.NewTableName("t", "abc")).TabID = 1
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if !isStale {
+		t.Errorf("expected table ID to be stale")
+	}
+	catalog.Table(tree.NewTableName("t", "abc")).TabID = 53
+
+	// Table Version changes.
+	catalog.Table(tree.NewTableName("t", "abc")).TabVersion = 1
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if !isStale {
+		t.Errorf("expected table version to be stale")
+	}
+	catalog.Table(tree.NewTableName("t", "abc")).TabVersion = 0
+
+	// Schema ID changes.
+	catalog.Schema().SchemaID = 2
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if !isStale {
+		t.Errorf("expected schema ID to be stale")
+	}
+	catalog.Schema().SchemaID = 1
+
+	// User no longer has access to schema.
+	catalog.Schema().Revoked = true
+	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err == nil || !isStale {
+		t.Errorf("expected user not to have CREATE privilege on schema")
+	}
+	catalog.Schema().Revoked = false
 
 	// Ensure that memo is not stale after restoring to original state.
 	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
