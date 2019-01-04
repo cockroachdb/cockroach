@@ -111,6 +111,9 @@ func (u *sqlSymUnion) strVal() *tree.StrVal {
     }
     return nil
 }
+func (u *sqlSymUnion) placeholder() *tree.Placeholder {
+    return u.val.(*tree.Placeholder)
+}
 func (u *sqlSymUnion) auditMode() tree.AuditMode {
     return u.val.(tree.AuditMode)
 }
@@ -451,7 +454,7 @@ func newNameFromStr(s string) *tree.Name {
 // Non-keyword token types.
 %token <str> IDENT SCONST BCONST BITCONST
 %token <*tree.NumVal> ICONST FCONST
-%token <str> PLACEHOLDER
+%token <*tree.Placeholder> PLACEHOLDER
 %token <str> TYPECAST TYPEANNOTATE DOT_DOT
 %token <str> LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %token <str> NOT_REGMATCH REGIMATCH NOT_REGIMATCH
@@ -1812,7 +1815,7 @@ string_or_placeholder:
   }
 | PLACEHOLDER
   {
-    $$.val = tree.NewPlaceholder($1)
+    $$.val = $1.placeholder()
   }
 
 string_or_placeholder_list:
@@ -7557,7 +7560,7 @@ d_expr:
   }
 | PLACEHOLDER
   {
-    $$.val = tree.NewPlaceholder($1)
+    $$.val = $1.placeholder()
   }
 // TODO(knz/jordan): extend this for compound types. See explanation above.
 | '(' a_expr ')' '.' '*'

@@ -15,7 +15,6 @@
 package pgwire_test
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
@@ -470,10 +469,10 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT $1 + $1":                            "pq: could not determine data type of placeholder $1",
 		"SELECT CASE WHEN TRUE THEN $1 END":         "pq: could not determine data type of placeholder $1",
 		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END": "pq: could not determine data type of placeholder $1",
-		"SELECT $1 > 0 AND NOT $1":                  "pq: placeholder 1 already has type int, cannot assign bool",
+		"SELECT $1 > 0 AND NOT $1":                  "pq: placeholder $1 already has type int, cannot assign bool",
 		"CREATE TABLE $1 (id INT)":                  "pq: syntax error at or near \"1\"",
 		"UPDATE d.t SET s = i + $1":                 "pq: unsupported binary operator: <int> + <placeholder{1}> (desired <string>)",
-		"SELECT $0 > 0":                             "pq: invalid placeholder name: $0",
+		"SELECT $0 > 0":                             "pq: placeholder index must be between 1 and 65536",
 		"SELECT $2 > 0":                             "pq: could not determine data type of placeholder $1",
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of placeholder $1",
 		"SELECT ($1 + $1) + current_date()":         "pq: could not determine data type of placeholder $1",
@@ -2155,39 +2154,6 @@ func TestPGWireResultChange(t *testing.T) {
 	}
 	if count != countAfter {
 		t.Fatalf("expected %d rows, got %d", count, countAfter)
-	}
-}
-
-func TestPGWireTooManyArguments(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
-	defer cleanupFn()
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	var b bytes.Buffer
-	b.WriteString("SELECT")
-
-	args := make([]interface{}, 1<<16)
-	for i := 1; i <= 1<<16; i++ {
-		comma := ","
-		if i == 1 {
-			comma = ""
-		}
-		b.WriteString(fmt.Sprintf("%s $%d::int", comma, i))
-		args[i-1] = i
-	}
-	b.WriteString(";")
-	query := b.String()
-	if _, err := db.Prepare(query); !testutils.IsError(err, "more than 65535 arguments") {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

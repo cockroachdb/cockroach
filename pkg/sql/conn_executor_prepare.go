@@ -17,12 +17,12 @@ package sql
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -68,14 +68,9 @@ func (ex *connExecutor) execPrepare(
 				pgwirebase.MaxPreparedStatementArgs, len(ps.TypeHints)))
 	}
 	for k, t := range ps.TypeHints {
-		i, err := strconv.Atoi(k)
-		if err != nil || i < 1 {
-			return retErr(pgerror.NewErrorf(
-				pgerror.CodeUndefinedParameterError, "invalid placeholder name: $%s", k))
-		}
 		// Placeholder names are 1-indexed; the arrays in the protocol are
 		// 0-indexed.
-		i--
+		i := int(k)
 		// Grow inTypes to be at least as large as i. Prepopulate all
 		// slots with the hints provided, if any.
 		for j := len(inTypes); j <= i; j++ {
@@ -96,7 +91,7 @@ func (ex *connExecutor) execPrepare(
 		if t == 0 {
 			return retErr(pgerror.NewErrorf(
 				pgerror.CodeIndeterminateDatatypeError,
-				"could not determine data type of placeholder $%d", i+1))
+				"could not determine data type of placeholder %s", types.PlaceholderIdx(i)))
 		}
 	}
 	// Remember the inferred placeholder types so they can be reported on
@@ -319,8 +314,7 @@ func (ex *connExecutor) execBind(
 					pgwirebase.NewProtocolViolationErrorf(
 						"for argument %d expected OID %d, got %d", i, t, oid))
 			}
-			k := strconv.Itoa(i + 1)
-			qargs[k] = datum
+			qargs[types.PlaceholderIdx(i)] = datum
 		}
 	} else {
 		qArgFormatCodes := bindCmd.ArgFormatCodes
@@ -350,7 +344,7 @@ func (ex *connExecutor) execBind(
 			ex.state.sqlTimestamp.In(ex.sessionData.DataConversion.Location))
 
 		for i, arg := range bindCmd.Args {
-			k := strconv.Itoa(i + 1)
+			k := types.PlaceholderIdx(i)
 			t := ps.InTypes[i]
 			if arg == nil {
 				// nil indicates a NULL argument value.
@@ -362,7 +356,7 @@ func (ex *connExecutor) execBind(
 						return retErr(err)
 					}
 					return retErr(pgwirebase.NewProtocolViolationErrorf(
-						"error in argument for $%d: %s", i+1, err.Error()))
+						"error in argument for %s: %s", k, err.Error()))
 
 				}
 				qargs[k] = d

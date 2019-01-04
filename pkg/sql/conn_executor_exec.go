@@ -17,7 +17,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -296,7 +295,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		typeHints := make(tree.PlaceholderTypes, len(s.Types))
 		for i, t := range s.Types {
-			typeHints[strconv.Itoa(i+1)] = coltypes.CastTargetToDatumType(t)
+			typeHints[types.PlaceholderIdx(i)] = coltypes.CastTargetToDatumType(t)
 		}
 		if _, err := ex.addPreparedStmt(
 			ctx, name, Statement{SQL: s.Statement.String(), AST: s.Statement}, typeHints,
