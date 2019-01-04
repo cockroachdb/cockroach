@@ -137,10 +137,15 @@ var OptimizerUpdatesClusterMode = settings.RegisterBoolSetting(
 
 // VectorizeClusterMode controls the cluster default for when automatic
 // vectorization is enabled.
-var VectorizeClusterMode = settings.RegisterBoolSetting(
+var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"sql.defaults.experimental_vectorize",
 	"default experimental_vectorize mode",
-	false,
+	"off",
+	map[int64]string{
+		int64(sessiondata.VectorizeOff):    "off",
+		int64(sessiondata.VectorizeOn):     "on",
+		int64(sessiondata.VectorizeAlways): "always",
+	},
 )
 
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
@@ -1676,7 +1681,7 @@ func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 	m.data.ZigzagJoinEnabled = val
 }
 
-func (m *sessionDataMutator) SetVectorize(val bool) {
+func (m *sessionDataMutator) SetVectorize(val sessiondata.VectorizeExecMode) {
 	m.data.Vectorize = val
 }
 

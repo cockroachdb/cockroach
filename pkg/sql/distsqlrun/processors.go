@@ -1195,6 +1195,21 @@ type LocalProcessor interface {
 	SetInput(ctx context.Context, input RowSource) error
 }
 
+// vectorizeAlwaysException is an object that returns whether or not execution
+// should continue if experimental_vectorize=always and an error occurred when
+// setting up the vectorized flow. Consider the case in which
+// experimental_vectorize=always. The user must be able to unset this session
+// variable without getting an error.
+type vectorizeAlwaysException interface {
+	// IsException returns whether this object should be an exception to the rule
+	// that an inability to run this node in a vectorized flow should produce an
+	// error.
+	// TODO(asubiotto): This is the cleanest way I can think of to not error out
+	// on SET statements when running with experimental_vectorize = always. If
+	// there is a better way, we should get rid of this interface.
+	IsException() bool
+}
+
 // NewReadImportDataProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
 var NewReadImportDataProcessor func(*FlowCtx, int32, distsqlpb.ReadImportDataSpec, RowReceiver) (Processor, error)
