@@ -204,3 +204,9 @@ func (f *stubFactory) ConstructUpdate(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructCreateTable(
+	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}

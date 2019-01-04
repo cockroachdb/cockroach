@@ -263,6 +263,10 @@ type Factory interface {
 	ConstructUpdate(
 		input Node, table cat.Table, fetchCols, updateCols ColumnOrdinalSet, rowsNeeded bool,
 	) (Node, error)
+
+	// ConstructCreateTable returns a node that implements a CREATE TABLE
+	// statement.
+	ConstructCreateTable(input Node, schema cat.Schema, ct *tree.CreateTable) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

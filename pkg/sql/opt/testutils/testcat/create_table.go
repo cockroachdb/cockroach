@@ -55,7 +55,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(&stmt.Table)
 
-	tab := &Table{StableID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
+	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
 	// Assume that every table in the "system" or "information_schema" catalog
 	// is a virtual table. This is a simplified assumption for testing purposes.

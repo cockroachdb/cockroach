@@ -370,7 +370,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) (planFl
 	switch stmt.AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
 		*tree.UnionClause, *tree.ValuesClause, *tree.Explain,
-		*tree.Insert, *tree.Update:
+		*tree.Insert, *tree.Update, *tree.CreateTable:
 
 	default:
 		return 0, pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))

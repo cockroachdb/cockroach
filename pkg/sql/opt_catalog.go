@@ -42,6 +42,9 @@ type optCatalog struct {
 	// repeated calls for the same data source. The same underlying descriptor
 	// will always return the same data source wrapper object.
 	dataSources map[*sqlbase.ImmutableTableDescriptor]cat.DataSource
+
+	// tn is a temporary name used during resolution to avoid heap allocation.
+	tn tree.TableName
 }
 
 var _ cat.Catalog = &optCatalog{}
@@ -53,9 +56,56 @@ func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver Logi
 	oc.dataSources = nil
 }
 
+// optSchema is a wrapper around sqlbase.DatabaseDescriptor that implements the
+// cat.Object and cat.Schema interfaces.
+type optSchema struct {
+	desc *sqlbase.DatabaseDescriptor
+
+	name cat.SchemaName
+}
+
+// ID is part of the cat.Object interface.
+func (os *optSchema) ID() cat.StableID {
+	return cat.StableID(os.desc.ID)
+}
+
+// Name is part of the cat.Schema interface.
+func (os *optSchema) Name() *cat.SchemaName {
+	return &os.name
+}
+
+// ResolveSchema is part of the cat.Catalog interface.
+func (oc *optCatalog) ResolveSchema(ctx context.Context, name *cat.SchemaName) (cat.Schema, error) {
+	p := oc.resolver.(*planner)
+	defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
+	p.avoidCachedDescriptors = true
+
+	// ResolveTargetObject wraps ResolveTarget in order to raise "schema not
+	// found" and "schema cannot be modified" errors. However, ResolveTargetObject
+	// assumes that a data source object is being resolved, which is not the case
+	// for ResolveSchema. Therefore, call ResolveTarget directly and produce a
+	// more general error.
+	oc.tn.TableNamePrefix = *name
+	found, desc, err := oc.tn.ResolveTarget(
+		ctx,
+		oc.resolver,
+		oc.resolver.CurrentDatabase(),
+		oc.resolver.CurrentSearchPath(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+			"target database or schema does not exist")
+	}
+	*name = oc.tn.TableNamePrefix
+	return &optSchema{desc: desc.(*DatabaseDescriptor)}, nil
+}
+
 // ResolveDataSource is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveDataSource(
-	ctx context.Context, name *tree.TableName,
+	ctx context.Context, name *cat.DataSourceName,
 ) (cat.DataSource, error) {
 	desc, err := ResolveExistingObject(ctx, oc.resolver, name, true /* required */, anyDescType)
 	if err != nil {
@@ -68,7 +118,6 @@ func (oc *optCatalog) ResolveDataSource(
 func (oc *optCatalog) ResolveDataSourceByID(
 	ctx context.Context, dataSourceID cat.StableID,
 ) (cat.DataSource, error) {
-
 	tableLookup, err := oc.resolver.LookupTableByID(ctx, sqlbase.ID(dataSourceID))
 
 	if err != nil || tableLookup.IsAdding {
@@ -89,10 +138,10 @@ func (oc *optCatalog) ResolveDataSourceByID(
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
-func (oc *optCatalog) CheckPrivilege(
-	ctx context.Context, ds cat.DataSource, priv privilege.Kind,
-) error {
-	switch t := ds.(type) {
+func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
+	switch t := o.(type) {
+	case *optSchema:
+		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
 	case *optTable:
 		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
 	case *optView:
@@ -107,7 +156,7 @@ func (oc *optCatalog) CheckPrivilege(
 // newDataSource returns a data source wrapper for the given table descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) newDataSource(
-	desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName,
+	desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName,
 ) (cat.DataSource, error) {
 	// Check to see if there's already a data source wrapper for this descriptor.
 	if oc.dataSources == nil {
@@ -146,18 +195,18 @@ func (oc *optCatalog) newDataSource(
 }
 
 // optView is a wrapper around sqlbase.ImmutableTableDescriptor that implements
-// the cat.DataSource and cat.View interfaces.
+// the cat.Object, cat.DataSource, and cat.View interfaces.
 type optView struct {
 	desc *sqlbase.ImmutableTableDescriptor
 
 	// name is the fully qualified, fully resolved, fully normalized name of
 	// the view.
-	name tree.TableName
+	name cat.DataSourceName
 }
 
 var _ cat.View = &optView{}
 
-func newOptView(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName) *optView {
+func newOptView(desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName) *optView {
 	ov := &optView{desc: desc, name: *name}
 
 	// The cat.View interface requires that view names be fully qualified.
@@ -167,7 +216,7 @@ func newOptView(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName) *o
 	return ov
 }
 
-// ID is part of the cat.DataSource interface.
+// ID is part of the cat.Object interface.
 func (ov *optView) ID() cat.StableID {
 	return cat.StableID(ov.desc.ID)
 }
@@ -178,7 +227,7 @@ func (ov *optView) Version() cat.Version {
 }
 
 // Name is part of the cat.View interface.
-func (ov *optView) Name() *tree.TableName {
+func (ov *optView) Name() *cat.DataSourceName {
 	return &ov.name
 }
 
@@ -197,8 +246,8 @@ func (ov *optView) ColumnName(i int) tree.Name {
 	return tree.Name(ov.desc.Columns[i].Name)
 }
 
-// optSequence is a wrapper around sqlbase.ImmutableTableDescriptor that implements the
-// cat.DataSource interface.
+// optSequence is a wrapper around sqlbase.ImmutableTableDescriptor that
+// implements the cat.Object and cat.DataSource interfaces.
 //
 // TODO(andyk): This should implement cat.Sequence once we have it.
 type optSequence struct {
@@ -206,12 +255,12 @@ type optSequence struct {
 
 	// name is the fully qualified, fully resolved, fully normalized name of the
 	// sequence.
-	name tree.TableName
+	name cat.DataSourceName
 }
 
 var _ cat.DataSource = &optSequence{}
 
-func newOptSequence(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName) *optSequence {
+func newOptSequence(desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName) *optSequence {
 	ot := &optSequence{desc: desc, name: *name}
 
 	// The cat.Sequence interface requires that table names be fully qualified.
@@ -221,7 +270,7 @@ func newOptSequence(desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName
 	return ot
 }
 
-// ID is part of the cat.DataSource interface.
+// ID is part of the cat.Object interface.
 func (os *optSequence) ID() cat.StableID {
 	return cat.StableID(os.desc.ID)
 }
@@ -232,18 +281,18 @@ func (os *optSequence) Version() cat.Version {
 }
 
 // Name is part of the cat.DataSource interface.
-func (os *optSequence) Name() *tree.TableName {
+func (os *optSequence) Name() *cat.DataSourceName {
 	return &os.name
 }
 
-// optTable is a wrapper around sqlbase.ImmutableTableDescriptor that caches index
-// wrappers and maintains a ColumnID => Column mapping for fast lookup.
+// optTable is a wrapper around sqlbase.ImmutableTableDescriptor that caches
+// index wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
 	desc *sqlbase.ImmutableTableDescriptor
 
 	// name is the fully qualified, fully resolved, fully normalized name of the
 	// table.
-	name tree.TableName
+	name cat.DataSourceName
 
 	// primary is the inlined wrapper for the table's primary index.
 	primary optIndex
@@ -269,7 +318,7 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
-	desc *sqlbase.ImmutableTableDescriptor, name *tree.TableName, stats []*stats.TableStatistic,
+	desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName, stats []*stats.TableStatistic,
 ) *optTable {
 	ot := &optTable{desc: desc, name: *name}
 	if stats != nil {
@@ -315,7 +364,7 @@ func (ot *optTable) prepareMutationColumns(desc *sqlbase.ImmutableTableDescripto
 	}
 }
 
-// ID is part of the cat.DataSource interface.
+// ID is part of the cat.Object interface.
 func (ot *optTable) ID() cat.StableID {
 	return cat.StableID(ot.desc.ID)
 }
@@ -326,7 +375,7 @@ func (ot *optTable) Version() cat.Version {
 }
 
 // Name is part of the cat.DataSource interface.
-func (ot *optTable) Name() *tree.TableName {
+func (ot *optTable) Name() *cat.DataSourceName {
 	return &ot.name
 }
 

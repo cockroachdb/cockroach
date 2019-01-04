@@ -626,7 +626,7 @@ func (c *CustomFuncs) ExtractJoinEquality(
 		panic("no equalities to extract")
 	}
 
-	join := c.ConstructJoin(
+	join := c.f.ConstructJoin(
 		joinOp,
 		leftProj.buildProject(left, leftCols),
 		rightProj.buildProject(right, rightCols),

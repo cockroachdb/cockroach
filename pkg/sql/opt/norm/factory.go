@@ -231,36 +231,42 @@ func (f *Factory) onConstructScalar(scalar opt.ScalarExpr) opt.ScalarExpr {
 //
 // ----------------------------------------------------------------------
 
+// ConstructZeroValues constructs a Values operator with zero rows and zero
+// columns. It is used to create a dummy input for operators like CreateTable.
+func (f *Factory) ConstructZeroValues() memo.RelExpr {
+	return f.ConstructValues(memo.EmptyScalarListExpr, opt.ColList{})
+}
+
 // ConstructJoin constructs the join operator that corresponds to the given join
 // operator type.
-func (c *CustomFuncs) ConstructJoin(
+func (f *Factory) ConstructJoin(
 	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
 ) memo.RelExpr {
 	switch joinOp {
 	case opt.InnerJoinOp:
-		return c.f.ConstructInnerJoin(left, right, on)
+		return f.ConstructInnerJoin(left, right, on)
 	case opt.InnerJoinApplyOp:
-		return c.f.ConstructInnerJoinApply(left, right, on)
+		return f.ConstructInnerJoinApply(left, right, on)
 	case opt.LeftJoinOp:
-		return c.f.ConstructLeftJoin(left, right, on)
+		return f.ConstructLeftJoin(left, right, on)
 	case opt.LeftJoinApplyOp:
-		return c.f.ConstructLeftJoinApply(left, right, on)
+		return f.ConstructLeftJoinApply(left, right, on)
 	case opt.RightJoinOp:
-		return c.f.ConstructRightJoin(left, right, on)
+		return f.ConstructRightJoin(left, right, on)
 	case opt.RightJoinApplyOp:
-		return c.f.ConstructRightJoinApply(left, right, on)
+		return f.ConstructRightJoinApply(left, right, on)
 	case opt.FullJoinOp:
-		return c.f.ConstructFullJoin(left, right, on)
+		return f.ConstructFullJoin(left, right, on)
 	case opt.FullJoinApplyOp:
-		return c.f.ConstructFullJoinApply(left, right, on)
+		return f.ConstructFullJoinApply(left, right, on)
 	case opt.SemiJoinOp:
-		return c.f.ConstructSemiJoin(left, right, on)
+		return f.ConstructSemiJoin(left, right, on)
 	case opt.SemiJoinApplyOp:
-		return c.f.ConstructSemiJoinApply(left, right, on)
+		return f.ConstructSemiJoinApply(left, right, on)
 	case opt.AntiJoinOp:
-		return c.f.ConstructAntiJoin(left, right, on)
+		return f.ConstructAntiJoin(left, right, on)
 	case opt.AntiJoinApplyOp:
-		return c.f.ConstructAntiJoinApply(left, right, on)
+		return f.ConstructAntiJoinApply(left, right, on)
 	}
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }
@@ -280,17 +286,4 @@ func (f *Factory) ConstructConstVal(d tree.Datum) opt.ScalarExpr {
 		return memo.FalseSingleton
 	}
 	return f.ConstructConst(d)
-}
-
-// projectExtraCol constructs a new Project operator that passes through all
-// columns in the given "in" expression, and then adds the given "extra"
-// expression as an additional column.
-func (f *Factory) projectExtraCol(
-	in memo.RelExpr, extra opt.ScalarExpr, extraID opt.ColumnID,
-) memo.RelExpr {
-	projections := memo.ProjectionsExpr{{
-		Element:    extra,
-		ColPrivate: memo.ColPrivate{Col: extraID}},
-	}
-	return f.ConstructProject(in, projections, in.Relational().OutputCols)
 }
