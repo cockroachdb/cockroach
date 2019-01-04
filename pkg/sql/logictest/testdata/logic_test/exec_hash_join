@@ -1,10 +1,7 @@
-# LogicTest: local local-vec
+# LogicTest: local-vec
 
 # Test that the exec HashJoiner follows SQL NULL semantics for ON predicate
-# equivilance. The use of sorts here force the planning of merge join.
-
-statement ok
-SET experimental_vectorize = true;
+# equivalence. The use of sorts here force the planning of merge join.
 
 statement ok
 CREATE TABLE  t1 (k INT PRIMARY KEY, v INT)
