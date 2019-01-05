@@ -123,12 +123,12 @@ enum TransactionAbortedReason {
   // For backwards compatibility.
   ABORT_REASON_UNKNOWN = 0;
 
-  // A BeginTransaction or EndTransaction(commit=true) request found an aborted
-  // transaction record. Another txn must have written this record - that other
-  // txn probably ran into one of our intents written before BeginTransaction
-  // (on a different range) and pushed it successfully. Or, a high-priority
-  // transaction simply pushed us, or we failed to heartbeat for a while and
-  // another txn (of any priority) considered us abandoned and pushed us.
+  // A BeginTransaction, HeartbeatTxn, or EndTransaction(commit=true) request
+  // found an aborted transaction record. Another txn must have written this
+  // record - that other txn probably ran into one of our intents and pushed our
+  // transaction record successfully. Either a high-priority transaction simply
+  // pushed us or we failed to heartbeat for a while and another txn (of any
+  // priority) considered us abandoned and pushed us.
   ABORT_REASON_ABORTED_RECORD_FOUND = 1;
 
   // The request attempting to create a transaction record has a timestamp below
@@ -152,11 +152,11 @@ enum TransactionAbortedReason {
   // meantime because the transaction was aborted.
   ABORT_REASON_ABORT_SPAN = 5;
 
-  // An EndTransaction encountered a timestamp cache entry for the txn key, and
-  // the entry identifies this transaction. This means that the transaction
-  // definitely committed or rolled back before.
-  // So, this EndTransaction is either a delayed replay of some sort, or it
-  // raced with an async abort and lost. If a client gets this
+  // A request attempting to create a transaction record encountered a write
+  // timestamp cache entry for the txn key, and the entry identifies this
+  // transaction. This means that the transaction definitely committed or rolled
+  // back before. So, this request is either a delayed replay of some sort, or
+  // it raced with an async abort and lost. If a client gets this
   // TransactionAbortedError (without it being wrapped in an ambiguous error),
   // it must be the latter case, and the transaction can be retried.
   ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY = 6;

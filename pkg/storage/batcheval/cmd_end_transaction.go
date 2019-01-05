@@ -186,8 +186,8 @@ func evalEndTransaction(
 		// to perform this verification for commits. Rollbacks can always write
 		// an aborted txn record.
 		if args.Commit {
-			if ok, reason := cArgs.EvalCtx.CanCreateTxnRecord(reply.Txn); !ok {
-				return result.Result{}, roachpb.NewTransactionAbortedError(reason)
+			if err := CanCreateTxnRecord(cArgs.EvalCtx, reply.Txn); err != nil {
+				return result.Result{}, err
 			}
 		}
 	} else {
@@ -350,12 +350,12 @@ func evalEndTransaction(
 	// subsequent replay of this EndTransaction call because the txn timestamp
 	// will be too old. Replays of requests which attempt to create a new txn
 	// record (BeginTransaction, HeartbeatTxn, or EndTransaction) never succeed
-	// because EndTransaction inserts in the write timestamp cache, forcing the
-	// call to CanCreateTxnRecord to return false, resulting in a transaction
-	// retry error. If the replay didn't attempt to create a txn record, any
-	// push will immediately succeed as a missing txn record on push where
-	// CanCreateTxnRecord returns false succeeds. In both cases, the txn will
-	// be GC'd on the slow path.
+	// because EndTransaction inserts in the write timestamp cache in Replica's
+	// updateTimestampCache method, forcing the call to CanCreateTxnRecord to
+	// return false, resulting in a transaction retry error. If the replay
+	// didn't attempt to create a txn record, any push will immediately succeed
+	// as a missing txn record on push where CanCreateTxnRecord returns false
+	// succeeds. In both cases, the txn will be GC'd on the slow path.
 	//
 	// We specify alwaysReturn==false because if the commit fails below Raft, we
 	// don't want the intents to be up for resolution. That should happen only

@@ -91,3 +91,62 @@ func CanPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
 	return (pusher.Priority > roachpb.MinTxnPriority && pushee.Priority == roachpb.MinTxnPriority) ||
 		(pusher.Priority == roachpb.MaxTxnPriority && pushee.Priority < pusher.Priority)
 }
+
+// CanCreateTxnRecord determines whether a transaction record can be created for
+// the provided transaction. If not, the function will return an error. If so,
+// the function may modify the provided transaction.
+func CanCreateTxnRecord(rec EvalContext, txn *roachpb.Transaction) error {
+	// Provide the transaction's epoch zero original timestamp as its minimum
+	// timestamp. The transaction could not have written a transaction record
+	// previously with a timestamp below this.
+	epochZeroOrigTS, _ := txn.InclusiveTimeBounds()
+	ok, minTS, reason := rec.CanCreateTxnRecord(txn.ID, txn.Key, epochZeroOrigTS)
+	if !ok {
+		return roachpb.NewTransactionAbortedError(reason)
+	}
+	txn.Timestamp.Forward(minTS)
+	return nil
+}
+
+// SynthesizeTxnFromMeta creates a synthetic transaction object from the
+// provided transaction metadata. The synthetic transaction is not meant to be
+// persisted, but can serve as a representation of the transaction for outside
+// observation. The function also checks whether it is possible for the
+// transaction to ever create a transaction record in the future. If not, the
+// returned transaction will be marked as ABORTED and it is safe to assume that
+// the transaction record will never be written in the future.
+func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transaction {
+	// Construct the transaction object.
+	synthTxnRecord := roachpb.TransactionRecord{
+		TxnMeta: txn,
+		Status:  roachpb.PENDING,
+		// Set the LastHeartbeat timestamp to the intent's timestamp.
+		// We use this as an indication of client activity.
+		LastHeartbeat: txn.Timestamp,
+		// We set the OrigTimestamp to avoid triggering an assertion
+		// in txn.AssertInitialized on 2.1 nodes. This value may not
+		// be accurate, but it won't cause issues anywhere that it
+		// can leak to.
+		// TODO(nvanbenschoten): Remove this in 2.3.
+		OrigTimestamp: txn.Timestamp,
+	}
+
+	// Determine whether the transaction record could ever actually be written
+	// in the future. We provide the TxnMeta's timestamp (which we read from an
+	// intent) as the upper bound on the transaction's minimum timestamp. This
+	// may be greater than the transaction's actually original epoch-zero
+	// timestamp, in which case we're subjecting ourselves to false positives
+	// where we don't discover that a transaction is uncommittable, but never
+	// false negatives where we think that a transaction is uncommittable even
+	// when it's not and could later complete.
+	ok, minTS, _ := rec.CanCreateTxnRecord(txn.ID, txn.Key, txn.Timestamp)
+	if ok {
+		// Forward the provisional commit timestamp by the minimum timestamp that
+		// the transaction would be able to create a transaction record at.
+		synthTxnRecord.Timestamp.Forward(minTS)
+	} else {
+		// Mark the transaction as ABORTED because it is uncommittable.
+		synthTxnRecord.Status = roachpb.ABORTED
+	}
+	return synthTxnRecord.AsTransaction()
+}
