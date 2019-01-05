@@ -282,7 +282,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// This is handling the SQL statement "PREPARE". See execPrepare for
 		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
-		if _, ok := ex.prepStmtsNamespace.prepStmts[name]; ok {
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
 			err := pgerror.NewErrorf(
 				pgerror.CodeDuplicatePreparedStatementError,
 				"prepared statement %q already exists", name,
@@ -316,7 +316,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution below.
 		name := s.Name.String()
-		ps, ok := ex.prepStmtsNamespace.prepStmts[name]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 		if !ok {
 			err := pgerror.NewErrorf(
 				pgerror.CodeInvalidSQLStatementNameError,
@@ -325,13 +325,13 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		var err error
-		pinfo, err = fillInPlaceholders(ps.PreparedStatement, name, s.Params, ex.sessionData.SearchPath)
+		pinfo, err = fillInPlaceholders(ps, name, s.Params, ex.sessionData.SearchPath)
 		if err != nil {
 			return makeErrEvent(err)
 		}
 
 		stmt.Statement = ps.Statement
-		stmt.Prepared = ps.PreparedStatement
+		stmt.Prepared = ps
 		stmt.ExpectedTypes = ps.Columns
 		stmt.AnonymizedStr = ps.AnonymizedStr
 		res.ResetStmtType(ps.AST)

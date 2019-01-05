@@ -628,7 +628,7 @@ func (icc *internalClientComm) Flush(pos CmdPos) error {
 
 // CreateDescribeResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateDescribeResult(pos CmdPos) DescribeResult {
-	panic("unimplemented")
+	return icc.createRes(pos, nil /* onClose */)
 }
 
 // CreateDeleteResult is part of the ClientComm interface.
