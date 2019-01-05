@@ -143,7 +143,7 @@ func NewDistSQLPlanner(
 	nodeDialer *nodedialer.Dialer,
 ) *DistSQLPlanner {
 	if liveness == nil {
-		panic("must specify liveness")
+		log.Fatal(ctx, "must specify liveness")
 	}
 	dsp := &DistSQLPlanner{
 		planVersion:  planVersion,
@@ -160,15 +160,7 @@ func NewDistSQLPlanner(
 		},
 		metadataTestTolerance: distsqlrun.NoExplain,
 	}
-	// NB: not all tests populate a NodeLiveness. Everything using the
-	// proper constructor NewDistSQLPlanner will, though.
-	if liveness != nil {
-		dsp.nodeHealth.isLive = liveness.IsLive
-	} else {
-		dsp.nodeHealth.isLive = func(_ roachpb.NodeID) (bool, error) {
-			return true, nil
-		}
-	}
+	dsp.nodeHealth.isLive = liveness.IsLive
 
 	dsp.initRunners()
 	return dsp
