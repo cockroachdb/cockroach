@@ -1596,7 +1596,7 @@ func (ex *connExecutor) commitPrepStmtNamespace(ctx context.Context) {
 		ctx, &ex.prepStmtsNamespace)
 }
 
-// commitPrepStmtNamespace deallocates everything in prepStmtsNamespace that's
+// rewindPrepStmtNamespace deallocates everything in prepStmtsNamespace that's
 // not part of prepStmtsNamespaceAtTxnRewindPos.
 func (ex *connExecutor) rewindPrepStmtNamespace(ctx context.Context) {
 	ex.prepStmtsNamespace.resetTo(
@@ -2210,10 +2210,7 @@ func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool 
 
 // DeleteAll is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
-	ps.ex.prepStmtsNamespace = prepStmtNamespace{
-		prepStmts: make(map[string]prepStmtEntry),
-		portals:   make(map[string]portalEntry),
-	}
+	ps.ex.prepStmtsNamespace.resetTo(ctx, &prepStmtNamespace{})
 }
 
 // contextStatementKey is an empty type for the handle associated with the
