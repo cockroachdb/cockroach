@@ -72,8 +72,8 @@ func HeartbeatTxn(
 		}
 
 		// Verify that it is safe to create the transaction record.
-		if ok, reason := cArgs.EvalCtx.CanCreateTxnRecord(&txn); !ok {
-			return result.Result{}, roachpb.NewTransactionAbortedError(reason)
+		if err := CanCreateTxnRecord(cArgs.EvalCtx, &txn); err != nil {
+			return result.Result{}, err
 		}
 	}
 

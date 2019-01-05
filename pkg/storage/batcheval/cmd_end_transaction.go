@@ -186,8 +186,8 @@ func evalEndTransaction(
 		// to perform this verification for commits. Rollbacks can always write
 		// an aborted txn record.
 		if args.Commit {
-			if ok, reason := cArgs.EvalCtx.CanCreateTxnRecord(reply.Txn); !ok {
-				return result.Result{}, roachpb.NewTransactionAbortedError(reason)
+			if err := CanCreateTxnRecord(cArgs.EvalCtx, reply.Txn); err != nil {
+				return result.Result{}, err
 			}
 		}
 	} else {

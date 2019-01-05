@@ -1028,7 +1028,7 @@ func (*AdminChangeReplicasRequest) flags() int { return isAdmin | isAlone }
 func (*AdminRelocateRangeRequest) flags() int  { return isAdmin | isAlone }
 func (*HeartbeatTxnRequest) flags() int        { return isWrite | isTxn }
 func (*GCRequest) flags() int                  { return isWrite | isRange }
-func (*PushTxnRequest) flags() int             { return isWrite | isAlone }
+func (*PushTxnRequest) flags() int             { return isWrite | isAlone | updatesReadTSCache }
 func (*QueryTxnRequest) flags() int            { return isRead | isAlone }
 
 // QueryIntent only updates the read timestamp cache when attempting
