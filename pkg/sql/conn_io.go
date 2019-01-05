@@ -932,3 +932,18 @@ func (r *bufferedCommandResult) Discard() {
 		r.closeCallback(r, discarded, nil /* err */)
 	}
 }
+
+// SetInTypes is part of the DescribeResult interface.
+func (r *bufferedCommandResult) SetInTypes([]oid.Oid) {}
+
+// SetNoDataRowDescription is part of the DescribeResult interface.
+func (r *bufferedCommandResult) SetNoDataRowDescription() {}
+
+// SetPrepStmtOutput is part of the DescribeResult interface.
+func (r *bufferedCommandResult) SetPrepStmtOutput(context.Context, sqlbase.ResultColumns) {}
+
+// SetPortalOutput is part of the DescribeResult interface.
+func (r *bufferedCommandResult) SetPortalOutput(
+	context.Context, sqlbase.ResultColumns, []pgwirebase.FormatCode,
+) {
+}
