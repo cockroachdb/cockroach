@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -31,12 +30,6 @@ import (
 func (r *Replica) updateTimestampCache(
 	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) {
-	readOnlyUseReadCache := true
-	if r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
-		// Clockless mode: all reads count as writes.
-		readOnlyUseReadCache = false
-	}
-
 	tc := r.store.tsCache
 	// Update the timestamp cache using the timestamp at which the batch
 	// was executed. Note this may have moved forward from ba.Timestamp,
@@ -82,7 +75,7 @@ func (r *Replica) updateTimestampCache(
 						continue
 					}
 				}
-				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
+				tc.Add(start, end, ts, txnID, true /* readCache */)
 			case *roachpb.ScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
 				if resp.ResumeSpan != nil {
@@ -91,7 +84,7 @@ func (r *Replica) updateTimestampCache(
 					// end key for the span to update the timestamp cache.
 					end = resp.ResumeSpan.Key
 				}
-				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
+				tc.Add(start, end, ts, txnID, true /* readCache */)
 			case *roachpb.ReverseScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
 				if resp.ResumeSpan != nil {
@@ -101,7 +94,7 @@ func (r *Replica) updateTimestampCache(
 					// the span to update the timestamp cache.
 					start = resp.ResumeSpan.EndKey
 				}
-				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
+				tc.Add(start, end, ts, txnID, true /* readCache */)
 			case *roachpb.QueryIntentRequest:
 				if t.IfMissing == roachpb.QueryIntentRequest_PREVENT {
 					resp := br.Responses[i].GetInner().(*roachpb.QueryIntentResponse)
@@ -114,7 +107,7 @@ func (r *Replica) updateTimestampCache(
 						// transaction ID so that we block the intent regardless
 						// of whether it is part of the current batch's transaction
 						// or not.
-						tc.Add(start, end, t.Txn.Timestamp, uuid.UUID{}, readOnlyUseReadCache)
+						tc.Add(start, end, t.Txn.Timestamp, uuid.UUID{}, true /* readCache */)
 					}
 				}
 			case *roachpb.RefreshRequest:
@@ -122,11 +115,7 @@ func (r *Replica) updateTimestampCache(
 			case *roachpb.RefreshRangeRequest:
 				tc.Add(start, end, ts, txnID, !t.Write /* readCache */)
 			default:
-				readCache := readOnlyUseReadCache
-				if roachpb.UpdatesWriteTimestampCache(args) {
-					readCache = false
-				}
-				tc.Add(start, end, ts, txnID, readCache)
+				tc.Add(start, end, ts, txnID, !roachpb.UpdatesWriteTimestampCache(args))
 			}
 		}
 	}
