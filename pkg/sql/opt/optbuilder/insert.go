@@ -130,7 +130,7 @@ func init() {
 // and thereby scrambles the input ordering.
 func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope) {
 	// Put UPSERT behind feature flag.
-	if ins.OnConflict != nil && !b.evalCtx.SessionData.OptimizerUpdates {
+	if ins.OnConflict != nil && !b.evalCtx.SessionData.OptimizerMutations {
 		panic(unimplementedf("cost-based optimizer is not planning UPSERT statements"))
 	}
 
