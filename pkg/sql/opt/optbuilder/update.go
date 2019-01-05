@@ -67,7 +67,7 @@ import (
 // mutations are applied, or the order of any returned rows (i.e. it won't
 // become a physical property required of the Update operator).
 func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope) {
-	if !b.evalCtx.SessionData.OptimizerUpdates {
+	if !b.evalCtx.SessionData.OptimizerMutations {
 		panic(unimplementedf("cost-based optimizer is not planning UPDATE statements"))
 	}
 

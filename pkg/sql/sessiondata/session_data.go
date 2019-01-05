@@ -49,9 +49,9 @@ type SessionData struct {
 	// OptimizerMode indicates whether to use the experimental optimizer for
 	// query planning.
 	OptimizerMode OptimizerMode
-	// OptimizerUpdates indicates whether to use the cost-based optimizer to
+	// OptimizerMutations indicates whether to use the cost-based optimizer to
 	// plan UPDATE statements.
-	OptimizerUpdates bool
+	OptimizerMutations bool
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of namespaces to search builtins in.

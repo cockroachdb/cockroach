@@ -397,21 +397,21 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_optimizer_updates`: {
-		GetStringVal: makeBoolGetStringValFn(`experimental_optimizer_updates`),
+	`experimental_optimizer_mutations`: {
+		GetStringVal: makeBoolGetStringValFn(`experimental_optimizer_mutations`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
 				return err
 			}
-			m.SetOptimizerUpdates(b)
+			m.SetOptimizerMutations(b)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData.OptimizerUpdates)
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.OptimizerMutations)
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(OptimizerUpdatesClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(OptimizerMutationsClusterMode.Get(sv))
 		},
 	},
 
