@@ -349,7 +349,7 @@ type Updater struct {
 	FetchCols             []sqlbase.ColumnDescriptor
 	FetchColIDtoRowIndex  map[sqlbase.ColumnID]int
 	UpdateCols            []sqlbase.ColumnDescriptor
-	updateColIDtoRowIndex map[sqlbase.ColumnID]int
+	UpdateColIDtoRowIndex map[sqlbase.ColumnID]int
 	primaryKeyColChange   bool
 
 	// rd and ri are used when the update this Updater is created for modifies
@@ -496,7 +496,7 @@ func makeUpdaterWithoutCascader(
 		Helper:                newRowHelper(tableDesc, includeIndexes),
 		DeleteHelper:          deleteOnlyHelper,
 		UpdateCols:            updateCols,
-		updateColIDtoRowIndex: updateColIDtoRowIndex,
+		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
 		marshaled:             make([]roachpb.Value, len(updateCols)),
 		newValues:             make([]tree.Datum, len(tableCols)),
@@ -550,7 +550,7 @@ func makeUpdaterWithoutCascader(
 		for _, fam := range tableDesc.Families {
 			familyBeingUpdated := false
 			for _, colID := range fam.ColumnIDs {
-				if _, ok := ru.updateColIDtoRowIndex[colID]; ok {
+				if _, ok := ru.UpdateColIDtoRowIndex[colID]; ok {
 					familyBeingUpdated = true
 					break
 				}
@@ -714,7 +714,7 @@ func (ru *Updater) UpdateRow(
 	ru.valueBuf, err = prepareInsertOrUpdateBatch(ctx, b,
 		&ru.Helper, primaryIndexKey, ru.FetchCols,
 		ru.newValues, ru.FetchColIDtoRowIndex,
-		ru.marshaled, ru.updateColIDtoRowIndex,
+		ru.marshaled, ru.UpdateColIDtoRowIndex,
 		&ru.key, &ru.value, ru.valueBuf, insertPutFn, true /* overwrite */, traceKV)
 	if err != nil {
 		return ru.newValues, nil

@@ -264,6 +264,39 @@ type Factory interface {
 		input Node, table cat.Table, fetchCols, updateCols ColumnOrdinalSet, rowsNeeded bool,
 	) (Node, error)
 
+	// ConstructUpsert creates a node that implements an INSERT..ON CONFLICT or
+	// UPSERT statement. For each input row, Upsert will test the canaryCol. If
+	// it is null, then it will insert a new row. If not-null, then Upsert will
+	// update an existing row. The input is expected to contain the columns to be
+	// inserted, followed by the columns containing existing values, and finally
+	// the columns containing new values.
+	//
+	// The length of each group of input columns can be up to the number of
+	// columns in the given table. The insertCols, fetchCols, and updateCols sets
+	// contain the ordinal positions of the table columns that are involved in
+	// the Upsert. For example:
+	//
+	//   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+	//   INSERT INTO abc VALUES (10, 20, 30) ON CONFLICT (a) DO UPDATE SET b=25
+	//
+	//   insertCols = {0, 1, 2}
+	//   fetchCols  = {0, 1, 2}
+	//   updateCols = {1}
+	//
+	// The input is expected to first have 3 columns that will be inserted into
+	// columns {0, 1, 2} of the table. The next 3 columns contain the existing
+	// values of columns {0, 1, 2} of the table. The last column contains the
+	// new value for column {1} of the table.
+	ConstructUpsert(
+		input Node,
+		table cat.Table,
+		canaryCol ColumnOrdinal,
+		insertCols ColumnOrdinalSet,
+		fetchCols ColumnOrdinalSet,
+		updateCols ColumnOrdinalSet,
+		rowsNeeded bool,
+	) (Node, error)
+
 	// ConstructCreateTable returns a node that implements a CREATE TABLE
 	// statement.
 	ConstructCreateTable(input Node, schema cat.Schema, ct *tree.CreateTable) (Node, error)

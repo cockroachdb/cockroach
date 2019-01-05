@@ -167,7 +167,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		f.Buffer.WriteByte(')')
 
 	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
-		*InsertExpr, *UpdateExpr:
+		*InsertExpr, *UpdateExpr, *UpsertExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
@@ -299,6 +299,17 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *CreateTableExpr:
 		tp.Child(t.Syntax.String())
+
+	case *UpsertExpr:
+		if len(colList) == 0 {
+			tp.Child("columns: <none>")
+		}
+		tp.Childf("canary column: %d", t.CanaryCol)
+		f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+		tpChild := tp.Child("insert-mapping:")
+		f.formatMutation(e, tpChild, t.InsertCols, t.Table)
+		tpChild = tp.Child("update-mapping:")
+		f.formatMutation(e, tpChild, t.UpdateCols, t.Table)
 	}
 
 	if !f.HasFlags(ExprFmtHideMiscProps) {

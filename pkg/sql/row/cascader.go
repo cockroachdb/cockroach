@@ -845,13 +845,13 @@ func (c *cascader) updateRows(
 					return nil, nil, nil, 0, err
 				}
 
-				updateRow := make(tree.Datums, len(rowUpdater.updateColIDtoRowIndex))
+				updateRow := make(tree.Datums, len(rowUpdater.UpdateColIDtoRowIndex))
 				switch action {
 				case sqlbase.ForeignKeyReference_CASCADE:
 					// Create the updateRow based on the passed in updated values and from
 					// the retrieved row as a fallback.
 					currentUpdatedValue := values.updatedValues.At(i)
-					for colID, rowIndex := range rowUpdater.updateColIDtoRowIndex {
+					for colID, rowIndex := range rowUpdater.UpdateColIDtoRowIndex {
 						if valueRowIndex, exists := valueColIDtoRowIndex[colID]; exists {
 							updateRow[rowIndex] = currentUpdatedValue[valueRowIndex]
 							if updateRow[rowIndex] == tree.DNull {
@@ -883,7 +883,7 @@ func (c *cascader) updateRows(
 					// Create the updateRow based on the original values and for all
 					// values in the index, either nulls (for SET NULL), or default (for
 					// SET DEFAULT).
-					for colID, rowIndex := range rowUpdater.updateColIDtoRowIndex {
+					for colID, rowIndex := range rowUpdater.UpdateColIDtoRowIndex {
 						if value, exists := referencingIndexValuesByColIDs[colID]; exists {
 							updateRow[rowIndex] = value
 							continue
@@ -1203,7 +1203,7 @@ func (c *cascader) cascadeAll(
 			}
 			// Now check all check constraints for the table.
 			checkHelper := c.tablesByID[tableID].CheckHelper
-			if err := checkHelper.LoadRow(rowUpdater.updateColIDtoRowIndex, updatedRows.At(0), false); err != nil {
+			if err := checkHelper.LoadRow(rowUpdater.UpdateColIDtoRowIndex, updatedRows.At(0), false); err != nil {
 				return err
 			}
 			if err := checkHelper.Check(c.evalCtx); err != nil {
@@ -1244,7 +1244,7 @@ func (c *cascader) cascadeAll(
 			}
 			// Now check all check constraints for the table.
 			checkHelper := c.tablesByID[tableID].CheckHelper
-			if err := checkHelper.LoadRow(rowUpdater.updateColIDtoRowIndex, finalRow, false); err != nil {
+			if err := checkHelper.LoadRow(rowUpdater.UpdateColIDtoRowIndex, finalRow, false); err != nil {
 				return err
 			}
 			if err := checkHelper.Check(c.evalCtx); err != nil {

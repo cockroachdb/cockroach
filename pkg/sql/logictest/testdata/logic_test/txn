@@ -939,7 +939,8 @@ INSERT INTO kv VALUES('foo')
 statement error cannot execute UPDATE in a read-only transaction
 UPDATE kv SET v = 'foo'
 
-statement error cannot execute INSERT in a read-only transaction
+# The heuristic planner uses INSERT, the optimizer uses UPSERT; accept both.
+statement error SERT in a read-only transaction
 UPSERT INTO kv VALUES('foo')
 
 statement error cannot execute DELETE in a read-only transaction

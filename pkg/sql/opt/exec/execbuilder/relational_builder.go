@@ -131,8 +131,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	// This will set the system DB trigger for transactions containing
 	// schema-modifying statements that have no effect, such as
 	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
-	// where the table already exists. This will generate some false
-	// refreshes, but that's expected to be quite rare in practice.
+	// where the table already exists. This will generate some false schema
+	// cache refreshes, but that's expected to be quite rare in practice.
 	isDDL := opt.IsDDLOp(e)
 	if isDDL {
 		if err := b.evalCtx.Txn.SetSystemConfigTrigger(); err != nil {
@@ -210,6 +210,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.UpdateExpr:
 		ep, err = b.buildUpdate(t)
+
+	case *memo.UpsertExpr:
+		ep, err = b.buildUpsert(t)
 
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
@@ -1186,6 +1189,60 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	ep := execPlan{root: node}
 	if upd.NeedResults {
 		ep.outputCols = mutationOutputColMap(upd)
+	}
+	return ep, nil
+}
+
+func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
+	// Build the input query and ensure that the insert, fetch, and update columns
+	// are projected.
+	input, err := b.buildRelational(ups.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Currently, the execution engine requires one input column for each insert,
+	// fetch, and update expression, so use ensureColumns to map and reorder
+	// columns so that they correspond to target table columns. For example:
+	//
+	//   INSERT INTO xyz (x, y) VALUES (1, 1)
+	//   ON CONFLICT (x) DO UPDATE SET x=2, y=2
+	//
+	// Here, both insert values and update values come from the same input column
+	// (because the constants are shared), and so must be mapped to separate
+	// output columns.
+	//
+	// TODO(andyk): Using ensureColumns here can result in an extra Render.
+	// Upgrade execution engine to not require this.
+	colList := make(opt.ColList, 0, len(ups.InsertCols)+len(ups.FetchCols)+len(ups.UpdateCols))
+	colList = appendColsWhenPresent(colList, ups.InsertCols)
+	colList = appendColsWhenPresent(colList, ups.FetchCols)
+	colList = appendColsWhenPresent(colList, ups.UpdateCols)
+	input, err = b.ensureColumns(input, colList, nil, ups.ProvidedPhysical().Ordering)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Construct the Upsert node.
+	md := b.mem.Metadata()
+	tab := md.Table(ups.Table)
+	canaryCol := input.getColumnOrdinal(ups.CanaryCol)
+	insertColOrds := ordinalSetFromColList(ups.InsertCols)
+	fetchColOrds := ordinalSetFromColList(ups.FetchCols)
+	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
+	node, err := b.factory.ConstructUpsert(
+		input.root, tab, canaryCol, insertColOrds, fetchColOrds, updateColOrds, ups.NeedResults)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// If UPSERT returns rows, they contain all non-mutation columns from the
+	// table, in the same order they're defined in the table. Each output column
+	// value is taken from an insert, fetch, or update column, depending on the
+	// result of the UPSERT operation for that row.
+	ep := execPlan{root: node}
+	if ups.NeedResults {
+		ep.outputCols = mutationOutputColMap(ups)
 	}
 	return ep, nil
 }

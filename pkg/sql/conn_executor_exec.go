@@ -459,7 +459,7 @@ func (ex *connExecutor) execStmtInOpenState(
 func (ex *connExecutor) maybeSynchronizeParallelStmts(
 	ctx context.Context, stmt Statement,
 ) (parallelize bool, _ error) {
-	parallelize = IsStmtParallelized(stmt.AST)
+	parallelize = tree.IsStmtParallelized(stmt.AST)
 	_, independentFromParallelStmts := stmt.AST.(tree.IndependentFromParallelizedPriors)
 	if !(parallelize || independentFromParallelStmts) {
 		if err := ex.synchronizeParallelStmts(ctx); err != nil {

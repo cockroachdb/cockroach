@@ -14,6 +14,8 @@
 
 package cat
 
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+
 // PrimaryIndex selects the primary index of a table when calling the
 // Table.Index method. Every table is guaranteed to have a unique primary
 // index, even if it meant adding a hidden unique rowid column.
@@ -32,10 +34,13 @@ type Index interface {
 	ID() StableID
 
 	// Name is the name of the index.
-	Name() string
+	Name() tree.Name
 
 	// Table returns a reference to the table this index is based on.
 	Table() Table
+
+	// IsUnique returns true if this index is declared as UNIQUE in the schema.
+	IsUnique() bool
 
 	// IsInverted returns true if this is a JSON inverted index.
 	IsInverted() bool
@@ -57,7 +62,7 @@ type Index interface {
 	//
 	// The second case is subtle, because UNIQUE indexes treat NULL values as if
 	// they are *not* equal to one another. For example, this is allowed with a
-	// unique index, even though it appears there are duplicate rows:
+	// unique (b, c) index, even though it appears there are duplicate rows:
 	//
 	//   b     c
 	//   -------
@@ -92,12 +97,16 @@ type Index interface {
 	//
 	// In the first three cases, all strict key columns (and thus all lax key
 	// columns as well) are guaranteed to be encoded in the row's key (as opposed
-	// to in its value). However, for a UNIQUE INDEX with at least one NULL-able
-	// column, only the lax key columns are guaranteed to be encoded in the row's
-	// key. The strict key columns are only encoded in the row's key when at least
-	// one of the lax key columns has a NULL value. Therefore, whether the row's
-	// key contains all the strict key columns is data-dependent, not schema-
-	// dependent.
+	// to in its value). Note that the third case, the UNIQUE INDEX columns are
+	// sufficient to form a strict key without needing to append the primary key
+	// columns (which are stored in the value).
+	//
+	// For the last case of a UNIQUE INDEX with at least one NULL-able column,
+	// only the lax key columns are guaranteed to be encoded in the row's key.
+	// The strict key columns (the primary key columns in this case) are only
+	// encoded in the row's key when at least one of the lax key columns has a
+	// NULL value. Therefore, whether the row's key contains all the strict key
+	// columns is data-dependent, not schema-dependent.
 	LaxKeyColumnCount() int
 
 	// Column returns the ith IndexColumn within the index definition, where

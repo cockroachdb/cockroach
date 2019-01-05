@@ -89,7 +89,7 @@ func (b *Builder) findIndexByName(table cat.Table, name tree.UnrestrictedName) (
 
 	for i, n := 0, table.IndexCount(); i < n; i++ {
 		idx := table.Index(i)
-		if string(name) == idx.Name() {
+		if tree.Name(name) == idx.Name() {
 			return idx, nil
 		}
 	}
@@ -140,7 +140,7 @@ func (b *Builder) analyzeOrderByIndex(
 
 		colItem := tree.NewColumnItem(tab.Name(), col.Column.ColName())
 		expr := inScope.resolveType(colItem, types.Any)
-		outCol := b.addColumn(orderByScope, "" /* label */, expr)
+		outCol := b.addColumn(orderByScope, "" /* alias */, expr)
 		outCol.descending = desc
 	}
 }
@@ -246,7 +246,7 @@ func (b *Builder) analyzeExtraArgument(
 	for _, e := range exprs {
 		// Ensure we can order on the given column(s).
 		ensureColumnOrderable(e)
-		b.addColumn(extraColsScope, "" /* label */, e)
+		b.addColumn(extraColsScope, "" /* alias */, e)
 	}
 }
 

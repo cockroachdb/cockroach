@@ -1405,3 +1405,51 @@ sort
            │              └── b + 1 [type=int, outer=(7)]
            └── filters
                 └── b = c [type=bool, outer=(2,3), fd=(2)==(3), (3)==(2)]
+
+# --------------------------------------------------
+# Upsert operator.
+# --------------------------------------------------
+
+# Verify that no ordering is provided once ON CONFLICT clause is added.
+opt
+SELECT *
+FROM
+[
+	INSERT INTO abc
+	SELECT * FROM xyz ORDER BY y, z LIMIT 2
+	ON CONFLICT (a, b, c)
+	DO UPDATE SET a=10
+	RETURNING *
+]
+ORDER BY b
+----
+sort
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── ordering: +2
+ └── upsert abc
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── canary column: 7
+      ├── fetch columns: a:7(int) b:8(int) c:9(int)
+      ├── insert-mapping:
+      │    ├──  x:4 => a:1
+      │    ├──  y:5 => b:2
+      │    └──  z:6 => c:3
+      ├── update-mapping:
+      │    └──  column10:10 => a:1
+      └── project
+           ├── columns: column10:10(int!null) x:4(int!null) y:5(int!null) z:6(int!null) a:7(int) b:8(int) c:9(int)
+           ├── left-join (lookup abc)
+           │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null) a:7(int) b:8(int) c:9(int)
+           │    ├── key columns: [4 5 6] = [7 8 9]
+           │    ├── limit
+           │    │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+           │    │    ├── internal-ordering: +5,+6
+           │    │    ├── sort
+           │    │    │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+           │    │    │    ├── ordering: +5,+6
+           │    │    │    └── scan xyz
+           │    │    │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+           │    │    └── const: 2 [type=int]
+           │    └── filters (true)
+           └── projections
+                └── const: 10 [type=int]

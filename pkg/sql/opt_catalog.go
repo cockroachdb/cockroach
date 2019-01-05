@@ -440,9 +440,9 @@ func (ot *optTable) Statistic(i int) cat.TableStatistic {
 
 func (ot *optTable) ensureColMap() {
 	if ot.colMap == nil {
-		ot.colMap = make(map[sqlbase.ColumnID]int, len(ot.desc.Columns))
-		for i := range ot.desc.Columns {
-			ot.colMap[ot.desc.Columns[i].ID] = i
+		ot.colMap = make(map[sqlbase.ColumnID]int, ot.ColumnCount())
+		for i, n := 0, ot.ColumnCount(); i < n; i++ {
+			ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
 		}
 	}
 }
@@ -491,18 +491,21 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 	oi.tab = tab
 	oi.desc = desc
 	if desc == &tab.desc.PrimaryIndex {
-		oi.storedCols = make([]sqlbase.ColumnID, 0, len(tab.desc.Columns)-len(desc.ColumnIDs))
+		// Although the primary index contains all columns in the table, the index
+		// descriptor does not contain columns that are not explicitly part of the
+		// primary key. Retrieve those columns from the table descriptor.
+		oi.storedCols = make([]sqlbase.ColumnID, 0, tab.ColumnCount()-len(desc.ColumnIDs))
 		var pkCols util.FastIntSet
 		for i := range desc.ColumnIDs {
 			pkCols.Add(int(desc.ColumnIDs[i]))
 		}
-		for i := range tab.desc.Columns {
-			id := tab.desc.Columns[i].ID
+		for i, n := 0, tab.ColumnCount(); i < n; i++ {
+			id := tab.Column(i).ColID()
 			if !pkCols.Contains(int(id)) {
-				oi.storedCols = append(oi.storedCols, id)
+				oi.storedCols = append(oi.storedCols, sqlbase.ColumnID(id))
 			}
 		}
-		oi.numCols = len(tab.desc.Columns)
+		oi.numCols = tab.ColumnCount()
 	} else {
 		oi.storedCols = desc.StoreColumnIDs
 		oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)
@@ -551,8 +554,13 @@ func (oi *optIndex) ID() cat.StableID {
 }
 
 // Name is part of the cat.Index interface.
-func (oi *optIndex) Name() string {
-	return oi.desc.Name
+func (oi *optIndex) Name() tree.Name {
+	return tree.Name(oi.desc.Name)
+}
+
+// IsUnique is part of the cat.Index interface.
+func (oi *optIndex) IsUnique() bool {
+	return oi.desc.Unique
 }
 
 // IsInverted is part of the cat.Index interface.
