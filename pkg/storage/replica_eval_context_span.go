@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // SpanSetReplicaEvalContext is a testing-only implementation of
@@ -142,20 +143,19 @@ func (rec SpanSetReplicaEvalContext) GetSplitQPS() float64 {
 	return rec.i.GetSplitQPS()
 }
 
-// CanCreateTxnRecord determines whether a transaction record can be created for
-// the provided transaction. If not, it returns the reason that transaction
-// record was rejected. If the method ever determines that a transaction record
-// must be rejected, it will continue to reject that transaction going forwards.
+// CanCreateTxnRecord determines whether a transaction record can be created
+// for the provided transaction information. See Replica.CanCreateTxnRecord
+// for details about its arguments, return values, and preconditions.
 func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
-	txn *roachpb.Transaction,
-) (bool, roachpb.TransactionAbortedReason) {
+	txnID uuid.UUID, txnKey []byte, txnMinTSUpperBound hlc.Timestamp,
+) (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
-		roachpb.Span{Key: keys.TransactionKey(txn.Key, txn.ID)},
+		roachpb.Span{Key: keys.TransactionKey(txnKey, txnID)},
 	)
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(rec.GetRangeID())},
 	)
-	return rec.i.CanCreateTxnRecord(txn)
+	return rec.i.CanCreateTxnRecord(txnID, txnKey, txnMinTSUpperBound)
 }
 
 // GetGCThreshold returns the GC threshold of the Range, typically updated when

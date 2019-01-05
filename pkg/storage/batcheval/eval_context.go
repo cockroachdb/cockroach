@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"golang.org/x/time/rate"
 )
 
@@ -64,15 +65,15 @@ type EvalContext interface {
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
 
-	// CanCreateTxnRecord determines whether a transaction record can be
-	// created for the provided transaction. If not, it returns the reason
-	// that transaction record was rejected. If the method ever determines
-	// that a transaction record must be rejected, it will continue to
-	// reject that transaction going forwards.
+	// CanCreateTxnRecord determines whether a transaction record can be created
+	// for the provided transaction information. See Replica.CanCreateTxnRecord
+	// for details about its arguments, return values, and preconditions.
 	//
-	// NOTE: To call this method, a command must delare (at least) a read
-	// on both the transaction's key and on the txn span GC threshold key.
-	CanCreateTxnRecord(*roachpb.Transaction) (bool, roachpb.TransactionAbortedReason)
+	// NOTE: To call this method, a command must declare (at least) a read on
+	// both the transaction's key and on the txn span GC threshold key.
+	CanCreateTxnRecord(
+		txnID uuid.UUID, txnKey []byte, txnMinTSUpperBound hlc.Timestamp,
+	) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason)
 
 	// GetMVCCStats returns a snapshot of the MVCC stats for the range.
 	// If called from a command that declares a read/write span on the
