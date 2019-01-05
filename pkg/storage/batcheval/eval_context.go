@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"golang.org/x/time/rate"
 )
 
@@ -64,15 +65,27 @@ type EvalContext interface {
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
 
-	// CanCreateTxnRecord determines whether a transaction record can be
-	// created for the provided transaction. If not, it returns the reason
-	// that transaction record was rejected. If the method ever determines
-	// that a transaction record must be rejected, it will continue to
-	// reject that transaction going forwards.
+	// CanCreateTxnRecord determines whether a transaction record can be created
+	// for the provided transaction information. Callers should provide an upper
+	// bound on the transaction's minimum timestamp across all epochs (typically
+	// the original timestamp of its first epoch). If this is not exact then the
+	// method may return false positives (i.e. it determines that the record
+	// could be created when it actually couldn't) but will never return false
+	// negatives (i.e. it determines that the record could not be created when
+	// it actually could). Callers who intend to write the transaction record
+	// should always provide an exact minimum timestamp.
 	//
-	// NOTE: To call this method, a command must delare (at least) a read
-	// on both the transaction's key and on the txn span GC threshold key.
-	CanCreateTxnRecord(*roachpb.Transaction) (bool, roachpb.TransactionAbortedReason)
+	// If the method return true, it also returns the minimum provisional commit
+	// timestamp that the record can be created with. If the method returns
+	// false, it returns the reason that transaction record was rejected. If the
+	// method ever determines that a transaction record must be rejected, it
+	// will continue to reject that transaction going forwards.
+	//
+	// NOTE: To call this method, a command must declare (at least) a read on
+	// both the transaction's key and on the txn span GC threshold key.
+	CanCreateTxnRecord(
+		txnID uuid.UUID, txnKey []byte, txnMinTSUpperBound hlc.Timestamp,
+	) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason)
 
 	// GetMVCCStats returns a snapshot of the MVCC stats for the range.
 	// If called from a command that declares a read/write span on the

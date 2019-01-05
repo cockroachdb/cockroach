@@ -717,6 +717,8 @@ func (q *Queue) startQueryPusherTxn(
 				} else if updatedPusher == nil {
 					// No pusher to query; the BeginTransaction hasn't yet created the
 					// pusher's record. Continue in order to backoff and retry.
+					// TODO(nvanbenschoten): do something about this. Does is need
+					// a migration?
 					log.Event(ctx, "no pusher found; backing off")
 					continue
 				}

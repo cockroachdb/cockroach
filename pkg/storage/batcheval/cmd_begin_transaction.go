@@ -118,8 +118,8 @@ func BeginTransaction(
 	}
 
 	// Verify that it is safe to create the transaction record.
-	if ok, reason := cArgs.EvalCtx.CanCreateTxnRecord(reply.Txn); !ok {
-		return result.Result{}, roachpb.NewTransactionAbortedError(reason)
+	if err := CanCreateTxnRecord(cArgs.EvalCtx, reply.Txn); err != nil {
+		return result.Result{}, err
 	}
 
 	// Write the txn record.

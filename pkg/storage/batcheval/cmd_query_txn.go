@@ -36,6 +36,7 @@ func declareKeysQueryTransaction(
 ) {
 	qr := req.(*roachpb.QueryTxnRequest)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.TransactionKey(qr.Txn.Key, qr.Txn.ID)})
+	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID)})
 }
 
 // QueryTxn fetches the current state of a transaction.
@@ -59,11 +60,15 @@ func QueryTxn(
 	}
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
-	// Fetch transaction record; if missing, return empty txn.
-	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, &reply.QueriedTxn,
-		engine.MVCCGetOptions{})
-	if err != nil || !ok {
+	// Fetch transaction record; if missing, attempt to synthesize one.
+	if ok, err := engine.MVCCGetProto(
+		ctx, batch, key, hlc.Timestamp{}, &reply.QueriedTxn, engine.MVCCGetOptions{},
+	); err != nil {
 		return result.Result{}, err
+	} else if !ok {
+		// The transaction hasn't written a transaction record yet.
+		// Attempt to synthesize it from the provided TxnMeta.
+		reply.QueriedTxn = SynthesizeTxnFromMeta(cArgs.EvalCtx, args.Txn)
 	}
 	// Get the list of txns waiting on this txn.
 	reply.WaitingTxns = cArgs.EvalCtx.GetTxnWaitQueue().GetDependents(args.Txn.ID)
