@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -68,9 +67,35 @@ func (r *Replica) updateTimestampCache(
 				// which is consulted in CanCreateTxnRecord.
 				key := keys.TransactionKey(start, txnID)
 				tc.Add(key, nil, ts, txnID, false /* readCache */)
+			case *roachpb.PushTxnRequest:
+				// A successful PushTxn request bumps the timestamp cache for
+				// the pushee's transaction key. The pushee will consult the
+				// timestamp cache when creating its record. If the push left
+				// the transaction in a PENDING state (PUSH_TIMESTAMP) then we
+				// update the read timestamp cache. This will cause the creator
+				// of the transaction record to forward its provisional commit
+				// timestamp to honor the result of this push. If the push left
+				// the transaction in an ABORTED state (PUSH_ABORT) then we
+				// update the write timestamp cache. This will prevent the
+				// creation of the transaction record entirely.
+				pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+
+				// Update the local clock to the pushee's new timestamp. This
+				// ensures that we can safely update the timestamp cache based
+				// on this value.
+				// TODO(nvanbenschoten): Is this necessary? Is this the right
+				// place to do this? Is it strange that a PushTxn request
+				// can have a lower batch timestamp than the corresponding
+				// transaction ends up at?
+				r.store.Clock().Update(pushee.Timestamp)
+
+				key := keys.TransactionKey(start, pushee.ID)
+				readCache := pushee.Status != roachpb.ABORTED
+				tc.Add(key, nil, pushee.Timestamp, t.PusherTxn.ID, readCache)
 			case *roachpb.ConditionalPutRequest:
 				if pErr != nil {
 					// ConditionalPut still updates on ConditionFailedErrors.
+					// TODO(nvanbenschoten): do we need similar logic for InitPutRequest?
 					if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 						continue
 					}
@@ -193,45 +218,109 @@ func (r *Replica) applyTimestampCache(
 	return bumped, nil
 }
 
-// CanCreateTxnRecord determines whether a transaction record can be created
-// for the provided transaction. If not, it returns the reason that transaction
-// record was rejected. If the method ever determines that a transaction record
-// must be rejected, it will continue to reject that transaction going forwards.
+// CanCreateTxnRecord determines whether a transaction record can be created for
+// the provided transaction information. See EvalContext.CanCreateTxnRecord for
+// details about its arguments, return values, and preconditions.
+//
+// The method protects against transaction records from being created with too
+// low of a timestamp or after being aborted. It plays a critical role in the
+// transaction record state machine detailed below:
+//
+// +-----------------------------------+
+// |vars                               |
+// |-----------------------------------|
+// |v1 = rTSCache[txn.id]   = timestamp|
+// |v2 = wTSCache[txn.id]   = timestamp|
+// |v3 = txnSpanGCThreshold = timestamp|
+// +-----------------------------------+
+//
+//                PushTxn(TIMESTAMP)                               HeartbeatTxn
+//                then: v1 = push.ts                            then: update record
+//                   +------+                                       +------+
+//  PushTxn(ABORT)   |      |       BeginTxn or HeartbeatTxn        |      |   PushTxn(TIMESTAMP)
+// then: v2 = txn.ts |      v       if: v2 == nil                   |      v  then: update record
+//                +---------------+   & v3 < txn.orig        +--------------------+
+//           +----|               | then: txn.ts.forward(v1) |                    |----+
+//           |    |               | else: fail               |                    |    |
+//           |    | no txn record |------------------------->| txn record written |    |
+//           +--->|               |                          |     [pending]      |<---+
+//                |               |-+                        |                    |
+//                +---------------+  \                       +--------------------+
+//                  ^          ^      \                             /           /
+//                  |           \      \ EndTxn                    / EndTxn    /
+//                  |            \      \ if: same conditions     / then: v2 = txn.ts
+//                  |             \      \    as above           /           /
+//                  |     Eager GC \      \ then: v2 = txn.ts   /           /
+//                  |    if: EndTxn \      \ else: fail        /           / PushTxn(ABORT)
+//                  |    transition  \      v                 v           /
+//                  |         taken   \    +--------------------+        /
+//                  |                  \   |                    |       /
+//                   \                  +--|                    |      /
+//                    \                    | txn record written |<----+
+//                     +-------------------|     [finalized]    |
+//                       GC queue          |                    |
+//                     then: v3 = now()    +--------------------+
+//                                                ^      |
+//                                                |      | PushTxn(*)
+//                                                +------+ then: no-op
+//
+//
+// In the diagram, CanCreateTxnRecord is consulted in both of the state
+// transitions that move away from the "no txn record" state. Updating
+// v1 and v2 is performed in updateTimestampCache.
 func (r *Replica) CanCreateTxnRecord(
-	txn *roachpb.Transaction,
-) (bool, roachpb.TransactionAbortedReason) {
-	// We make comparisons below against the epoch zero timestamp because the
-	// transaction's provisional commit timestamp may be moved forward over the
-	// course of a single epoch and its original timestamp may have moved
-	// forward over the course of a series of epochs.
-	minTxnTS, _ := txn.InclusiveTimeBounds()
+	txnID uuid.UUID, txnKey []byte, txnMinTSUpperBound hlc.Timestamp,
+) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason) {
+	// Consult the timestamp cache with the transaction's key. The timestamp
+	// cache is used in two ways for transactions without transaction records.
+	// The read timestamp cache is used to push the timestamp of transactions
+	// that don't have transaction records. The write timestamp cache is used
+	// to abort transactions entirely that don't have transaction records.
+	//
+	// Using this strategy, we enforce the invariant that only requests sent
+	// from a transaction's own coordinator can create its transaction record.
+	// However, once a transaction record is written, other concurrent actors
+	// can modify it. This is reflected in the diagram above.
+	key := keys.TransactionKey(txnKey, txnID)
 
-	// We look in the timestamp cache to see if there is an entry for this
-	// transaction, which would indicate this transaction has already been
-	// finalized. If there is an entry, then we return a retriable error: if
-	// this is a re-evaluation, then the error will be transformed into an
-	// ambiguous one higher up. Otherwise, if the client is still waiting for a
-	// result, then this cannot be a "replay" of any sort.
-	key := keys.TransactionKey(txn.Key, txn.ID)
+	// Look in the read timestamp cache to see if there is an entry for this
+	// transaction, which indicates the minimum timestamp that the transaction
+	// can commit at. This is used by pushers to push the timestamp of a
+	// transaction that hasn't yet written its transaction record.
+	minCommitTS, _ = r.store.tsCache.GetMaxRead(key, nil /* end */)
+
+	// Also look in the write timestamp cache to see if there is an entry for
+	// this transaction, which would indicate this transaction has already been
+	// finalized or was already aborted by a concurrent transaction. If there is
+	// an entry, then we return a retriable error: if this is a re-evaluation,
+	// then the error will be transformed into an ambiguous one higher up.
+	// Otherwise, if the client is still waiting for a result, then this cannot
+	// be a "replay" of any sort.
 	wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil /* end */)
-	// GetMaxWrite will only find a timestamp interval with an associated txnID
-	// on the TransactionKey if an EndTxnReq has been processed. All other
-	// timestamp intervals will have no associated txnID and will be due to the
-	// low-water mark.
-	switch wTxnID {
-	case txn.ID:
-		return false, roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
-	case uuid.UUID{} /* noTxnID */ :
-		if !wTS.Less(minTxnTS) {
+	// Compare against the minimum timestamp that the transaction could have
+	// written intents at.
+	if !wTS.Less(txnMinTSUpperBound) {
+		switch wTxnID {
+		case txnID:
+			// If we find our own transaction ID then an EndTransaction request
+			// sent by our coordinator has already been processed. We might be a
+			// replay, or we raced with an asynchronous abort. Either way, return
+			// an error.
+			return false, minCommitTS, roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
+		case uuid.Nil:
 			// On lease transfers the timestamp cache is reset with the transfer
 			// time as the low-water mark, so if this replica recently obtained
 			// the lease, this case will be true for new txns, even if they're
 			// not a replay. We force these txns to retry.
-			return false, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY
+			return false, minCommitTS, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY
+		default:
+			// If we find another transaction's ID then that transaction has
+			// aborted us before our transaction record was written. It obeyed
+			// the restriction that it couldn't create a transaction record for
+			// us, so it bumped the write timestamp cache instead to prevent us
+			// from ever creating a transaction record.
+			return false, minCommitTS, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
 		}
-	default:
-		log.Fatalf(context.Background(), "unexpected tscache interval (%s,%s) for txn %s",
-			wTS, wTxnID, txn)
 	}
 
 	// Disallow creation or modification of a transaction record if its original
@@ -240,10 +329,14 @@ func (r *Replica) CanCreateTxnRecord(
 	// of our intents (which may have been written before our transaction record).
 	//
 	// See #9265.
+	//
+	// TODO(nvanbenschoten): If we forwarded the Range's entire local txn span in
+	// the write timestamp cache when we performed a GC then we wouldn't need this
+	// check at all.
 	threshold := r.GetTxnSpanGCThreshold()
-	if minTxnTS.Less(threshold) {
-		return false, roachpb.ABORT_REASON_NEW_TXN_RECORD_TOO_OLD
+	if txnMinTSUpperBound.Less(threshold) {
+		return false, minCommitTS, roachpb.ABORT_REASON_NEW_TXN_RECORD_TOO_OLD
 	}
 
-	return true, 0
+	return true, minCommitTS, 0
 }

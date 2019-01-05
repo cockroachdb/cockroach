@@ -717,6 +717,11 @@ func (q *Queue) startQueryPusherTxn(
 				} else if updatedPusher == nil {
 					// No pusher to query; the BeginTransaction hasn't yet created the
 					// pusher's record. Continue in order to backoff and retry.
+					// TODO(nvanbenschoten): we shouldn't hit this case in a 2.2
+					// cluster now that QueryTxn requests synthesize
+					// transactions from their provided TxnMeta. However, we
+					// need to keep the logic while we want to support
+					// compatibility with 2.1 nodes. Remove this in 2.3.
 					log.Event(ctx, "no pusher found; backing off")
 					continue
 				}
@@ -806,7 +811,9 @@ func (q *Queue) queryTxnStatus(
 	}
 	br := b.RawResponse()
 	resp := br.Responses[0].GetInner().(*roachpb.QueryTxnResponse)
-	// ID can be nil if no BeginTransaction has been sent yet.
+	// ID can be nil if no BeginTransaction has been sent yet and we're talking
+	// to a 2.1 node.
+	// TODO(nvanbenschoten): Remove this in 2.3.
 	if updatedTxn := &resp.QueriedTxn; updatedTxn.ID != (uuid.UUID{}) {
 		return updatedTxn, resp.WaitingTxns, nil
 	}
