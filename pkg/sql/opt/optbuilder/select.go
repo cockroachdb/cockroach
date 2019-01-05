@@ -360,7 +360,7 @@ func (b *Builder) buildScan(
 			if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 				idx := -1
 				for i := 0; i < tab.IndexCount(); i++ {
-					if tab.Index(i).Name() == string(indexFlags.Index) ||
+					if tab.Index(i).Name() == tree.Name(indexFlags.Index) ||
 						tab.Index(i).ID() == cat.StableID(indexFlags.IndexID) {
 						idx = i
 						break
@@ -563,7 +563,7 @@ func (b *Builder) buildSelect(
 		projectionsScope.cols = make([]scopeColumn, 0, len(outScope.cols))
 		for i := range outScope.cols {
 			expr := &outScope.cols[i]
-			col := b.addColumn(projectionsScope, "" /* label */, expr)
+			col := b.addColumn(projectionsScope, "" /* alias */, expr)
 			b.buildScalar(expr, outScope, projectionsScope, col, nil)
 		}
 		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope)

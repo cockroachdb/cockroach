@@ -542,8 +542,7 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	}
 
 	// Queue the insert in the KV batch.
-	_, err = n.run.ti.row(params.ctx, rowVals, n.run.traceKV)
-	if err != nil {
+	if err = n.run.ti.row(params.ctx, rowVals, n.run.traceKV); err != nil {
 		return err
 	}
 
@@ -665,7 +664,7 @@ func GenerateInsertRow(
 	}
 
 	// Ensure that the values honor the specified column widths.
-	for i := range rowVals {
+	for i := 0; i < len(insertCols); i++ {
 		outVal, err := sqlbase.LimitValueWidth(insertCols[i].Type, rowVals[i], &insertCols[i].Name)
 		if err != nil {
 			return nil, err

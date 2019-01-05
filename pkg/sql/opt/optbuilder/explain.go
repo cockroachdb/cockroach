@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope *scope) {
@@ -43,6 +44,11 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		}
 
 	case tree.ExplainDistSQL:
+		analyze := opts.Flags.Contains(tree.ExplainFlagAnalyze)
+		if analyze && tree.IsStmtParallelized(explain.Statement) {
+			panic(builderError{
+				errors.New("EXPLAIN ANALYZE does not support RETURNING NOTHING statements")})
+		}
 		cols = sqlbase.ExplainDistSQLColumns
 
 	case tree.ExplainOpt:

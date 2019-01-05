@@ -397,7 +397,6 @@ func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
 			return col
 		}
 	}
-
 	return nil
 }
 

@@ -266,6 +266,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	idx := &Index{
 		IdxName:  tt.makeIndexName(def.Name, typ),
+		Unique:   typ != nonUniqueIndex,
 		Inverted: def.Inverted,
 		table:    tt,
 	}
@@ -290,7 +291,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 			pkOrdinals.Add(c.Ordinal)
 		}
 		// Add the rest of the columns in the table.
-		for i := range tt.Columns {
+		for i, n := 0, tt.ColumnCount(); i < n; i++ {
 			if !pkOrdinals.Contains(i) {
 				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}
@@ -396,6 +397,10 @@ func (ti *Index) addColumnByOrdinal(
 	case strictKeyCol:
 		// Column is only part of the strict key.
 		ti.KeyCount++
+	}
+
+	if mut, ok := col.(*cat.MutationColumn); ok {
+		return mut.Column.(*Column)
 	}
 	return col.(*Column)
 }

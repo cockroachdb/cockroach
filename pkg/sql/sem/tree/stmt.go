@@ -115,6 +115,26 @@ func CanWriteData(stmt Statement) bool {
 	return false
 }
 
+// IsStmtParallelized determines if a given statement's execution should be
+// parallelized. This means that its results should be mocked out, and that
+// it should be run asynchronously and in parallel with other statements that
+// are independent.
+func IsStmtParallelized(stmt Statement) bool {
+	parallelizedRetClause := func(ret ReturningClause) bool {
+		_, ok := ret.(*ReturningNothing)
+		return ok
+	}
+	switch s := stmt.(type) {
+	case *Delete:
+		return parallelizedRetClause(s.Returning)
+	case *Insert:
+		return parallelizedRetClause(s.Returning)
+	case *Update:
+		return parallelizedRetClause(s.Returning)
+	}
+	return false
+}
+
 // HiddenFromShowQueries is a pseudo-interface to be implemented
 // by statements that should not show up in SHOW QUERIES (and are hence
 // not cancellable using CANCEL QUERIES either). Usually implemented by

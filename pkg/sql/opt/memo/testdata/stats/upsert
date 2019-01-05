@@ -1,0 +1,172 @@
+exec-ddl
+CREATE TABLE abc (
+    a INT NOT NULL,
+    b TEXT DEFAULT ('foo'),
+    c FLOAT AS (a::float) STORED
+)
+----
+TABLE abc
+ ├── a int not null
+ ├── b string
+ ├── c float
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE xyz (
+    x TEXT PRIMARY KEY,
+    y INT8 NOT NULL,
+    z FLOAT8
+)
+----
+TABLE xyz
+ ├── x string not null
+ ├── y int not null
+ ├── z float
+ └── INDEX primary
+      └── x string not null
+
+# Statistics should be derived from input columns and transferred to RETURNING
+# columns.
+build
+SELECT *
+FROM
+[
+	INSERT INTO xyz (x, y)
+	SELECT b, a FROM abc WHERE b='foo'
+	ON CONFLICT (x) DO UPDATE SET y=5
+	RETURNING *
+]
+WHERE y=10
+----
+select
+ ├── columns: x:1(string!null) y:2(int!null) z:3(float)
+ ├── side-effects, mutations
+ ├── stats: [rows=1, distinct(1)=0.633042178, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── fd: ()-->(2)
+ ├── upsert xyz
+ │    ├── columns: x:1(string!null) y:2(int!null) z:3(float)
+ │    ├── canary column: 9
+ │    ├── fetch columns: x:9(string) y:10(int) z:11(float)
+ │    ├── insert-mapping:
+ │    │    ├──  b:5 => x:1
+ │    │    ├──  a:4 => y:2
+ │    │    └──  column8:8 => z:3
+ │    ├── update-mapping:
+ │    │    └──  column12:12 => y:2
+ │    ├── side-effects, mutations
+ │    ├── stats: [rows=200, distinct(1)=1, null(1)=0, distinct(2)=200, null(2)=0]
+ │    └── project
+ │         ├── columns: column12:12(int!null) a:4(int!null) b:5(string!null) column8:8(unknown) x:9(string) y:10(int) z:11(float)
+ │         ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0]
+ │         ├── fd: ()-->(5,8,12), (9)-->(10,11)
+ │         ├── left-join
+ │         │    ├── columns: a:4(int!null) b:5(string!null) column8:8(unknown) x:9(string) y:10(int) z:11(float)
+ │         │    ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0, distinct(9)=1, null(9)=0]
+ │         │    ├── fd: ()-->(5,8), (9)-->(10,11)
+ │         │    ├── project
+ │         │    │    ├── columns: column8:8(unknown) a:4(int!null) b:5(string!null)
+ │         │    │    ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0]
+ │         │    │    ├── fd: ()-->(5,8)
+ │         │    │    ├── project
+ │         │    │    │    ├── columns: a:4(int!null) b:5(string!null)
+ │         │    │    │    ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0]
+ │         │    │    │    ├── fd: ()-->(5)
+ │         │    │    │    └── select
+ │         │    │    │         ├── columns: a:4(int!null) b:5(string!null) c:6(float) rowid:7(int!null)
+ │         │    │    │         ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0, distinct(7)=200, null(7)=0]
+ │         │    │    │         ├── key: (7)
+ │         │    │    │         ├── fd: ()-->(5), (7)-->(4,6)
+ │         │    │    │         ├── scan abc
+ │         │    │    │         │    ├── columns: a:4(int!null) b:5(string) c:6(float) rowid:7(int!null)
+ │         │    │    │         │    ├── stats: [rows=2000, distinct(4)=2000, null(4)=0, distinct(5)=10, null(5)=0, distinct(7)=2000, null(7)=0]
+ │         │    │    │         │    ├── key: (7)
+ │         │    │    │         │    └── fd: (7)-->(4-6)
+ │         │    │    │         └── filters
+ │         │    │    │              └── b = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
+ │         │    │    └── projections
+ │         │    │         └── null [type=unknown]
+ │         │    ├── scan xyz
+ │         │    │    ├── columns: x:9(string!null) y:10(int!null) z:11(float)
+ │         │    │    ├── stats: [rows=1000, distinct(9)=1000, null(9)=0]
+ │         │    │    ├── key: (9)
+ │         │    │    └── fd: (9)-->(10,11)
+ │         │    └── filters
+ │         │         └── b = x [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
+ │         └── projections
+ │              └── const: 5 [type=int]
+ └── filters
+      └── y = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+
+# Cardinality is zero.
+build
+UPSERT INTO xyz SELECT b, a FROM abc WHERE False RETURNING *
+----
+upsert xyz
+ ├── columns: x:1(string!null) y:2(int!null) z:3(float)
+ ├── canary column: 9
+ ├── fetch columns: x:9(string) y:10(int) z:11(float)
+ ├── insert-mapping:
+ │    ├──  b:5 => x:1
+ │    ├──  a:4 => y:2
+ │    └──  column8:8 => z:3
+ ├── update-mapping:
+ │    ├──  a:4 => y:2
+ │    └──  column8:8 => z:3
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── stats: [rows=0]
+ └── left-join
+      ├── columns: a:4(int!null) b:5(string) column8:8(unknown) x:9(string) y:10(int) z:11(float)
+      ├── cardinality: [0 - 0]
+      ├── stats: [rows=0]
+      ├── fd: ()-->(8), (9)-->(10,11)
+      ├── project
+      │    ├── columns: column8:8(unknown) a:4(int!null) b:5(string)
+      │    ├── cardinality: [0 - 0]
+      │    ├── stats: [rows=0]
+      │    ├── fd: ()-->(8)
+      │    ├── project
+      │    │    ├── columns: a:4(int!null) b:5(string)
+      │    │    ├── cardinality: [0 - 0]
+      │    │    ├── stats: [rows=0]
+      │    │    └── select
+      │    │         ├── columns: a:4(int!null) b:5(string) c:6(float) rowid:7(int!null)
+      │    │         ├── cardinality: [0 - 0]
+      │    │         ├── stats: [rows=0]
+      │    │         ├── key: (7)
+      │    │         ├── fd: (7)-->(4-6)
+      │    │         ├── scan abc
+      │    │         │    ├── columns: a:4(int!null) b:5(string) c:6(float) rowid:7(int!null)
+      │    │         │    ├── stats: [rows=2000]
+      │    │         │    ├── key: (7)
+      │    │         │    └── fd: (7)-->(4-6)
+      │    │         └── filters
+      │    │              └── false [type=bool]
+      │    └── projections
+      │         └── null [type=unknown]
+      ├── scan xyz
+      │    ├── columns: x:9(string!null) y:10(int!null) z:11(float)
+      │    ├── stats: [rows=1000]
+      │    ├── key: (9)
+      │    └── fd: (9)-->(10,11)
+      └── filters
+           └── b = x [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]

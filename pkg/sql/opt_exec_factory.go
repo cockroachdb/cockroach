@@ -1025,6 +1025,123 @@ func (ef *execFactory) ConstructUpdate(
 	return &rowCountNode{source: upd}, nil
 }
 
+func (ef *execFactory) ConstructUpsert(
+	input exec.Node,
+	table cat.Table,
+	canaryCol exec.ColumnOrdinal,
+	insertCols exec.ColumnOrdinalSet,
+	fetchCols exec.ColumnOrdinalSet,
+	updateCols exec.ColumnOrdinalSet,
+	rowsNeeded bool,
+) (exec.Node, error) {
+	// Derive table and column descriptors.
+	tabDesc := table.(*optTable).desc
+	insertColDescs := makeColDescList(table, insertCols)
+	fetchColDescs := makeColDescList(table, fetchCols)
+	updateColDescs := makeColDescList(table, updateCols)
+
+	// Determine the foreign key tables involved in the upsert.
+	var fkCheckType row.FKCheck
+	if len(updateColDescs) == 0 {
+		fkCheckType = row.CheckInserts
+	} else {
+		fkCheckType = row.CheckUpdates
+	}
+
+	// Determine the foreign key tables involved in the upsert.
+	fkTables, err := row.TablesNeededForFKs(
+		ef.planner.extendedEvalCtx.Context,
+		*tabDesc,
+		fkCheckType,
+		ef.planner.LookupTableByID,
+		ef.planner.CheckPrivilege,
+		ef.planner.analyzeExpr,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the table inserter, which does the bulk of the insert-related work.
+	ri, err := row.MakeInserter(ef.planner.txn, tabDesc, fkTables, insertColDescs,
+		row.CheckFKs, &ef.planner.alloc)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the table updater, which does the bulk of the update-related work.
+	// In the HP, the updater derives the columns that need to be fetched. By
+	// contrast, the CBO will have already determined the set of fetch and update
+	// columns, and passes those sets into the updater (which will basically be a
+	// no-op).
+	ru, err := row.MakeUpdater(
+		ef.planner.txn,
+		tabDesc,
+		fkTables,
+		updateColDescs,
+		fetchColDescs,
+		row.UpdaterDefault,
+		ef.planner.EvalContext(),
+		&ef.planner.alloc,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine the relational type of the generated upsert node.
+	// If rows are not needed, no columns are returned.
+	var returnCols sqlbase.ResultColumns
+	if rowsNeeded {
+		// Upsert always returns all non-mutation columns, in the same order they
+		// are defined in the table.
+		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
+	}
+
+	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
+	// the explanatory comments in updateRun.
+	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
+	for i, col := range ru.UpdateCols {
+		updateColsIdx[col.ID] = i
+	}
+
+	// Instantiate the upsert node.
+	ups := upsertNodePool.Get().(*upsertNode)
+	*ups = upsertNode{
+		source:  input.(planNode),
+		columns: returnCols,
+		run: upsertRun{
+			checkHelper: fkTables[tabDesc.ID].CheckHelper,
+			insertCols:  insertColDescs,
+			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
+				Cols:    tabDesc.Columns,
+				Mapping: ri.InsertColIDtoRowIndex,
+			},
+			tw: &optTableUpserter{
+				tableUpserterBase: tableUpserterBase{
+					ri:          ri,
+					alloc:       &ef.planner.alloc,
+					collectRows: rowsNeeded,
+				},
+				canaryOrdinal: int(canaryCol),
+				fkTables:      fkTables,
+				fetchCols:     fetchColDescs,
+				updateCols:    updateColDescs,
+				ru:            ru,
+			},
+		},
+	}
+
+	// Serialize the data-modifying plan to ensure that no data is observed that
+	// hasn't been validated first. See the comments on BatchedNext() in
+	// plan_batch.go.
+	if rowsNeeded {
+		return &spoolNode{source: &serializeNode{source: ups}}, nil
+	}
+
+	// We could use serializeNode here, but using rowCountNode is an
+	// optimization that saves on calls to Next() by the caller.
+	return &rowCountNode{source: ups}, nil
+}
+
 func (ef *execFactory) ConstructCreateTable(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {

@@ -82,6 +82,7 @@ anti-join (merge)
  │    └── ordering: +6
  └── filters (true)
 
+# Decorrelate UPDATE statement.
 opt expect=DecorrelateJoin
 UPDATE xy SET (x, y)=(SELECT * FROM uv WHERE u=x)
 ----
@@ -109,6 +110,42 @@ update xy
       │    ├── key: (5)
       │    ├── fd: (5)-->(6)
       │    └── ordering: +5
+      └── filters (true)
+
+# Decorrelate INSERT..ON CONFLICT statement.
+opt expect=DecorrelateJoin
+INSERT INTO xy VALUES (1,2), (3,4)
+ON CONFLICT (x) DO UPDATE SET (x, y)=(SELECT * FROM uv WHERE u=excluded.x)
+RETURNING *
+----
+upsert xy
+ ├── columns: x:1(int!null) y:2(int)
+ ├── canary column: 5
+ ├── fetch columns: x:5(int) y:6(int)
+ ├── insert-mapping:
+ │    ├──  column1:3 => x:1
+ │    └──  column2:4 => y:2
+ ├── update-mapping:
+ │    ├──  u:7 => x:1
+ │    └──  v:8 => y:2
+ ├── cardinality: [2 - ]
+ ├── side-effects, mutations
+ └── left-join (lookup uv)
+      ├── columns: column1:3(int) column2:4(int) x:5(int) y:6(int) u:7(int) v:8(int)
+      ├── key columns: [3] = [7]
+      ├── cardinality: [2 - ]
+      ├── fd: (5)-->(6), (7)-->(8)
+      ├── left-join (lookup xy)
+      │    ├── columns: column1:3(int) column2:4(int) x:5(int) y:6(int)
+      │    ├── key columns: [3] = [5]
+      │    ├── cardinality: [2 - ]
+      │    ├── fd: (5)-->(6)
+      │    ├── values
+      │    │    ├── columns: column1:3(int) column2:4(int)
+      │    │    ├── cardinality: [2 - 2]
+      │    │    ├── (1, 2) [type=tuple{int, int}]
+      │    │    └── (3, 4) [type=tuple{int, int}]
+      │    └── filters (true)
       └── filters (true)
 
 # --------------------------------------------------

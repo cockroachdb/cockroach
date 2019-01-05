@@ -115,6 +115,17 @@ type ForeignKeyReference struct {
 	Match tree.CompositeKeyMatchMethod
 }
 
+// FindTableColumnByName returns the ordinal of the column having the given
+// name, if one exists in the given table. Otherwise, it returns -1.
+func FindTableColumnByName(tab Table, name tree.Name) int {
+	for ord, n := 0, tab.ColumnCount(); ord < n; ord++ {
+		if tab.Column(ord).ColName() == name {
+			return ord
+		}
+	}
+	return -1
+}
+
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for
 // debugging and testing.
 func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
