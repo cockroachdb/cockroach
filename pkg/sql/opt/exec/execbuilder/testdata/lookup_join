@@ -153,7 +153,7 @@ ALTER TABLE books2 INJECT STATISTICS '[
     "columns": ["title"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 10000
+    "distinct_count": 1000
   }
 ]'
 
@@ -176,7 +176,7 @@ distinct               ·            ·               (title)                   
 ·                      table        books2@primary  ·                             ·
 
 statement ok
-CREATE TABLE authors (name STRING PRIMARY KEY, book STRING)
+CREATE TABLE authors (name STRING, book STRING)
 
 statement ok
 ALTER TABLE authors INJECT STATISTICS '[
@@ -222,21 +222,23 @@ NULL       NULL     {5}       5
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk0-L2zAQxe_9FOqcElCx5X8LhoAKe-j24C1LbyUHrTVNRB3LSDK0hHz3YhuS2I2VP5febGl-8968QXuotcRC7NBC_gMYUEhhTaExukRrtemOh6IX-RvykIKqm9Z1x2sKpTYI-R6cchVCDoX-pJsgAwoSnVBVX3agoFt3gqwTG4T86UDPGjN_4-_ivcI3FBJNEI7aQ2PUTpg__F3rXzYCCq-tywlnlMcwp80e1WaXtUXrtl1Wc3rRrN5Jpq21kWhQTtO7XnLB9Bdht1-1qtEE0djzMZ6I8pjyZNZ0_GhIsWdBt-0n-Z95JWP7Ff50C86WK6M22_6rm6EgC56QFeHpknwunsmCZ-TjivBoeZxwfrz0nmSflXWqLl2Qjn1xNts_G_W_8mbf0Da6tnjTow277FBucNiF1a0p8ZvRZS8z_L72XH8g0brh9mn4eamHq87gOcy8cDyC2RSO7oCjKRx74dSvnNwB_6OceuHMH1jmhcMJvD58-BsAAP__2dLv4w==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk02L2zAQhu_9FeqcElCx5a8FQ0CFPXR78Jalt5KDYk0TUccykgwtIf-92IYmdmPl47I3aTTPvDPvoAPUWmIh9mgh_wEMKKSwptAYXaK12nThIelF_oY8pKDqpnVdeE2h1AYhP4BTrkLIodCfdBNkQEGiE6rq044UdOtOkHVii5A_HelZYeYv_F1sKnxDIdEE4ag8NEbthfnDN1r_shFQeG1dTjijPIY5bfaoNrusLVq367w6E49mxaNZ8ZNmW2sj0aCcWnk95cIEX4TdfdWqRhNE4wFO7VIeU57MNh0_6ljs2dZty0re069k3H6FP92Cs-XKqO2uP3UzFGTBE7IiPF2Sz8UzWfCMfFwRHi3_TTg_XnqPs8_KOlWXLkjHfXE2Wz8b1b_ygd_QNrq2eNMPDjvvUG5x2IXVrSnxm9FlLzNcX3uuD0i0bnh9Gi4v9fDUNXgOMy8cj2A2haM74GgKx1449Ssnd8D_KadeOPMblnnhcAKvjx_-BgAA__-eevL0
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
-tree              field     description      columns              ordering
-render            ·         ·                (name)               +name
- │                render 0  name             ·                    ·
- └── lookup-join  ·         ·                (name, book, title)  +name
-      │           type      inner            ·                    ·
-      ├── scan    ·         ·                (name, book)         +name
-      │           table     authors@primary  ·                    ·
-      │           spans     ALL              ·                    ·
-      └── scan    ·         ·                (title)              ·
-·                 table     books2@primary   ·                    ·
+tree                 field     description      columns              ordering
+render               ·         ·                (name)               +name
+ │                   render 0  name             ·                    ·
+ └── lookup-join     ·         ·                (name, book, title)  +name
+      │              type      inner            ·                    ·
+      ├── sort       ·         ·                (name, book)         +name
+      │    │         order     +name            ·                    ·
+      │    └── scan  ·         ·                (name, book)         ·
+      │              table     authors@primary  ·                    ·
+      │              spans     ALL              ·                    ·
+      └── scan       ·         ·                (title)              ·
+·                    table     books2@primary   ·                    ·
 
 # Cross joins should not be planned as lookup joins.
 query TTTTT colnames
@@ -263,7 +265,7 @@ render          ·         ·               (title, edition, shelf, title, editi
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFrwzAMhe_7FUZnjcZpC8Mw8LVjpKP0NnJwE9FlTa1gO7BR8t-H48HasWbbUU_69J7lE1iuqTBH8qCeQQLCEkqEznFF3rOLchpa1W-gMoTGdn2IcolQsSNQJwhNaAkUFHzL3SwHhJqCadpxbEDgPnxBPpg9gZoPeLZYTi_eml1LGzI1uVl2sR461xyNe9emDy8x7zU_-R-_B27sp5382W7HfPDxpY_Mh74Tr9xYwVYJHcV1IfRC3AuplFoV27so9UEJLVHnqOeoF6iXV7PmF1l_OfqGfMfW05-ung0lAtV7Sh_ruXcVPTmuRptUrkduFGryIXXnqVjZ1IoBz2E5CefTcD4JZ9_gcrj5CAAA__-cGuJJ
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkdFLwzAQxt_9K8I9n6zpNpCAkNeJdDL2Jn3I2mPWbbmSpKCM_u-SRnAVV_Ux393vvi98Z7BcU2FO5EE9gwSEJZQIreOKvGcX5bS0qt9AZQiNbbsQ5RKhYkegzhCacCRQUPAtt7McEGoKpjkOaz0Cd-EL8sHsCdS8x4vDcvrw1uyOtCFTk5tlo_PQuuZk3Ls2XXiJeRHWXVBCS9Q5XDOX_zF_4MZ-esufvXfMBx-__ch86Frxyo0VbJXQUVwXQi_EvZBKqVWxvRtFRD1HvUC9vJo1H2X9pYEN-Zatpz9VkPUlAtV7Si177lxFT46rwSY91wM3CDX5kKbz9FjZNIoBL2E5CefTcD4JZ9_gsr_5CAAA__8DmeVa
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #

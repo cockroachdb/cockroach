@@ -136,6 +136,24 @@ func TestJoinReader(t *testing.T) {
 			expected:    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
 		},
 		{
+			description: "Test lookup joins preserve order of left input",
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 3},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(2), bFn(2)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			lookupCols:  []uint32{0, 1},
+			inputTypes:  twoIntCols,
+			outputTypes: threeIntCols,
+			expected:    "[[0 2 2] [0 5 5] [0 2 2] [1 0 0] [1 5 5]]",
+		},
+		{
 			description: "Test lookup join with onExpr",
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -327,7 +345,7 @@ func TestJoinReader(t *testing.T) {
 				}
 
 				// Set a lower batch size to force multiple batches.
-				jr.batchSize = 2
+				jr.batchSize = 3
 
 				jr.Run(ctx)
 
