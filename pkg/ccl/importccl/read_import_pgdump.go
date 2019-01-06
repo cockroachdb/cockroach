@@ -84,7 +84,7 @@ func (p *postgreStream) Next() (interface{}, error) {
 
 	for p.s.Scan() {
 		t := p.s.Text()
-		stmts, _, err := parser.Parse(t)
+		stmts, err := parser.Parse(t)
 		if err != nil {
 			// Something non-parseable may be something we don't yet parse but still
 			// want to ignore.
@@ -100,7 +100,7 @@ func (p *postgreStream) Next() (interface{}, error) {
 			// If the statement is COPY ... FROM STDIN, set p.copy so the next call to
 			// this function will read copy data. We still return this COPY statement
 			// for this invocation.
-			if cf, ok := stmts[0].(*tree.CopyFrom); ok && cf.Stdin {
+			if cf, ok := stmts[0].AST.(*tree.CopyFrom); ok && cf.Stdin {
 				// Set p.copy which reconfigures the scanner's split func.
 				p.copy = newPostgreStreamCopy(p.s, copyDefaultDelimiter, copyDefaultNull)
 
@@ -116,7 +116,7 @@ func (p *postgreStream) Next() (interface{}, error) {
 					return nil, errors.Errorf("expected empty line")
 				}
 			}
-			return stmts[0], nil
+			return stmts[0].AST, nil
 		default:
 			return nil, errors.Errorf("unexpected: got %d statements", len(stmts))
 		}

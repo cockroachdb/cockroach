@@ -411,7 +411,7 @@ func BenchmarkFormatRandomStatements(b *testing.B) {
 		b.Fatalf("error instantiating RSG: %v", err)
 	}
 	strs := make([]string, 1000)
-	stmts := make(tree.StatementList, 1000)
+	stmts := make([]tree.Statement, 1000)
 	for i := 0; i < 1000; {
 		rdm := r.Generate("stmt", 20)
 		stmt, err := parser.ParseOne(rdm)
