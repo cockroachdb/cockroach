@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"runtime/pprof"
-	"strconv"
 	"testing"
 	"time"
 
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -510,10 +510,10 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 		}
 
 		var texpr tree.TypedExpr
-		name := strconv.Itoa(i + 1)
+		id := types.PlaceholderIdx(i)
 		texpr, err = sqlbase.SanitizeVarFreeExpr(
 			parg,
-			h.semaCtx.Placeholders.TypeHints[name],
+			h.semaCtx.Placeholders.TypeHints[id],
 			"", /* context */
 			&h.semaCtx,
 			&h.evalCtx,
@@ -523,7 +523,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 			tb.Fatalf("%v", err)
 		}
 
-		h.semaCtx.Placeholders.Values[name] = texpr
+		h.semaCtx.Placeholders.Values[id] = texpr
 	}
 	h.evalCtx.Placeholders = &h.semaCtx.Placeholders
 }
