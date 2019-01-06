@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
@@ -529,39 +528,6 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 func (p *planner) prepareForDistSQLSupportCheck() {
 	// Trigger limit propagation.
 	p.setUnlimited(p.curPlan.plan)
-}
-
-// optionallyUseOptimizer will attempt to make an optimizer plan based on the
-// optimizerMode setting.
-//
-// If we are able to create a plan with the optimizer, the planFlagOptUsed is
-// set in the flags.
-//
-// If the optimizer is off or it is safe to fall back to the heuristic planner,
-// no error is returned and planFlagOptUsed is not set in the flags
-// (planFlagOptFallback is set in the latter case).
-func (p *planner) optionallyUseOptimizer(
-	ctx context.Context, sd sessiondata.SessionData, stmt Statement,
-) (planFlags, error) {
-	if sd.OptimizerMode == sessiondata.OptimizerOff {
-		log.VEvent(ctx, 2, "optimizer disabled")
-		return 0, nil
-	}
-
-	log.VEvent(ctx, 2, "generating optimizer plan")
-
-	flags, err := p.makeOptimizerPlan(ctx, stmt)
-	if err != nil {
-		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
-		if canFallbackFromOpt(err, sd.OptimizerMode, stmt) {
-			log.VEvent(ctx, 1, "optimizer falls back on heuristic planner")
-			return planFlagOptFallback, nil
-		}
-		return 0, err
-	}
-
-	log.VEvent(ctx, 2, "optimizer plan succeeded")
-	return flags, nil
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current

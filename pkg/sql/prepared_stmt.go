@@ -61,6 +61,20 @@ type PreparedStatement struct {
 	memAcc mon.BoundAccount
 }
 
+// MemoryEstimate returns a rough estimate of the PreparedStatement's memory
+// usage, in bytes.
+func (p *PreparedStatement) MemoryEstimate() int64 {
+	// Account for the memory used by this prepared statement:
+	//   1. Size of the query string and prepared struct.
+	//   2. Size of the prepared memo, if using the cost-based optimizer.
+	size := int64(len(p.Str) + int(unsafe.Sizeof(*p)))
+	if p.Memo != nil {
+		size += p.Memo.MemoryEstimate()
+	}
+	// TODO(radu): account for more fields.
+	return size
+}
+
 func (p *PreparedStatement) close(ctx context.Context) {
 	p.memAcc.Close(ctx)
 }
