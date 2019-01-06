@@ -46,9 +46,9 @@ const (
 	// jrPerformingLookup means we are performing an index lookup for the current
 	// input row batch.
 	jrPerformingLookup
-	// jrCollectingOutputRows is used for left outer joins. It means we are
-	// collecting the result of the index lookup to be emitted, while preserving
-	// the order of the input and rendering rows for unmatched inputs.
+	// jrCollectingOutputRows means we are collecting the result of the index
+	// lookup to be emitted, while preserving the order of the input, and
+	// optionally rendering rows for unmatched inputs for left outer joins.
 	jrCollectingOutputRows
 	// jrEmittingRows means we are emitting the results of the index lookup.
 	jrEmittingRows
@@ -398,11 +398,16 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 		return jrStateUnknown, jr.DrainHelper()
 	}
 
-	// If this is an outer join, maintain a map from input row index to the
-	// corresponding output rows. This will allow us to emit unmatched rows while
-	// preserving the order of the input. For inner joins, we can skip this step
-	// and add output rows directly to jr.toEmit.
-	if jr.joinType == sqlbase.LeftOuterJoin {
+	// Maintain a map from input row index to the corresponding output rows. This
+	// will allow us to preserve the order of the input in the face of multiple
+	// input rows having the same lookup keyspan, or if we're doing an outer join
+	// and we need to emit unmatched rows.
+	if len(jr.inputRowIdxToOutputRows) >= len(jr.inputRows) {
+		jr.inputRowIdxToOutputRows = jr.inputRowIdxToOutputRows[:len(jr.inputRows)]
+		for i := range jr.inputRowIdxToOutputRows {
+			jr.inputRowIdxToOutputRows[i] = nil
+		}
+	} else {
 		jr.inputRowIdxToOutputRows = make([]sqlbase.EncDatumRows, len(jr.inputRows))
 	}
 
@@ -516,12 +521,8 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 			}
 			if renderedRow != nil {
 				rowCopy := jr.out.rowAlloc.CopyRow(renderedRow)
-				if jr.inputRowIdxToOutputRows == nil {
-					jr.toEmit = append(jr.toEmit, rowCopy)
-				} else {
-					jr.inputRowIdxToOutputRows[inputRowIdx] = append(
-						jr.inputRowIdxToOutputRows[inputRowIdx], rowCopy)
-				}
+				jr.inputRowIdxToOutputRows[inputRowIdx] = append(
+					jr.inputRowIdxToOutputRows[inputRowIdx], rowCopy)
 			}
 		}
 	}
@@ -533,20 +534,19 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 	return jrEmittingRows, nil
 }
 
-// collectOutputRows is used for left joins only. It iterates over
-// jr.inputRowIdxToOutputRows and adds output rows to jr.Emit, rendering rows
-// for unmatched inputs while preserving the input order. For inner joins it is
-// a no-op.
+// collectOutputRows iterates over jr.inputRowIdxToOutputRows and adds output
+// rows to jr.Emit, rendering rows for unmatched inputs if the join is a left
+// outer join, while preserving the input order.
 func (jr *joinReader) collectOutputRows() joinReaderState {
-	if jr.joinType == sqlbase.LeftOuterJoin {
-		for i, outputRows := range jr.inputRowIdxToOutputRows {
-			if len(outputRows) == 0 {
+	for i, outputRows := range jr.inputRowIdxToOutputRows {
+		if len(outputRows) == 0 {
+			if jr.joinType == sqlbase.LeftOuterJoin {
 				if row := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); row != nil {
 					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
 				}
-			} else {
-				jr.toEmit = append(jr.toEmit, outputRows...)
 			}
+		} else {
+			jr.toEmit = append(jr.toEmit, outputRows...)
 		}
 	}
 	return jrEmittingRows
