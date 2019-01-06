@@ -2948,6 +2948,45 @@ func TestParseSQL(t *testing.T) {
 	}
 }
 
+// TestParseNumPlaceholders verifies that Statement.NumPlaceholders is set
+// correctly.
+func TestParseNumPlaceholders(t *testing.T) {
+	testData := []struct {
+		in  string
+		exp []int
+	}{
+		{in: ``, exp: nil},
+
+		{in: `SELECT 1`, exp: []int{0}},
+		{in: `SELECT $1`, exp: []int{1}},
+		{in: `SELECT $1 + $1`, exp: []int{1}},
+		{in: `SELECT $1 + $2`, exp: []int{2}},
+		{in: `SELECT $1 + $2 + $1 + $2`, exp: []int{2}},
+		{in: `SELECT $2`, exp: []int{2}},
+		{in: `SELECT $1, $1 + $2, $1 + $2 + $3`, exp: []int{3}},
+
+		{in: `SELECT $1; SELECT $1`, exp: []int{1, 1}},
+		{in: `SELECT $1; SELECT $1 + $2 + $3; SELECT $1 + $2`, exp: []int{1, 3, 2}},
+	}
+
+	var p parser.Parser // Verify that the same parser can be reused.
+	for _, d := range testData {
+		t.Run(d.in, func(t *testing.T) {
+			stmts, err := p.Parse(d.in)
+			if err != nil {
+				t.Fatalf("expected success, but found %s", err)
+			}
+			var res []int
+			for i := range stmts {
+				res = append(res, stmts[i].NumPlaceholders)
+			}
+			if !reflect.DeepEqual(res, d.exp) {
+				t.Errorf("expected \n%v\n, but found %v", res, d.exp)
+			}
+		})
+	}
+}
+
 func TestParseOne(t *testing.T) {
 	_, err := parser.ParseOne("SELECT 1; SELECT 2")
 	if !testutils.IsError(err, "expected 1 statement") {
