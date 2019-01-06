@@ -529,7 +529,7 @@ func (ls *logicStatement) readSQL(
 		if !hasVars {
 			newSyntax, err := func(inSql string) (string, error) {
 				// Can't rewrite the SQL otherwise because the vars make it invalid.
-				stmtList, _, err := parser.Parse(inSql)
+				stmtList, err := parser.Parse(inSql)
 				if err != nil {
 					if ls.expectErr != "" {
 						// Maybe a parse error was expected. Simply do not rewrite.
@@ -542,11 +542,11 @@ func (ls *logicStatement) readSQL(
 				pcfg.LineWidth = *sqlfmtLen
 				pcfg.Simplify = false
 				pcfg.UseTabs = false
-				for i, s := range stmtList {
+				for i := range stmtList {
 					if i > 0 {
 						fmt.Fprintln(&newSyntax, ";")
 					}
-					fmt.Fprint(&newSyntax, pcfg.Pretty(s))
+					fmt.Fprint(&newSyntax, pcfg.Pretty(stmtList[i].AST))
 				}
 				return newSyntax.String(), nil
 			}(ls.sql)

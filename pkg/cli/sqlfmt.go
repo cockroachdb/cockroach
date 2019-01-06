@@ -47,10 +47,10 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 		return errors.Errorf("tab width must be > 0: %d", sqlfmtCtx.tabWidth)
 	}
 
-	var sl tree.StatementList
+	var sl parser.Statements
 	if len(sqlfmtCtx.execStmts) != 0 {
 		for _, exec := range sqlfmtCtx.execStmts {
-			stmts, _, err := parser.Parse(exec)
+			stmts, err := parser.Parse(exec)
 			if err != nil {
 				return err
 			}
@@ -61,7 +61,7 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		sl, _, err = parser.Parse(string(in))
+		sl, err = parser.Parse(string(in))
 		if err != nil {
 			return err
 		}
@@ -77,8 +77,8 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 		cfg.Align = tree.PrettyAlignAndDeindent
 	}
 
-	for _, s := range sl {
-		fmt.Print(cfg.Pretty(s))
+	for i := range sl {
+		fmt.Print(cfg.Pretty(sl[i].AST))
 		if len(sl) > 1 {
 			fmt.Print(";")
 		}

@@ -26,14 +26,15 @@ import (
 func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 	t.Helper()
 
-	stmts, _, err := parser.Parse(sql)
+	stmts, err := parser.Parse(sql)
 	if err != nil {
 		t.Fatalf("%s: %s", err, sql)
 	}
 	cfg := tree.DefaultPrettyCfg()
 	// Be careful to not simplify otherwise the tests won't round trip.
 	cfg.Simplify = false
-	for _, origStmt := range stmts {
+	for i := range stmts {
+		origStmt := stmts[i].AST
 		// Be careful to not simplify otherwise the tests won't round trip.
 		prettyStmt := cfg.Pretty(origStmt)
 		parsedPretty, err := parser.ParseOne(prettyStmt)
