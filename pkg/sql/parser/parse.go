@@ -42,6 +42,16 @@ type Statement struct {
 	// is not appropriate for use in logging, as it may contain passwords and
 	// other sensitive data.
 	SQL string
+
+	// NumPlaceholders indicates the number of placeholders encountered in the
+	// statement. It is the value of the highest placeholder index encountered
+	// plus 1.
+	//
+	// Note: where there are "gaps" in the placeholder indexes, this
+	// number is based on the highest index encountered. For example, for
+	// `SELECT 1 + $3`, NumPlaceholders is 3. These cases are malformed and
+	// will result in a type-check error.
+	NumPlaceholders int
 }
 
 // Statements is a list of parsed statements.
@@ -152,11 +162,8 @@ func (p *Parser) parseWithDepth(
 		if err != nil {
 			return nil, err
 		}
-		if stmt != nil {
-			stmts = append(stmts, Statement{
-				AST: stmt,
-				SQL: sql,
-			})
+		if stmt.AST != nil {
+			stmts = append(stmts, stmt)
 		}
 		if done {
 			break
@@ -172,7 +179,7 @@ func (p *Parser) parse(
 	tokens []sqlSymType,
 	nakedIntType *coltypes.TInt,
 	nakedSerialType *coltypes.TSerial,
-) (tree.Statement, error) {
+) (Statement, error) {
 	p.lexer.init(sql, tokens, nakedIntType, nakedSerialType)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
@@ -192,9 +199,13 @@ func (p *Parser) parse(
 			err.Hint = lastError.hint
 		}
 		err.Detail = lastError.detail
-		return nil, err
+		return Statement{}, err
 	}
-	return p.lexer.stmt, nil
+	return Statement{
+		AST:             p.lexer.stmt,
+		SQL:             sql,
+		NumPlaceholders: p.lexer.numPlaceholders,
+	}, nil
 }
 
 // unaryNegation constructs an AST node for a negation. This attempts
