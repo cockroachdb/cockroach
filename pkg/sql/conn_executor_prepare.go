@@ -18,12 +18,12 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
@@ -178,64 +178,9 @@ func (ex *connExecutor) prepare(
 	// anything other than getting a timestamp.
 	txn := client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
 
-	// Create a plan for the statement to figure out the typing, then close the
-	// plan.
-	if err := func() error {
-		p := &ex.planner
-		ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTimestamp */)
-		p.semaCtx.Placeholders.SetTypeHints(placeholderHints)
-		p.extendedEvalCtx.PrepareOnly = true
-		p.extendedEvalCtx.ActiveMemAcc = &prepared.memAcc
-		// constantMemAcc accounts for all constant folded values that are computed
-		// prior to any rows being computed.
-		constantMemAcc := p.extendedEvalCtx.Mon.MakeBoundAccount()
-		p.extendedEvalCtx.ActiveMemAcc = &constantMemAcc
-		defer constantMemAcc.Close(ctx)
-
-		protoTS, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now() /* max */)
-		if err != nil {
-			return err
-		}
-		if protoTS != nil {
-			p.semaCtx.AsOfTimestamp = protoTS
-			txn.SetFixedTimestamp(ctx, *protoTS)
-		}
-
-		// PREPARE has a limited subset of statements it can be run with. Postgres
-		// only allows SELECT, INSERT, UPDATE, DELETE and VALUES statements to be
-		// prepared.
-		// See: https://www.postgresql.org/docs/current/static/sql-prepare.html
-		// However, we allow a large number of additional statements.
-		// As of right now, the optimizer only works on SELECT statements and will
-		// fallback for all others, so this should be safe for the foreseeable
-		// future.
-		if flags, err := p.optionallyUseOptimizer(ctx, ex.sessionData, stmt); err != nil {
-			return err
-		} else if !flags.IsSet(planFlagOptUsed) {
-			isCorrelated := p.curPlan.isCorrelated
-			log.VEventf(ctx, 1, "query is correlated: %v", isCorrelated)
-			// Fallback if the optimizer was not enabled or used.
-			if err := p.prepare(ctx, stmt.AST); err != nil {
-				enhanceErrWithCorrelation(err, isCorrelated)
-				return err
-			}
-		}
-
-		if p.curPlan.plan == nil {
-			// The statement cannot be prepared. Nothing to do.
-			return nil
-		}
-		defer p.curPlan.close(ctx)
-
-		prepared.Columns = p.curPlan.columns()
-		for _, c := range prepared.Columns {
-			if err := checkResultType(c.Typ); err != nil {
-				return err
-			}
-		}
-		prepared.Types = p.semaCtx.Placeholders.Types
-		return nil
-	}(); err != nil {
+	p := &ex.planner
+	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTimestamp */)
+	if err := ex.populatePrepared(ctx, txn, stmt, placeholderHints, p); err != nil {
 		txn.CleanupOnError(ctx, err)
 		return nil, err
 	}
@@ -243,17 +188,90 @@ func (ex *connExecutor) prepare(
 		return nil, err
 	}
 
-	// Account for the memory used by this prepared statement:
-	//   1. Size of the query string and prepared struct.
-	//   2. Size of the prepared memo, if using the cost-based optimizer.
-	size := int64(len(prepared.Str) + int(unsafe.Sizeof(*prepared)))
-	if prepared.Memo != nil {
-		size += prepared.Memo.MemoryEstimate()
-	}
-	if err := prepared.memAcc.Grow(ctx, size); err != nil {
+	// Account for the memory used by this prepared statement.
+	if err := prepared.memAcc.Grow(ctx, prepared.MemoryEstimate()); err != nil {
 		return nil, err
 	}
 	return prepared, nil
+}
+
+// populatePrepared analyzes and type-checks the query and populates
+// stmt.Prepared.
+func (ex *connExecutor) populatePrepared(
+	ctx context.Context,
+	txn *client.Txn,
+	stmt Statement,
+	placeholderHints tree.PlaceholderTypes,
+	p *planner,
+) error {
+	prepared := stmt.Prepared
+	p.semaCtx.Placeholders.SetTypeHints(placeholderHints)
+	p.extendedEvalCtx.PrepareOnly = true
+	p.extendedEvalCtx.ActiveMemAcc = &prepared.memAcc
+	// constantMemAcc accounts for all constant folded values that are computed
+	// prior to any rows being computed.
+	constantMemAcc := p.extendedEvalCtx.Mon.MakeBoundAccount()
+	p.extendedEvalCtx.ActiveMemAcc = &constantMemAcc
+	defer constantMemAcc.Close(ctx)
+
+	protoTS, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now() /* max */)
+	if err != nil {
+		return err
+	}
+	if protoTS != nil {
+		p.semaCtx.AsOfTimestamp = protoTS
+		txn.SetFixedTimestamp(ctx, *protoTS)
+	}
+
+	// PREPARE has a limited subset of statements it can be run with. Postgres
+	// only allows SELECT, INSERT, UPDATE, DELETE and VALUES statements to be
+	// prepared.
+	// See: https://www.postgresql.org/docs/current/static/sql-prepare.html
+	// However, we allow a large number of additional statements.
+	// As of right now, the optimizer only works on SELECT statements and will
+	// fallback for all others, so this should be safe for the foreseeable
+	// future.
+	var isCorrelated bool
+	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
+		log.VEvent(ctx, 2, "preparing using optimizer")
+		var err error
+		isCorrelated, err = p.prepareUsingOptimizer(ctx, stmt)
+		if err == nil {
+			log.VEvent(ctx, 2, "optimizer prepare succeeded")
+			// stmt.Prepared fields have been populated.
+			return nil
+		}
+		log.VEventf(ctx, 1, "optimizer prepare failed: %v", err)
+		if !canFallbackFromOpt(err, optMode, stmt) {
+			return err
+		}
+		log.VEvent(ctx, 1, "prepare falls back on heuristic planner")
+	} else {
+		log.VEvent(ctx, 2, "optimizer disabled (prepare)")
+	}
+
+	// Fallback on the heuristic planner if the optimizer was not enabled or used:
+	// create a plan for the statement to figure out the typing, then close the
+	// plan.
+	if err := p.prepare(ctx, stmt.AST); err != nil {
+		enhanceErrWithCorrelation(err, isCorrelated)
+		return err
+	}
+
+	if p.curPlan.plan == nil {
+		// Statement with no result columns and no support for placeholders.
+		return nil
+	}
+	defer p.curPlan.close(ctx)
+
+	prepared.Columns = p.curPlan.columns()
+	for _, c := range prepared.Columns {
+		if err := checkResultType(c.Typ); err != nil {
+			return err
+		}
+	}
+	prepared.Types = p.semaCtx.Placeholders.Types
+	return nil
 }
 
 func (ex *connExecutor) execBind(
