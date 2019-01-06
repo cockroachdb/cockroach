@@ -1296,7 +1296,7 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 	// when there are no available values for the placeholders yet, because
 	// during Execute all placeholders are replaced from the AST before type
 	// checking.
-	if typ, ok := ctx.Placeholders.Type(expr.Name, true); ok {
+	if typ, ok := ctx.Placeholders.Type(expr.Idx, true); ok {
 		if !desired.Equivalent(typ) {
 			// This indicates there's a conflict between what the type system thinks
 			// the type for this position should be, and the actual type of the
@@ -1312,7 +1312,7 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 		// We call SetType regardless of the above condition to inform the
 		// placeholder struct that this placeholder is locked to its type and cannot
 		// be overridden again.
-		if err := ctx.Placeholders.SetType(expr.Name, typ); err != nil {
+		if err := ctx.Placeholders.SetType(expr.Idx, typ); err != nil {
 			return nil, err
 		}
 		expr.typ = typ
@@ -1321,7 +1321,7 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 	if desired.IsAmbiguous() {
 		return nil, placeholderTypeAmbiguityError{expr}
 	}
-	if err := ctx.Placeholders.SetType(expr.Name, desired); err != nil {
+	if err := ctx.Placeholders.SetType(expr.Idx, desired); err != nil {
 		return nil, err
 	}
 	expr.typ = desired
@@ -2044,7 +2044,7 @@ func checkTupleHasLength(t *Tuple, expectedLen int) error {
 }
 
 type placeholderAnnotationVisitor struct {
-	placeholders map[string]annotationState
+	placeholders map[types.PlaceholderIdx]annotationState
 }
 
 // annotationState holds the state of an unresolved type annotation for a given placeholder.
@@ -2059,14 +2059,14 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 	case *AnnotateTypeExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
 			assertType := t.annotationType()
-			if state, ok := v.placeholders[arg.Name]; ok && state.sawAssertion {
+			if state, ok := v.placeholders[arg.Idx]; ok && state.sawAssertion {
 				if state.shouldAnnotate && !assertType.Equivalent(state.typ) {
 					state.shouldAnnotate = false
-					v.placeholders[arg.Name] = state
+					v.placeholders[arg.Idx] = state
 				}
 			} else {
 				// Ignore any previous casts now that we see an annotation.
-				v.placeholders[arg.Name] = annotationState{
+				v.placeholders[arg.Idx] = annotationState{
 					sawAssertion:   true,
 					shouldAnnotate: true,
 					typ:            assertType,
@@ -2077,7 +2077,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 	case *CastExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
 			castType := t.castType()
-			if state, ok := v.placeholders[arg.Name]; ok {
+			if state, ok := v.placeholders[arg.Idx]; ok {
 				// Ignore casts once an assertion has been seen.
 				if state.sawAssertion {
 					return false, expr
@@ -2085,10 +2085,10 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 
 				if state.shouldAnnotate && !castType.Equivalent(state.typ) {
 					state.shouldAnnotate = false
-					v.placeholders[arg.Name] = state
+					v.placeholders[arg.Idx] = state
 				}
 			} else {
-				v.placeholders[arg.Name] = annotationState{
+				v.placeholders[arg.Idx] = annotationState{
 					shouldAnnotate: true,
 					typ:            castType,
 				}
@@ -2096,10 +2096,10 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 			return false, expr
 		}
 	case *Placeholder:
-		if state, ok := v.placeholders[t.Name]; !(ok && state.sawAssertion) {
+		if state, ok := v.placeholders[t.Idx]; !(ok && state.sawAssertion) {
 			// Ignore non-annotated placeholders once an assertion has been seen.
 			state.shouldAnnotate = false
-			v.placeholders[t.Name] = state
+			v.placeholders[t.Idx] = state
 		}
 		return false, expr
 	}
@@ -2126,7 +2126,7 @@ func (*placeholderAnnotationVisitor) VisitPost(expr Expr) Expr { return expr }
 //
 // TODO(nvanbenschoten): Can this visitor and map be preallocated (like normalizeVisitor)?
 func (p PlaceholderTypes) ProcessPlaceholderAnnotations(stmt Statement) error {
-	v := placeholderAnnotationVisitor{make(map[string]annotationState)}
+	v := placeholderAnnotationVisitor{make(map[types.PlaceholderIdx]annotationState)}
 
 	// We treat existing inferred types in the MapPlaceholderTypes as initial assertions.
 	for placeholder, typ := range p {
@@ -2145,10 +2145,10 @@ func (p PlaceholderTypes) ProcessPlaceholderAnnotations(stmt Statement) error {
 			// If we should not annotate the type but we did see a type assertion,
 			// there were conflicting type assertions.
 			if prevType, ok := p[placeholder]; ok {
-				return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "found type annotation around %s that conflicts with previously "+
+				return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "found type annotation around %d that conflicts with previously "+
 					"inferred type %s", placeholder, prevType)
 			}
-			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "found multiple conflicting type annotations around %s", placeholder)
+			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "found multiple conflicting type annotations around %d", placeholder)
 		}
 	}
 	return nil

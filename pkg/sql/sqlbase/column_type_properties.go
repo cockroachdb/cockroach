@@ -787,10 +787,10 @@ func CheckDatumTypeFitsColumnType(
 	// populated 'colTyp' with a type to assign to it.
 	colTyp := col.Type.ToDatumType()
 	if p, pok := typ.(types.TPlaceholder); pok {
-		if err := pmap.SetType(p.Name, colTyp); err != nil {
+		if err := pmap.SetType(p.Idx, colTyp); err != nil {
 			return pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeError,
 				"cannot infer type for placeholder %s from column %q: %s",
-				p.Name, tree.ErrNameString(&col.Name), err)
+				p.Idx, tree.ErrNameString(&col.Name), err)
 		}
 	} else if !typ.Equivalent(colTyp) {
 		// Not a placeholder; check that the value cast has succeeded.
