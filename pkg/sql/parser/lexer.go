@@ -37,8 +37,10 @@ type lexer struct {
 	// token returned by Lex().
 	lastPos int
 
-	stmt      tree.Statement
-	lastError *parseErr
+	stmt tree.Statement
+	// numPlaceholders is 1 + the highest placeholder index encountered.
+	numPlaceholders int
+	lastError       *parseErr
 }
 
 func (l *lexer) init(
@@ -48,6 +50,7 @@ func (l *lexer) init(
 	l.tokens = tokens
 	l.lastPos = -1
 	l.stmt = nil
+	l.numPlaceholders = 0
 	l.lastError = nil
 
 	l.nakedIntType = nakedIntType
@@ -122,6 +125,18 @@ func (l *lexer) lastToken() sqlSymType {
 		}
 	}
 	return l.tokens[l.lastPos]
+}
+
+// SetStmt is called from the parser when the statement is constructed.
+func (l *lexer) SetStmt(stmt tree.Statement) {
+	l.stmt = stmt
+}
+
+// UpdateNumPlaceholders is called from the parser when a placeholder is constructed.
+func (l *lexer) UpdateNumPlaceholders(p *tree.Placeholder) {
+	if n := int(p.Idx) + 1; l.numPlaceholders < n {
+		l.numPlaceholders = n
+	}
 }
 
 // parseErr holds parsing error state.
