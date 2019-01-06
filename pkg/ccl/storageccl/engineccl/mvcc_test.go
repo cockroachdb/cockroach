@@ -188,11 +188,18 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
 			t.Fatal(err)
 		}
-		t.Run("intents1",
+		t.Run("intents",
 			iterateExpectErr(e, fn, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
-		t.Run("intents2",
+		t.Run("intents",
 			iterateExpectErr(e, fn, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
-		t.Run("intents3", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv2_2_2)))
+		t.Run("intents",
+			iterateExpectErr(e, fn, keyMin, keyMax, tsMin, ts4, "conflicting intents"))
+		// Intents above the upper time bound or beneath the lower time bound must
+		// be ignored (#28358). Note that the lower time bound is exclusive while
+		// the upper time bound is inclusive.
+		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv2_2_2)))
+		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
+		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
 
 		intent1 := roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta, Status: roachpb.COMMITTED}
 		if err := engine.MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
@@ -202,7 +209,7 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		if err := engine.MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 			t.Fatal(err)
 		}
-		t.Run("intents4", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv2_2_2)))
+		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv2_2_2)))
 	})
 
 	t.Run("iterFn=Next", func(t *testing.T) {
@@ -266,11 +273,18 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		if err := engine.MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
 			t.Fatal(err)
 		}
-		t.Run("intents1",
+		t.Run("intents",
 			iterateExpectErr(e, fn, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
-		t.Run("intents2",
+		t.Run("intents",
 			iterateExpectErr(e, fn, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
-		t.Run("intents3", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
+		t.Run("intents",
+			iterateExpectErr(e, fn, keyMin, keyMax, tsMin, ts4, "conflicting intents"))
+		// Intents above the upper time bound or beneath the lower time bound must
+		// be ignored (#28358). Note that the lower time bound is exclusive while
+		// the upper time bound is inclusive.
+		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
+		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
+		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
 
 		intent1 := roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta, Status: roachpb.COMMITTED}
 		if err := engine.MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
@@ -280,7 +294,7 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		if err := engine.MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 			t.Fatal(err)
 		}
-		t.Run("intents4", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
+		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
 	})
 }
 
