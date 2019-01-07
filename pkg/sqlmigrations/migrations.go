@@ -63,8 +63,13 @@ var _ base.ModuleTestingKnobs = &MigrationManagerTestingKnobs{}
 // startup. They will always be run from top-to-bottom, and because they are
 // assumed to be backward-compatible, they will be run regardless of what other
 // node versions are currently running within the cluster.
-// Migrations must be idempotent: a migration may run successfully but not be recorded
-// as completed, causing a second run.
+// Migrations must be idempotent: a migration may run successfully but not be
+// recorded as completed, causing a second run.
+//
+// Attention: If a migration is creating new tables, it should also be added to
+// the metadata schema written by bootstrap (see addSystemDatabaseToSchema())
+// and it should have the includedInBootstrap field set (see comments on that
+// field too).
 var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v1.0. Baked into v2.0.
@@ -192,9 +197,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v2.2.
 		// TODO(knz): bake this migration into v2.3.
-		name:             "create system.comment table",
-		workFn:           createCommentTable,
-		newDescriptorIDs: staticIDs(keys.CommentsTableID),
+		name:                "create system.comment table",
+		workFn:              createCommentTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.CommentsTableID),
 	},
 }
 
@@ -223,8 +229,18 @@ type migrationDescriptor struct {
 	// name must be unique amongst all hard-coded migrations.
 	name string
 	// workFn must be idempotent so that we can safely re-run it if a node failed
-	// while running it.
+	// while running it. nil if the migration has been "backed in" and is no
+	// longer to be performed at cluster startup.
 	workFn func(context.Context, runner) error
+	// includedInBootstrap is set for migrations that need to be performed for
+	// updating old clusters, but are also covered by the MetadataSchema that gets
+	// created by hand for a new cluster when it bootstraps itself. This kind of
+	// duplication between a migration and the MetadataSchema is useful for
+	// migrations that create system descriptor - for new clusters (particularly
+	// for tests) we want to create these tables by hand so that a corresponding
+	// range is created at bootstrap time. Otherwise, we'd have the split queue
+	// asynchronously creating some ranges which is annoying for tests.
+	includedInBootstrap bool
 	// doesBackfill should be set to true if the migration triggers a backfill.
 	doesBackfill bool
 	// newDescriptorIDs is a function that returns the IDs of any additional
@@ -315,7 +331,10 @@ func ExpectedDescriptorIDs(ctx context.Context, db db) (sqlbase.IDs, error) {
 	}
 	descriptorIDs := sqlbase.MakeMetadataSchema().DescriptorIDs()
 	for _, migration := range backwardCompatibleMigrations {
-		if migration.newDescriptorIDs == nil {
+		// Is the migration not creating descriptors?
+		if migration.newDescriptorIDs == nil ||
+			// Is the migration included in the metadata schema considered above?
+			migration.includedInBootstrap {
 			continue
 		}
 		if _, ok := completedMigrations[string(migrationKey(migration))]; ok {
@@ -330,10 +349,21 @@ func ExpectedDescriptorIDs(ctx context.Context, db db) (sqlbase.IDs, error) {
 	return descriptorIDs, nil
 }
 
+// MigrationFilter is used to indicate to EnsureMigrations what to run.
+type MigrationFilter bool
+
+const (
+	// AllMigrations means run all the migrations.
+	AllMigrations MigrationFilter = true
+	// ExcludeMigrationsIncludedInBootstrap means don't run migrations with the
+	// includedInBootstrap field set.
+	ExcludeMigrationsIncludedInBootstrap MigrationFilter = false
+)
+
 // EnsureMigrations should be run during node startup to ensure that all
 // required migrations have been run (and running all those that are definitely
 // safe to run).
-func (m *Manager) EnsureMigrations(ctx context.Context) error {
+func (m *Manager) EnsureMigrations(ctx context.Context, filter MigrationFilter) error {
 	// First, check whether there are any migrations that need to be run.
 	completedMigrations, err := getCompletedMigrations(ctx, m.db)
 	if err != nil {
@@ -341,8 +371,10 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 	}
 	allMigrationsCompleted := true
 	for _, migration := range backwardCompatibleMigrations {
-		if migration.workFn == nil {
-			// Migration has been baked in. Ignore it.
+		if migration.workFn == nil || // has the migration been baked in?
+			// is the migration unnecessary?
+			(migration.includedInBootstrap &&
+				filter == ExcludeMigrationsIncludedInBootstrap) {
 			continue
 		}
 		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
@@ -456,9 +488,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 			return errors.Wrapf(err, "failed to run migration %q", migration.name)
 		}
 
-		if log.V(1) {
-			log.Infof(ctx, "trying to persist record of completing migration %s", migration.name)
-		}
+		log.VEventf(ctx, 1, "persisting record of completing migration %s", migration.name)
 		if err := m.db.Put(ctx, key, startTime); err != nil {
 			return errors.Wrapf(err, "failed to persist record of completing migration %q",
 				migration.name)

@@ -140,7 +140,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 sql txn           CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
 sql txn           InitPut /Table/54/2/2/0 -> /BYTES/0x89
 dist sender send  querying next range at /Table/54/1/1/0
-dist sender send  r19: sending batch 1 CPut, 1 EndTxn, 1 InitPut to (n1,s1):1
+dist sender send  r20: sending batch 1 CPut, 1 EndTxn, 1 InitPut to (n1,s1):1
 sql txn           fast path completed
 sql txn           rows affected: 1
 
@@ -155,10 +155,10 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 sql txn           CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
 sql txn           InitPut /Table/54/2/2/0 -> /BYTES/0x89
 dist sender send  querying next range at /Table/54/1/1/0
-dist sender send  r19: sending batch 1 CPut, 1 EndTxn, 1 InitPut to (n1,s1):1
+dist sender send  r20: sending batch 1 CPut, 1 EndTxn, 1 InitPut to (n1,s1):1
 sql txn           execution failed after 0 rows: duplicate key value (k)=(1) violates unique constraint "primary"
 dist sender send  querying next range at /Table/54/1/1/0
-dist sender send  r19: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r20: sending batch 1 EndTxn to (n1,s1):1
 
 statement error duplicate key value
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -170,10 +170,10 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 sql txn           CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
 sql txn           InitPut /Table/54/2/2/0 -> /BYTES/0x8a
 dist sender send  querying next range at /Table/54/1/2/0
-dist sender send  r19: sending batch 1 CPut, 1 EndTxn, 1 InitPut to (n1,s1):1
+dist sender send  r20: sending batch 1 CPut, 1 EndTxn, 1 InitPut to (n1,s1):1
 sql txn           execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
 dist sender send  querying next range at /Table/54/1/2/0
-dist sender send  r19: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r20: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = off
@@ -183,11 +183,11 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 sql txn           Scan /Table/54/1/2{-/#}
 dist sender send  querying next range at /Table/54/1/2
-dist sender send  r19: sending batch 1 Scan to (n1,s1):1
+dist sender send  r20: sending batch 1 Scan to (n1,s1):1
 sql txn           CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/3
 sql txn           InitPut /Table/54/2/3/0 -> /BYTES/0x8a
 dist sender send  querying next range at /Table/54/1/2/0
-dist sender send  r19: sending batch 1 CPut, 1 EndTxn, 1 InitPut to (n1,s1):1
+dist sender send  r20: sending batch 1 CPut, 1 EndTxn, 1 InitPut to (n1,s1):1
 sql txn           fast path completed
 sql txn           rows affected: 1
 
@@ -199,11 +199,11 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 sql txn           Scan /Table/54/1/1{-/#}
 dist sender send  querying next range at /Table/54/1/1
-dist sender send  r19: sending batch 1 Scan to (n1,s1):1
+dist sender send  r20: sending batch 1 Scan to (n1,s1):1
 sql txn           fetched: /kv/primary/1/v -> /2
 sql txn           Put /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
 dist sender send  querying next range at /Table/54/1/1/0
-dist sender send  r19: sending batch 1 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r20: sending batch 1 Put, 1 EndTxn to (n1,s1):1
 sql txn           fast path completed
 sql txn           rows affected: 1
 
@@ -216,16 +216,16 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 sql txn           Scan /Table/54/1/2{-/#}
 dist sender send  querying next range at /Table/54/1/2
-dist sender send  r19: sending batch 1 Scan to (n1,s1):1
+dist sender send  r20: sending batch 1 Scan to (n1,s1):1
 sql txn           fetched: /kv/primary/2/v -> /3
 sql txn           Put /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
 sql txn           Del /Table/54/2/3/0
 sql txn           CPut /Table/54/2/2/0 -> /BYTES/0x8a
 dist sender send  querying next range at /Table/54/1/2/0
-dist sender send  r19: sending batch 1 Put, 1 CPut, 1 Del, 1 EndTxn to (n1,s1):1
+dist sender send  r20: sending batch 1 Put, 1 CPut, 1 Del, 1 EndTxn to (n1,s1):1
 sql txn           execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
 dist sender send  querying next range at /Table/54/1/2/0
-dist sender send  r19: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r20: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
 SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv; SET tracing = off
@@ -259,14 +259,14 @@ dist sender send  querying next range at /Table/3/1/53/2/1
 dist sender send  r6: sending batch 1 Get to (n1,s1):1
 sql txn           Scan /Table/54/{1-2}
 dist sender send  querying next range at /Table/54/1
-dist sender send  r19: sending batch 1 Scan to (n1,s1):1
+dist sender send  r20: sending batch 1 Scan to (n1,s1):1
 sql txn           fetched: /kv/primary/1/v -> /2
 sql txn           CPut /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/2
 sql txn           fetched: /kv/primary/2/v -> /3
 sql txn           CPut /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/3
 dist sender send  querying next range at /Table/SystemConfigSpan/Start
 dist sender send  querying next range at /Table/55/1/...PK.../0
-dist sender send  r19: sending batch 2 CPut to (n1,s1):1
+dist sender send  r20: sending batch 2 CPut to (n1,s1):1
 dist sender send  querying next range at /Table/2/1/53/"kv2"/3/1
 dist sender send  r8: sending batch 5 QueryIntent to (n1,s1):1
 dist sender send  querying next range at /Table/SystemConfigSpan/Start
@@ -292,13 +292,13 @@ dist sender send  r6: sending batch 1 Get to (n1,s1):1
 dist sender send  r7: sending batch 1 EndTxn, 1 QueryIntent to (n1,s1):1
 sql txn           Scan /Table/55/{1-2}
 dist sender send  querying next range at /Table/55/1
-dist sender send  r19: sending batch 1 Scan to (n1,s1):1
+dist sender send  r20: sending batch 1 Scan to (n1,s1):1
 sql txn           fetched: /kv2/primary/...PK.../k/v -> /1/2
 sql txn           Put /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/4
 sql txn           fetched: /kv2/primary/...PK.../k/v -> /2/3
 sql txn           Put /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/5
 dist sender send  querying next range at /Table/55/1/...PK.../0
-dist sender send  r19: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r20: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 sql txn           fast path completed
 sql txn           rows affected: 2
 
@@ -310,10 +310,10 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 sql txn           Scan /Table/55/{1-2}
 dist sender send  querying next range at /Table/55/1
-dist sender send  r19: sending batch 1 Scan to (n1,s1):1
+dist sender send  r20: sending batch 1 Scan to (n1,s1):1
 sql txn           DelRange /Table/55/1 - /Table/55/2
 dist sender send  querying next range at /Table/55/1
-dist sender send  r19: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+dist sender send  r20: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 sql txn           fast path completed
 sql txn           rows affected: 2
 
@@ -354,7 +354,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 sql txn           Scan /Table/54/{1-2}
 dist sender send  querying next range at /Table/54/1
-dist sender send  r19: sending batch 1 Scan to (n1,s1):1
+dist sender send  r20: sending batch 1 Scan to (n1,s1):1
 sql txn           fetched: /kv/primary/1/v -> /2
 sql txn           Del /Table/54/2/2/0
 sql txn           Del /Table/54/1/1/0
@@ -362,7 +362,7 @@ sql txn           fetched: /kv/primary/2/v -> /3
 sql txn           Del /Table/54/2/3/0
 sql txn           Del /Table/54/1/2/0
 dist sender send  querying next range at /Table/54/1/1/0
-dist sender send  r19: sending batch 4 Del, 1 EndTxn to (n1,s1):1
+dist sender send  r20: sending batch 4 Del, 1 EndTxn to (n1,s1):1
 sql txn           fast path completed
 sql txn           rows affected: 2
 
@@ -448,7 +448,7 @@ SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 EndTxn%' AND message NOT LIKE e'%proposing command%'
 ----
-r19: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+r20: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 1 CPut, 1 EndTxn
 
 ## TODO(tschottdorf): re-enable
@@ -503,4 +503,4 @@ SELECT DISTINCT node_id, store_id, replica_id
 node_id  store_id  replica_id
 1        1         6
 1        1         7
-1        1         19
+1        1         20
