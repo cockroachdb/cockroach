@@ -381,10 +381,15 @@ message TransactionRecord {
   storage.engine.enginepb.TxnMeta meta = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   TransactionStatus status             = 4;
   util.hlc.Timestamp last_heartbeat    = 5  [(gogoproto.nullable) = false];
+  // TODO(nvanbenschoten): We can't accurately determine this value from
+  // intents, so we'd like to avoid ever needing to synthesize it. 2.1 nodes
+  // will assert that it is set, so we set it for now, but we should stop doing
+  // that in the future. Removing this in 2.3 shouldn't cause any issues.
+  util.hlc.Timestamp orig_timestamp    = 6  [(gogoproto.nullable) = false];
   repeated Span intents                = 11 [(gogoproto.nullable) = false];
 
   // Fields on Transaction that are not present in a transaction record.
-  reserved 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16;
+  reserved 2, 3, 7, 8, 9, 10, 12, 13, 14, 15, 16;
 }
 
 // A Intent is a Span together with a Transaction metadata and its status.

@@ -3684,6 +3684,8 @@ void TransactionRecord::InitAsDefaultInstance() {
       ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
   ::cockroach::roachpb::_TransactionRecord_default_instance_._instance.get_mutable()->last_heartbeat_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  ::cockroach::roachpb::_TransactionRecord_default_instance_._instance.get_mutable()->orig_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
 void TransactionRecord::clear_meta() {
   if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
@@ -3697,10 +3699,17 @@ void TransactionRecord::clear_last_heartbeat() {
   }
   last_heartbeat_ = NULL;
 }
+void TransactionRecord::clear_orig_timestamp() {
+  if (GetArenaNoVirtual() == NULL && orig_timestamp_ != NULL) {
+    delete orig_timestamp_;
+  }
+  orig_timestamp_ = NULL;
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TransactionRecord::kMetaFieldNumber;
 const int TransactionRecord::kStatusFieldNumber;
 const int TransactionRecord::kLastHeartbeatFieldNumber;
+const int TransactionRecord::kOrigTimestampFieldNumber;
 const int TransactionRecord::kIntentsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -3726,6 +3735,11 @@ TransactionRecord::TransactionRecord(const TransactionRecord& from)
   } else {
     last_heartbeat_ = NULL;
   }
+  if (from.has_orig_timestamp()) {
+    orig_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.orig_timestamp_);
+  } else {
+    orig_timestamp_ = NULL;
+  }
   status_ = from.status_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.TransactionRecord)
 }
@@ -3744,6 +3758,7 @@ TransactionRecord::~TransactionRecord() {
 void TransactionRecord::SharedDtor() {
   if (this != internal_default_instance()) delete meta_;
   if (this != internal_default_instance()) delete last_heartbeat_;
+  if (this != internal_default_instance()) delete orig_timestamp_;
 }
 
 void TransactionRecord::SetCachedSize(int size) const {
@@ -3770,6 +3785,10 @@ void TransactionRecord::Clear() {
     delete last_heartbeat_;
   }
   last_heartbeat_ = NULL;
+  if (GetArenaNoVirtual() == NULL && orig_timestamp_ != NULL) {
+    delete orig_timestamp_;
+  }
+  orig_timestamp_ = NULL;
   status_ = 0;
   _internal_metadata_.Clear();
 }
@@ -3821,6 +3840,17 @@ bool TransactionRecord::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_last_heartbeat()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_orig_timestamp()));
         } else {
           goto handle_unusual;
         }
@@ -3880,6 +3910,11 @@ void TransactionRecord::SerializeWithCachedSizes(
       5, this->_internal_last_heartbeat(), output);
   }
 
+  if (this->has_orig_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      6, this->_internal_orig_timestamp(), output);
+  }
+
   for (unsigned int i = 0,
       n = static_cast<unsigned int>(this->intents_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
@@ -3921,6 +3956,12 @@ size_t TransactionRecord::ByteSizeLong() const {
         *last_heartbeat_);
   }
 
+  if (this->has_orig_timestamp()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *orig_timestamp_);
+  }
+
   // .cockroach.roachpb.TransactionStatus status = 4;
   if (this->status() != 0) {
     total_size += 1 +
@@ -3951,6 +3992,9 @@ void TransactionRecord::MergeFrom(const TransactionRecord& from) {
   if (from.has_last_heartbeat()) {
     mutable_last_heartbeat()->::cockroach::util::hlc::Timestamp::MergeFrom(from.last_heartbeat());
   }
+  if (from.has_orig_timestamp()) {
+    mutable_orig_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.orig_timestamp());
+  }
   if (from.status() != 0) {
     set_status(from.status());
   }
@@ -3976,6 +4020,7 @@ void TransactionRecord::InternalSwap(TransactionRecord* other) {
   CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
   swap(meta_, other->meta_);
   swap(last_heartbeat_, other->last_heartbeat_);
+  swap(orig_timestamp_, other->orig_timestamp_);
   swap(status_, other->status_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }

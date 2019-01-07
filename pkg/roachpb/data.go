@@ -1100,6 +1100,7 @@ func (t *Transaction) AsRecord() TransactionRecord {
 	tr.TxnMeta = t.TxnMeta
 	tr.Status = t.Status
 	tr.LastHeartbeat = t.LastHeartbeat
+	tr.OrigTimestamp = t.OrigTimestamp
 	tr.Intents = t.Intents
 	return tr
 }
@@ -1112,6 +1113,7 @@ func (tr *TransactionRecord) AsTransaction() Transaction {
 	t.TxnMeta = tr.TxnMeta
 	t.Status = tr.Status
 	t.LastHeartbeat = tr.LastHeartbeat
+	t.OrigTimestamp = tr.OrigTimestamp
 	t.Intents = tr.Intents
 	return t
 }
