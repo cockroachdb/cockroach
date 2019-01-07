@@ -1,9 +1,16 @@
 - Feature Name: Range merges
-- Status: draft
+- Status: completed
 - Start Date: 2018-03-30
 - Authors: Nikhil Benesch
 - RFC PR: [#24394]
 - Cockroach Issue: [#2433]
+
+*Disclaimer: As expected, the implementation encountered serious hurdles with
+the initial design proposed here. This document is preserved in its original
+form for posterity. The resulting implementation, as well as a the challenges
+that were encountered, are described in the [range merge tech note].*
+
+[range merge tech note]: docs/tech-notes/range-merges.md
 
 # Summary
 
