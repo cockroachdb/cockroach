@@ -29,10 +29,10 @@ import (
 func fillInPlaceholders(
 	ps *PreparedStatement, name string, params tree.Exprs, searchPath sessiondata.SearchPath,
 ) (*tree.PlaceholderInfo, error) {
-	if len(ps.TypeHints) != len(params) {
+	if len(ps.Types) != len(params) {
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"wrong number of parameters for prepared statement %q: expected %d, got %d",
-			name, len(ps.TypeHints), len(params))
+			name, len(ps.Types), len(params))
 	}
 
 	qArgs := make(tree.QueryArguments, len(params))
@@ -40,8 +40,12 @@ func fillInPlaceholders(
 	for i, e := range params {
 		idx := types.PlaceholderIdx(i)
 
+		typ, ok := ps.ValueType(idx)
+		if !ok {
+			return nil, pgerror.NewAssertionErrorf("no type for placeholder %s", idx)
+		}
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(
-			e, ps.TypeHints[idx], "EXECUTE parameter", /* context */
+			e, typ, "EXECUTE parameter", /* context */
 			&semaCtx, nil /* evalCtx */, true /* allowImpure */)
 		if err != nil {
 			return nil, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
@@ -50,9 +54,10 @@ func fillInPlaceholders(
 		qArgs[idx] = typedExpr
 	}
 	return &tree.PlaceholderInfo{
-			Values:    qArgs,
+		Values: qArgs,
+		PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
 			TypeHints: ps.TypeHints,
 			Types:     ps.Types,
 		},
-		nil
+	}, nil
 }

@@ -44,14 +44,9 @@ type PreparedStatement struct {
 	// during prepare of a SQL statement. It can significantly speed up execution
 	// if it is used by the optimizer as a starting point.
 	Memo *memo.Memo
-	// TypeHints contains the types of the placeholders set by the client. It
-	// dictates how input parameters for those placeholders will be parsed. If a
-	// placeholder has no type hint, it will be populated during type checking.
-	TypeHints tree.PlaceholderTypes
-	// Types contains the final types of the placeholders, after type checking.
-	// These may differ from the types in TypeHints, if a user provides an
-	// imprecise type hint like sending an int for an oid comparison.
-	Types   tree.PlaceholderTypes
+
+	tree.PlaceholderTypesInfo
+
 	Columns sqlbase.ResultColumns
 
 	// InTypes represents the inferred types for placeholder, using protocol
