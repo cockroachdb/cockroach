@@ -81,7 +81,7 @@ func runShowSyntax(
 	report func(ctx context.Context, field, msg string) error,
 	reportErr func(err error),
 ) error {
-	stmts, _, err := parser.Parse(stmt)
+	stmts, err := parser.Parse(stmt)
 	if err != nil {
 		if reportErr != nil {
 			reportErr(err)
@@ -125,8 +125,9 @@ func runShowSyntax(
 			}
 		}
 	} else {
-		for _, stmt := range stmts {
-			if err := report(ctx, "sql", tree.AsStringWithFlags(stmt, tree.FmtParsable)); err != nil {
+		for i := range stmts {
+			str := tree.AsStringWithFlags(stmts[i].AST, tree.FmtParsable)
+			if err := report(ctx, "sql", str); err != nil {
 				return err
 			}
 		}

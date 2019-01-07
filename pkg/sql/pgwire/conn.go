@@ -453,7 +453,7 @@ func (c *conn) handleSimpleQuery(
 	tracing.AnnotateTrace()
 
 	startParse := timeutil.Now()
-	stmts, sqlStrs, err := c.parser.ParseWithInt(query, ch.GetDefaultIntSize())
+	stmts, err := c.parser.ParseWithInt(query, ch.GetDefaultIntSize())
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -470,11 +470,11 @@ func (c *conn) handleSimpleQuery(
 			})
 	}
 
-	for i, stmt := range stmts {
+	for i := range stmts {
 		// The CopyFrom statement is special. We need to detect it so we can hand
 		// control of the connection, through the stmtBuf, to a copyMachine, and
 		// block this network routine until control is passed back.
-		if cp, ok := stmt.(*tree.CopyFrom); ok {
+		if cp, ok := stmts[i].AST.(*tree.CopyFrom); ok {
 			if len(stmts) != 1 {
 				// NOTE(andrei): I don't know if Postgres supports receiving a COPY
 				// together with other statements in the "simple" protocol, but I'd
@@ -499,8 +499,8 @@ func (c *conn) handleSimpleQuery(
 		if err := c.stmtBuf.Push(
 			ctx,
 			sql.ExecStmt{
-				SQL:          sqlStrs[i],
-				Stmt:         stmt,
+				Stmt:         stmts[i].AST,
+				SQL:          stmts[i].SQL,
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
 				ParseEnd:     endParse,
@@ -559,11 +559,11 @@ func (c *conn) handleParse(
 
 	startParse := timeutil.Now()
 	var stmt tree.Statement
-	stmts, _, err := c.parser.ParseWithInt(query, ch.GetDefaultIntSize())
+	stmts, err := c.parser.ParseWithInt(query, ch.GetDefaultIntSize())
 	if len(stmts) > 1 {
 		err = pgerror.NewWrongNumberOfPreparedStatements(len(stmts))
 	} else if len(stmts) == 1 {
-		stmt = stmts[0]
+		stmt = stmts[0].AST
 	}
 	// len(stmts) == 0 results in a nil (empty) statement.
 

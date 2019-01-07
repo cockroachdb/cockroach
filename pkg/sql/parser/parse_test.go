@@ -1246,12 +1246,9 @@ func TestParse(t *testing.T) {
 	var p parser.Parser // Verify that the same parser can be reused.
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
-			stmts, strs, err := p.Parse(d.sql)
+			stmts, err := p.Parse(d.sql)
 			if err != nil {
 				t.Fatalf("%s: expected success, but found %s", d.sql, err)
-			}
-			if len(strs) == 1 && strs[0] != d.sql {
-				t.Errorf("expected string %s, got %s", d.sql, strs[0])
 			}
 			s := stmts.String()
 			if d.sql != s {
@@ -1259,18 +1256,6 @@ func TestParse(t *testing.T) {
 			}
 			sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
 		})
-		stmts, strs, err := p.Parse(d.sql)
-		if err != nil {
-			t.Fatalf("%s: expected success, but found %s", d.sql, err)
-		}
-		if len(strs) == 1 && strs[0] != d.sql {
-			t.Errorf("expected string %s, got %s", d.sql, strs[0])
-		}
-		s := stmts.String()
-		if d.sql != s {
-			t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
-		}
-		sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
 	}
 }
 
@@ -1987,16 +1972,16 @@ func TestParse2(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
-			stmts, _, err := parser.Parse(d.sql)
+			stmts, err := parser.Parse(d.sql)
 			if err != nil {
 				t.Errorf("%s: expected success, but found %s", d.sql, err)
 				return
 			}
-			s := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
+			s := stmts.StringWithFlags(tree.FmtShowPasswords)
 			if d.expected != s {
 				t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 			}
-			if _, _, err := parser.Parse(s); err != nil {
+			if _, err := parser.Parse(s); err != nil {
 				t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 			}
 			sqlutils.VerifyStatementPrettyRoundtrip(t, d.expected)
@@ -2021,16 +2006,16 @@ func TestParseTree(t *testing.T) {
 
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
-			stmts, _, err := parser.Parse(d.sql)
+			stmts, err := parser.Parse(d.sql)
 			if err != nil {
 				t.Errorf("%s: expected success, but found %s", d.sql, err)
 				return
 			}
-			s := tree.AsStringWithFlags(&stmts, tree.FmtAlwaysGroupExprs)
+			s := stmts.StringWithFlags(tree.FmtAlwaysGroupExprs)
 			if d.expected != s {
 				t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 			}
-			if _, _, err := parser.Parse(s); err != nil {
+			if _, err := parser.Parse(s); err != nil {
 				t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 			}
 			sqlutils.VerifyStatementPrettyRoundtrip(t, d.expected)
@@ -2052,7 +2037,7 @@ func TestParseSyntax(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
-			if _, _, err := parser.Parse(d.sql); err != nil {
+			if _, err := parser.Parse(d.sql); err != nil {
 				t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 			}
 			sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
@@ -2479,7 +2464,7 @@ HINT: try \h SELECT`,
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
-			_, _, err := parser.Parse(d.sql)
+			_, err := parser.Parse(d.sql)
 			if err == nil {
 				t.Errorf("expected error, got nil for:\n%s", d.sql)
 				return
@@ -2516,7 +2501,7 @@ func TestParsePanic(t *testing.T) {
 		"(F(F(F(F(F(F(F(F(F(F" +
 		"(F(F(F(F(F(F(F(F(F((" +
 		"F(0"
-	_, _, err := parser.Parse(s)
+	_, err := parser.Parse(s)
 	expected := `syntax error at or near "EOF"`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
@@ -2894,7 +2879,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
-			_, _, err := parser.Parse(d.sql)
+			_, err := parser.Parse(d.sql)
 			if err == nil {
 				t.Errorf("%s: expected error, got nil", d.sql)
 				return
@@ -2926,6 +2911,77 @@ func TestUnimplementedSyntax(t *testing.T) {
 				if !strings.HasSuffix(pgerr.Hint, exp2) {
 					t.Errorf("%s: expected %q at end of hint, got %q", d.sql, exp2, pgerr.Hint)
 				}
+			}
+		})
+	}
+}
+
+// TestParseSQL verifies that Statement.SQL is set correctly.
+func TestParseSQL(t *testing.T) {
+	testData := []struct {
+		in  string
+		exp []string
+	}{
+		{in: ``, exp: nil},
+		{in: `SELECT 1`, exp: []string{`SELECT 1`}},
+		{in: `SELECT 1;`, exp: []string{`SELECT 1`}},
+		{in: `SELECT 1 /* comment */`, exp: []string{`SELECT 1`}},
+		{in: `SELECT 1;SELECT 2`, exp: []string{`SELECT 1`, `SELECT 2`}},
+		{in: `SELECT 1 /* comment */ ;SELECT 2`, exp: []string{`SELECT 1`, `SELECT 2`}},
+		{in: `SELECT 1 /* comment */ ; /* comment */ SELECT 2`, exp: []string{`SELECT 1`, `SELECT 2`}},
+	}
+	var p parser.Parser // Verify that the same parser can be reused.
+	for _, d := range testData {
+		t.Run(d.in, func(t *testing.T) {
+			stmts, err := p.Parse(d.in)
+			if err != nil {
+				t.Fatalf("expected success, but found %s", err)
+			}
+			var res []string
+			for i := range stmts {
+				res = append(res, stmts[i].SQL)
+			}
+			if !reflect.DeepEqual(res, d.exp) {
+				t.Errorf("expected \n%v\n, but found %v", res, d.exp)
+			}
+		})
+	}
+}
+
+// TestParseNumPlaceholders verifies that Statement.NumPlaceholders is set
+// correctly.
+func TestParseNumPlaceholders(t *testing.T) {
+	testData := []struct {
+		in  string
+		exp []int
+	}{
+		{in: ``, exp: nil},
+
+		{in: `SELECT 1`, exp: []int{0}},
+		{in: `SELECT $1`, exp: []int{1}},
+		{in: `SELECT $1 + $1`, exp: []int{1}},
+		{in: `SELECT $1 + $2`, exp: []int{2}},
+		{in: `SELECT $1 + $2 + $1 + $2`, exp: []int{2}},
+		{in: `SELECT $2`, exp: []int{2}},
+		{in: `SELECT $1, $1 + $2, $1 + $2 + $3`, exp: []int{3}},
+
+		{in: `SELECT $1; SELECT $1`, exp: []int{1, 1}},
+		{in: `SELECT $1; SELECT $1 + $2 + $3; SELECT $1 + $2`, exp: []int{1, 3, 2}},
+	}
+
+	var p parser.Parser // Verify that the same parser can be reused.
+	for _, d := range testData {
+		t.Run(d.in, func(t *testing.T) {
+			stmts, err := p.Parse(d.in)
+			if err != nil {
+				t.Fatalf("expected success, but found %s", err)
+			}
+			var res []int
+			for i := range stmts {
+				res = append(res, stmts[i].NumPlaceholders)
+			}
+			if !reflect.DeepEqual(res, d.exp) {
+				t.Errorf("expected \n%v\n, but found %v", res, d.exp)
 			}
 		})
 	}
@@ -2966,8 +3022,7 @@ func BenchmarkParse(b *testing.B) {
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_, _, err := parser.Parse(tc.query)
-				if err != nil {
+				if _, err := parser.Parse(tc.query); err != nil {
 					b.Fatal(err)
 				}
 			}

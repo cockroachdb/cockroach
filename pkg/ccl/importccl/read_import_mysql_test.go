@@ -46,7 +46,7 @@ func descForTable(
 	t *testing.T, create string, parent, id sqlbase.ID, fks fkHandler,
 ) *sqlbase.TableDescriptor {
 	t.Helper()
-	parsed, _, err := parser.Parse(create)
+	parsed, err := parser.Parse(create)
 	if err != nil {
 		t.Fatalf("could not parse %q: %v", create, err)
 	}
@@ -55,8 +55,8 @@ func descForTable(
 	var stmt *tree.CreateTable
 
 	if len(parsed) == 2 {
-		stmt = parsed[1].(*tree.CreateTable)
-		name := parsed[0].(*tree.CreateSequence).Name.String()
+		stmt = parsed[1].AST.(*tree.CreateTable)
+		name := parsed[0].AST.(*tree.CreateSequence).Name.String()
 
 		ts := hlc.Timestamp{WallTime: nanos}
 		priv := sqlbase.NewDefaultPrivilegeDescriptor()
@@ -68,7 +68,7 @@ func descForTable(
 		}
 		fks.resolver[name] = &desc
 	} else {
-		stmt = parsed[0].(*tree.CreateTable)
+		stmt = parsed[0].AST.(*tree.CreateTable)
 	}
 	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, parent, id, fks, nanos)
 	if err != nil {
