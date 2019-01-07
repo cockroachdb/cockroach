@@ -7759,7 +7759,7 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 					// Unset the custom proposal function so re-proposal proceeds
 					// without blocking.
 					tc.repl.mu.submitProposalFn = nil
-					// We've just told addWriteCmd to retry the request, so it will no
+					// We've just told executeWriteBatch to retry the request, so it will no
 					// longer listen for the result of this original proposal. However, we
 					// still want the original proposal to succeed (before the retry is
 					// processed), so submit it before releasing the lock.
