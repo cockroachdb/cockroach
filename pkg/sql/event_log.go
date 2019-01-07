@@ -98,6 +98,10 @@ const (
 	EventLogSetZoneConfig EventLogType = "set_zone_config"
 	// EventLogRemoveZoneConfig is recorded when a zone config is removed.
 	EventLogRemoveZoneConfig EventLogType = "remove_zone_config"
+
+	// EventLogCreateStatistics is recorded when statistics are collected for a
+	// table.
+	EventLogCreateStatistics EventLogType = "create_statistics"
 )
 
 // EventLogSetClusterSettingDetail is the json details for a settings change.

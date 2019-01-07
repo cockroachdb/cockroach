@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -158,6 +159,13 @@ import (
 //            more information.
 //      - colnames: column names are verified (the expected column names
 //            are the first line in the expected results).
+//      - retry: if the expected results do not match the actual results, the
+//            test will be retried with exponential backoff up to some maximum
+//            duration. If the test succeeds at any time during that period, it
+//            is considered successful. Otherwise, it is a failure. See
+//            testutils.SucceedsSoon for more information. If run with the flag
+//            -rewrite-results-in-testfiles=true, inserts a 500ms sleep before
+//            executing the query once.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -723,6 +731,9 @@ type logicQuery struct {
 	colTypes string
 	// colNames controls the inclusion of column names in the query result.
 	colNames bool
+	// retry indicates if the query should be retried in case of failure with
+	// exponential backoff up to some maximum duration.
+	retry bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
 	// expectedErr and expectedErrCode are as in logicStatement.
@@ -1007,6 +1018,10 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		}
 		params.ServerArgsPerNode = paramsPerNode
 	}
+
+	// Update the defaults for automatic statistics to avoid delays in testing.
+	stats.DefaultAsOfTime = 0
+	stats.DefaultRefreshInterval = time.Millisecond
 
 	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {
@@ -1410,6 +1425,9 @@ func (t *logicTest) processSubtest(
 						case "colnames":
 							query.colNames = true
 
+						case "retry":
+							query.retry = true
+
 						default:
 							return errors.Errorf("%s: unknown sort mode: %s", query.pos, opt)
 						}
@@ -1495,8 +1513,21 @@ func (t *logicTest) processSubtest(
 
 			if !s.skip {
 				for i := 0; i < repeat; i++ {
-					if err := t.execQuery(query); err != nil {
-						t.Error(err)
+					if query.retry && !*rewriteResultsInTestfiles {
+						testutils.SucceedsSoon(t.t, func() error {
+							return t.execQuery(query)
+						})
+					} else {
+						if query.retry && *rewriteResultsInTestfiles {
+							// The presence of the retry flag indicates that we expect this
+							// query may need some time to succeed. If we are rewriting, wait
+							// 500ms before executing the query.
+							// TODO(rytaft): We may want to make this sleep time configurable.
+							time.Sleep(time.Millisecond * 500)
+						}
+						if err := t.execQuery(query); err != nil {
+							t.Error(err)
+						}
 					}
 				}
 			} else {

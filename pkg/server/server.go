@@ -183,6 +183,7 @@ type Server struct {
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry    *sql.SessionRegistry
 	jobRegistry        *jobs.Registry
+	statsRefresher     *stats.Refresher
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
@@ -650,6 +651,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if sqlEvalContext := s.cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
 	}
+
+	s.statsRefresher = stats.MakeRefresher(
+		internalExecutor,
+		execCfg.TableStatsCache,
+		stats.DefaultAsOfTime,
+	)
+	execCfg.StatsRefresher = s.statsRefresher
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	s.sqlMemMetrics = sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
@@ -1577,6 +1585,11 @@ func (s *Server) Start(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
+	}
+
+	// Start the background thread for periodically refreshing table statistics.
+	if err := s.statsRefresher.Start(ctx, s.stopper, stats.DefaultRefreshInterval); err != nil {
+		return err
 	}
 
 	// Before serving SQL requests, we have to make sure the database is

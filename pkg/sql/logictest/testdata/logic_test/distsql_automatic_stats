@@ -1,0 +1,117 @@
+# LogicTest: fakedist fakedist-opt fakedist-metadata
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDEX d_idx (d))
+
+# Enable automatic stats
+statement ok
+SET CLUSTER SETTING sql.defaults.experimental_automatic_statistics = true
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, NULL FROM
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c)
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           1000       10              0
+__auto__         {d}           1000       0               1000
+
+# Disable automatic stats
+statement ok
+SET CLUSTER SETTING sql.defaults.experimental_automatic_statistics = false
+
+# Update more than 5% of the table.
+statement ok
+UPDATE data SET d = 11, a = 11 WHERE a = 1 AND b > 1
+
+# There should be no change to stats.
+query TTIII colnames,rowsort
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           1000       10              0
+__auto__         {d}           1000       0               1000
+
+# Enable automatic stats
+statement ok
+SET CLUSTER SETTING sql.defaults.experimental_automatic_statistics = true
+
+# Update more than 5% of the table.
+statement ok
+UPDATE data SET d = 12, a = 12 WHERE a = 11
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           1000       10              0
+__auto__         {a}           1000       11              0
+__auto__         {d}           1000       0               1000
+__auto__         {d}           1000       1               910
+
+# Upsert more than 5% of the table.
+statement ok
+UPSERT INTO data SELECT a, b, 1, 1 FROM
+generate_series(1, 11) AS a(a),
+generate_series(1, 10) AS b(b)
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           1000       10              0
+__auto__         {a}           1000       11              0
+__auto__         {a}           1019       12              0
+__auto__         {d}           1000       0               1000
+__auto__         {d}           1000       1               910
+__auto__         {d}           1019       2               819
+
+# Delete more than 5% of the table.
+statement ok
+DELETE FROM data WHERE c > 5
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           1000       10              0
+__auto__         {a}           1000       11              0
+__auto__         {a}           1019       12              0
+__auto__         {a}           519        12              0
+__auto__         {d}           1000       0               1000
+__auto__         {d}           1000       1               910
+__auto__         {d}           1019       2               819
+__auto__         {d}           519        2               364
+
+# Test CREATE TABLE ... AS
+statement ok
+CREATE TABLE copy AS SELECT * FROM data
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           519        12              0
+
+# Test fast path delete.
+statement ok
+DELETE FROM copy WHERE true
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a}           519        12              0
+__auto__         {a}           0          0               0

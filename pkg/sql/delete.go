@@ -325,6 +325,13 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 		d.run.done = true
 	}
 
+	// Possibly initiate a run of CREATE STATISTICS.
+	params.ExecCfg().StatsRefresher.NotifyMutation(
+		params.EvalContext(),
+		d.run.td.tableDesc().ID,
+		d.run.rowCount,
+	)
+
 	return d.run.rowCount > 0, nil
 }
 
@@ -520,9 +527,19 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode, interleavedFas
 		}
 	}
 	var err error
-	d.run.rowCount, err = d.run.td.fastDelete(
-		params.ctx, scan, d.run.autoCommit, d.run.traceKV)
-	return err
+	if d.run.rowCount, err = d.run.td.fastDelete(
+		params.ctx, scan, d.run.autoCommit, d.run.traceKV); err != nil {
+		return err
+	}
+
+	// Possibly initiate a run of CREATE STATISTICS.
+	params.ExecCfg().StatsRefresher.NotifyMutation(
+		params.EvalContext(),
+		d.run.td.tableDesc().ID,
+		d.run.rowCount,
+	)
+
+	return nil
 }
 
 // enableAutoCommit is part of the autoCommitNode interface.

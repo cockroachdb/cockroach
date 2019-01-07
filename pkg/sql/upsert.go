@@ -351,6 +351,13 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 		n.run.done = true
 	}
 
+	// Possibly initiate a run of CREATE STATISTICS.
+	params.ExecCfg().StatsRefresher.NotifyMutation(
+		params.EvalContext(),
+		n.run.tw.tableDesc().ID,
+		n.run.tw.batchedCount(),
+	)
+
 	return n.run.tw.batchedCount() > 0, nil
 }
 
