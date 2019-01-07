@@ -589,6 +589,9 @@ func TestTransactionRecordRoundtrips(t *testing.T) {
 	if !reflect.DeepEqual(txnRecord.LastHeartbeat, txn.LastHeartbeat) {
 		t.Fatalf("txnRecord.LastHeartbeat = %v, txn.LastHeartbeat = %v", txnRecord.LastHeartbeat, txn.LastHeartbeat)
 	}
+	if !reflect.DeepEqual(txnRecord.OrigTimestamp, txn.OrigTimestamp) {
+		t.Fatalf("txnRecord.OrigTimestamp = %v, txn.OrigTimestamp = %v", txnRecord.OrigTimestamp, txn.OrigTimestamp)
+	}
 	if !reflect.DeepEqual(txnRecord.Intents, txn.Intents) {
 		t.Fatalf("txnRecord.Intents = %v, txn.Intents = %v", txnRecord.Intents, txn.Intents)
 	}
