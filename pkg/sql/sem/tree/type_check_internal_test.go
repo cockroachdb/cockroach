@@ -16,6 +16,7 @@ package tree_test
 
 import (
 	"context"
+	"fmt"
 	"go/constant"
 	"go/token"
 	"reflect"
@@ -177,7 +178,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 	}
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
 		ctx := tree.MakeSemaContext(false)
-		ctx.Placeholders.SetTypeHints(clonePlaceholderTypes(test.ptypes))
+		ctx.Placeholders.Reset(clonePlaceholderTypes(test.ptypes))
 		desired := types.Any
 		if test.desired != nil {
 			desired = test.desired
@@ -252,7 +253,9 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 		{nil, types.Decimal, exprs(intConst("1"), placeholder(1)), types.Decimal, mapPTypesDecimal},
 		{nil, types.Decimal, exprs(decConst("1.1"), placeholder(1)), types.Decimal, mapPTypesDecimal},
 	} {
-		attemptTypeCheckSameTypedExprs(t, i, d)
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			attemptTypeCheckSameTypedExprs(t, i, d)
+		})
 	}
 }
 
@@ -316,7 +319,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 	for i, d := range testData {
 		ctx := tree.MakeSemaContext(false)
-		ctx.Placeholders.SetTypeHints(d.ptypes)
+		ctx.Placeholders.Reset(d.ptypes)
 		desired := types.Any
 		if d.desired != nil {
 			desired = d.desired
