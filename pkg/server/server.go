@@ -1358,8 +1358,11 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	var hlcUpperBoundExists bool
+	// iAmTheBootstrapper is set if we're the ones who bootstrapped the cluster.
+	var iAmTheBootstrapper bool
 	if len(bootstrappedEngines) > 0 {
 		// The cluster was already initialized.
+		iAmTheBootstrapper = false
 		if s.cfg.ReadyFn != nil {
 			s.cfg.ReadyFn(false /*waitForInit*/)
 		}
@@ -1380,13 +1383,13 @@ func (s *Server) Start(ctx context.Context) error {
 			hlcUpperBound,
 			timeutil.SleepUntil,
 		)
-
 	} else if len(s.cfg.GossipBootstrapResolvers) == 0 {
 		// If the _unfiltered_ list of hosts from the --join flag is
 		// empty, then this node can bootstrap a new cluster. We disallow
 		// this if this node is being started with itself specified as a
 		// --join host, because that's too likely to be operator error.
 		//
+		iAmTheBootstrapper = true
 		if s.cfg.ReadyFn != nil {
 			// TODO(knz): when CockroachDB stops auto-initializing when --join
 			// is not specified, this needs to be adjusted as well. See issue
@@ -1421,6 +1424,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
+		// We have no existing stores and we've been told to join a cluster. Wait
+		// for the initServer to bootstrap the cluster or connect to an existing
+		// one.
 		if s.cfg.ReadyFn != nil {
 			s.cfg.ReadyFn(true /*waitForInit*/)
 		}
@@ -1436,9 +1442,11 @@ func (s *Server) Start(ctx context.Context) error {
 			})
 		})
 
-		if err := s.initServer.awaitBootstrap(); err != nil {
+		initRes, err := s.initServer.awaitBootstrap()
+		if err != nil {
 			return err
 		}
+		iAmTheBootstrapper = initRes == bootstrappedCluster
 
 		// Reacquire the semaphore, allowing the code below to be oblivious to
 		// the fact that this branch was taken.
@@ -1608,7 +1616,14 @@ func (s *Server) Start(ctx context.Context) error {
 		mmKnobs,
 		s.NodeID().String(),
 	)
-	if err := migMgr.EnsureMigrations(ctx); err != nil {
+	migrationFilter := sqlmigrations.AllMigrations
+	if iAmTheBootstrapper {
+		// If we've just bootstrapped, some migrations are unnecessary because
+		// they're included in the metadata schema that we've written to the store
+		// by hand.
+		migrationFilter = sqlmigrations.ExcludeMigrationsIncludedInBootstrap
+	}
+	if err := migMgr.EnsureMigrations(ctx, migrationFilter); err != nil {
 		select {
 		case <-s.stopper.ShouldQuiesce():
 			// Avoid turning an early shutdown into a fatal error. See #19579.

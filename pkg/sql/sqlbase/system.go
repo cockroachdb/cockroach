@@ -911,15 +911,15 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &LocationsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &RoleMembersTable)
 
+	// The CommentsTable has been introduced in 2.2. It was added here since it
+	// was introduced, but it's also created as a migration for older clusters.
+	target.AddDescriptor(keys.SystemDatabaseID, &CommentsTable)
+
 	target.AddSplitIDs(keys.PseudoTableIDs...)
 
-	// Adding a new system table? Don't add it to the metadata schema yet!
-	//
-	// The first release to contain the system table must add the system table
-	// via a migration in both fresh clusters and existing clusters. Only in the
-	// next release should you "bake in" the migration by adding the table to
-	// the metadata schema here. This ensures there's only ever one code path
-	// responsible for creating the table.
+	// Adding a new system table? It should be added here to the metadata schema,
+	// and also created as a migration for older cluster. The includedInBootstrap
+	// field should be set on the migration.
 
 	// Default zone config entry.
 	zoneConf := config.DefaultZoneConfig()
