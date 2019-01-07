@@ -530,7 +530,7 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
 ----
-memo (optimized, ~6KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G6 G7)
@@ -595,7 +595,7 @@ select
 memo
 SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
 ----
-memo (optimized, ~4KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~5KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G3)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G3)
