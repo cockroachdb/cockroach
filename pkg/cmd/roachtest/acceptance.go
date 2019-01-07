@@ -17,7 +17,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
@@ -26,52 +25,55 @@ func registerAcceptance(r *registry) {
 	// local mode the acceptance tests should be configured to run within a
 	// minute or so as these tests are run on every merge to master.
 
-	testCases := map[int][]struct {
+	testCases := []struct {
 		name string
 		fn   func(ctx context.Context, t *test, c *cluster)
 	}{
-		4: {
-			// Sorted. Please keep it that way.
-			{"bank/cluster-recovery", runBankClusterRecovery},
-			{"bank/node-restart", runBankNodeRestart},
-			{"bank/zerosum-splits", runBankNodeZeroSum},
-			//TODO(masha) This is flaking for same reasons as bank/node-restart
-			// enable after #30064 is fixed.
-			//{"bank/zerosum-restart", runBankZeroSumRestart},
-			{"build-info", runBuildInfo},
-			{"cli/node-status", runCLINodeStatus},
-			{"decommission", runDecommissionAcceptance},
-			{"cluster-init", runClusterInit},
-			{"event-log", runEventLog},
-			{"gossip/peerings", runGossipPeerings},
-			{"gossip/restart", runGossipRestart},
-			{"gossip/restart-node-one", runGossipRestartNodeOne},
-			{"gossip/locality-address", runCheckLocalityIPAddress},
-			{"rapid-restart", runRapidRestart},
-			{"status-server", runStatusServer},
-			{"version-upgrade", runVersionUpgrade},
-		},
+		// Sorted. Please keep it that way.
+		{"bank/cluster-recovery", runBankClusterRecovery},
+		{"bank/node-restart", runBankNodeRestart},
+		{"bank/zerosum-splits", runBankNodeZeroSum},
+		//TODO(masha) This is flaking for same reasons as bank/node-restart
+		// enable after #30064 is fixed.
+		//{"bank/zerosum-restart", runBankZeroSumRestart},
+		{"build-info", runBuildInfo},
+		{"cli/node-status", runCLINodeStatus},
+		{"decommission", runDecommissionAcceptance},
+		{"cluster-init", runClusterInit},
+		{"event-log", runEventLog},
+		{"gossip/peerings", runGossipPeerings},
+		{"gossip/restart", runGossipRestart},
+		{"gossip/restart-node-one", runGossipRestartNodeOne},
+		{"gossip/locality-address", runCheckLocalityIPAddress},
+		{"rapid-restart", runRapidRestart},
+		{"status-server", runStatusServer},
+		{"version-upgrade", runVersionUpgrade},
 	}
 	tags := []string{"default", "quick"}
-	for numNodes, cases := range testCases {
-		spec := testSpec{
-			Name:  fmt.Sprintf("acceptance/nodes=%d", numNodes),
-			Tags:  tags,
-			Nodes: nodes(numNodes),
-		}
-
-		for _, tc := range cases {
-			tc := tc
-			spec.SubTests = append(spec.SubTests, testSpec{
-				Name:    tc.name,
-				Timeout: 10 * time.Minute,
-				Tags:    tags,
-				Run: func(ctx context.Context, t *test, c *cluster) {
-					c.Wipe(ctx)
-					tc.fn(ctx, t, c)
-				},
-			})
-		}
-		r.Add(spec)
+	const numNodes = 4
+	spec := testSpec{
+		// NB: teamcity-post-failures.py relies on the acceptance tests
+		// being named acceptance/<testname> and will avoid posting a
+		// blank issue for the "acceptance" parent test. Make sure to
+		// teach that script (if it's still used at that point) should
+		// this naming scheme ever change (or issues such as #33519)
+		// will be posted.
+		Name:  "acceptance",
+		Tags:  tags,
+		Nodes: nodes(numNodes),
 	}
+
+	for _, tc := range testCases {
+		tc := tc
+		spec.SubTests = append(spec.SubTests, testSpec{
+			Name:    tc.name,
+			Timeout: 10 * time.Minute,
+			Tags:    tags,
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				c.Wipe(ctx)
+				tc.fn(ctx, t, c)
+			},
+		})
+	}
+	r.Add(spec)
 }
