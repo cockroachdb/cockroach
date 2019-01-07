@@ -346,7 +346,7 @@ type WithSSTables interface {
 type Batch interface {
 	ReadWriter
 	// Commit atomically applies any batched updates to the underlying
-	// engine. This is a noop unless the engine was created via NewBatch(). If
+	// engine. This is a noop unless the batch was created via NewBatch(). If
 	// sync is true, the batch is synchronously committed to disk.
 	Commit(sync bool) error
 	// Distinct returns a view of the existing batch which only sees writes that
