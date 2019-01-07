@@ -55,7 +55,7 @@ func makeRowSourceToPlanNode(
 	planCols sqlbase.ResultColumns,
 	originalPlanNode planNode,
 ) *rowSourceToPlanNode {
-	row := make(tree.Datums, len(s.OutputTypes()))
+	row := make(tree.Datums, len(planCols))
 
 	return &rowSourceToPlanNode{
 		source:           s,
@@ -96,9 +96,22 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 			return false, nil
 		}
 
-		if err := sqlbase.EncDatumRowToDatums(r.source.OutputTypes(), r.datumRow, r.row, &r.da); err != nil {
-			return false, err
+		idx := 0
+		types := r.source.OutputTypes()
+		for i, col := range r.planCols {
+			if col.Omitted {
+				r.datumRow[i] = tree.DNull
+				continue
+			}
+			encDatum := r.row[idx]
+			err := encDatum.EnsureDecoded(&types[i], &r.da)
+			if err != nil {
+				return false, err
+			}
+			r.datumRow[i] = encDatum.Datum
+			idx++
 		}
+
 		return true, nil
 	}
 }
