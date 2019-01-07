@@ -126,7 +126,7 @@ func (p *planner) newUpsertNode(
 		// Determine which columns are updated by the RHS of INSERT
 		// ... ON CONFLICT DO UPDATE, or the non-PK columns in an
 		// UPSERT.
-		names, err := p.namesForExprs(updateExprs)
+		names, _, err := p.namesForExprs(ctx, updateExprs)
 		if err != nil {
 			return nil, err
 		}

@@ -753,3 +753,28 @@ SELECT * FROM ex33313 ORDER BY foo
 foo  bar  baz
 1    1    1
 3    2    2
+
+subtest regression_32473
+# With the optimizer enabled, a conflict will proceed correctly, see the same
+# subtest in pkg/sql/opt/exec/execbuilder/testdata/upsert.
+
+statement ok
+CREATE TABLE customers (
+  customer_id serial PRIMARY KEY,
+  name VARCHAR UNIQUE,
+  email VARCHAR NOT NULL
+);
+
+statement ok
+INSERT INTO customers (name, email) VALUES ('bob', 'bob@email.com') ON CONFLICT (name)
+  DO UPDATE SET (name, email) = (
+    SELECT 'bob', 'otherbob@email.com'
+  )
+
+query TT
+SELECT name, email FROM customers
+----
+bob  bob@email.com
+
+statement ok
+DROP TABLE customers
