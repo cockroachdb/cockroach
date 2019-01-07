@@ -194,6 +194,10 @@ var EmptyProjectionsExpr = ProjectionsExpr{}
 
 var _ opt.ScalarExpr = &ProjectionsExpr{}
 
+func (e *ProjectionsExpr) ID() int {
+	panic("lists have no id")
+}
+
 func (e *ProjectionsExpr) Op() opt.Operator {
 	return opt.ProjectionsOp
 }
@@ -229,9 +233,14 @@ type ProjectionsItem struct {
 	ColPrivate
 
 	Typ types.T
+	id  int
 }
 
 var _ opt.ScalarExpr = &ProjectionsItem{}
+
+func (e *ProjectionsItem) ID() int {
+	return e.id
+}
 
 func (e *ProjectionsItem) Op() opt.Operator {
 	return opt.ProjectionsItemOp

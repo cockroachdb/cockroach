@@ -144,6 +144,9 @@ type Memo struct {
 	// searchPath is the current search path at the time the memo was compiled.
 	// If this changes, then the memo is invalidated.
 	searchPath sessiondata.SearchPath
+
+	// curID is the highest currently in-use scalar expression ID.
+	curID int
 }
 
 // Init initializes a new empty memo instance, or resets existing state so it
@@ -332,4 +335,10 @@ func (m *Memo) IsOptimized() bool {
 	// assigned.
 	rel, ok := m.rootExpr.(RelExpr)
 	return ok && rel.RequiredPhysical() != nil
+}
+
+// NextID returns a new unique positive integer to number expressions with.
+func (m *Memo) NextID() int {
+	m.curID++
+	return m.curID
 }

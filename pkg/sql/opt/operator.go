@@ -89,6 +89,10 @@ type Expr interface {
 type ScalarExpr interface {
 	Expr
 
+	// ID is a unique (within the context of a memo) ID that can be
+	// used to define a total order over ScalarExprs.
+	ID() int
+
 	// DataType is the SQL type of the expression.
 	DataType() types.T
 }
