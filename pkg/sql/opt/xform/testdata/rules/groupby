@@ -1222,7 +1222,7 @@ memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w, u DESC, v
 ----
-memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
+memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4]
  │    │    ├── best: (distinct-on G2="[ordering: +4,-2,+3]" G3 cols=(4),ordering=-2,+3 opt(4))
@@ -1249,7 +1249,7 @@ memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w DESC, u DESC, v
 ----
-memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
+memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: -4]
  │    │    ├── best: (distinct-on G2="[ordering: -4,-2,+3]" G3 cols=(4),ordering=-2,+3 opt(4))
@@ -1276,7 +1276,7 @@ memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w, u, v DESC
 ----
-memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
+memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=+2,-3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4]
  │    │    ├── best: (distinct-on G2="[ordering: +4,+2,-3]" G3 cols=(4),ordering=+2,-3 opt(4))
