@@ -1031,7 +1031,7 @@ func newNameFromStr(s string) *tree.Name {
 stmt_block:
   stmt
   {
-    sqllex.(*lexer).stmt = $1.stmt()
+    sqllex.(*lexer).SetStmt($1.stmt())
   }
 
 stmt:
@@ -1815,7 +1815,9 @@ string_or_placeholder:
   }
 | PLACEHOLDER
   {
-    $$.val = $1.placeholder()
+    p := $1.placeholder()
+    sqllex.(*lexer).UpdateNumPlaceholders(p)
+    $$.val = p
   }
 
 string_or_placeholder_list:
@@ -7560,7 +7562,9 @@ d_expr:
   }
 | PLACEHOLDER
   {
-    $$.val = $1.placeholder()
+    p := $1.placeholder()
+    sqllex.(*lexer).UpdateNumPlaceholders(p)
+    $$.val = p
   }
 // TODO(knz/jordan): extend this for compound types. See explanation above.
 | '(' a_expr ')' '.' '*'

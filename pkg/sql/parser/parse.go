@@ -32,6 +32,48 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// Statement is the result of parsing a single statement. It contains the AST
+// node along with other information.
+type Statement struct {
+	// AST is the root of the AST tree for the parsed statement.
+	AST tree.Statement
+
+	// SQL is the original SQL from which the statement was parsed. Note that this
+	// is not appropriate for use in logging, as it may contain passwords and
+	// other sensitive data.
+	SQL string
+
+	// NumPlaceholders indicates the number of arguments to the statement (which
+	// are referenced through placeholders). This corresponds to the highest
+	// argument position (i.e. the x in "$x") that appears in the query.
+	//
+	// Note: where there are "gaps" in the placeholder positions, this number is
+	// based on the highest position encountered. For example, for `SELECT $3`,
+	// NumPlaceholders is 3. These cases are malformed and will result in a
+	// type-check error.
+	NumPlaceholders int
+}
+
+// Statements is a list of parsed statements.
+type Statements []Statement
+
+// String returns the AST formatted as a string.
+func (stmts Statements) String() string {
+	return stmts.StringWithFlags(tree.FmtSimple)
+}
+
+// StringWithFlags returns the AST formatted as a string (with the given flags).
+func (stmts Statements) StringWithFlags(flags tree.FmtFlags) string {
+	ctx := tree.NewFmtCtxWithBuf(flags)
+	for i, s := range stmts {
+		if i > 0 {
+			ctx.WriteString("; ")
+		}
+		ctx.FormatNode(s.AST)
+	}
+	return ctx.CloseAndGetString()
+}
+
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
@@ -39,8 +81,7 @@ type Parser struct {
 	lexer      lexer
 	parserImpl sqlParserImpl
 	tokBuf     [8]sqlSymType
-	stmtBuf    [1]tree.Statement
-	strBuf     [1]string
+	stmtBuf    [1]Statement
 }
 
 // INT8 is the historical interpretation of INT. This should be left
@@ -51,15 +92,13 @@ var defaultNakedIntType = coltypes.Int8
 var defaultNakedSerialType = coltypes.Serial8
 
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string) (stmts tree.StatementList, sqlStrings []string, _ error) {
+func (p *Parser) Parse(sql string) (Statements, error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 }
 
 // ParseWithInt parses a sql statement string and returns a list of
 // Statements. The INT token will result in the specified TInt type.
-func (p *Parser) ParseWithInt(
-	sql string, nakedIntType *coltypes.TInt,
-) (stmts tree.StatementList, sqlStrings []string, _ error) {
+func (p *Parser) ParseWithInt(sql string, nakedIntType *coltypes.TInt) (Statements, error) {
 	nakedSerialType := coltypes.Serial8
 	if nakedIntType == coltypes.Int4 {
 		nakedSerialType = coltypes.Serial4
@@ -68,14 +107,14 @@ func (p *Parser) ParseWithInt(
 }
 
 func (p *Parser) parseOneWithDepth(depth int, sql string) (tree.Statement, error) {
-	stmts, _, err := p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
+	stmts, err := p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 	if err != nil {
 		return nil, err
 	}
 	if len(stmts) != 1 {
 		return nil, pgerror.NewAssertionErrorf("expected 1 statement, but found %d", len(stmts))
 	}
-	return stmts[0], nil
+	return stmts[0].AST, nil
 }
 
 func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
@@ -113,26 +152,24 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 
 func (p *Parser) parseWithDepth(
 	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
-) (stmts tree.StatementList, sqlStrings []string, err error) {
-	stmts = tree.StatementList(p.stmtBuf[:0])
-	sqlStrings = p.strBuf[:0]
+) (Statements, error) {
+	stmts := Statements(p.stmtBuf[:0])
 	p.scanner.init(sql)
 	defer p.scanner.cleanup()
 	for {
 		sql, tokens, done := p.scanOneStmt()
 		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType, nakedSerialType)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		if stmt != nil {
+		if stmt.AST != nil {
 			stmts = append(stmts, stmt)
-			sqlStrings = append(sqlStrings, sql)
 		}
 		if done {
 			break
 		}
 	}
-	return stmts, sqlStrings, nil
+	return stmts, nil
 }
 
 // parse parses a statement from the given scanned tokens.
@@ -142,7 +179,7 @@ func (p *Parser) parse(
 	tokens []sqlSymType,
 	nakedIntType *coltypes.TInt,
 	nakedSerialType *coltypes.TSerial,
-) (tree.Statement, error) {
+) (Statement, error) {
 	p.lexer.init(sql, tokens, nakedIntType, nakedSerialType)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
@@ -162,9 +199,13 @@ func (p *Parser) parse(
 			err.Hint = lastError.hint
 		}
 		err.Detail = lastError.detail
-		return nil, err
+		return Statement{}, err
 	}
-	return p.lexer.stmt, nil
+	return Statement{
+		AST:             p.lexer.stmt,
+		SQL:             sql,
+		NumPlaceholders: p.lexer.numPlaceholders,
+	}, nil
 }
 
 // unaryNegation constructs an AST node for a negation. This attempts
@@ -183,7 +224,7 @@ func unaryNegation(e tree.Expr) tree.Expr {
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
-func Parse(sql string) (stmts tree.StatementList, sqlStrings []string, _ error) {
+func Parse(sql string) (Statements, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 }

@@ -48,17 +48,17 @@ var (
 )
 
 func verifyFormat(sql string) error {
-	stmts, _, err := parser.Parse(sql)
+	stmts, err := parser.Parse(sql)
 	if err != nil {
 		// Cannot serialize a statement list without parsing it.
 		return nil
 	}
-	formattedSQL := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
-	formattedStmts, _, err := parser.Parse(formattedSQL)
+	formattedSQL := stmts.StringWithFlags(tree.FmtShowPasswords)
+	formattedStmts, err := parser.Parse(formattedSQL)
 	if err != nil {
 		return errors.Wrapf(err, "cannot parse output of Format: sql=%q, formattedSQL=%q", sql, formattedSQL)
 	}
-	formattedFormattedSQL := tree.AsStringWithFlags(&formattedStmts, tree.FmtShowPasswords)
+	formattedFormattedSQL := formattedStmts.StringWithFlags(tree.FmtShowPasswords)
 	if formattedSQL != formattedFormattedSQL {
 		return errors.Errorf("Parse followed by Format is not idempotent: %q -> %q != %q", sql, formattedSQL, formattedFormattedSQL)
 	}

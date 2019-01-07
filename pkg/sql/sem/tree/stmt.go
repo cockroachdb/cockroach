@@ -153,19 +153,6 @@ type IndependentFromParallelizedPriors interface {
 	independentFromParallelizedPriors()
 }
 
-// StatementList is a list of statements.
-type StatementList []Statement
-
-// Format implements the NodeFormatter interface.
-func (l *StatementList) Format(ctx *FmtCtx) {
-	for i, s := range *l {
-		if i > 0 {
-			ctx.WriteString("; ")
-		}
-		ctx.FormatNode(s)
-	}
-}
-
 // ObserverStatement is a marker interface for statements which are allowed to
 // run regardless of the current transaction state: statements other than
 // rollback are generally rejected if the session is in a failed transaction
@@ -920,7 +907,6 @@ func (n *ShowVar) String() string                   { return AsString(n) }
 func (n *ShowZoneConfig) String() string            { return AsString(n) }
 func (n *ShowFingerprints) String() string          { return AsString(n) }
 func (n *Split) String() string                     { return AsString(n) }
-func (l *StatementList) String() string             { return AsString(l) }
 func (n *Truncate) String() string                  { return AsString(n) }
 func (n *UnionClause) String() string               { return AsString(n) }
 func (n *Update) String() string                    { return AsString(n) }
