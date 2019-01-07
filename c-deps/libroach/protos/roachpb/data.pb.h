@@ -1770,6 +1770,17 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::cockroach::util::hlc::Timestamp* mutable_last_heartbeat();
   void set_allocated_last_heartbeat(::cockroach::util::hlc::Timestamp* last_heartbeat);
 
+  bool has_orig_timestamp() const;
+  void clear_orig_timestamp();
+  static const int kOrigTimestampFieldNumber = 6;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_orig_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& orig_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_orig_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_orig_timestamp();
+  void set_allocated_orig_timestamp(::cockroach::util::hlc::Timestamp* orig_timestamp);
+
   // .cockroach.roachpb.TransactionStatus status = 4;
   void clear_status();
   static const int kStatusFieldNumber = 4;
@@ -1783,6 +1794,7 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
   ::cockroach::storage::engine::enginepb::TxnMeta* meta_;
   ::cockroach::util::hlc::Timestamp* last_heartbeat_;
+  ::cockroach::util::hlc::Timestamp* orig_timestamp_;
   int status_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
@@ -4219,6 +4231,53 @@ inline void TransactionRecord::set_allocated_last_heartbeat(::cockroach::util::h
   }
   last_heartbeat_ = last_heartbeat;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TransactionRecord.last_heartbeat)
+}
+
+inline bool TransactionRecord::has_orig_timestamp() const {
+  return this != internal_default_instance() && orig_timestamp_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& TransactionRecord::_internal_orig_timestamp() const {
+  return *orig_timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& TransactionRecord::orig_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = orig_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionRecord.orig_timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* TransactionRecord::release_orig_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.TransactionRecord.orig_timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = orig_timestamp_;
+  orig_timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* TransactionRecord::mutable_orig_timestamp() {
+  
+  if (orig_timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    orig_timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionRecord.orig_timestamp)
+  return orig_timestamp_;
+}
+inline void TransactionRecord::set_allocated_orig_timestamp(::cockroach::util::hlc::Timestamp* orig_timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(orig_timestamp_);
+  }
+  if (orig_timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      orig_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, orig_timestamp, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  orig_timestamp_ = orig_timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TransactionRecord.orig_timestamp)
 }
 
 inline int TransactionRecord::intents_size() const {

@@ -2927,7 +2927,8 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 // all operations are written at the same timestamp. If it is transactional, a
 // timestamp must not be set - it is deduced automatically from the
 // transaction. In particular, the read (original) timestamp will be used for
-// all reads _and writes_ (see the TxnMeta.OrigTimestamp for details).
+// all reads and the write (provisional commit) timestamp will be used for
+// all writes.
 //
 // Should a transactional operation be forced to a higher timestamp (for
 // instance due to the timestamp cache or finding a committed value in the path
