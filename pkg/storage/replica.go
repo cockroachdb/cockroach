@@ -1718,11 +1718,6 @@ func (r *Replica) EvalKnobs() storagebase.BatchEvalTestingKnobs {
 	return r.store.cfg.TestingKnobs.EvalKnobs
 }
 
-// Tracer returns the Replica's Tracer.
-func (r *Replica) Tracer() opentracing.Tracer {
-	return r.store.Tracer()
-}
-
 // Clock returns the hlc clock shared by this replica.
 func (r *Replica) Clock() *hlc.Clock {
 	return r.store.Clock()
