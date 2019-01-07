@@ -1241,7 +1241,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			PrevLease: curLease,
 		}
 		if _, pErr := client.SendWrapped(context.Background(), s.DB().NonTransactionalSender(), &leaseReq); pErr != nil {
-			t.Fatal(pErr)
+			t.Error(pErr) // NB: don't fatal or shutdown hangs
 		}
 		// Unblock the read.
 		readBlocked <- struct{}{}
