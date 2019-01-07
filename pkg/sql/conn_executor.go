@@ -1193,9 +1193,11 @@ func (ex *connExecutor) run(
 			ex.curStmt = portal.Stmt.Statement
 
 			*pinfo = tree.PlaceholderInfo{
-				TypeHints: portal.Stmt.TypeHints,
-				Types:     portal.Stmt.Types,
-				Values:    portal.Qargs,
+				PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
+					TypeHints: portal.Stmt.TypeHints,
+					Types:     portal.Stmt.Types,
+				},
+				Values: portal.Qargs,
 			}
 
 			ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
