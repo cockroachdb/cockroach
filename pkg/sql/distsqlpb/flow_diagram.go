@@ -132,10 +132,18 @@ func indexDetails(indexIdx uint32, desc *sqlbase.TableDescriptor) []string {
 // summary implements the diagramCellType interface.
 func (tr *TableReaderSpec) summary() (string, []string) {
 	var details = indexDetails(tr.IndexIdx, &tr.Table)
+
+	var spans []roachpb.Span
 	for _, trspan := range tr.Spans {
-		details = append(details, sqlbase.PrettySpan(nil, trspan.Span, 2)) // nil yolo on the encoding direction
+		spans = append(spans, trspan.Span)
 	}
 
+	idx :=  &tr.Table.PrimaryIndex
+	if tr.IndexIdx != 0 {
+		idx = &tr.Table.Indexes[tr.IndexIdx-1]
+	}
+
+	details = append(details, sqlbase.PrettySpans(idx, spans, 2))
 	return "TableReader", details
 }
 
