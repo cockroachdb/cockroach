@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -183,19 +182,10 @@ func (dsp *DistSQLPlanner) Run(
 
 	evalCtxProto := distsqlpb.MakeEvalContext(evalCtx.EvalContext)
 	setupReq := distsqlpb.SetupFlowRequest{
-		Version:     distsqlrun.Version,
-		EvalContext: evalCtxProto,
-		TraceKV:     evalCtx.Tracing.KVTracingEnabled(),
-	}
-	if txnCoordMeta != nil {
-		// The receiver may not know about the TxnCoordMeta field if it is
-		// an old binary. In this case, set the DeprecatedTxn field as well.
-		// TODO(nvanbenschoten): remove in 2.2.
-		if !dsp.st.Version.IsActive(cluster.VersionTxnCoordMetaInvalidField) {
-			setupReq.DeprecatedTxn = &txnCoordMeta.Txn
-		} else {
-			setupReq.TxnCoordMeta = txnCoordMeta
-		}
+		TxnCoordMeta: txnCoordMeta,
+		Version:      distsqlrun.Version,
+		EvalContext:  evalCtxProto,
+		TraceKV:      evalCtx.Tracing.KVTracingEnabled(),
 	}
 
 	// Start all the flows except the flow on this node (there is always a flow on

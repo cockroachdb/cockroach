@@ -355,33 +355,10 @@ func (sr *txnSpanRefresher) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
 		meta.RefreshReads = append([]roachpb.Span(nil), sr.refreshReads...)
 		meta.RefreshWrites = append([]roachpb.Span(nil), sr.refreshWrites...)
 	}
-
-	// Also populate DeprecatedRefreshValid as a function of RefreshInvalid.
-	// This is required both for 2.0 nodes and so that 2.1 nodes where
-	// !IsActive(VersionTxnCoordMetaInvalidField) can tell the difference
-	// between an old node indicating that refresh spans are invalid and a new
-	// node indicating that refresh spans are valid.
-	// TODO(nvanbenschoten): Can be removed in 2.2. 2.2 binaries can never
-	// connect to nodes where !IsActive(VersionTxnCoordMetaInvalidField),
-	// so this field will never be needed.
-	meta.DeprecatedRefreshValid = !meta.RefreshInvalid
 }
 
 // augmentMetaLocked implements the txnInterceptor interface.
 func (sr *txnSpanRefresher) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
-	if !sr.st.Version.IsActive(cluster.VersionTxnCoordMetaInvalidField) {
-		// If VersionTxnCoordMetaInvalidField is not active, we may be hearing
-		// from an old node that is not setting RefreshInvalid correctly. It's
-		// also possible that we're not. To decide, check whether
-		// DeprecatedRefreshValid and RefreshInvalid are being set correctly.
-		// TODO(nvanbenschoten): Can be removed in 2.2.
-		if !meta.RefreshInvalid && !meta.DeprecatedRefreshValid {
-			// This contradiction is only possible if the sender didn't know
-			// about RefreshInvalid.
-			meta.RefreshInvalid = true
-		}
-	}
-
 	// Do not modify existing span slices when copying.
 	if meta.RefreshInvalid {
 		sr.refreshInvalid = true

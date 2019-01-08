@@ -781,7 +781,7 @@ func MakeTransaction(
 // MakeTxnCoordMeta creates a new transaction coordinator meta for the given
 // transaction.
 func MakeTxnCoordMeta(txn Transaction) TxnCoordMeta {
-	return TxnCoordMeta{Txn: txn, DeprecatedRefreshValid: true}
+	return TxnCoordMeta{Txn: txn}
 }
 
 // StripRootToLeaf strips out all information that is unnecessary to communicate
