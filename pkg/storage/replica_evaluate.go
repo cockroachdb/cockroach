@@ -161,9 +161,11 @@ func evaluateBatch(
 		ba.Requests = optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
-	// Create a shallow clone of the transaction. We only modify a few
-	// non-pointer fields (Sequence, DeprecatedBatchIndex, WriteTooOld, Timestamp),
-	// so this saves a few allocs.
+	// Create a shallow clone of the transaction to store the new txn
+	// state produced on the return/error path. We use a shallow clone
+	// because we only modify a few non-pointer fields (Sequence,
+	// DeprecatedBatchIndex, WriteTooOld, Timestamp): a shallow clone saves a
+	// few allocs.
 	if ba.Txn != nil {
 		txnShallow := *ba.Txn
 		ba.Txn = &txnShallow
