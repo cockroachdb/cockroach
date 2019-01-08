@@ -188,7 +188,10 @@ func distChangefeedFlow(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, &p, recv, &evalCtxCopy, finishedSetupFn)
+	cleanup := dsp.Run(planCtx, noTxn, &p, recv, &evalCtxCopy, finishedSetupFn)
+	if cleanup != nil {
+		cleanup()
+	}
 	return resultRows.Err()
 }
 

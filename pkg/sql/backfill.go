@@ -444,12 +444,15 @@ func (sc *SchemaChanger) distBackfill(
 			if err != nil {
 				return err
 			}
-			sc.distSQLPlanner.Run(
+			cleanup := sc.distSQLPlanner.Run(
 				planCtx,
 				nil, /* txn - the processors manage their own transactions */
 				&plan, recv, evalCtx,
 				nil, /* finishedSetupFn */
 			)
+			if cleanup != nil {
+				cleanup()
+			}
 			return rw.Err()
 		}); err != nil {
 			return err
