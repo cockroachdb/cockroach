@@ -148,6 +148,33 @@ upsert xy
       │    └── filters (true)
       └── filters (true)
 
+# Decorrelate DELETE statement.
+opt expect=DecorrelateJoin
+DELETE FROM xy WHERE EXISTS(SELECT * FROM uv WHERE u=x)
+----
+delete xy
+ ├── columns: <none>
+ ├── fetch columns: x:3(int) y:4(int)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── semi-join (merge)
+      ├── columns: x:3(int!null) y:4(int)
+      ├── left ordering: +3
+      ├── right ordering: +5
+      ├── key: (3)
+      ├── fd: (3)-->(4)
+      ├── scan xy
+      │    ├── columns: x:3(int!null) y:4(int)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4)
+      │    └── ordering: +3
+      ├── scan uv
+      │    ├── columns: u:5(int!null) v:6(int)
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
 # --------------------------------------------------
 # DecorrelateProjectSet
 # --------------------------------------------------

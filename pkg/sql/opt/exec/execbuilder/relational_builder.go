@@ -141,8 +141,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		}
 	}
 
-	// Raise error if a DDL or mutation op is part of a read-only transaction.
-	if isDDL || opt.IsMutationOp(e) {
+	// Raise error if mutation op is part of a read-only transaction.
+	if opt.IsMutationOp(e) {
 		if b.evalCtx.TxnReadOnly {
 			return execPlan{}, pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
 				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
@@ -213,6 +213,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.UpsertExpr:
 		ep, err = b.buildUpsert(t)
+
+	case *memo.DeleteExpr:
+		ep, err = b.buildDelete(t)
 
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
@@ -1243,6 +1246,39 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	ep := execPlan{root: node}
 	if ups.NeedResults {
 		ep.outputCols = mutationOutputColMap(ups)
+	}
+	return ep, nil
+}
+
+func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
+	// Build the input query and ensure that the fetch columns are projected.
+	input, err := b.buildRelational(del.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Ensure that order of input columns matches order of target table columns.
+	//
+	// TODO(andyk): Using ensureColumns here can result in an extra Render.
+	// Upgrade execution engine to not require this.
+	input, err = b.ensureColumns(input, del.FetchCols, nil, del.ProvidedPhysical().Ordering)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Construct the Delete node.
+	md := b.mem.Metadata()
+	tab := md.Table(del.Table)
+	fetchColOrds := ordinalSetFromColList(del.FetchCols)
+	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, del.NeedResults)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Construct the output column map.
+	ep := execPlan{root: node}
+	if del.NeedResults {
+		ep.outputCols = mutationOutputColMap(del)
 	}
 	return ep, nil
 }

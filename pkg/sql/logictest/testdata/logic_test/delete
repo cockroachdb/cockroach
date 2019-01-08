@@ -153,13 +153,13 @@ statement ok
 INSERT INTO unindexed VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 
 query II
-DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC RETURNING v,k
+DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC LIMIT 2 RETURNING v,k
 ----
 4  6
 2  8
 
 query II
-DELETE FROM unindexed ORDER BY v RETURNING k,v
+DELETE FROM unindexed ORDER BY v LIMIT 2 RETURNING k,v
 ----
 3  7
 1  9

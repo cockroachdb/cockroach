@@ -23,7 +23,7 @@ UTF8                1
 query TT colnames
 SELECT *
 FROM [SHOW ALL]
-WHERE variable != 'optimizer' AND variable != 'crdb_version' AND variable != 'experimental_optimizer_updates'
+WHERE variable != 'optimizer' AND variable != 'crdb_version' AND variable != 'experimental_optimizer_mutations'
 ----
 variable                           value
 application_name                   ·
