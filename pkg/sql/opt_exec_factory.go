@@ -876,7 +876,7 @@ func (ef *execFactory) ConstructInsert(
 	// Determine the foreign key tables involved in the update.
 	fkTables, err := row.TablesNeededForFKs(
 		ef.planner.extendedEvalCtx.Context,
-		*tabDesc,
+		tabDesc,
 		row.CheckInserts,
 		ef.planner.LookupTableByID,
 		ef.planner.CheckPrivilege,
@@ -950,7 +950,7 @@ func (ef *execFactory) ConstructUpdate(
 	// Determine the foreign key tables involved in the update.
 	fkTables, err := row.TablesNeededForFKs(
 		ef.planner.extendedEvalCtx.Context,
-		*tabDesc,
+		tabDesc,
 		row.CheckUpdates,
 		ef.planner.LookupTableByID,
 		ef.planner.CheckPrivilege,
@@ -1051,7 +1051,7 @@ func (ef *execFactory) ConstructUpsert(
 	// Determine the foreign key tables involved in the upsert.
 	fkTables, err := row.TablesNeededForFKs(
 		ef.planner.extendedEvalCtx.Context,
-		*tabDesc,
+		tabDesc,
 		fkCheckType,
 		ef.planner.LookupTableByID,
 		ef.planner.CheckPrivilege,
@@ -1152,7 +1152,7 @@ func (ef *execFactory) ConstructDelete(
 	// Determine the foreign key tables involved in the update.
 	fkTables, err := row.TablesNeededForFKs(
 		ef.planner.extendedEvalCtx.Context,
-		*tabDesc,
+		tabDesc,
 		row.CheckDeletes,
 		ef.planner.LookupTableByID,
 		ef.planner.CheckPrivilege,
