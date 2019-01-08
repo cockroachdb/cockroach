@@ -670,7 +670,7 @@ func (tc *TxnCoordSender) Send(
 					"unexpected retryable error at the client.Txn level: (%T) %s",
 					pErr.GetDetail(), pErr)
 			}
-		} else if _, ok := pErr.GetDetail().(*roachpb.HandledRetryableTxnError); ok {
+		} else if _, ok := pErr.GetDetail().(*roachpb.RetryUsingTransactionError); ok {
 			retriable = true
 		}
 
@@ -750,7 +750,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
 		if tc.typ == client.LeafTxn {
 			// Leaf txns return raw retriable errors (which get handled by the
-			// root) rather than HandledRetryableTxnError.
+			// root) rather than RetryUsingTransactionError.
 			return abortedErr
 		}
 		newTxn := roachpb.PrepareTransactionForRetry(
@@ -758,7 +758,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			// priority is not used for aborted errors
 			roachpb.NormalUserPriority,
 			tc.clock)
-		return roachpb.NewError(roachpb.NewHandledRetryableTxnError(
+		return roachpb.NewError(roachpb.NewRetryUsingTransactionError(
 			abortedErr.Message, tc.mu.txn.ID, newTxn))
 	}
 
@@ -806,7 +806,7 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 // needs to call tc.mu.txn.Update(pErr.GetTxn()).
 func (tc *TxnCoordSender) handleRetryableErrLocked(
 	ctx context.Context, pErr *roachpb.Error,
-) *roachpb.HandledRetryableTxnError {
+) *roachpb.RetryUsingTransactionError {
 	// If the error is a transaction retry error, update metrics to
 	// reflect the reason for the restart.
 	// TODO(spencer): this code path does not account for retry errors
@@ -826,8 +826,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	errTxnID := pErr.GetTxn().ID
 	newTxn := roachpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
 
-	// We'll pass a HandledRetryableTxnError up to the next layer.
-	retErr := roachpb.NewHandledRetryableTxnError(
+	// We'll pass a RetryUsingTransactionError up to the next layer.
+	retErr := roachpb.NewRetryUsingTransactionError(
 		pErr.Message,
 		errTxnID, // the id of the transaction that encountered the error
 		newTxn)
