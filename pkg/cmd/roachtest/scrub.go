@@ -88,5 +88,6 @@ func makeScrubTPCCTest(
 				Duration: length,
 			})
 		},
+		MinVersion: "v2.2.0",
 	}
 }
