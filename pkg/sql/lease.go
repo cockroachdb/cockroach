@@ -208,7 +208,7 @@ func (s LeaseStore) acquire(ctx context.Context, tableID sqlbase.ID) (*tableVers
 		// read from the database for the special descriptor of a system table
 		// (#23937).
 		insertLease := fmt.Sprintf(
-			`INSERT INTO system.lease ("descID", version, "nodeID", expiration) VALUES (%d, %d, %d, %s)`,
+			`INSERT INTO system.public.lease ("descID", version, "nodeID", expiration) VALUES (%d, %d, %d, %s)`,
 			storedLease.id, storedLease.version, nodeID, &storedLease.expiration,
 		)
 		count, err := s.execCfg.InternalExecutor.Exec(ctx, "lease-insert", txn, insertLease)
@@ -242,7 +242,7 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, lease *s
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
-		const deleteLease = `DELETE FROM system.lease ` +
+		const deleteLease = `DELETE FROM system.public.lease ` +
 			`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
 		count, err := s.execCfg.InternalExecutor.Exec(
 			ctx,
@@ -469,7 +469,7 @@ func CountLeases(
 		)
 	}
 
-	stmt := fmt.Sprintf(`SELECT count(1) FROM system.lease AS OF SYSTEM TIME %s WHERE `,
+	stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME %s WHERE `,
 		at.AsOfSystemTime()) +
 		strings.Join(whereClauses, " OR ")
 	values, err := executor.QueryRow(
@@ -1782,7 +1782,7 @@ func (m *LeaseManager) DeleteOrphanedLeases(timeThreshold int64) {
 
 		// Read orphaned leases.
 		sqlQuery := fmt.Sprintf(`
-SELECT "descID", version, expiration FROM system.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
+SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
 `, timeThreshold, nodeID)
 		var rows []tree.Datums
 		retryOptions := base.DefaultRetryOptions()
