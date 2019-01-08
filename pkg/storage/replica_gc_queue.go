@@ -196,6 +196,10 @@ func (rgcq *replicaGCQueue) process(
 	// StartKey (and avoid rng.GetReplica() for the same reason).
 	desc := repl.Desc()
 
+	// Now get an updated descriptor for the range. Note that this may
+	// not be _our_ range but instead some earlier range if our range has
+	// been merged. See below.
+
 	// Calls to RangeLookup typically use inconsistent reads, but we
 	// want to do a consistent read here. This is important when we are
 	// considering one of the metadata ranges: we must not do an inconsistent
@@ -206,10 +210,17 @@ func (rgcq *replicaGCQueue) process(
 		return err
 	}
 	if len(rs) != 1 {
+		// Regardless of whether ranges were merged, we're guaranteed one answer.
+		//
+		// TODO(knz): we should really have a separate type for assertion
+		// errors that trigger telemetry, like
+		// pgerror.NewAssertionErrorf() does.
 		return errors.Errorf("expected 1 range descriptor, got %d", len(rs))
 	}
 	replyDesc := rs[0]
 
+	// Now check whether the replica is meant to still exist.
+	// Maybe it was deleted "under us" by being moved.
 	currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID())
 	if desc.RangeID == replyDesc.RangeID && currentMember {
 		// This replica is a current member of the raft group. Set the last replica
