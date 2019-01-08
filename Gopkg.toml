@@ -61,11 +61,6 @@ ignored = [
   name = "github.com/montanaflynn/stats"
   branch = "master"
 
-# https://github.com/rubyist/circuitbreaker/commit/af95830
-[[constraint]]
-  name = "github.com/rubyist/circuitbreaker"
-  branch = "master"
-
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
 #
@@ -93,3 +88,7 @@ ignored = [
   [[prune.project]]
     name = "github.com/knz/go-libedit"
     unused-packages = false
+
+[[constraint]]
+  name = "github.com/cockroachdb/circuitbreaker"
+  revision = "a614b14ccf63dd2311d4ff646c30c61b8ed34aa"

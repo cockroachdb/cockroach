@@ -187,6 +187,12 @@
   version = "v1.1.0"
 
 [[projects]]
+  name = "github.com/cenkalti/backoff"
+  packages = ["."]
+  revision = "1e4cf3da559842a91afcb6ea6141451e6c30c618"
+  version = "v2.1.1"
+
+[[projects]]
   name = "github.com/certifi/gocertifi"
   packages = ["."]
   revision = "3fd9e1adb12b72d2f3f82191d49be9b93c69f67c"
@@ -206,6 +212,11 @@
   packages = ["."]
   revision = "b1ce49cb2a474f4416531e7395373eaafaa4fbe2"
   version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/cockroachdb/circuitbreaker"
+  packages = ["."]
+  revision = "a614b14ccf63dd2311d4ff646c30c61b8ed34aa"
 
 [[projects]]
   branch = "master"
@@ -938,12 +949,6 @@
   revision = "1f30fe9094a513ce4c700b9a54458bbb0c96996c"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/rubyist/circuitbreaker"
-  packages = ["."]
-  revision = "2074adba5ddc7d5f7559448a9c3066573521c5bf"
-
-[[projects]]
   name = "github.com/russross/blackfriday"
   packages = ["."]
   revision = "4048872b16cc0fc2c5fd9eacf0ed2c2fedaa0c8c"
@@ -1235,6 +1240,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "3f17f79398b9d0ebd6aaaaf0f901bc5b0f8818abe58f95211356691e746ff3ff"
+  inputs-digest = "8cf1fa12e173a7194b9af15d74137b8163c2d7ba9a19b424321bb684467574e2"
   solver-name = "gps-cdcl"
   solver-version = 1

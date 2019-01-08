@@ -25,9 +25,9 @@ import (
 	"time"
 	"unsafe"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
-	"github.com/rubyist/circuitbreaker"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -415,7 +415,7 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
 	value, ok := t.breakers.Load(int64(nodeID))
 	if !ok {
-		breaker := t.rpcContext.NewBreaker()
+		breaker := t.rpcContext.NewBreaker(fmt.Sprintf("RaftTransport[n%d]", nodeID))
 		value, _ = t.breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
 	}
 	return (*circuit.Breaker)(value)
@@ -464,7 +464,7 @@ func (t *RaftTransport) connectAndProcess(
 		if consecFailures == 0 {
 			log.Warningf(ctx, "raft transport stream to node %d failed: %s", nodeID, err)
 		}
-		breaker.Fail()
+		breaker.Fail(err)
 	}
 }
 

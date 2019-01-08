@@ -383,7 +383,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 			localAddr := local.GetNodeAddr()
 			c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, localAddr, makeMetrics())
 			peer.mu.Lock()
-			c.startLocked(peer, disconnectedCh, peer.rpcContext, stopper, peer.rpcContext.NewBreaker())
+			c.startLocked(peer, disconnectedCh, peer.rpcContext, stopper, peer.rpcContext.NewBreaker(""))
 			peer.mu.Unlock()
 
 			disconnectedClient := <-disconnectedCh
