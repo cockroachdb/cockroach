@@ -2130,10 +2130,15 @@ func (r *Replica) sendWithRangeID(
 // times during the processing of the request (i.e. during both
 // proposal and application for write commands).
 //
-// This is called downstream of raft and therefore should be changed
-// only with extreme care. It also accesses replica state that is not
-// declared in the SpanSet; this is OK because it can never change the
-// evaluation of a batch, only allow or disallow it.
+// This function is called both upstream and downstream of raft.
+// It is called upstream for read-only batches and admin batches;
+// and in the propose phase of write batches.
+// It is then also called downstream of raft for write batches.
+//
+// It also accesses replica state that is not declared in the SpanSet;
+// this is OK although it can run downstream of raft, because it can
+// never change the evaluation of a batch, only allow or disallow
+// it.
 func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error {
 	r.mu.RLock()
 	desc := r.mu.state.Desc
