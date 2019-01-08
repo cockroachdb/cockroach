@@ -100,7 +100,7 @@ func (p *planner) Delete(
 	// Determine what are the foreign key tables that are involved in the deletion.
 	fkTables, err := row.TablesNeededForFKs(
 		ctx,
-		*desc,
+		desc,
 		row.CheckDeletes,
 		p.LookupTableByID,
 		p.CheckPrivilege,

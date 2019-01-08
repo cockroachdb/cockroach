@@ -283,7 +283,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 ) (roachpb.Key, error) {
 	fkTables, _ := row.TablesNeededForFKs(
 		ctx,
-		*tableDesc,
+		tableDesc,
 		row.CheckUpdates,
 		row.NoLookup,
 		row.NoCheckPrivilege,

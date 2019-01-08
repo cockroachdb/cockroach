@@ -186,7 +186,7 @@ func TestTablesNeededForFKs(t *testing.T) {
 	test := func(t *testing.T, usage FKCheck, expectedIDs []ID) {
 		tableLookups, err := TablesNeededForFKs(
 			context.TODO(),
-			*xDesc,
+			xDesc,
 			usage,
 			lookup,
 			NoCheckPrivilege,
