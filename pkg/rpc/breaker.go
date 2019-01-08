@@ -15,11 +15,13 @@
 package rpc
 
 import (
+	"context"
 	"time"
 
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/facebookgo/clock"
 )
 
@@ -89,10 +91,36 @@ func newBackOff(clock backoff.Clock) backoff.BackOff {
 	return b
 }
 
-func newBreaker(clock clock.Clock) *circuit.Breaker {
+func newBreaker(ctx context.Context, name string, clock clock.Clock) *circuit.Breaker {
 	return circuit.NewBreakerWithOptions(&circuit.Options{
 		BackOff:    newBackOff(clock),
 		Clock:      clock,
 		ShouldTrip: circuit.ThresholdTripFunc(1),
+		Logger:     breakerLogger{ctx},
 	})
+}
+
+// *clogLogger implements the raft.Logger interface. Note that all methods
+// must be defined on the pointer type rather than the value type because
+// (at least in the go 1.4 compiler), methods on a value type called through
+// an interface pointer go through an additional layer of indirection that
+// appears on the stack, and would make all our stack frame offsets incorrect.
+//
+// Raft is fairly verbose at the "info" level, so we map "info" messages to
+// clog.V(1) and "debug" messages to clog.V(2).
+//
+// This file is named raft.go instead of something like logger.go because this
+// file's name is used to determine the vmodule parameter: --vmodule=raft=1
+type breakerLogger struct {
+	ctx context.Context
+}
+
+func (r breakerLogger) Debugf(format string, v ...interface{}) {
+	if log.V(3) {
+		log.InfofDepth(r.ctx, 1, format, v...)
+	}
+}
+
+func (r breakerLogger) Infof(format string, v ...interface{}) {
+	log.InfofDepth(r.ctx, 1, format, v...)
 }
