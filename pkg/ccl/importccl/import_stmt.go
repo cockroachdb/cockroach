@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -993,8 +994,9 @@ func doDistributedCSVTransform(
 }
 
 type importResumer struct {
-	settings *cluster.Settings
-	res      roachpb.BulkOpSummary
+	settings       *cluster.Settings
+	res            roachpb.BulkOpSummary
+	statsRefresher *stats.Refresher
 }
 
 func (r *importResumer) Resume(
@@ -1057,6 +1059,7 @@ func (r *importResumer) Resume(
 		return err
 	}
 	r.res = res
+	r.statsRefresher = p.ExecCfg().StatsRefresher
 	return nil
 }
 
@@ -1119,6 +1122,17 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 	// imported data.
 	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, job.Payload().Username, r.settings, seqs); err != nil {
 		return errors.Wrapf(err, "creating tables")
+	}
+
+	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
+	// rows affected per table, but the stats refresher will always create
+	// statistics if none exist yet.
+	for i := range toWrite {
+		r.statsRefresher.NotifyMutation(
+			&r.settings.SV,
+			toWrite[i].ID,
+			1, /* rowsAffected */
+		)
 	}
 
 	return nil

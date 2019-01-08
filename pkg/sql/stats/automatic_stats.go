@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -215,9 +214,9 @@ func (r *Refresher) Start(
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
 func (r *Refresher) NotifyMutation(
-	evalCtx *tree.EvalContext, tableID sqlbase.ID, rowsAffected int,
+	settings *settings.Values, tableID sqlbase.ID, rowsAffected int,
 ) {
-	if !AutomaticStatisticsClusterMode.Get(&evalCtx.Settings.SV) {
+	if !AutomaticStatisticsClusterMode.Get(settings) {
 		// Automatic stats are disabled.
 		return
 	}
