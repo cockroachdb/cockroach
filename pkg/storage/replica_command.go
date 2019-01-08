@@ -28,10 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/causer"
@@ -43,102 +40,6 @@ import (
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
-
-// evaluateCommand delegates to the eval method for the given
-// roachpb.Request. The returned Result may be partially valid
-// even if an error is returned. maxKeys is the number of scan results
-// remaining for this batch (MaxInt64 for no limit).
-func evaluateCommand(
-	ctx context.Context,
-	raftCmdID storagebase.CmdIDKey,
-	index int,
-	batch engine.ReadWriter,
-	rec batcheval.EvalContext,
-	ms *enginepb.MVCCStats,
-	h roachpb.Header,
-	maxKeys int64,
-	args roachpb.Request,
-	reply roachpb.Response,
-) (result.Result, *roachpb.Error) {
-
-	// If a unittest filter was installed, check for an injected error; otherwise, continue.
-	if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
-		filterArgs := storagebase.FilterArgs{
-			Ctx:   ctx,
-			CmdID: raftCmdID,
-			Index: index,
-			Sid:   rec.StoreID(),
-			Req:   args,
-			Hdr:   h,
-		}
-		if pErr := filter(filterArgs); pErr != nil {
-			log.Infof(ctx, "test injecting error: %s", pErr)
-			return result.Result{}, pErr
-		}
-	}
-
-	var err error
-	var pd result.Result
-
-	if cmd, ok := batcheval.LookupCommand(args.Method()); ok {
-		cArgs := batcheval.CommandArgs{
-			EvalCtx: rec,
-			Header:  h,
-			// Some commands mutate their arguments, so give each invocation
-			// its own copy (shallow to mimic earlier versions of this code
-			// in which args were passed by value instead of pointer).
-			Args:    args.ShallowCopy(),
-			MaxKeys: maxKeys,
-			Stats:   ms,
-		}
-		pd, err = cmd.Eval(ctx, batch, cArgs, reply)
-	} else {
-		err = errors.Errorf("unrecognized command %s", args.Method())
-	}
-
-	if h.ReturnRangeInfo {
-		returnRangeInfo(reply, rec)
-	}
-
-	// TODO(peter): We'd like to assert that the hlc clock is always updated
-	// correctly, but various tests insert versioned data without going through
-	// the proper channels. See TestPushTxnUpgradeExistingTxn for an example.
-	//
-	// if header.Txn != nil && !header.Txn.Timestamp.Less(h.Timestamp) {
-	// 	if now := r.store.Clock().Now(); now.Less(header.Txn.Timestamp) {
-	// 		log.Fatalf(ctx, "hlc clock not updated: %s < %s", now, header.Txn.Timestamp)
-	// 	}
-	// }
-
-	if log.V(2) {
-		log.Infof(ctx, "evaluated %s command %+v: %+v, err=%v", args.Method(), args, reply, err)
-	}
-
-	// Create a roachpb.Error by initializing txn from the request/response header.
-	var pErr *roachpb.Error
-	if err != nil {
-		txn := reply.Header().Txn
-		if txn == nil {
-			txn = h.Txn
-		}
-		pErr = roachpb.NewErrorWithTxn(err, txn)
-	}
-
-	return pd, pErr
-}
-
-func returnRangeInfo(reply roachpb.Response, rec batcheval.EvalContext) {
-	header := reply.Header()
-	lease, _ := rec.GetLease()
-	desc := rec.Desc()
-	header.RangeInfos = []roachpb.RangeInfo{
-		{
-			Desc:  *desc,
-			Lease: lease,
-		},
-	}
-	reply.SetHeader(header)
-}
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
