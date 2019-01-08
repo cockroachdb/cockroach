@@ -89,7 +89,6 @@ func (EngineMetrics) MetricStruct() {}
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.
-// - samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
 // - distSQLUsed reports whether the query was distributed.
 // - automaticRetryCount is the count of implicit txn retries
 //   so far.
@@ -98,7 +97,6 @@ func (EngineMetrics) MetricStruct() {}
 func (ex *connExecutor) recordStatementSummary(
 	planner *planner,
 	stmt Statement,
-	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	planFlags planFlags,
 	automaticRetryCount int,
 	rowsAffected int,
@@ -149,6 +147,16 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 		m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
 		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+	}
+
+	var samplePlanDescription *roachpb.ExplainTreePlanNode
+	if planner.curPlan.plan != nil && sampleLogicalPlans.Get(&ex.appStats.st.SV) {
+		if ex.saveLogicalPlanDescription(stmt,
+			planFlags.IsSet(planFlagDistributed), planFlags.IsSet(planFlagOptUsed), err) {
+			// If statement plan sample is requested, collect a sample.
+			samplePlanDescription = planToTree(
+				planner.EvalContext().Ctx(), planner.curPlan)
+		}
 	}
 
 	planner.statsCollector.RecordStatement(

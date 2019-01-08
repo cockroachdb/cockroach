@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // explainDistSQLNode is a planNode that wraps a plan and returns
@@ -79,7 +79,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
 	planCtx.isLocal = !shouldDistributeGivenRecAndMode(recommendation, params.SessionData().DistSQLMode)
-	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
 
@@ -207,8 +206,11 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			newParams.extendedEvalCtx.Tracing,
 		)
 		defer recv.Release()
-		distSQLPlanner.Run(
+		cleanup := distSQLPlanner.Run(
 			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil /* finishedSetupFn */)
+		if cleanup != nil {
+			cleanup()
+		}
 
 		n.run.executedStatement = true
 

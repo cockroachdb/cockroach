@@ -161,8 +161,13 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		planCtx.planner = p
 		planCtx.stmtType = recv.stmtType
 
-		execCfg.DistSQLPlanner.PlanAndRun(
+		cleanup := execCfg.DistSQLPlanner.PlanAndRun(
 			ctx, evalCtx, planCtx, txn, p.curPlan.plan, recv)
+		// Closing the plan before calling cleanup() as per the contract on PlanAndRun().
+		p.curPlan.close(ctx)
+		if cleanup != nil {
+			cleanup()
+		}
 		return rw.Err()
 	})
 	if err != nil {
