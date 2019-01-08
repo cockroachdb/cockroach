@@ -6325,8 +6325,8 @@ func (r *Replica) shouldGossip() bool {
 }
 
 // MaybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
-// The first call is on NewReplica. Further calls come from the trigger on
-// EndTransaction or range lease acquisition.
+// Further calls come from the trigger on EndTransaction or range lease
+// acquisition.
 //
 // Note that MaybeGossipSystemConfig gossips information only when the
 // lease is actually held. The method does not request a range lease
@@ -6348,7 +6348,7 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 		return nil
 	}
 	if !r.ContainsKey(keys.SystemConfigSpan.Key) {
-		log.VEventf(ctx, 2,
+		log.VEventf(ctx, 3,
 			"not gossiping system config because the replica doesn't contain the system config's start key")
 		return nil
 	}
