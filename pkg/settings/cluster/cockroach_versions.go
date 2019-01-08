@@ -62,8 +62,8 @@ const (
 	VersionSecondaryLookupJoins
 	VersionClientSideWritingFlag // unused
 	VersionColumnarTimeSeries
-	VersionTxnCoordMetaInvalidField
-	VersionAsyncConsensus // unused
+	VersionTxnCoordMetaInvalidField // unused
+	VersionAsyncConsensus           // unused
 	VersionBatchResponse
 	VersionCreateChangefeed
 	VersionRangeMerges

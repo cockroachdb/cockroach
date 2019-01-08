@@ -333,13 +333,6 @@ func (ds *ServerImpl) setupFlow(
 	// create a txn based on the request's TxnCoordMeta.
 	var txn *client.Txn
 	if !localState.IsLocal {
-		if depTxn := req.DeprecatedTxn; depTxn != nil {
-			if req.TxnCoordMeta != nil {
-				return nil, nil, errors.Errorf("provided both Txn and TxnCoordMeta")
-			}
-			meta := roachpb.MakeTxnCoordMeta(*depTxn)
-			req.TxnCoordMeta = &meta
-		}
 		if meta := req.TxnCoordMeta; meta != nil {
 			if meta.Txn.Status != roachpb.PENDING {
 				return nil, nil, errors.Errorf("cannot create flow in non-PENDING txn: %s",
