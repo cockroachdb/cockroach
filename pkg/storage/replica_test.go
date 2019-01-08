@@ -406,11 +406,11 @@ func TestIsOnePhaseCommit(t *testing.T) {
 	txnReqs := make([]roachpb.RequestUnion, 3)
 	txnReqs[0].MustSetInner(&roachpb.BeginTransactionRequest{})
 	txnReqs[1].MustSetInner(&roachpb.PutRequest{})
-	txnReqs[2].MustSetInner(&roachpb.EndTransactionRequest{})
+	txnReqs[2].MustSetInner(&roachpb.EndTransactionRequest{Commit: true})
 	txnReqsNoRefresh := make([]roachpb.RequestUnion, 3)
 	txnReqsNoRefresh[0].MustSetInner(&roachpb.BeginTransactionRequest{})
 	txnReqsNoRefresh[1].MustSetInner(&roachpb.PutRequest{})
-	txnReqsNoRefresh[2].MustSetInner(&roachpb.EndTransactionRequest{NoRefreshSpans: true})
+	txnReqsNoRefresh[2].MustSetInner(&roachpb.EndTransactionRequest{Commit: true, NoRefreshSpans: true})
 	testCases := []struct {
 		bu      []roachpb.RequestUnion
 		isTxn   bool
@@ -3761,7 +3761,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		// End the transaction, verify expected error.
 		txn.Key = test.key
 		args, h := endTxnArgs(txn, true)
-		assignSeqNumsForReqs(txn, &args)
+		args.Sequence = 2
 
 		if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
 			t.Errorf("%d: expected error:\n%s\nto match:\n%s", i, pErr, test.expErrRegexp)
@@ -4375,7 +4375,7 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 				t.Fatalf("commit=%t: %s", commit, err)
 			}
 			etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
-			if !ok || !etArgs.OnePhaseCommit {
+			if !ok || (!etArgs.OnePhaseCommit && commit) {
 				t.Errorf("commit=%t: expected one phase commit", commit)
 			}
 

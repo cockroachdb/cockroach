@@ -246,7 +246,7 @@ querying next range at /Table/61/1/5
 r19: sending batch 1 Scan to (n1,s1):1
 DelRange /Table/61/1/5 - /Table/61/1/7/NULL
 querying next range at /Table/61/1/5
-r19: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+r19: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 fast path completed
 rows affected: 3
 
@@ -291,7 +291,7 @@ querying next range at /Table/61/1
 r19: sending batch 1 Scan to (n1,s1):1
 DelRange /Table/61/1 - /Table/61/3
 querying next range at /Table/61/1
-r19: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+r19: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 fast path completed
 rows affected: 5
 
@@ -346,7 +346,7 @@ querying next range at /Table/61/1/1/#/62/1/1
 r19: sending batch 1 Scan to (n1,s1):1
 Del /Table/61/1/1/#/62/1/1/0
 querying next range at /Table/61/1/1/#/62/1/1/0
-r19: sending batch 1 Del, 1 BeginTxn to (n1,s1):1
+r19: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 63 using index: 1
 CascadeScan /Table/61/1/1/#/62/1/1/#/63/{1-2}
 querying next range at /Table/61/1/1/#/62/1/1/#/63/1

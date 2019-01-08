@@ -34,17 +34,17 @@ import (
 func TestUpsertFastPath(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// This filter increments scans and beginTxn for every ScanRequest and
-	// BeginTransactionRequest that hits user table data.
+	// This filter increments scans and endTxn for every ScanRequest and
+	// EndTransactionRequest that hits user table data.
 	var scans uint64
-	var beginTxn uint64
+	var endTxn uint64
 	filter := func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if bytes.Compare(filterArgs.Req.Header().Key, keys.UserTableDataMin) >= 0 {
 			switch filterArgs.Req.Method() {
 			case roachpb.Scan:
 				atomic.AddUint64(&scans, 1)
-			case roachpb.BeginTransaction:
-				atomic.AddUint64(&beginTxn, 1)
+			case roachpb.EndTransaction:
+				atomic.AddUint64(&endTxn, 1)
 			}
 		}
 		return nil
@@ -64,41 +64,41 @@ func TestUpsertFastPath(t *testing.T) {
 
 	// This should hit the fast path.
 	atomic.StoreUint64(&scans, 0)
-	atomic.StoreUint64(&beginTxn, 0)
+	atomic.StoreUint64(&endTxn, 0)
 	sqlDB.Exec(t, `UPSERT INTO d.kv VALUES (1, 1)`)
 	if s := atomic.LoadUint64(&scans); s != 0 {
 		t.Errorf("expected no scans (the upsert fast path) but got %d", s)
 	}
-	if s := atomic.LoadUint64(&beginTxn); s != 0 {
-		t.Errorf("expected no begin-txn (1PC) but got %d", s)
+	if s := atomic.LoadUint64(&endTxn); s != 0 {
+		t.Errorf("expected no end-txn (1PC) but got %d", s)
 	}
 
 	// This could hit the fast path, but doesn't right now because of #14482.
 	atomic.StoreUint64(&scans, 0)
-	atomic.StoreUint64(&beginTxn, 0)
+	atomic.StoreUint64(&endTxn, 0)
 	sqlDB.Exec(t, `INSERT INTO d.kv VALUES (1, 1) ON CONFLICT (k) DO UPDATE SET v=excluded.v`)
 	if s := atomic.LoadUint64(&scans); s != 1 {
 		t.Errorf("expected 1 scans (no upsert fast path) but got %d", s)
 	}
-	if s := atomic.LoadUint64(&beginTxn); s != 0 {
-		t.Errorf("expected no begin-txn (1PC) but got %d", s)
+	if s := atomic.LoadUint64(&endTxn); s != 0 {
+		t.Errorf("expected no end-txn (1PC) but got %d", s)
 	}
 
 	// This should not hit the fast path because it doesn't set every column.
 	atomic.StoreUint64(&scans, 0)
-	atomic.StoreUint64(&beginTxn, 0)
+	atomic.StoreUint64(&endTxn, 0)
 	sqlDB.Exec(t, `UPSERT INTO d.kv (k) VALUES (1)`)
 	if s := atomic.LoadUint64(&scans); s != 1 {
 		t.Errorf("expected 1 scans (no upsert fast path) but got %d", s)
 	}
-	if s := atomic.LoadUint64(&beginTxn); s != 0 {
-		t.Errorf("expected no begin-txn (1PC) but got %d", s)
+	if s := atomic.LoadUint64(&endTxn); s != 0 {
+		t.Errorf("expected no end-txn (1PC) but got %d", s)
 	}
 
 	// This should hit the fast path, but won't be a 1PC because of the explicit
 	// transaction.
 	atomic.StoreUint64(&scans, 0)
-	atomic.StoreUint64(&beginTxn, 0)
+	atomic.StoreUint64(&endTxn, 0)
 	tx, err := conn.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -112,20 +112,20 @@ func TestUpsertFastPath(t *testing.T) {
 	if s := atomic.LoadUint64(&scans); s != 0 {
 		t.Errorf("expected no scans (the upsert fast path) but got %d", s)
 	}
-	if s := atomic.LoadUint64(&beginTxn); s != 1 {
-		t.Errorf("expected 1 begin-txn (no 1PC) but got %d", s)
+	if s := atomic.LoadUint64(&endTxn); s != 1 {
+		t.Errorf("expected 1 end-txn (no 1PC) but got %d", s)
 	}
 
 	// This should not hit the fast path because kv has a secondary index.
 	sqlDB.Exec(t, `CREATE INDEX vidx ON d.kv (v)`)
 	atomic.StoreUint64(&scans, 0)
-	atomic.StoreUint64(&beginTxn, 0)
+	atomic.StoreUint64(&endTxn, 0)
 	sqlDB.Exec(t, `UPSERT INTO d.kv VALUES (1, 1)`)
 	if s := atomic.LoadUint64(&scans); s != 1 {
 		t.Errorf("expected 1 scans (no upsert fast path) but got %d", s)
 	}
-	if s := atomic.LoadUint64(&beginTxn); s != 0 {
-		t.Errorf("expected no begin-txn (1PC) but got %d", s)
+	if s := atomic.LoadUint64(&endTxn); s != 0 {
+		t.Errorf("expected no end-txn (1PC) but got %d", s)
 	}
 }
 

@@ -1,5 +1,5 @@
 - Feature Name: Lazy Transaction Record Creation (a.k.a Deprecate BeginTransaction)
-- Status: in-progress
+- Status: completed
 - Start Date: 2018-12-09
 - Authors: Nathan VanBenschoten
 - RFC PR: #32971

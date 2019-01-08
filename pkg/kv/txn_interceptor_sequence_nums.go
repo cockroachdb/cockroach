@@ -48,14 +48,18 @@ func (s *txnSeqNumAllocator) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	for _, ru := range ba.Requests {
-		s.seqNumCounter++
+		// Only increment the sequence number generator for requests that
+		// will leave intents or requests that will commit the transaction.
+		// This enables ba.IsCompleteTransaction to work properly.
+		req := ru.GetInner()
+		if roachpb.IsTransactionWrite(req) || req.Method() == roachpb.EndTransaction {
+			s.seqNumCounter++
+		}
 
-		oldHeader := ru.GetInner().Header()
+		oldHeader := req.Header()
 		oldHeader.Sequence = s.seqNumCounter
 		ru.GetInner().SetHeader(oldHeader)
 	}
-	// For 2.0 compatibility.
-	ba.Txn.Sequence = s.seqNumCounter
 
 	s.commandCount += int32(len(ba.Requests))
 
