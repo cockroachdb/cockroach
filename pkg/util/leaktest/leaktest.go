@@ -25,6 +25,7 @@
 package leaktest
 
 import (
+	"fmt"
 	"runtime"
 	"sort"
 	"strings"
@@ -78,40 +79,68 @@ func interestingGoroutines() map[int64]string {
 	return gs
 }
 
+// Set once a test leaks goroutines so that further tests don't attempt to
+// detect leaks any more. Once a tests leaks, it has soiled the process beyond
+// repair: even though other tests would take a snapshot of goroutines at the
+// beginning that would include the previously-leaked goroutines, those leaked
+// goroutines can spin up other goroutines at random times and these would be
+// mis-attributed as leaked by the currently-running test.
+var leakDetectorDisabled bool
+
 // AfterTest snapshots the currently-running goroutines and returns a
 // function to be run at the end of tests to see whether any
 // goroutines leaked.
 func AfterTest(t testing.TB) func() {
 	orig := interestingGoroutines()
 	return func() {
-		if t.Failed() {
-			return
-		}
+		// If there was a panic, "leaked" goroutines are expected.
 		if r := recover(); r != nil {
 			panic(r)
 		}
+
+		// If the test already failed, we don't pile on any more errors but we check
+		// to see if the leak detector should be disabled for future tests.
+		if t.Failed() {
+			if err := diffGoroutines(orig); err != nil {
+				leakDetectorDisabled = true
+			}
+			return
+		}
+
 		// Loop, waiting for goroutines to shut down.
 		// Wait up to 5 seconds, but finish as quickly as possible.
 		deadline := timeutil.Now().Add(5 * time.Second)
 		for {
-			var leaked []string
-			for id, stack := range interestingGoroutines() {
-				if _, ok := orig[id]; !ok {
-					leaked = append(leaked, stack)
+			if err := diffGoroutines(orig); err != nil {
+				if timeutil.Now().Before(deadline) {
+					time.Sleep(50 * time.Millisecond)
+					continue
 				}
+				leakDetectorDisabled = true
+				t.Error(err)
 			}
-			if len(leaked) == 0 {
-				return
-			}
-			if timeutil.Now().Before(deadline) {
-				time.Sleep(50 * time.Millisecond)
-				continue
-			}
-			sort.Strings(leaked)
-			for _, g := range leaked {
-				t.Errorf("Leaked goroutine: %v", g)
-			}
-			return
+			break
 		}
 	}
+}
+
+// diffGoroutines compares the current goroutines with the base snapshort and
+// returns an error if they differ.
+func diffGoroutines(base map[int64]string) error {
+	var leaked []string
+	for id, stack := range interestingGoroutines() {
+		if _, ok := base[id]; !ok {
+			leaked = append(leaked, stack)
+		}
+	}
+	if len(leaked) == 0 {
+		return nil
+	}
+
+	sort.Strings(leaked)
+	var b strings.Builder
+	for _, g := range leaked {
+		b.WriteString(fmt.Sprintf("Leaked goroutine: %v\n\n", g))
+	}
+	return fmt.Errorf(b.String())
 }
