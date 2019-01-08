@@ -62,13 +62,8 @@ var errSavepointNotUsed = pgerror.NewErrorf(
 // res: Used to produce query results.
 // pinfo: The values to use for the statement's placeholders. If nil is passed,
 // 	 then the statement cannot have any placeholder.
-// pos: The position of stmt.
 func (ex *connExecutor) execStmt(
-	ctx context.Context,
-	stmt Statement,
-	res RestrictedCommandResult,
-	pinfo *tree.PlaceholderInfo,
-	pos CmdPos,
+	ctx context.Context, stmt Statement, res RestrictedCommandResult, pinfo *tree.PlaceholderInfo,
 ) (fsm.Event, fsm.EventPayload, error) {
 	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
 		log.HasSpanOrEvent(ctx) {
