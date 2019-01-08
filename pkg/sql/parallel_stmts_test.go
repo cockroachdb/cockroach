@@ -68,7 +68,7 @@ func waitAndAssertEmpty(t *testing.T, pq *ParallelizeQueue) {
 	}
 }
 
-func (pq *ParallelizeQueue) MustAdd(t *testing.T, plan planNode, exec func() error) {
+func (pq *ParallelizeQueue) MustAdd(t *testing.T, plan planNode, exec func() (func(), error)) {
 	p := makeTestPlanner()
 	params := runParams{
 		ctx:             context.TODO(),
@@ -92,25 +92,25 @@ func TestParallelizeQueueNoDependencies(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.MustAdd(t, newPlanNode(), func() error {
+	pq.MustAdd(t, newPlanNode(), func() (func(), error) {
 		<-run1
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		close(run3)
-		return nil
+		return func() {}, nil
 	})
-	pq.MustAdd(t, newPlanNode(), func() error {
+	pq.MustAdd(t, newPlanNode(), func() (func(), error) {
 		<-run2
 		res = append(res, 2)
 		assertLenEventually(t, &pq, 1)
-		return nil
+		return func() {}, nil
 	})
-	pq.MustAdd(t, newPlanNode(), func() error {
+	pq.MustAdd(t, newPlanNode(), func() (func(), error) {
 		<-run3
 		res = append(res, 3)
 		assertLenEventually(t, &pq, 2)
 		close(run2)
-		return nil
+		return func() {}, nil
 	})
 	close(run1)
 
@@ -135,21 +135,21 @@ func TestParallelizeQueueAllDependent(t *testing.T) {
 
 	// Executes: plan1 -> plan2 -> plan3.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.MustAdd(t, newPlanNode(), func() error {
+	pq.MustAdd(t, newPlanNode(), func() (func(), error) {
 		<-run
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
-		return nil
+		return func() {}, nil
 	})
-	pq.MustAdd(t, newPlanNode(), func() error {
+	pq.MustAdd(t, newPlanNode(), func() (func(), error) {
 		res = append(res, 2)
 		assertLen(t, &pq, 2)
-		return nil
+		return func() {}, nil
 	})
-	pq.MustAdd(t, newPlanNode(), func() error {
+	pq.MustAdd(t, newPlanNode(), func() (func(), error) {
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
-		return nil
+		return func() {}, nil
 	})
 	close(run)
 
@@ -179,23 +179,23 @@ func TestParallelizeQueueSingleDependency(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.MustAdd(t, plan1, func() error {
+	pq.MustAdd(t, plan1, func() (func(), error) {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
-		return nil
+		return func() {}, nil
 	})
-	pq.MustAdd(t, plan2, func() error {
+	pq.MustAdd(t, plan2, func() (func(), error) {
 		res = append(res, 2)
 		assertLen(t, &pq, 1)
-		return nil
+		return func() {}, nil
 	})
-	pq.MustAdd(t, plan3, func() error {
+	pq.MustAdd(t, plan3, func() (func(), error) {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
 		close(run1)
-		return nil
+		return func() {}, nil
 	})
 	close(run3)
 
@@ -225,24 +225,24 @@ func TestParallelizeQueueError(t *testing.T) {
 
 	// Executes: plan3 -> plan1 (error!) -> plan2 (dropped).
 	pq := MakeParallelizeQueue(analyzer)
-	pq.MustAdd(t, plan1, func() error {
+	pq.MustAdd(t, plan1, func() (func(), error) {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
-		return planErr
+		return func() {}, planErr
 	})
-	pq.MustAdd(t, plan2, func() error {
+	pq.MustAdd(t, plan2, func() (func(), error) {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
-		return nil
+		return func() {}, nil
 	})
-	pq.MustAdd(t, plan3, func() error {
+	pq.MustAdd(t, plan3, func() (func(), error) {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
 		close(run1)
-		return nil
+		return func() {}, nil
 	})
 	close(run3)
 
@@ -270,10 +270,10 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 	// Executes: plan1 (error!) -> plan2 (dropped) -> plan3.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.MustAdd(t, plan1, func() error {
+	pq.MustAdd(t, plan1, func() (func(), error) {
 		res = append(res, 1)
 		assertLen(t, &pq, 1)
-		return planErr
+		return func() {}, planErr
 	})
 	testutils.SucceedsSoon(t, func() error {
 		// We need this, because any signal from within plan1's execution could
@@ -284,11 +284,11 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 		return nil
 	})
 
-	pq.MustAdd(t, plan2, func() error {
+	pq.MustAdd(t, plan2, func() (func(), error) {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
-		return nil
+		return func() {}, nil
 	})
 
 	// Wait for the ParallelizeQueue to clear and assert that we see the
@@ -298,11 +298,11 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErrs)
 	}
 
-	pq.MustAdd(t, plan3, func() error {
+	pq.MustAdd(t, plan3, func() (func(), error) {
 		// Will be called, because the error is cleared when Wait is called.
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
-		return nil
+		return func() {}, nil
 	})
 
 	waitAndAssertEmpty(t, &pq)

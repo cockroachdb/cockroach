@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -119,6 +119,8 @@ func (dsp *DistSQLPlanner) initRunners() {
 // mutated.
 // - finishedSetupFn, if non-nil, is called synchronously after all the
 // processors have successfully started up.
+//
+// The returned cleanup callback must be called by the caller to release resources.
 func (dsp *DistSQLPlanner) Run(
 	planCtx *PlanningCtx,
 	txn *client.Txn,
@@ -126,7 +128,7 @@ func (dsp *DistSQLPlanner) Run(
 	recv *DistSQLReceiver,
 	evalCtx *extendedEvalContext,
 	finishedSetupFn func(),
-) {
+) (cleanup func()) {
 	ctx := planCtx.ctx
 
 	var (
@@ -147,7 +149,7 @@ func (dsp *DistSQLPlanner) Run(
 		if err != nil {
 			log.Infof(ctx, "%s: %s", clientRejectedMsg, err)
 			recv.SetError(err)
-			return
+			return func() {}
 		}
 		meta.StripRootToLeaf()
 		txnCoordMeta = &meta
@@ -155,7 +157,7 @@ func (dsp *DistSQLPlanner) Run(
 
 	if err := planCtx.sanityCheckAddresses(); err != nil {
 		recv.SetError(err)
-		return
+		return func() {}
 	}
 
 	flows := plan.GenerateFlowSpecs(dsp.nodeDesc.NodeID /* gateway */)
@@ -230,17 +232,17 @@ func (dsp *DistSQLPlanner) Run(
 	}
 	if firstErr != nil {
 		recv.SetError(firstErr)
-		return
+		return func() {}
 	}
 
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
-	defer distsqlplan.ReleaseSetupFlowRequest(&localReq)
+	cleanupFlowRequest := func() { distsqlplan.ReleaseSetupFlowRequest(&localReq) }
 	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
 		recv.SetError(err)
-		return
+		return cleanupFlowRequest
 	}
 
 	if finishedSetupFn != nil {
@@ -252,12 +254,11 @@ func (dsp *DistSQLPlanner) Run(
 		log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 			"The error should have gone to the consumer.", err)
 	}
-	// We need to close the planNode tree we translated into a DistSQL plan before
-	// flow.Cleanup, which closes memory accounts that expect to be emptied.
-	if planCtx.planner != nil && !planCtx.ignoreClose {
-		planCtx.planner.curPlan.close(ctx)
+	cleanupRun := func() {
+		cleanupFlowRequest()
+		flow.Cleanup(ctx)
 	}
-	flow.Cleanup(ctx)
+	return cleanupRun
 }
 
 // DistSQLReceiver is a RowReceiver that writes results to a rowResultWriter.
@@ -674,9 +675,6 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryPlanCtx.isLocal = !distributeSubquery
 	subqueryPlanCtx.planner = planner
 	subqueryPlanCtx.stmtType = tree.Rows
-	// Don't close the top-level plan from subqueries - someone else will handle
-	// that.
-	subqueryPlanCtx.ignoreClose = true
 
 	subqueryPhysPlan, err := dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
 	if err != nil {
@@ -712,7 +710,8 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryRowReceiver := NewRowResultWriter(rows)
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
-	dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
+	cleanup := dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
+	cleanup()
 	if subqueryRecv.commErr != nil {
 		return subqueryRecv.commErr
 	}
@@ -774,6 +773,10 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 // while using that resultWriter), the error is also stored in
 // DistSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
+//
+// The returned cleanup callback, if non-nil, must be called *after*
+// closing the planNode tree (if there is one), to ensure proper
+// ordering of memory monitoring assertions.
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -781,22 +784,22 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	txn *client.Txn,
 	plan planNode,
 	recv *DistSQLReceiver,
-) {
+) (cleanup func()) {
 	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
 	physPlan, err := dsp.createPlanForNode(planCtx, plan)
 	if err != nil {
 		recv.SetError(err)
-		return
+		return func() {}
 	}
 	dsp.FinalizePlan(planCtx, &physPlan)
-	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	cleanup = dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 	if recv.resultWriter.Err() == nil {
 		if err := dsp.logEvents(ctx, evalCtx, plan); err != nil {
 			recv.SetError(err)
-			return
 		}
 	}
+	return cleanup
 }
 
 // logEvents logs events in the system.eventlog table for successful completion

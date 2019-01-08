@@ -141,6 +141,11 @@ type planNode interface {
 	// This method should be called if the node has been used in any way (any
 	// methods on it have been called) after it was constructed. Note that this
 	// doesn't imply that startPlan() has been necessarily called.
+	//
+	// This method must not be called during execution - the planNode
+	// tree must remain "live" and readable via walk() even after
+	// execution completes.  The executor is responsible for closing
+	// this (via planTop.close) when statistic collection has completed.
 	Close(ctx context.Context)
 }
 

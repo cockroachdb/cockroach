@@ -129,6 +129,9 @@ func (dsp *DistSQLPlanner) Exec(
 	planCtx.planner = p
 	planCtx.stmtType = recv.stmtType
 
-	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.plan, recv)
+	cleanup := dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.plan, recv)
+	// Closing the plan before calling cleanup() as per the contract on PlanAndRun().
+	p.curPlan.close(ctx)
+	cleanup()
 	return rw.Err()
 }

@@ -86,9 +86,6 @@ func (p *planTop) evalSubqueries(params runParams) error {
 }
 
 func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
-	// After evaluation, there is no plan remaining.
-	defer func() { s.plan.Close(params.ctx); s.plan = nil }()
-
 	switch s.execMode {
 	case distsqlrun.SubqueryExecModeExists:
 		// For EXISTS expressions, all we want to know is if there is at least one

@@ -149,12 +149,11 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			p.ExtendedEvalContext().Tracing,
 		)
 
-		// We need to re-plan every time, since close() below makes
-		// the plan unusable across retries.
+		// We need to re-plan every time, since the close() below
+		// will make the plan unusable across retries.
 		if err := p.makePlan(ctx, Statement{Statement: stmt}); err != nil {
 			t.Fatal(err)
 		}
-		defer p.curPlan.close(ctx)
 
 		evalCtx := p.ExtendedEvalContext()
 		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, nil /* txn */)
@@ -165,8 +164,11 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		planCtx.planner = p
 		planCtx.stmtType = recv.stmtType
 
-		execCfg.DistSQLPlanner.PlanAndRun(
+		cleanup := execCfg.DistSQLPlanner.PlanAndRun(
 			ctx, evalCtx, planCtx, txn, p.curPlan.plan, recv)
+		// Closing the plan before calling cleanup() as per the contract on PlanAndRun().
+		p.curPlan.close(ctx)
+		cleanup()
 		return rw.Err()
 	})
 	if err != nil {
