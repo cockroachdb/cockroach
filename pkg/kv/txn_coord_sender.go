@@ -417,6 +417,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	tcs.interceptorAlloc.txnHeartbeat.init(
 		&tcs.mu.Mutex,
 		&tcs.mu.txn,
+		tcf.st,
 		tcs.clock,
 		tcs.heartbeatInterval,
 		&tcs.interceptorAlloc.txnLockGatekeeper,
@@ -581,7 +582,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnHeartbeat.mu.everSentBeginTxn {
+	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnHeartbeat.mu.everWroteIntents {
 		return nil, tc.commitReadOnlyTxnLocked(ctx, ba.Requests[0].GetEndTransaction().Deadline)
 	}
 

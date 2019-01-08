@@ -154,9 +154,7 @@ func (tp *txnPipeliner) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Fast-path for 1PC transactions.
-	_, hasBT := ba.GetArg(roachpb.BeginTransaction)
-	_, hasET := ba.GetArg(roachpb.EndTransaction)
-	if hasBT && hasET {
+	if ba.IsCompleteTransaction() {
 		return tp.wrapped.SendLocked(ctx, ba)
 	}
 

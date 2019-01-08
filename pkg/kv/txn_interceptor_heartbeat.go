@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -50,6 +51,7 @@ type txnHeartbeat struct {
 	// sends got through `wrapped`, not directly through `gatekeeper`.
 	gatekeeper lockedSender
 
+	st                *cluster.Settings
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	metrics           *TxnMetrics
@@ -87,16 +89,21 @@ type txnHeartbeat struct {
 		// successful BeginTxn (in which case we know that there is a txn record)
 		// but as of May 2018 we don't do that. Note that the server accepts a
 		// BeginTxn with a higher epoch if a transaction record already exists.
+		// TODO(nvanbenschoten): Once we stop sending BeginTxn entirely (v2.3)
+		// we can get rid of this. For now, we keep it to ensure compatibility.
+		// It can't be collapsed into everWroteIntents because 2.1 nodes expect
+		// a new BeginTxn request on each epoch (e.g. to detect 1PC txns).
 		needBeginTxn bool
 
-		// everSentBeginTxn is set once a BeginTransactionRequest (out of possibly
-		// many) was sent to the server. If a BeginTxn was ever sent, then an
-		// EndTransaction needs to eventually be sent and cannot be elided.
-		// Note that simply looking at txnEnd == nil to see if a heartbeat loop is
-		// currently running is not always sufficient for deciding whether an
-		// EndTransaction can be elided - we want to allow multiple rollback attempts
-		// to be sent and the first one stops the heartbeat loop.
-		everSentBeginTxn bool
+		// everWroteIntents is set once the transaction's first write is sent to
+		// the server. If a write was ever sent, then an EndTransaction needs to
+		// eventually be sent and cannot be elided. Note that simply looking at
+		// txnEnd == nil to see if a heartbeat loop is currently running is not
+		// always sufficient for deciding whether an EndTransaction can be
+		// elided - we want to allow multiple rollback attempts to be sent and
+		// the first one stops the heartbeat loop.
+		// TODO(nvanbenschoten): Can this be replaced with h.mu.txn.Writing?
+		everWroteIntents bool
 	}
 }
 
@@ -105,6 +112,7 @@ type txnHeartbeat struct {
 func (h *txnHeartbeat) init(
 	mu sync.Locker,
 	txn *roachpb.Transaction,
+	st *cluster.Settings,
 	clock *hlc.Clock,
 	heartbeatInterval time.Duration,
 	gatekeeper lockedSender,
@@ -113,6 +121,7 @@ func (h *txnHeartbeat) init(
 	asyncAbortCallbackLocked func(context.Context),
 ) {
 	h.stopper = stopper
+	h.st = st
 	h.clock = clock
 	h.heartbeatInterval = heartbeatInterval
 	h.metrics = metrics
@@ -147,10 +156,11 @@ func (h *txnHeartbeat) SendLocked(
 		etReq = et.(*roachpb.EndTransactionRequest)
 	}
 
+	addedBeginTxn := false
 	needBeginTxn := haveTxnWrite && h.mu.needBeginTxn
 	if needBeginTxn {
 		h.mu.needBeginTxn = false
-		h.mu.everSentBeginTxn = true
+		h.mu.everWroteIntents = true
 		// From now on, all requests need to be checked against the AbortCache on
 		// the server side. We also conservatively update the current request,
 		// although I'm not sure if that's necessary.
@@ -167,20 +177,25 @@ func (h *txnHeartbeat) SendLocked(
 			// prepared before we had an anchor.
 			ba.Txn.Key = anchor
 		}
-		// Set the key in the begin transaction request to the txn's anchor key.
-		bt := &roachpb.BeginTransactionRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key: h.mu.txn.Key,
-			},
-		}
 
-		// Inject the new request before the first write position, taking care to
-		// avoid unnecessary allocations.
-		oldRequests := ba.Requests
-		ba.Requests = make([]roachpb.RequestUnion, len(ba.Requests)+1)
-		copy(ba.Requests, oldRequests[:firstWriteIdx])
-		ba.Requests[firstWriteIdx].MustSetInner(bt)
-		copy(ba.Requests[firstWriteIdx+1:], oldRequests[firstWriteIdx:])
+		if !h.st.Version.IsActive(cluster.VersionLazyTxnRecord) {
+			addedBeginTxn = true
+
+			// Set the key in the begin transaction request to the txn's anchor key.
+			bt := &roachpb.BeginTransactionRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key: h.mu.txn.Key,
+				},
+			}
+
+			// Inject the new request before the first write position, taking care to
+			// avoid unnecessary allocations.
+			oldRequests := ba.Requests
+			ba.Requests = make([]roachpb.RequestUnion, len(ba.Requests)+1)
+			copy(ba.Requests, oldRequests[:firstWriteIdx])
+			ba.Requests[firstWriteIdx].MustSetInner(bt)
+			copy(ba.Requests[firstWriteIdx+1:], oldRequests[firstWriteIdx:])
+		}
 
 		// Start the heartbeat loop.
 		// Note that we don't do it for 1PC txns: they only leave intents around on
@@ -204,7 +219,7 @@ func (h *txnHeartbeat) SendLocked(
 	var commitTurnedToRollback bool
 	if haveEndTxn {
 		// Are we writing now or have we written in the past?
-		elideEndTxn = !h.mu.everSentBeginTxn
+		elideEndTxn = !h.mu.everWroteIntents
 		if elideEndTxn {
 			ba.Requests = ba.Requests[:lastIndex]
 		} else if etReq.Commit {
@@ -234,7 +249,7 @@ func (h *txnHeartbeat) SendLocked(
 	}
 
 	// If we inserted a begin transaction request, remove it here.
-	if needBeginTxn {
+	if addedBeginTxn {
 		if br != nil && br.Responses != nil {
 			br.Responses = append(br.Responses[:firstWriteIdx], br.Responses[firstWriteIdx+1:]...)
 		}
@@ -464,6 +479,16 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 		if tse, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
 			tse.Reason == roachpb.TransactionStatusError_REASON_TXN_NOT_FOUND {
 			return true
+		}
+
+		// TODO(nvanbenschoten): Figure out what to do here. The case we're
+		// handling is TransactionAbortedErrors without corresponding
+		// transaction protos attached. @andreimatei any suggestions?
+		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
+			h.mu.txn.Status = roachpb.ABORTED
+			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
+			h.abortTxnAsyncLocked(ctx)
+			return false
 		}
 
 		respTxn = pErr.GetTxn()
