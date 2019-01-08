@@ -67,7 +67,7 @@ import (
 // mutations are applied, or the order of any returned rows (i.e. it won't
 // become a physical property required of the Update operator).
 func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope) {
-	if !b.evalCtx.SessionData.OptimizerUpdates {
+	if !b.evalCtx.SessionData.OptimizerMutations {
 		panic(unimplementedf("cost-based optimizer is not planning UPDATE statements"))
 	}
 
@@ -106,7 +106,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the update table will be projected.
-	mb.buildInputForUpdate(inScope, upd)
+	mb.buildInputForUpdateOrDelete(inScope, upd.Where, upd.Limit, upd.OrderBy)
 
 	// Derive the columns that will be updated from the SET expressions.
 	mb.addTargetColsForUpdate(upd.Exprs)
@@ -169,52 +169,6 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 					len(expr.Names), n)})
 			}
 		}
-	}
-}
-
-// buildInputForUpdate constructs a Select expression from the fields in the
-// Update operator, similar to this:
-//
-//   SELECT <cols>
-//   FROM <table>
-//   WHERE <where>
-//   ORDER BY <order-by>
-//   LIMIT <limit>
-//
-// All columns from the table to update are added to fetchColList.
-// TODO(andyk): Do needed column analysis to project fewer columns if possible.
-func (mb *mutationBuilder) buildInputForUpdate(inScope *scope, upd *tree.Update) {
-	// FROM
-	mb.outScope = mb.b.buildScan(
-		mb.tab,
-		mb.alias,
-		nil, /* ordinals */
-		nil, /* indexFlags */
-		includeMutations,
-		inScope,
-	)
-
-	// WHERE
-	mb.b.buildWhere(upd.Where, mb.outScope)
-
-	// SELECT + ORDER BY (which may add projected expressions)
-	projectionsScope := mb.outScope.replace()
-	projectionsScope.appendColumnsFromScope(mb.outScope)
-	orderByScope := mb.b.analyzeOrderBy(upd.OrderBy, mb.outScope, projectionsScope)
-	mb.b.buildOrderBy(mb.outScope, projectionsScope, orderByScope)
-	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
-
-	// LIMIT
-	if upd.Limit != nil {
-		mb.b.buildLimit(upd.Limit, inScope, projectionsScope)
-	}
-
-	mb.outScope = projectionsScope
-
-	// Set list of columns that will be fetched by the input expression.
-	mb.fetchColList = make(opt.ColList, cap(mb.targetColList))
-	for i := range mb.outScope.cols {
-		mb.fetchColList[i] = mb.outScope.cols[i].id
 	}
 }
 

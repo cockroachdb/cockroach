@@ -962,6 +962,10 @@ func (b *logicalPropsBuilder) buildUpsertProps(ups *UpsertExpr, rel *props.Relat
 	b.buildMutationProps(ups, rel)
 }
 
+func (b *logicalPropsBuilder) buildDeleteProps(del *DeleteExpr, rel *props.Relational) {
+	b.buildMutationProps(del, rel)
+}
+
 func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Relational) {
 	BuildSharedProps(b.mem, mutation, &rel.Shared)
 
@@ -1031,7 +1035,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// ops, since destination values can be sourced from multiple input columns.
 	// In that case, the functional dependencies are empty.
 	switch mutation.Op() {
-	case opt.InsertOp, opt.UpdateOp:
+	case opt.InsertOp, opt.UpdateOp, opt.DeleteOp:
 		rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
 		private.AddEquivTableCols(md, &rel.FuncDeps)
 		rel.FuncDeps.ProjectCols(rel.OutputCols)
@@ -1131,9 +1135,11 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 			shared.CanHaveSideEffects = true
 		}
 
-	case *InsertExpr, *UpdateExpr, *UpsertExpr, *CreateTableExpr:
-		shared.CanHaveSideEffects = true
-		shared.CanMutate = true
+	default:
+		if opt.IsMutationOp(e) {
+			shared.CanHaveSideEffects = true
+			shared.CanMutate = true
+		}
 	}
 
 	// Recursively build the shared properties.

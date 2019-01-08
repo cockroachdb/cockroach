@@ -131,7 +131,7 @@ func NewOptTester(catalog cat.Catalog, sql string) *OptTester {
 	// Set any OptTester-wide session flags here.
 
 	// Enable CBO planning for UPDATE statements, for all tests.
-	ot.evalCtx.SessionData.OptimizerUpdates = true
+	ot.evalCtx.SessionData.OptimizerMutations = true
 
 	// Enable zigzag joins for all opt tests. Execbuilder tests exercise
 	// cases where this flag is false.

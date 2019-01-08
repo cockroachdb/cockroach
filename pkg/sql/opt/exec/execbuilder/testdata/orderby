@@ -497,15 +497,15 @@ render                 ·              ·                 (b)              ·
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-render               ·         ·                (b)        key()
- │                   render 0  test.public.t.b  ·          ·
- └── run             ·         ·                (a, b, c)  a=CONST; key()
-      └── delete     ·         ·                (a, b, c)  a=CONST; key()
-           │         from      t                ·          ·
-           │         strategy  deleter          ·          ·
-           └── scan  ·         ·                (a, b, c)  a=CONST; key()
-·                    table     t@primary        ·          ·
-·                    spans     /3-/3/#          ·          ·
+render               ·         ·          (b)        ·
+ │                   render 0  b          ·          ·
+ └── run             ·         ·          (a, b, c)  ·
+      └── delete     ·         ·          (a, b, c)  ·
+           │         from      t          ·          ·
+           │         strategy  deleter    ·          ·
+           └── scan  ·         ·          (a, b, c)  ·
+·                    table     t@primary  ·          ·
+·                    spans     /3-/3/#    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b

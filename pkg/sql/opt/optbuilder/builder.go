@@ -187,6 +187,9 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 	case *tree.CreateTable:
 		return b.buildCreateTable(stmt, inScope)
 
+	case *tree.Delete:
+		return b.buildDelete(stmt, inScope)
+
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
 

@@ -222,3 +222,9 @@ func (f *stubFactory) ConstructUpsert(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructDelete(
+	input exec.Node, table cat.Table, fetchCols exec.ColumnOrdinalSet, rowsNeeded bool,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}

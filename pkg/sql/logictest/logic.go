@@ -929,9 +929,9 @@ func (t *logicTest) setUser(user string) func() {
 			t.Fatal(err)
 		}
 
-		// Use the cost-based-optimizer for planning UPDATE statements.
+		// Use the cost-based-optimizer for planning mutation statements.
 		if optMode == "on" {
-			if _, err := db.Exec("SET experimental_optimizer_updates = true"); err != nil {
+			if _, err := db.Exec("SET experimental_optimizer_mutations = true"); err != nil {
 				t.Fatal(err)
 			}
 		}

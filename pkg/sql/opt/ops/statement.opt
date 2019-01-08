@@ -142,8 +142,20 @@ define Upsert {
     _ MutationPrivate
 }
 
+# Delete is an operator used to delete all rows that are selected by a
+# relational input expression:
+#
+#   DELETE FROM abc WHERE a>0 ORDER BY b LIMIT 10
+#
+[Relational, Mutation]
+define Delete {
+    Input RelExpr
+
+    _ MutationPrivate
+}
+
 # CreateTable represents a CREATE TABLE statement.
-[Relational, DDL]
+[Relational, DDL, Mutation]
 define CreateTable {
     # Input is only used if the AS clause was used in the CREATE TABLE
     # statement. If it was not used, then the Input is a dummy zero row, zero
