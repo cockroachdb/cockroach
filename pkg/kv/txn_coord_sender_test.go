@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -1263,13 +1264,11 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				txn := ba.Txn.Clone()
 				br.Txn = &txn
 
-				if _, hasBT := ba.GetArg(roachpb.BeginTransaction); hasBT {
-					if _, ok := ba.Requests[1].GetInner().(*roachpb.PutRequest); !ok {
+				if _, hasPut := ba.GetArg(roachpb.Put); hasPut {
+					if _, ok := ba.Requests[0].GetInner().(*roachpb.PutRequest); !ok {
 						t.Fatalf("expected Put")
 					}
 					union := &br.Responses[0] // avoid operating on copy
-					union.MustSetInner(&roachpb.BeginTransactionResponse{})
-					union = &br.Responses[1] // avoid operating on copy
 					union.MustSetInner(&roachpb.PutResponse{})
 					if ba.Txn != nil && br.Txn == nil {
 						txnClone := ba.Txn.Clone()
@@ -1629,8 +1628,8 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	var calls []roachpb.Method
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
-		if bt, ok := ba.GetArg(roachpb.BeginTransaction); ok && !bt.Header().Key.Equal(roachpb.Key("a")) {
-			t.Errorf("expected begin transaction key to be \"a\"; got %s", bt.Header().Key)
+		if !bytes.Equal(ba.Txn.Key, roachpb.Key("a")) {
+			t.Errorf("expected transaction key to be \"a\"; got %s", ba.Txn.Key)
 		}
 		if et, ok := ba.GetArg(roachpb.EndTransaction); ok && !et.(*roachpb.EndTransactionRequest).Commit {
 			t.Errorf("expected commit to be true")
@@ -1692,7 +1691,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			if err := db.Txn(ctx, test.f); err != nil {
 				t.Fatalf("%d: unexpected error on commit: %s", i, err)
 			}
-			expectedCalls := []roachpb.Method{roachpb.BeginTransaction, test.expMethod}
+			expectedCalls := []roachpb.Method{test.expMethod}
 			if test.pointWrite {
 				expectedCalls = append(expectedCalls, roachpb.QueryIntent)
 			}
@@ -1706,6 +1705,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 
 // TestTxnInsertBeginTransaction verifies that a begin transaction
 // request is inserted just before the first mutating command.
+// TODO(nvanbenschoten): Remove in 2.3.
 func TestTxnInsertBeginTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -1727,9 +1727,12 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 		return nil, nil
 	})
 
+	v := cluster.VersionByKey(cluster.Version2_1)
+	st := cluster.MakeTestingClusterSettingsWithVersion(v, v)
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
+			Settings:   st,
 			Clock:      clock,
 			Stopper:    stopper,
 		},
@@ -1758,6 +1761,7 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 
 // TestBeginTransactionErrorIndex verifies that the error index is cleared
 // when a BeginTransaction command causes an error.
+// TODO(nvanbenschoten): Remove in 2.3.
 func TestBeginTransactionErrorIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -1773,9 +1777,12 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 		return nil, pErr
 	})
 
+	v := cluster.VersionByKey(cluster.Version2_1)
+	st := cluster.MakeTestingClusterSettingsWithVersion(v, v)
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
+			Settings:   st,
 			Clock:      clock,
 			Stopper:    stopper,
 		},
@@ -1885,7 +1892,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		sender,
 	)
 	db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
-	expCalls := []roachpb.Method{roachpb.BeginTransaction, roachpb.Put, roachpb.EndTransaction}
+	expCalls := []roachpb.Method{roachpb.Put, roachpb.EndTransaction}
 
 	testutils.RunTrueAndFalse(t, "success", func(t *testing.T, success bool) {
 		calls = nil
@@ -1911,8 +1918,8 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 }
 
 // TestTransactionKeyNotChangedInRestart verifies that if the transaction
-// already has a key (we're in a restart), the key in the begin transaction
-// request is not changed.
+// already has a key (we're in a restart), the key in the transaction request is
+// not changed.
 func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -1933,13 +1940,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 			return nil, nil
 		}
 
-		// Attempt 0 should have a BeginTxnRequest, and a PutRequest.
-		// Attempt 1 should have a PutRequest.
-		if attempt == 0 {
-			if _, ok := ba.GetArg(roachpb.BeginTransaction); !ok {
-				t.Fatalf("failed to find a begin transaction request: %v", ba)
-			}
-		}
+		// Both attempts should have a PutRequest.
 		if _, ok := ba.GetArg(roachpb.Put); !ok {
 			t.Fatalf("failed to find a put request: %v", ba)
 		}
@@ -2003,9 +2004,6 @@ func TestSequenceNumbers(t *testing.T) {
 				t.Errorf("expected Request sequence %d; got %d. request: %T",
 					expSequence, seq, args)
 			}
-		}
-		if expSequence != ba.Txn.Sequence {
-			t.Errorf("expected header sequence %d; got %d", expSequence, ba.Txn.Sequence)
 		}
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -2081,10 +2079,9 @@ func TestConcurrentTxnRequests(t *testing.T) {
 	}
 
 	expectedCallCounts := map[roachpb.Method]int{
-		roachpb.BeginTransaction: 1,
-		roachpb.Put:              26,
-		roachpb.QueryIntent:      26,
-		roachpb.EndTransaction:   1,
+		roachpb.Put:            26,
+		roachpb.QueryIntent:    26,
+		roachpb.EndTransaction: 1,
 	}
 	if !reflect.DeepEqual(expectedCallCounts, callCounts) {
 		t.Errorf("expected %v, got %v", expectedCallCounts, callCounts)
@@ -2265,8 +2262,8 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 	}
 
 	require.Equal(t, []roachpb.Method{
-		roachpb.BeginTransaction, roachpb.Put, roachpb.QueryIntent, roachpb.EndTransaction,
-		roachpb.BeginTransaction, roachpb.Put, roachpb.EndTransaction,
+		roachpb.Put, roachpb.QueryIntent, roachpb.EndTransaction,
+		roachpb.Put, roachpb.EndTransaction,
 	}, calls)
 
 	for _, action := range []func(ctx context.Context, txn *client.Txn) error{

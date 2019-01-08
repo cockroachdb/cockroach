@@ -47,9 +47,7 @@ func (m *txnMetrics) init(txn *roachpb.Transaction, clock *hlc.Clock, metrics *T
 func (m *txnMetrics) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
-	et, hasEnd := ba.GetArg(roachpb.EndTransaction)
-	m.onePCCommit = hasBegin && hasEnd && et.(*roachpb.EndTransactionRequest).Commit
+	m.onePCCommit = ba.IsCompleteTransaction()
 
 	if m.txnStartNanos == 0 {
 		m.txnStartNanos = timeutil.Now().UnixNano()

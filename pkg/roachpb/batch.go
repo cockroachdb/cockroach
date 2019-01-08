@@ -212,6 +212,53 @@ func (ba *BatchRequest) IsSingleComputeChecksumRequest() bool {
 	return false
 }
 
+// IsCompleteTransaction determines whether a batch contains every write in a
+// transactions.
+func (ba *BatchRequest) IsCompleteTransaction() bool {
+	et, hasET := ba.GetArg(EndTransaction)
+	if !hasET {
+		return false
+	}
+	if _, hasBegin := ba.GetArg(BeginTransaction); hasBegin {
+		// TODO(nvanbenschoten): Remove this condition in 2.3. It can be removed
+		// in 2.3 once we're sure that all nodes will properly set sequence
+		// numbers (i.e. on writes only).
+		return true
+	}
+	maxSeq := et.Header().Sequence
+	switch maxSeq {
+	case 0:
+		// If the batch isn't using sequence numbers,
+		// assume that it is not a complete transaction.
+		return false
+	case 1:
+		// The transaction performed no writes.
+		return true
+	}
+	if int(maxSeq) > len(ba.Requests) {
+		// Fast-path.
+		return false
+	}
+	nextSeq := int32(1)
+	for _, args := range ba.Requests {
+		req := args.GetInner()
+		seq := req.Header().Sequence
+		if seq > nextSeq {
+			return false
+		}
+		if seq == nextSeq {
+			if !IsTransactionWrite(req) {
+				return false
+			}
+			nextSeq++
+			if nextSeq == maxSeq {
+				return true
+			}
+		}
+	}
+	panic("unreachable")
+}
+
 // GetPrevLeaseForLeaseRequest returns the previous lease, at the time
 // of proposal, for a request lease or transfer lease request. If the
 // batch does not contain a single lease request, this method will panic.

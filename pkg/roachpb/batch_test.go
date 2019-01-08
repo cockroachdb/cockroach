@@ -22,6 +22,61 @@ import (
 	"github.com/kr/pretty"
 )
 
+func TestBatchIsCompleteTransaction(t *testing.T) {
+	get := &GetRequest{}
+	put := &PutRequest{}
+	bt := &BeginTransactionRequest{}
+	et := &EndTransactionRequest{}
+	withSeq := func(r Request, s int32) Request {
+		c := r.ShallowCopy()
+		h := c.Header()
+		h.Sequence = s
+		c.SetHeader(h)
+		return c
+	}
+	testCases := []struct {
+		reqs       []Request
+		isComplete bool
+	}{
+		{[]Request{get, put}, false},
+		{[]Request{bt}, false},
+		{[]Request{et}, false},
+		{[]Request{bt, put, get}, false},
+		{[]Request{put, get, et}, false},
+		{[]Request{bt, put, get, et}, true},
+		{[]Request{bt, get, et}, true},
+		{[]Request{withSeq(et, 1)}, true},
+		{[]Request{put, withSeq(et, 3)}, false},
+		{[]Request{withSeq(put, 1), withSeq(et, 3)}, false},
+		{[]Request{withSeq(put, 2), withSeq(et, 3)}, false},
+		{[]Request{withSeq(put, 1), withSeq(put, 2), withSeq(et, 3)}, true},
+		{[]Request{withSeq(put, 1), withSeq(put, 2), withSeq(et, 4)}, false},
+		{[]Request{withSeq(put, 1), withSeq(put, 2), withSeq(put, 3), withSeq(et, 4)}, true},
+		{[]Request{withSeq(get, 0), withSeq(put, 1), withSeq(get, 1), withSeq(et, 3)}, false},
+		{[]Request{withSeq(get, 0), withSeq(get, 1), withSeq(put, 2), withSeq(et, 3)}, false},
+		{[]Request{withSeq(get, 0), withSeq(put, 1), withSeq(put, 2), withSeq(get, 2), withSeq(et, 3)}, true},
+		{[]Request{withSeq(put, 1), withSeq(get, 1), withSeq(put, 2), withSeq(et, 4)}, false},
+		{[]Request{withSeq(get, 0), withSeq(put, 1), withSeq(put, 2), withSeq(put, 3), withSeq(get, 3), withSeq(et, 4)}, true},
+		// These cases will be removed in 2.3 once we're sure that all nodes
+		// will properly set sequence numbers (i.e. on writes only).
+		{[]Request{bt, withSeq(put, 1), withSeq(et, 3)}, true},
+		{[]Request{bt, withSeq(put, 2), withSeq(et, 3)}, true},
+		{[]Request{bt, withSeq(put, 1), withSeq(put, 2), withSeq(et, 3)}, true},
+		{[]Request{bt, withSeq(put, 1), withSeq(put, 2), withSeq(et, 4)}, true},
+		{[]Request{bt, withSeq(put, 1), withSeq(put, 2), withSeq(put, 3), withSeq(et, 4)}, true},
+	}
+	for i, test := range testCases {
+		ba := BatchRequest{}
+		for _, args := range test.reqs {
+			ba.Add(args)
+		}
+		complete := ba.IsCompleteTransaction()
+		if complete != test.isComplete {
+			t.Errorf("%d: expected IsCompleteTransaction=%t, found %t", i, test.isComplete, complete)
+		}
+	}
+}
+
 func TestBatchSplit(t *testing.T) {
 	get := &GetRequest{}
 	scan := &ScanRequest{}
