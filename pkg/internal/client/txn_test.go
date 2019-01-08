@@ -278,7 +278,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 								if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
 									// HACK ALERT: to do without a TxnCoordSender, we jump through
 									// hoops to get the retryable error expected by db.Txn().
-									return nil, roachpb.NewError(roachpb.NewHandledRetryableTxnError(
+									return nil, roachpb.NewError(roachpb.NewRetryUsingTransactionError(
 										pErr.Message, ba.Txn.ID, *ba.Txn))
 								}
 								return nil, pErr
@@ -425,7 +425,7 @@ func TestWrongTxnRetry(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Simulate an inner txn by generating an error with a bogus txn id.
-		return roachpb.NewHandledRetryableTxnError("test error", uuid.MakeV4(), roachpb.Transaction{})
+		return roachpb.NewRetryUsingTransactionError("test error", uuid.MakeV4(), roachpb.Transaction{})
 	}
 
 	if err := db.Txn(context.TODO(), txnClosure); !testutils.IsError(err, "test error") {

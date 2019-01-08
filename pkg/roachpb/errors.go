@@ -324,15 +324,15 @@ func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
 var _ ErrorDetailInterface = &TransactionAbortedError{}
 var _ transactionRestartError = &TransactionAbortedError{}
 
-func (e *HandledRetryableTxnError) Error() string {
+func (e *RetryUsingTransactionError) Error() string {
 	return e.message(nil)
 }
 
-func (e *HandledRetryableTxnError) message(_ *Error) string {
-	return fmt.Sprintf("HandledRetryableTxnError: %s", e.Msg)
+func (e *RetryUsingTransactionError) message(_ *Error) string {
+	return fmt.Sprintf("RetryUsingTransactionError: %s", e.Msg)
 }
 
-var _ ErrorDetailInterface = &HandledRetryableTxnError{}
+var _ ErrorDetailInterface = &RetryUsingTransactionError{}
 
 // NewTransactionAbortedError initializes a new TransactionAbortedError.
 func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbortedError {
@@ -341,14 +341,14 @@ func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbo
 	}
 }
 
-// NewHandledRetryableTxnError initializes a new HandledRetryableTxnError.
+// NewRetryUsingTransactionError initializes a new RetryUsingTransactionError.
 //
 // txnID is the ID of the transaction being restarted.
 // txn is the transaction that the client should use for the next attempts.
-func NewHandledRetryableTxnError(
+func NewRetryUsingTransactionError(
 	msg string, txnID uuid.UUID, txn Transaction,
-) *HandledRetryableTxnError {
-	return &HandledRetryableTxnError{Msg: msg, TxnID: txnID, Transaction: txn}
+) *RetryUsingTransactionError {
+	return &RetryUsingTransactionError{Msg: msg, TxnID: txnID, Transaction: txn}
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
