@@ -16,6 +16,7 @@ package nodedialer
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 	"unsafe"
@@ -93,12 +94,14 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 
 	addr, err := n.resolver(nodeID)
 	if err != nil {
-		breaker.Fail()
+		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
+		breaker.Fail(err)
 		return nil, err
 	}
 	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
 	if err != nil {
-		breaker.Fail()
+		err = errors.Wrapf(err, "failed to grpc dial n%d at %v", nodeID, addr)
+		breaker.Fail(err)
 		return nil, err
 	}
 	breaker.Success()
@@ -136,14 +139,16 @@ func (n *Dialer) DialInternalClient(
 	log.VEventf(ctx, 2, "sending request to %s", addr)
 	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
 	if err != nil {
-		breaker.Fail()
+		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
+		breaker.Fail(err)
 		return nil, nil, err
 	}
 	// Check to see if the connection is in the transient failure state. This can
 	// happen if the connection already existed, but a recent heartbeat has
 	// failed and we haven't yet torn down the connection.
 	if err := grpcutil.ConnectionReady(conn); err != nil {
-		breaker.Fail()
+		err = errors.Wrapf(err, "failed to check for connection ready to n%d at %v", nodeID, addr)
+		breaker.Fail(err)
 		return nil, nil, err
 	}
 	// TODO(bdarnell): Reconcile the different health checks and circuit breaker
@@ -190,7 +195,8 @@ func (n *Dialer) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
 func (n *Dialer) getBreaker(nodeID roachpb.NodeID) *wrappedBreaker {
 	value, ok := n.breakers.Load(int64(nodeID))
 	if !ok {
-		breaker := &wrappedBreaker{Breaker: n.rpcContext.NewBreaker(), EveryN: log.Every(logPerNodeFailInterval)}
+		name := fmt.Sprintf("rpc %v->%v", n.rpcContext.Config.Addr, nodeID)
+		breaker := &wrappedBreaker{Breaker: n.rpcContext.NewBreaker(name), EveryN: log.Every(logPerNodeFailInterval)}
 		value, _ = n.breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
 	}
 	return (*wrappedBreaker)(value)
