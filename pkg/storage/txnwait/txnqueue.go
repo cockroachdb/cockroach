@@ -460,27 +460,17 @@ func (q *Queue) MaybeWaitForPush(
 			}
 		}()
 	}
-	var pusheeTxnTimer timeutil.Timer
-	defer pusheeTxnTimer.Stop()
 	pusherPriority := req.PusherTxn.Priority
 	pusheePriority := req.PusheeTxn.Priority
 
-	first := true
+	var pusheeTxnTimer timeutil.Timer
+	defer pusheeTxnTimer.Stop()
+	// The first time we want to check the pushee's txn record immediately:
+	// the pushee might be gone by the time the pusher gets here if it cleaned
+	// itself up after the pusher saw an intent but before it entered this
+	// queue.
+	pusheeTxnTimer.Reset(0)
 	for {
-		// Set the timer to check for the pushee txn's expiration.
-		if !first {
-			expiration := TxnExpiration(pending.txn.Load().(*roachpb.Transaction)).GoTime()
-			now := q.store.Clock().Now().GoTime()
-			pusheeTxnTimer.Reset(expiration.Sub(now))
-		} else {
-			// The first time we want to check the pushee's txn record immediately:
-			// the pushee might be gone by the time the pusher gets here if it cleaned
-			// itself up after the pusher saw an intent but before it entered this
-			// queue.
-			pusheeTxnTimer.Reset(0)
-			first = false
-		}
-
 		select {
 		case <-ctx.Done():
 			// Caller has given up.
@@ -530,6 +520,10 @@ func (q *Queue) MaybeWaitForPush(
 				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				return nil, nil
 			}
+			// Set the timer to check for the pushee txn's expiration.
+			expiration := TxnExpiration(updatedPushee).GoTime()
+			now := q.store.Clock().Now().GoTime()
+			pusheeTxnTimer.Reset(expiration.Sub(now))
 
 		case updatedPusher := <-queryPusherCh:
 			switch updatedPusher.Status {
