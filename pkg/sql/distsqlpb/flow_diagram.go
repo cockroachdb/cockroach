@@ -131,8 +131,12 @@ func indexDetails(indexIdx uint32, desc *sqlbase.TableDescriptor) []string {
 
 // summary implements the diagramCellType interface.
 func (tr *TableReaderSpec) summary() (string, []string) {
-	// TODO(radu): a summary of the spans
-	return "TableReader", indexDetails(tr.IndexIdx, &tr.Table)
+	var details = indexDetails(tr.IndexIdx, &tr.Table)
+	for _, trspan := range tr.Spans {
+		details = append(details, sqlbase.PrettySpan(nil, trspan.Span, 2)) // nil yolo on the encoding direction
+	}
+
+	return "TableReader", details
 }
 
 // summary implements the diagramCellType interface.
