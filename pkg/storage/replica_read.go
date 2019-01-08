@@ -94,8 +94,11 @@ func (r *Replica) executeReadOnlyBatch(
 		readOnly = spanset.NewReadWriter(readOnly, spans)
 	}
 	defer readOnly.Close()
-	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
+	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba, true /* readOnly */)
 
+	// A merge is (likely) about to be carried out, and this replica
+	// needs to block all traffic until the merge either commits or
+	// aborts. See docs/tech-notes/range-merges.md.
 	if result.Local.DetachMaybeWatchForMerge() {
 		if err := r.maybeWatchForMerge(ctx); err != nil {
 			return nil, roachpb.NewError(err)

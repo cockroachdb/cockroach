@@ -145,6 +145,7 @@ func evaluateBatch(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba roachpb.BatchRequest,
+	readOnly bool,
 ) (*roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	br := ba.CreateReply()
 
@@ -156,7 +157,7 @@ func evaluateBatch(
 	}
 
 	// Optimize any contiguous sequences of put and conditional put ops.
-	if len(ba.Requests) >= optimizePutThreshold {
+	if len(ba.Requests) >= optimizePutThreshold && !readOnly {
 		ba.Requests = optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
