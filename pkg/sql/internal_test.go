@@ -150,6 +150,11 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
+	params.Knobs.SQLLeaseManager = &sql.LeaseManagerTestingKnobs{
+		// Disable the orphaned leases query which has an innocuous race with the
+		// SHOW QUERIES query used elsewhere in this test.
+		DisableDeleteOrphanedLeases: true,
+	}
 
 	// sem will be fired every time pg_sleep(1337666) is called.
 	sem := make(chan struct{})
