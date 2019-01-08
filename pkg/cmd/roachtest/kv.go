@@ -281,7 +281,14 @@ func registerKVSplits(r *registry) {
 		splits  int
 		timeout time.Duration
 	}{
-		{true, 500000, 2 * time.Hour},
+		// NB: with 500000 splits, this test sometimes fails since it's pushing
+		// far past the number of replicas per node we support, at least if the
+		// ranges start to unquiesce (which can set off a cascade due to resource
+		// exhaustion).
+		{true, 300000, 2 * time.Hour},
+		// This version of the test prevents range quiescence to trigger the
+		// badness described above more reliably for when we wish to improve
+		// the performance.
 		{false, 100000, 2 * time.Hour},
 	} {
 		item := item // for use in closure below
