@@ -1170,7 +1170,7 @@ func (ex *connExecutor) run(
 			ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
 
 			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, nil /* pinfo */, pos)
+			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, nil /* pinfo */)
 			if err != nil {
 				return err
 			}
@@ -1228,7 +1228,7 @@ func (ex *connExecutor) run(
 				AnonymizedStr: portal.Stmt.AnonymizedStr,
 			}
 			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, pinfo, pos)
+			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, pinfo)
 			if err != nil {
 				return err
 			}
