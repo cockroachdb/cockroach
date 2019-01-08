@@ -2919,6 +2919,7 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 // Send fetches a range based on the header's replica, assembles method, args &
 // reply into a Raft Cmd struct and executes the command using the fetched
 // range.
+//
 // An incoming request may be transactional or not. If it is not transactional,
 // the timestamp at which it executes may be higher than that optionally
 // specified through the incoming BatchRequest, and it is not guaranteed that
@@ -2926,12 +2927,13 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 // timestamp must not be set - it is deduced automatically from the
 // transaction. In particular, the read (original) timestamp will be used for
 // all reads and the write (provisional commit) timestamp will be used for
-// all writes.
+// all writes. See the comments on txn.TxnMeta.Timestamp and txn.OrigTimestamp
+// for more details.
 //
 // Should a transactional operation be forced to a higher timestamp (for
 // instance due to the timestamp cache or finding a committed value in the path
 // of one of its writes), the response will have a transaction set which should
-// be used to update the client transaction.
+// be used to update the client transaction object.
 func (s *Store) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
