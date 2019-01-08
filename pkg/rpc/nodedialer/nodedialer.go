@@ -16,14 +16,12 @@ package nodedialer
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 	"unsafe"
 
-	"github.com/pkg/errors"
-	"github.com/rubyist/circuitbreaker"
-	"google.golang.org/grpc"
-
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
@@ -32,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 // No more than one failure to connect to a given node will be logged in the given interval.
@@ -98,12 +98,14 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 
 	addr, err := n.resolver(nodeID)
 	if err != nil {
-		breaker.Fail()
+		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
+		breaker.Fail(err)
 		return nil, err
 	}
 	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
 	if err != nil {
-		breaker.Fail()
+		err = errors.Wrapf(err, "failed to grpc dial n%d at %v", nodeID, addr)
+		breaker.Fail(err)
 		return nil, err
 	}
 	breaker.Success()
@@ -197,7 +199,8 @@ func (n *Dialer) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
 func (n *Dialer) getBreaker(nodeID roachpb.NodeID) *wrappedBreaker {
 	value, ok := n.breakers.Load(int64(nodeID))
 	if !ok {
-		breaker := &wrappedBreaker{Breaker: n.rpcContext.NewBreaker(), EveryN: log.Every(logPerNodeFailInterval)}
+		name := fmt.Sprintf("rpc %v->%v", n.rpcContext.Config.Addr, nodeID)
+		breaker := &wrappedBreaker{Breaker: n.rpcContext.NewBreaker(name), EveryN: log.Every(logPerNodeFailInterval)}
 		value, _ = n.breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
 	}
 	return (*wrappedBreaker)(value)

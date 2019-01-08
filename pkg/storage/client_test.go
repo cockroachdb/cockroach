@@ -33,10 +33,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenk/backoff"
+	"github.com/cenkalti/backoff"
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	circuit "github.com/rubyist/circuitbreaker"
 	"go.etcd.io/etcd/raft"
 	"google.golang.org/grpc"
 
