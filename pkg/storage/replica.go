@@ -2783,8 +2783,9 @@ func (r *Replica) executeReadOnlyBatch(
 		readOnly = spanset.NewReadWriter(readOnly, spans)
 	}
 	defer readOnly.Close()
-	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
+	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba, true /* readOnly */)
 
+	// Handle batches that may be influenced by range merges.
 	if result.Local.DetachMaybeWatchForMerge() {
 		if err := r.maybeWatchForMerge(ctx); err != nil {
 			return nil, roachpb.NewError(err)
@@ -5829,7 +5830,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			batch = spanset.NewBatch(batch, spans)
 		}
 
-		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba)
+		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
 		// If we can retry, set a higher batch timestamp and continue.
 		if wtoErr, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && canRetry {
 			// Allow one retry only; a non-txn batch containing overlapping
@@ -5994,6 +5995,7 @@ func evaluateBatch(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba roachpb.BatchRequest,
+	readOnlyBatch bool,
 ) (*roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	br := ba.CreateReply()
 
@@ -6005,7 +6007,7 @@ func evaluateBatch(
 	}
 
 	// Optimize any contiguous sequences of put and conditional put ops.
-	if len(ba.Requests) >= optimizePutThreshold {
+	if len(ba.Requests) >= optimizePutThreshold && !readOnlyBatch {
 		ba.Requests = optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
@@ -6378,7 +6380,7 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
 	br, result, pErr :=
-		evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
+		evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba, true /* readOnly */)
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
@@ -6453,7 +6455,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
 	br, result, pErr := evaluateBatch(
-		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba,
+		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba, true, /* readOnly */
 	)
 	if pErr != nil {
 		return nil, pErr.GoError()
