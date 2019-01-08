@@ -259,7 +259,7 @@ r19: sending batch 2 Scan to (n1,s1):1
 Del /Table/61/1/5/#/62/1/1/0
 Del /Table/61/1/5/#/62/1/2/0
 querying next range at /Table/61/1/5/#/62/1/1/0
-r19: sending batch 2 Del, 1 BeginTxn to (n1,s1):1
+r19: sending batch 2 Del to (n1,s1):1
 cascading delete into table: 63 using index: 1
 CascadeScan /Table/61/1/5/#/62/1/1/#/63/{1-2}
 CascadeScan /Table/61/1/5/#/62/1/2/#/63/{1-2}
@@ -411,7 +411,7 @@ r19: sending batch 2 Scan to (n1,s1):1
 Del /Table/61/1/3/#/62/1/1/0
 Del /Table/61/1/3/#/62/1/2/0
 querying next range at /Table/61/1/3/#/62/1/1/0
-r19: sending batch 2 Del, 1 BeginTxn to (n1,s1):1
+r19: sending batch 2 Del to (n1,s1):1
 cascading delete into table: 63 using index: 1
 CascadeScan /Table/61/1/3/#/62/1/1/#/63/{1-2}
 CascadeScan /Table/61/1/3/#/62/1/2/#/63/{1-2}
@@ -634,7 +634,7 @@ querying next range at /Table/61/1/1/#/62/1/1
 r19: sending batch 1 Scan to (n1,s1):1
 Del /Table/61/1/1/#/62/1/1/0
 querying next range at /Table/61/1/1/#/62/1/1/0
-r19: sending batch 1 Del, 1 BeginTxn to (n1,s1):1
+r19: sending batch 1 Del to (n1,s1):1
 cascading delete into table: 63 using index: 1
 CascadeScan /Table/61/1/1/#/62/1/1/#/63/{1-2}
 querying next range at /Table/61/1/1/#/62/1/1/#/63/1

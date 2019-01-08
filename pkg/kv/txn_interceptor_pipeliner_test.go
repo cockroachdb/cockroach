@@ -70,16 +70,14 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	ba.Add(&roachpb.EndTransactionRequest{Commit: true})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 3, len(ba.Requests))
+		require.Equal(t, 2, len(ba.Requests))
 		require.False(t, ba.AsyncConsensus)
-		require.IsType(t, &roachpb.BeginTransactionRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
-		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[1].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -107,16 +105,14 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-	putArgs.Sequence = 2
+	putArgs.Sequence = 1
 	ba.Add(&putArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Equal(t, 1, len(ba.Requests))
 		require.True(t, ba.AsyncConsensus)
-		require.IsType(t, &roachpb.BeginTransactionRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -136,18 +132,18 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 	keyB, keyC := roachpb.Key("b"), roachpb.Key("c")
 	ba.Requests = nil
 	cputArgs := roachpb.ConditionalPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-	cputArgs.Sequence = 3
+	cputArgs.Sequence = 2
 	ba.Add(&cputArgs)
 	initPutArgs := roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
-	initPutArgs.Sequence = 4
+	initPutArgs.Sequence = 3
 	ba.Add(&initPutArgs)
 	incArgs := roachpb.IncrementRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
-	incArgs.Sequence = 5
+	incArgs.Sequence = 4
 	ba.Add(&incArgs)
 	// Write at the same key as another write in the same batch. Will only
 	// result in a single outstanding write, at the larger sequence number.
 	delArgs := roachpb.DeleteRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
-	delArgs.Sequence = 6
+	delArgs.Sequence = 5
 	ba.Add(&delArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -163,7 +159,7 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 		require.Equal(t, keyA, qiReq.Key)
 		require.Equal(t, txn.ID, qiReq.Txn.ID)
 		require.Equal(t, txn.Timestamp, qiReq.Txn.Timestamp)
-		require.Equal(t, int32(2), qiReq.Txn.Sequence)
+		require.Equal(t, int32(1), qiReq.Txn.Sequence)
 		require.Equal(t, roachpb.QueryIntentRequest_RETURN_ERROR, qiReq.IfMissing)
 
 		// No outstanding writes have been proved yet.
@@ -197,9 +193,11 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 	keyD := roachpb.Key("d")
 	ba.Requests = nil
 	putArgs2 := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}}
-	putArgs2.Sequence = 7
+	putArgs2.Sequence = 6
 	ba.Add(&putArgs2)
-	ba.Add(&roachpb.EndTransactionRequest{Commit: true})
+	etArgs := roachpb.EndTransactionRequest{Commit: true}
+	etArgs.Sequence = 7
+	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 5, len(ba.Requests))
@@ -216,9 +214,9 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 		require.Equal(t, keyA, qiReq1.Key)
 		require.Equal(t, keyB, qiReq2.Key)
 		require.Equal(t, keyC, qiReq3.Key)
-		require.Equal(t, int32(3), qiReq1.Txn.Sequence)
-		require.Equal(t, int32(4), qiReq2.Txn.Sequence)
-		require.Equal(t, int32(6), qiReq3.Txn.Sequence)
+		require.Equal(t, int32(2), qiReq1.Txn.Sequence)
+		require.Equal(t, int32(3), qiReq2.Txn.Sequence)
+		require.Equal(t, int32(5), qiReq3.Txn.Sequence)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -506,21 +504,16 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
 	for i := 0; i < writes; i++ {
-		key := makeKey(i)
-		if i == 0 {
-			ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
-		}
-		putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}}
+		putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: makeKey(i)}}
 		putArgs.Sequence = makeSeq(i)
 		ba.Add(&putArgs)
 	}
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, writes+1, len(ba.Requests))
+		require.Equal(t, writes, len(ba.Requests))
 		require.True(t, ba.AsyncConsensus)
-		require.IsType(t, &roachpb.BeginTransactionRequest{}, ba.Requests[0].GetInner())
 		for i := 0; i < writes; i++ {
-			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[i+1].GetInner())
+			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[i].GetInner())
 		}
 
 		br := ba.CreateReply()
@@ -600,16 +593,14 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-	putArgs.Sequence = 2
+	putArgs.Sequence = 1
 	ba.Add(&putArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Equal(t, 1, len(ba.Requests))
 		require.True(t, ba.AsyncConsensus)
-		require.IsType(t, &roachpb.BeginTransactionRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -628,7 +619,9 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	// We'll unrealistically return a PENDING transaction, which won't allow
 	// the txnPipeliner to clean up.
 	ba.Requests = nil
-	ba.Add(&roachpb.EndTransactionRequest{Commit: false})
+	etArgs := roachpb.EndTransactionRequest{Commit: false}
+	etArgs.Sequence = 2
+	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 1, len(ba.Requests))
@@ -755,16 +748,14 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
 	putArgs.Sequence = 1
 	ba.Add(&putArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Equal(t, 1, len(ba.Requests))
 		require.False(t, ba.AsyncConsensus)
-		require.IsType(t, &roachpb.BeginTransactionRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -836,7 +827,9 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	// Commit the txn. Again with pipeling disabled. Again, outstanding writes
 	// should be proven first.
 	ba.Requests = nil
-	ba.Add(&roachpb.EndTransactionRequest{Commit: true})
+	etArgs := roachpb.EndTransactionRequest{Commit: true}
+	etArgs.Sequence = 5
+	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 2, len(ba.Requests))
@@ -877,14 +870,12 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	// Batch below limit.
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Equal(t, 1, len(ba.Requests))
 		require.True(t, ba.AsyncConsensus)
-		require.IsType(t, &roachpb.BeginTransactionRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
