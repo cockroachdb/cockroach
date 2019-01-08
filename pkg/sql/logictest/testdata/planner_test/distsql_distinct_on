@@ -84,7 +84,7 @@ distinct        ·            ·                  (x, y, z)               weak-k
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyslE2LqzAUhvf3V1zedaAm2i9XLu6mm9uhzG5w4ZhDEVojSYR2iv99UMGOpY0Oukzie57zxHBuyJWk_8mZDMIPcDAIMPhgCMCwRMxQaJWSMUrXn7SBnbwg9BiyvChtvR0zpEoTwhtsZk-EEO_J54kOlEjSCw8MkmySnRpMobNzoq_R5foFhn1pw7-RYJHPogBxxaBKe69rbHIkhLxi49n_MmOzPLWLZR8ccdaAXlLES8q9eJkrLUmT7NWOK1cf3PtlI36vET7-qvncVz3A7hRXk65ajDcUcxsOsDvD9SRDf7yhP7fhALsz3EwyDMYbBnMbDrA7w-1sA-EJ5UCmULmhh8HwvLJXDwySR2qni1GlTulNq7TBtMt9k2s2JBnbnvJ2scvbo7rBn2HuDItemD-GhZs8gPad6cAdDqb0vXSGV27yagp57Qxv3OTNFPLW_a-8gWfifmSP7Lj68x0AAP__pp2oBA==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyslDHPmzAQhvf-iupmI7BxSD4mhi5ZmirqVjFQfIqQEoxsIyWN-O8VIJESJQeFbwTy-nmfi3V3KLXC79kFLcS_gAMDAQxCYCCBwQZSBpXROVqrTfuTPrBXV4gDBkVZ1a59nTLItUGI7-AKd0aI4Wf2-4xHzBQaPwAGCl1WnDtMZYpLZm7J9fYHGHh-izzULv6aCJaELJGQNgx07R6nW5edEGLesPkNvhXWFWXu_M0Yn3DWgd5SxFvK4_C61EahQTU6O22oHjz4zyLhqAifP3BODdwXni8Xjnyiw6AarRq5mG8qSFPpdU2WmE50GEy3q0zD-aYhaRp5XZMlphMdBtPdKlM531SSpltvoedEg8Hz49PWxQvKEW2lS4tPa-P1yUG7TlCdsN89Vtcmxx9G5x2mfzx0ue6FQuv6r7x_2Jf9p7bgv2FOhsUozJ_DgiZPoEMyLemwXNN7Q4YjmhytIW_J8I4m79aQP-j_Kpi4JvQle2anzZe_AQAA___poq4z
 
 # Ensure that ordering propagates past local DISTINCT processors.
 query TTTTT
@@ -106,7 +106,7 @@ distinct             ·            ·                  (x, y, z)               w
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lb9u2zAQh_c-RXBrCdhH0o6tSUOXLE2Rdis8qOIhEOCIBkkBSQO_e6E_gCo3OsqyOkry777jdwf6HUpr6Gv2Qh6Sn4AgQIIABQI0CNjAQcDJ2Zy8t67-SRt4MK-QrAUU5akK9euDgNw6guQdQhGOBAn8yH4d6YkyQ261BgGGQlYcG8zJFS-Ze0tf336DgMcqJHepFKkSqYbDWYCtQl_Xh-yZIMGzmM7-bl0gt9oMsSl-Hi0vryn_pfChKPOwwvUlQTQHqU_lDDkyyV2Ko1A1Cu1Ztq3z0UnYzv45-1Wd6UFnOH3SuPSkI-xu0tu5k46U733igpOW033KpX1G2J3P-7k-I-V7n3JBn2q6T7W0zwi787mb6zNSvvepFvSpp_vUS_uMsDuf-7k-I-V7n_o_3ewfQJ_In2zpaUAcq7yur30yz9T-TXhbuZy-OZs3mPbxsck1Lwz50H7F9uGhbD_VDf4dRjYs-bBkw2oQxsuw4tve8mjNpjd8eMOGI-TtLYe-Z8M7nrxjw3s-vL-lbYzsWGzJ-C3DyJrhTXuGkUXTETi_aRhZNeR37bL3w_nTnwAAAP__eVbBtQ==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lT9v2zAQxfd-iuDWUpCPpP9p0tAlS1Ok3QoPqngIBDiiQdJA0sDfvZBkQLUbHxXaHUX63Xv3u4P5Bq019LV6Jg_FT0AQIEGAAgEaBMxhI2DnbE3eW9f9ZBDcmxcoZgKadrcP3fFGQG0dQfEGoQlbggJ-VL-29EiVIZfPQIChUDXb3mbnmufKvZYvr79BQJZ3lg_7UNyVUpRKlBo2BwF2H8bqPlRPBAUexPQE360L5PL5qXmJny-Wlx8p_6XxoWnrkOPs3EH0jXRdOUOOTHFX4kVTddF09LJDnfc6YZP90_uHkumTZDh93sjNO5dZrhMnHslwnPgideKR8iNXvOHE5XSukuWqs77zFK6RDEeuy1SukfIjV3lDrmo6V8VyXWR95ylcIxmOXFepXCPlR67qhlz1dK6a5brMEqlGEhyprlOpRsqPVPV_-t9_x_SR_M62nk4cL1WedY8CmScaHhFv966mb87Wvc3w-dDr-gNDPgy3OHzct8NVF_BvMbJiyYslK1YnYjwXKz72grfWrHrOi-esOOK8uKbpJSte8c4rVrzmxetrYmNkx2JLxm8ZRtYMr9ozjCyajpjzm4aRVUN-186zbw6f_gQAAP__fBjH5A==
 
 # Ensure that even with more ordering columns, ordering propagates past local
 # DISTINCT processors.
@@ -128,7 +128,7 @@ distinct             ·            ·                  (x, y)                   
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyslb9u2zAQh_c-RXFrCNhHyo6tSUOXLE2Rdis0qOIhEOCIAkkBSQO_e6E_gCq3OioQR0n-8bv77kC_Q200fS1eyEH6ExAESBCgQEACAg6QC2isKck5Y7ufDIEH_QrpXkBVN63vXucCSmMJ0nfwlb8QpPCj-HWhJyo02d0eBGjyRXXpMY2tXgr7lr2-_QYBj61PP2dSZAryqwDT-ulQ54tnghSvYj34u7Ge7O4wZ2byTmR4t4iQH0F8qZyv6tLvcH9L6RqymizprqlFnFrETRQznLPUB1vXP92vrCuZ1YXrR4xRRxwAjyM-bhlxADGpxCgjlutVyqgqA-BR5f0WlQHEpFJGUanWq1RRVQbAo8rTFpUBxKRSRVGZrFeZRFUZAI8qz1tUBhCTyiT6Hf4f3BO5xtSOZqylk_fd5U76mYY_BGdaW9I3a8oeMzw-9rn-hSbnh684PDzUw6euwL_DyIYlH5ZsWM3CeBtWfNlHHp2w6QMfPrDhAPm4pel7NnziySc2fObD5y1lY2DHQkvGbxkG1gw37RkGFi0JwPlNw8CqIb9rt7Xn109_AgAA__8Zbbvp
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyslc-OmzAQh-99imqua0TGdv5x4tDLXrrVtrcqB4pHK6QsjmxH2u0q714BkWjSMiaBI5Cfv5lvRs4H1NbQ1-KVPGQ_AUGABAEKBGgQsISdgIOzJXlvXfOTLvBo3iBbCKjqwzE0r3cCSusIsg8IVdgTZPCj-LWnZyoMuXQBAgyFotq3mIOrXgv3nr-9_wYBSdogn44h-5xLkSvYnQTYY-iP9qF4IcjwJMbjv1sXyKXLS3IuH0SOD4MIeQviS-VDVZchxcU1pWnIGXJkmqYGcWoQ11Nsd85QH2xd_3Q_si59UReOHzRyg05lkup7Rh0p4Dzq1ZRRRxC9Upxl1HK8Uskq1Unb981KIwWcla6nKI0geqVyFqVqvFLFKl0lbd83K40UcFa6maI0guiVqlmU6vFKNat0ndwjNII_C91OERpB9EL17Df8f3DP5A-29nTBGjp50Vz9ZF6o-7vw9uhK-uZs2WK6x6c2174w5EP3FbuHx7r71BT4dxjZsOTDkg2rizBehxVf9opHaza95MNLNhwhr6Y0vWbDG568YcNbPrydUjZGdiy2ZPyWYWTNcNKeYWTRdATObxpGVg35XbuufXf69CcAAP__Y0zCGA==
 
 # Distinct processors elided becaue of strong key.
 query TTTTT
@@ -141,7 +141,7 @@ scan  ·      ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyskj1rwzAQhvf-jHdWiT87eOqaJS2hW_GgWEcwOD5zkqEl-L8Xy0Pq4BYVdZTunnvu4L2iZ0MHfSGL6h0pFDIo5FAooFCiVhiEG7KWZW5ZgL35QJUotP0wuvm7VmhYCNUVrnUdocKbPnV0JG1IdvNcQ063ndcM0l60fD7rU4N6UuDR3eZYp8-EKp3UD66bYuxZDAmZ1fh62tjmwI887Mq7xm11tlKn4WdmsWdm4a481pWHu4pYVxHuSv4zKhuuI9mBe0tBSUjmKJE505I7y6M09CrceM3yfPGc_zBk3VJNl8e-9yW_4Hc4_RV-WsHJPZzFmPMYuIiByz_B9fTwFQAA__97QoeT
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykk8FuszAQhO__U0RzNgIM_AdOvUaK0ipqT4WDg1cpUoKRbaRWEe9eYaSG0DR1mstKY-8wH6v1EY2StBYHMshfEYOBgyEBQwqGDCVDq1VFxig9tIyGpXxHHjHUTdvZ4bhkqJQm5EfY2u4JOZ7Fdk8bEpJ0OHxXkhX13sW0uj4I_fEgthUYwvXLanUqQVggLvBVeQGUPYPq7CnMWLEj5HHPfgA6cXSN0pI0yTOGsr-AvFaBasNs1ng5mp9Fx_6z4Fdn8e3fg6m4aRzcnynxYuJTplEkrqbeTIk_U_oL0wwgmIqwQObNlPozRdeYgtkiL0QjF_FC2TfSf9jgCygbMq1qDHktaDRsOMkdjc_BqE5X9KRV5WJG-eh87kCSseNtPIpl464c4NQcXzX_PzNHczO_Jzm5x5zeY85uMpf9v88AAAD__xB-s60=
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
@@ -158,4 +158,4 @@ distinct        ·            ·            (a, b)     a!=NULL; b!=NULL; key(a,b
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lM-LqzAQx-_vr3jMtQM10f7y5OFdenldyt4WD9YMRWiNJBF2Kf7vi2axa9lGwezRxO985sOEuUEpBf3PrqQhfgMGCBwQQkCIAGEFKUKlZE5aS9X-YgN78Q5xgFCUVW3a4xQhl4ogvoEpzIUghtfsdKEjZYLUsq0ryGTFpcNUqrhm6iPJTjkgHGoT_00YJhyTENIGQdbmXleb7EwQswans_8V2hRlbpbrIbijtEglSJH4wj5l8qfMO0raUo-cBSZ8gUm4gLRxNciCWR2Ggw7Z9Ilw3xMZYffCG48T4dN9Q9--I-zed-vRN5zuG_n2HWH3vjuPvtF038C37wi791390ob5gXkkXclS04D4rHLQrh0SZ7LrSsta5fSiZN5h7Oehy3UHgrSxt8x-7Et71Tb4PcycYT4Is8cwd5NH0KEzHbnD0Zy-V87w2k1ezyFvnOGtm7ydQ965ZxWMPBP3I3tkp82fzwAAAP__G57AJg==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lEFr2zAYhu_7FeG9RsGW7KSpTz7sUijtKNtp8UG1PjpDagVJgY2S_z5sDSfxFtnE2UUg26-el-cz-kCtFT3Jd7LIvoODQYAhAUMKhiUKhp3RJVmrTfOJDzyon8hihqre7V3zuGAotSFkH3CV2xIyfJWvW3ohqchEzbmKnKy2LWZnqndpfuXytQRD9PTt8fG4LKIN-AbdKjYAw_PeZbOcs1ywPEFxYNB7d4RbJ98IGT-w8QU_V9ZVdemi1Xm7ltIgjSJD6g_2IlNcZB5R2h_V58xZLuYsT-YoDqGCPJ7UMDlryMePTQTH9teYFqebSZMb6NiJubvh5MR4L8koL-LUi98k7Zpe7WWgY-dlfUMvyXgv6YCXnoTF6SbaYHm1l4GOnZf7G3pJx3uJQ14WvftvJms14zPtfpC5UsdAtU7H8j9dfP9gvpDd6drSGfHSyXFzG5J6I3-LWr03JX0xumwxfvvc5toHiqzzb7nfPNT-VVPwNMyDYXEW5v2wCJMH0EkwnYbD6ZTey2B4FSavppDvguF1mLyeQr4Pzyoe-E3CP1mfXRw-_Q4AAP__mGPsQA==
