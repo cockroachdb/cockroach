@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -148,7 +147,7 @@ type Refresher struct {
 
 	// mutationCounts contains aggregated mutation counts for each table that
 	// have yet to be processed by the refresher.
-	mutationCounts map[sqlbase.ID]int
+	mutationCounts map[sqlbase.ID]int64
 }
 
 // mutation contains metadata about a SQL mutation and is the message passed to
@@ -171,7 +170,7 @@ func MakeRefresher(
 		mutations:      make(chan mutation, refreshChanBufferLen),
 		asOfTime:       asOfTime,
 		extraTime:      time.Duration(rand.Int63n(int64(time.Hour))),
-		mutationCounts: make(map[sqlbase.ID]int, 16),
+		mutationCounts: make(map[sqlbase.ID]int64, 16),
 	}
 }
 
@@ -197,10 +196,10 @@ func (r *Refresher) Start(
 					}); err != nil {
 					log.Errorf(ctx, "failed to refresh stats: %v", err)
 				}
-				r.mutationCounts = make(map[sqlbase.ID]int, len(r.mutationCounts))
+				r.mutationCounts = make(map[sqlbase.ID]int64, len(r.mutationCounts))
 
 			case mut := <-r.mutations:
-				r.mutationCounts[mut.tableID] += mut.rowsAffected
+				r.mutationCounts[mut.tableID] += int64(mut.rowsAffected)
 
 			case <-stopper.ShouldStop():
 				return
@@ -215,9 +214,9 @@ func (r *Refresher) Start(
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
 func (r *Refresher) NotifyMutation(
-	evalCtx *tree.EvalContext, tableID sqlbase.ID, rowsAffected int,
+	settings *settings.Values, tableID sqlbase.ID, rowsAffected int,
 ) {
-	if !AutomaticStatisticsClusterMode.Get(&evalCtx.Settings.SV) {
+	if !AutomaticStatisticsClusterMode.Get(settings) {
 		// Automatic stats are disabled.
 		return
 	}
@@ -247,7 +246,7 @@ func (r *Refresher) NotifyMutation(
 // maybeRefreshStats implements the core logic described in the comment for
 // Refresher. It is called by the background Refresher thread.
 func (r *Refresher) maybeRefreshStats(
-	ctx context.Context, tableID sqlbase.ID, rowsAffected int, asOf time.Duration,
+	ctx context.Context, tableID sqlbase.ID, rowsAffected int64, asOf time.Duration,
 ) {
 	tableStats, err := r.cache.GetTableStats(ctx, tableID)
 	if err != nil {
@@ -286,7 +285,7 @@ func (r *Refresher) maybeRefreshStats(
 	}
 
 	targetRows := int64(rowCount*targetFractionOfRowsUpdatedBeforeRefresh) + 1
-	if !mustRefresh && r.randGen.randInt(targetRows) >= int64(rowsAffected) {
+	if !mustRefresh && r.randGen.randInt(targetRows) >= rowsAffected {
 		// No refresh is happening this time.
 		return
 	}

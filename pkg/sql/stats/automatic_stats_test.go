@@ -306,7 +306,7 @@ func TestMutationsChannel(t *testing.T) {
 	// Test that the mutations channel doesn't block even when we add 10 more
 	// items than can fit in the buffer.
 	for i := 0; i < refreshChanBufferLen+10; i++ {
-		r.NotifyMutation(evalCtx, sqlbase.ID(53), 5 /* rowsAffected */)
+		r.NotifyMutation(&evalCtx.Settings.SV, sqlbase.ID(53), 5 /* rowsAffected */)
 	}
 
 	if expected, actual := refreshChanBufferLen, len(r.mutations); expected != actual {
