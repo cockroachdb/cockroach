@@ -302,11 +302,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:220d60c10e7c67f52168c496bf778fb00ec88e12956a933b7ce53d286fb438fe"
+  digest = "1:aa25ee35f01d366573ff3bfd11001e8bd3e026d444ff54935ef4757b05d97f0e"
   name = "github.com/cockroachdb/circuitbreaker"
   packages = ["."]
   pruneopts = "UT"
-  revision = "3e861b2e1d31642be9e447dc6f8aa599813e98b4"
+  revision = "2ade251759d957f8f045571748cda4fbd1a95f8c"
 
 [[projects]]
   branch = "master"
