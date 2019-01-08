@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
-	ctstorage "github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
@@ -2723,35 +2722,8 @@ func (r *Replica) executeReadOnlyBatch(
 	var status storagepb.LeaseStatus
 	if ba.ReadConsistency.RequiresReadLease() {
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&
-				FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) &&
-				lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch {
-
-				r.mu.RLock()
-				lai := r.mu.state.LeaseAppliedIndex
-				r.mu.RUnlock()
-				if !r.store.cfg.ClosedTimestamp.Provider.CanServe(
-					lErr.LeaseHolder.NodeID, ba.Timestamp, r.RangeID, ctpb.Epoch(lErr.Lease.Epoch), ctpb.LAI(lai),
-				) {
-					r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
-					// NB: this can't go behind V(x) because the log message created by the
-					// storage might be gigantic in real clusters, and we don't want to trip it
-					// using logspy.
-					if false {
-						log.Warningf(ctx, "can't serve follower read for %s at epo %d lai %d, storage is %s",
-							ba.Timestamp, lErr.Lease.Epoch, lai,
-							r.store.cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
-						)
-					}
-					return nil, pErr
-				}
-				// This replica can serve this read!
-				//
-				// TODO(tschottdorf): once a read for a timestamp T has been served, the replica may
-				// serve reads for that and smaller timestamps forever.
-				log.Event(ctx, "serving via follower read")
-			} else {
-				return nil, pErr
+			if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
+				return nil, nErr
 			}
 		}
 	}
