@@ -52,8 +52,8 @@ func (ru ErrorDetail) GetInner() error {
 		return t.AmbiguousResult
 	case *ErrorDetail_StoreNotFound:
 		return t.StoreNotFound
-	case *ErrorDetail_RetryUsingTransactionError:
-		return t.RetryUsingTransactionError
+	case *ErrorDetail_TransactionRetryWithProtoRefresh:
+		return t.TransactionRetryWithProtoRefresh
 	case *ErrorDetail_IntegerOverflow:
 		return t.IntegerOverflow
 	case *ErrorDetail_UnsupportedRequest:
@@ -297,8 +297,8 @@ func (ru *ErrorDetail) SetInner(r error) bool {
 		union = &ErrorDetail_AmbiguousResult{t}
 	case *StoreNotFoundError:
 		union = &ErrorDetail_StoreNotFound{t}
-	case *RetryUsingTransactionError:
-		union = &ErrorDetail_RetryUsingTransactionError{t}
+	case *TransactionRetryWithProtoRefreshError:
+		union = &ErrorDetail_TransactionRetryWithProtoRefresh{t}
 	case *IntegerOverflowError:
 		union = &ErrorDetail_IntegerOverflow{t}
 	case *UnsupportedRequestError:

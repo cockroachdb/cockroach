@@ -837,7 +837,7 @@ func convertToErrWithPGCode(err error) error {
 		return nil
 	}
 	switch tErr := err.(type) {
-	case *roachpb.RetryUsingTransactionError:
+	case *roachpb.TransactionRetryWithProtoRefreshError:
 		return sqlbase.NewRetryError(err)
 	case *roachpb.AmbiguousResultError:
 		// TODO(andrei): Once DistSQL starts executing writes, we'll need a

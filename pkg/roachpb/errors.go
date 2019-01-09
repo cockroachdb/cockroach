@@ -324,15 +324,15 @@ func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
 var _ ErrorDetailInterface = &TransactionAbortedError{}
 var _ transactionRestartError = &TransactionAbortedError{}
 
-func (e *RetryUsingTransactionError) Error() string {
+func (e *TransactionRetryWithProtoRefreshError) Error() string {
 	return e.message(nil)
 }
 
-func (e *RetryUsingTransactionError) message(_ *Error) string {
-	return fmt.Sprintf("RetryUsingTransactionError: %s", e.Msg)
+func (e *TransactionRetryWithProtoRefreshError) message(_ *Error) string {
+	return fmt.Sprintf("TransactionRetryWithProtoRefreshError: %s", e.Msg)
 }
 
-var _ ErrorDetailInterface = &RetryUsingTransactionError{}
+var _ ErrorDetailInterface = &TransactionRetryWithProtoRefreshError{}
 
 // NewTransactionAbortedError initializes a new TransactionAbortedError.
 func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbortedError {
@@ -341,14 +341,14 @@ func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbo
 	}
 }
 
-// NewRetryUsingTransactionError initializes a new RetryUsingTransactionError.
+// NewTransactionRetryWithProtoRefreshError initializes a new TransactionRetryWithProtoRefreshError.
 //
 // txnID is the ID of the transaction being restarted.
 // txn is the transaction that the client should use for the next attempts.
-func NewRetryUsingTransactionError(
+func NewTransactionRetryWithProtoRefreshError(
 	msg string, txnID uuid.UUID, txn Transaction,
-) *RetryUsingTransactionError {
-	return &RetryUsingTransactionError{Msg: msg, TxnID: txnID, Transaction: txn}
+) *TransactionRetryWithProtoRefreshError {
+	return &TransactionRetryWithProtoRefreshError{Msg: msg, TxnID: txnID, Transaction: txn}
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
