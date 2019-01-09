@@ -255,7 +255,9 @@ func (s *windowPlanState) createWindowFnSpec(
 
 // addRenderingIfNecessary checks whether any of the window functions' outputs
 // are used in another expression and, if they are, adds rendering to the plan.
-func (s *windowPlanState) addRenderingIfNecessary() error {
+// It returns a boolean to indicate whether the rendering is added and any
+// error if it occurs.
+func (s *windowPlanState) addRenderingIfNecessary() (bool, error) {
 	// numWindowFuncsAsIs is the number of window functions output of which is
 	// used directly (i.e. simply as an output column). Note: the same window
 	// function might appear multiple times in the query, but its every
@@ -270,7 +272,7 @@ func (s *windowPlanState) addRenderingIfNecessary() error {
 	}
 	if numWindowFuncsAsIs == len(s.infos) {
 		// All window functions' outputs are used directly, so no rendering to do.
-		return nil
+		return false, nil
 	}
 
 	// windowNode contains render expressions that might contain:
@@ -325,15 +327,14 @@ func (s *windowPlanState) addRenderingIfNecessary() error {
 		}
 		outputType, err := sqlbase.DatumTypeToColumnType(renderExprs[i].ResolvedType())
 		if err != nil {
-			return err
+			return false, err
 		}
 		renderTypes = append(renderTypes, outputType)
 	}
 	if err := s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes); err != nil {
-		return err
+		return false, err
 	}
-	s.plan.PlanToStreamColMap = identityMap(s.plan.PlanToStreamColMap, len(renderTypes))
-	return nil
+	return true, nil
 }
 
 // replaceWindowFuncsVisitor is used to populate render expressions containing

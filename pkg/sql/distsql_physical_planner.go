@@ -3386,12 +3386,30 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 	}
 
 	// We probably added/removed columns throughout all the stages of windowers,
-	// so we need to update PlanToStreamColMap.
+	// so we need to update PlanToStreamColMap. We need to update the map before
+	// possibly adding rendering because it is used there.
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.ResultTypes))
 
 	// After all window functions are computed, we might need to add rendering.
-	if err := windowPlanState.addRenderingIfNecessary(); err != nil {
+	if renderingAdded, err := windowPlanState.addRenderingIfNecessary(); err != nil {
 		return PhysicalPlan{}, err
+	} else if !renderingAdded && windowPlanState.n.numOverClausesColumns != 0 {
+		// We have added some columns used in OVER clauses of window functions, so
+		// we need to project them out. They were appended at the end, so the
+		// projection simply "discards" the last numOverClausesColumns. If
+		// rendering was added, then it took care of these extra columns, so we
+		// don't need to do anything in that case.
+		columns := make([]uint32, len(plan.ResultTypes)-windowPlanState.n.numOverClausesColumns)
+		for col := 0; col < len(columns); col++ {
+			columns[col] = uint32(col)
+		}
+		plan.AddProjection(columns)
+	}
+
+	if len(plan.ResultTypes) != len(plan.PlanToStreamColMap) {
+		// We added/removed columns while rendering or projecting, so we need to
+		// update PlanToStreamColMap.
+		plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.ResultTypes))
 	}
 
 	return plan, nil
