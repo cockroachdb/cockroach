@@ -609,6 +609,7 @@ func (g *exprsGen) genMemoizeFuncs() {
 		}
 
 		if define.Tags.Contains("Scalar") {
+			fmt.Fprintf(g.w, "   id: m.NextID(),\n")
 			fmt.Fprintf(g.w, "  }\n")
 			if g.needsDataTypeField(define) {
 				fmt.Fprintf(g.w, "  e.Typ = InferType(m, e)\n")
