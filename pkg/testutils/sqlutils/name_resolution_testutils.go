@@ -82,7 +82,7 @@ func RunResolveQualifiedStarTest(t *testing.T, ct ColumnItemResolverTester) {
 				if err != nil {
 					return "", "", err
 				}
-				v := stmt.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
+				v := stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
 				c, err := v.NormalizeVarName()
 				if err != nil {
 					return "", "", err
@@ -161,7 +161,7 @@ func RunResolveColumnItemTest(t *testing.T, ct ColumnItemResolverTester) {
 				if err != nil {
 					return "", err
 				}
-				v := stmt.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
+				v := stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
 				c, err := v.NormalizeVarName()
 				if err != nil {
 					return "", err

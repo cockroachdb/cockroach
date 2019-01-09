@@ -70,10 +70,10 @@ func TestParseColumnType(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%d: %s", i, err)
 			}
-			if sql != stmt.String() {
-				t.Errorf("%d: expected %s, but got %s", i, sql, stmt)
+			if sql != stmt.AST.String() {
+				t.Errorf("%d: expected %s, but got %s", i, sql, stmt.AST)
 			}
-			createTable, ok := stmt.(*tree.CreateTable)
+			createTable, ok := stmt.AST.(*tree.CreateTable)
 			if !ok {
 				t.Fatalf("%d: expected tree.CreateTable, but got %T", i, stmt)
 			}
@@ -107,12 +107,12 @@ func TestParseColumnTypeAliases(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%d: %s", i, err)
 			}
-			if d.expectedStr != stmt.String() {
-				t.Errorf("%d: expected %s, but got %s", i, d.expectedStr, stmt)
+			if d.expectedStr != stmt.AST.String() {
+				t.Errorf("%d: expected %s, but got %s", i, d.expectedStr, stmt.AST)
 			}
-			createTable, ok := stmt.(*tree.CreateTable)
+			createTable, ok := stmt.AST.(*tree.CreateTable)
 			if !ok {
-				t.Fatalf("%d: expected tree.CreateTable, but got %T", i, stmt)
+				t.Fatalf("%d: expected tree.CreateTable, but got %T", i, stmt.AST)
 			}
 			columnDef, ok2 := createTable.Defs[0].(*tree.ColumnTableDef)
 			if !ok2 {

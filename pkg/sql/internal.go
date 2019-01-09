@@ -506,7 +506,7 @@ func (ie *internalExecutorImpl) execInternal(
 			ctx,
 			ExecStmt{
 				SQL:          stmt,
-				Stmt:         s,
+				Stmt:         s.AST,
 				TimeReceived: timeReceived,
 				ParseStart:   parseStart,
 				ParseEnd:     parseEnd,
@@ -519,7 +519,7 @@ func (ie *internalExecutorImpl) execInternal(
 			ctx,
 			PrepareStmt{
 				SQL:        stmt,
-				Stmt:       s,
+				Stmt:       s.AST,
 				ParseStart: parseStart,
 				ParseEnd:   parseEnd,
 				TypeHints:  typeHints,

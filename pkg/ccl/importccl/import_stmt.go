@@ -121,7 +121,7 @@ func readCreateTableFromStore(
 	if err != nil {
 		return nil, err
 	}
-	create, ok := stmt.(*tree.CreateTable)
+	create, ok := stmt.AST.(*tree.CreateTable)
 	if !ok {
 		return nil, errors.New("expected CREATE TABLE statement in table file")
 	}

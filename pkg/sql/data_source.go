@@ -346,7 +346,7 @@ func (p *planner) getViewPlan(
 	if err != nil {
 		return planDataSource{}, errors.Wrapf(err, "failed to parse underlying query from view %q", tn)
 	}
-	sel, ok := stmt.(*tree.Select)
+	sel, ok := stmt.AST.(*tree.Select)
 	if !ok {
 		return planDataSource{},
 			errors.Errorf("failed to parse underlying query from view %q as a select", tn)
