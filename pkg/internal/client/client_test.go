@@ -347,7 +347,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 			for _, err := range concErrs {
 				if err != nil {
 					anyError = err
-					if _, ok := err.(*roachpb.RetryUsingTransactionError); ok {
+					if _, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
 						return err
 					}
 				}

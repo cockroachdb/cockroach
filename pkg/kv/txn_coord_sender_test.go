@@ -562,7 +562,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 }
 
 func assertTransactionRetryError(t *testing.T, e error) {
-	if retErr, ok := e.(*roachpb.RetryUsingTransactionError); ok {
+	if retErr, ok := e.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
 		if !testutils.IsError(retErr, "TransactionRetryError") {
 			t.Fatalf("expected the cause to be TransactionRetryError, but got %s",
 				retErr)
@@ -573,7 +573,7 @@ func assertTransactionRetryError(t *testing.T, e error) {
 }
 
 func assertTransactionAbortedError(t *testing.T, e error) {
-	if retErr, ok := e.(*roachpb.RetryUsingTransactionError); ok {
+	if retErr, ok := e.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
 		if !testutils.IsError(retErr, "TransactionAbortedError") {
 			t.Fatalf("expected the cause to be TransactionAbortedError, but got %s",
 				retErr)
@@ -2412,7 +2412,7 @@ func TestCommitTurnedToRollback(t *testing.T) {
 
 // Test that a leaf txn returns a raw error when "rejecting a client" (a client
 // sending something after the txn is known to be aborted), not a
-// HandledRetryableError. This is important as leaves are not supposed to create
+// TransactionRetryWithProtoRefreshError. This is important as leaves are not supposed to create
 // "handled" errors; instead the DistSQL infra knows to recognize raw retryable
 // errors and feed them to the root txn.
 func TestLeafTxnClientRejectError(t *testing.T) {
@@ -2438,7 +2438,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 	// pErr will be TransactionAbortedError. When pErr.GoError() is called, that's
 	// transformed into an UnhandledRetryableError. For our purposes, what this
 	// test is interested in demonstrating is that it's not a
-	// HandledRetryableError.
+	// TransactionRetryWithProtoRefreshError.
 	_, err := leafTxn.Get(ctx, roachpb.Key("a"))
 	if _, ok := err.(*roachpb.UnhandledRetryableError); !ok {
 		t.Fatalf("expected UnhandledRetryableError(TransactionAbortedError), got: (%T) %v", err, err)

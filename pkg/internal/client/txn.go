@@ -686,7 +686,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\n", err)
 				if err != nil {
-					if _, retryable := err.(*roachpb.RetryUsingTransactionError); !retryable {
+					if _, retryable := err.(*roachpb.TransactionRetryWithProtoRefreshError); !retryable {
 						// We can't retry, so let the caller know we tried to
 						// autocommit.
 						err = &AutoCommitError{cause: err}
@@ -702,16 +702,16 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		case *roachpb.UnhandledRetryableError:
 			if txn.typ == RootTxn {
 				// We sent transactional requests, so the TxnCoordSender was supposed to
-				// turn retryable errors into RetryUsingTransactionError. Note that this
+				// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
 				// applies only in the case where this is the root transaction.
 				log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 			}
 
-		case *roachpb.RetryUsingTransactionError:
+		case *roachpb.TransactionRetryWithProtoRefreshError:
 			if !txn.IsRetryableErrMeantForTxn(*t) {
 				// Make sure the txn record that err carries is for this txn.
 				// If it's not, we terminate the "retryable" character of the error. We
-				// might get a RetryUsingTransactionError if the closure ran another
+				// might get a TransactionRetryWithProtoRefreshError if the closure ran another
 				// transaction internally and let the error propagate upwards.
 				return errors.Wrapf(err, "retryable error from another txn")
 			}
@@ -740,7 +740,9 @@ func (txn *Txn) PrepareForRetry(ctx context.Context, err error) {
 
 // IsRetryableErrMeantForTxn returns true if err is a retryable
 // error meant to restart this client transaction.
-func (txn *Txn) IsRetryableErrMeantForTxn(retryErr roachpb.RetryUsingTransactionError) bool {
+func (txn *Txn) IsRetryableErrMeantForTxn(
+	retryErr roachpb.TransactionRetryWithProtoRefreshError,
+) bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 
@@ -783,7 +785,7 @@ func (txn *Txn) Send(
 		return br, nil
 	}
 
-	if retryErr, ok := pErr.GetDetail().(*roachpb.RetryUsingTransactionError); ok {
+	if retryErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryWithProtoRefreshError); ok {
 		if requestTxnID != retryErr.TxnID {
 			// KV should not return errors for transactions other than the one that sent
 			// the request.
@@ -799,7 +801,7 @@ func (txn *Txn) Send(
 }
 
 func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
-	retryErr, ok := err.(*roachpb.RetryUsingTransactionError)
+	retryErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError)
 	if !ok {
 		return
 	}
@@ -847,7 +849,7 @@ func (txn *Txn) AugmentTxnCoordMeta(ctx context.Context, meta roachpb.TxnCoordMe
 
 // UpdateStateOnRemoteRetryableErr updates the txn in response to an error
 // encountered when running a request through the txn. Returns a
-// HandledRetryableError on success or another error on failure.
+// TransactionRetryWithProtoRefreshError on success or another error on failure.
 func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roachpb.Error) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
@@ -867,7 +869,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 	}
 
 	pErr = txn.mu.sender.UpdateStateOnRemoteRetryableErr(ctx, pErr)
-	txn.replaceSenderIfTxnAbortedLocked(ctx, pErr.GetDetail().(*roachpb.RetryUsingTransactionError), origTxnID)
+	txn.replaceSenderIfTxnAbortedLocked(ctx, pErr.GetDetail().(*roachpb.TransactionRetryWithProtoRefreshError), origTxnID)
 
 	return pErr.GoError()
 }
@@ -878,7 +880,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 // origTxnID is the id of the txn that generated retryErr. Note that this can be
 // different from retryErr.Transaction - the latter might be a new transaction.
 func (txn *Txn) replaceSenderIfTxnAbortedLocked(
-	ctx context.Context, retryErr *roachpb.RetryUsingTransactionError, origTxnID uuid.UUID,
+	ctx context.Context, retryErr *roachpb.TransactionRetryWithProtoRefreshError, origTxnID uuid.UUID,
 ) {
 	// The proto inside the error has been prepared for use by the next
 	// transaction attempt.
@@ -927,7 +929,7 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	txn.mu.sender.SetFixedTimestamp(ctx, ts)
 }
 
-// GenerateForcedRetryableError returns a RetryUsingTransactionError that will
+// GenerateForcedRetryableError returns a TransactionRetryWithProtoRefreshError that will
 // cause the txn to be retried.
 //
 // The transaction's epoch is bumped, simulating to an extent what the
@@ -941,7 +943,7 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 	now := txn.db.clock.Now()
 	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now)
 	txn.resetDeadlineLocked()
-	return roachpb.NewRetryUsingTransactionError(
+	return roachpb.NewTransactionRetryWithProtoRefreshError(
 		msg,
 		txn.mu.ID,
 		roachpb.MakeTransaction(

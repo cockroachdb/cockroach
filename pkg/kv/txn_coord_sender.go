@@ -670,7 +670,7 @@ func (tc *TxnCoordSender) Send(
 					"unexpected retryable error at the client.Txn level: (%T) %s",
 					pErr.GetDetail(), pErr)
 			}
-		} else if _, ok := pErr.GetDetail().(*roachpb.RetryUsingTransactionError); ok {
+		} else if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryWithProtoRefreshError); ok {
 			retriable = true
 		}
 
@@ -750,7 +750,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
 		if tc.typ == client.LeafTxn {
 			// Leaf txns return raw retriable errors (which get handled by the
-			// root) rather than RetryUsingTransactionError.
+			// root) rather than TransactionRetryWithProtoRefreshError.
 			return abortedErr
 		}
 		newTxn := roachpb.PrepareTransactionForRetry(
@@ -758,7 +758,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			// priority is not used for aborted errors
 			roachpb.NormalUserPriority,
 			tc.clock)
-		return roachpb.NewError(roachpb.NewRetryUsingTransactionError(
+		return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
 			abortedErr.Message, tc.mu.txn.ID, newTxn))
 	}
 
@@ -800,13 +800,13 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 }
 
 // handleRetryableErrLocked takes a retriable error and creates a
-// HandledRetryableError containing the transaction that needs to be used by the
+// TransactionRetryWithProtoRefreshError containing the transaction that needs to be used by the
 // next attempt. It also handles various aspects of updating the
 // TxnCoordSender's state, but notably it does not update its proto: the caller
 // needs to call tc.mu.txn.Update(pErr.GetTxn()).
 func (tc *TxnCoordSender) handleRetryableErrLocked(
 	ctx context.Context, pErr *roachpb.Error,
-) *roachpb.RetryUsingTransactionError {
+) *roachpb.TransactionRetryWithProtoRefreshError {
 	// If the error is a transaction retry error, update metrics to
 	// reflect the reason for the restart.
 	// TODO(spencer): this code path does not account for retry errors
@@ -826,8 +826,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	errTxnID := pErr.GetTxn().ID
 	newTxn := roachpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
 
-	// We'll pass a RetryUsingTransactionError up to the next layer.
-	retErr := roachpb.NewRetryUsingTransactionError(
+	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
+	retErr := roachpb.NewTransactionRetryWithProtoRefreshError(
 		pErr.Message,
 		errTxnID, // the id of the transaction that encountered the error
 		newTxn)

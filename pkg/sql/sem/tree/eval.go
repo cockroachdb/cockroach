@@ -3585,7 +3585,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		// If we are facing a retry error, in particular those generated
 		// by crdb_internal.force_retry(), propagate it unchanged, so that
 		// the executor can see it with the right type.
-		if _, ok := err.(*roachpb.RetryUsingTransactionError); ok {
+		if _, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
 			return nil, err
 		}
 		// If we are facing an explicit error, propagate it unchanged.
