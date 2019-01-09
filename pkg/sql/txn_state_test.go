@@ -404,7 +404,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (Event, EventPayload) {
 				b := eventRetriableErrPayload{
-					err: roachpb.NewHandledRetryableTxnError(
+					err: roachpb.NewRetryUsingTransactionError(
 						"test retriable err",
 						ts.mu.txn.ID(),
 						*ts.mu.txn.Serialize()),
@@ -431,7 +431,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (Event, EventPayload) {
 				b := eventRetriableErrPayload{
-					err: roachpb.NewHandledRetryableTxnError(
+					err: roachpb.NewRetryUsingTransactionError(
 						"test retriable err",
 						ts.mu.txn.ID(),
 						*ts.mu.txn.Serialize()),
@@ -457,7 +457,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (Event, EventPayload) {
 				b := eventRetriableErrPayload{
-					err: roachpb.NewHandledRetryableTxnError(
+					err: roachpb.NewRetryUsingTransactionError(
 						"test retriable err",
 						ts.mu.txn.ID(),
 						*ts.mu.txn.Serialize()),
@@ -487,7 +487,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (Event, EventPayload) {
 				b := eventRetriableErrPayload{
-					err: roachpb.NewHandledRetryableTxnError(
+					err: roachpb.NewRetryUsingTransactionError(
 						"test retriable err",
 						ts.mu.txn.ID(),
 						*ts.mu.txn.Serialize()),
@@ -530,7 +530,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (Event, EventPayload) {
 				b := eventRetriableErrPayload{
-					err: roachpb.NewHandledRetryableTxnError(
+					err: roachpb.NewRetryUsingTransactionError(
 						"test retriable err",
 						ts.mu.txn.ID(),
 						*ts.mu.txn.Serialize()),
@@ -555,7 +555,7 @@ func TestTransitions(t *testing.T) {
 			},
 			evFun: func(ts *txnState) (Event, EventPayload) {
 				b := eventRetriableErrPayload{
-					err: roachpb.NewHandledRetryableTxnError(
+					err: roachpb.NewRetryUsingTransactionError(
 						"test retriable err",
 						ts.mu.txn.ID(),
 						*ts.mu.txn.Serialize()),

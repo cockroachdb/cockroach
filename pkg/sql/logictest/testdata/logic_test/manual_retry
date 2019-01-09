@@ -19,7 +19,7 @@ BEGIN TRANSACTION; SAVEPOINT cockroach_restart
 statement ok
 SELECT 1
 
-query error restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
+query error restart transaction: RetryUsingTransactionError: forced by crdb_internal.force_retry()
 SELECT crdb_internal.force_retry('500ms':::INTERVAL)
 
 statement ok

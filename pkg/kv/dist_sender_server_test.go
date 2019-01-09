@@ -1704,7 +1704,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 		b.CPut(targetKey, "new_val", origVal)
 		err := txn.CommitInBatch(ctx, b)
 		if epoch == 1 {
-			if retErr, ok := err.(*roachpb.HandledRetryableTxnError); ok {
+			if retErr, ok := err.(*roachpb.RetryUsingTransactionError); ok {
 				if !testutils.IsError(retErr, "ReadWithinUncertaintyIntervalError") {
 					t.Errorf("expected ReadWithinUncertaintyIntervalError, but got: %s", retErr)
 				}

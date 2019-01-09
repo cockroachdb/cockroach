@@ -1629,7 +1629,7 @@ func isCommit(stmt tree.Statement) bool {
 }
 
 func errIsRetriable(err error) bool {
-	_, retriable := err.(*roachpb.HandledRetryableTxnError)
+	_, retriable := err.(*roachpb.RetryUsingTransactionError)
 	return retriable
 }
 
@@ -1677,7 +1677,7 @@ func (ex *connExecutor) synchronizeParallelStmts(ctx context.Context) error {
 		sort.Slice(errs, func(i, j int) bool {
 			errPriority := func(err error) int {
 				switch t := err.(type) {
-				case *roachpb.HandledRetryableTxnError:
+				case *roachpb.RetryUsingTransactionError:
 					errTxn := t.Transaction
 					if errTxn.ID == curTxnID && errTxn.Epoch == curTxnEpoch {
 						// A retryable error for the current transaction
@@ -1705,7 +1705,7 @@ func (ex *connExecutor) synchronizeParallelStmts(ctx context.Context) error {
 		// Return the "best" error.
 		bestErr := errs[0]
 		switch bestErr.(type) {
-		case *roachpb.HandledRetryableTxnError:
+		case *roachpb.RetryUsingTransactionError:
 			// If any of the errors are retryable, we need to bump the transaction
 			// epoch to invalidate any writes performed by any workers after the
 			// retry updated the txn's proto but before we synchronized (some of

@@ -182,8 +182,8 @@ func TestDelayedBeginRetryable(t *testing.T) {
 		t.Fatal(pushErr)
 	}
 
-	if _, ok := pErr.GetDetail().(*roachpb.HandledRetryableTxnError); !ok {
-		t.Fatalf("expected HandledRetryableTxnError, got: %v", pErr)
+	if _, ok := pErr.GetDetail().(*roachpb.RetryUsingTransactionError); !ok {
+		t.Fatalf("expected RetryUsingTransactionError, got: %v", pErr)
 	}
 	exp := "TransactionAbortedError(ABORT_REASON_ABORT_SPAN)"
 	if !testutils.IsPError(pErr, regexp.QuoteMeta(exp)) {
