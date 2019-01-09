@@ -3012,7 +3012,12 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaRebalancing = true
-	mtc := &multiTestContext{storeConfig: &sc}
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		// This test needs to verify full replication, but as written the check
+		// only works if there's only one range initially.
+		startWithSingleRange: true,
+	}
 
 	storage.TimeUntilStoreDead.Override(&sc.Settings.SV, storage.TestTimeUntilStoreDead)
 	// Disable declined and failed reservations. Their default values are on
@@ -3066,13 +3071,26 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 						panic(err)
 					}
 				}
+
+			case <-stopper.ShouldQuiesce():
+				return
+			}
+		}
+	})
+	stopper.RunWorker(ctx, func(ctx context.Context) {
+		tickerDur := storage.TestTimeUntilStoreDead / 2
+		ticker := time.NewTicker(tickerDur)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
 				// Force the repair queues on all alive stores to run.
 				for _, s := range nonDeadStores {
 					if err := s.ForceReplicationScanAndProcess(); err != nil {
 						panic(err)
 					}
 				}
-
 			case <-stopper.ShouldQuiesce():
 				return
 			}
@@ -3081,6 +3099,8 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 
 	// Wait for up-replication, including at least one replica on s2 (deadStore).
 	testutils.SucceedsSoon(t, func() error {
+		// NB: this only checks the first range, so it'll give false positives
+		// if there's more than one (see the note at the beginning of the test).
 		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
 		var found bool
 		for _, replica := range replicas {
