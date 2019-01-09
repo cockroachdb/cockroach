@@ -75,7 +75,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.makePlan(ctx, Statement{SQL: query, AST: stmt.AST}); err != nil {
+	if err := p.makePlan(ctx, Statement{Statement: stmt}); err != nil {
 		t.Fatal(err)
 	}
 

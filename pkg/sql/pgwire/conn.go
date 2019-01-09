@@ -462,8 +462,7 @@ func (c *conn) handleSimpleQuery(
 	if len(stmts) == 0 {
 		return c.stmtBuf.Push(
 			ctx, sql.ExecStmt{
-				SQL:          "",
-				Stmt:         nil,
+				Statement:    parser.Statement{},
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
 				ParseEnd:     endParse,
@@ -499,8 +498,7 @@ func (c *conn) handleSimpleQuery(
 		if err := c.stmtBuf.Push(
 			ctx,
 			sql.ExecStmt{
-				Stmt:         stmts[i].AST,
-				SQL:          stmts[i].SQL,
+				Statement:    stmts[i],
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
 				ParseEnd:     endParse,
@@ -558,12 +556,12 @@ func (c *conn) handleParse(
 	}
 
 	startParse := timeutil.Now()
-	var stmt tree.Statement
+	var stmt parser.Statement
 	stmts, err := c.parser.ParseWithInt(query, ch.GetDefaultIntSize())
 	if len(stmts) > 1 {
 		err = pgerror.NewWrongNumberOfPreparedStatements(len(stmts))
 	} else if len(stmts) == 1 {
-		stmt = stmts[0].AST
+		stmt = stmts[0]
 	}
 	// len(stmts) == 0 results in a nil (empty) statement.
 
@@ -572,7 +570,7 @@ func (c *conn) handleParse(
 	}
 	endParse := timeutil.Now()
 
-	if _, ok := stmt.(*tree.CopyFrom); ok {
+	if _, ok := stmt.AST.(*tree.CopyFrom); ok {
 		// We don't support COPY in extended protocol because it'd be complicated:
 		// it wouldn't be the preparing, but the execution that would need to
 		// execute the copyMachine.
@@ -585,9 +583,8 @@ func (c *conn) handleParse(
 	return c.stmtBuf.Push(
 		ctx,
 		sql.PrepareStmt{
-			SQL:          query,
 			Name:         name,
-			Stmt:         stmt,
+			Statement:    stmt,
 			TypeHints:    sqlTypeHints,
 			RawTypeHints: inTypeHints,
 			ParseStart:   startParse,

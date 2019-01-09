@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,17 +30,13 @@ import (
 // PreparedStatement is a SQL statement that has been parsed and the types
 // of arguments and results have been determined.
 type PreparedStatement struct {
-	// Str is the statement string prior to parsing, used to generate
-	// error messages. This may be used in
-	// the future to present a contextual error message based on location
-	// information.
-	Str string
+	// Note that AST may be nil if the prepared statement is empty.
+	parser.Statement
+
 	// AnonymizedStr is the anonymized statement string suitable for recording
 	// in statement statistics.
 	AnonymizedStr string
-	// Statement is the parsed, prepared SQL statement. It may be nil if the
-	// prepared statement is empty.
-	Statement tree.Statement
+
 	// Memo is the memoized data structure constructed by the cost-based optimizer
 	// during prepare of a SQL statement. It can significantly speed up execution
 	// if it is used by the optimizer as a starting point.
@@ -67,7 +64,7 @@ func (p *PreparedStatement) MemoryEstimate() int64 {
 	// Account for the memory used by this prepared statement:
 	//   1. Size of the query string and prepared struct.
 	//   2. Size of the prepared memo, if using the cost-based optimizer.
-	size := int64(len(p.Str) + int(unsafe.Sizeof(*p)))
+	size := int64(len(p.SQL) + int(unsafe.Sizeof(*p)))
 	if p.Memo != nil {
 		size += p.Memo.MemoryEstimate()
 	}
