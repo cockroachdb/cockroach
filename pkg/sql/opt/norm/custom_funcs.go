@@ -1434,11 +1434,56 @@ func (c *CustomFuncs) UnifyComparison(left, right opt.ScalarExpr) opt.ScalarExpr
 	return c.f.ConstructConst(convertedDatum)
 }
 
+// normalizeComparison maps a given comparison operation and its expressions
+// into an equivalent operation that exists in the tree.CmpOps map, returning
+// this new operation, along with potentially flipped operands and a "not"
+// flag. The "not" flag indicates whether the result of the comparison
+// operation should be inverted.
+func (c *CustomFuncs) normalizeComparison(
+	op opt.Operator, left, right opt.ScalarExpr,
+) (newOp opt.Operator, newLeft, newRight opt.ScalarExpr, not bool) {
+	switch op {
+	case opt.NeOp:
+		// Ne(left, right) is implemented as !Eq(left, right).
+		return opt.EqOp, left, right, true
+	case opt.GtOp:
+		// Gt(left, right) is implemented as Lt(right, left)
+		return opt.LtOp, right, left, false
+	case opt.GeOp:
+		// Ge(left, right) is implemented as Le(right, left)
+		return opt.LeOp, right, left, false
+	case opt.NotInOp:
+		// NotIn(left, right) is implemented as !In(left, right)
+		return opt.InOp, left, right, true
+	case opt.NotLikeOp:
+		// NotLike(left, right) is implemented as !Like(left, right)
+		return opt.LikeOp, left, right, true
+	case opt.NotILikeOp:
+		// NotILike(left, right) is implemented as !ILike(left, right)
+		return opt.ILikeOp, left, right, true
+	case opt.NotSimilarToOp:
+		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
+		return opt.SimilarToOp, left, right, true
+	case opt.NotRegMatchOp:
+		// NotRegMatch(left, right) is implemented as !RegMatch(left, right)
+		return opt.RegMatchOp, left, right, true
+	case opt.NotRegIMatchOp:
+		// NotRegIMatch(left, right) is implemented as !RegIMatch(left, right)
+		return opt.RegIMatchOp, left, right, true
+	case opt.IsNotOp:
+		// IsNot(left, right) is implemented as !Is(left, right)
+		return opt.IsOp, left, right, true
+	}
+	return op, left, right, false
+}
+
 // FoldComparison evaluates a comparison expression with constant inputs. It
 // returns a constant expression as long as it finds an appropriate overload
 // function for the given operator and input types, and the evaluation causes
 // no error.
 func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr) opt.ScalarExpr {
+	var not bool
+	op, left, right, not = c.normalizeComparison(op, left, right)
 	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
 
 	o, ok := memo.FindComparisonOverload(op, left.DataType(), right.DataType())
@@ -1449,6 +1494,9 @@ func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr
 	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
 	if err != nil {
 		return nil
+	}
+	if b, ok := result.(*tree.DBool); ok && not {
+		result = tree.MakeDBool(!*b)
 	}
 	return c.f.ConstructConstVal(result)
 }
