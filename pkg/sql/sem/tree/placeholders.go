@@ -42,22 +42,20 @@ func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
 	return true
 }
 
-// QueryArguments relates placeholder names to their provided query argument.
+// QueryArguments stores query arguments, one per PlaceholderIdx.
 //
 // A nil value represents a NULL argument.
-type QueryArguments map[types.PlaceholderIdx]TypedExpr
+type QueryArguments []TypedExpr
 
-var emptyQueryArgumentStr = "{}"
-
-func (qa *QueryArguments) String() string {
-	if len(*qa) == 0 {
-		return emptyQueryArgumentStr
+func (qa QueryArguments) String() string {
+	if len(qa) == 0 {
+		return "{}"
 	}
 	var buf bytes.Buffer
 	buf.WriteByte('{')
 	sep := ""
-	for k, v := range *qa {
-		fmt.Fprintf(&buf, "%s%s:%q", sep, k, v)
+	for k, v := range qa {
+		fmt.Fprintf(&buf, "%s%s:%q", sep, types.PlaceholderIdx(k), v)
 		sep = ", "
 	}
 	buf.WriteByte('}')
@@ -136,7 +134,7 @@ func MakePlaceholderInfo() PlaceholderInfo {
 func (p *PlaceholderInfo) Clear() {
 	p.TypeHints = PlaceholderTypes{}
 	p.Types = PlaceholderTypes{}
-	p.Values = QueryArguments{}
+	p.Values = nil
 	p.permitUnassigned = false
 }
 
@@ -146,7 +144,7 @@ func (p *PlaceholderInfo) Reset(typeHints PlaceholderTypes) {
 	if typeHints != nil {
 		p.TypeHints = typeHints
 		p.Types = PlaceholderTypes{}
-		p.Values = QueryArguments{}
+		p.Values = nil
 	} else {
 		p.Clear()
 	}
@@ -176,7 +174,7 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 	}
 	var missing []string
 	for pn := range p.Types {
-		if _, ok := p.Values[pn]; !ok {
+		if _, ok := p.Value(pn); !ok {
 			missing = append(missing, pn.String())
 		}
 	}
@@ -194,10 +192,10 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 // Value returns the known value of a placeholder.  Returns false in
 // the 2nd value if the placeholder does not have a value.
 func (p *PlaceholderInfo) Value(idx types.PlaceholderIdx) (TypedExpr, bool) {
-	if v, ok := p.Values[idx]; ok {
-		return v, true
+	if len(p.Values) <= int(idx) || p.Values[idx] == nil {
+		return nil, false
 	}
-	return nil, false
+	return p.Values[idx], true
 }
 
 // IsUnresolvedPlaceholder returns whether expr is an unresolved placeholder. In
