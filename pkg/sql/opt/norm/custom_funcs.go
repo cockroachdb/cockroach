@@ -1441,14 +1441,22 @@ func (c *CustomFuncs) UnifyComparison(left, right opt.ScalarExpr) opt.ScalarExpr
 func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr) opt.ScalarExpr {
 	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
 
-	o, ok := memo.FindComparisonOverload(op, left.DataType(), right.DataType())
+	var flipped, not bool
+	o, flipped, not, ok := memo.FindComparisonOverload(op, left.DataType(), right.DataType())
 	if !ok {
 		return nil
+	}
+
+	if flipped {
+		lDatum, rDatum = rDatum, lDatum
 	}
 
 	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
 	if err != nil {
 		return nil
+	}
+	if b, ok := result.(*tree.DBool); ok && not {
+		result = tree.MakeDBool(!*b)
 	}
 	return c.f.ConstructConstVal(result)
 }
