@@ -1915,7 +1915,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 		post,
 		types,
-		dsp.convertOrdering(planPhysicalProps(n), plan.PlanToStreamColMap),
+		dsp.convertOrdering(planPhysicalProps(n), planToStreamColMap),
 	)
 	plan.PlanToStreamColMap = planToStreamColMap
 	return plan, nil

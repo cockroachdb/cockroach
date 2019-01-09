@@ -560,3 +560,24 @@ render            ·         ·          (a)              ·
       │           filter    e = 5      ·                ·
       └── scan    ·         ·          (a, d)           ·
 ·                 table     u@idx      ·                ·
+
+# Plan for #33342 regression test. We want the ordering in the lookup join node
+# to be `+f` not `+a`; this is achieved by making def show up in the query
+# first (and thus get smaller opt.ColumnIDs).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
+----
+render            ·         ·            (d, e, f, a, b, c)  ·
+ │                render 0  d            ·                   ·
+ │                render 1  e            ·                   ·
+ │                render 2  f            ·                   ·
+ │                render 3  a            ·                   ·
+ │                render 4  b            ·                   ·
+ │                render 5  c            ·                   ·
+ └── lookup-join  ·         ·            (a, b, c, d, e, f)  +f
+      │           type      inner        ·                   ·
+      ├── scan    ·         ·            (a, b, c)           +a
+      │           table     abc@primary  ·                   ·
+      │           spans     ALL          ·                   ·
+      └── scan    ·         ·            (d, e, f)           ·
+·                 table     def@primary  ·                   ·
