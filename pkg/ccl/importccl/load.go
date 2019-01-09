@@ -129,7 +129,7 @@ func Load(
 		if err != nil {
 			return backupccl.BackupDescriptor{}, errors.Wrapf(err, "parsing: %q", cmd)
 		}
-		switch s := stmt.(type) {
+		switch s := stmt.AST.(type) {
 		case *tree.CreateTable:
 			if tableDesc != nil {
 				if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {

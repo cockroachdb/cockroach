@@ -64,7 +64,7 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 		if err != nil {
 			t.Fatal(err)
 		}
-		selectStmt, ok := stmt.(*tree.Select)
+		selectStmt, ok := stmt.AST.(*tree.Select)
 		if !ok {
 			t.Fatal("not select")
 		}

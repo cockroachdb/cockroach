@@ -398,7 +398,7 @@ func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 	if err != nil {
 		t.Fatal(err)
 	}
-	createStmt := parsed.(*tree.CreateChangefeed)
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
 	if createStmt.SinkURI != nil {
 		t.Fatalf(`unexpected sink provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}

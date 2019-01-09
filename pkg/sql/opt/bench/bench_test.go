@@ -529,7 +529,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 }
 
 func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared bool) {
-	var stmt tree.Statement
+	var stmt parser.Statement
 	var err error
 	if !usePrepared {
 		stmt, err = parser.ParseOne(h.query.query)
@@ -548,7 +548,7 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared b
 	}
 
 	if !usePrepared {
-		bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.cat, h.optimizer.Factory(), stmt)
+		bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.cat, h.optimizer.Factory(), stmt.AST)
 		if err = bld.Build(); err != nil {
 			tb.Fatalf("%v", err)
 		}

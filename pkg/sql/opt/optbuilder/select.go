@@ -153,7 +153,7 @@ func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
 			panic(builderError{wrapped})
 		}
 
-		sel, ok = stmt.(*tree.Select)
+		sel, ok = stmt.AST.(*tree.Select)
 		if !ok {
 			panic("expected SELECT statement")
 		}

@@ -99,7 +99,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		return sqlbase.TableDescriptor{}, err
 	}
 
-	create := stmt.(*tree.CreateTable)
+	create := stmt.AST.(*tree.CreateTable)
 	for _, def := range create.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok && d.HasDefaultExpr() {
 			return sqlbase.TableDescriptor{},
@@ -141,7 +141,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		return sqlbase.TableDescriptor{}, err
 	}
 
-	create := stmt.(*tree.CreateView)
+	create := stmt.AST.(*tree.CreateView)
 
 	mutDesc, err := MakeViewTableDesc(
 		create,

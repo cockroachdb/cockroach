@@ -90,7 +90,7 @@ func runTestPrettyData(t *testing.T, prefix string, cfg tree.PrettyCfg, matches 
 				for i := range work {
 					thisCfg := cfg
 					thisCfg.LineWidth = i
-					res[i-1] = thisCfg.Pretty(stmt)
+					res[i-1] = thisCfg.Pretty(stmt.AST)
 				}
 				return nil
 			}
@@ -151,7 +151,7 @@ func TestPrettyVerify(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := tree.Pretty(stmt)
+			got := tree.Pretty(stmt.AST)
 			if pretty != got {
 				t.Fatalf("got: %s\nexpected: %s", got, pretty)
 			}
@@ -175,7 +175,7 @@ func BenchmarkPrettyData(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		docs = append(docs, cfg.Doc(stmt))
+		docs = append(docs, cfg.Doc(stmt.AST))
 	}
 
 	b.ResetTimer()

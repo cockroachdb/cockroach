@@ -67,7 +67,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			create, ok := stmt.(*tree.CreateTable)
+			create, ok := stmt.AST.(*tree.CreateTable)
 			if !ok {
 				t.Fatal("expected CREATE TABLE statement in table file")
 			}
