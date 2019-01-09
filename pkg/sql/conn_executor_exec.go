@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -293,7 +294,19 @@ func (ex *connExecutor) execStmtInOpenState(
 			typeHints[types.PlaceholderIdx(i)] = coltypes.CastTargetToDatumType(t)
 		}
 		if _, err := ex.addPreparedStmt(
-			ctx, name, Statement{SQL: s.Statement.String(), AST: s.Statement}, typeHints,
+			ctx, name,
+			Statement{
+				Statement: parser.Statement{
+					// We need the SQL string just for the part that comes after
+					// "PREPARE ... AS",
+					// TODO(radu): it would be nice if the parser would figure out this
+					// string and store it in tree.Prepare.
+					SQL:             tree.AsStringWithFlags(s.Statement, tree.FmtParsable),
+					AST:             s.Statement,
+					NumPlaceholders: stmt.NumPlaceholders,
+				},
+			},
+			typeHints,
 		); err != nil {
 			return makeErrEvent(err)
 		}
@@ -317,11 +330,11 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 
-		stmt.AST = ps.Statement
+		stmt.Statement = ps.Statement
 		stmt.Prepared = ps.PreparedStatement
 		stmt.ExpectedTypes = ps.Columns
 		stmt.AnonymizedStr = ps.AnonymizedStr
-		res.ResetStmtType(ps.Statement)
+		res.ResetStmtType(ps.AST)
 
 		// Check again if the statement should be parallelized.
 		parallelize, err = ex.maybeSynchronizeParallelStmts(ctx, stmt)
