@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -1385,10 +1386,11 @@ func loadBackupSQLDescs(
 }
 
 type restoreResumer struct {
-	settings  *cluster.Settings
-	res       roachpb.BulkOpSummary
-	databases []*sqlbase.DatabaseDescriptor
-	tables    []*sqlbase.TableDescriptor
+	settings       *cluster.Settings
+	res            roachpb.BulkOpSummary
+	databases      []*sqlbase.DatabaseDescriptor
+	tables         []*sqlbase.TableDescriptor
+	statsRefresher *stats.Refresher
 }
 
 func (r *restoreResumer) Resume(
@@ -1417,6 +1419,7 @@ func (r *restoreResumer) Resume(
 	r.res = res
 	r.databases = databases
 	r.tables = tables
+	r.statsRefresher = p.ExecCfg().StatsRefresher
 	return err
 }
 
@@ -1447,6 +1450,17 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jo
 	// restored data.
 	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Payload().Username, r.settings, nil); err != nil {
 		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
+	}
+
+	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
+	// rows affected per table, so we use a large number because we want to make
+	// sure that stats always get created/refreshed here.
+	for i := range r.tables {
+		r.statsRefresher.NotifyMutation(
+			&r.settings.SV,
+			r.tables[i].ID,
+			math.MaxInt32, /* rowsAffected */
+		)
 	}
 
 	return nil

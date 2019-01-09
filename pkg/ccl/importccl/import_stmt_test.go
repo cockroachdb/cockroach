@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -2409,4 +2410,43 @@ func TestImportCockroachDump(t *testing.T) {
 	FAMILY "primary" (i)
 )`},
 	})
+}
+
+func TestCreateStatsAfterImport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldRefreshInterval, oldAsOf time.Duration) {
+		stats.DefaultRefreshInterval = oldRefreshInterval
+		stats.DefaultAsOfTime = oldAsOf
+	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
+	stats.DefaultRefreshInterval = time.Millisecond
+	stats.DefaultAsOfTime = 0
+
+	const nodes = 1
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.experimental_automatic_statistics=true`)
+
+	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal:///cockroachdump/dump.sql")
+
+	// Verify that statistics have been created.
+	sqlDB.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+	  FROM [SHOW STATISTICS FOR TABLE t]`,
+		[][]string{
+			{"__auto__", "{i}", "2", "2", "0"},
+			{"__auto__", "{t}", "2", "2", "0"},
+		})
+	sqlDB.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+	  FROM [SHOW STATISTICS FOR TABLE a]`,
+		[][]string{
+			{"__auto__", "{i}", "1", "1", "0"},
+		})
 }

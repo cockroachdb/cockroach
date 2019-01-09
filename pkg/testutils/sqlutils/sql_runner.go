@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/pkg/errors"
 )
 
 // SQLRunner wraps a testing.TB and *gosql.DB connection and provides
@@ -184,4 +185,20 @@ func (sr *SQLRunner) CheckQueryResults(t testing.TB, query string, expected [][]
 			query, maxtrixToStr(expected), maxtrixToStr(res),
 		)
 	}
+}
+
+// CheckQueryResultsRetry checks that the rows returned by a query match the
+// expected response. If the results don't match right away, it will retry
+// using testutils.SucceedsSoon.
+func (sr *SQLRunner) CheckQueryResultsRetry(t testing.TB, query string, expected [][]string) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		res := sr.QueryStr(t, query)
+		if !reflect.DeepEqual(res, expected) {
+			return errors.Errorf("query '%s': expected:\n%v\ngot:\n%v\n",
+				query, maxtrixToStr(expected), maxtrixToStr(res),
+			)
+		}
+		return nil
+	})
 }
