@@ -587,10 +587,10 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	if err != nil {
 		txn.CleanupOnError(ctx, err)
 	}
-	// Terminate RetryUsingTransactionError here, so it doesn't cause a higher-level
+	// Terminate TransactionRetryWithProtoRefreshError here, so it doesn't cause a higher-level
 	// txn to be retried. We don't do this in any of the other functions in DB; I
 	// guess we should.
-	if _, ok := err.(*roachpb.RetryUsingTransactionError); ok {
+	if _, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
 		return errors.Wrapf(err, "terminated retryable error")
 	}
 	return err
