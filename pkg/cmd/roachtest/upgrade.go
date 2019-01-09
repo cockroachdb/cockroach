@@ -45,9 +45,7 @@ func registerUpgrade(r *registry) {
 		}
 
 		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
-		// Force disable encryption.
-		// TODO(mberhault): allow it once oldVersion >= 2.1.
-		c.Start(ctx, t, c.Range(1, nodes), startArgsDontEncrypt)
+		c.Start(ctx, t, c.Range(1, nodes))
 
 		const stageDuration = 30 * time.Second
 		const timeUntilStoreDead = 90 * time.Second
@@ -78,9 +76,9 @@ func registerUpgrade(r *registry) {
 
 		stop := func(node int) error {
 			port := fmt.Sprintf("{pgport:%d}", node)
-			// Note that the following command line needs to run against both v2.0
+			// Note that the following command line needs to run against both v2.1
 			// and the current branch. Do not change it in a manner that is
-			// incompatible with 2.0.
+			// incompatible with 2.1.
 			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port="+port); err != nil {
 				return err
 			}
@@ -90,9 +88,9 @@ func registerUpgrade(r *registry) {
 
 		decommissionAndStop := func(node int) error {
 			port := fmt.Sprintf("{pgport:%d}", node)
-			// Note that the following command line needs to run against both v2.0
+			// Note that the following command line needs to run against both v2.1
 			// and the current branch. Do not change it in a manner that is
-			// incompatible with 2.0.
+			// incompatible with 2.1.
 			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --decommission --insecure --port="+port); err != nil {
 				return err
 			}
@@ -183,10 +181,10 @@ func registerUpgrade(r *registry) {
 
 		// Check cannot set cluster setting cluster.preserve_downgrade_option to any
 		// value besides the old cluster version.
-		if err := checkDowngradeOption("1.1"); err != nil {
+		if err := checkDowngradeOption("2.0"); err != nil {
 			t.Fatal(err)
 		}
-		if err := checkDowngradeOption("2.2"); err != nil {
+		if err := checkDowngradeOption("2.3"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -255,7 +253,7 @@ func registerUpgrade(r *registry) {
 		}
 	}
 
-	const oldVersion = "v2.0.5"
+	const oldVersion = "v2.1.3"
 	for _, n := range []int{5} {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("upgrade/oldVersion=%s/nodes=%d", oldVersion, n),
