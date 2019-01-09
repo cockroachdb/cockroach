@@ -3988,8 +3988,8 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	// Placeholder expressions cannot contain other placeholders, so we do
 	// not need to recurse.
-	typ, typed := ctx.Placeholders.Types[t.Idx]
-	if !typed {
+	typ := ctx.Placeholders.Types[t.Idx]
+	if typ == nil {
 		// All placeholders should be typed at this point.
 		return nil, pgerror.NewAssertionErrorf("missing type for placeholder %s", t)
 	}

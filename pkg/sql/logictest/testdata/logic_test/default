@@ -4,9 +4,6 @@ statement error expected DEFAULT expression to have type int, but 'false' has ty
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
 
 statement error variable sub-expressions are not allowed in DEFAULT
-CREATE TABLE t (a INT PRIMARY KEY DEFAULT $1)
-
-statement error variable sub-expressions are not allowed in DEFAULT
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT (SELECT 1))
 
 statement error variable sub-expressions are not allowed in DEFAULT

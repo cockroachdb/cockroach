@@ -89,6 +89,12 @@ func (p *planner) prepareUsingOptimizer(
 			return 0, false, err
 		}
 	}
+
+	// Verify that all placeholder types have been set.
+	if err := p.semaCtx.Placeholders.Types.AssertAllSet(); err != nil {
+		return 0, false, err
+	}
+
 	stmt.Prepared.Columns = resultCols
 	stmt.Prepared.Types = p.semaCtx.Placeholders.Types
 	if opc.allowMemoReuse {
