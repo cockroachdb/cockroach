@@ -148,10 +148,7 @@ SELECT * FROM (SELECT 1 AS one from xy) WHERE one > 0
 project
  ├── columns: one:3(int!null)
  ├── fd: ()-->(3)
- ├── select
- │    ├── scan xy
- │    └── filters
- │         └── 1 > 0 [type=bool]
+ ├── scan xy
  └── projections
       └── const: 1 [type=int]
 

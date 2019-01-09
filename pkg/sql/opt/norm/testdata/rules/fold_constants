@@ -342,7 +342,6 @@ values
 # FoldComparison
 # --------------------------------------------------
 
-# Fold constant.
 opt expect=FoldComparison
 SELECT 1::INT < 2::INT
 ----
@@ -353,7 +352,36 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-# Fold constant.
+opt expect=FoldComparison
+SELECT 1::INT > 2::INT
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 10.0::FLOAT <= 20.0::FLOAT
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 10.0::FLOAT >= 20.0::FLOAT
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
+
 opt expect=FoldComparison
 SELECT 2.0::DECIMAL = 2::INT
 ----
@@ -364,7 +392,16 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-# Fold constant.
+opt expect=FoldComparison
+SELECT 2.0::DECIMAL != 2::INT
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
+
 opt expect=FoldComparison
 SELECT 100 IS NOT DISTINCT FROM 200
 ----
@@ -375,7 +412,16 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-# Fold constant.
+opt expect=FoldComparison
+SELECT 100 IS DISTINCT FROM 200
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
+
 opt expect=FoldComparison
 SELECT 'foo' IN ('a', 'b', 'c')
 ----
@@ -386,7 +432,116 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-# Fold constant.
+opt expect=FoldComparison
+SELECT 'foo' NOT IN ('a', 'b', 'c')
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 'foo' LIKE 'foobar'
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 'foo' NOT LIKE 'foobar'
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 'foo' ILIKE 'FOO%'
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 'foo' NOT ILIKE 'FOO%'
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 'monday' SIMILAR TO '_onday'
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 'monday' NOT SIMILAR TO '_onday'
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 'tuEsday' ~ 't[uU][eE]sday'
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 'tuEsday' !~ 't[uU][eE]sday'
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 'wednesday' ~* 'W.*y'
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,) [type=tuple{bool}]
+
+opt expect=FoldComparison
+SELECT 'wednesday' !~* 'W.*y'
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,) [type=tuple{bool}]
+
 opt expect=FoldComparison
 SELECT '[1, 2]'::JSONB <@ '[1, 2, 3]'::JSONB
 ----
@@ -397,7 +552,6 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-# Fold constant.
 opt expect=FoldComparison
 SELECT ('a', 'b', 'c') = ('d', 'e', 'f')
 ----
