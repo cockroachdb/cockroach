@@ -54,7 +54,7 @@ func (ex *connExecutor) execPrepare(
 	}
 
 	ps, err := ex.addPreparedStmt(
-		ctx, parseCmd.Name, Statement{SQL: parseCmd.SQL, AST: parseCmd.Stmt}, parseCmd.TypeHints,
+		ctx, parseCmd.Name, Statement{Statement: parseCmd.Statement}, parseCmd.TypeHints,
 	)
 	if err != nil {
 		return retErr(err)
@@ -160,9 +160,7 @@ func (ex *connExecutor) prepare(
 	if stmt.AST == nil {
 		return prepared, nil
 	}
-	prepared.Str = stmt.String()
-
-	prepared.Statement = stmt.AST
+	prepared.Statement = stmt.Statement
 	prepared.AnonymizedStr = anonymizeStmt(stmt)
 
 	// Point to the prepared state, which can be further populated during query
@@ -510,7 +508,7 @@ func (ex *connExecutor) execDescribe(
 
 		res.SetInTypes(ps.InTypes)
 
-		if stmtHasNoData(ps.Statement) {
+		if stmtHasNoData(ps.AST) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPrepStmtOutput(ctx, ps.Columns)
@@ -522,7 +520,7 @@ func (ex *connExecutor) execDescribe(
 				pgerror.CodeInvalidCursorNameError, "unknown portal %q", descCmd.Name))
 		}
 
-		if stmtHasNoData(portal.Stmt.Statement) {
+		if stmtHasNoData(portal.Stmt.AST) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)

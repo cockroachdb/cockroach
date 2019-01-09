@@ -15,14 +15,14 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Statement contains a statement with optional expected result columns and metadata.
 type Statement struct {
-	SQL           string
-	AST           tree.Statement
+	parser.Statement
+
 	ExpectedTypes sqlbase.ResultColumns
 	AnonymizedStr string
 	queryID       ClusterWideID

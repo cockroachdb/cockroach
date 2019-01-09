@@ -204,7 +204,7 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 			log.Infof(ctx, "stop wait at: %v", cmd)
 			return nil
 		}
-		query := exec.Stmt.String()
+		query := exec.AST.String()
 		if !strings.HasPrefix(query, "SELECT t.oid") {
 			log.Infof(ctx, "stop wait at query: %s", query)
 			return nil
@@ -391,8 +391,8 @@ func expectExecStmt(
 		t.Fatalf("%s: expected command ExecStmt, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
 	}
 
-	if es.Stmt.String() != expSQL {
-		t.Fatalf("%s: expected %s, got %s", testutils.Caller(1), expSQL, es.Stmt.String())
+	if es.AST.String() != expSQL {
+		t.Fatalf("%s: expected %s, got %s", testutils.Caller(1), expSQL, es.AST.String())
 	}
 
 	if es.ParseStart == (time.Time{}) {
@@ -430,8 +430,8 @@ func expectPrepareStmt(
 		t.Fatalf("%s: expected name %s, got %s", testutils.Caller(1), expName, pr.Name)
 	}
 
-	if pr.Stmt.String() != expSQL {
-		t.Fatalf("%s: expected %s, got %s", testutils.Caller(1), expSQL, pr.Stmt.String())
+	if pr.AST.String() != expSQL {
+		t.Fatalf("%s: expected %s, got %s", testutils.Caller(1), expSQL, pr.AST.String())
 	}
 
 	if err := finishQuery(prepare, c); err != nil {
