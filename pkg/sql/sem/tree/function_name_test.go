@@ -42,7 +42,7 @@ func TestResolveFunction(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", tc.in, err)
 		}
-		f, ok := stmt.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.FuncExpr)
+		f, ok := stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.FuncExpr)
 		if !ok {
 			t.Fatalf("%s does not parse to a tree.FuncExpr", tc.in)
 		}

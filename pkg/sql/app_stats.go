@@ -302,7 +302,7 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 			keepNameCtx.WithReformatTableNames(nil)
 			keepNameCtx.FormatNode(&newTn)
 		})
-	f.FormatNode(stmt)
+	f.FormatNode(stmt.AST)
 	return f.CloseAndGetString(), true
 }
 

@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -69,7 +68,7 @@ func TestCreateRandomSchema(t *testing.T) {
 		}
 
 		// Reparse the show create table statement that's stored in the database.
-		stmtAst, err := parser.ParseOne(tabStmt)
+		parsed, err := parser.ParseOne(tabStmt)
 		if err != nil {
 			t.Fatalf("error parsing show create table: %s", err)
 		}
@@ -78,9 +77,9 @@ func TestCreateRandomSchema(t *testing.T) {
 		// Now run the SHOW CREATE TABLE statement we found on a new db and verify
 		// that both tables are the same.
 
-		_, err = db.Exec(stmtAst.String())
+		_, err = db.Exec(parsed.AST.String())
 		if err != nil {
-			t.Fatal(stmtAst, err)
+			t.Fatal(parsed.AST, err)
 		}
 
 		if err := db.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s",
@@ -92,14 +91,13 @@ func TestCreateRandomSchema(t *testing.T) {
 			t.Fatalf("found table name %s, expected %s", tabName, tab.Table.String())
 		}
 		// Reparse the show create table statement that's stored in the database.
-		var secondStmtAst tree.Statement
-		secondStmtAst, err = parser.ParseOne(secondTabStmt)
+		secondParsed, err := parser.ParseOne(secondTabStmt)
 		if err != nil {
 			t.Fatalf("error parsing show create table: %s", err)
 		}
-		if stmtAst.String() != secondStmtAst.String() {
+		if parsed.AST.String() != secondParsed.AST.String() {
 			t.Fatalf("for input statement\n%s\nfound first output\n%q\nbut second output\n%q",
-				tab.String(), stmtAst.String(), secondStmtAst.String())
+				tab.String(), parsed.AST.String(), secondParsed.AST.String())
 		}
 		if tabStmt != secondTabStmt {
 			t.Fatalf("for input statement\n%s\nfound first output\n%q\nbut second output\n%q",

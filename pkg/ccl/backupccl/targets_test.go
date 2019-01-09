@@ -107,7 +107,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			targets := stmt.(*tree.Grant).Targets
+			targets := stmt.AST.(*tree.Grant).Targets
 
 			matched, err := descriptorsMatchingTargets(context.TODO(),
 				test.sessionDatabase, searchPath, descriptors, targets)

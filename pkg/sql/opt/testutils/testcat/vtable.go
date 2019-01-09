@@ -42,7 +42,7 @@ func init() {
 			panic(fmt.Sprintf("error initializing virtual table map: %s", err))
 		}
 
-		ct, ok := parsed.(*tree.CreateTable)
+		ct, ok := parsed.AST.(*tree.CreateTable)
 		if !ok {
 			panic("virtual table schemas must be CREATE TABLE statements")
 		}

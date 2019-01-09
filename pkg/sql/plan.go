@@ -539,7 +539,7 @@ func (p *planner) delegateQuery(
 	if err != nil {
 		return nil, err
 	}
-	plan, err := p.newPlan(ctx, stmt, desiredTypes)
+	plan, err := p.newPlan(ctx, stmt.AST, desiredTypes)
 	if err != nil {
 		return nil, err
 	}

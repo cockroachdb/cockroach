@@ -120,7 +120,7 @@ func (t *partitioningTest) parse() error {
 		if err != nil {
 			return errors.Wrapf(err, `parsing %s`, t.parsed.createStmt)
 		}
-		createTable, ok := stmt.(*tree.CreateTable)
+		createTable, ok := stmt.AST.(*tree.CreateTable)
 		if !ok {
 			return errors.Errorf("expected *tree.CreateTable got %T", stmt)
 		}
