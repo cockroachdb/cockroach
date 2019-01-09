@@ -562,7 +562,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 }
 
 func assertTransactionRetryError(t *testing.T, e error) {
-	if retErr, ok := e.(*roachpb.HandledRetryableTxnError); ok {
+	if retErr, ok := e.(*roachpb.RetryUsingTransactionError); ok {
 		if !testutils.IsError(retErr, "TransactionRetryError") {
 			t.Fatalf("expected the cause to be TransactionRetryError, but got %s",
 				retErr)
@@ -573,7 +573,7 @@ func assertTransactionRetryError(t *testing.T, e error) {
 }
 
 func assertTransactionAbortedError(t *testing.T, e error) {
-	if retErr, ok := e.(*roachpb.HandledRetryableTxnError); ok {
+	if retErr, ok := e.(*roachpb.RetryUsingTransactionError); ok {
 		if !testutils.IsError(retErr, "TransactionAbortedError") {
 			t.Fatalf("expected the cause to be TransactionAbortedError, but got %s",
 				retErr)

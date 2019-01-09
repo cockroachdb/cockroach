@@ -134,7 +134,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 	// Check that further sends through the aborted txn are rejected. The
 	// TxnCoordSender is supposed to synthesize a TransactionAbortedError.
 	if err := txn.CommitOrCleanup(ctx); !testutils.IsError(
-		err, "HandledRetryableTxnError: TransactionAbortedError",
+		err, "RetryUsingTransactionError: TransactionAbortedError",
 	) {
 		t.Fatalf("expected aborted error, got: %s", err)
 	}
