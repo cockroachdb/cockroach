@@ -538,9 +538,12 @@ func (cfg *RaftConfig) SetDefaults() {
 		// ticks. Add a generous amount of ticks to make sure even a backed up
 		// Raft snapshot queue is going to make progress when a (not overly
 		// concurrent) amount of splits happens.
-		// The resulting delay configured here is north of 20s by default, which
-		// experimentally has shown to be enough.
-		cfg.RaftDelaySplitToSuppressSnapshotTicks = 3*cfg.RaftElectionTimeoutTicks + 60
+		// The generous amount should result in a delay sufficient to
+		// transmit at least one snapshot with the slow delay, which
+		// with default settings is max 64MB at 2MB/s, ie 32 seconds.
+		//
+		// The resulting delay configured here is about 50s.
+		cfg.RaftDelaySplitToSuppressSnapshotTicks = 3*cfg.RaftElectionTimeoutTicks + 200
 	}
 }
 
