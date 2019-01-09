@@ -155,7 +155,7 @@ func TestEncodings(t *testing.T) {
 				case *tree.DFloat:
 					// Skip floats because postgres rounds them different than Go.
 					t.Skip()
-				case *tree.DTuple, *tree.DBitArray:
+				case *tree.DTuple:
 					// Unsupported.
 					t.Skip()
 				}

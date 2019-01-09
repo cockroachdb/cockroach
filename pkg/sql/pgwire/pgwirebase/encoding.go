@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -534,6 +535,37 @@ func DecodeOidDatum(
 				return nil, err
 			}
 			return tree.ParseDJSON(string(b))
+		case oid.T_varbit:
+			if len(b) < 4 {
+				return nil, errors.Errorf("missing varbit bitlen prefix")
+			}
+			bitlen := binary.BigEndian.Uint32(b)
+			b = b[4:]
+			lastBitsUsed := uint64(bitlen % 64)
+			if bitlen != 0 && lastBitsUsed == 0 {
+				lastBitsUsed = 64
+			}
+			if bitlen < 0 || len(b)*8 < int(bitlen) {
+				return nil, errors.Errorf("unexpected varbit bitlen %d (b: %d)", bitlen, len(b))
+			}
+			words := make([]uint64, (len(b)+7)/8)
+			for i := 0; i < len(words)-1; i++ {
+				words[i] = binary.BigEndian.Uint64(b)
+				b = b[8:]
+			}
+			if len(words) > 0 {
+				var w uint64
+				i := uint(0)
+				for ; i < uint(lastBitsUsed); i += 8 {
+					w <<= 8
+					w += uint64(b[0])
+					b = b[1:]
+				}
+				w <<= 64 - i
+				words[len(words)-1] = w
+			}
+			ba, err := bitarray.FromEncodingParts(words, lastBitsUsed)
+			return &tree.DBitArray{ba}, err
 		default:
 			if _, ok := types.ArrayOids[id]; ok {
 				return decodeBinaryArray(ctx, b, code)
