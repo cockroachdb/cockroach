@@ -226,8 +226,8 @@ func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColum
 	}
 }
 
-// SetInTypes is part of the DescribeResult interface.
-func (r *commandResult) SetInTypes(types []oid.Oid) {
+// SetInferredTypes is part of the DescribeResult interface.
+func (r *commandResult) SetInferredTypes(types []oid.Oid) {
 	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferParamDesc(types)
 }

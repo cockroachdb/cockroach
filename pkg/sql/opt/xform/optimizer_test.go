@@ -47,6 +47,7 @@ func TestDetachMemo(t *testing.T) {
 
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */)
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	var o xform.Optimizer
@@ -62,7 +63,7 @@ func TestDetachMemo(t *testing.T) {
 		t.Error("memo expression should be reinitialized by DetachMemo")
 	}
 
-	semaCtx.Placeholders.Clear()
+	semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */)
 	o.Init(&evalCtx)
 
 	stmt2, err := parser.ParseOne("SELECT a=$1 FROM abc")
@@ -70,6 +71,7 @@ func TestDetachMemo(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	semaCtx.Placeholders.Init(stmt2.NumPlaceholders, nil /* typeHints */)
 	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt2.AST).Build()
 	if err != nil {
 		t.Fatal(err)

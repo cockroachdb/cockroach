@@ -441,9 +441,6 @@ statement error could not parse "foo" as type int
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 'foo'
 
 statement error variable sub-expressions are not allowed in DEFAULT
-ALTER TABLE add_default ALTER COLUMN b SET DEFAULT $1
-
-statement error variable sub-expressions are not allowed in DEFAULT
 ALTER TABLE add_default ALTER COLUMN b SET DEFAULT c
 
 statement error variable sub-expressions are not allowed in DEFAULT

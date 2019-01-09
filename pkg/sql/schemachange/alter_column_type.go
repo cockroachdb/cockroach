@@ -201,9 +201,10 @@ func ClassifyConversion(
 
 	// See if there's existing cast logic.  If so, return general.
 	ctx := tree.MakeSemaContext(false)
+	ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */)
 
 	// Use a placeholder just to sub in the original type.
-	fromPlaceholder, err := (&tree.Placeholder{}).TypeCheck(&ctx, oldType.ToDatumType())
+	fromPlaceholder, err := (&tree.Placeholder{Idx: 0}).TypeCheck(&ctx, oldType.ToDatumType())
 	if err != nil {
 		return ColumnConversionImpossible, err
 	}

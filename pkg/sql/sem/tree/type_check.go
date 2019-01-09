@@ -187,10 +187,11 @@ func (sp *ScalarProperties) Clear() {
 // MakeSemaContext initializes a simple SemaContext suitable
 // for "lightweight" type checking such as the one performed for default
 // expressions.
+// Note: if queries with placeholders are going to be used,
+// SemaContext.Placeholders.Init must be called separately.
 func MakeSemaContext(privileged bool) SemaContext {
 	return SemaContext{
-		Placeholders: MakePlaceholderInfo(),
-		privileged:   privileged,
+		privileged: privileged,
 	}
 }
 
@@ -222,11 +223,11 @@ func (sc *SemaContext) GetRelativeParseTime() time.Time {
 }
 
 type placeholderTypeAmbiguityError struct {
-	v *Placeholder
+	idx types.PlaceholderIdx
 }
 
 func (err placeholderTypeAmbiguityError) Error() string {
-	return fmt.Sprintf("could not determine data type of placeholder %s", err.v)
+	return fmt.Sprintf("could not determine data type of placeholder %s", err.idx)
 }
 
 type unexpectedTypeError struct {
@@ -1319,7 +1320,7 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 		return expr, nil
 	}
 	if desired.IsAmbiguous() {
-		return nil, placeholderTypeAmbiguityError{expr}
+		return nil, placeholderTypeAmbiguityError{expr.Idx}
 	}
 	if err := ctx.Placeholders.SetType(expr.Idx, desired); err != nil {
 		return nil, err
@@ -1785,7 +1786,8 @@ func TypeCheckSameTypedExprs(
 			case len(constIdxs) > 0:
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 			case len(placeholderIdxs) > 0:
-				return nil, nil, placeholderTypeAmbiguityError{s.exprs[placeholderIdxs[0]].(*Placeholder)}
+				p := s.exprs[placeholderIdxs[0]].(*Placeholder)
+				return nil, nil, placeholderTypeAmbiguityError{p.Idx}
 			default:
 				return typedExprs, types.Unknown, nil
 			}
@@ -2045,7 +2047,7 @@ func checkTupleHasLength(t *Tuple, expectedLen int) error {
 
 type placeholderAnnotationVisitor struct {
 	types PlaceholderTypes
-	state map[types.PlaceholderIdx]annotationState
+	state []annotationState
 	err   error
 	// errIdx stores the placeholder to which err applies. Used to select the
 	// error for the smallest index.
@@ -2135,7 +2137,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 				// Verify that the casts are consistent.
 				if !castType.Equivalent(v.types[arg.Idx]) {
 					v.state[arg.Idx] = conflictingCasts
-					delete(v.types, arg.Idx)
+					v.types[arg.Idx] = nil
 				}
 
 			case typeFromHint, typeFromAnnotation:
@@ -2156,7 +2158,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 		case noType, typeFromCast:
 			// A "bare" placeholder prevents type determination from casts.
 			v.state[t.Idx] = conflictingCasts
-			delete(v.types, t.Idx)
+			v.types[t.Idx] = nil
 
 		case typeFromHint, typeFromAnnotation:
 			// We are not relying on casts to determine the type, nothing to do.
@@ -2192,15 +2194,21 @@ func (*placeholderAnnotationVisitor) VisitPost(expr Expr) Expr { return expr }
 // See docs/RFCS/20160203_typing.md for more details on placeholder typing (in
 // particular section "First pass: placeholder annotations").
 //
+// The typeHints slice contains the client-provided hints and is populated with
+// any newly assigned types. It is assumed to be pre-sized to the number of
+// placeholders in the statement and is populated accordingly.
+//
 // TODO(nvanbenschoten): Can this visitor and map be preallocated (like normalizeVisitor)?
 func ProcessPlaceholderAnnotations(stmt Statement, typeHints PlaceholderTypes) error {
 	v := placeholderAnnotationVisitor{
 		types: typeHints,
-		state: make(map[types.PlaceholderIdx]annotationState),
+		state: make([]annotationState, len(typeHints)),
 	}
 
 	for placeholder := range typeHints {
-		v.state[placeholder] = typeFromHint
+		if typeHints[placeholder] != nil {
+			v.state[placeholder] = typeFromHint
+		}
 	}
 
 	walkStmt(&v, stmt)

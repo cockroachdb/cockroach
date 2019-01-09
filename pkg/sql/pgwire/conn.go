@@ -540,34 +540,48 @@ func (c *conn) handleParse(
 		}
 		inTypeHints[i] = oid.Oid(typ)
 	}
-	// Prepare the mapping of SQL placeholder names to types. Pre-populate it with
-	// the type hints received from the client, if any.
-	sqlTypeHints := make(tree.PlaceholderTypes)
-	for i, t := range inTypeHints {
-		if t == 0 {
-			continue
-		}
-		v, ok := types.OidToType[t]
-		if !ok {
-			err := pgwirebase.NewProtocolViolationErrorf("unknown oid type: %v", t)
-			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
-		}
-		sqlTypeHints[types.PlaceholderIdx(i)] = v
-	}
 
 	startParse := timeutil.Now()
-	var stmt parser.Statement
 	stmts, err := c.parser.ParseWithInt(query, ch.GetDefaultIntSize())
+	if err != nil {
+		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+	}
 	if len(stmts) > 1 {
-		err = pgerror.NewWrongNumberOfPreparedStatements(len(stmts))
-	} else if len(stmts) == 1 {
+		err := pgerror.NewWrongNumberOfPreparedStatements(len(stmts))
+		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+	}
+	var stmt parser.Statement
+	if len(stmts) == 1 {
 		stmt = stmts[0]
 	}
 	// len(stmts) == 0 results in a nil (empty) statement.
 
-	if err != nil {
+	if len(inTypeHints) > stmt.NumPlaceholders {
+		err := pgwirebase.NewProtocolViolationErrorf(
+			"received too many type hints: %d vs %d placeholders in query",
+			len(inTypeHints), stmt.NumPlaceholders,
+		)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
+
+	var sqlTypeHints tree.PlaceholderTypes
+	if len(inTypeHints) > 0 {
+		// Prepare the mapping of SQL placeholder names to types. Pre-populate it with
+		// the type hints received from the client, if any.
+		sqlTypeHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
+		for i, t := range inTypeHints {
+			if t == 0 {
+				continue
+			}
+			v, ok := types.OidToType[t]
+			if !ok {
+				err := pgwirebase.NewProtocolViolationErrorf("unknown oid type: %v", t)
+				return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+			}
+			sqlTypeHints[i] = v
+		}
+	}
+
 	endParse := timeutil.Now()
 
 	if _, ok := stmt.AST.(*tree.CopyFrom); ok {
