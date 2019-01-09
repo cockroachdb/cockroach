@@ -429,7 +429,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				}
 				txn.ManualRestart(ctx, ex.server.cfg.Clock.Now())
 				payload := eventRetriableErrPayload{
-					err: roachpb.NewRetryUsingTransactionError(
+					err: roachpb.NewTransactionRetryWithProtoRefreshError(
 						"serializable transaction timestamp pushed (detected by connExecutor)",
 						txn.ID(),
 						// No updated transaction required; we've already manually updated our
@@ -530,7 +530,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// Restart the transaction so that it is able to replay itself at a newer timestamp
 	// with the hope that the next time around there will be leases only at the current
 	// version.
-	retryErr := roachpb.NewRetryUsingTransactionError(
+	retryErr := roachpb.NewTransactionRetryWithProtoRefreshError(
 		fmt.Sprintf(
 			`cannot publish new versions for tables: %v, old versions still in use`,
 			tables),

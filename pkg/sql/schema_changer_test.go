@@ -3733,7 +3733,7 @@ func TestSchemaChangeRetryError(t *testing.T) {
 	// TODO(vivek): fix #17698. The transaction should get retried
 	// without returning this error to the user.
 	if err := tx.Commit(); !testutils.IsError(err,
-		`restart transaction: RetryUsingTransactionError: TransactionRetryError: retry txn \(RETRY_SERIALIZABLE\)`,
+		`restart transaction: TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn \(RETRY_SERIALIZABLE\)`,
 	) {
 		t.Fatalf("err = %+v", err)
 	}

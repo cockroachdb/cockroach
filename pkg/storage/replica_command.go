@@ -633,7 +633,7 @@ func (r *Replica) AdminMerge(
 		if err != nil {
 			txn.CleanupOnError(ctx, err)
 		}
-		if _, canRetry := errors.Cause(err).(*roachpb.RetryUsingTransactionError); !canRetry {
+		if _, canRetry := errors.Cause(err).(*roachpb.TransactionRetryWithProtoRefreshError); !canRetry {
 			if err != nil {
 				return reply, roachpb.NewErrorf("merge of range into %d failed: %s",
 					origLeftDesc.RangeID, err)
