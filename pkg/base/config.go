@@ -533,10 +533,16 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 
 	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
-		// A total of 100 ticks is >18s which experimentally has been shown to
-		// allow the small pile (<100) of Raft snapshots observed at the
-		// beginning of an import/restore to be resolved.
-		cfg.RaftDelaySplitToSuppressSnapshotTicks = 100
+		// The Raft Ticks interval defaults to 200ms, and an election is 15
+		// ticks. Add a generous amount of ticks to make sure even a backed up
+		// Raft snapshot queue is going to make progress when a (not overly
+		// concurrent) amount of splits happens.
+		// The generous amount should result in a delay sufficient to
+		// transmit at least one snapshot with the slow delay, which
+		// with default settings is max 64MB at 2MB/s, ie 32 seconds.
+		//
+		// The resulting delay configured here is about 50s.
+		cfg.RaftDelaySplitToSuppressSnapshotTicks = 3*cfg.RaftElectionTimeoutTicks + 200
 	}
 }
 
