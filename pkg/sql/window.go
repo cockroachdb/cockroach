@@ -62,6 +62,12 @@ type windowNode struct {
 	// TODO(yuzefovich): once this is no longer necessary, remove this restriction.
 	numRendersNotToBeReused int
 
+	// numOverClausesColumns indicates the number of renders that are added
+	// while constructing window definitions (arguments of PARTITION BY and of
+	// ORDER BY within OVER clauses). These renders are used only during
+	// processing of window functions and should be projected out afterwards.
+	numOverClausesColumns int
+
 	run windowRun
 }
 
@@ -371,6 +377,8 @@ func (p *planner) constructWindowDefinitions(
 
 		n.run.windowFrames[idx] = windowDef.Frame
 	}
+
+	n.numOverClausesColumns = len(s.render) - n.numRendersNotToBeReused
 	return nil
 }
 

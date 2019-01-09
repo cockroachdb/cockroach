@@ -222,4 +222,22 @@ public class MainTest extends CockroachDBTest {
             "type uuid: uuid: incorrect UUID length: e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
         stmt.executeQuery();
     }
+
+    // Regression for 33340: temporary columns used by window functions should
+    // be projected out after they are no longer necessary. This problem
+    // presented itself only when invoked via an external driver by crashing
+    // the server.
+    @Test
+    public void testWindowFunctions() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE t (a INT, b INT)");
+        stmt.execute();
+        stmt = conn.prepareStatement("INSERT INTO t VALUES (0, 10), (1, 11)");
+        stmt.execute();
+        stmt = conn.prepareStatement("SELECT sum(b) OVER (ORDER BY a) FROM t");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        Assert.assertEquals(rs.getInt(1), 10);
+        rs.next();
+        Assert.assertEquals(rs.getInt(1), 21);
+    }
 }
