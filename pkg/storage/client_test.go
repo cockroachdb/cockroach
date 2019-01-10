@@ -176,7 +176,7 @@ func createTestStoreWithOpts(
 			t.Fatal(err)
 		}
 	}
-	store := storage.NewStore(storeCfg, eng, nodeDesc)
+	store := storage.NewStore(ctx, storeCfg, eng, nodeDesc)
 	if !opts.dontBootstrap {
 		var kvs []roachpb.KeyValue
 		var splits []roachpb.RKey
@@ -836,7 +836,7 @@ func (m *multiTestContext) addStore(idx int) {
 			m.t.Fatal(err)
 		}
 	}
-	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
+	store := storage.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap && idx == 0 {
 		// Bootstrap the initial range on the first store.
 		var splits []roachpb.RKey
@@ -1000,10 +1000,9 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	cfg.DB = m.dbs[i]
 	cfg.NodeLiveness = m.nodeLivenesses[i]
 	cfg.StorePool = m.storePools[i]
-	store := storage.NewStore(cfg, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
-	m.stores[i] = store
-
 	ctx := context.Background()
+	store := storage.NewStore(ctx, cfg, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
+	m.stores[i] = store
 
 	// Need to start the store before adding it so that the store ID is initialized.
 	if err := store.Start(ctx, stopper); err != nil {
