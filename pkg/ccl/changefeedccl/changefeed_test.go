@@ -101,6 +101,11 @@ func TestChangefeedEnvelope(t *testing.T) {
 			defer foo.Close(t)
 			assertPayloads(t, foo, []string{`foo: [1]->`})
 		})
+		t.Run(`envelope=value_only`, func(t *testing.T) {
+			foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH envelope='value_only'`)
+			defer foo.Close(t)
+			assertPayloads(t, foo, []string{`foo: ->{"a": 1, "b": "a"}`})
+		})
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
@@ -1381,6 +1386,18 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `schema_topic is not yet supported`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?schema_topic=foo`,
+	)
+
+	// The cloudStorageSink is particular about the options it will work with.
+	sqlDB.ExpectErr(
+		t, `this sink is incompatible with format=experimental_avro`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro'`,
+		`experimental-nodelocal:///bar?bucket_size=0ns`,
+	)
+	sqlDB.ExpectErr(
+		t, `this sink is incompatible with envelope=key_only`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='key_only'`,
+		`experimental-nodelocal:///bar?bucket_size=0ns`,
 	)
 }
 

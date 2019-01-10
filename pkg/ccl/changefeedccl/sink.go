@@ -9,26 +9,33 @@
 package changefeedccl
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"io"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -36,23 +43,33 @@ import (
 type Sink interface {
 	// EmitRow enqueues a row message for asynchronous delivery on the sink. An
 	// error may be returned if a previously enqueued message has failed.
-	EmitRow(ctx context.Context, topic string, key, value []byte) error
+	EmitRow(
+		ctx context.Context,
+		table *sqlbase.TableDescriptor,
+		key, value []byte,
+		updated hlc.Timestamp,
+	) error
 	// EmitResolvedTimestamp enqueues a resolved timestamp message for
 	// asynchronous delivery on every partition of every topic that has been
 	// seen by EmitRow. The list of partitions used may be stale. An error may
 	// be returned if a previously enqueued message has failed.
-	EmitResolvedTimestamp(ctx context.Context, payload []byte) error
+	EmitResolvedTimestamp(ctx context.Context, payload []byte, resolved hlc.Timestamp) error
 	// Flush blocks until every message enqueued by EmitRow and
-	// EmitResolvedTimestamp has been acknowledged by the sink. If an error is
-	// returned, no guarantees are given about which messages have been
-	// delivered or not delivered.
-	Flush(ctx context.Context) error
+	// EmitResolvedTimestamp with a timestamp >= ts has been acknowledged by the
+	// sink. This is also a guarantee that rows that come in after will have an
+	// updated timestamp <= ts (which can be useful for gc inside the sink). If
+	// an error is returned, no guarantees are given about which messages have
+	// been delivered or not delivered.
+	Flush(ctx context.Context, ts hlc.Timestamp) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
 }
 
 func getSink(
-	sinkURI string, opts map[string]string, targets jobspb.ChangefeedTargets,
+	sinkURI string,
+	opts map[string]string,
+	targets jobspb.ChangefeedTargets,
+	settings *cluster.Settings,
 ) (Sink, error) {
 	u, err := url.Parse(sinkURI)
 	if err != nil {
@@ -75,7 +92,22 @@ func getSink(
 			return nil, errors.Errorf(`%s is not yet supported`, sinkParamSchemaTopic)
 		}
 		makeSink = func() (Sink, error) {
-			return getKafkaSink(kafkaTopicPrefix, u.Host, targets)
+			return makeKafkaSink(kafkaTopicPrefix, u.Host, targets)
+		}
+	case `experimental-s3`, `experimental-gs`, `experimental-nodelocal`, `experimental-http`,
+		`experimental-https`, `experimental-azure`:
+		sinkURI = strings.TrimPrefix(sinkURI, `experimental-`)
+		bucketSizeStr := q.Get(sinkParamBucketSize)
+		q.Del(sinkParamBucketSize)
+		if bucketSizeStr == `` {
+			return nil, errors.Errorf(`sink param %s is required`, sinkParamBucketSize)
+		}
+		bucketSize, err := time.ParseDuration(bucketSizeStr)
+		if err != nil {
+			return nil, err
+		}
+		makeSink = func() (Sink, error) {
+			return makeCloudStorageSink(sinkURI, bucketSize, settings, opts)
 		}
 	case sinkSchemeExperimentalSQL:
 		// Swap the changefeed prefix for the sql connection one that sqlSink
@@ -133,7 +165,7 @@ type kafkaSink struct {
 	}
 }
 
-func getKafkaSink(
+func makeKafkaSink(
 	kafkaTopicPrefix string, bootstrapServers string, targets jobspb.ChangefeedTargets,
 ) (Sink, error) {
 	sink := &kafkaSink{
@@ -217,8 +249,10 @@ func (s *kafkaSink) Close() error {
 }
 
 // EmitRow implements the Sink interface.
-func (s *kafkaSink) EmitRow(ctx context.Context, tableName string, key, value []byte) error {
-	topic := s.kafkaTopicPrefix + SQLNameToKafkaName(tableName)
+func (s *kafkaSink) EmitRow(
+	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+) error {
+	topic := s.kafkaTopicPrefix + SQLNameToKafkaName(table.Name)
 	if _, ok := s.topics[topic]; !ok {
 		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
 	}
@@ -232,7 +266,9 @@ func (s *kafkaSink) EmitRow(ctx context.Context, tableName string, key, value []
 }
 
 // EmitResolvedTimestamp implements the Sink interface.
-func (s *kafkaSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
+func (s *kafkaSink) EmitResolvedTimestamp(
+	ctx context.Context, payload []byte, _ hlc.Timestamp,
+) error {
 	// Periodically ping sarama to refresh its metadata. This means talking to
 	// zookeeper, so it shouldn't be done too often, but beyond that this
 	// constant was picked pretty arbitrarily.
@@ -277,7 +313,10 @@ func (s *kafkaSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) e
 }
 
 // Flush implements the Sink interface.
-func (s *kafkaSink) Flush(ctx context.Context) error {
+func (s *kafkaSink) Flush(ctx context.Context, _ hlc.Timestamp) error {
+	// Ignore the timestamp and flush everything, which necessarily means that
+	// we've flushed everything >= the timestamp.
+
 	flushCh := make(chan struct{}, 1)
 
 	s.mu.Lock()
@@ -446,7 +485,10 @@ func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlS
 }
 
 // EmitRow implements the Sink interface.
-func (s *sqlSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
+func (s *sqlSink) EmitRow(
+	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+) error {
+	topic := table.Name
 	if _, ok := s.topics[topic]; !ok {
 		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
 	}
@@ -466,7 +508,9 @@ func (s *sqlSink) EmitRow(ctx context.Context, topic string, key, value []byte) 
 }
 
 // EmitResolvedTimestamp implements the Sink interface.
-func (s *sqlSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
+func (s *sqlSink) EmitResolvedTimestamp(
+	ctx context.Context, payload []byte, _ hlc.Timestamp,
+) error {
 	var noKey, noValue []byte
 	for topic := range s.topics {
 		for partition := int32(0); partition < sqlSinkNumPartitions; partition++ {
@@ -487,13 +531,17 @@ func (s *sqlSink) emit(
 	messageID := builtins.GenerateUniqueInt(roachpb.NodeID(partition))
 	s.rowBuf = append(s.rowBuf, topic, partition, messageID, key, value, resolved)
 	if len(s.rowBuf)/sqlSinkEmitCols >= sqlSinkRowBatchSize {
-		return s.Flush(ctx)
+		var gcTs hlc.Timestamp
+		return s.Flush(ctx, gcTs)
 	}
 	return nil
 }
 
 // Flush implements the Sink interface.
-func (s *sqlSink) Flush(ctx context.Context) error {
+func (s *sqlSink) Flush(ctx context.Context, _ hlc.Timestamp) error {
+	// Ignore the timestamp and flush everything, which necessarily means that
+	// we've flushed everything >= the timestamp.
+
 	if len(s.rowBuf) == 0 {
 		return nil
 	}
@@ -549,10 +597,13 @@ type bufferSink struct {
 }
 
 // EmitRow implements the Sink interface.
-func (s *bufferSink) EmitRow(_ context.Context, topic string, key, value []byte) error {
+func (s *bufferSink) EmitRow(
+	_ context.Context, table *sqlbase.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+) error {
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
+	topic := table.Name
 	s.buf.Push(sqlbase.EncDatumRow{
 		{Datum: tree.DNull},                              // resolved span
 		{Datum: s.alloc.NewDString(tree.DString(topic))}, // topic
@@ -563,9 +614,11 @@ func (s *bufferSink) EmitRow(_ context.Context, topic string, key, value []byte)
 }
 
 // EmitResolvedTimestamp implements the Sink interface.
-func (s *bufferSink) EmitResolvedTimestamp(_ context.Context, payload []byte) error {
+func (s *bufferSink) EmitResolvedTimestamp(
+	_ context.Context, payload []byte, _ hlc.Timestamp,
+) error {
 	if s.closed {
-		return errors.New(`cannot EmitRow on a closed sink`)
+		return errors.New(`cannot EmitResolvedTimestamp on a closed sink`)
 	}
 	s.buf.Push(sqlbase.EncDatumRow{
 		{Datum: tree.DNull},                              // resolved span
@@ -577,13 +630,279 @@ func (s *bufferSink) EmitResolvedTimestamp(_ context.Context, payload []byte) er
 }
 
 // Flush implements the Sink interface.
-func (s *bufferSink) Flush(_ context.Context) error {
+func (s *bufferSink) Flush(_ context.Context, _ hlc.Timestamp) error {
 	return nil
 }
 
 // Close implements the Sink interface.
 func (s *bufferSink) Close() error {
 	s.closed = true
+	return nil
+}
+
+// cloudStorageFormatBucket formats times as YYYYMMDDHHMMSSNNNNNNNNN.
+func cloudStorageFormatBucket(t time.Time) string {
+	// TODO(dan): Instead do the minimal thing necessary to differentiate times
+	// truncated to some bucket size.
+	const f = `20060102150405`
+	return fmt.Sprintf(`%s%09d`, t.Format(f), t.Nanosecond())
+}
+
+type cloudStorageSinkKey struct {
+	Bucket   time.Time
+	Topic    string
+	SchemaID sqlbase.DescriptorVersion
+	SinkID   string
+	Ext      string
+}
+
+func (k cloudStorageSinkKey) Filename() string {
+	return fmt.Sprintf(`%s-%s-%d-%s%s`,
+		cloudStorageFormatBucket(k.Bucket), k.Topic, k.SchemaID, k.SinkID, k.Ext)
+}
+
+// cloudStorageSink emits to files on cloud storage.
+//
+// The data files are named `<timestamp>_<topic>_<schema_id>_<uniquer>.<ext>`.
+//
+// `<timestamp>` is truncated to some bucket size, specified by the required
+// sink param `bucket_size`. Bucket size is a tradeoff between number of files
+// and the end-to-end latency of data being resolved.
+//
+// `<topic>` corresponds to one SQL table.
+//
+// `<schema_id>` changes whenever the SQL table schema changes, which allows us
+// to guarantee to users that _all entries in a given file have the same
+// schema_.
+//
+// `<uniquer>` is used to keep nodes in a cluster from overwriting each other's
+// data and should be ignored by external users. It also keeps a single node
+// from overwriting its own data if there are multiple changefeeds, or if a
+// changefeed gets canceled/restarted.
+//
+// `<ext>` implies the format of the file: currently the only option is
+// `ndjson`, which means a text file conforming to the "Newline Delimited JSON"
+// spec.
+//
+// Each record in the data files is a value, keys are not included, so the
+// `envelope` option must be set to `row`, which is the default. Within a file,
+// records are not guaranteed to be sorted by timestamp. A duplicate of some
+// record might exist in a different file or even in the same file.
+//
+// The resolved timestamp files are named `<timestamp>.RESOLVED`. This is
+// carefully done so that we can offer the following external guarantee: At any
+// given time, if the the files are iterated in lexicographic filename order,
+// then encountering any filename containing `RESOLVED` means that everything
+// before it is finalized (and thus can be ingested into some other system and
+// deleted, included in hive queries, etc). A typical user of cloudStorageSink
+// would periodically do exactly this.
+//
+// Still TODO is writing out data schemas, Avro support, bounding memory usage.
+// Eliminating duplicates would be great, but may not be immediately practical.
+type cloudStorageSink struct {
+	base       *url.URL
+	bucketSize time.Duration
+	settings   *cluster.Settings
+	sinkID     string
+
+	ext           string
+	recordDelimFn func(io.Writer) error
+
+	files           map[cloudStorageSinkKey]*bytes.Buffer
+	localResolvedTs hlc.Timestamp
+}
+
+func makeCloudStorageSink(
+	baseURI string, bucketSize time.Duration, settings *cluster.Settings, opts map[string]string,
+) (Sink, error) {
+	base, err := url.Parse(baseURI)
+	if err != nil {
+		return nil, err
+	}
+	// TODO(dan): Each sink needs a unique id for the reasons described in the
+	// above docs, but this is a pretty ugly way to do it.
+	sinkID := uuid.MakeV4().String()
+	s := &cloudStorageSink{
+		base:       base,
+		bucketSize: bucketSize,
+		settings:   settings,
+		sinkID:     sinkID,
+		files:      make(map[cloudStorageSinkKey]*bytes.Buffer),
+	}
+
+	switch formatType(opts[optFormat]) {
+	case optFormatJSON:
+		// TODO(dan): It seems like these should be on the encoder, but that
+		// seems to require a bit of refactoring.
+		s.ext = `.ndjson`
+		s.recordDelimFn = func(w io.Writer) error {
+			_, err := w.Write([]byte{'\n'})
+			return err
+		}
+	default:
+		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
+			optFormat, opts[optFormat])
+	}
+
+	switch envelopeType(opts[optEnvelope]) {
+	case optEnvelopeValueOnly:
+	default:
+		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
+			optEnvelope, opts[optEnvelope])
+	}
+
+	{
+		// Sanity check that we can connect.
+		ctx := context.Background()
+		es, err := storageccl.ExportStorageFromURI(ctx, s.base.String(), settings)
+		if err != nil {
+			return nil, err
+		}
+		if err := es.Close(); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
+// EmitRow implements the Sink interface.
+func (s *cloudStorageSink) EmitRow(
+	_ context.Context, table *sqlbase.TableDescriptor, _, value []byte, updated hlc.Timestamp,
+) error {
+	if s.files == nil {
+		return errors.New(`cannot EmitRow on a closed sink`)
+	}
+
+	// localResolvedTs is a guarantee that any rows <= to it are duplicates and
+	// we can drop them.
+	//
+	// TODO(dan): We could actually move this higher up the changefeed stack and
+	// do it for all sinks.
+	if !s.localResolvedTs.Less(updated) {
+		return nil
+	}
+
+	// Intentionally throw away the logical part of the timestamp for bucketing.
+	key := cloudStorageSinkKey{
+		Bucket:   updated.GoTime().Truncate(s.bucketSize),
+		Topic:    table.Name,
+		SchemaID: table.Version,
+		SinkID:   s.sinkID,
+		Ext:      s.ext,
+	}
+	file := s.files[key]
+	if file == nil {
+		// We could pool the bytes.Buffers if necessary, but we'd need to be
+		// careful to bound the size of the memory held by the pool.
+		file = &bytes.Buffer{}
+		s.files[key] = file
+	}
+
+	// TODO(dan): Memory monitoring for this
+	if _, err := file.Write(value); err != nil {
+		return err
+	}
+	return s.recordDelimFn(file)
+}
+
+// EmitResolvedTimestamp implements the Sink interface.
+func (s *cloudStorageSink) EmitResolvedTimestamp(
+	ctx context.Context, payload []byte, resolved hlc.Timestamp,
+) error {
+	if s.files == nil {
+		return errors.New(`cannot EmitRow on a closed sink`)
+	}
+
+	es, err := storageccl.ExportStorageFromURI(ctx, s.base.String(), s.settings)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := es.Close(); err != nil {
+			log.Warningf(ctx, `failed to close %s, resources may have leaked: %s`, s.base.String(), err)
+		}
+	}()
+
+	// resolving some given time means that every in the _previous_ bucket is
+	// finished.
+	resolvedBucket := resolved.GoTime().Truncate(s.bucketSize).Add(-time.Nanosecond)
+	name := cloudStorageFormatBucket(resolvedBucket) + `.RESOLVED`
+	if log.V(1) {
+		log.Info(ctx, "writing ", name)
+	}
+	return es.WriteFile(ctx, name, bytes.NewReader(payload))
+}
+
+// Flush implements the Sink interface.
+func (s *cloudStorageSink) Flush(ctx context.Context, ts hlc.Timestamp) error {
+	if s.files == nil {
+		return errors.New(`cannot Flush on a closed sink`)
+	}
+	if s.localResolvedTs.Less(ts) {
+		s.localResolvedTs = ts
+	}
+
+	var gcKeys []cloudStorageSinkKey
+	for key, file := range s.files {
+		// Any files where the bucket begin is `>= ts` don't need to be flushed
+		// because of the Flush contract w.r.t. `ts`. (Bucket begin time is
+		// exclusive and end time is inclusive).
+		if !key.Bucket.Before(ts.GoTime()) {
+			continue
+		}
+
+		// TODO(dan): These files should be further subdivided for three
+		// reasons. 1) we could always gc anything we flush and later write a
+		// followup bucket subdivion if needed 2) very large bucket sizes could
+		// mean very large files, which are unwieldy once written 3) smooth
+		// and/or control memory usage of the sink.
+		filename := key.Filename()
+		if log.V(1) {
+			log.Info(ctx, "writing ", filename)
+		}
+		if err := s.writeFile(ctx, filename, file); err != nil {
+			return err
+		}
+
+		// If the bucket end is `<= ts`, we'll never see another _previously
+		// unseen_ row for this bucket. We drop any future such rows so that it
+		// can be cleaned up.
+		if end := key.Bucket.Add(s.bucketSize); ts.GoTime().After(end) {
+			gcKeys = append(gcKeys, key)
+		} else {
+			if log.V(2) {
+				log.Infof(ctx, "wrote %s but was not eligible for gc", filename)
+			}
+		}
+	}
+	for _, key := range gcKeys {
+		delete(s.files, key)
+	}
+
+	return nil
+}
+
+func (s *cloudStorageSink) writeFile(
+	ctx context.Context, name string, contents *bytes.Buffer,
+) error {
+	u := *s.base
+	u.Path = filepath.Join(u.Path, name)
+	es, err := storageccl.ExportStorageFromURI(ctx, u.String(), s.settings)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := es.Close(); err != nil {
+			log.Warningf(ctx, `failed to close %s, resources may have leaked: %s`, name, err)
+		}
+	}()
+	r := bytes.NewReader(contents.Bytes())
+	return es.WriteFile(ctx, ``, r)
+}
+
+// Close implements the Sink interface.
+func (s *cloudStorageSink) Close() error {
+	s.files = nil
 	return nil
 }
 
