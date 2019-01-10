@@ -51,7 +51,7 @@ func TestDetachMemo(t *testing.T) {
 
 	var o xform.Optimizer
 	o.Init(&evalCtx)
-	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt).Build()
+	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt.AST).Build()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestDetachMemo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt2).Build()
+	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt2.AST).Build()
 	if err != nil {
 		t.Fatal(err)
 	}

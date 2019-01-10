@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -122,12 +123,10 @@ type Command interface {
 // ExecStmt is the command for running a query sent through the "simple" pgwire
 // protocol.
 type ExecStmt struct {
-	// Stmt can be nil, in which case a "empty query response" message should be
-	// produced.
-	Stmt tree.Statement
-
-	// SQL is the SQL string that was parsed into Stmt.
-	SQL string
+	// Information returned from parsing: AST, SQL, NumPlaceholders.
+	// Note that AST can be nil, in which case executing it should produce an
+	// "empty query response" message.
+	parser.Statement
 
 	// TimeReceived is the time at which the exec message was received
 	// from the client. Used to compute the service latency.
@@ -144,7 +143,7 @@ func (ExecStmt) command() {}
 func (e ExecStmt) String() string {
 	// We have the original SQL, but we still use String() because it obfuscates
 	// passwords.
-	return fmt.Sprintf("ExecStmt: %s", e.Stmt.String())
+	return fmt.Sprintf("ExecStmt: %s", e.AST.String())
 }
 
 var _ Command = ExecStmt{}
@@ -174,12 +173,10 @@ type PrepareStmt struct {
 	// Name of the prepared statement (optional).
 	Name string
 
-	// Stmt can be nil, in which case executing it should produce an "empty query
-	// response" message.
-	Stmt tree.Statement
-
-	// SQL is the string from which Stmt was parsed.
-	SQL string
+	// Information returned from parsing: AST, SQL, NumPlaceholders.
+	// Note that AST can be nil, in which case executing it should produce an
+	// "empty query response" message.
+	parser.Statement
 
 	TypeHints tree.PlaceholderTypes
 	// RawTypeHints is the representation of type hints exactly as specified by
@@ -195,7 +192,7 @@ func (PrepareStmt) command() {}
 func (p PrepareStmt) String() string {
 	// We have the original SQL, but we still use String() because it obfuscates
 	// passwords.
-	return fmt.Sprintf("PrepareStmt: %s", p.Stmt.String())
+	return fmt.Sprintf("PrepareStmt: %s", p.AST.String())
 }
 
 var _ Command = PrepareStmt{}

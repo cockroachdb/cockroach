@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/lib/pq/oid"
@@ -25,12 +26,12 @@ import (
 // PrepareMetadata encapsulates information about a statement that is gathered
 // during Prepare and is later used during Describe or Execute.
 type PrepareMetadata struct {
+	// Note that AST may be nil if the prepared statement is empty.
+	parser.Statement
+
 	// AnonymizedStr is the anonymized statement string suitable for recording
 	// in statement statistics.
 	AnonymizedStr string
-	// Statement is the parsed, prepared SQL statement. It may be nil if the
-	// prepared statement is empty.
-	Statement tree.Statement
 
 	// Provides TypeHints and Types fields which contain placeholder typing
 	// information.
@@ -47,11 +48,13 @@ type PrepareMetadata struct {
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
 // the prepare metadata.
 func (pm *PrepareMetadata) MemoryEstimate() int64 {
-	res := int64(unsafe.Sizeof(PrepareMetadata{}))
-	res += int64(len(pm.AnonymizedStr))
+	res := int64(unsafe.Sizeof(*pm))
+	res += int64(len(pm.SQL))
 	// We don't have a good way of estimating the size of the AST. Just assume
-	// it's a small multiple of the anonymized string length.
-	res += 2 * int64(len(pm.AnonymizedStr))
+	// it's a small multiple of the string length.
+	res += 2 * int64(len(pm.SQL))
+
+	res += int64(len(pm.AnonymizedStr))
 
 	res += int64(len(pm.TypeHints)+len(pm.Types)) *
 		int64(unsafe.Sizeof(types.PlaceholderIdx(0))+unsafe.Sizeof(types.T(nil)))

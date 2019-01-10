@@ -35,7 +35,7 @@ func TestMakeDatabaseDesc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc := makeDatabaseDesc(stmt.(*tree.CreateDatabase))
+	desc := makeDatabaseDesc(stmt.AST.(*tree.CreateDatabase))
 	if desc.Name != "test" {
 		t.Fatalf("expected Name == test, got %s", desc.Name)
 	}

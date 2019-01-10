@@ -75,7 +75,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.makePlan(ctx, Statement{SQL: query, AST: stmt}); err != nil {
+	if err := p.makePlan(ctx, Statement{Statement: stmt}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -142,7 +142,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		recv := MakeDistSQLReceiver(
 			ctx,
 			rw,
-			stmt.StatementType(),
+			stmt.AST.StatementType(),
 			execCfg.RangeDescriptorCache,
 			execCfg.LeaseHolderCache,
 			txn,

@@ -37,7 +37,7 @@ func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, `parsing %s`, createTableStmt)
 	}
-	createTable, ok := stmt.(*tree.CreateTable)
+	createTable, ok := stmt.AST.(*tree.CreateTable)
 	if !ok {
 		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
 	}
@@ -60,7 +60,7 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 	if err != nil {
 		return nil, err
 	}
-	selectStmt, ok := valuesStmt.(*tree.Select)
+	selectStmt, ok := valuesStmt.AST.(*tree.Select)
 	if !ok {
 		return nil, errors.Errorf("expected *tree.Select got %T", valuesStmt)
 	}
