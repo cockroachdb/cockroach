@@ -715,9 +715,6 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		if test.hb > 0 {
 			txn.LastHeartbeat = hlc.Timestamp{WallTime: test.hb}
 		}
-		// Set a high Timestamp to make sure it does not matter. Only
-		// OrigTimestamp (and heartbeat) are used for GC decisions.
-		txn.Timestamp.Forward(hlc.MaxTimestamp)
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)

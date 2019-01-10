@@ -460,27 +460,17 @@ func (q *Queue) MaybeWaitForPush(
 			}
 		}()
 	}
-	var pusheeTxnTimer timeutil.Timer
-	defer pusheeTxnTimer.Stop()
 	pusherPriority := req.PusherTxn.Priority
 	pusheePriority := req.PusheeTxn.Priority
 
-	first := true
+	var pusheeTxnTimer timeutil.Timer
+	defer pusheeTxnTimer.Stop()
+	// The first time we want to check the pushee's txn record immediately:
+	// the pushee might be gone by the time the pusher gets here if it cleaned
+	// itself up after the pusher saw an intent but before it entered this
+	// queue.
+	pusheeTxnTimer.Reset(0)
 	for {
-		// Set the timer to check for the pushee txn's expiration.
-		if !first {
-			expiration := TxnExpiration(pending.txn.Load().(*roachpb.Transaction)).GoTime()
-			now := q.store.Clock().Now().GoTime()
-			pusheeTxnTimer.Reset(expiration.Sub(now))
-		} else {
-			// The first time we want to check the pushee's txn record immediately:
-			// the pushee might be gone by the time the pusher gets here if it cleaned
-			// itself up after the pusher saw an intent but before it entered this
-			// queue.
-			pusheeTxnTimer.Reset(0)
-			first = false
-		}
-
 		select {
 		case <-ctx.Done():
 			// Caller has given up.
@@ -530,6 +520,10 @@ func (q *Queue) MaybeWaitForPush(
 				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				return nil, nil
 			}
+			// Set the timer to check for the pushee txn's expiration.
+			expiration := TxnExpiration(updatedPushee).GoTime()
+			now := q.store.Clock().Now().GoTime()
+			pusheeTxnTimer.Reset(expiration.Sub(now))
 
 		case updatedPusher := <-queryPusherCh:
 			switch updatedPusher.Status {
@@ -723,6 +717,11 @@ func (q *Queue) startQueryPusherTxn(
 				} else if updatedPusher == nil {
 					// No pusher to query; the BeginTransaction hasn't yet created the
 					// pusher's record. Continue in order to backoff and retry.
+					// TODO(nvanbenschoten): we shouldn't hit this case in a 2.2
+					// cluster now that QueryTxn requests synthesize
+					// transactions from their provided TxnMeta. However, we
+					// need to keep the logic while we want to support
+					// compatibility with 2.1 nodes. Remove this in 2.3.
 					log.Event(ctx, "no pusher found; backing off")
 					continue
 				}
@@ -812,7 +811,9 @@ func (q *Queue) queryTxnStatus(
 	}
 	br := b.RawResponse()
 	resp := br.Responses[0].GetInner().(*roachpb.QueryTxnResponse)
-	// ID can be nil if no BeginTransaction has been sent yet.
+	// ID can be nil if no BeginTransaction has been sent yet and we're talking
+	// to a 2.1 node.
+	// TODO(nvanbenschoten): Remove this in 2.3.
 	if updatedTxn := &resp.QueriedTxn; updatedTxn.ID != (uuid.UUID{}) {
 		return updatedTxn, resp.WaitingTxns, nil
 	}
