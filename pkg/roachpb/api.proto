@@ -742,8 +742,8 @@ message PushTxnRequest {
   // this to PUSH_TOUCH to determine whether the pushee can be aborted
   // due to inactivity (based on the now field).
   PushTxnType push_type = 6;
-  // Forces the push by overriding the normal checks in PushTxn to
-  // either abort or push the timestamp.
+  // Forces the push by overriding the normal expiration and priority checks
+  // in PushTxn to either abort or push the timestamp.
   bool force = 7;
 
   reserved 8;
