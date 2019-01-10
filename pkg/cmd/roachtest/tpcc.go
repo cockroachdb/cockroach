@@ -44,6 +44,18 @@ type tpccOptions struct {
 	ZFS        bool
 }
 
+// tpccFixturesCmd generates the command string to load tpcc data for the
+// specified warehouse count into a cluster using either `fixtures import`
+// or `fixtures load` depending on the cloud.
+func tpccFixturesCmd(cloud string, warehouses int, checks bool) string {
+	action := "load"
+	if cloud == "aws" {
+		action = "import"
+	}
+	return fmt.Sprintf("./workload fixtures %s tpcc --checks=%v --warehouses=%d {pgurl:1}",
+		action, checks, warehouses)
+}
+
 func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	crdbNodes := c.Range(1, c.nodes-1)
 	workloadNode := c.Node(c.nodes)
@@ -72,14 +84,6 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	}
 
 	func() {
-		var fixturesCmd string
-		if cloud == "aws" {
-			fixturesCmd = fmt.Sprintf(
-				"./workload fixtures import tpcc --warehouses=%d {pgurl:1}", fixtureWarehouses)
-		} else {
-			fixturesCmd = fmt.Sprintf(
-				"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", fixtureWarehouses)
-		}
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 		if opts.ZFS {
@@ -92,7 +96,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 				t.Status("loading dataset")
 				c.Start(ctx, t, crdbNodes)
 
-				c.Run(ctx, workloadNode, fixturesCmd)
+				c.Run(ctx, workloadNode, tpccFixturesCmd(cloud, fixtureWarehouses, true /* checks */))
 				c.Stop(ctx, crdbNodes)
 
 				c.Run(ctx, crdbNodes, "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
@@ -102,7 +106,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 			c.Start(ctx, t, crdbNodes)
 		} else {
 			c.Start(ctx, t, crdbNodes)
-			c.Run(ctx, workloadNode, fixturesCmd)
+			c.Run(ctx, workloadNode, tpccFixturesCmd(cloud, fixtureWarehouses, true /* checks */))
 		}
 	}()
 	t.Status("waiting")
@@ -442,8 +446,7 @@ func loadTPCCBench(
 
 	// Load the corresponding fixture.
 	t.l.Printf("restoring tpcc fixture\n")
-	cmd := fmt.Sprintf(
-		"./workload fixtures load tpcc --checks=false --warehouses=%d {pgurl:1}", b.LoadWarehouses)
+	cmd := tpccFixturesCmd(cloud, b.LoadWarehouses, false /* checks */)
 	if err := c.RunE(ctx, loadNode, cmd); err != nil {
 		return err
 	}
