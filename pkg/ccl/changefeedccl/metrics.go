@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -33,9 +34,11 @@ func makeMetricsSink(metrics *Metrics, s Sink) *metricsSink {
 	return m
 }
 
-func (s *metricsSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
+func (s *metricsSink) EmitRow(
+	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+) error {
 	start := timeutil.Now()
-	err := s.wrapped.EmitRow(ctx, topic, key, value)
+	err := s.wrapped.EmitRow(ctx, table, key, value, updated)
 	if err == nil {
 		s.metrics.EmittedMessages.Inc(1)
 		s.metrics.EmittedBytes.Inc(int64(len(key) + len(value)))
@@ -44,9 +47,11 @@ func (s *metricsSink) EmitRow(ctx context.Context, topic string, key, value []by
 	return err
 }
 
-func (s *metricsSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
+func (s *metricsSink) EmitResolvedTimestamp(
+	ctx context.Context, payload []byte, resolved hlc.Timestamp,
+) error {
 	start := timeutil.Now()
-	err := s.wrapped.EmitResolvedTimestamp(ctx, payload)
+	err := s.wrapped.EmitResolvedTimestamp(ctx, payload, resolved)
 	if err == nil {
 		s.metrics.EmittedMessages.Inc(1)
 		s.metrics.EmittedBytes.Inc(int64(len(payload)))
@@ -55,9 +60,9 @@ func (s *metricsSink) EmitResolvedTimestamp(ctx context.Context, payload []byte)
 	return err
 }
 
-func (s *metricsSink) Flush(ctx context.Context) error {
+func (s *metricsSink) Flush(ctx context.Context, gc hlc.Timestamp) error {
 	start := timeutil.Now()
-	err := s.wrapped.Flush(ctx)
+	err := s.wrapped.Flush(ctx, gc)
 	if err == nil {
 		s.metrics.Flushes.Inc(1)
 		s.metrics.FlushNanos.Inc(timeutil.Since(start).Nanoseconds())

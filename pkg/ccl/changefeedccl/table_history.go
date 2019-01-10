@@ -268,9 +268,6 @@ func fetchTableDescriptorVersions(
 				if err != nil {
 					return err
 				}
-				// WIP: I think targets currently doesn't contain interleaved
-				// parents if they are not watched by the changefeed, but this
-				// seems wrong.
 				origName, ok := targets[sqlbase.ID(tableID)]
 				if !ok {
 					// Uninteresting table.

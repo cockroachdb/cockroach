@@ -19,13 +19,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
+
+var zeroTS hlc.Timestamp
 
 type asyncProducerMock struct {
 	inputCh     chan *sarama.ProducerMessage
@@ -47,6 +52,10 @@ func (p asyncProducerMock) Close() error {
 func TestKafkaSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	table := func(name string) *sqlbase.TableDescriptor {
+		return &sqlbase.TableDescriptor{Name: name}
+	}
+
 	ctx := context.Background()
 	p := asyncProducerMock{
 		inputCh:     make(chan *sarama.ProducerMessage, 1),
@@ -65,42 +74,44 @@ func TestKafkaSink(t *testing.T) {
 	}()
 
 	// No inflight
-	if err := sink.Flush(ctx); err != nil {
+	if err := sink.Flush(ctx, zeroTS); err != nil {
 		t.Fatal(err)
 	}
 
 	// Timeout
-	if err := sink.EmitRow(ctx, `t`, []byte(`1`), nil); err != nil {
+	if err := sink.EmitRow(ctx, table(`t`), []byte(`1`), nil, zeroTS); err != nil {
 		t.Fatal(err)
 	}
 	m1 := <-p.inputCh
 	for i := 0; i < 2; i++ {
 		timeoutCtx, cancel := context.WithTimeout(ctx, time.Millisecond)
 		defer cancel()
-		if err := sink.Flush(timeoutCtx); !testutils.IsError(err, `context deadline exceeded`) {
+		if err := sink.Flush(timeoutCtx, zeroTS); !testutils.IsError(
+			err, `context deadline exceeded`,
+		) {
 			t.Fatalf(`expected "context deadline exceeded" error got: %+v`, err)
 		}
 	}
 	go func() { p.successesCh <- m1 }()
-	if err := sink.Flush(ctx); err != nil {
+	if err := sink.Flush(ctx, zeroTS); err != nil {
 		t.Fatal(err)
 	}
 
 	// Check no inflight again now that we've sent something
-	if err := sink.Flush(ctx); err != nil {
+	if err := sink.Flush(ctx, zeroTS); err != nil {
 		t.Fatal(err)
 	}
 
 	// Mixed success and error.
-	if err := sink.EmitRow(ctx, `t`, []byte(`2`), nil); err != nil {
+	if err := sink.EmitRow(ctx, table(`t`), []byte(`2`), nil, zeroTS); err != nil {
 		t.Fatal(err)
 	}
 	m2 := <-p.inputCh
-	if err := sink.EmitRow(ctx, `t`, []byte(`3`), nil); err != nil {
+	if err := sink.EmitRow(ctx, table(`t`), []byte(`3`), nil, zeroTS); err != nil {
 		t.Fatal(err)
 	}
 	m3 := <-p.inputCh
-	if err := sink.EmitRow(ctx, `t`, []byte(`4`), nil); err != nil {
+	if err := sink.EmitRow(ctx, table(`t`), []byte(`4`), nil, zeroTS); err != nil {
 		t.Fatal(err)
 	}
 	m4 := <-p.inputCh
@@ -112,23 +123,27 @@ func TestKafkaSink(t *testing.T) {
 		}
 	}()
 	go func() { p.successesCh <- m4 }()
-	if err := sink.Flush(ctx); !testutils.IsError(err, `m3`) {
+	if err := sink.Flush(ctx, zeroTS); !testutils.IsError(err, `m3`) {
 		t.Fatalf(`expected "m3" error got: %+v`, err)
 	}
 
 	// Check simple success again after error
-	if err := sink.EmitRow(ctx, `t`, []byte(`5`), nil); err != nil {
+	if err := sink.EmitRow(ctx, table(`t`), []byte(`5`), nil, zeroTS); err != nil {
 		t.Fatal(err)
 	}
 	m5 := <-p.inputCh
 	go func() { p.successesCh <- m5 }()
-	if err := sink.Flush(ctx); err != nil {
+	if err := sink.Flush(ctx, zeroTS); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestKafkaSinkEscaping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	table := func(name string) *sqlbase.TableDescriptor {
+		return &sqlbase.TableDescriptor{Name: name}
+	}
 
 	ctx := context.Background()
 	p := asyncProducerMock{
@@ -142,7 +157,7 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	}
 	sink.start()
 	defer func() { require.NoError(t, sink.Close()) }()
-	if err := sink.EmitRow(ctx, `☃`, []byte(`k☃`), []byte(`v☃`)); err != nil {
+	if err := sink.EmitRow(ctx, table(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS); err != nil {
 		t.Fatal(err)
 	}
 	m := <-p.inputCh
@@ -153,6 +168,10 @@ func TestKafkaSinkEscaping(t *testing.T) {
 
 func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	table := func(name string) *sqlbase.TableDescriptor {
+		return &sqlbase.TableDescriptor{Name: name}
+	}
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
@@ -173,17 +192,18 @@ func TestSQLSink(t *testing.T) {
 	defer func() { require.NoError(t, sink.Close()) }()
 
 	// Empty
-	require.NoError(t, sink.Flush(ctx))
+	require.NoError(t, sink.Flush(ctx, zeroTS))
 
 	// Undeclared topic
-	require.EqualError(t, sink.EmitRow(ctx, `nope`, nil, nil), `cannot emit to undeclared topic: nope`)
+	require.EqualError(t,
+		sink.EmitRow(ctx, table(`nope`), nil, nil, zeroTS), `cannot emit to undeclared topic: nope`)
 
 	// With one row, nothing flushes until Flush is called.
-	require.NoError(t, sink.EmitRow(ctx, `foo`, []byte(`k1`), []byte(`v0`)))
+	require.NoError(t, sink.EmitRow(ctx, table(`foo`), []byte(`k1`), []byte(`v0`), zeroTS))
 	sqlDB.CheckQueryResults(t, `SELECT key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{},
 	)
-	require.NoError(t, sink.Flush(ctx))
+	require.NoError(t, sink.Flush(ctx, zeroTS))
 	sqlDB.CheckQueryResults(t, `SELECT key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{{`k1`, `v0`}},
 	)
@@ -192,19 +212,20 @@ func TestSQLSink(t *testing.T) {
 	// Verify the implicit flushing
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`0`}})
 	for i := 0; i < sqlSinkRowBatchSize+1; i++ {
-		require.NoError(t, sink.EmitRow(ctx, `foo`, []byte(`k1`), []byte(`v`+strconv.Itoa(i))))
+		require.NoError(t,
+			sink.EmitRow(ctx, table(`foo`), []byte(`k1`), []byte(`v`+strconv.Itoa(i)), zeroTS))
 	}
 	// Should have auto flushed after sqlSinkRowBatchSize
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`3`}})
-	require.NoError(t, sink.Flush(ctx))
+	require.NoError(t, sink.Flush(ctx, zeroTS))
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`4`}})
 	sqlDB.Exec(t, `TRUNCATE sink`)
 
 	// Two tables interleaved in time
-	require.NoError(t, sink.EmitRow(ctx, `foo`, []byte(`kfoo`), []byte(`v0`)))
-	require.NoError(t, sink.EmitRow(ctx, `bar`, []byte(`kbar`), []byte(`v0`)))
-	require.NoError(t, sink.EmitRow(ctx, `foo`, []byte(`kfoo`), []byte(`v1`)))
-	require.NoError(t, sink.Flush(ctx))
+	require.NoError(t, sink.EmitRow(ctx, table(`foo`), []byte(`kfoo`), []byte(`v0`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, table(`bar`), []byte(`kbar`), []byte(`v0`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, table(`foo`), []byte(`kfoo`), []byte(`v1`), zeroTS))
+	require.NoError(t, sink.Flush(ctx, zeroTS))
 	sqlDB.CheckQueryResults(t, `SELECT topic, key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{{`bar`, `kbar`, `v0`}, {`foo`, `kfoo`, `v0`}, {`foo`, `kfoo`, `v1`}},
 	)
@@ -213,12 +234,14 @@ func TestSQLSink(t *testing.T) {
 	// Multiple keys interleaved in time. Use sqlSinkNumPartitions+1 keys to
 	// guarantee that at lease two of them end up in the same partition.
 	for i := 0; i < sqlSinkNumPartitions+1; i++ {
-		require.NoError(t, sink.EmitRow(ctx, `foo`, []byte(`v`+strconv.Itoa(i)), []byte(`v0`)))
+		require.NoError(t,
+			sink.EmitRow(ctx, table(`foo`), []byte(`v`+strconv.Itoa(i)), []byte(`v0`), zeroTS))
 	}
 	for i := 0; i < sqlSinkNumPartitions+1; i++ {
-		require.NoError(t, sink.EmitRow(ctx, `foo`, []byte(`v`+strconv.Itoa(i)), []byte(`v1`)))
+		require.NoError(t,
+			sink.EmitRow(ctx, table(`foo`), []byte(`v`+strconv.Itoa(i)), []byte(`v1`), zeroTS))
 	}
-	require.NoError(t, sink.Flush(ctx))
+	require.NoError(t, sink.Flush(ctx, zeroTS))
 	sqlDB.CheckQueryResults(t, `SELECT partition, key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{
 			{`0`, `v3`, `v0`},
@@ -234,10 +257,10 @@ func TestSQLSink(t *testing.T) {
 	sqlDB.Exec(t, `TRUNCATE sink`)
 
 	// Emit resolved
-	require.NoError(t, sink.EmitResolvedTimestamp(ctx, []byte(`r0`)))
-	require.NoError(t, sink.EmitRow(ctx, `foo`, []byte(`foo0`), []byte(`v0`)))
-	require.NoError(t, sink.EmitResolvedTimestamp(ctx, []byte(`r1`)))
-	require.NoError(t, sink.Flush(ctx))
+	require.NoError(t, sink.EmitResolvedTimestamp(ctx, []byte(`r0`), zeroTS))
+	require.NoError(t, sink.EmitRow(ctx, table(`foo`), []byte(`foo0`), []byte(`v0`), zeroTS))
+	require.NoError(t, sink.EmitResolvedTimestamp(ctx, []byte(`r1`), zeroTS))
+	require.NoError(t, sink.Flush(ctx, zeroTS))
 	sqlDB.CheckQueryResults(t,
 		`SELECT topic, partition, key, value, resolved FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{
@@ -256,4 +279,53 @@ func TestSQLSink(t *testing.T) {
 			{`foo`, `2`, ``, ``, `r1`},
 		},
 	)
+}
+
+// TODO(dan): More extensive cloudStorageSink testing.
+// - multi node cluster
+// - job restarts
+// - ValidationsTest (+ maybe chaos?)
+func TestCloudStorageSink(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	flushCh := make(chan struct{}, 1)
+	defer close(flushCh)
+	knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{
+		AfterSinkFlush: func() error {
+			select {
+			case flushCh <- struct{}{}:
+			default:
+			}
+			return nil
+		},
+	}}}
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase:   "d",
+		ExternalIODir: dir,
+		Knobs:         knobs,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+
+	f := makeCloud(s, db, dir, flushCh)
+
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+	foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved, envelope=value_only`)
+
+	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'b')`)
+
+	assertPayloads(t, foo, []string{
+		`foo: ->{"a": 1}`,
+		`foo: ->{"a": 2, "b": "b"}`,
+	})
 }

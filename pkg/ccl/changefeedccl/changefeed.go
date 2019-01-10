@@ -172,6 +172,7 @@ func kvsToRows(
 func emitEntries(
 	settings *cluster.Settings,
 	details jobspb.ChangefeedDetails,
+	watchedSpans []roachpb.Span,
 	encoder Encoder,
 	sink Sink,
 	inputFn func(context.Context) ([]emitEntry, error),
@@ -182,15 +183,16 @@ func emitEntries(
 	emitRowFn := func(ctx context.Context, row emitRow) error {
 		var keyCopy, valueCopy []byte
 
-		encodedKey, err := encoder.EncodeKey(row.tableDesc, row.datums)
-		if err != nil {
-			return err
+		if envelopeType(details.Opts[optEnvelope]) != optEnvelopeValueOnly {
+			encodedKey, err := encoder.EncodeKey(row.tableDesc, row.datums)
+			if err != nil {
+				return err
+			}
+			scratch, keyCopy = scratch.Copy(encodedKey, 0 /* extraCap */)
 		}
-		scratch, keyCopy = scratch.Copy(encodedKey, 0 /* extraCap */)
 
-		if !row.deleted && envelopeType(details.Opts[optEnvelope]) == optEnvelopeRow {
-			var encodedValue []byte
-			encodedValue, err = encoder.EncodeValue(row.tableDesc, row.datums, row.timestamp)
+		if !row.deleted && envelopeType(details.Opts[optEnvelope]) != optEnvelopeKeyOnly {
+			encodedValue, err := encoder.EncodeValue(row.tableDesc, row.datums, row.timestamp)
 			if err != nil {
 				return err
 			}
@@ -202,7 +204,9 @@ func emitEntries(
 				return err
 			}
 		}
-		if err := sink.EmitRow(ctx, row.tableDesc.Name, keyCopy, valueCopy); err != nil {
+		if err := sink.EmitRow(
+			ctx, row.tableDesc, keyCopy, valueCopy, row.timestamp,
+		); err != nil {
 			return err
 		}
 		if log.V(3) {
@@ -211,8 +215,12 @@ func emitEntries(
 		return nil
 	}
 
+	// This SpanFrontier only tracks the spans being watched on this node.
+	// (There is a different SpanFrontier elsewhere for the entire changefeed.)
+	watchedSF := makeSpanFrontier(watchedSpans...)
+
 	var lastFlush time.Time
-	// TODO(dan): We could keep these in a spanFrontier to eliminate dups.
+	// TODO(dan): We could keep these in `watchedSF` to eliminate dups.
 	var resolvedSpans []jobspb.ResolvedSpan
 
 	return func(ctx context.Context) ([]jobspb.ResolvedSpan, error) {
@@ -238,6 +246,7 @@ func emitEntries(
 				}
 			}
 			if input.resolved != nil {
+				_ = watchedSF.Forward(input.resolved.Span, input.resolved.Timestamp)
 				resolvedSpans = append(resolvedSpans, *input.resolved)
 			}
 		}
@@ -264,7 +273,7 @@ func emitEntries(
 		// otherwise, we could lose buffered messages and violate the
 		// at-least-once guarantee. This is also true for checkpointing the
 		// resolved spans in the job progress.
-		if err := sink.Flush(ctx); err != nil {
+		if err := sink.Flush(ctx, watchedSF.Frontier()); err != nil {
 			return nil, err
 		}
 		lastFlush = timeutil.Now()
@@ -329,7 +338,7 @@ func emitResolvedTimestamp(
 	payload = append([]byte(nil), payload...)
 	// TODO(dan): Emit more fine-grained (table level) resolved
 	// timestamps.
-	if err := sink.EmitResolvedTimestamp(ctx, payload); err != nil {
+	if err := sink.EmitResolvedTimestamp(ctx, payload, resolved); err != nil {
 		return err
 	}
 	if log.V(2) {
