@@ -699,7 +699,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		txnWaitQueue:   txnwait.NewQueue(store),
 	}
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
-	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
+	r.mu.stateLoader = stateloader.Make(rangeID)
 	r.mu.quiescent = true
 	r.mu.zone = config.DefaultZoneConfigRef()
 
@@ -720,7 +720,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	// Add replica pointer value. NB: this was historically useful for debugging
 	// replica GC issues, but is a distraction at the moment.
 	// r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
-	r.raftMu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
+	r.raftMu.stateLoader = stateloader.Make(rangeID)
 	return r
 }
 
@@ -5194,7 +5194,7 @@ func (r *Replica) processRaftCommand(
 			if err := tmpBatch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
 				log.Fatal(ctx, err)
 			}
-			splitPreApply(ctx, r.store.cfg.Settings, tmpBatch, raftCmd.ReplicatedEvalResult.Split.SplitTrigger)
+			splitPreApply(ctx, tmpBatch, raftCmd.ReplicatedEvalResult.Split.SplitTrigger)
 			writeBatch.Data = tmpBatch.Repr()
 			tmpBatch.Close()
 		}
@@ -5640,7 +5640,7 @@ func (r *Replica) applyRaftCommand(
 
 	var assertHS *raftpb.HardState
 	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
-		rsl := stateloader.Make(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
+		rsl := stateloader.Make(rResult.Split.RightDesc.RangeID)
 		oldHS, err := rsl.LoadHardState(ctx, r.store.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to load HardState")
@@ -5653,7 +5653,7 @@ func (r *Replica) applyRaftCommand(
 
 	if assertHS != nil {
 		// Load the HardState that was just committed (if any).
-		rsl := stateloader.Make(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
+		rsl := stateloader.Make(rResult.Split.RightDesc.RangeID)
 		newHS, err := rsl.LoadHardState(ctx, r.store.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to load HardState")
