@@ -174,16 +174,16 @@ func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) 
 }
 
 // allocateStoreIDs increments the store id generator key for the
-// specified node to allocate "inc" new, unique store ids. The
+// specified node to allocate count new, unique store ids. The
 // first ID in a contiguous range is returned on success.
 func allocateStoreIDs(
-	ctx context.Context, nodeID roachpb.NodeID, inc int64, db *client.DB,
+	ctx context.Context, nodeID roachpb.NodeID, count int64, db *client.DB,
 ) (roachpb.StoreID, error) {
-	val, err := client.IncrementValRetryable(ctx, db, keys.StoreIDGenerator, inc)
+	val, err := client.IncrementValRetryable(ctx, db, keys.StoreIDGenerator, count)
 	if err != nil {
-		return 0, errors.Wrapf(err, "unable to allocate %d store IDs for node %d", inc, nodeID)
+		return 0, errors.Wrapf(err, "unable to allocate %d store IDs for node %d", count, nodeID)
 	}
-	return roachpb.StoreID(val - inc + 1), nil
+	return roachpb.StoreID(val - count + 1), nil
 }
 
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
