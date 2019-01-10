@@ -345,7 +345,7 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 }
 
 func isExpectedRelocateError(err error) bool {
-	return testutils.IsError(err, "(descriptor changed|unable to remove replica .* which is not present|unable to add replica .* which is already present|received invalid ChangeReplicasTrigger .* to remove self)")
+	return testutils.IsError(err, "(descriptor changed|unable to remove replica .* which is not present|unable to add replica .* which is already present|received invalid ChangeReplicasTrigger .* to remove self|breaker open)")
 }
 
 func accountDistribution(r *rand.Rand) *rand.Zipf {
