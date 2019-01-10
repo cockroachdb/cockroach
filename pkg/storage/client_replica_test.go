@@ -1224,11 +1224,6 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			t.Fatalf("replica descriptor for key %s not found", rKey)
 		}
 
-		curLease, _, err := s.GetRangeLease(context.TODO(), key)
-		if err != nil {
-			t.Fatal(err)
-		}
-
 		leaseReq := roachpb.RequestLeaseRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key: key,
@@ -1238,10 +1233,30 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0).Clone(),
 				Replica:    replDesc,
 			},
-			PrevLease: curLease,
 		}
-		if _, pErr := client.SendWrapped(context.Background(), s.DB().NonTransactionalSender(), &leaseReq); pErr != nil {
-			t.Error(pErr) // NB: don't fatal or shutdown hangs
+
+		for {
+			curLease, _, err := s.GetRangeLease(context.TODO(), key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			leaseReq.PrevLease = curLease
+
+			_, pErr := client.SendWrapped(context.Background(), s.DB().NonTransactionalSender(), &leaseReq)
+			if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
+				log.Infof(context.Background(), "retrying lease after %s", pErr)
+				continue
+			}
+			if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
+				// Lease rejected? Try again. The extension should work because
+				// extending is idempotent (assuming the PrevLease matches).
+				log.Infof(context.Background(), "retrying lease after %s", pErr)
+				continue
+			}
+			if pErr != nil {
+				t.Errorf("%T %s", pErr.GetDetail(), pErr) // NB: don't fatal or shutdown hangs
+			}
+			break
 		}
 		// Unblock the read.
 		readBlocked <- struct{}{}
