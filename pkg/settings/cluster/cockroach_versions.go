@@ -321,7 +321,7 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than BinaryMinimumSupportedVersion, then the binary will exit with
 	// an error.
-	BinaryMinimumSupportedVersion = VersionByKey(Version2_0)
+	BinaryMinimumSupportedVersion = VersionByKey(Version2_1)
 
 	// BinaryServerVersion is the version of this binary.
 	//
