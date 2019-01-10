@@ -560,3 +560,21 @@ render            ·         ·          (a)              ·
       │           filter    e = 5      ·                ·
       └── scan    ·         ·          (a, d)           ·
 ·                 table     u@idx      ·                ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
+----
+render            ·         ·            (d, e, f, a, b, c)  ·
+ │                render 0  d            ·                   ·
+ │                render 1  e            ·                   ·
+ │                render 2  f            ·                   ·
+ │                render 3  a            ·                   ·
+ │                render 4  b            ·                   ·
+ │                render 5  c            ·                   ·
+ └── lookup-join  ·         ·            (a, b, c, d, e, f)  +a
+      │           type      inner        ·                   ·
+      ├── scan    ·         ·            (a, b, c)           +a
+      │           table     abc@primary  ·                   ·
+      │           spans     ALL          ·                   ·
+      └── scan    ·         ·            (d, e, f)           ·
+·                 table     def@primary  ·                   ·

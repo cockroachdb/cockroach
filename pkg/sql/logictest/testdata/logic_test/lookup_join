@@ -498,3 +498,12 @@ query I
 SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = u.d WHERE t.e = 5
 ----
 1
+
+query IIIIII colnames,partialsort(4)
+SELECT * FROM def JOIN abc ON a=f ORDER BY a
+----
+d     e  f  a  b     c
+2     1  1  1  1     2
+NULL  2  1  1  1     2
+1     1  2  2  NULL  2
+1     1  2  2  1     1
