@@ -95,3 +95,34 @@
 )
 =>
 (GenerateLookupJoins (OpName) $left $scanPrivate (ConcatFilters $on $filters))
+
+# AssociateJoin applies the rule of join associativity. It converts an
+# expression like:
+#   (A JOIN B ON A.y = B.y) JOIN C ON B.x = C.x
+# to the logically equivalent expression:
+#   A JOIN (B JOIN C ON B.x = C.x) ON A.y = B.y
+[AssociateJoin, Explore]
+(InnerJoin
+    (InnerJoin
+        $innerLeft:* & (ShouldReorderJoins)
+        $innerRight:*
+        $innerOn:*
+    )
+    $right:*
+    $on:*
+)
+=>
+(InnerJoin
+    $innerLeft
+    (InnerJoin
+        $innerRight
+        $right
+        (ExtractBoundConditions $on (OutputCols2 $innerRight $right))
+    )
+    (SortFilters
+        (ConcatFilters
+            (ExtractUnboundConditions $on (OutputCols2 $innerRight $right))
+            $innerOn
+        )
+    )
+)
