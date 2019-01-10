@@ -375,7 +375,7 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 		}
 		defer eng.Close()
 
-		rsl := stateloader.Make(nil /* st */, rangeID)
+		rsl := stateloader.Make(rangeID)
 		ms, err := rsl.LoadMVCCStats(ctx, eng)
 		if err != nil {
 			t.Fatal(err)

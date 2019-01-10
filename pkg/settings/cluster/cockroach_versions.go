@@ -39,7 +39,6 @@ const (
 	VersionSplitHardStateBelowRaft
 	VersionStatsBasedRebalancing
 	Version1_1
-	VersionRaftLastIndex
 	VersionMVCCNetworkStats
 	VersionMeta2Splits // unused
 	VersionRPCNetworkStats
@@ -124,11 +123,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     Version1_1,
 		Version: roachpb.Version{Major: 1, Minor: 1},
 	},
-	{
-		// VersionRaftLastIndex is https://github.com/cockroachdb/cockroach/pull/18717.
-		Key:     VersionRaftLastIndex,
-		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 1},
-	},
+	// Removed.
+	// {
+	//   // VersionRaftLastIndex is https://github.com/cockroachdb/cockroach/pull/18717.
+	//   Key:     VersionRaftLastIndex,
+	//   Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 1},
+	// },
 	{
 		// VersionMVCCNetworkStats is https://github.com/cockroachdb/cockroach/pull/18828.
 		Key:     VersionMVCCNetworkStats,

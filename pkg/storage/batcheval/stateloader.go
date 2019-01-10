@@ -18,5 +18,5 @@ import "github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 
 // MakeStateLoader creates a StateLoader for the EvalContext.
 func MakeStateLoader(rec EvalContext) stateloader.StateLoader {
-	return stateloader.Make(rec.ClusterSettings(), rec.GetRangeID())
+	return stateloader.Make(rec.GetRangeID())
 }
