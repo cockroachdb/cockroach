@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -71,6 +72,14 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	}
 
 	func() {
+		var fixturesCmd string
+		if cloud == "aws" {
+			fixturesCmd = fmt.Sprintf(
+				"./workload fixtures import tpcc --warehouses=%d {pgurl:1}", fixtureWarehouses)
+		} else {
+			fixturesCmd = fmt.Sprintf(
+				"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", fixtureWarehouses)
+		}
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 		if opts.ZFS {
@@ -82,9 +91,8 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 
 				t.Status("loading dataset")
 				c.Start(ctx, t, crdbNodes)
-				cmd := fmt.Sprintf(
-					"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", fixtureWarehouses)
-				c.Run(ctx, workloadNode, cmd)
+
+				c.Run(ctx, workloadNode, fixturesCmd)
 				c.Stop(ctx, crdbNodes)
 
 				c.Run(ctx, crdbNodes, "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
@@ -94,9 +102,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 			c.Start(ctx, t, crdbNodes)
 		} else {
 			c.Start(ctx, t, crdbNodes)
-			c.Run(ctx, workloadNode, fmt.Sprintf(
-				`./workload fixtures load tpcc --warehouses=%d {pgurl:1}`, fixtureWarehouses,
-			))
+			c.Run(ctx, workloadNode, fixturesCmd)
 		}
 	}()
 	t.Status("waiting")
@@ -124,70 +130,77 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 }
 
 func registerTPCC(r *registry) {
-	r.Add(testSpec{
-		Name: "tpcc/nodes=3/w=max",
-		// TODO(dan): Instead of MinVersion, adjust the warehouses below to
-		// match our expectation for the max tpcc warehouses that previous
-		// releases will support on this hardware.
-		MinVersion: "v2.1.0",
-		Nodes:      nodes(4, cpu(16)),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			warehouses := 1400
-			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: warehouses,
-				Duration:   120 * time.Minute,
-			})
+	specs := []testSpec{
+		{
+			Name: "tpcc/nodes=3/w=max",
+			// TODO(dan): Instead of MinVersion, adjust the warehouses below to
+			// match our expectation for the max tpcc warehouses that previous
+			// releases will support on this hardware.
+			MinVersion: "v2.1.0",
+			Nodes:      nodes(4, cpu(16)),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				warehouses := 1400
+				runTPCC(ctx, t, c, tpccOptions{
+					Warehouses: warehouses,
+					Duration:   120 * time.Minute,
+				})
+			},
 		},
-	})
-	r.Add(testSpec{
-		Name:  "tpcc-nowait/nodes=3/w=1",
-		Nodes: nodes(4, cpu(16)),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: 1,
-				Duration:   10 * time.Minute,
-				Extra:      "--wait=false",
-			})
+		{
+			Name:  "tpcc-nowait/nodes=3/w=1",
+			Nodes: nodes(4, cpu(16)),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				runTPCC(ctx, t, c, tpccOptions{
+					Warehouses: 1,
+					Duration:   10 * time.Minute,
+					Extra:      "--wait=false",
+				})
+			},
 		},
-	})
-	r.Add(testSpec{
-		Name:  "weekly/tpcc-max",
-		Tags:  []string{`weekly`},
-		Nodes: nodes(4, cpu(16)),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			warehouses := 1400
-			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: warehouses,
-				Duration:   6 * 24 * time.Hour,
-			})
+		{
+			Name:  "weekly/tpcc-max",
+			Tags:  []string{`weekly`},
+			Nodes: nodes(4, cpu(16)),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				warehouses := 1400
+				runTPCC(ctx, t, c, tpccOptions{
+					Warehouses: warehouses,
+					Duration:   6 * 24 * time.Hour,
+				})
+			},
 		},
-	})
+		{
+			Name:  "tpcc/w=100/nodes=3/chaos=true",
+			Nodes: nodes(4),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				duration := 30 * time.Minute
+				runTPCC(ctx, t, c, tpccOptions{
+					Warehouses: 100,
+					Duration:   duration,
+					Extra:      "--wait=false --tolerate-errors",
+					Chaos: func() Chaos {
+						return Chaos{
+							Timer: Periodic{
+								Period:   45 * time.Second,
+								DownTime: 10 * time.Second,
+							},
+							Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.nodes-1)) },
+							Stopper:      time.After(duration),
+							DrainAndQuit: false,
+						}
+					},
+					ZFS: false, // change to true during debugging/development
+				})
+			},
+		},
+	}
 
-	r.Add(testSpec{
-		Name:  "tpcc/w=100/nodes=3/chaos=true",
-		Nodes: nodes(4),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			duration := 30 * time.Minute
-			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: 100,
-				Duration:   duration,
-				Extra:      "--wait=false --tolerate-errors",
-				Chaos: func() Chaos {
-					return Chaos{
-						Timer: Periodic{
-							Period:   45 * time.Second,
-							DownTime: 10 * time.Second,
-						},
-						Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.nodes-1)) },
-						Stopper:      time.After(duration),
-						DrainAndQuit: false,
-					}
-				},
-				ZFS: false, // change to true during debugging/development
-			})
-		},
-	})
-
+	for i := range specs {
+		if cloud == "aws" {
+			setMinVersionForFixturesImport(&specs[i])
+		}
+		r.Add(specs[i])
+	}
 	// Run a few representative tpccbench specs in CI.
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
@@ -206,6 +219,30 @@ func registerTPCC(r *registry) {
 		EstimatedMax:   600,
 	})
 }
+
+// setMinVersionForFixturesImport enforces that the testSpec has a sufficient
+// version to use fixtures import.
+func setMinVersionForFixturesImport(s *testSpec) {
+	if v, err := version.Parse(s.MinVersion); err == nil {
+		if v.AtLeast(minVersionForFixturesImport) {
+			return
+		}
+	}
+	s.MinVersion = minVersionForFixturesImportStr
+}
+
+// AWS runs require `fixtures import` which is not available on all versions.
+// 2.2 is the first version which support this functionality.
+const minVersionForFixturesImportStr = "2.2"
+
+var minVersionForFixturesImport = func() *version.Version {
+	v, err := version.Parse(minVersionForFixturesImportStr)
+	if err != nil {
+		panic(fmt.Errorf("failed to parse %q as a version: %v",
+			minVersionForFixturesImportStr, err))
+	}
+	return v
+}()
 
 // tpccBenchDistribution represents a distribution of nodes in a tpccbench
 // cluster.
@@ -346,14 +383,17 @@ func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
 	nodes := nodes(numNodes, opts...)
-
-	r.Add(testSpec{
+	ts := testSpec{
 		Name:  name,
 		Nodes: nodes,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
-	})
+	}
+	if cloud == "aws" {
+		setMinVersionForFixturesImport(&ts)
+	}
+	r.Add(ts)
 }
 
 // loadTPCCBench loads a TPCC dataset for the specific benchmark spec. The
