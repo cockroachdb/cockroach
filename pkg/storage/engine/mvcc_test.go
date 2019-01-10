@@ -3360,9 +3360,10 @@ func TestMVCCReadWithOldEpoch(t *testing.T) {
 	}
 }
 
-// TestMVCCWriteWithSequence verifies that no retry errors
-// are thrown in the event that earlier sequence numbers are
-// encountered.
+// TestMVCCWriteWithSequence verifies that writes at sequence numbers equal to
+// or below the sequence of an active intent verify that they agree with the
+// intent's sequence history. If so, they become no-ops because writes are meant
+// to be idempotent. If not, they throw errors.
 func TestMVCCWriteWithSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -3371,32 +3372,128 @@ func TestMVCCWriteWithSequence(t *testing.T) {
 	defer engine.Close()
 
 	testCases := []struct {
-		sequence    int32
-		expectedErr string
+		name     string
+		sequence int32
+		value    roachpb.Value
+		expWrite bool
+		expErr   string
 	}{
-		{1, "missing an intent"}, // old sequence
-		{2, ""},                  // same sequence
-		{3, ""},                  // new sequence
+		{"old seq", 1, value1, false, "missing an intent"},
+		{"same seq as overwritten intent", 2, value1, false, ""},
+		{"same seq as overwritten intent, wrong value", 2, value2, false, "has a different value"},
+		{"same seq as active intent", 3, value2, false, ""},
+		{"same seq as active intent, wrong value", 3, value3, false, "has a different value"},
+		{"new seq", 4, value4, true, ""},
 	}
 
-	for i, tc := range testCases {
-		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		// Start with sequence 2.
-		txn := *txn1
-		txn.Sequence = 2
-		if err := MVCCPut(ctx, engine, nil, key, txn.OrigTimestamp, value1, &txn); err != nil {
-			t.Fatal(err)
-		}
-
-		txn.Sequence = tc.sequence
-		err := MVCCPut(ctx, engine, nil, key, txn.OrigTimestamp, value1, &txn)
-		if tc.expectedErr != "" && err != nil {
-			if !testutils.IsError(err, tc.expectedErr) {
-				t.Fatalf("%d: unexpected error: %s", i, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			key := roachpb.Key(fmt.Sprintf("key-%d", tc.sequence))
+			txn := *txn1
+			txn.Sequence = 2
+			if err := MVCCPut(ctx, engine, nil, key, txn.Timestamp, value1, &txn); err != nil {
+				t.Fatal(err)
 			}
-		} else if err != nil {
-			t.Fatalf("%d: unexpected error: %s", i, err)
-		}
+			txn.Sequence = 3
+			if err := MVCCPut(ctx, engine, nil, key, txn.Timestamp, value2, &txn); err != nil {
+				t.Fatal(err)
+			}
+
+			batch := engine.NewBatch()
+			defer batch.Close()
+
+			txn.Sequence = tc.sequence
+			err := MVCCPut(ctx, batch, nil, key, txn.Timestamp, tc.value, &txn)
+			if tc.expErr != "" && err != nil {
+				if !testutils.IsError(err, tc.expErr) {
+					t.Fatalf("unexpected error: %s", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			write := !batch.Empty()
+			if tc.expWrite {
+				if !write {
+					t.Fatalf("expected write to batch")
+				}
+			} else {
+				if write {
+					t.Fatalf("unexpected write to batch")
+				}
+			}
+		})
+	}
+}
+
+// TestMVCCWriteWithSequence verifies that delete range operations at sequence
+// numbers equal to or below the sequence of a previous delete range operation
+// verify that they agree with the sequence history of each intent left by the
+// delete range. If so, they become no-ops because writes are meant to be
+// idempotent. If not, they throw errors.
+func TestMVCCDeleteRangeWithSequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	testCases := []struct {
+		name     string
+		sequence int32
+		expErr   string
+	}{
+		{"old seq", 5, "missing an intent"},
+		{"same seq", 6, ""},
+		{"new seq", 7, ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			prefix := roachpb.Key(fmt.Sprintf("key-%d", tc.sequence))
+			txn := *txn1
+			for i := int32(0); i < 3; i++ {
+				key := append(prefix, []byte(strconv.Itoa(int(i)))...)
+				txn.Sequence = 2 + i
+				if err := MVCCPut(ctx, engine, nil, key, txn.Timestamp, value1, &txn); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Perform the initial DeleteRange.
+			const origSeq = 6
+			txn.Sequence = origSeq
+			origDeleted, _, origNum, err := MVCCDeleteRange(
+				ctx, engine, nil, prefix, prefix.PrefixEnd(), math.MaxInt64, txn.Timestamp, &txn, true,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			txn.Sequence = tc.sequence
+			deleted, _, num, err := MVCCDeleteRange(
+				ctx, engine, nil, prefix, prefix.PrefixEnd(), math.MaxInt64, txn.Timestamp, &txn, true,
+			)
+			if tc.expErr != "" && err != nil {
+				if !testutils.IsError(err, tc.expErr) {
+					t.Fatalf("unexpected error: %s", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			// If at the same sequence as the initial DeleteRange.
+			if tc.sequence == origSeq {
+				if !reflect.DeepEqual(origDeleted, deleted) {
+					t.Fatalf("deleted keys did not match original execution: %+v vs. %+v",
+						origDeleted, deleted)
+				}
+				if origNum != num {
+					t.Fatalf("number of keys deleted did not match original execution: %d vs. %d",
+						origNum, num)
+				}
+			}
+		})
 	}
 }
 
