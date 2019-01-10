@@ -91,20 +91,20 @@ ignored = [
   source = "https://github.com/cockroachdb/gogoproto"
   branch = "v1.2.0-with-clone-fix"
 
-# github.com/docker/docker depends on a few functions not included in the
-# latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
-#
-# https://github.com/docker/distribution/commit/429c75f
-# https://github.com/docker/distribution/commit/2caeb61
-[[override]]
-  name = "github.com/docker/distribution"
-  branch = "master"
+# Pin to v1.1.0 because of https://github.com/kisielk/errcheck/issues/162.
+[[constraint]]
+  name = "github.com/kisielk/errcheck"
+  version = "=v1.1.0"
 
 # github.com/openzipkin-contrib/zipkin-go-opentracing requires a newer
 # version of thrift than is currently present in a release.
 [[override]]
   name = "github.com/apache/thrift"
   revision = "2b7365c54f823013cc6a4760798051b22743c103"
+
+[[override]]
+  name = "google.golang.org/genproto"
+  revision = "a1fde740824669f161e97af4237fb80b8734444d"
 
 [prune]
   go-tests = true
