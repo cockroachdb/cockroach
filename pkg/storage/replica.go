@@ -5714,6 +5714,7 @@ func (r *Replica) evaluateWriteBatch(
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
 	if isOnePhaseCommit(ba, r.store.TestingKnobs()) {
+		_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
 		arg, _ := ba.GetArg(roachpb.EndTransaction)
 		etArg := arg.(*roachpb.EndTransactionRequest)
 
@@ -5722,12 +5723,16 @@ func (r *Replica) evaluateWriteBatch(
 		strippedBa := ba
 		strippedBa.Timestamp = strippedBa.Txn.Timestamp
 		strippedBa.Txn = nil
-		strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
+		if hasBegin {
+			strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
+		} else {
+			strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
+		}
 
 		// If there were no refreshable spans earlier in the txn
 		// (e.g. earlier gets or scans), then the batch can be retried
 		// locally in the event of write too old errors.
-		retryLocally := etArg.NoRefreshSpans
+		retryLocally := etArg.NoRefreshSpans && !ba.Txn.OrigTimestampWasObserved
 
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		rec := NewReplicaEvalContext(r, spans)
@@ -5762,9 +5767,14 @@ func (r *Replica) evaluateWriteBatch(
 
 			br.Txn = &clonedTxn
 			// Add placeholder responses for begin & end transaction requests.
-			resps := make([]roachpb.ResponseUnion, len(br.Responses)+2)
-			resps[0].MustSetInner(&roachpb.BeginTransactionResponse{})
-			copy(resps[1:], br.Responses)
+			var resps []roachpb.ResponseUnion
+			if hasBegin {
+				resps = make([]roachpb.ResponseUnion, len(br.Responses)+2)
+				resps[0].MustSetInner(&roachpb.BeginTransactionResponse{})
+				copy(resps[1:], br.Responses)
+			} else {
+				resps = append(br.Responses, roachpb.ResponseUnion{})
+			}
 			resps[len(resps)-1].MustSetInner(&roachpb.EndTransactionResponse{OnePhaseCommit: true})
 			br.Responses = resps
 			return batch, ms, br, res, nil
@@ -5884,13 +5894,10 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	if ba.Txn == nil {
 		return false
 	}
-	if _, hasBegin := ba.GetArg(roachpb.BeginTransaction); !hasBegin {
+	if !ba.IsCompleteTransaction() {
 		return false
 	}
-	arg, hasEnd := ba.GetArg(roachpb.EndTransaction)
-	if !hasEnd {
-		return false
-	}
+	arg, _ := ba.GetArg(roachpb.EndTransaction)
 	etArg := arg.(*roachpb.EndTransactionRequest)
 	if batcheval.IsEndTransactionExceedingDeadline(ba.Txn.Timestamp, *etArg) {
 		return false
