@@ -277,7 +277,7 @@ func (s *statusServer) Allocator(
 				func(desc roachpb.RangeDescriptor) (bool, error) {
 					rep, err := store.GetReplica(desc.RangeID)
 					if err != nil {
-						return true, err
+						return true, nil // continue
 					}
 					if !rep.OwnsValidLease(store.Clock().Now()) {
 						return false, nil
@@ -1239,7 +1239,7 @@ func (s *statusServer) Ranges(
 				func(desc roachpb.RangeDescriptor) (bool, error) {
 					rep, err := store.GetReplica(desc.RangeID)
 					if err != nil {
-						return true, err
+						return true, nil // continue
 					}
 					output.Ranges = append(output.Ranges,
 						constructRangeInfo(
