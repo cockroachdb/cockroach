@@ -17,10 +17,12 @@ package sql
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,68 +31,138 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func TestQueryCache(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+type queryCacheTestHelper struct {
+	srv  serverutils.TestServerInterface
+	godb *gosql.DB
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	conns   []*gosql.Conn
+	runners []*sqlutils.SQLRunner
+}
 
-	conns := make([]*gosql.Conn, 4)
-	runners := make([]*sqlutils.SQLRunner, len(conns))
-	for i := range conns {
+func makeQueryCacheTestHelper(t *testing.T, numConns int) *queryCacheTestHelper {
+	h := &queryCacheTestHelper{}
+	h.srv, h.godb, _ = serverutils.StartServer(t, base.TestServerArgs{})
+
+	h.conns = make([]*gosql.Conn, numConns)
+	h.runners = make([]*sqlutils.SQLRunner, numConns)
+	for i := range h.conns {
 		var err error
-		conns[i], err = db.Conn(context.Background())
+		h.conns[i], err = h.godb.Conn(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
-		runners[i] = sqlutils.MakeSQLRunner(conns[i])
+		h.runners[i] = sqlutils.MakeSQLRunner(h.conns[i])
 	}
-	r0, r1 := runners[0], runners[1]
-
+	r0 := h.runners[0]
+	r0.Exec(t, "DROP DATABASE IF EXISTS db1")
+	r0.Exec(t, "DROP DATABASE IF EXISTS db2")
+	r0.Exec(t, "CREATE DATABASE db1")
+	r0.Exec(t, "CREATE TABLE db1.t (a INT, b INT)")
+	r0.Exec(t, "INSERT INTO db1.t VALUES (1, 1)")
+	for _, r := range h.runners {
+		r.Exec(t, "SET DATABASE = db1")
+	}
 	r0.Exec(t, "SET CLUSTER SETTING sql.query_cache.enabled = true")
+	return h
+}
 
-	init := func(t *testing.T) {
-		r0.Exec(t, "DROP DATABASE IF EXISTS db1")
-		r0.Exec(t, "DROP DATABASE IF EXISTS db2")
-		r0.Exec(t, "CREATE DATABASE db1")
-		r0.Exec(t, "CREATE TABLE db1.t (a INT, b INT)")
-		r0.Exec(t, "INSERT INTO db1.t VALUES (1, 1)")
-		for _, r := range runners {
-			r.Exec(t, "SET DATABASE = db1")
-		}
-	}
+func (h *queryCacheTestHelper) Stop() {
+	h.srv.Stopper().Stop(context.TODO())
+}
 
-	hitsDelta, missesDelta := 0, 0
-	getStats := func() (numHits, numMisses int) {
-		return int(s.MustGetSQLCounter(MetaSQLOptPlanCacheHits.Name)) - hitsDelta,
-			int(s.MustGetSQLCounter(MetaSQLOptPlanCacheMisses.Name)) - missesDelta
-	}
-	resetStats := func() {
-		h, m := getStats()
-		hitsDelta += h
-		missesDelta += m
-	}
+func (h *queryCacheTestHelper) GetStats() (numHits, numMisses int) {
+	return int(h.srv.MustGetSQLCounter(MetaSQLOptPlanCacheHits.Name)),
+		int(h.srv.MustGetSQLCounter(MetaSQLOptPlanCacheMisses.Name))
+}
+
+func (h *queryCacheTestHelper) AssertStats(t *testing.T, expHits, expMisses int) {
+	t.Helper()
+	hits, misses := h.GetStats()
+	assert.Equal(t, expHits, hits, "hits")
+	assert.Equal(t, expMisses, misses, "misses")
+}
+
+func TestQueryCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 
 	t.Run("simple", func(t *testing.T) {
-		init(t)
-		resetStats()
+		const numConns = 4
+		h := makeQueryCacheTestHelper(t, numConns)
+		defer h.Stop()
+
 		// Alternate between the connections.
 		for i := 0; i < 5; i++ {
-			for _, r := range runners {
+			for _, r := range h.runners {
 				r.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1", "1"}})
 			}
 		}
-		h, m := getStats()
 		// We should have 1 miss and the rest hits.
-		assert.Equal(t, 1, m)
-		assert.Equal(t, 5*len(runners)-1, h)
+		h.AssertStats(t, 5*numConns-1, 1)
+	})
+
+	t.Run("simple-prepare", func(t *testing.T) {
+		const numConns = 4
+		h := makeQueryCacheTestHelper(t, numConns)
+		defer h.Stop()
+
+		// Alternate between the connections.
+		for i := 0; i < 5; i++ {
+			for _, r := range h.runners {
+				r.Exec(t, fmt.Sprintf("PREPARE a%d AS SELECT * FROM t", i))
+			}
+		}
+		// We should have 1 miss and the rest hits.
+		h.AssertStats(t, 5*numConns-1, 1)
+
+		for i := 0; i < 5; i++ {
+			for _, r := range h.runners {
+				r.CheckQueryResults(
+					t,
+					fmt.Sprintf("EXECUTE a%d", i),
+					[][]string{{"1", "1"}},
+				)
+			}
+		}
+	})
+
+	t.Run("simple-prepare-with-args", func(t *testing.T) {
+		const numConns = 4
+		h := makeQueryCacheTestHelper(t, numConns)
+		defer h.Stop()
+
+		// Alternate between the connections.
+		for i := 0; i < 5; i++ {
+			for _, r := range h.runners {
+				r.Exec(t, fmt.Sprintf("PREPARE a%d AS SELECT a + $1, b + $2 FROM t", i))
+			}
+		}
+		// We should have 1 miss and the rest hits.
+		h.AssertStats(t, 5*numConns-1, 1)
+
+		for i := 0; i < 5; i++ {
+			for _, r := range h.runners {
+				r.CheckQueryResults(
+					t,
+					fmt.Sprintf("EXECUTE a%d (10, 100)", i),
+					[][]string{{"11", "101"}},
+				)
+				r.CheckQueryResults(
+					t,
+					fmt.Sprintf("EXECUTE a%d (20, 200)", i),
+					[][]string{{"21", "201"}},
+				)
+			}
+		}
 	})
 
 	t.Run("parallel", func(t *testing.T) {
-		init(t)
+		const numConns = 4
+		h := makeQueryCacheTestHelper(t, numConns)
+		defer h.Stop()
+
 		var group errgroup.Group
-		for connIdx := range conns {
-			c := conns[connIdx]
+		for connIdx := range h.conns {
+			c := h.conns[connIdx]
 			group.Go(func() error {
 				for j := 0; j < 10; j++ {
 					rows, err := c.QueryContext(context.Background(), "SELECT * FROM t")
@@ -113,22 +185,62 @@ func TestQueryCache(t *testing.T) {
 		}
 	})
 
+	t.Run("parallel-prepare", func(t *testing.T) {
+		const numConns = 4
+		h := makeQueryCacheTestHelper(t, numConns)
+		defer h.Stop()
+
+		var group errgroup.Group
+		for connIdx := range h.conns {
+			c := h.conns[connIdx]
+			group.Go(func() error {
+				ctx := context.Background()
+				for j := 0; j < 10; j++ {
+					if _, err := c.ExecContext(
+						ctx, fmt.Sprintf("PREPARE a%d AS SELECT a + $1, b + $2 FROM t", j),
+					); err != nil {
+						return err
+					}
+					rows, err := c.QueryContext(ctx, fmt.Sprintf("EXECUTE a%d (10, 100)", j))
+					if err != nil {
+						return err
+					}
+					res, err := sqlutils.RowsToStrMatrix(rows)
+					if err != nil {
+						return err
+					}
+					if !reflect.DeepEqual(res, [][]string{{"11", "101"}}) {
+						return errors.Errorf("incorrect results %v", res)
+					}
+				}
+				return nil
+			})
+		}
+		if err := group.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	// Test connections running the same statement but under different databases.
 	t.Run("multidb", func(t *testing.T) {
-		init(t)
+		const numConns = 4
+		h := makeQueryCacheTestHelper(t, numConns)
+		defer h.Stop()
+
+		r0 := h.runners[0]
 		r0.Exec(t, "CREATE DATABASE db2")
 		r0.Exec(t, "CREATE TABLE db2.t (a INT)")
 		r0.Exec(t, "INSERT INTO db2.t VALUES (2)")
-		for i := range runners {
+		for i := range h.runners {
 			if i%2 == 1 {
-				runners[i].Exec(t, "SET DATABASE = db2")
+				h.runners[i].Exec(t, "SET DATABASE = db2")
 			}
 		}
 		// Alternate between the connections.
 		for i := 0; i < 5; i++ {
-			for i, r := range runners {
+			for j, r := range h.runners {
 				var res [][]string
-				if i%2 == 0 {
+				if j%2 == 0 {
 					res = [][]string{{"1", "1"}}
 				} else {
 					res = [][]string{{"2"}}
@@ -138,26 +250,96 @@ func TestQueryCache(t *testing.T) {
 		}
 	})
 
+	t.Run("multidb-prepare", func(t *testing.T) {
+		const numConns = 4
+		h := makeQueryCacheTestHelper(t, numConns)
+		defer h.Stop()
+
+		r0 := h.runners[0]
+		r0.Exec(t, "CREATE DATABASE db2")
+		r0.Exec(t, "CREATE TABLE db2.t (a INT)")
+		r0.Exec(t, "INSERT INTO db2.t VALUES (2)")
+		for i := range h.runners {
+			if i%2 == 1 {
+				h.runners[i].Exec(t, "SET DATABASE = db2")
+			}
+		}
+		// Alternate between the connections.
+		for i := 0; i < 5; i++ {
+			for j, r := range h.runners {
+				r.Exec(t, fmt.Sprintf("PREPARE a%d AS SELECT a + $1 FROM t", i))
+				var res [][]string
+				if j%2 == 0 {
+					res = [][]string{{"11"}}
+				} else {
+					res = [][]string{{"12"}}
+				}
+				r.CheckQueryResults(t, fmt.Sprintf("EXECUTE a%d (10)", i), res)
+			}
+		}
+	})
+
 	// Test that a schema change triggers cache invalidation.
 	t.Run("schemachange", func(t *testing.T) {
-		init(t)
+		h := makeQueryCacheTestHelper(t, 2 /* numConns */)
+		defer h.Stop()
+		r0, r1 := h.runners[0], h.runners[1]
 		r0.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1", "1"}})
 		r1.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1", "1"}})
 		r0.Exec(t, "ALTER TABLE t ADD COLUMN c INT AS (a+b) STORED")
 		r1.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1", "1", "2"}})
 	})
 
+	// Test that a schema change triggers cache invalidation.
+	t.Run("schemachange-prepare", func(t *testing.T) {
+		h := makeQueryCacheTestHelper(t, 2 /* numConns */)
+		defer h.Stop()
+		r0, r1 := h.runners[0], h.runners[1]
+		r0.Exec(t, "PREPARE a AS SELECT * FROM t")
+		r0.CheckQueryResults(t, "EXECUTE a", [][]string{{"1", "1"}})
+		r0.CheckQueryResults(t, "EXECUTE a", [][]string{{"1", "1"}})
+		r0.Exec(t, "ALTER TABLE t ADD COLUMN c INT AS (a+b) STORED")
+		r1.Exec(t, "PREPARE b AS SELECT * FROM t")
+		r1.CheckQueryResults(t, "EXECUTE b", [][]string{{"1", "1", "2"}})
+	})
+
 	// Test a schema change where the other connections are running the query in
 	// parallel.
 	t.Run("schemachange-parallel", func(t *testing.T) {
-		init(t)
+		const numConns = 4
+
+		h := makeQueryCacheTestHelper(t, numConns)
+		defer h.Stop()
 		var group errgroup.Group
-		for connIdx := 1; connIdx < len(conns); connIdx++ {
-			c := conns[connIdx]
+		for connIdx := 1; connIdx < numConns; connIdx++ {
+			c := h.conns[connIdx]
+			connIdx := connIdx
 			group.Go(func() error {
 				sawChanged := false
+				prepIdx := 0
 				doQuery := func() error {
-					rows, err := c.QueryContext(context.Background(), "SELECT * FROM t")
+					// Some threads do prepare, others execute directly.
+					var rows *gosql.Rows
+					var err error
+					ctx := context.Background()
+					if connIdx%2 == 1 {
+						rows, err = c.QueryContext(ctx, "SELECT * FROM t")
+					} else {
+						prepIdx++
+						_, err = c.ExecContext(ctx, fmt.Sprintf("PREPARE a%d AS SELECT * FROM t", prepIdx))
+						if err == nil {
+							rows, err = c.QueryContext(ctx, fmt.Sprintf("EXECUTE a%d", prepIdx))
+							if err != nil {
+								// If the schema change happens in-between the PREPARE and
+								// EXECUTE, we will get an error. Tolerate this error if we
+								// haven't seen updated results already.
+								if !sawChanged && testutils.IsError(err, "cached plan must not change result type") {
+									t.Logf("thread %d hit race", connIdx)
+									return nil
+								}
+							}
+						}
+					}
 					if err != nil {
 						return err
 					}
@@ -183,6 +365,7 @@ func TestQueryCache(t *testing.T) {
 						return err
 					}
 				}
+				t.Logf("thread %d saw changed results", connIdx)
 
 				// Now run the query a bunch more times to make sure we keep reading the
 				// updated version.
@@ -194,6 +377,79 @@ func TestQueryCache(t *testing.T) {
 				return nil
 			})
 		}
+		r0 := h.runners[0]
 		r0.Exec(t, "ALTER TABLE t ADD COLUMN c INT AS (a+b) STORED")
+		if err := group.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Verify the case where a PREPARE encounters a query cache entry that was
+	// created by a direct execution (and hence has no PrepareMetadata).
+	t.Run("exec-and-prepare", func(t *testing.T) {
+		h := makeQueryCacheTestHelper(t, 1 /* numConns */)
+		defer h.Stop()
+
+		r0 := h.runners[0]
+		r0.Exec(t, "SELECT * FROM t") // Should miss the cache.
+		h.AssertStats(t, 0 /* hits */, 1 /* misses */)
+
+		r0.Exec(t, "SELECT * FROM t") // Should hit the cache.
+		h.AssertStats(t, 1 /* hits */, 1 /* misses */)
+
+		r0.Exec(t, "PREPARE x AS SELECT * FROM t") // Should miss the cache.
+		h.AssertStats(t, 1 /* hits */, 2 /* misses */)
+
+		r0.Exec(t, "PREPARE y AS SELECT * FROM t") // Should hit the cache.
+		h.AssertStats(t, 2 /* hits */, 2 /* misses */)
+
+		r0.CheckQueryResults(t, "EXECUTE x", [][]string{{"1", "1"}})
+		r0.CheckQueryResults(t, "EXECUTE y", [][]string{{"1", "1"}})
+	})
+
+	// Verify the case where we PREPARE the same statement with different hints.
+	t.Run("prepare-hints", func(t *testing.T) {
+		h := makeQueryCacheTestHelper(t, 1 /* numConns */)
+		defer h.Stop()
+
+		r0 := h.runners[0]
+		r0.Exec(t, "PREPARE a1 AS SELECT pg_typeof(1 + $1)") // Should miss the cache.
+		h.AssertStats(t, 0 /* hits */, 1 /* misses */)
+
+		r0.Exec(t, "PREPARE a2 AS SELECT pg_typeof(1 + $1)") // Should hit the cache.
+		h.AssertStats(t, 1 /* hits */, 1 /* misses */)
+
+		r0.Exec(t, "PREPARE b1 (float) AS SELECT pg_typeof(1 + $1)") // Should miss the cache.
+		h.AssertStats(t, 1 /* hits */, 2 /* misses */)
+
+		r0.Exec(t, "PREPARE b2 (float) AS SELECT pg_typeof(1 + $1)") // Should hit the cache.
+		h.AssertStats(t, 2 /* hits */, 2 /* misses */)
+
+		r0.Exec(t, "PREPARE c1 (decimal) AS SELECT pg_typeof(1 + $1)") // Should miss the cache.
+		h.AssertStats(t, 2 /* hits */, 3 /* misses */)
+
+		r0.Exec(t, "PREPARE c2 (decimal) AS SELECT pg_typeof(1 + $1)") // Should hit the cache.
+		h.AssertStats(t, 3 /* hits */, 3 /* misses */)
+
+		r0.Exec(t, "PREPARE a3 AS SELECT pg_typeof(1 + $1)") // Should miss the cache.
+		h.AssertStats(t, 3 /* hits */, 4 /* misses */)
+
+		r0.Exec(t, "PREPARE b3 (float) AS SELECT pg_typeof(1 + $1)") // Should miss the cache.
+		h.AssertStats(t, 3 /* hits */, 5 /* misses */)
+
+		r0.Exec(t, "PREPARE c3 (decimal) AS SELECT pg_typeof(1 + $1)") // Should miss the cache.
+		h.AssertStats(t, 3 /* hits */, 6 /* misses */)
+
+		r0.CheckQueryResults(t, "EXECUTE a1 (1)", [][]string{{"int"}})
+		r0.CheckQueryResults(t, "EXECUTE a2 (1)", [][]string{{"int"}})
+		r0.CheckQueryResults(t, "EXECUTE a3 (1)", [][]string{{"int"}})
+
+		r0.CheckQueryResults(t, "EXECUTE b1 (1)", [][]string{{"float"}})
+		r0.CheckQueryResults(t, "EXECUTE b2 (1)", [][]string{{"float"}})
+		r0.CheckQueryResults(t, "EXECUTE b3 (1)", [][]string{{"float"}})
+
+		r0.CheckQueryResults(t, "EXECUTE c1 (1)", [][]string{{"decimal"}})
+		r0.CheckQueryResults(t, "EXECUTE c2 (1)", [][]string{{"decimal"}})
+		r0.CheckQueryResults(t, "EXECUTE c3 (1)", [][]string{{"decimal"}})
 	})
 }

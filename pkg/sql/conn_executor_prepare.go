@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
@@ -145,8 +146,10 @@ func (ex *connExecutor) prepare(
 	}
 
 	prepared := &PreparedStatement{
-		PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
-			TypeHints: placeholderHints,
+		PrepareMetadata: sqlbase.PrepareMetadata{
+			PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
+				TypeHints: placeholderHints,
+			},
 		},
 		memAcc: ex.sessionMon.MakeBoundAccount(),
 	}
@@ -178,7 +181,8 @@ func (ex *connExecutor) prepare(
 
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTimestamp */)
-	if err := ex.populatePrepared(ctx, txn, stmt, placeholderHints, p); err != nil {
+	flags, err := ex.populatePrepared(ctx, txn, stmt, placeholderHints, p)
+	if err != nil {
 		txn.CleanupOnError(ctx, err)
 		return nil, err
 	}
@@ -190,6 +194,7 @@ func (ex *connExecutor) prepare(
 	if err := prepared.memAcc.Grow(ctx, prepared.MemoryEstimate()); err != nil {
 		return nil, err
 	}
+	ex.updateOptCounters(flags)
 	return prepared, nil
 }
 
@@ -201,7 +206,7 @@ func (ex *connExecutor) populatePrepared(
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
 	p *planner,
-) error {
+) (planFlags, error) {
 	prepared := stmt.Prepared
 	p.semaCtx.Placeholders.Reset(placeholderHints)
 	p.extendedEvalCtx.PrepareOnly = true
@@ -214,7 +219,7 @@ func (ex *connExecutor) populatePrepared(
 
 	protoTS, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now() /* max */)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if protoTS != nil {
 		p.semaCtx.AsOfTimestamp = protoTS
@@ -229,20 +234,22 @@ func (ex *connExecutor) populatePrepared(
 	// As of right now, the optimizer only works on SELECT statements and will
 	// fallback for all others, so this should be safe for the foreseeable
 	// future.
+	var flags planFlags
 	var isCorrelated bool
 	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
 		log.VEvent(ctx, 2, "preparing using optimizer")
 		var err error
-		isCorrelated, err = p.prepareUsingOptimizer(ctx, stmt)
+		flags, isCorrelated, err = p.prepareUsingOptimizer(ctx, stmt)
 		if err == nil {
 			log.VEvent(ctx, 2, "optimizer prepare succeeded")
 			// stmt.Prepared fields have been populated.
-			return nil
+			return flags, nil
 		}
 		log.VEventf(ctx, 1, "optimizer prepare failed: %v", err)
 		if !canFallbackFromOpt(err, optMode, stmt) {
-			return err
+			return 0, err
 		}
+		flags = planFlagOptFallback
 		log.VEvent(ctx, 1, "prepare falls back on heuristic planner")
 	} else {
 		log.VEvent(ctx, 2, "optimizer disabled (prepare)")
@@ -253,23 +260,23 @@ func (ex *connExecutor) populatePrepared(
 	// plan.
 	if err := p.prepare(ctx, stmt.AST); err != nil {
 		enhanceErrWithCorrelation(err, isCorrelated)
-		return err
+		return 0, err
 	}
 
 	if p.curPlan.plan == nil {
 		// Statement with no result columns and no support for placeholders.
-		return nil
+		return flags, nil
 	}
 	defer p.curPlan.close(ctx)
 
 	prepared.Columns = p.curPlan.columns()
 	for _, c := range prepared.Columns {
 		if err := checkResultType(c.Typ); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	prepared.Types = p.semaCtx.Placeholders.Types
-	return nil
+	return flags, nil
 }
 
 func (ex *connExecutor) execBind(

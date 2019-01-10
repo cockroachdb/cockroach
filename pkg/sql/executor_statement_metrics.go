@@ -128,24 +128,14 @@ func (ex *connExecutor) recordStatementSummary(
 	execOverhead := svcLat - processingLat
 
 	if automaticRetryCount == 0 {
+		ex.updateOptCounters(planFlags)
 		m := &ex.metrics.EngineMetrics
-		if planFlags.IsSet(planFlagOptUsed) {
-			m.SQLOptCount.Inc(1)
-		} else if planFlags.IsSet(planFlagOptFallback) {
-			m.SQLOptFallbackCount.Inc(1)
-		}
-
 		if planFlags.IsSet(planFlagDistributed) {
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)
 			}
 			m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
 			m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
-		}
-		if planFlags.IsSet(planFlagOptCacheHit) {
-			m.SQLOptPlanCacheHits.Inc(1)
-		} else if planFlags.IsSet(planFlagOptCacheMiss) {
-			m.SQLOptPlanCacheMisses.Inc(1)
 		}
 		m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
 		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
@@ -177,5 +167,20 @@ func (ex *connExecutor) recordStatementSummary(
 			execOverhead*1e6, 100*execOverhead/svcLat,
 			sessionAge,
 		)
+	}
+}
+
+func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
+	m := &ex.metrics.EngineMetrics
+	if planFlags.IsSet(planFlagOptUsed) {
+		m.SQLOptCount.Inc(1)
+	} else if planFlags.IsSet(planFlagOptFallback) {
+		m.SQLOptFallbackCount.Inc(1)
+	}
+
+	if planFlags.IsSet(planFlagOptCacheHit) {
+		m.SQLOptPlanCacheHits.Inc(1)
+	} else if planFlags.IsSet(planFlagOptCacheMiss) {
+		m.SQLOptPlanCacheMisses.Inc(1)
 	}
 }

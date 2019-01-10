@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/lib/pq/oid"
 )
 
 // PreparedStatement is a SQL statement that has been parsed and the types
@@ -34,24 +33,12 @@ type PreparedStatement struct {
 	// the future to present a contextual error message based on location
 	// information.
 	Str string
-	// AnonymizedStr is the anonymized statement string suitable for recording
-	// in statement statistics.
-	AnonymizedStr string
-	// Statement is the parsed, prepared SQL statement. It may be nil if the
-	// prepared statement is empty.
-	Statement tree.Statement
 	// Memo is the memoized data structure constructed by the cost-based optimizer
 	// during prepare of a SQL statement. It can significantly speed up execution
 	// if it is used by the optimizer as a starting point.
 	Memo *memo.Memo
 
-	tree.PlaceholderTypesInfo
-
-	Columns sqlbase.ResultColumns
-
-	// InTypes represents the inferred types for placeholder, using protocol
-	// identifiers. Used for reporting on Describe.
-	InTypes []oid.Oid
+	sqlbase.PrepareMetadata
 
 	memAcc mon.BoundAccount
 }
@@ -66,7 +53,7 @@ func (p *PreparedStatement) MemoryEstimate() int64 {
 	if p.Memo != nil {
 		size += p.Memo.MemoryEstimate()
 	}
-	// TODO(radu): account for more fields.
+	size += p.PrepareMetadata.MemoryEstimate()
 	return size
 }
 
