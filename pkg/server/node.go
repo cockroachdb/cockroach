@@ -441,13 +441,9 @@ func (n *Node) start(
 	// Start the closed timestamp subsystem.
 	n.storeCfg.ClosedTimestamp.Start(n.Descriptor.NodeID)
 
-	// Initialize the stores we're going to start.
-	stores, err := n.initStores(ctx, bootstrappedEngines, n.stopper)
-	if err != nil {
-		return err
-	}
-
-	for _, s := range stores {
+	// Create stores from the engines that were already bootstrapped.
+	for _, e := range bootstrappedEngines {
+		s := storage.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
 		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
 		}
@@ -467,7 +463,7 @@ func (n *Node) start(
 	if err := n.validateStores(ctx); err != nil {
 		return err
 	}
-	log.Event(ctx, "validated stores")
+	log.VEventf(ctx, 2, "validated stores")
 
 	// Compute the time this node was last up; this is done by reading the
 	// "last up time" from every store and choosing the most recent timestamp.
@@ -572,25 +568,6 @@ func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error 
 	})
 }
 
-// initStores initializes the Stores map from ID to Store. Stores are
-// added to the local sender if already bootstrapped. A bootstrapped
-// Store has a valid ident with cluster, node and Store IDs set. If
-// the Store doesn't yet have a valid ident, it's added to the
-// bootstraps list for initialization once the cluster and node IDs
-// have been determined.
-func (n *Node) initStores(
-	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper,
-) ([]*storage.Store, error) {
-	var stores []*storage.Store
-	for _, e := range engines {
-		s := storage.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
-		log.Eventf(ctx, "created store for engine: %s", e)
-
-		stores = append(stores, s)
-	}
-	return stores, nil
-}
-
 func (n *Node) addStore(store *storage.Store) {
 	cv, err := store.GetClusterVersion(context.TODO())
 	if err != nil {
@@ -664,12 +641,9 @@ func (n *Node) bootstrapStores(
 		}
 	}
 
-	// Start the newly bootstrapped stores.
-	bootstraps, err := n.initStores(ctx, emptyEngines, n.stopper)
-	if err != nil {
-		return err
-	}
-	for _, s := range bootstraps {
+	// Create stores from the newly bootstrapped engines.
+	for _, e := range emptyEngines {
+		s := storage.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
 		if err := s.Start(ctx, stopper); err != nil {
 			return err
 		}
