@@ -65,6 +65,9 @@ type SessionData struct {
 	// ZigzagJoinEnabled indicates whether the optimizer should try and plan a
 	// zigzag join.
 	ZigzagJoinEnabled bool
+	// ReorderJoins indicates whether the optimizer should try to reorder the
+	// joins in a query.
+	ReorderJoins bool
 	// SequenceState gives access to the SQL sequences that have been manipulated
 	// by the session.
 	SequenceState *SequenceState
