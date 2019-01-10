@@ -3222,19 +3222,18 @@ func (r *Replica) evaluateProposal(
 		} else {
 			res.Replicated.DeprecatedDelta = &ms
 		}
-		// If the RangeAppliedState key is not being used and the cluster version is
-		// high enough to guarantee that all current and future binaries will
-		// understand the key, we send the migration flag through Raft. Because
-		// there is a delay between command proposal and application, we may end up
-		// setting this migration flag multiple times. This is ok, because the
-		// migration is idempotent.
-		// TODO(nvanbenschoten): This will be baked in to 2.1, so it can be removed
-		// in the 2.2 release.
+		// If the RangeAppliedState key is not being used yet by the range, we send
+		// the migration flag through Raft. Because there is a delay between command
+		// proposal and application, we may end up setting this migration flag
+		// multiple times. This is ok, because the migration is idempotent.
+		//
+		// NOTE(nvanbenschoten): We can only get rid of this migration code once we
+		// declare it virtually impossible for a proposal created by a cluster at
+		// version 2.0 to still exist (think old unapplied Raft log entries).
 		r.mu.RLock()
 		usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
 		r.mu.RUnlock()
-		if !usingAppliedStateKey &&
-			r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
+		if !usingAppliedStateKey {
 			if res.Replicated.State == nil {
 				res.Replicated.State = &storagepb.ReplicaState{}
 			}
