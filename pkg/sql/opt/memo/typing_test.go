@@ -139,9 +139,18 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 
 // TestTypingComparisonAssumptions ensures that comparison overloads conform to
 // certain assumptions we're making in the type inference code:
-//   1. The overload can be inferred from the operator type and the data
+//   1. All comparison ops will be present in tree.CmpOps after being mapped
+//      with NormalizeComparison.
+//   2. The overload can be inferred from the operator type and the data
 //      types of its operands.
 func TestTypingComparisonAssumptions(t *testing.T) {
+	for _, op := range opt.ComparisonOperators {
+		newOp, _, _ := memo.NormalizeComparison(op)
+		comp := opt.ComparisonOpReverseMap[newOp]
+		if _, ok := tree.CmpOps[comp]; !ok {
+			t.Errorf("could not find overload for %v", op)
+		}
+	}
 	for name, overloads := range tree.CmpOps {
 		for i, overload := range overloads {
 			op := overload.(*tree.CmpOp)

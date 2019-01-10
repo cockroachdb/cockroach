@@ -362,10 +362,21 @@ func FindUnaryOverload(op opt.Operator, typ types.T) (_ *tree.UnaryOp, ok bool) 
 
 // FindComparisonOverload finds the correct type signature overload for the
 // specified comparison operator, given the types of its inputs. If an overload
-// is found, FindComparisonOverload returns true, plus a pointer to the
-// overload. If an overload is not found, FindComparisonOverload returns false.
-func FindComparisonOverload(op opt.Operator, leftType, rightType types.T) (_ *tree.CmpOp, ok bool) {
+// is found, FindComparisonOverload returns a pointer to the overload and
+// ok=true. It also returns "flipped" and "not" flags. The "flipped" flag
+// indicates whether the original left and right operands should be flipped
+// with the returned overload. The "not" flag indicates whether the result of
+// the comparison operation should be negated. If an overload is not found,
+// FindComparisonOverload returns ok=false.
+func FindComparisonOverload(
+	op opt.Operator, leftType, rightType types.T,
+) (_ *tree.CmpOp, flipped, not, ok bool) {
+	op, flipped, not = NormalizeComparison(op)
 	comp := opt.ComparisonOpReverseMap[op]
+
+	if flipped {
+		leftType, rightType = rightType, leftType
+	}
 
 	// Find the comparison op that matches the type of the expression's left and
 	// right children. No more than one match should ever be found. The
@@ -376,17 +387,59 @@ func FindComparisonOverload(op opt.Operator, leftType, rightType types.T) (_ *tr
 
 		if leftType == types.Unknown {
 			if rightType.Equivalent(o.RightType) {
-				return o, true
+				return o, flipped, not, true
 			}
 		} else if rightType == types.Unknown {
 			if leftType.Equivalent(o.LeftType) {
-				return o, true
+				return o, flipped, not, true
 			}
 		} else {
 			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
-				return o, true
+				return o, flipped, not, true
 			}
 		}
 	}
-	return nil, false
+	return nil, false, false, false
+}
+
+// NormalizeComparison maps a given comparison operator into an equivalent
+// operator that exists in the tree.CmpOps map, returning this new operator,
+// along with "flipped" and "not" flags. The "flipped" flag indicates whether
+// the left and right operands should be flipped with the new operator. The
+// "not" flag indicates whether the result of the comparison operation should
+// be negated.
+func NormalizeComparison(op opt.Operator) (newOp opt.Operator, flipped, not bool) {
+	switch op {
+	case opt.NeOp:
+		// Ne(left, right) is implemented as !Eq(left, right).
+		return opt.EqOp, false, true
+	case opt.GtOp:
+		// Gt(left, right) is implemented as Lt(right, left)
+		return opt.LtOp, true, false
+	case opt.GeOp:
+		// Ge(left, right) is implemented as Le(right, left)
+		return opt.LeOp, true, false
+	case opt.NotInOp:
+		// NotIn(left, right) is implemented as !In(left, right)
+		return opt.InOp, false, true
+	case opt.NotLikeOp:
+		// NotLike(left, right) is implemented as !Like(left, right)
+		return opt.LikeOp, false, true
+	case opt.NotILikeOp:
+		// NotILike(left, right) is implemented as !ILike(left, right)
+		return opt.ILikeOp, false, true
+	case opt.NotSimilarToOp:
+		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
+		return opt.SimilarToOp, false, true
+	case opt.NotRegMatchOp:
+		// NotRegMatch(left, right) is implemented as !RegMatch(left, right)
+		return opt.RegMatchOp, false, true
+	case opt.NotRegIMatchOp:
+		// NotRegIMatch(left, right) is implemented as !RegIMatch(left, right)
+		return opt.RegIMatchOp, false, true
+	case opt.IsNotOp:
+		// IsNot(left, right) is implemented as !Is(left, right)
+		return opt.IsOp, false, true
+	}
+	return op, false, false
 }
