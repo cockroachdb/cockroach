@@ -1382,6 +1382,18 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `schema_topic is not yet supported`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?schema_topic=foo`,
 	)
+
+	// The cloudStorageSink is particular about the options it will work with.
+	sqlDB.ExpectErr(
+		t, `this sink is incompatible with format=experimental_avro`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro'`,
+		`experimental-nodelocal:///bar?bucket_size=0ns`,
+	)
+	sqlDB.ExpectErr(
+		t, `this sink is incompatible with envelope=key_only`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='key_only'`,
+		`experimental-nodelocal:///bar?bucket_size=0ns`,
+	)
 }
 
 func TestChangefeedPermissions(t *testing.T) {
