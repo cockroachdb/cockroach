@@ -509,11 +509,11 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 			tb.Fatalf("%v", err)
 		}
 
-		var texpr tree.TypedExpr
 		id := types.PlaceholderIdx(i)
-		texpr, err = sqlbase.SanitizeVarFreeExpr(
+		typ, _ := h.semaCtx.Placeholders.ValueType(id)
+		texpr, err := sqlbase.SanitizeVarFreeExpr(
 			parg,
-			h.semaCtx.Placeholders.TypeHints[id],
+			typ,
 			"", /* context */
 			&h.semaCtx,
 			&h.evalCtx,

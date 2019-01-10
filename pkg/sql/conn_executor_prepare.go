@@ -60,14 +60,14 @@ func (ex *connExecutor) execPrepare(
 	}
 
 	// Convert the inferred SQL types back to an array of pgwire Oids.
-	inTypes := make([]oid.Oid, 0, len(ps.TypeHints))
+	inTypes := make([]oid.Oid, 0, len(ps.Types))
 	if len(ps.TypeHints) > pgwirebase.MaxPreparedStatementArgs {
 		return retErr(
 			pgwirebase.NewProtocolViolationErrorf(
 				"more than %d arguments to prepared statement: %d",
 				pgwirebase.MaxPreparedStatementArgs, len(ps.TypeHints)))
 	}
-	for k, t := range ps.TypeHints {
+	for k := range ps.Types {
 		// Placeholder names are 1-indexed; the arrays in the protocol are
 		// 0-indexed.
 		i := int(k)
@@ -85,6 +85,7 @@ func (ex *connExecutor) execPrepare(
 		if inTypes[i] != 0 {
 			continue
 		}
+		t, _ := ps.ValueType(k)
 		inTypes[i] = t.Oid()
 	}
 	for i, t := range inTypes {
@@ -144,8 +145,10 @@ func (ex *connExecutor) prepare(
 	}
 
 	prepared := &PreparedStatement{
-		TypeHints: placeholderHints,
-		memAcc:    ex.sessionMon.MakeBoundAccount(),
+		PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
+			TypeHints: placeholderHints,
+		},
+		memAcc: ex.sessionMon.MakeBoundAccount(),
 	}
 	// NB: if we start caching the plan, we'll want to keep around the memory
 	// account used for the plan, rather than clearing it.
@@ -200,7 +203,7 @@ func (ex *connExecutor) populatePrepared(
 	p *planner,
 ) error {
 	prepared := stmt.Prepared
-	p.semaCtx.Placeholders.SetTypeHints(placeholderHints)
+	p.semaCtx.Placeholders.Reset(placeholderHints)
 	p.extendedEvalCtx.PrepareOnly = true
 	p.extendedEvalCtx.ActiveMemAcc = &prepared.memAcc
 	// constantMemAcc accounts for all constant folded values that are computed
