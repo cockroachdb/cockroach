@@ -22,6 +22,69 @@ import (
 	"github.com/kr/pretty"
 )
 
+func TestBatchIsCompleteTransaction(t *testing.T) {
+	get := &GetRequest{}
+	put := &PutRequest{}
+	bt := &BeginTransactionRequest{}
+	etA := &EndTransactionRequest{Commit: false}
+	etC := &EndTransactionRequest{Commit: true}
+	withSeq := func(r Request, s int32) Request {
+		c := r.ShallowCopy()
+		h := c.Header()
+		h.Sequence = s
+		c.SetHeader(h)
+		return c
+	}
+	testCases := []struct {
+		reqs       []Request
+		isComplete bool
+	}{
+		{[]Request{get, put}, false},
+		{[]Request{bt}, false},
+		{[]Request{etA}, false},
+		{[]Request{etC}, false},
+		{[]Request{bt, put, get}, false},
+		{[]Request{put, get, etA}, false},
+		{[]Request{put, get, etC}, false},
+		{[]Request{bt, put, get, etA}, false},
+		{[]Request{bt, put, get, etC}, true},
+		{[]Request{bt, get, etA}, false},
+		{[]Request{bt, get, etC}, true},
+		{[]Request{withSeq(etA, 1)}, false},
+		{[]Request{withSeq(etC, 1)}, true},
+		{[]Request{put, withSeq(etC, 3)}, false},
+		{[]Request{withSeq(put, 1), withSeq(etC, 3)}, false},
+		{[]Request{withSeq(put, 2), withSeq(etC, 3)}, false},
+		{[]Request{withSeq(put, 1), withSeq(put, 2), withSeq(etA, 3)}, false},
+		{[]Request{withSeq(put, 1), withSeq(put, 2), withSeq(etC, 3)}, true},
+		{[]Request{withSeq(put, 1), withSeq(put, 2), withSeq(etC, 4)}, false},
+		{[]Request{withSeq(put, 1), withSeq(put, 2), withSeq(put, 3), withSeq(etA, 4)}, false},
+		{[]Request{withSeq(put, 1), withSeq(put, 2), withSeq(put, 3), withSeq(etC, 4)}, true},
+		{[]Request{withSeq(get, 0), withSeq(put, 1), withSeq(get, 1), withSeq(etC, 3)}, false},
+		{[]Request{withSeq(get, 0), withSeq(get, 1), withSeq(put, 2), withSeq(etC, 3)}, false},
+		{[]Request{withSeq(get, 0), withSeq(put, 1), withSeq(put, 2), withSeq(get, 2), withSeq(etC, 3)}, true},
+		{[]Request{withSeq(put, 1), withSeq(get, 1), withSeq(put, 2), withSeq(etC, 4)}, false},
+		{[]Request{withSeq(get, 0), withSeq(put, 1), withSeq(put, 2), withSeq(put, 3), withSeq(get, 3), withSeq(etC, 4)}, true},
+		// These cases will be removed in 2.3 once we're sure that all nodes
+		// will properly set sequence numbers (i.e. on writes only).
+		{[]Request{bt, withSeq(put, 1), withSeq(etC, 3)}, true},
+		{[]Request{bt, withSeq(put, 2), withSeq(etC, 3)}, true},
+		{[]Request{bt, withSeq(put, 1), withSeq(put, 2), withSeq(etC, 3)}, true},
+		{[]Request{bt, withSeq(put, 1), withSeq(put, 2), withSeq(etC, 4)}, true},
+		{[]Request{bt, withSeq(put, 1), withSeq(put, 2), withSeq(put, 3), withSeq(etC, 4)}, true},
+	}
+	for i, test := range testCases {
+		ba := BatchRequest{}
+		for _, args := range test.reqs {
+			ba.Add(args)
+		}
+		complete := ba.IsCompleteTransaction()
+		if complete != test.isComplete {
+			t.Errorf("%d: expected IsCompleteTransaction=%t, found %t", i, test.isComplete, complete)
+		}
+	}
+}
+
 func TestBatchSplit(t *testing.T) {
 	get := &GetRequest{}
 	scan := &ScanRequest{}

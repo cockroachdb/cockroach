@@ -61,6 +61,9 @@ func QueryIntent(
 	if intent != nil {
 		// See comment on QueryIntentRequest.Txn for an explanation of this
 		// comparison.
+		// TODO(nvanbenschoten): Now that we have a full intent history,
+		// we can look at the exact sequence! That won't serve as much more
+		// than an assertion that QueryIntent is being used correctly.
 		reply.FoundIntent = (args.Txn.ID == intent.Txn.ID) &&
 			(args.Txn.Epoch == intent.Txn.Epoch) &&
 			(args.Txn.Sequence <= intent.Txn.Sequence)
