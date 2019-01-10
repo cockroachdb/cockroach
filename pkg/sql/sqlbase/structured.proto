@@ -193,6 +193,7 @@ message ColumnType {
 enum ConstraintValidity {
   Validated = 0;
   Unvalidated = 1;
+  Validating = 2;
 }
 
 message ForeignKeyReference {
@@ -497,6 +498,7 @@ message DescriptorMutation {
   oneof descriptor {
     ColumnDescriptor column = 1;
     IndexDescriptor index = 2;
+    TableDescriptor.CheckConstraint check = 8;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to
@@ -654,7 +656,7 @@ message TableDescriptor {
     reserved 4;
     // An ordered list of column IDs used by the check constraint.
     repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
-      (gogoproto.casttype) = "ColumnID"];
+                                   (gogoproto.casttype) = "ColumnID"];
   }
 
   repeated CheckConstraint checks = 20;
