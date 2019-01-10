@@ -169,7 +169,7 @@ func createTestStoreWithOpts(
 	// TODO(bdarnell): arrange to have the transport closed.
 	ctx := context.Background()
 	if !opts.dontBootstrap {
-		if err := storage.Bootstrap(
+		if err := storage.InitEngine(
 			ctx, eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
 			storeCfg.Settings.Version.BootstrapVersion(),
 		); err != nil {
@@ -829,7 +829,7 @@ func (m *multiTestContext) addStore(idx int) {
 
 	ctx := context.Background()
 	if needBootstrap {
-		if err := storage.Bootstrap(ctx, eng, roachpb.StoreIdent{
+		if err := storage.InitEngine(ctx, eng, roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
 		}, cfg.Settings.Version.BootstrapVersion()); err != nil {

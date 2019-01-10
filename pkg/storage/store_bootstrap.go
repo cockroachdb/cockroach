@@ -29,12 +29,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Bootstrap writes a new store ident to the underlying engine. To
+// InitEngine writes a new store ident to the underlying engine. To
 // ensure that no crufty data already exists in the engine, it scans
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func Bootstrap(
+func InitEngine(
 	ctx context.Context, eng engine.Engine, ident roachpb.StoreIdent, cv cluster.ClusterVersion,
 ) error {
 	exIdent, err := ReadStoreIdent(ctx, eng)
