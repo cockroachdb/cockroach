@@ -208,8 +208,6 @@ func bootstrapCluster(
 	txnMetrics kv.TxnMetrics,
 ) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
 
 	// Make sure that the store config has a valid clock and that it doesn't
 	// try to use gossip, since that can introduce race conditions.
@@ -223,26 +221,6 @@ func bootstrapCluster(
 	tr := cfg.Settings.Tracer
 	defer tr.Close()
 	cfg.AmbientCtx.Tracer = tr
-	// Create a KV DB with a sender that routes all requests to the first range
-	// and first local store.
-	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
-	localSender := client.Wrap(stores, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
-		ba.RangeID = 1
-		ba.Replica.StoreID = 1
-		return ba
-	})
-	tcsFactory := kv.NewTxnCoordSenderFactory(
-		kv.TxnCoordSenderFactoryConfig{
-			AmbientCtx: cfg.AmbientCtx,
-			Settings:   cfg.Settings,
-			Clock:      cfg.Clock,
-			Stopper:    stopper,
-			Metrics:    txnMetrics,
-		},
-		localSender,
-	)
-
-	cfg.DB = client.NewDB(cfg.AmbientCtx, tcsFactory, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(cfg.Settings)
 	cfg.ClosedTimestamp = container.NoopContainer()
 	if err := cfg.Settings.InitializeVersion(bootstrapVersion); err != nil {
@@ -263,14 +241,14 @@ func bootstrapCluster(
 			return uuid.UUID{}, err
 		}
 
-		// The bootstrapping store will not connect to other nodes so its
-		// StoreConfig doesn't really matter.
-		s := storage.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
-
 		// Create first range, writing directly to engine. Note this does
 		// not create the range, just its data. Only do this if this is the
 		// first store.
 		if i == 0 {
+			// The bootstrapping store will not connect to other nodes so its
+			// StoreConfig doesn't really matter.
+			s := storage.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
+
 			schema := GetBootstrapSchema()
 			initialValues, tableSplits := schema.GetInitialValues()
 			splits := append(config.StaticSplits(), tableSplits...)
@@ -284,11 +262,6 @@ func bootstrapCluster(
 				return uuid.UUID{}, err
 			}
 		}
-		if err := s.Start(ctx, stopper); err != nil {
-			return uuid.UUID{}, err
-		}
-
-		stores.AddStore(s)
 	}
 	return clusterID, nil
 }
