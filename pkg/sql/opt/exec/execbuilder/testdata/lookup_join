@@ -129,7 +129,7 @@ render            ·         ·             (a, b, c, d)              ·
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzElFGrmzAUx9_3KeQ8Z1yjttcbGPg06Bi943Lfhg-ZORQ3myNJhI3idx_qoFraKBS7R2P-_H_8Tjgn0KRwL49oQXwHDgwiYBADgwQYbCBnUBsq0Foy3ZUhsFO_QYQMSl03rjvOGRRkEMQJXOkqBAHv8keFbygVmqcQGCh0sqz6mtqUR2n-ZEo6CQw-l5VDI4IsDj4FXAix27-nkLcMqHHnAuvkAUHwli2H-EKl_sew8TJ8JfrV1MFPKnVAWgQZZ1nEsphlnYfXxk2PbsFFN-HOTI0mo9CgmgDl7RX8PX2k-omHFzevd8eTbr58Ony16cxAjKazffx0ouWGotUMzUCMDD0_3lC83FC8mqEZiJGh9PGGkuWGktUMzUCMDL383x14Be4NbU3a4qINF3Y7EtUBh4VqqTEFfjNU9DXD52uf6w8UWjf85cPHTg-_OsBxmHvD0STML8ORv3mmOvamE384uYd74w1v_c3be5qfveHU35ze0_zin1U480z8j-yyO28__A0AAP__5bUEPg==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElEFr2zAUx-_7FOKdZWxJTpoKBj4NMkY6ut6GD1r06LylkpFk2Cj57sP2oE5IZYFLerSsP_8fvyfeMxircaee0IP8DgwocKAggEIJFFZQU2id3aP31vVXxsBW_wFZUGhM24X-uKawtw5BPkNowgFBwoP6ccB7VBpdXgAFjUE1h6Gmdc2Tcn8rrYICCt9aZbwkWc6IMppwYsNPdB4ofGoOAZ0klSAfCZNSbncPG6iPFGwXXqp9UI8Ikh1pOt5n25j_dKso3Rdrf3ct-WUbQ6yRpGK04rQStOoN3XXh9Og1OP4q3AtTZ6zT6FCfANXHC_g7m9k2Z8XZzcvd4qSbpc-NpcwtZ1nOh8mxcXILBzfDNxnc-vqD4-nyeJI8nuXiDeXN8E3k3VxfnkiXJ5LkiSwv31DeDN9E3ub68sp0eWWSvDIbNt8SYTNME2G377tjL8Ddo2-t8Zi0QYt-B6N-xHFhe9u5PX51dj_UjJ93Q2440OjD-JeNH1sz_uoBp2EWDfOTMDsP83jzTLWIpst4uFzCvYqG1_Hm9ZLmm2h4E2_eLGm-jc-qmHkm8Ud23l0fP_wLAAD__w5KJqY=
 
 statement ok
 CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
@@ -222,7 +222,7 @@ NULL       NULL     {5}       5
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk0-L2zAQxe_9FOqcElCx5X8LhoAKe-j24C1LbyUHrTVNRB3LSDK0hHz3YhuS2I2VP5febGl-8968QXuotcRC7NBC_gMYUEhhTaExukRrtemOh6IX-RvykIKqm9Z1x2sKpTYI-R6cchVCDoX-pJsgAwoSnVBVX3agoFt3gqwTG4T86UDPGjN_4-_ivcI3FBJNEI7aQ2PUTpg__F3rXzYCCq-tywlnlMcwp80e1WaXtUXrtl1Wc3rRrN5Jpq21kWhQTtO7XnLB9Bdht1-1qtEE0djzMZ6I8pjyZNZ0_GhIsWdBt-0n-Z95JWP7Ff50C86WK6M22_6rm6EgC56QFeHpknwunsmCZ-TjivBoeZxwfrz0nmSflXWqLl2Qjn1xNts_G_W_8mbf0Da6tnjTow277FBucNiF1a0p8ZvRZS8z_L72XH8g0brh9mn4eamHq87gOcy8cDyC2RSO7oCjKRx74dSvnNwB_6OceuHMH1jmhcMJvD58-BsAAP__2dLv4w==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk09r3DAQxe_9FOqcdkHBlv8FDAsq5ND04JS0t7IHxZruijqSkWRoCfvdi21I1m6s1HvJzZbmN-_NG_QE2kisxCM6KH8AAwo57Cm01tTonLH98Vh0K39DGVNQuu18f7ynUBuLUD6BV75BKKEyV6aNCqAg0QvVDGUnCqbzL5Dz4oBQXp_oWWMWbvxdPDR4j0KijeJJe2itehT2D38w5pdLgMK3VmhXkiugcNf5knBGeQpLNtilNtjrNkTnj31sZz6WpJNF6RfFThsr0aKcZ_p2ySv-Pwt3_GKURhslU_vPSSWUp5Rni6bTS_NKA2tbvbXsPaPLppM0-NNvONvurDoch69-hopseEZ2hOdb8qm6IRtekI87wpPt84TL4-VrQr5Rzitd-yif-uJssX8x6f_Go75H1xrt8L9eddxnh_KA4y6c6WyNX62pB5nx927ghgOJzo-31-PPrR6veoPnMAvC6QRmczhZASdzOA3CeVg5WwH_o5wH4SIcWBGE4xm8P334GwAA__856fjX
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
@@ -263,7 +263,7 @@ render          ·         ·               (title, edition, shelf, title, editi
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFrwzAMhe_7FUZnjcZpC8Mw8LVjpKP0NnJwE9FlTa1gO7BR8t-H48HasWbbUU_69J7lE1iuqTBH8qCeQQLCEkqEznFF3rOLchpa1W-gMoTGdn2IcolQsSNQJwhNaAkUFHzL3SwHhJqCadpxbEDgPnxBPpg9gZoPeLZYTi_eml1LGzI1uVl2sR461xyNe9emDy8x7zU_-R-_B27sp5382W7HfPDxpY_Mh74Tr9xYwVYJHcV1IfRC3AuplFoV27so9UEJLVHnqOeoF6iXV7PmF1l_OfqGfMfW05-ung0lAtV7Sh_ruXcVPTmuRptUrkduFGryIXXnqVjZ1IoBz2E5CefTcD4JZ9_gcrj5CAAA__-cGuJJ
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFrwzAMhe_7FUZnlcZpC8Mw8LVjpKPrbeTgJqLL2lrGdmCj5L8PJ4O1Y822o5706T1bJ7BcU2GOFEA9gwSEBZQIznNFIbBP8jC0rN9AZQiNdW1McolQsSdQJ4hNPBAoKHjCbpoDQk3RNId-rEPgNn5BIZodgZp1eLZYji_emO2B1mRq8tPsYj043xyNf9emjS8pL8KTMzYoMYFr1vI_1vfc2E9n-bPzlnkf0qMfmPetE6_cWMFWCZ3EVSH0XNwJqZRaFpvbJLVRCS1R56hnqOeoF1ez5hdZf_n_NQXHNtCfDpB1JQLVOxpuHLj1FT16rnqboVz1XC_UFOLQnQ3F0g6tFPAclqNwPg7no3D2DS67m48AAAD__01P5UU=
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #
@@ -375,7 +375,7 @@ render            ·         ·              (a, b)     +a
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlUGLm0AUx-_9FMMfCi2dso6abHag4GULWRYtwZ6KBxsfwdY4MqPQZcl3L9Gl0dCMQnLwlpnJP7_3fm-YvKJUGYXpngzkDwhwuODwwOGDY4GEo9JqS8YoffxKF1hnfyAdjrysmvq4nXBslSbIV9R5XRAk4vRnQRtKM9J3DjgyqtO8aDGVzvepfgnMPi0KcERNLVkgkBw4VFOfftPU6Y4gxYFP5z6pvHzDLobY-KUiyZ4fv8Ys-h4_bthTtA7B_5VTpHpH4HhW6ndTsV8qL5kq28o4opB9CDz2ni2llOswXn1kX5jz9vnUAw-8i224F9s4Va90RpqyYeGB-ITk8J9eQ_VZVXdiqPcS3hvgxfTpiVtOb4Tbm95yztNzp-tzb6lvhNvTdz9nfd50fd4t9Y1we_pWc9bnT9fn31LfCLen72HO-kb-QTZkKlUamvSqOsd3mbIdde-4UY3e0jetti2mW0Ztrt3IyNTdqegW67I7OhbYDwtr2B2ExXnYtZNH0J417dvD_jV1L6zhpZ28vIZ8bw2v7OTVNeQH-6yckWtiv2Tn7OTw7m8AAAD__48rKi4=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlcGK2zwUhff_U4gLP7RUxpbtZDKCgjdTyDDYJXVXxQs1vqRuHctIMnQY8u4l9tDYQyMLvMkuknI4535HWC_QyBJTcUQN_BswoBAChQgoxEBhBQWFVsk9ai3V-S-DYFv-Bh5QqJq2M-ftgsJeKgT-AqYyNQKHXHyvcYeiROUHQKFEI6q6t2lVdRTqOdFHUddA4UsrGs2J5zMimpIwIs0PVEAh6wwnCYPiREF25mKmjTggcHai7oEeZdW85llN8-TPLXLy9PApJ9nX_GFHHrNtCvRvzlqoAwKFJyl_dS35KauGyKZPRiFLybskIv-TNed8m-ab9-QjCV5_X2agSXR1jPDqGJf0UpWosJwGT9gHKE7_mDWVnmx9NuV-zT6a2DP3WplTrT7z_HBRsTORRsWub7nY0J1s6EY29PxoEdmZSCOyd7dMNnInG7mRjTw_XkR2JtKI7OaWycbuZGM3srHnrxaRnYk0Int_y2RnXqsd6lY2Gp2-4MH5DcDygMOboWWn9vhZyX1vMyyzXtdvlKjNcMqGxbYZjs4Bx2JmFYcTMXsrDu3OM9aRVR3bxfGS3CureG13Xi9xvrOKN3bnzRLne3tXwcw1sV-yt97F6b8_AQAA___pW1AI
 
 # Left join against covering secondary index
 query TTTTT
