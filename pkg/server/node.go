@@ -192,13 +192,17 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 	return sqlbase.MakeMetadataSchema()
 }
 
-// bootstrapCluster bootstraps multiple stores using the provided engines.
+// bootstrapCluster initializes the passed-in engines for a new cluster.
 // Returns the cluster ID.
 //
-// Ranges for various static split points are created (i.e. various system
-// ranges and system tables). Note however that many of these ranges cannot be
-// accessed by KV in regular means until the node liveness is written, since
-// epoch-based leases cannot be granted until then.
+// The first engine will contain ranges for various static split points (i.e.
+// various system ranges and system tables). Note however that many of these
+// ranges cannot be accessed by KV in regular means until the node liveness is
+// written, since epoch-based leases cannot be granted until then.
+// All other engines are initialized with their StoreIdent. These identities
+// need to be generated here and put in these engines; at the point where this
+// function is called the cluster is not able to allocate store ids through
+// normal mechnisms.
 func bootstrapCluster(
 	ctx context.Context,
 	cfg storage.StoreConfig,
@@ -254,14 +258,15 @@ func bootstrapCluster(
 			StoreID:   roachpb.StoreID(i + 1),
 		}
 
+		// Initialize store with the store ident and cluster version.
+		if err := storage.InitEngine(ctx, eng, sIdent, bootstrapVersion); err != nil {
+			return uuid.UUID{}, err
+		}
+
 		// The bootstrapping store will not connect to other nodes so its
 		// StoreConfig doesn't really matter.
 		s := storage.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
-		// Bootstrap store to persist the store ident and cluster version.
-		if err := storage.Bootstrap(ctx, eng, sIdent, bootstrapVersion); err != nil {
-			return uuid.UUID{}, err
-		}
 		// Create first range, writing directly to engine. Note this does
 		// not create the range, just its data. Only do this if this is the
 		// first store.
@@ -386,7 +391,7 @@ func (n *Node) onClusterVersionChange(cv cluster.ClusterVersion) {
 func (n *Node) start(
 	ctx context.Context,
 	addr net.Addr,
-	bootstrappedEngines, emptyEngines []engine.Engine,
+	initializedEngines, emptyEngines []engine.Engine,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
 	cv cluster.ClusterVersion,
@@ -402,8 +407,8 @@ func (n *Node) start(
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to
 	// use the KV store to get a NodeID assigned.
 	var nodeID roachpb.NodeID
-	if len(bootstrappedEngines) > 0 {
-		firstIdent, err := storage.ReadStoreIdent(ctx, bootstrappedEngines[0])
+	if len(initializedEngines) > 0 {
+		firstIdent, err := storage.ReadStoreIdent(ctx, initializedEngines[0])
 		if err != nil {
 			return err
 		}
@@ -455,7 +460,7 @@ func (n *Node) start(
 	n.storeCfg.ClosedTimestamp.Start(n.Descriptor.NodeID)
 
 	// Create stores from the engines that were already bootstrapped.
-	for _, e := range bootstrappedEngines {
+	for _, e := range initializedEngines {
 		s := storage.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
 		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
@@ -509,7 +514,7 @@ func (n *Node) start(
 		return err
 	}
 
-	if len(bootstrappedEngines) != 0 {
+	if len(initializedEngines) != 0 {
 		// Connect gossip before starting bootstrap. This will be necessary
 		// to bootstrap new stores. We do it before initializing the NodeID
 		// as well (if needed) to avoid awkward error messages until Gossip
@@ -537,7 +542,7 @@ func (n *Node) start(
 	// bumped immediately, which would be possible if gossip got started earlier).
 	n.startGossip(ctx, n.stopper)
 
-	allEngines := append([]engine.Engine(nil), bootstrappedEngines...)
+	allEngines := append([]engine.Engine(nil), initializedEngines...)
 	allEngines = append(allEngines, emptyEngines...)
 	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, allEngines, attrs.Attrs)
 	return nil
@@ -617,7 +622,7 @@ func (n *Node) bootstrapStores(
 
 	{
 		// Bootstrap all waiting stores by allocating a new store id for
-		// each and invoking store.Bootstrap() to persist.
+		// each and invoking storage.Bootstrap() to persist, and create stores.
 		inc := int64(len(emptyEngines))
 		firstID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, inc, n.storeCfg.DB)
 		if err != nil {
@@ -629,25 +634,23 @@ func (n *Node) bootstrapStores(
 			StoreID:   firstID,
 		}
 		for _, eng := range emptyEngines {
-			if err := storage.Bootstrap(ctx, eng, sIdent, cv); err != nil {
+			if err := storage.InitEngine(ctx, eng, sIdent, cv); err != nil {
 				return err
 			}
-			sIdent.StoreID++
-		}
-	}
 
-	// Create stores from the newly bootstrapped engines.
-	for _, e := range emptyEngines {
-		s := storage.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
-		if err := s.Start(ctx, stopper); err != nil {
-			return err
-		}
-		n.addStore(s)
-		log.Infof(ctx, "bootstrapped store %s", s)
-		// Done regularly in Node.startGossip, but this cuts down the time
-		// until this store is used for range allocations.
-		if err := s.GossipStore(ctx, false /* useCached */); err != nil {
-			log.Warningf(ctx, "error doing initial gossiping: %s", err)
+			s := storage.NewStore(ctx, n.storeCfg, eng, &n.Descriptor)
+			if err := s.Start(ctx, stopper); err != nil {
+				return err
+			}
+			n.addStore(s)
+			log.Infof(ctx, "bootstrapped store %s", s)
+			// Done regularly in Node.startGossip, but this cuts down the time
+			// until this store is used for range allocations.
+			if err := s.GossipStore(ctx, false /* useCached */); err != nil {
+				log.Warningf(ctx, "error doing initial gossiping: %s", err)
+			}
+
+			sIdent.StoreID++
 		}
 	}
 
