@@ -834,6 +834,8 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 	}()
 	wg.Wait()
 
+	p.reg.waitForCaughtUp()
+
 	// Verify that no registrations were given operations
 	// from before they registered.
 	for s, expFirstIdx := range regs {
