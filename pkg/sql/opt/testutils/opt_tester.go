@@ -229,11 +229,10 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	}
 
 	if ot.Flags.ReorderJoins {
-		oldValue := ot.evalCtx.SessionData.ReorderJoins
-		ot.evalCtx.SessionData.ReorderJoins = true
-		defer func() {
+		defer func(oldValue bool) {
 			ot.evalCtx.SessionData.ReorderJoins = oldValue
-		}()
+		}(ot.evalCtx.SessionData.ReorderJoins)
+		ot.evalCtx.SessionData.ReorderJoins = true
 	}
 
 	ot.Flags.Verbose = testing.Verbose()
