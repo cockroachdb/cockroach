@@ -277,6 +277,9 @@ func (s *statusServer) Allocator(
 				func(desc roachpb.RangeDescriptor) (bool, error) {
 					rep, err := store.GetReplica(desc.RangeID)
 					if err != nil {
+						if _, skip := err.(*roachpb.RangeNotFoundError); skip {
+							return true, nil // continue
+						}
 						return true, err
 					}
 					if !rep.OwnsValidLease(store.Clock().Now()) {
@@ -1238,6 +1241,9 @@ func (s *statusServer) Ranges(
 			err := storage.IterateRangeDescriptors(ctx, store.Engine(),
 				func(desc roachpb.RangeDescriptor) (bool, error) {
 					rep, err := store.GetReplica(desc.RangeID)
+					if _, skip := err.(*roachpb.RangeNotFoundError); skip {
+						return true, nil // continue
+					}
 					if err != nil {
 						return true, err
 					}
