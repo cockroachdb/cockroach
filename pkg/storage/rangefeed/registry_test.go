@@ -245,11 +245,11 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 	expEvents := []*roachpb.RangeFeedEvent{
 		rangeFeedValue(
 			roachpb.Key("d"),
-			roachpb.Value{RawBytes: []byte("val5"), Timestamp: hlc.Timestamp{WallTime: 20}},
+			roachpb.Value{RawBytes: []byte("val6"), Timestamp: hlc.Timestamp{WallTime: 19}},
 		),
 		rangeFeedValue(
 			roachpb.Key("d"),
-			roachpb.Value{RawBytes: []byte("val6"), Timestamp: hlc.Timestamp{WallTime: 19}},
+			roachpb.Value{RawBytes: []byte("val5"), Timestamp: hlc.Timestamp{WallTime: 20}},
 		),
 		rangeFeedValue(
 			roachpb.Key("g"),
