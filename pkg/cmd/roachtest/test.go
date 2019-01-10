@@ -1064,13 +1064,13 @@ func (r *registry) runAsync(
 				if err := c.FetchDebugZip(ctx); err != nil {
 					c.l.Printf("failed to download debug zip: %s", err)
 				}
-				// NB: fetch the logs even when we have a debug zip because
-				// debug zip can't ever get the logs for down nodes.
-				// We only save artifacts for failed tests in CI, so this
-				// duplication is acceptable.
-				if err := c.FetchLogs(ctx); err != nil {
-					c.l.Printf("failed to download logs: %s", err)
-				}
+			}
+			// NB: fetch the logs even when we have a debug zip because
+			// debug zip can't ever get the logs for down nodes.
+			// We only save artifacts for failed tests in CI, so this
+			// duplication is acceptable.
+			if err := c.FetchLogs(ctx); err != nil {
+				c.l.Printf("failed to download logs: %s", err)
 			}
 		}()
 
