@@ -107,7 +107,7 @@ func TestFormatStatement(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			stmtStr := tree.AsStringWithFlags(stmt, test.f)
+			stmtStr := tree.AsStringWithFlags(stmt.AST, test.f)
 			if stmtStr != test.expected {
 				t.Fatalf("expected %q, got %q", test.expected, stmtStr)
 			}
@@ -156,7 +156,7 @@ func TestFormatTableName(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.Reset()
-			f.FormatNode(stmt)
+			f.FormatNode(stmt.AST)
 			stmtStr := f.String()
 			if stmtStr != test.expected {
 				t.Fatalf("expected %q, got %q", test.expected, stmtStr)
@@ -422,7 +422,7 @@ func BenchmarkFormatRandomStatements(b *testing.B) {
 			continue
 		}
 		strs[i] = rdm
-		stmts[i] = stmt
+		stmts[i] = stmt.AST
 		i++
 	}
 

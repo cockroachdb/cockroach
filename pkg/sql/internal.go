@@ -453,7 +453,7 @@ func (ie *internalExecutorImpl) execInternal(
 
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
-	s, err := parser.ParseOne(stmt)
+	parsed, err := parser.ParseOne(stmt)
 	if err != nil {
 		return result{}, err
 	}
@@ -505,8 +505,7 @@ func (ie *internalExecutorImpl) execInternal(
 		if err := stmtBuf.Push(
 			ctx,
 			ExecStmt{
-				SQL:          stmt,
-				Stmt:         s,
+				Statement:    parsed,
 				TimeReceived: timeReceived,
 				ParseStart:   parseStart,
 				ParseEnd:     parseEnd,
@@ -518,8 +517,7 @@ func (ie *internalExecutorImpl) execInternal(
 		if err := stmtBuf.Push(
 			ctx,
 			PrepareStmt{
-				SQL:        stmt,
-				Stmt:       s,
+				Statement:  parsed,
 				ParseStart: parseStart,
 				ParseEnd:   parseEnd,
 				TypeHints:  typeHints,

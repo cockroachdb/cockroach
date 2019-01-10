@@ -1442,7 +1442,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	create := stmt.(*tree.CreateTable)
+	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
 
 	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)

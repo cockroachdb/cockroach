@@ -28,17 +28,12 @@ import (
 // PreparedStatement is a SQL statement that has been parsed and the types
 // of arguments and results have been determined.
 type PreparedStatement struct {
-	// Str is the statement string prior to parsing, used to generate
-	// error messages. This may be used in
-	// the future to present a contextual error message based on location
-	// information.
-	Str string
+	sqlbase.PrepareMetadata
+
 	// Memo is the memoized data structure constructed by the cost-based optimizer
 	// during prepare of a SQL statement. It can significantly speed up execution
 	// if it is used by the optimizer as a starting point.
 	Memo *memo.Memo
-
-	sqlbase.PrepareMetadata
 
 	memAcc mon.BoundAccount
 }
@@ -47,13 +42,12 @@ type PreparedStatement struct {
 // usage, in bytes.
 func (p *PreparedStatement) MemoryEstimate() int64 {
 	// Account for the memory used by this prepared statement:
-	//   1. Size of the query string and prepared struct.
+	//   1. Size of the prepare metadata.
 	//   2. Size of the prepared memo, if using the cost-based optimizer.
-	size := int64(len(p.Str) + int(unsafe.Sizeof(*p)))
+	size := p.PrepareMetadata.MemoryEstimate()
 	if p.Memo != nil {
 		size += p.Memo.MemoryEstimate()
 	}
-	size += p.PrepareMetadata.MemoryEstimate()
 	return size
 }
 

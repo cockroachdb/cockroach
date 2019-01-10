@@ -264,11 +264,11 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return "", err
 	}
 
-	if stmt.StatementType() != tree.DDL {
-		return "", fmt.Errorf("statement type is not DDL: %v", stmt.StatementType())
+	if stmt.AST.StatementType() != tree.DDL {
+		return "", fmt.Errorf("statement type is not DDL: %v", stmt.AST.StatementType())
 	}
 
-	switch stmt := stmt.(type) {
+	switch stmt := stmt.AST.(type) {
 	case *tree.CreateTable:
 		tab := tc.CreateTable(stmt)
 		return tab.String(), nil

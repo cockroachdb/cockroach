@@ -127,7 +127,7 @@ func TestClassifyTablePattern(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				tp, err := stmt.(*tree.Grant).Targets.Tables[0].NormalizeTablePattern()
+				tp, err := stmt.AST.(*tree.Grant).Targets.Tables[0].NormalizeTablePattern()
 				if err != nil {
 					return nil, err
 				}
@@ -223,7 +223,7 @@ func TestClassifyColumnName(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				v := stmt.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
+				v := stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
 				return v.NormalizeVarName()
 			}()
 			if !testutils.IsError(err, tc.err) {
@@ -751,7 +751,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 				if err != nil {
 					return nil, "", err
 				}
-				tp, err := stmt.(*tree.Grant).Targets.Tables[0].NormalizeTablePattern()
+				tp, err := stmt.AST.(*tree.Grant).Targets.Tables[0].NormalizeTablePattern()
 				if err != nil {
 					return nil, "", err
 				}

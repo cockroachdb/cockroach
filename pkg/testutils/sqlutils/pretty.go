@@ -41,7 +41,7 @@ func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 		if err != nil {
 			t.Fatalf("%s: %s", err, prettyStmt)
 		}
-		prettyFormatted := tree.AsStringWithFlags(parsedPretty, tree.FmtSimple)
+		prettyFormatted := tree.AsStringWithFlags(parsedPretty.AST, tree.FmtSimple)
 		origFormatted := tree.AsStringWithFlags(origStmt, tree.FmtParsable)
 		if prettyFormatted != origFormatted {
 			// Type annotations and unicode strings don't round trip well. Sometimes we
@@ -51,7 +51,7 @@ func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			origFormatted = tree.AsStringWithFlags(reparsedStmt, tree.FmtParsable)
+			origFormatted = tree.AsStringWithFlags(reparsedStmt.AST, tree.FmtParsable)
 			if prettyFormatted != origFormatted {
 				t.Fatalf("orig formatted != pretty formatted\norig SQL: %q\norig formatted: %q\npretty printed: %s\npretty formatted: %q",
 					sql,

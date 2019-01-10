@@ -68,7 +68,7 @@ func TestMemoInit(t *testing.T) {
 
 	var o xform.Optimizer
 	o.Init(&evalCtx)
-	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt).Build()
+	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt.AST).Build()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestMemoIsStale(t *testing.T) {
 
 	var o xform.Optimizer
 	o.Init(&evalCtx)
-	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt).Build()
+	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt.AST).Build()
 	if err != nil {
 		t.Fatal(err)
 	}

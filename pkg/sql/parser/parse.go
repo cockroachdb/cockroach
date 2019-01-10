@@ -106,15 +106,15 @@ func (p *Parser) ParseWithInt(sql string, nakedIntType *coltypes.TInt) (Statemen
 	return p.parseWithDepth(1, sql, nakedIntType, nakedSerialType)
 }
 
-func (p *Parser) parseOneWithDepth(depth int, sql string) (tree.Statement, error) {
+func (p *Parser) parseOneWithDepth(depth int, sql string) (Statement, error) {
 	stmts, err := p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
 	if err != nil {
-		return nil, err
+		return Statement{}, err
 	}
 	if len(stmts) != 1 {
-		return nil, pgerror.NewAssertionErrorf("expected 1 statement, but found %d", len(stmts))
+		return Statement{}, pgerror.NewAssertionErrorf("expected 1 statement, but found %d", len(stmts))
 	}
-	return stmts[0].AST, nil
+	return stmts[0], nil
 }
 
 func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
@@ -235,7 +235,7 @@ func Parse(sql string) (Statements, error) {
 // used in various internal-execution paths where we might receive
 // bits of SQL from other nodes. In general, we expect that all
 // user-generated SQL has been run through the ParseWithInt() function.
-func ParseOne(sql string) (tree.Statement, error) {
+func ParseOne(sql string) (Statement, error) {
 	var p Parser
 	return p.parseOneWithDepth(1, sql)
 }
@@ -248,7 +248,7 @@ func ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, error) {
 	if err != nil {
 		return tree.TableNameWithIndex{}, err
 	}
-	rename, ok := stmt.(*tree.RenameIndex)
+	rename, ok := stmt.AST.(*tree.RenameIndex)
 	if !ok {
 		return tree.TableNameWithIndex{}, pgerror.NewAssertionErrorf("expected an ALTER INDEX statement, but found %T", stmt)
 	}
@@ -263,7 +263,7 @@ func ParseTableName(sql string) (*tree.TableName, error) {
 	if err != nil {
 		return nil, err
 	}
-	rename, ok := stmt.(*tree.RenameTable)
+	rename, ok := stmt.AST.(*tree.RenameTable)
 	if !ok {
 		return nil, pgerror.NewAssertionErrorf("expected an ALTER TABLE statement, but found %T", stmt)
 	}
@@ -276,7 +276,7 @@ func parseExprs(exprs []string) (tree.Exprs, error) {
 	if err != nil {
 		return nil, err
 	}
-	set, ok := stmt.(*tree.SetVar)
+	set, ok := stmt.AST.(*tree.SetVar)
 	if !ok {
 		return nil, pgerror.NewAssertionErrorf("expected a SET statement, but found %T", stmt)
 	}

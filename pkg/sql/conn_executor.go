@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1153,17 +1154,17 @@ func (ex *connExecutor) run(
 
 		switch tcmd := cmd.(type) {
 		case ExecStmt:
-			if tcmd.Stmt == nil {
+			if tcmd.AST == nil {
 				res = ex.clientComm.CreateEmptyQueryResult(pos)
 				break
 			}
-			ex.curStmt = tcmd.Stmt
+			ex.curStmt = tcmd.AST
 
 			stmtRes := ex.clientComm.CreateStatementResult(
-				tcmd.Stmt, NeedRowDesc, pos, nil, /* formatCodes */
+				tcmd.AST, NeedRowDesc, pos, nil, /* formatCodes */
 				ex.sessionData.DataConversion)
 			res = stmtRes
-			curStmt := Statement{SQL: tcmd.SQL, AST: tcmd.Stmt}
+			curStmt := Statement{Statement: tcmd.Statement}
 
 			ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
 			ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
@@ -1188,9 +1189,9 @@ func (ex *connExecutor) run(
 				break
 			}
 			if log.ExpensiveLogEnabled(ex.Ctx(), 2) {
-				log.VEventf(ex.Ctx(), 2, "portal resolved to: %s", portal.Stmt.Str)
+				log.VEventf(ex.Ctx(), 2, "portal resolved to: %s", portal.Stmt.AST.String())
 			}
-			ex.curStmt = portal.Stmt.Statement
+			ex.curStmt = portal.Stmt.AST
 
 			*pinfo = tree.PlaceholderInfo{
 				PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
@@ -1208,13 +1209,13 @@ func (ex *connExecutor) run(
 			ex.phaseTimes[sessionStartParse] = time.Time{}
 			ex.phaseTimes[sessionEndParse] = time.Time{}
 
-			if portal.Stmt.Statement == nil {
+			if portal.Stmt.AST == nil {
 				res = ex.clientComm.CreateEmptyQueryResult(pos)
 				break
 			}
 
 			stmtRes := ex.clientComm.CreateStatementResult(
-				portal.Stmt.Statement,
+				portal.Stmt.AST,
 				// The client is using the extended protocol, so no row description is
 				// needed.
 				DontNeedRowDesc,
@@ -1223,8 +1224,7 @@ func (ex *connExecutor) run(
 			stmtRes.SetLimit(tcmd.Limit)
 			res = stmtRes
 			curStmt := Statement{
-				SQL:           portal.Stmt.Str,
-				AST:           portal.Stmt.Statement,
+				Statement:     portal.Stmt.Statement,
 				Prepared:      portal.Stmt,
 				ExpectedTypes: portal.Stmt.Columns,
 				AnonymizedStr: portal.Stmt.AnonymizedStr,
@@ -1235,7 +1235,7 @@ func (ex *connExecutor) run(
 				return err
 			}
 		case PrepareStmt:
-			ex.curStmt = tcmd.Stmt
+			ex.curStmt = tcmd.AST
 			res = ex.clientComm.CreatePrepareResult(pos)
 			ctx := withStatement(ex.Ctx(), ex.curStmt)
 			ev, payload = ex.execPrepare(ctx, tcmd)
@@ -1424,10 +1424,10 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 		if inOpen && (ex.extraTxnState.txnRewindPos == pos) {
 			switch tcmd := cmd.(type) {
 			case ExecStmt:
-				canAdvance = ex.stmtDoesntNeedRetry(tcmd.Stmt)
+				canAdvance = ex.stmtDoesntNeedRetry(tcmd.AST)
 			case ExecPortal:
 				portal := ex.prepStmtsNamespace.portals[tcmd.Name]
-				canAdvance = ex.stmtDoesntNeedRetry(portal.Stmt.Statement)
+				canAdvance = ex.stmtDoesntNeedRetry(portal.Stmt.AST)
 			case PrepareStmt:
 				canAdvance = true
 			case DescribeStmt:
@@ -1475,7 +1475,7 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
 // retried when performing automatic retries. This means that the results of the
 // statement do not change with retries.
 func (ex *connExecutor) stmtDoesntNeedRetry(stmt tree.Statement) bool {
-	wrap := Statement{AST: stmt}
+	wrap := Statement{Statement: parser.Statement{AST: stmt}}
 	return isSavepoint(wrap) || isSetTransaction(wrap)
 }
 

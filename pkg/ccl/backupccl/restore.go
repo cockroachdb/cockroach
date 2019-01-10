@@ -177,7 +177,7 @@ func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error
 			ctxCopy.WithReformatTableNames(nil)
 			ctxCopy.FormatNode(tn)
 		})
-	f.FormatNode(stmt)
+	f.FormatNode(stmt.AST)
 	table.ViewQuery = f.CloseAndGetString()
 	return nil
 }

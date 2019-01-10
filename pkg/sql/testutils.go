@@ -45,7 +45,7 @@ func CreateTestTableDescriptor(
 		nil, /* txn */
 		nil, /* vt */
 		st,
-		stmt.(*tree.CreateTable),
+		stmt.AST.(*tree.CreateTable),
 		parentID, id,
 		hlc.Timestamp{}, /* creationTime */
 		privileges,
@@ -102,7 +102,7 @@ func (dsp *DistSQLPlanner) Exec(
 		return err
 	}
 	p := localPlanner.(*planner)
-	if err := p.makePlan(ctx, Statement{SQL: sql, AST: stmt}); err != nil {
+	if err := p.makePlan(ctx, Statement{Statement: stmt}); err != nil {
 		return err
 	}
 	rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
@@ -112,7 +112,7 @@ func (dsp *DistSQLPlanner) Exec(
 	recv := MakeDistSQLReceiver(
 		ctx,
 		rw,
-		stmt.StatementType(),
+		stmt.AST.StatementType(),
 		execCfg.RangeDescriptorCache,
 		execCfg.LeaseHolderCache,
 		p.txn,
