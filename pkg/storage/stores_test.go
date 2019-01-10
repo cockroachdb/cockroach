@@ -114,8 +114,9 @@ func TestStoresVisitStores(t *testing.T) {
 
 func TestStoresGetReplicaForRangeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
@@ -131,7 +132,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		cfg := TestStoreConfig(clock)
 		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 
-		store := NewStore(cfg, memEngine, &roachpb.NodeDescriptor{NodeID: 1})
+		store := NewStore(ctx, cfg, memEngine, &roachpb.NodeDescriptor{NodeID: 1})
 		// Fake-set an ident. This is usually read from the engine on store.Start()
 		// which we're not even going to call.
 		store.Ident = &roachpb.StoreIdent{StoreID: storeID}
@@ -216,7 +217,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 		eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		stopper.AddCloser(eng)
-		s := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		s := NewStore(context.TODO(), cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++
 		s.Ident = &roachpb.StoreIdent{StoreID: storeIDAlloc}
 		stores = append(stores, s)

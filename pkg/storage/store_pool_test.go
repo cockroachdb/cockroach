@@ -515,13 +515,14 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 // the local copy of store before that store has been gossiped will be a no-op.
 func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	stopper, _, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		storagepb.NodeLivenessStatus_DEAD)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 
 	// Create store.
 	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
@@ -529,7 +530,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	stopper.AddCloser(eng)
 	cfg := TestStoreConfig(clock)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-	store := NewStore(cfg, eng, &node)
+	store := NewStore(ctx, cfg, eng, &node)
 	// Fake an ident because this test doesn't want to start the store
 	// but without an Ident there will be NPEs.
 	store.Ident = &roachpb.StoreIdent{
