@@ -715,7 +715,6 @@ func MVCCGetAsTxn(
 	txnMeta enginepb.TxnMeta,
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	return MVCCGet(ctx, engine, key, timestamp, MVCCGetOptions{
-		IgnoreSequence: true,
 		Txn: &roachpb.Transaction{
 			TxnMeta:       txnMeta,
 			Status:        roachpb.PENDING,

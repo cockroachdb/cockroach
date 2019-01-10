@@ -24,13 +24,6 @@
 #include "status.h"
 #include "timestamp.h"
 
-// compareIntents compares two sequenced intents to check if the first one
-// has a sequence equal or lower than the second.
-bool compareIntents(const cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent& intent1,
-    const cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent& intent2) {
-  return (intent1.sequence() < intent2.sequence());
-}
-
 namespace cockroach {
 
 // kMaxItersBeforeSeek is the number of calls to iter->{Next,Prev}()
@@ -178,16 +171,21 @@ template <bool reverse> class mvccScanner {
   bool getFromIntentHistory() {
     cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent readIntent;
     readIntent.set_sequence(txn_sequence_);
-    // We try to find the smallest intent that is written after the read sequence.
-    // The intent right before that one must be the one we should read.
-    //
-    // If the read sequence is greater than all the intent sequences, we use the intent
-    // from the history with the largest sequence number.
-    auto up = std::upper_bound(meta_.intent_history().begin(), meta_.intent_history().end(),
-        readIntent, compareIntents);
+    // Look for the intent with the sequence number less than or equal to the
+    // read sequence. To do so, search using upper_bound, which returns an
+    // iterator pointing to the first element in the range [first, last) that is
+    // greater than value, or last if no such element is found. Then, return the
+    // previous value.
+    auto up = std::upper_bound(
+        meta_.intent_history().begin(), meta_.intent_history().end(), readIntent,
+        [](const cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent& a,
+           const cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent& b) -> bool {
+          return a.sequence() < b.sequence();
+        });
     if (up == meta_.intent_history().begin()) {
-      // It is possible that no intent exists such that the sequence is lower or equal
-      // to the read sequence. In this case, we cannot read a value from the intent history. 
+      // It is possible that no intent exists such that the sequence is less
+      // than the read sequence. In this case, we cannot read a value from the
+      // intent history.
       return false;
     }
     const auto intent = *(up - 1);
@@ -304,18 +302,22 @@ template <bool reverse> class mvccScanner {
         // transaction. Txn's always need to read their own writes.
         return seekVersion(meta_timestamp, false);
       } else {
-        // 9. We're reading our own txn's intent at a lower sequence.
-        // This means the intent we're seeing was written after the read.
-        // If there exists a value in the intent history that has a sequence
-        // number equal to or lower than the read sequence, read that value.
-        bool found = getFromIntentHistory();
+        // 9. We're reading our own txn's intent at a lower sequence than is
+        // currently present in the intent. This means the intent we're seeing
+        // was written at a higher sequence than the read and that there may or
+        // may not be earlier versions of the intent (with lower sequence
+        // numbers) that we should read. If there exists a value in the intent
+        // history that has a sequence number equal to or less than the read
+        // sequence, read that value.
+        const bool found = getFromIntentHistory();
         if (found) {
-          return true;
+          return advanceKey();
         }
-        // 10. If no value in the intent history has a sequence number equal to or
-        // lower than the read, we must ignore the intents laid down by the
+        // 10. If no value in the intent history has a sequence number equal to
+        // or less than the read, we must ignore the intents laid down by the
         // transaction all together. We ignore the intent by insisting that the
-        // timestamp we're reading at is a historical timestamp < the intent timestamp.
+        // timestamp we're reading at is a historical timestamp < the intent
+        // timestamp.
         return seekVersion(PrevTimestamp(ToDBTimestamp(meta_.timestamp())), false);
       }
     }
