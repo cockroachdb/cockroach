@@ -29,21 +29,21 @@ NULL       /10      {1}       1
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMFKAzEYhO8-RZiTQsCsIkhOFUTYyyqlN80hJkMJbDdLkgWl5N2lG7B4EHqc-ZKZ4T9iip6DPTBDv6ODkZhTdMw5ppPVHvT-C1pJhGleysk2Ei4mQh9RQhkJjZ39HLml9Uy3ChKexYZxjZ1TONj0vSmQeAljYdLienMnPhal7ik6pbXuh93jjXgans_EiYdfAlMl4lLO_bnYPaG7Ki_fuGWe45T5Z95_yaoaCfo92x1yXJLjW4purWnydf23Gp65NNo10U8NVVOvfgIAAP__TJBy_A==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMFKNDEQhO__U4Q6_ULEjCJIn1YQYS6jrHvTHGLSLIHZJCQZUJa8u-wEXDwIHqu-7uqijwjR8WQOXECvGKAlUo6WS4n5ZPWB0X2AlIQPaaknW0vYmBl0RPV1ZhB25n3mLRvH-UpBwnE1fl5jU_YHkz83FRIvyYRC4hISj36unEn831yLt0WpGxaDIqJx2t1diPvp4UysuP0m0E0iLvVcpVSzZ9DQ5N_rbrmkGAr_aPpbsmpagt2e-0tKXLLl5xzteqbLp3VvNRyX2unQxRg6arr9-woAAP__3cR1-A==
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFLxDAUhO_-ijInxcAmFUFyqiBCL1XWvWkPsXkshW5TXl5BWfrfpQ24rrDiHt9M5pshe_TBU-V2FGFfYVArDBwaijHwLKUHpf-A1QptP4wyy7VCE5hg95BWOoLFxr13tCbniVcaCp7Etd2CHbjdOf4sBAqPbSfENrss8uxt1PqGMqOttWW1ubvK7quHg9Nkt98O6kkhjHLoj-K2BGsm9f-NL4GFeGWO5xX59Ul8fg5-TXEIfaQj_CmynmoF8ltK3xzDyA09c2iWmnQ-LblF8BQluSYdZZ-seeDPsPkznP8K19PFVwAAAP__AEKl-Q==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFL_DAUxO__TxHm9Bcjm1QEyamCCL1U2d2b9hCbx1LoNuElBWXpd5c24LrCih5nJvPL8A4YvKPa7inCPEOjkQjsW4rR82zlB5V7g1ES3RDGNNuNROuZYA5IXeoJBlv72tOarCNeKUg4SrbrF2zgbm_5vUyQ2AQ7RCOuIPHQ9YnYiP9lIV5Gpa5JaGWMqert7YW4q--PSStuPhM0k4Qf03FKTHZHMHqSv5-78ZyIV_p0aVlcnsUXf8GvKQY_RDrBnyOrqZEgt6N88ehHbumJfbt8k-Xj0lsMRzHlVGdRDTmaB34t6x_LxbdyM_37CAAA__9jJKj1
 
 # Here we care about ordering by v, but v is not otherwise used.
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 10 AND v < 50 ORDER BY v]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFLxDAUhO_-ijAnxcAmXQTJqYIIvXRl3Zv2EJvHUug2JXkFZel_lzZgXWHFPb6ZzHxDjui8o9IeKMK8QqOS6IOvKUYfJik9KNwHjJJoun7gSa4kah8I5ghuuCUY7Ox7S1uyjsJKQcIR26ada_vQHGz4zBkST03LFIy4zjPxNii1JqGVMaYod_c34qF8XJxa3H07kNgMbESeyXyNapTwAy9jIts9wehR_n_wiw9MYaVPt-b6dmGdBWWXgLYUe99FOgGda1ZjJUFuT-n3ox9CTc_B1zMmnZs5NwuOIidXp6PokjUN_BnWf4azX-FqvPoKAAD__6Niq38=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFL_DAUxO__TxHm9Bcjm3QRJKcKIvTSld29aQ-xeSyFblOSV1CWfndpA9YVVvT4ZjLzG8gJnXdU2iNFmGdoVBJ98DXF6MMkpQeFe4NREk3XDzzJlUTtA8GcwA23BIO9fW1pS9ZRWClIOGLbtHNtH5qjDe85Q2LX2y4acQOJx6ZlCkb8zzPxMii1JqGVMaYo93dX4r58WJxa3H46kNgMbESeyXyNapTwAy-7ItsDwehR_n77zgemsNLns3N9vbAugrK_gLYUe99FOgNdalZjJUHuQOkjoh9CTU_B1zMmnZs5NwuOIidXp6PokjUN_BrWP4azb-Fq_PcRAAD__0r3rns=
 
 # The single join reader should be on node 5, and doesn't need to output v.
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 40 AND v < 50 ORDER BY v]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkT1rwzAQhvf-ivLOKrFsumjKmg5JCd2KB9U6gsHRCelcWoL_e7FVqF2I24z38byPOF3g2dHeninBvEJD4RG1QojcUEocx3Ze2rkPmEKh9aGXsV0rNBwJ5gJppSMY7PmBw6aEgiOxbTetDQrcyw-UxJ4IphrULFivB7_Yt46OZB3FTbGIx_tWoHDoxdxvNa7Z9C22J279t0wvZSG2Zxs_Z8rqqrJcKP-43JFSYJ_oX6crhlqB3Iny7yTuY0PPkZtJk8vDxE0NR0nytMrFzufR-MA5rFfhch0uV-HiF1wPd18BAAD__56h0KE=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkbFOwzAQhneeovpnV4kTunjqWoYWFTaUwcSnKlLqs2wHgaq8O4qNRIPUAKPv7vu_0_kCy4b2-kwB6gUSAhs0As5zSyGwn8p5aGfeoUqBzrohTuVGoGVPUBfELvYEhT2v2RUVBAxF3fVpbBTgIX5DIeoTQdWjuAqWy8HP-rWnI2lDvihn8XjbRgg8OW2DWhX3cl1sponDENVqK3FLL_-jf-DOftnl3O58d9b-I-2QlfVNZTVT_nLKIwXHNtCfblmOjQCZE-XvCjz4lh49t0mTn4fEpYKhEHO3zo-dza1pwWtYLsLVMlwtwuUPuBnvPgMAAP__G4vUxQ==
