@@ -433,7 +433,7 @@ func (r *Replica) GetSnapshot(
 	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
 	snapData, err := snapshot(
-		ctx, snapUUID, stateloader.Make(r.store.cfg.Settings, rangeID), snapType,
+		ctx, snapUUID, stateloader.Make(rangeID), snapType,
 		snap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
 	)
 	if err != nil {
@@ -620,10 +620,6 @@ func (r *Replica) append(
 		if err != nil {
 			return 0, 0, 0, err
 		}
-	}
-
-	if err := r.raftMu.stateLoader.SetLastIndex(ctx, batch, lastIndex); err != nil {
-		return 0, 0, 0, err
 	}
 
 	raftLogSize := prevRaftLogSize + diff.SysBytes

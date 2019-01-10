@@ -788,11 +788,11 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Get the range stats for both ranges now that we have data.
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	msA, err := stateloader.Make(nil /* st */, lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
+	msA, err := stateloader.Make(lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
-	msB, err := stateloader.Make(nil /* st */, rhsDesc.RangeID).LoadMVCCStats(ctx, snap)
+	msB, err := stateloader.Make(rhsDesc.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -817,7 +817,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Get the range stats for the merged range and verify.
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
-	msMerged, err := stateloader.Make(nil /* st */, replMerged.RangeID).LoadMVCCStats(ctx, snap)
+	msMerged, err := stateloader.Make(replMerged.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}

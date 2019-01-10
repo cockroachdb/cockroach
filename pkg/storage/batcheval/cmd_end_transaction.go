@@ -953,7 +953,7 @@ func splitTrigger(
 			// clobber downstream simply because that's what 1.0 does and if we
 			// don't write it here, then a 1.0 version applying it as a follower
 			// won't write a HardState at all and is guaranteed to crash.
-			rsl := stateloader.Make(rec.ClusterSettings(), split.RightDesc.RangeID)
+			rsl := stateloader.Make(split.RightDesc.RangeID)
 			if err := rsl.SynthesizeRaftState(ctx, batch); err != nil {
 				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to synthesize initial Raft state")
 			}

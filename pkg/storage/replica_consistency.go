@@ -428,7 +428,7 @@ func (r *Replica) sha512(
 	result.RecomputedMS = ms
 	hasher.Sum(result.SHA512[:0])
 
-	curMS, err := stateloader.Make(r.store.cfg.Settings, desc.RangeID).LoadMVCCStats(ctx, snap)
+	curMS, err := stateloader.Make(desc.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		return nil, err
 	}
