@@ -256,7 +256,7 @@ func bootstrapCluster(
 
 		// The bootstrapping store will not connect to other nodes so its
 		// StoreConfig doesn't really matter.
-		s := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
+		s := storage.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
 		// Bootstrap store to persist the store ident and cluster version.
 		if err := storage.Bootstrap(ctx, eng, sIdent, bootstrapVersion); err != nil {
@@ -587,7 +587,7 @@ func (n *Node) initStores(
 ) ([]*storage.Store, error) {
 	var stores []*storage.Store
 	for _, e := range engines {
-		s := storage.NewStore(n.storeCfg, e, &n.Descriptor)
+		s := storage.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
 		log.Eventf(ctx, "created store for engine: %s", e)
 
 		stores = append(stores, s)
