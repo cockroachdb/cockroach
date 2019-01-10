@@ -1,0 +1,160 @@
+exec-ddl
+CREATE TABLE bx (
+  b INT PRIMARY KEY,
+  x INT
+)
+----
+TABLE bx
+ ├── b int not null
+ ├── x int
+ └── INDEX primary
+      └── b int not null
+
+exec-ddl
+CREATE TABLE cy (
+  c INT PRIMARY KEY,
+  y INT
+)
+----
+TABLE cy
+ ├── c int not null
+ ├── y int
+ └── INDEX primary
+      └── c int not null
+
+exec-ddl
+CREATE TABLE dz (
+  d INT PRIMARY KEY,
+  z INT
+)
+----
+TABLE dz
+ ├── d int not null
+ ├── z int
+ └── INDEX primary
+      └── d int not null
+
+exec-ddl
+CREATE TABLE abc (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT
+)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ └── INDEX primary
+      └── a int not null
+
+opt reorder-joins
+SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
+----
+inner-join (lookup cy)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) b:5(int!null) x:6(int) c:7(int!null) y:8(int)
+ ├── key columns: [3] = [7]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-8)
+ ├── inner-join (lookup bx)
+ │    ├── columns: a:1(int!null) abc.b:2(int!null) abc.c:3(int) d:4(int) bx.b:5(int!null) x:6(int)
+ │    ├── key columns: [2] = [5]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-6)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) abc.b:2(int) abc.c:3(int) d:4(int)
+ │    │    ├── constraint: /1: [/1 - /1]
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(1-4)
+ │    └── filters (true)
+ └── filters (true)
+
+opt reorder-joins
+SELECT * FROM bx, abc, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
+----
+inner-join (lookup cy)
+ ├── columns: b:1(int!null) x:2(int) a:3(int!null) b:4(int!null) c:5(int!null) d:6(int) c:7(int!null) y:8(int)
+ ├── key columns: [5] = [7]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-8)
+ ├── inner-join (lookup bx)
+ │    ├── columns: bx.b:1(int!null) x:2(int) a:3(int!null) abc.b:4(int!null) abc.c:5(int) d:6(int)
+ │    ├── key columns: [4] = [1]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-6)
+ │    ├── scan abc
+ │    │    ├── columns: a:3(int!null) abc.b:4(int) abc.c:5(int) d:6(int)
+ │    │    ├── constraint: /3: [/1 - /1]
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(3-6)
+ │    └── filters (true)
+ └── filters (true)
+
+opt reorder-joins
+SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
+----
+inner-join (lookup bx)
+ ├── columns: b:1(int!null) x:2(int) c:3(int!null) y:4(int) a:5(int!null) b:6(int!null) c:7(int!null) d:8(int)
+ ├── key columns: [6] = [1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-8)
+ ├── inner-join (lookup cy)
+ │    ├── columns: cy.c:3(int!null) y:4(int) a:5(int!null) abc.b:6(int) abc.c:7(int!null) d:8(int)
+ │    ├── key columns: [7] = [3]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(3-8)
+ │    ├── scan abc
+ │    │    ├── columns: a:5(int!null) abc.b:6(int) abc.c:7(int) d:8(int)
+ │    │    ├── constraint: /5: [/1 - /1]
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(5-8)
+ │    └── filters (true)
+ └── filters (true)
+
+opt reorder-joins
+SELECT * FROM bx, cy, dz, abc WHERE a = 1
+----
+inner-join
+ ├── columns: b:1(int!null) x:2(int) c:3(int!null) y:4(int) d:5(int!null) z:6(int) a:7(int!null) b:8(int) c:9(int) d:10(int)
+ ├── key: (1,3,5)
+ ├── fd: ()-->(7-10), (1)-->(2), (3)-->(4), (5)-->(6)
+ ├── inner-join
+ │    ├── columns: bx.b:1(int!null) x:2(int) cy.c:3(int!null) y:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── scan bx
+ │    │    ├── columns: bx.b:1(int!null) x:2(int)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan cy
+ │    │    ├── columns: cy.c:3(int!null) y:4(int)
+ │    │    ├── key: (3)
+ │    │    └── fd: (3)-->(4)
+ │    └── filters (true)
+ ├── inner-join
+ │    ├── columns: dz.d:5(int!null) z:6(int) a:7(int!null) abc.b:8(int) abc.c:9(int) abc.d:10(int)
+ │    ├── key: (5)
+ │    ├── fd: ()-->(7-10), (5)-->(6)
+ │    ├── scan dz
+ │    │    ├── columns: dz.d:5(int!null) z:6(int)
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6)
+ │    ├── scan abc
+ │    │    ├── columns: a:7(int!null) abc.b:8(int) abc.c:9(int) abc.d:10(int)
+ │    │    ├── constraint: /7: [/1 - /1]
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(7-10)
+ │    └── filters (true)
+ └── filters (true)

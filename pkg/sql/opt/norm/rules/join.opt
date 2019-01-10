@@ -462,3 +462,33 @@ $left
   $right
   (SortFilters $on)
 )
+
+# NormalizeInnerJoinToLeftDeep rearranges inner joins to a left deep tree, where every right child
+# is not an inner join.
+#
+# This rule is needed to make exploration via AssociateJoin not require the merging of groups.
+[NormalizeInnerJoinToLeftDeep, Normalize]
+(InnerJoin
+    $left:* & (ShouldReorderJoins)
+    $right:(InnerJoin
+        $innerLeft:*
+        $innerRight:*
+        $innerOn:*
+    )
+    $on:*
+)
+=>
+(InnerJoin
+    (InnerJoin
+        $left
+        $innerLeft
+        (SortFilters (ExtractBoundConditions $on (OutputCols2 $left $innerLeft)))
+    )
+    $innerRight
+    (SortFilters
+        (ConcatFilters
+            (ExtractUnboundConditions $on (OutputCols2 $left $innerLeft))
+            $innerOn
+        )
+    )
+)
