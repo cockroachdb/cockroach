@@ -199,10 +199,7 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 // written, since epoch-based leases cannot be granted until then. All other
 // engines are initialized with their StoreIdent.
 func bootstrapCluster(
-	ctx context.Context,
-	engines []engine.Engine,
-	bootstrapVersion cluster.ClusterVersion,
-	txnMetrics kv.TxnMetrics,
+	ctx context.Context, engines []engine.Engine, bootstrapVersion cluster.ClusterVersion,
 ) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
@@ -304,7 +301,7 @@ func (n *Node) bootstrap(
 		return fmt.Errorf("cluster has already been initialized with ID %s", n.clusterID.Get())
 	}
 	n.initialBoot = true
-	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion, n.txnMetrics)
+	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion)
 	if err != nil {
 		return err
 	}

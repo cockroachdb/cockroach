@@ -202,17 +202,17 @@ func (s keySlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 	if _, err := bootstrapCluster(
-		context.TODO(), []engine.Engine{e}, cluster.TestingClusterVersion,
-		kv.MakeTxnMetrics(metric.TestSampleInterval),
+		ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// Scan the complete contents of the local database directly from the engine.
-	rows, _, _, err := engine.MVCCScan(context.Background(), e, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, engine.MVCCScanOptions{})
+	rows, _, _, err := engine.MVCCScan(ctx, e, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, engine.MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,6 @@ func TestBootstrapNewStore(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	if _, err := bootstrapCluster(
 		ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
-		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +317,6 @@ func TestNodeJoin(t *testing.T) {
 
 	if _, err := bootstrapCluster(
 		ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
-		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -384,12 +382,12 @@ func TestNodeJoin(t *testing.T) {
 func TestCorruptedClusterID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
 	if _, err := bootstrapCluster(
-		context.TODO(), []engine.Engine{e},
-		cluster.TestingClusterVersion, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -400,21 +398,23 @@ func TestCorruptedClusterID(t *testing.T) {
 		NodeID:    1,
 		StoreID:   1,
 	}
-	if err := engine.MVCCPutProto(context.Background(), e, nil, keys.StoreIdentKey(), hlc.Timestamp{}, nil, &sIdent); err != nil {
+	if err := engine.MVCCPutProto(
+		ctx, e, nil /* ms */, keys.StoreIdentKey(), hlc.Timestamp{}, nil /* txn */, &sIdent,
+	); err != nil {
 		t.Fatal(err)
 	}
 
 	engines := []engine.Engine{e}
 	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion,
+		ctx, engines, cfg.Settings.Version.MinSupportedVersion,
 		cfg.Settings.Version.ServerVersion, node.clusterID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := node.start(
-		context.Background(), serverAddr, bootstrappedEngines, newEngines,
+		ctx, serverAddr, bootstrappedEngines, newEngines,
 		roachpb.Attributes{}, roachpb.Locality{}, cv,
 		[]roachpb.LocalityAddress{},
 		nil, /* nodeDescriptorCallback */
@@ -736,7 +736,6 @@ func TestStartNodeWithLocality(t *testing.T) {
 		defer e.Close()
 		if _, err := bootstrapCluster(
 			ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
-			kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {
 			t.Fatal(err)
 		}
