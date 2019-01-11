@@ -189,12 +189,14 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		})
 	}
 
-	if err := ltc.Store.WriteInitialData(
+	if err := storage.WriteInitialClusterData(
 		ctx,
+		ltc.Eng,
 		initialValues,
 		cfg.Settings.Version.ServerVersion,
 		1, /* numStores */
 		splits,
+		ltc.Clock.PhysicalNow(),
 	); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}

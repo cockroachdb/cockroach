@@ -188,11 +188,12 @@ func createTestStoreWithOpts(
 				return splits[i].Less(splits[j])
 			})
 		}
-		err := store.WriteInitialData(
+		err := storage.WriteInitialClusterData(
 			ctx,
-			kvs,
+			eng,
+			kvs, /* initialValues */
 			storeCfg.Settings.Version.BootstrapVersion().Version,
-			1 /* numStores */, splits)
+			1 /* numStores */, splits, storeCfg.Clock.PhysicalNow())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -836,9 +837,8 @@ func (m *multiTestContext) addStore(idx int) {
 			m.t.Fatal(err)
 		}
 	}
-	store := storage.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap && idx == 0 {
-		// Bootstrap the initial range on the first store.
+		// Bootstrap the initial range on the first engine.
 		var splits []roachpb.RKey
 		kvs, tableSplits := sqlbase.MakeMetadataSchema().GetInitialValues()
 		if !m.startWithSingleRange {
@@ -848,15 +848,17 @@ func (m *multiTestContext) addStore(idx int) {
 				return splits[i].Less(splits[j])
 			})
 		}
-		err := store.WriteInitialData(
+		err := storage.WriteInitialClusterData(
 			ctx,
-			kvs,
+			eng,
+			kvs, /* initialValues */
 			cfg.Settings.Version.BootstrapVersion().Version,
-			len(m.engines), splits)
+			len(m.engines), splits, cfg.Clock.PhysicalNow())
 		if err != nil {
 			m.t.Fatal(err)
 		}
 	}
+	store := storage.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if err := store.Start(ctx, stopper); err != nil {
 		m.t.Fatal(err)
 	}
