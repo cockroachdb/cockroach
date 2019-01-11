@@ -170,6 +170,13 @@ type TxnSender interface {
 	// like the transaction that merges ranges together.
 	DisablePipelining() error
 
+	// EagerRecord instructs the transaction write its transaction record as soon as
+	// possible, instead of waiting for the transaction's first heartbeat or for the
+	// end of the transaction to write it.
+	//
+	// TODO(nvanbenschoten): Fix up flaky tests to allow us to get rid of this.
+	EagerRecord() error
+
 	// OrigTimestamp returns the transaction's starting timestamp.
 	// Note a transaction can be internally pushed forward in time before
 	// committing so this is not guaranteed to be the commit timestamp.
@@ -360,6 +367,9 @@ func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
 
 // DisablePipelining is part of the client.TxnSender interface.
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
+
+// EagerRecord is part of the client.TxnSender interface.
+func (m *MockTransactionalSender) EagerRecord() error { return nil }
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
