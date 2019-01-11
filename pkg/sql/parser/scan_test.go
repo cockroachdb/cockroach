@@ -155,12 +155,12 @@ foo`, "", "foo"},
 }
 
 func TestScanKeyword(t *testing.T) {
-	for kwName, kwID := range lex.Keywords {
+	for _, kwName := range lex.KeywordNames {
 		s := makeScanner(kwName)
 		var lval sqlSymType
 		s.scan(&lval)
-		if int32(kwID.Tok) != lval.id {
-			t.Errorf("%s: expected %d, but found %d", kwName, kwID.Tok, lval.id)
+		if id := lex.GetKeywordID(kwName); id != lval.id {
+			t.Errorf("%s: expected %d, but found %d", kwName, id, lval.id)
 		}
 	}
 }
