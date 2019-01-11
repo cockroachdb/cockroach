@@ -77,25 +77,30 @@ func BeginTransaction(
 
 	// Check whether the transaction record already exists. If it already
 	// exists, check its current status and react accordingly.
-	tmpTxn := roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, &tmpTxn, engine.MVCCGetOptions{})
-	if err != nil {
+	var existingTxn roachpb.Transaction
+	if ok, err := engine.MVCCGetProto(
+		ctx, batch, key, hlc.Timestamp{}, &existingTxn, engine.MVCCGetOptions{},
+	); err != nil {
 		return result.Result{}, err
-	}
-	if ok {
-		switch tmpTxn.Status {
+	} else if !ok {
+		// Verify that it is safe to create the transaction record.
+		if err := CanCreateTxnRecord(cArgs.EvalCtx, reply.Txn); err != nil {
+			return result.Result{}, err
+		}
+	} else {
+		switch existingTxn.Status {
 		case roachpb.ABORTED:
 			// Check whether someone has come in ahead and already aborted the
 			// txn.
 			return result.Result{}, roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
 		case roachpb.PENDING:
-			if h.Txn.Epoch > tmpTxn.Epoch {
+			if h.Txn.Epoch > existingTxn.Epoch {
 				// On a transaction retry there will be an extant txn record
 				// but this run should have an upgraded epoch. The extant txn
 				// record may have been pushed or otherwise updated, so update
 				// this command's txn and rewrite the record.
-				reply.Txn.Update(&tmpTxn)
+				reply.Txn.Update(&existingTxn)
 			} else {
 				// Our txn record already exists. This is possible if the first
 				// transaction heartbeat evaluated before this BeginTransaction
@@ -107,19 +112,14 @@ func BeginTransaction(
 
 		case roachpb.COMMITTED:
 			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("BeginTransaction can't overwrite %s", tmpTxn),
+				fmt.Sprintf("BeginTransaction can't overwrite %s", existingTxn),
 			)
 
 		default:
 			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("bad txn state: %s", tmpTxn),
+				fmt.Sprintf("bad txn state: %s", existingTxn),
 			)
 		}
-	}
-
-	// Verify that it is safe to create the transaction record.
-	if err := CanCreateTxnRecord(cArgs.EvalCtx, reply.Txn); err != nil {
-		return result.Result{}, err
 	}
 
 	// Write the txn record.
