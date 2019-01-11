@@ -65,14 +65,8 @@ func (r *Replica) updateTimestampCache(
 			switch t := args.(type) {
 			case *roachpb.EndTransactionRequest:
 				// EndTransaction adds the transaction key to the write
-				// timestamp cache as a tombstone to ensure replays and
-				// concurrent requests aren't able to create a new
-				// transaction record.
-				//
-				// It inserts the timestamp of the final batch in the
-				// transaction. This timestamp must necessarily be equal
-				// to or greater than the transaction's OrigTimestamp,
-				// which is consulted in CanCreateTxnRecord.
+				// timestamp cache to ensure replays create a transaction
+				// record with WriteTooOld set.
 				key := keys.TransactionKey(start, txnID)
 				tc.Add(key, nil, ts, txnID, false /* readCache */)
 			case *roachpb.ConditionalPutRequest:
@@ -163,6 +157,51 @@ func (r *Replica) applyTimestampCache(
 		args := union.GetInner()
 		if roachpb.ConsultsTimestampCache(args) {
 			header := args.Header()
+			// BeginTransaction is a special case. We use the transaction
+			// key to look for an entry which would indicate this transaction
+			// has already been finalized, in which case this BeginTxn might be a
+			// replay (it might also be delayed, coming in behind an async EndTxn).
+			// If the request hits the timestamp cache, then we return a retriable
+			// error: if this is a re-evaluation, then the error will be transformed
+			// into an ambiguous one higher up. Otherwise, if the client is still
+			// waiting for a result, then this cannot be a "replay" of any sort.
+			//
+			// The retriable error we return is a TransactionAbortedError, instructing
+			// the client to create a new transaction. Since a transaction record
+			// doesn't exist, there's no point in the client to continue with the
+			// existing transaction at a new epoch.
+			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
+				key := keys.TransactionKey(header.Key, ba.Txn.ID)
+				wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil /* end */)
+				// GetMaxWrite will only find a timestamp interval with an
+				// associated txnID on the TransactionKey if an EndTxnReq has
+				// been processed. All other timestamp intervals will have no
+				// associated txnID and will be due to the low-water mark.
+				switch wTxnID {
+				case ba.Txn.ID:
+					newTxn := ba.Txn.Clone()
+					newTxn.Status = roachpb.ABORTED
+					newTxn.Timestamp.Forward(wTS.Next())
+					return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(
+						roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY), &newTxn)
+				case uuid.UUID{} /* noTxnID */ :
+					if !wTS.Less(ba.Txn.Timestamp) {
+						// On lease transfers the timestamp cache is reset with the transfer
+						// time as the low-water mark, so if this replica recently obtained
+						// the lease, this case will be true for new txns, even if they're
+						// not a replay. We move the timestamp forward and return retry.
+						newTxn := ba.Txn.Clone()
+						newTxn.Status = roachpb.ABORTED
+						newTxn.Timestamp.Forward(wTS.Next())
+						return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(
+							roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY), &newTxn)
+					}
+				default:
+					log.Fatalf(ctx, "unexpected tscache interval (%s,%s) on TxnKey %s",
+						wTS, wTxnID, key)
+				}
+				continue
+			}
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
 			rTS, rTxnID := r.store.tsCache.GetMaxRead(header.Key, header.EndKey)
@@ -202,59 +241,4 @@ func (r *Replica) applyTimestampCache(
 		}
 	}
 	return bumped, nil
-}
-
-// CanCreateTxnRecord determines whether a transaction record can be created
-// for the provided transaction. If not, it returns the reason that transaction
-// record was rejected. If the method ever determines that a transaction record
-// must be rejected, it will continue to reject that transaction going forwards.
-func (r *Replica) CanCreateTxnRecord(
-	txn *roachpb.Transaction,
-) (bool, roachpb.TransactionAbortedReason) {
-	// We make comparisons below against the epoch zero timestamp because the
-	// transaction's provisional commit timestamp may be moved forward over the
-	// course of a single epoch and its original timestamp may have moved
-	// forward over the course of a series of epochs.
-	minTxnTS, _ := txn.InclusiveTimeBounds()
-
-	// We look in the timestamp cache to see if there is an entry for this
-	// transaction, which would indicate this transaction has already been
-	// finalized. If there is an entry, then we return a retriable error: if
-	// this is a re-evaluation, then the error will be transformed into an
-	// ambiguous one higher up. Otherwise, if the client is still waiting for a
-	// result, then this cannot be a "replay" of any sort.
-	key := keys.TransactionKey(txn.Key, txn.ID)
-	wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil /* end */)
-	// GetMaxWrite will only find a timestamp interval with an associated txnID
-	// on the TransactionKey if an EndTxnReq has been processed. All other
-	// timestamp intervals will have no associated txnID and will be due to the
-	// low-water mark.
-	switch wTxnID {
-	case txn.ID:
-		return false, roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
-	case uuid.UUID{} /* noTxnID */ :
-		if !wTS.Less(minTxnTS) {
-			// On lease transfers the timestamp cache is reset with the transfer
-			// time as the low-water mark, so if this replica recently obtained
-			// the lease, this case will be true for new txns, even if they're
-			// not a replay. We force these txns to retry.
-			return false, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY
-		}
-	default:
-		log.Fatalf(context.Background(), "unexpected tscache interval (%s,%s) for txn %s",
-			wTS, wTxnID, txn)
-	}
-
-	// Disallow creation or modification of a transaction record if its original
-	// timestamp is before the TxnSpanGCThreshold, as in that case our transaction
-	// may already have been aborted by a concurrent actor which encountered one
-	// of our intents (which may have been written before our transaction record).
-	//
-	// See #9265.
-	threshold := r.GetTxnSpanGCThreshold()
-	if minTxnTS.Less(threshold) {
-		return false, roachpb.ABORT_REASON_NEW_TXN_RECORD_TOO_OLD
-	}
-
-	return true, 0
 }

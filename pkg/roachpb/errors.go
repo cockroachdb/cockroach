@@ -408,6 +408,15 @@ func NewTransactionStatusError(msg string) *TransactionStatusError {
 	}
 }
 
+// NewTransactionNotFoundStatusError initializes a new TransactionStatusError with
+// a REASON_TXN_NOT_FOUND reason.
+func NewTransactionNotFoundStatusError() *TransactionStatusError {
+	return &TransactionStatusError{
+		Msg:    "txn record not found",
+		Reason: TransactionStatusError_REASON_TXN_NOT_FOUND,
+	}
+}
+
 // NewTransactionCommittedStatusError initializes a new TransactionStatusError
 // with a REASON_TXN_COMMITTED.
 func NewTransactionCommittedStatusError() *TransactionStatusError {

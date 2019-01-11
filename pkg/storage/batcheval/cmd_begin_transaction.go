@@ -40,9 +40,6 @@ func declareKeysWriteTransaction(
 		spans.Add(spanset.SpanReadWrite, roachpb.Span{
 			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
 		})
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{
-			Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID),
-		})
 	}
 }
 
@@ -50,6 +47,7 @@ func declareKeysBeginTransaction(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	declareKeysWriteTransaction(desc, header, req, spans)
+	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID)})
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{
 		Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 	})
@@ -97,12 +95,10 @@ func BeginTransaction(
 				// this command's txn and rewrite the record.
 				reply.Txn.Update(&tmpTxn)
 			} else {
-				// Our txn record already exists. This is possible if the first
-				// transaction heartbeat evaluated before this BeginTransaction
-				// request or if the DistSender re-sent the batch. Either way,
-				// this request will contain no new information about the
-				// transaction, so treat the BeginTransaction as a no-op.
-				return result.Result{}, nil
+				// Our txn record already exists. This is either a client error, sending
+				// a duplicate BeginTransaction, or it's an artifact of DistSender
+				// re-sending a batch. Assume the latter and ask the client to restart.
+				return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
 			}
 
 		case roachpb.COMMITTED:
@@ -117,10 +113,21 @@ func BeginTransaction(
 		}
 	}
 
-	// Verify that it is safe to create the transaction record.
-	if ok, reason := cArgs.EvalCtx.CanCreateTxnRecord(reply.Txn); !ok {
-		return result.Result{}, roachpb.NewTransactionAbortedError(reason)
+	// Disallow creation or modification of a transaction record if it's at a
+	// timestamp before the TxnSpanGCThreshold, as in that case our transaction
+	// may already have been aborted by a concurrent actor which encountered one
+	// of our intents (which may have been written before this entry).
+	//
+	// See #9265.
+	threshold := cArgs.EvalCtx.GetTxnSpanGCThreshold()
+	if reply.Txn.LastActive().Less(threshold) {
+		return result.Result{}, roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_BEGIN_TOO_OLD)
 	}
+
+	// Initialize the LastHeartbeat field to the present time. This allows the
+	// transaction record to survive for a while regardless of when the first
+	// heartbeat arrives.
+	reply.Txn.LastHeartbeat.Forward(cArgs.EvalCtx.Clock().Now())
 
 	// Write the txn record.
 	txnRecord := reply.Txn.AsRecord()
