@@ -538,7 +538,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	}
 
 	// Verify distribution.
-	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html#eJyskT1rwzAQhvf-inJTCoJETrpoSumUoXbJBx2KCap1GEMsmZMELcH_vdgaEodYTSGjTn7uef3qCNooTGWNFsQncGCQQM6gIVOgtYa6cfhopb5BzBhUuvGuG-cMCkMI4giucgcEAVv5dcA1SoU0nQEDhU5Wh351Q1Ut6WepfW2BQeadeEyNRshbBsa701LrZIkgeMtuF7-UJWEpnaFpMvS-Zrt0u19nH5vJ06grGXWdFF4bUkioBvvzNp5mMUyz2b3tV-l2suTjYeaDMPz2xvldG_9DfPaP87s2fsW1RtsYbfGi-eubZ92LoCoxPJ81ngp8J1P0mnDMeq4fKLQu3PJwWOlw1QU8h3kUTgYwv4STKPwcN8-j8CIOL_4VO28ffgMAAP__nC9YuA=="}})
+	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html#eJyskT9r8zAQh_f3U4Sb8oKCIyddNKV0ylC75A8digmqdRhDIpmTBC3B373YGhKHRE1LR935d8_juyNoozCTB7Qg3oADgxQKBg2ZEq011JXDR0v1AWLKoNaNd125YFAaQhBHcLXbIwjYyPc9rlAqpGQKDBQ6We_70Q3VB0mfC-0PFhisG6mtGE2SDpl7J0aZ0QhFy8B4dyJYJysEwVt2v8VjVRFW0hlK0qHEU77NNrtV_roe_7_JSm-yTgivDSkkVIP5RRu3mQ9t1tvn3TLbjBf8tsxsIMPvXz-_Z_0Jn_xi_d9YnP3w7E_Xf4W1QtsYbfHiDNcnT7vzoKow3NIaTyW-kCl7THjmfa4vKLQudHl4LHVodYLnYR4Np4Mwvwyn0fBDnDyLhufx8PxH2kX77ysAAP__gSRfcA=="}})
 
 	// Drain the second node and expect the query to be planned on only the
 	// first node.
@@ -546,7 +546,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	distServer.ServerConfig.TestingKnobs.DrainFast = true
 	distServer.Drain(ctx, 0 /* flowDrainWait */)
 
-	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEFL9DAQhu_fr_h4TwqBbfeYk-JpL63UFQ8SJDZDKLSZMklAWfrfpc1BV1jR47yT533CnBDYUWMnitDPqGEUZuGeYmRZo_Lg4N6gK4UhzDmtsVHoWQj6hDSkkaBxtK8jdWQdya6CgqNkh3GrnWWYrLzfhDxFKLQ56f8NB4JZFDinz9KYrCfoelG_F996L-RtYtnV59679rE5vnTt08PV9UXX_i-ujuLMIdKZ51JztRgFcp7KISNn6eleuN80ZWw3bgscxVS2dRkOoazWD36F6x_h_TfYLP8-AgAA__-zG6EE"}})
+	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkDFLxEAUhHt_xTGVwsolV26lWF2TSO7EQoKs2UcIJPvCextQjvx3SbbQE060fDM78w17QmBPhRtIYV-QozYYhRtSZVmk9GDv32Ezgy6MU1zk2qBhIdgTYhd7gsXRvfVUkfMk2wwGnqLr-rV2lG5w8nEXpkFhcBhdULu5hUE5RbspOBDq2YCn-NWv0bUEm8_m7xvu21aodZFlm59PeCifiuNrVT4frm8usnb_YVWkIwelM86l5myuDci3lP5UeZKGHoWbFZPOcs2tgieNyc3TsQ_JWgZ-D-e_hnc_wvV89RkAAP__weakAA=="}})
 
 	// Verify correctness.
 	var res int

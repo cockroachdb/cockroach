@@ -175,4 +175,3 @@ SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 
 statement ok
 SET experimental_enable_zigzag_join = false;
-
