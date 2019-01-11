@@ -131,8 +131,29 @@ func indexDetails(indexIdx uint32, desc *sqlbase.TableDescriptor) []string {
 
 // summary implements the diagramCellType interface.
 func (tr *TableReaderSpec) summary() (string, []string) {
-	// TODO(radu): a summary of the spans
-	return "TableReader", indexDetails(tr.IndexIdx, &tr.Table)
+	details := indexDetails(tr.IndexIdx, &tr.Table)
+
+	if len(tr.Spans) > 0 {
+		// only show the first span
+		idx, _, _ := tr.Table.FindIndexByIndexIdx(int(tr.IndexIdx))
+		valDirs := sqlbase.IndexKeyValDirs(idx)
+
+		var spanStr strings.Builder
+		spanStr.WriteString("Spans: ")
+		spanStr.WriteString(sqlbase.PrettySpan(valDirs, tr.Spans[0].Span, 2))
+
+		if len(tr.Spans) > 1 {
+			spanStr.WriteString(fmt.Sprintf(" and %d other", len(tr.Spans)-1))
+		}
+
+		if len(tr.Spans) > 2 {
+			spanStr.WriteString("s") // pluralize the 'other'
+		}
+
+		details = append(details, spanStr.String())
+	}
+
+	return "TableReader", details
 }
 
 // summary implements the diagramCellType interface.
