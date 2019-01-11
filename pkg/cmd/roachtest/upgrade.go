@@ -137,7 +137,7 @@ func registerUpgrade(r *registry) {
 				t.Fatal(err)
 			}
 			c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-			c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+			c.Start(ctx, t, c.Node(i))
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
 			}
@@ -159,7 +159,7 @@ func registerUpgrade(r *registry) {
 			t.Fatal(err)
 		}
 		c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
-		c.Start(ctx, t, c.Node(nodes), startArgsDontEncrypt)
+		c.Start(ctx, t, c.Node(nodes))
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -200,7 +200,7 @@ func registerUpgrade(r *registry) {
 		}
 
 		// Restart the previously stopped node.
-		c.Start(ctx, t, c.Node(nodes-1), startArgsDontEncrypt)
+		c.Start(ctx, t, c.Node(nodes-1))
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
