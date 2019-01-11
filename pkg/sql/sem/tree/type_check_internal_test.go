@@ -350,160 +350,160 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 	}{
 		{
 			tree.PlaceholderTypes{},
-			[]tree.Expr{newPlaceholder(1)},
+			[]tree.Expr{newPlaceholder(0)},
 			tree.PlaceholderTypes{},
 		},
 		{
 			tree.PlaceholderTypes{},
-			[]tree.Expr{newPlaceholder(1), newPlaceholder(2)},
+			[]tree.Expr{newPlaceholder(0), newPlaceholder(1)},
 			tree.PlaceholderTypes{},
 		},
 		{
-			tree.PlaceholderTypes{2: types.Bool},
-			[]tree.Expr{newPlaceholder(1), newPlaceholder(2)},
-			tree.PlaceholderTypes{2: types.Bool},
+			tree.PlaceholderTypes{1: types.Bool},
+			[]tree.Expr{newPlaceholder(0), newPlaceholder(1)},
+			tree.PlaceholderTypes{1: types.Bool},
 		},
 		{
-			tree.PlaceholderTypes{3: types.Float},
-			[]tree.Expr{newPlaceholder(1), newPlaceholder(2)},
-			tree.PlaceholderTypes{3: types.Float},
+			tree.PlaceholderTypes{2: types.Float},
+			[]tree.Expr{newPlaceholder(0), newPlaceholder(1)},
+			tree.PlaceholderTypes{2: types.Float},
 		},
 		{
 			tree.PlaceholderTypes{},
 			[]tree.Expr{
-				cast(newPlaceholder(1), intType),
+				cast(newPlaceholder(0), intType),
+				cast(newPlaceholder(0), boolType),
+			},
+			tree.PlaceholderTypes{},
+		},
+		{
+			tree.PlaceholderTypes{0: types.Float},
+			[]tree.Expr{
+				cast(newPlaceholder(0), intType),
+				cast(newPlaceholder(0), boolType),
+			},
+			tree.PlaceholderTypes{0: types.Float},
+		},
+		{
+			tree.PlaceholderTypes{},
+			[]tree.Expr{
+				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(1), boolType),
 			},
-			tree.PlaceholderTypes{},
-		},
-		{
-			tree.PlaceholderTypes{1: types.Float},
-			[]tree.Expr{
-				cast(newPlaceholder(1), intType),
-				cast(newPlaceholder(1), boolType),
-			},
-			tree.PlaceholderTypes{1: types.Float},
+			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
 		},
 		{
 			tree.PlaceholderTypes{},
 			[]tree.Expr{
-				cast(newPlaceholder(1), intType),
-				cast(newPlaceholder(2), boolType),
-			},
-			tree.PlaceholderTypes{1: types.Int, 2: types.Bool},
-		},
-		{
-			tree.PlaceholderTypes{},
-			[]tree.Expr{
-				annot(newPlaceholder(1), intType),
-				annot(newPlaceholder(2), boolType),
-			},
-			tree.PlaceholderTypes{1: types.Int, 2: types.Bool},
-		},
-		{
-			tree.PlaceholderTypes{2: types.Bool},
-			[]tree.Expr{
-				annot(newPlaceholder(1), intType),
-			},
-			tree.PlaceholderTypes{1: types.Int, 2: types.Bool},
-		},
-		{
-			tree.PlaceholderTypes{},
-			[]tree.Expr{
-				cast(newPlaceholder(1), intType),
-				cast(newPlaceholder(2), boolType),
-				cast(newPlaceholder(1), intType),
-				cast(newPlaceholder(2), intType),
-			},
-			tree.PlaceholderTypes{1: types.Int},
-		},
-		{
-			tree.PlaceholderTypes{},
-			[]tree.Expr{
-				cast(newPlaceholder(1), intType),
-				annot(newPlaceholder(2), boolType),
-				cast(newPlaceholder(1), intType),
-				cast(newPlaceholder(2), intType),
-			},
-			tree.PlaceholderTypes{1: types.Int, 2: types.Bool},
-		},
-		{
-			tree.PlaceholderTypes{},
-			[]tree.Expr{
-				cast(newPlaceholder(1), intType),
-				cast(newPlaceholder(2), boolType),
-				newPlaceholder(1),
-			},
-			tree.PlaceholderTypes{2: types.Bool},
-		},
-		{
-			tree.PlaceholderTypes{},
-			[]tree.Expr{
-				newPlaceholder(1),
-				cast(newPlaceholder(1), intType),
-				cast(newPlaceholder(2), boolType),
-			},
-			tree.PlaceholderTypes{2: types.Bool},
-		},
-		{
-			tree.PlaceholderTypes{},
-			[]tree.Expr{
-				annot(newPlaceholder(1), intType),
-				annot(newPlaceholder(2), boolType),
-				newPlaceholder(1),
-			},
-			tree.PlaceholderTypes{1: types.Int, 2: types.Bool},
-		},
-		{
-			tree.PlaceholderTypes{},
-			[]tree.Expr{
-				newPlaceholder(1),
-				annot(newPlaceholder(1), intType),
-				annot(newPlaceholder(2), boolType),
-			},
-			tree.PlaceholderTypes{1: types.Int, 2: types.Bool},
-		},
-		{
-			tree.PlaceholderTypes{1: types.Float, 2: types.Bool},
-			[]tree.Expr{
-				newPlaceholder(1),
-				cast(newPlaceholder(1), intType),
-				cast(newPlaceholder(2), boolType),
-			},
-			tree.PlaceholderTypes{1: types.Float, 2: types.Bool},
-		},
-		{
-			tree.PlaceholderTypes{1: types.Float, 2: types.Float},
-			[]tree.Expr{
-				newPlaceholder(1),
-				cast(newPlaceholder(1), intType),
-				cast(newPlaceholder(2), boolType),
-			},
-			tree.PlaceholderTypes{1: types.Float, 2: types.Float},
-		},
-		{
-			tree.PlaceholderTypes{},
-			[]tree.Expr{
-				cast(newPlaceholder(1), intType),
-				annot(newPlaceholder(1), intType),
-				cast(newPlaceholder(1), intType),
-			},
-			tree.PlaceholderTypes{1: types.Int},
-		},
-		{
-			tree.PlaceholderTypes{},
-			[]tree.Expr{
-				cast(newPlaceholder(1), intType),
+				annot(newPlaceholder(0), intType),
 				annot(newPlaceholder(1), boolType),
+			},
+			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+		},
+		{
+			tree.PlaceholderTypes{1: types.Bool},
+			[]tree.Expr{
+				annot(newPlaceholder(0), intType),
+			},
+			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+		},
+		{
+			tree.PlaceholderTypes{},
+			[]tree.Expr{
+				cast(newPlaceholder(0), intType),
+				cast(newPlaceholder(1), boolType),
+				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(1), intType),
+			},
+			tree.PlaceholderTypes{0: types.Int},
+		},
+		{
+			tree.PlaceholderTypes{},
+			[]tree.Expr{
+				cast(newPlaceholder(0), intType),
+				annot(newPlaceholder(1), boolType),
+				cast(newPlaceholder(0), intType),
+				cast(newPlaceholder(1), intType),
+			},
+			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+		},
+		{
+			tree.PlaceholderTypes{},
+			[]tree.Expr{
+				cast(newPlaceholder(0), intType),
+				cast(newPlaceholder(1), boolType),
+				newPlaceholder(0),
 			},
 			tree.PlaceholderTypes{1: types.Bool},
+		},
+		{
+			tree.PlaceholderTypes{},
+			[]tree.Expr{
+				newPlaceholder(0),
+				cast(newPlaceholder(0), intType),
+				cast(newPlaceholder(1), boolType),
+			},
+			tree.PlaceholderTypes{1: types.Bool},
+		},
+		{
+			tree.PlaceholderTypes{},
+			[]tree.Expr{
+				annot(newPlaceholder(0), intType),
+				annot(newPlaceholder(1), boolType),
+				newPlaceholder(0),
+			},
+			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+		},
+		{
+			tree.PlaceholderTypes{},
+			[]tree.Expr{
+				newPlaceholder(0),
+				annot(newPlaceholder(0), intType),
+				annot(newPlaceholder(1), boolType),
+			},
+			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+		},
+		{
+			tree.PlaceholderTypes{0: types.Float, 1: types.Bool},
+			[]tree.Expr{
+				newPlaceholder(0),
+				cast(newPlaceholder(0), intType),
+				cast(newPlaceholder(1), boolType),
+			},
+			tree.PlaceholderTypes{0: types.Float, 1: types.Bool},
+		},
+		{
+			tree.PlaceholderTypes{0: types.Float, 1: types.Float},
+			[]tree.Expr{
+				newPlaceholder(0),
+				cast(newPlaceholder(0), intType),
+				cast(newPlaceholder(1), boolType),
+			},
+			tree.PlaceholderTypes{0: types.Float, 1: types.Float},
+		},
+		{
+			tree.PlaceholderTypes{},
+			[]tree.Expr{
+				cast(newPlaceholder(0), intType),
+				annot(newPlaceholder(0), intType),
+				cast(newPlaceholder(0), intType),
+			},
+			tree.PlaceholderTypes{0: types.Int},
+		},
+		{
+			tree.PlaceholderTypes{},
+			[]tree.Expr{
+				cast(newPlaceholder(0), intType),
+				annot(newPlaceholder(0), boolType),
+				cast(newPlaceholder(0), intType),
+			},
+			tree.PlaceholderTypes{0: types.Bool},
 		},
 	}
 	for i, d := range testData {
 		args := d.initArgs
 		stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
-		if err := args.ProcessPlaceholderAnnotations(stmt); err != nil {
+		if err := tree.ProcessPlaceholderAnnotations(stmt, args); err != nil {
 			t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)
 		} else if !reflect.DeepEqual(args, d.desired) {
 			t.Errorf("%d: expected args %v after processing placeholder annotations for %v, found %v", i, d.desired, stmt, args)
@@ -523,57 +523,67 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 		{
 			tree.PlaceholderTypes{},
 			[]tree.Expr{
-				annot(newPlaceholder(1), floatType),
-				annot(newPlaceholder(1), intType),
+				annot(newPlaceholder(0), floatType),
+				annot(newPlaceholder(0), intType),
 			},
-			"multiple conflicting type annotations around 1",
+			"multiple conflicting type annotations around \\$1",
 		},
 		{
 			tree.PlaceholderTypes{},
 			[]tree.Expr{
-				annot(newPlaceholder(1), floatType),
+				annot(newPlaceholder(0), floatType),
+				cast(newPlaceholder(0), floatType),
 				cast(newPlaceholder(1), floatType),
-				cast(newPlaceholder(2), floatType),
-				annot(newPlaceholder(1), intType),
+				annot(newPlaceholder(0), intType),
 			},
-			"multiple conflicting type annotations around 1",
+			"multiple conflicting type annotations around \\$1",
 		},
 		{
-			tree.PlaceholderTypes{1: types.Float},
+			tree.PlaceholderTypes{},
 			[]tree.Expr{
-				annot(newPlaceholder(1), intType),
-			},
-			"type annotation around 1 that conflicts with previously inferred type float",
-		},
-		{
-			tree.PlaceholderTypes{1: types.Float},
-			[]tree.Expr{
-				cast(newPlaceholder(1), intType),
-				annot(newPlaceholder(1), intType),
-			},
-			"type annotation around 1 that conflicts with previously inferred type float",
-		},
-		{
-			tree.PlaceholderTypes{1: types.Float},
-			[]tree.Expr{
+				annot(newPlaceholder(0), floatType),
 				annot(newPlaceholder(1), floatType),
 				annot(newPlaceholder(1), intType),
+				annot(newPlaceholder(0), intType),
 			},
-			"type annotation around 1 that conflicts with previously inferred type float",
+			"multiple conflicting type annotations around \\$1",
 		},
 		{
-			tree.PlaceholderTypes{1: types.Float},
+			tree.PlaceholderTypes{0: types.Float},
 			[]tree.Expr{
-				annot(newPlaceholder(1), intType),
-				annot(newPlaceholder(1), floatType),
+				annot(newPlaceholder(0), intType),
 			},
-			"type annotation around 1 that conflicts with previously inferred type float",
+			"type annotation around \\$1 conflicts with specified type float",
+		},
+		{
+			tree.PlaceholderTypes{0: types.Float},
+			[]tree.Expr{
+				cast(newPlaceholder(0), intType),
+				annot(newPlaceholder(0), intType),
+			},
+			"type annotation around \\$1 conflicts with specified type float",
+		},
+		{
+			tree.PlaceholderTypes{0: types.Float},
+			[]tree.Expr{
+				annot(newPlaceholder(0), floatType),
+				annot(newPlaceholder(0), intType),
+			},
+			"type annotation around \\$1 conflicts with specified type float",
+		},
+		{
+			tree.PlaceholderTypes{0: types.Float},
+			[]tree.Expr{
+				annot(newPlaceholder(0), intType),
+				annot(newPlaceholder(0), floatType),
+			},
+			"type annotation around \\$1 conflicts with specified type float",
 		},
 	}
 	for i, d := range testData {
 		args := d.initArgs
 		stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
-		if err := args.ProcessPlaceholderAnnotations(stmt); !testutils.IsError(err, d.expected) {
+		if err := tree.ProcessPlaceholderAnnotations(stmt, args); !testutils.IsError(err, d.expected) {
 			t.Errorf("%d: expected '%s', got '%v'", i, d.expected, err)
 		}
 	}

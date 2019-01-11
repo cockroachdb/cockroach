@@ -2044,64 +2044,129 @@ func checkTupleHasLength(t *Tuple, expectedLen int) error {
 }
 
 type placeholderAnnotationVisitor struct {
-	placeholders map[types.PlaceholderIdx]annotationState
+	types PlaceholderTypes
+	state map[types.PlaceholderIdx]annotationState
+	err   error
+	// errIdx stores the placeholder to which err applies. Used to select the
+	// error for the smallest index.
+	errIdx types.PlaceholderIdx
 }
 
-// annotationState holds the state of an unresolved type annotation for a given placeholder.
-type annotationState struct {
-	sawAssertion   bool // marks if the placeholder has been subject to at least one type assetion
-	shouldAnnotate bool // marks if the placeholder should be annotated with the type typ
-	typ            types.T
+// annotationState keeps extra information relating to the type of a
+// placeholder.
+type annotationState uint8
+
+const (
+	noType annotationState = iota
+
+	// typeFromHint indicates that the type for the placeholder is set from a
+	// provided type hint (from pgwire, or PREPARE AS arguments).
+	typeFromHint
+
+	// typeFromAnnotation indicates that the type for this placeholder is set from
+	// a type annotation.
+	typeFromAnnotation
+
+	// typeFromCast indicates that the type for this placeholder is set from
+	// a cast. This type can be replaced if an annotation is found, or discarded
+	// if conflicting casts are found.
+	typeFromCast
+
+	// conflictingCasts indicates that we haven't found an annotation for the
+	// placeholder, and we cannot determine the type from casts: either we found
+	// conflicting casts, or we found an appearance of the placeholder without a
+	// cast.
+	conflictingCasts
+)
+
+func (v *placeholderAnnotationVisitor) setErr(idx types.PlaceholderIdx, err error) {
+	if v.err == nil || v.errIdx >= idx {
+		v.err = err
+		v.errIdx = idx
+	}
 }
 
 func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	switch t := expr.(type) {
 	case *AnnotateTypeExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
-			assertType := t.annotationType()
-			if state, ok := v.placeholders[arg.Idx]; ok && state.sawAssertion {
-				if state.shouldAnnotate && !assertType.Equivalent(state.typ) {
-					state.shouldAnnotate = false
-					v.placeholders[arg.Idx] = state
+			annotationType := t.annotationType()
+			switch v.state[arg.Idx] {
+			case noType, typeFromCast, conflictingCasts:
+				// An annotation overrides casts.
+				v.types[arg.Idx] = annotationType
+				v.state[arg.Idx] = typeFromAnnotation
+
+			case typeFromAnnotation:
+				// Verify that the annotations are consistent.
+				if !annotationType.Equivalent(v.types[arg.Idx]) {
+					v.setErr(arg.Idx, pgerror.NewErrorf(
+						pgerror.CodeDatatypeMismatchError,
+						"multiple conflicting type annotations around %s",
+						arg.Idx,
+					))
 				}
-			} else {
-				// Ignore any previous casts now that we see an annotation.
-				v.placeholders[arg.Idx] = annotationState{
-					sawAssertion:   true,
-					shouldAnnotate: true,
-					typ:            assertType,
+
+			case typeFromHint:
+				// Verify that the annotation is consistent with the type hint.
+				if prevType := v.types[arg.Idx]; !annotationType.Equivalent(prevType) {
+					v.setErr(arg.Idx, pgerror.NewErrorf(
+						pgerror.CodeDatatypeMismatchError,
+						"type annotation around %s conflicts with specified type %s",
+						arg.Idx, v.types[arg.Idx],
+					))
 				}
+
+			default:
+				panic("unhandled state")
 			}
 			return false, expr
 		}
+
 	case *CastExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
 			castType := t.castType()
-			if state, ok := v.placeholders[arg.Idx]; ok {
-				// Ignore casts once an assertion has been seen.
-				if state.sawAssertion {
-					return false, expr
+			switch v.state[arg.Idx] {
+			case noType:
+				v.types[arg.Idx] = castType
+				v.state[arg.Idx] = typeFromCast
+
+			case typeFromCast:
+				// Verify that the casts are consistent.
+				if !castType.Equivalent(v.types[arg.Idx]) {
+					v.state[arg.Idx] = conflictingCasts
+					delete(v.types, arg.Idx)
 				}
 
-				if state.shouldAnnotate && !castType.Equivalent(state.typ) {
-					state.shouldAnnotate = false
-					v.placeholders[arg.Idx] = state
-				}
-			} else {
-				v.placeholders[arg.Idx] = annotationState{
-					shouldAnnotate: true,
-					typ:            castType,
-				}
+			case typeFromHint, typeFromAnnotation:
+				// A cast never overrides a hinted or annotated type.
+
+			case conflictingCasts:
+				// We already saw inconsistent casts, or a "bare" placeholder; ignore
+				// this cast.
+
+			default:
+				panic("unhandled state")
 			}
 			return false, expr
 		}
+
 	case *Placeholder:
-		if state, ok := v.placeholders[t.Idx]; !(ok && state.sawAssertion) {
-			// Ignore non-annotated placeholders once an assertion has been seen.
-			state.shouldAnnotate = false
-			v.placeholders[t.Idx] = state
+		switch v.state[t.Idx] {
+		case noType, typeFromCast:
+			// A "bare" placeholder prevents type determination from casts.
+			v.state[t.Idx] = conflictingCasts
+			delete(v.types, t.Idx)
+
+		case typeFromHint, typeFromAnnotation:
+			// We are not relying on casts to determine the type, nothing to do.
+
+		case conflictingCasts:
+			// We already decided not to use casts, nothing to do.
+
+		default:
+			panic("unhandled state")
 		}
-		return false, expr
 	}
 	return true, expr
 }
@@ -2110,48 +2175,36 @@ func (*placeholderAnnotationVisitor) VisitPost(expr Expr) Expr { return expr }
 
 // ProcessPlaceholderAnnotations performs an order-independent global traversal of the
 // provided Statement, annotating all placeholders with a type in either of the following
-// situations.
-// - the placeholder is the subject of an explicit type annotation in at least one
-//   of its occurrences. If it is subject to multiple explicit type annotations where
-//   the types are not all in agreement, or if the placeholder already has an inferred
-//   type in the placeholder map which conflicts with the explicit type annotation
-//   type, an error will be thrown.
-// - the placeholder is the subject to an implicit type annotation, meaning that it
-//   is not subject to an explicit type annotation, and that in all occurrences of the
-//   placeholder, it is subject to a cast to the same type. If it is subject to casts
-//   of multiple types, no error will be thrown, but the placeholder type will not be
-//   inferred. If a type has already been assigned for the placeholder in the placeholder
-//   map, no error will be thrown, and the placeholder will keep it's previously
-//   inferred type.
+// situations:
+//
+//  - the placeholder is the subject of an explicit type annotation in at least one
+//    of its occurrences. If it is subject to multiple explicit type annotations
+//    where the types are not all in agreement, or if the placeholder already has
+//    a type hint in the placeholder map which conflicts with the explicit type
+//    annotation type, an error will be thrown.
+//
+//  - the placeholder is the subject to a cast of the same type in all
+//    occurrences of the placeholder. If the placeholder is subject to casts of
+//    multiple types, or if it has occurrences without a cast, no error will be
+//    thrown but the type will not be inferred. If the placeholder already has a
+//    type hint, that type will be kept regardless of any casts.
+//
+// See docs/RFCS/20160203_typing.md for more details on placeholder typing (in
+// particular section "First pass: placeholder annotations").
 //
 // TODO(nvanbenschoten): Can this visitor and map be preallocated (like normalizeVisitor)?
-func (p PlaceholderTypes) ProcessPlaceholderAnnotations(stmt Statement) error {
-	v := placeholderAnnotationVisitor{make(map[types.PlaceholderIdx]annotationState)}
+func ProcessPlaceholderAnnotations(stmt Statement, typeHints PlaceholderTypes) error {
+	v := placeholderAnnotationVisitor{
+		types: typeHints,
+		state: make(map[types.PlaceholderIdx]annotationState),
+	}
 
-	// We treat existing inferred types in the MapPlaceholderTypes as initial assertions.
-	for placeholder, typ := range p {
-		v.placeholders[placeholder] = annotationState{
-			sawAssertion:   true,
-			shouldAnnotate: true,
-			typ:            typ,
-		}
+	for placeholder := range typeHints {
+		v.state[placeholder] = typeFromHint
 	}
 
 	walkStmt(&v, stmt)
-	for placeholder, state := range v.placeholders {
-		if state.shouldAnnotate {
-			p[placeholder] = state.typ
-		} else if state.sawAssertion {
-			// If we should not annotate the type but we did see a type assertion,
-			// there were conflicting type assertions.
-			if prevType, ok := p[placeholder]; ok {
-				return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "found type annotation around %d that conflicts with previously "+
-					"inferred type %s", placeholder, prevType)
-			}
-			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "found multiple conflicting type annotations around %d", placeholder)
-		}
-	}
-	return nil
+	return v.err
 }
 
 // StripMemoizedFuncs strips memoized function references from expression trees.
