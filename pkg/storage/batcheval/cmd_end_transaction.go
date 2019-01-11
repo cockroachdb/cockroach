@@ -941,7 +941,7 @@ func splitTrigger(
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
 		rightMS, err = stateloader.WriteInitialReplicaState(
-			ctx, rec.ClusterSettings(), batch, rightMS, split.RightDesc,
+			ctx, batch, rightMS, split.RightDesc,
 			rightLease, *gcThreshold, *txnSpanGCThreshold,
 		)
 		if err != nil {

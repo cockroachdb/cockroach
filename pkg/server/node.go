@@ -17,7 +17,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"math"
 	"net"
 	"sort"
 	"time"
@@ -36,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -205,30 +203,11 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 // normal mechnisms.
 func bootstrapCluster(
 	ctx context.Context,
-	cfg storage.StoreConfig,
 	engines []engine.Engine,
 	bootstrapVersion cluster.ClusterVersion,
 	txnMetrics kv.TxnMetrics,
 ) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
-
-	// Make sure that the store config has a valid clock and that it doesn't
-	// try to use gossip, since that can introduce race conditions.
-	if cfg.Clock == nil {
-		cfg.Clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	}
-	cfg.Gossip = nil
-	cfg.TestingKnobs = storage.StoreTestingKnobs{}
-	cfg.ScanInterval = 10 * time.Minute
-	cfg.HistogramWindowInterval = time.Duration(math.MaxInt64)
-	tr := cfg.Settings.Tracer
-	defer tr.Close()
-	cfg.AmbientCtx.Tracer = tr
-	cfg.Transport = storage.NewDummyRaftTransport(cfg.Settings)
-	cfg.ClosedTimestamp = container.NoopContainer()
-	if err := cfg.Settings.InitializeVersion(bootstrapVersion); err != nil {
-		return uuid.UUID{}, errors.Wrap(err, "while initializing cluster version")
-	}
 	for i, eng := range engines {
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
@@ -245,10 +224,6 @@ func bootstrapCluster(
 		// not create the range, just its data. Only do this if this is the
 		// first store.
 		if i == 0 {
-			// The bootstrapping store will not connect to other nodes so its
-			// StoreConfig doesn't really matter.
-			s := storage.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
-
 			schema := GetBootstrapSchema()
 			initialValues, tableSplits := schema.GetInitialValues()
 			splits := append(config.StaticSplits(), tableSplits...)
@@ -259,8 +234,10 @@ func bootstrapCluster(
 			// The MinimumVersion is the ServerVersion when we are bootstrapping
 			// a cluster (except in some tests that specifically want to set up
 			// an "old-looking" cluster).
-			if err := s.WriteInitialData(
-				ctx, initialValues, bootstrapVersion.MinimumVersion, len(engines), splits,
+			if err := storage.WriteInitialClusterDataToEngine(
+				ctx, eng, initialValues,
+				bootstrapVersion.MinimumVersion, len(engines), splits,
+				hlc.UnixNano(),
 			); err != nil {
 				return uuid.UUID{}, err
 			}
@@ -339,7 +316,7 @@ func (n *Node) bootstrap(
 		return &duplicateBootstrapError{ClusterID: n.clusterID.Get()}
 	}
 	n.initialBoot = true
-	clusterID, err := bootstrapCluster(ctx, n.storeCfg, engines, bootstrapVersion, n.txnMetrics)
+	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion, n.txnMetrics)
 	if err != nil {
 		return err
 	}

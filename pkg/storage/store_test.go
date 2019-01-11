@@ -231,9 +231,9 @@ func createTestStoreWithoutStart(
 			return splits[i].Less(splits[j])
 		})
 	}
-	if err := store.WriteInitialData(
-		context.TODO(), kvs /* initialValues */, cfg.Settings.Version.ServerVersion,
-		1 /* numStores */, splits,
+	if err := WriteInitialClusterDataToEngine(
+		context.TODO(), eng, kvs /* initialValues */, cfg.Settings.Version.ServerVersion,
+		1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -441,9 +441,9 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 			return splits[i].Less(splits[j])
 		})
 
-		if err := store.WriteInitialData(
-			ctx, kvs /* initialValues */, cfg.Settings.Version.ServerVersion,
-			1 /* numStores */, splits,
+		if err := WriteInitialClusterDataToEngine(
+			ctx, eng, kvs /* initialValues */, cfg.Settings.Version.ServerVersion,
+			1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 		); err != nil {
 			t.Errorf("failure to create first range: %s", err)
 		}
@@ -1344,7 +1344,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
 	if _, err := stateloader.WriteInitialState(
-		context.Background(), store.ClusterSettings(), store.engine, enginepb.MVCCStats{},
+		context.Background(), store.engine, enginepb.MVCCStats{},
 		*desc, roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
 	); err != nil {
 		t.Fatal(err)
@@ -2773,7 +2773,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	}
 
 	if _, err := stateloader.WriteInitialState(
-		ctx, s.ClusterSettings(), s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(),
+		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(),
 		roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
 	); err != nil {
 		t.Fatal(err)
