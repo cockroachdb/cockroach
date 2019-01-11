@@ -27,7 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-const maxCount = 100
+var counts = [...]int{1, 17, 42, 91}
+
 const minOffset = 0
 const maxOffset = 100
 const probabilityOfNewNumber = 0.5
@@ -296,7 +297,7 @@ func partitionToString(partition IndexedRows) string {
 }
 
 func TestRangeMode(t *testing.T) {
-	for count := 1; count <= maxCount; count++ {
+	for _, count := range counts {
 		testRangeMode(t, count)
 	}
 }
