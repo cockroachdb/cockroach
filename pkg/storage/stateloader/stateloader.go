@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -48,8 +49,8 @@ type StateLoader struct {
 	keys.RangeIDPrefixBuf
 }
 
-// Make creates an Instance.
-func Make(rangeID roachpb.RangeID) StateLoader {
+// Make creates a a StateLoader.
+func Make(st *cluster.Settings, rangeID roachpb.RangeID) StateLoader {
 	rsl := StateLoader{
 		RangeIDPrefixBuf: keys.MakeRangeIDPrefixBuf(rangeID),
 	}

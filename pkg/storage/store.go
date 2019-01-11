@@ -2008,8 +2008,9 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 	return nil
 }
 
-// WriteInitialData writes bootstrapping data to a store. It creates system
-// ranges (filling in meta1 and meta2) and the default zone config.
+// WriteInitialClusterDataToEngine writes bootstrapping data to an engine. It
+// creates system ranges (filling in meta1 and meta2) and the default zone
+// config.
 //
 // Args:
 // initialValues: an optional list of k/v to be written as well after each
@@ -2018,8 +2019,9 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 // numStores: the number of stores this node will have.
 // splits: an optional list of split points. Range addressing will be created
 //   for all the splits. The list needs to be sorted.
-func (s *Store) WriteInitialData(
+func WriteInitialClusterDataToEngine(
 	ctx context.Context,
+	eng engine.Engine,
 	initialValues []roachpb.KeyValue,
 	bootstrapVersion roachpb.Version,
 	numStores int,
@@ -2098,11 +2100,13 @@ func (s *Store) WriteInitialData(
 		log.VEventf(
 			ctx, 2, "creating range %d [%s, %s). Initial values: %d",
 			desc.RangeID, desc.StartKey, desc.EndKey, len(rangeInitialValues))
-		batch := s.engine.NewBatch()
+		batch := eng.NewBatch()
 		defer batch.Close()
 
-		now := s.cfg.Clock.Now()
-		ctx := context.Background()
+		now := hlc.Timestamp{
+			Physical: hlc.UnixNano(),
+			Logical:  0,
+		}
 
 		// NOTE: We don't do stats computations in any of the puts below. Instead,
 		// we write everything and then compute the stats over the whole range.

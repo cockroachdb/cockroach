@@ -259,8 +259,8 @@ func bootstrapCluster(
 			// The MinimumVersion is the ServerVersion when we are bootstrapping
 			// a cluster (except in some tests that specifically want to set up
 			// an "old-looking" cluster).
-			if err := s.WriteInitialData(
-				ctx, initialValues, bootstrapVersion.MinimumVersion, len(engines), splits,
+			if err := WriteInitialClusterDataToEngine(
+				ctx, eng, initialValues, bootstrapVersion.MinimumVersion, len(engines), splits,
 			); err != nil {
 				return uuid.UUID{}, err
 			}
