@@ -357,7 +357,11 @@ func (sc *SchemaChanger) nRanges(
 		}
 	}
 
-	return len(rangeIds), nil
+	n := len(rangeIds)
+	if n == 0 {
+		return 0, errors.Errorf("no ranges found for spans: %+v", spans)
+	}
+	return n, nil
 }
 
 // distBackfill runs (or continues) a backfill for the first mutation
@@ -377,10 +381,12 @@ func (sc *SchemaChanger) distBackfill(
 		duration = sc.testingKnobs.WriteCheckpointInterval
 	}
 	chunkSize := sc.getChunkSize(backfillChunkSize)
-
-	origNRanges := -1
-	origFractionCompleted := sc.job.FractionCompleted()
-	fractionLeft := 1 - origFractionCompleted
+	// expected fraction of a range processed with each iteration.
+	const rangeFractionPerIteration = float32(30* time.Minute / checkpointInterval)
+	// The number of ranges needing processing.
+	var origNRanges int
+	fractionCompleted := sc.job.FractionCompleted()
+	progress := fractionCompleted
 	readAsOf := sc.clock.Now()
 	for {
 		var spans []roachpb.Span
@@ -405,24 +411,39 @@ func (sc *SchemaChanger) distBackfill(
 			// Report schema change progress. We define progress at this point
 			// as the the fraction of fully-backfilled ranges of the primary index of
 			// the table being scanned. Since we may have already modified the
-			// fraction completed of our job from the 10% allocated to completing the
-			// schema change state machine or from a previous backfill attempt,
+			// fraction completed of our job from a previous backfill attempt,
 			// we scale that fraction of ranges completed by the remaining fraction
 			// of the job's progress bar.
 			nRanges, err := sc.nRanges(ctx, txn, spans)
 			if err != nil {
 				return err
 			}
-			if origNRanges == -1 {
+			// If origNRanges is not set or nRanges has increased in value and
+			// so origNRanges needs to go up.
+			if nRanges > origNRanges {
 				origNRanges = nRanges
 			}
 
-			if nRanges < origNRanges {
-				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
-				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				if err := sc.job.FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted)); err != nil {
-					return jobs.SimplifyInvalidStatusError(err)
-				}
+			// origNRanges is guaranteed > 0 because nRanges > 0
+			perRangeContribution := (1.0 - fractionCompleted) / float32(origNRanges)
+			// This is to provide more incremental progress updates.
+			perIterationContribution := perRangeContribution / rangeFractionPerIteration
+			progress += perIterationContribution
+			// Provide a cap for incremental progress.
+			progressCap := fractionCompleted + perRangeContribution
+
+			// Ranges might have been fully processed.
+			fractionCompleted += perRangeContribution * float32(origNRanges-nRanges)
+			origNRanges = nRanges
+			if progress < fractionCompleted {
+				progress = fractionCompleted
+			} else if progress > progressCap {
+				progress = progressCap
+				log.Infof(ctx,"backfill making very slow progress: %+v spans", spans)
+			}
+
+			if err := sc.job.FractionProgressed(ctx, jobs.FractionUpdater(progress)); err != nil {
+				return jobs.SimplifyInvalidStatusError(err)
 			}
 
 			tc := &TableCollection{leaseMgr: sc.leaseMgr}
