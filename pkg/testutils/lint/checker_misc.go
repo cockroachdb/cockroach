@@ -20,30 +20,45 @@ import (
 	"go/ast"
 
 	"honnef.co/go/tools/lint"
+	"honnef.co/go/tools/lint/lintdsl"
 )
 
 type miscChecker struct{}
 
+var _ lint.Checker = &miscChecker{}
+
+// Name is part of the lint.Checker interface.
 func (*miscChecker) Name() string {
 	return "misccheck"
 }
 
+// Prefix is part of the lint.Checker interface.
 func (*miscChecker) Prefix() string {
 	return "CR"
 }
 
+// Init is part of the lint.Checker interface.
 func (*miscChecker) Init(*lint.Program) {}
 
-func (*miscChecker) Funcs() map[string]lint.Func {
-	return map[string]lint.Func{
-		"FloatToUnsigned": checkConvertFloatToUnsigned,
-		"Unconvert":       checkUnconvert,
+// Checks is part of the lint.Checker interface.
+func (*miscChecker) Checks() []lint.Check {
+	return []lint.Check{
+		{
+			Fn:              checkConvertFloatToUnsigned,
+			ID:              "FloatToUnsigned",
+			FilterGenerated: true,
+		},
+		{
+			Fn:              checkUnconvert,
+			ID:              "Unconvert",
+			FilterGenerated: true,
+		},
 	}
 }
 
 func forAllFiles(j *lint.Job, fn func(node ast.Node) bool) {
 	for _, f := range j.Program.Files {
-		if !lint.IsGenerated(f) {
+		if !lintdsl.IsGenerated(f) {
 			ast.Inspect(f, fn)
 		}
 	}

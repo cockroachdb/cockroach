@@ -21,6 +21,7 @@ import (
 	"go/types"
 
 	"honnef.co/go/tools/lint"
+	"honnef.co/go/tools/lint/lintdsl"
 )
 
 // @ianlancetaylor via golang-nuts[0]:
@@ -50,7 +51,7 @@ func checkConvertFloatToUnsigned(j *lint.Job) {
 		if !ok {
 			return true
 		}
-		castType, ok := j.Program.Info.TypeOf(call.Fun).(*types.Basic)
+		castType, ok := lintdsl.TypeOf(j, call.Fun).(*types.Basic)
 		if !ok {
 			return true
 		}
@@ -58,7 +59,7 @@ func checkConvertFloatToUnsigned(j *lint.Job) {
 			return true
 		}
 		for _, arg := range call.Args {
-			argType, ok := j.Program.Info.TypeOf(arg).(*types.Basic)
+			argType, ok := lintdsl.TypeOf(j, arg).(*types.Basic)
 			if !ok {
 				continue
 			}

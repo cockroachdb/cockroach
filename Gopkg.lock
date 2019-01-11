@@ -45,6 +45,14 @@
   revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
 
 [[projects]]
+  digest = "1:9f3b30d9f8e0d7040f729b82dcbc8f0dead820a133b3147ce355fc451f32d761"
+  name = "github.com/BurntSushi/toml"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005"
+  version = "v0.3.1"
+
+[[projects]]
   digest = "1:ed77032e4241e3b8329c9304d66452ed196e795876e14be677a546f36b94e67a"
   name = "github.com/DataDog/zstd"
   packages = ["."]
@@ -903,15 +911,15 @@
   source = "https://github.com/dim13/go-bindata"
 
 [[projects]]
-  digest = "1:395909746961a45abfc8b4a566a53cb6335e580768eae7d29d4a196b2bed2d07"
+  digest = "1:b472339040c571f1085e429ad08d94218bc3fc7a635c99fd95e3f80382413317"
   name = "github.com/kisielk/errcheck"
   packages = [
     ".",
     "internal/errcheck",
   ]
   pruneopts = "UT"
-  revision = "55d8f507faff4d6eddd0c41a3e713e2567fca4e5"
-  version = "v1.1.0"
+  revision = "e14f8d59a22d460d56c5ee92507cd94c78fbf274"
+  version = "v1.2.0"
 
 [[projects]]
   digest = "1:15ec2166e33ef6c60b344a04d050eec79193517e7f5082b6233b2d09ef0d10b8"
@@ -1532,7 +1540,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:0919b0cefec5fdf196797c85e728a197b19a531a50e1044a6d1c7313be283332"
+  digest = "1:126d7e6e46079c91aa9ee44178d389527ddb7263ecf175b21693830e10052dd1"
   name = "golang.org/x/tools"
   packages = [
     "cmd/goyacc",
@@ -1544,8 +1552,13 @@
     "go/gcexportdata",
     "go/internal/cgo",
     "go/internal/gcimporter",
+    "go/internal/packagesdriver",
     "go/loader",
+    "go/packages",
     "go/types/typeutil",
+    "internal/fastwalk",
+    "internal/gopathwalk",
+    "internal/semver",
   ]
   pruneopts = "UT"
   revision = "d30e00c240341e9e2a2d9519c67bd95fde906c7b"
@@ -1647,25 +1660,32 @@
   source = "https://github.com/cockroachdb/yaml"
 
 [[projects]]
-  digest = "1:ce504fbb2b67961ac269fc0a9fcf16a48f638d622af3d87f5cdff766e2559161"
+  digest = "1:920503560b73b9778dd5e98a1b0d0a30b14cab99e543703a373d2d97c677f4bf"
   name = "honnef.co/go/tools"
   packages = [
+    "arg",
     "callgraph",
     "callgraph/static",
+    "config",
     "deprecated",
     "functions",
     "internal/sharedcheck",
     "lint",
+    "lint/lintdsl",
+    "lint/lintutil",
+    "lint/lintutil/format",
     "simple",
     "ssa",
     "ssa/ssautil",
+    "ssautil",
     "staticcheck",
     "staticcheck/vrp",
     "unused",
+    "version",
   ]
   pruneopts = "UT"
-  revision = "d73ab98e7c39fdcf9ba65062e43d34310f198353"
-  version = "2017.2.2"
+  revision = "c2f93a96b099cbbec1de36336ab049ffa620e6d7"
+  version = "2019.1"
 
 [[projects]]
   branch = "no-flag-names-parens"
@@ -1836,7 +1856,6 @@
     "golang.org/x/tools/cmd/stringer",
     "golang.org/x/tools/container/intsets",
     "golang.org/x/tools/go/buildutil",
-    "golang.org/x/tools/go/loader",
     "google.golang.org/api/iterator",
     "google.golang.org/api/option",
     "google.golang.org/grpc",
@@ -1854,6 +1873,8 @@
     "google.golang.org/grpc/transport",
     "gopkg.in/yaml.v2",
     "honnef.co/go/tools/lint",
+    "honnef.co/go/tools/lint/lintdsl",
+    "honnef.co/go/tools/lint/lintutil",
     "honnef.co/go/tools/simple",
     "honnef.co/go/tools/staticcheck",
     "honnef.co/go/tools/unused",

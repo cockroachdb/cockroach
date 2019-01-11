@@ -34,7 +34,7 @@ func checkUnconvert(j *lint.Job) {
 		if len(call.Args) != 1 || call.Ellipsis != token.NoPos {
 			return true
 		}
-		ft, ok := j.Program.Info.Types[call.Fun]
+		ft, ok := j.NodePackage(call.Fun).TypesInfo.Types[call.Fun]
 		if !ok {
 			j.Errorf(call.Fun, "missing type")
 			return true
@@ -43,7 +43,7 @@ func checkUnconvert(j *lint.Job) {
 			// Function call; not a conversion.
 			return true
 		}
-		at, ok := j.Program.Info.Types[call.Args[0]]
+		at, ok := j.NodePackage(call.Args[0]).TypesInfo.Types[call.Args[0]]
 		if !ok {
 			j.Errorf(call.Args[0], "missing type")
 			return true
@@ -52,7 +52,7 @@ func checkUnconvert(j *lint.Job) {
 			// A real conversion.
 			return true
 		}
-		if isUntypedValue(call.Args[0], j.Program.Info) {
+		if isUntypedValue(call.Args[0], j) {
 			// Workaround golang.org/issue/13061.
 			return true
 		}
@@ -73,35 +73,35 @@ func checkUnconvert(j *lint.Job) {
 }
 
 // Cribbed from https://github.com/mdempsky/unconvert/blob/beb68d938016d2dec1d1b078054f4d3db25f97be/unconvert.go#L557-L607.
-func isUntypedValue(n ast.Expr, info *types.Info) bool {
+func isUntypedValue(n ast.Expr, j *lint.Job) bool {
 	switch n := n.(type) {
 	case *ast.BinaryExpr:
 		switch n.Op {
 		case token.SHL, token.SHR:
 			// Shifts yield an untyped value if their LHS is untyped.
-			return isUntypedValue(n.X, info)
+			return isUntypedValue(n.X, j)
 		case token.EQL, token.NEQ, token.LSS, token.GTR, token.LEQ, token.GEQ:
 			// Comparisons yield an untyped boolean value.
 			return true
 		case token.ADD, token.SUB, token.MUL, token.QUO, token.REM,
 			token.AND, token.OR, token.XOR, token.AND_NOT,
 			token.LAND, token.LOR:
-			return isUntypedValue(n.X, info) && isUntypedValue(n.Y, info)
+			return isUntypedValue(n.X, j) && isUntypedValue(n.Y, j)
 		}
 	case *ast.UnaryExpr:
 		switch n.Op {
 		case token.ADD, token.SUB, token.NOT, token.XOR:
-			return isUntypedValue(n.X, info)
+			return isUntypedValue(n.X, j)
 		}
 	case *ast.BasicLit:
 		// Basic literals are always untyped.
 		return true
 	case *ast.ParenExpr:
-		return isUntypedValue(n.X, info)
+		return isUntypedValue(n.X, j)
 	case *ast.SelectorExpr:
-		return isUntypedValue(n.Sel, info)
+		return isUntypedValue(n.Sel, j)
 	case *ast.Ident:
-		if obj, ok := info.Uses[n]; ok {
+		if obj, ok := j.NodePackage(n).TypesInfo.Uses[n]; ok {
 			if obj.Pkg() == nil && obj.Name() == "nil" {
 				// The universal untyped zero value.
 				return true
@@ -112,12 +112,12 @@ func isUntypedValue(n ast.Expr, info *types.Info) bool {
 			}
 		}
 	case *ast.CallExpr:
-		if b, ok := asBuiltin(n.Fun, info); ok {
+		if b, ok := asBuiltin(n.Fun, j); ok {
 			switch b.Name() {
 			case "real", "imag":
-				return isUntypedValue(n.Args[0], info)
+				return isUntypedValue(n.Args[0], j)
 			case "complex":
-				return isUntypedValue(n.Args[0], info) && isUntypedValue(n.Args[1], info)
+				return isUntypedValue(n.Args[0], j) && isUntypedValue(n.Args[1], j)
 			}
 		}
 	}
@@ -126,7 +126,7 @@ func isUntypedValue(n ast.Expr, info *types.Info) bool {
 }
 
 // Cribbed from https://github.com/mdempsky/unconvert/blob/beb68d938016d2dec1d1b078054f4d3db25f97be/unconvert.go#L609-L630.
-func asBuiltin(n ast.Expr, info *types.Info) (*types.Builtin, bool) {
+func asBuiltin(n ast.Expr, j *lint.Job) (*types.Builtin, bool) {
 	for {
 		paren, ok := n.(*ast.ParenExpr)
 		if !ok {
@@ -140,7 +140,7 @@ func asBuiltin(n ast.Expr, info *types.Info) (*types.Builtin, bool) {
 		return nil, false
 	}
 
-	obj, ok := info.Uses[ident]
+	obj, ok := j.NodePackage(ident).TypesInfo.Uses[ident]
 	if !ok {
 		return nil, false
 	}

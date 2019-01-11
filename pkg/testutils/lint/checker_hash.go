@@ -22,6 +22,7 @@ import (
 	"log"
 
 	"honnef.co/go/tools/lint"
+	"honnef.co/go/tools/lint/lintdsl"
 )
 
 // hashChecker assures that the hash.Hash interface is not misused. A common
@@ -55,29 +56,39 @@ type hashChecker struct {
 	hashType *types.Interface
 }
 
+var _ lint.Checker = &hashChecker{}
+
+// Name is part of the lint.Checker interface.
 func (*hashChecker) Name() string {
 	return "hashcheck"
 }
 
+// Prefix is part of the lint.Checker interface.
 func (*hashChecker) Prefix() string {
 	return "HC"
 }
 
+// Init is part of the lint.Checker interface.
 func (c *hashChecker) Init(program *lint.Program) {
-	hashPkg := program.Prog.Package("hash")
+	hashPkg := program.Package("hash")
 	if hashPkg == nil {
 		log.Fatal("hash package not found")
 	}
-	hashIface := hashPkg.Pkg.Scope().Lookup("Hash")
+	hashIface := hashPkg.Types.Scope().Lookup("Hash")
 	if hashIface == nil {
 		log.Fatal("hash.Hash type not found")
 	}
 	c.hashType = hashIface.Type().Underlying().(*types.Interface)
 }
 
-func (c *hashChecker) Funcs() map[string]lint.Func {
-	return map[string]lint.Func{
-		"HC1000": c.checkHashWritten,
+// Checks is part of the lint.Checker interface.
+func (c *hashChecker) Checks() []lint.Check {
+	return []lint.Check{
+		{
+			Fn:              c.checkHashWritten,
+			ID:              "HC1000",
+			FilterGenerated: true,
+		},
 	}
 }
 
@@ -98,7 +109,7 @@ func (c *hashChecker) checkHashWritten(j *lint.Job) {
 		if selExpr.Sel.Name != "Sum" {
 			return true
 		}
-		if !types.Implements(j.Program.Info.TypeOf(selExpr.X), c.hashType) {
+		if !types.Implements(lintdsl.TypeOf(j, selExpr.X), c.hashType) {
 			return true
 		}
 		callExpr, ok := stack[len(stack)-2].(*ast.CallExpr)

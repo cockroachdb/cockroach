@@ -24,6 +24,7 @@ import (
 	"log"
 
 	"honnef.co/go/tools/lint"
+	"honnef.co/go/tools/lint/lintdsl"
 )
 
 // timerChecker assures that timeutil.Timer objects are used correctly, to
@@ -48,22 +49,27 @@ type timerChecker struct {
 	timerType types.Type
 }
 
+var _ lint.Checker = &timerChecker{}
+
+// Name is part of the lint.Checker interface.
 func (*timerChecker) Name() string {
 	return "timercheck"
 }
 
+// Prefix is part of the lint.Checker interface.
 func (*timerChecker) Prefix() string {
 	return "T"
 }
 
 const timerChanName = "C"
 
+// Init is part of the lint.Checker interface.
 func (m *timerChecker) Init(program *lint.Program) {
-	timeutilPkg := program.Prog.Package("github.com/cockroachdb/cockroach/pkg/util/timeutil")
+	timeutilPkg := program.Package("github.com/cockroachdb/cockroach/pkg/util/timeutil")
 	if timeutilPkg == nil {
 		log.Fatal("timeutil package not found")
 	}
-	timerObject := timeutilPkg.Pkg.Scope().Lookup("Timer")
+	timerObject := timeutilPkg.Types.Scope().Lookup("Timer")
 	if timerObject == nil {
 		log.Fatal("timeutil.Timer type not found")
 	}
@@ -81,14 +87,19 @@ func (m *timerChecker) Init(program *lint.Program) {
 	}()
 }
 
-func (m *timerChecker) Funcs() map[string]lint.Func {
-	return map[string]lint.Func{
-		"TimeutilTimerRead": m.checkSetTimeutilTimerRead,
+// Checks is part of the lint.Checker interface.
+func (m *timerChecker) Checks() []lint.Check {
+	return []lint.Check{
+		{
+			Fn:              m.checkSetTimeutilTimerRead,
+			ID:              "TimeutilTimerRead",
+			FilterGenerated: true,
+		},
 	}
 }
 
-func (m *timerChecker) selectorIsTimer(s *ast.SelectorExpr, info *types.Info) bool {
-	selTyp := info.TypeOf(s.X)
+func (m *timerChecker) selectorIsTimer(s *ast.SelectorExpr, j *lint.Job) bool {
+	selTyp := lintdsl.TypeOf(j, s.X)
 	if ptr, ok := selTyp.(*types.Pointer); ok {
 		selTyp = ptr.Elem()
 	}
@@ -124,7 +135,7 @@ func (m *timerChecker) checkSetTimeutilTimerRead(j *lint.Job) {
 				if !ok {
 					return true
 				}
-				if !m.selectorIsTimer(selector, j.Program.Info) {
+				if !m.selectorIsTimer(selector, j) {
 					return true
 				}
 				selectorName := fmt.Sprint(selector.X)
@@ -146,7 +157,7 @@ func (m *timerChecker) checkSetTimeutilTimerRead(j *lint.Job) {
 						if !ok {
 							return true
 						}
-						if !m.selectorIsTimer(assignSelector, j.Program.Info) {
+						if !m.selectorIsTimer(assignSelector, j) {
 							return true
 						}
 						if fmt.Sprint(assignSelector.X) != selectorName {

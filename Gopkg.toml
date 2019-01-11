@@ -91,16 +91,6 @@ ignored = [
   source = "https://github.com/cockroachdb/gogoproto"
   branch = "v1.2.0-with-clone-fix"
 
-# Pin to v1.1.0 because of https://github.com/kisielk/errcheck/issues/162.
-[[constraint]]
-  name = "github.com/kisielk/errcheck"
-  version = "=v1.1.0"
-
-# Pin to 2017.2.2 because of https://github.com/cockroachdb/cockroach/issues/33669.
-[[constraint]]
-  name = "honnef.co/go/tools"
-  version = "=2017.2.2"
-
 # github.com/openzipkin-contrib/zipkin-go-opentracing requires a newer
 # version of thrift than is currently present in a release.
 [[override]]
