@@ -231,9 +231,9 @@ func createTestStoreWithoutStart(
 			return splits[i].Less(splits[j])
 		})
 	}
-	if err := store.WriteInitialData(
-		context.TODO(), kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
-		1 /* numStores */, splits,
+	if err := WriteInitialClusterData(
+		context.TODO(), eng, kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
+		1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -442,9 +442,9 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 			return splits[i].Less(splits[j])
 		})
 
-		if err := store.WriteInitialData(
-			ctx, kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
-			1 /* numStores */, splits,
+		if err := WriteInitialClusterData(
+			ctx, eng, kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
+			1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 		); err != nil {
 			t.Errorf("failure to create first range: %s", err)
 		}

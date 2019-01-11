@@ -230,9 +230,11 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		tc.store.mergeQueue.SetDisabled(true)
 
 		if tc.repl == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
-			if err := tc.store.WriteInitialData(
-				ctx, nil /* initialValues */, bootstrapVersion.Version,
-				1 /* numStores */, nil, /* splits */
+			if err := WriteInitialClusterData(
+				ctx, tc.store.Engine(),
+				nil, /* initialValues */
+				bootstrapVersion.Version,
+				1 /* numStores */, nil /* splits */, cfg.Clock.PhysicalNow(),
 			); err != nil {
 				t.Fatal(err)
 			}
