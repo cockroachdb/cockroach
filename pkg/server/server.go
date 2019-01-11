@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1042,6 +1043,64 @@ func (s *Server) startPersistingHLCUpperBound(
 			)
 		},
 	)
+}
+
+// !!!
+// Returns a cluster id.
+func WaitForClusterBootstrap(
+	ctx context.Context,
+	engines Engines,
+	joinList []resolver.Resolver,
+	gossip *gossip.Gossip,
+	shouldStop <-chan struct{},
+	bootstrapVersion cluster.ClusterVersion,
+	waitingForInit <-chan struct{},
+	grpcServer *grpc.Server,
+) (uuid.UUID, error) {
+	var clusterIDContainer base.ClusterIDContainer
+
+	bootstrappedEngines, _, _, err := inspectEngines(
+		ctx, engines,
+		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
+		&clusterIDContainer)
+	if err != nil {
+		return errors.Wrap(err, "inspecting engines")
+	}
+
+	if len(bootstrappedEngines) > 0 {
+		// The cluster was already initialized.
+		cid := clusterIDContainer.Get()
+		if cid == uuid.Nil {
+			return uuid.Nil, fmt.Errorf(ctx, "found bootstrapped engines but no cluster id")
+		}
+		return cid, nil
+	} else if len(joinList) == 0 {
+		// If the _unfiltered_ list of hosts from the --join flag is
+		// empty, then this node can bootstrap a new cluster. We disallow
+		// this if this node is being started with itself specified as a
+		// --join host, because that's too likely to be operator error.
+	} else {
+		if waitingForInit != nil {
+			close(waitingForInit)
+		}
+		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
+		initServer := newInitServer(gossip.Connected, shouldStop)
+		serverpb.RegisterInitServer(grpcServer, initServer)
+		var err error
+		needClusterBootstrap, err := initServer.awaitBootstrap()
+		if err != nil {
+			return uuid.Nil, err
+		}
+		if !needClusterBootstrap {
+			// If awaitBootstrap() returned false, the cluster ID is supposed to be in
+			// gossip.
+			return gossip.GetClusterID()
+		}
+	}
+
+	// If we didn't early-return before, it means we need to bootstrap the
+	// cluster.
+	return bootstrapCluster(ctx, engines, bootstrapVersion)
 }
 
 // Start starts the server on the specified port, starts gossip and initializes

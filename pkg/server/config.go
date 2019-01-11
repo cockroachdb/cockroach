@@ -247,6 +247,7 @@ type Config struct {
 	// server is not bootstrapped yet, will not bootstrap itself and
 	// will be waiting for an `init` command. This can be used to inform
 	// the user.
+	// !!! do we want to call it with false ever?
 	ReadyFn func(waitForInit bool)
 
 	// DelayedBootstrapFn is called if the boostrap process does not complete
