@@ -4356,6 +4356,27 @@ func (s *Store) AvailableNodeCount() int {
 	return s.cfg.StorePool.AvailableNodeCount()
 }
 
+// HotReplicaInfo contains a range descriptor and its QPS.
+type HotReplicaInfo struct {
+	Desc *roachpb.RangeDescriptor
+	QPS  float64
+}
+
+// HottestReplicas returns the hottest replicas on a store, sorted by their
+// QPS. Only contains ranges for which this store is the leaseholder.
+//
+// Note that this uses cached information, so it's cheap but may be slightly
+// out of date.
+func (s *Store) HottestReplicas() []HotReplicaInfo {
+	topQPS := s.replRankings.topQPS()
+	hotRepls := make([]HotReplicaInfo, len(topQPS))
+	for i := range topQPS {
+		hotRepls[i].Desc = topQPS[i].repl.Desc()
+		hotRepls[i].QPS = topQPS[i].qps
+	}
+	return hotRepls
+}
+
 // StoreKeySpanStats carries the result of a stats computation over a key range.
 type StoreKeySpanStats struct {
 	ReplicaCount         int
