@@ -10006,6 +10006,55 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn:   txnWithoutChanges,
 		},
 		{
+			name: "begin transaction with epoch bump after begin transaction",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Restart(-1, 0, now)
+				bt, btH := beginTxnArgs(clone.Key, &clone)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
+				record := txn.AsRecord()
+				record.Epoch = txn.Epoch + 1
+				record.Timestamp.Forward(now)
+				record.OrigTimestamp.Forward(now)
+				return record
+			},
+		},
+		{
+			// Even if the TxnSpanGCThreshold (or the write timestamp cache low
+			// water mark) has been bumped above the epoch-zero orig timestamp
+			// of a transaction, a second begin transaction that bumps the epoch
+			// should not be rejected.
+			name: "begin transaction with epoch bump after begin transaction and gc",
+			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				if err := sendWrappedWithErr(btH, &bt); err != nil {
+					return err
+				}
+				gc := gcArgs([]byte("a"), []byte("z"))
+				gc.TxnSpanGCThreshold = now
+				return sendWrappedWithErr(roachpb.Header{}, &gc)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Restart(-1, 0, now)
+				bt, btH := beginTxnArgs(clone.Key, &clone)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
+				record := txn.AsRecord()
+				record.Epoch = txn.Epoch + 1
+				record.Timestamp.Forward(now)
+				record.OrigTimestamp.Forward(now)
+				return record
+			},
+		},
+		{
 			name: "begin transaction after heartbeat transaction",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				hb, hbH := heartbeatArgs(txn, now)
@@ -10186,7 +10235,7 @@ func TestCreateTxnRecord(t *testing.T) {
 				// threshold against this timestamp instead of its epoch zero
 				// timestamp.
 				clone := txn.Clone()
-				clone.Restart(1, 0, now.Add(0, 1))
+				clone.Restart(-1, 0, now.Add(0, 1))
 				hb, hbH := heartbeatArgs(&clone, now)
 				return sendWrappedWithErr(hbH, &hb)
 			},
@@ -10468,7 +10517,7 @@ func TestCreateTxnRecord(t *testing.T) {
 				// threshold against this timestamp instead of its epoch zero
 				// timestamp.
 				clone := txn.Clone()
-				clone.Restart(1, 0, now.Add(0, 1))
+				clone.Restart(-1, 0, now.Add(0, 1))
 				hb, hbH := heartbeatArgs(&clone, now)
 				return sendWrappedWithErr(hbH, &hb)
 			},
@@ -10545,7 +10594,7 @@ func TestCreateTxnRecord(t *testing.T) {
 				// threshold against this timestamp instead of its epoch zero
 				// timestamp.
 				clone := txn.Clone()
-				clone.Restart(1, 0, now.Add(0, 1))
+				clone.Restart(-1, 0, now.Add(0, 1))
 				hb, hbH := heartbeatArgs(&clone, now)
 				return sendWrappedWithErr(hbH, &hb)
 			},
@@ -10617,7 +10666,8 @@ func TestCreateTxnRecord(t *testing.T) {
 				}
 				expRecord := c.expTxn(txn, runTs)
 				if !reflect.DeepEqual(expRecord, foundRecord) {
-					t.Fatalf("expected txn record %v, found %v", expRecord, foundRecord)
+					t.Fatalf("txn record does not match expectations:\n%s",
+						strings.Join(pretty.Diff(foundRecord, expRecord), "\n"))
 				}
 			} else {
 				if c.expTxn != nil {
