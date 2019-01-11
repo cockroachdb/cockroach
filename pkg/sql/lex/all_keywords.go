@@ -13,6 +13,8 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
+// +build all-keywords
+
 // all-keywords generates sql/lex/keywords.go from sql.y.
 //
 // It is generically structured with Go templates to allow for quick
