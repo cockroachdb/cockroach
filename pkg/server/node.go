@@ -202,10 +202,7 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 // function is called the cluster is not able to allocate store ids through
 // normal mechnisms.
 func bootstrapCluster(
-	ctx context.Context,
-	engines []engine.Engine,
-	bootstrapVersion cluster.ClusterVersion,
-	txnMetrics kv.TxnMetrics,
+	ctx context.Context, engines []engine.Engine, bootstrapVersion cluster.ClusterVersion,
 ) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	for i, eng := range engines {
@@ -316,7 +313,7 @@ func (n *Node) bootstrap(
 		return &duplicateBootstrapError{ClusterID: n.clusterID.Get()}
 	}
 	n.initialBoot = true
-	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion, n.txnMetrics)
+	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion)
 	if err != nil {
 		return err
 	}
