@@ -20,6 +20,7 @@ import "build/info.proto";
 import "gossip/gossip.proto";
 import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
 import "server/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
@@ -529,6 +530,7 @@ message SpanStatsResponse {
 }
 
 message ProblemRangesRequest {
+  // If left empty, problem ranges for all nodes/stores will be returned.
   string node_id = 1 [ (gogoproto.customname) = "NodeID" ];
 }
 
@@ -581,6 +583,41 @@ message ProblemRangesResponse {
   map<int32, NodeProblems> problems_by_node_id = 9 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.customname) = "ProblemsByNodeID",
+    (gogoproto.nullable) = false
+  ];
+}
+
+message HotRangesRequest {
+  // If left empty, hot ranges for all nodes/stores will be returned.
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+message HotRangesResponse {
+  message HotRange {
+    cockroach.roachpb.RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+    double queries_per_second = 2;
+  }
+  message StoreResponse {
+    int32 store_id = 1 [
+      (gogoproto.customname) = "StoreID",
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+    ];
+    repeated HotRange hot_ranges = 2 [(gogoproto.nullable) = false];
+  }
+  message NodeResponse {
+    string error_message = 1;
+    repeated StoreResponse stores = 2;
+  }
+  // NodeID is the node that submitted all the requests.
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  map<int32, NodeResponse> hot_ranges_by_node_id = 2 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "HotRangesByNodeID",
     (gogoproto.nullable) = false
   ];
 }
@@ -796,6 +833,11 @@ service Status {
       get : "/_status/problemranges"
     };
   }
+  rpc HotRanges(HotRangesRequest) returns (HotRangesResponse) {
+    option (google.api.http) = {
+      get : "/_status/hotranges"
+    };
+  }
   rpc Range(RangeRequest) returns (RangeResponse) {
     option (google.api.http) = {
       get : "/_status/range/{range_id}"
@@ -812,7 +854,6 @@ service Status {
       get : "/_status/stores/{node_id}"
     };
   }
-
   rpc Statements(StatementsRequest) returns (StatementsResponse) {
     option (google.api.http) = {
       get: "/_status/statements"

@@ -65,6 +65,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
@@ -1281,6 +1282,91 @@ func (s *statusServer) Ranges(
 		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
 	return &output, nil
+}
+
+// HotRanges returns the hottest ranges on each store on the requested node(s).
+func (s *statusServer) HotRanges(
+	ctx context.Context, req *serverpb.HotRangesRequest,
+) (*serverpb.HotRangesResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	response := &serverpb.HotRangesResponse{
+		NodeID:            s.gossip.NodeID.Get(),
+		HotRangesByNodeID: make(map[roachpb.NodeID]serverpb.HotRangesResponse_NodeResponse),
+	}
+
+	if len(req.NodeID) > 0 {
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+
+		// Only hot ranges from the local node.
+		if local {
+			response.HotRangesByNodeID[requestedNodeID] = s.localHotRanges(ctx)
+			return response, nil
+		}
+
+		// Only hot ranges from one non-local node.
+		status, err := s.dialNode(ctx, requestedNodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.HotRanges(ctx, req)
+	}
+
+	// Hot ranges from all nodes.
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		status := client.(serverpb.StatusClient)
+		return status.HotRanges(ctx, &remoteRequest)
+	}
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		hotRangesResp := resp.(*serverpb.HotRangesResponse)
+		response.HotRangesByNodeID[nodeID] = hotRangesResp.HotRangesByNodeID[nodeID]
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		response.HotRangesByNodeID[nodeID] = serverpb.HotRangesResponse_NodeResponse{
+			ErrorMessage: err.Error(),
+		}
+	}
+
+	if err := s.iterateNodes(ctx, "hot ranges", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesResponse_NodeResponse {
+	var resp serverpb.HotRangesResponse_NodeResponse
+	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
+	err := s.stores.VisitStores(func(store *storage.Store) error {
+		ranges := store.HottestReplicas()
+		storeResp := &serverpb.HotRangesResponse_StoreResponse{
+			StoreID:   store.StoreID(),
+			HotRanges: make([]serverpb.HotRangesResponse_HotRange, len(ranges)),
+		}
+		for i, r := range ranges {
+			storeResp.HotRanges[i].Desc = *r.Desc
+			if !includeRawKeys {
+				storeResp.HotRanges[i].Desc.StartKey = nil
+				storeResp.HotRanges[i].Desc.EndKey = nil
+			}
+			storeResp.HotRanges[i].QueriesPerSecond = r.QPS
+		}
+		resp.Stores = append(resp.Stores, storeResp)
+		return nil
+	})
+	if err != nil {
+		return serverpb.HotRangesResponse_NodeResponse{ErrorMessage: err.Error()}
+	}
+	return resp
 }
 
 // Range returns rangeInfos for all nodes in the cluster about a specific
