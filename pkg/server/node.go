@@ -291,15 +291,6 @@ func bootstrapCluster(
 	return clusterID, nil
 }
 
-// duplicateBootstrapError is returned by Node.bootstrap when the node is already initialized.
-type duplicateBootstrapError struct {
-	ClusterID uuid.UUID
-}
-
-func (e *duplicateBootstrapError) Error() string {
-	return fmt.Sprintf("cluster has already been initialized with ID %s", e.ClusterID)
-}
-
 // NewNode returns a new instance of Node.
 //
 // execCfg can be nil to help bootstrapping of a Server (the Node is created
@@ -358,7 +349,7 @@ func (n *Node) bootstrap(
 	ctx context.Context, engines []engine.Engine, bootstrapVersion cluster.ClusterVersion,
 ) error {
 	if n.initialBoot || n.clusterID.Get() != uuid.Nil {
-		return &duplicateBootstrapError{ClusterID: n.clusterID.Get()}
+		return fmt.Errorf("cluster has already been initialized with ID %s", n.clusterID.Get())
 	}
 	n.initialBoot = true
 	clusterID, err := bootstrapCluster(ctx, n.storeCfg, engines, bootstrapVersion, n.txnMetrics)
