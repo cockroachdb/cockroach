@@ -167,7 +167,7 @@ func (ex *connExecutor) prepare(
 	// preparation.
 	stmt.Prepared = prepared
 
-	if err := placeholderHints.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
+	if err := tree.ProcessPlaceholderAnnotations(stmt.AST, placeholderHints); err != nil {
 		return nil, err
 	}
 	// Preparing needs a transaction because it needs to retrieve db/table

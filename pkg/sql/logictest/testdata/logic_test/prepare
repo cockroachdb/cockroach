@@ -361,6 +361,12 @@ EXECUTE sets('hello')
 statement error could not determine data type of placeholder
 PREPARE x19597 AS SELECT $1 IN ($2, null);
 
+statement error multiple conflicting type annotations around \$1
+PREPARE invalid AS SELECT $1:::int + $1:::float
+
+statement error type annotation around \$1 conflicts with specified type int
+PREPARE invalid (int) AS SELECT $1:::float
+
 statement ok
 PREPARE innerStmt AS SELECT $1:::int i, 'foo' t
 
