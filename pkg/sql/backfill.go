@@ -339,6 +339,9 @@ func getJobIDForMutationWithDescriptor(
 func (sc *SchemaChanger) nRanges(
 	ctx context.Context, txn *client.Txn, spans []roachpb.Span,
 ) (int, error) {
+	if len(spans) == 0 {
+		return 0, nil
+	}
 	spanResolver := sc.distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
 	rangeIds := make(map[int64]struct{})
 	for _, span := range spans {
@@ -357,38 +360,68 @@ func (sc *SchemaChanger) nRanges(
 		}
 	}
 
-	return len(rangeIds), nil
+	n := len(rangeIds)
+	if n == 0 {
+		return 0, errors.Errorf("no ranges found for spans: %+v", spans)
+	}
+	return n, nil
 }
 
 type backfillProgress struct {
-	// Number of ranges needing processing at the very beginning.
+	// Number of ranges needing processing.
 	origNRanges int
-	// The fraction completed from a previous backfill attempt.
-	origFractionCompleted float32
 	// Current number of ranges needing processing.
 	nRanges int
+	// The fraction completed from a previous backfill attempt.
+	origFractionCompleted float32
+	// The running fraction of ranges completed.
+	fractionCompleted float32
+	// The progress recorded to the job.
+	progressRecorded float32
 }
 
+var errSlowProgress = errors.New("backfill making slow progress")
+
+// Report schema change progress. We define progress at this point
+// as the the fraction of fully-backfilled ranges of the primary index of
+// the table being scanned. The progress is also incremented with every iteration
+// just to report progress.
 func (sc *SchemaChanger) reportProgress(
 	ctx context.Context, bp backfillProgress,
 ) (backfillProgress, error) {
+	// Expected fraction of a range processed with each iteration.
+	const rangeFractionPerIteration = float32(30 * time.Minute / checkpointInterval)
+	var progress, fractionCompleted float32
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		// Report schema change progress. We define progress at this point
-		// as the the fraction of fully-backfilled ranges of the primary index of
-		// the table being scanned. Since we may have already modified the
-		// fraction completed of our job from a previous backfill attempt,
-		// we scale that fraction of ranges completed by the remaining fraction
-		// of the job's progress bar.
-		if bp.nRanges < bp.origNRanges {
-			fractionRangesFinished := float32(bp.origNRanges-bp.nRanges) / float32(bp.origNRanges)
-			fractionLeft := 1 - bp.origFractionCompleted
-			fractionCompleted := bp.origFractionCompleted + fractionLeft*fractionRangesFinished
-			if err := sc.job.FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted)); err != nil {
-				return jobs.SimplifyInvalidStatusError(err)
-			}
+		// origNRanges is guaranteed > 0 because nRanges > 0
+		perRangeContribution := (1.0 - bp.fractionCompleted) / float32(bp.origNRanges)
+		// This is to provide more incremental progress updates.
+		perIterationContribution := perRangeContribution / rangeFractionPerIteration
+		progress = bp.progressRecorded + perIterationContribution
+		// Provide a cap for incremental progress.
+		progressCap := bp.fractionCompleted + perRangeContribution - perIterationContribution
+
+		// Ranges might have been fully processed.
+		fractionCompleted = bp.fractionCompleted + perRangeContribution*float32(bp.origNRanges-bp.nRanges)
+		if progress < fractionCompleted {
+			progress = fractionCompleted
+		} else if progress > progressCap {
+			return errSlowProgress
+		}
+
+		if err := sc.job.FractionProgressed(ctx, jobs.FractionUpdater(progress)); err != nil {
+			return jobs.SimplifyInvalidStatusError(err)
 		}
 		return nil
 	})
+	if err != nil {
+		return bp, err
+	}
+
+	// Update backfillProgress for next iteration.
+	bp.progressRecorded = progress
+	bp.fractionCompleted = fractionCompleted
+	bp.origNRanges = bp.nRanges
 	return bp, err
 }
 
@@ -427,7 +460,6 @@ func (sc *SchemaChanger) distBackfill(
 		duration = sc.testingKnobs.WriteCheckpointInterval
 	}
 	chunkSize := sc.getChunkSize(backfillChunkSize)
-
 	origFractionCompleted := sc.job.FractionCompleted()
 	readAsOf := sc.clock.Now()
 	spans, origNRanges, err := sc.spansToProcess(ctx, filter)
@@ -438,9 +470,9 @@ func (sc *SchemaChanger) distBackfill(
 		return nil
 	}
 	bp := backfillProgress{
-		origNRanges: origNRanges,
+		origNRanges:           origNRanges,
 		origFractionCompleted: origFractionCompleted,
-		nRanges: origNRanges,
+		nRanges:               origNRanges,
 	}
 	for {
 		if err := sc.ExtendLease(ctx, lease); err != nil {
@@ -519,9 +551,17 @@ func (sc *SchemaChanger) distBackfill(
 		if len(spans) <= 0 {
 			break
 		}
+		// New ranges could get added along the way.
+		if bp.nRanges > bp.origNRanges {
+			bp.origNRanges = bp.nRanges
+		}
 
 		bp, err = sc.reportProgress(ctx, bp)
 		if err != nil {
+			if err == errSlowProgress {
+				log.Infof(ctx, "backfill making slow progress, spans: %+v", spans)
+				continue
+			}
 			return err
 		}
 	}

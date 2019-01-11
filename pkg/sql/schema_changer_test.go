@@ -3988,3 +3988,68 @@ func TestBlockedSchemaChange(t *testing.T) {
 
 	wg.Wait()
 }
+
+// Tests schema change progress updates.
+func TestSchemaChangeProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var sqlDB *sqlutils.SQLRunner
+	const maxValue = 1000
+	params, _ := tests.CreateTestServerParams()
+	var expectedProgress float32
+	const progressIncrement = 0.066
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			WriteCheckpointInterval: time.Nanosecond,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				// check progress
+				var status string
+				var progress float32
+				sqlDB.QueryRow(t, `
+SELECT status, fraction_completed::decimal(10,3)
+FROM crdb_internal.jobs
+ORDER BY created DESC
+LIMIT 1
+				`).Scan(&status, &progress)
+				if status != "running" {
+					t.Errorf("status = %s", status)
+				}
+				// progress has moved.
+				if expectedProgress > progress || progress > expectedProgress+progressIncrement {
+					t.Errorf("progress = %f, expectedProgress = %f", progress, expectedProgress)
+				}
+				// expected progress for the next iteration.
+				expectedProgress += progressIncrement
+				return nil
+			},
+		},
+	}
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB = sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE t;
+		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+	`)
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(db, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.TODO()
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`CREATE INDEX foo ON t.public.test (v)`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
+	}
+}
