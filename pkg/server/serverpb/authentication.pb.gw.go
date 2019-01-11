@@ -61,14 +61,14 @@ func RegisterLogInHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux
 	defer func() {
 		if err != nil {
 			if cerr := conn.Close(); cerr != nil {
-				grpclog.Printf("Failed to close conn to %s: %v", endpoint, cerr)
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
 			}
 			return
 		}
 		go func() {
 			<-ctx.Done()
 			if cerr := conn.Close(); cerr != nil {
-				grpclog.Printf("Failed to close conn to %s: %v", endpoint, cerr)
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
 			}
 		}()
 	}()
@@ -82,8 +82,8 @@ func RegisterLogInHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 	return RegisterLogInHandlerClient(ctx, mux, NewLogInClient(conn))
 }
 
-// RegisterLogInHandler registers the http handlers for service LogIn to "mux".
-// The handlers forward requests to the grpc endpoint over the given implementation of "LogInClient".
+// RegisterLogInHandlerClient registers the http handlers for service LogIn
+// to "mux". The handlers forward requests to the grpc endpoint over the given implementation of "LogInClient".
 // Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "LogInClient"
 // doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
 // "LogInClient" to call the correct interceptors.
@@ -139,14 +139,14 @@ func RegisterLogOutHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMu
 	defer func() {
 		if err != nil {
 			if cerr := conn.Close(); cerr != nil {
-				grpclog.Printf("Failed to close conn to %s: %v", endpoint, cerr)
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
 			}
 			return
 		}
 		go func() {
 			<-ctx.Done()
 			if cerr := conn.Close(); cerr != nil {
-				grpclog.Printf("Failed to close conn to %s: %v", endpoint, cerr)
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
 			}
 		}()
 	}()
@@ -160,8 +160,8 @@ func RegisterLogOutHandler(ctx context.Context, mux *runtime.ServeMux, conn *grp
 	return RegisterLogOutHandlerClient(ctx, mux, NewLogOutClient(conn))
 }
 
-// RegisterLogOutHandler registers the http handlers for service LogOut to "mux".
-// The handlers forward requests to the grpc endpoint over the given implementation of "LogOutClient".
+// RegisterLogOutHandlerClient registers the http handlers for service LogOut
+// to "mux". The handlers forward requests to the grpc endpoint over the given implementation of "LogOutClient".
 // Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "LogOutClient"
 // doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
 // "LogOutClient" to call the correct interceptors.
