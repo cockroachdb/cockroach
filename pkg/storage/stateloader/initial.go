@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -45,7 +44,6 @@ const (
 // are returned.
 func WriteInitialReplicaState(
 	ctx context.Context,
-	st *cluster.Settings,
 	eng engine.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
@@ -106,7 +104,6 @@ func WriteInitialReplicaState(
 // state itself, and the updated stats are returned.
 func WriteInitialState(
 	ctx context.Context,
-	st *cluster.Settings,
 	eng engine.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
@@ -114,7 +111,7 @@ func WriteInitialState(
 	gcThreshold hlc.Timestamp,
 	txnSpanGCThreshold hlc.Timestamp,
 ) (enginepb.MVCCStats, error) {
-	newMS, err := WriteInitialReplicaState(ctx, st, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold)
+	newMS, err := WriteInitialReplicaState(ctx, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
