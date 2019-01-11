@@ -2013,12 +2013,14 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 // config.
 //
 // Args:
+// eng: the engine to which data is to be written.
 // initialValues: an optional list of k/v to be written as well after each
 //   value's checksum is initialized.
 // bootstrapVersion: the version at which the cluster is bootstrapped.
 // numStores: the number of stores this node will have.
 // splits: an optional list of split points. Range addressing will be created
 //   for all the splits. The list needs to be sorted.
+// nowNanos: the timestamp at which to write the initial engine data.
 func WriteInitialClusterDataToEngine(
 	ctx context.Context,
 	eng engine.Engine,
@@ -2026,6 +2028,7 @@ func WriteInitialClusterDataToEngine(
 	bootstrapVersion roachpb.Version,
 	numStores int,
 	splits []roachpb.RKey,
+	nowNanos int64,
 ) error {
 	// Bootstrap version information. We'll add the "bootstrap version" to the
 	// list of initialValues, so that we don't have to handle it specially
@@ -2104,7 +2107,7 @@ func WriteInitialClusterDataToEngine(
 		defer batch.Close()
 
 		now := hlc.Timestamp{
-			Physical: hlc.UnixNano(),
+			WallTime: nowNanos,
 			Logical:  0,
 		}
 
@@ -2158,15 +2161,14 @@ func WriteInitialClusterDataToEngine(
 
 		lease := roachpb.BootstrapLease()
 		_, err := stateloader.WriteInitialState(
-			ctx, s.cfg.Settings, batch,
-			enginepb.MVCCStats{},
-			*desc,
-			lease, hlc.Timestamp{}, hlc.Timestamp{})
+			ctx, batch, enginepb.MVCCStats{},
+			*desc, lease,
+			hlc.Timestamp{} /* gcThreshold */, hlc.Timestamp{} /* txnSpanGCThreshold */)
 		if err != nil {
 			return err
 		}
 
-		computedStats, err := rditer.ComputeStatsForRange(desc, batch, s.Clock().PhysicalNow())
+		computedStats, err := rditer.ComputeStatsForRange(desc, batch, now.WallTime)
 		if err != nil {
 			return err
 		}

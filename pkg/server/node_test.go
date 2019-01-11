@@ -203,11 +203,9 @@ func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
-	st := cluster.MakeTestingClusterSettings()
 	if _, err := bootstrapCluster(
-		context.TODO(), storage.StoreConfig{
-			Settings: st,
-		}, []engine.Engine{e}, st.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), []engine.Engine{e}, cluster.TestingClusterVersion,
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -261,9 +259,8 @@ func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
-	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		ctx, cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(),
+		ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
@@ -308,20 +305,6 @@ func TestBootstrapNewStore(t *testing.T) {
 	}
 }
 
-// TODO(tschottdorf): tests calling this previously used an empty store config
-// for bootstrapCluster. When changing it to use TestStoreConfig(nil), the
-// following adjustments were necessary to prevent the test from failing to
-// observe its initial splits in time under stressrace, or timing out (never
-// receiving a response from Replica). Investigate why.
-func bootstrapNodeConfig() storage.StoreConfig {
-	cfg := storage.TestStoreConfig(nil)
-	cfg.CoalescedHeartbeatsInterval = 0
-	cfg.RaftHeartbeatIntervalTicks = 0
-	cfg.RaftTickInterval = 0
-	cfg.RaftElectionTimeoutTicks = 0
-	return cfg
-}
-
 // TestNodeJoin verifies a new node is able to join a bootstrapped
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
@@ -332,10 +315,8 @@ func TestNodeJoin(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(e)
 
-	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		ctx, cfg, []engine.Engine{e},
-		cfg.Settings.Version.BootstrapVersion(),
+		ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
@@ -405,9 +386,9 @@ func TestCorruptedClusterID(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
-	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), []engine.Engine{e},
+		cluster.TestingClusterVersion, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -752,10 +733,8 @@ func TestStartNodeWithLocality(t *testing.T) {
 	testLocalityWithNewNode := func(locality roachpb.Locality) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
-		cfg := bootstrapNodeConfig()
 		if _, err := bootstrapCluster(
-			ctx, cfg, []engine.Engine{e},
-			cfg.Settings.Version.BootstrapVersion(),
+			ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
 			kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {
 			t.Fatal(err)
