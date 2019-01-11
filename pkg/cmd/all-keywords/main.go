@@ -90,4 +90,16 @@ var Keywords = map[string]struct {
 	"{{.Lower}}": { {{.Match}}, "{{.Category}}" },
 {{end -}}
 }
+
+// GetKeywordID returns the lex id of the SQL keyword k or IDENT if k is
+// not a keyword.
+func GetKeywordID(k string) int32 {
+	// Although odd, manually listing out a full switch statement benchmarked faster than a map lookup.
+	switch k {
+	{{range . -}}
+	case "{{.Lower}}": return {{.Match}}
+	{{end -}}
+	default: return IDENT
+	}
+}
 `
