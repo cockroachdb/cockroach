@@ -703,15 +703,10 @@ func (n *Node) connectGossip(ctx context.Context) error {
 	case <-n.storeCfg.Gossip.Connected:
 	}
 
-	uuidBytes, err := n.storeCfg.Gossip.GetInfo(gossip.KeyClusterID)
+	gossipClusterID, err := n.storeCfg.Gossip.GetClusterID()
 	if err != nil {
-		return errors.Wrap(err, "unable to ascertain cluster ID from gossip network")
+		return err
 	}
-	gossipClusterID, err := uuid.FromBytes(uuidBytes)
-	if err != nil {
-		return errors.Wrap(err, "unable to parse cluster ID from gossip network")
-	}
-
 	clusterID := n.clusterID.Get()
 	if clusterID == uuid.Nil {
 		n.clusterID.Set(ctx, gossipClusterID)
