@@ -25,7 +25,8 @@ import (
 
 func TestWaitingForInitError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if err := WaitingForInitError("foo"); !IsWaitingForInit(err) {
+	s := &grpcServer{}
+	if err := s.waitingForInitError("foo"); !IsWaitingForInit(err) {
 		t.Errorf("WaitingForInitError() not recognized by IsWaitingForInit(): %v", err)
 	}
 	if err := grpcstatus.Errorf(codes.Unavailable, "foo"); IsWaitingForInit(err) {
