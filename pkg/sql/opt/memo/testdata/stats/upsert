@@ -75,15 +75,15 @@ select
  │    ├── side-effects, mutations
  │    ├── stats: [rows=200, distinct(1)=1, null(1)=0, distinct(2)=200, null(2)=0]
  │    └── project
- │         ├── columns: column12:12(int!null) a:4(int!null) b:5(string!null) column8:8(unknown) x:9(string) y:10(int) z:11(float)
+ │         ├── columns: column12:12(int!null) a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float)
  │         ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0]
  │         ├── fd: ()-->(5,8,12), (9)-->(10,11)
  │         ├── left-join
- │         │    ├── columns: a:4(int!null) b:5(string!null) column8:8(unknown) x:9(string) y:10(int) z:11(float)
+ │         │    ├── columns: a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float)
  │         │    ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0, distinct(9)=1, null(9)=0]
  │         │    ├── fd: ()-->(5,8), (9)-->(10,11)
  │         │    ├── project
- │         │    │    ├── columns: column8:8(unknown) a:4(int!null) b:5(string!null)
+ │         │    │    ├── columns: column8:8(float) a:4(int!null) b:5(string!null)
  │         │    │    ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0]
  │         │    │    ├── fd: ()-->(5,8)
  │         │    │    ├── project
@@ -103,7 +103,7 @@ select
  │         │    │    │         └── filters
  │         │    │    │              └── b = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
  │         │    │    └── projections
- │         │    │         └── null [type=unknown]
+ │         │    │         └── NULL::FLOAT8 [type=float]
  │         │    ├── scan xyz
  │         │    │    ├── columns: x:9(string!null) y:10(int!null) z:11(float)
  │         │    │    ├── stats: [rows=1000, distinct(9)=1000, null(9)=0]
@@ -135,12 +135,12 @@ upsert xyz
  ├── side-effects, mutations
  ├── stats: [rows=0]
  └── left-join
-      ├── columns: a:4(int!null) b:5(string) column8:8(unknown) x:9(string) y:10(int) z:11(float)
+      ├── columns: a:4(int!null) b:5(string) column8:8(float) x:9(string) y:10(int) z:11(float)
       ├── cardinality: [0 - 0]
       ├── stats: [rows=0]
       ├── fd: ()-->(8), (9)-->(10,11)
       ├── project
-      │    ├── columns: column8:8(unknown) a:4(int!null) b:5(string)
+      │    ├── columns: column8:8(float) a:4(int!null) b:5(string)
       │    ├── cardinality: [0 - 0]
       │    ├── stats: [rows=0]
       │    ├── fd: ()-->(8)
@@ -162,7 +162,7 @@ upsert xyz
       │    │         └── filters
       │    │              └── false [type=bool]
       │    └── projections
-      │         └── null [type=unknown]
+      │         └── NULL::FLOAT8 [type=float]
       ├── scan xyz
       │    ├── columns: x:9(string!null) y:10(int!null) z:11(float)
       │    ├── stats: [rows=1000]

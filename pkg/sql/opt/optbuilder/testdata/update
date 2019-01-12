@@ -171,15 +171,24 @@ update abcde
  │    ├──  column13:13 => a:1
  │    ├──  column13:13 => b:2
  │    ├──  column13:13 => c:3
- │    ├──  column13:13 => d:4
+ │    ├──  column14:14 => d:4
  │    ├──  column13:13 => e:5
  │    └──  column13:13 => rowid:6
  └── project
-      ├── columns: column13:13(unknown) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      ├── scan abcde
-      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
+      ├── project
+      │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── projections
+      │         └── cast: INT8 [type=int]
+      │              └── null [type=unknown]
       └── projections
-           └── null [type=unknown]
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column13 [type=int]
+                │    └── variable: column13 [type=int]
+                └── const: 1 [type=int]
 
 # Set columns using variable expressions.
 build
@@ -613,15 +622,24 @@ update abcde
  ├── update-mapping:
  │    ├──  column13:13 => b:2
  │    ├──  column14:14 => c:3
- │    ├──  column13:13 => d:4
+ │    ├──  column15:15 => d:4
  │    └──  a:7 => e:5
  └── project
-      ├── columns: column13:13(unknown) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      ├── scan abcde
-      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: column15:15(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int) column14:14(int!null)
+      ├── project
+      │    ├── columns: column13:13(int) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── projections
+      │         ├── cast: INT8 [type=int]
+      │         │    └── null [type=unknown]
+      │         └── const: 10 [type=int]
       └── projections
-           ├── null [type=unknown]
-           └── const: 10 [type=int]
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column13 [type=int]
+                │    └── variable: column14 [type=int]
+                └── const: 1 [type=int]
 
 # Allow not-null column to be updated with NULL DEFAULT value (would fail at
 # runtime if there are any rows to update).
@@ -636,13 +654,14 @@ update abcde
  │    ├──  column14:14 => d:4
  │    └──  column13:13 => e:5
  └── project
-      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(unknown)
+      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
       ├── project
-      │    ├── columns: column13:13(unknown) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
       │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    └── projections
-      │         └── null [type=unknown]
+      │         └── cast: INT8 [type=int]
+      │              └── null [type=unknown]
       └── projections
            └── plus [type=int]
                 ├── plus [type=int]
@@ -698,16 +717,25 @@ update abcde
  │    ├──  column15:15 => a:1
  │    ├──  column14:14 => b:2
  │    ├──  column13:13 => c:3
- │    ├──  column13:13 => d:4
+ │    ├──  column16:16 => d:4
  │    └──  column15:15 => e:5
  └── project
-      ├── columns: column13:13(unknown) column14:14(int!null) column15:15(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      ├── scan abcde
-      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: column16:16(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int) column14:14(int!null) column15:15(int!null)
+      ├── project
+      │    ├── columns: column13:13(int) column14:14(int!null) column15:15(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── projections
+      │         ├── cast: INT8 [type=int]
+      │         │    └── null [type=unknown]
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
       └── projections
-           ├── null [type=unknown]
-           ├── const: 1 [type=int]
-           └── const: 2 [type=int]
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column14 [type=int]
+                │    └── variable: column13 [type=int]
+                └── const: 1 [type=int]
 
 # Tuples + DEFAULT.
 build
@@ -719,15 +747,24 @@ update abcde
  ├── update-mapping:
  │    ├──  column13:13 => b:2
  │    ├──  column14:14 => c:3
- │    ├──  column13:13 => d:4
+ │    ├──  column15:15 => d:4
  │    └──  a:7 => e:5
  └── project
-      ├── columns: column13:13(unknown) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      ├── scan abcde
-      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: column15:15(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int) column14:14(int!null)
+      ├── project
+      │    ├── columns: column13:13(int) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── projections
+      │         ├── cast: INT8 [type=int]
+      │         │    └── null [type=unknown]
+      │         └── const: 10 [type=int]
       └── projections
-           ├── null [type=unknown]
-           └── const: 10 [type=int]
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column13 [type=int]
+                │    └── variable: column14 [type=int]
+                └── const: 1 [type=int]
 
 # Tuples + non-null DEFAULT.
 build
@@ -739,14 +776,23 @@ update abcde
  ├── update-mapping:
  │    ├──  column13:13 => a:1
  │    ├──  column13:13 => b:2
- │    ├──  column13:13 => d:4
+ │    ├──  column14:14 => d:4
  │    └──  column13:13 => e:5
  └── project
-      ├── columns: column13:13(unknown) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      ├── scan abcde
-      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
+      ├── project
+      │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── scan abcde
+      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── projections
+      │         └── cast: INT8 [type=int]
+      │              └── null [type=unknown]
       └── projections
-           └── null [type=unknown]
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── variable: column13 [type=int]
+                │    └── variable: c [type=int]
+                └── const: 1 [type=int]
 
 build
 UPDATE abcde SET (a, b)=(1, 2, 3)
