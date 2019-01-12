@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -282,15 +283,16 @@ func (s *scope) resolveCTE(name *tree.TableName) *cteSource {
 //
 // The desired type is a suggestion, but resolveType does not throw an error if
 // the resolved type turns out to be different from desired (in contrast to
-// resolveAndRequireType, which panics with a builderError).
+// resolveAndRequireType, which panics with a builderError). If the result
+// type is types.Unknown, then resolveType will wrap the expression in a type
+// cast in order to produce the desired type.
 func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
 	texpr, err := tree.TypeCheck(expr, s.builder.semaCtx, desired)
 	if err != nil {
 		panic(builderError{err})
 	}
-
-	return texpr
+	return s.ensureNullType(texpr, desired)
 }
 
 // resolveAndRequireType converts the given expr to a tree.TypedExpr. As part
@@ -300,14 +302,34 @@ func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 //
 // If the resolved type does not match the desired type, resolveAndRequireType
 // panics with a builderError (in contrast to resolveType, which returns the
-// typed expression with no error).
+// typed expression with no error). If the result type is types.Unknown, then
+// resolveType will wrap the expression in a type cast in order to produce the
+// desired type.
 func (s *scope) resolveAndRequireType(expr tree.Expr, desired types.T) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
 	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, s.context)
 	if err != nil {
 		panic(builderError{err})
 	}
+	return s.ensureNullType(texpr, desired)
+}
 
+// ensureNullType tests the type of the given expression. If types.Unknown, then
+// ensureNullType wraps the expression in a CAST to the desired type (assuming
+// it is not types.Any). types.Unknown is a special type used for null values,
+// and can be cast to any other type.
+func (s *scope) ensureNullType(texpr tree.TypedExpr, desired types.T) tree.TypedExpr {
+	if desired != types.Any && texpr.ResolvedType() == types.Unknown {
+		// Should always be able to convert null value to any other type.
+		colType, err := coltypes.DatumTypeToColumnType(desired)
+		if err != nil {
+			panic(err)
+		}
+		texpr, err = tree.NewTypedCastExpr(texpr, colType)
+		if err != nil {
+			panic(err)
+		}
+	}
 	return texpr
 }
 
