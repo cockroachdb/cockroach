@@ -78,6 +78,12 @@ type mutationBuilder struct {
 	// clause.
 	updateColList opt.ColList
 
+	// checkColList is an ordered list of IDs of input columns which contain the
+	// boolean results of evaluating check constraint expressions defined on the
+	// target table. Its length is always equal to the number of check constraints
+	// on the table (see opt.Table.CheckCount).
+	checkColList opt.ColList
+
 	// canaryColID is the ID of the column that is used to decide whether to
 	// insert or update each row. If the canary column's value is null, then it's
 	// an insert; otherwise it's an update.
@@ -352,6 +358,33 @@ func (mb *mutationBuilder) addSynthesizedCols(
 	}
 
 	if projectionsScope != nil {
+		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
+		mb.outScope = projectionsScope
+	}
+}
+
+// addCheckConstraintCols synthesizes a boolean output column for each check
+// constraint defined on the target table. The mutation operator will report
+// a constraint violation error if the value of the column is false.
+func (mb *mutationBuilder) addCheckConstraintCols() {
+	if mb.tab.CheckCount() > 0 {
+		mb.checkColList = make(opt.ColList, mb.tab.CheckCount())
+		projectionsScope := mb.outScope.replace()
+		projectionsScope.appendColumnsFromScope(mb.outScope)
+
+		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
+			expr, err := parser.ParseExpr(string(mb.tab.Check(i)))
+			if err != nil {
+				panic(builderError{err})
+			}
+
+			alias := fmt.Sprintf("check%d", i+1)
+			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
+			scopeCol := mb.b.addColumn(projectionsScope, alias, texpr)
+			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
+			mb.checkColList[i] = scopeCol.id
+		}
+
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
 	}

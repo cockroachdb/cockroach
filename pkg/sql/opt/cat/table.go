@@ -164,6 +164,10 @@ func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 			formatCatalogFKRef(cat, tab, tab.Index(i), fkRef, child)
 		}
 	}
+
+	for i := 0; i < tab.CheckCount(); i++ {
+		child.Childf("CHECK (%s)", tab.Check(i))
+	}
 }
 
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for

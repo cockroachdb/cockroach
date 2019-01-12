@@ -62,6 +62,23 @@ TABLE mutation
  └── INDEX primary
       └── m int not null
 
+exec-ddl
+CREATE TABLE checks (
+    a INT PRIMARY KEY CHECK (a > 0),
+    b INT,
+    c INT,
+    CHECK (checks.b < c)
+)
+----
+TABLE checks
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── INDEX primary
+ │    └── a int not null
+ ├── CHECK (checks.b < c)
+ └── CHECK (a > 0)
+
 # Unknown target table.
 build
 INSERT INTO unknown VALUES (1, 2, 3)
@@ -1227,3 +1244,59 @@ build
 INSERT INTO mutation (m, n, q) VALUES (1, 2, 3)
 ----
 error (42P10): column "q" is being backfilled
+
+# ------------------------------------------------------------------------------
+# Test check constraints
+# ------------------------------------------------------------------------------
+
+# Insert constants.
+build
+INSERT INTO checks (a, b, c) VALUES (1, 2, 3)
+----
+insert checks
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:4 => a:1
+ │    ├──  column2:5 => b:2
+ │    └──  column3:6 => c:3
+ ├── check columns: check1:7(bool) check2:8(bool)
+ └── project
+      ├── columns: check1:7(bool) check2:8(bool) column1:4(int) column2:5(int) column3:6(int)
+      ├── values
+      │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
+      │    └── tuple [type=tuple{int, int, int}]
+      │         ├── const: 1 [type=int]
+      │         ├── const: 2 [type=int]
+      │         └── const: 3 [type=int]
+      └── projections
+           ├── lt [type=bool]
+           │    ├── variable: column2 [type=int]
+           │    └── variable: column3 [type=int]
+           └── gt [type=bool]
+                ├── variable: column1 [type=int]
+                └── const: 0 [type=int]
+
+# Insert results of SELECT.
+build
+INSERT INTO checks SELECT a, b, c FROM abcde
+----
+insert checks
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  abcde.a:4 => checks.a:1
+ │    ├──  abcde.b:5 => checks.b:2
+ │    └──  abcde.c:6 => checks.c:3
+ ├── check columns: check1:10(bool) check2:11(bool)
+ └── project
+      ├── columns: check1:10(bool) check2:11(bool) abcde.a:4(int!null) abcde.b:5(int) abcde.c:6(int)
+      ├── project
+      │    ├── columns: abcde.a:4(int!null) abcde.b:5(int) abcde.c:6(int)
+      │    └── scan abcde
+      │         └── columns: abcde.a:4(int!null) abcde.b:5(int) abcde.c:6(int) d:7(int) e:8(int) rowid:9(int!null)
+      └── projections
+           ├── lt [type=bool]
+           │    ├── variable: abcde.b [type=int]
+           │    └── variable: abcde.c [type=int]
+           └── gt [type=bool]
+                ├── variable: abcde.a [type=int]
+                └── const: 0 [type=int]

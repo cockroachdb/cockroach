@@ -279,13 +279,21 @@ TABLE leaderboard_record
  │    ├── leaderboard_id bytes not null
  │    ├── expires_at int not null
  │    └── owner_id bytes not null
- └── INDEX test_idx
-      ├── leaderboard_id bytes not null
-      ├── expires_at int not null
-      ├── score int not null
-      ├── updated_at_inverse int not null
-      ├── id bytes not null
-      └── owner_id bytes not null
+ ├── INDEX test_idx
+ │    ├── leaderboard_id bytes not null
+ │    ├── expires_at int not null
+ │    ├── score int not null
+ │    ├── updated_at_inverse int not null
+ │    ├── id bytes not null
+ │    └── owner_id bytes not null
+ ├── CHECK (rank_value >= 0)
+ ├── CHECK (num_score >= 0)
+ ├── CHECK (length(metadata) < 16000)
+ ├── CHECK (ranked_at >= 0)
+ ├── CHECK (updated_at > 0)
+ ├── CHECK (updated_at > 0)
+ ├── CHECK (expires_at >= 0)
+ └── CHECK (expires_at >= 0)
 
 opt
 SELECT score, expires_at
