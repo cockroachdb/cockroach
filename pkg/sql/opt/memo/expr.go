@@ -275,63 +275,58 @@ func (sf *ScanFlags) Empty() bool {
 	return !sf.NoIndexJoin && !sf.ForceIndex
 }
 
-// MapToInputIDs maps from the ID of a target table column to the ID(s) of the
-// corresponding input column(s) that provides the value for it:
+// MapToInputID maps from the ID of a target table column to the ID of the
+// corresponding input column that provides the value for it:
 //
-//   Insert: a = InsertCols
-//   Update: a = UpdateCols/FetchCols
-//   Upsert: a = UpdateCols/FetchCols, b = InsertCols
-//   Delete: a = FetchCols
+//   Insert: InsertCols
+//   Update: UpdateCols/FetchCols
+//   Upsert: InsertCols/UpdateCols/FetchCols
+//   Delete: FetchCols
 //
-// For the UpdateCols/FetchCols case, use the corresponding UpdateCol if it is
-// non-zero (meaning that column will be updated), else use the FetchCol (which
-// holds the existing value of the column).
-func (m *MutationPrivate) MapToInputIDs(tabColID opt.ColumnID) (a, b opt.ColumnID) {
+// When choosing from UpdateCols/FetchCols, use the corresponding UpdateCol if
+// it is non-zero (meaning that column will be updated), else use the FetchCol
+// (which holds the existing value of the column). And for the Upsert case, use
+// either the UpdateCols/FetchCols or the InsertCols value, as long as it is
+// non-zero. If both are non-zero, then they must be the same, since they are
+// set to the same CASE expression column.
+//
+// If there is no matching input column ID, MapToInputID returns 0.
+func (m *MutationPrivate) MapToInputID(tabColID opt.ColumnID) opt.ColumnID {
 	ord := m.Table.ColumnOrdinal(tabColID)
-	if m.FetchCols != nil {
-		if m.UpdateCols != nil && m.UpdateCols[ord] != 0 {
-			a = m.UpdateCols[ord]
-		} else {
-			a = m.FetchCols[ord]
-		}
+	if m.InsertCols != nil && m.InsertCols[ord] != 0 {
+		return m.InsertCols[ord]
 	}
-	if m.InsertCols != nil {
-		if a == 0 {
-			a = m.InsertCols[ord]
-		} else {
-			b = m.InsertCols[ord]
-		}
+	if m.UpdateCols != nil && m.UpdateCols[ord] != 0 {
+		return m.UpdateCols[ord]
 	}
-	return a, b
+	if m.FetchCols != nil && m.FetchCols[ord] != 0 {
+		return m.FetchCols[ord]
+	}
+	return 0
 }
 
 // MapToInputCols maps the given set of table columns to a corresponding set of
-// input columns using the MapToInputID function. This method should not be
-// called for Upsert ops, since the mapping is ambiguous.
+// input columns using the MapToInputID function.
 func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 	var inCols opt.ColSet
 	tabCols.ForEach(func(t int) {
-		a, b := m.MapToInputIDs(opt.ColumnID(t))
-		if b != 0 {
-			panic("MapToInputCols cannot be called for Upsert case")
+		id := m.MapToInputID(opt.ColumnID(t))
+		if id == 0 {
+			panic(fmt.Sprintf("could not find input column for %d", t))
 		}
-		inCols.Add(int(a))
+		inCols.Add(int(id))
 	})
 	return inCols
 }
 
 // AddEquivTableCols adds an FD to the given set that declares an equivalence
-// between each table column and its corresponding input column. This method
-// should not be called for Upsert ops, since the mapping is ambiguous.
+// between each table column and its corresponding input column.
 func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncDepSet) {
 	for i, n := 0, md.Table(m.Table).ColumnCount(); i < n; i++ {
 		t := m.Table.ColumnID(i)
-		a, b := m.MapToInputIDs(t)
-		if b != 0 {
-			panic("AddEquivTableCols cannot be called for Upsert case")
-		}
-		if a != 0 {
-			fdset.AddEquivalency(t, a)
+		id := m.MapToInputID(t)
+		if id != 0 {
+			fdset.AddEquivalency(t, id)
 		}
 	}
 }

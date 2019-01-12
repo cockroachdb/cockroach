@@ -62,20 +62,21 @@ query TTT
 EXPLAIN WITH a AS (UPSERT INTO t VALUES (2), (3) RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-limit                            ·         ·
- │                               count     1
- └── spool                       ·         ·
-      │                          limit     1
-      └── run                    ·         ·
-           └── upsert            ·         ·
-                │                into      t(x)
-                │                strategy  opt upserter
-                └── lookup-join  ·         ·
-                     │           type      left outer
-                     ├── values  ·         ·
-                     │           size      1 column, 2 rows
-                     └── scan    ·         ·
-·                                table     t@primary
+limit                                 ·         ·
+ │                                    count     1
+ └── spool                            ·         ·
+      │                               limit     1
+      └── run                         ·         ·
+           └── upsert                 ·         ·
+                │                     into      t(x)
+                │                     strategy  opt upserter
+                └── render            ·         ·
+                     └── lookup-join  ·         ·
+                          │           type      left outer
+                          ├── values  ·         ·
+                          │           size      1 column, 2 rows
+                          └── scan    ·         ·
+·                                     table     t@primary
 
 # Ditto all mutations, with the statement source syntax.
 query TTT
@@ -128,20 +129,21 @@ limit                          ·         ·
 query TTT
 EXPLAIN SELECT * FROM [UPSERT INTO t VALUES (2), (3) RETURNING x] LIMIT 1
 ----
-limit                            ·         ·
- │                               count     1
- └── spool                       ·         ·
-      │                          limit     1
-      └── run                    ·         ·
-           └── upsert            ·         ·
-                │                into      t(x)
-                │                strategy  opt upserter
-                └── lookup-join  ·         ·
-                     │           type      left outer
-                     ├── values  ·         ·
-                     │           size      1 column, 2 rows
-                     └── scan    ·         ·
-·                                table     t@primary
+limit                                 ·         ·
+ │                                    count     1
+ └── spool                            ·         ·
+      │                               limit     1
+      └── run                         ·         ·
+           └── upsert                 ·         ·
+                │                     into      t(x)
+                │                     strategy  opt upserter
+                └── render            ·         ·
+                     └── lookup-join  ·         ·
+                          │           type      left outer
+                          ├── values  ·         ·
+                          │           size      1 column, 2 rows
+                          └── scan    ·         ·
+·                                     table     t@primary
 
 # Check that a spool is also inserted for other processings than LIMIT.
 query TTT

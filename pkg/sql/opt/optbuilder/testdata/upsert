@@ -69,7 +69,8 @@ CREATE TABLE mutation (
     m INT PRIMARY KEY,
     n INT,
     "o:write-only" INT DEFAULT(10),
-    "p:write-only" INT AS (o + n) STORED
+    "p:write-only" INT AS (o + n) STORED,
+    "q:delete-only" INT
 )
 ----
 TABLE mutation
@@ -77,6 +78,7 @@ TABLE mutation
  ├── n int
  ├── o int
  ├── p int
+ ├── q int
  └── INDEX primary
       └── m int not null
 
@@ -96,128 +98,19 @@ upsert abc
  ├── canary column: 13
  ├── fetch columns: a:10(int) b:11(int) c:12(int) rowid:13(int)
  ├── insert-mapping:
- │    ├──  x:5 => a:1
- │    ├──  y:6 => b:2
- │    ├──  column9:9 => c:3
- │    └──  column8:8 => rowid:4
+ │    ├──  upsert_a:16 => a:1
+ │    ├──  upsert_b:17 => b:2
+ │    ├──  upsert_c:18 => c:3
+ │    └──  upsert_rowid:19 => rowid:4
  ├── update-mapping:
- │    ├──  column14:14 => a:1
- │    └──  column15:15 => c:3
+ │    ├──  upsert_a:16 => a:1
+ │    └──  upsert_c:18 => c:3
  └── project
-      ├── columns: column15:15(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null)
+      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
       ├── project
-      │    ├── columns: column14:14(int!null) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
-      │    ├── left-join
-      │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
-      │    │    ├── project
-      │    │    │    ├── columns: column9:9(int) x:5(int!null) y:6(int) column8:8(int)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int)
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: x:5(int!null) y:6(int)
-      │    │    │    │    │    └── scan xyz
-      │    │    │    │    │         └── columns: x:5(int!null) y:6(int) z:7(int)
-      │    │    │    │    └── projections
-      │    │    │    │         └── function: unique_rowid [type=int]
-      │    │    │    └── projections
-      │    │    │         └── plus [type=int]
-      │    │    │              ├── variable: y [type=int]
-      │    │    │              └── const: 1 [type=int]
-      │    │    ├── scan abc
-      │    │    │    └── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
-      │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: x [type=int]
-      │    │              └── variable: a [type=int]
-      │    └── projections
-      │         └── const: 5 [type=int]
-      └── projections
-           └── plus [type=int]
-                ├── variable: b [type=int]
-                └── const: 1 [type=int]
-
-# Set all columns, multi-column conflict.
-build
-INSERT INTO abc (a, b, rowid)
-SELECT x, y, z FROM xyz
-ON CONFLICT (b, c) DO
-UPDATE SET a=1, b=2, rowid=3
-RETURNING *
-----
-project
- ├── columns: a:1(int!null) b:2(int) c:3(int)
- └── upsert abc
-      ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
-      ├── canary column: 12
-      ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
-      ├── insert-mapping:
-      │    ├──  x:5 => a:1
-      │    ├──  y:6 => b:2
-      │    ├──  column8:8 => c:3
-      │    └──  z:7 => rowid:4
-      ├── update-mapping:
-      │    ├──  column13:13 => a:1
-      │    ├──  column14:14 => b:2
-      │    ├──  column16:16 => c:3
-      │    └──  column15:15 => rowid:4
-      └── project
-           ├── columns: column16:16(int) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int!null) column15:15(int!null)
-           ├── project
-           │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-           │    ├── left-join
-           │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-           │    │    ├── project
-           │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int) z:7(int)
-           │    │    │    ├── scan xyz
-           │    │    │    │    └── columns: x:5(int!null) y:6(int) z:7(int)
-           │    │    │    └── projections
-           │    │    │         └── plus [type=int]
-           │    │    │              ├── variable: y [type=int]
-           │    │    │              └── const: 1 [type=int]
-           │    │    ├── scan abc
-           │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
-           │    │    └── filters
-           │    │         ├── eq [type=bool]
-           │    │         │    ├── variable: y [type=int]
-           │    │         │    └── variable: b [type=int]
-           │    │         └── eq [type=bool]
-           │    │              ├── variable: column8 [type=int]
-           │    │              └── variable: c [type=int]
-           │    └── projections
-           │         ├── const: 1 [type=int]
-           │         ├── const: 2 [type=int]
-           │         └── const: 3 [type=int]
-           └── projections
-                └── plus [type=int]
-                     ├── variable: column14 [type=int]
-                     └── const: 1 [type=int]
-
-# UPDATE + WHERE clause.
-build
-INSERT INTO abc
-SELECT x, y FROM xyz
-ON CONFLICT (a) DO
-UPDATE SET b=10
-WHERE abc.a>0
-----
-upsert abc
- ├── columns: <none>
- ├── canary column: 13
- ├── fetch columns: a:10(int) b:11(int) c:12(int) rowid:13(int)
- ├── insert-mapping:
- │    ├──  x:5 => a:1
- │    ├──  y:6 => b:2
- │    ├──  column9:9 => c:3
- │    └──  column8:8 => rowid:4
- ├── update-mapping:
- │    ├──  column14:14 => b:2
- │    └──  column15:15 => c:3
- └── project
-      ├── columns: column15:15(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null)
-      ├── project
-      │    ├── columns: column14:14(int!null) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
-      │    ├── select
-      │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
+      │    ├── columns: column15:15(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null)
+      │    ├── project
+      │    │    ├── columns: column14:14(int!null) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
       │    │    ├── left-join
       │    │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
       │    │    │    ├── project
@@ -240,20 +133,234 @@ upsert abc
       │    │    │         └── eq [type=bool]
       │    │    │              ├── variable: x [type=int]
       │    │    │              └── variable: a [type=int]
-      │    │    └── filters
-      │    │         └── or [type=bool]
-      │    │              ├── is [type=bool]
-      │    │              │    ├── variable: rowid [type=int]
-      │    │              │    └── null [type=unknown]
-      │    │              └── gt [type=bool]
-      │    │                   ├── variable: a [type=int]
-      │    │                   └── const: 0 [type=int]
+      │    │    └── projections
+      │    │         └── const: 5 [type=int]
       │    └── projections
-      │         └── const: 10 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: b [type=int]
+      │              └── const: 1 [type=int]
       └── projections
-           └── plus [type=int]
-                ├── variable: column14 [type=int]
-                └── const: 1 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: x [type=int]
+           │    └── variable: column14 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: y [type=int]
+           │    └── variable: b [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column9 [type=int]
+           │    └── variable: column15 [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: rowid [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: column8 [type=int]
+                └── variable: rowid [type=int]
+
+# Set all columns, multi-column conflict.
+build
+INSERT INTO abc (a, b, rowid)
+SELECT x, y, z FROM xyz
+ON CONFLICT (b, c) DO
+UPDATE SET a=1, b=2, rowid=3
+RETURNING *
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ └── upsert abc
+      ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
+      ├── canary column: 12
+      ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
+      ├── insert-mapping:
+      │    ├──  upsert_a:17 => a:1
+      │    ├──  upsert_b:18 => b:2
+      │    ├──  upsert_c:19 => c:3
+      │    └──  upsert_rowid:20 => rowid:4
+      ├── update-mapping:
+      │    ├──  upsert_a:17 => a:1
+      │    ├──  upsert_b:18 => b:2
+      │    ├──  upsert_c:19 => c:3
+      │    └──  upsert_rowid:20 => rowid:4
+      └── project
+           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+           ├── project
+           │    ├── columns: column16:16(int) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int!null) column15:15(int!null)
+           │    ├── project
+           │    │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+           │    │    ├── left-join
+           │    │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+           │    │    │    ├── project
+           │    │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int) z:7(int)
+           │    │    │    │    ├── scan xyz
+           │    │    │    │    │    └── columns: x:5(int!null) y:6(int) z:7(int)
+           │    │    │    │    └── projections
+           │    │    │    │         └── plus [type=int]
+           │    │    │    │              ├── variable: y [type=int]
+           │    │    │    │              └── const: 1 [type=int]
+           │    │    │    ├── scan abc
+           │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+           │    │    │    └── filters
+           │    │    │         ├── eq [type=bool]
+           │    │    │         │    ├── variable: y [type=int]
+           │    │    │         │    └── variable: b [type=int]
+           │    │    │         └── eq [type=bool]
+           │    │    │              ├── variable: column8 [type=int]
+           │    │    │              └── variable: c [type=int]
+           │    │    └── projections
+           │    │         ├── const: 1 [type=int]
+           │    │         ├── const: 2 [type=int]
+           │    │         └── const: 3 [type=int]
+           │    └── projections
+           │         └── plus [type=int]
+           │              ├── variable: column14 [type=int]
+           │              └── const: 1 [type=int]
+           └── projections
+                ├── case [type=int]
+                │    ├── true [type=bool]
+                │    ├── when [type=int]
+                │    │    ├── is [type=bool]
+                │    │    │    ├── variable: rowid [type=int]
+                │    │    │    └── null [type=unknown]
+                │    │    └── variable: x [type=int]
+                │    └── variable: column13 [type=int]
+                ├── case [type=int]
+                │    ├── true [type=bool]
+                │    ├── when [type=int]
+                │    │    ├── is [type=bool]
+                │    │    │    ├── variable: rowid [type=int]
+                │    │    │    └── null [type=unknown]
+                │    │    └── variable: y [type=int]
+                │    └── variable: column14 [type=int]
+                ├── case [type=int]
+                │    ├── true [type=bool]
+                │    ├── when [type=int]
+                │    │    ├── is [type=bool]
+                │    │    │    ├── variable: rowid [type=int]
+                │    │    │    └── null [type=unknown]
+                │    │    └── variable: column8 [type=int]
+                │    └── variable: column16 [type=int]
+                └── case [type=int]
+                     ├── true [type=bool]
+                     ├── when [type=int]
+                     │    ├── is [type=bool]
+                     │    │    ├── variable: rowid [type=int]
+                     │    │    └── null [type=unknown]
+                     │    └── variable: z [type=int]
+                     └── variable: column15 [type=int]
+
+# UPDATE + WHERE clause.
+build
+INSERT INTO abc
+SELECT x, y FROM xyz
+ON CONFLICT (a) DO
+UPDATE SET b=10
+WHERE abc.a>0
+----
+upsert abc
+ ├── columns: <none>
+ ├── canary column: 13
+ ├── fetch columns: a:10(int) b:11(int) c:12(int) rowid:13(int)
+ ├── insert-mapping:
+ │    ├──  upsert_a:16 => a:1
+ │    ├──  upsert_b:17 => b:2
+ │    ├──  upsert_c:18 => c:3
+ │    └──  upsert_rowid:19 => rowid:4
+ ├── update-mapping:
+ │    ├──  upsert_b:17 => b:2
+ │    └──  upsert_c:18 => c:3
+ └── project
+      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
+      ├── project
+      │    ├── columns: column15:15(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null)
+      │    ├── project
+      │    │    ├── columns: column14:14(int!null) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
+      │    │    ├── select
+      │    │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
+      │    │    │    ├── left-join
+      │    │    │    │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column9:9(int) x:5(int!null) y:6(int) column8:8(int)
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: column8:8(int) x:5(int!null) y:6(int)
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: x:5(int!null) y:6(int)
+      │    │    │    │    │    │    │    └── scan xyz
+      │    │    │    │    │    │    │         └── columns: x:5(int!null) y:6(int) z:7(int)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── function: unique_rowid [type=int]
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── plus [type=int]
+      │    │    │    │    │              ├── variable: y [type=int]
+      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    ├── scan abc
+      │    │    │    │    │    └── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
+      │    │    │    │    └── filters
+      │    │    │    │         └── eq [type=bool]
+      │    │    │    │              ├── variable: x [type=int]
+      │    │    │    │              └── variable: a [type=int]
+      │    │    │    └── filters
+      │    │    │         └── or [type=bool]
+      │    │    │              ├── is [type=bool]
+      │    │    │              │    ├── variable: rowid [type=int]
+      │    │    │              │    └── null [type=unknown]
+      │    │    │              └── gt [type=bool]
+      │    │    │                   ├── variable: a [type=int]
+      │    │    │                   └── const: 0 [type=int]
+      │    │    └── projections
+      │    │         └── const: 10 [type=int]
+      │    └── projections
+      │         └── plus [type=int]
+      │              ├── variable: column14 [type=int]
+      │              └── const: 1 [type=int]
+      └── projections
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: x [type=int]
+           │    └── variable: a [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: y [type=int]
+           │    └── variable: column14 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column9 [type=int]
+           │    └── variable: column15 [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: rowid [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: column8 [type=int]
+                └── variable: rowid [type=int]
 
 # Use RETURNING INSERT..ON CONFLICT as a FROM clause.
 build
@@ -271,49 +378,84 @@ sort
            ├── canary column: 12
            ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
            ├── insert-mapping:
-           │    ├──  column1:5 => a:1
-           │    ├──  column2:6 => b:2
-           │    ├──  column8:8 => c:3
-           │    └──  column7:7 => rowid:4
+           │    ├──  upsert_a:15 => a:1
+           │    ├──  upsert_b:16 => b:2
+           │    ├──  upsert_c:17 => c:3
+           │    └──  upsert_rowid:18 => rowid:4
            ├── update-mapping:
-           │    ├──  column13:13 => b:2
-           │    └──  column14:14 => c:3
+           │    ├──  upsert_b:16 => b:2
+           │    └──  upsert_c:17 => c:3
            └── project
-                ├── columns: column14:14(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null)
+                ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
                 ├── project
-                │    ├── columns: column13:13(int!null) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-                │    ├── left-join
-                │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-                │    │    ├── project
-                │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+                │    ├── columns: column14:14(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null)
+                │    ├── project
+                │    │    ├── columns: column13:13(int!null) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+                │    │    ├── left-join
+                │    │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
                 │    │    │    ├── project
-                │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
-                │    │    │    │    ├── values
-                │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
-                │    │    │    │    │    ├── tuple [type=tuple{int, int}]
-                │    │    │    │    │    │    ├── const: 1 [type=int]
-                │    │    │    │    │    │    └── const: 2 [type=int]
-                │    │    │    │    │    └── tuple [type=tuple{int, int}]
-                │    │    │    │    │         ├── const: 3 [type=int]
-                │    │    │    │    │         └── const: 4 [type=int]
+                │    │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+                │    │    │    │    ├── project
+                │    │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+                │    │    │    │    │    ├── values
+                │    │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+                │    │    │    │    │    │    ├── tuple [type=tuple{int, int}]
+                │    │    │    │    │    │    │    ├── const: 1 [type=int]
+                │    │    │    │    │    │    │    └── const: 2 [type=int]
+                │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+                │    │    │    │    │    │         ├── const: 3 [type=int]
+                │    │    │    │    │    │         └── const: 4 [type=int]
+                │    │    │    │    │    └── projections
+                │    │    │    │    │         └── function: unique_rowid [type=int]
                 │    │    │    │    └── projections
-                │    │    │    │         └── function: unique_rowid [type=int]
-                │    │    │    └── projections
-                │    │    │         └── plus [type=int]
-                │    │    │              ├── variable: column2 [type=int]
-                │    │    │              └── const: 1 [type=int]
-                │    │    ├── scan abc
-                │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
-                │    │    └── filters
-                │    │         └── eq [type=bool]
-                │    │              ├── variable: column1 [type=int]
-                │    │              └── variable: a [type=int]
+                │    │    │    │         └── plus [type=int]
+                │    │    │    │              ├── variable: column2 [type=int]
+                │    │    │    │              └── const: 1 [type=int]
+                │    │    │    ├── scan abc
+                │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+                │    │    │    └── filters
+                │    │    │         └── eq [type=bool]
+                │    │    │              ├── variable: column1 [type=int]
+                │    │    │              └── variable: a [type=int]
+                │    │    └── projections
+                │    │         └── const: 1 [type=int]
                 │    └── projections
-                │         └── const: 1 [type=int]
+                │         └── plus [type=int]
+                │              ├── variable: column13 [type=int]
+                │              └── const: 1 [type=int]
                 └── projections
-                     └── plus [type=int]
-                          ├── variable: column13 [type=int]
-                          └── const: 1 [type=int]
+                     ├── case [type=int]
+                     │    ├── true [type=bool]
+                     │    ├── when [type=int]
+                     │    │    ├── is [type=bool]
+                     │    │    │    ├── variable: rowid [type=int]
+                     │    │    │    └── null [type=unknown]
+                     │    │    └── variable: column1 [type=int]
+                     │    └── variable: a [type=int]
+                     ├── case [type=int]
+                     │    ├── true [type=bool]
+                     │    ├── when [type=int]
+                     │    │    ├── is [type=bool]
+                     │    │    │    ├── variable: rowid [type=int]
+                     │    │    │    └── null [type=unknown]
+                     │    │    └── variable: column2 [type=int]
+                     │    └── variable: column13 [type=int]
+                     ├── case [type=int]
+                     │    ├── true [type=bool]
+                     │    ├── when [type=int]
+                     │    │    ├── is [type=bool]
+                     │    │    │    ├── variable: rowid [type=int]
+                     │    │    │    └── null [type=unknown]
+                     │    │    └── variable: column8 [type=int]
+                     │    └── variable: column14 [type=int]
+                     └── case [type=int]
+                          ├── true [type=bool]
+                          ├── when [type=int]
+                          │    ├── is [type=bool]
+                          │    │    ├── variable: rowid [type=int]
+                          │    │    └── null [type=unknown]
+                          │    └── variable: column7 [type=int]
+                          └── variable: rowid [type=int]
 
 # Use table alias.
 build
@@ -327,48 +469,83 @@ upsert tab
  ├── canary column: 12
  ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
  ├── insert-mapping:
- │    ├──  column1:5 => a:1
- │    ├──  column2:6 => b:2
- │    ├──  column8:8 => c:3
- │    └──  column7:7 => rowid:4
+ │    ├──  upsert_a:15 => a:1
+ │    ├──  upsert_b:16 => b:2
+ │    ├──  upsert_c:17 => c:3
+ │    └──  upsert_rowid:18 => rowid:4
  ├── update-mapping:
- │    ├──  column13:13 => a:1
- │    └──  column14:14 => c:3
+ │    ├──  upsert_a:15 => a:1
+ │    └──  upsert_c:17 => c:3
  └── project
-      ├── columns: column14:14(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int)
+      ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       ├── project
-      │    ├── columns: column13:13(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-      │    ├── left-join
-      │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-      │    │    ├── project
-      │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    ├── columns: column14:14(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int)
+      │    ├── project
+      │    │    ├── columns: column13:13(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    ├── left-join
+      │    │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
-      │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── function: unique_rowid [type=int]
       │    │    │    │    └── projections
-      │    │    │    │         └── function: unique_rowid [type=int]
-      │    │    │    └── projections
-      │    │    │         └── plus [type=int]
-      │    │    │              ├── variable: column2 [type=int]
-      │    │    │              └── const: 1 [type=int]
-      │    │    ├── scan tab
-      │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
-      │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: column1 [type=int]
-      │    │              └── variable: a [type=int]
+      │    │    │    │         └── plus [type=int]
+      │    │    │    │              ├── variable: column2 [type=int]
+      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    ├── scan tab
+      │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+      │    │    │    └── filters
+      │    │    │         └── eq [type=bool]
+      │    │    │              ├── variable: column1 [type=int]
+      │    │    │              └── variable: a [type=int]
+      │    │    └── projections
+      │    │         └── mult [type=int]
+      │    │              ├── variable: a [type=int]
+      │    │              └── variable: column1 [type=int]
       │    └── projections
-      │         └── mult [type=int]
-      │              ├── variable: a [type=int]
-      │              └── variable: column1 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: b [type=int]
+      │              └── const: 1 [type=int]
       └── projections
-           └── plus [type=int]
-                ├── variable: b [type=int]
-                └── const: 1 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column1 [type=int]
+           │    └── variable: column13 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column2 [type=int]
+           │    └── variable: b [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column8 [type=int]
+           │    └── variable: column14 [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: rowid [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: column7 [type=int]
+                └── variable: rowid [type=int]
 
 # Conflict columns don't match unique index (too few columns).
 build
@@ -533,62 +710,89 @@ WHERE excluded.y>xyz.y
 RETURNING xyz.x*2, y+z
 ----
 project
- ├── columns: "?column?":13(int) "?column?":14(int)
+ ├── columns: "?column?":16(int) "?column?":17(int)
  ├── upsert xyz
  │    ├── columns: x:1(int!null) y:2(int) z:3(int)
  │    ├── canary column: 7
  │    ├── fetch columns: x:7(int) y:8(int) z:9(int)
  │    ├── insert-mapping:
- │    │    ├──  column1:4 => x:1
- │    │    ├──  column2:5 => y:2
- │    │    └──  column3:6 => z:3
+ │    │    ├──  upsert_x:13 => x:1
+ │    │    ├──  upsert_y:14 => y:2
+ │    │    └──  upsert_z:15 => z:3
  │    ├── update-mapping:
- │    │    ├──  column10:10 => x:1
- │    │    ├──  column11:11 => y:2
- │    │    └──  column12:12 => z:3
+ │    │    ├──  upsert_x:13 => x:1
+ │    │    ├──  upsert_y:14 => y:2
+ │    │    └──  upsert_z:15 => z:3
  │    └── project
- │         ├── columns: column10:10(int) column11:11(int) column12:12(int) column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
- │         ├── select
- │         │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
- │         │    ├── left-join
+ │         ├── columns: upsert_x:13(int) upsert_y:14(int) upsert_z:15(int) x:7(int) y:8(int) z:9(int)
+ │         ├── project
+ │         │    ├── columns: column10:10(int) column11:11(int) column12:12(int) column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+ │         │    ├── select
  │         │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
- │         │    │    ├── values
- │         │    │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
- │         │    │    │    ├── tuple [type=tuple{int, int, int}]
- │         │    │    │    │    ├── const: 1 [type=int]
- │         │    │    │    │    ├── const: 2 [type=int]
- │         │    │    │    │    └── const: 3 [type=int]
- │         │    │    │    └── tuple [type=tuple{int, int, int}]
- │         │    │    │         ├── const: -1 [type=int]
- │         │    │    │         ├── const: -1 [type=int]
- │         │    │    │         └── const: -1 [type=int]
- │         │    │    ├── scan xyz
- │         │    │    │    └── columns: x:7(int!null) y:8(int) z:9(int)
+ │         │    │    ├── left-join
+ │         │    │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+ │         │    │    │    ├── values
+ │         │    │    │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
+ │         │    │    │    │    ├── tuple [type=tuple{int, int, int}]
+ │         │    │    │    │    │    ├── const: 1 [type=int]
+ │         │    │    │    │    │    ├── const: 2 [type=int]
+ │         │    │    │    │    │    └── const: 3 [type=int]
+ │         │    │    │    │    └── tuple [type=tuple{int, int, int}]
+ │         │    │    │    │         ├── const: -1 [type=int]
+ │         │    │    │    │         ├── const: -1 [type=int]
+ │         │    │    │    │         └── const: -1 [type=int]
+ │         │    │    │    ├── scan xyz
+ │         │    │    │    │    └── columns: x:7(int!null) y:8(int) z:9(int)
+ │         │    │    │    └── filters
+ │         │    │    │         ├── eq [type=bool]
+ │         │    │    │         │    ├── variable: column3 [type=int]
+ │         │    │    │         │    └── variable: z [type=int]
+ │         │    │    │         └── eq [type=bool]
+ │         │    │    │              ├── variable: column2 [type=int]
+ │         │    │    │              └── variable: y [type=int]
  │         │    │    └── filters
- │         │    │         ├── eq [type=bool]
- │         │    │         │    ├── variable: column3 [type=int]
- │         │    │         │    └── variable: z [type=int]
- │         │    │         └── eq [type=bool]
- │         │    │              ├── variable: column2 [type=int]
- │         │    │              └── variable: y [type=int]
- │         │    └── filters
- │         │         └── or [type=bool]
- │         │              ├── is [type=bool]
- │         │              │    ├── variable: x [type=int]
- │         │              │    └── null [type=unknown]
- │         │              └── gt [type=bool]
- │         │                   ├── variable: column2 [type=int]
- │         │                   └── variable: y [type=int]
+ │         │    │         └── or [type=bool]
+ │         │    │              ├── is [type=bool]
+ │         │    │              │    ├── variable: x [type=int]
+ │         │    │              │    └── null [type=unknown]
+ │         │    │              └── gt [type=bool]
+ │         │    │                   ├── variable: column2 [type=int]
+ │         │    │                   └── variable: y [type=int]
+ │         │    └── projections
+ │         │         ├── plus [type=int]
+ │         │         │    ├── variable: column1 [type=int]
+ │         │         │    └── const: 1 [type=int]
+ │         │         ├── mult [type=int]
+ │         │         │    ├── variable: column2 [type=int]
+ │         │         │    └── variable: y [type=int]
+ │         │         └── minus [type=int]
+ │         │              ├── variable: column1 [type=int]
+ │         │              └── variable: column3 [type=int]
  │         └── projections
- │              ├── plus [type=int]
- │              │    ├── variable: column1 [type=int]
- │              │    └── const: 1 [type=int]
- │              ├── mult [type=int]
- │              │    ├── variable: column2 [type=int]
- │              │    └── variable: y [type=int]
- │              └── minus [type=int]
- │                   ├── variable: column1 [type=int]
- │                   └── variable: column3 [type=int]
+ │              ├── case [type=int]
+ │              │    ├── true [type=bool]
+ │              │    ├── when [type=int]
+ │              │    │    ├── is [type=bool]
+ │              │    │    │    ├── variable: x [type=int]
+ │              │    │    │    └── null [type=unknown]
+ │              │    │    └── variable: column1 [type=int]
+ │              │    └── variable: column10 [type=int]
+ │              ├── case [type=int]
+ │              │    ├── true [type=bool]
+ │              │    ├── when [type=int]
+ │              │    │    ├── is [type=bool]
+ │              │    │    │    ├── variable: x [type=int]
+ │              │    │    │    └── null [type=unknown]
+ │              │    │    └── variable: column2 [type=int]
+ │              │    └── variable: column11 [type=int]
+ │              └── case [type=int]
+ │                   ├── true [type=bool]
+ │                   ├── when [type=int]
+ │                   │    ├── is [type=bool]
+ │                   │    │    ├── variable: x [type=int]
+ │                   │    │    └── null [type=unknown]
+ │                   │    └── variable: column3 [type=int]
+ │                   └── variable: column12 [type=int]
  └── projections
       ├── mult [type=int]
       │    ├── variable: x [type=int]
@@ -632,62 +836,97 @@ upsert abc
  ├── canary column: 12
  ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
  ├── insert-mapping:
- │    ├──  column1:5 => a:1
- │    ├──  column2:6 => b:2
- │    ├──  column8:8 => c:3
- │    └──  column7:7 => rowid:4
+ │    ├──  upsert_a:18 => a:1
+ │    ├──  upsert_b:19 => b:2
+ │    ├──  upsert_c:20 => c:3
+ │    └──  upsert_rowid:21 => rowid:4
  ├── update-mapping:
- │    ├──  "?column?":16 => a:1
- │    ├──  x:13 => b:2
- │    └──  column17:17 => c:3
+ │    ├──  upsert_a:18 => a:1
+ │    ├──  upsert_b:19 => b:2
+ │    └──  upsert_c:20 => c:3
  └── project
-      ├── columns: column17:17(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
-      ├── left-join-apply
-      │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
-      │    ├── left-join
-      │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-      │    │    ├── project
-      │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      ├── columns: upsert_a:18(int) upsert_b:19(int) upsert_c:20(int) upsert_rowid:21(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      ├── project
+      │    ├── columns: column17:17(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
+      │    ├── left-join-apply
+      │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
+      │    │    ├── left-join
+      │    │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
-      │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── function: unique_rowid [type=int]
       │    │    │    │    └── projections
-      │    │    │    │         └── function: unique_rowid [type=int]
-      │    │    │    └── projections
-      │    │    │         └── plus [type=int]
-      │    │    │              ├── variable: column2 [type=int]
-      │    │    │              └── const: 1 [type=int]
-      │    │    ├── scan abc
-      │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
-      │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: column1 [type=int]
-      │    │              └── variable: a [type=int]
-      │    ├── max1-row
-      │    │    ├── columns: x:13(int!null) "?column?":16(int)
-      │    │    └── project
-      │    │         ├── columns: "?column?":16(int) x:13(int!null)
-      │    │         ├── select
-      │    │         │    ├── columns: x:13(int!null) y:14(int) z:15(int)
-      │    │         │    ├── scan xyz
-      │    │         │    │    └── columns: x:13(int!null) y:14(int) z:15(int)
-      │    │         │    └── filters
-      │    │         │         └── eq [type=bool]
-      │    │         │              ├── variable: x [type=int]
-      │    │         │              └── variable: column1 [type=int]
-      │    │         └── projections
-      │    │              └── plus [type=int]
-      │    │                   ├── variable: y [type=int]
-      │    │                   └── variable: column2 [type=int]
-      │    └── filters (true)
+      │    │    │    │         └── plus [type=int]
+      │    │    │    │              ├── variable: column2 [type=int]
+      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    ├── scan abc
+      │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+      │    │    │    └── filters
+      │    │    │         └── eq [type=bool]
+      │    │    │              ├── variable: column1 [type=int]
+      │    │    │              └── variable: a [type=int]
+      │    │    ├── max1-row
+      │    │    │    ├── columns: x:13(int!null) "?column?":16(int)
+      │    │    │    └── project
+      │    │    │         ├── columns: "?column?":16(int) x:13(int!null)
+      │    │    │         ├── select
+      │    │    │         │    ├── columns: x:13(int!null) y:14(int) z:15(int)
+      │    │    │         │    ├── scan xyz
+      │    │    │         │    │    └── columns: x:13(int!null) y:14(int) z:15(int)
+      │    │    │         │    └── filters
+      │    │    │         │         └── eq [type=bool]
+      │    │    │         │              ├── variable: x [type=int]
+      │    │    │         │              └── variable: column1 [type=int]
+      │    │    │         └── projections
+      │    │    │              └── plus [type=int]
+      │    │    │                   ├── variable: y [type=int]
+      │    │    │                   └── variable: column2 [type=int]
+      │    │    └── filters (true)
+      │    └── projections
+      │         └── plus [type=int]
+      │              ├── variable: x [type=int]
+      │              └── const: 1 [type=int]
       └── projections
-           └── plus [type=int]
-                ├── variable: x [type=int]
-                └── const: 1 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column1 [type=int]
+           │    └── variable: ?column? [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column2 [type=int]
+           │    └── variable: x [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column8 [type=int]
+           │    └── variable: column17 [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: rowid [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: column7 [type=int]
+                └── variable: rowid [type=int]
 
 # Default expressions.
 build
@@ -701,49 +940,84 @@ upsert abc
  ├── canary column: 12
  ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
  ├── insert-mapping:
- │    ├──  column1:5 => a:1
- │    ├──  column2:6 => b:2
- │    ├──  column8:8 => c:3
- │    └──  column7:7 => rowid:4
+ │    ├──  upsert_a:16 => a:1
+ │    ├──  upsert_b:17 => b:2
+ │    ├──  upsert_c:18 => c:3
+ │    └──  upsert_rowid:19 => rowid:4
  ├── update-mapping:
- │    ├──  column13:13 => a:1
- │    ├──  column14:14 => b:2
- │    └──  column15:15 => c:3
+ │    ├──  upsert_a:16 => a:1
+ │    ├──  upsert_b:17 => b:2
+ │    └──  upsert_c:18 => c:3
  └── project
-      ├── columns: column15:15(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null)
+      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       ├── project
-      │    ├── columns: column13:13(int) column14:14(int!null) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-      │    ├── left-join
-      │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-      │    │    ├── project
-      │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    ├── columns: column15:15(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null)
+      │    ├── project
+      │    │    ├── columns: column13:13(int) column14:14(int!null) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    ├── left-join
+      │    │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
-      │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── function: unique_rowid [type=int]
       │    │    │    │    └── projections
-      │    │    │    │         └── function: unique_rowid [type=int]
-      │    │    │    └── projections
-      │    │    │         └── plus [type=int]
-      │    │    │              ├── variable: column2 [type=int]
-      │    │    │              └── const: 1 [type=int]
-      │    │    ├── scan abc
-      │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
-      │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: column1 [type=int]
-      │    │              └── variable: a [type=int]
+      │    │    │    │         └── plus [type=int]
+      │    │    │    │              ├── variable: column2 [type=int]
+      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    ├── scan abc
+      │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+      │    │    │    └── filters
+      │    │    │         └── eq [type=bool]
+      │    │    │              ├── variable: column1 [type=int]
+      │    │    │              └── variable: a [type=int]
+      │    │    └── projections
+      │    │         ├── cast: INT8 [type=int]
+      │    │         │    └── null [type=unknown]
+      │    │         └── const: 10 [type=int]
       │    └── projections
-      │         ├── cast: INT8 [type=int]
-      │         │    └── null [type=unknown]
-      │         └── const: 10 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: column14 [type=int]
+      │              └── const: 1 [type=int]
       └── projections
-           └── plus [type=int]
-                ├── variable: column14 [type=int]
-                └── const: 1 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column1 [type=int]
+           │    └── variable: column13 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column2 [type=int]
+           │    └── variable: column14 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: rowid [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column8 [type=int]
+           │    └── variable: column15 [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: rowid [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: column7 [type=int]
+                └── variable: rowid [type=int]
 
 # ------------------------------------------------------------------------------
 # Test mutation columns.
@@ -757,51 +1031,86 @@ UPDATE SET m=mutation.m+1
 ----
 upsert mutation
  ├── columns: <none>
- ├── canary column: 9
- ├── fetch columns: m:9(int) n:10(int) o:11(int) p:12(int)
+ ├── canary column: 10
+ ├── fetch columns: m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
  ├── insert-mapping:
- │    ├──  column1:5 => m:1
- │    ├──  column2:6 => n:2
- │    ├──  column7:7 => o:3
- │    └──  column8:8 => p:4
+ │    ├──  upsert_m:17 => m:1
+ │    ├──  upsert_n:18 => n:2
+ │    ├──  upsert_o:19 => o:3
+ │    └──  upsert_p:20 => p:4
  ├── update-mapping:
- │    ├──  column13:13 => m:1
- │    └──  column14:14 => p:4
+ │    ├──  upsert_m:17 => m:1
+ │    └──  upsert_p:20 => p:4
  └── project
-      ├── columns: column14:14(int) column1:5(int) column2:6(int) column7:7(int!null) column8:8(int) m:9(int) n:10(int) o:11(int) p:12(int) column13:13(int)
+      ├── columns: upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       ├── project
-      │    ├── columns: column13:13(int) column1:5(int) column2:6(int) column7:7(int!null) column8:8(int) m:9(int) n:10(int) o:11(int) p:12(int)
-      │    ├── left-join
-      │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int!null) column8:8(int) m:9(int) n:10(int) o:11(int) p:12(int)
-      │    │    ├── project
-      │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int!null)
+      │    ├── columns: column16:16(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
+      │    ├── project
+      │    │    ├── columns: column15:15(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    ├── left-join
+      │    │    │    ├── columns: column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column7:7(int!null) column1:5(int) column2:6(int)
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
-      │    │    │    │    │    └── tuple [type=tuple{int, int}]
-      │    │    │    │    │         ├── const: 1 [type=int]
-      │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:6(int) column2:7(int)
+      │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── const: 10 [type=int]
       │    │    │    │    └── projections
-      │    │    │    │         └── const: 10 [type=int]
-      │    │    │    └── projections
-      │    │    │         └── plus [type=int]
-      │    │    │              ├── variable: column7 [type=int]
-      │    │    │              └── variable: column2 [type=int]
-      │    │    ├── scan mutation
-      │    │    │    └── columns: m:9(int!null) n:10(int) o:11(int) p:12(int)
-      │    │    └── filters
-      │    │         └── eq [type=bool]
-      │    │              ├── variable: column1 [type=int]
-      │    │              └── variable: m [type=int]
+      │    │    │    │         └── plus [type=int]
+      │    │    │    │              ├── variable: column8 [type=int]
+      │    │    │    │              └── variable: column2 [type=int]
+      │    │    │    ├── scan mutation
+      │    │    │    │    └── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    └── filters
+      │    │    │         └── eq [type=bool]
+      │    │    │              ├── variable: column1 [type=int]
+      │    │    │              └── variable: m [type=int]
+      │    │    └── projections
+      │    │         └── plus [type=int]
+      │    │              ├── variable: m [type=int]
+      │    │              └── const: 1 [type=int]
       │    └── projections
       │         └── plus [type=int]
-      │              ├── variable: m [type=int]
-      │              └── const: 1 [type=int]
+      │              ├── variable: o [type=int]
+      │              └── variable: n [type=int]
       └── projections
-           └── plus [type=int]
-                ├── variable: o [type=int]
-                └── variable: n [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: m [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column1 [type=int]
+           │    └── variable: column15 [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: m [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column2 [type=int]
+           │    └── variable: n [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: m [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column8 [type=int]
+           │    └── variable: o [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: m [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: column9 [type=int]
+                └── variable: column16 [type=int]
 
 # ------------------------------------------------------------------------------
 # Test UPSERT.
@@ -816,29 +1125,56 @@ upsert xyz
  ├── canary column: 6
  ├── fetch columns: x:6(int) y:7(int) z:8(int)
  ├── insert-mapping:
- │    ├──  column1:4 => x:1
- │    ├──  column5:5 => y:2
- │    └──  column5:5 => z:3
+ │    ├──  upsert_x:9 => x:1
+ │    ├──  upsert_y:10 => y:2
+ │    └──  upsert_z:11 => z:3
  ├── update-mapping:
- │    ├──  column5:5 => y:2
- │    └──  column5:5 => z:3
- └── left-join
-      ├── columns: column1:4(int) column5:5(int) x:6(int) y:7(int) z:8(int)
-      ├── project
-      │    ├── columns: column5:5(int) column1:4(int)
-      │    ├── values
-      │    │    ├── columns: column1:4(int)
-      │    │    └── tuple [type=tuple{int}]
-      │    │         └── const: 1 [type=int]
-      │    └── projections
-      │         └── cast: INT8 [type=int]
-      │              └── null [type=unknown]
-      ├── scan xyz
-      │    └── columns: x:6(int!null) y:7(int) z:8(int)
-      └── filters
-           └── eq [type=bool]
-                ├── variable: column1 [type=int]
-                └── variable: x [type=int]
+ │    ├──  upsert_y:10 => y:2
+ │    └──  upsert_z:11 => z:3
+ └── project
+      ├── columns: upsert_x:9(int) upsert_y:10(int) upsert_z:11(int) x:6(int) y:7(int) z:8(int)
+      ├── left-join
+      │    ├── columns: column1:4(int) column5:5(int) x:6(int) y:7(int) z:8(int)
+      │    ├── project
+      │    │    ├── columns: column5:5(int) column1:4(int)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:4(int)
+      │    │    │    └── tuple [type=tuple{int}]
+      │    │    │         └── const: 1 [type=int]
+      │    │    └── projections
+      │    │         └── cast: INT8 [type=int]
+      │    │              └── null [type=unknown]
+      │    ├── scan xyz
+      │    │    └── columns: x:6(int!null) y:7(int) z:8(int)
+      │    └── filters
+      │         └── eq [type=bool]
+      │              ├── variable: column1 [type=int]
+      │              └── variable: x [type=int]
+      └── projections
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: x [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column1 [type=int]
+           │    └── variable: x [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: x [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column5 [type=int]
+           │    └── variable: column5 [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: x [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: column5 [type=int]
+                └── variable: column5 [type=int]
 
 # Test multi-column primary key that contains all columns in table.
 build
@@ -849,24 +1185,43 @@ upsert uv
  ├── canary column: 5
  ├── fetch columns: u:5(int) v:6(int)
  ├── insert-mapping:
- │    ├──  column1:3 => u:1
- │    └──  column2:4 => v:2
+ │    ├──  upsert_u:7 => u:1
+ │    └──  upsert_v:8 => v:2
  ├── update-mapping:
- └── left-join
-      ├── columns: column1:3(int) column2:4(int) u:5(int) v:6(int)
-      ├── values
-      │    ├── columns: column1:3(int) column2:4(int)
-      │    └── tuple [type=tuple{int, int}]
-      │         ├── const: 1 [type=int]
-      │         └── const: 2 [type=int]
-      ├── scan uv
-      │    └── columns: u:5(int!null) v:6(int!null)
-      └── filters
-           ├── eq [type=bool]
-           │    ├── variable: column1 [type=int]
+ └── project
+      ├── columns: upsert_u:7(int) upsert_v:8(int) u:5(int) v:6(int)
+      ├── left-join
+      │    ├── columns: column1:3(int) column2:4(int) u:5(int) v:6(int)
+      │    ├── values
+      │    │    ├── columns: column1:3(int) column2:4(int)
+      │    │    └── tuple [type=tuple{int, int}]
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 2 [type=int]
+      │    ├── scan uv
+      │    │    └── columns: u:5(int!null) v:6(int!null)
+      │    └── filters
+      │         ├── eq [type=bool]
+      │         │    ├── variable: column1 [type=int]
+      │         │    └── variable: u [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: column2 [type=int]
+      │              └── variable: v [type=int]
+      └── projections
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: u [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column1 [type=int]
            │    └── variable: u [type=int]
-           └── eq [type=bool]
-                ├── variable: column2 [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: u [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: column2 [type=int]
                 └── variable: v [type=int]
 
 # Use returning UPSERT as a FROM expression.
@@ -880,36 +1235,71 @@ project
       ├── canary column: 12
       ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
       ├── insert-mapping:
-      │    ├──  column1:5 => a:1
-      │    ├──  column2:6 => b:2
-      │    ├──  column8:8 => c:3
-      │    └──  column7:7 => rowid:4
+      │    ├──  upsert_a:13 => a:1
+      │    ├──  upsert_b:14 => b:2
+      │    ├──  upsert_c:15 => c:3
+      │    └──  upsert_rowid:16 => rowid:4
       ├── update-mapping:
-      │    ├──  column1:5 => a:1
-      │    ├──  column2:6 => b:2
-      │    └──  column8:8 => c:3
-      └── left-join
-           ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-           ├── project
-           │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    ├──  upsert_a:13 => a:1
+      │    ├──  upsert_b:14 => b:2
+      │    └──  upsert_c:15 => c:3
+      └── project
+           ├── columns: upsert_a:13(int) upsert_b:14(int) upsert_c:15(int) upsert_rowid:16(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+           ├── left-join
+           │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
            │    ├── project
-           │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
-           │    │    ├── values
-           │    │    │    ├── columns: column1:5(int) column2:6(int)
-           │    │    │    └── tuple [type=tuple{int, int}]
-           │    │    │         ├── const: 1 [type=int]
-           │    │    │         └── const: 2 [type=int]
+           │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+           │    │    ├── project
+           │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+           │    │    │    ├── values
+           │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+           │    │    │    │    └── tuple [type=tuple{int, int}]
+           │    │    │    │         ├── const: 1 [type=int]
+           │    │    │    │         └── const: 2 [type=int]
+           │    │    │    └── projections
+           │    │    │         └── function: unique_rowid [type=int]
            │    │    └── projections
-           │    │         └── function: unique_rowid [type=int]
-           │    └── projections
-           │         └── plus [type=int]
-           │              ├── variable: column2 [type=int]
-           │              └── const: 1 [type=int]
-           ├── scan abc
-           │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
-           └── filters
-                └── eq [type=bool]
-                     ├── variable: column7 [type=int]
+           │    │         └── plus [type=int]
+           │    │              ├── variable: column2 [type=int]
+           │    │              └── const: 1 [type=int]
+           │    ├── scan abc
+           │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+           │    └── filters
+           │         └── eq [type=bool]
+           │              ├── variable: column7 [type=int]
+           │              └── variable: rowid [type=int]
+           └── projections
+                ├── case [type=int]
+                │    ├── true [type=bool]
+                │    ├── when [type=int]
+                │    │    ├── is [type=bool]
+                │    │    │    ├── variable: rowid [type=int]
+                │    │    │    └── null [type=unknown]
+                │    │    └── variable: column1 [type=int]
+                │    └── variable: column1 [type=int]
+                ├── case [type=int]
+                │    ├── true [type=bool]
+                │    ├── when [type=int]
+                │    │    ├── is [type=bool]
+                │    │    │    ├── variable: rowid [type=int]
+                │    │    │    └── null [type=unknown]
+                │    │    └── variable: column2 [type=int]
+                │    └── variable: column2 [type=int]
+                ├── case [type=int]
+                │    ├── true [type=bool]
+                │    ├── when [type=int]
+                │    │    ├── is [type=bool]
+                │    │    │    ├── variable: rowid [type=int]
+                │    │    │    └── null [type=unknown]
+                │    │    └── variable: column8 [type=int]
+                │    └── variable: column8 [type=int]
+                └── case [type=int]
+                     ├── true [type=bool]
+                     ├── when [type=int]
+                     │    ├── is [type=bool]
+                     │    │    ├── variable: rowid [type=int]
+                     │    │    └── null [type=unknown]
+                     │    └── variable: column7 [type=int]
                      └── variable: rowid [type=int]
 
 # Use explicitly specified column names.
@@ -921,26 +1311,53 @@ upsert xyz
  ├── canary column: 7
  ├── fetch columns: x:7(int) y:8(int) z:9(int)
  ├── insert-mapping:
- │    ├──  column2:5 => x:1
- │    ├──  column3:6 => y:2
- │    └──  column1:4 => z:3
+ │    ├──  upsert_x:10 => x:1
+ │    ├──  upsert_y:11 => y:2
+ │    └──  upsert_z:12 => z:3
  ├── update-mapping:
- │    ├──  column3:6 => y:2
- │    └──  column1:4 => z:3
- └── left-join
-      ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
-      ├── values
-      │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
-      │    └── tuple [type=tuple{int, int, int}]
-      │         ├── const: 1 [type=int]
-      │         ├── const: 2 [type=int]
-      │         └── const: 3 [type=int]
-      ├── scan xyz
-      │    └── columns: x:7(int!null) y:8(int) z:9(int)
-      └── filters
-           └── eq [type=bool]
-                ├── variable: column2 [type=int]
-                └── variable: x [type=int]
+ │    ├──  upsert_y:11 => y:2
+ │    └──  upsert_z:12 => z:3
+ └── project
+      ├── columns: upsert_x:10(int) upsert_y:11(int) upsert_z:12(int) x:7(int) y:8(int) z:9(int)
+      ├── left-join
+      │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+      │    ├── values
+      │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
+      │    │    └── tuple [type=tuple{int, int, int}]
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 2 [type=int]
+      │    │         └── const: 3 [type=int]
+      │    ├── scan xyz
+      │    │    └── columns: x:7(int!null) y:8(int) z:9(int)
+      │    └── filters
+      │         └── eq [type=bool]
+      │              ├── variable: column2 [type=int]
+      │              └── variable: x [type=int]
+      └── projections
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: x [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column2 [type=int]
+           │    └── variable: x [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: x [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column3 [type=int]
+           │    └── variable: column3 [type=int]
+           └── case [type=int]
+                ├── true [type=bool]
+                ├── when [type=int]
+                │    ├── is [type=bool]
+                │    │    ├── variable: x [type=int]
+                │    │    └── null [type=unknown]
+                │    └── variable: column1 [type=int]
+                └── variable: column1 [type=int]
 
 # Use unknown name in upsert column list.
 build

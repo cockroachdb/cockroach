@@ -1431,13 +1431,13 @@ sort
       ├── canary column: 7
       ├── fetch columns: a:7(int) b:8(int) c:9(int)
       ├── insert-mapping:
-      │    ├──  x:4 => a:1
-      │    ├──  y:5 => b:2
-      │    └──  z:6 => c:3
+      │    ├──  upsert_a:11 => a:1
+      │    ├──  upsert_b:12 => b:2
+      │    └──  upsert_c:13 => c:3
       ├── update-mapping:
-      │    └──  column10:10 => a:1
+      │    └──  upsert_a:11 => a:1
       └── project
-           ├── columns: column10:10(int!null) x:4(int!null) y:5(int!null) z:6(int!null) a:7(int) b:8(int) c:9(int)
+           ├── columns: upsert_a:11(int) upsert_b:12(int) upsert_c:13(int) a:7(int) b:8(int) c:9(int)
            ├── left-join (lookup abc)
            │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null) a:7(int) b:8(int) c:9(int)
            │    ├── key columns: [4 5 6] = [7 8 9]
@@ -1452,7 +1452,9 @@ sort
            │    │    └── const: 2 [type=int]
            │    └── filters (true)
            └── projections
-                └── const: 10 [type=int]
+                ├── CASE WHEN a IS NULL THEN x ELSE 10 END [type=int]
+                ├── CASE WHEN a IS NULL THEN y ELSE b END [type=int]
+                └── CASE WHEN a IS NULL THEN z ELSE c END [type=int]
 
 # --------------------------------------------------
 # Delete operator.

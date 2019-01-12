@@ -123,30 +123,37 @@ upsert xy
  ├── canary column: 5
  ├── fetch columns: x:5(int) y:6(int)
  ├── insert-mapping:
- │    ├──  column1:3 => x:1
- │    └──  column2:4 => y:2
+ │    ├──  upsert_x:9 => x:1
+ │    └──  upsert_y:10 => y:2
  ├── update-mapping:
- │    ├──  u:7 => x:1
- │    └──  v:8 => y:2
+ │    ├──  upsert_x:9 => x:1
+ │    └──  upsert_y:10 => y:2
  ├── cardinality: [2 - ]
  ├── side-effects, mutations
- └── left-join (lookup uv)
-      ├── columns: column1:3(int) column2:4(int) x:5(int) y:6(int) u:7(int) v:8(int)
-      ├── key columns: [3] = [7]
+ └── project
+      ├── columns: upsert_x:9(int) upsert_y:10(int) x:5(int) y:6(int)
       ├── cardinality: [2 - ]
-      ├── fd: (5)-->(6), (7)-->(8)
-      ├── left-join (lookup xy)
-      │    ├── columns: column1:3(int) column2:4(int) x:5(int) y:6(int)
-      │    ├── key columns: [3] = [5]
+      ├── fd: (5)-->(6)
+      ├── left-join (lookup uv)
+      │    ├── columns: column1:3(int) column2:4(int) x:5(int) y:6(int) u:7(int) v:8(int)
+      │    ├── key columns: [3] = [7]
       │    ├── cardinality: [2 - ]
-      │    ├── fd: (5)-->(6)
-      │    ├── values
-      │    │    ├── columns: column1:3(int) column2:4(int)
-      │    │    ├── cardinality: [2 - 2]
-      │    │    ├── (1, 2) [type=tuple{int, int}]
-      │    │    └── (3, 4) [type=tuple{int, int}]
+      │    ├── fd: (5)-->(6), (7)-->(8)
+      │    ├── left-join (lookup xy)
+      │    │    ├── columns: column1:3(int) column2:4(int) x:5(int) y:6(int)
+      │    │    ├── key columns: [3] = [5]
+      │    │    ├── cardinality: [2 - ]
+      │    │    ├── fd: (5)-->(6)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:3(int) column2:4(int)
+      │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    ├── (1, 2) [type=tuple{int, int}]
+      │    │    │    └── (3, 4) [type=tuple{int, int}]
+      │    │    └── filters (true)
       │    └── filters (true)
-      └── filters (true)
+      └── projections
+           ├── CASE WHEN x IS NULL THEN column1 ELSE u END [type=int, outer=(3,5,7)]
+           └── CASE WHEN x IS NULL THEN column2 ELSE v END [type=int, outer=(4,5,8)]
 
 # Decorrelate DELETE statement.
 opt expect=DecorrelateJoin

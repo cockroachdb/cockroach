@@ -11,27 +11,32 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC LIMIT 2
 ]
 ----
-count                               ·         ·
- └── upsert                         ·         ·
-      │                             into      kv(k, v)
-      │                             strategy  opt upserter
-      └── render                    ·         ·
-           │                        render 0  k
-           │                        render 1  v
-           │                        render 2  k
-           │                        render 3  v
-           │                        render 4  v
-           └── lookup-join          ·         ·
-                │                   type      inner
-                ├── limit           ·         ·
-                │    │              count     2
-                │    └── sort       ·         ·
-                │         │         order     -v
-                │         └── scan  ·         ·
-                │                   table     kv@primary
-                │                   spans     ALL
-                └── scan            ·         ·
-·                                   table     kv@primary
+count                                    ·         ·
+ └── upsert                              ·         ·
+      │                                  into      kv(k, v)
+      │                                  strategy  opt upserter
+      └── render                         ·         ·
+           │                             render 0  upsert_k
+           │                             render 1  upsert_v
+           │                             render 2  k
+           │                             render 3  v
+           │                             render 4  upsert_v
+           └── render                    ·         ·
+                │                        render 0  CASE WHEN k IS NULL THEN k ELSE k END
+                │                        render 1  CASE WHEN k IS NULL THEN v ELSE v END
+                │                        render 2  k
+                │                        render 3  v
+                └── lookup-join          ·         ·
+                     │                   type      inner
+                     ├── limit           ·         ·
+                     │    │              count     2
+                     │    └── sort       ·         ·
+                     │         │         order     -v
+                     │         └── scan  ·         ·
+                     │                   table     kv@primary
+                     │                   spans     ALL
+                     └── scan            ·         ·
+·                                        table     kv@primary
 
 # Regression test for #25726.
 # UPSERT over tables with column families, on the fast path, use the

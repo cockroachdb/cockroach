@@ -90,6 +90,10 @@ func init() {
 //   3. Computed columns which will be updated when a conflict is detected and
 //      that are dependent on one or more updated columns.
 //
+// In addition, the insert and update column expressions are merged into a
+// single set of upsert column expressions that toggle between the insert and
+// update values depending on whether the canary column is null.
+//
 // For example, if this is the schema and INSERT..ON CONFLICT statement:
 //
 //   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
@@ -97,15 +101,21 @@ func init() {
 //
 // Then an input expression equivalent to this would be built:
 //
-//   SELECT ins_a, ins_b, ins_c, fetch_a, fetch_b, fetch_c, 10 AS upd_b
+//   SELECT
+//     fetch_a,
+//     fetch_b,
+//     fetch_c,
+//     CASE WHEN fetch_a IS NULL ins_a ELSE fetch_a END AS ups_a,
+//     CASE WHEN fetch_a IS NULL ins_b ELSE 10 END AS ups_b,
+//     CASE WHEN fetch_a IS NULL ins_c ELSE fetch_c END AS ups_c,
 //   FROM (VALUES (1, 2, NULL)) AS ins(ins_a, ins_b, ins_c)
 //   LEFT OUTER JOIN abc AS fetch(fetch_a, fetch_b, fetch_c)
 //   ON ins_a = fetch_a
 //
-// At runtime, the Upsert execution operator will test the fetch_a column. If
-// it is null, then there is no existing row, so the operator inserts a new row
-// using the (ins_a, ins_b, ins_c) columns. Otherwise, the operator formulates
-// an update using the (upd_b) column, along with any needed fetch columns.
+// The CASE expressions will often prevent the unnecessary evaluation of the
+// update expression in the case where an insertion needs to occur. In addition,
+// it simplifies logical property calculation, since a 1:1 mapping to each
+// target table column from a corresponding input column is maintained.
 //
 // If the ON CONFLICT clause contains a DO NOTHING clause, then each UNIQUE
 // index on the target table requires its own LEFT OUTER JOIN to check whether a
@@ -604,6 +614,8 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 		}
 
 		// Construct the left join + filter.
+		// TODO(andyk): Convert this to use anti-join once we have support for
+		// lookup anti-joins.
 		mb.outScope.expr = mb.b.factory.ConstructProject(
 			mb.b.factory.ConstructSelect(
 				mb.b.factory.ConstructLeftJoin(
@@ -759,6 +771,8 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 // buildUpsert constructs an Upsert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
+	mb.projectUpsertColumns()
+
 	private := memo.MutationPrivate{
 		Table:       mb.tabID,
 		InsertCols:  mb.insertColList,
@@ -770,6 +784,112 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, &private)
 
 	mb.buildReturning(returning)
+}
+
+// projectUpsertColumns projects a set of merged columns that will be either
+// inserted into the target table, or else used to update an existing row,
+// depending on whether the canary column is null. For example:
+//
+//   UPSERT INTO ab VALUES (ins_a, ins_b) ON CONFLICT (a) DO UPDATE SET b=upd_b
+//
+// will cause the columns to be projected:
+//
+//   SELECT
+//     fetch_a,
+//     fetch_b,
+//     CASE WHEN fetch_a IS NULL ins_a ELSE fetch_a END AS ups_a,
+//     CASE WHEN fetch_b IS NULL ins_b ELSE upd_b END AS ups_b,
+//   FROM (SELECT ins_a, ins_b, upd_b, fetch_a, fetch_b FROM ...)
+//
+// For each column, a CASE expression is created that toggles between the insert
+// and update values depending on whether the canary column is null. These
+// columns can then feed into any constraint checking expressions, which operate
+// on the final result values.
+func (mb *mutationBuilder) projectUpsertColumns() {
+	projectionsScope := mb.outScope.replace()
+	projectionsScope.cols = make([]scopeColumn, 0, len(mb.outScope.cols))
+
+	addAnonymousColumn := func(id opt.ColumnID) *scopeColumn {
+		projectionsScope.cols = append(projectionsScope.cols, scopeColumn{
+			typ: mb.md.ColumnMeta(id).Type,
+			id:  id,
+		})
+		return &projectionsScope.cols[len(projectionsScope.cols)-1]
+	}
+
+	// Pass through all fetch columns. This always includes the canary column.
+	fetchColSet := mb.fetchColList.ToSet()
+	for i := range mb.outScope.cols {
+		col := &mb.outScope.cols[i]
+		if fetchColSet.Contains(int(col.id)) {
+			// Don't copy the column's name, since fetch columns can no longer be
+			// referenced by expressions, such as any check constraints.
+			addAnonymousColumn(col.id)
+		}
+	}
+
+	// Project a column for each target table column that needs to be either
+	// inserted or updated.
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		insertColID := mb.insertColList[i]
+		updateColID := mb.updateColList[i]
+		if updateColID == 0 {
+			updateColID = mb.fetchColList[i]
+		}
+
+		var scopeCol *scopeColumn
+		switch {
+		case insertColID == 0 && updateColID == 0:
+			// Neither insert nor update required for this column, so skip.
+			continue
+
+		case insertColID == 0:
+			// No insert is required, so just pass through update column.
+			scopeCol = addAnonymousColumn(updateColID)
+
+		case updateColID == 0:
+			// No update is required, so just pass through insert column.
+			scopeCol = addAnonymousColumn(insertColID)
+
+		default:
+			// Generate CASE that toggles between insert and update column.
+			caseExpr := mb.b.factory.ConstructCase(
+				memo.TrueSingleton,
+				memo.ScalarListExpr{
+					mb.b.factory.ConstructWhen(
+						mb.b.factory.ConstructIs(
+							mb.b.factory.ConstructVariable(mb.canaryColID),
+							memo.NullSingleton,
+						),
+						mb.b.factory.ConstructVariable(insertColID),
+					),
+				},
+				mb.b.factory.ConstructVariable(updateColID),
+			)
+
+			alias := fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName())
+			typ := mb.md.ColumnMeta(insertColID).Type
+			scopeCol = mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
+		}
+
+		// Assign name to synthesized column. Check constraint columns may refer
+		// to columns in the table by name.
+		scopeCol.table = *mb.tab.Name()
+		scopeCol.name = mb.tab.Column(i).ColName()
+
+		// Update the insert and update column list to point to the new upsert
+		// column. This will be used by the Upsert operator in place of the
+		// original columns.
+		if mb.insertColList[i] != 0 {
+			mb.insertColList[i] = scopeCol.id
+		}
+		if mb.updateColList[i] != 0 {
+			mb.updateColList[i] = scopeCol.id
+		}
+	}
+
+	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
+	mb.outScope = projectionsScope
 }
 
 // ensureUniqueConflictCols tries to prove that the given list of column names
