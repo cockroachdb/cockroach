@@ -48,7 +48,7 @@ type StateLoader struct {
 	keys.RangeIDPrefixBuf
 }
 
-// Make creates an Instance.
+// Make creates a a StateLoader.
 func Make(rangeID roachpb.RangeID) StateLoader {
 	rsl := StateLoader{
 		RangeIDPrefixBuf: keys.MakeRangeIDPrefixBuf(rangeID),

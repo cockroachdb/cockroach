@@ -3222,19 +3222,18 @@ func (r *Replica) evaluateProposal(
 		} else {
 			res.Replicated.DeprecatedDelta = &ms
 		}
-		// If the RangeAppliedState key is not being used and the cluster version is
-		// high enough to guarantee that all current and future binaries will
-		// understand the key, we send the migration flag through Raft. Because
-		// there is a delay between command proposal and application, we may end up
-		// setting this migration flag multiple times. This is ok, because the
-		// migration is idempotent.
-		// TODO(nvanbenschoten): This will be baked in to 2.1, so it can be removed
-		// in the 2.2 release.
+		// If the RangeAppliedState key is not being used yet by the range, we send
+		// the migration flag through Raft. Because there is a delay between command
+		// proposal and application, we may end up setting this migration flag
+		// multiple times. This is ok, because the migration is idempotent.
+		//
+		// NOTE(nvanbenschoten): We can only get rid of this migration code once we
+		// declare it virtually impossible for a proposal created by a cluster at
+		// version 2.0 to still exist (think old unapplied Raft log entries).
 		r.mu.RLock()
 		usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
 		r.mu.RUnlock()
-		if !usingAppliedStateKey &&
-			r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
+		if !usingAppliedStateKey {
 			if res.Replicated.State == nil {
 				res.Replicated.State = &storagepb.ReplicaState{}
 			}
@@ -6262,13 +6261,11 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 	// When multiple nodes are initialized with overlapping Gossip addresses, they all
 	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
 	// so we error out below.
-	if uuidBytes, err := r.store.Gossip().GetInfo(gossip.KeyClusterID); err == nil {
-		if gossipClusterID, err := uuid.FromBytes(uuidBytes); err == nil {
-			if gossipClusterID != r.store.ClusterID() {
-				log.Fatalf(
-					ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
-					r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
-			}
+	if gossipClusterID, err := r.store.Gossip().GetClusterID(); err == nil {
+		if gossipClusterID != r.store.ClusterID() {
+			log.Fatalf(
+				ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
+				r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
 		}
 	}
 
@@ -6278,9 +6275,7 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 		log.Infof(ctx, "gossiping cluster id %q from store %d, r%d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(
-		gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second,
-	); err != nil {
+	if err := r.store.Gossip().AddClusterID(r.store.ClusterID()); err != nil {
 		log.Errorf(ctx, "failed to gossip cluster ID: %s", err)
 	}
 

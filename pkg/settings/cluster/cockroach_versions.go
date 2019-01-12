@@ -56,7 +56,6 @@ const (
 	Version2_0
 	VersionImportSkipRecords
 	VersionProposedTSLeaseRequest
-	VersionRangeAppliedStateKey
 	VersionImportFormats
 	VersionSecondaryLookupJoins
 	VersionClientSideWritingFlag // unused
@@ -224,11 +223,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionProposedTSLeaseRequest,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 2},
 	},
-	{
-		// VersionRangeAppliedStateKey is https://github.com/cockroachdb/cockroach/pull/22317.
-		Key:     VersionRangeAppliedStateKey,
-		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 3},
-	},
+	// Removed
+	// {
+	//   // VersionRangeAppliedStateKey is https://github.com/cockroachdb/cockroach/pull/22317.
+	//   Key:     VersionRangeAppliedStateKey,
+	//   Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 3},
+	// },
 	{
 		// VersionImportFormats is https://github.com/cockroachdb/cockroach/pull/25615.
 		Key:     VersionImportFormats,
@@ -321,7 +321,7 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than BinaryMinimumSupportedVersion, then the binary will exit with
 	// an error.
-	BinaryMinimumSupportedVersion = VersionByKey(Version2_0)
+	BinaryMinimumSupportedVersion = VersionByKey(Version2_1)
 
 	// BinaryServerVersion is the version of this binary.
 	//

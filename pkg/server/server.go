@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -558,8 +559,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(s.grpc)
 	}
 
-	s.initServer = newInitServer(s)
-	s.initServer.semaphore.acquire()
+	s.initServer = newInitServer(s.gossip.Connected, s.stopper.ShouldStop())
 
 	serverpb.RegisterInitServer(s.grpc, s.initServer)
 
@@ -1045,6 +1045,64 @@ func (s *Server) startPersistingHLCUpperBound(
 	)
 }
 
+// !!!
+// Returns a cluster id.
+func WaitForClusterBootstrap(
+	ctx context.Context,
+	engines Engines,
+	joinList []resolver.Resolver,
+	gossip *gossip.Gossip,
+	shouldStop <-chan struct{},
+	bootstrapVersion cluster.ClusterVersion,
+	waitingForInit <-chan struct{},
+	grpcServer *grpc.Server,
+) (uuid.UUID, error) {
+	var clusterIDContainer base.ClusterIDContainer
+
+	bootstrappedEngines, _, _, err := inspectEngines(
+		ctx, engines,
+		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
+		&clusterIDContainer)
+	if err != nil {
+		return errors.Wrap(err, "inspecting engines")
+	}
+
+	if len(bootstrappedEngines) > 0 {
+		// The cluster was already initialized.
+		cid := clusterIDContainer.Get()
+		if cid == uuid.Nil {
+			return uuid.Nil, fmt.Errorf(ctx, "found bootstrapped engines but no cluster id")
+		}
+		return cid, nil
+	} else if len(joinList) == 0 {
+		// If the _unfiltered_ list of hosts from the --join flag is
+		// empty, then this node can bootstrap a new cluster. We disallow
+		// this if this node is being started with itself specified as a
+		// --join host, because that's too likely to be operator error.
+	} else {
+		if waitingForInit != nil {
+			close(waitingForInit)
+		}
+		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
+		initServer := newInitServer(gossip.Connected, shouldStop)
+		serverpb.RegisterInitServer(grpcServer, initServer)
+		var err error
+		needClusterBootstrap, err := initServer.awaitBootstrap()
+		if err != nil {
+			return uuid.Nil, err
+		}
+		if !needClusterBootstrap {
+			// If awaitBootstrap() returned false, the cluster ID is supposed to be in
+			// gossip.
+			return gossip.GetClusterID()
+		}
+	}
+
+	// If we didn't early-return before, it means we need to bootstrap the
+	// cluster.
+	return bootstrapCluster(ctx, engines, bootstrapVersion)
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context. This is complex since
 // it sets up the listeners and the associated port muxing, but especially since
@@ -1357,6 +1415,31 @@ func (s *Server) Start(ctx context.Context) error {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
 
+	bootstrapCluster := func() error {
+		bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
+		if s.cfg.TestingKnobs.Store != nil {
+			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
+				bootstrapVersion = *storeKnobs.BootstrapVersion
+			}
+		}
+
+		if err := s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
+			return err
+		}
+		// Force all the system ranges through the replication queue so they
+		// upreplicate as quickly as possible when a new node joins. Without this
+		// code, the upreplication would be up to the whim of the scanner, which
+		// might be too slow for new clusters.
+		done := false
+		return s.node.stores.VisitStores(func(store *storage.Store) error {
+			if !done {
+				done = true
+				return store.ForceReplicationScanAndProcess()
+			}
+			return nil
+		})
+	}
+
 	var hlcUpperBoundExists bool
 	if len(bootstrappedEngines) > 0 {
 		// The cluster was already initialized.
@@ -1395,27 +1478,7 @@ func (s *Server) Start(ctx context.Context) error {
 			s.cfg.ReadyFn(false /*waitForInit*/)
 		}
 
-		bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
-		if s.cfg.TestingKnobs.Store != nil {
-			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
-				bootstrapVersion = *storeKnobs.BootstrapVersion
-			}
-		}
-		if err := s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
-			return err
-		}
-		// Force all the system ranges through the replication queue so they
-		// upreplicate as quickly as possible when a new node joins. Without this
-		// code, the upreplication would be up to the whim of the scanner, which
-		// might be too slow for new clusters.
-		done := false
-		if err := s.node.stores.VisitStores(func(store *storage.Store) error {
-			if !done {
-				done = true
-				return store.ForceReplicationScanAndProcess()
-			}
-			return nil
-		}); err != nil {
+		if err := bootstrapCluster(); err != nil {
 			return err
 		}
 
@@ -1426,29 +1489,23 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
 
-		// Note that when we created the init server, we acquired its semaphore
-		// (to stop anyone from rushing in).
-		s.initServer.semaphore.release()
-
 		s.stopper.RunWorker(workersCtx, func(context.Context) {
 			serveOnMux.Do(func() {
 				netutil.FatalIfUnexpected(m.Serve())
 			})
 		})
 
-		if err := s.initServer.awaitBootstrap(); err != nil {
+		shouldBootstrap, err := s.initServer.awaitBootstrap()
+		if err != nil {
 			return err
 		}
 
-		// Reacquire the semaphore, allowing the code below to be oblivious to
-		// the fact that this branch was taken.
-		s.initServer.semaphore.acquire()
+		if shouldBootstrap {
+			if err := bootstrapCluster(); err != nil {
+				return err
+			}
+		}
 	}
-
-	// Release the semaphore of the init server. Anyone still managing to talk
-	// to it may do so, but will be greeted with an error telling them that the
-	// cluster is already initialized.
-	s.initServer.semaphore.release()
 
 	// This opens the main listener.
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
