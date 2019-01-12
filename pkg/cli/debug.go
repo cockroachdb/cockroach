@@ -606,7 +606,7 @@ func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) erro
 	var failed bool
 	if err := storage.IterateRangeDescriptors(ctx, db,
 		func(desc roachpb.RangeDescriptor) (bool, error) {
-			claimedMS, err := stateloader.Make(serverCfg.Settings, desc.RangeID).LoadMVCCStats(ctx, db)
+			claimedMS, err := stateloader.Make(desc.RangeID).LoadMVCCStats(ctx, db)
 			if err != nil {
 				return false, err
 			}

@@ -574,7 +574,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	}
 
 	// Get the original stats for key and value bytes.
-	ms, err := stateloader.Make(nil /* st */, rangeID).LoadMVCCStats(context.Background(), store.Engine())
+	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), store.Engine())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -651,12 +651,12 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non zero and
 	// exceed the original range when summed.
-	left, err := stateloader.Make(nil /* st */, rangeID).LoadMVCCStats(context.Background(), store.Engine())
+	left, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), store.Engine())
 	if err != nil {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
-	right, err := stateloader.Make(nil /* st */, newRng.RangeID).LoadMVCCStats(context.Background(), store.Engine())
+	right, err := stateloader.Make(newRng.RangeID).LoadMVCCStats(context.Background(), store.Engine())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -713,7 +713,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Get the range stats now that we have data.
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	ms, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, snap)
+	ms, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -736,12 +736,12 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
-	msLeft, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, snap)
+	msLeft, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
 	replRight := store.LookupReplica(midKey)
-	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, snap)
+	msRight, err := stateloader.Make(replRight.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -921,12 +921,12 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	msLeft, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, snap)
+	msLeft, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
 	replRight := store.LookupReplica(midKey)
-	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, snap)
+	msRight, err := stateloader.Make(replRight.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -962,7 +962,7 @@ func fillRange(
 	src := rand.New(rand.NewSource(0))
 	var key []byte
 	for {
-		ms, err := stateloader.Make(nil /* st */, rangeID).LoadMVCCStats(context.Background(), store.Engine())
+		ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), store.Engine())
 		if err != nil {
 			t.Fatal(err)
 		}

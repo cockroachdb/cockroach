@@ -1455,7 +1455,7 @@ func TestSortRangeDescByAge(t *testing.T) {
 }
 
 func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats) error {
-	ms, err := stateloader.Make(nil /* st */, rangeID).LoadMVCCStats(context.Background(), eng)
+	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), eng)
 	if err != nil {
 		return err
 	}

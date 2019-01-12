@@ -2165,7 +2165,7 @@ func (s *Store) WriteInitialData(
 			return err
 		}
 
-		sl := stateloader.Make(s.ClusterSettings(), rangeID)
+		sl := stateloader.Make(rangeID)
 		if err := sl.SetMVCCStats(ctx, batch, &computedStats); err != nil {
 			return err
 		}
@@ -2237,13 +2237,11 @@ func (s *Store) NewRangeDescriptor(
 // splitPreApply is called when the raft command is applied. Any
 // changes to the given ReadWriter will be written atomically with the
 // split commit.
-func splitPreApply(
-	ctx context.Context, st *cluster.Settings, eng engine.ReadWriter, split roachpb.SplitTrigger,
-) {
+func splitPreApply(ctx context.Context, eng engine.ReadWriter, split roachpb.SplitTrigger) {
 	// Update the raft HardState with the new Commit value now that the
 	// replica is initialized (combining it with existing or default
 	// Term and Vote).
-	rsl := stateloader.Make(st, split.RightDesc.RangeID)
+	rsl := stateloader.Make(split.RightDesc.RangeID)
 	if err := rsl.SynthesizeRaftState(ctx, eng); err != nil {
 		log.Fatal(ctx, err)
 	}
