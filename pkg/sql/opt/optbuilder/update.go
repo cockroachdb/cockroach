@@ -315,8 +315,7 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 					col.table = *mb.tab.Name()
 				} else {
 					// Clear name so that it will never match.
-					col.table = tree.TableName{}
-					col.name = ""
+					col.clearName()
 				}
 			}
 		}
@@ -331,10 +330,13 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 // buildUpdate constructs an Update operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
+	mb.addCheckConstraintCols()
+
 	private := memo.MutationPrivate{
 		Table:       mb.tabID,
 		FetchCols:   mb.fetchColList,
 		UpdateCols:  mb.updateColList,
+		CheckCols:   mb.checkColList,
 		NeedResults: returning != nil,
 	}
 	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, &private)

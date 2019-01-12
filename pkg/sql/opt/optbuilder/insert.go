@@ -531,9 +531,13 @@ func (mb *mutationBuilder) addDefaultAndComputedColsForInsert() {
 // buildInsert constructs an Insert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
+	// Add any check constraint boolean columns to the input.
+	mb.addCheckConstraintCols()
+
 	private := memo.MutationPrivate{
 		Table:       mb.tabID,
 		InsertCols:  mb.insertColList,
+		CheckCols:   mb.checkColList,
 		NeedResults: returning != nil,
 	}
 	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, &private)
@@ -584,11 +588,6 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 			excludeMutations,
 			inScope,
 		)
-
-		// Add the scan columns to the current scope. It's OK to modify the current
-		// scope because it contains only INSERT columns that were added by the
-		// mutationBuilder, and which aren't needed for any other purpose.
-		mb.outScope.appendColumnsFromScope(scanScope)
 
 		// Remember the column ID of a scan column that is not null. This will be
 		// used to detect whether a conflict was detected for a row. Such a column
@@ -771,7 +770,11 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 // buildUpsert constructs an Upsert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
+	// Merge input insert and update columns using CASE expressions.
 	mb.projectUpsertColumns()
+
+	// Add any check constraint boolean columns to the input.
+	mb.addCheckConstraintCols()
 
 	private := memo.MutationPrivate{
 		Table:       mb.tabID,
@@ -779,6 +782,7 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 		FetchCols:   mb.fetchColList,
 		UpdateCols:  mb.updateColList,
 		CanaryCol:   mb.canaryColID,
+		CheckCols:   mb.checkColList,
 		NeedResults: returning != nil,
 	}
 	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, &private)

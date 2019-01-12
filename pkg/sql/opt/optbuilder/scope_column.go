@@ -63,6 +63,14 @@ type scopeColumn struct {
 	exprStr string
 }
 
+// clearName sets the empty table and column name. This is used to make the
+// column anonymous so that it cannot be referenced, but will still be
+// projected.
+func (c *scopeColumn) clearName() {
+	c.name = ""
+	c.table = tree.TableName{}
+}
+
 // getExpr returns the the expression that this column refers to, or the column
 // itself if the column does not refer to an expression.
 func (c *scopeColumn) getExpr() tree.TypedExpr {
