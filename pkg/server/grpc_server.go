@@ -18,9 +18,30 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
+
+// grpcServer is a wrapper on top of a grpc.Server that includes an interceptor
+// and a mode of operation that can instruct the interceptor to refuse certain
+// RPCs.
+type grpcServer struct {
+	*grpc.Server
+	mode serveMode
+}
+
+func newGRPCServer(rpcCtx *rpc.Context) *grpcServer {
+	s := &grpcServer{}
+	s.mode.set(modeInitializing)
+	s.Server = rpc.NewServerWithInterceptor(rpcCtx, func(path string) error {
+		return s.intercept(path)
+	})
+	return s
+}
+
+type serveMode int32
 
 // A list of the server states for bootstrap process.
 const (
@@ -36,25 +57,31 @@ const (
 	modeDraining
 )
 
-type serveMode int32
+func (s *grpcServer) setMode(mode serveMode) {
+	s.mode.set(mode)
+}
 
-// Intercept implements filtering rules for each server state.
-func (s *Server) Intercept() func(string) error {
-	interceptors := map[string]struct{}{
-		"/cockroach.rpc.Heartbeat/Ping":             {},
-		"/cockroach.gossip.Gossip/Gossip":           {},
-		"/cockroach.server.serverpb.Init/Bootstrap": {},
-		"/cockroach.server.serverpb.Status/Details": {},
-	}
-	return func(fullName string) error {
-		if s.serveMode.operational() {
-			return nil
-		}
-		if _, allowed := interceptors[fullName]; !allowed {
-			return WaitingForInitError(fullName)
-		}
+func (s *grpcServer) operational() bool {
+	sMode := s.mode.get()
+	return sMode == modeOperational || sMode == modeDraining
+}
+
+var rpcsAllowedWhileBootstrapping = map[string]struct{}{
+	"/cockroach.rpc.Heartbeat/Ping":             {},
+	"/cockroach.gossip.Gossip/Gossip":           {},
+	"/cockroach.server.serverpb.Init/Bootstrap": {},
+	"/cockroach.server.serverpb.Status/Details": {},
+}
+
+// intercept implements filtering rules for each server state.
+func (s *grpcServer) intercept(fullName string) error {
+	if s.operational() {
 		return nil
 	}
+	if _, allowed := rpcsAllowedWhileBootstrapping[fullName]; !allowed {
+		return s.waitingForInitError(fullName)
+	}
+	return nil
 }
 
 func (s *serveMode) set(mode serveMode) {
@@ -65,14 +92,9 @@ func (s *serveMode) get() serveMode {
 	return serveMode(atomic.LoadInt32((*int32)(s)))
 }
 
-func (s *serveMode) operational() bool {
-	sMode := s.get()
-	return sMode == modeOperational || sMode == modeDraining
-}
-
-// WaitingForInitError indicates that the server cannot run the specified
-// method until the node has been initialized.
-func WaitingForInitError(methodName string) error {
+// waitingForInitError creates an error indicating that the server cannot run
+// the specified method until the node has been initialized.
+func (s *grpcServer) waitingForInitError(methodName string) error {
 	return grpcstatus.Errorf(codes.Unavailable, "node waiting for init; %s not available", methodName)
 }
 
