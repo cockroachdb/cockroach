@@ -66,7 +66,22 @@ type Table interface {
 
 	// Statistic returns the ith statistic, where i < StatisticCount.
 	Statistic(i int) TableStatistic
+
+	// CheckCount returns the number of check constraints present on the table.
+	CheckCount() int
+
+	// Check returns the ith check constraint, where i < CheckCount.
+	Check(i int) CheckConstraint
 }
+
+// CheckConstraint is the SQL text for a check constraint on a table. Check
+// constraints are user-defined restrictions on the content of each row in a
+// table. For example, this check constraint ensures that only values greater
+// than zero can be inserted into the table:
+//
+//   CREATE TABLE a (a INT CHECK (a > 0))
+//
+type CheckConstraint string
 
 // TableStatistic is an interface to a table statistic. Each statistic is
 // associated with a set of columns.
