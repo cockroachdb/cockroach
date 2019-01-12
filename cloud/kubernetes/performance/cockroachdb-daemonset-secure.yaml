@@ -247,7 +247,7 @@ spec:
           - "/bin/bash"
           - "-ecx"
           # TODO: Replace "YOUR_IP_ADDR1_HERE,YOUR_IP_ADDR2_HERE,YOUR_IP_ADDR3_HERE" with a list of a few of the IP addresses or hostnames of the machines on which CockroachDB will be running.
-          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --http-host 0.0.0.0 --cache 25% --max-sql-memory 25% --join=YOUR_IP_ADDR1_HERE,YOUR_IP_ADDR2_HERE,YOUR_IP_ADDR3_HERE"
+          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --http-addr 0.0.0.0 --cache 25% --max-sql-memory 25% --join=YOUR_IP_ADDR1_HERE,YOUR_IP_ADDR2_HERE,YOUR_IP_ADDR3_HERE"
       terminationGracePeriodSeconds: 60
       volumes:
       - name: datadir
