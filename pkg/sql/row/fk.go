@@ -91,17 +91,6 @@ type tableLookupQueue struct {
 	analyzeExpr    sqlbase.AnalyzeExprFunction
 }
 
-func (tl *TableLookup) addCheckHelper(
-	ctx context.Context, analyzeExpr sqlbase.AnalyzeExprFunction,
-) error {
-	if analyzeExpr == nil {
-		return nil
-	}
-	tableName := tree.MakeUnqualifiedTableName(tree.Name(tl.Table.Name))
-	tl.CheckHelper = &sqlbase.CheckHelper{}
-	return tl.CheckHelper.Init(ctx, analyzeExpr, &tableName, tl.Table)
-}
-
 func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLookup, error) {
 	if tableLookup, exists := q.tableLookups[tableID]; exists {
 		return tableLookup, nil
@@ -114,9 +103,11 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLooku
 		if err := q.checkPrivilege(ctx, tableLookup.Table, privilege.SELECT); err != nil {
 			return TableLookup{}, err
 		}
-		if err := tableLookup.addCheckHelper(ctx, q.analyzeExpr); err != nil {
+		checkHelper, err := sqlbase.NewEvalCheckHelper(ctx, q.analyzeExpr, tableLookup.Table)
+		if err != nil {
 			return TableLookup{}, err
 		}
+		tableLookup.CheckHelper = checkHelper
 	}
 	q.tableLookups[tableID] = tableLookup
 	return tableLookup, nil
@@ -185,6 +176,7 @@ func TablesNeededForFKs(
 	lookup TableLookupFunction,
 	checkPrivilege CheckPrivilegeFunction,
 	analyzeExpr sqlbase.AnalyzeExprFunction,
+	checkHelper *sqlbase.CheckHelper,
 ) (TableLookupsByID, error) {
 	queue := tableLookupQueue{
 		tableLookups:   make(TableLookupsByID),
@@ -194,11 +186,7 @@ func TablesNeededForFKs(
 		analyzeExpr:    analyzeExpr,
 	}
 	// Add the passed in table descriptor to the table lookup.
-	baseTableLookup := TableLookup{Table: table}
-	if err := baseTableLookup.addCheckHelper(ctx, analyzeExpr); err != nil {
-		return nil, err
-	}
-	queue.tableLookups[table.ID] = baseTableLookup
+	queue.tableLookups[table.ID] = TableLookup{Table: table, CheckHelper: checkHelper}
 	if err := queue.enqueue(ctx, table.ID, usage); err != nil {
 		return nil, err
 	}

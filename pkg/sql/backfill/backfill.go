@@ -147,6 +147,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		row.NoLookup,
 		row.NoCheckPrivilege,
 		nil, /* AnalyzeExprFunction */
+		nil, /* CheckHelper */
 	)
 	for i, fkTableDesc := range otherTables {
 		found, ok := fkTables[fkTableDesc.ID]
