@@ -357,6 +357,26 @@ func (mb *mutationBuilder) addSynthesizedCols(
 	}
 }
 
+// makeReturnCols returns the set of column ids that will be returned by the
+// mutation operator, based on the RETURNING clause. It is empty if there was
+// no RETURNING clause.
+func (mb *mutationBuilder) makeReturnCols(returning tree.ReturningExprs) opt.ColSet {
+	// Only need output columns if the RETURNING clause is specified.
+	if returning == nil {
+		return opt.ColSet{}
+	}
+
+	// Only non-mutation columns are output columns.
+	var cols opt.ColSet
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		if cat.IsMutationColumn(mb.tab, i) {
+			continue
+		}
+		cols.Add(int(mb.tabID.ColumnID(i)))
+	}
+	return cols
+}
+
 // buildReturning wraps the input expression with a Project operator that
 // projects the given RETURNING expressions.
 func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {

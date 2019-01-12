@@ -973,7 +973,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 
 	// If no columns are output by the operator, then all other properties retain
 	// default values.
-	if !private.NeedResults {
+	if private.ReturnCols.Empty() {
 		return
 	}
 
@@ -983,15 +983,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 
 	// Output Columns
 	// --------------
-	// Only non-mutation columns are output columns.
-	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		if cat.IsMutationColumn(tab, i) {
-			continue
-		}
-
-		colID := int(private.Table.ColumnID(i))
-		rel.OutputCols.Add(colID)
-	}
+	rel.OutputCols = private.ReturnCols
 
 	// Not Null Columns
 	// ----------------

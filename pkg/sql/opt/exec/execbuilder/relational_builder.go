@@ -1138,14 +1138,20 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	// Construct the Insert node.
 	tab := b.mem.Metadata().Table(ins.Table)
 	insertOrds := ordinalSetFromColList(ins.InsertCols)
-	node, err := b.factory.ConstructInsert(input.root, tab, insertOrds, ins.NeedResults)
+	returnOrds := ordinalSetFromColSet(ins.Table, ins.ReturnCols)
+	node, err := b.factory.ConstructInsert(
+		input.root,
+		tab,
+		insertOrds,
+		returnOrds,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	// Construct the output column map.
 	ep := execPlan{root: node}
-	if ins.NeedResults {
+	if !returnOrds.Empty() {
 		ep.outputCols = mutationOutputColMap(ins)
 	}
 	return ep, nil
@@ -1183,14 +1189,21 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	tab := md.Table(upd.Table)
 	fetchColOrds := ordinalSetFromColList(upd.FetchCols)
 	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
-	node, err := b.factory.ConstructUpdate(input.root, tab, fetchColOrds, updateColOrds, upd.NeedResults)
+	returnOrds := ordinalSetFromColSet(upd.Table, upd.ReturnCols)
+	node, err := b.factory.ConstructUpdate(
+		input.root,
+		tab,
+		fetchColOrds,
+		updateColOrds,
+		returnOrds,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	// Construct the output column map.
 	ep := execPlan{root: node}
-	if upd.NeedResults {
+	if !returnOrds.Empty() {
 		ep.outputCols = mutationOutputColMap(upd)
 	}
 	return ep, nil
@@ -1233,8 +1246,16 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
 	fetchColOrds := ordinalSetFromColList(ups.FetchCols)
 	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
+	returnOrds := ordinalSetFromColSet(ups.Table, ups.ReturnCols)
 	node, err := b.factory.ConstructUpsert(
-		input.root, tab, canaryCol, insertColOrds, fetchColOrds, updateColOrds, ups.NeedResults)
+		input.root,
+		tab,
+		canaryCol,
+		insertColOrds,
+		fetchColOrds,
+		updateColOrds,
+		returnOrds,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1244,7 +1265,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	// value is taken from an insert, fetch, or update column, depending on the
 	// result of the UPSERT operation for that row.
 	ep := execPlan{root: node}
-	if ups.NeedResults {
+	if !returnOrds.Empty() {
 		ep.outputCols = mutationOutputColMap(ups)
 	}
 	return ep, nil
@@ -1270,14 +1291,15 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
-	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, del.NeedResults)
+	returnOrds := ordinalSetFromColSet(del.Table, del.ReturnCols)
+	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, returnOrds)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	// Construct the output column map.
 	ep := execPlan{root: node}
-	if del.NeedResults {
+	if !returnOrds.Empty() {
 		ep.outputCols = mutationOutputColMap(del)
 	}
 	return ep, nil
@@ -1454,6 +1476,16 @@ func ordinalSetFromColList(colList opt.ColList) exec.ColumnOrdinalSet {
 			res.Add(i)
 		}
 	}
+	return res
+}
+
+// ordinalSetFromColSet returns the set of ordinal positions of each column in
+// the given set. Positions are with respect to the columns' owning table.
+func ordinalSetFromColSet(tabID opt.TableID, colSet opt.ColSet) exec.ColumnOrdinalSet {
+	var res opt.ColSet
+	colSet.ForEach(func(i int) {
+		res.Add(int(tabID.ColumnOrdinal(opt.ColumnID(i))))
+	})
 	return res
 }
 

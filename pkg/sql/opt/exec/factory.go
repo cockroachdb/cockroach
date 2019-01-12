@@ -241,11 +241,14 @@ type Factory interface {
 	// same order they're defined. The insertCols set contains the ordinal
 	// positions of columns in the table into which values are inserted. All
 	// columns are expected to be present except delete-only mutation columns,
-	// since those do not need to participate in an insert operation. The
-	// rowsNeeded parameter is true if a RETURNING clause needs the inserted
-	// row(s) as output.
+	// since those do not need to participate in an insert operation. If a
+	// RETURNING clause needs the inserted row(s) as output, then returnCols
+	// specifies the columns which need to be projected by the operator.
 	ConstructInsert(
-		input Node, table cat.Table, insertCols ColumnOrdinalSet, rowsNeeded bool,
+		input Node,
+		table cat.Table,
+		insertCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 	) (Node, error)
 
 	// ConstructUpdate creates a node that implements an UPDATE statement. The
@@ -258,10 +261,15 @@ type Factory interface {
 	// The fetchCols and updateCols sets contain the ordinal positions of the
 	// fetch and update columns in the target table. The input must contain those
 	// columns in the same order as they appear in the table schema, with the
-	// fetch columns first and the update columns second. The rowsNeeded parameter
-	// is true if a RETURNING clause needs the updated row(s) as output.
+	// fetch columns first and the update columns second. If a RETURNING clause
+	// needs the updated row(s) as output, then returnCols specifies the columns
+	// which need to be projected by the operator.
 	ConstructUpdate(
-		input Node, table cat.Table, fetchCols, updateCols ColumnOrdinalSet, rowsNeeded bool,
+		input Node,
+		table cat.Table,
+		fetchCols ColumnOrdinalSet,
+		updateCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 	) (Node, error)
 
 	// ConstructUpsert creates a node that implements an INSERT..ON CONFLICT or
@@ -287,6 +295,9 @@ type Factory interface {
 	// columns {0, 1, 2} of the table. The next 3 columns contain the existing
 	// values of columns {0, 1, 2} of the table. The last column contains the
 	// new value for column {1} of the table.
+	//
+	// If a RETURNING clause needs the upserted row(s) as output, then returnCols
+	// specifies the columns which need to be projected by the operator.
 	ConstructUpsert(
 		input Node,
 		table cat.Table,
@@ -294,7 +305,7 @@ type Factory interface {
 		insertCols ColumnOrdinalSet,
 		fetchCols ColumnOrdinalSet,
 		updateCols ColumnOrdinalSet,
-		rowsNeeded bool,
+		returnCols ColumnOrdinalSet,
 	) (Node, error)
 
 	// ConstructDelete creates a node that implements a DELETE statement. The
@@ -303,10 +314,11 @@ type Factory interface {
 	//
 	// The fetchCols set contains the ordinal positions of the fetch columns in
 	// the target table. The input must contain those columns in the same order
-	// as they appear in the table schema. The rowsNeeded parameter is true if a
-	// RETURNING clause needs the deleted row(s) as output.
+	// as they appear in the table schema. If a RETURNING clause needs the deleted
+	// row(s) as output, then returnCols specifies the columns which need to be
+	// projected by the operator.
 	ConstructDelete(
-		input Node, table cat.Table, fetchCols ColumnOrdinalSet, rowsNeeded bool,
+		input Node, table cat.Table, fetchCols ColumnOrdinalSet, returnCols ColumnOrdinalSet,
 	) (Node, error)
 
 	// ConstructCreateTable returns a node that implements a CREATE TABLE

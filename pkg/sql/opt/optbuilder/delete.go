@@ -89,9 +89,9 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildDelete(returning tree.ReturningExprs) {
 	private := memo.MutationPrivate{
-		Table:       mb.tabID,
-		FetchCols:   mb.fetchColList,
-		NeedResults: returning != nil,
+		Table:      mb.tabID,
+		FetchCols:  mb.fetchColList,
+		ReturnCols: mb.makeReturnCols(returning),
 	}
 	mb.outScope.expr = mb.b.factory.ConstructDelete(mb.outScope.expr, &private)
 

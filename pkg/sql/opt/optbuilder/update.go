@@ -332,10 +332,10 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	private := memo.MutationPrivate{
-		Table:       mb.tabID,
-		FetchCols:   mb.fetchColList,
-		UpdateCols:  mb.updateColList,
-		NeedResults: returning != nil,
+		Table:      mb.tabID,
+		FetchCols:  mb.fetchColList,
+		UpdateCols: mb.updateColList,
+		ReturnCols: mb.makeReturnCols(returning),
 	}
 	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, &private)
 

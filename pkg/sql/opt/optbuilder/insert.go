@@ -522,9 +522,9 @@ func (mb *mutationBuilder) addDefaultAndComputedColsForInsert() {
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	private := memo.MutationPrivate{
-		Table:       mb.tabID,
-		InsertCols:  mb.insertColList,
-		NeedResults: returning != nil,
+		Table:      mb.tabID,
+		InsertCols: mb.insertColList,
+		ReturnCols: mb.makeReturnCols(returning),
 	}
 	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, &private)
 
@@ -760,12 +760,12 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	private := memo.MutationPrivate{
-		Table:       mb.tabID,
-		InsertCols:  mb.insertColList,
-		FetchCols:   mb.fetchColList,
-		UpdateCols:  mb.updateColList,
-		CanaryCol:   mb.canaryColID,
-		NeedResults: returning != nil,
+		Table:      mb.tabID,
+		InsertCols: mb.insertColList,
+		FetchCols:  mb.fetchColList,
+		UpdateCols: mb.updateColList,
+		CanaryCol:  mb.canaryColID,
+		ReturnCols: mb.makeReturnCols(returning),
 	}
 	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, &private)
 
