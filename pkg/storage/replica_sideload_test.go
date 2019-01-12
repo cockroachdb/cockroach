@@ -941,7 +941,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			if withSS {
 				ss = tc.repl.raftMu.sideloaded
 			}
-			rsl := stateloader.Make(tc.store.ClusterSettings(), tc.repl.RangeID)
+			rsl := stateloader.Make(tc.repl.RangeID)
 			entries, err := entries(
 				ctx, rsl, tc.store.Engine(), tc.repl.RangeID, tc.store.raftEntryCache,
 				ss, sideloadedIndex, sideloadedIndex+1, 1<<20,

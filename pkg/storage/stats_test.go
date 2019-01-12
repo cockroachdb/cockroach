@@ -69,7 +69,7 @@ func TestRangeStatsInit(t *testing.T) {
 		GCBytesAge:      10,
 		LastUpdateNanos: 11,
 	}
-	rsl := stateloader.Make(nil /* st */, tc.repl.RangeID)
+	rsl := stateloader.Make(tc.repl.RangeID)
 	if err := rsl.SetMVCCStats(context.Background(), tc.engine, &ms); err != nil {
 		t.Fatal(err)
 	}

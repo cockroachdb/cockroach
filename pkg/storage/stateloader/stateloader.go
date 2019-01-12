@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -46,14 +45,12 @@ import (
 // struct with a mutex, and temporary loaders may be created when
 // locking is less desirable than an allocation.
 type StateLoader struct {
-	st *cluster.Settings
 	keys.RangeIDPrefixBuf
 }
 
 // Make creates an Instance.
-func Make(st *cluster.Settings, rangeID roachpb.RangeID) StateLoader {
+func Make(rangeID roachpb.RangeID) StateLoader {
 	rsl := StateLoader{
-		st:               st,
 		RangeIDPrefixBuf: keys.MakeRangeIDPrefixBuf(rangeID),
 	}
 	return rsl
@@ -524,19 +521,6 @@ func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader engine.Reader) 
 	return lastIndex, nil
 }
 
-// SetLastIndex overwrites the last index.
-func (rsl StateLoader) SetLastIndex(
-	ctx context.Context, eng engine.ReadWriter, lastIndex uint64,
-) error {
-	if rsl.st.Version.IsActive(cluster.VersionRaftLastIndex) {
-		return nil
-	}
-	var value roachpb.Value
-	value.SetInt(int64(lastIndex))
-	return engine.MVCCPut(ctx, eng, nil, rsl.RaftLastIndexKey(),
-		hlc.Timestamp{}, value, nil /* txn */)
-}
-
 // LoadReplicaDestroyedError loads the replica destroyed error for the specified
 // range. If there is no error, nil is returned.
 func (rsl StateLoader) LoadReplicaDestroyedError(
@@ -603,10 +587,7 @@ func (rsl StateLoader) SynthesizeRaftState(ctx context.Context, eng engine.ReadW
 	if err != nil {
 		return err
 	}
-	if err := rsl.SynthesizeHardState(ctx, eng, hs, truncState, raftAppliedIndex); err != nil {
-		return err
-	}
-	return rsl.SetLastIndex(ctx, eng, truncState.Index)
+	return rsl.SynthesizeHardState(ctx, eng, hs, truncState, raftAppliedIndex)
 }
 
 // SynthesizeHardState synthesizes an on-disk HardState from the given input,

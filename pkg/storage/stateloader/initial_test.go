@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,7 +56,7 @@ func TestSynthesizeHardState(t *testing.T) {
 		func() {
 			batch := eng.NewBatch()
 			defer batch.Close()
-			rsl := Make(cluster.MakeTestingClusterSettings(), 1)
+			rsl := Make(roachpb.RangeID(1))
 
 			if test.OldHS != nil {
 				if err := rsl.SetHardState(context.Background(), batch, *test.OldHS); err != nil {

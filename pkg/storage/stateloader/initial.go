@@ -53,7 +53,7 @@ func WriteInitialReplicaState(
 	gcThreshold hlc.Timestamp,
 	txnSpanGCThreshold hlc.Timestamp,
 ) (enginepb.MVCCStats, error) {
-	rsl := Make(st, desc.RangeID)
+	rsl := Make(desc.RangeID)
 
 	var s storagepb.ReplicaState
 	s.TruncatedState = &roachpb.RaftTruncatedState{
@@ -124,7 +124,7 @@ func WriteInitialState(
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := Make(st, desc.RangeID).SynthesizeRaftState(ctx, eng); err != nil {
+	if err := Make(desc.RangeID).SynthesizeRaftState(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return newMS, nil
