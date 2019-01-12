@@ -133,7 +133,8 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 				row.CheckDeletes,
 				lookup,
 				row.NoCheckPrivilege,
-				nil, /* AnalyzeExprFunction */
+				nil, /* analyzeExpr */
+				nil, /* checkHelper */
 			)
 			if err != nil {
 				t.Fatal(err)

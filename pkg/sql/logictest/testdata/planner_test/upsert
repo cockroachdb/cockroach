@@ -161,3 +161,14 @@ INSERT INTO customers (name, email) VALUES ('bob', 'bob@email.com') ON CONFLICT 
 
 statement ok
 DROP TABLE customers
+
+# The heuristic planner behaves differently than the CBO in this case. It always
+# checks constraints, even if no insert or update actually occurs.
+statement ok
+CREATE TABLE t5 (k INT PRIMARY KEY, a INT, b int CHECK (a > b))
+
+statement ok
+INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING
+
+statement error pgcode 23514 failed to satisfy CHECK constraint
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING

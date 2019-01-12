@@ -190,7 +190,8 @@ func TestMakeFkMetadata(t *testing.T) {
 			usage,
 			lookup,
 			NoCheckPrivilege,
-			nil, /* AnalyzeExprFunction */
+			nil, /* analyzeExpr */
+			nil, /* checkHelper */
 		)
 		if err != nil {
 			t.Fatal(err)
