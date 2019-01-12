@@ -245,7 +245,11 @@ type Factory interface {
 	// rowsNeeded parameter is true if a RETURNING clause needs the inserted
 	// row(s) as output.
 	ConstructInsert(
-		input Node, table cat.Table, insertCols ColumnOrdinalSet, rowsNeeded bool,
+		input Node,
+		table cat.Table,
+		insertCols ColumnOrdinalSet,
+		checks CheckOrdinalSet,
+		rowsNeeded bool,
 	) (Node, error)
 
 	// ConstructUpdate creates a node that implements an UPDATE statement. The
@@ -261,7 +265,12 @@ type Factory interface {
 	// fetch columns first and the update columns second. The rowsNeeded parameter
 	// is true if a RETURNING clause needs the updated row(s) as output.
 	ConstructUpdate(
-		input Node, table cat.Table, fetchCols, updateCols ColumnOrdinalSet, rowsNeeded bool,
+		input Node,
+		table cat.Table,
+		fetchCols ColumnOrdinalSet,
+		updateCols ColumnOrdinalSet,
+		checks CheckOrdinalSet,
+		rowsNeeded bool,
 	) (Node, error)
 
 	// ConstructUpsert creates a node that implements an INSERT..ON CONFLICT or
@@ -294,6 +303,7 @@ type Factory interface {
 		insertCols ColumnOrdinalSet,
 		fetchCols ColumnOrdinalSet,
 		updateCols ColumnOrdinalSet,
+		checks CheckOrdinalSet,
 		rowsNeeded bool,
 	) (Node, error)
 
@@ -363,6 +373,10 @@ type ColumnOrdinal int32
 
 // ColumnOrdinalSet contains a set of ColumnOrdinal values as ints.
 type ColumnOrdinalSet = util.FastIntSet
+
+// CheckOrdinalSet contains the ordinal positions of a set of check constraints
+// taken from the opt.Table.Check collection.
+type CheckOrdinalSet = util.FastIntSet
 
 // AggInfo represents an aggregation (see ConstructGroupBy).
 type AggInfo struct {

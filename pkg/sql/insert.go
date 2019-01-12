@@ -111,6 +111,12 @@ func (p *planner) Insert(
 		}
 	}
 
+	// Set up any check constraints.
+	checkHelper, err := sqlbase.NewEvalCheckHelper(ctx, p.analyzeExpr, desc)
+	if err != nil {
+		return nil, err
+	}
+
 	// Determine what are the foreign key tables that are involved in the update.
 	var fkCheckType row.FKCheckType
 	if n.OnConflict == nil || n.OnConflict.DoNothing {
@@ -125,6 +131,7 @@ func (p *planner) Insert(
 		p.LookupTableByID,
 		p.CheckPrivilege,
 		p.analyzeExpr,
+		checkHelper,
 	)
 	if err != nil {
 		return nil, err
@@ -303,7 +310,7 @@ func (p *planner) Insert(
 			columns: columns,
 			run: insertRun{
 				ti:           tableInserter{ri: ri},
-				checkHelper:  fkTables[desc.ID].CheckHelper,
+				checkHelper:  checkHelper,
 				rowsNeeded:   rowsNeeded,
 				computedCols: computedCols,
 				computeExprs: computeExprs,
@@ -538,13 +545,24 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		return err
 	}
 
-	// Run the CHECK constraints, if any.
-	if len(n.run.checkHelper.Exprs) > 0 {
-		if err := n.run.checkHelper.LoadRow(n.run.ti.ri.InsertColIDtoRowIndex, rowVals, false); err != nil {
-			return err
-		}
-		if err := n.run.checkHelper.Check(params.EvalContext()); err != nil {
-			return err
+	// Run the CHECK constraints, if any. CheckHelper will either evaluate the
+	// constraints itself, or else inspect boolean columns from the input that
+	// contain the results of evaluation.
+	if n.run.checkHelper != nil {
+		if n.run.checkHelper.NeedsEval() {
+			if err := n.run.checkHelper.LoadEvalRow(
+				n.run.ti.ri.InsertColIDtoRowIndex, rowVals, false); err != nil {
+				return err
+			}
+			if err := n.run.checkHelper.CheckEval(params.EvalContext()); err != nil {
+				return err
+			}
+		} else {
+			checkVals := rowVals[len(n.run.insertCols):]
+			if err := n.run.checkHelper.CheckInput(checkVals); err != nil {
+				return err
+			}
+			rowVals = rowVals[:len(n.run.insertCols)]
 		}
 	}
 

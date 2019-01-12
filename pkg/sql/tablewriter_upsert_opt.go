@@ -46,8 +46,6 @@ import (
 type optTableUpserter struct {
 	tableUpserterBase
 
-	evalCtx *tree.EvalContext
-
 	// fetchCols indicate which columns need to be fetched from the target table,
 	// in order to detect whether a conflict has occurred, as well as to provide
 	// existing values for updates.
@@ -78,8 +76,6 @@ func (tu *optTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) err
 	if err != nil {
 		return err
 	}
-
-	tu.evalCtx = evalCtx
 
 	if tu.collectRows {
 		tu.resultRow = make(tree.Datums, len(tu.colIDToReturnIndex))
@@ -126,7 +122,13 @@ func (tu *optTableUpserter) row(ctx context.Context, row tree.Datums, traceKV bo
 	// Update the row.
 	updateEnd := fetchEnd + len(tu.updateCols)
 	return tu.updateConflictingRow(
-		ctx, tu.b, row[insertEnd:fetchEnd], row[fetchEnd:updateEnd], tu.tableDesc(), traceKV)
+		ctx,
+		tu.b,
+		row[insertEnd:fetchEnd],
+		row[fetchEnd:updateEnd],
+		tu.tableDesc(),
+		traceKV,
+	)
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
@@ -176,23 +178,6 @@ func (tu *optTableUpserter) updateConflictingRow(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
-	checkHelper := tu.fkTables[tableDesc.ID].CheckHelper
-
-	// Do we need to evaluate CHECK expressions?
-	if len(checkHelper.Exprs) > 0 {
-		if err := checkHelper.LoadRow(
-			tu.ru.FetchColIDtoRowIndex, fetchRow, false); err != nil {
-			return err
-		}
-		if err := checkHelper.LoadRow(
-			tu.ru.UpdateColIDtoRowIndex, updateValues, true); err != nil {
-			return err
-		}
-		if err := checkHelper.Check(tu.evalCtx); err != nil {
-			return err
-		}
-	}
-
 	// Queue the update in KV. This also returns an "update row"
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.

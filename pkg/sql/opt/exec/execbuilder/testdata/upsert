@@ -104,3 +104,15 @@ bob2  otherbob@email.com
 
 statement ok
 DROP TABLE customers
+
+# The CBO behaves differently than the HP and PG in this case. It only checks
+# constraints if an insert or update actually occurs. In this case, the DO
+# NOTHING clause skips the update, so there is no need to check the constraint.
+statement ok
+CREATE TABLE t5 (k INT PRIMARY KEY, a INT, b int CHECK (a > b))
+
+statement ok
+INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING
+
+statement ok
+INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
