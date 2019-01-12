@@ -710,9 +710,9 @@ upsert abc
  │    ├──  column14:14 => b:2
  │    └──  column15:15 => c:3
  └── project
-      ├── columns: column15:15(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(unknown) column14:14(int!null)
+      ├── columns: column15:15(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null)
       ├── project
-      │    ├── columns: column13:13(unknown) column14:14(int!null) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    ├── columns: column13:13(int) column14:14(int!null) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    ├── left-join
       │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    ├── project
@@ -737,7 +737,8 @@ upsert abc
       │    │              ├── variable: column1 [type=int]
       │    │              └── variable: a [type=int]
       │    └── projections
-      │         ├── null [type=unknown]
+      │         ├── cast: INT8 [type=int]
+      │         │    └── null [type=unknown]
       │         └── const: 10 [type=int]
       └── projections
            └── plus [type=int]
@@ -822,15 +823,16 @@ upsert xyz
  │    ├──  column5:5 => y:2
  │    └──  column5:5 => z:3
  └── left-join
-      ├── columns: column1:4(int) column5:5(unknown) x:6(int) y:7(int) z:8(int)
+      ├── columns: column1:4(int) column5:5(int) x:6(int) y:7(int) z:8(int)
       ├── project
-      │    ├── columns: column5:5(unknown) column1:4(int)
+      │    ├── columns: column5:5(int) column1:4(int)
       │    ├── values
       │    │    ├── columns: column1:4(int)
       │    │    └── tuple [type=tuple{int}]
       │    │         └── const: 1 [type=int]
       │    └── projections
-      │         └── null [type=unknown]
+      │         └── cast: INT8 [type=int]
+      │              └── null [type=unknown]
       ├── scan xyz
       │    └── columns: x:6(int!null) y:7(int) z:8(int)
       └── filters
