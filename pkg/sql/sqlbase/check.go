@@ -21,16 +21,39 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
 
 // CheckHelper validates check constraints on rows, on INSERT and UPDATE.
+// CheckHelper has two different modes for executing check constraints:
+//
+//   1. Eval: in this mode, CheckHelper analyzes and evaluates each check
+//            constraint as a standalone expression. This is used by the
+//            heuristic planner, and is the backwards-compatible code path.
+//
+//   2. Input: in this mode, each check constraint expression is integrated with
+//             the input expression as a boolean column. CheckHelper only
+//             inspects the value of the column; if false, it reports a
+//             constraint violation error. This mode is used by the cost-based
+//             optimizer.
+//
+// In the Eval mode, callers should call NewEvalCheckHelper to initialize a new
+// instance of CheckHelper. For each row, they call LoadEvalRow one or more
+// times to set row values for evaluation, and then call CheckEval to trigger
+// evaluation.
+//
+// In the Input mode, callers should call NewInputCheckHelper to initialize a
+// new instance of CheckHelper. For each row, they call CheckInput with the
+// boolean check columns.
 type CheckHelper struct {
 	Exprs        []tree.TypedExpr
 	cols         []ColumnDescriptor
 	sourceInfo   *DataSourceInfo
 	ivarHelper   *tree.IndexedVarHelper
 	curSourceRow tree.Datums
+	checkSet     util.FastIntSet
+	tableDesc    *ImmutableTableDescriptor
 }
 
 // AnalyzeExprFunction is the function type used by the CheckHelper during
@@ -46,20 +69,20 @@ type AnalyzeExprFunction func(
 	typingContext string,
 ) (tree.TypedExpr, error)
 
-// Init initializes the CheckHelper. This step should be done during planning.
-func (c *CheckHelper) Init(
-	ctx context.Context,
-	analyzeExpr AnalyzeExprFunction,
-	tn *tree.TableName,
-	tableDesc *ImmutableTableDescriptor,
-) error {
+// NewEvalCheckHelper constructs a new instance of the CheckHelper, to be used
+// in the "Eval" mode (see comment for the CheckHelper struct).
+func NewEvalCheckHelper(
+	ctx context.Context, analyzeExpr AnalyzeExprFunction, tableDesc *ImmutableTableDescriptor,
+) (*CheckHelper, error) {
 	if len(tableDesc.Checks) == 0 {
-		return nil
+		return nil, nil
 	}
 
+	c := &CheckHelper{}
 	c.cols = tableDesc.Columns
 	c.sourceInfo = NewSourceInfoForSingleTable(
-		*tn, ResultColumnsFromColDescs(tableDesc.Columns),
+		tree.MakeUnqualifiedTableName(tree.Name(tableDesc.Name)),
+		ResultColumnsFromColDescs(tableDesc.Columns),
 	)
 
 	c.Exprs = make([]tree.TypedExpr, len(tableDesc.Checks))
@@ -69,7 +92,7 @@ func (c *CheckHelper) Init(
 	}
 	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ivarHelper := tree.MakeIndexedVarHelper(c, len(c.cols))
@@ -84,19 +107,45 @@ func (c *CheckHelper) Init(
 			"",    /* typingContext */
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		c.Exprs[i] = typedExpr
 	}
 	c.ivarHelper = &ivarHelper
 	c.curSourceRow = make(tree.Datums, len(c.cols))
-	return nil
+	return c, nil
 }
 
-// LoadRow sets values in the IndexedVars used by the CHECK exprs.
+// NewInputCheckHelper constructs a new instance of the CheckHelper, to be used
+// in the "Input" mode (see comment for the CheckHelper struct).
+func NewInputCheckHelper(checks util.FastIntSet, tableDesc *ImmutableTableDescriptor) *CheckHelper {
+	if checks.Empty() {
+		return nil
+	}
+	return &CheckHelper{checkSet: checks, tableDesc: tableDesc}
+}
+
+// Count returns the number of check constraints that need to be checked. The
+// count can be less than the number of check constraints defined on the table
+// descriptor if the planner was able to statically prove that some have already
+// been fulfilled.
+func (c *CheckHelper) Count() int {
+	if len(c.Exprs) != 0 {
+		return len(c.Exprs)
+	}
+	return c.checkSet.Len()
+}
+
+// NeedsEval returns true if CheckHelper is operating in the "Eval" mode. See
+// the comment for the CheckHelper struct for more details.
+func (c *CheckHelper) NeedsEval() bool {
+	return len(c.Exprs) != 0
+}
+
+// LoadEvalRow sets values in the IndexedVars used by the CHECK exprs.
 // Any value not passed is set to NULL, unless `merge` is true, in which
 // case it is left unchanged (allowing updating a subset of a row's values).
-func (c *CheckHelper) LoadRow(colIdx map[ColumnID]int, row tree.Datums, merge bool) error {
+func (c *CheckHelper) LoadEvalRow(colIdx map[ColumnID]int, row tree.Datums, merge bool) error {
 	if len(c.Exprs) == 0 {
 		return nil
 	}
@@ -136,9 +185,9 @@ func (c *CheckHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return c.sourceInfo.NodeFormatter(idx)
 }
 
-// Check performs the actual checks based on the values stored in the
-// CheckHelper.
-func (c *CheckHelper) Check(ctx *tree.EvalContext) error {
+// CheckEval evaluates each check constraint expression using values from the
+// current row that was previously set via a call to LoadEvalRow.
+func (c *CheckHelper) CheckEval(ctx *tree.EvalContext) error {
 	ctx.PushIVarContainer(c)
 	defer func() { ctx.PopIVarContainer() }()
 	for _, expr := range c.Exprs {
@@ -150,6 +199,31 @@ func (c *CheckHelper) Check(ctx *tree.EvalContext) error {
 			// Failed to satisfy CHECK constraint.
 			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
 				"failed to satisfy CHECK constraint (%s)", expr)
+		}
+	}
+	return nil
+}
+
+// CheckInput expects checkVals to already contain the boolean result of
+// evaluating each check constraint. If any of the boolean values is false, then
+// CheckInput reports a constraint violation error.
+func (c *CheckHelper) CheckInput(checkVals tree.Datums) error {
+	if len(checkVals) != c.checkSet.Len() {
+		return pgerror.NewAssertionErrorf(
+			"mismatched check constraint columns: expected %d, got %d", c.checkSet.Len(), len(checkVals))
+	}
+
+	for i := range c.tableDesc.Checks {
+		if !c.checkSet.Contains(i) {
+			continue
+		}
+
+		if res, err := tree.GetBool(checkVals[i]); err != nil {
+			return err
+		} else if !res && checkVals[i] != tree.DNull {
+			// Failed to satisfy CHECK constraint.
+			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+				"failed to satisfy CHECK constraint (%s)", c.tableDesc.Checks[i].Expr)
 		}
 	}
 	return nil

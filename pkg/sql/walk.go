@@ -433,8 +433,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			for i, dexpr := range n.run.defaultExprs {
 				v.metadataExpr(name, "default", i, dexpr)
 			}
-			for i, cexpr := range n.run.checkHelper.Exprs {
-				v.metadataExpr(name, "check", i, cexpr)
+			if n.run.checkHelper != nil {
+				for i, cexpr := range n.run.checkHelper.Exprs {
+					v.metadataExpr(name, "check", i, cexpr)
+				}
 			}
 		}
 		n.source = v.visit(n.source)
@@ -459,8 +461,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			for i, dexpr := range n.run.defaultExprs {
 				v.metadataExpr(name, "default", i, dexpr)
 			}
-			for i, cexpr := range n.run.checkHelper.Exprs {
-				v.metadataExpr(name, "check", i, cexpr)
+			if n.run.checkHelper != nil {
+				for i, cexpr := range n.run.checkHelper.Exprs {
+					v.metadataExpr(name, "check", i, cexpr)
+				}
 			}
 			n.run.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
 				v.metadataExpr(name, d, i, e)
@@ -487,8 +491,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			for i, cexpr := range n.run.computeExprs {
 				v.metadataExpr(name, "computed", i, cexpr)
 			}
-			for i, cexpr := range n.run.checkHelper.Exprs {
-				v.metadataExpr(name, "check", i, cexpr)
+			if n.run.checkHelper != nil {
+				for i, cexpr := range n.run.checkHelper.Exprs {
+					v.metadataExpr(name, "check", i, cexpr)
+				}
 			}
 		}
 		// An updater has no sub-expressions, so nothing special to do here.

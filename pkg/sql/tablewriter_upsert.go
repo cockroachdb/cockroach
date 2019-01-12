@@ -530,7 +530,7 @@ func (tu *tableUpserter) updateConflictingRow(
 	checkHelper := tu.fkTables[tableDesc.ID].CheckHelper
 
 	// Do we need to (re-)compute computed columns or CHECK expressions?
-	if tu.anyComputed || len(checkHelper.Exprs) > 0 {
+	if tu.anyComputed || checkHelper != nil {
 		// For computed columns, the goal for the following code appends
 		// the computed columns at the end of updateValues.
 		// For CHECK constraints, the goal of the following code
@@ -564,7 +564,7 @@ func (tu *tableUpserter) updateConflictingRow(
 			return nil, err
 		}
 
-		if len(checkHelper.Exprs) > 0 {
+		if checkHelper != nil {
 			// If there are CHECK expressions, we must add the computed
 			// columns to the input row.
 
@@ -574,10 +574,10 @@ func (tu *tableUpserter) updateConflictingRow(
 			}
 
 			// Check CHECK constraints.
-			if err := checkHelper.LoadRow(tu.ru.FetchColIDtoRowIndex, newValues, false); err != nil {
+			if err := checkHelper.LoadEvalRow(tu.ru.FetchColIDtoRowIndex, newValues, false); err != nil {
 				return nil, err
 			}
-			if err := checkHelper.Check(tu.evalCtx); err != nil {
+			if err := checkHelper.CheckEval(tu.evalCtx); err != nil {
 				return nil, err
 			}
 		}
