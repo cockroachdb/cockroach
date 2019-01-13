@@ -22,11 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // PreparedStatement is a SQL statement that has been parsed and the types
 // of arguments and results have been determined.
+//
+// Note that PreparedStatemts maintain a reference counter internally.
+// References need to be registered with incRef() and de-registered with
+// decRef().
 type PreparedStatement struct {
 	sqlbase.PrepareMetadata
 
@@ -35,7 +40,14 @@ type PreparedStatement struct {
 	// if it is used by the optimizer as a starting point.
 	Memo *memo.Memo
 
-	memAcc mon.BoundAccount
+	// refCount keeps track of the number of references to this PreparedStatement.
+	// New references are registered through incRef().
+	// Once refCount hits 0 (through calls to decRef()), the following memAcc is
+	// closed.
+	// Most references are being held by portals created from this prepared
+	// statement.
+	refCount int
+	memAcc   mon.BoundAccount
 }
 
 // MemoryEstimate returns a rough estimate of the PreparedStatement's memory
@@ -51,8 +63,21 @@ func (p *PreparedStatement) MemoryEstimate() int64 {
 	return size
 }
 
-func (p *PreparedStatement) close(ctx context.Context) {
-	p.memAcc.Close(ctx)
+func (p *PreparedStatement) decRef(ctx context.Context) {
+	if p.refCount <= 0 {
+		log.Fatal(ctx, "corrupt PreparedStatement refcount")
+	}
+	p.refCount--
+	if p.refCount == 0 {
+		p.memAcc.Close(ctx)
+	}
+}
+
+func (p *PreparedStatement) incRef(ctx context.Context) {
+	if p.refCount <= 0 {
+		log.Fatal(ctx, "corrupt PreparedStatement refcount")
+	}
+	p.refCount++
 }
 
 // preparedStatementsAccessor gives a planner access to a session's collection
@@ -71,6 +96,16 @@ type preparedStatementsAccessor interface {
 }
 
 // PreparedPortal is a PreparedStatement that has been bound with query arguments.
+//
+// Note that PreparedPortals maintain a reference counter internally.
+// References need to be registered with incRef() and de-registered with
+// decRef().
+//
+// TODO(andrei): In Postgres, portals can only be used to "execute a query" once
+// (but they allow one to move back and forth through the results). Our portals
+// can be used to execute a query multiple times, which is a bug (executing an
+// exhausted portal in Postres returns 0 results; in CRDB executing a portal a
+// second time always restarts the query).
 type PreparedPortal struct {
 	Stmt  *PreparedStatement
 	Qargs tree.QueryArguments
@@ -78,12 +113,21 @@ type PreparedPortal struct {
 	// OutFormats contains the requested formats for the output columns.
 	OutFormats []pgwirebase.FormatCode
 
+	// refCount keeps track of the number of references to this PreparedStatement.
+	// New references are registered through incRef().
+	// Once refCount hits 0 (through calls to decRef()), the following memAcc is
+	// closed.
+	// Most references are being held by portals created from this prepared
+	// statement.
+	refCount int
+
 	memAcc mon.BoundAccount
 }
 
 // newPreparedPortal creates a new PreparedPortal.
 //
-// When no longer in use, the PreparedPortal needs to be close()d.
+// incRef() doesn't need to be called on the result.
+// When no longer in use, the PreparedPortal needs to be decRef()d.
 func (ex *connExecutor) newPreparedPortal(
 	ctx context.Context,
 	name string,
@@ -96,14 +140,32 @@ func (ex *connExecutor) newPreparedPortal(
 		Qargs:      qargs,
 		OutFormats: outFormats,
 		memAcc:     ex.sessionMon.MakeBoundAccount(),
+		refCount:   1,
 	}
 	sz := int64(uintptr(len(name)) + unsafe.Sizeof(*portal))
 	if err := portal.memAcc.Grow(ctx, sz); err != nil {
 		return nil, err
 	}
+	// The portal keeps a reference to the PreparedStatement, so register it.
+	stmt.incRef(ctx)
 	return portal, nil
 }
 
-func (p *PreparedPortal) close(ctx context.Context) {
-	p.memAcc.Close(ctx)
+func (p *PreparedPortal) incRef(ctx context.Context) {
+	if p.refCount <= 0 {
+		log.Fatal(ctx, "corrupt PreparedStatement refcount")
+	}
+	p.refCount++
+}
+
+func (p *PreparedPortal) decRef(ctx context.Context) {
+	if p.refCount <= 0 {
+		log.Fatal(ctx, "corrupt PreparedPrepared refcount")
+	}
+	p.refCount--
+
+	if p.refCount == 0 {
+		p.memAcc.Close(ctx)
+		p.Stmt.decRef(ctx)
+	}
 }
