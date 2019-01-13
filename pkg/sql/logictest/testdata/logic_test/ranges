@@ -297,7 +297,8 @@ start_key                          start_pretty                   end_key       
 [156]                              /Table/20                      [157]                              /Table/21                      system         table_statistics  ·           {1}       1
 [157]                              /Table/21                      [158]                              /Table/22                      system         locations         ·           {1}       1
 [158]                              /Table/22                      [159]                              /Table/23                      ·              ·                 ·           {1}       1
-[159]                              /Table/23                      [189 137 137]                      /Table/53/1/1                  system         role_members      ·           {1}       1
+[159]                              /Table/23                      [160]                              /Table/24                      system         role_members      ·           {1}       1
+[160]                              /Table/24                      [189 137 137]                      /Table/53/1/1                  system         comments          ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                 ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                 ·           {1,2,3}   1
 [189 137 141 138]                  /Table/53/1/5/2                [189 137 141 139]                  /Table/53/1/5/3                test           t                 ·           {2,3,5}   5
@@ -336,7 +337,8 @@ start_key                          start_pretty                   end_key       
 [156]                              /Table/20                      [157]                              /Table/21                      system         table_statistics  ·           {1}       1
 [157]                              /Table/21                      [158]                              /Table/22                      system         locations         ·           {1}       1
 [158]                              /Table/22                      [159]                              /Table/23                      ·              ·                 ·           {1}       1
-[159]                              /Table/23                      [189 137 137]                      /Table/53/1/1                  system         role_members      ·           {1}       1
+[159]                              /Table/23                      [160]                              /Table/24                      system         role_members      ·           {1}       1
+[160]                              /Table/24                      [189 137 137]                      /Table/53/1/1                  system         comments          ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                 ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                 ·           {1,2,3}   1
 [189 137 141 138]                  /Table/53/1/5/2                [189 137 141 139]                  /Table/53/1/5/3                test           t                 ·           {2,3,5}   5

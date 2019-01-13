@@ -673,11 +673,12 @@ func TestSpanStatsResponse(t *testing.T) {
 
 func TestSpanStatsGRPCResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	ts := startServer(t)
-	defer ts.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(ctx)
 
 	rpcStopper := stop.NewStopper()
-	defer rpcStopper.Stop(context.TODO())
+	defer rpcStopper.Stop(ctx)
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, ts.RPCContext().Config, ts.Clock(),
 		rpcStopper, &ts.ClusterSettings().Version)
@@ -688,13 +689,13 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	}
 
 	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	conn, err := rpcContext.GRPCDial(url).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	client := serverpb.NewStatusClient(conn)
 
-	response, err := client.SpanStats(context.Background(), &request)
+	response, err := client.SpanStats(ctx, &request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -703,7 +704,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a, e := int(response.RangeCount), initialRanges; a != e {
-		t.Errorf("expected %d ranges, found %d", e, a)
+		t.Fatalf("expected %d ranges, found %d", e, a)
 	}
 }
 
