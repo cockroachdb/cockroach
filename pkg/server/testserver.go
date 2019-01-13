@@ -353,7 +353,7 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func (ts *TestServer) ExpectedInitialUserRangeCount() int {
-	return ExpectedInitialUserRangeCount(ts.DB())
+	return 1
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
@@ -378,14 +378,6 @@ func ExpectedInitialRangeCount(db *client.DB) (int, error) {
 
 	// `n` splits create `n+1` ranges.
 	return len(config.StaticSplits()) + systemTableSplits + 1, nil
-}
-
-// ExpectedInitialUserRangeCount returns the expected number of user ranges that should
-// be on the server after initial (asynchronous) splits have been completed,
-// assuming no additional information is added outside of the normal bootstrap
-// process.
-func ExpectedInitialUserRangeCount(db *client.DB) int {
-	return 1
 }
 
 // Stores returns the collection of stores from this TestServer's node.
