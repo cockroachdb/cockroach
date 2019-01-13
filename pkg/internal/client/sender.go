@@ -296,7 +296,13 @@ func (m *MockTransactionalSender) AugmentMeta(context.Context, roachpb.TxnCoordM
 }
 
 // OnFinish is part of the TxnSender interface.
-func (m *MockTransactionalSender) OnFinish(_ func(error)) { panic("unimplemented") }
+func (m *MockTransactionalSender) OnFinish(f func(error)) {
+	// We accept the nil, as that's commonly used to reset a previously-set
+	// closure.
+	if f != nil {
+		panic("unimplemented")
+	}
+}
 
 // SetSystemConfigTrigger is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetSystemConfigTrigger() error { panic("unimplemented") }
@@ -346,7 +352,7 @@ func (m *MockTransactionalSender) ManualRestart(
 
 // IsSerializablePushAndRefreshNotPossible is part of the TxnSender interface.
 func (m *MockTransactionalSender) IsSerializablePushAndRefreshNotPossible() bool {
-	panic("unimplemented")
+	return false
 }
 
 // Epoch is part of the TxnSender interface.

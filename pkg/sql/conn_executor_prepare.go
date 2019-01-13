@@ -41,7 +41,7 @@ func (ex *connExecutor) execPrepare(
 
 	// The anonymous statement can be overwritter.
 	if parseCmd.Name != "" {
-		if _, ok := ex.prepStmtsNamespace.prepStmts[parseCmd.Name]; ok {
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[parseCmd.Name]; ok {
 			err := pgerror.NewErrorf(
 				pgerror.CodeDuplicatePreparedStatementError,
 				"prepared statement %q already exists", parseCmd.Name,
@@ -111,7 +111,7 @@ func (ex *connExecutor) execPrepare(
 func (ex *connExecutor) addPreparedStmt(
 	ctx context.Context, name string, stmt Statement, placeholderHints tree.PlaceholderTypes,
 ) (*PreparedStatement, error) {
-	if _, ok := ex.prepStmtsNamespace.prepStmts[name]; ok {
+	if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
 		panic(fmt.Sprintf("prepared statement already exists: %q", name))
 	}
 
@@ -124,10 +124,7 @@ func (ex *connExecutor) addPreparedStmt(
 	if err := prepared.memAcc.Grow(ctx, int64(len(name))); err != nil {
 		return nil, err
 	}
-	ex.prepStmtsNamespace.prepStmts[name] = prepStmtEntry{
-		PreparedStatement: prepared,
-		portals:           make(map[string]struct{}),
-	}
+	ex.extraTxnState.prepStmtsNamespace.prepStmts[name] = prepared
 	return prepared, nil
 }
 
@@ -151,7 +148,8 @@ func (ex *connExecutor) prepare(
 				TypeHints: placeholderHints,
 			},
 		},
-		memAcc: ex.sessionMon.MakeBoundAccount(),
+		memAcc:   ex.sessionMon.MakeBoundAccount(),
+		refCount: 1,
 	}
 	// NB: if we start caching the plan, we'll want to keep around the memory
 	// account used for the plan, rather than clearing it.
@@ -288,7 +286,7 @@ func (ex *connExecutor) execBind(
 	portalName := bindCmd.PortalName
 	// The unnamed portal can be freely overwritten.
 	if portalName != "" {
-		if _, ok := ex.prepStmtsNamespace.portals[portalName]; ok {
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
 			return retErr(pgerror.NewErrorf(
 				pgerror.CodeDuplicateCursorError, "portal %q already exists", portalName))
 		}
@@ -297,7 +295,7 @@ func (ex *connExecutor) execBind(
 		ex.deletePortal(ctx, "")
 	}
 
-	ps, ok := ex.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
+	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
 	if !ok {
 		return retErr(pgerror.NewErrorf(
 			pgerror.CodeInvalidSQLStatementNameError,
@@ -390,7 +388,7 @@ func (ex *connExecutor) execBind(
 
 	// Create the new PreparedPortal.
 	if err := ex.addPortal(
-		ctx, portalName, bindCmd.PreparedStatementName, ps.PreparedStatement, qargs, columnFormatCodes,
+		ctx, portalName, bindCmd.PreparedStatementName, ps, qargs, columnFormatCodes,
 	); err != nil {
 		return retErr(err)
 	}
@@ -415,7 +413,7 @@ func (ex *connExecutor) addPortal(
 	qargs tree.QueryArguments,
 	outFormats []pgwirebase.FormatCode,
 ) error {
-	if _, ok := ex.prepStmtsNamespace.portals[portalName]; ok {
+	if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
 		panic(fmt.Sprintf("portal already exists: %q", portalName))
 	}
 
@@ -424,43 +422,26 @@ func (ex *connExecutor) addPortal(
 		return err
 	}
 
-	ex.prepStmtsNamespace.portals[portalName] = portalEntry{
-		PreparedPortal: portal,
-		psName:         psName,
-	}
-	ex.prepStmtsNamespace.prepStmts[psName].portals[portalName] = struct{}{}
+	ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
 	return nil
 }
 
 func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
-	psEntry, ok := ex.prepStmtsNamespace.prepStmts[name]
+	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 	if !ok {
 		return
 	}
-	// If the prepared statement only exists in prepStmtsNamespace, it's up to us
-	// to close it.
-	baseP, inBase := ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.prepStmts[name]
-	if !inBase || (baseP.PreparedStatement != psEntry.PreparedStatement) {
-		psEntry.close(ctx)
-	}
-	for portalName := range psEntry.portals {
-		ex.deletePortal(ctx, portalName)
-	}
-	delete(ex.prepStmtsNamespace.prepStmts, name)
+	ps.decRef(ctx)
+	delete(ex.extraTxnState.prepStmtsNamespace.prepStmts, name)
 }
 
 func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
-	portalEntry, ok := ex.prepStmtsNamespace.portals[name]
+	portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[name]
 	if !ok {
 		return
 	}
-	// If the portal only exists in prepStmtsNamespace, it's up to us to close it.
-	baseP, inBase := ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals[name]
-	if !inBase || (baseP.PreparedPortal != portalEntry.PreparedPortal) {
-		portalEntry.close(ctx)
-	}
-	delete(ex.prepStmtsNamespace.portals, name)
-	delete(ex.prepStmtsNamespace.prepStmts[portalEntry.psName].portals, name)
+	portal.decRef(ctx)
+	delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 }
 
 func (ex *connExecutor) execDelPrepStmt(
@@ -468,7 +449,7 @@ func (ex *connExecutor) execDelPrepStmt(
 ) (fsm.Event, fsm.EventPayload) {
 	switch delCmd.Type {
 	case pgwirebase.PrepareStatement:
-		_, ok := ex.prepStmtsNamespace.prepStmts[delCmd.Name]
+		_, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[delCmd.Name]
 		if !ok {
 			// The spec says "It is not an error to issue Close against a nonexistent
 			// statement or portal name". See
@@ -478,7 +459,7 @@ func (ex *connExecutor) execDelPrepStmt(
 
 		ex.deletePreparedStmt(ctx, delCmd.Name)
 	case pgwirebase.PreparePortal:
-		_, ok := ex.prepStmtsNamespace.portals[delCmd.Name]
+		_, ok := ex.extraTxnState.prepStmtsNamespace.portals[delCmd.Name]
 		if !ok {
 			break
 		}
@@ -499,7 +480,7 @@ func (ex *connExecutor) execDescribe(
 
 	switch descCmd.Type {
 	case pgwirebase.PrepareStatement:
-		ps, ok := ex.prepStmtsNamespace.prepStmts[descCmd.Name]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[descCmd.Name]
 		if !ok {
 			return retErr(pgerror.NewErrorf(
 				pgerror.CodeInvalidSQLStatementNameError,
@@ -514,7 +495,7 @@ func (ex *connExecutor) execDescribe(
 			res.SetPrepStmtOutput(ctx, ps.Columns)
 		}
 	case pgwirebase.PreparePortal:
-		portal, ok := ex.prepStmtsNamespace.portals[descCmd.Name]
+		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[descCmd.Name]
 		if !ok {
 			return retErr(pgerror.NewErrorf(
 				pgerror.CodeInvalidCursorNameError, "unknown portal %q", descCmd.Name))
