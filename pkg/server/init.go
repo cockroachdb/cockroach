@@ -57,15 +57,26 @@ func newInitServer(s *Server) *initServer {
 	}
 }
 
-func (s *initServer) awaitBootstrap() error {
+type initServerResult int
+
+const (
+	invalidInitResult initServerResult = iota
+	connectedToCluster
+	bootstrappedCluster
+)
+
+// awaitBootstrap blocks until either we're connected to the gossip network
+// (meaning we're joinging an existing cluster) or until we've bootstrapped the
+// cluster following instructions to do so.
+func (s *initServer) awaitBootstrap() (initServerResult, error) {
 	select {
 	case <-s.server.node.storeCfg.Gossip.Connected:
+		return connectedToCluster, nil
 	case <-s.bootstrapped:
+		return bootstrappedCluster, nil
 	case <-s.server.stopper.ShouldStop():
-		return errors.New("stop called while waiting to bootstrap")
+		return invalidInitResult, errors.New("stop called while waiting to bootstrap")
 	}
-
-	return nil
 }
 
 func (s *initServer) Bootstrap(

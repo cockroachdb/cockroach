@@ -204,7 +204,7 @@ func TestEnsureMigrations(t *testing.T) {
 			}
 			backwardCompatibleMigrations = tc.migrations
 
-			err := mgr.EnsureMigrations(context.Background())
+			err := mgr.EnsureMigrations(context.Background(), AllMigrations)
 			if !testutils.IsError(err, tc.expectedErr) {
 				t.Errorf("expected error %q, got error %v", tc.expectedErr, err)
 			}
@@ -267,7 +267,7 @@ func TestDBErrors(t *testing.T) {
 			db.scanErr = tc.scanErr
 			db.putErr = tc.putErr
 			db.kvs = make(map[string][]byte)
-			err := mgr.EnsureMigrations(context.Background())
+			err := mgr.EnsureMigrations(context.Background(), AllMigrations)
 			if !testutils.IsError(err, tc.expectedErr) {
 				t.Errorf("expected error %q, got error %v", tc.expectedErr, err)
 			}
@@ -305,7 +305,7 @@ func TestLeaseErrors(t *testing.T) {
 	migration := noopMigration1
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = []migrationDescriptor{migration}
-	if err := mgr.EnsureMigrations(context.Background()); err != nil {
+	if err := mgr.EnsureMigrations(context.Background(), AllMigrations); err != nil {
 		t.Error(err)
 	}
 	if _, ok := db.kvs[string(migrationKey(migration))]; !ok {
@@ -352,7 +352,7 @@ func TestLeaseExpiration(t *testing.T) {
 	}
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = []migrationDescriptor{waitForExitMigration}
-	if err := mgr.EnsureMigrations(context.Background()); err != nil {
+	if err := mgr.EnsureMigrations(context.Background(), AllMigrations); err != nil {
 		t.Error(err)
 	}
 }
