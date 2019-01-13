@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -1015,6 +1016,26 @@ func (g *Gossip) AddInfoProto(key string, msg protoutil.Message, ttl time.Durati
 		return err
 	}
 	return g.AddInfo(key, bytes, ttl)
+}
+
+// AddClusterID is a convenience method for gossipping the cluster ID. There's
+// no TTL - the record lives forever.
+func (g *Gossip) AddClusterID(val uuid.UUID) error {
+	return g.AddInfo(KeyClusterID, val.GetBytes(), 0 /* ttl */)
+}
+
+// GetClusterID returns the cluster ID if it has been gossipped. If it hasn't,
+// (so if this gossip instance is not "connected"), an error is returned.
+func (g *Gossip) GetClusterID() (uuid.UUID, error) {
+	uuidBytes, err := g.GetInfo(KeyClusterID)
+	if err != nil {
+		return uuid.Nil, errors.Wrap(err, "unable to ascertain cluster ID from gossip network")
+	}
+	clusterID, err := uuid.FromBytes(uuidBytes)
+	if err != nil {
+		return uuid.Nil, errors.Wrap(err, "unable to parse cluster ID from gossip network")
+	}
+	return clusterID, nil
 }
 
 // GetInfo returns an info value by key or an KeyNotPresentError if specified
