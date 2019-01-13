@@ -6262,13 +6262,11 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 	// When multiple nodes are initialized with overlapping Gossip addresses, they all
 	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
 	// so we error out below.
-	if uuidBytes, err := r.store.Gossip().GetInfo(gossip.KeyClusterID); err == nil {
-		if gossipClusterID, err := uuid.FromBytes(uuidBytes); err == nil {
-			if gossipClusterID != r.store.ClusterID() {
-				log.Fatalf(
-					ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
-					r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
-			}
+	if gossipClusterID, err := r.store.Gossip().GetClusterID(); err == nil {
+		if gossipClusterID != r.store.ClusterID() {
+			log.Fatalf(
+				ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
+				r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
 		}
 	}
 
@@ -6278,9 +6276,7 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 		log.Infof(ctx, "gossiping cluster id %q from store %d, r%d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(
-		gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second,
-	); err != nil {
+	if err := r.store.Gossip().AddClusterID(r.store.ClusterID()); err != nil {
 		log.Errorf(ctx, "failed to gossip cluster ID: %s", err)
 	}
 
