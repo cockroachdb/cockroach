@@ -345,7 +345,7 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 }
 
 func isExpectedRelocateError(err error) bool {
-	return testutils.IsError(err, "(descriptor changed|unable to remove replica .* which is not present|unable to add replica .* which is already present|received invalid ChangeReplicasTrigger .* to remove self|breaker open)")
+	return testutils.IsError(err, "(descriptor changed|unable to remove replica .* which is not present|unable to add replica .* which is already present|received invalid ChangeReplicasTrigger .* to remove self|breaker open|cannot up-replicate|error looking up store)")
 }
 
 func accountDistribution(r *rand.Rand) *rand.Zipf {
@@ -530,8 +530,6 @@ func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
 	}
 	c.l.Printf("%d transfers (%.1f/sec) in %.1fs\n", count, float64(count)/elapsed, elapsed)
 }
-
-var _ = runBankZeroSumRestart
 
 func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
