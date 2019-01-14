@@ -3894,7 +3894,7 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const expErr = "snapshot failed: unknown peer 3"
+	const expErr = "snapshot failed: failed to resolve n3: unknown peer 3"
 	if err := rep.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
