@@ -21,18 +21,18 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func toStr(c *C) string {
+	c.check()
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	var b strings.Builder
-	for e := c.mu.sentinel.next; e != &c.mu.sentinel; e = e.next {
-		if e.SQL == "" {
-			continue
-		}
+	for e := c.mu.used.next; e != &c.mu.used; e = e.next {
 		if b.Len() != 0 {
 			b.WriteString(",")
 		}
@@ -48,6 +48,24 @@ func expect(t *testing.T, c *C, exp string) {
 	}
 }
 
+func data(sql string, mem *memo.Memo, memEstimate int64) *CachedData {
+	cd := &CachedData{SQL: sql, Memo: mem, PrepareMetadata: &sqlbase.PrepareMetadata{}}
+	n := memEstimate - cd.memoryEstimate()
+	if n < 0 {
+		panic(fmt.Sprintf("size %d too small", memEstimate))
+	}
+	// Add characters to AnonymizedStr which should increase the estimate.
+	s := make([]byte, n)
+	for i := range s {
+		s[i] = 'x'
+	}
+	cd.PrepareMetadata.AnonymizedStr = string(s)
+	if cd.memoryEstimate() != memEstimate {
+		panic(fmt.Sprintf("failed to create CachedData of size %d", memEstimate))
+	}
+	return cd
+}
+
 // TestCache tests the main operations of the cache.
 func TestCache(t *testing.T) {
 	sa := &memo.Memo{}
@@ -55,16 +73,17 @@ func TestCache(t *testing.T) {
 	sc := &memo.Memo{}
 	sd := &memo.Memo{}
 
-	c := New(3 * maxCachedSize)
+	// In this test, all entries have the same size: avgCachedSize.
+	c := New(3 * avgCachedSize)
 
 	expect(t, c, "")
-	c.Add(&CachedData{SQL: "a", Memo: sa})
+	c.Add(data("a", sa, avgCachedSize))
 	expect(t, c, "a")
-	c.Add(&CachedData{SQL: "b", Memo: sb})
+	c.Add(data("b", sb, avgCachedSize))
 	expect(t, c, "b,a")
-	c.Add(&CachedData{SQL: "c", Memo: sc})
+	c.Add(data("c", sc, avgCachedSize))
 	expect(t, c, "c,b,a")
-	c.Add(&CachedData{SQL: "d", Memo: sd})
+	c.Add(data("d", sd, avgCachedSize))
 	expect(t, c, "d,c,b")
 	if _, ok := c.Find("a"); ok {
 		t.Errorf("a shouldn't be in the cache")
@@ -83,7 +102,7 @@ func TestCache(t *testing.T) {
 	}
 	expect(t, c, "b,c,d")
 
-	c.Add(&CachedData{SQL: "a", Memo: sa})
+	c.Add(data("a", sa, avgCachedSize))
 	expect(t, c, "a,b,c")
 
 	c.Purge("b")
@@ -95,7 +114,7 @@ func TestCache(t *testing.T) {
 	c.Purge("c")
 	expect(t, c, "a")
 
-	c.Add(&CachedData{SQL: "b", Memo: sb})
+	c.Add(data("b", sb, avgCachedSize))
 	expect(t, c, "b,a")
 
 	c.Clear()
@@ -105,11 +124,67 @@ func TestCache(t *testing.T) {
 	}
 }
 
+func TestCacheMemory(t *testing.T) {
+	m := &memo.Memo{}
+
+	c := New(10 * avgCachedSize)
+	expect(t, c, "")
+	for i := 0; i < 10; i++ {
+		c.Add(data(fmt.Sprintf("%d", i), m, avgCachedSize/2))
+	}
+	expect(t, c, "9,8,7,6,5,4,3,2,1,0")
+
+	// Verify handling when we have no more entries.
+	c.Add(data("10", m, avgCachedSize/2))
+	expect(t, c, "10,9,8,7,6,5,4,3,2,1")
+
+	// Verify handling when we have larger entries.
+	c.Add(data("large", m, avgCachedSize*8))
+	expect(t, c, "large,10,9,8,7")
+	c.Add(data("verylarge", m, avgCachedSize*10))
+	expect(t, c, "verylarge")
+
+	for i := 0; i < 10; i++ {
+		c.Add(data(fmt.Sprintf("%d", i), m, avgCachedSize))
+	}
+	expect(t, c, "9,8,7,6,5,4,3,2,1,0")
+
+	// Verify that we don't try to add an entry that's larger than the cache size.
+	c.Add(data("large", m, avgCachedSize*11))
+	expect(t, c, "9,8,7,6,5,4,3,2,1,0")
+
+	// Verify handling when we update an existing entry with one that uses more
+	// memory.
+	c.Add(data("5", m, avgCachedSize*5))
+	expect(t, c, "5,9,8,7,6,4")
+
+	c.Add(data("0", m, avgCachedSize))
+	expect(t, c, "0,5,9,8,7,6")
+
+	// Verify handling when we update an existing entry with one that uses less
+	// memory.
+	c.Add(data("5", m, avgCachedSize))
+	expect(t, c, "5,0,9,8,7,6")
+	c.Add(data("1", m, avgCachedSize))
+	c.Add(data("2", m, avgCachedSize))
+	c.Add(data("3", m, avgCachedSize))
+	c.Add(data("4", m, avgCachedSize))
+	expect(t, c, "4,3,2,1,5,0,9,8,7,6")
+
+	// Verify Purge updates the available memory.
+	c.Purge("3")
+	expect(t, c, "4,2,1,5,0,9,8,7,6")
+	c.Add(data("x", m, avgCachedSize))
+	expect(t, c, "x,4,2,1,5,0,9,8,7,6")
+	c.Add(data("y", m, avgCachedSize))
+	expect(t, c, "y,x,4,2,1,5,0,9,8,7")
+}
+
 // TestSynchronization verifies that the cache doesn't crash (or cause a race
 // detector error) when multiple goroutines are using it in parallel.
 func TestSynchronization(t *testing.T) {
 	const size = 100
-	c := New(size * maxCachedSize)
+	c := New(size * avgCachedSize)
 
 	var wg sync.WaitGroup
 	const goroutines = 20
@@ -128,11 +203,12 @@ func TestSynchronization(t *testing.T) {
 					c.Purge(sql)
 				case r <= 35:
 					// 25% of the time, add an entry.
-					c.Add(&CachedData{SQL: sql, Memo: &memo.Memo{}})
+					c.Add(data(sql, &memo.Memo{}, int64(256+rng.Intn(10*avgCachedSize))))
 				default:
 					// The rest of the time, find an entry.
 					_, _ = c.Find(sql)
 				}
+				c.check()
 			}
 			wg.Done()
 		}()
