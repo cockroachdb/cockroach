@@ -16,45 +16,44 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
-
-type semaphore chan struct{}
-
-func newSemaphore() semaphore {
-	ch := make(semaphore, 1)
-	ch <- struct{}{}
-	return ch
-}
-
-func (s semaphore) acquire() {
-	<-s
-}
-
-func (s semaphore) release() {
-	s <- struct{}{}
-}
 
 // initServer manages the temporary init server used during
 // bootstrapping.
 type initServer struct {
-	server       *Server
-	bootstrapped chan struct{}
-	semaphore
+	mu struct {
+		syncutil.Mutex
+		// If set, a Bootstrap() call is rejected with this error.
+		rejectErr error
+	}
+	bootstrapReqCh chan struct{}
+	connected      <-chan struct{}
+	shouldStop     <-chan struct{}
 }
 
-func newInitServer(s *Server) *initServer {
+func newInitServer(connected <-chan struct{}, shouldStop <-chan struct{}) *initServer {
 	return &initServer{
-		server:       s,
-		semaphore:    newSemaphore(),
-		bootstrapped: make(chan struct{}),
+		bootstrapReqCh: make(chan struct{}),
+		connected:      connected,
+		shouldStop:     shouldStop,
 	}
+}
+
+// testOrSetRejectErr set the reject error unless a reject error was already
+// set, in which case it returns the one that was already set. If no error had
+// previously been set, returns nil.
+func (s *initServer) testOrSetRejectErr(err error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mu.rejectErr != nil {
+		return s.mu.rejectErr
+	}
+	s.mu.rejectErr = err
+	return nil
 }
 
 type initServerResult int
@@ -62,55 +61,45 @@ type initServerResult int
 const (
 	invalidInitResult initServerResult = iota
 	connectedToCluster
-	bootstrappedCluster
+	needBootstrap
 )
 
-// awaitBootstrap blocks until either we're connected to the gossip network
-// (meaning we're joinging an existing cluster) or until we've bootstrapped the
-// cluster following instructions to do so.
+// awaitBootstrap blocks until the connected channel is closed or a Bootstrap()
+// call is received. It returns true if a Bootstrap() call is received,
+// instructing the caller to perform cluster bootstrap. It returns false if the
+// connected channel is closed, telling the caller that someone else
+// bootstrapped the cluster. Assuming that the connected channel comes from
+// Gossip, this means that the cluster ID is now available in gossip.
 func (s *initServer) awaitBootstrap() (initServerResult, error) {
 	select {
-	case <-s.server.node.storeCfg.Gossip.Connected:
+	case <-s.connected:
+		_ = s.testOrSetRejectErr(fmt.Errorf("already connected to cluster"))
 		return connectedToCluster, nil
-	case <-s.bootstrapped:
-		return bootstrappedCluster, nil
-	case <-s.server.stopper.ShouldStop():
-		return invalidInitResult, errors.New("stop called while waiting to bootstrap")
+	case <-s.bootstrapReqCh:
+		return needBootstrap, nil
+	case <-s.shouldStop:
+		err := fmt.Errorf("stop called while waiting to bootstrap")
+		_ = s.testOrSetRejectErr(err)
+		return invalidInitResult, err
 	}
 }
 
+// Bootstrap unblocks an awaitBootstrap() call. If awaitBootstrap() hasn't been
+// called yet, it will not block the next time it's called.
+//
+// TODO(andrei): There's a race between gossip connecting and this initServer
+// getting a Bootstrap request that allows both to succeed: there's no
+// synchronization between gossip and this server and so gossip can succeed in
+// propagating one cluster ID while this call succeeds in telling the Server to
+// bootstrap and created a new cluster ID. We should fix it somehow by tangling
+// the gossip.Server with this initServer such that they serialize access to a
+// clusterID and decide among themselves a single winner for the race.
 func (s *initServer) Bootstrap(
 	ctx context.Context, request *serverpb.BootstrapRequest,
 ) (response *serverpb.BootstrapResponse, err error) {
-	s.semaphore.acquire()
-	defer s.semaphore.release()
-
-	if err := s.server.node.bootstrap(
-		ctx, s.server.engines, s.server.cfg.Settings.Version.BootstrapVersion(),
-	); err != nil {
-		if _, ok := err.(*duplicateBootstrapError); ok {
-			return nil, status.Errorf(codes.AlreadyExists, err.Error())
-		}
-		log.Error(ctx, "node bootstrap failed: ", err)
+	if err := s.testOrSetRejectErr(fmt.Errorf("cluster has already been initialized")); err != nil {
 		return nil, err
 	}
-	// Force all the system ranges through the replication queue so they
-	// upreplicate as quickly as possible when a new node joins. Without this
-	// code, the upreplication would be up to the whim of the scanner, which
-	// might be too slow for new clusters.
-	done := false
-	if err := s.server.node.stores.VisitStores(func(store *storage.Store) error {
-		if !done {
-			done = true
-			if err := store.ForceReplicationScanAndProcess(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	close(s.bootstrapped)
+	close(s.bootstrapReqCh)
 	return &serverpb.BootstrapResponse{}, nil
 }

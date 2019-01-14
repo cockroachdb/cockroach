@@ -558,9 +558,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(s.grpc)
 	}
 
-	s.initServer = newInitServer(s)
-	s.initServer.semaphore.acquire()
-
+	// TODO(andrei): We're creating an initServer even through the inspection of
+	// our engines in Server.Start() might reveal that we're already bootstrapped
+	// and so we don't need to accept a Bootstrap RPC. The creation of this server
+	// early means that a Bootstrap RPC might erroneously succeed. We should
+	// figure out early if our engines are bootstrapped and, if they are, create a
+	// dummy implementation of the InitServer that rejects all RPCs.
+	s.initServer = newInitServer(s.gossip.Connected, s.stopper.ShouldStop())
 	serverpb.RegisterInitServer(s.grpc, s.initServer)
 
 	nodeInfo := sql.NodeInfo{
@@ -1358,11 +1362,11 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	var hlcUpperBoundExists bool
-	// iAmTheBootstrapper is set if we're the ones who bootstrapped the cluster.
-	var iAmTheBootstrapper bool
+	// doBootstrap is set if we're the ones who bootstrapped the cluster.
+	var doBootstrap bool
 	if len(bootstrappedEngines) > 0 {
 		// The cluster was already initialized.
-		iAmTheBootstrapper = false
+		doBootstrap = false
 		if s.cfg.ReadyFn != nil {
 			s.cfg.ReadyFn(false /*waitForInit*/)
 		}
@@ -1389,7 +1393,7 @@ func (s *Server) Start(ctx context.Context) error {
 		// this if this node is being started with itself specified as a
 		// --join host, because that's too likely to be operator error.
 		//
-		iAmTheBootstrapper = true
+		doBootstrap = true
 		if s.cfg.ReadyFn != nil {
 			// TODO(knz): when CockroachDB stops auto-initializing when --join
 			// is not specified, this needs to be adjusted as well. See issue
@@ -1398,27 +1402,7 @@ func (s *Server) Start(ctx context.Context) error {
 			s.cfg.ReadyFn(false /*waitForInit*/)
 		}
 
-		bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
-		if s.cfg.TestingKnobs.Store != nil {
-			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
-				bootstrapVersion = *storeKnobs.BootstrapVersion
-			}
-		}
-		if err := s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
-			return err
-		}
-		// Force all the system ranges through the replication queue so they
-		// upreplicate as quickly as possible when a new node joins. Without this
-		// code, the upreplication would be up to the whim of the scanner, which
-		// might be too slow for new clusters.
-		done := false
-		if err := s.node.stores.VisitStores(func(store *storage.Store) error {
-			if !done {
-				done = true
-				return store.ForceReplicationScanAndProcess()
-			}
-			return nil
-		}); err != nil {
+		if err := s.bootstrapCluster(ctx); err != nil {
 			return err
 		}
 
@@ -1432,10 +1416,6 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
 
-		// Note that when we created the init server, we acquired its semaphore
-		// (to stop anyone from rushing in).
-		s.initServer.semaphore.release()
-
 		s.stopper.RunWorker(workersCtx, func(context.Context) {
 			serveOnMux.Do(func() {
 				netutil.FatalIfUnexpected(m.Serve())
@@ -1446,17 +1426,13 @@ func (s *Server) Start(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		iAmTheBootstrapper = initRes == bootstrappedCluster
-
-		// Reacquire the semaphore, allowing the code below to be oblivious to
-		// the fact that this branch was taken.
-		s.initServer.semaphore.acquire()
+		doBootstrap = initRes == needBootstrap
+		if doBootstrap {
+			if err := s.bootstrapCluster(ctx); err != nil {
+				return err
+			}
+		}
 	}
-
-	// Release the semaphore of the init server. Anyone still managing to talk
-	// to it may do so, but will be greeted with an error telling them that the
-	// cluster is already initialized.
-	s.initServer.semaphore.release()
 
 	// This opens the main listener.
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
@@ -1617,7 +1593,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.NodeID().String(),
 	)
 	migrationFilter := sqlmigrations.AllMigrations
-	if iAmTheBootstrapper {
+	if doBootstrap {
 		// If we've just bootstrapped, some migrations are unnecessary because
 		// they're included in the metadata schema that we've written to the store
 		// by hand.
@@ -1748,6 +1724,31 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Event(ctx, "server ready")
 
 	return nil
+}
+
+func (s *Server) bootstrapCluster(ctx context.Context) error {
+	bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
+	if s.cfg.TestingKnobs.Store != nil {
+		if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
+			bootstrapVersion = *storeKnobs.BootstrapVersion
+		}
+	}
+
+	if err := s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
+		return err
+	}
+	// Force all the system ranges through the replication queue so they
+	// upreplicate as quickly as possible when a new node joins. Without this
+	// code, the upreplication would be up to the whim of the scanner, which
+	// might be too slow for new clusters.
+	done := false
+	return s.node.stores.VisitStores(func(store *storage.Store) error {
+		if !done {
+			done = true
+			return store.ForceReplicationScanAndProcess()
+		}
+		return nil
+	})
 }
 
 func (s *Server) doDrain(
