@@ -103,7 +103,7 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 				continue
 			}
 			encDatum := r.row[idx]
-			err := encDatum.EnsureDecoded(&types[i], &r.da)
+			err := encDatum.EnsureDecoded(&types[idx], &r.da)
 			if err != nil {
 				return false, err
 			}
