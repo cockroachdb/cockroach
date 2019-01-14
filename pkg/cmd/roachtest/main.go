@@ -97,13 +97,9 @@ Examples:
    roachtest list tag:weekly
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			r := newRegistry()
-			if buildTag != "" {
-				if err := r.setBuildVersion(buildTag); err != nil {
-					return err
-				}
-			} else {
-				r.loadBuildVersion()
+			r, err := newRegistryWithBuildVersion()
+			if err != nil {
+				return err
 			}
 			if !listBench {
 				registerTests(r)
@@ -134,14 +130,9 @@ the test tags.
 			if count <= 0 {
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
-
-			r := newRegistry()
-			if buildTag != "" {
-				if err := r.setBuildVersion(buildTag); err != nil {
-					return err
-				}
-			} else {
-				r.loadBuildVersion()
+			r, err := newRegistryWithBuildVersion()
+			if err != nil {
+				return err
 			}
 			registerTests(r)
 			os.Exit(r.Run(args, parallelism, artifacts, getUser(username)))
@@ -164,7 +155,10 @@ the test tags.
 			if count <= 0 {
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
-			r := newRegistry()
+			r, err := newRegistryWithBuildVersion()
+			if err != nil {
+				return err
+			}
 			registerBenchmarks(r)
 			os.Exit(r.Run(args, parallelism, artifacts, getUser(username)))
 			return nil
@@ -225,6 +219,20 @@ Cockroach cluster with existing data.
 		// Cobra has already printed the error message.
 		os.Exit(1)
 	}
+}
+
+// newRegistryWithBuildVersion creates a new registry and sets up the build
+// version based on the buildTag falling back to loading the latest from git.
+func newRegistryWithBuildVersion() (*registry, error) {
+	r := newRegistry()
+	if buildTag != "" {
+		if err := r.setBuildVersion(buildTag); err != nil {
+			return nil, err
+		}
+	} else {
+		r.loadBuildVersion()
+	}
+	return r, nil
 }
 
 // user takes the value passed on the command line and comes up with the
