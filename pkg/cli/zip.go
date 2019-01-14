@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -65,13 +66,20 @@ func (z *zipper) close() {
 	_ = z.f.Close()
 }
 
-func (z *zipper) create(name string) (io.Writer, error) {
+func (z *zipper) create(name string, mtime time.Time) (io.Writer, error) {
 	fmt.Printf("  %s\n", name)
-	return z.z.Create(name)
+	if mtime.IsZero() {
+		mtime = timeutil.Now()
+	}
+	return z.z.CreateHeader(&zip.FileHeader{
+		Name:     name,
+		Method:   zip.Deflate,
+		Modified: mtime,
+	})
 }
 
 func (z *zipper) createRaw(name string, b []byte) error {
-	w, err := z.create(name)
+	w, err := z.create(name, time.Time{})
 	if err != nil {
 		return err
 	}
@@ -89,7 +97,7 @@ func (z *zipper) createJSON(name string, m interface{}) error {
 
 func (z *zipper) createError(name string, e error) error {
 	fmt.Printf("  %s: %s\n", name, e)
-	w, err := z.z.Create(name)
+	w, err := z.create(name, time.Time{})
 	if err != nil {
 		return err
 	}
@@ -329,7 +337,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 								}
 								continue
 							}
-							logOut, err := z.create(name)
+							logOut, err := z.create(name, timeutil.Unix(0, file.ModTimeNanos))
 							if err != nil {
 								return err
 							}
@@ -426,7 +434,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 }
 
 func dumpTableDataForZip(z *zipper, conn *sqlConn, query string, name string) error {
-	w, err := z.create(name)
+	w, err := z.create(name, time.Time{})
 	if err != nil {
 		return err
 	}
