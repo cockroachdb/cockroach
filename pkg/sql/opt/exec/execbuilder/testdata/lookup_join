@@ -153,7 +153,7 @@ ALTER TABLE books2 INJECT STATISTICS '[
     "columns": ["title"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 10000
+    "distinct_count": 1000
   }
 ]'
 
@@ -176,7 +176,7 @@ distinct               ·            ·               (title)                   
 ·                      table        books2@primary  ·                             ·
 
 statement ok
-CREATE TABLE authors (name STRING PRIMARY KEY, book STRING)
+CREATE TABLE authors (name STRING, book STRING)
 
 statement ok
 ALTER TABLE authors INJECT STATISTICS '[
@@ -219,24 +219,28 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {5}       5
 
+# TODO(radu): this doesn't seem to be a lookup join, but it should be.
+
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk09r3DAQxe_9FOqcdkHBlv8FDAsq5ND04JS0t7IHxZruijqSkWRoCfvdi21I1m6s1HvJzZbmN-_NG_QE2kisxCM6KH8AAwo57Cm01tTonLH98Vh0K39DGVNQuu18f7ynUBuLUD6BV75BKKEyV6aNCqAg0QvVDGUnCqbzL5Dz4oBQXp_oWWMWbvxdPDR4j0KijeJJe2itehT2D38w5pdLgMK3VmhXkiugcNf5knBGeQpLNtilNtjrNkTnj31sZz6WpJNF6RfFThsr0aKcZ_p2ySv-Pwt3_GKURhslU_vPSSWUp5Rni6bTS_NKA2tbvbXsPaPLppM0-NNvONvurDoch69-hopseEZ2hOdb8qm6IRtekI87wpPt84TL4-VrQr5Rzitd-yif-uJssX8x6f_Go75H1xrt8L9eddxnh_KA4y6c6WyNX62pB5nx927ghgOJzo-31-PPrR6veoPnMAvC6QRmczhZASdzOA3CeVg5WwH_o5wH4SIcWBGE4xm8P334GwAA__856fjX
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk09r3DAQxe_9FOqcdkHBlv8FDAsq5ND04JS0t7IHxZruijqSkWRoCfvdi23oxu5aqffSmy3Nb-a9N-gFtJFYiWd0UH4DBhRy2FNoranROWP747HoXv6EMqagdNv5_nhPoTYWoXwBr3yDUEJlbkwbFUBBoheqGcpOFEznz5Dz4oBQ3p7oq8Ys3PireGrwEYVEG8WT9tBa9SzsL_5kzA-XAIUvrdCuJDdA4aHzJeGM8hSWZLBrZbDLMkTnj31sl3UkizqSRR3n8Z02VqJFOQ_47ZILZj4Kd_xklEYbJVMvZ7mUp5Rni6LTa8NLAztcvcLsf0aXTZ00-N1vONvurDoch6_eQ0U2PCM7wvMt-VDdkQ0vyPsd4cn2j8Nle_makO-U80rXPsqnujhb7F9M-r_xwh_RtUY7_KcnHvfZoTzguAtnOlvjZ2vqYcz4-zBww4FE58fb2_HnXo9XvcDXMAvC6QRmczhZASdzOA3CeXhytgL-a3IehItwYEUQjmfw_vTudwAAAP__beT76A==
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
-tree              field     description      columns              ordering
-render            ·         ·                (name)               +name
- │                render 0  name             ·                    ·
- └── lookup-join  ·         ·                (name, book, title)  +name
-      │           type      inner            ·                    ·
-      ├── scan    ·         ·                (name, book)         +name
-      │           table     authors@primary  ·                    ·
-      │           spans     ALL              ·                    ·
-      └── scan    ·         ·                (title)              ·
-·                 table     books2@primary   ·                    ·
+tree                 field     description      columns              ordering
+render               ·         ·                (name)               +name
+ │                   render 0  name             ·                    ·
+ └── lookup-join     ·         ·                (name, book, title)  +name
+      │              type      inner            ·                    ·
+      ├── sort       ·         ·                (name, book)         +name
+      │    │         order     +name            ·                    ·
+      │    └── scan  ·         ·                (name, book)         ·
+      │              table     authors@primary  ·                    ·
+      │              spans     ALL              ·                    ·
+      └── scan       ·         ·                (title)              ·
+·                    table     books2@primary   ·                    ·
 
 # Cross joins should not be planned as lookup joins.
 query TTTTT colnames
@@ -263,7 +267,7 @@ render          ·         ·               (title, edition, shelf, title, editi
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFrwzAMhe_7FUZnlcZpC8Mw8LVjpKPrbeTgJqLL2lrGdmCj5L8PJ4O1Y822o5706T1bJ7BcU2GOFEA9gwSEBZQIznNFIbBP8jC0rN9AZQiNdW1McolQsSdQJ4hNPBAoKHjCbpoDQk3RNId-rEPgNn5BIZodgZp1eLZYji_emO2B1mRq8tPsYj043xyNf9emjS8pL8KTMzYoMYFr1vI_1vfc2E9n-bPzlnkf0qMfmPetE6_cWMFWCZ3EVSH0XNwJqZRaFpvbJLVRCS1R56hnqOeoF1ez5hdZf_n_NQXHNtCfDpB1JQLVOxpuHLj1FT16rnqboVz1XC_UFOLQnQ3F0g6tFPAclqNwPg7no3D2DS67m48AAAD__01P5UU=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVFLwzAQx9_9FOGeb6zpNpCAkNeJdDL3Jn3I2mPWbbmQpKCMfndpI7iJq_p4_7vf5UfuBJZrKsyRAqhnkICwgBLBea4oBPZ9nIaW9RuoDKGxro19XCJU7AnUCWITDwQKCp6wm-aAUFM0zWEY6xC4jV9QiGZHoGYdni2W44s3ZnugNZma_DS7WA_ON0fj37Vp40vvi_DkjA1KTABh1UYltESdwzUP-R-Pe27sp4b8WWPLvA_9Dzww71snXrmxgq0Sug9XhdBzcSekUmpZbG4vFFHPUM9RL6665heuvxxjTcGxDfSna2RdiUD1jtLBA7e-okfP1fBMKlcDNwQ1hZi6s1QsbWr1guewHIXzcTgfhbNvcNndfAQAAP__24voVg==
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #
