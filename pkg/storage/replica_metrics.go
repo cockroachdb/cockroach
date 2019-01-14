@@ -222,3 +222,25 @@ func (r *Replica) WritesPerSecond() float64 {
 	wps, _ := r.writeStats.avgQPS()
 	return wps
 }
+
+// needsSplitBySize returns true if the size of the range requires it
+// to be split.
+func (r *Replica) needsSplitBySize() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.needsSplitBySizeRLocked()
+}
+
+func (r *Replica) needsSplitBySizeRLocked() bool {
+	return r.exceedsMultipleOfSplitSizeRLocked(1)
+}
+
+func (r *Replica) needsMergeBySizeRLocked() bool {
+	return r.mu.state.Stats.Total() < *r.mu.zone.RangeMinBytes
+}
+
+func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
+	maxBytes := *r.mu.zone.RangeMaxBytes
+	size := r.mu.state.Stats.Total()
+	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
+}

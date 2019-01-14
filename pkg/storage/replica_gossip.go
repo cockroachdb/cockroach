@@ -27,6 +27,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const configGossipTTL = 0 // does not expire
+
 func (r *Replica) gossipFirstRange(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -198,4 +200,81 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	sysCfg := &config.SystemConfigEntries{}
 	sysCfg.Values = kvs
 	return sysCfg, nil
+}
+
+// getLeaseForGossip tries to obtain a range lease. Only one of the replicas
+// should gossip; the bool returned indicates whether it's us.
+func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) {
+	// If no Gossip available (some tests) or range too fresh, noop.
+	if r.store.Gossip() == nil || !r.IsInitialized() {
+		return false, roachpb.NewErrorf("no gossip or range not initialized")
+	}
+	var hasLease bool
+	var pErr *roachpb.Error
+	if err := r.store.Stopper().RunTask(
+		ctx, "storage.Replica: acquiring lease to gossip",
+		func(ctx context.Context) {
+			// Check for or obtain the lease, if none active.
+			_, pErr = r.redirectOnOrAcquireLease(ctx)
+			hasLease = pErr == nil
+			if pErr != nil {
+				switch e := pErr.GetDetail().(type) {
+				case *roachpb.NotLeaseHolderError:
+					// NotLeaseHolderError means there is an active lease, but only if
+					// the lease holder is set; otherwise, it's likely a timeout.
+					if e.LeaseHolder != nil {
+						pErr = nil
+					}
+				default:
+					// Any other error is worth being logged visibly.
+					log.Warningf(ctx, "could not acquire lease for range gossip: %s", e)
+				}
+			}
+		}); err != nil {
+		pErr = roachpb.NewError(err)
+	}
+	return hasLease, pErr
+}
+
+// maybeGossipFirstRange adds the sentinel and first range metadata to gossip
+// if this is the first range and a range lease can be obtained. The Store
+// calls this periodically on first range replicas.
+func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
+	if !r.IsFirstRange() {
+		return nil
+	}
+
+	// When multiple nodes are initialized with overlapping Gossip addresses, they all
+	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
+	// so we error out below.
+	if gossipClusterID, err := r.store.Gossip().GetClusterID(); err == nil {
+		if gossipClusterID != r.store.ClusterID() {
+			log.Fatalf(
+				ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
+				r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
+		}
+	}
+
+	// Gossip the cluster ID from all replicas of the first range; there
+	// is no expiration on the cluster ID.
+	if log.V(1) {
+		log.Infof(ctx, "gossiping cluster id %q from store %d, r%d", r.store.ClusterID(),
+			r.store.StoreID(), r.RangeID)
+	}
+	if err := r.store.Gossip().AddClusterID(r.store.ClusterID()); err != nil {
+		log.Errorf(ctx, "failed to gossip cluster ID: %s", err)
+	}
+
+	if r.store.cfg.TestingKnobs.DisablePeriodicGossips {
+		return nil
+	}
+
+	hasLease, pErr := r.getLeaseForGossip(ctx)
+	if pErr != nil {
+		return pErr
+	} else if !hasLease {
+		return nil
+	}
+	r.gossipFirstRange(ctx)
+	return nil
 }
