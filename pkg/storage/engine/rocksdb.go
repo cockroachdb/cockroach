@@ -17,7 +17,6 @@ package engine
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -45,7 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
@@ -912,11 +911,6 @@ func (r *RocksDB) disableAutoCompaction() error {
 	return statusToError(C.DBDisableAutoCompaction(r.rdb))
 }
 
-// enableAutoCompaction enables automatic compactions. For testing use only.
-func (r *RocksDB) enableAutoCompaction() error {
-	return statusToError(C.DBDisableAutoCompaction(r.rdb))
-}
-
 // ApproximateDiskBytes returns the approximate on-disk size of the specified key range.
 func (r *RocksDB) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 	start := MVCCKey{Key: from}
@@ -924,11 +918,6 @@ func (r *RocksDB) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 	var result C.uint64_t
 	err := statusToError(C.DBApproximateDiskBytes(r.rdb, goToCKey(start), goToCKey(end), &result))
 	return uint64(result), err
-}
-
-// Destroy destroys the underlying filesystem data associated with the database.
-func (r *RocksDB) Destroy() error {
-	return statusToError(C.DBDestroy(goToCSlice([]byte(r.cfg.Dir))))
 }
 
 // Flush causes RocksDB to write all in-memory data to disk immediately.
@@ -2843,6 +2832,8 @@ func (fw *RocksDBSstFileWriter) Delete(k MVCCKey) error {
 	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(k)))
 }
 
+var _ = (*RocksDBSstFileWriter).Delete
+
 // Finish finalizes the writer and returns the constructed file's contents. At
 // least one kv entry must have been added.
 func (fw *RocksDBSstFileWriter) Finish() ([]byte, error) {
@@ -3030,24 +3021,6 @@ func lockFile(filename string) (C.DBFileLock, error) {
 // unlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.
 func unlockFile(lock C.DBFileLock) error {
 	return statusToError(C.DBUnlockFile(lock))
-}
-
-// mvccScanSkipKeyValue is like MVCCScanDecodeKeyValue, but doesn't bother
-// actually decoding the kvs. Instead, it skips the kv and returns the rest of
-// the byte buffer.
-func mvccScanSkipKeyValue(repr []byte) ([]byte, error) {
-	if len(repr) < 8 {
-		return repr, errors.Errorf("unexpected batch EOF")
-	}
-	v := binary.LittleEndian.Uint64(repr)
-	keySize := v >> 32
-	valSize := v & ((1 << 32) - 1)
-	if (keySize + valSize) > uint64(len(repr)) {
-		return nil, fmt.Errorf("expected %d bytes, but only %d remaining",
-			keySize+valSize, len(repr))
-	}
-	repr = repr[8+keySize+valSize:]
-	return repr, nil
 }
 
 // MVCCScanDecodeKeyValue decodes a key/value pair returned in an MVCCScan
