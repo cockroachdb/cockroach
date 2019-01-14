@@ -109,6 +109,22 @@ statement ok
 ALTER TABLE data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
+# Verify data placement.
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {2}       2
+/2         /3       {3}       3
+/3         /4       {4}       4
+/4         /5       {5}       5
+/5         /6       {1}       1
+/6         /7       {2}       2
+/7         /8       {3}       3
+/8         /9       {4}       4
+/9         NULL     {5}       5
+
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r
 ----
@@ -129,7 +145,7 @@ render            ·         ·             (a, b, c, d)              ·
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzElEFr2zAUx-_7FOKdZWxJTpoKBj4NMkY6ut6GD1r06LylkpFk2Cj57sP2oE5IZYFLerSsP_8fvyfeMxircaee0IP8DgwocKAggEIJFFZQU2id3aP31vVXxsBW_wFZUGhM24X-uKawtw5BPkNowgFBwoP6ccB7VBpdXgAFjUE1h6Gmdc2Tcn8rrYICCt9aZbwkWc6IMppwYsNPdB4ofGoOAZ0klSAfCZNSbncPG6iPFGwXXqp9UI8Ikh1pOt5n25j_dKso3Rdrf3ct-WUbQ6yRpGK04rQStOoN3XXh9Og1OP4q3AtTZ6zT6FCfANXHC_g7m9k2Z8XZzcvd4qSbpc-NpcwtZ1nOh8mxcXILBzfDNxnc-vqD4-nyeJI8nuXiDeXN8E3k3VxfnkiXJ5LkiSwv31DeDN9E3ub68sp0eWWSvDIbNt8SYTNME2G377tjL8Ddo2-t8Zi0QYt-B6N-xHFhe9u5PX51dj_UjJ93Q2440OjD-JeNH1sz_uoBp2EWDfOTMDsP83jzTLWIpst4uFzCvYqG1_Hm9ZLmm2h4E2_eLGm-jc-qmHkm8Ud23l0fP_wLAAD__w5KJqY=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElEFr2zAUx-_7FOKdZWxJTpoKBj4NMkY6ut6GD1r06LylkpFk2Cj57sPxoE5IZEFMerSsP_8fvyfeKxircaNe0IP8DgwocKAggEIJFBZQU2id3aL31vVXhsBa_wFZUGhM24X-uKawtQ5BvkJowg5BwpP6scNHVBpdXgAFjUE1u0NN65oX5f5WWgUFFL61ynhJspwRZTRhxIaf6IDCp2YX0ElSCfKRMCnlevO0gnpPwXbhrdkH9Ywg2Z6m0322jfkPt4jCfbH2d9eSX7YxxBpJKkYrTitBq17QQxeOjy7B8Ytwb0ydsU6jQ30EVO_P4G9sZtucFSc3z3eLo26WPjaWMracZTmfcXATfKPBLW8_OJ4ujyfJ41kuZpQ3wTeSd3d7eSJdnkiSJ7K8nFHeBN9I3ur28sp0eWWSvDLLFzPKm-Abybt_3317Bu4RfWuNx6RtWvT7GPUzDsvb285t8auz20PN8PlwyB0ONPow_GXDx9oMv3rAcZhFw_wozE7DPN48US2i6TIeLq_hXkTDy3jz8prmu2h4FW9eXdN8H59VMfFM4o_stLvef_gXAAD__0eIKhg=
 
 statement ok
 CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
