@@ -49,6 +49,15 @@ type destroyStatus struct {
 	err    error
 }
 
+func (s *destroyStatus) Set(err error, reason DestroyReason) {
+	s.err = err
+	s.reason = reason
+}
+
+func (s *destroyStatus) Reset() {
+	s.Set(nil, destroyReasonAlive)
+}
+
 // IsAlive returns true when a replica is alive.
 func (s destroyStatus) IsAlive() bool {
 	return s.reason == destroyReasonAlive
