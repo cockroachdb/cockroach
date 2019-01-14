@@ -920,6 +920,13 @@ func (ex *connExecutor) saveLogicalPlanDescription(
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
 	}
+	mostRecentPlan := stats.data.SensitiveInfo.MostRecentPlanDescription
+	if len(mostRecentPlan.Name) == 0 || len(mostRecentPlan.Attrs) == 0 {
+		// No plan has been sampled for existing stats, either because
+		// sql.metrics.statement_details.sample_logical_plans was previously
+		// false, or because stats was collected from an older version.
+		return true
+	}
 	stats.Lock()
 	count := stats.data.Count
 	stats.Unlock()
