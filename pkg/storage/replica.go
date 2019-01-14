@@ -167,15 +167,6 @@ func (d *atomicDescString) String() string {
 	return *(*string)(atomic.LoadPointer(&d.strPtr))
 }
 
-func (s *destroyStatus) Set(err error, reason DestroyReason) {
-	s.err = err
-	s.reason = reason
-}
-
-func (s *destroyStatus) Reset() {
-	s.Set(nil, destroyReasonAlive)
-}
-
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
