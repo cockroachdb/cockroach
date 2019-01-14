@@ -53,6 +53,19 @@ const (
 	collectChecksumTimeout = 15 * time.Second
 )
 
+// ReplicaChecksum contains progress on a replica checksum computation.
+type ReplicaChecksum struct {
+	CollectChecksumResponse
+	// started is true if the checksum computation has started.
+	started bool
+	// If gcTimestamp is nonzero, GC this checksum after gcTimestamp. gcTimestamp
+	// is zero if and only if the checksum computation is in progress.
+	gcTimestamp time.Time
+	// This channel is closed after the checksum is computed, and is used
+	// as a notification.
+	notify chan struct{}
+}
+
 // CheckConsistency runs a consistency check on the range. It first applies a
 // ComputeChecksum through Raft and then issues CollectChecksum commands to the
 // other replicas. When an inconsistency is detected and no diff was requested,

@@ -146,19 +146,6 @@ type proposalResult struct {
 	EndTxns       []result.EndTxnIntents
 }
 
-// ReplicaChecksum contains progress on a replica checksum computation.
-type ReplicaChecksum struct {
-	CollectChecksumResponse
-	// started is true if the checksum computation has started.
-	started bool
-	// If gcTimestamp is nonzero, GC this checksum after gcTimestamp. gcTimestamp
-	// is zero if and only if the checksum computation is in progress.
-	gcTimestamp time.Time
-	// This channel is closed after the checksum is computed, and is used
-	// as a notification.
-	notify chan struct{}
-}
-
 type atomicDescString struct {
 	strPtr unsafe.Pointer
 }
