@@ -2162,3 +2162,12 @@ func isRaftLeader(raftStatus *raft.Status) bool {
 func HasRaftLeader(raftStatus *raft.Status) bool {
 	return raftStatus != nil && raftStatus.SoftState.Lead != 0
 }
+
+// pendingCmdSlice sorts by increasing MaxLeaseIndex.
+type pendingCmdSlice []*ProposalData
+
+func (s pendingCmdSlice) Len() int      { return len(s) }
+func (s pendingCmdSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s pendingCmdSlice) Less(i, j int) bool {
+	return s[i].command.MaxLeaseIndex < s[j].command.MaxLeaseIndex
+}
