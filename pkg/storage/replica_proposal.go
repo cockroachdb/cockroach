@@ -790,3 +790,14 @@ func (r *Replica) handleEvalResultRaftMuLocked(
 		r.mu.Unlock()
 	}
 }
+
+// proposalResult indicates the result of a proposal. Exactly one of
+// Reply, Err and ProposalRetry is set, and it represents the result of
+// the proposal.
+type proposalResult struct {
+	Reply         *roachpb.BatchResponse
+	Err           *roachpb.Error
+	ProposalRetry proposalReevaluationReason
+	Intents       []result.IntentsWithArg
+	EndTxns       []result.EndTxnIntents
+}

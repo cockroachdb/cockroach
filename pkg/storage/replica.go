@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
@@ -123,17 +122,6 @@ const (
 	// a Lease index it was not legal for. The command should be re-evaluated.
 	proposalIllegalLeaseIndex
 )
-
-// proposalResult indicates the result of a proposal. Exactly one of
-// Reply, Err and ProposalRetry is set, and it represents the result of
-// the proposal.
-type proposalResult struct {
-	Reply         *roachpb.BatchResponse
-	Err           *roachpb.Error
-	ProposalRetry proposalReevaluationReason
-	Intents       []result.IntentsWithArg
-	EndTxns       []result.EndTxnIntents
-}
 
 type atomicDescString struct {
 	strPtr unsafe.Pointer
@@ -460,40 +448,6 @@ var _ KeyRange = &Replica{}
 
 var _ client.Sender = &Replica{}
 
-func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
-	r := &Replica{
-		AmbientContext: store.cfg.AmbientCtx,
-		RangeID:        rangeID,
-		store:          store,
-		abortSpan:      abortspan.New(rangeID),
-		txnWaitQueue:   txnwait.NewQueue(store),
-	}
-	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
-	r.mu.stateLoader = stateloader.Make(rangeID)
-	r.mu.quiescent = true
-	r.mu.zone = config.DefaultZoneConfigRef()
-
-	if leaseHistoryMaxEntries > 0 {
-		r.leaseHistory = newLeaseHistory()
-	}
-	if store.cfg.StorePool != nil {
-		r.leaseholderStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
-	}
-	// Pass nil for the localityOracle because we intentionally don't track the
-	// origin locality of write load.
-	r.writeStats = newReplicaStats(store.Clock(), nil)
-
-	// Init rangeStr with the range ID.
-	r.rangeStr.store(0, &roachpb.RangeDescriptor{RangeID: rangeID})
-	// Add replica log tag - the value is rangeStr.String().
-	r.AmbientContext.AddLogTag("r", &r.rangeStr)
-	// Add replica pointer value. NB: this was historically useful for debugging
-	// replica GC issues, but is a distraction at the moment.
-	// r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
-	r.raftMu.stateLoader = stateloader.Make(rangeID)
-	return r
-}
-
 // NewReplica initializes the replica using the given metadata. If the
 // replica is initialized (i.e. desc contains more than a RangeID),
 // replicaID should be 0 and the replicaID will be discovered from the
@@ -503,6 +457,94 @@ func NewReplica(
 ) (*Replica, error) {
 	r := newReplica(desc.RangeID, store)
 	return r, r.init(desc, store.Clock(), replicaID)
+}
+
+// Send executes a command on this range, dispatching it to the
+// read-only, read-write, or admin execution path as appropriate.
+// ctx should contain the log tags from the store (and up).
+func (r *Replica) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	return r.sendWithRangeID(ctx, r.RangeID, ba)
+}
+
+// sendWithRangeID takes an unused rangeID argument so that the range
+// ID will be accessible in stack traces (both in panics and when
+// sampling goroutines from a live server). This line is subject to
+// the whims of the compiler and it can be difficult to find the right
+// value, but as of this writing the following example shows a stack
+// while processing range 21 (0x15) (the first occurrence of that
+// number is the rangeID argument, the second is within the encoded
+// BatchRequest, although we don't want to rely on that occurring
+// within the portion printed in the stack trace):
+//
+// github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
+func (r *Replica) sendWithRangeID(
+	ctx context.Context, rangeID roachpb.RangeID, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	var br *roachpb.BatchResponse
+	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
+		r.leaseholderStats.record(ba.Header.GatewayNodeID)
+	}
+
+	// Add the range log tag.
+	ctx = r.AnnotateCtx(ctx)
+	ctx, cleanup := tracing.EnsureContext(ctx, r.AmbientContext.Tracer, "replica send")
+	defer cleanup()
+
+	// If the internal Raft group is not initialized, create it and wake the leader.
+	r.maybeInitializeRaftGroup(ctx)
+
+	isReadOnly := ba.IsReadOnly()
+	useRaft := !isReadOnly && ba.IsWrite()
+
+	if isReadOnly && r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
+		// Clockless reads mode: reads go through Raft.
+		useRaft = true
+	}
+
+	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	if filter := r.store.cfg.TestingKnobs.TestingRequestFilter; filter != nil {
+		if pErr := filter(ba); pErr != nil {
+			return nil, pErr
+		}
+	}
+
+	// Differentiate between admin, read-only and write.
+	var pErr *roachpb.Error
+	if useRaft {
+		log.Event(ctx, "read-write path")
+		br, pErr = r.executeWriteBatch(ctx, ba)
+	} else if isReadOnly {
+		log.Event(ctx, "read-only path")
+		br, pErr = r.executeReadOnlyBatch(ctx, ba)
+	} else if ba.IsAdmin() {
+		log.Event(ctx, "admin path")
+		br, pErr = r.executeAdminBatch(ctx, ba)
+	} else if len(ba.Requests) == 0 {
+		// empty batch; shouldn't happen (we could handle it, but it hints
+		// at someone doing weird things, and once we drop the key range
+		// from the header it won't be clear how to route those requests).
+		log.Fatalf(ctx, "empty batch")
+	} else {
+		log.Fatalf(ctx, "don't know how to handle command %s", ba)
+	}
+	if pErr != nil {
+		if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
+			// This error needs to be converted appropriately so that
+			// clients will retry.
+			pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()))
+		}
+		log.Eventf(ctx, "replica.Send got error: %s", pErr)
+	} else {
+		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
+			pErr = filter(ba, br)
+		}
+	}
+	return br, pErr
 }
 
 // String returns the string representation of the replica using an
@@ -870,94 +912,6 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
 				pretty.Diff(diskState, r.mu.state)),
 		))
 	}
-}
-
-// Send executes a command on this range, dispatching it to the
-// read-only, read-write, or admin execution path as appropriate.
-// ctx should contain the log tags from the store (and up).
-func (r *Replica) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	return r.sendWithRangeID(ctx, r.RangeID, ba)
-}
-
-// sendWithRangeID takes an unused rangeID argument so that the range
-// ID will be accessible in stack traces (both in panics and when
-// sampling goroutines from a live server). This line is subject to
-// the whims of the compiler and it can be difficult to find the right
-// value, but as of this writing the following example shows a stack
-// while processing range 21 (0x15) (the first occurrence of that
-// number is the rangeID argument, the second is within the encoded
-// BatchRequest, although we don't want to rely on that occurring
-// within the portion printed in the stack trace):
-//
-// github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
-func (r *Replica) sendWithRangeID(
-	ctx context.Context, rangeID roachpb.RangeID, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	var br *roachpb.BatchResponse
-	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
-		r.leaseholderStats.record(ba.Header.GatewayNodeID)
-	}
-
-	// Add the range log tag.
-	ctx = r.AnnotateCtx(ctx)
-	ctx, cleanup := tracing.EnsureContext(ctx, r.AmbientContext.Tracer, "replica send")
-	defer cleanup()
-
-	// If the internal Raft group is not initialized, create it and wake the leader.
-	r.maybeInitializeRaftGroup(ctx)
-
-	isReadOnly := ba.IsReadOnly()
-	useRaft := !isReadOnly && ba.IsWrite()
-
-	if isReadOnly && r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
-		// Clockless reads mode: reads go through Raft.
-		useRaft = true
-	}
-
-	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	if filter := r.store.cfg.TestingKnobs.TestingRequestFilter; filter != nil {
-		if pErr := filter(ba); pErr != nil {
-			return nil, pErr
-		}
-	}
-
-	// Differentiate between admin, read-only and write.
-	var pErr *roachpb.Error
-	if useRaft {
-		log.Event(ctx, "read-write path")
-		br, pErr = r.executeWriteBatch(ctx, ba)
-	} else if isReadOnly {
-		log.Event(ctx, "read-only path")
-		br, pErr = r.executeReadOnlyBatch(ctx, ba)
-	} else if ba.IsAdmin() {
-		log.Event(ctx, "admin path")
-		br, pErr = r.executeAdminBatch(ctx, ba)
-	} else if len(ba.Requests) == 0 {
-		// empty batch; shouldn't happen (we could handle it, but it hints
-		// at someone doing weird things, and once we drop the key range
-		// from the header it won't be clear how to route those requests).
-		log.Fatalf(ctx, "empty batch")
-	} else {
-		log.Fatalf(ctx, "don't know how to handle command %s", ba)
-	}
-	if pErr != nil {
-		if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
-			// This error needs to be converted appropriately so that
-			// clients will retry.
-			pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()))
-		}
-		log.Eventf(ctx, "replica.Send got error: %s", pErr)
-	} else {
-		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
-			pErr = filter(ba, br)
-		}
-	}
-	return br, pErr
 }
 
 // requestCanProceed returns an error if a request (identified by its

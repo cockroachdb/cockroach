@@ -18,9 +18,13 @@ import (
 	"context"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -28,6 +32,40 @@ import (
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 )
+
+func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
+	r := &Replica{
+		AmbientContext: store.cfg.AmbientCtx,
+		RangeID:        rangeID,
+		store:          store,
+		abortSpan:      abortspan.New(rangeID),
+		txnWaitQueue:   txnwait.NewQueue(store),
+	}
+	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
+	r.mu.stateLoader = stateloader.Make(rangeID)
+	r.mu.quiescent = true
+	r.mu.zone = config.DefaultZoneConfigRef()
+
+	if leaseHistoryMaxEntries > 0 {
+		r.leaseHistory = newLeaseHistory()
+	}
+	if store.cfg.StorePool != nil {
+		r.leaseholderStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
+	}
+	// Pass nil for the localityOracle because we intentionally don't track the
+	// origin locality of write load.
+	r.writeStats = newReplicaStats(store.Clock(), nil)
+
+	// Init rangeStr with the range ID.
+	r.rangeStr.store(0, &roachpb.RangeDescriptor{RangeID: rangeID})
+	// Add replica log tag - the value is rangeStr.String().
+	r.AmbientContext.AddLogTag("r", &r.rangeStr)
+	// Add replica pointer value. NB: this was historically useful for debugging
+	// replica GC issues, but is a distraction at the moment.
+	// r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
+	r.raftMu.stateLoader = stateloader.Make(rangeID)
+	return r
+}
 
 func (r *Replica) init(
 	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
