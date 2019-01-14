@@ -3946,21 +3946,18 @@ func TestReplicaLaziness(t *testing.T) {
 	})
 }
 
-// TestRaftRetryCantCommitIntents tests that transactional Raft retries cannot
+// TestBatchRetryCantCommitIntents tests that transactional retries cannot
 // commit intents.
 // It also tests current behavior - that a retried transactional batch can lay
 // down an intent that will never be committed. We don't necessarily like this
-// behavior, though. Note that normally intents are not left hanging by retries
-// like they are in this low-level test. There are two cases:
+// behavior, though. Note that intents are not always left hanging by retries
+// like they are in this low-level test. For example:
 // - in case of Raft *reproposals*, the MaxLeaseIndex mechanism will make
 // the reproposal not execute if the original proposal had already been
 // applied.
-// - in case of Raft *retries*, in most cases we know that the original proposal
-// has been dropped and will never be applied. In some cases, the retry is
-// "ambiguous" - we don't know if the original proposal was applied. In those
-// cases, the retry does not leave intents around because of the
-// batch.WillNotBeRetried bit.
-func TestRaftRetryCantCommitIntents(t *testing.T) {
+// - in case of request *re-evaluations*, we know that the original proposal
+// will not apply.
+func TestBatchRetryCantCommitIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
