@@ -16,7 +16,6 @@ package builtins
 
 import (
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -225,14 +224,13 @@ func (k *keywordsValueGenerator) Start() error {
 }
 func (k *keywordsValueGenerator) Next() (bool, error) {
 	k.curKeyword++
-	return k.curKeyword < len(keywordNames), nil
+	return k.curKeyword < len(lex.KeywordNames), nil
 }
 
 // Values implements the tree.ValueGenerator interface.
 func (k *keywordsValueGenerator) Values() tree.Datums {
-	kw := keywordNames[k.curKeyword]
-	info := lex.Keywords[kw]
-	cat := info.Cat
+	kw := lex.KeywordNames[k.curKeyword]
+	cat := lex.KeywordsCategories[kw]
 	desc := keywordCategoryDescriptions[cat]
 	return tree.Datums{tree.NewDString(kw), tree.NewDString(cat), tree.NewDString(desc)}
 }
@@ -243,17 +241,6 @@ var keywordCategoryDescriptions = map[string]string{
 	"T": "reserved (can be function or type name)",
 	"U": "unreserved",
 }
-
-// keywordNames contains all the keys in the `keywords` map, sorted so
-// that pg_get_keywords returns deterministic results.
-var keywordNames = func() []string {
-	ret := make([]string, 0, len(lex.Keywords))
-	for k := range lex.Keywords {
-		ret = append(ret, k)
-	}
-	sort.Strings(ret)
-	return ret
-}()
 
 // seriesValueGenerator supports the execution of generate_series()
 // with integer bounds.

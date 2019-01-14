@@ -543,11 +543,8 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 		// The string has unicode in it. No choice but to run Normalize.
 		lval.str = lex.NormalizeName(s.in[start:s.pos])
 	}
-	if id, ok := lex.Keywords[lval.str]; ok {
-		lval.id = int32(id.Tok)
-	} else {
-		lval.id = IDENT
-	}
+
+	lval.id = lex.GetKeywordID(lval.str)
 }
 
 func (s *scanner) scanNumber(lval *sqlSymType, ch int) {

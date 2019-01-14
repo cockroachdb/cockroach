@@ -1297,8 +1297,8 @@ pkg/sql/lex/reserved_keywords.go: pkg/sql/parser/sql.y pkg/sql/parser/reserved_k
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
-pkg/sql/lex/keywords.go: pkg/sql/parser/sql.y pkg/sql/parser/all_keywords.awk
-	awk -f pkg/sql/parser/all_keywords.awk < $< > $@.tmp || rm $@.tmp
+pkg/sql/lex/keywords.go: pkg/sql/parser/sql.y pkg/sql/lex/all_keywords.go
+	go run -tags all-keywords pkg/sql/lex/all_keywords.go < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
