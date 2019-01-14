@@ -200,13 +200,35 @@ type registry struct {
 	}
 }
 
-func newRegistry() *registry {
+type registryOpt func(r *registry) error
+
+var (
+	// setBuildVersion sets the build version based on the flag variable or loads
+	// the version from git if the flag is not set.
+	setBuildVersion registryOpt = func(r *registry) error {
+		if buildTag != "" {
+			return r.setBuildVersion(buildTag)
+		}
+		return r.loadBuildVersion()
+	}
+)
+
+// newRegistry constructs a registry and configures it with opts. If any opt
+// returns an error then the function will log about the error and exit the
+// process with os.Exit(1).
+func newRegistry(opts ...registryOpt) *registry {
 	r := &registry{
 		m:        make(map[string]*testSpec),
 		clusters: make(map[string]string),
 		out:      os.Stdout,
 	}
 	r.config.skipClusterWipeOnAttach = !clusterWipe
+	for _, opt := range opts {
+		if err := opt(r); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to construct registry: %v", err)
+			os.Exit(1)
+		}
+	}
 	return r
 }
 
@@ -216,7 +238,7 @@ func (r *registry) setBuildVersion(buildTag string) error {
 	return err
 }
 
-func (r *registry) loadBuildVersion() {
+func (r *registry) loadBuildVersion() error {
 	getLatestTag := func() (string, error) {
 		cmd := exec.Command("git", "describe", "--abbrev=0", "--tags", "--match=v[0-9]*")
 		out, err := cmd.CombinedOutput()
@@ -225,16 +247,11 @@ func (r *registry) loadBuildVersion() {
 		}
 		return strings.TrimSpace(string(out)), nil
 	}
-
 	buildTag, err := getLatestTag()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%+v\n", err)
-		os.Exit(1)
+		return err
 	}
-	if err := r.setBuildVersion(buildTag); err != nil {
-		fmt.Fprintf(os.Stderr, "%+v\n", err)
-		os.Exit(1)
-	}
+	return r.setBuildVersion(buildTag)
 }
 
 // verifyValidClusterName verifies that the test name can be turned into a cluster
