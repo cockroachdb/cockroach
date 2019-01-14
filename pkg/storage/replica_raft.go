@@ -1513,3 +1513,148 @@ func (s pendingCmdSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s pendingCmdSlice) Less(i, j int) bool {
 	return s[i].command.MaxLeaseIndex < s[j].command.MaxLeaseIndex
 }
+
+// withRaftGroupLocked calls the supplied function with the (lazily
+// initialized) Raft group. The supplied function should return true for the
+// unquiesceAndWakeLeader argument if the replica should be unquiesced (and the
+// leader awoken). See handleRaftReady for an instance of where this value
+// varies.
+//
+// Requires that Replica.mu is held. Also requires that Replica.raftMu is held
+// if either the caller can't guarantee that r.mu.internalRaftGroup != nil or
+// the provided function requires Replica.raftMu.
+func (r *Replica) withRaftGroupLocked(
+	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+) error {
+	if r.mu.destroyStatus.RemovedOrCorrupt() {
+		// Silently ignore all operations on destroyed replicas. We can't return an
+		// error here as all errors returned from this method are considered fatal.
+		return nil
+	}
+
+	if r.mu.replicaID == 0 {
+		// The replica's raft group has not yet been configured (i.e. the replica
+		// was created from a preemptive snapshot).
+		return nil
+	}
+
+	if r.mu.internalRaftGroup == nil {
+		r.raftMu.Mutex.AssertHeld()
+
+		ctx := r.AnnotateCtx(context.TODO())
+		raftGroup, err := raft.NewRawNode(newRaftConfig(
+			raft.Storage((*replicaRaftStorage)(r)),
+			uint64(r.mu.replicaID),
+			r.mu.state.RaftAppliedIndex,
+			r.store.cfg,
+			&raftLogger{ctx: ctx},
+		), nil)
+		if err != nil {
+			return err
+		}
+		r.mu.internalRaftGroup = raftGroup
+
+		if mayCampaignOnWake {
+			r.maybeCampaignOnWakeLocked(ctx)
+		}
+	}
+
+	// This wrapper function is a hack to add range IDs to stack traces
+	// using the same pattern as Replica.sendWithRangeID.
+	unquiesce, err := func(rangeID roachpb.RangeID, raftGroup *raft.RawNode) (bool, error) {
+		return f(raftGroup)
+	}(r.RangeID, r.mu.internalRaftGroup)
+	if unquiesce {
+		r.unquiesceAndWakeLeaderLocked()
+	}
+	return err
+}
+
+// withRaftGroup calls the supplied function with the (lazily initialized)
+// Raft group. It acquires and releases the Replica lock, so r.mu must not be
+// held (or acquired by the supplied function).
+//
+// If mayCampaignOnWake is true, the replica may initiate a raft
+// election if it was previously in a dormant state. Most callers
+// should set this to true, because the prevote feature minimizes the
+// disruption from unnecessary elections. The exception is that we
+// should not initiate an election while handling incoming raft
+// messages (which may include MsgVotes from an election in progress,
+// and this election would be disrupted if we started our own).
+//
+// Has the same requirement for Replica.raftMu as withRaftGroupLocked.
+func (r *Replica) withRaftGroup(
+	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.withRaftGroupLocked(mayCampaignOnWake, f)
+}
+
+func shouldCampaignOnWake(
+	leaseStatus storagepb.LeaseStatus,
+	lease roachpb.Lease,
+	storeID roachpb.StoreID,
+	raftStatus raft.Status,
+) bool {
+	// When waking up a range, campaign unless we know that another
+	// node holds a valid lease (this is most important after a split,
+	// when all replicas create their raft groups at about the same
+	// time, with a lease pre-assigned to one of them). Note that
+	// thanks to PreVote, unnecessary campaigns are not disruptive so
+	// we should err on the side of campaigining here.
+	anotherOwnsLease := leaseStatus.State == storagepb.LeaseState_VALID && !lease.OwnedBy(storeID)
+
+	// If we're already campaigning or know who the leader is, don't
+	// start a new term.
+	noLeader := raftStatus.RaftState == raft.StateFollower && raftStatus.Lead == 0
+	return !anotherOwnsLease && noLeader
+}
+
+// maybeCampaignOnWakeLocked is called when the range wakes from a
+// dormant state (either the initial "raftGroup == nil" state or after
+// being quiescent) and campaigns for raft leadership if appropriate.
+func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
+	// Raft panics if a node that is not currently a member of the
+	// group tries to campaign. That happens primarily when we apply
+	// preemptive snapshots.
+	if _, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID); !currentMember {
+		return
+	}
+
+	leaseStatus := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
+	raftStatus := r.mu.internalRaftGroup.Status()
+	if shouldCampaignOnWake(leaseStatus, *r.mu.state.Lease, r.store.StoreID(), *raftStatus) {
+		log.VEventf(ctx, 3, "campaigning")
+		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
+			log.VEventf(ctx, 1, "failed to campaign: %s", err)
+		}
+	}
+}
+
+// a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
+// last communication received from followers, which in turn informs the quota
+// pool and log truncations.
+type lastUpdateTimesMap map[roachpb.ReplicaID]time.Time
+
+func (m lastUpdateTimesMap) update(replicaID roachpb.ReplicaID, now time.Time) {
+	if m == nil {
+		return
+	}
+	m[replicaID] = now
+}
+
+// isFollowerActive returns whether the specified follower has made
+// communication with the leader in the last MaxQuotaReplicaLivenessDuration.
+func (m lastUpdateTimesMap) isFollowerActive(
+	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time,
+) bool {
+	lastUpdateTime, ok := m[replicaID]
+	if !ok {
+		// If the follower has no entry in lastUpdateTimes, it has not been
+		// updated since r became the leader (at which point all then-existing
+		// replicas were updated).
+		return false
+	}
+	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
+}
