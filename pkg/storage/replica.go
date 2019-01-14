@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"reflect"
 	"sync/atomic"
 	"time"
@@ -660,95 +659,6 @@ func NewReplica(
 	return r, r.init(desc, store.Clock(), replicaID)
 }
 
-func (r *Replica) init(
-	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
-) error {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.initRaftMuLockedReplicaMuLocked(desc, clock, replicaID)
-}
-
-func (r *Replica) initRaftMuLockedReplicaMuLocked(
-	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
-) error {
-	ctx := r.AnnotateCtx(context.TODO())
-	if r.mu.state.Desc != nil && r.isInitializedRLocked() {
-		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
-	}
-	if desc.IsInitialized() && replicaID != 0 {
-		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
-	}
-
-	r.latchMgr = spanlatch.Make(r.store.stopper, r.store.metrics.SlowLatchRequests)
-	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
-	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
-	// Clear the internal raft group in case we're being reset. Since we're
-	// reloading the raft state below, it isn't safe to use the existing raft
-	// group.
-	r.mu.internalRaftGroup = nil
-
-	var err error
-	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.store.Engine(), desc); err != nil {
-		return err
-	}
-
-	// Init the minLeaseProposedTS such that we won't use an existing lease (if
-	// any). This is so that, after a restart, we don't propose under old leases.
-	// If the replica is being created through a split, this value will be
-	// overridden.
-	if !r.store.cfg.TestingKnobs.DontPreventUseOfOldLeaseOnStart {
-		// Only do this if there was a previous lease. This shouldn't be important
-		// to do but consider that the first lease which is obtained is back-dated
-		// to a zero start timestamp (and this de-flakes some tests). If we set the
-		// min proposed TS here, this lease could not be renewed (by the semantics
-		// of minLeaseProposedTS); and since minLeaseProposedTS is copied on splits,
-		// this problem would multiply to a number of replicas at cluster bootstrap.
-		// Instead, we make the first lease special (which is OK) and the problem
-		// disappears.
-		if r.mu.state.Lease.Sequence > 0 {
-			r.mu.minLeaseProposedTS = clock.Now()
-		}
-	}
-
-	r.rangeStr.store(0, r.mu.state.Desc)
-
-	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.store.Engine())
-	if err != nil {
-		return err
-	}
-	r.mu.lastTerm = invalidLastTerm
-
-	pErr, err := r.mu.stateLoader.LoadReplicaDestroyedError(ctx, r.store.Engine())
-	if err != nil {
-		return err
-	}
-	if r.mu.destroyStatus.RemovedOrCorrupt() {
-		if err := pErr.GetDetail(); err != nil {
-			r.mu.destroyStatus.Set(err, destroyReasonRemoved)
-		}
-	}
-
-	if replicaID == 0 {
-		repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID())
-		if !ok {
-			// This is intentionally not an error and is the code path exercised
-			// during preemptive snapshots. The replica ID will be sent when the
-			// actual raft replica change occurs.
-			return nil
-		}
-		replicaID = repDesc.ReplicaID
-	}
-	r.rangeStr.store(replicaID, r.mu.state.Desc)
-	if err := r.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
-		return err
-	}
-
-	r.assertStateLocked(ctx, r.store.Engine())
-	return nil
-}
-
 // String returns the string representation of the replica using an
 // inconsistent copy of the range descriptor. Therefore, String does not
 // require a lock and its output may not be atomic with other ongoing work in
@@ -773,102 +683,6 @@ func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 		r.mu.proposalQuota.add(int64(cmdSize))
 		delete(r.mu.commandSizes, p.idKey)
 	}
-}
-
-func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.setReplicaIDRaftMuLockedMuLocked(replicaID)
-}
-
-func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) error {
-	if r.mu.replicaID == replicaID {
-		// The common case: the replica ID is unchanged.
-		return nil
-	}
-	if replicaID == 0 {
-		// If the incoming message does not have a new replica ID it is a
-		// preemptive snapshot. We'll update minReplicaID if the snapshot is
-		// accepted.
-		return nil
-	}
-	if replicaID < r.mu.minReplicaID {
-		return &roachpb.RaftGroupDeletedError{}
-	}
-	if r.mu.replicaID > replicaID {
-		return errors.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
-	}
-
-	if r.mu.destroyStatus.reason == destroyReasonRemovalPending {
-		// An earlier incarnation of this replica was removed, but apparently it has been re-added
-		// now, so reset the status.
-		r.mu.destroyStatus.Reset()
-	}
-
-	// if r.mu.replicaID != 0 {
-	// 	// TODO(bdarnell): clean up previous raftGroup (update peers)
-	// }
-
-	// Initialize or update the sideloaded storage. If the sideloaded storage
-	// already exists (which is iff the previous replicaID was non-zero), then
-	// we have to move the contained files over (this corresponds to the case in
-	// which our replica is removed and re-added to the range, without having
-	// the replica GC'ed in the meantime).
-	//
-	// Note that we can't race with a concurrent replicaGC here because both that
-	// and this is under raftMu.
-	var prevSideloadedDir string
-	if ss := r.raftMu.sideloaded; ss != nil {
-		prevSideloadedDir = ss.Dir()
-	}
-	var err error
-	if r.raftMu.sideloaded, err = newDiskSideloadStorage(
-		r.store.cfg.Settings,
-		r.mu.state.Desc.RangeID,
-		replicaID,
-		r.store.Engine().GetAuxiliaryDir(),
-		r.store.limiters.BulkIOWriteRate,
-		r.store.engine,
-	); err != nil {
-		return errors.Wrap(err, "while initializing sideloaded storage")
-	}
-	if prevSideloadedDir != "" {
-		if _, err := os.Stat(prevSideloadedDir); err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
-			// Old directory not found.
-		} else {
-			// Old directory found, so we have something to move over to the new one.
-			if err := os.Rename(prevSideloadedDir, r.raftMu.sideloaded.Dir()); err != nil {
-				return errors.Wrap(err, "while moving sideloaded directory")
-			}
-		}
-	}
-
-	previousReplicaID := r.mu.replicaID
-	r.mu.replicaID = replicaID
-
-	if replicaID >= r.mu.minReplicaID {
-		r.mu.minReplicaID = replicaID + 1
-	}
-	// Reset the raft group to force its recreation on next usage.
-	r.mu.internalRaftGroup = nil
-
-	// If there was a previous replica, repropose its pending commands under
-	// this new incarnation.
-	if previousReplicaID != 0 {
-		if log.V(1) {
-			log.Infof(r.AnnotateCtx(context.TODO()), "changed replica ID from %d to %d",
-				previousReplicaID, replicaID)
-		}
-		// repropose all pending commands under new replicaID.
-		r.refreshProposalsLocked(0, reasonReplicaIDChanged)
-	}
-
-	return nil
 }
 
 // GetMinBytes gets the replica's minimum byte threshold.
@@ -1226,25 +1040,6 @@ func (r *Replica) redirectOnOrAcquireLease(
 	}
 }
 
-// IsInitialized is true if we know the metadata of this range, either
-// because we created it or we have received an initial snapshot from
-// another node. It is false when a range has been created in response
-// to an incoming message but we are waiting for our initial snapshot.
-func (r *Replica) IsInitialized() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.isInitializedRLocked()
-}
-
-// isInitializedRLocked is true if we know the metadata of this range, either
-// because we created it or we have received an initial snapshot from
-// another node. It is false when a range has been created in response
-// to an incoming message but we are waiting for our initial snapshot.
-// isInitializedLocked requires that the replica lock is held.
-func (r *Replica) isInitializedRLocked() bool {
-	return r.mu.state.Desc.IsInitialized()
-}
-
 // DescAndZone returns the authoritative range descriptor as well
 // as the zone config for the replica.
 func (r *Replica) DescAndZone() (*roachpb.RangeDescriptor, *config.ZoneConfig) {
@@ -1344,37 +1139,6 @@ func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return *r.mu.state.TxnSpanGCThreshold
-}
-
-// setDesc atomically sets the replica's descriptor. It requires raftMu to be
-// locked.
-func (r *Replica) setDesc(ctx context.Context, desc *roachpb.RangeDescriptor) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if desc.RangeID != r.RangeID {
-		log.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
-			desc.RangeID, r.RangeID)
-	}
-	if r.mu.state.Desc != nil && r.mu.state.Desc.IsInitialized() &&
-		(desc == nil || !desc.IsInitialized()) {
-		log.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
-			r.mu.state.Desc, desc)
-	}
-	if r.mu.state.Desc != nil && r.mu.state.Desc.IsInitialized() &&
-		!r.mu.state.Desc.StartKey.Equal(desc.StartKey) {
-		log.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
-			r.mu.state.Desc.StartKey, desc.StartKey)
-	}
-
-	newMaxID := maxReplicaID(desc)
-	if newMaxID > r.mu.lastReplicaAdded {
-		r.mu.lastReplicaAdded = newMaxID
-		r.mu.lastReplicaAddedTime = timeutil.Now()
-	}
-
-	r.rangeStr.store(r.mu.replicaID, desc)
-	r.mu.state.Desc = desc
 }
 
 func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
@@ -1576,32 +1340,6 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
 			fmt.Sprintf("on-disk and in-memory state diverged: %s",
 				pretty.Diff(diskState, r.mu.state)),
 		))
-	}
-}
-
-// maybeInitializeRaftGroup check whether the internal Raft group has
-// not yet been initialized. If not, it is created and set to campaign
-// if this replica is the most recent owner of the range lease.
-func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
-	r.mu.RLock()
-	// If this replica hasn't initialized the Raft group, create it and
-	// unquiesce and wake the leader to ensure the replica comes up to date.
-	initialized := r.mu.internalRaftGroup != nil
-	r.mu.RUnlock()
-	if initialized {
-		return
-	}
-
-	// Acquire raftMu, but need to maintain lock ordering (raftMu then mu).
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
-		return true, nil
-	}); err != nil {
-		log.VErrEventf(ctx, 1, "unable to initialize raft group: %s", err)
 	}
 }
 
@@ -2278,151 +2016,6 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		err = nil
 	}
 	return err
-}
-
-// requestToProposal converts a BatchRequest into a ProposalData, by
-// evaluating it. The returned ProposalData is partially valid even
-// on a non-nil *roachpb.Error and should be proposed through Raft
-// if ProposalData.command is non-nil.
-func (r *Replica) requestToProposal(
-	ctx context.Context,
-	idKey storagebase.CmdIDKey,
-	ba roachpb.BatchRequest,
-	endCmds *endCmds,
-	spans *spanset.SpanSet,
-) (*ProposalData, *roachpb.Error) {
-	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, spans)
-
-	// Fill out the results even if pErr != nil; we'll return the error below.
-	proposal := &ProposalData{
-		ctx:     ctx,
-		idKey:   idKey,
-		endCmds: endCmds,
-		doneCh:  make(chan proposalResult, 1),
-		Local:   &res.Local,
-		Request: &ba,
-	}
-
-	if needConsensus {
-		proposal.command = &storagepb.RaftCommand{
-			ReplicatedEvalResult: res.Replicated,
-			WriteBatch:           res.WriteBatch,
-			LogicalOpLog:         res.LogicalOpLog,
-		}
-	}
-
-	return proposal, pErr
-}
-
-// evaluateProposal generates a Result from the given request by
-// evaluating it, returning both state which is held only on the
-// proposer and that which is to be replicated through Raft. The
-// return value is ready to be inserted into Replica's proposal map
-// and subsequently passed to submitProposalLocked.
-//
-// The method also returns a flag indicating if the request needs to
-// be proposed through Raft and replicated. This flag will be false
-// either if the request was a no-op or if it hit an error. In this
-// case, the result can be sent directly back to the client without
-// going through Raft, but while still handling LocalEvalResult.
-//
-// Replica.mu must not be held.
-func (r *Replica) evaluateProposal(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
-) (*result.Result, bool, *roachpb.Error) {
-	if ba.Timestamp == (hlc.Timestamp{}) {
-		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
-	}
-
-	// Evaluate the commands. If this returns without an error, the batch should
-	// be committed. Note that we don't hold any locks at this point. This is
-	// important since evaluating a proposal is expensive.
-	// TODO(tschottdorf): absorb all returned values in `res` below this point
-	// in the call stack as well.
-	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, spans)
-
-	// Note: reusing the proposer's batch when applying the command on the
-	// proposer was explored as an optimization but resulted in no performance
-	// benefit.
-	defer batch.Close()
-
-	if pErr != nil {
-		pErr = r.maybeSetCorrupt(ctx, pErr)
-
-		txn := pErr.GetTxn()
-		if txn != nil && ba.Txn == nil {
-			log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
-		}
-
-		// Failed proposals can't have any Result except for what's
-		// whitelisted here.
-		intents := res.Local.DetachIntents()
-		endTxns := res.Local.DetachEndTxns(true /* alwaysOnly */)
-		res.Local = result.LocalResult{
-			Intents: &intents,
-			EndTxns: &endTxns,
-			Metrics: res.Local.Metrics,
-		}
-		res.Replicated.Reset()
-		return &res, false /* needConsensus */, pErr
-	}
-
-	// Set the local reply, which is held only on the proposing replica and is
-	// returned to the client after the proposal completes, or immediately if
-	// replication is not necessary.
-	res.Local.Reply = br
-
-	// needConsensus determines if the result needs to be replicated and
-	// proposed through Raft. This is necessary if at least one of the
-	// following conditions is true:
-	// 1. the request created a non-empty write batch.
-	// 2. the request had an impact on the MVCCStats. NB: this is possible
-	//    even with an empty write batch when stats are recomputed.
-	// 3. the request has replicated side-effects.
-	// 4. the cluster is in "clockless" mode, in which case consensus is
-	//    used to enforce a linearization of all reads and writes.
-	needConsensus := !batch.Empty() ||
-		ms != (enginepb.MVCCStats{}) ||
-		!res.Replicated.Equal(storagepb.ReplicatedEvalResult{}) ||
-		r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
-
-	if needConsensus {
-		// Set the proposal's WriteBatch, which is the serialized representation of
-		// the proposals effect on RocksDB.
-		res.WriteBatch = &storagepb.WriteBatch{
-			Data: batch.Repr(),
-		}
-
-		// Set the proposal's replicated result, which contains metadata and
-		// side-effects that are to be replicated to all replicas.
-		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
-		res.Replicated.Timestamp = ba.Timestamp
-		if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
-			res.Replicated.Delta = ms.ToStatsDelta()
-		} else {
-			res.Replicated.DeprecatedDelta = &ms
-		}
-		// If the RangeAppliedState key is not being used and the cluster version is
-		// high enough to guarantee that all current and future binaries will
-		// understand the key, we send the migration flag through Raft. Because
-		// there is a delay between command proposal and application, we may end up
-		// setting this migration flag multiple times. This is ok, because the
-		// migration is idempotent.
-		// TODO(nvanbenschoten): This will be baked in to 2.1, so it can be removed
-		// in the 2.2 release.
-		r.mu.RLock()
-		usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
-		r.mu.RUnlock()
-		if !usingAppliedStateKey &&
-			r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
-			if res.Replicated.State == nil {
-				res.Replicated.State = &storagepb.ReplicaState{}
-			}
-			res.Replicated.State.UsingAppliedStateKey = true
-		}
-	}
-
-	return &res, needConsensus, nil
 }
 
 func (r *Replica) maybeTransferRaftLeadership(ctx context.Context) {
