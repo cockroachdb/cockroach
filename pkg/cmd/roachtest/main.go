@@ -97,14 +97,7 @@ Examples:
    roachtest list tag:weekly
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			r := newRegistry()
-			if buildTag != "" {
-				if err := r.setBuildVersion(buildTag); err != nil {
-					return err
-				}
-			} else {
-				r.loadBuildVersion()
-			}
+			r := newRegistry(setBuildVersion)
 			if !listBench {
 				registerTests(r)
 			} else {
@@ -134,15 +127,7 @@ the test tags.
 			if count <= 0 {
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
-
-			r := newRegistry()
-			if buildTag != "" {
-				if err := r.setBuildVersion(buildTag); err != nil {
-					return err
-				}
-			} else {
-				r.loadBuildVersion()
-			}
+			r := newRegistry(setBuildVersion)
 			registerTests(r)
 			os.Exit(r.Run(args, parallelism, artifacts, getUser(username)))
 			return nil
@@ -164,7 +149,7 @@ the test tags.
 			if count <= 0 {
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
-			r := newRegistry()
+			r := newRegistry(setBuildVersion)
 			registerBenchmarks(r)
 			os.Exit(r.Run(args, parallelism, artifacts, getUser(username)))
 			return nil
