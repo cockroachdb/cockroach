@@ -6476,22 +6476,6 @@ func EnableLeaseHistory(maxEntries int) func() {
 	}
 }
 
-// EmitMLAI registers the replica's last assigned max lease index with the
-// closed timestamp tracker. This is called to emit an update about this
-// replica in the absence of write activity.
-func (r *Replica) EmitMLAI() {
-	r.mu.Lock()
-	lai := r.mu.lastAssignedLeaseIndex
-	if r.mu.state.LeaseAppliedIndex > lai {
-		lai = r.mu.state.LeaseAppliedIndex
-	}
-	r.mu.Unlock()
-
-	ctx := r.AnnotateCtx(context.Background())
-	_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-	untrack(ctx, r.RangeID, ctpb.LAI(lai))
-}
-
 func init() {
 	tracing.RegisterTagRemapping("r", "range")
 }
