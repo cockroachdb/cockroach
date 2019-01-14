@@ -29,7 +29,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -66,7 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -6257,144 +6256,6 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 	return nil
 }
 
-func (r *Replica) gossipFirstRange(ctx context.Context) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// Gossip is not provided for the bootstrap store and for some tests.
-	if r.store.Gossip() == nil {
-		return
-	}
-	log.Event(ctx, "gossiping sentinel and first range")
-	if log.V(1) {
-		log.Infof(ctx, "gossiping sentinel from store %d, r%d", r.store.StoreID(), r.RangeID)
-	}
-	if err := r.store.Gossip().AddInfo(
-		gossip.KeySentinel, r.store.ClusterID().GetBytes(),
-		r.store.cfg.SentinelGossipTTL()); err != nil {
-		log.Errorf(ctx, "failed to gossip sentinel: %s", err)
-	}
-	if log.V(1) {
-		log.Infof(ctx, "gossiping first range from store %d, r%d: %s",
-			r.store.StoreID(), r.RangeID, r.mu.state.Desc.Replicas)
-	}
-	if err := r.store.Gossip().AddInfoProto(
-		gossip.KeyFirstRangeDescriptor, r.mu.state.Desc, configGossipTTL); err != nil {
-		log.Errorf(ctx, "failed to gossip first range metadata: %s", err)
-	}
-}
-
-// shouldGossip returns true if this replica should be gossiping. Gossip is
-// inherently inconsistent and asynchronous, we're using the lease as a way to
-// ensure that only one node gossips at a time.
-func (r *Replica) shouldGossip() bool {
-	return r.OwnsValidLease(r.store.Clock().Now())
-}
-
-// MaybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
-// Further calls come from the trigger on EndTransaction or range lease
-// acquisition.
-//
-// Note that MaybeGossipSystemConfig gossips information only when the
-// lease is actually held. The method does not request a range lease
-// here since RequestLease and applyRaftCommand call the method and we
-// need to avoid deadlocking in redirectOnOrAcquireLease.
-//
-// MaybeGossipSystemConfig must only be called from Raft commands
-// (which provide the necessary serialization to avoid data races).
-//
-// TODO(nvanbenschoten,bdarnell): even though this is best effort, we
-// should log louder when we continually fail to gossip system config.
-func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
-	if r.store.Gossip() == nil {
-		log.VEventf(ctx, 2, "not gossiping system config because gossip isn't initialized")
-		return nil
-	}
-	if !r.IsInitialized() {
-		log.VEventf(ctx, 2, "not gossiping system config because the replica isn't initialized")
-		return nil
-	}
-	if !r.ContainsKey(keys.SystemConfigSpan.Key) {
-		log.VEventf(ctx, 3,
-			"not gossiping system config because the replica doesn't contain the system config's start key")
-		return nil
-	}
-	if !r.shouldGossip() {
-		log.VEventf(ctx, 2, "not gossiping system config because the replica doesn't hold the lease")
-		return nil
-	}
-
-	// TODO(marc): check for bad split in the middle of the SystemConfig span.
-	loadedCfg, err := r.loadSystemConfig(ctx)
-	if err != nil {
-		if err == errSystemConfigIntent {
-			log.VEventf(ctx, 2, "not gossiping system config because intents were found on SystemConfigSpan")
-			return nil
-		}
-		return errors.Wrap(err, "could not load SystemConfig span")
-	}
-
-	if gossipedCfg := r.store.Gossip().GetSystemConfig(); gossipedCfg != nil && gossipedCfg.Equal(loadedCfg) &&
-		r.store.Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
-		log.VEventf(ctx, 2, "not gossiping unchanged system config")
-		return nil
-	}
-
-	log.VEventf(ctx, 2, "gossiping system config")
-	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, loadedCfg, 0); err != nil {
-		return errors.Wrap(err, "failed to gossip system config")
-	}
-	return nil
-}
-
-// MaybeGossipNodeLiveness gossips information for all node liveness
-// records stored on this range. To scan and gossip, this replica
-// must hold the lease to a range which contains some or all of the
-// node liveness records. After scanning the records, it checks
-// against what's already in gossip and only gossips records which
-// are out of date.
-func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span) error {
-	if r.store.Gossip() == nil || !r.IsInitialized() {
-		return nil
-	}
-
-	if !r.ContainsKeyRange(span.Key, span.EndKey) || !r.shouldGossip() {
-		return nil
-	}
-
-	ba := roachpb.BatchRequest{}
-	ba.Timestamp = r.store.Clock().Now()
-	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
-	// Call evaluateBatch instead of Send to avoid reacquiring latches.
-	rec := NewReplicaEvalContext(r, todoSpanSet)
-	br, result, pErr :=
-		evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
-	if pErr != nil {
-		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
-	}
-	if result.Local.Intents != nil && len(*result.Local.Intents) > 0 {
-		return errors.Errorf("unexpected intents on node liveness span %s: %+v", span, *result.Local.Intents)
-	}
-	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
-	for _, kv := range kvs {
-		var kvLiveness, gossipLiveness storagepb.Liveness
-		if err := kv.Value.GetProto(&kvLiveness); err != nil {
-			return errors.Wrapf(err, "failed to unmarshal liveness value %s", kv.Key)
-		}
-		key := gossip.MakeNodeLivenessKey(kvLiveness.NodeID)
-		// Look up liveness from gossip; skip gossiping anew if unchanged.
-		if err := r.store.Gossip().GetInfoProto(key, &gossipLiveness); err == nil {
-			if gossipLiveness == kvLiveness {
-				continue
-			}
-		}
-		if err := r.store.Gossip().AddInfoProto(key, &kvLiveness, 0); err != nil {
-			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", kvLiveness)
-		}
-	}
-	return nil
-}
-
 // maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
 // failure is indicated by a call to maybeSetCorrupt with a ReplicaCorruptionError.
 // Currently any error is passed through, but prospectively it should stop the
@@ -6428,41 +6289,6 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 		log.Fatalf(ctx, "replica is corrupted: %s", pErr)
 	}
 	return pErr
-}
-
-var errSystemConfigIntent = errors.New("must retry later due to intent on SystemConfigSpan")
-
-// loadSystemConfig scans the system config span and returns the system
-// config.
-func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEntries, error) {
-	ba := roachpb.BatchRequest{}
-	ba.ReadConsistency = roachpb.INCONSISTENT
-	ba.Timestamp = r.store.Clock().Now()
-	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemConfigSpan)})
-	// Call evaluateBatch instead of Send to avoid reacquiring latches.
-	rec := NewReplicaEvalContext(r, todoSpanSet)
-	br, result, pErr := evaluateBatch(
-		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba,
-	)
-	if pErr != nil {
-		return nil, pErr.GoError()
-	}
-	if intents := result.Local.DetachIntents(); len(intents) > 0 {
-		// There were intents, so what we read may not be consistent. Attempt
-		// to nudge the intents in case they're expired; next time around we'll
-		// hopefully have more luck.
-		// This is called from handleLocalEvalResult (with raftMu locked),
-		// so disallow synchronous processing (which blocks that mutex for
-		// too long and is a potential deadlock).
-		if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, intents, false /* allowSync */); err != nil {
-			log.Warning(ctx, err)
-		}
-		return nil, errSystemConfigIntent
-	}
-	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	sysCfg := &config.SystemConfigEntries{}
-	sysCfg.Values = kvs
-	return sysCfg, nil
 }
 
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
