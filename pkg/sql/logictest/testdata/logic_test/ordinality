@@ -80,3 +80,7 @@ SELECT ordinality = row_number() OVER () FROM foo WITH ORDINALITY
 true
 true
 true
+
+# Regression test for #33659
+statement ok
+TABLE [SHOW ZONE CONFIGURATIONS] WITH ORDINALITY
