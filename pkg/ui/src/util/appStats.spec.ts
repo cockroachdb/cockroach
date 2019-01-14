@@ -15,7 +15,10 @@
 import { assert } from "chai";
 import Long from "long";
 
+import * as protos from "src/js/protos";
 import { addNumericStats, NumericStat, flattenStatementStats, StatementStatistics, combineStatementStats } from "./appStats";
+import IExplainTreePlanNode = protos.cockroach.sql.IExplainTreePlanNode;
+import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
 // record is implemented here so we can write the below test as a direct
 // analog of the one in pkg/roachpb/app_stats_test.go.  It's here rather
@@ -148,7 +151,7 @@ function randomStat(scale: number = 1): NumericStat {
   };
 }
 
-function randomStats(): StatementStatistics {
+function randomStats(sensitiveInfo?: ISensitiveInfo): StatementStatistics {
   const count = randomInt(1000);
   // tslint:disable:variable-name
   const first_attempt_count = randomInt(count);
@@ -165,6 +168,35 @@ function randomStats(): StatementStatistics {
     run_lat: randomStat(),
     service_lat: randomStat(),
     overhead_lat: randomStat(),
+    sensitive_info: sensitiveInfo || makeSensitiveInfo(null, null),
+  };
+}
+
+function randomString(length: number = 10): string {
+  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let text = "";
+  for (let i = 0; i < length; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
+
+function randomPlanDescription(): IExplainTreePlanNode {
+  return {
+    name: randomString(),
+    attrs: [
+      {
+        key: randomString(),
+        value: randomString(),
+      },
+    ],
+  };
+}
+
+function makeSensitiveInfo(lastErr: string, planDescription: IExplainTreePlanNode): ISensitiveInfo {
+  return {
+    last_err: lastErr,
+    most_recent_plan_description: planDescription,
   };
 }
 
@@ -222,5 +254,54 @@ describe("combineStatementStats", () => {
     assert.approximately(ab_c.overhead_lat.mean, bc_a.overhead_lat.mean, 0.0000001);
     assert.approximately(ab_c.overhead_lat.squared_diffs, ac_b.overhead_lat.squared_diffs, 0.0000001);
     assert.approximately(ab_c.overhead_lat.squared_diffs, bc_a.overhead_lat.squared_diffs, 0.0000001);
+  });
+
+  describe("when sensitiveInfo has data", () => {
+    it("uses first non-empty property from each statementStat", () => {
+      const error1 = randomString();
+      const error2 = randomString();
+      const plan1 = randomPlanDescription();
+      const plan2 = randomPlanDescription();
+
+      const empty = makeSensitiveInfo(null, null);
+      const a = makeSensitiveInfo(error1, null);
+      const b = makeSensitiveInfo(null, plan1);
+      const c = makeSensitiveInfo(error2, plan2);
+
+      assertSensitiveInfoInCombineStatementStats([empty], empty);
+      assertSensitiveInfoInCombineStatementStats([a], a);
+      assertSensitiveInfoInCombineStatementStats([b], b);
+      assertSensitiveInfoInCombineStatementStats([c], c);
+
+      assertSensitiveInfoInCombineStatementStats([empty, a], a);
+      assertSensitiveInfoInCombineStatementStats([empty, b], b);
+      assertSensitiveInfoInCombineStatementStats([empty, c], c);
+      assertSensitiveInfoInCombineStatementStats([a, empty], a);
+      assertSensitiveInfoInCombineStatementStats([b, empty], b);
+      assertSensitiveInfoInCombineStatementStats([c, empty], c);
+
+      assertSensitiveInfoInCombineStatementStats([a, b, c], {
+        last_err: a.last_err,
+        most_recent_plan_description: b.most_recent_plan_description,
+      });
+      assertSensitiveInfoInCombineStatementStats([a, c, b], {
+        last_err: a.last_err,
+        most_recent_plan_description: c.most_recent_plan_description,
+      });
+      assertSensitiveInfoInCombineStatementStats([b, c, a], {
+        last_err: c.last_err,
+        most_recent_plan_description: b.most_recent_plan_description,
+      });
+      assertSensitiveInfoInCombineStatementStats([c, a, b], c);
+
+      function assertSensitiveInfoInCombineStatementStats(
+        input: ISensitiveInfo[],
+        expected: ISensitiveInfo,
+      ) {
+        const stats = input.map((sensitiveInfo) => randomStats(sensitiveInfo));
+        const result = combineStatementStats(stats);
+        assert.deepEqual(result.sensitive_info, expected);
+      }
+    });
   });
 });
