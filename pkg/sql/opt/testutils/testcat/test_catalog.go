@@ -355,7 +355,7 @@ func (s *Schema) Name() *cat.SchemaName {
 // View implements the cat.View interface for testing purposes.
 type View struct {
 	ViewID      cat.StableID
-	ViewVersion cat.Version
+	ViewVersion int
 	ViewName    cat.DataSourceName
 	QueryText   string
 	ColumnNames tree.NameList
@@ -377,9 +377,13 @@ func (tv *View) ID() cat.StableID {
 	return tv.ViewID
 }
 
-// Version is part of the cat.DataSource interface.
-func (tv *View) Version() cat.Version {
-	return tv.ViewVersion
+// Equals is part of the cat.DataSource interface.
+func (tv *View) Equals(other cat.DataSource) bool {
+	otherView, ok := other.(*View)
+	if !ok {
+		return false
+	}
+	return tv.ViewID == otherView.ViewID && tv.ViewVersion == otherView.ViewVersion
 }
 
 // Name is part of the cat.DataSource interface.
@@ -405,7 +409,7 @@ func (tv *View) ColumnName(i int) tree.Name {
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
 	TabID      cat.StableID
-	TabVersion cat.Version
+	TabVersion int
 	TabName    tree.TableName
 	Columns    []*Column
 	Indexes    []*Index
@@ -431,9 +435,13 @@ func (tt *Table) ID() cat.StableID {
 	return tt.TabID
 }
 
-// Version is part of the cat.DataSource interface.
-func (tt *Table) Version() cat.Version {
-	return tt.TabVersion
+// Equals is part of the cat.DataSource interface.
+func (tt *Table) Equals(other cat.DataSource) bool {
+	otherTable, ok := other.(*Table)
+	if !ok {
+		return false
+	}
+	return tt.TabID == otherTable.TabID && tt.TabVersion == otherTable.TabVersion
 }
 
 // Name is part of the cat.DataSource interface.
