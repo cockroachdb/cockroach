@@ -830,6 +830,7 @@ func TestLint(t *testing.T) {
 		ctx := gotool.DefaultContext
 		releaseTags := ctx.BuildContext.ReleaseTags
 		lastTag := releaseTags[len(releaseTags)-1]
+		panic(fmt.Sprintf("release tags: %v\n", releaseTags)) // XXX DEBUGGING TEAMCITY
 		dotIdx := strings.IndexByte(lastTag, '.')
 		goVersion, err := strconv.Atoi(lastTag[dotIdx+1:])
 		if err != nil {
