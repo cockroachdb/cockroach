@@ -119,7 +119,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 
 	var err error
 	if ca.sink, err = getSink(
-		ca.spec.Feed.SinkURI, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
+		ca.spec.Feed.SinkURI, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Settings,
 	); err != nil {
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
@@ -160,7 +160,8 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		knobs = *cfKnobs
 	}
-	ca.tickFn = emitEntries(ca.flowCtx.Settings, ca.spec.Feed, ca.encoder, ca.sink, rowsFn, knobs, metrics)
+	ca.tickFn = emitEntries(
+		ca.flowCtx.Settings, ca.spec.Feed, spans, ca.encoder, ca.sink, rowsFn, knobs, metrics)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -393,7 +394,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 
 	var err error
 	if cf.sink, err = getSink(
-		cf.spec.Feed.SinkURI, cf.spec.Feed.Opts, cf.spec.Feed.Targets,
+		cf.spec.Feed.SinkURI, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Settings,
 	); err != nil {
 		cf.MoveToDraining(err)
 		return ctx
