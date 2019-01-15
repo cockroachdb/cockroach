@@ -78,9 +78,9 @@ case "${1-}" in
       XGOOS=darwin
       XGOARCH=amd64
       XCMAKE_SYSTEM_NAME=Darwin
-      TARGET_TRIPLE=x86_64-apple-darwin13
-      EXTRA_XCMAKE_FLAGS=-DCMAKE_INSTALL_NAME_TOOL=x86_64-apple-darwin13-install_name_tool
-      SUFFIX=-darwin-10.9-amd64
+      TARGET_TRIPLE=x86_64-apple-darwin14
+      EXTRA_XCMAKE_FLAGS=-DCMAKE_INSTALL_NAME_TOOL=x86_64-apple-darwin14-install_name_tool
+      SUFFIX=-darwin-10.10-amd64
     ) ;;
 
   ?(amd64-)windows)
