@@ -305,8 +305,6 @@ type optTable struct {
 	// primary is the inlined wrapper for the table's primary index.
 	primary optIndex
 
-	// stats is nil until StatisticCount is called. After that it will not be nil,
-	// even when there are no statistics.
 	stats []optTableStat
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
@@ -383,7 +381,19 @@ func (ot *optTable) Equals(other cat.DataSource) bool {
 	if !ok {
 		return false
 	}
-	return ot.desc.Version == otherTable.desc.Version
+	if ot.desc.Version != otherTable.desc.Version {
+		return false
+	}
+	// Verify the stats are identical.
+	if len(ot.stats) != len(otherTable.stats) {
+		return false
+	}
+	for i := range ot.stats {
+		if !ot.stats[i].equals(&otherTable.stats[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // Name is part of the cat.DataSource interface.
@@ -659,6 +669,24 @@ func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool
 		if !ok {
 			// Column not in table (this is possible if the column was removed since
 			// the statistic was calculated).
+			return false
+		}
+	}
+	return true
+}
+
+func (os *optTableStat) equals(other *optTableStat) bool {
+	if os.createdAt != other.createdAt ||
+		os.rowCount != other.rowCount ||
+		os.distinctCount != other.distinctCount ||
+		os.nullCount != other.nullCount {
+		return false
+	}
+	if len(os.columnOrdinals) != len(other.columnOrdinals) {
+		return false
+	}
+	for i, c := range os.columnOrdinals {
+		if c != other.columnOrdinals[i] {
 			return false
 		}
 	}
