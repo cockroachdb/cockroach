@@ -61,9 +61,11 @@ func TestLogSplits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// verify that every the count has increased by one.
-	if a, e := countSplits(), initialSplits+1; a != e {
-		t.Fatalf("expected %d splits, found %d", e, a)
+	// Verify that the count has increased by at least one. Realistically it's
+	// almost always by exactly one, but if there are any other splits they
+	// might race in after the previous call to countSplits().
+	if now := countSplits(); now <= initialSplits {
+		t.Fatalf("expected >= %d splits, found %d", initialSplits, now)
 	}
 
 	// verify that RangeID always increases (a good way to see that the splits
