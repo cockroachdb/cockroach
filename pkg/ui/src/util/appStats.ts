@@ -19,6 +19,7 @@
 import _ from "lodash";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
+import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type CollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -63,6 +64,14 @@ export function addStatementStats(a: StatementStatistics, b: StatementStatistics
     run_lat: addNumericStats(a.run_lat, b.run_lat, countA, countB),
     service_lat: addNumericStats(a.service_lat, b.service_lat, countA, countB),
     overhead_lat: addNumericStats(a.overhead_lat, b.overhead_lat, countA, countB),
+    sensitive_info: coalesceSensitiveInfo(a.sensitive_info, b.sensitive_info),
+  };
+}
+
+export function coalesceSensitiveInfo(a: ISensitiveInfo, b: ISensitiveInfo) {
+  return {
+    last_err: a.last_err || b.last_err,
+    most_recent_plan_description: a.most_recent_plan_description || b.most_recent_plan_description,
   };
 }
 

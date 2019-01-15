@@ -22,6 +22,7 @@ import { CollectedStatementStatistics } from "src/util/appStats";
 import { appAttr, statementAttr } from "src/util/constants";
 import { selectStatements, selectApps, selectTotalFingerprints, selectLastReset } from "./statementsPage";
 import { selectStatement } from "./statementDetails";
+import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
 describe("selectStatements", () => {
   it("returns null if the statements data is invalid", () => {
@@ -391,6 +392,7 @@ function makeStats() {
     run_lat: makeStat(),
     overhead_lat: makeStat(),
     service_lat: makeStat(),
+    sensitive_info: makeEmptySensitiveInfo(),
   };
 }
 
@@ -398,6 +400,13 @@ function makeStat() {
   return {
     mean: 10,
     squared_diffs: 1,
+  };
+}
+
+function makeEmptySensitiveInfo(): ISensitiveInfo {
+  return {
+    last_err: null,
+    most_recent_plan_description: null,
   };
 }
 
