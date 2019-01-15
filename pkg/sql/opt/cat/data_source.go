@@ -35,7 +35,7 @@ type DataSource interface {
 	// DataSource.
 	//
 	// This is used for invalidating cached plans and must return false whenever
-	// the schema of a data source changed between the times the two data sources
-	// were resolved.
+	// the schema or statistics of a data source changed between the times the two
+	// data sources were resolved.
 	Equals(other DataSource) bool
 }
