@@ -190,6 +190,5 @@ define VALID_VARS
   use-stdmalloc
   xcmake-flags
   xconfigure-flags
-  xgo
   yellow
 endef

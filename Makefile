@@ -383,13 +383,13 @@ configure-flags :=
 # Similarly for xconfigure-flags and configure-flags, and xgo and GO.
 xcmake-flags := $(cmake-flags) $(EXTRA_XCMAKE_FLAGS)
 xconfigure-flags := $(configure-flags) $(EXTRA_XCONFIGURE_FLAGS)
-xgo := $(GO)
+override xgo := GOFLAGS= $(GO)
 
 # If we're cross-compiling, inform Autotools and CMake.
 ifdef is-cross-compile
 xconfigure-flags += --host=$(TARGET_TRIPLE) CC=$(XCC) CXX=$(XCXX)
 xcmake-flags += -DCMAKE_SYSTEM_NAME=$(XCMAKE_SYSTEM_NAME) -DCMAKE_C_COMPILER=$(XCC) -DCMAKE_CXX_COMPILER=$(XCXX)
-xgo := GOOS=$(XGOOS) GOARCH=$(XGOARCH) CC=$(XCC) CXX=$(XCXX) $(xgo)
+override xgo := GOFLAGS= GOOS=$(XGOOS) GOARCH=$(XGOARCH) CC=$(XCC) CXX=$(XCXX) $(xgo)
 endif
 
 C_DEPS_DIR := $(abspath c-deps)
