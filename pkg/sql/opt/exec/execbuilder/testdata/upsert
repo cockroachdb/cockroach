@@ -64,3 +64,38 @@ querying next range at /Table/54/1/1/1/1
 r20: sending batch 2 Del, 1 EndTxn to (n1,s1):1
 fast path completed
 rows affected: 1
+
+subtest regression_32473
+
+statement ok
+CREATE TABLE customers (
+  customer_id serial PRIMARY KEY,
+  name VARCHAR UNIQUE,
+  email VARCHAR NOT NULL
+);
+
+statement ok
+INSERT INTO customers (name, email) VALUES ('bob', 'bob@email.com') ON CONFLICT (name)
+  DO UPDATE SET (name, email) = (
+    SELECT 'bob', 'otherbob@email.com'
+  )
+
+query TT
+SELECT name, email FROM customers
+----
+bob  bob@email.com
+
+# This statement only works with the optimizer enabled.
+statement ok
+INSERT INTO customers (name, email) VALUES ('bob', 'bob@email.com') ON CONFLICT (name)
+  DO UPDATE SET (name, email) = (
+    SELECT 'bob2', 'otherbob@email.com'
+  )
+
+query TT
+SELECT name, email FROM customers
+----
+bob2  otherbob@email.com
+
+statement ok
+DROP TABLE customers

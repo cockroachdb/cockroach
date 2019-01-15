@@ -75,9 +75,6 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.makePlan(ctx, Statement{Statement: stmt}); err != nil {
-		t.Fatal(err)
-	}
 
 	push := func(ctx context.Context, key roachpb.Key) error {
 		// Conflicting transaction that pushes another transaction.
@@ -151,6 +148,13 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			},
 			p.ExtendedEvalContext().Tracing,
 		)
+
+		// We need to re-plan every time, since close() below makes
+		// the plan unusable across retries.
+		if err := p.makePlan(ctx, Statement{Statement: stmt}); err != nil {
+			t.Fatal(err)
+		}
+		defer p.curPlan.close(ctx)
 
 		evalCtx := p.ExtendedEvalContext()
 		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, nil /* txn */)

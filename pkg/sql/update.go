@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -112,46 +111,9 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	// Pre-perform early subquery analysis and extraction. Usually
-	// this is done by analyzeExpr(), and, in fact, analyzeExpr() is indirectly
-	// called below as well. Why not call analyzeExpr() already?
-	//
-	// The obstacle is that there's a circular dependency here.
-	//
-	// - We can't call analyzeExpr() at this point because the RHS of
-	//   UPDATE SET can contain the special expression "DEFAULT", and
-	//   analyzeExpr() does not work with DEFAULT.
-	//
-	// - The substitution of DEFAULT by the actual default expression
-	//   occurs below (in addOrMergeExpr), but we can't do that yet here
-	//   because we first need to decompose a tuple in the LHS into
-	//   multiple assignments.
-	//
-	// - We can't decompose the tuple in the LHS without validating it
-	//   against the arity of the RHS (to properly reject mismatched
-	//   arities with an error) until subquery analysis has occurred.
-	//
-	// So we need the subquery analysis to be done early and we can't
-	// call analyzeExpr() to do so.
-	//
-	// TODO(knz): arguably we could do the tuple decomposition _before_
-	// the arity check, in this order: decompose tuples, substitute
-	// DEFAULT / run addOrMergeExpr which itself calls analyzeExpr, and
-	// then check the arity. This improvement is left as an exercise for
-	// the reader.
-	setExprs := make([]*tree.UpdateExpr, len(n.Exprs))
-	for i, expr := range n.Exprs {
-		// Analyze the sub-query nodes.
-		err := p.analyzeSubqueries(ctx, expr.Expr, len(expr.Names))
-		if err != nil {
-			return nil, err
-		}
-		setExprs[i] = &tree.UpdateExpr{Tuple: expr.Tuple, Expr: expr.Expr, Names: expr.Names}
-	}
-
 	// Extract all the LHS column names, and verify that the arity of
 	// the LHS and RHS match when assigning tuples.
-	names, err := p.namesForExprs(setExprs)
+	names, setExprs, err := p.namesForExprs(ctx, n.Exprs)
 	if err != nil {
 		return nil, err
 	}
@@ -347,6 +309,7 @@ func (p *planner) Update(
 
 					currentUpdateIdx++
 				}
+
 			case *tree.Subquery:
 				selectExpr := tree.SelectExpr{Expr: t}
 				desiredTupleType := types.TTuple{Types: make([]types.T, len(setExpr.Names))}
@@ -366,8 +329,9 @@ func (p *planner) Update(
 					sourceIndex: colIdx,
 				})
 				currentUpdateIdx += len(setExpr.Names)
+
 			default:
-				panic(fmt.Sprintf("assigning to tuple with expression that is neither a tuple nor a subquery: %s", setExpr.Expr))
+				return nil, pgerror.NewAssertionErrorf("assigning to tuple with expression that is neither a tuple nor a subquery: %s", setExpr.Expr)
 			}
 
 		} else {
@@ -835,13 +799,52 @@ func (p *planner) addOrMergeExpr(
 	return render.addOrReuseRender(col, expr, true), nil
 }
 
-// namesForExprs collects all the names mentioned in the LHS of the
-// UpdateExprs.  That is, it will transform SET (a,b) = (1,2), b = 3,
-// (a,c) = 4 into [a,b,b,a,c].
+// namesForExprs both preperforms early subquery analysis and extraction and
+// then collects all the names mentioned in the LHS of the UpdateExprs.  That
+// is, it will transform SET (a,b) = (1,2), b = 3, (a,c) = 4 into [a,b,b,a,c].
 //
 // It also checks that the arity of the LHS and RHS match when
 // assigning tuples.
-func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.NameList, error) {
+func (p *planner) namesForExprs(
+	ctx context.Context, exprs tree.UpdateExprs,
+) (tree.NameList, tree.UpdateExprs, error) {
+	// Pre-perform early subquery analysis and extraction. Usually
+	// this is done by analyzeExpr(), and, in fact, analyzeExpr() is indirectly
+	// called below as well. Why not call analyzeExpr() already?
+	//
+	// The obstacle is that there's a circular dependency here.
+	//
+	// - We can't call analyzeExpr() at this point because the RHS of
+	//   UPDATE SET can contain the special expression "DEFAULT", and
+	//   analyzeExpr() does not work with DEFAULT.
+	//
+	// - The substitution of DEFAULT by the actual default expression
+	//   occurs below (in addOrMergeExpr), but we can't do that yet here
+	//   because we first need to decompose a tuple in the LHS into
+	//   multiple assignments.
+	//
+	// - We can't decompose the tuple in the LHS without validating it
+	//   against the arity of the RHS (to properly reject mismatched
+	//   arities with an error) until subquery analysis has occurred.
+	//
+	// So we need the subquery analysis to be done early and we can't
+	// call analyzeExpr() to do so.
+	//
+	// TODO(knz): arguably we could do the tuple decomposition _before_
+	// the arity check, in this order: decompose tuples, substitute
+	// DEFAULT / run addOrMergeExpr which itself calls analyzeExpr, and
+	// then check the arity. This improvement is left as an exercise for
+	// the reader.
+	setExprs := make(tree.UpdateExprs, len(exprs))
+	for i, expr := range exprs {
+		// Analyze the sub-query nodes.
+		err := p.analyzeSubqueries(ctx, expr.Expr, len(expr.Names))
+		if err != nil {
+			return nil, nil, err
+		}
+		setExprs[i] = &tree.UpdateExpr{Tuple: expr.Tuple, Expr: expr.Expr, Names: expr.Names}
+	}
+
 	var names tree.NameList
 	for _, expr := range exprs {
 		if expr.Tuple {
@@ -857,16 +860,17 @@ func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.NameList, error) {
 				n = len(t.D)
 			}
 			if n < 0 {
-				return nil, errors.Errorf("unsupported tuple assignment: %T", expr.Expr)
+				return nil, nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+					"unsupported tuple assignment: %T", expr.Expr)
 			}
 			if len(expr.Names) != n {
-				return nil, fmt.Errorf("number of columns (%d) does not match number of values (%d)",
-					len(expr.Names), n)
+				return nil, nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"number of columns (%d) does not match number of values (%d)", len(expr.Names), n)
 			}
 		}
 		names = append(names, expr.Names...)
 	}
-	return names, nil
+	return names, setExprs, nil
 }
 
 func fillDefault(expr tree.Expr, index int, defaultExprs []tree.TypedExpr) tree.Expr {

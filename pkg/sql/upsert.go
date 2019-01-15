@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -126,10 +127,14 @@ func (p *planner) newUpsertNode(
 		// Determine which columns are updated by the RHS of INSERT
 		// ... ON CONFLICT DO UPDATE, or the non-PK columns in an
 		// UPSERT.
-		names, err := p.namesForExprs(updateExprs)
+		names, newUpdateExprs, err := p.namesForExprs(ctx, updateExprs)
 		if err != nil {
 			return nil, err
 		}
+		// namesForExprs is responsible for re-shaping the SET RHS, we
+		// need to use its result as new input for newUpsertHelper()
+		// below.
+		updateExprs = newUpdateExprs
 
 		// We use ensureColumns = false in processColumns, because
 		// updateCols may be legitimately empty (when there is no DO
@@ -561,6 +566,10 @@ func (p *planner) newUpsertHelper(
 	// contains the metadata for [a,b,c,d] already, so there's always
 	// exactly one entry in defaultExprs for the untuplification to
 	// find.
+	//
+	// However we need to be careful when the RHS is not a tuple
+	// constructor, for example it is a tuple-returning unary expression
+	// or a subquery.
 	untupledExprs := make(tree.Exprs, 0, len(updateExprs))
 	i := 0
 	for _, updateExpr := range updateExprs {
@@ -571,6 +580,9 @@ func (p *planner) newUpsertHelper(
 					untupledExprs = append(untupledExprs, e)
 					i++
 				}
+			} else {
+				return nil, pgerror.UnimplementedWithIssueErrorf(8330,
+					"cannot use this type of expression on the right of UPDATE SET: %s", updateExpr.Expr)
 			}
 		} else {
 			e := fillDefault(updateExpr.Expr, i, defaultExprs)
