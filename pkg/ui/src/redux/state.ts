@@ -62,13 +62,15 @@ export function createAdminUIStore() {
       // Support for redux dev tools
       // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
       (window as any).devToolsExtension ? (window as any).devToolsExtension({
-        // TODO(maxlang): implement {,de}serializeAction.
-        // TODO(maxlang): implement deserializeState.
-        serializeState: (_key: string, value: any): Object => {
-          if (value && value.toRaw) {
-            return value.toRaw();
-          }
-          return value;
+        serialize: {
+          options: {
+            function: (_key: string, value: any): Object => {
+              if (value && value.toRaw) {
+                return value.toRaw();
+              }
+              return value;
+            },
+          },
         },
       }) : _.identity,
     ) as GenericStoreEnhancer,
