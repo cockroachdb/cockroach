@@ -153,10 +153,8 @@ func TestServerStartClock(t *testing.T) {
 	}
 
 	now := s.Clock().Now()
-	// We rely on s.Clock() having been initialized from hlc.UnixNano(), which is a
-	// bit fragile.
-	physicalNow := hlc.UnixNano()
-	serverClockWasPushed := (now.Logical > 0) || (now.WallTime > physicalNow)
+	physicalNow := s.Clock().PhysicalNow()
+	serverClockWasPushed := now.WallTime > physicalNow
 	if serverClockWasPushed {
 		t.Fatalf("time: server %s vs actual %d", now, physicalNow)
 	}
