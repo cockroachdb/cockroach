@@ -238,6 +238,11 @@ $(call make-lazy,term-reset)
 # Print an error if the user specified any variables on the command line that
 # don't appear in this Makefile. The list of valid variables is automatically
 # rebuilt on the first successful `make` invocation after the Makefile changes.
+#
+# TODO(peter): Figure out how to disallow overriding of variables that
+# are not in the valid list from the environment. The problem is that
+# any environment variable becomes a make variable and environments
+# are dirty. For instance, my includes GREP_COLOR.
 include build/variables.mk
 $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
@@ -334,7 +339,7 @@ build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile bui
 	@echo '# GENERATED FILE DO NOT EDIT' >> $@
 	@echo 'define VALID_VARS' >> $@
 	@sed -nE -e '/^	/d' -e 's/([^#]*)#.*/\1/' \
-	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([^ ]+)[ ]*[:?+]?=.*/  \3/p' $^ \
+	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([[:upper:]_]+)[ ]*[:?+]?=.*/  \3/p' $^ \
 	  | sort -u >> $@
 	@echo 'endef' >> $@
 
