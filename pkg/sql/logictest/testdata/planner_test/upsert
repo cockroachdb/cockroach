@@ -141,3 +141,23 @@ id   a
 
 statement ok
 DROP TABLE test_table;
+
+subtest regression_32473
+
+statement ok
+CREATE TABLE customers (
+  customer_id serial PRIMARY KEY,
+  name VARCHAR UNIQUE,
+  email VARCHAR NOT NULL
+);
+
+# The heuristic planner does not support non-tuple expressions on the RHS, throwing
+# a planning error immediately.
+statement error unimplemented: cannot use this type of expression on the right of UPDATE SET
+INSERT INTO customers (name, email) VALUES ('bob', 'bob@email.com') ON CONFLICT (name)
+  DO UPDATE SET (name, email) = (
+    SELECT 'bob', 'otherbob@email.com'
+  )
+
+statement ok
+DROP TABLE customers

@@ -699,8 +699,8 @@ func RunAndWaitForTerminalState(
 	}()
 
 	var jobID int64
-	var execErr error
 	for r := retry.StartWithCtx(ctx, retry.Options{}); ; {
+		var execErr error
 		select {
 		case <-ctx.Done():
 			return 0, "", ctx.Err()
@@ -728,7 +728,7 @@ func RunAndWaitForTerminalState(
 		select {
 		case <-ctx.Done():
 			return jobID, "", ctx.Err()
-		case execErr = <-execErrCh:
+		case <-execErrCh:
 			// The closure finished, this is a nice hint to wake up, but it only
 			// works once. Close and nil out execErrCh so it blocks from now on.
 			close(execErrCh)

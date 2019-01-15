@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -217,6 +217,9 @@ func (ag *aggregatorBase) init(
 				return errors.Wrap(err, argument.String())
 			}
 			argTypes[len(aggInfo.ColIdx)+j], err = sqlbase.DatumTypeToColumnType(d.ResolvedType())
+			if err != nil {
+				return errors.Wrap(err, argument.String())
+			}
 			arguments[j] = d
 		}
 

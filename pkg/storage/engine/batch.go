@@ -29,24 +29,24 @@ type BatchType byte
 // These constants come from rocksdb/db/dbformat.h.
 const (
 	BatchTypeDeletion BatchType = 0x0
-	BatchTypeValue              = 0x1
-	BatchTypeMerge              = 0x2
-	BatchTypeLogData            = 0x3
-	// BatchTypeColumnFamilyDeletion                 = 0x4
-	// BatchTypeColumnFamilyValue                    = 0x5
-	// BatchTypeColumnFamilyMerge                    = 0x6
-	BatchTypeSingleDeletion = 0x7
-	// BatchTypeColumnFamilySingleDeletion           = 0x8
-	// BatchTypeBeginPrepareXID                      = 0x9
-	// BatchTypeEndPrepareXID                        = 0xA
-	// BatchTypeCommitXID                            = 0xB
-	// BatchTypeRollbackXID                          = 0xC
-	// BatchTypeNoop                                 = 0xD
-	// BatchTypeColumnFamilyRangeDeletion            = 0xE
-	// BatchTypeRangeDeletion                        = 0xF
-	// BatchTypeColumnFamilyBlobIndex                = 0x10
-	// BatchTypeBlobIndex                            = 0x11
-	// BatchMaxValue                                 = 0x7F
+	BatchTypeValue    BatchType = 0x1
+	BatchTypeMerge    BatchType = 0x2
+	BatchTypeLogData  BatchType = 0x3
+	// BatchTypeColumnFamilyDeletion       BatchType = 0x4
+	// BatchTypeColumnFamilyValue          BatchType = 0x5
+	// BatchTypeColumnFamilyMerge          BatchType = 0x6
+	BatchTypeSingleDeletion BatchType = 0x7
+	// BatchTypeColumnFamilySingleDeletion BatchType = 0x8
+	// BatchTypeBeginPrepareXID            BatchType = 0x9
+	// BatchTypeEndPrepareXID              BatchType = 0xA
+	// BatchTypeCommitXID                  BatchType = 0xB
+	// BatchTypeRollbackXID                BatchType = 0xC
+	// BatchTypeNoop                       BatchType = 0xD
+	// BatchTypeColumnFamilyRangeDeletion  BatchType = 0xE
+	// BatchTypeRangeDeletion              BatchType = 0xF
+	// BatchTypeColumnFamilyBlobIndex      BatchType = 0x10
+	// BatchTypeBlobIndex                  BatchType = 0x11
+	// BatchMaxValue                       BatchType = 0x7F
 )
 
 const (
