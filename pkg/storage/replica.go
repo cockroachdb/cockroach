@@ -1213,12 +1213,12 @@ func (r *Replica) executeAdminBatch(
 	switch tArgs := args.(type) {
 	case *roachpb.AdminSplitRequest:
 		var reply roachpb.AdminSplitResponse
-		reply, pErr = r.AdminSplit(ctx, *tArgs)
+		reply, pErr = r.AdminSplit(ctx, *tArgs, "manual")
 		resp = &reply
 
 	case *roachpb.AdminMergeRequest:
 		var reply roachpb.AdminMergeResponse
-		reply, pErr = r.AdminMerge(ctx, *tArgs)
+		reply, pErr = r.AdminMerge(ctx, *tArgs, "manual")
 		resp = &reply
 
 	case *roachpb.AdminTransferLeaseRequest:

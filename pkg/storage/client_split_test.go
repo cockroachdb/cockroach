@@ -2411,6 +2411,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 				},
 				SplitKey: splitKey,
 			},
+			"test",
 		)
 		return pErr
 	}

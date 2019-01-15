@@ -142,7 +142,7 @@ func returnRangeInfo(reply roachpb.Response, rec batcheval.EvalContext) {
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
-	ctx context.Context, args roachpb.AdminSplitRequest,
+	ctx context.Context, args roachpb.AdminSplitRequest, reason string,
 ) (reply roachpb.AdminSplitResponse, _ *roachpb.Error) {
 	if len(args.SplitKey) == 0 {
 		return roachpb.AdminSplitResponse{}, roachpb.NewErrorf("cannot split range with no key provided")
@@ -170,7 +170,7 @@ func (r *Replica) AdminSplit(
 			return roachpb.AdminSplitResponse{}, pErr
 		}
 
-		reply, lastErr = r.adminSplitWithDescriptor(ctx, args, r.Desc(), true /* delayable */)
+		reply, lastErr = r.adminSplitWithDescriptor(ctx, args, r.Desc(), true /* delayable */, reason)
 		// On seeing a ConditionFailedError or an AmbiguousResultError, retry
 		// the command with the updated descriptor.
 		if retry := causer.Visit(lastErr, func(err error) bool {
@@ -262,6 +262,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	args roachpb.AdminSplitRequest,
 	desc *roachpb.RangeDescriptor,
 	delayable bool,
+	reason string,
 ) (roachpb.AdminSplitResponse, error) {
 	var reply roachpb.AdminSplitResponse
 
@@ -346,8 +347,8 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
-	log.Infof(ctx, "initiating a split of this range at key %s [r%d]%s",
-		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightDesc.RangeID, extra)
+	log.Infof(ctx, "initiating a split of this range at key %s [r%d] (%s)%s",
+		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightDesc.RangeID, reason, extra)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
@@ -448,7 +449,7 @@ func (r *Replica) adminSplitWithDescriptor(
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) AdminMerge(
-	ctx context.Context, args roachpb.AdminMergeRequest,
+	ctx context.Context, args roachpb.AdminMergeRequest, reason string,
 ) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
 
@@ -489,7 +490,7 @@ func (r *Replica) AdminMerge(
 
 		updatedLeftDesc.IncrementGeneration()
 		updatedLeftDesc.EndKey = rightDesc.EndKey
-		log.Infof(ctx, "initiating a merge of %s into this range", rightDesc)
+		log.Infof(ctx, "initiating a merge of %s into this range (%s)", rightDesc, reason)
 	}
 
 	runMergeTxn := func(txn *client.Txn) error {
