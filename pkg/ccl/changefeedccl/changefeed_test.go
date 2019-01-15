@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -165,15 +166,9 @@ func TestChangefeedCursor(t *testing.T) {
 			`foo: [2]->{"a": 2, "b": "after"}`,
 		})
 
-		fooTime := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsClock)
+		fooTime := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, pq.FormatTimestamp(tsClock))
 		defer fooTime.Close(t)
 		assertPayloads(t, fooTime, []string{
-			`foo: [2]->{"a": 2, "b": "after"}`,
-		})
-
-		fooNanos := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsClock.UnixNano())
-		defer fooNanos.Close(t)
-		assertPayloads(t, fooNanos, []string{
 			`foo: [2]->{"a": 2, "b": "after"}`,
 		})
 
@@ -215,6 +210,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 		ctx := context.Background()
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (-1)`)
 
 		var ts0 string
 		if err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
@@ -228,6 +224,11 @@ func TestChangefeedTimestamps(t *testing.T) {
 		beforeFeed := tree.TimestampToDecimal(f.Server().Clock().Now())
 		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH updated, resolved`)
 		defer foo.Close(t)
+		// Read the first thing from the feed to make sure the statement
+		// timestamp is evaluated before afterFeed.
+		if _, _, _, _, _, ok := foo.Next(t); !ok {
+			t.Fatal("unexpected end of feed")
+		}
 		afterFeed := tree.TimestampToDecimal(f.Server().Clock().Now())
 
 		var ts1 string
