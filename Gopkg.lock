@@ -109,6 +109,14 @@
   version = "v1.20.0"
 
 [[projects]]
+  digest = "1:34f7a5e65430906c3eeeebb52f4ff50fdc0ed06e86063c5e13dd3236109de787"
+  name = "github.com/Shopify/toxiproxy"
+  packages = ["client"]
+  pruneopts = "UT"
+  revision = "49b4ea27da29ae83ad3bfe7f7f090d18cbee1dc3"
+  version = "v2.1.4"
+
+[[projects]]
   digest = "1:e92f5581902c345eb4ceffdcd4a854fb8f73cf436d47d837d1ec98ef1fe0a214"
   name = "github.com/StackExchange/wmi"
   packages = ["."]
@@ -1695,6 +1703,7 @@
     "github.com/MichaelTJones/walk",
     "github.com/PuerkitoBio/goquery",
     "github.com/Shopify/sarama",
+    "github.com/Shopify/toxiproxy/client",
     "github.com/VividCortex/ewma",
     "github.com/abourget/teamcity",
     "github.com/andy-kimball/arenaskl",
