@@ -9,14 +9,19 @@
 package changefeedccl
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -59,14 +64,16 @@ func makeBenchSink() *benchSink {
 	return s
 }
 
-func (s *benchSink) EmitRow(ctx context.Context, _ string, k, v []byte) error {
+func (s *benchSink) EmitRow(
+	ctx context.Context, _ *sqlbase.TableDescriptor, k, v []byte, _ hlc.Timestamp,
+) error {
 	return s.emit(int64(len(k) + len(v)))
 }
-func (s *benchSink) EmitResolvedTimestamp(_ context.Context, p []byte) error {
+func (s *benchSink) EmitResolvedTimestamp(_ context.Context, p []byte, _ hlc.Timestamp) error {
 	return s.emit(int64(len(p)))
 }
-func (s *benchSink) Flush(_ context.Context) error { return nil }
-func (s *benchSink) Close() error                  { return nil }
+func (s *benchSink) Flush(_ context.Context, _ hlc.Timestamp) error { return nil }
+func (s *benchSink) Close() error                                   { return nil }
 func (s *benchSink) emit(bytes int64) error {
 	s.Lock()
 	defer s.Unlock()
@@ -138,7 +145,7 @@ func createBenchmarkChangefeed(
 	}
 	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
 	tickFn := emitEntries(
-		s.ClusterSettings(), details, encoder, sink, rowsFn, TestingKnobs{}, metrics)
+		s.ClusterSettings(), details, spans, encoder, sink, rowsFn, TestingKnobs{}, metrics)
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() { _ = poller.Run(ctx) }()
@@ -362,6 +369,53 @@ func (c *sinklessFeed) Close(t testing.TB) {
 	_ = c.rows.Close()
 }
 
+type jobFeed struct {
+	db      *gosql.DB
+	flushCh chan struct{}
+
+	jobID  int64
+	jobErr error
+}
+
+func (f *jobFeed) fetchJobError() error {
+	// To avoid busy waiting, we wait for the AfterFlushHook (which is called
+	// after results are flushed to a sink) in between polls. It is required
+	// that this is hooked up to `flushCh`, which is usually handled by the
+	// `enterpriseTest` helper.
+	//
+	// The trickiest bit is handling errors in the changefeed. The tests want to
+	// eventually notice them, but want to return all generated results before
+	// giving up and returning the error. This is accomplished by checking the
+	// job error immediately before every poll. If it's set, the error is
+	// stashed and one more poll's result set is paged through, before finally
+	// returning the error. If we're careful to run the last poll after getting
+	// the error, then it's guaranteed to contain everything flushed by the
+	// changefeed before it shut down.
+	if f.jobErr != nil {
+		return f.jobErr
+	}
+
+	// We're not guaranteed to get a flush notification if the feed exits,
+	// so bound how long we wait.
+	select {
+	case <-f.flushCh:
+	case <-time.After(30 * time.Millisecond):
+	}
+
+	// If the error was set, save it, but do one more poll as described
+	// above.
+	var errorStr gosql.NullString
+	if err := f.db.QueryRow(
+		`SELECT error FROM [SHOW JOBS] WHERE job_id=$1`, f.jobID,
+	).Scan(&errorStr); err != nil {
+		return err
+	}
+	if len(errorStr.String) > 0 {
+		f.jobErr = errors.New(errorStr.String)
+	}
+	return nil
+}
+
 type tableFeedFactory struct {
 	s       serverutils.TestServerInterface
 	db      *gosql.DB
@@ -387,8 +441,13 @@ func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 
 	sink.Scheme = sinkSchemeExperimentalSQL
 	c := &tableFeed{
-		db: db, urlCleanup: cleanup, sinkURI: sink.String(), flushCh: f.flushCh,
-		seen: make(map[string]struct{}),
+		jobFeed: jobFeed{
+			db:      db,
+			flushCh: f.flushCh,
+		},
+		urlCleanup: cleanup,
+		sinkURI:    sink.String(),
+		seen:       make(map[string]struct{}),
 	}
 	if _, err := c.db.Exec(`CREATE DATABASE ` + sink.Path); err != nil {
 		t.Fatal(err)
@@ -415,15 +474,11 @@ func (f *tableFeedFactory) Server() serverutils.TestServerInterface {
 }
 
 type tableFeed struct {
-	db         *gosql.DB
+	jobFeed
 	sinkURI    string
 	urlCleanup func()
-	jobID      int64
-	flushCh    chan struct{}
 
-	rows   *gosql.Rows
-	jobErr error
-
+	rows *gosql.Rows
 	seen map[string]struct{}
 }
 
@@ -442,20 +497,6 @@ func (c *tableFeed) Next(
 	// and a hash of the partition in 50-64. This tableFeed.Next function works
 	// by repeatedly fetching and deleting all rows in the table. Then it pages
 	// through the results until they are empty and repeats.
-	//
-	// To avoid busy waiting, we wait for the AfterFlushHook (which is called
-	// after results are flushed to a sink) in between polls. It is required
-	// that this is hooked up to `flushCh`, which is usually handled by the
-	// `enterpriseTest` helper.
-	//
-	// The trickiest bit is handling errors in the changefeed. The tests want to
-	// eventually notice them, but want to return all generated results before
-	// giving up and returning the error. This is accomplished by checking the
-	// job error immediately before every poll. If it's set, the error is
-	// stashed and one more poll's result set is paged through, before finally
-	// returning the error. If we're careful to run the last poll after getting
-	// the error, then it's guaranteed to contain everything flushed by the
-	// changefeed before it shut down.
 	for {
 		if c.rows != nil && c.rows.Next() {
 			var msgID int64
@@ -466,7 +507,7 @@ func (c *tableFeed) Next(
 			// Scan turns NULL bytes columns into a 0-length, non-nil byte
 			// array, which is pretty unexpected. Nil them out before returning.
 			// Either key+value or payload will be set, but not both.
-			if len(key) > 0 {
+			if len(key) > 0 || len(value) > 0 {
 				// TODO(dan): This skips duplicates, since they're allowed by
 				// the semantics of our changefeeds. Now that we're switching to
 				// RangeFeed, this can actually happen (usually because of
@@ -490,27 +531,9 @@ func (c *tableFeed) Next(
 			}
 			c.rows = nil
 		}
-		if c.jobErr != nil {
+
+		if err := c.fetchJobError(); err != nil {
 			return ``, ``, nil, nil, nil, false
-		}
-
-		// We're not guaranteed to get a flush notification if the feed exits,
-		// so bound how long we wait.
-		select {
-		case <-c.flushCh:
-		case <-time.After(30 * time.Millisecond):
-		}
-
-		// If the error was set, save it, but do one more poll as described
-		// above.
-		var errorStr gosql.NullString
-		if err := c.db.QueryRow(
-			`SELECT error FROM [SHOW JOBS] WHERE job_id=$1`, c.jobID,
-		).Scan(&errorStr); err != nil {
-			t.Fatal(err)
-		}
-		if len(errorStr.String) > 0 {
-			c.jobErr = errors.New(errorStr.String)
 		}
 
 		// TODO(dan): It's a bummer that this mutates the sqlsink table. I
@@ -549,6 +572,181 @@ func (c *tableFeed) Close(t testing.TB) {
 	c.urlCleanup()
 }
 
+var cloudFeedFileRE = regexp.MustCompile(`^\d{23}-(.+?)-(\d+)-`)
+
+type cloudFeedFactory struct {
+	s       serverutils.TestServerInterface
+	db      *gosql.DB
+	dir     string
+	flushCh chan struct{}
+
+	feedIdx int
+}
+
+func makeCloud(
+	s serverutils.TestServerInterface, db *gosql.DB, dir string, flushCh chan struct{},
+) *cloudFeedFactory {
+	return &cloudFeedFactory{s: s, db: db, dir: dir, flushCh: flushCh}
+}
+
+func (f *cloudFeedFactory) Feed(t testing.TB, create string, args ...interface{}) testfeed {
+	t.Helper()
+
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
+	if createStmt.SinkURI != nil {
+		t.Fatalf(`unexpected sink provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
+	}
+	feedDir := strconv.Itoa(f.feedIdx)
+	f.feedIdx++
+	createStmt.SinkURI = tree.NewStrVal(`experimental-nodelocal:///` + feedDir + `?bucket_size=10ms`)
+
+	// Nodelocal puts its dir under `ExternalIODir`, which is passed into
+	// cloudFeedFactory.
+	feedDir = filepath.Join(f.dir, feedDir)
+	if err := os.Mkdir(feedDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	c := &cloudFeed{
+		jobFeed: jobFeed{
+			db:      f.db,
+			flushCh: f.flushCh,
+		},
+		dir:  feedDir,
+		seen: make(map[string]struct{}),
+	}
+	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.jobID); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func (f *cloudFeedFactory) Server() serverutils.TestServerInterface {
+	return f.s
+}
+
+type cloudFeedEntry struct {
+	topic          string
+	value, payload []byte
+}
+
+type cloudFeed struct {
+	jobFeed
+	dir string
+
+	resolved string
+	rows     []cloudFeedEntry
+
+	seen map[string]struct{}
+}
+
+const cloudFeedPartition = ``
+
+func (c *cloudFeed) Partitions() []string {
+	// TODO(dan): Try to plumb these through somehow?
+	return []string{cloudFeedPartition}
+}
+
+func (c *cloudFeed) Next(
+	t testing.TB,
+) (topic, partition string, key, value, payload []byte, ok bool) {
+	for {
+		if len(c.rows) > 0 {
+			e := c.rows[0]
+			c.rows = c.rows[1:]
+			topic, key, value, payload = e.topic, nil, e.value, e.payload
+
+			if len(value) > 0 {
+				seen := topic + string(value)
+				if _, ok := c.seen[seen]; ok {
+					continue
+				}
+				c.seen[seen] = struct{}{}
+				payload = nil
+				return topic, cloudFeedPartition, key, value, payload, true
+			}
+			key, value = nil, nil
+			return topic, cloudFeedPartition, key, value, payload, true
+		}
+
+		if err := c.fetchJobError(); err != nil {
+			return ``, ``, nil, nil, nil, false
+		}
+
+		{
+			d, err := os.Open(c.dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, err := d.Readdirnames(-1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sort.Strings(files)
+			var newResolved string
+			var idx int
+			for ; idx < len(files); idx++ {
+				if f := files[len(files)-idx-1]; strings.HasSuffix(f, `RESOLVED`) {
+					newResolved = f
+					break
+				}
+			}
+			files = files[:len(files)-idx]
+			for _, file := range files {
+				if strings.Compare(c.resolved, file) >= 0 {
+					continue
+				}
+				if strings.HasSuffix(file, `RESOLVED`) {
+					// TODO(dan): Implement this when a test needs it.
+					continue
+				}
+
+				var topic string
+				if subs := cloudFeedFileRE.FindStringSubmatch(file); subs == nil {
+					t.Fatalf(`unexpected file: %s`, file)
+				} else {
+					topic = subs[1]
+				}
+
+				f, err := os.Open(filepath.Join(c.dir, file))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				// NB: This is the logic for JSON. Avro will involve parsing an
+				// "Object Container File".
+				s := bufio.NewScanner(f)
+				for s.Scan() {
+					c.rows = append(c.rows, cloudFeedEntry{
+						topic: topic,
+						value: s.Bytes(),
+					})
+				}
+			}
+			if newResolved != `` {
+				c.resolved = newResolved
+			}
+		}
+	}
+}
+
+func (c *cloudFeed) Err() error {
+	return c.jobErr
+}
+
+func (c *cloudFeed) Close(t testing.TB) {
+	if _, err := c.db.Exec(`CANCEL JOB $1`, c.jobID); err != nil {
+		log.Infof(context.Background(), `could not cancel feed %d: %v`, c.jobID, err)
+	}
+	if err := c.db.Close(); err != nil {
+		t.Error(err)
+	}
+}
+
 func waitForSchemaChange(
 	t testing.TB, sqlDB *sqlutils.SQLRunner, stmt string, arguments ...interface{},
 ) {
@@ -574,9 +772,12 @@ func assertPayloads(t testing.TB, f testfeed, expected []string) {
 	var actual []string
 	for len(actual) < len(expected) {
 		topic, _, key, value, _, ok := f.Next(t)
+		if log.V(1) {
+			log.Infof(context.TODO(), `%v %s: %s->%s`, ok, topic, key, value)
+		}
 		if !ok {
 			break
-		} else if key != nil {
+		} else if key != nil || value != nil {
 			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic, key, value))
 		}
 	}
@@ -628,7 +829,7 @@ func skipResolvedTimestamps(t *testing.T, f testfeed) {
 		if !ok {
 			break
 		}
-		if key != nil {
+		if key != nil || value != nil {
 			t.Errorf(`unexpected row %s: %s->%s`, table, key, value)
 		}
 	}
@@ -650,7 +851,7 @@ func parseTimeToHLC(t testing.TB, s string) hlc.Timestamp {
 func expectResolvedTimestamp(t testing.TB, f testfeed) hlc.Timestamp {
 	t.Helper()
 	topic, _, key, value, resolved, _ := f.Next(t)
-	if key != nil {
+	if key != nil || value != nil {
 		t.Fatalf(`unexpected row %s: %s -> %s`, topic, key, value)
 	}
 	if resolved == nil {

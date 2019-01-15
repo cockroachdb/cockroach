@@ -48,15 +48,17 @@ const (
 	optResolvedTimestamps      = `resolved`
 	optUpdatedTimestamps       = `updated`
 
-	optEnvelopeKeyOnly envelopeType = `key_only`
-	optEnvelopeRow     envelopeType = `row`
-	optEnvelopeDiff    envelopeType = `diff`
+	optEnvelopeDiff      envelopeType = `diff`
+	optEnvelopeKeyOnly   envelopeType = `key_only`
+	optEnvelopeRow       envelopeType = `row`
+	optEnvelopeValueOnly envelopeType = `value_only`
 
 	optFormatJSON formatType = `json`
 	optFormatAvro formatType = `experimental_avro`
 
-	sinkParamTopicPrefix      = `topic_prefix`
+	sinkParamBucketSize       = `bucket_size`
 	sinkParamSchemaTopic      = `schema_topic`
+	sinkParamTopicPrefix      = `topic_prefix`
 	sinkSchemeBuffer          = ``
 	sinkSchemeExperimentalSQL = `experimental-sql`
 	sinkSchemeKafka           = `kafka`
@@ -142,6 +144,8 @@ func changefeedPlanHook(
 			return err
 		}
 
+		jobDescription := changefeedJobDescription(changefeedStmt, sinkURI, opts)
+
 		statementTime := p.ExecCfg().Clock.Now()
 		var initialHighWater hlc.Timestamp
 		if cursor, ok := opts[optCursor]; ok {
@@ -205,9 +209,14 @@ func changefeedPlanHook(
 			return distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
 		}
 
+		settings := p.ExecCfg().Settings
 		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
+			settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
 		); err != nil {
+			return err
+		}
+
+		if details, err = validateDetails(details); err != nil {
 			return err
 		}
 
@@ -217,7 +226,7 @@ func changefeedPlanHook(
 		// the CREATE CHANGEFEED statement. To do this, we create a "canary" sink,
 		// which will be immediately closed, only to check for errors.
 		{
-			canarySink, err := getSink(sinkURI, opts, targets)
+			canarySink, err := getSink(details.SinkURI, details.Opts, details.Targets, settings)
 			if err != nil {
 				// In this context, we don't want to retry even retryable errors from the
 				// sync. Unwrap any retryable errors encountered.
@@ -236,7 +245,7 @@ func changefeedPlanHook(
 		// hooked up to resultsCh to avoid a bunch of extra plumbing.
 		startedCh := make(chan tree.Datums)
 		job, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, startedCh, jobs.Record{
-			Description: changefeedJobDescription(changefeedStmt, sinkURI, opts),
+			Description: jobDescription,
 			Username:    p.User(),
 			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
 				for _, desc := range targetDescs {
@@ -310,6 +319,8 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		details.Opts[optEnvelope] = string(optEnvelopeRow)
 	case optEnvelopeKeyOnly:
 		details.Opts[optEnvelope] = string(optEnvelopeKeyOnly)
+	case optEnvelopeValueOnly:
+		details.Opts[optEnvelope] = string(optEnvelopeValueOnly)
 	case optEnvelopeDiff:
 		return jobspb.ChangefeedDetails{}, errors.Errorf(
 			`%s=%s is not yet supported`, optEnvelope, optEnvelopeDiff)

@@ -180,7 +180,7 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 	// TODO(dan): Figure out what updated and resolved timestamps should
 	// look like with avro.
 	for _, opt := range []string{optUpdatedTimestamps, optResolvedTimestamps} {
-		if _, ok := opts[optUpdatedTimestamps]; ok {
+		if _, ok := opts[opt]; ok {
 			return nil, errors.Errorf(
 				`%s=%s is not yet compatible with %s`, optFormat, optFormatAvro, opt)
 		}
