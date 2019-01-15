@@ -268,7 +268,7 @@ func newColOperator(
 		op = exec.NewSimpleProjectOp(op, renderedCols)
 	}
 	if post.Offset != 0 {
-		return nil, errors.New("offset unsupported")
+		op = exec.NewOffsetOp(op, post.Offset)
 	}
 	if post.Limit != 0 {
 		op = exec.NewLimitOp(op, post.Limit)
