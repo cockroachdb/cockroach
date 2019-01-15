@@ -525,7 +525,14 @@ func (desc *TableDescriptor) IsSequence() bool {
 // virtual Table (like the information_schema tables) and thus doesn't
 // need to be physically stored.
 func (desc *TableDescriptor) IsVirtualTable() bool {
-	return desc.ID == keys.VirtualDescriptorID
+	return IsVirtualTable(desc.ID)
+}
+
+// IsVirtualTable returns true if the TableDescriptor describes a
+// virtual Table (like the informationgi_schema tables) and thus doesn't
+// need to be physically stored.
+func IsVirtualTable(id ID) bool {
+	return MinVirtualID <= id
 }
 
 // IsPhysicalTable returns true if the TableDescriptor actually describes a
@@ -721,21 +728,30 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 	}
 
 	columnNames := map[string]ColumnID{}
-	fillColumnID := func(c *ColumnDescriptor) {
+	fillColumnID := func(c *ColumnDescriptor) error {
 		columnID := c.ID
 		if columnID == 0 {
 			columnID = desc.NextColumnID
 			desc.NextColumnID++
+			if MaxColumnID < desc.NextColumnID {
+				return pgerror.NewErrorf(pgerror.CodeTooManyColumnsError, "too many columns")
+			}
 		}
 		columnNames[c.Name] = columnID
 		c.ID = columnID
+
+		return nil
 	}
 	for i := range desc.Columns {
-		fillColumnID(&desc.Columns[i])
+		if err := fillColumnID(&desc.Columns[i]); err != nil {
+			return err
+		}
 	}
 	for _, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
-			fillColumnID(c)
+			if err := fillColumnID(c); err != nil {
+				return err
+			}
 		}
 	}
 

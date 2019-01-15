@@ -20,7 +20,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -226,7 +225,7 @@ func (r *Refresher) NotifyMutation(
 		// for table_statistics itself).
 		return
 	}
-	if tableID == keys.VirtualDescriptorID {
+	if sqlbase.IsVirtualTable(tableID) {
 		// Don't try to create statistics for virtual tables.
 		return
 	}

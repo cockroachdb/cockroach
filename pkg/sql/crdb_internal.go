@@ -52,40 +52,40 @@ const crdbInternalName = "crdb_internal"
 
 var crdbInternal = virtualSchema{
 	name: crdbInternalName,
-	tableDefs: []virtualSchemaDef{
-		crdbInternalBackwardDependenciesTable,
-		crdbInternalBuildInfoTable,
-		crdbInternalBuiltinFunctionsTable,
-		crdbInternalClusterQueriesTable,
-		crdbInternalClusterSessionsTable,
-		crdbInternalClusterSettingsTable,
-		crdbInternalCreateStmtsTable,
-		crdbInternalFeatureUsage,
-		crdbInternalForwardDependenciesTable,
-		crdbInternalGossipNodesTable,
-		crdbInternalGossipAlertsTable,
-		crdbInternalGossipLivenessTable,
-		crdbInternalGossipNetworkTable,
-		crdbInternalIndexColumnsTable,
-		crdbInternalJobsTable,
-		crdbInternalKVNodeStatusTable,
-		crdbInternalKVStoreStatusTable,
-		crdbInternalLeasesTable,
-		crdbInternalLocalQueriesTable,
-		crdbInternalLocalSessionsTable,
-		crdbInternalLocalMetricsTable,
-		crdbInternalPartitionsTable,
-		crdbInternalRangesNoLeasesTable,
-		crdbInternalRangesView,
-		crdbInternalRuntimeInfoTable,
-		crdbInternalSchemaChangesTable,
-		crdbInternalSessionTraceTable,
-		crdbInternalSessionVariablesTable,
-		crdbInternalStmtStatsTable,
-		crdbInternalTableColumnsTable,
-		crdbInternalTableIndexesTable,
-		crdbInternalTablesTable,
-		crdbInternalZonesTable,
+	tableDefs: map[sqlbase.ID]virtualSchemaDef{
+		sqlbase.CrdbInternalBackwardDependenciesTableID: crdbInternalBackwardDependenciesTable,
+		sqlbase.CrdbInternalBuildInfoTableID:            crdbInternalBuildInfoTable,
+		sqlbase.CrdbInternalBuiltinFunctionsTableID:     crdbInternalBuiltinFunctionsTable,
+		sqlbase.CrdbInternalClusterQueriesTableID:       crdbInternalClusterQueriesTable,
+		sqlbase.CrdbInternalClusterSessionsTableID:      crdbInternalClusterSessionsTable,
+		sqlbase.CrdbInternalClusterSettingsTableID:      crdbInternalClusterSettingsTable,
+		sqlbase.CrdbInternalCreateStmtsTableID:          crdbInternalCreateStmtsTable,
+		sqlbase.CrdbInternalFeatureUsageID:              crdbInternalFeatureUsage,
+		sqlbase.CrdbInternalForwardDependenciesTableID:  crdbInternalForwardDependenciesTable,
+		sqlbase.CrdbInternalGossipNodesTableID:          crdbInternalGossipNodesTable,
+		sqlbase.CrdbInternalGossipAlertsTableID:         crdbInternalGossipAlertsTable,
+		sqlbase.CrdbInternalGossipLivenessTableID:       crdbInternalGossipLivenessTable,
+		sqlbase.CrdbInternalGossipNetworkTableID:        crdbInternalGossipNetworkTable,
+		sqlbase.CrdbInternalIndexColumnsTableID:         crdbInternalIndexColumnsTable,
+		sqlbase.CrdbInternalJobsTableID:                 crdbInternalJobsTable,
+		sqlbase.CrdbInternalKVNodeStatusTableID:         crdbInternalKVNodeStatusTable,
+		sqlbase.CrdbInternalKVStoreStatusTableID:        crdbInternalKVStoreStatusTable,
+		sqlbase.CrdbInternalLeasesTableID:               crdbInternalLeasesTable,
+		sqlbase.CrdbInternalLocalQueriesTableID:         crdbInternalLocalQueriesTable,
+		sqlbase.CrdbInternalLocalSessionsTableID:        crdbInternalLocalSessionsTable,
+		sqlbase.CrdbInternalLocalMetricsTableID:         crdbInternalLocalMetricsTable,
+		sqlbase.CrdbInternalPartitionsTableID:           crdbInternalPartitionsTable,
+		sqlbase.CrdbInternalRangesNoLeasesTableID:       crdbInternalRangesNoLeasesTable,
+		sqlbase.CrdbInternalRangesViewID:                crdbInternalRangesView,
+		sqlbase.CrdbInternalRuntimeInfoTableID:          crdbInternalRuntimeInfoTable,
+		sqlbase.CrdbInternalSchemaChangesTableID:        crdbInternalSchemaChangesTable,
+		sqlbase.CrdbInternalSessionTraceTableID:         crdbInternalSessionTraceTable,
+		sqlbase.CrdbInternalSessionVariablesTableID:     crdbInternalSessionVariablesTable,
+		sqlbase.CrdbInternalStmtStatsTableID:            crdbInternalStmtStatsTable,
+		sqlbase.CrdbInternalTableColumnsTableID:         crdbInternalTableColumnsTable,
+		sqlbase.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
+		sqlbase.CrdbInternalTablesTableID:               crdbInternalTablesTable,
+		sqlbase.CrdbInternalZonesTableID:                crdbInternalZonesTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -1109,14 +1109,8 @@ CREATE TABLE crdb_internal.create_statements (
 					return err
 				}
 
-				descID := tree.DNull
-				if table.ID != keys.VirtualDescriptorID {
-					descID = tree.NewDInt(tree.DInt(table.ID))
-				}
-				dbDescID := tree.DNull
-				if table.GetParentID() != keys.VirtualDescriptorID {
-					dbDescID = tree.NewDInt(tree.DInt(table.GetParentID()))
-				}
+				descID := tree.NewDInt(tree.DInt(table.ID))
+				dbDescID := tree.NewDInt(tree.DInt(table.GetParentID()))
 				if createNofk == "" {
 					createNofk = stmt
 				}

@@ -18,7 +18,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -44,7 +43,7 @@ import (
 type virtualSchema struct {
 	name           string
 	allTableNames  map[string]struct{}
-	tableDefs      []virtualSchemaDef
+	tableDefs      map[sqlbase.ID]virtualSchemaDef
 	tableValidator func(*sqlbase.TableDescriptor) error // optional
 	// Some virtual tables can be used if there is no current database set; others can't.
 	validWithNoDatabaseContext bool
@@ -54,7 +53,7 @@ type virtualSchema struct {
 type virtualSchemaDef interface {
 	getSchema() string
 	initVirtualTableDesc(
-		ctx context.Context, st *cluster.Settings,
+		ctx context.Context, st *cluster.Settings, id sqlbase.ID,
 	) (sqlbase.TableDescriptor, error)
 }
 
@@ -92,7 +91,7 @@ func (t virtualSchemaTable) getSchema() string {
 
 // initVirtualTableDesc is part of the virtualSchemaDef interface.
 func (t virtualSchemaTable) initVirtualTableDesc(
-	ctx context.Context, st *cluster.Settings,
+	ctx context.Context, st *cluster.Settings, id sqlbase.ID,
 ) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(t.schema)
 	if err != nil {
@@ -117,7 +116,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		st,
 		create,
 		0, /* parentID */
-		keys.VirtualDescriptorID,
+		id,
 		hlc.Timestamp{}, /* creationTime */
 		publicSelectPrivileges,
 		nil, /* affected */
@@ -134,7 +133,7 @@ func (v virtualSchemaView) getSchema() string {
 
 // initVirtualTableDesc is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) initVirtualTableDesc(
-	ctx context.Context, st *cluster.Settings,
+	ctx context.Context, st *cluster.Settings, id sqlbase.ID,
 ) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(v.schema)
 	if err != nil {
@@ -147,7 +146,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		create,
 		v.resultColumns,
 		0,
-		keys.VirtualDescriptorID,
+		id,
 		hlc.Timestamp{},
 		publicSelectPrivileges,
 		nil, // semaCtx
@@ -160,10 +159,10 @@ func (v virtualSchemaView) initVirtualTableDesc(
 //
 // When adding a new virtualSchema, define a virtualSchema in a separate file, and
 // add that object to this slice.
-var virtualSchemas = []virtualSchema{
-	informationSchema,
-	pgCatalog,
-	crdbInternal,
+var virtualSchemas = map[sqlbase.ID]virtualSchema{
+	sqlbase.InformationSchemaID: informationSchema,
+	sqlbase.PgCatalogID:         pgCatalog,
+	sqlbase.CrdbInternalID:      crdbInternal,
 }
 
 //
@@ -295,14 +294,16 @@ func NewVirtualSchemaHolder(
 		entries:      make(map[string]virtualSchemaEntry, len(virtualSchemas)),
 		orderedNames: make([]string, len(virtualSchemas)),
 	}
-	for i, schema := range virtualSchemas {
+
+	order := 0
+	for schemaID, schema := range virtualSchemas {
 		dbName := schema.name
-		dbDesc := initVirtualDatabaseDesc(dbName)
+		dbDesc := initVirtualDatabaseDesc(schemaID, dbName)
 		defs := make(map[string]virtualDefEntry, len(schema.tableDefs))
 		orderedDefNames := make([]string, 0, len(schema.tableDefs))
 
-		for _, def := range schema.tableDefs {
-			tableDesc, err := def.initVirtualTableDesc(ctx, st)
+		for id, def := range schema.tableDefs {
+			tableDesc, err := def.initVirtualTableDesc(ctx, st, id)
 
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to initialize %s", def.getSchema())
@@ -330,7 +331,8 @@ func NewVirtualSchemaHolder(
 			orderedDefNames: orderedDefNames,
 			allTableNames:   schema.allTableNames,
 		}
-		vs.orderedNames[i] = dbName
+		vs.orderedNames[order] = dbName
+		order++
 	}
 	sort.Strings(vs.orderedNames)
 	return vs, nil
@@ -342,10 +344,10 @@ func NewVirtualSchemaHolder(
 // user has access to.
 var publicSelectPrivileges = sqlbase.NewPrivilegeDescriptor(sqlbase.PublicRole, privilege.List{privilege.SELECT})
 
-func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
+func initVirtualDatabaseDesc(id sqlbase.ID, name string) *sqlbase.DatabaseDescriptor {
 	return &sqlbase.DatabaseDescriptor{
 		Name:       name,
-		ID:         keys.VirtualDescriptorID,
+		ID:         id,
 		Privileges: publicSelectPrivileges,
 	}
 }
@@ -407,10 +409,4 @@ func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 		return nil, err
 	}
 	return t.desc, nil
-}
-
-// isVirtualDescriptor checks if the provided DescriptorProto is an instance of
-// a Virtual Descriptor.
-func isVirtualDescriptor(desc sqlbase.DescriptorProto) bool {
-	return desc.GetID() == keys.VirtualDescriptorID
 }
