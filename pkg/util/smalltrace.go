@@ -40,7 +40,11 @@ func GetSmallTrace(skip int) string {
 	for {
 		f, more := frames.Next()
 		function := strings.TrimPrefix(f.Function, prefix)
-		callers = append(callers, function+":"+strconv.Itoa(f.Line))
+		file := f.File
+		if index := strings.LastIndexByte(file, '/'); index >= 0 {
+			file = file[index+1:]
+		}
+		callers = append(callers, file+":"+strconv.Itoa(f.Line)+":"+function)
 		if !more {
 			break
 		}
