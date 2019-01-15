@@ -17,7 +17,7 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -511,9 +512,6 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
-				// Andrei is too lazy to figure out the incantation for telling pgx about
-				// our test certs.
-				Insecure: true,
 			},
 			ServerArgsPerNode: map[int]base.TestServerArgs{
 				0: {
@@ -539,9 +537,6 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 						},
 					},
 					UseDatabase: "test",
-					// Andrei is too lazy to figure out the incantation for telling pgx about
-					// our test certs.
-					Insecure: true,
 				},
 			},
 		})
@@ -580,22 +575,15 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	host, ports, err := net.SplitHostPort(tc.Server(0).ServingAddr())
+	pgURL, cleanup := sqlutils.PGUrl(
+		t, tc.Server(0).ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+	pgURL.Path = `test`
+	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	port, err := strconv.Atoi(ports)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	conn, err := pgx.Connect(
-		pgx.ConnConfig{
-			Host:     host,
-			Port:     uint16(port),
-			User:     "root",
-			Database: "test",
-		})
+	conn, err := pgx.Connect(pgxConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
