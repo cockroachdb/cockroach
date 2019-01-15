@@ -22,10 +22,6 @@ import (
 
 func registerYCSB(r *registry) {
 	runYCSB := func(ctx context.Context, t *test, c *cluster, wl string) {
-		if !c.isLocal() {
-			c.RemountNoBarrier(ctx)
-		}
-
 		nodes := c.nodes - 1
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
