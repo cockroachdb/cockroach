@@ -92,7 +92,7 @@ func (lResult *LocalResult) String() string {
 		lResult.MaybeGossipNodeLiveness, lResult.MaybeWatchForMerge)
 }
 
-// DetachMaybeWatchForMerge returns and falsifies the MaybeWatchForMerge flag
+// DetachMaybeWatchForMerge returns and clears the MaybeWatchForMerge flag
 // from the local result.
 func (lResult *LocalResult) DetachMaybeWatchForMerge() bool {
 	if lResult == nil {

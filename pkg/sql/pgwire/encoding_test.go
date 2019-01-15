@@ -160,26 +160,29 @@ func TestEncodings(t *testing.T) {
 					t.Skip()
 				}
 				id := tc.Datum.ResolvedType().Oid()
-				var d tree.Datum
-				var err error
 				for code, value := range map[pgwirebase.FormatCode][]byte{
 					pgwirebase.FormatText:   tc.TextAsBinary,
 					pgwirebase.FormatBinary: tc.Binary,
 				} {
-					t.Logf("code: %s, value: %q (%[2]s)", code, value)
 					t.Run(code.String(), func(t *testing.T) {
-						if darr, ok := tc.Datum.(*tree.DArray); ok && code == pgwirebase.FormatText {
+						t.Logf("code: %s\nvalue: %q (%[2]s)\noid: %v", code, value, id)
+						d, err := pgwirebase.DecodeOidDatum(nil, id, code, value)
+						if err != nil {
+							t.Fatal(err)
+						}
+						// Text decoding returns a string for some kinds of arrays. If that's the
+						// case, manually do the conversion to array.
+						if darr, isdarr := tc.Datum.(*tree.DArray); isdarr && d.ResolvedType() == types.String {
+							t.Log("convert string to array")
 							var typ coltypes.T
 							typ, err = coltypes.DatumTypeToColumnType(darr.ParamTyp)
 							if err != nil {
 								t.Fatal(err)
 							}
 							d, err = tree.ParseDArrayFromString(&evalCtx, string(value), typ)
-						} else {
-							d, err = pgwirebase.DecodeOidDatum(nil, id, code, value)
-						}
-						if err != nil {
-							t.Fatal(err)
+							if err != nil {
+								t.Fatal(err)
+							}
 						}
 						if d.Compare(&evalCtx, tc.Datum) != 0 {
 							t.Fatalf("%v != %v", d, tc.Datum)
