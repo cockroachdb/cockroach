@@ -36,12 +36,12 @@ import (
 // Constants for the String() representation of the session states. Shared with
 // the CLI code which needs to recognize them.
 const (
-	NoTxnStr              string = "NoTxn"
-	OpenStateStr                 = "Open"
-	AbortedStateStr              = "Aborted"
-	CommitWaitStateStr           = "CommitWait"
-	RestartWaitStateStr          = "RestartWait"
-	InternalErrorStateStr        = "InternalError"
+	NoTxnStr              = "NoTxn"
+	OpenStateStr          = "Open"
+	AbortedStateStr       = "Aborted"
+	CommitWaitStateStr    = "CommitWait"
+	RestartWaitStateStr   = "RestartWait"
+	InternalErrorStateStr = "InternalError"
 )
 
 /// States.
