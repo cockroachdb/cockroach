@@ -33,9 +33,10 @@ fi
 `
 
 	r.Add(testSpec{
-		Name:       "synctest",
-		MinVersion: `v2.2.0`,
-		Nodes:      nodes(1),
+		Name:         "synctest",
+		MinVersion:   `v2.2.0`,
+		Nodes:        nodes(1),
+		UseIOBarrier: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			n := c.Node(1)
 			tmpDir, err := ioutil.TempDir("", "synctest")

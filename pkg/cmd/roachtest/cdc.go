@@ -58,8 +58,6 @@ type cdcTestArgs struct {
 }
 
 func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
-	c.RemountNoBarrier(ctx)
-
 	crdbNodes := c.Range(1, c.nodes-1)
 	workloadNode := c.Node(c.nodes)
 	kafkaNode := c.Node(c.nodes)
