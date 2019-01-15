@@ -142,16 +142,30 @@ RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/l
  && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory && make cxx -j$(nproc)) \
  && rm -rf llvm
 
-RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
- && (cd osxcross/tarballs && curl -sfSL https://s3.amazonaws.com/andrew-osx-sdks/MacOSX10.9.sdk.tar.xz -O) \
- && OSX_VERSION_MIN=10.9 PORTABLE=1 UNATTENDED=1 osxcross/build.sh \
- && mv osxcross/target /x-tools/x86_64-apple-darwin13 \
+# Install osxcross. This needs the min supported osx version (we bump that
+# whenever Go does, in which case the builder image stops working). The SDK
+# can either be generated from Xcode or we let someone else do the work.
+# See for example:
+# https://github.com/docker/golang-cross/pull/11#issuecomment-428741406.
+#
+# See https://en.wikipedia.org/wiki/Uname for the right suffix in the `mv` step
+# below. For example, Yosemite is 10.10 and has kernel release (uname -r)
+# 14.0.0. Similar edits are needed in mkrelease.sh.
+#
+# The osxcross SHA should be bumped. It's fixed merely to avoid an obvious
+# highjack of the upstream repo from slipping in unnoticed.
+RUN git clone https://github.com/tpoechtrager/osxcross.git \
+ && (cd osxcross && git checkout 6525b2b7d33abc371ad889f205377dc5cf81f23e) \
+ && (cd osxcross/tarballs && curl -sfSL https://s3.dockerproject.org/darwin/v2/MacOSX10.10.sdk.tar.xz -O) \
+ && echo "631b4144c6bf75bf7a4d480d685a9b5bda10ee8d03dbf0db829391e2ef858789 osxcross/tarballs/MacOSX10.10.sdk.tar.xz" | sha256sum -c - \
+ && OSX_VERSION_MIN=10.10 PORTABLE=1 UNATTENDED=1 osxcross/build.sh \
+ && mv osxcross/target /x-tools/x86_64-apple-darwin14 \
  && rm -rf osxcross
 
-RUN ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin13-cc \
- && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin13-c++
+RUN ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin14-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin14-c++
 
-ENV PATH $PATH:/x-tools/x86_64-apple-darwin13/bin
+ENV PATH $PATH:/x-tools/x86_64-apple-darwin14/bin
 
 # automake - sed build
 # autopoint - sed build
