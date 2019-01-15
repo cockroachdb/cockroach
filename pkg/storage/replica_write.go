@@ -427,7 +427,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			batch = spanset.NewBatch(batch, spans)
 		}
 
-		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba)
+		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
 		// If we can retry, set a higher batch timestamp and continue.
 		if wtoErr, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && canRetry {
 			// Allow one retry only; a non-txn batch containing overlapping
