@@ -30,10 +30,6 @@ import (
 
 func registerKV(r *registry) {
 	runKV := func(ctx context.Context, t *test, c *cluster, percent int, encryption option) {
-		if !c.isLocal() {
-			c.RemountNoBarrier(ctx)
-		}
-
 		nodes := c.nodes - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
@@ -83,10 +79,6 @@ func registerKVQuiescenceDead(r *registry) {
 		Nodes:      nodes(4),
 		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			if !c.isLocal() {
-				c.RemountNoBarrier(ctx)
-			}
-
 			nodes := c.nodes - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
@@ -166,10 +158,6 @@ func registerKVGracefulDraining(r *registry) {
 		Name:  "kv/gracefuldraining/nodes=3",
 		Nodes: nodes(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			if !c.isLocal() {
-				c.RemountNoBarrier(ctx)
-			}
-
 			nodes := c.nodes - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
@@ -329,10 +317,6 @@ func registerKVSplits(r *registry) {
 func registerKVScalability(r *registry) {
 	runScalability := func(ctx context.Context, t *test, c *cluster, percent int) {
 		nodes := c.nodes - 1
-
-		if !c.isLocal() {
-			c.RemountNoBarrier(ctx)
-		}
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))

@@ -64,8 +64,6 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		opts.Warehouses = 1
 		opts.Duration = 1 * time.Minute
 		rampDuration = 30 * time.Second
-	} else if !opts.ZFS {
-		c.RemountNoBarrier(ctx)
 	}
 
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
@@ -525,11 +523,6 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	for _, g := range loadGroup {
 		roachNodes = roachNodes.merge(g.roachNodes)
 		loadNodes = loadNodes.merge(g.loadNodes)
-	}
-
-	// Disable write barrier on mounted SSDs.
-	if !c.isLocal() {
-		c.RemountNoBarrier(ctx)
 	}
 
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
