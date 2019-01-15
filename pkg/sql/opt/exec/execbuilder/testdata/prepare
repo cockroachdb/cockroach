@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: fakedist-opt
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT); INSERT INTO ab (a, b) VALUES (1, 10)
@@ -36,3 +36,41 @@ scan  ·       ·
 ·     table   ab@primary
 ·     spans   ALL
 ·     filter  b = 10
+
+## Statistics change: Create statistics and ensure that the plan is recalculated.
+statement ok
+CREATE TABLE cd (c INT PRIMARY KEY, d INT)
+
+statement ok
+PREPARE change_stats AS SELECT * FROM [EXPLAIN SELECT * FROM ab JOIN cd ON a=c]
+
+query TTT
+EXECUTE change_stats
+----
+join       ·               ·
+ │         type            inner
+ │         equality        (a) = (c)
+ │         mergeJoinOrder  +"(a=c)"
+ ├── scan  ·               ·
+ │         table           ab@primary
+ │         spans           ALL
+ └── scan  ·               ·
+·          table           cd@primary
+·          spans           ALL
+
+statement ok
+CREATE STATISTICS s FROM ab
+
+# Now that the optimizer knows table ab has one row (and it assumes a much
+# higher number of rows for cd), it should choose lookup join.
+# We allow retry because stat cache invalidation happens asynchronously.
+query TTT retry
+EXECUTE change_stats
+----
+lookup-join  ·      ·
+ │           type   inner
+ ├── scan    ·      ·
+ │           table  ab@primary
+ │           spans  ALL
+ └── scan    ·      ·
+·            table  cd@primary
