@@ -78,6 +78,10 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 	if n == nil || n.resolver == nil {
 		return nil, errors.New("no node dialer configured")
 	}
+	// Don't trip the breaker if we're already canceled.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
 	breaker := n.getBreaker(nodeID)
 
 	if !breaker.Ready() {
@@ -119,6 +123,10 @@ func (n *Dialer) DialInternalClient(
 ) (context.Context, roachpb.InternalClient, error) {
 	if n == nil || n.resolver == nil {
 		return nil, nil, errors.New("no node dialer configured")
+	}
+	// Don't trip the breaker if we're already canceled.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, nil, ctxErr
 	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
