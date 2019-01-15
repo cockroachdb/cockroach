@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -292,7 +293,16 @@ func (mq *mergeQueue) process(
 	}
 
 	log.VEventf(ctx, 2, "merging to produce range: %s-%s", mergedDesc.StartKey, mergedDesc.EndKey)
-	_, pErr := lhsRepl.AdminMerge(ctx, roachpb.AdminMergeRequest{})
+	reason := fmt.Sprintf("lhs+rhs has (size=%s+%s qps=%.2f+%.2f --> %.2fqps) below threshold (size=%s, qps=%.2f)",
+		humanizeutil.IBytes(lhsStats.Total()),
+		humanizeutil.IBytes(rhsStats.Total()),
+		lhsQPS,
+		rhsQPS,
+		mergedQPS,
+		humanizeutil.IBytes(mergedStats.Total()),
+		mergedQPS,
+	)
+	_, pErr := lhsRepl.AdminMerge(ctx, roachpb.AdminMergeRequest{}, reason)
 	switch err := pErr.GoError(); err.(type) {
 	case nil:
 	case *roachpb.ConditionFailedError:

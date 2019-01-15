@@ -1008,7 +1008,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	// Split the range.
 	splitKey := roachpb.Key("m")
 	splitArgs := adminSplitArgs(splitKey)
-	if _, err := rep1.AdminSplit(context.Background(), *splitArgs); err != nil {
+	if _, err := rep1.AdminSplit(context.Background(), *splitArgs, "test"); err != nil {
 		t.Fatal(err)
 	}
 
