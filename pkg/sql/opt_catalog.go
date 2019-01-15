@@ -221,9 +221,13 @@ func (ov *optView) ID() cat.StableID {
 	return cat.StableID(ov.desc.ID)
 }
 
-// Version is part of the cat.DataSource interface.
-func (ov *optView) Version() cat.Version {
-	return cat.Version(ov.desc.Version)
+// Equals is part of the cat.DataSource interface.
+func (ov *optView) Equals(other cat.DataSource) bool {
+	otherView, ok := other.(*optView)
+	if !ok {
+		return false
+	}
+	return ov.desc.Version == otherView.desc.Version
 }
 
 // Name is part of the cat.View interface.
@@ -275,9 +279,13 @@ func (os *optSequence) ID() cat.StableID {
 	return cat.StableID(os.desc.ID)
 }
 
-// Version is part of the cat.DataSource interface.
-func (os *optSequence) Version() cat.Version {
-	return cat.Version(os.desc.Version)
+// Equals is part of the cat.DataSource interface.
+func (os *optSequence) Equals(other cat.DataSource) bool {
+	otherSeq, ok := other.(*optSequence)
+	if !ok {
+		return false
+	}
+	return os.desc.Version == otherSeq.desc.Version
 }
 
 // Name is part of the cat.DataSource interface.
@@ -369,9 +377,13 @@ func (ot *optTable) ID() cat.StableID {
 	return cat.StableID(ot.desc.ID)
 }
 
-// Version is part of the cat.DataSource interface.
-func (ot *optTable) Version() cat.Version {
-	return cat.Version(ot.desc.Version)
+// Equals is part of the cat.DataSource interface.
+func (ot *optTable) Equals(other cat.DataSource) bool {
+	otherTable, ok := other.(*optTable)
+	if !ok {
+		return false
+	}
+	return ot.desc.Version == otherTable.desc.Version
 }
 
 // Name is part of the cat.DataSource interface.

@@ -150,7 +150,7 @@ func (md *Metadata) CheckDependencies(
 			if err != nil {
 				return false, err
 			}
-			if new.Version() != old.Version() {
+			if !new.Equals(old) {
 				return false, nil
 			}
 			toCheck = new
