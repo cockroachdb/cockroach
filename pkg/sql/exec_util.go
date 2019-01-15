@@ -64,6 +64,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ClusterName is the cluster name.
+var ClusterName = settings.RegisterStringSetting(
+	"cluster.name",
+	"cluster name",
+	"",
+)
+
 // ClusterOrganization is the organization name.
 var ClusterOrganization = settings.RegisterStringSetting(
 	"cluster.organization",
@@ -372,6 +379,11 @@ type ExecutorConfig struct {
 	// Caches updated by DistSQL.
 	RangeDescriptorCache *kv.RangeDescriptorCache
 	LeaseHolderCache     *kv.LeaseHolderCache
+}
+
+// Name returns the value of cluster.name.
+func (ec *ExecutorConfig) Name() string {
+	return ClusterName.Get(&ec.Settings.SV)
 }
 
 // Organization returns the value of cluster.organization.
