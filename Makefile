@@ -238,6 +238,11 @@ $(call make-lazy,term-reset)
 # Print an error if the user specified any variables on the command line that
 # don't appear in this Makefile. The list of valid variables is automatically
 # rebuilt on the first successful `make` invocation after the Makefile changes.
+#
+# TODO(peter): Figure out how to disallow overriding of variables that
+# are not in the valid list from the environment. The problem is that
+# any environment variable becomes a make variable and environments
+# are dirty. For instance, my includes GREP_COLOR.
 include build/variables.mk
 $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
@@ -334,7 +339,7 @@ build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile bui
 	@echo '# GENERATED FILE DO NOT EDIT' >> $@
 	@echo 'define VALID_VARS' >> $@
 	@sed -nE -e '/^	/d' -e 's/([^#]*)#.*/\1/' \
-	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([^ ]+)[ ]*[:?+]?=.*/  \3/p' $^ \
+	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([[:upper:]_]+)[ ]*[:?+]?=.*/  \3/p' $^ \
 	  | sort -u >> $@
 	@echo 'endef' >> $@
 
@@ -383,13 +388,13 @@ configure-flags :=
 # Similarly for xconfigure-flags and configure-flags, and xgo and GO.
 xcmake-flags := $(cmake-flags) $(EXTRA_XCMAKE_FLAGS)
 xconfigure-flags := $(configure-flags) $(EXTRA_XCONFIGURE_FLAGS)
-xgo := $(GO)
+override xgo := GOFLAGS= $(GO)
 
 # If we're cross-compiling, inform Autotools and CMake.
 ifdef is-cross-compile
 xconfigure-flags += --host=$(TARGET_TRIPLE) CC=$(XCC) CXX=$(XCXX)
 xcmake-flags += -DCMAKE_SYSTEM_NAME=$(XCMAKE_SYSTEM_NAME) -DCMAKE_C_COMPILER=$(XCC) -DCMAKE_CXX_COMPILER=$(XCXX)
-xgo := GOOS=$(XGOOS) GOARCH=$(XGOARCH) CC=$(XCC) CXX=$(XCXX) $(xgo)
+override xgo := GOFLAGS= GOOS=$(XGOOS) GOARCH=$(XGOARCH) CC=$(XCC) CXX=$(XCXX) $(xgo)
 endif
 
 C_DEPS_DIR := $(abspath c-deps)
