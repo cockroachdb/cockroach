@@ -16,6 +16,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -180,6 +182,7 @@ func (sq *splitQueue) processAttempt(
 			},
 			desc,
 			false, /* delayable */
+			"zone config",
 		); err != nil {
 			return errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}
@@ -197,21 +200,42 @@ func (sq *splitQueue) processAttempt(
 			roachpb.AdminSplitRequest{},
 			desc,
 			false, /* delayable */
+			fmt.Sprintf("%s above threshold size %s", humanizeutil.IBytes(size), humanizeutil.IBytes(maxBytes)),
 		)
 		return err
 	}
 
-	// If the cluster setting for load based splitting
-	// is disabled, splitFinder is nil and this becomes a
-	// no-op.
+	// Decide whether to split by load. This is the case if there's an engaged
+	// split finder which is Ready() and has identified a key suitable for
+	// splitting at.
+	var splitByLoadKey roachpb.Key
+	var splitQPS float64
+
+	// If this replica was added to the split queue based on load, we want to
+	// make sure the criteria still hold. For example, if a range was added for
+	// a split due to a 10s write burst that suddenly stopped, we don't want to
+	// split it when it is processed a minute later.
 	r.splitMu.Lock()
-	splitByLoad, splitByLoadKey := r.splitMu.splitFinder.Key()
-	if splitByLoad {
-		r.splitMu.splitFinder = nil
+	if _, shouldSplit := r.needsSplitByLoadLocked(); shouldSplit {
+		var splitByLoad bool
+		splitByLoad, splitByLoadKey = r.splitMu.splitFinder.Key()
+		splitQPS = r.splitMu.qps
+		if splitByLoad {
+			r.splitMu.splitFinder = nil
+		}
 	}
 	r.splitMu.Unlock()
-	if splitByLoad {
-		log.Infof(ctx, "initiating a split based on load at key %q", splitByLoadKey)
+
+	if splitByLoadKey != nil {
+		batchHandledQPS := r.QueriesPerSecond()
+		raftAppliedQPS := r.WritesPerSecond()
+		reason := fmt.Sprintf(
+			"load at key %s (%.2f splitQPS, %.2f batches/sec, %.2f raft mutations/sec)",
+			splitByLoadKey,
+			splitQPS,
+			batchHandledQPS,
+			raftAppliedQPS,
+		)
 		if _, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{
@@ -222,6 +246,7 @@ func (sq *splitQueue) processAttempt(
 			},
 			desc,
 			false, /* delayable */
+			reason,
 		); pErr != nil {
 			return errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
 		}

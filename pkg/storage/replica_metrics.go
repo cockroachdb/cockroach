@@ -212,12 +212,22 @@ func calcBehindCount(
 // QueriesPerSecond returns the range's average QPS if it is the current
 // leaseholder. If it isn't, this will return 0 because the replica does not
 // know about the reads that the leaseholder is serving.
+//
+// A "Query" is a BatchRequest (regardless of its contents) arriving at the
+// leaseholder with a gateway node set in the header (i.e. excluding requests
+// that weren't sent through a DistSender, which in practice should be
+// practically none).
 func (r *Replica) QueriesPerSecond() float64 {
 	qps, _ := r.leaseholderStats.avgQPS()
 	return qps
 }
 
-// WritesPerSecond returns the range's average keys written per second.
+// WritesPerSecond returns the range's average keys written per second. A
+// "Write" is a mutation applied by Raft as measured by
+// engine.RocksDBBatchCount(writeBatch). This corresponds roughly to the number
+// of keys mutated by a write. For example, writing 12 intents would count as 24
+// writes (12 for the metadata, 12 for the versions). A DeleteRange that
+// ultimately only removes one key counts as one (or two if it's transactional).
 func (r *Replica) WritesPerSecond() float64 {
 	wps, _ := r.writeStats.avgQPS()
 	return wps
