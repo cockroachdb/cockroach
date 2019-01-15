@@ -97,6 +97,7 @@ type indexHTMLArgs struct {
 	Tag                  string
 	Version              string
 	NodeID               string
+	ClusterName          string
 }
 
 // bareIndexHTML is used in place of indexHTMLTemplate when the binary is built
@@ -113,6 +114,7 @@ type Config struct {
 	LoginEnabled         bool
 	NodeID               *base.NodeIDContainer
 	GetUser              func(ctx context.Context) *string
+	GetClusterName       func() string
 }
 
 // Handler returns an http.Handler that serves the UI,
@@ -144,6 +146,7 @@ func Handler(cfg Config) http.Handler {
 			Tag:                  buildInfo.Tag,
 			Version:              build.VersionPrefix(),
 			NodeID:               cfg.NodeID.String(),
+			ClusterName:          cfg.GetClusterName(),
 		}); err != nil {
 			err = errors.Wrap(err, "templating index.html")
 			http.Error(w, err.Error(), 500)

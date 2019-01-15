@@ -1632,6 +1632,9 @@ func (s *Server) Start(ctx context.Context) error {
 				}
 				return nil
 			},
+			GetClusterName: func() string {
+				return s.execCfg.Name()
+			},
 		}),
 	)
 	s.mux.Handle("/", authenticatedUIHandler)

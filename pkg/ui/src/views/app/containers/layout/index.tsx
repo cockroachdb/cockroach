@@ -16,12 +16,21 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { RouterState } from "react-router";
 
+import { getDataFromServer } from "src/util/dataFromServer";
 import NavigationBar from "src/views/app/components/layoutSidebar";
 import TimeWindowManager from "src/views/app/containers/timewindow";
 import AlertBanner from "src/views/app/containers/alertBanner";
 import RequireLogin from "src/views/login/requireLogin";
 
 import "./layout.styl";
+
+function getBaseTitle() {
+    const clusterName = getDataFromServer().ClusterName;
+    if (clusterName === "") {
+        return "Cockroach Console";
+    }
+    return `${clusterName} Cluster | Cockroach Console`;
+}
 
 /**
  * Defines the main layout of all admin ui pages. This includes static
@@ -31,9 +40,10 @@ import "./layout.styl";
  */
 export default class extends React.Component<RouterState, {}> {
   render() {
+    const baseTitle = getBaseTitle();
     return (
       <RequireLogin>
-        <Helmet titleTemplate="%s | Cockroach Console" defaultTitle="Cockroach Console" />
+        <Helmet titleTemplate={`%s | ${baseTitle}`} defaultTitle={baseTitle} />
         <TimeWindowManager/>
         <AlertBanner/>
         <NavigationBar/>
