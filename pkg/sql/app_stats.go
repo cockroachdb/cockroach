@@ -85,6 +85,14 @@ var sampleLogicalPlans = settings.RegisterBoolSetting(
 	true,
 )
 
+// saveFingerprintPlanOnceEvery is the number of queries for a given fingerprint that go by before
+// we save the plan again.
+var saveFingerprintPlanOnceEvery = settings.RegisterIntSetting(
+	"sql.metrics.statement_details.logical_plans_sampling_frequency",
+	"number of queries for a given fingerprint that go by before we save the plan again",
+	1000,
+)
+
 func (s stmtKey) String() string {
 	return s.flags() + s.stmt
 }
@@ -102,10 +110,6 @@ func (s stmtKey) flags() string {
 	}
 	return b.String()
 }
-
-// saveFingerprintPlanOnceEvery is the number of queries for a given fingerprint that go by before
-// we save the plan again.
-const saveFingerprintPlanOnceEvery = 1000
 
 // recordStatement saves per-statement statistics.
 //

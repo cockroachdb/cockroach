@@ -931,7 +931,7 @@ func (ex *connExecutor) saveLogicalPlanDescription(
 	count := stats.data.Count
 	stats.Unlock()
 
-	return count%saveFingerprintPlanOnceEvery == 0
+	return count%saveFingerprintPlanOnceEvery.Get(&ex.appStats.st.SV) == 0
 }
 
 // canFallbackFromOpt returns whether we can fallback on the heuristic planner
