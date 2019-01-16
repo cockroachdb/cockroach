@@ -634,9 +634,19 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 
 		distinct := false
 		var argIdx []exec.ColumnOrdinal
+		var filterOrd exec.ColumnOrdinal = -1
 
 		if item.Agg.ChildCount() > 0 {
 			child := item.Agg.Child(0)
+
+			if aggFilter, ok := child.(*memo.AggFilterExpr); ok {
+				filter, ok := aggFilter.Filter.(*memo.VariableExpr)
+				if !ok {
+					return execPlan{}, errors.Errorf("only VariableOp args supported")
+				}
+				filterOrd = input.getColumnOrdinal(filter.Col)
+				child = aggFilter.Input
+			}
 
 			if aggDistinct, ok := child.(*memo.AggDistinctExpr); ok {
 				distinct = true
@@ -658,6 +668,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 			ResultType: item.Agg.DataType(),
 			ArgCols:    argIdx,
 			ConstArgs:  constArgs,
+			Filter:     filterOrd,
 		}
 		ep.outputCols.Set(int(item.Col), len(groupingColIdx)+i)
 	}
