@@ -166,6 +166,8 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 	ctx := p.AnnotateCtx(context.Background())
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer close(p.stoppedC)
+		ctx, cancelOutputLoops := context.WithCancel(ctx)
+		defer cancelOutputLoops()
 
 		// Launch an async task to scan over the resolved timestamp iterator and
 		// initialize the unresolvedIntentQueue. Ignore error if quiescing.
