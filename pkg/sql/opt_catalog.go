@@ -149,7 +149,7 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 	case *optSequence:
 		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
 	default:
-		panic("invalid DataSource")
+		return pgerror.NewAssertionErrorf("invalid object type: %T", o)
 	}
 }
 
