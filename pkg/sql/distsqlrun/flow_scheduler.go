@@ -123,6 +123,7 @@ func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f *Flow) error {
 				return fs.runFlowNow(ctx, f)
 			}
 			log.VEventf(ctx, 1, "flow scheduler enqueuing flow %s to be run later", f.id)
+			fs.metrics.FlowsQueued.Inc(1)
 			fs.mu.queue.PushBack(&flowWithCtx{
 				ctx:         ctx,
 				flow:        f,
@@ -156,9 +157,12 @@ func (fs *flowScheduler) Start() {
 					if frElem := fs.mu.queue.Front(); frElem != nil {
 						n := frElem.Value.(*flowWithCtx)
 						fs.mu.queue.Remove(frElem)
+						wait := timeutil.Since(n.enqueueTime)
 						log.VEventf(
-							n.ctx, 1, "flow scheduler dequeued flow %s, spent %s in queue", n.flow.id, timeutil.Since(n.enqueueTime),
+							n.ctx, 1, "flow scheduler dequeued flow %s, spent %s in queue", n.flow.id, wait,
 						)
+						fs.metrics.FlowsQueued.Dec(1)
+						fs.metrics.QueueWaitHist.RecordValue(int64(wait))
 						// Note: we use the flow's context instead of the worker
 						// context, to ensure that logging etc is relative to the
 						// specific flow.
