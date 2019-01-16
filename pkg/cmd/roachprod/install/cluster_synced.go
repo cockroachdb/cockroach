@@ -211,7 +211,7 @@ func (c *SyncedCluster) Wipe() {
 		} else {
 			cmd = `find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
 rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data} \; ;
-rm -fr certs* ;
+rm -fr {certs*,logs} ;
 `
 		}
 		return sess.CombinedOutput(cmd)
