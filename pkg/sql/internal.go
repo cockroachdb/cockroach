@@ -431,8 +431,9 @@ func (ie *internalExecutorImpl) execInternal(
 		fallthrough
 	case internalExecRootSession:
 		sargs.SessionDefaults = map[string]string{
-			"database":         "system",
-			"application_name": InternalAppNamePrefix + "internal-" + opName,
+			"database":                  "system",
+			"application_name":          InternalAppNamePrefix + "internal-" + opName,
+			"statement_logging_enabled": "false",
 		}
 	}
 

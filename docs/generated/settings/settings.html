@@ -79,6 +79,9 @@
 <tr><td><code>sql.metrics.statement_details.enabled</code></td><td>boolean</td><td><code>true</code></td><td>collect per-statement query statistics</td></tr>
 <tr><td><code>sql.metrics.statement_details.sample_logical_plans</code></td><td>boolean</td><td><code>true</code></td><td>periodically save a logical plan for each fingerprint</td></tr>
 <tr><td><code>sql.metrics.statement_details.threshold</code></td><td>duration</td><td><code>0s</code></td><td>minimum execution time to cause statistics to be collected</td></tr>
+<tr><td><code>sql.metrics.statement_execution_log.enabled</code></td><td>boolean</td><td><code>true</code></td><td>collect per-execution statement timings</td></tr>
+<tr><td><code>sql.metrics.statement_execution_log.flush_frequency</code></td><td>duration</td><td><code>1s</code></td><td>the frequency to flush statement executions to the system table</td></tr>
+<tr><td><code>sql.metrics.statement_execution_log.threshold</code></td><td>duration</td><td><code>0s</code></td><td>minimum execution time to cause statistics to be collected</td></tr>
 <tr><td><code>sql.parallel_scans.enabled</code></td><td>boolean</td><td><code>true</code></td><td>parallelizes scanning different ranges when the maximum result size can be deduced</td></tr>
 <tr><td><code>sql.query_cache.enabled</code></td><td>boolean</td><td><code>false</code></td><td>enable the query cache</td></tr>
 <tr><td><code>sql.tablecache.lease.refresh_limit</code></td><td>integer</td><td><code>50</code></td><td>maximum number of tables to periodically refresh leases for</td></tr>

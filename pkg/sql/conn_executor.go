@@ -241,6 +241,10 @@ type Server struct {
 	// node.
 	sqlStats sqlStats
 
+	// executionLog holds per-executions timings until they are persisted to the
+	// system table.
+	executionLog executionLog
+
 	reCache *tree.RegexpCache
 
 	// pool is the parent monitor for all session monitors except "internal" ones.
@@ -275,10 +279,11 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		Metrics:         makeMetrics(false /*internal*/),
 		InternalMetrics: makeMetrics(true /*internal*/),
 		// dbCache will be updated on Start().
-		dbCache:  newDatabaseCacheHolder(newDatabaseCache(config.NewSystemConfig())),
-		pool:     pool,
-		sqlStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
-		reCache:  tree.NewRegexpCache(512),
+		dbCache:      newDatabaseCacheHolder(newDatabaseCache(config.NewSystemConfig())),
+		pool:         pool,
+		sqlStats:     sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
+		executionLog: makeExecutionLog(cfg.Settings),
+		reCache:      tree.NewRegexpCache(512),
 	}
 }
 
@@ -320,6 +325,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 		}
 	})
 	s.PeriodicallyClearStmtStats(ctx, stopper)
+	s.PeriodicallyFlushStmtExecutionLog(ctx, stopper)
 }
 
 // ResetStatementStats resets the executor's collected statement statistics.
@@ -667,6 +673,26 @@ func (s *Server) PeriodicallyClearStmtStats(ctx context.Context, stopper *stop.S
 					timer.Read = true
 				}
 			}
+		}
+	})
+}
+
+// PeriodicallyFlushStmtExecutionLog flushes the statement execution log to the
+// system table.
+func (s *Server) PeriodicallyFlushStmtExecutionLog(ctx context.Context, stopper *stop.Stopper) {
+	stopper.RunWorker(ctx, func(ctx context.Context) {
+		var timer timeutil.Timer
+		for {
+			wait := sqlExecutionLogFlushFrequency.Get(&s.cfg.Settings.SV)
+			timer.Reset(wait)
+			select {
+			case <-stopper.ShouldQuiesce():
+				return
+			case <-timer.C:
+				timer.Read = true
+			}
+
+			s.executionLog.writeToSql(ctx, s.cfg)
 		}
 	})
 }
@@ -1878,6 +1904,9 @@ func (ex *connExecutor) resetPlanner(
 		p.statsCollector = ex.newStatsCollector()
 	} else {
 		p.statsCollector.Reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	}
+	if p.executionLog == nil {
+		p.executionLog = &ex.server.executionLog
 	}
 
 	p.semaCtx = tree.MakeSemaContext(ex.sessionData.User == security.RootUser)

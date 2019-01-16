@@ -612,7 +612,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData.StatementLoggingEnabled)
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: globalTrue,
 	},
 
 	`statement_timeout`: {
@@ -731,6 +731,7 @@ func makeReadOnlyVar(value string) sessionVar {
 }
 
 func globalFalse(_ *settings.Values) string { return formatBoolAsPostgresSetting(false) }
+func globalTrue(_ *settings.Values) string  { return formatBoolAsPostgresSetting(true) }
 
 func makeCompatStringVar(varName, displayValue string, extraAllowed ...string) sessionVar {
 	allowedVals := append(extraAllowed, strings.ToLower(displayValue))

@@ -228,19 +228,20 @@ CREATE TABLE system.comments (
 	// statement_executions stores metrics about executed statements.
 	StatementExecutionsTableSchema = `
 CREATE TABLE system.statement_executions (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    received_at      TIMESTAMP NOT NULL,
-    statement        STRING NOT NULL,
-    application_name STRING NOT NULL,
-    distributed      BOOL NOT NULL,
-    optimized        BOOL NOT NULL,
-    retries          INT NOT NULL,      -- how many automatic retries occurred?
-    error            STRING NULL,       -- if execution failed, this is the error
-    rows_affected    INT NOT NULL,      -- the number of rows affected
-    parse_lat        INTERVAL NOT NULL, -- latency of parsing, in nanoseconds
-    plan_lat         INTERVAL NOT NULL, -- latency of planning, in nanoseconds
-    run_lat          INTERVAL NOT NULL, -- execution latency, in nanoseconds
-    service_lat      INTERVAL NOT NULL  -- end-to-end latency, in nanoseconds
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    node_id                 INT NOT NULL, -- the gateway node
+    received_at             TIMESTAMP NOT NULL,
+    statement               STRING NOT NULL,
+    application_name        STRING NOT NULL,
+    distributed             BOOL NOT NULL,
+    optimized               BOOL NOT NULL,
+    automatic_retry_count   INT NOT NULL,
+    error                   STRING NULL, -- if execution failed, the error
+    rows_affected           INT NOT NULL,
+    parse_lat               INTERVAL NOT NULL,
+    plan_lat                INTERVAL NOT NULL,
+    run_lat                 INTERVAL NOT NULL,
+    service_lat             INTERVAL NOT NULL
 );`
 )
 
@@ -902,26 +903,28 @@ var (
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeUuid, DefaultExpr: &genRandomUUIDString},
-			{Name: "received_at", ID: 2, Type: colTypeTimestamp},
-			{Name: "statement", ID: 3, Type: colTypeString},
-			{Name: "application_name", ID: 4, Type: colTypeString},
-			{Name: "distributed", ID: 5, Type: colTypeBool},
-			{Name: "optimized", ID: 6, Type: colTypeBool},
-			{Name: "retries", ID: 7, Type: colTypeInt},
-			{Name: "error", ID: 8, Type: colTypeString, Nullable: true},
-			{Name: "rows_affected", ID: 9, Type: colTypeInt},
-			{Name: "parse_lat", ID: 10, Type: colTypeInterval},
-			{Name: "plan_lat", ID: 11, Type: colTypeInterval},
-			{Name: "run_lat", ID: 12, Type: colTypeInterval},
-			{Name: "service_lat", ID: 13, Type: colTypeInterval},
+			{Name: "node_id", ID: 2, Type: colTypeInt},
+			{Name: "received_at", ID: 3, Type: colTypeTimestamp},
+			{Name: "statement", ID: 4, Type: colTypeString},
+			{Name: "application_name", ID: 5, Type: colTypeString},
+			{Name: "distributed", ID: 6, Type: colTypeBool},
+			{Name: "optimized", ID: 7, Type: colTypeBool},
+			{Name: "automatic_retry_count", ID: 8, Type: colTypeInt},
+			{Name: "error", ID: 9, Type: colTypeString, Nullable: true},
+			{Name: "rows_affected", ID: 10, Type: colTypeInt},
+			{Name: "parse_lat", ID: 11, Type: colTypeInterval},
+			{Name: "plan_lat", ID: 12, Type: colTypeInterval},
+			{Name: "run_lat", ID: 13, Type: colTypeInterval},
+			{Name: "service_lat", ID: 14, Type: colTypeInterval},
 		},
-		NextColumnID: 14,
+		NextColumnID: 15,
 		Families: []ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{
-				"id", "received_at", "statement", "application_name",
-				"distributed", "optimized", "retries", "error", "rows_affected",
+				"id", "node_id", "received_at", "statement",
+				"application_name", "distributed", "optimized",
+				"automatic_retry_count", "error", "rows_affected",
 				"parse_lat", "plan_lat", "run_lat", "service_lat"},
-				ColumnIDs: []ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}},
+				ColumnIDs: []ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}},
 		},
 		NextFamilyID: 1,
 		PrimaryIndex: IndexDescriptor{

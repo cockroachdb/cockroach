@@ -112,6 +112,9 @@ type planner struct {
 	// statsCollector is used to collect statistics about SQL statement execution.
 	statsCollector sqlStatsCollector
 
+	// executionLog collects detailed timings of SQL statement executions.
+	executionLog *executionLog
+
 	// avoidCachedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
 	// within the transaction. This is necessary to read descriptors
