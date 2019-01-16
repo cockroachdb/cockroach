@@ -692,7 +692,7 @@ func (s *Server) PeriodicallyFlushStmtExecutionLog(ctx context.Context, stopper 
 				timer.Read = true
 			}
 
-			s.executionLog.writeToSql(ctx, s.cfg)
+			s.executionLog.writeToSQL(ctx, s.cfg)
 		}
 	})
 }

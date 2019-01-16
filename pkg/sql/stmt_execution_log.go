@@ -75,7 +75,7 @@ var sqlExecutionLogFlushFrequency = settings.RegisterDurationSetting(
 func makeExecutionLog(st *cluster.Settings) executionLog {
 	return executionLog{
 		st:             st,
-		stmtExecutions: make([]stmtExecution, 0, 100), // TODO: what inital cap?
+		stmtExecutions: make([]stmtExecution, 0, 100), // TODO: what initial cap?
 	}
 }
 
@@ -126,7 +126,7 @@ func (e *executionLog) recordExecution(
 
 // writeToSql stores the in-memory execution log to the SQL table and
 // clears the in-memory store.
-func (e *executionLog) writeToSql(ctx context.Context, execCfg *ExecutorConfig) {
+func (e *executionLog) writeToSQL(ctx context.Context, execCfg *ExecutorConfig) {
 	e.Lock()
 	executions := e.stmtExecutions
 	e.stmtExecutions = make([]stmtExecution, 0, len(e.stmtExecutions)/2)

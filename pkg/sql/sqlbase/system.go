@@ -295,7 +295,7 @@ var (
 	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
 	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
 	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
-	colTypeUuid      = ColumnType{SemanticType: ColumnType_UUID}
+	colTypeUUID      = ColumnType{SemanticType: ColumnType_UUID}
 	colTypeIntArray  = ColumnType{
 		SemanticType:    ColumnType_ARRAY,
 		ArrayContents:   &colTypeInt.SemanticType,
@@ -902,7 +902,7 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "id", ID: 1, Type: colTypeUuid, DefaultExpr: &genRandomUUIDString},
+			{Name: "id", ID: 1, Type: colTypeUUID, DefaultExpr: &genRandomUUIDString},
 			{Name: "node_id", ID: 2, Type: colTypeInt},
 			{Name: "received_at", ID: 3, Type: colTypeTimestamp},
 			{Name: "statement", ID: 4, Type: colTypeString},
