@@ -154,7 +154,7 @@ func (ex *connExecutor) recordStatementSummary(
 		applicationName := planner.SessionData().ApplicationName
 		receivedAt := phaseTimes[sessionQueryReceived]
 		planner.executionLog.recordExecution(
-			tree.AsString(stmt.AST), applicationName, receivedAt,
+			stmt, applicationName, receivedAt,
 			planFlags.IsSet(planFlagDistributed),
 			planFlags.IsSet(planFlagOptUsed),
 			automaticRetryCount, rowsAffected, err,

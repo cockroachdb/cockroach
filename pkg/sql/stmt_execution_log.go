@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -36,7 +37,7 @@ type executionLog struct {
 // stmtExecution holds per-statement timings.
 type stmtExecution struct {
 	receivedAt          time.Time
-	statement           string
+	statement           Statement
 	applicationName     string
 	distributed         bool
 	optimized           bool
@@ -81,7 +82,7 @@ func makeExecutionLog(st *cluster.Settings) executionLog {
 
 // recordExecution saves per-execution timings.
 func (e *executionLog) recordExecution(
-	statement string,
+	statement Statement,
 	applicationName string,
 	receivedAt time.Time,
 	distributed bool,
@@ -134,7 +135,7 @@ func (e *executionLog) writeToSQL(ctx context.Context, execCfg *ExecutorConfig) 
 
 	insertTimings := `INSERT INTO system.statement_executions
 (
-    received_at, node_id, statement, application_name,
+    received_at, node_id, statement, statement_key, application_name,
     distributed, optimized, automatic_retry_count,
     error, rows_affected,
     parse_lat, plan_lat, run_lat, service_lat
@@ -152,7 +153,8 @@ func (e *executionLog) writeToSQL(ctx context.Context, execCfg *ExecutorConfig) 
 			insertTimings,
 			ex.receivedAt,
 			execCfg.NodeID.Get(),
-			ex.statement,
+			tree.AsString(ex.statement.AST),
+			tree.AsStringWithFlags(ex.statement.AST, tree.FmtHideConstants),
 			ex.applicationName,
 			ex.distributed,
 			ex.optimized,
