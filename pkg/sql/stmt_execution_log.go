@@ -140,7 +140,7 @@ func (e *executionLog) writeToSQL(ctx context.Context, execCfg *ExecutorConfig) 
     error, rows_affected,
     parse_lat, plan_lat, run_lat, service_lat
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )`
 
 	// TODO: bulkify this DML

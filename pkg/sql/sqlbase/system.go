@@ -922,7 +922,7 @@ var (
 		NextColumnID: 16,
 		Families: []ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{
-				"id", "node_id", "received_at", "statement",
+				"id", "node_id", "received_at", "statement", "statement_key",
 				"application_name", "distributed", "optimized",
 				"automatic_retry_count", "error", "rows_affected",
 				"parse_lat", "plan_lat", "run_lat", "service_lat"},
