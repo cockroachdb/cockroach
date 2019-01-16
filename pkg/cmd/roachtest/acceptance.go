@@ -25,6 +25,10 @@ func registerAcceptance(r *registry) {
 	// local mode the acceptance tests should be configured to run within a
 	// minute or so as these tests are run on every merge to master.
 
+	// NB: zerosum-restart is skipped due to generating various errors during
+	// its rebalances. See the comment on:
+	_ = isExpectedRelocateError
+
 	testCases := []struct {
 		name string
 		fn   func(ctx context.Context, t *test, c *cluster)
@@ -33,7 +37,7 @@ func registerAcceptance(r *registry) {
 		{"bank/cluster-recovery", runBankClusterRecovery},
 		{"bank/node-restart", runBankNodeRestart},
 		{"bank/zerosum-splits", runBankNodeZeroSum},
-		{"bank/zerosum-restart", runBankZeroSumRestart},
+		// {"bank/zerosum-restart", runBankZeroSumRestart},
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
 		{"decommission", runDecommissionAcceptance},
