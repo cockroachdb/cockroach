@@ -632,7 +632,7 @@ func TestShowQueries(t *testing.T) {
 	// Now check the behavior on error.
 	tc.StopServer(1)
 
-	rows, err := conn1.Query(`SELECT node_id, query FROM [SHOW CLUSTER QUERIES]`)
+	rows, err := conn1.Query(`SELECT node_id, query FROM [SHOW ALL CLUSTER QUERIES]`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -743,7 +743,7 @@ func TestShowSessions(t *testing.T) {
 	// Now check the behavior on error.
 	tc.StopServer(1)
 
-	rows, err = conn.Query(`SELECT node_id, active_queries FROM [SHOW CLUSTER SESSIONS]`)
+	rows, err = conn.Query(`SELECT node_id, active_queries FROM [SHOW ALL CLUSTER SESSIONS]`)
 	if err != nil {
 		t.Fatal(err)
 	}
