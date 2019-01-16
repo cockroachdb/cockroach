@@ -166,8 +166,8 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 		Store: &storage.StoreTestingKnobs{
 			BootstrapVersion: &bootstrapVersion,
 		},
-		Upgrade: &server.UpgradeTestingKnobs{
-			DisableUpgrade: 1,
+		Server: &server.ServerTestingKnobs{
+			DisableAutomaticVersionUpgrade: 1,
 		},
 	}
 
@@ -217,8 +217,8 @@ func TestClusterVersionUpgrade(t *testing.T) {
 		Store: &storage.StoreTestingKnobs{
 			BootstrapVersion: &bootstrapVersion,
 		},
-		Upgrade: &server.UpgradeTestingKnobs{
-			DisableUpgrade: 1,
+		Server: &server.ServerTestingKnobs{
+			DisableAutomaticVersionUpgrade: 1,
 		},
 	}
 	tc := setupMixedCluster(t, knobs, versions, dir)
@@ -228,7 +228,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	if err := tc.setDowngrade(0, oldVersion.String()); err != nil {
 		t.Fatalf("error setting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
 	}
-	atomic.StoreInt32(&knobs.Upgrade.(*server.UpgradeTestingKnobs).DisableUpgrade, 0)
+	atomic.StoreInt32(&knobs.Server.(*server.ServerTestingKnobs).DisableAutomaticVersionUpgrade, 0)
 
 	// Check the cluster version is still oldVersion.
 	curVersion := tc.getVersionFromSelect(0)
