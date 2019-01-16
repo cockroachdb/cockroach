@@ -247,7 +247,7 @@ func testInternalExecutorAppNameInitialization(
 			nil, /* txn */
 			// We need to assemble the magic string so that this SELECT
 			// does not find itself.
-			"SELECT query_id, application_name FROM [SHOW QUERIES] WHERE query LIKE '%337' || '666%'")
+			"SELECT query_id, application_name FROM [SHOW ALL QUERIES] WHERE query LIKE '%337' || '666%'")
 		if err != nil {
 			return err
 		}

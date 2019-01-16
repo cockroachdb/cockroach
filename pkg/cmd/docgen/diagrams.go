@@ -1106,8 +1106,9 @@ var specs = []stmtSpec{
 		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'KEYS'")},
 	},
 	{
-		name: "show_queries",
-		stmt: "show_queries_stmt",
+		name:   "show_queries",
+		stmt:   "show_queries_stmt",
+		inline: []string{"opt_cluster"},
 	},
 	{
 		name: "show_roles_stmt",
@@ -1126,8 +1127,9 @@ var specs = []stmtSpec{
 		stmt: "show_sequences_stmt",
 	},
 	{
-		name: "show_sessions",
-		stmt: "show_sessions_stmt",
+		name:   "show_sessions",
+		stmt:   "show_sessions_stmt",
+		inline: []string{"opt_cluster"},
 	},
 	{
 		name: "show_stats",

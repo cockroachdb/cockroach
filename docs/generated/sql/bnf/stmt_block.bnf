@@ -475,9 +475,8 @@ show_jobs_stmt ::=
 	'SHOW' 'JOBS'
 
 show_queries_stmt ::=
-	'SHOW' 'QUERIES'
-	| 'SHOW' 'CLUSTER' 'QUERIES'
-	| 'SHOW' 'LOCAL' 'QUERIES'
+	'SHOW' opt_cluster 'QUERIES'
+	| 'SHOW' 'ALL' opt_cluster 'QUERIES'
 
 show_ranges_stmt ::=
 	'SHOW' ranges_kw 'FROM' 'TABLE' table_name
@@ -499,9 +498,8 @@ show_session_stmt ::=
 	| 'SHOW' 'SESSION' session_var
 
 show_sessions_stmt ::=
-	'SHOW' 'SESSIONS'
-	| 'SHOW' 'CLUSTER' 'SESSIONS'
-	| 'SHOW' 'LOCAL' 'SESSIONS'
+	'SHOW' opt_cluster 'SESSIONS'
+	| 'SHOW' 'ALL' opt_cluster 'SESSIONS'
 
 show_stats_stmt ::=
 	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name
@@ -1121,6 +1119,10 @@ opt_on_targets_roles ::=
 for_grantee_clause ::=
 	'FOR' name_list
 	| 
+
+opt_cluster ::=
+	'CLUSTER'
+	| 'LOCAL'
 
 ranges_kw ::=
 	'TESTING_RANGES'
