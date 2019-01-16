@@ -360,6 +360,56 @@ func (sc *SchemaChanger) nRanges(
 	return len(rangeIds), nil
 }
 
+type backfillProgress struct {
+	// Number of ranges needing processing at the very beginning.
+	origNRanges int
+	// The fraction completed from a previous backfill attempt.
+	origFractionCompleted float32
+	// Current number of ranges needing processing.
+	nRanges int
+}
+
+func (sc *SchemaChanger) reportProgress(
+	ctx context.Context, bp backfillProgress,
+) (backfillProgress, error) {
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Report schema change progress. We define progress at this point
+		// as the the fraction of fully-backfilled ranges of the primary index of
+		// the table being scanned. Since we may have already modified the
+		// fraction completed of our job from a previous backfill attempt,
+		// we scale that fraction of ranges completed by the remaining fraction
+		// of the job's progress bar.
+		if bp.nRanges < bp.origNRanges {
+			fractionRangesFinished := float32(bp.origNRanges-bp.nRanges) / float32(bp.origNRanges)
+			fractionLeft := 1 - bp.origFractionCompleted
+			fractionCompleted := bp.origFractionCompleted + fractionLeft*fractionRangesFinished
+			if err := sc.job.FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted)); err != nil {
+				return jobs.SimplifyInvalidStatusError(err)
+			}
+		}
+		return nil
+	})
+	return bp, err
+}
+
+func (sc *SchemaChanger) spansToProcess(
+	ctx context.Context, filter backfill.MutationFilter,
+) ([]roachpb.Span, int, error) {
+	var spans []roachpb.Span
+	var nRanges int
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		spans, _, _, err = distsqlrun.GetResumeSpans(
+			ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
+		if err != nil {
+			return err
+		}
+		nRanges, err = sc.nRanges(ctx, txn, spans)
+		return err
+	})
+	return spans, nRanges, err
+}
+
 // distBackfill runs (or continues) a backfill for the first mutation
 // enqueued on the SchemaChanger's table descriptor that passes the input
 // MutationFilter.
@@ -378,53 +428,26 @@ func (sc *SchemaChanger) distBackfill(
 	}
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
-	origNRanges := -1
 	origFractionCompleted := sc.job.FractionCompleted()
-	fractionLeft := 1 - origFractionCompleted
 	readAsOf := sc.clock.Now()
+	spans, origNRanges, err := sc.spansToProcess(ctx, filter)
+	if err != nil {
+		return err
+	}
+	if len(spans) <= 0 {
+		return nil
+	}
+	bp := backfillProgress{
+		origNRanges: origNRanges,
+		origFractionCompleted: origFractionCompleted,
+		nRanges: origNRanges,
+	}
 	for {
-		var spans []roachpb.Span
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			var err error
-			spans, _, _, err = distsqlrun.GetResumeSpans(
-				ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
-			return err
-		}); err != nil {
-			return err
-		}
-
-		if len(spans) <= 0 {
-			break
-		}
-
 		if err := sc.ExtendLease(ctx, lease); err != nil {
 			return err
 		}
 		log.VEventf(ctx, 2, "backfill: process %+v spans", spans)
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			// Report schema change progress. We define progress at this point
-			// as the the fraction of fully-backfilled ranges of the primary index of
-			// the table being scanned. Since we may have already modified the
-			// fraction completed of our job from the 10% allocated to completing the
-			// schema change state machine or from a previous backfill attempt,
-			// we scale that fraction of ranges completed by the remaining fraction
-			// of the job's progress bar.
-			nRanges, err := sc.nRanges(ctx, txn, spans)
-			if err != nil {
-				return err
-			}
-			if origNRanges == -1 {
-				origNRanges = nRanges
-			}
-
-			if nRanges < origNRanges {
-				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
-				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				if err := sc.job.FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted)); err != nil {
-					return jobs.SimplifyInvalidStatusError(err)
-				}
-			}
-
 			tc := &TableCollection{leaseMgr: sc.leaseMgr}
 			// Use a leased table descriptor for the backfill.
 			defer tc.releaseTables(ctx)
@@ -485,6 +508,20 @@ func (sc *SchemaChanger) distBackfill(
 			)
 			return rw.Err()
 		}); err != nil {
+			return err
+		}
+
+		// Get the spans for the next iteration and report progress.
+		spans, bp.nRanges, err = sc.spansToProcess(ctx, filter)
+		if err != nil {
+			return err
+		}
+		if len(spans) <= 0 {
+			break
+		}
+
+		bp, err = sc.reportProgress(ctx, bp)
+		if err != nil {
 			return err
 		}
 	}
