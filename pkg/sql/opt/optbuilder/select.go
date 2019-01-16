@@ -329,6 +329,7 @@ func (b *Builder) buildScan(
 				}
 				def.Flags.ForceIndex = true
 				def.Flags.Index = idx
+				def.Flags.Direction = indexFlags.Direction
 			}
 		}
 

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -217,7 +218,15 @@ func (ev ExprView) formatRelational(f *ExprFmtCtx, tp treeprinter.Node) {
 				tp.Childf("flags: no-index-join")
 			} else if def.Flags.ForceIndex {
 				idx := ev.Metadata().Table(def.Table).Index(def.Flags.Index)
-				tp.Childf("flags: force-index=%s", idx.IdxName())
+				dir := ""
+				switch def.Flags.Direction {
+				case tree.DefaultDirection:
+				case tree.Ascending:
+					dir = ",fwd"
+				case tree.Descending:
+					dir = ",rev"
+				}
+				tp.Childf("flags: force-index=%s%s", idx.IdxName(), dir)
 			}
 		}
 

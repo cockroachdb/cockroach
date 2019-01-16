@@ -153,6 +153,7 @@ type ScanFlags struct {
 	// ForceIndex forces the use of a specific index (specified in Index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
 	ForceIndex bool
+	Direction  tree.Direction
 	Index      int
 }
 
@@ -205,7 +206,13 @@ func (s *ScanOpDef) CanProvideOrdering(
 		if s.HardLimit.Reverse() {
 			direction = rev
 		}
+	} else if s.Flags.Direction != 0 {
+		direction = fwd
+		if s.Flags.Direction == tree.Descending {
+			direction = rev
+		}
 	}
+
 	index := md.Table(s.Table).Index(s.Index)
 	for left, right := 0, 0; right < len(required.Columns); {
 		if left >= index.KeyColumnCount() {
