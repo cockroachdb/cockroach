@@ -171,7 +171,7 @@ type Config struct {
 	SQLTableStatCacheSize int
 
 	// SQLQueryCacheSize is the memory size (in bytes) of the query plan cache.
-	SQLQueryCacheSize int
+	SQLQueryCacheSize int64
 
 	// HeapProfileDirName is the directory name for heap profiles using
 	// heapprofiler.
