@@ -355,7 +355,6 @@ export function ConfigureLineChart(
   axis: React.ReactElement<AxisProps>,
   data: TSResponse,
   timeInfo: QueryTimeInfo,
-  hoverTime?: moment.Moment,
 ) {
   chart.showLegend(metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
   let formattedData: formattedSeries[];
@@ -400,11 +399,25 @@ export function ConfigureLineChart(
   } catch (e) {
     console.log("Error rendering graph: ", e);
   }
+}
 
-  const xScale = chart.xAxis.scale();
-  const yScale = chart.yAxis.scale();
-  const yExtent: Extent = data ? [yScale(yAxisDomain.extent[0]), yScale(yAxisDomain.extent[1])] : [0, 1];
-  updateLinkedGuideline(svgEl, xScale, yExtent, hoverTime);
+/**
+ * ConfigureLinkedGuide renders the linked guideline for a chart.
+ */
+export function ConfigureLinkedGuideline(
+  chart: nvd3.LineChart,
+  svgEl: SVGElement,
+  axis: React.ReactElement<AxisProps>,
+  data: TSResponse,
+  hoverTime: moment.Moment,
+) {
+  if (data) {
+    const xScale = chart.xAxis.scale();
+    const yScale = chart.yAxis.scale();
+    const yAxisDomain = calculateYAxisDomain(axis.props.units, data);
+    const yExtent: Extent = data ? [yScale(yAxisDomain.extent[0]), yScale(yAxisDomain.extent[1])] : [0, 1];
+    updateLinkedGuideline(svgEl, xScale, yExtent, hoverTime);
+  }
 }
 
 // updateLinkedGuideline is responsible for maintaining "linked" guidelines on

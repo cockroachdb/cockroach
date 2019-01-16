@@ -18,17 +18,20 @@ import moment from "moment";
 import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
+import * as protos from  "src/js/protos";
 import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
-  ConfigureLineChart, InitLineChart, CHART_MARGINS,
+  ConfigureLineChart, InitLineChart, CHART_MARGINS, ConfigureLinkedGuideline,
 } from "src/views/cluster/util/graphs";
 import {
-  Metric, MetricProps, Axis, AxisProps,
+  Metric, MetricProps, Axis, AxisProps, QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
 import { NanoToMilli } from "src/util/convert";
+
+type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
@@ -41,12 +44,17 @@ interface LineGraphProps extends MetricsDataComponentProps {
   hoverState?: HoverState;
 }
 
+interface LineGraphState {
+  lastData?: TSResponse;
+  lastTimeInfo?: QueryTimeInfo;
+}
+
 /**
  * LineGraph displays queried metrics in a line graph. It currently only
  * supports a single Y-axis, but multiple metrics can be graphed on the same
  * axis.
  */
-export class LineGraph extends React.Component<LineGraphProps, {}> {
+export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
   // The SVG Element reference in the DOM used to render the graph.
   graphEl: React.RefObject<SVGSVGElement> = React.createRef();
 
@@ -162,6 +170,14 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         return;
       }
 
+      ConfigureLineChart(
+        this.chart, this.graphEl.current, metrics, axis, this.props.data, this.props.timeInfo,
+      );
+    }
+  }
+
+  drawLine = () => {
+    if (!document.hidden) {
       let hoverTime: moment.Moment;
       if (this.props.hoverState) {
         const { currentlyHovering, hoverChart } = this.props.hoverState;
@@ -171,15 +187,23 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         }
       }
 
-      ConfigureLineChart(
-        this.chart, this.graphEl.current, metrics, axis, this.props.data, this.props.timeInfo, hoverTime,
-      );
+      const axis = this.axis(this.props);
+      ConfigureLinkedGuideline(this.chart, this.graphEl.current, axis, this.props.data, hoverTime);
     }
+  }
+
+  constructor(props: any) {
+    super(props);
+    this.state = {
+      lastData: null,
+      lastTimeInfo: null,
+    };
   }
 
   componentDidMount() {
     this.initChart();
     this.drawChart();
+    this.drawLine();
     // NOTE: This might not work on Android:
     // http://caniuse.com/#feat=pagevisibility
     // TODO (maxlang): Check if this element is visible based on scroll state.
@@ -191,7 +215,14 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   componentDidUpdate() {
-    this.drawChart();
+    if (this.props.data !== this.state.lastData || this.props.timeInfo !== this.state.lastTimeInfo) {
+      this.drawChart();
+      this.setState({
+        lastData: this.props.data,
+        lastTimeInfo: this.props.timeInfo,
+      });
+    }
+    this.drawLine();
   }
 
   render() {
