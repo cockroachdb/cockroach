@@ -89,13 +89,6 @@ func newTestIterator(kvs []engine.MVCCKeyValue) *testIterator {
 	}
 }
 
-func newErrorIterator(err error) *testIterator {
-	return &testIterator{
-		err:  err,
-		done: make(chan struct{}),
-	}
-}
-
 func (s *testIterator) Close() {
 	s.closed = true
 	close(s.done)
@@ -215,65 +208,6 @@ func TestInitResolvedTSScan(t *testing.T) {
 	for _, expEvent := range expEvents {
 		require.Equal(t, expEvent, <-p.eventC)
 	}
-}
-
-func TestCatchUpScan(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Mock processor. We just needs its catchUpC.
-	p := Processor{catchUpC: make(chan catchUpResult, 1)}
-
-	// Run a catch-up scan for a registration over a test
-	// iterator with the following keys.
-	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	iter := newTestIterator([]engine.MVCCKeyValue{
-		makeKV("a", "val1", 10),
-		makeInline("b", "val2"),
-		makeIntent("c", txn1, "txnKey1", 15),
-		makeKV("c", "val3", 11),
-		makeKV("c", "val4", 9),
-		makeIntent("d", txn2, "txnKey2", 21),
-		makeKV("d", "val5", 20),
-		makeKV("d", "val6", 19),
-		makeInline("g", "val7"),
-		makeKV("m", "val8", 1),
-		makeIntent("n", txn1, "txnKey1", 12),
-		makeIntent("r", txn1, "txnKey1", 19),
-		makeKV("r", "val9", 4),
-		makeIntent("w", txn1, "txnKey1", 3),
-		makeInline("x", "val10"),
-		makeIntent("z", txn2, "txnKey2", 21),
-		makeKV("z", "val11", 4),
-	})
-	r := newTestRegistration(roachpb.Span{
-		Key:    roachpb.Key("d"),
-		EndKey: roachpb.Key("w"),
-	})
-	r.catchUpIter = iter
-	r.startTS = hlc.Timestamp{WallTime: 4}
-
-	catchUpScan := newCatchUpScan(&p, &r.registration)
-	catchUpScan.Run(context.Background())
-	require.True(t, iter.closed)
-
-	// Compare the events sent on the registration's Stream to the expected events.
-	expEvents := []*roachpb.RangeFeedEvent{
-		rangeFeedValue(
-			roachpb.Key("d"),
-			roachpb.Value{RawBytes: []byte("val5"), Timestamp: hlc.Timestamp{WallTime: 20}},
-		),
-		rangeFeedValue(
-			roachpb.Key("d"),
-			roachpb.Value{RawBytes: []byte("val6"), Timestamp: hlc.Timestamp{WallTime: 19}},
-		),
-		rangeFeedValue(
-			roachpb.Key("g"),
-			roachpb.Value{RawBytes: []byte("val7"), Timestamp: hlc.Timestamp{WallTime: 0}},
-		),
-	}
-	require.Equal(t, expEvents, r.Events())
-	require.Equal(t, 1, len(p.catchUpC))
-	require.Equal(t, catchUpResult{r: &r.registration}, <-p.catchUpC)
 }
 
 type testTxnPusher struct {
