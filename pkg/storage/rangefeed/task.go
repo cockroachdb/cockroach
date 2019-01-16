@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -113,104 +112,6 @@ func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
 
 func (s *initResolvedTSScan) Cancel() {
 	s.it.Close()
-}
-
-// catchUpScan scans over the provided iterator and publishes committed values
-// to the registration's stream. This backfill allows a registration to request
-// a starting timestamp in the past and observe events for writes that have
-// already happened.
-//
-// Iterator Contract:
-//   Committed values beneath the registration's starting timestamp will be
-//   ignored, but all values above the registration's starting timestamp must be
-//   present. An important implication of this is that if the iterator is a
-//   TimeBoundIterator, its MinTimestamp cannot be above the registration's
-//   starting timestamp.
-//
-type catchUpScan struct {
-	p  *Processor
-	r  *registration
-	it engine.SimpleIterator
-	a  bufalloc.ByteAllocator
-}
-
-func newCatchUpScan(p *Processor, r *registration) runnable {
-	s := catchUpScan{p: p, r: r, it: r.catchUpIter}
-	r.catchUpIter = nil // detach
-	return &s
-}
-
-func (s *catchUpScan) Run(ctx context.Context) {
-	defer s.Cancel()
-	if err := s.iterateAndSend(ctx); err != nil {
-		err = errors.Wrap(err, "catch-up scan failed")
-		log.Error(ctx, err)
-		s.p.deliverCatchUpScanRes(s.r, roachpb.NewError(err))
-	} else {
-		s.p.deliverCatchUpScanRes(s.r, nil)
-	}
-}
-
-func (s *catchUpScan) iterateAndSend(ctx context.Context) error {
-	startKey := engine.MakeMVCCMetadataKey(s.r.span.Key)
-	endKey := engine.MakeMVCCMetadataKey(s.r.span.EndKey)
-
-	// Iterate though all keys using Next. We want to publish all committed
-	// versions of each key that are after the registration's startTS, so we
-	// can't use NextKey.
-	var meta enginepb.MVCCMetadata
-	for s.it.Seek(startKey); ; s.it.Next() {
-		if ok, err := s.it.Valid(); err != nil {
-			return err
-		} else if !ok || !s.it.UnsafeKey().Less(endKey) {
-			break
-		}
-
-		unsafeKey := s.it.UnsafeKey()
-		unsafeVal := s.it.UnsafeValue()
-		if !unsafeKey.IsValue() {
-			// Found a metadata key.
-			if err := protoutil.Unmarshal(unsafeVal, &meta); err != nil {
-				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
-			}
-			if !meta.IsInline() {
-				// Not an inline value. Ignore.
-				continue
-			}
-
-			// If write is inline, it doesn't have a timestamp so we don't
-			// filter on the registration's starting timestamp. Instead, we
-			// return all inline writes.
-			unsafeVal = meta.RawBytes
-		} else if !s.r.startTS.Less(unsafeKey.Timestamp) {
-			// At or before the registration's exclusive starting timestamp.
-			// Ignore.
-			continue
-		}
-
-		var key, val []byte
-		s.a, key = s.a.Copy(unsafeKey.Key, 0)
-		s.a, val = s.a.Copy(unsafeVal, 0)
-		ts := unsafeKey.Timestamp
-
-		var event roachpb.RangeFeedEvent
-		event.MustSetValue(&roachpb.RangeFeedValue{
-			Key: key,
-			Value: roachpb.Value{
-				RawBytes:  val,
-				Timestamp: ts,
-			},
-		})
-		if err := s.r.stream.Send(&event); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *catchUpScan) Cancel() {
-	s.it.Close()
-	s.a = nil
 }
 
 // TxnPusher is capable of pushing transactions to a new timestamp and
