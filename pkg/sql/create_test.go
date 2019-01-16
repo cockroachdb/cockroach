@@ -18,19 +18,20 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net"
-	"strconv"
+	"net/url"
 	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/jackc/pgx"
@@ -438,28 +439,17 @@ SELECT * FROM t.kv%d
 
 func TestCreateStatementType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Andrei is too lazy to figure out the incantation for telling pgx about
-		// our test certs.
-		Insecure: true,
-	})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
-	host, ports, err := net.SplitHostPort(s.ServingAddr())
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	port, err := strconv.Atoi(ports)
-	if err != nil {
-		t.Fatal(err)
-	}
-	conn, err := pgx.Connect(pgx.ConnConfig{
-		Host:     host,
-		Port:     uint16(port),
-		User:     "root",
-		Database: "system",
-	})
+	conn, err := pgx.Connect(pgxConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

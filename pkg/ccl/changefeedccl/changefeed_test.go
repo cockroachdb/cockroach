@@ -165,18 +165,6 @@ func TestChangefeedCursor(t *testing.T) {
 			`foo: [2]->{"a": 2, "b": "after"}`,
 		})
 
-		fooTime := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsClock)
-		defer fooTime.Close(t)
-		assertPayloads(t, fooTime, []string{
-			`foo: [2]->{"a": 2, "b": "after"}`,
-		})
-
-		fooNanos := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsClock.UnixNano())
-		defer fooNanos.Close(t)
-		assertPayloads(t, fooNanos, []string{
-			`foo: [2]->{"a": 2, "b": "after"}`,
-		})
-
 		nanosStr := strconv.FormatInt(tsClock.UnixNano(), 10)
 		fooNanosStr := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, nanosStr)
 		defer fooNanosStr.Close(t)
@@ -212,6 +200,15 @@ func TestChangefeedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		beforeEmitRowCh := make(chan struct{})
+		beforeEmitRowHook := func() error {
+			<-beforeEmitRowCh
+			return nil
+		}
+		f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*distsqlrun.TestingKnobs).
+			Changefeed.(*TestingKnobs).BeforeEmitRow = beforeEmitRowHook
+
 		ctx := context.Background()
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
@@ -228,6 +225,11 @@ func TestChangefeedTimestamps(t *testing.T) {
 		beforeFeed := tree.TimestampToDecimal(f.Server().Clock().Now())
 		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH updated, resolved`)
 		defer foo.Close(t)
+		// Make sure the changefeed has picked a statement timestamp by waiting
+		// on something that happens after it (the first BeforeEmitRow hook
+		// call). Then unblock the hook for the rest of the test.
+		beforeEmitRowCh <- struct{}{}
+		close(beforeEmitRowCh)
 		afterFeed := tree.TimestampToDecimal(f.Server().Clock().Now())
 
 		var ts1 string
@@ -378,10 +380,12 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `INSERT INTO rename_column VALUES (1, '1')`)
 			renameColumn := f.Feed(t, `CREATE CHANGEFEED FOR rename_column`)
 			defer renameColumn.Close(t)
+			assertPayloads(t, renameColumn, []string{
+				`rename_column: [1]->{"a": 1, "b": "1"}`,
+			})
 			sqlDB.Exec(t, `ALTER TABLE rename_column RENAME COLUMN b TO c`)
 			sqlDB.Exec(t, `INSERT INTO rename_column VALUES (2, '2')`)
 			assertPayloads(t, renameColumn, []string{
-				`rename_column: [1]->{"a": 1, "b": "1"}`,
 				`rename_column: [2]->{"a": 2, "c": "2"}`,
 			})
 		})
