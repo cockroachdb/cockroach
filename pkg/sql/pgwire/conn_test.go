@@ -650,11 +650,7 @@ var _ pgx.Logger = pgxTestLogger{}
 // network errors.
 func TestConnClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Andrei is too lazy to figure out the incantation for telling pgx about
-		// our test certs.
-		Insecure: true,
-	})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
@@ -667,7 +663,6 @@ func TestConnClose(t *testing.T) {
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.ServingAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
 	)
-	pgURL.RawQuery = "sslmode=disable"
 	defer cleanupFunc()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
@@ -679,23 +674,14 @@ func TestConnClose(t *testing.T) {
 	r.Exec(t, "CREATE DATABASE test")
 	r.Exec(t, "CREATE TABLE test.test AS SELECT * FROM generate_series(1,100)")
 
-	host, ports, err := net.SplitHostPort(s.ServingAddr())
-	if err != nil {
-		t.Fatal(err)
-	}
-	port, err := strconv.Atoi(ports)
+	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
 	// We test both with and without DistSQL, as the way that network errors are
 	// observed depends on the engine.
 	testutils.RunTrueAndFalse(t, "useDistSQL", func(t *testing.T, useDistSQL bool) {
-		conn, err := pgx.Connect(pgx.ConnConfig{
-			Host:     host,
-			Port:     uint16(port),
-			User:     "root",
-			Database: "system",
-		})
+		conn, err := pgx.Connect(pgxConfig)
 		if err != nil {
 			t.Fatal(err)
 		}

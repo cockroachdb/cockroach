@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 )
 
@@ -269,39 +270,31 @@ type testfeed interface {
 }
 
 type sinklessFeedFactory struct {
-	s  serverutils.TestServerInterface
-	db *gosql.DB
+	s serverutils.TestServerInterface
 }
 
-func makeSinkless(s serverutils.TestServerInterface, db *gosql.DB) *sinklessFeedFactory {
-	return &sinklessFeedFactory{s: s, db: db}
+func makeSinkless(s serverutils.TestServerInterface) *sinklessFeedFactory {
+	return &sinklessFeedFactory{s: s}
 }
 
 func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interface{}) testfeed {
 	t.Helper()
-
-	s := &sinklessFeed{db: f.db, seen: make(map[string]struct{})}
-	now := timeutil.Now()
-	var err error
-	s.rows, err = s.db.Query(create, args...)
+	url, cleanup := sqlutils.PGUrl(t, f.s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	s := &sinklessFeed{cleanup: cleanup, seen: make(map[string]struct{})}
+	url.Path = `d`
+	// Use pgx directly instead of database/sql so we can close the conn
+	// (instead of returning it to the pool).
+	pgxConfig, err := pgx.ParseConnectionString(url.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	queryIDRows, err := s.db.Query(
-		`SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'CREATE CHANGEFEED%' AND start > $1`,
-		now,
-	)
+	s.conn, err = pgx.Connect(pgxConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !queryIDRows.Next() {
-		t.Fatalf(`could not find query id`)
-	}
-	if err := queryIDRows.Scan(&s.queryID); err != nil {
+	s.rows, err = s.conn.Query(create, args...)
+	if err != nil {
 		t.Fatal(err)
-	}
-	if queryIDRows.Next() {
-		t.Fatalf(`found too many query ids`)
 	}
 	return s
 }
@@ -310,10 +303,12 @@ func (f *sinklessFeedFactory) Server() serverutils.TestServerInterface {
 	return f.s
 }
 
+// sinklessFeed is an implementation of the `testfeed` interface for a
+// "sinkless" (results returned over pgwire) feed.
 type sinklessFeed struct {
-	db      *gosql.DB
-	rows    *gosql.Rows
-	queryID string
+	conn    *pgx.Conn
+	cleanup func()
+	rows    *pgx.Rows
 	seen    map[string]struct{}
 }
 
@@ -360,13 +355,10 @@ func (c *sinklessFeed) Err() error {
 
 func (c *sinklessFeed) Close(t testing.TB) {
 	t.Helper()
-	// TODO(dan): We should just be able to close the `gosql.Rows` but that
-	// currently blocks forever without this.
-	if _, err := c.db.Exec(`CANCEL QUERY IF EXISTS $1`, c.queryID); err != nil {
+	if err := c.conn.Close(); err != nil {
 		t.Error(err)
 	}
-	// Ignore the error because we just force canceled the feed.
-	_ = c.rows.Close()
+	c.cleanup()
 }
 
 type jobFeed struct {
@@ -875,7 +867,8 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*tes
 		ctx := context.Background()
 		knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{}}}
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-			Knobs: knobs,
+			Knobs:       knobs,
+			UseDatabase: `d`,
 		})
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -884,21 +877,8 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*tes
 		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 
-		// Now that we've updated sql.defaults.results_buffer.size, open a new
-		// conn pool so that connections use the new setting.
-		pgURL, cleanupFunc := sqlutils.PGUrl(
-			t, s.ServingAddr(), "sinklessTest" /* prefix */, url.User(security.RootUser),
-		)
-		defer cleanupFunc()
-		pgURL.Path = "d"
-		noBufferDB, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer noBufferDB.Close()
-
-		f := makeSinkless(s, noBufferDB)
-		testFn(t, noBufferDB, f)
+		f := makeSinkless(s)
+		testFn(t, db, f)
 	}
 }
 
