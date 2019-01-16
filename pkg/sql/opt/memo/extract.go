@@ -111,23 +111,38 @@ func ExtractAggSingleInputColumn(e opt.ScalarExpr) opt.ColumnID {
 	return ExtractVarFromAggInput(e.Child(0).(opt.ScalarExpr)).Col
 }
 
-// ExtractAggInputColumns returns the input columns of an aggregate (which can
-// be empty).
+// ExtractAggInputColumns returns the set of columns the aggregate depends on.
 func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 	if !opt.IsAggregateOp(e) {
 		panic("not an Aggregate")
 	}
 
-	var res opt.ColSet
-	if e.ChildCount() > 0 {
-		res.Add(int(ExtractVarFromAggInput(e.Child(0).(opt.ScalarExpr)).Col))
+	if e.ChildCount() == 0 {
+		return opt.ColSet{}
 	}
-	return res
+
+	arg := e.Child(0)
+	var res opt.ColSet
+	if filter, ok := arg.(*AggFilterExpr); ok {
+		res.Add(int(filter.Filter.(*VariableExpr).Col))
+		arg = filter.Input
+	}
+	if distinct, ok := arg.(*AggDistinctExpr); ok {
+		arg = distinct.Input
+	}
+	if variable, ok := arg.(*VariableExpr); ok {
+		res.Add(int(variable.Col))
+		return res
+	}
+	panic(fmt.Sprintf("unhandled aggregate input %T", arg))
 }
 
 // ExtractVarFromAggInput is given an argument to an Aggregate and returns the
 // inner Variable expression, stripping out modifiers like AggDistinct.
 func ExtractVarFromAggInput(arg opt.ScalarExpr) *VariableExpr {
+	if filter, ok := arg.(*AggFilterExpr); ok {
+		arg = filter.Input
+	}
 	if distinct, ok := arg.(*AggDistinctExpr); ok {
 		arg = distinct.Input
 	}
