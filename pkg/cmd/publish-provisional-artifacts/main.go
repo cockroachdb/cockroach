@@ -226,6 +226,11 @@ func main() {
 			cockroachBuildOpts = append(cockroachBuildOpts, o)
 		}
 	}
+	archiveBuildOpts := opts{
+		PkgDir:     pkg.Dir,
+		BucketName: bucketName,
+		VersionStr: versionStr,
+	}
 
 	if *doProvisional {
 		for _, o := range cockroachBuildOpts {
@@ -245,39 +250,30 @@ func main() {
 				log.Fatal(err)
 			}
 		}
+		if *isRelease {
+			buildAndPutArchive(svc, archiveBuildOpts)
+		}
 	}
 	if *doBless {
 		if !*isRelease {
 			log.Fatal("cannot bless non-release versions")
 		}
-		// TODO(dan): It's unfortunate to be doing this inside bless. See if we
-		// can split it up like the binaries.
-		buildAndPutArchive(svc, opts{
-			PkgDir:     pkg.Dir,
-			BucketName: bucketName,
-			VersionStr: versionStr,
-		}, versionStr)
 		if updateLatest {
-			buildAndPutArchive(svc, opts{
-				PkgDir:     pkg.Dir,
-				BucketName: bucketName,
-				VersionStr: versionStr,
-			}, latestStr)
 			for _, o := range cockroachBuildOpts {
 				markLatestRelease(svc, o)
 			}
+			markLatestArchive(svc, archiveBuildOpts)
 		}
 	}
 }
 
-func buildAndPutArchive(svc s3putter, o opts, releaseVersionStr string) {
+func buildAndPutArchive(svc s3putter, o opts) {
 	log.Printf("building archive %s", pretty.Sprint(o))
 	defer func() {
 		log.Printf("done building archive: %s", pretty.Sprint(o))
 	}()
 
-	archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
-	srcArchive := fmt.Sprintf("%s.%s", archiveBase, "src.tgz")
+	archiveBase, srcArchive := s3KeyArchive(o)
 	cmd := exec.Command(
 		"make",
 		"archive",
@@ -303,9 +299,6 @@ func buildAndPutArchive(svc s3putter, o opts, releaseVersionStr string) {
 		Bucket: &o.BucketName,
 		Key:    &srcArchive,
 		Body:   f,
-	}
-	if releaseVersionStr == latestStr {
-		putObjectInput.CacheControl = &noCache
 	}
 	if _, err := svc.PutObject(&putObjectInput); err != nil {
 		log.Fatalf("s3 upload %s: %s", absoluteSrcArchivePath, err)
@@ -442,7 +435,7 @@ func putNonRelease(svc s3putter, o opts, binary io.ReadSeeker) {
 	}
 }
 
-func releaseS3Key(o opts) (string, string) {
+func s3KeyRelease(o opts) (string, string) {
 	targetSuffix, hasExe := TrimDotExe(o.Suffix)
 	// TODO(tamird): remove this weirdness. Requires updating
 	// "users" e.g. docs, cockroachdb/cockroach-go, maybe others.
@@ -459,6 +452,12 @@ func releaseS3Key(o opts) (string, string) {
 	return targetArchiveBase, targetArchiveBase + ".tgz"
 }
 
+func s3KeyArchive(o opts) (string, string) {
+	archiveBase := fmt.Sprintf("cockroach-%s", o.VersionStr)
+	srcArchive := fmt.Sprintf("%s.%s", archiveBase, "src.tgz")
+	return archiveBase, srcArchive
+}
+
 func putRelease(svc s3putter, o opts, binary *os.File) {
 	// Stat the binary. Info is needed for archive headers.
 	binaryInfo, err := binary.Stat()
@@ -466,7 +465,7 @@ func putRelease(svc s3putter, o opts, binary *os.File) {
 		log.Fatal(err)
 	}
 
-	targetArchiveBase, targetArchive := releaseS3Key(o)
+	targetArchiveBase, targetArchive := s3KeyRelease(o)
 	var body bytes.Buffer
 	if _, hasExe := TrimDotExe(o.Suffix); hasExe {
 		zw := zip.NewWriter(&body)
@@ -524,7 +523,7 @@ func putRelease(svc s3putter, o opts, binary *os.File) {
 }
 
 func markLatestRelease(svc s3putter, o opts) {
-	_, keyRelease := releaseS3Key(o)
+	_, keyRelease := s3KeyRelease(o)
 	binaryURL := fmt.Sprintf("https://s3.amazonaws.com/%s/%s", o.BucketName, keyRelease)
 	log.Printf("Downloading from %s", binaryURL)
 	binary, err := http.DefaultClient.Get(binaryURL)
@@ -539,7 +538,36 @@ func markLatestRelease(svc s3putter, o opts) {
 
 	oLatest := o
 	oLatest.VersionStr = latestStr
-	_, keyLatest := releaseS3Key(oLatest)
+	_, keyLatest := s3KeyRelease(oLatest)
+	log.Printf("Uploading to s3://%s/%s", o.BucketName, keyLatest)
+	putObjectInput := s3.PutObjectInput{
+		Bucket:       &o.BucketName,
+		Key:          &keyLatest,
+		Body:         bytes.NewReader(buf.Bytes()),
+		CacheControl: &noCache,
+	}
+	if _, err := svc.PutObject(&putObjectInput); err != nil {
+		log.Fatalf("s3 upload %s: %s", keyLatest, err)
+	}
+}
+
+func markLatestArchive(svc s3putter, o opts) {
+	_, keyRelease := s3KeyArchive(o)
+	binaryURL := fmt.Sprintf("https://s3.amazonaws.com/%s/%s", o.BucketName, keyRelease)
+	log.Printf("Downloading from %s", binaryURL)
+	binary, err := http.DefaultClient.Get(binaryURL)
+	if err != nil {
+		log.Fatalf("downloading %s: %s", binaryURL, err)
+	}
+	defer binary.Body.Close()
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, binary.Body); err != nil {
+		log.Fatalf("downloading %s: %s", binaryURL, err)
+	}
+
+	oLatest := o
+	oLatest.VersionStr = latestStr
+	_, keyLatest := s3KeyArchive(oLatest)
 	log.Printf("Uploading to s3://%s/%s", o.BucketName, keyLatest)
 	putObjectInput := s3.PutObjectInput{
 		Bucket:       &o.BucketName,
