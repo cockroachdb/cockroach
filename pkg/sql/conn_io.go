@@ -718,8 +718,8 @@ type RestrictedCommandResult interface {
 type DescribeResult interface {
 	ResultBase
 
-	// SetInTypes tells the client about the inferred placeholder types.
-	SetInTypes([]oid.Oid)
+	// SetInferredTypes tells the client about the inferred placeholder types.
+	SetInferredTypes([]oid.Oid)
 	// SetNoDataDescription is used to tell the client that the prepared statement
 	// or portal produces no rows.
 	SetNoDataRowDescription()
@@ -933,8 +933,8 @@ func (r *bufferedCommandResult) Discard() {
 	}
 }
 
-// SetInTypes is part of the DescribeResult interface.
-func (r *bufferedCommandResult) SetInTypes([]oid.Oid) {}
+// SetInferredTypes is part of the DescribeResult interface.
+func (r *bufferedCommandResult) SetInferredTypes([]oid.Oid) {}
 
 // SetNoDataRowDescription is part of the DescribeResult interface.
 func (r *bufferedCommandResult) SetNoDataRowDescription() {}

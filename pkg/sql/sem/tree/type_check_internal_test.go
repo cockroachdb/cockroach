@@ -38,6 +38,7 @@ func BenchmarkTypeCheck(b *testing.B) {
 		b.Fatalf("%s: %v", expr, err)
 	}
 	ctx := tree.MakeSemaContext(false)
+	ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */)
 	for i := 0; i < b.N; i++ {
 		_, err := tree.TypeCheck(expr, &ctx, types.Int)
 		if err != nil {
@@ -81,11 +82,12 @@ func TestTypeCheckNormalize(t *testing.T) {
 }
 
 var (
-	mapPTypesInt               = tree.PlaceholderTypes{1: types.Int}
-	mapPTypesDecimal           = tree.PlaceholderTypes{1: types.Decimal}
-	mapPTypesIntAndInt         = tree.PlaceholderTypes{1: types.Int, 2: types.Int}
-	mapPTypesIntAndDecimal     = tree.PlaceholderTypes{1: types.Int, 2: types.Decimal}
-	mapPTypesDecimalAndDecimal = tree.PlaceholderTypes{1: types.Decimal, 2: types.Decimal}
+	ptypesNone              = tree.PlaceholderTypes{nil, nil}
+	ptypesInt               = tree.PlaceholderTypes{types.Int, nil}
+	ptypesDecimal           = tree.PlaceholderTypes{types.Decimal, nil}
+	ptypesIntAndInt         = tree.PlaceholderTypes{types.Int, types.Int}
+	ptypesIntAndDecimal     = tree.PlaceholderTypes{types.Int, types.Decimal}
+	ptypesDecimalAndDecimal = tree.PlaceholderTypes{types.Decimal, types.Decimal}
 )
 
 // copyableExpr can provide each test permutation with a deep copy of the expression tree.
@@ -156,7 +158,7 @@ func forEachPerm(exprs []copyableExpr, i int, fn func([]copyableExpr)) {
 }
 
 func clonePlaceholderTypes(args tree.PlaceholderTypes) tree.PlaceholderTypes {
-	clone := make(tree.PlaceholderTypes)
+	clone := make(tree.PlaceholderTypes, len(args))
 	for k, v := range args {
 		clone[k] = v
 	}
@@ -174,11 +176,11 @@ type sameTypedExprsTestCase struct {
 
 func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTestCase) {
 	if test.expectedPTypes == nil {
-		test.expectedPTypes = make(tree.PlaceholderTypes)
+		test.expectedPTypes = tree.PlaceholderTypes{}
 	}
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
 		ctx := tree.MakeSemaContext(false)
-		ctx.Placeholders.Reset(clonePlaceholderTypes(test.ptypes))
+		ctx.Placeholders.Init(len(test.ptypes), clonePlaceholderTypes(test.ptypes))
 		desired := types.Any
 		if test.desired != nil {
 			desired = test.desired
@@ -216,16 +218,16 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 		{nil, nil, exprs(ddecimal(1), decConst("1.1")), types.Decimal, nil},
 		{nil, nil, exprs(ddecimal(1), ddecimal(1)), types.Decimal, nil},
 		// Mixing resolved placeholders with constants and resolved exprs.
-		{mapPTypesDecimal, nil, exprs(ddecimal(1), placeholder(1)), types.Decimal, mapPTypesDecimal},
-		{mapPTypesDecimal, nil, exprs(intConst("1"), placeholder(1)), types.Decimal, mapPTypesDecimal},
-		{mapPTypesDecimal, nil, exprs(decConst("1.1"), placeholder(1)), types.Decimal, mapPTypesDecimal},
-		{mapPTypesInt, nil, exprs(intConst("1"), placeholder(1)), types.Int, mapPTypesInt},
-		{mapPTypesInt, nil, exprs(decConst("1.0"), placeholder(1)), types.Int, mapPTypesInt},
-		{mapPTypesDecimalAndDecimal, nil, exprs(placeholder(2), placeholder(1)), types.Decimal, mapPTypesDecimalAndDecimal},
+		{ptypesDecimal, nil, exprs(ddecimal(1), placeholder(0)), types.Decimal, ptypesDecimal},
+		{ptypesDecimal, nil, exprs(intConst("1"), placeholder(0)), types.Decimal, ptypesDecimal},
+		{ptypesDecimal, nil, exprs(decConst("1.1"), placeholder(0)), types.Decimal, ptypesDecimal},
+		{ptypesInt, nil, exprs(intConst("1"), placeholder(0)), types.Int, ptypesInt},
+		{ptypesInt, nil, exprs(decConst("1.0"), placeholder(0)), types.Int, ptypesInt},
+		{ptypesDecimalAndDecimal, nil, exprs(placeholder(1), placeholder(0)), types.Decimal, ptypesDecimalAndDecimal},
 		// Mixing unresolved placeholders with constants and resolved exprs.
-		{nil, nil, exprs(ddecimal(1), placeholder(1)), types.Decimal, mapPTypesDecimal},
-		{nil, nil, exprs(intConst("1"), placeholder(1)), types.Int, mapPTypesInt},
-		{nil, nil, exprs(decConst("1.1"), placeholder(1)), types.Decimal, mapPTypesDecimal},
+		{ptypesNone, nil, exprs(ddecimal(1), placeholder(0)), types.Decimal, ptypesDecimal},
+		{ptypesNone, nil, exprs(intConst("1"), placeholder(0)), types.Int, ptypesInt},
+		{ptypesNone, nil, exprs(decConst("1.1"), placeholder(0)), types.Decimal, ptypesDecimal},
 		// Verify dealing with Null.
 		{nil, nil, exprs(dnull), types.Unknown, nil},
 		{nil, nil, exprs(dnull, dnull), types.Unknown, nil},
@@ -249,9 +251,9 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 		{nil, types.Int, exprs(intConst("1"), decConst("1.1")), types.Decimal, nil},
 		{nil, types.Decimal, exprs(intConst("1"), decConst("1.1")), types.Decimal, nil},
 		// Verify desired type when possible with unresolved placeholders.
-		{nil, types.Decimal, exprs(placeholder(1)), types.Decimal, mapPTypesDecimal},
-		{nil, types.Decimal, exprs(intConst("1"), placeholder(1)), types.Decimal, mapPTypesDecimal},
-		{nil, types.Decimal, exprs(decConst("1.1"), placeholder(1)), types.Decimal, mapPTypesDecimal},
+		{ptypesNone, types.Decimal, exprs(placeholder(0)), types.Decimal, ptypesDecimal},
+		{ptypesNone, types.Decimal, exprs(intConst("1"), placeholder(0)), types.Decimal, ptypesDecimal},
+		{ptypesNone, types.Decimal, exprs(decConst("1.1"), placeholder(0)), types.Decimal, ptypesDecimal},
 	} {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			attemptTypeCheckSameTypedExprs(t, i, d)
@@ -274,19 +276,19 @@ func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 		{nil, nil, exprs(tuple(dint(1), decConst("1.1")), tuple(intConst("1"), ddecimal(1))), ttuple(types.Int, types.Decimal), nil},
 		{nil, nil, exprs(tuple(dint(1), decConst("1.0")), tuple(intConst("1"), dint(1))), ttuple(types.Int, types.Int), nil},
 		// Mixing resolved placeholders with constants and resolved exprs.
-		{mapPTypesDecimal, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder(1), placeholder(1))), ttuple(types.Decimal, types.Decimal), mapPTypesDecimal},
-		{mapPTypesDecimalAndDecimal, nil, exprs(tuple(placeholder(2), intConst("1")), tuple(placeholder(1), placeholder(1))), ttuple(types.Decimal, types.Decimal), mapPTypesDecimalAndDecimal},
-		{mapPTypesIntAndDecimal, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(placeholder(1), placeholder(2))), ttuple(types.Int, types.Decimal), mapPTypesIntAndDecimal},
+		{ptypesDecimal, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder(0), placeholder(0))), ttuple(types.Decimal, types.Decimal), ptypesDecimal},
+		{ptypesDecimalAndDecimal, nil, exprs(tuple(placeholder(1), intConst("1")), tuple(placeholder(0), placeholder(0))), ttuple(types.Decimal, types.Decimal), ptypesDecimalAndDecimal},
+		{ptypesIntAndDecimal, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(placeholder(0), placeholder(1))), ttuple(types.Int, types.Decimal), ptypesIntAndDecimal},
 		// Mixing unresolved placeholders with constants and resolved exprs.
-		{nil, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder(1), placeholder(1))), ttuple(types.Decimal, types.Decimal), mapPTypesDecimal},
-		{nil, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(placeholder(1), placeholder(2))), ttuple(types.Int, types.Int), mapPTypesIntAndInt},
+		{ptypesNone, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder(0), placeholder(0))), ttuple(types.Decimal, types.Decimal), ptypesDecimal},
+		{ptypesNone, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(placeholder(0), placeholder(1))), ttuple(types.Int, types.Int), ptypesIntAndInt},
 		// Verify dealing with Null.
 		{nil, nil, exprs(tuple(intConst("1"), dnull), tuple(dnull, decConst("1"))), ttuple(types.Int, types.Decimal), nil},
 		{nil, nil, exprs(tuple(dint(1), dnull), tuple(dnull, ddecimal(1))), ttuple(types.Int, types.Decimal), nil},
 		// Verify desired type when possible.
 		{nil, ttuple(types.Int, types.Decimal), exprs(tuple(intConst("1"), intConst("1")), tuple(intConst("1"), intConst("1"))), ttuple(types.Int, types.Decimal), nil},
 		// Verify desired type when possible with unresolved constants.
-		{nil, ttuple(types.Int, types.Decimal), exprs(tuple(placeholder(1), intConst("1")), tuple(intConst("1"), placeholder(2))), ttuple(types.Int, types.Decimal), mapPTypesIntAndDecimal},
+		{ptypesNone, ttuple(types.Int, types.Decimal), exprs(tuple(placeholder(0), intConst("1")), tuple(intConst("1"), placeholder(1))), ttuple(types.Int, types.Decimal), ptypesIntAndDecimal},
 	} {
 		attemptTypeCheckSameTypedExprs(t, i, d)
 	}
@@ -309,17 +311,17 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 		// Single type mismatches.
 		{nil, nil, exprs(dint(1), decConst("1.1")), decimalIntMismatchErr},
 		{nil, nil, exprs(dint(1), ddecimal(1)), decimalIntMismatchErr},
-		{mapPTypesInt, nil, exprs(decConst("1.1"), placeholder(1)), decimalIntMismatchErr},
+		{ptypesInt, nil, exprs(decConst("1.1"), placeholder(0)), decimalIntMismatchErr},
 		// Tuple type mismatches.
 		{nil, nil, exprs(tuple(dint(1)), tuple(ddecimal(1))), tupleFloatIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), dint(1), dint(1)), tupleIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), tuple(dint(1), dint(1))), tupleLenErr},
 		// Placeholder ambiguity.
-		{nil, nil, exprs(placeholder(2), placeholder(1)), placeholderErr},
+		{ptypesNone, nil, exprs(placeholder(1), placeholder(0)), placeholderErr},
 	}
 	for i, d := range testData {
 		ctx := tree.MakeSemaContext(false)
-		ctx.Placeholders.Reset(d.ptypes)
+		ctx.Placeholders.Init(len(d.ptypes), d.ptypes)
 		desired := types.Any
 		if d.desired != nil {
 			desired = d.desired
@@ -348,166 +350,171 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 		stmtExprs []tree.Expr
 		desired   tree.PlaceholderTypes
 	}{
-		{
-			tree.PlaceholderTypes{},
+		{ // 0
+			tree.PlaceholderTypes{nil},
 			[]tree.Expr{newPlaceholder(0)},
-			tree.PlaceholderTypes{},
+			tree.PlaceholderTypes{nil},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 1
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{newPlaceholder(0), newPlaceholder(1)},
-			tree.PlaceholderTypes{},
+			tree.PlaceholderTypes{nil, nil},
 		},
-		{
-			tree.PlaceholderTypes{1: types.Bool},
+		{ // 2
+			tree.PlaceholderTypes{nil, nil, types.Bool},
 			[]tree.Expr{newPlaceholder(0), newPlaceholder(1)},
-			tree.PlaceholderTypes{1: types.Bool},
+			tree.PlaceholderTypes{nil, nil, types.Bool},
 		},
-		{
-			tree.PlaceholderTypes{2: types.Float},
+		{ // 3
+			tree.PlaceholderTypes{nil, nil, types.Float},
 			[]tree.Expr{newPlaceholder(0), newPlaceholder(1)},
-			tree.PlaceholderTypes{2: types.Float},
+			tree.PlaceholderTypes{nil, nil, types.Float},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 4
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(0), boolType),
 			},
-			tree.PlaceholderTypes{},
+			tree.PlaceholderTypes{nil, nil},
 		},
-		{
-			tree.PlaceholderTypes{0: types.Float},
+		{ // 5
+			tree.PlaceholderTypes{types.Float},
 			[]tree.Expr{
 				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(0), boolType),
 			},
-			tree.PlaceholderTypes{0: types.Float},
+			tree.PlaceholderTypes{types.Float},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 6
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(1), boolType),
 			},
-			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+			tree.PlaceholderTypes{types.Int, types.Bool},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 7
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				annot(newPlaceholder(0), intType),
 				annot(newPlaceholder(1), boolType),
 			},
-			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+			tree.PlaceholderTypes{types.Int, types.Bool},
 		},
-		{
-			tree.PlaceholderTypes{1: types.Bool},
+		{ // 8
+			tree.PlaceholderTypes{nil, types.Bool},
 			[]tree.Expr{
 				annot(newPlaceholder(0), intType),
 			},
-			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+			tree.PlaceholderTypes{types.Int, types.Bool},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 9
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(1), boolType),
 				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(1), intType),
 			},
-			tree.PlaceholderTypes{0: types.Int},
+			tree.PlaceholderTypes{types.Int, nil},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 10
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				cast(newPlaceholder(0), intType),
 				annot(newPlaceholder(1), boolType),
 				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(1), intType),
 			},
-			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+			tree.PlaceholderTypes{types.Int, types.Bool},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 11
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(1), boolType),
 				newPlaceholder(0),
 			},
-			tree.PlaceholderTypes{1: types.Bool},
+			tree.PlaceholderTypes{nil, types.Bool},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 12
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				newPlaceholder(0),
 				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(1), boolType),
 			},
-			tree.PlaceholderTypes{1: types.Bool},
+			tree.PlaceholderTypes{nil, types.Bool},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 13
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				annot(newPlaceholder(0), intType),
 				annot(newPlaceholder(1), boolType),
 				newPlaceholder(0),
 			},
-			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+			tree.PlaceholderTypes{types.Int, types.Bool},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 14
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				newPlaceholder(0),
 				annot(newPlaceholder(0), intType),
 				annot(newPlaceholder(1), boolType),
 			},
-			tree.PlaceholderTypes{0: types.Int, 1: types.Bool},
+			tree.PlaceholderTypes{types.Int, types.Bool},
 		},
-		{
-			tree.PlaceholderTypes{0: types.Float, 1: types.Bool},
+		{ // 15
+			tree.PlaceholderTypes{types.Float, types.Bool},
 			[]tree.Expr{
 				newPlaceholder(0),
 				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(1), boolType),
 			},
-			tree.PlaceholderTypes{0: types.Float, 1: types.Bool},
+			tree.PlaceholderTypes{types.Float, types.Bool},
 		},
-		{
-			tree.PlaceholderTypes{0: types.Float, 1: types.Float},
+		{ // 16
+			tree.PlaceholderTypes{types.Float, types.Float},
 			[]tree.Expr{
 				newPlaceholder(0),
 				cast(newPlaceholder(0), intType),
 				cast(newPlaceholder(1), boolType),
 			},
-			tree.PlaceholderTypes{0: types.Float, 1: types.Float},
+			tree.PlaceholderTypes{types.Float, types.Float},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 17
+			tree.PlaceholderTypes{nil},
 			[]tree.Expr{
 				cast(newPlaceholder(0), intType),
 				annot(newPlaceholder(0), intType),
 				cast(newPlaceholder(0), intType),
 			},
-			tree.PlaceholderTypes{0: types.Int},
+			tree.PlaceholderTypes{types.Int},
 		},
-		{
-			tree.PlaceholderTypes{},
+		{ // 18
+			tree.PlaceholderTypes{nil},
 			[]tree.Expr{
 				cast(newPlaceholder(0), intType),
 				annot(newPlaceholder(0), boolType),
 				cast(newPlaceholder(0), intType),
 			},
-			tree.PlaceholderTypes{0: types.Bool},
+			tree.PlaceholderTypes{types.Bool},
 		},
 	}
 	for i, d := range testData {
-		args := d.initArgs
-		stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
-		if err := tree.ProcessPlaceholderAnnotations(stmt, args); err != nil {
-			t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)
-		} else if !reflect.DeepEqual(args, d.desired) {
-			t.Errorf("%d: expected args %v after processing placeholder annotations for %v, found %v", i, d.desired, stmt, args)
-		}
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			args := d.initArgs
+			stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
+			if err := tree.ProcessPlaceholderAnnotations(stmt, args); err != nil {
+				t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)
+			} else if !reflect.DeepEqual(args, d.desired) {
+				t.Errorf(
+					"%d: expected args %v after processing placeholder annotations for %v, found %v",
+					i, d.desired, stmt, args,
+				)
+			}
+		})
 	}
 }
 
@@ -521,7 +528,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 		expected  string
 	}{
 		{
-			tree.PlaceholderTypes{},
+			tree.PlaceholderTypes{nil},
 			[]tree.Expr{
 				annot(newPlaceholder(0), floatType),
 				annot(newPlaceholder(0), intType),
@@ -529,7 +536,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 			"multiple conflicting type annotations around \\$1",
 		},
 		{
-			tree.PlaceholderTypes{},
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				annot(newPlaceholder(0), floatType),
 				cast(newPlaceholder(0), floatType),
@@ -539,7 +546,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 			"multiple conflicting type annotations around \\$1",
 		},
 		{
-			tree.PlaceholderTypes{},
+			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				annot(newPlaceholder(0), floatType),
 				annot(newPlaceholder(1), floatType),
@@ -549,14 +556,14 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 			"multiple conflicting type annotations around \\$1",
 		},
 		{
-			tree.PlaceholderTypes{0: types.Float},
+			tree.PlaceholderTypes{types.Float},
 			[]tree.Expr{
 				annot(newPlaceholder(0), intType),
 			},
 			"type annotation around \\$1 conflicts with specified type float",
 		},
 		{
-			tree.PlaceholderTypes{0: types.Float},
+			tree.PlaceholderTypes{types.Float},
 			[]tree.Expr{
 				cast(newPlaceholder(0), intType),
 				annot(newPlaceholder(0), intType),
@@ -564,7 +571,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 			"type annotation around \\$1 conflicts with specified type float",
 		},
 		{
-			tree.PlaceholderTypes{0: types.Float},
+			tree.PlaceholderTypes{types.Float},
 			[]tree.Expr{
 				annot(newPlaceholder(0), floatType),
 				annot(newPlaceholder(0), intType),
@@ -572,7 +579,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 			"type annotation around \\$1 conflicts with specified type float",
 		},
 		{
-			tree.PlaceholderTypes{0: types.Float},
+			tree.PlaceholderTypes{types.Float},
 			[]tree.Expr{
 				annot(newPlaceholder(0), intType),
 				annot(newPlaceholder(0), floatType),

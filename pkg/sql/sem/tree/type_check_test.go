@@ -174,6 +174,7 @@ func TestTypeCheck(t *testing.T) {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
 			ctx := tree.MakeSemaContext(false)
+			ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */)
 			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
 			if err != nil {
 				t.Fatalf("%s: unexpected error %s", d.expr, err)

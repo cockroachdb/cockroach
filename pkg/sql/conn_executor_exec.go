@@ -289,9 +289,16 @@ func (ex *connExecutor) execStmtInOpenState(
 			)
 			return makeErrEvent(err)
 		}
-		typeHints := make(tree.PlaceholderTypes, len(s.Types))
-		for i, t := range s.Types {
-			typeHints[types.PlaceholderIdx(i)] = coltypes.CastTargetToDatumType(t)
+		var typeHints tree.PlaceholderTypes
+		if len(s.Types) > 0 {
+			if len(s.Types) > stmt.NumPlaceholders {
+				err := pgerror.NewErrorf(pgerror.CodeSyntaxError, "too many types provided")
+				return makeErrEvent(err)
+			}
+			typeHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
+			for i, t := range s.Types {
+				typeHints[i] = coltypes.CastTargetToDatumType(t)
+			}
 		}
 		if _, err := ex.addPreparedStmt(
 			ctx, name,
@@ -391,7 +398,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
-	p.semaCtx.Placeholders.Assign(pinfo)
+	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	ex.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt

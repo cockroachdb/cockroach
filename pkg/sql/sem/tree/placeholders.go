@@ -25,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// PlaceholderTypes relates placeholder names to their resolved type.
-type PlaceholderTypes map[types.PlaceholderIdx]types.T
+// PlaceholderTypes stores placeholder types (or type hints), one per
+// PlaceholderIdx.  The slice is always pre-allocated to the number of
+// placeholders in the statement. Entries that don't yet have a type are nil.
+type PlaceholderTypes []types.T
 
 // Equals returns true if two PlaceholderTypes contain the same types.
 func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
@@ -34,30 +36,42 @@ func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
 		return false
 	}
 	for i, t := range pt {
-		otherT, ok := other[i]
-		if !ok || !t.Equivalent(otherT) {
+		switch {
+		case t == nil && other[i] == nil:
+		case t == nil || other[i] == nil:
+			return false
+		case !t.Equivalent(other[i]):
 			return false
 		}
 	}
 	return true
 }
 
-// QueryArguments relates placeholder names to their provided query argument.
+// AssertAllSet verifies that all types have been set and returns an error
+// otherwise.
+func (pt PlaceholderTypes) AssertAllSet() error {
+	for i := range pt {
+		if pt[i] == nil {
+			return placeholderTypeAmbiguityError{types.PlaceholderIdx(i)}
+		}
+	}
+	return nil
+}
+
+// QueryArguments stores query arguments, one per PlaceholderIdx.
 //
 // A nil value represents a NULL argument.
-type QueryArguments map[types.PlaceholderIdx]TypedExpr
+type QueryArguments []TypedExpr
 
-var emptyQueryArgumentStr = "{}"
-
-func (qa *QueryArguments) String() string {
-	if len(*qa) == 0 {
-		return emptyQueryArgumentStr
+func (qa QueryArguments) String() string {
+	if len(qa) == 0 {
+		return "{}"
 	}
 	var buf bytes.Buffer
 	buf.WriteByte('{')
 	sep := ""
-	for k, v := range *qa {
-		fmt.Fprintf(&buf, "%s%s:%q", sep, k, v)
+	for k, v := range qa {
+		fmt.Fprintf(&buf, "%s%s:%q", sep, types.PlaceholderIdx(k), v)
 		sep = ", "
 	}
 	buf.WriteByte('}')
@@ -77,12 +91,11 @@ type PlaceholderTypesInfo struct {
 // Type returns the known type of a placeholder. If there is no known type yet
 // but there is a type hint, returns the type hint.
 func (p *PlaceholderTypesInfo) Type(idx types.PlaceholderIdx) (_ types.T, ok bool) {
-	if t, ok := p.Types[idx]; ok {
-		return t, true
-	} else if t, ok := p.TypeHints[idx]; ok {
-		return t, true
+	t := p.Types[idx]
+	if t == nil && len(p.TypeHints) >= int(idx) {
+		t = p.TypeHints[idx]
 	}
-	return nil, false
+	return t, (t != nil)
 }
 
 // ValueType returns the type of the value that must be supplied for a placeholder.
@@ -90,19 +103,20 @@ func (p *PlaceholderTypesInfo) Type(idx types.PlaceholderIdx) (_ types.T, ok boo
 // type if there isn't one. This can differ from Type(idx) when a client hint is
 // overridden (see Placeholder.Eval).
 func (p *PlaceholderTypesInfo) ValueType(idx types.PlaceholderIdx) (_ types.T, ok bool) {
-	if t, ok := p.TypeHints[idx]; ok {
-		return t, true
-	} else if t, ok := p.Types[idx]; ok {
-		return t, true
+	var t types.T
+	if len(p.TypeHints) >= int(idx) {
+		t = p.TypeHints[idx]
 	}
-	return nil, false
-
+	if t == nil {
+		t = p.Types[idx]
+	}
+	return t, (t != nil)
 }
 
 // SetType assigns a known type to a placeholder.
 // Reports an error if another type was previously assigned.
 func (p *PlaceholderTypesInfo) SetType(idx types.PlaceholderIdx, typ types.T) error {
-	if t, ok := p.Types[idx]; ok {
+	if t := p.Types[idx]; t != nil {
 		if !typ.Equivalent(t) {
 			return pgerror.NewErrorf(
 				pgerror.CodeDatatypeMismatchError,
@@ -125,40 +139,32 @@ type PlaceholderInfo struct {
 	permitUnassigned bool
 }
 
-// MakePlaceholderInfo constructs an empty PlaceholderInfo.
-func MakePlaceholderInfo() PlaceholderInfo {
-	res := PlaceholderInfo{}
-	res.Clear()
-	return res
-}
-
-// Clear resets the placeholder info map.
-func (p *PlaceholderInfo) Clear() {
-	p.TypeHints = PlaceholderTypes{}
-	p.Types = PlaceholderTypes{}
-	p.Values = QueryArguments{}
+// Init initializes a PlaceholderInfo structure appropriate for the given number
+// of placeholders, and with the given (optional) type hints.
+func (p *PlaceholderInfo) Init(numPlaceholders int, typeHints PlaceholderTypes) {
+	p.Types = make(PlaceholderTypes, numPlaceholders)
+	if typeHints == nil {
+		p.TypeHints = make(PlaceholderTypes, numPlaceholders)
+	} else {
+		if len(typeHints) != numPlaceholders {
+			panic("typeHints of invalid length")
+		}
+		p.TypeHints = typeHints
+	}
+	p.Values = nil
 	p.permitUnassigned = false
 }
 
-// Reset resets the type and values in the map and replaces the type hints map
-// by an alias to typeHints. If typeHints is nil, the map is cleared.
-func (p *PlaceholderInfo) Reset(typeHints PlaceholderTypes) {
-	if typeHints != nil {
-		p.TypeHints = typeHints
-		p.Types = PlaceholderTypes{}
-		p.Values = QueryArguments{}
-	} else {
-		p.Clear()
-	}
-}
-
 // Assign resets the PlaceholderInfo to the contents of src.
-// If src is nil, the map is cleared.
-func (p *PlaceholderInfo) Assign(src *PlaceholderInfo) {
+// If src is nil, a new structure is initialized.
+func (p *PlaceholderInfo) Assign(src *PlaceholderInfo, numPlaceholders int) {
 	if src != nil {
+		if len(src.Types) != numPlaceholders {
+			panic("inconsistent number of placeholders")
+		}
 		*p = *src
 	} else {
-		p.Clear()
+		p.Init(numPlaceholders, nil /* typeHints */)
 	}
 }
 
@@ -175,9 +181,10 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 		return nil
 	}
 	var missing []string
-	for pn := range p.Types {
-		if _, ok := p.Values[pn]; !ok {
-			missing = append(missing, pn.String())
+	for i := range p.Types {
+		idx := types.PlaceholderIdx(i)
+		if _, ok := p.Value(idx); !ok {
+			missing = append(missing, idx.String())
 		}
 	}
 	if len(missing) > 0 {
@@ -194,10 +201,10 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 // Value returns the known value of a placeholder.  Returns false in
 // the 2nd value if the placeholder does not have a value.
 func (p *PlaceholderInfo) Value(idx types.PlaceholderIdx) (TypedExpr, bool) {
-	if v, ok := p.Values[idx]; ok {
-		return v, true
+	if len(p.Values) <= int(idx) || p.Values[idx] == nil {
+		return nil, false
 	}
-	return nil, false
+	return p.Values[idx], true
 }
 
 // IsUnresolvedPlaceholder returns whether expr is an unresolved placeholder. In

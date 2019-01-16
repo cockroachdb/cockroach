@@ -40,9 +40,9 @@ type PrepareMetadata struct {
 	// Columns are the types and names of the query output columns.
 	Columns ResultColumns
 
-	// InTypes represents the inferred types for placeholder, using protocol
+	// InferredTypes represents the inferred types for placeholder, using protocol
 	// identifiers. Used for reporting on Describe.
-	InTypes []oid.Oid
+	InferredTypes []oid.Oid
 }
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
@@ -60,6 +60,6 @@ func (pm *PrepareMetadata) MemoryEstimate() int64 {
 		int64(unsafe.Sizeof(types.PlaceholderIdx(0))+unsafe.Sizeof(types.T(nil)))
 
 	res += int64(len(pm.Columns)) * int64(unsafe.Sizeof(ResultColumn{}))
-	res += int64(len(pm.InTypes)) * int64(unsafe.Sizeof(oid.Oid(0)))
+	res += int64(len(pm.InferredTypes)) * int64(unsafe.Sizeof(oid.Oid(0)))
 	return res
 }
