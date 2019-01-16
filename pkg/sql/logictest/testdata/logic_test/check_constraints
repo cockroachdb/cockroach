@@ -201,9 +201,6 @@ SELECT * FROM t5
 2 11  9
 
 statement error variable sub-expressions are not allowed in CHECK
-CREATE TABLE t6 (x INT CHECK (x = $1))
-
-statement error variable sub-expressions are not allowed in CHECK
 CREATE TABLE t6 (x INT CHECK (x = (SELECT 1)))
 
 # Check auto-generated constraint names.

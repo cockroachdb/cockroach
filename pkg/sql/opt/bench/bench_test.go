@@ -486,6 +486,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 		}
 	}
 
+	h.semaCtx.Placeholders.Init(len(h.query.args), nil /* typeHints */)
 	if h.query.prepare {
 		// Prepare the query by normalizing it (if it has placeholders) or exploring
 		// it (if it doesn't have placeholders), and cache the resulting memo so that
@@ -502,6 +503,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 	}
 
 	// Construct placeholder values.
+	h.semaCtx.Placeholders.Values = make(tree.QueryArguments, len(h.query.args))
 	for i, arg := range h.query.args {
 		var parg tree.Expr
 		parg, err := parser.ParseExpr(fmt.Sprintf("%v", arg))
@@ -523,7 +525,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 			tb.Fatalf("%v", err)
 		}
 
-		h.semaCtx.Placeholders.Values[id] = texpr
+		h.semaCtx.Placeholders.Values[i] = texpr
 	}
 	h.evalCtx.Placeholders = &h.semaCtx.Placeholders
 }

@@ -64,6 +64,7 @@ func TestMemoInit(t *testing.T) {
 
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */)
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	var o xform.Optimizer

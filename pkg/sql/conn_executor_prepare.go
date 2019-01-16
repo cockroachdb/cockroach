@@ -39,7 +39,7 @@ func (ex *connExecutor) execPrepare(
 		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
 	}
 
-	// The anonymous statement can be overwritter.
+	// The anonymous statement can be overwritten.
 	if parseCmd.Name != "" {
 		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[parseCmd.Name]; ok {
 			err := pgerror.NewErrorf(
@@ -61,44 +61,27 @@ func (ex *connExecutor) execPrepare(
 	}
 
 	// Convert the inferred SQL types back to an array of pgwire Oids.
-	inTypes := make([]oid.Oid, 0, len(ps.Types))
 	if len(ps.TypeHints) > pgwirebase.MaxPreparedStatementArgs {
 		return retErr(
 			pgwirebase.NewProtocolViolationErrorf(
 				"more than %d arguments to prepared statement: %d",
 				pgwirebase.MaxPreparedStatementArgs, len(ps.TypeHints)))
 	}
-	for k := range ps.Types {
-		// Placeholder names are 1-indexed; the arrays in the protocol are
-		// 0-indexed.
-		i := int(k)
-		// Grow inTypes to be at least as large as i. Prepopulate all
-		// slots with the hints provided, if any.
-		for j := len(inTypes); j <= i; j++ {
-			inTypes = append(inTypes, 0)
-			if j < len(parseCmd.RawTypeHints) {
-				inTypes[j] = parseCmd.RawTypeHints[j]
-			}
-		}
+	inferredTypes := make([]oid.Oid, len(ps.Types))
+	copy(inferredTypes, parseCmd.RawTypeHints)
+
+	for i := range ps.Types {
 		// OID to Datum is not a 1-1 mapping (for example, int4 and int8
 		// both map to TypeInt), so we need to maintain the types sent by
 		// the client.
-		if inTypes[i] != 0 {
-			continue
-		}
-		t, _ := ps.ValueType(k)
-		inTypes[i] = t.Oid()
-	}
-	for i, t := range inTypes {
-		if t == 0 {
-			return retErr(pgerror.NewErrorf(
-				pgerror.CodeIndeterminateDatatypeError,
-				"could not determine data type of placeholder %s", types.PlaceholderIdx(i)))
+		if inferredTypes[i] == 0 {
+			t, _ := ps.ValueType(types.PlaceholderIdx(i))
+			inferredTypes[i] = t.Oid()
 		}
 	}
 	// Remember the inferred placeholder types so they can be reported on
 	// Describe.
-	ps.InTypes = inTypes
+	ps.InferredTypes = inferredTypes
 	return nil, nil
 }
 
@@ -139,7 +122,7 @@ func (ex *connExecutor) prepare(
 	ctx context.Context, stmt Statement, placeholderHints tree.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	if placeholderHints == nil {
-		placeholderHints = make(tree.PlaceholderTypes)
+		placeholderHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
 	}
 
 	prepared := &PreparedStatement{
@@ -204,7 +187,7 @@ func (ex *connExecutor) populatePrepared(
 	p *planner,
 ) (planFlags, error) {
 	prepared := stmt.Prepared
-	p.semaCtx.Placeholders.Reset(placeholderHints)
+	p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints)
 	p.extendedEvalCtx.PrepareOnly = true
 	p.extendedEvalCtx.ActiveMemAcc = &prepared.memAcc
 	// constantMemAcc accounts for all constant folded values that are computed
@@ -271,6 +254,10 @@ func (ex *connExecutor) populatePrepared(
 			return 0, err
 		}
 	}
+	// Verify that all placeholder types have been set.
+	if err := p.semaCtx.Placeholders.Types.AssertAllSet(); err != nil {
+		return 0, err
+	}
 	prepared.Types = p.semaCtx.Placeholders.Types
 	return flags, nil
 }
@@ -302,11 +289,11 @@ func (ex *connExecutor) execBind(
 			"unknown prepared statement %q", bindCmd.PreparedStatementName))
 	}
 
-	numQArgs := uint16(len(ps.InTypes))
+	numQArgs := uint16(len(ps.InferredTypes))
 
 	// Decode the arguments, except for internal queries for which we just verify
 	// that the arguments match what's expected.
-	qargs := tree.QueryArguments{}
+	qargs := make(tree.QueryArguments, numQArgs)
 	if bindCmd.internalArgs != nil {
 		if len(bindCmd.internalArgs) != int(numQArgs) {
 			return retErr(
@@ -314,13 +301,13 @@ func (ex *connExecutor) execBind(
 					"expected %d arguments, got %d", numQArgs, len(bindCmd.internalArgs)))
 		}
 		for i, datum := range bindCmd.internalArgs {
-			t := ps.InTypes[i]
+			t := ps.InferredTypes[i]
 			if oid := datum.ResolvedType().Oid(); datum != tree.DNull && oid != t {
 				return retErr(
 					pgwirebase.NewProtocolViolationErrorf(
 						"for argument %d expected OID %d, got %d", i, t, oid))
 			}
-			qargs[types.PlaceholderIdx(i)] = datum
+			qargs[i] = datum
 		}
 	} else {
 		qArgFormatCodes := bindCmd.ArgFormatCodes
@@ -351,7 +338,7 @@ func (ex *connExecutor) execBind(
 
 		for i, arg := range bindCmd.Args {
 			k := types.PlaceholderIdx(i)
-			t := ps.InTypes[i]
+			t := ps.InferredTypes[i]
 			if arg == nil {
 				// nil indicates a NULL argument value.
 				qargs[k] = tree.DNull
@@ -487,7 +474,7 @@ func (ex *connExecutor) execDescribe(
 				"unknown prepared statement %q", descCmd.Name))
 		}
 
-		res.SetInTypes(ps.InTypes)
+		res.SetInferredTypes(ps.InferredTypes)
 
 		if stmtHasNoData(ps.AST) {
 			res.SetNoDataRowDescription()

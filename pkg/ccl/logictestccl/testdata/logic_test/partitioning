@@ -345,9 +345,11 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, 
     PARTITION p1 VALUES FROM (0, 0) TO (0, (DEFAULT))
 )
 
-statement error unimplemented: placeholders are not supported in PARTITION BY
-CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
-    PARTITION p1 VALUES IN ($1)
+# TODO(radu): we are not properly walking the expressions when
+# walking CREATE TABLE.
+statement error pq: could not determine data type of placeholder \$1
+PREPARE a AS CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN ($1:::int)
 )
 
 statement error syntax error

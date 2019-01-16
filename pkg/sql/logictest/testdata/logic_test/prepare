@@ -69,7 +69,13 @@ PREPARE a as ()
 statement error could not determine data type of placeholder \$1
 PREPARE a AS SELECT $1
 
-statement
+statement error could not determine data type of placeholder \$1
+PREPARE a AS SELECT $2:::int
+
+statement error could not determine data type of placeholder \$2
+PREPARE a AS SELECT $1:::int, $3:::int
+
+statement ok
 PREPARE a AS SELECT $1:::int + $2
 
 query I
@@ -812,3 +818,6 @@ a  d
 
 statement ok
 ROLLBACK TRANSACTION
+
+statement error no value provided for placeholder: \$1
+SELECT $1:::int
