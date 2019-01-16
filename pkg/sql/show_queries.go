@@ -26,5 +26,9 @@ func (p *planner) ShowQueries(ctx context.Context, n *tree.ShowQueries) (planNod
 	if n.Cluster {
 		table = `cluster_queries`
 	}
-	return p.delegateQuery(ctx, "SHOW QUERIES", query+table, nil, nil)
+	var filter string
+	if !n.All {
+		filter = " WHERE application_name NOT LIKE '" + InternalAppNamePrefix + "%'"
+	}
+	return p.delegateQuery(ctx, "SHOW QUERIES", query+table+filter, nil, nil)
 }

@@ -1,4 +1,5 @@
 show_queries_stmt ::=
-	'SHOW' 'QUERIES'
-	| 'SHOW' 'CLUSTER' 'QUERIES'
+	'SHOW' 'CLUSTER' 'QUERIES'
 	| 'SHOW' 'LOCAL' 'QUERIES'
+	| 'SHOW' 'ALL' 'CLUSTER' 'QUERIES'
+	| 'SHOW' 'ALL' 'LOCAL' 'QUERIES'
