@@ -127,6 +127,10 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		}
 	}
 
+	if newVersion == "" {
+		return false, errors.Errorf("no live nodes found")
+	}
+
 	// Check if we really need to upgrade cluster version.
 	if newVersion == clusterVersion {
 		return true, nil
