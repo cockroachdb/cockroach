@@ -45,7 +45,8 @@ type scanNode struct {
 	index *sqlbase.IndexDescriptor
 
 	// Set if an index was explicitly specified.
-	specifiedIndex *sqlbase.IndexDescriptor
+	specifiedIndex        *sqlbase.IndexDescriptor
+	specifiedIndexReverse bool
 	// Set if the NO_INDEX_JOIN hint was given.
 	noIndexJoin bool
 
@@ -378,6 +379,9 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 		if n.specifiedIndex == nil {
 			return errors.Errorf("index [%d] not found", indexFlags.IndexID)
 		}
+	}
+	if indexFlags.Direction == tree.Descending {
+		n.specifiedIndexReverse = true
 	}
 	return nil
 }
