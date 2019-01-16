@@ -137,26 +137,6 @@ func TestHashJoiner(t *testing.T) {
 			})
 		}
 
-		// Run tests with a probability of the run failing with a memory error.
-		// These verify that the hashJoiner falls back to disk correctly in all
-		// cases.
-		for _, memFailPoint := range []hashJoinerState{hjBuilding, hjConsumingStoredSide} {
-			name := "Building"
-			if memFailPoint == hjConsumingStoredSide {
-				name = "ConsumingStoredSide"
-			}
-			for i := 0; i < 5; i++ {
-				t.Run(fmt.Sprintf("MemFailPoint=%s", name), func(t *testing.T) {
-					if err := testFunc(t, nil, func(h *hashJoiner) {
-						h.testingKnobMemFailPoint = memFailPoint
-						h.testingKnobFailProbability = 0.5
-					}); err != nil {
-						t.Fatal(err)
-					}
-				})
-			}
-		}
-
 		// Run test with a variety of memory limits.
 		for _, memLimit := range []int64{1, 256, 512, 1024, 2048} {
 			t.Run(fmt.Sprintf("MemLimit=%d", memLimit), func(t *testing.T) {

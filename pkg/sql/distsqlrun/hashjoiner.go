@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -120,11 +119,6 @@ type hashJoiner struct {
 	// testingKnobMemFailPoint specifies a state in which the hashJoiner will
 	// fail at a random point during this phase.
 	testingKnobMemFailPoint hashJoinerState
-	// testingKnobFailProbability is a value in the range [0, 1] that specifies
-	// a probability of failure at each possible failure point in a phase
-	// specified by testingKnobMemFailPoint. Note that it becomes less likely
-	// to hit a specific failure point as execution in the phase continues.
-	testingKnobFailProbability float64
 
 	// Context cancellation checker.
 	cancelChecker *sqlbase.CancelChecker
@@ -341,14 +335,20 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 		if err := h.rows[side].AddRow(h.Ctx, row); err != nil {
 			// If this error is a memory limit error, move to hjConsumingStoredSide.
 			h.storedSide = side
-			if spilled, spillErr := h.maybeSpillToDisk(err); spilled {
-				addErr := h.storedRows.AddRow(h.Ctx, row)
-				if addErr == nil {
-					return hjConsumingStoredSide, nil, nil
+			if pgErr, ok := pgerror.GetPGCause(err); ok && pgErr.Code == pgerror.CodeOutOfMemoryError {
+				if !h.useTempStorage {
+					err = errors.Wrap(err, "error while attempting hashJoiner disk spill: temp storage disabled")
+				} else {
+					if err := h.initStoredRows(); err != nil {
+						h.MoveToDraining(err)
+						return hjStateUnknown, nil, h.DrainHelper()
+					}
+					addErr := h.storedRows.AddRow(h.Ctx, row)
+					if addErr == nil {
+						return hjConsumingStoredSide, nil, nil
+					}
+					err = errors.Wrap(err, addErr.Error())
 				}
-				err = errors.Wrap(err, addErr.Error())
-			} else if spillErr != nil {
-				err = errors.Wrap(err, spillErr.Error())
 			}
 			h.MoveToDraining(err)
 			return hjStateUnknown, nil, h.DrainHelper()
@@ -380,41 +380,29 @@ func (h *hashJoiner) consumeStoredSide() (hashJoinerState, sqlbase.EncDatumRow, 
 			// The stored side has been fully consumed, move on to hjReadingProbeSide.
 			// If storedRows is in-memory, pre-reserve the memory needed to mark.
 			if rc, ok := h.storedRows.(*hashMemRowContainer); ok {
-				err = h.maybeMakeMemErr("reserving mark memory")
-				if err == nil {
-					err = rc.reserveMarkMemoryMaybe(h.Ctx)
-				}
-				if err != nil {
-					if spilled, spillErr := h.maybeSpillToDisk(err); spilled {
-						return hjReadingProbeSide, nil, nil
-					} else if spillErr != nil {
-						err = errors.Wrap(err, spillErr.Error())
-					}
-					h.MoveToDraining(err)
-					return hjStateUnknown, nil, h.DrainHelper()
-				}
+				// h.storedRows is hashMemRowContainer and not a disk backed one, so
+				// h.useTempStorage is false and we cannot spill to disk, so we simply
+				// will return an error if it occurs.
+				err = rc.reserveMarkMemoryMaybe(h.Ctx)
+			} else if hdbrc, ok := h.storedRows.(*hashDiskBackedRowContainer); ok {
+				err = hdbrc.reserveMarkMemoryMaybe(h.Ctx)
+			} else {
+				panic("unexpected type of storedRows in hashJoiner")
+			}
+			if err != nil {
+				h.MoveToDraining(err)
+				return hjStateUnknown, nil, h.DrainHelper()
 			}
 			return hjReadingProbeSide, nil, nil
 		}
 
-		err = h.maybeMakeMemErr("consuming stored side")
-		if err == nil {
-			err = h.storedRows.AddRow(h.Ctx, row)
-		}
+		err = h.storedRows.AddRow(h.Ctx, row)
+		// Regardless of the underlying row container (disk backed or in-memory
+		// only), we cannot do anything about an error if it occurs.
 		if err != nil {
-			if spilled, spillErr := h.maybeSpillToDisk(err); spilled {
-				if err := h.storedRows.AddRow(h.Ctx, row); err != nil {
-					h.MoveToDraining(err)
-					return hjStateUnknown, nil, h.DrainHelper()
-				}
-				continue
-			} else if spillErr != nil {
-				err = errors.Wrap(err, spillErr.Error())
-			}
 			h.MoveToDraining(err)
 			return hjStateUnknown, nil, h.DrainHelper()
 		}
-
 	}
 }
 
@@ -604,8 +592,13 @@ func (h *hashJoiner) emitUnmatched() (hashJoinerState, sqlbase.EncDatumRow, *Pro
 
 func (h *hashJoiner) close() {
 	if h.InternalClose() {
-		h.rows[leftSide].Close(h.Ctx)
-		h.rows[rightSide].Close(h.Ctx)
+		// We need to close only memRowContainer of the probe side because the
+		// stored side container will be closed by closing h.storedRows.
+		if h.storedSide == rightSide {
+			h.rows[leftSide].Close(h.Ctx)
+		} else {
+			h.rows[rightSide].Close(h.Ctx)
+		}
 		if h.storedRows != nil {
 			h.storedRows.Close(h.Ctx)
 		}
@@ -681,107 +674,27 @@ func (h *hashJoiner) shouldEmitUnmatched(
 
 // initStoredRows initializes a hashRowContainer and sets h.storedRows.
 func (h *hashJoiner) initStoredRows() error {
-	storedMemRows := makeHashMemRowContainer(&h.rows[h.storedSide])
-	err := storedMemRows.Init(
+	if h.useTempStorage {
+		hrc := makeHashDiskBackedRowContainer(
+			&h.rows[h.storedSide],
+			h.evalCtx,
+			h.MemMonitor,
+			h.diskMonitor,
+			h.flowCtx.TempStorage,
+		)
+		h.storedRows = &hrc
+	} else {
+		hrc := makeHashMemRowContainer(&h.rows[h.storedSide])
+		h.storedRows = &hrc
+	}
+
+	return h.storedRows.Init(
 		h.Ctx,
 		shouldMark(h.storedSide, h.joinType),
 		h.rows[h.storedSide].types,
 		h.eqCols[h.storedSide],
 		h.nullEquality,
 	)
-	if err == nil {
-		err = h.maybeMakeMemErr("initializing mem rows")
-		// Close the container on an artificial error.
-		if err != nil {
-			storedMemRows.Close(h.Ctx)
-		}
-	}
-	if err != nil {
-		if spilled, spillErr := h.maybeSpillToDisk(err); spilled {
-			return nil
-		} else if spillErr != nil {
-			return errors.Wrap(err, spillErr.Error())
-		}
-		return err
-	}
-
-	h.storedRows = &storedMemRows
-	return nil
-}
-
-// maybeSpillToDisk checks err and spills h.rows[h.storedSide] to disk if the
-// error is a memory error and h.storedRows is not a hashDiskRowContainer. On
-// a successful disk spill, maybeSpillToDisk Close()s whatever h.storedRows
-// previously pointed to and sets h.storedRows a hashDiskRowContainer.
-// Returns whether the hashJoiner spilled to disk and an error if one occurred
-// while doing so.
-// TODO(asubiotto): This should be behind an auto-fallback hashDiskRowContainer.
-func (h *hashJoiner) maybeSpillToDisk(err error) (bool, error) {
-	newDiskSpillErr := func(errString string) error {
-		return fmt.Errorf("error while attempting hashJoiner disk spill: %s", errString)
-	}
-	if !h.useTempStorage {
-		return false, newDiskSpillErr("temp storage disabled")
-	}
-	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
-		return false, nil
-	}
-	if _, ok := h.storedRows.(*hashDiskRowContainer); ok {
-		return false, newDiskSpillErr("already using disk")
-	}
-
-	storedDiskRows := makeHashDiskRowContainer(h.diskMonitor, h.flowCtx.TempStorage)
-	if err := storedDiskRows.Init(
-		h.Ctx,
-		shouldMark(h.storedSide, h.joinType),
-		h.rows[h.storedSide].types,
-		h.eqCols[h.storedSide],
-		h.nullEquality,
-	); err != nil {
-		return false, newDiskSpillErr(err.Error())
-	}
-
-	if h.storedRows != nil {
-		h.storedRows.Close(h.Ctx)
-	}
-	h.storedRows = &storedDiskRows
-
-	// Transfer rows from memory.
-	i := h.rows[h.storedSide].NewFinalIterator(h.Ctx)
-	defer i.Close()
-	for i.Rewind(); ; i.Next() {
-		if err := h.cancelChecker.Check(); err != nil {
-			return false, newDiskSpillErr(err.Error())
-		}
-		if ok, err := i.Valid(); err != nil {
-			return false, newDiskSpillErr(err.Error())
-		} else if !ok {
-			break
-		}
-		memRow, err := i.Row()
-		if err != nil {
-			return false, newDiskSpillErr(err.Error())
-		}
-		if err := storedDiskRows.AddRow(h.Ctx, memRow); err != nil {
-			return false, newDiskSpillErr(err.Error())
-		}
-	}
-	return true, nil
-}
-
-// maybeMakeMemErr is a utility function that returns a memory error with a
-// probability of h.testingKnobMemFailProbability if h.runningState matches the
-// h.testingKnobMemFailPoint.
-func (h *hashJoiner) maybeMakeMemErr(action string) error {
-	if h.testingKnobMemFailPoint == h.runningState &&
-		rand.Float64() < h.testingKnobFailProbability {
-		// Unset the testing knob fail point.
-		h.testingKnobMemFailPoint = hjStateUnknown
-		return pgerror.NewErrorf(
-			pgerror.CodeOutOfMemoryError, fmt.Sprintf("%s test induced error", action),
-		)
-	}
-	return nil
 }
 
 var _ distsqlpb.DistSQLSpanStats = &HashJoinerStats{}
