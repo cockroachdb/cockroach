@@ -375,4 +375,8 @@ type AggInfo struct {
 	// ConstArgs is the list of any constant arguments to the aggregate,
 	// for instance, the separator in string_agg.
 	ConstArgs []tree.Datum
+
+	// Filter is the index of the column, if any, which should be used as the
+	// FILTER condition for the aggregate. If there is no filter, Filter is -1.
+	Filter ColumnOrdinal
 }
