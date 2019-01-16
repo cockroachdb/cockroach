@@ -407,6 +407,7 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) cat.Schema {
 				tree.ErrString(name)).
 				SetHintf("verify that the current database and search_path are valid and/or the target database exists")})
 		}
+		panic(builderError{err})
 	}
 
 	// Only allow creation of objects in the public schema.
