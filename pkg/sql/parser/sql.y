@@ -3336,7 +3336,7 @@ show_constraints_stmt:
 
 // %Help: SHOW QUERIES - list running queries
 // %Category: Misc
-// %Text: SHOW [CLUSTER | LOCAL] QUERIES
+// %Text: SHOW [ALL] [CLUSTER | LOCAL] QUERIES
 // %SeeAlso: CANCEL QUERIES
 show_queries_stmt:
   SHOW QUERIES
@@ -3344,13 +3344,26 @@ show_queries_stmt:
     $$.val = &tree.ShowQueries{Cluster: true}
   }
 | SHOW QUERIES error // SHOW HELP: SHOW QUERIES
+| SHOW ALL QUERIES
+  {
+    $$.val = &tree.ShowQueries{All: true, Cluster: true}
+  }
+| SHOW ALL QUERIES error // SHOW HELP: SHOW QUERIES
 | SHOW CLUSTER QUERIES
   {
     $$.val = &tree.ShowQueries{Cluster: true}
   }
+| SHOW ALL CLUSTER QUERIES
+  {
+    $$.val = &tree.ShowQueries{All: true, Cluster: true}
+  }
 | SHOW LOCAL QUERIES
   {
     $$.val = &tree.ShowQueries{Cluster: false}
+  }
+| SHOW ALL LOCAL QUERIES
+  {
+    $$.val = &tree.ShowQueries{All: true, Cluster: false}
   }
 
 // %Help: SHOW JOBS - list background jobs
@@ -3393,7 +3406,7 @@ opt_compact:
 
 // %Help: SHOW SESSIONS - list open client sessions
 // %Category: Misc
-// %Text: SHOW [CLUSTER | LOCAL] SESSIONS
+// %Text: SHOW [ALL] [CLUSTER | LOCAL] SESSIONS
 // %SeeAlso: CANCEL SESSIONS
 show_sessions_stmt:
   SHOW SESSIONS
@@ -3401,13 +3414,26 @@ show_sessions_stmt:
     $$.val = &tree.ShowSessions{Cluster: true}
   }
 | SHOW SESSIONS error // SHOW HELP: SHOW SESSIONS
+| SHOW ALL SESSIONS
+  {
+    $$.val = &tree.ShowSessions{All: true, Cluster: true}
+  }
+| SHOW ALL SESSIONS error // SHOW HELP: SHOW SESSIONS
 | SHOW CLUSTER SESSIONS
   {
     $$.val = &tree.ShowSessions{Cluster: true}
   }
+| SHOW ALL CLUSTER SESSIONS
+  {
+    $$.val = &tree.ShowSessions{All: true, Cluster: true}
+  }
 | SHOW LOCAL SESSIONS
   {
     $$.val = &tree.ShowSessions{Cluster: false}
+  }
+| SHOW ALL LOCAL SESSIONS
+  {
+    $$.val = &tree.ShowSessions{All: true, Cluster: false}
   }
 
 // %Help: SHOW TABLES - list tables

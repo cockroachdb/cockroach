@@ -475,8 +475,11 @@ show_jobs_stmt ::=
 
 show_queries_stmt ::=
 	'SHOW' 'QUERIES'
+	| 'SHOW' 'ALL' 'QUERIES'
 	| 'SHOW' 'CLUSTER' 'QUERIES'
+	| 'SHOW' 'ALL' 'CLUSTER' 'QUERIES'
 	| 'SHOW' 'LOCAL' 'QUERIES'
+	| 'SHOW' 'ALL' 'LOCAL' 'QUERIES'
 
 show_ranges_stmt ::=
 	'SHOW' ranges_kw 'FROM' 'TABLE' table_name
@@ -495,8 +498,11 @@ show_session_stmt ::=
 
 show_sessions_stmt ::=
 	'SHOW' 'SESSIONS'
+	| 'SHOW' 'ALL' 'SESSIONS'
 	| 'SHOW' 'CLUSTER' 'SESSIONS'
+	| 'SHOW' 'ALL' 'CLUSTER' 'SESSIONS'
 	| 'SHOW' 'LOCAL' 'SESSIONS'
+	| 'SHOW' 'ALL' 'LOCAL' 'SESSIONS'
 
 show_stats_stmt ::=
 	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name
