@@ -152,6 +152,7 @@ func init() {
 
 	// Modifiers for aggregations pass through their argument.
 	typingFuncMap[opt.AggDistinctOp] = typeAsFirstArg
+	typingFuncMap[opt.AggFilterOp] = typeAsFirstArg
 
 	for _, op := range opt.BinaryOperators {
 		typingFuncMap[op] = typeAsBinary

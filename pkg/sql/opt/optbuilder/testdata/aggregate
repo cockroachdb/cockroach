@@ -2622,10 +2622,145 @@ scalar-group-by
            └── agg-distinct [type=decimal]
                 └── variable: d [type=decimal]
 
+# FILTER.
+
 build
 SELECT sum(abc.d) FILTER (WHERE abc.d > 0) FROM abc
 ----
-error (0A000): aggregates with FILTER are not supported yet
+scalar-group-by
+ ├── columns: sum:6(decimal)
+ ├── project
+ │    ├── columns: column5:5(bool) d:4(decimal)
+ │    ├── scan abc
+ │    │    └── columns: a:1(string!null) b:2(float) c:3(bool) d:4(decimal)
+ │    └── projections
+ │         └── gt [type=bool]
+ │              ├── variable: d [type=decimal]
+ │              └── const: 0 [type=decimal]
+ └── aggregations
+      └── sum [type=decimal]
+           └── agg-filter [type=decimal]
+                ├── variable: d [type=decimal]
+                └── filter
+                     └── variable: column5 [type=bool]
+
+# Ensure aggregates with FILTER coexist properly with non-FILTER aggregates.
+build
+SELECT
+    sum(x) FILTER (WHERE y > 0),
+    avg(DISTINCT z),
+    avg(DISTINCT z) FILTER (WHERE y > 0)
+FROM xyz
+----
+scalar-group-by
+ ├── columns: sum:5(decimal) avg:6(float) avg:7(float)
+ ├── project
+ │    ├── columns: column4:4(bool) x:1(int!null) z:3(float)
+ │    ├── scan xyz
+ │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
+ │    └── projections
+ │         └── gt [type=bool]
+ │              ├── variable: y [type=int]
+ │              └── const: 0 [type=int]
+ └── aggregations
+      ├── sum [type=decimal]
+      │    └── agg-filter [type=int]
+      │         ├── variable: x [type=int]
+      │         └── filter
+      │              └── variable: column4 [type=bool]
+      ├── avg [type=float]
+      │    └── agg-distinct [type=float]
+      │         └── variable: z [type=float]
+      └── avg [type=float]
+           └── agg-filter [type=float]
+                ├── agg-distinct [type=float]
+                │    └── variable: z [type=float]
+                └── filter
+                     └── variable: column4 [type=bool]
+
+# Ensure aggregates involving FILTER are deduplicated.
+build
+SELECT
+    avg(DISTINCT x),
+    avg(DISTINCT x),
+    avg(DISTINCT x) FILTER (WHERE y > 0),
+    avg(DISTINCT x) FILTER (WHERE y > 0)
+FROM xyz
+----
+scalar-group-by
+ ├── columns: avg:4(decimal) avg:4(decimal) avg:6(decimal) avg:6(decimal)
+ ├── project
+ │    ├── columns: column5:5(bool) x:1(int!null)
+ │    ├── scan xyz
+ │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
+ │    └── projections
+ │         └── gt [type=bool]
+ │              ├── variable: y [type=int]
+ │              └── const: 0 [type=int]
+ └── aggregations
+      ├── avg [type=decimal]
+      │    └── agg-distinct [type=int]
+      │         └── variable: x [type=int]
+      └── avg [type=decimal]
+           └── agg-filter [type=int]
+                ├── agg-distinct [type=int]
+                │    └── variable: x [type=int]
+                └── filter
+                     └── variable: column5 [type=bool]
+
+build
+SELECT
+    string_agg(x::string, 'foo') FILTER (WHERE y > 0)
+FROM xyz
+----
+scalar-group-by
+ ├── columns: string_agg:7(string)
+ ├── project
+ │    ├── columns: column4:4(string) column5:5(string!null) column6:6(bool)
+ │    ├── scan xyz
+ │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
+ │    └── projections
+ │         ├── cast: STRING [type=string]
+ │         │    └── variable: x [type=int]
+ │         ├── const: 'foo' [type=string]
+ │         └── gt [type=bool]
+ │              ├── variable: y [type=int]
+ │              └── const: 0 [type=int]
+ └── aggregations
+      └── string-agg [type=string]
+           ├── agg-filter [type=string]
+           │    ├── variable: column4 [type=string]
+           │    └── filter
+           │         └── variable: column6 [type=bool]
+           └── const: 'foo' [type=string]
+
+build
+SELECT y, count(*) FILTER (WHERE x > 5) FROM xyz GROUP BY y
+----
+group-by
+ ├── columns: y:2(int) count:6(int)
+ ├── grouping columns: y:2(int)
+ ├── project
+ │    ├── columns: column4:4(bool!null) column5:5(bool) y:2(int)
+ │    ├── scan xyz
+ │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
+ │    └── projections
+ │         ├── true [type=bool]
+ │         └── gt [type=bool]
+ │              ├── variable: x [type=int]
+ │              └── const: 5 [type=int]
+ └── aggregations
+      └── count [type=int]
+           └── agg-filter [type=bool]
+                ├── variable: column4 [type=bool]
+                └── filter
+                     └── variable: column5 [type=bool]
+
+build
+SELECT y, count(*) FILTER (WHERE count(*) > 5) FROM xyz GROUP BY y
+----
+error: count_rows(): aggregate functions are not allowed in FILTER
+
 
 # Check that ordering by an alias of an aggregate works.
 build

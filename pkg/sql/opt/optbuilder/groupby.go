@@ -88,6 +88,7 @@ type aggregateInfo struct {
 	def      memo.FunctionPrivate
 	distinct bool
 	args     memo.ScalarListExpr
+	filter   opt.ScalarExpr
 
 	// col is the output column of the aggregation.
 	col *scopeColumn
@@ -248,6 +249,7 @@ func (b *Builder) buildAggregation(
 		args := make([]opt.ScalarExpr, 0, 2)
 		if len(agg.args) > 0 {
 			colID := argCols[0].id
+			argCols = argCols[1:]
 			args = append(args, b.factory.ConstructVariable(colID))
 			if agg.distinct {
 				// Wrap the argument with AggDistinct.
@@ -255,11 +257,22 @@ func (b *Builder) buildAggregation(
 			}
 
 			// Append any constant arguments without further processing.
-			args = append(args, agg.args[1:]...)
+			constArgs := agg.args[1:]
+			args = append(args, constArgs...)
+			argCols = argCols[len(constArgs):]
+
+			// If the aggregate had a filter, there's an extra column in argCols
+			// corresponding to the filter.
+			// TODO(justin): add a norm rule to push these filters below group bys where appropriate.
+			if agg.filter != nil {
+				colID := argCols[0].id
+				argCols = argCols[1:]
+				// Wrap the argument with AggFilter.
+				args[0] = b.factory.ConstructAggFilter(args[0], b.factory.ConstructVariable(colID))
+			}
 		}
 
 		aggCols[i].scalar = b.constructAggregate(agg.def.Name, args).(opt.ScalarExpr)
-		argCols = argCols[len(agg.args):]
 
 		if opt.AggregateIsOrderingSensitive(aggCols[i].scalar.Op()) {
 			haveOrderingSensitiveAgg = true
@@ -403,6 +416,22 @@ func (b *Builder) buildGrouping(
 	}
 }
 
+// buildAggArg builds a scalar expression which is used as an input in some form
+// to an aggregate expression. The scopeColumn for the built expression will
+// be added to tempScope.
+func (b *Builder) buildAggArg(
+	e tree.TypedExpr, info *aggregateInfo, tempScope, inScope *scope,
+) opt.ScalarExpr {
+	// This synthesizes a new tempScope column, unless the argument is a
+	// simple VariableOp.
+	col := b.addColumn(tempScope, "" /* alias */, e)
+	b.buildScalar(e, inScope, tempScope, col, &info.colRefs)
+	if col.scalar != nil {
+		return col.scalar
+	}
+	return b.factory.ConstructVariable(col.id)
+}
+
 // buildAggregateFunction is called when we are building a function which is an
 // aggregate. Any non-trivial parameters (i.e. not column reference) to the
 // aggregate function are extracted and added to aggInScope. The aggregate
@@ -436,17 +465,13 @@ func (b *Builder) buildAggregateFunction(
 	defer func() { b.subquery = subq }()
 
 	for i, pexpr := range f.Exprs {
-		// This synthesizes a new tempScope column, unless the argument is a
-		// simple VariableOp.
-		texpr := pexpr.(tree.TypedExpr)
+		info.args[i] = b.buildAggArg(pexpr.(tree.TypedExpr), &info, tempScope, inScope)
+	}
 
-		col := b.addColumn(tempScope, "" /* alias */, texpr)
-		b.buildScalar(texpr, inScope, tempScope, col, &info.colRefs)
-		if col.scalar != nil {
-			info.args[i] = col.scalar
-		} else {
-			info.args[i] = b.factory.ConstructVariable(col.id)
-		}
+	// If we have a filter, add it to tempScope after all the arguments. We'll
+	// later extract the column that gets added here in buildAggregation.
+	if f.Filter != nil {
+		info.filter = b.buildAggArg(f.Filter.(tree.TypedExpr), &info, tempScope, inScope)
 	}
 
 	// Find the appropriate aggregation scopes for this aggregate now that we
