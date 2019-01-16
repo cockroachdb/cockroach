@@ -345,7 +345,14 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 }
 
 func isExpectedRelocateError(err error) bool {
-	return testutils.IsError(err, "(descriptor changed|unable to remove replica .* which is not present|unable to add replica .* which is already present|received invalid ChangeReplicasTrigger .* to remove self|breaker open)")
+	// See:
+	// https://github.com/cockroachdb/cockroach/issues/33732
+	// https://github.com/cockroachdb/cockroach/issues/33708
+	// https://github.cm/cockroachdb/cockroach/issues/34012
+	// for more failure modes not caught here. We decided to avoid adding
+	// to this catchall and to fix the root causes instead.
+	// We've also seen "breaker open" errors here.
+	return testutils.IsError(err, "(descriptor changed|unable to remove replica .* which is not present|unable to add replica .* which is already present|received invalid ChangeReplicasTrigger .* to remove self)")
 }
 
 func accountDistribution(r *rand.Rand) *rand.Zipf {
