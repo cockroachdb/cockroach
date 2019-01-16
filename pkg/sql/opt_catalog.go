@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -149,7 +150,7 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 	case *optSequence:
 		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
 	default:
-		panic("invalid DataSource")
+		return pgerror.NewAssertionErrorf("invalid object type: %v", reflect.TypeOf(o))
 	}
 }
 

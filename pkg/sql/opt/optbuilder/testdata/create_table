@@ -36,6 +36,12 @@ CREATE TABLE unknown.ab (a INT PRIMARY KEY)
 ----
 error (3F000): cannot create "unknown.ab" because the target database or schema does not exist
 
+# Schema can only be created in public schema.
+build
+CREATE TABLE t.crdb_internal.ab (a INT PRIMARY KEY)
+----
+error (42602): schema cannot be modified: "t.crdb_internal"
+
 # Too few input columns.
 build
 CREATE TABLE ab (a, b) AS SELECT 1
