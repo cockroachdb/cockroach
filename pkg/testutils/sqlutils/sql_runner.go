@@ -166,7 +166,9 @@ func RowsToStrMatrix(rows *gosql.Rows) ([][]string, error) {
 	return res, nil
 }
 
-func maxtrixToStr(rows [][]string) string {
+// MatrixToStr converts a set of rows into a single string where each row is on
+// a separate line and the columns with a row are comma separated.
+func MatrixToStr(rows [][]string) string {
 	res := strings.Builder{}
 	for _, row := range rows {
 		res.WriteString(strings.Join(row, ", "))
@@ -182,7 +184,7 @@ func (sr *SQLRunner) CheckQueryResults(t testing.TB, query string, expected [][]
 	res := sr.QueryStr(t, query)
 	if !reflect.DeepEqual(res, expected) {
 		t.Errorf("query '%s': expected:\n%v\ngot:\n%v\n",
-			query, maxtrixToStr(expected), maxtrixToStr(res),
+			query, MatrixToStr(expected), MatrixToStr(res),
 		)
 	}
 }
@@ -196,7 +198,7 @@ func (sr *SQLRunner) CheckQueryResultsRetry(t testing.TB, query string, expected
 		res := sr.QueryStr(t, query)
 		if !reflect.DeepEqual(res, expected) {
 			return errors.Errorf("query '%s': expected:\n%v\ngot:\n%v\n",
-				query, maxtrixToStr(expected), maxtrixToStr(res),
+				query, MatrixToStr(expected), MatrixToStr(res),
 			)
 		}
 		return nil

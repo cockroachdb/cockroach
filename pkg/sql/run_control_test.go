@@ -308,12 +308,14 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 			return err
 		}
 
-		numRows := 0
-		for rows.Next() {
-			numRows++
+		m, err := sqlutils.RowsToStrMatrix(rows)
+		if err != nil {
+			return err
 		}
-		if numRows != numNodes {
-			return fmt.Errorf("expected %d sessions but found %d", numNodes, numRows)
+
+		if numRows := len(m); numRows != numNodes {
+			return fmt.Errorf("expected %d sessions but found %d\n%s",
+				numNodes, numRows, sqlutils.MatrixToStr(m))
 		}
 
 		return nil
