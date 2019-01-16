@@ -2349,6 +2349,7 @@ writing ` + os.DevNull + `
   debug/schema/system/rangelog
   debug/schema/system/role_members
   debug/schema/system/settings
+  debug/schema/system/statement_executions
   debug/schema/system/table_statistics
   debug/schema/system/ui
   debug/schema/system/users

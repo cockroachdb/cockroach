@@ -54,6 +54,7 @@ server_version_num                 90500
 session_user                       root
 sql_safe_updates                   off
 standard_conforming_strings        on
+statement_logging_enabled          on
 statement_timeout                  0
 timezone                           UTC
 tracing                            off

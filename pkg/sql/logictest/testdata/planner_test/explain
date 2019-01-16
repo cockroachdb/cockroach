@@ -183,7 +183,7 @@ sort                                  ·         ·
            │         │    └── values  ·         ·
            │         │                size      6 columns, 92 rows
            │         └── values       ·         ·
-           │                          size      13 columns, 16 rows
+           │                          size      13 columns, 17 rows
            └── scan                   ·         ·
 ·                                     table     comments@primary
 ·                                     spans     ALL
