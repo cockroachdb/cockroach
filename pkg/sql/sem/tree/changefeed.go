@@ -25,7 +25,14 @@ var _ Statement = &CreateChangefeed{}
 
 // Format implements the NodeFormatter interface.
 func (node *CreateChangefeed) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE CHANGEFEED FOR ")
+	if node.SinkURI != nil {
+		ctx.WriteString("CREATE ")
+	} else {
+		// Sinkless feeds don't really CREATE anything, so the syntax omits the
+		// prefix. They're also still EXPERIMENTAL, so they get marked as such.
+		ctx.WriteString("EXPERIMENTAL ")
+	}
+	ctx.WriteString("CHANGEFEED FOR ")
 	ctx.FormatNode(&node.Targets)
 	if node.SinkURI != nil {
 		ctx.WriteString(" INTO ")

@@ -9,3 +9,13 @@ create_changefeed_stmt ::=
 	| 'CREATE' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
 	| 'CREATE' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
 	| 'CREATE' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'INTO' sink 
+	| 'EXPERIMENTAL' 'CHANGEFEED' 'FOR' table_name ( ( ',' table_name ) )* 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'EXPERIMENTAL' 'CHANGEFEED' 'FOR' table_name ( ( ',' table_name ) )* 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'EXPERIMENTAL' 'CHANGEFEED' 'FOR' table_name ( ( ',' table_name ) )* 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'EXPERIMENTAL' 'CHANGEFEED' 'FOR' table_name ( ( ',' table_name ) )* 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'EXPERIMENTAL' 'CHANGEFEED' 'FOR' table_name ( ( ',' table_name ) )* 
+	| 'EXPERIMENTAL' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'EXPERIMENTAL' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'EXPERIMENTAL' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'EXPERIMENTAL' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'EXPERIMENTAL' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 
