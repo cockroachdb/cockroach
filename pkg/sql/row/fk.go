@@ -269,69 +269,7 @@ func TablesNeededForFKs(
 	}
 }
 
-type fkInsertHelper struct {
-	// fks maps index id to slice of baseFKHelper, the outgoing foreign keys for
-	// each index. These slices will have at most one entry, since there can be
-	// at most one outgoing foreign key per index. We use this data structure
-	// instead of a one-to-one map for consistency with the other insert helpers.
-	fks map[sqlbase.IndexID][]baseFKHelper
-
-	checker *fkBatchChecker
-}
-
 var errSkipUnusedFK = errors.New("no columns involved in FK included in writer")
-
-func makeFKInsertHelper(
-	txn *client.Txn,
-	table *sqlbase.ImmutableTableDescriptor,
-	otherTables TableLookupsByID,
-	colMap map[sqlbase.ColumnID]int,
-	alloc *sqlbase.DatumAlloc,
-) (fkInsertHelper, error) {
-	h := fkInsertHelper{
-		checker: &fkBatchChecker{
-			txn: txn,
-		},
-	}
-	for _, idx := range table.AllNonDropIndexes() {
-		if idx.ForeignKey.IsSet() {
-			fk, err := makeBaseFKHelper(txn, otherTables, idx, idx.ForeignKey, colMap, alloc, CheckInserts)
-			if err == errSkipUnusedFK {
-				continue
-			}
-			if err != nil {
-				return h, err
-			}
-			if h.fks == nil {
-				h.fks = make(map[sqlbase.IndexID][]baseFKHelper)
-			}
-			h.fks[idx.ID] = append(h.fks[idx.ID], fk)
-		}
-	}
-	return h, nil
-}
-
-func (h fkInsertHelper) addAllIdxChecks(ctx context.Context, row tree.Datums, traceKV bool) error {
-	if len(h.fks) == 0 {
-		return nil
-	}
-	for idx := range h.fks {
-		if err := checkIdx(ctx, h.checker, h.fks, idx, row, traceKV); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// CollectSpans implements the FkSpanCollector interface.
-func (h fkInsertHelper) CollectSpans() roachpb.Spans {
-	return collectSpansWithFKMap(h.fks)
-}
-
-// CollectSpansForValues implements the FkSpanCollector interface.
-func (h fkInsertHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spans, error) {
-	return collectSpansForValuesWithFKMap(h.fks, values)
-}
 
 func checkIdx(
 	ctx context.Context,
