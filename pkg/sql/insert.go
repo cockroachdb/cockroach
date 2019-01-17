@@ -120,7 +120,7 @@ func (p *planner) Insert(
 	}
 	fkTables, err := row.TablesNeededForFKs(
 		ctx,
-		*desc,
+		desc,
 		fkCheckType,
 		p.LookupTableByID,
 		p.CheckPrivilege,
