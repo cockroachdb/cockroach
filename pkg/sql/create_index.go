@@ -107,7 +107,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
-	if err := n.tableDesc.AddIndexMutation(*indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
+	if err := n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
 		return err
 	}
 	if err := n.tableDesc.AllocateIDs(); err != nil {
@@ -119,7 +119,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		if err := params.p.addInterleave(params.ctx, n.tableDesc, index, n.n.Interleave); err != nil {
 			return err
 		}
-		if err := params.p.finalizeInterleave(params.ctx, n.tableDesc, *index); err != nil {
+		if err := params.p.finalizeInterleave(params.ctx, n.tableDesc, index); err != nil {
 			return err
 		}
 	}

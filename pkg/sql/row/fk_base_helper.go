@@ -80,7 +80,7 @@ type baseFKHelper struct {
 	searchTable *sqlbase.ImmutableTableDescriptor
 	// writeIdx is the descriptor for the target index being mutated.
 	// Stored only for error messages.
-	writeIdx sqlbase.IndexDescriptor
+	writeIdx *sqlbase.IndexDescriptor
 }
 
 // makeBaseFKHelper instanciates a FK helper.
@@ -113,7 +113,7 @@ type baseFKHelper struct {
 func makeBaseFKHelper(
 	txn *client.Txn,
 	otherTables TableLookupsByID,
-	writeIdx sqlbase.IndexDescriptor,
+	writeIdx *sqlbase.IndexDescriptor,
 	ref sqlbase.ForeignKeyReference,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
@@ -181,7 +181,7 @@ func makeBaseFKHelper(
 // different composite foreign key matching methods.
 func computeFkCheckColumnIDs(
 	match sqlbase.ForeignKeyReference_Match,
-	writeIdx sqlbase.IndexDescriptor,
+	writeIdx *sqlbase.IndexDescriptor,
 	searchIdx *sqlbase.IndexDescriptor,
 	colMap map[sqlbase.ColumnID]int,
 	prefixLen int,

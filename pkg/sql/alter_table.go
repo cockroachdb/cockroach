@@ -158,7 +158,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			n.tableDesc.AddColumnMutation(*col, sqlbase.DescriptorMutation_ADD)
 			if idx != nil {
-				if err := n.tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD); err != nil {
+				if err := n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD); err != nil {
 					return err
 				}
 			}
@@ -208,7 +208,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return fmt.Errorf("index %q being dropped, try again later", d.Name)
 					}
 				}
-				if err := n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD); err != nil {
+				if err := n.tableDesc.AddIndexMutation(&idx, sqlbase.DescriptorMutation_ADD); err != nil {
 					return err
 				}
 
@@ -463,7 +463,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, *idx); err != nil {
+				if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, idx); err != nil {
 					return err
 				}
 				idx.ForeignKey = sqlbase.ForeignKeyReference{}
