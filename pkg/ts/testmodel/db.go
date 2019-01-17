@@ -34,7 +34,7 @@ type ModelDB struct {
 // NewModelDB instantiates a new ModelDB instance.
 func NewModelDB() *ModelDB {
 	return &ModelDB{
-		data: make(map[string]DataSeries),
+		data:                    make(map[string]DataSeries),
 		metricNameToDataSources: make(map[string]map[string]struct{}),
 		seenDataSources:         make(map[string]struct{}),
 	}

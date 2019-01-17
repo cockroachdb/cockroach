@@ -281,7 +281,7 @@ func startConnExecutor(
 			nil, /* gossip */
 			stopper,
 			dummyLivenessProvider{}, /* liveness */
-			nil, /* nodeDialer */
+			nil,                     /* nodeDialer */
 		),
 		TestingKnobs: &ExecutorTestingKnobs{},
 	}

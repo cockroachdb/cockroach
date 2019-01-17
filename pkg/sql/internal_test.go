@@ -190,7 +190,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 		)
 		testInternalExecutorAppNameInitialization(t, sem,
-			"appname_findme",                            // app name in SHOW
+			"appname_findme", // app name in SHOW
 			sql.DelegatedAppNamePrefix+"appname_findme", // app name in stats
 			&ie)
 	})

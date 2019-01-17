@@ -549,7 +549,7 @@ func TestReportUsage(t *testing.T) {
 		"othererror." +
 			pgerror.CodeDataExceptionError +
 			".crdb_internal.set_vmodule()": 10,
-		"errorcodes.blah":                                    10,
+		"errorcodes.blah": 10,
 		"errorcodes." + pgerror.CodeDataExceptionError:       10,
 		"errorcodes." + pgerror.CodeInternalError:            10,
 		"errorcodes." + pgerror.CodeSyntaxError:              10,

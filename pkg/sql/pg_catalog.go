@@ -274,37 +274,37 @@ CREATE TABLE pg_catalog.pg_am (
 		return addRow(
 			h.getOid(),                            // oid - all versions
 			tree.NewDName(cockroachIndexEncoding), // amname - all versions
-			zeroVal,              // amstrategies - < v9.6
-			zeroVal,              // amsupport - < v9.6
-			tree.DBoolTrue,       // amcanorder - < v9.6
-			tree.DBoolFalse,      // amcanorderbyop - < v9.6
-			tree.DBoolTrue,       // amcanbackward - < v9.6
-			tree.DBoolTrue,       // amcanunique - < v9.6
-			tree.DBoolTrue,       // amcanmulticol - < v9.6
-			tree.DBoolTrue,       // amoptionalkey - < v9.6
-			tree.DBoolTrue,       // amsearcharray - < v9.6
-			tree.DBoolTrue,       // amsearchnulls - < v9.6
-			tree.DBoolFalse,      // amstorage - < v9.6
-			tree.DBoolFalse,      // amclusterable - < v9.6
-			tree.DBoolFalse,      // ampredlocks - < v9.6
-			oidZero,              // amkeytype - < v9.6
-			tree.DNull,           // aminsert - < v9.6
-			tree.DNull,           // ambeginscan - < v9.6
-			oidZero,              // amgettuple - < v9.6
-			oidZero,              // amgetbitmap - < v9.6
-			tree.DNull,           // amrescan - < v9.6
-			tree.DNull,           // amendscan - < v9.6
-			tree.DNull,           // ammarkpos - < v9.6
-			tree.DNull,           // amrestrpos - < v9.6
-			tree.DNull,           // ambuild - < v9.6
-			tree.DNull,           // ambuildempty - < v9.6
-			tree.DNull,           // ambulkdelete - < v9.6
-			tree.DNull,           // amvacuumcleanup - < v9.6
-			tree.DNull,           // amcanreturn - < v9.6
-			tree.DNull,           // amcostestimate - < v9.6
-			tree.DNull,           // amoptions - < v9.6
-			tree.DNull,           // amhandler - > v9.6
-			tree.NewDString("i"), // amtype - > v9.6
+			zeroVal,                               // amstrategies - < v9.6
+			zeroVal,                               // amsupport - < v9.6
+			tree.DBoolTrue,                        // amcanorder - < v9.6
+			tree.DBoolFalse,                       // amcanorderbyop - < v9.6
+			tree.DBoolTrue,                        // amcanbackward - < v9.6
+			tree.DBoolTrue,                        // amcanunique - < v9.6
+			tree.DBoolTrue,                        // amcanmulticol - < v9.6
+			tree.DBoolTrue,                        // amoptionalkey - < v9.6
+			tree.DBoolTrue,                        // amsearcharray - < v9.6
+			tree.DBoolTrue,                        // amsearchnulls - < v9.6
+			tree.DBoolFalse,                       // amstorage - < v9.6
+			tree.DBoolFalse,                       // amclusterable - < v9.6
+			tree.DBoolFalse,                       // ampredlocks - < v9.6
+			oidZero,                               // amkeytype - < v9.6
+			tree.DNull,                            // aminsert - < v9.6
+			tree.DNull,                            // ambeginscan - < v9.6
+			oidZero,                               // amgettuple - < v9.6
+			oidZero,                               // amgetbitmap - < v9.6
+			tree.DNull,                            // amrescan - < v9.6
+			tree.DNull,                            // amendscan - < v9.6
+			tree.DNull,                            // ammarkpos - < v9.6
+			tree.DNull,                            // amrestrpos - < v9.6
+			tree.DNull,                            // ambuild - < v9.6
+			tree.DNull,                            // ambuildempty - < v9.6
+			tree.DNull,                            // ambulkdelete - < v9.6
+			tree.DNull,                            // amvacuumcleanup - < v9.6
+			tree.DNull,                            // amcanreturn - < v9.6
+			tree.DNull,                            // amcostestimate - < v9.6
+			tree.DNull,                            // amoptions - < v9.6
+			tree.DNull,                            // amhandler - > v9.6
+			tree.NewDString("i"),                  // amtype - > v9.6
 		)
 	},
 }
@@ -335,8 +335,8 @@ CREATE TABLE pg_catalog.pg_attrdef (
 						h.ColumnOid(db, scName, table, column), // oid
 						h.TableOid(db, scName, table),          // adrelid
 						tree.NewDInt(tree.DInt(colNum)),        // adnum
-						defSrc, // adbin
-						defSrc, // adsrc
+						defSrc,                                 // adbin
+						defSrc,                                 // adsrc
 					)
 				})
 			})
@@ -382,21 +382,21 @@ CREATE TABLE pg_catalog.pg_attribute (
 					zeroVal,                        // attstattarget
 					typLen(colTyp),                 // attlen
 					tree.NewDInt(tree.DInt(colID)), // attnum
-					zeroVal,    // attndims
-					negOneVal,  // attcacheoff
-					negOneVal,  // atttypmod
-					tree.DNull, // attbyval (see pg_type.typbyval)
-					tree.DNull, // attstorage
-					tree.DNull, // attalign
+					zeroVal,                        // attndims
+					negOneVal,                      // attcacheoff
+					negOneVal,                      // atttypmod
+					tree.DNull,                     // attbyval (see pg_type.typbyval)
+					tree.DNull,                     // attstorage
+					tree.DNull,                     // attalign
 					tree.MakeDBool(tree.DBool(!column.Nullable)),          // attnotnull
 					tree.MakeDBool(tree.DBool(column.DefaultExpr != nil)), // atthasdef
-					tree.DBoolFalse,                                       // attisdropped
-					tree.DBoolTrue,                                        // attislocal
-					zeroVal,                                               // attinhcount
-					typColl(colTyp, h),                                    // attcollation
-					tree.DNull,                                            // attacl
-					tree.DNull,                                            // attoptions
-					tree.DNull,                                            // attfdwoptions
+					tree.DBoolFalse,    // attisdropped
+					tree.DBoolTrue,     // attislocal
+					zeroVal,            // attinhcount
+					typColl(colTyp, h), // attcollation
+					tree.DNull,         // attacl
+					tree.DNull,         // attoptions
+					tree.DNull,         // attfdwoptions
 				)
 			}
 
@@ -511,20 +511,20 @@ CREATE TABLE pg_catalog.pg_class (
 					zeroVal,                       // relallvisible
 					oidZero,                       // reltoastrelid
 					tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhasindex
-					tree.DBoolFalse,                                     // relisshared
-					relPersistencePermanent,                             // relPersistence
-					tree.DBoolFalse,                                     // relistemp
-					relKind,                                             // relkind
-					tree.NewDInt(tree.DInt(len(table.Columns))),         // relnatts
-					tree.NewDInt(tree.DInt(len(table.Checks))),          // relchecks
-					tree.DBoolFalse,                                     // relhasoids
+					tree.DBoolFalse,         // relisshared
+					relPersistencePermanent, // relPersistence
+					tree.DBoolFalse,         // relistemp
+					relKind,                 // relkind
+					tree.NewDInt(tree.DInt(len(table.Columns))), // relnatts
+					tree.NewDInt(tree.DInt(len(table.Checks))),  // relchecks
+					tree.DBoolFalse, // relhasoids
 					tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey
-					tree.DBoolFalse,                                     // relhasrules
-					tree.DBoolFalse,                                     // relhastriggers
-					tree.DBoolFalse,                                     // relhassubclass
-					zeroVal,                                             // relfrozenxid
-					tree.DNull,                                          // relacl
-					tree.DNull,                                          // reloptions
+					tree.DBoolFalse, // relhasrules
+					tree.DBoolFalse, // relhastriggers
+					tree.DBoolFalse, // relhassubclass
+					zeroVal,         // relfrozenxid
+					tree.DNull,      // relacl
+					tree.DNull,      // reloptions
 				); err != nil {
 					return err
 				}
@@ -539,23 +539,23 @@ CREATE TABLE pg_catalog.pg_class (
 				// Indexes.
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
 					return addRow(
-						h.IndexOid(db, scName, table, index),            // oid
-						tree.NewDName(index.Name),                       // relname
-						namespaceOid,                                    // relnamespace
-						oidZero,                                         // reltype
-						tree.DNull,                                      // relowner
-						tree.DNull,                                      // relam
-						oidZero,                                         // relfilenode
-						oidZero,                                         // reltablespace
-						tree.DNull,                                      // relpages
-						tree.DNull,                                      // reltuples
-						zeroVal,                                         // relallvisible
-						oidZero,                                         // reltoastrelid
-						tree.DBoolFalse,                                 // relhasindex
-						tree.DBoolFalse,                                 // relisshared
-						relPersistencePermanent,                         // relPersistence
-						tree.DBoolFalse,                                 // relistemp
-						relKindIndex,                                    // relkind
+						h.IndexOid(db, scName, table, index), // oid
+						tree.NewDName(index.Name),            // relname
+						namespaceOid,                         // relnamespace
+						oidZero,                              // reltype
+						tree.DNull,                           // relowner
+						tree.DNull,                           // relam
+						oidZero,                              // relfilenode
+						oidZero,                              // reltablespace
+						tree.DNull,                           // relpages
+						tree.DNull,                           // reltuples
+						zeroVal,                              // relallvisible
+						oidZero,                              // reltoastrelid
+						tree.DBoolFalse,                      // relhasindex
+						tree.DBoolFalse,                      // relisshared
+						relPersistencePermanent,              // relPersistence
+						tree.DBoolFalse,                      // relistemp
+						relKindIndex,                         // relkind
 						tree.NewDInt(tree.DInt(len(index.ColumnNames))), // relnatts
 						zeroVal,         // relchecks
 						tree.DBoolFalse, // relhasoids
@@ -781,12 +781,12 @@ CREATE TABLE pg_catalog.pg_constraint (
 				}
 
 				if err := addRow(
-					oid,                                          // oid
-					dNameOrNull(conName),                         // conname
-					namespaceOid,                                 // connamespace
-					contype,                                      // contype
-					tree.DBoolFalse,                              // condeferrable
-					tree.DBoolFalse,                              // condeferred
+					oid,                  // oid
+					dNameOrNull(conName), // conname
+					namespaceOid,         // connamespace
+					contype,              // contype
+					tree.DBoolFalse,      // condeferrable
+					tree.DBoolFalse,      // condeferred
 					tree.MakeDBool(tree.DBool(!con.Unvalidated)), // convalidated
 					tblOid,         // conrelid
 					oidZero,        // contypid
@@ -1226,7 +1226,7 @@ CREATE TABLE pg_catalog.pg_index (
 					}
 					return addRow(
 						h.IndexOid(db, scName, table, index), // indexrelid
-						tableOid, // indrelid
+						tableOid,                             // indrelid
 						tree.NewDInt(tree.DInt(len(index.ColumnNames))),                                          // indnatts
 						tree.MakeDBool(tree.DBool(index.Unique)),                                                 // indisunique
 						tree.MakeDBool(tree.DBool(table.IsPhysicalTable() && index.ID == table.PrimaryIndex.ID)), // indisprimary
@@ -1643,36 +1643,36 @@ CREATE TABLE pg_catalog.pg_proc (
 						variadicType = oidZero
 					}
 					err := addRow(
-						h.BuiltinOid(name, &builtin), // oid
-						dName,                                     // proname
-						nspOid,                                    // pronamespace
-						tree.DNull,                                // proowner
-						oidZero,                                   // prolang
-						tree.DNull,                                // procost
-						tree.DNull,                                // prorows
-						variadicType,                              // provariadic
-						tree.DNull,                                // protransform
-						tree.MakeDBool(tree.DBool(isAggregate)),   // proisagg
-						tree.MakeDBool(tree.DBool(isWindow)),      // proiswindow
-						tree.DBoolFalse,                           // prosecdef
+						h.BuiltinOid(name, &builtin),            // oid
+						dName,                                   // proname
+						nspOid,                                  // pronamespace
+						tree.DNull,                              // proowner
+						oidZero,                                 // prolang
+						tree.DNull,                              // procost
+						tree.DNull,                              // prorows
+						variadicType,                            // provariadic
+						tree.DNull,                              // protransform
+						tree.MakeDBool(tree.DBool(isAggregate)), // proisagg
+						tree.MakeDBool(tree.DBool(isWindow)),    // proiswindow
+						tree.DBoolFalse,                         // prosecdef
 						tree.MakeDBool(tree.DBool(!props.Impure)), // proleakproof
-						tree.DBoolFalse,                           // proisstrict
-						tree.MakeDBool(tree.DBool(isRetSet)),      // proretset
-						tree.DNull,                                // provolatile
-						tree.DNull,                                // proparallel
+						tree.DBoolFalse,                      // proisstrict
+						tree.MakeDBool(tree.DBool(isRetSet)), // proretset
+						tree.DNull,                           // provolatile
+						tree.DNull,                           // proparallel
 						tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
 						tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
 						retType,                                         // prorettype
-						tree.NewDOidVectorFromDArray(dArgTypes), // proargtypes
-						tree.DNull,                              // proallargtypes
-						argmodes,                                // proargmodes
-						tree.DNull,                              // proargnames
-						tree.DNull,                              // proargdefaults
-						tree.DNull,                              // protrftypes
-						dSrc,                                    // prosrc
-						tree.DNull,                              // probin
-						tree.DNull,                              // proconfig
-						tree.DNull,                              // proacl
+						tree.NewDOidVectorFromDArray(dArgTypes),         // proargtypes
+						tree.DNull,                                      // proallargtypes
+						argmodes,                                        // proargmodes
+						tree.DNull,                                      // proargnames
+						tree.DNull,                                      // proargdefaults
+						tree.DNull,                                      // protrftypes
+						dSrc,                                            // prosrc
+						tree.DNull,                                      // probin
+						tree.DNull,                                      // proconfig
+						tree.DNull,                                      // proacl
 					)
 					if err != nil {
 						return err
@@ -1911,9 +1911,9 @@ CREATE TABLE pg_catalog.pg_tables (
 					tree.DNull,                // tableowner
 					tree.DNull,                // tablespace
 					tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // hasindexes
-					tree.DBoolFalse,                                     // hasrules
-					tree.DBoolFalse,                                     // hastriggers
-					tree.DBoolFalse,                                     // rowsecurity
+					tree.DBoolFalse, // hasrules
+					tree.DBoolFalse, // hastriggers
+					tree.DBoolFalse, // rowsecurity
 				)
 			})
 	},
@@ -1932,7 +1932,7 @@ CREATE TABLE pg_catalog.pg_tablespace (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return addRow(
-			oidZero, // oid
+			oidZero,                       // oid
 			tree.NewDString("pg_default"), // spcname
 			tree.DNull,                    // spcowner
 			tree.DNull,                    // spclocation
@@ -2107,9 +2107,9 @@ CREATE TABLE pg_catalog.pg_type (
 					h.RegProc(builtinPrefix+"out"),  // typoutput
 					h.RegProc(builtinPrefix+"recv"), // typreceive
 					h.RegProc(builtinPrefix+"send"), // typsend
-					oidZero, // typmodin
-					oidZero, // typmodout
-					oidZero, // typanalyze
+					oidZero,                         // typmodin
+					oidZero,                         // typmodout
+					oidZero,                         // typanalyze
 
 					tree.DNull,      // typalign
 					tree.DNull,      // typstorage

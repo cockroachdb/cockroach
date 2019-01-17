@@ -534,7 +534,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 			// This test was written before the test stores were able to start with
 			// more than one range and is not prepared to handle many ranges.
 			dontCreateSystemRanges: true,
-			cfg: &storeCfg},
+			cfg:                    &storeCfg},
 		stopper)
 	rangeID := roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
@@ -2775,7 +2775,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 			// This test was written before the test stores were able to start with
 			// more than one range and is not prepared to handle many ranges.
 			dontCreateSystemRanges: true,
-			cfg: &cfg},
+			cfg:                    &cfg},
 		stopper)
 
 	cap, err := s.Capacity(false /* useCached */)

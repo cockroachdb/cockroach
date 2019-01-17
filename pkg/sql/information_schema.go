@@ -296,13 +296,13 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 				visible++
 				return addRow(
-					dbNameStr,                                                   // table_catalog
-					scNameStr,                                                   // table_schema
-					tree.NewDString(table.Name),                                 // table_name
-					tree.NewDString(column.Name),                                // column_name
-					tree.NewDInt(tree.DInt(visible)),                            // ordinal_position, 1-indexed
-					dStringPtrOrNull(column.DefaultExpr),                        // column_default
-					yesOrNoDatum(column.Nullable),                               // is_nullable
+					dbNameStr,                            // table_catalog
+					scNameStr,                            // table_schema
+					tree.NewDString(table.Name),          // table_name
+					tree.NewDString(column.Name),         // column_name
+					tree.NewDInt(tree.DInt(visible)),     // ordinal_position, 1-indexed
+					dStringPtrOrNull(column.DefaultExpr), // column_default
+					yesOrNoDatum(column.Nullable),        // is_nullable
 					tree.NewDString(column.Type.InformationSchemaVisibleType()), // data_type
 					characterMaximumLength(column.Type),                         // character_maximum_length
 					characterOctetLength(column.Type),                           // character_octet_length
