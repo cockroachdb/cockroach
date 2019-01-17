@@ -614,9 +614,9 @@ func TestJSONFetchIdx(t *testing.T) {
 		idx      int
 		expected JSON
 	}{
-		`{}`: {{1, nil}, {2, nil}},
+		`{}`:                     {{1, nil}, {2, nil}},
 		`{"foo": 1, "1": "baz"}`: {{0, nil}, {1, nil}, {2, nil}},
-		`[]`: {{-1, nil}, {0, nil}, {1, nil}},
+		`[]`:                     {{-1, nil}, {0, nil}, {1, nil}},
 		`["a", "b", "c"]`: {
 			// Negative indices count from the back.
 			{-4, nil},

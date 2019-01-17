@@ -433,9 +433,9 @@ func putNonRelease(svc s3putter, o opts, binary io.ReadSeeker) {
 	latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, latestSuffix)
 	log.Printf("Uploading to s3://%s/%s", o.BucketName, latestKey)
 	if _, err := svc.PutObject(&s3.PutObjectInput{
-		Bucket:       &o.BucketName,
-		CacheControl: &noCache,
-		Key:          &latestKey,
+		Bucket:                  &o.BucketName,
+		CacheControl:            &noCache,
+		Key:                     &latestKey,
 		WebsiteRedirectLocation: &versionKey,
 	}); err != nil {
 		log.Fatalf("s3 redirect to %s: %s", versionKey, err)

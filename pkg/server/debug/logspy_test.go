@@ -46,9 +46,9 @@ func TestDebugLogSpyOptions(t *testing.T) {
 			// Example where everything is specified (and parsed).
 			vals: map[string][]string{
 				"NonexistentOptionIsIgnored": {"banana"},
-				"Count":    {"123"},
-				"Duration": {"9s"},
-				"Grep":     {`^foo$`},
+				"Count":                      {"123"},
+				"Duration":                   {"9s"},
+				"Grep":                       {`^foo$`},
 			},
 			expOpts: logSpyOptions{
 				Count:    123,
@@ -60,9 +60,9 @@ func TestDebugLogSpyOptions(t *testing.T) {
 			// Example where everything is specified (and parsed) and where grep is an integer.
 			vals: map[string][]string{
 				"NonexistentOptionIsIgnored": {"banana"},
-				"Count":    {"123"},
-				"Duration": {"9s"},
-				"Grep":     {`123`},
+				"Count":                      {"123"},
+				"Duration":                   {"9s"},
+				"Grep":                       {`123`},
 			},
 			expOpts: logSpyOptions{
 				Count:    123,

@@ -315,8 +315,8 @@ func NewVirtualSchemaHolder(
 			}
 
 			defs[tableDesc.Name] = virtualDefEntry{
-				virtualDef: def,
-				desc:       &tableDesc,
+				virtualDef:                 def,
+				desc:                       &tableDesc,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 			}
 			orderedDefNames = append(orderedDefNames, tableDesc.Name)

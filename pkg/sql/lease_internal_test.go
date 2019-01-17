@@ -631,13 +631,13 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		// Checks what happens when the race between between acquire() and
 		// lease release occurs.
 		{
-			name: "CallAcquireConcurrently",
+			name:                        "CallAcquireConcurrently",
 			isSecondCallAcquireFreshest: false,
 		},
 		// Checks what happens when the race between
 		// acquireFreshestFromStore() and lease release occurs.
 		{
-			name: "CallAcquireFreshestAndAcquireConcurrently",
+			name:                        "CallAcquireFreshestAndAcquireConcurrently",
 			isSecondCallAcquireFreshest: true,
 		},
 	}

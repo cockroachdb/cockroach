@@ -285,11 +285,11 @@ func TestHandshake(t *testing.T) {
 		consumerConnectedEarly bool
 	}{
 		{
-			name: "consumer early",
+			name:                   "consumer early",
 			consumerConnectedEarly: true,
 		},
 		{
-			name: "consumer late",
+			name:                   "consumer late",
 			consumerConnectedEarly: false,
 		},
 	}
