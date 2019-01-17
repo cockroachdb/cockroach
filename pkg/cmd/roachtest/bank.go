@@ -349,6 +349,7 @@ func isExpectedRelocateError(err error) bool {
 	// https://github.com/cockroachdb/cockroach/issues/33732
 	// https://github.com/cockroachdb/cockroach/issues/33708
 	// https://github.cm/cockroachdb/cockroach/issues/34012
+	// https://github.com/cockroachdb/cockroach/issues/33683#issuecomment-454889149
 	// for more failure modes not caught here. We decided to avoid adding
 	// to this catchall and to fix the root causes instead.
 	// We've also seen "breaker open" errors here.
