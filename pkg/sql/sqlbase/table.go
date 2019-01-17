@@ -273,8 +273,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 
 	// Indexes provide PK, Unique and FK constraints.
 	indexes := desc.AllNonDropIndexes()
-	for i := range indexes {
-		index := &indexes[i]
+	for _, index := range indexes {
 		if index.ID == desc.PrimaryIndex.ID {
 			if _, ok := info[index.Name]; ok {
 				return nil, errors.Errorf("duplicate constraint name: %q", index.Name)

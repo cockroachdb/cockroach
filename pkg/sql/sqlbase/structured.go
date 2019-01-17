@@ -551,16 +551,18 @@ func (desc *TableDescriptor) allNonDropColumns() []ColumnDescriptor {
 
 // AllNonDropIndexes returns all the indexes, including those being added
 // in the mutations.
-func (desc *TableDescriptor) AllNonDropIndexes() []IndexDescriptor {
-	indexes := make([]IndexDescriptor, 0, 1+len(desc.Indexes)+len(desc.Mutations))
+func (desc *TableDescriptor) AllNonDropIndexes() []*IndexDescriptor {
+	indexes := make([]*IndexDescriptor, 0, 1+len(desc.Indexes)+len(desc.Mutations))
 	if desc.IsPhysicalTable() {
-		indexes = append(indexes, desc.PrimaryIndex)
+		indexes = append(indexes, &desc.PrimaryIndex)
 	}
-	indexes = append(indexes, desc.Indexes...)
+	for i := range desc.Indexes {
+		indexes = append(indexes, &desc.Indexes[i])
+	}
 	for _, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil {
 			if m.Direction == DescriptorMutation_ADD {
-				indexes = append(indexes, *idx)
+				indexes = append(indexes, idx)
 			}
 		}
 	}
@@ -1612,7 +1614,7 @@ func (desc *TableDescriptor) FindNonDropPartitionByName(
 	}
 	for _, idx := range desc.AllNonDropIndexes() {
 		if p := find(idx.Partitioning); p != nil {
-			return p, &idx, nil
+			return p, idx, nil
 		}
 	}
 	return nil, nil, fmt.Errorf("partition %q does not exist", name)
@@ -2030,28 +2032,28 @@ func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescripto
 
 // FindIndexByName finds the index with the specified name in the active
 // list or the mutations list. It returns true if the index is being dropped.
-func (desc *TableDescriptor) FindIndexByName(name string) (IndexDescriptor, bool, error) {
+func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, bool, error) {
 	if desc.IsPhysicalTable() && desc.PrimaryIndex.Name == name {
-		return desc.PrimaryIndex, false, nil
+		return &desc.PrimaryIndex, false, nil
 	}
 	for i, idx := range desc.Indexes {
 		if idx.Name == name {
-			return desc.Indexes[i], false, nil
+			return &desc.Indexes[i], false, nil
 		}
 	}
 	for _, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil {
 			if idx.Name == name {
-				return *idx, m.Direction == DescriptorMutation_DROP, nil
+				return idx, m.Direction == DescriptorMutation_DROP, nil
 			}
 		}
 	}
-	return IndexDescriptor{}, false, fmt.Errorf("index %q does not exist", name)
+	return nil, false, fmt.Errorf("index %q does not exist", name)
 }
 
 // RenameIndexDescriptor renames an index descriptor.
 func (desc *MutableTableDescriptor) RenameIndexDescriptor(
-	index IndexDescriptor, name string,
+	index *IndexDescriptor, name string,
 ) error {
 	id := index.ID
 	if id == desc.PrimaryIndex.ID {
@@ -2180,7 +2182,7 @@ func (desc *MutableTableDescriptor) AddColumnMutation(
 
 // AddIndexMutation adds an index mutation to desc.Mutations.
 func (desc *MutableTableDescriptor) AddIndexMutation(
-	idx IndexDescriptor, direction DescriptorMutation_Direction,
+	idx *IndexDescriptor, direction DescriptorMutation_Direction,
 ) error {
 
 	switch idx.Type {
@@ -2194,7 +2196,7 @@ func (desc *MutableTableDescriptor) AddIndexMutation(
 		}
 	}
 
-	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: idx}, Direction: direction}
 	desc.addMutation(m)
 	return nil
 }

@@ -467,14 +467,17 @@ func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMuta
 	if err != nil {
 		mt.Fatal(err)
 	}
+	// The rewrite below potentially invalidates the original object with an overwrite.
+	// Clarify what's going on.
+	idxCopy := *idx
 	for i := range tableDesc.Indexes {
-		if idx.ID == tableDesc.Indexes[i].ID {
+		if idxCopy.ID == tableDesc.Indexes[i].ID {
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
 			break
 		}
 	}
 
-	m.Descriptor_ = &sqlbase.DescriptorMutation_Index{Index: &idx}
+	m.Descriptor_ = &sqlbase.DescriptorMutation_Index{Index: &idxCopy}
 	mt.writeMutation(m)
 }
 

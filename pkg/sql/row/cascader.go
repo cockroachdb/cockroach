@@ -1050,7 +1050,7 @@ func (c *cascader) cascadeAll(
 					case sqlbase.ForeignKeyReference_CASCADE:
 						deletedRows, colIDtoRowIndex, startIndex, err := c.deleteRows(
 							ctx,
-							&referencedIndex,
+							referencedIndex,
 							referencingTable.Table,
 							referencingIndex,
 							ref.Match,
@@ -1076,7 +1076,7 @@ func (c *cascader) cascadeAll(
 					case sqlbase.ForeignKeyReference_SET_NULL, sqlbase.ForeignKeyReference_SET_DEFAULT:
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
-							&referencedIndex,
+							referencedIndex,
 							referencingTable.Table,
 							referencingIndex,
 							ref.Match,
@@ -1107,7 +1107,7 @@ func (c *cascader) cascadeAll(
 					case sqlbase.ForeignKeyReference_CASCADE, sqlbase.ForeignKeyReference_SET_NULL, sqlbase.ForeignKeyReference_SET_DEFAULT:
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
-							&referencedIndex,
+							referencedIndex,
 							referencingTable.Table,
 							referencingIndex,
 							ref.Match,
