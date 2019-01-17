@@ -1042,6 +1042,9 @@ func TestStatusAPIStatements(t *testing.T) {
 		thirdServerSQL.Exec(t, stmt.stmt)
 	}
 
+	// TODO(couchand): force a flush instead
+	time.Sleep(60 * time.Second)
+
 	// Hit query endpoint.
 	var resp serverpb.StatementsResponse
 	if err := getStatusJSONProto(firstServerProto, "statements", &resp); err != nil {
