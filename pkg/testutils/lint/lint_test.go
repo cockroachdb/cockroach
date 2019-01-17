@@ -1024,7 +1024,6 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestVet", func(t *testing.T) {
-		t.Skip("#34059")
 		t.Parallel()
 		// `go vet` is a special snowflake that emits all its output on
 		// `stderr.
