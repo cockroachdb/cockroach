@@ -1385,7 +1385,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t4/primary/10/20 -> NULL
-fetched: /t4/primary/10/20/c -> 40
+fetched: /t4/primary/10/20/d -> 40
 output row: [40]
 
 # Point lookup on both d and e uses a single span for the two adjacent column
