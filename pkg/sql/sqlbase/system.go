@@ -928,7 +928,7 @@ var (
 				"parse_lat", "plan_lat", "run_lat", "service_lat"},
 				ColumnIDs: []ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}},
 		},
-		NextFamilyID: 16,
+		NextFamilyID: 1,
 		PrimaryIndex: IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
