@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -993,6 +994,40 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 	}
 }
 
+// Put a string into the specified file on the remote(s).
+func (c *cluster) PutString(
+	ctx context.Context, content, dest string, mode os.FileMode, opts ...option,
+) {
+	if c.t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return
+	}
+	if atomic.LoadInt32(&interrupted) == 1 {
+		c.t.Fatal("interrupted")
+	}
+	c.status("uploading string")
+
+	temp, err := ioutil.TempFile("", filepath.Base(dest))
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	if _, err := temp.WriteString(content); err != nil {
+		c.t.Fatal(err)
+	}
+	temp.Close()
+	src := temp.Name()
+
+	if err := os.Chmod(src, mode); err != nil {
+		c.t.Fatal(err)
+	}
+	// NB: we intentionally don't remove the temp files. This is because roachprod
+	// will symlink them when running locally.
+
+	if err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
 // GitCloneE clones a git repo from src into dest and checks out origin's
 // version of the given branch. The src, dest, and branch arguments must not
 // contain shell special characters. GitCloneE unlike GitClone returns an
@@ -1288,12 +1323,21 @@ func urlToAddr(c *cluster, pgURL string) string {
 	return u.Host
 }
 
-func addrToIP(c *cluster, addr string) string {
-	host, _, err := net.SplitHostPort(addr)
+func addrToHost(c *cluster, addr string) string {
+	host, _ := addrToHostPort(c, addr)
+	return host
+}
+
+func addrToHostPort(c *cluster, addr string) (string, int) {
+	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
 		c.t.Fatal(err)
 	}
-	return host
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	return host, port
 }
 
 // InternalAdminUIAddr returns the internal Admin UI address in the form host:port
@@ -1330,7 +1374,7 @@ func (c *cluster) InternalAddr(ctx context.Context, node nodeListOption) []strin
 func (c *cluster) InternalIP(ctx context.Context, node nodeListOption) []string {
 	var ips []string
 	for _, addr := range c.InternalAddr(ctx, node) {
-		ips = append(ips, addrToIP(c, addr))
+		ips = append(ips, addrToHost(c, addr))
 	}
 	return ips
 }
@@ -1349,7 +1393,7 @@ func (c *cluster) ExternalAddr(ctx context.Context, node nodeListOption) []strin
 func (c *cluster) ExternalIP(ctx context.Context, node nodeListOption) []string {
 	var ips []string
 	for _, addr := range c.ExternalAddr(ctx, node) {
-		ips = append(ips, addrToIP(c, addr))
+		ips = append(ips, addrToHost(c, addr))
 	}
 	return ips
 }
