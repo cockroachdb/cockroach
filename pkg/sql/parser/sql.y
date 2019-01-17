@@ -2116,6 +2116,14 @@ create_changefeed_stmt:
       Options: $6.kvOptions(),
     }
   }
+| EXPERIMENTAL CHANGEFEED FOR changefeed_targets opt_with_options
+  {
+    /* SKIP DOC */
+    $$.val = &tree.CreateChangefeed{
+      Targets: $4.targetList(),
+      Options: $5.kvOptions(),
+    }
+  }
 
 changefeed_targets:
   single_table_pattern_list

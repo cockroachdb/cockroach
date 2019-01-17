@@ -1234,9 +1234,9 @@ func TestParse(t *testing.T) {
 
 		{`SET ROW (1, true, NULL)`},
 
-		{`CREATE CHANGEFEED FOR TABLE foo`},
-		{`EXPLAIN CREATE CHANGEFEED FOR TABLE foo`},
-		{`CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo`},
+		{`EXPERIMENTAL CHANGEFEED FOR TABLE foo`},
+		{`EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
+		{`CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO 'sink'`},
 		{`CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
 		// TODO(dan): Implement.
 		// {`CREATE CHANGEFEED FOR TABLE foo VALUES FROM (1) TO (2) INTO 'sink'`},

@@ -296,6 +296,14 @@ func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interfac
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// The syntax for a sinkless changefeed is `EXPERIMENTAL CHANGEFEED FOR ...`
+	// but it's convenient to accept the `CREATE CHANGEFEED` syntax from the
+	// test, so we can keep the current abstraction of running each test over
+	// both types. This bit turns what we received into the real sinkless
+	// syntax.
+	create = strings.Replace(create, `CREATE CHANGEFEED`, `EXPERIMENTAL CHANGEFEED`, 1)
+
 	s.rows, err = s.conn.Query(create, args...)
 	if err != nil {
 		t.Fatal(err)
