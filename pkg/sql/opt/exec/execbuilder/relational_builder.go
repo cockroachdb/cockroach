@@ -1217,10 +1217,11 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(ups.InsertCols)+len(ups.FetchCols)+len(ups.UpdateCols))
+	colList := make(opt.ColList, 0, len(ups.InsertCols)+len(ups.FetchCols)+len(ups.UpdateCols)+1)
 	colList = appendColsWhenPresent(colList, ups.InsertCols)
 	colList = appendColsWhenPresent(colList, ups.FetchCols)
 	colList = appendColsWhenPresent(colList, ups.UpdateCols)
+	colList = append(colList, ups.CanaryCol)
 	input, err = b.ensureColumns(input, colList, nil, ups.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err

@@ -1057,7 +1057,8 @@ full-join
  │    └── tuple [type=tuple{unknown}]
  │         └── null [type=unknown]
  └── filters
-      └── null [type=bool, constraints=(contradiction; tight)]
+      └── cast: BOOL [type=bool]
+           └── null [type=unknown]
 
 # Calculate full-join cardinality of one input with unknown cardinality.
 build

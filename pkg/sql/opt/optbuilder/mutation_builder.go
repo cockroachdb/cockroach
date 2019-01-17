@@ -334,7 +334,7 @@ func (mb *mutationBuilder) addSynthesizedCols(
 		}
 		tabColID := mb.tabID.ColumnID(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
-		texpr := mb.outScope.resolveType(expr, tabCol.DatumType())
+		texpr := mb.outScope.resolveAndRequireType(expr, tabCol.DatumType())
 		scopeCol := mb.b.addColumn(projectionsScope, "" /* alias */, texpr)
 		mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
 
@@ -449,7 +449,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 	}
 
 	mb.parsedExprs[ord] = expr
-	return mb.parsedExprs[ord]
+	return expr
 }
 
 // findNotNullIndexCol finds the first not-null column in the given index and
@@ -516,7 +516,7 @@ func getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName) {
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
 func checkDatumTypeFitsColumnType(col cat.Column, typ types.T) {
-	if typ == types.Unknown || typ.Equivalent(col.DatumType()) {
+	if typ.Equivalent(col.DatumType()) {
 		return
 	}
 

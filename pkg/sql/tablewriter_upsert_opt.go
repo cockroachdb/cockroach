@@ -124,8 +124,9 @@ func (tu *optTableUpserter) row(ctx context.Context, row tree.Datums, traceKV bo
 	}
 
 	// Update the row.
+	updateEnd := fetchEnd + len(tu.updateCols)
 	return tu.updateConflictingRow(
-		ctx, tu.b, row[insertEnd:fetchEnd], row[fetchEnd:], tu.tableDesc(), traceKV)
+		ctx, tu.b, row[insertEnd:fetchEnd], row[fetchEnd:updateEnd], tu.tableDesc(), traceKV)
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.

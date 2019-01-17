@@ -1011,14 +1011,10 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 			continue
 		}
 
-		// Either one or two input columns can provide the source value for the
-		// mutation. If two are present, then both must be not-null in order to
-		// guarantee that the result will be not-null as well.
-		a, b := private.MapToInputIDs(tabColID)
-		if inputProps.NotNullCols.Contains(int(a)) {
-			if b == 0 || inputProps.NotNullCols.Contains(int(b)) {
-				rel.NotNullCols.Add(int(private.Table.ColumnID(i)))
-			}
+		// If the input column is not null, then the result will be not null.
+		inputColID := private.MapToInputID(tabColID)
+		if inputProps.NotNullCols.Contains(int(inputColID)) {
+			rel.NotNullCols.Add(int(private.Table.ColumnID(i)))
 		}
 	}
 
@@ -1028,18 +1024,12 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 
 	// Functional Dependencies
 	// -----------------------
-	// Start with copy of FuncDepSet from input. For Insert, Update, and Delete
-	// ops, map the FDs of each source column to the corresponding destination
-	// column by making the columns equivalent and then filtering out the source
-	// columns via a call to ProjectCols. Note that this will not work for Upsert
-	// ops, since destination values can be sourced from multiple input columns.
-	// In that case, the functional dependencies are empty.
-	switch mutation.Op() {
-	case opt.InsertOp, opt.UpdateOp, opt.DeleteOp:
-		rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-		private.AddEquivTableCols(md, &rel.FuncDeps)
-		rel.FuncDeps.ProjectCols(rel.OutputCols)
-	}
+	// Start with copy of FuncDepSet from input. Map the FDs of each source column
+	// to the corresponding destination column by making the columns equivalent
+	// and then filtering out the source columns via a call to ProjectCols.
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	private.AddEquivTableCols(md, &rel.FuncDeps)
+	rel.FuncDeps.ProjectCols(rel.OutputCols)
 
 	// Cardinality
 	// -----------

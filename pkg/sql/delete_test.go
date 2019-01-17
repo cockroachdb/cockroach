@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 
 			fkTables, err := row.TablesNeededForFKs(
 				context.TODO(),
-				*pd,
+				pd,
 				row.CheckDeletes,
 				lookup,
 				row.NoCheckPrivilege,

@@ -482,17 +482,17 @@ ordinality        ·              ·                 (x, "ordinality")  ·
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-render                 ·              ·                 (b)              ·
- │                     render 0       b                 ·                ·
- └── run               ·              ·                 (a, b, c)        ·
-      └── insert       ·              ·                 (a, b, c)        ·
-           │           into           t(a, b, c)        ·                ·
-           │           strategy       inserter          ·                ·
-           └── values  ·              ·                 (x, y, column6)  ·
-·                      size           3 columns, 1 row  ·                ·
-·                      row 0, expr 0  1                 ·                ·
-·                      row 0, expr 1  2                 ·                ·
-·                      row 0, expr 2  NULL              ·                ·
+render                 ·              ·                   (b)              ·
+ │                     render 0       b                   ·                ·
+ └── run               ·              ·                   (a, b, c)        ·
+      └── insert       ·              ·                   (a, b, c)        ·
+           │           into           t(a, b, c)          ·                ·
+           │           strategy       inserter            ·                ·
+           └── values  ·              ·                   (x, y, column6)  ·
+·                      size           3 columns, 1 row    ·                ·
+·                      row 0, expr 0  1                   ·                ·
+·                      row 0, expr 1  2                   ·                ·
+·                      row 0, expr 2  CAST(NULL AS BOOL)  ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b

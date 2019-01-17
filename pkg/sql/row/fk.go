@@ -180,7 +180,7 @@ func (q *tableLookupQueue) dequeue() (TableLookup, FKCheck, bool) {
 // CheckHelpers are required.
 func TablesNeededForFKs(
 	ctx context.Context,
-	table sqlbase.ImmutableTableDescriptor,
+	table *sqlbase.ImmutableTableDescriptor,
 	usage FKCheck,
 	lookup TableLookupFunction,
 	checkPrivilege CheckPrivilegeFunction,
@@ -194,7 +194,7 @@ func TablesNeededForFKs(
 		analyzeExpr:    analyzeExpr,
 	}
 	// Add the passed in table descriptor to the table lookup.
-	baseTableLookup := TableLookup{Table: &table}
+	baseTableLookup := TableLookup{Table: table}
 	if err := baseTableLookup.addCheckHelper(ctx, analyzeExpr); err != nil {
 		return nil, err
 	}

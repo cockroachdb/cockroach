@@ -1902,17 +1902,7 @@ func (sb *statisticsBuilder) colStatMutation(
 
 	// Get colstat from child by mapping requested columns to corresponding
 	// input columns.
-	var inColSet opt.ColSet
-	if mutation.Op() == opt.UpsertOp {
-		// Treat the Upsert operator as if it was an Insert. This is not precise,
-		// as some percentage of rows will come from the fetch/update columns.
-		temp := *private
-		temp.FetchCols = nil
-		temp.UpdateCols = nil
-		inColSet = temp.MapToInputCols(colSet)
-	} else {
-		inColSet = private.MapToInputCols(colSet)
-	}
+	inColSet := private.MapToInputCols(colSet)
 	inColStat := sb.colStatFromChild(inColSet, mutation, 0 /* childIdx */)
 
 	// Construct mutation colstat using the corresponding input stats.
