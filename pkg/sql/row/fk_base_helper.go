@@ -32,7 +32,7 @@ type baseFKHelper struct {
 	dir FKCheck
 
 	// rf is the row fetcher used to look up rows in the searched table.
-	rf Fetcher
+	rf *Fetcher
 
 	// searchIdx is the index used for lookups over the searched table.
 	searchIdx *sqlbase.IndexDescriptor
@@ -104,79 +104,115 @@ func makeBaseFKHelper(
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
 	dir FKCheck,
-) (baseFKHelper, error) {
-	b := baseFKHelper{
-		txn:         txn,
-		writeIdx:    writeIdx,
-		searchTable: otherTables[ref.Table].Table,
-		dir:         dir,
-		ref:         ref,
+) (ret baseFKHelper, err error) {
+	// Look up the searched table.
+	searchTable := otherTables[ref.Table].Table
+	if searchTable == nil {
+		return ret, pgerror.NewAssertionErrorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
-	if b.searchTable == nil {
-		return b, pgerror.NewAssertionErrorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
-	}
-	b.searchPrefix = sqlbase.MakeIndexKeyPrefix(b.searchTable.TableDesc(), ref.Index)
-	searchIdx, err := b.searchTable.FindIndexByID(ref.Index)
+	// Look up the searched index.
+	searchIdx, err := searchTable.FindIndexByID(ref.Index)
 	if err != nil {
-		return b, err
-	}
-	b.prefixLen = len(searchIdx.ColumnIDs)
-	if len(writeIdx.ColumnIDs) < b.prefixLen {
-		b.prefixLen = len(writeIdx.ColumnIDs)
-	}
-	b.searchIdx = searchIdx
-	tableArgs := FetcherTableArgs{
-		Desc:             b.searchTable,
-		Index:            b.searchIdx,
-		ColIdxMap:        b.searchTable.ColumnIdxMap(),
-		IsSecondaryIndex: b.searchIdx.ID != b.searchTable.PrimaryIndex.ID,
-		Cols:             b.searchTable.Columns,
-	}
-	err = b.rf.Init(false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, alloc, tableArgs)
-	if err != nil {
-		return b, err
+		return ret, err
 	}
 
-	// See https://github.com/cockroachdb/cockroach/issues/20305 or
-	// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
-	// different composite foreign key matching methods.
-	b.ids = make(map[sqlbase.ColumnID]int, len(writeIdx.ColumnIDs))
-	switch ref.Match {
+	// Determine the number of columns being looked up.
+	prefixLen := len(searchIdx.ColumnIDs)
+	if len(writeIdx.ColumnIDs) < prefixLen {
+		prefixLen = len(writeIdx.ColumnIDs)
+	}
+
+	// Determine the columns being looked up.
+	ids, err := computeFkCheckColumnIDs(ref.Match, writeIdx, searchIdx, colMap, prefixLen)
+	if err != nil {
+		return ret, err
+	}
+
+	// Precompute the KV lookup prefix.
+	searchPrefix := sqlbase.MakeIndexKeyPrefix(searchTable.TableDesc(), ref.Index)
+
+	// Initialize the row fetcher.
+	tableArgs := FetcherTableArgs{
+		Desc:             searchTable,
+		Index:            searchIdx,
+		ColIdxMap:        searchTable.ColumnIdxMap(),
+		IsSecondaryIndex: searchIdx.ID != searchTable.PrimaryIndex.ID,
+		Cols:             searchTable.Columns,
+	}
+	rf := &Fetcher{}
+	if err := rf.Init(
+		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, alloc, tableArgs); err != nil {
+		return ret, err
+	}
+
+	return baseFKHelper{
+		txn:          txn,
+		dir:          dir,
+		rf:           rf,
+		ref:          ref,
+		searchTable:  searchTable,
+		searchIdx:    searchIdx,
+		ids:          ids,
+		prefixLen:    prefixLen,
+		searchPrefix: searchPrefix,
+		writeIdx:     writeIdx,
+	}, nil
+}
+
+// computeFkCheckColumnIDs determines the set of column IDs to use for
+// the existence check, depending on the MATCH style.
+//
+// See https://github.com/cockroachdb/cockroach/issues/20305 or
+// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
+// different composite foreign key matching methods.
+func computeFkCheckColumnIDs(
+	match sqlbase.ForeignKeyReference_Match,
+	writeIdx sqlbase.IndexDescriptor,
+	searchIdx *sqlbase.IndexDescriptor,
+	colMap map[sqlbase.ColumnID]int,
+	prefixLen int,
+) (ids map[sqlbase.ColumnID]int, err error) {
+	ids = make(map[sqlbase.ColumnID]int, len(writeIdx.ColumnIDs))
+
+	switch match {
 	case sqlbase.ForeignKeyReference_SIMPLE:
-		for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
+		for i, writeColID := range writeIdx.ColumnIDs[:prefixLen] {
 			if found, ok := colMap[writeColID]; ok {
-				b.ids[searchIdx.ColumnIDs[i]] = found
+				ids[searchIdx.ColumnIDs[i]] = found
 			} else {
-				return b, errSkipUnusedFK
+				return nil, errSkipUnusedFK
 			}
 		}
-		return b, nil
+		return ids, nil
+
 	case sqlbase.ForeignKeyReference_FULL:
 		var missingColumns []string
-		for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
+		for i, writeColID := range writeIdx.ColumnIDs[:prefixLen] {
 			if found, ok := colMap[writeColID]; ok {
-				b.ids[searchIdx.ColumnIDs[i]] = found
+				ids[searchIdx.ColumnIDs[i]] = found
 			} else {
 				missingColumns = append(missingColumns, writeIdx.ColumnNames[i])
 			}
 		}
+
 		switch len(missingColumns) {
 		case 0:
-			return b, nil
+			return ids, nil
+
 		case 1:
-			return b, pgerror.NewAssertionErrorf(
+			return nil, pgerror.NewAssertionErrorf(
 				"missing value for column %q in multi-part foreign key", missingColumns[0])
-		case b.prefixLen:
+
+		case prefixLen:
 			// All the columns are nulls, don't check the foreign key.
-			return b, errSkipUnusedFK
+			return nil, errSkipUnusedFK
+
 		default:
 			sort.Strings(missingColumns)
-			return b, pgerror.NewAssertionErrorf(
+			return nil, pgerror.NewAssertionErrorf(
 				"missing values for columns %q in multi-part foreign key", missingColumns)
 		}
 	default:
-		return baseFKHelper{}, pgerror.NewAssertionErrorf(
-			"unknown composite key match type: %v", ref.Match,
-		)
+		return nil, pgerror.NewAssertionErrorf("unknown composite key match type: %v", match)
 	}
 }
