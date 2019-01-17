@@ -86,9 +86,7 @@ func init() {
 // FromWarehouses returns a tpcc generator pre-configured with the specified
 // number of warehouses.
 func FromWarehouses(warehouses int) workload.Generator {
-	gen := tpccMeta.New().(*tpcc)
-	gen.warehouses = warehouses
-	return gen
+	return workload.FromFlags(tpccMeta, fmt.Sprintf(`--warehouses=%d`, warehouses))
 }
 
 var tpccMeta = workload.Meta{

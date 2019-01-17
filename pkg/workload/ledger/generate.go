@@ -39,6 +39,7 @@ const (
 func (w *ledger) ledgerCustomerInitialRow(rowIdx int) []interface{} {
 	rng := w.rngPool.Get().(*rand.Rand)
 	defer w.rngPool.Put(rng)
+	rng.Seed(w.seed + int64(rowIdx))
 
 	return []interface{}{
 		rowIdx,                // id
@@ -63,6 +64,7 @@ func (w *ledger) ledgerCustomerSplitRow(splitIdx int) []interface{} {
 func (w *ledger) ledgerTransactionInitialRow(rowIdx int) []interface{} {
 	rng := w.rngPool.Get().(*rand.Rand)
 	defer w.rngPool.Put(rng)
+	rng.Seed(w.seed + int64(rowIdx))
 
 	h := w.hashPool.Get().(hash.Hash64)
 	defer w.hashPool.Put(h)
@@ -92,6 +94,7 @@ func (w *ledger) ledgerTransactionSplitRow(splitIdx int) []interface{} {
 func (w *ledger) ledgerEntryInitialRow(rowIdx int) []interface{} {
 	rng := w.rngPool.Get().(*rand.Rand)
 	defer w.rngPool.Put(rng)
+	rng.Seed(w.seed + int64(rowIdx))
 
 	// Alternate.
 	debit := rowIdx%2 == 0
@@ -133,6 +136,7 @@ func (w *ledger) ledgerEntrySplitRow(splitIdx int) []interface{} {
 func (w *ledger) ledgerSessionInitialRow(rowIdx int) []interface{} {
 	rng := w.rngPool.Get().(*rand.Rand)
 	defer w.rngPool.Put(rng)
+	rng.Seed(w.seed + int64(rowIdx))
 
 	return []interface{}{
 		randSessionID(rng),   // session_id

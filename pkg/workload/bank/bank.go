@@ -18,6 +18,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/hex"
+	"fmt"
 	"math/rand"
 	"strings"
 
@@ -83,11 +84,11 @@ func FromConfig(rows int, payloadBytes int, ranges int) workload.Generator {
 	if ranges > rows {
 		ranges = rows
 	}
-	b := bankMeta.New().(*bank)
-	b.rows = rows
-	b.payloadBytes = payloadBytes
-	b.ranges = ranges
-	return b
+	return workload.FromFlags(bankMeta,
+		fmt.Sprintf(`--rows=%d`, rows),
+		fmt.Sprintf(`--payload-bytes=%d`, payloadBytes),
+		fmt.Sprintf(`--ranges=%d`, ranges),
+	)
 }
 
 // Meta implements the Generator interface.
