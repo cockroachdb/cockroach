@@ -205,9 +205,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v2.2.
 		// TODO(couchand): bake this migration into v2.3
-		name:             "create system.statement_executions table",
-		workFn:           createStatementExecutionsTable,
-		newDescriptorIDs: staticIDs(keys.StatementExecutionsTableID),
+		name:                "create system.statement_executions table",
+		workFn:              createStatementExecutionsTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.StatementExecutionsTableID),
 	},
 }
 

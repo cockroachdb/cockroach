@@ -243,7 +243,13 @@ CREATE TABLE system.statement_executions (
     parse_lat               INTERVAL NOT NULL,
     plan_lat                INTERVAL NOT NULL,
     run_lat                 INTERVAL NOT NULL,
-    service_lat             INTERVAL NOT NULL
+    service_lat             INTERVAL NOT NULL,
+    FAMILY (id, transaction_id, node_id, received_at,
+        statement, statement_key, application_name,
+        distributed, optimized, automatic_retry_count,
+        error, rows_affected,
+        parse_lat, plan_lat, run_lat, service_lat
+    )
 );`
 )
 
@@ -923,7 +929,7 @@ var (
 		},
 		NextColumnID: 17,
 		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{
+			{Name: "fam_0_id_transaction_id_node_id_received_at_statement_statement_key_application_name_distributed_optimized_automatic_retry_count_error_rows_affected_parse_lat_plan_lat_run_lat_service_lat", ID: 0, ColumnNames: []string{
 				"id", "transaction_id", "node_id", "received_at", "statement", "statement_key",
 				"application_name", "distributed", "optimized",
 				"automatic_retry_count", "error", "rows_affected",
@@ -991,6 +997,9 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// The CommentsTable has been introduced in 2.2. It was added here since it
 	// was introduced, but it's also created as a migration for older clusters.
 	target.AddDescriptor(keys.SystemDatabaseID, &CommentsTable)
+
+	// Added in 2.2
+	target.AddDescriptor(keys.SystemDatabaseID, &StatementExecutionsTable)
 
 	target.AddSplitIDs(keys.PseudoTableIDs...)
 
