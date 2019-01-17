@@ -1439,9 +1439,20 @@ func (c *cluster) isLocal() bool {
 func getDiskUsageInBytes(
 	ctx context.Context, c *cluster, logger *logger, nodeIdx int,
 ) (int, error) {
-	out, err := c.RunWithBuffer(ctx, logger, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
-	if err != nil {
-		return 0, err
+	var out []byte
+	for {
+		if c.t.Failed() {
+			return 0, errors.New("already failed")
+		}
+		var err error
+		out, err = c.RunWithBuffer(ctx, logger, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
+		if err != nil {
+			// `du` can fail if files get removed out from under it. RocksDB likes to do that
+			// during compactions and such. It's rare enough to just retry.
+			logger.Printf("retrying disk usage computation after spurious error: %s", err)
+			continue
+		}
+		break
 	}
 
 	str := string(out)
