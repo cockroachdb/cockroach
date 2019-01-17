@@ -109,6 +109,14 @@
   version = "v1.20.1"
 
 [[projects]]
+  digest = "1:34f7a5e65430906c3eeeebb52f4ff50fdc0ed06e86063c5e13dd3236109de787"
+  name = "github.com/Shopify/toxiproxy"
+  packages = ["client"]
+  pruneopts = "UT"
+  revision = "49b4ea27da29ae83ad3bfe7f7f090d18cbee1dc3"
+  version = "v2.1.4"
+
+[[projects]]
   digest = "1:e92f5581902c345eb4ceffdcd4a854fb8f73cf436d47d837d1ec98ef1fe0a214"
   name = "github.com/StackExchange/wmi"
   packages = ["."]
@@ -716,7 +724,7 @@
   revision = "883fe33ffc4344bad1ecd881f61afd5ec5d80e0a"
 
 [[projects]]
-  digest = "1:5eae7496bdb74a6c7592bc74ea3da8a6a61a361fd52682820900d755bb144194"
+  digest = "1:6ce94e52c5f56dfbea4e3cb99ccf4b44d701d91b16167486e9842b2fe45e717a"
   name = "github.com/golang/protobuf"
   packages = [
     "jsonpb",
@@ -730,7 +738,6 @@
     "ptypes/duration",
     "ptypes/struct",
     "ptypes/timestamp",
-    "ptypes/wrappers",
   ]
   pruneopts = "UT"
   revision = "aa810b61a9c79d51363740d207bb46cf8e620ed5"
@@ -1592,14 +1599,13 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:c687169ea4f1554252009306cc8305fc86b9c5a68fbd0e61e7cadd8ed6504767"
+  digest = "1:a7d48ca460ca1b4f6ccd8c95502443afa05df88aee84de7dbeb667a8754e8fa6"
   name = "google.golang.org/genproto"
   packages = [
     "googleapis/api/annotations",
     "googleapis/iam/v1",
     "googleapis/rpc/code",
     "googleapis/rpc/status",
-    "protobuf/field_mask",
   ]
   pruneopts = "UT"
   revision = "db91494dd46c1fdcbbde05e5ff5eb56df8f7d79a"
@@ -1697,6 +1703,7 @@
     "github.com/MichaelTJones/walk",
     "github.com/PuerkitoBio/goquery",
     "github.com/Shopify/sarama",
+    "github.com/Shopify/toxiproxy/client",
     "github.com/VividCortex/ewma",
     "github.com/abourget/teamcity",
     "github.com/andy-kimball/arenaskl",
