@@ -197,6 +197,17 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.MakeDTimestamp(x.(time.Time), time.Microsecond), nil
 		}
+	case sqlbase.ColumnType_TIMESTAMPTZ:
+		avroType = avroLogicalType{
+			SchemaType:  avroSchemaLong,
+			LogicalType: `timestamp-micros`,
+		}
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return d.(*tree.DTimestampTZ).Time, nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.MakeDTimestampTZ(x.(time.Time), time.Microsecond), nil
+		}
 	case sqlbase.ColumnType_DECIMAL:
 		if colDesc.Type.Precision == 0 {
 			return nil, errors.Errorf(
