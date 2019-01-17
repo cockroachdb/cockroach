@@ -103,6 +103,8 @@ func (f *fkBatchChecker) runCheck(
 		case CheckInserts:
 			// If we're inserting, then there's a violation if the scan found nothing.
 			if fk.rf.kvEnd {
+				// TODO(knz): re-allocating a datum slice in every check
+				// is super inefficient and expensive. Factor this.
 				fkValues := make(tree.Datums, fk.prefixLen)
 
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
@@ -121,7 +123,11 @@ func (f *fkBatchChecker) runCheck(
 						"foreign key violation: non-empty columns %s referenced in table %q",
 						fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 				}
+
+				// TODO(knz): re-allocating a datum slice in every check
+				// is super inefficient and expensive. Factor this.
 				fkValues := make(tree.Datums, fk.prefixLen)
+
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 					fkValues[valueIdx] = oldRow[fk.ids[colID]]
 				}
