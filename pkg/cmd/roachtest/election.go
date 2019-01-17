@@ -24,8 +24,8 @@ import (
 
 func registerElectionAfterRestart(r *registry) {
 	r.Add(testSpec{
-		Name:  "election-after-restart",
-		Nodes: nodes(3),
+		Name:    "election-after-restart",
+		Cluster: makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Status("starting up")
 			c.Put(ctx, cockroach, "./cockroach")

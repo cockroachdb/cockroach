@@ -269,7 +269,7 @@ func registerUpgrade(r *registry) {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("upgrade/mixedWith=%s/nodes=%d", mixedWithVersion, n),
 			MinVersion: "v2.1.0",
-			Nodes:      nodes(n),
+			Cluster:    makeClusterSpec(n),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runUpgrade(ctx, t, c, mixedWithVersion)
 			},

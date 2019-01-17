@@ -53,8 +53,8 @@ func registerYCSB(r *registry) {
 
 		wl := wl
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("ycsb/%s/nodes=3", wl),
-			Nodes: nodes(4, cpu(8)),
+			Name:    fmt.Sprintf("ycsb/%s/nodes=3", wl),
+			Cluster: makeClusterSpec(4, cpu(8)),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runYCSB(ctx, t, c, wl)
 			},

@@ -61,9 +61,9 @@ func registerAcceptance(r *registry) {
 		// teach that script (if it's still used at that point) should
 		// this naming scheme ever change (or issues such as #33519)
 		// will be posted.
-		Name:  "acceptance",
-		Tags:  tags,
-		Nodes: nodes(numNodes),
+		Name:    "acceptance",
+		Tags:    tags,
+		Cluster: makeClusterSpec(numNodes),
 	}
 
 	for _, tc := range testCases {

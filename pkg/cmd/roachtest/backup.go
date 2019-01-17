@@ -27,8 +27,8 @@ import (
 
 func registerBackup(r *registry) {
 	r.Add(testSpec{
-		Name:  `backup2TB`,
-		Nodes: nodes(10),
+		Name:    `backup2TB`,
+		Cluster: makeClusterSpec(10),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			nodes := c.nodes
 
@@ -60,7 +60,7 @@ func registerBackup(r *registry) {
 	// verifies them with a fingerprint.
 	r.Add(testSpec{
 		Name:    `backupTPCC`,
-		Nodes:   nodes(3),
+		Cluster: makeClusterSpec(3),
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach")

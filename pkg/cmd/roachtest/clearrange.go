@@ -29,7 +29,7 @@ func registerClearRange(r *registry) {
 			Name:       fmt.Sprintf(`clearrange/checks=%t`, checks),
 			Timeout:    90 * time.Minute,
 			MinVersion: `v2.1.0`,
-			Nodes:      nodes(10),
+			Cluster:    makeClusterSpec(10),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClearRange(ctx, t, c, checks)
 			},

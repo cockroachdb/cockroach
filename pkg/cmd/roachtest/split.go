@@ -48,7 +48,7 @@ func registerLoadSplits(r *registry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
 		MinVersion: "v2.2.0",
-		Nodes:      nodes(numNodes),
+		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			// After load based splitting is turned on, from experiments
 			// it's clear that at least 20 splits will happen. We could
@@ -86,7 +86,7 @@ func registerLoadSplits(r *registry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
 		MinVersion: "v2.2.0",
-		Nodes:      nodes(numNodes),
+		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
@@ -103,7 +103,7 @@ func registerLoadSplits(r *registry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
 		MinVersion: "v2.2.0",
-		Nodes:      nodes(numNodes),
+		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
@@ -208,7 +208,7 @@ func registerLargeRange(r *registry) {
 
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
-		Nodes:   nodes(numNodes),
+		Cluster: makeClusterSpec(numNodes),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLargeRangeSplits(ctx, t, c, size)

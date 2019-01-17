@@ -100,8 +100,8 @@ func registerHotSpotSplits(r *registry) {
 	concurrency := 128
 
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
-		Nodes: nodes(numNodes),
+		Name:    fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
+		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 32
