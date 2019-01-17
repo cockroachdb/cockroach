@@ -91,7 +91,7 @@ func registerEncryption(r *registry) {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("encryption/nodes=%d", n),
 			MinVersion: "v2.1.0",
-			Nodes:      nodes(n),
+			Cluster:    makeClusterSpec(n),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runEncryption(ctx, t, c)
 			},

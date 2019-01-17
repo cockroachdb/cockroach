@@ -138,7 +138,7 @@ func registerTPCC(r *registry) {
 		// match our expectation for the max tpcc warehouses that previous
 		// releases will support on this hardware.
 		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
-		Nodes:      nodes(4, cpu(16)),
+		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			warehouses := 1400
 			runTPCC(ctx, t, c, tpccOptions{
@@ -150,7 +150,7 @@ func registerTPCC(r *registry) {
 	r.Add(testSpec{
 		Name:       "tpcc-nowait/nodes=3/w=1",
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
-		Nodes:      nodes(4, cpu(16)),
+		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: 1,
@@ -163,7 +163,7 @@ func registerTPCC(r *registry) {
 		Name:       "weekly/tpcc-max",
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
 		Tags:       []string{`weekly`},
-		Nodes:      nodes(4, cpu(16)),
+		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			warehouses := 1400
 			runTPCC(ctx, t, c, tpccOptions{
@@ -175,7 +175,7 @@ func registerTPCC(r *registry) {
 
 	r.Add(testSpec{
 		Name:       "tpcc/w=100/nodes=3/chaos=true",
-		Nodes:      nodes(4),
+		Cluster:    makeClusterSpec(4),
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			duration := 30 * time.Minute
@@ -381,11 +381,11 @@ func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 	name := strings.Join(nameParts, "/")
 
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
-	nodes := nodes(numNodes, opts...)
+	nodes := makeClusterSpec(numNodes, opts...)
 
 	r.Add(testSpec{
 		Name:       name,
-		Nodes:      nodes,
+		Cluster:    nodes,
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCCBench(ctx, t, c, b)

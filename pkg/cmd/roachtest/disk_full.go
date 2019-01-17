@@ -28,7 +28,7 @@ func registerDiskFull(r *registry) {
 	r.Add(testSpec{
 		Name:       "disk-full",
 		MinVersion: `v2.1.0`,
-		Nodes:      nodes(5),
+		Cluster:    makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if c.isLocal() {
 				t.spec.Skip = "you probably don't want to fill your local disk"

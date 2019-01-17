@@ -60,8 +60,8 @@ func registerStoreGen(r *registry, args []string) {
 	workloadArgs := strings.Join(args, " ")
 
 	r.Add(testSpec{
-		Name:  "store-gen",
-		Nodes: nodes(stores),
+		Name:    "store-gen",
+		Cluster: makeClusterSpec(stores),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
