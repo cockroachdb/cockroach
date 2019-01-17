@@ -736,7 +736,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
-			baseTest.Results("comments").Others(14),
+			baseTest.Results("comments").Others(15),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
 			baseTest.Results("crdb_internal").Others(3),

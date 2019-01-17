@@ -186,7 +186,7 @@ render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'database'
       └── values  ·       ·
-·                 size    3 columns, 40 rows
+·                 size    3 columns, 41 rows
 
 query TTT
 EXPLAIN SHOW TIME ZONE
