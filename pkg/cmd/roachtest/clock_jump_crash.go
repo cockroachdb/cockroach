@@ -131,7 +131,7 @@ func makeClockJumpTests() testSpec {
 func registerClock(r *registry) {
 	r.Add(testSpec{
 		Name:  "clock",
-		Nodes: nodes(1),
+		Nodes: makeTestClusterSpec(1),
 		SubTests: []testSpec{
 			makeClockJumpTests(),
 			makeClockMonotonicTests(),

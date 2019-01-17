@@ -294,7 +294,7 @@ func registerJepsen(r *registry) {
 	for i := range groups {
 		spec := testSpec{
 			Name:  fmt.Sprintf("jepsen-batch%d", i+1),
-			Nodes: nodes(6),
+			Nodes: makeTestClusterSpec(6),
 		}
 
 		for _, testName := range groups[i] {

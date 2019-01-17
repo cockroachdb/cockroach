@@ -118,7 +118,7 @@ type testSpec struct {
 	// Nodes provides the specification for the cluster to use for the test. Only
 	// a top-level testSpec may contain a nodes specification. The cluster is
 	// shared by all subtests.
-	Nodes []nodeSpec
+	Nodes testClusterSpec
 	// A testSpec must specify only one of Run or SubTests. All subtests run in
 	// the same cluster, without concurrency between them. Subtest should not
 	// assume any particular state for the cluster as the SubTest may be run in
@@ -325,7 +325,7 @@ func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 		return fmt.Errorf("%s: timeouts only apply to tests specifying Run", spec.Name)
 	}
 
-	if depth > 0 && len(spec.Nodes) > 0 {
+	if depth > 0 {
 		return fmt.Errorf("%s: subtest may not provide cluster specification", spec.Name)
 	}
 

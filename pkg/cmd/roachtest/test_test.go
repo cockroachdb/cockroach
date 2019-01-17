@@ -283,7 +283,7 @@ func TestRegistryRunClusterExpired(t *testing.T) {
 
 	r.Add(testSpec{
 		Name:  `expired`,
-		Nodes: nodes(1, nodeLifetimeOption(time.Second)),
+		Nodes: makeTestClusterSpec(1, nodeLifetimeOption(time.Second)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			panic("not reached")
 		},
@@ -400,7 +400,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Name: "a",
 				SubTests: []testSpec{{
 					Name:  "b",
-					Nodes: nodes(1),
+					Nodes: makeTestClusterSpec(1),
 					Run:   dummyRun,
 				}},
 			},

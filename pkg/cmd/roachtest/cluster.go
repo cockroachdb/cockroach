@@ -42,6 +42,7 @@ import (
 	"github.com/armon/circbuf"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+
 	// "postgres" gosql driver
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -500,23 +501,37 @@ func (n nodeListOption) String() string {
 	return buf.String()
 }
 
-type nodeSpec struct {
-	Count    int
+// testClusterSpec represents a test's description of what its cluster needs to
+// look like. It becomes part of a clusterConfig when the cluster is created.
+type testClusterSpec struct {
+	NodeCount int
+	// CPUs is the number of CPUs per node.
 	CPUs     int
 	Zones    string
 	Geo      bool
 	Lifetime time.Duration
 }
 
-func (s *nodeSpec) String() string {
-	str := fmt.Sprintf("n%dcpu%d", s.Count, s.CPUs)
+func makeTestClusterSpec(nodeCount int, opts ...createOption) testClusterSpec {
+	spec := testClusterSpec{
+		NodeCount: nodeCount,
+	}
+	cpu(4).apply(&spec)
+	for _, o := range opts {
+		o.apply(&spec)
+	}
+	return spec
+}
+
+func (s *testClusterSpec) String() string {
+	str := fmt.Sprintf("n%dcpu%d", s.NodeCount, s.CPUs)
 	if s.Geo {
 		str += "-geo"
 	}
 	return str
 }
 
-func (s *nodeSpec) args() []string {
+func (s *testClusterSpec) args() []string {
 	var args []string
 
 	switch cloud {
@@ -553,7 +568,7 @@ func (s *nodeSpec) args() []string {
 	return args
 }
 
-func (s *nodeSpec) expiration() time.Time {
+func (s *testClusterSpec) expiration() time.Time {
 	l := s.Lifetime
 	if l == 0 {
 		l = 12 * time.Hour
@@ -562,12 +577,12 @@ func (s *nodeSpec) expiration() time.Time {
 }
 
 type createOption interface {
-	apply(spec *nodeSpec)
+	apply(spec *testClusterSpec)
 }
 
 type nodeCPUOption int
 
-func (o nodeCPUOption) apply(spec *nodeSpec) {
+func (o nodeCPUOption) apply(spec *testClusterSpec) {
 	spec.CPUs = int(o)
 }
 
@@ -578,7 +593,7 @@ func cpu(n int) nodeCPUOption {
 
 type nodeGeoOption struct{}
 
-func (o nodeGeoOption) apply(spec *nodeSpec) {
+func (o nodeGeoOption) apply(spec *testClusterSpec) {
 	spec.Geo = true
 }
 
@@ -589,7 +604,7 @@ func geo() nodeGeoOption {
 
 type nodeZonesOption string
 
-func (o nodeZonesOption) apply(spec *nodeSpec) {
+func (o nodeZonesOption) apply(spec *testClusterSpec) {
 	spec.Zones = string(o)
 }
 
@@ -602,21 +617,8 @@ func zones(s string) nodeZonesOption {
 
 type nodeLifetimeOption time.Duration
 
-func (o nodeLifetimeOption) apply(spec *nodeSpec) {
+func (o nodeLifetimeOption) apply(spec *testClusterSpec) {
 	spec.Lifetime = time.Duration(o)
-}
-
-// nodes is a helper method for creating a []nodeSpec given a node count and
-// options.
-func nodes(count int, opts ...createOption) []nodeSpec {
-	spec := nodeSpec{
-		Count: count,
-	}
-	cpu(4).apply(&spec)
-	for _, o := range opts {
-		o.apply(&spec)
-	}
-	return []nodeSpec{spec}
 }
 
 // cluster provides an interface for interacting with a set of machines,
@@ -653,7 +655,7 @@ type cluster struct {
 type clusterConfig struct {
 	// name must be empty if localCluster is specified.
 	name  string
-	nodes []nodeSpec
+	nodes testClusterSpec
 	// artifactsDir is the path where log file will be stored.
 	artifactsDir string
 	localCluster bool
@@ -688,32 +690,26 @@ func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, er
 		name = makeClusterName(cfg.user + "-" + cfg.name)
 	}
 
-	switch {
-	case len(cfg.nodes) == 0:
-		// For tests. Return the minimum that makes them happy.
-		return &cluster{
-			expiration: timeutil.Now().Add(24 * time.Hour),
-		}, nil
-	case len(cfg.nodes) > 1:
-		// TODO(peter): Need a motivating test that has different specs per node.
-		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", cfg.nodes)
-	}
+	// For tests. Return the minimum that makes them happy.
+	return &cluster{
+		expiration: timeutil.Now().Add(24 * time.Hour),
+	}, nil
 
 	c := &cluster{
 		name:           name,
-		nodes:          cfg.nodes[0].Count,
+		nodes:          cfg.nodes.NodeCount,
 		status:         func(...interface{}) {},
 		l:              l,
 		destroyed:      make(chan struct{}),
-		expiration:     cfg.nodes[0].expiration(),
+		expiration:     cfg.nodes.expiration(),
 		owned:          true,
 		encryptDefault: encrypt.asBool(),
 	}
 	registerCluster(c)
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.nodes)}
-	sargs = append(sargs, cfg.nodes[0].args()...)
-	if !local && zonesF != "" && cfg.nodes[0].Zones == "" {
+	sargs = append(sargs, cfg.nodes.args()...)
+	if !local && zonesF != "" && cfg.nodes.Zones == "" {
 		sargs = append(sargs, "--gce-zones="+zonesF)
 	}
 
@@ -738,20 +734,15 @@ type attachOpt struct {
 //
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func attachToExistingCluster(
-	ctx context.Context, name string, l *logger, nodes []nodeSpec, opt attachOpt,
+	ctx context.Context, name string, l *logger, nodes testClusterSpec, opt attachOpt,
 ) (*cluster, error) {
-	if len(nodes) > 1 {
-		// TODO(peter): Need a motivating test that has different specs per node.
-		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", nodes)
-	}
-
 	c := &cluster{
 		name:       name,
-		nodes:      nodes[0].Count,
+		nodes:      nodes.NodeCount,
 		status:     func(...interface{}) {},
 		l:          l,
 		destroyed:  make(chan struct{}),
-		expiration: nodes[0].expiration(),
+		expiration: nodes.expiration(),
 		// If we're attaching to an existing cluster, we're not going to destoy it.
 		owned:          false,
 		encryptDefault: encrypt.asBool(),
@@ -799,7 +790,7 @@ func (c *cluster) setTest(t testI) {
 // the cluster's spec. It's intended to be used with clusters created by
 // attachToExistingCluster(); otherwise, clusters create with newCluster() are
 // know to be up to spec.
-func (c *cluster) validate(ctx context.Context, nodes []nodeSpec, l *logger) error {
+func (c *cluster) validate(ctx context.Context, nodes testClusterSpec, l *logger) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
 	sargs := []string{roachprod, "list", c.name, "--json"}
@@ -829,7 +820,7 @@ func (c *cluster) validate(ctx context.Context, nodes []nodeSpec, l *logger) err
 	if len(cDetails.VMs) < c.nodes {
 		return fmt.Errorf("cluster has %d nodes, test requires at least %d", len(cDetails.VMs), c.nodes)
 	}
-	if cpus := nodes[0].CPUs; cpus != 0 {
+	if cpus := nodes.CPUs; cpus != 0 {
 		for i, vm := range cDetails.VMs {
 			vmCPUs := MachineTypeToCPUs(vm.MachineType)
 			if vmCPUs < cpus {

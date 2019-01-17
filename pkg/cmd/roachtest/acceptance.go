@@ -63,7 +63,7 @@ func registerAcceptance(r *registry) {
 		// will be posted.
 		Name:  "acceptance",
 		Tags:  tags,
-		Nodes: nodes(numNodes),
+		Nodes: makeTestClusterSpec(numNodes),
 	}
 
 	for _, tc := range testCases {

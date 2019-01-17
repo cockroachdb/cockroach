@@ -118,7 +118,7 @@ func registerCancel(r *registry) {
 
 	r.Add(testSpec{
 		Name:  fmt.Sprintf("cancel/tpcc/distsql/w=%d,nodes=%d", warehouses, numNodes),
-		Nodes: nodes(numNodes),
+		Nodes: makeTestClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCancel(ctx, t, c, queries, warehouses, true /* useDistsql */)
 		},
@@ -126,7 +126,7 @@ func registerCancel(r *registry) {
 
 	r.Add(testSpec{
 		Name:  fmt.Sprintf("cancel/tpcc/local/w=%d,nodes=%d", warehouses, numNodes),
-		Nodes: nodes(numNodes),
+		Nodes: makeTestClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCancel(ctx, t, c, queries, warehouses, false /* useDistsql */)
 		},

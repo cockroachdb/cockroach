@@ -75,7 +75,7 @@ func registerRoachmart(r *registry) {
 		v := v
 		r.Add(testSpec{
 			Name:  fmt.Sprintf("roachmart/partition=%v", v),
-			Nodes: nodes(9, geo(), zones("us-central1-b,us-west1-b,europe-west2-b")),
+			Nodes: makeTestClusterSpec(9, geo(), zones("us-central1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

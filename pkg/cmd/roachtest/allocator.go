@@ -77,14 +77,14 @@ func registerAllocator(r *registry) {
 
 	r.Add(testSpec{
 		Name:  `upreplicate/1to3`,
-		Nodes: nodes(3),
+		Nodes: makeTestClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
 	r.Add(testSpec{
 		Name:  `rebalance/3to5`,
-		Nodes: nodes(5),
+		Nodes: makeTestClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
