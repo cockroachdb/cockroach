@@ -16,7 +16,6 @@ package row
 
 import (
 	"context"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -658,100 +657,4 @@ func (fks fkUpdateHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spa
 		return nil, err
 	}
 	return append(inboundReads, outboundReads...), nil
-}
-
-type baseFKHelper struct {
-	txn          *client.Txn
-	rf           Fetcher
-	searchTable  *sqlbase.ImmutableTableDescriptor // the table being searched (for err msg)
-	searchIdx    *sqlbase.IndexDescriptor          // the index that must (not) contain a value
-	prefixLen    int
-	writeIdx     sqlbase.IndexDescriptor  // the index we want to modify
-	searchPrefix []byte                   // prefix of keys in searchIdx
-	ids          map[sqlbase.ColumnID]int // col IDs
-	dir          FKCheck                  // direction of check
-	ref          sqlbase.ForeignKeyReference
-}
-
-func makeBaseFKHelper(
-	txn *client.Txn,
-	otherTables TableLookupsByID,
-	writeIdx sqlbase.IndexDescriptor,
-	ref sqlbase.ForeignKeyReference,
-	colMap map[sqlbase.ColumnID]int,
-	alloc *sqlbase.DatumAlloc,
-	dir FKCheck,
-) (baseFKHelper, error) {
-	b := baseFKHelper{
-		txn:         txn,
-		writeIdx:    writeIdx,
-		searchTable: otherTables[ref.Table].Table,
-		dir:         dir,
-		ref:         ref,
-	}
-	if b.searchTable == nil {
-		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
-	}
-	b.searchPrefix = sqlbase.MakeIndexKeyPrefix(b.searchTable.TableDesc(), ref.Index)
-	searchIdx, err := b.searchTable.FindIndexByID(ref.Index)
-	if err != nil {
-		return b, err
-	}
-	b.prefixLen = len(searchIdx.ColumnIDs)
-	if len(writeIdx.ColumnIDs) < b.prefixLen {
-		b.prefixLen = len(writeIdx.ColumnIDs)
-	}
-	b.searchIdx = searchIdx
-	tableArgs := FetcherTableArgs{
-		Desc:             b.searchTable,
-		Index:            b.searchIdx,
-		ColIdxMap:        b.searchTable.ColumnIdxMap(),
-		IsSecondaryIndex: b.searchIdx.ID != b.searchTable.PrimaryIndex.ID,
-		Cols:             b.searchTable.Columns,
-	}
-	err = b.rf.Init(false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, alloc, tableArgs)
-	if err != nil {
-		return b, err
-	}
-
-	// See https://github.com/cockroachdb/cockroach/issues/20305 or
-	// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
-	// different composite foreign key matching methods.
-	b.ids = make(map[sqlbase.ColumnID]int, len(writeIdx.ColumnIDs))
-	switch ref.Match {
-	case sqlbase.ForeignKeyReference_SIMPLE:
-		for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
-			if found, ok := colMap[writeColID]; ok {
-				b.ids[searchIdx.ColumnIDs[i]] = found
-			} else {
-				return b, errSkipUnusedFK
-			}
-		}
-		return b, nil
-	case sqlbase.ForeignKeyReference_FULL:
-		var missingColumns []string
-		for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
-			if found, ok := colMap[writeColID]; ok {
-				b.ids[searchIdx.ColumnIDs[i]] = found
-			} else {
-				missingColumns = append(missingColumns, writeIdx.ColumnNames[i])
-			}
-		}
-		switch len(missingColumns) {
-		case 0:
-			return b, nil
-		case 1:
-			return b, errors.Errorf("missing value for column %q in multi-part foreign key", missingColumns[0])
-		case b.prefixLen:
-			// All the columns are nulls, don't check the foreign key.
-			return b, errSkipUnusedFK
-		default:
-			sort.Strings(missingColumns)
-			return b, errors.Errorf("missing values for columns %q in multi-part foreign key", missingColumns)
-		}
-	default:
-		return baseFKHelper{}, pgerror.NewAssertionErrorf(
-			"unknown composite key match type: %v", ref.Match,
-		)
-	}
 }
