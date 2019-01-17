@@ -216,11 +216,12 @@ func TestSynchronization(t *testing.T) {
 	wg.Wait()
 }
 
-// BenchmarkQueryCache is a worst case benchmark where every session misses the
-// cache. The result of the benchmark is the time to do a pair of Find, Add
-// operations.
-func BenchmarkQueryCache(b *testing.B) {
-	// Run a worst case benchmark where every worker misses the cache.
+// BenchmarkWorstCase is a worst case benchmark where every session
+// misses the cache. The result of the benchmark is the time to do a pair of
+// Find, Add operations.
+//
+// For server-level benchmarks, see BenchmarkQueryCache in pkg/sql.
+func BenchmarkWorstCase(b *testing.B) {
 	for _, numWorkers := range []int{1, 10, 100} {
 		b.Run(fmt.Sprintf("%d", numWorkers), func(b *testing.B) {
 			const cacheSize = 10
