@@ -933,7 +933,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:284874efbaa03f94a209a905d2c493feea7f41ffc23875aa4809e4cdfd83c561"
+  digest = "1:9c0eed728d7c6c3232a7b90505855517daa4a81697529bc509c3c10bea5d3ef1"
   name = "github.com/knz/go-libedit"
   packages = [
     ".",
@@ -943,8 +943,8 @@
     "unix/sigtramp",
   ]
   pruneopts = "T"
-  revision = "f49778aa742b30ce62b430589d78a57247ae7cb1"
-  version = "v1.9"
+  revision = "0af72fd06d6f44cdb9666279d9b9a4d29cfa2da0"
+  version = "v1.9.1"
 
 [[projects]]
   branch = "master"
