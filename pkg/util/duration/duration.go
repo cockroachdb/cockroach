@@ -31,6 +31,7 @@ const (
 	nanosInDay    = 24 * int64(time.Hour) // Try as I might, couldn't do this without the cast.
 	nanosInMonth  = daysInMonth * nanosInDay
 	nanosInSecond = 1000 * 1000 * 1000
+	nanosInMicro  = 1000
 
 	// Used in overflow calculations.
 	maxYearsInDuration = math.MaxInt64 / nanosInMonth
@@ -66,6 +67,23 @@ type Duration struct {
 	Nanos  int64
 }
 
+// Round rounds Nanos to the nearest microsecond.
+func (d Duration) Round() Duration {
+	d.Nanos = d.rounded()
+	return d
+}
+
+func (d Duration) rounded() int64 {
+	dur := time.Duration(d.Nanos) * time.Nanosecond
+	v := dur.Round(time.Microsecond).Nanoseconds()
+	// Near the boundaries of int64 will return the argument unchanged. Check
+	// for those cases and truncate instead of round so that we never have nanos.
+	if m := v % nanosInMicro; m != 0 {
+		v -= m
+	}
+	return v
+}
+
 // Compare returns an integer representing the relative length of two Durations.
 // The result will be 0 if d==x, -1 if d < x, and +1 if d > x.
 func (d Duration) Compare(x Duration) int {
@@ -96,20 +114,19 @@ func FromInt64(x int64) Duration {
 	return d.normalize()
 }
 
-// FromFloat64 converts a float64 number of seconds to a
-// duration. Inverse conversion of AsFloat64.
+// FromFloat64 converts a float64 number of seconds to a duration. Inverse
+// conversion of AsFloat64.
 func FromFloat64(x float64) Duration {
 	months := int64(x / float64(nanosInMonth/nanosInSecond))
 	secDays := math.Mod(x, float64(nanosInMonth/nanosInSecond))
 	days := int64(secDays / float64(nanosInDay/nanosInSecond))
 	secsRem := math.Mod(secDays, float64(nanosInDay/nanosInSecond))
 	d := Duration{Months: months, Days: days, Nanos: int64(secsRem * 1e9)}
-	return d.normalize()
+	return d.normalize().Round()
 }
 
-// FromBigInt converts a big.Int number of nanoseconds to a
-// duration. Inverse conversion of AsBigInt. Boolean false
-// if the result overflows.
+// FromBigInt converts a big.Int number of nanoseconds to a duration. Inverse
+// conversion of AsBigInt. Boolean false if the result overflows.
 func FromBigInt(src *big.Int) (Duration, bool) {
 	var rem big.Int
 	var monthsDec big.Int
@@ -125,7 +142,7 @@ func FromBigInt(src *big.Int) (Duration, bool) {
 	// excess bits were spilled into months above already.
 
 	d := Duration{Months: monthsDec.Int64(), Days: daysDec.Int64(), Nanos: nanosRem.Int64()}
-	return d.normalize(), true
+	return d.normalize().Round(), true
 }
 
 // AsInt64 converts a duration to an int64 number of seconds.
@@ -150,17 +167,16 @@ func (d Duration) AsInt64() (int64, bool) {
 func (d Duration) AsFloat64() float64 {
 	mSecs := float64(d.Months) * float64(nanosInMonth/nanosInSecond)
 	dSecs := float64(d.Days) * float64(nanosInDay/nanosInSecond)
-	return float64(d.Nanos)/float64(nanosInSecond) + mSecs + dSecs
+	return float64(d.rounded())/float64(nanosInSecond) + mSecs + dSecs
 }
 
-// AsBigInt converts a duration to a big.Int with the number of
-// nanoseconds.
+// AsBigInt converts a duration to a big.Int with the number of nanoseconds.
 func (d Duration) AsBigInt(dst *big.Int) {
 	dst.SetInt64(d.Months)
 	dst.Mul(dst, bigDaysInMonth)
 	dst.Add(dst, big.NewInt(d.Days))
 	dst.Mul(dst, bigNanosInDay)
-	dst.Add(dst, big.NewInt(d.Nanos))
+	dst.Add(dst, big.NewInt(d.rounded()))
 }
 
 const (
@@ -169,7 +185,7 @@ const (
 	secondNanos = uint64(time.Second / time.Nanosecond)
 )
 
-// Format emits a string representation of a Duration to a Buffer.
+// Format emits a string representation of a Duration to a Buffer truncated to microseconds.
 func (d Duration) Format(buf *bytes.Buffer) {
 	if d.Nanos == 0 && d.Days == 0 && d.Months == 0 {
 		buf.WriteString("00:00:00")
@@ -207,7 +223,7 @@ func (d Duration) Format(buf *bytes.Buffer) {
 
 	wrotePrev(wrote, buf)
 
-	if d.Nanos < 0 {
+	if d.Nanos/nanosInMicro < 0 {
 		buf.WriteString("-")
 	} else if negDays {
 		buf.WriteString("+")
@@ -218,7 +234,6 @@ func (d Duration) Format(buf *bytes.Buffer) {
 	if d.Nanos >= 0 {
 		nanos = uint64(d.Nanos)
 	} else {
-
 		nanos = uint64(-d.Nanos)
 	}
 
@@ -230,8 +245,9 @@ func (d Duration) Format(buf *bytes.Buffer) {
 	nanos %= secondNanos
 	fmt.Fprintf(buf, "%02d:%02d:%02d", hn, mn, sn)
 
-	if nanos != 0 {
-		s := fmt.Sprintf(".%09d", nanos)
+	micros := nanos / nanosInMicro
+	if micros != 0 {
+		s := fmt.Sprintf(".%06d", micros)
 		buf.WriteString(strings.TrimRight(s, "0"))
 	}
 }
@@ -256,6 +272,18 @@ func absGE(x, y int64) bool {
 func (d Duration) String() string {
 	var buf bytes.Buffer
 	d.Format(&buf)
+	return buf.String()
+}
+
+// StringNanos returns a string representation of a Duration including its
+// hidden nanoseconds value. To be used only by the encoding/decoding packages.
+func (d Duration) StringNanos() string {
+	var buf bytes.Buffer
+	d.Format(&buf)
+	nanos := d.Nanos % nanosInMicro
+	if nanos != 0 {
+		fmt.Fprintf(&buf, "%+dns", nanos)
+	}
 	return buf.String()
 }
 
@@ -393,22 +421,22 @@ func Add(ctx Context, t time.Time, d Duration) time.Time {
 
 // Add returns a Duration representing a time length of d+x.
 func (d Duration) Add(x Duration) Duration {
-	return Duration{d.Months + x.Months, d.Days + x.Days, d.Nanos + x.Nanos}
+	return Duration{d.Months + x.Months, d.Days + x.Days, d.Nanos + x.Nanos}.Round()
 }
 
 // Sub returns a Duration representing a time length of d-x.
 func (d Duration) Sub(x Duration) Duration {
-	return Duration{d.Months - x.Months, d.Days - x.Days, d.Nanos - x.Nanos}
+	return Duration{d.Months - x.Months, d.Days - x.Days, d.Nanos - x.Nanos}.Round()
 }
 
 // Mul returns a Duration representing a time length of d*x.
 func (d Duration) Mul(x int64) Duration {
-	return Duration{d.Months * x, d.Days * x, d.Nanos * x}
+	return Duration{d.Months * x, d.Days * x, d.Nanos * x}.Round()
 }
 
 // Div returns a Duration representing a time length of d/x.
 func (d Duration) Div(x int64) Duration {
-	return Duration{d.Months / x, d.Days / x, d.Nanos / x}
+	return Duration{d.Months / x, d.Days / x, d.Nanos / x}.Round()
 }
 
 // MulFloat returns a Duration representing a time length of d*x.
@@ -417,7 +445,7 @@ func (d Duration) MulFloat(x float64) Duration {
 		int64(float64(d.Months) * x),
 		int64(float64(d.Days) * x),
 		int64(float64(d.Nanos) * x),
-	}
+	}.Round()
 }
 
 // DivFloat returns a Duration representing a time length of d/x.
@@ -426,7 +454,7 @@ func (d Duration) DivFloat(x float64) Duration {
 		int64(float64(d.Months) / x),
 		int64(float64(d.Days) / x),
 		int64(float64(d.Nanos) / x),
-	}
+	}.Round()
 }
 
 // normalized returns a new Duration transformed using the equivalence rules.

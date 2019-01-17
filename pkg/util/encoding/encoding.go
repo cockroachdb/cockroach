@@ -1543,7 +1543,7 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 		if err != nil {
 			return b, "", err
 		}
-		return b, d.String(), nil
+		return b, d.StringNanos(), nil
 	default:
 		if len(b) >= 1 {
 			switch b[0] {
@@ -2358,7 +2358,7 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 		if err != nil {
 			return b, "", err
 		}
-		return b, d.String(), nil
+		return b, d.StringNanos(), nil
 	case BitArray:
 		var d bitarray.BitArray
 		b, d, err = DecodeBitArrayValue(b)

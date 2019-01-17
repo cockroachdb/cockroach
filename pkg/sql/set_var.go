@@ -234,10 +234,11 @@ func timeZoneVarGetStringVal(
 		}
 
 	case *tree.DInterval:
-		offset, _, _, err = v.Duration.Div(time.Second.Nanoseconds()).Encode()
+		offset, _, _, err = v.Duration.Encode()
 		if err != nil {
 			return "", wrapSetVarError("timezone", values[0].String(), "%v", err)
 		}
+		offset /= int64(time.Second)
 
 	case *tree.DInt:
 		offset = int64(*v) * 60 * 60

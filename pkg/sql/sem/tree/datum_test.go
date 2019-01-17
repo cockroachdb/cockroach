@@ -110,20 +110,20 @@ func TestDatumOrdering(t *testing.T) {
 
 		// Intervals
 		{`'1 day':::interval`, noPrev, noNext,
-			`'-768614336404564650 years -8 mons -9223372036854775808 days -2562047:47:16.854775808'`,
-			`'768614336404564650 years 7 mons 9223372036854775807 days 2562047:47:16.854775807'`},
+			`'-768614336404564650 years -8 mons -9223372036854775808 days -2562047:47:16.854775'`,
+			`'768614336404564650 years 7 mons 9223372036854775807 days 2562047:47:16.854775'`},
 		// Max interval: we use Postgres syntax, because Go doesn't accept
 		// months/days and ISO8601 doesn't accept nanoseconds.
 		{`'9223372036854775807 months 9223372036854775807 days ` +
-			`2562047 hours 47 minutes 16 seconds 854775807 nanoseconds':::interval`,
+			`2562047 hours 47 minutes 16 seconds 854775 us':::interval`,
 			noPrev, valIsMax,
-			`'-768614336404564650 years -8 mons -9223372036854775808 days -2562047:47:16.854775808'`,
-			`'768614336404564650 years 7 mons 9223372036854775807 days 2562047:47:16.854775807'`},
+			`'-768614336404564650 years -8 mons -9223372036854775808 days -2562047:47:16.854775'`,
+			`'768614336404564650 years 7 mons 9223372036854775807 days 2562047:47:16.854775'`},
 		{`'-9223372036854775808 months -9223372036854775808 days ` +
-			`-2562047 h -47 m -16 s -854775808 ns':::interval`,
+			`-2562047 h -47 m -16 s -854775 us':::interval`,
 			valIsMin, noNext,
-			`'-768614336404564650 years -8 mons -9223372036854775808 days -2562047:47:16.854775808'`,
-			`'768614336404564650 years 7 mons 9223372036854775807 days 2562047:47:16.854775807'`},
+			`'-768614336404564650 years -8 mons -9223372036854775808 days -2562047:47:16.854775'`,
+			`'768614336404564650 years 7 mons 9223372036854775807 days 2562047:47:16.854775'`},
 
 		// UUIDs
 		{`'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid`, `'ffffffff-ffff-ffff-ffff-fffffffffffe'`, valIsMax,
