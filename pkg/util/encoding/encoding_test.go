@@ -1112,11 +1112,11 @@ func testCustomEncodeDuration(
 
 func TestEncodeDecodeDuration(t *testing.T) {
 	testCases := []testCaseDuration{
-		{duration.Duration{Months: 0, Days: 0, Nanos: 0}, []byte{0x16, 0x88, 0x88, 0x88}},
-		{duration.Duration{Months: 0, Days: 0, Nanos: 1}, []byte{0x16, 0x89, 0x88, 0x88}},
-		{duration.Duration{Months: 0, Days: 1, Nanos: 0}, []byte{0x16, 0xfb, 0x4e, 0x94, 0x91, 0x4f, 0x00, 0x00, 0x88, 0x89}},
-		{duration.Duration{Months: 1, Days: 0, Nanos: 0}, []byte{0x16, 0xfc, 0x09, 0x35, 0x69, 0x07, 0x42, 0x00, 0x00, 0x89, 0x88}},
-		{duration.Duration{Months: 0, Days: 40, Nanos: 0}, []byte{0x16, 0xfc, 0x0c, 0x47, 0x36, 0xb4, 0x58, 0x00, 0x00, 0x88, 0xb0}},
+		{duration.DecodeDuration(0, 0, 0), []byte{0x16, 0x88, 0x88, 0x88}},
+		{duration.DecodeDuration(0, 0, 1), []byte{0x16, 0x89, 0x88, 0x88}},
+		{duration.DecodeDuration(0, 1, 0), []byte{0x16, 0xfb, 0x4e, 0x94, 0x91, 0x4f, 0x00, 0x00, 0x88, 0x89}},
+		{duration.DecodeDuration(1, 0, 0), []byte{0x16, 0xfc, 0x09, 0x35, 0x69, 0x07, 0x42, 0x00, 0x00, 0x89, 0x88}},
+		{duration.DecodeDuration(0, 40, 0), []byte{0x16, 0xfc, 0x0c, 0x47, 0x36, 0xb4, 0x58, 0x00, 0x00, 0x88, 0xb0}},
 	}
 	testBasicEncodeDuration(testCases, EncodeDurationAscending, t)
 	testCustomEncodeDuration(testCases, EncodeDurationAscending, DecodeDurationAscending, t)
@@ -1124,11 +1124,11 @@ func TestEncodeDecodeDuration(t *testing.T) {
 
 func TestEncodeDecodeDescending(t *testing.T) {
 	testCases := []testCaseDuration{
-		{duration.Duration{Months: 0, Days: 40, Nanos: 0}, []byte{0x16, 0x81, 0xf3, 0xb8, 0xc9, 0x4b, 0xa7, 0xff, 0xff, 0x87, 0xff, 0x87, 0xd7}},
-		{duration.Duration{Months: 1, Days: 0, Nanos: 0}, []byte{0x16, 0x81, 0xf6, 0xca, 0x96, 0xf8, 0xbd, 0xff, 0xff, 0x87, 0xfe, 0x87, 0xff}},
-		{duration.Duration{Months: 0, Days: 1, Nanos: 0}, []byte{0x16, 0x82, 0xb1, 0x6b, 0x6e, 0xb0, 0xff, 0xff, 0x87, 0xff, 0x87, 0xfe}},
-		{duration.Duration{Months: 0, Days: 0, Nanos: 1}, []byte{0x16, 0x87, 0xfe, 0x87, 0xff, 0x87, 0xff}},
-		{duration.Duration{Months: 0, Days: 0, Nanos: 0}, []byte{0x16, 0x87, 0xff, 0x87, 0xff, 0x87, 0xff}},
+		{duration.DecodeDuration(0, 40, 0), []byte{0x16, 0x81, 0xf3, 0xb8, 0xc9, 0x4b, 0xa7, 0xff, 0xff, 0x87, 0xff, 0x87, 0xd7}},
+		{duration.DecodeDuration(1, 0, 0), []byte{0x16, 0x81, 0xf6, 0xca, 0x96, 0xf8, 0xbd, 0xff, 0xff, 0x87, 0xfe, 0x87, 0xff}},
+		{duration.DecodeDuration(0, 1, 0), []byte{0x16, 0x82, 0xb1, 0x6b, 0x6e, 0xb0, 0xff, 0xff, 0x87, 0xff, 0x87, 0xfe}},
+		{duration.DecodeDuration(0, 0, 1), []byte{0x16, 0x87, 0xfe, 0x87, 0xff, 0x87, 0xff}},
+		{duration.DecodeDuration(0, 0, 0), []byte{0x16, 0x87, 0xff, 0x87, 0xff, 0x87, 0xff}},
 	}
 	testBasicEncodeDuration(testCases, EncodeDurationDescending, t)
 	testCustomEncodeDuration(testCases, EncodeDurationDescending, DecodeDurationDescending, t)
@@ -1203,11 +1203,11 @@ func (rd randData) bitArray() bitarray.BitArray {
 }
 
 func (rd randData) duration() duration.Duration {
-	return duration.Duration{
-		Months: rd.Int63n(1000),
-		Days:   rd.Int63n(1000),
-		Nanos:  rd.Int63n(1000000),
-	}
+	return duration.DecodeDuration(
+		rd.Int63n(1000),
+		rd.Int63n(1000),
+		rd.Int63n(1000000),
+	)
 }
 
 func (rd randData) ipAddr() ipaddr.IPAddr {
@@ -2140,7 +2140,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{EncodeTimeValue(nil, NoColumnID,
 			time.Date(2016, 6, 29, 16, 2, 50, 5, time.UTC)), "2016-06-29T16:02:50.000000005Z"},
 		{EncodeDurationValue(nil, NoColumnID,
-			duration.Duration{Months: 1, Days: 2, Nanos: 3}), "1 mon 2 days 00:00:00.000000003"},
+			duration.DecodeDuration(1, 2, 3)), "1 mon 2 days 00:00:00+3ns"},
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x1, 0x2, 0xF, 0xFF}), "0x01020fff"},
 		{EncodeBytesValue(nil, NoColumnID, []byte("foo")), "foo"}, // printable bytes
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x89}), "0x89"}, // non-printable bytes

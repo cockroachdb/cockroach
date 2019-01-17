@@ -1843,20 +1843,20 @@ may increase either contention or retry errors, or both.`,
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				switch timeSpan {
 				case "hour", "hours":
-					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Hour))), nil
+					return tree.NewDInt(tree.DInt(fromInterval.Nanos() / int64(time.Hour))), nil
 
 				case "minute", "minutes":
-					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Minute))), nil
+					return tree.NewDInt(tree.DInt(fromInterval.Nanos() / int64(time.Minute))), nil
 
 				case "second", "seconds":
-					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Second))), nil
+					return tree.NewDInt(tree.DInt(fromInterval.Nanos() / int64(time.Second))), nil
 
 				case "millisecond", "milliseconds":
 					// This a PG extension not supported in MySQL.
-					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Millisecond))), nil
+					return tree.NewDInt(tree.DInt(fromInterval.Nanos() / int64(time.Millisecond))), nil
 
 				case "microsecond", "microseconds":
-					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Microsecond))), nil
+					return tree.NewDInt(tree.DInt(fromInterval.Nanos() / int64(time.Microsecond))), nil
 
 				default:
 					return nil, pgerror.NewErrorf(
@@ -1946,7 +1946,7 @@ may increase either contention or retry errors, or both.`,
 				if err != nil {
 					return nil, err
 				}
-				return &tree.DInterval{Duration: duration.Duration{Nanos: int64(*time) * 1000}}, nil
+				return &tree.DInterval{Duration: duration.MakeDuration(int64(*time)*1000, 0, 0)}, nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero.\n\n" +
@@ -2870,9 +2870,7 @@ may increase either contention or retry errors, or both.`,
 					return nil, err
 				}
 				minDuration := args[0].(*tree.DInterval).Duration
-				elapsed := duration.Duration{
-					Nanos: int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)),
-				}
+				elapsed := duration.MakeDuration(int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)), 0, 0)
 				if elapsed.Compare(minDuration) < 0 {
 					return nil, ctx.Txn.GenerateForcedRetryableError(
 						ctx.Ctx(), "forced by crdb_internal.force_retry()")

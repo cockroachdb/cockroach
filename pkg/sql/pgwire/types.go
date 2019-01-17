@@ -390,7 +390,7 @@ func (b *writeBuffer) writeBinaryDatum(
 
 	case *tree.DInterval:
 		b.putInt32(16)
-		b.putInt64(v.Nanos / int64(time.Microsecond/time.Nanosecond))
+		b.putInt64(v.Nanos() / int64(time.Microsecond/time.Nanosecond))
 		b.putInt32(int32(v.Days))
 		b.putInt32(int32(v.Months))
 

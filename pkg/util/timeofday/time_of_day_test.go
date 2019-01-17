@@ -82,7 +82,7 @@ func TestAdd(t *testing.T) {
 		{Min, -1, Max},
 	}
 	for _, td := range testData {
-		d := duration.Duration{Nanos: td.micros * nanosPerMicro}
+		d := duration.MakeDuration(td.micros*nanosPerMicro, 0, 0)
 		t.Run(fmt.Sprintf("%s,%s", td.t, d), func(t *testing.T) {
 			actual := td.t.Add(d)
 			if actual != td.exp {
@@ -106,7 +106,7 @@ func TestDifference(t *testing.T) {
 	}
 	for _, td := range testData {
 		t.Run(fmt.Sprintf("%s,%s", td.t1, td.t2), func(t *testing.T) {
-			actual := Difference(td.t1, td.t2).Nanos / nanosPerMicro
+			actual := Difference(td.t1, td.t2).Nanos() / nanosPerMicro
 			if actual != td.expMicros {
 				t.Errorf("expected %d, got %d", td.expMicros, actual)
 			}

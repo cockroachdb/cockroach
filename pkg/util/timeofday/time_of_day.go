@@ -99,12 +99,12 @@ func Random(rng *rand.Rand) TimeOfDay {
 
 // Add adds a Duration to a TimeOfDay, wrapping into the next day if necessary.
 func (t TimeOfDay) Add(d duration.Duration) TimeOfDay {
-	return FromInt(int64(t) + d.Nanos/nanosPerMicro)
+	return FromInt(int64(t) + d.Nanos()/nanosPerMicro)
 }
 
 // Difference returns the interval between t1 and t2, which may be negative.
 func Difference(t1 TimeOfDay, t2 TimeOfDay) duration.Duration {
-	return duration.Duration{Nanos: int64(t1-t2) * nanosPerMicro}
+	return duration.MakeDuration(int64(t1-t2)*nanosPerMicro, 0, 0)
 }
 
 // Hour returns the hour specified by t, in the range [0, 23].
