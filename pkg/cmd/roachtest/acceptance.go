@@ -25,31 +25,32 @@ func registerAcceptance(r *registry) {
 	// local mode the acceptance tests should be configured to run within a
 	// minute or so as these tests are run on every merge to master.
 
-	// NB: zerosum-restart is skipped due to generating various errors during
-	// its rebalances. See the comment on:
-	_ = isExpectedRelocateError
-
 	testCases := []struct {
 		name string
 		fn   func(ctx context.Context, t *test, c *cluster)
+		skip string
 	}{
 		// Sorted. Please keep it that way.
-		{"bank/cluster-recovery", runBankClusterRecovery},
-		{"bank/node-restart", runBankNodeRestart},
-		{"bank/zerosum-splits", runBankNodeZeroSum},
+		{name: "bank/cluster-recovery", fn: runBankClusterRecovery},
+		{name: "bank/node-restart", fn: runBankNodeRestart},
+		{
+			name: "bank/zerosum-splits", fn: runBankNodeZeroSum,
+			skip: "https://github.com/cockroachdb/cockroach/issues/33683 (runs " +
+				"into various errors during its rebalances, see isExpectedRelocateError)",
+		},
 		// {"bank/zerosum-restart", runBankZeroSumRestart},
-		{"build-info", runBuildInfo},
-		{"cli/node-status", runCLINodeStatus},
-		{"decommission", runDecommissionAcceptance},
-		{"cluster-init", runClusterInit},
-		{"event-log", runEventLog},
-		{"gossip/peerings", runGossipPeerings},
-		{"gossip/restart", runGossipRestart},
-		{"gossip/restart-node-one", runGossipRestartNodeOne},
-		{"gossip/locality-address", runCheckLocalityIPAddress},
-		{"rapid-restart", runRapidRestart},
-		{"status-server", runStatusServer},
-		{"version-upgrade", runVersionUpgrade},
+		{name: "build-info", fn: runBuildInfo},
+		{name: "cli/node-status", fn: runCLINodeStatus},
+		{name: "decommission", fn: runDecommissionAcceptance},
+		{name: "cluster-init", fn: runClusterInit},
+		{name: "event-log", fn: runEventLog},
+		{name: "gossip/peerings", fn: runGossipPeerings},
+		{name: "gossip/restart", fn: runGossipRestart},
+		{name: "gossip/restart-node-one", fn: runGossipRestartNodeOne},
+		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
+		{name: "rapid-restart", fn: runRapidRestart},
+		{name: "status-server", fn: runStatusServer},
+		{name: "version-upgrade", fn: runVersionUpgrade},
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4
@@ -68,6 +69,7 @@ func registerAcceptance(r *registry) {
 	for _, tc := range testCases {
 		tc := tc
 		spec.SubTests = append(spec.SubTests, testSpec{
+			Skip:    tc.skip,
 			Name:    tc.name,
 			Timeout: 10 * time.Minute,
 			Tags:    tags,
