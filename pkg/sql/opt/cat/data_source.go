@@ -25,15 +25,17 @@ type DataSourceName = tree.TableName
 type DataSource interface {
 	Object
 
-	// Version uniquely identifies a particular iteration of the data source's
-	// schema. Each time the schema changes, the version will be incremented,
-	// which allows changes to be easily detected. See the comment for the Version
-	// type for more detail.
-	Version() Version
-
 	// Name returns the fully normalized, fully qualified, and fully resolved
 	// name of the data source (<db-name>.<schema-name>.<data-source-name>). The
 	// ExplicitCatalog and ExplicitSchema fields will always be true, since all
 	// parts of the name are always specified.
 	Name() *DataSourceName
+
+	// Equals returns true if this DataSource is identical to the given
+	// DataSource.
+	//
+	// This is used for invalidating cached plans and must return false whenever
+	// the schema or statistics of a data source changed between the times the two
+	// data sources were resolved.
+	Equals(other DataSource) bool
 }

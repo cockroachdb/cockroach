@@ -221,9 +221,13 @@ func (ov *optView) ID() cat.StableID {
 	return cat.StableID(ov.desc.ID)
 }
 
-// Version is part of the cat.DataSource interface.
-func (ov *optView) Version() cat.Version {
-	return cat.Version(ov.desc.Version)
+// Equals is part of the cat.DataSource interface.
+func (ov *optView) Equals(other cat.DataSource) bool {
+	otherView, ok := other.(*optView)
+	if !ok {
+		return false
+	}
+	return ov.desc.ID == otherView.desc.ID && ov.desc.Version == otherView.desc.Version
 }
 
 // Name is part of the cat.View interface.
@@ -275,9 +279,13 @@ func (os *optSequence) ID() cat.StableID {
 	return cat.StableID(os.desc.ID)
 }
 
-// Version is part of the cat.DataSource interface.
-func (os *optSequence) Version() cat.Version {
-	return cat.Version(os.desc.Version)
+// Equals is part of the cat.DataSource interface.
+func (os *optSequence) Equals(other cat.DataSource) bool {
+	otherSeq, ok := other.(*optSequence)
+	if !ok {
+		return false
+	}
+	return os.desc.ID == otherSeq.desc.ID && os.desc.Version == otherSeq.desc.Version
 }
 
 // Name is part of the cat.DataSource interface.
@@ -297,8 +305,6 @@ type optTable struct {
 	// primary is the inlined wrapper for the table's primary index.
 	primary optIndex
 
-	// stats is nil until StatisticCount is called. After that it will not be nil,
-	// even when there are no statistics.
 	stats []optTableStat
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
@@ -369,9 +375,25 @@ func (ot *optTable) ID() cat.StableID {
 	return cat.StableID(ot.desc.ID)
 }
 
-// Version is part of the cat.DataSource interface.
-func (ot *optTable) Version() cat.Version {
-	return cat.Version(ot.desc.Version)
+// Equals is part of the cat.DataSource interface.
+func (ot *optTable) Equals(other cat.DataSource) bool {
+	otherTable, ok := other.(*optTable)
+	if !ok {
+		return false
+	}
+	if ot.desc.ID != otherTable.desc.ID || ot.desc.Version != otherTable.desc.Version {
+		return false
+	}
+	// Verify the stats are identical.
+	if len(ot.stats) != len(otherTable.stats) {
+		return false
+	}
+	for i := range ot.stats {
+		if !ot.stats[i].equals(&otherTable.stats[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // Name is part of the cat.DataSource interface.
@@ -647,6 +669,20 @@ func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool
 		if !ok {
 			// Column not in table (this is possible if the column was removed since
 			// the statistic was calculated).
+			return false
+		}
+	}
+	return true
+}
+
+func (os *optTableStat) equals(other *optTableStat) bool {
+	// Two table statistics are considered equal if they have been created at the
+	// same time, on the same set of columns.
+	if os.createdAt != other.createdAt || len(os.columnOrdinals) != len(other.columnOrdinals) {
+		return false
+	}
+	for i, c := range os.columnOrdinals {
+		if c != other.columnOrdinals[i] {
 			return false
 		}
 	}

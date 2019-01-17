@@ -43,14 +43,6 @@ import (
 // For sqlbase objects, the StableID is the 32-bit descriptor ID.
 type StableID uint32
 
-// Version is incremented any time the schema of a catalog data source (table,
-// view, etc.) is changed in any way, including changes to any associated
-// indexes. This enables cached data sources (or other data structures dependent
-// on the data sources) to be invalidated when their schema changes.
-//
-// For sqlbase data sources, the version is the 32-bit descriptor version.
-type Version uint32
-
 // SchemaName is an alias for tree.TableNamePrefix, since it consists of the
 // catalog + schema name.
 type SchemaName = tree.TableNamePrefix
