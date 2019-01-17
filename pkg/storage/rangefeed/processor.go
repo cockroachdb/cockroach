@@ -219,6 +219,9 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 					}
 				}
 				if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
+					if r.catchupIter != nil {
+						r.catchupIter.Close() // clean up
+					}
 					r.disconnect(roachpb.NewError(err))
 					p.reg.Unregister(&r)
 				}
@@ -354,6 +357,9 @@ func (p *Processor) Register(
 	select {
 	case p.regC <- r:
 	case <-p.stoppedC:
+		if catchupIter != nil {
+			catchupIter.Close() // clean up
+		}
 		// errC has a capacity of 1. If it is already full, we don't need to send
 		// another error.
 		select {
