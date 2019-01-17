@@ -6,7 +6,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 // baseFKHelper is an auxiliary struct that facilitates FK existence
@@ -114,7 +113,7 @@ func makeBaseFKHelper(
 		ref:         ref,
 	}
 	if b.searchTable == nil {
-		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
+		return b, pgerror.NewAssertionErrorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	b.searchPrefix = sqlbase.MakeIndexKeyPrefix(b.searchTable.TableDesc(), ref.Index)
 	searchIdx, err := b.searchTable.FindIndexByID(ref.Index)
@@ -165,13 +164,15 @@ func makeBaseFKHelper(
 		case 0:
 			return b, nil
 		case 1:
-			return b, errors.Errorf("missing value for column %q in multi-part foreign key", missingColumns[0])
+			return b, pgerror.NewAssertionErrorf(
+				"missing value for column %q in multi-part foreign key", missingColumns[0])
 		case b.prefixLen:
 			// All the columns are nulls, don't check the foreign key.
 			return b, errSkipUnusedFK
 		default:
 			sort.Strings(missingColumns)
-			return b, errors.Errorf("missing values for columns %q in multi-part foreign key", missingColumns)
+			return b, pgerror.NewAssertionErrorf(
+				"missing values for columns %q in multi-part foreign key", missingColumns)
 		}
 	default:
 		return baseFKHelper{}, pgerror.NewAssertionErrorf(
