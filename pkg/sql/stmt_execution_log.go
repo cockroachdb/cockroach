@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // executionLog holds statement executions which have yet to be written
@@ -36,6 +37,7 @@ type executionLog struct {
 
 // stmtExecution holds per-statement timings.
 type stmtExecution struct {
+	transactionID       uuid.UUID
 	receivedAt          time.Time
 	statement           Statement
 	applicationName     string
@@ -85,6 +87,7 @@ func (e *executionLog) recordExecution(
 	statement Statement,
 	applicationName string,
 	receivedAt time.Time,
+	transactionID uuid.UUID,
 	distributed bool,
 	optimized bool,
 	automaticRetryCount int,
@@ -106,6 +109,7 @@ func (e *executionLog) recordExecution(
 	}
 
 	stmtExecution := stmtExecution{
+		transactionID:       transactionID,
 		receivedAt:          receivedAt,
 		statement:           statement,
 		applicationName:     applicationName,
@@ -135,12 +139,12 @@ func (e *executionLog) writeToSQL(ctx context.Context, execCfg *ExecutorConfig) 
 
 	insertTimings := `INSERT INTO system.statement_executions
 (
-    received_at, node_id, statement, statement_key, application_name,
+    transaction_id, received_at, node_id, statement, statement_key, application_name,
     distributed, optimized, automatic_retry_count,
     error, rows_affected,
     parse_lat, plan_lat, run_lat, service_lat
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 )`
 
 	// TODO: bulkify this DML
@@ -151,6 +155,7 @@ func (e *executionLog) writeToSQL(ctx context.Context, execCfg *ExecutorConfig) 
 			"flush-statement-execution-log",
 			nil, /* txn */
 			insertTimings,
+			&tree.DUuid{ex.transactionID},
 			ex.receivedAt,
 			execCfg.NodeID.Get(),
 			tree.AsString(ex.statement.AST),
