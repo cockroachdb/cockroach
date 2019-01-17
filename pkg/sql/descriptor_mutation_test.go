@@ -474,7 +474,7 @@ func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMuta
 		}
 	}
 
-	m.Descriptor_ = &sqlbase.DescriptorMutation_Index{Index: &idx}
+	m.Descriptor_ = &sqlbase.DescriptorMutation_Index{Index: idx}
 	mt.writeMutation(m)
 }
 
