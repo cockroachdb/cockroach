@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
@@ -39,9 +40,9 @@ type queryCacheTestHelper struct {
 	runners []*sqlutils.SQLRunner
 }
 
-func makeQueryCacheTestHelper(t *testing.T, numConns int) *queryCacheTestHelper {
+func makeQueryCacheTestHelper(tb testing.TB, numConns int) *queryCacheTestHelper {
 	h := &queryCacheTestHelper{}
-	h.srv, h.godb, _ = serverutils.StartServer(t, base.TestServerArgs{})
+	h.srv, h.godb, _ = serverutils.StartServer(tb, base.TestServerArgs{})
 
 	h.conns = make([]*gosql.Conn, numConns)
 	h.runners = make([]*sqlutils.SQLRunner, numConns)
@@ -49,20 +50,20 @@ func makeQueryCacheTestHelper(t *testing.T, numConns int) *queryCacheTestHelper 
 		var err error
 		h.conns[i], err = h.godb.Conn(context.Background())
 		if err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 		h.runners[i] = sqlutils.MakeSQLRunner(h.conns[i])
 	}
 	r0 := h.runners[0]
-	r0.Exec(t, "DROP DATABASE IF EXISTS db1")
-	r0.Exec(t, "DROP DATABASE IF EXISTS db2")
-	r0.Exec(t, "CREATE DATABASE db1")
-	r0.Exec(t, "CREATE TABLE db1.t (a INT, b INT)")
-	r0.Exec(t, "INSERT INTO db1.t VALUES (1, 1)")
+	r0.Exec(tb, "DROP DATABASE IF EXISTS db1")
+	r0.Exec(tb, "DROP DATABASE IF EXISTS db2")
+	r0.Exec(tb, "CREATE DATABASE db1")
+	r0.Exec(tb, "CREATE TABLE db1.t (a INT, b INT)")
+	r0.Exec(tb, "INSERT INTO db1.t VALUES (1, 1)")
 	for _, r := range h.runners {
-		r.Exec(t, "SET DATABASE = db1")
+		r.Exec(tb, "SET DATABASE = db1")
 	}
-	r0.Exec(t, "SET CLUSTER SETTING sql.query_cache.enabled = true")
+	r0.Exec(tb, "SET CLUSTER SETTING sql.query_cache.enabled = true")
 	return h
 }
 
@@ -75,11 +76,11 @@ func (h *queryCacheTestHelper) GetStats() (numHits, numMisses int) {
 		int(h.srv.MustGetSQLCounter(MetaSQLOptPlanCacheMisses.Name))
 }
 
-func (h *queryCacheTestHelper) AssertStats(t *testing.T, expHits, expMisses int) {
-	t.Helper()
+func (h *queryCacheTestHelper) AssertStats(tb *testing.T, expHits, expMisses int) {
+	tb.Helper()
 	hits, misses := h.GetStats()
-	assert.Equal(t, expHits, hits, "hits")
-	assert.Equal(t, expMisses, misses, "misses")
+	assert.Equal(tb, expHits, hits, "hits")
+	assert.Equal(tb, expMisses, misses, "misses")
 }
 
 func TestQueryCache(t *testing.T) {
@@ -471,4 +472,61 @@ func TestQueryCache(t *testing.T) {
 		r0.CheckQueryResults(t, "EXECUTE c2 (1)", [][]string{{"decimal"}})
 		r0.CheckQueryResults(t, "EXECUTE c3 (1)", [][]string{{"decimal"}})
 	})
+}
+
+// BenchmarkQueryCache is a set of benchmarks that run queries against a server
+// with the query cache on and off, with varying number of parallel clients and
+// with workloads that are either cacheable or not.
+//
+// For microbenchmarks of the query cache data structures, see the sql/querycache
+// package.
+func BenchmarkQueryCache(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+
+	for workload, workloadName := range []string{"GoodWorkload", "BadWorkload"} {
+		b.Run(workloadName, func(b *testing.B) {
+			for _, clients := range []int{1, 4, 8} {
+				b.Run(fmt.Sprintf("Clients%d", clients), func(b *testing.B) {
+					for _, cache := range []bool{true, false} {
+						name := "CacheOff"
+						if cache {
+							name = "CacheOn"
+						}
+						b.Run(name, func(b *testing.B) {
+							h := makeQueryCacheTestHelper(b, clients)
+							defer h.Stop()
+							r0 := h.runners[0]
+							r0.Exec(b, "CREATE TABLE kv (k INT PRIMARY KEY, v INT)")
+
+							r0.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.query_cache.enabled = %t", cache))
+							var group errgroup.Group
+							b.ResetTimer()
+							for connIdx := 0; connIdx < clients; connIdx++ {
+								c := h.conns[connIdx]
+								group.Go(func() error {
+									rng, _ := randutil.NewPseudoRand()
+									// We use a small or large range of values depending on the
+									// workload type.
+									valRange := 100
+									if workload == 1 {
+										valRange = 10000000
+									}
+									for i := 0; i < b.N/clients; i++ {
+										query := fmt.Sprintf("SELECT v FROM kv WHERE k=%d", rng.Intn(valRange))
+										if _, err := c.ExecContext(context.Background(), query); err != nil {
+											return err
+										}
+									}
+									return nil
+								})
+								if err := group.Wait(); err != nil {
+									b.Fatal(err)
+								}
+							}
+						})
+					}
+				})
+			}
+		})
+	}
 }
