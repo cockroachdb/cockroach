@@ -1,5 +1,40 @@
 # LogicTest: local
 
+# Prepare a trace to be inspected below.
+
+statement ok
+SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off
+
+# Inspect the trace: we exclude messages containing newlines as these
+# may contain non-deterministic txn object descriptions.
+# This also checks that the span column properly reports separate
+# SQL transactions.
+# We replace the command position because the values depend on exactly
+# how many commands we ran in the session.
+query ITT
+SELECT
+  span, regexp_replace(message, 'pos:[0-9]*', 'pos:?'), operation
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
+----
+0                         === SPAN START: session recording ===                session recording
+0                         [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  session recording
+1                         === SPAN START: sql txn ===                          sql txn
+1                         [Open pos:?] executing ExecStmt: SELECT 1            sql txn
+2                         === SPAN START: consuming rows ===                   consuming rows
+3                         === SPAN START: flow ===                             flow
+7                         === SPAN START: values ===
+cockroach.processorid: 0  values
+1                         [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
+0                         [NoTxn pos:?] executing ExecStmt: SELECT 2           session recording
+4                         === SPAN START: sql txn ===                          sql txn
+4                         [Open pos:?] executing ExecStmt: SELECT 2            sql txn
+5                         === SPAN START: consuming rows ===                   consuming rows
+6                         === SPAN START: flow ===                             flow
+8                         === SPAN START: values ===
+cockroach.processorid: 0  values
+0                         [NoTxn pos:?] executing ExecStmt: SET TRACING = off  session recording
+
 # ------------------------------------------------------------------------------
 # Test with storing columns.
 # ------------------------------------------------------------------------------
