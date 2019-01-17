@@ -374,7 +374,7 @@ func (f *fkBatchChecker) runCheck(
 				if oldRow == nil {
 					return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 						"foreign key violation: non-empty columns %s referenced in table %q",
-						fk.writeIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
+						fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 				}
 				fkValues := make(tree.Datums, fk.prefixLen)
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
@@ -382,7 +382,7 @@ func (f *fkBatchChecker) runCheck(
 				}
 				return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 					"foreign key violation: values %v in columns %s referenced in table %q",
-					fkValues, fk.writeIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
+					fkValues, fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 			}
 		default:
 			log.Fatalf(ctx, "impossible case: baseFKHelper has dir=%v", fk.dir)

@@ -41,7 +41,7 @@ type baseFKHelper struct {
 	// Because it serves both directions, the explanations below
 	// avoid using the words "referencing" and "referenced". Instead
 	// it uses "searched" for the table/index where the existence
-	// is tested; and "target" for the table/index being mutated.
+	// is tested; and "mutated" for the table/index being written to.
 	//
 	dir FKCheck
 
@@ -78,9 +78,9 @@ type baseFKHelper struct {
 	// searchTable is the descriptor of the searched table. Stored only
 	// for error messages; lookups use the pre-computed searchPrefix.
 	searchTable *sqlbase.ImmutableTableDescriptor
-	// writeIdx is the descriptor for the target index being mutated.
+	// mutatedIdx is the descriptor for the target index being mutated.
 	// Stored only for error messages.
-	writeIdx *sqlbase.IndexDescriptor
+	mutatedIdx *sqlbase.IndexDescriptor
 }
 
 // makeBaseFKHelper instanciates a FK helper.
@@ -113,7 +113,7 @@ type baseFKHelper struct {
 func makeBaseFKHelper(
 	txn *client.Txn,
 	otherTables TableLookupsByID,
-	writeIdx *sqlbase.IndexDescriptor,
+	mutatedIdx *sqlbase.IndexDescriptor,
 	ref sqlbase.ForeignKeyReference,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
@@ -132,12 +132,12 @@ func makeBaseFKHelper(
 
 	// Determine the number of columns being looked up.
 	prefixLen := len(searchIdx.ColumnIDs)
-	if len(writeIdx.ColumnIDs) < prefixLen {
-		prefixLen = len(writeIdx.ColumnIDs)
+	if len(mutatedIdx.ColumnIDs) < prefixLen {
+		prefixLen = len(mutatedIdx.ColumnIDs)
 	}
 
 	// Determine the columns being looked up.
-	ids, err := computeFkCheckColumnIDs(ref.Match, writeIdx, searchIdx, colMap, prefixLen)
+	ids, err := computeFkCheckColumnIDs(ref.Match, mutatedIdx, searchIdx, colMap, prefixLen)
 	if err != nil {
 		return ret, err
 	}
@@ -169,7 +169,7 @@ func makeBaseFKHelper(
 		ids:          ids,
 		prefixLen:    prefixLen,
 		searchPrefix: searchPrefix,
-		writeIdx:     writeIdx,
+		mutatedIdx:   mutatedIdx,
 	}, nil
 }
 
@@ -181,16 +181,16 @@ func makeBaseFKHelper(
 // different composite foreign key matching methods.
 func computeFkCheckColumnIDs(
 	match sqlbase.ForeignKeyReference_Match,
-	writeIdx *sqlbase.IndexDescriptor,
+	mutatedIdx *sqlbase.IndexDescriptor,
 	searchIdx *sqlbase.IndexDescriptor,
 	colMap map[sqlbase.ColumnID]int,
 	prefixLen int,
 ) (ids map[sqlbase.ColumnID]int, err error) {
-	ids = make(map[sqlbase.ColumnID]int, len(writeIdx.ColumnIDs))
+	ids = make(map[sqlbase.ColumnID]int, len(mutatedIdx.ColumnIDs))
 
 	switch match {
 	case sqlbase.ForeignKeyReference_SIMPLE:
-		for i, writeColID := range writeIdx.ColumnIDs[:prefixLen] {
+		for i, writeColID := range mutatedIdx.ColumnIDs[:prefixLen] {
 			if found, ok := colMap[writeColID]; ok {
 				ids[searchIdx.ColumnIDs[i]] = found
 			} else {
@@ -201,11 +201,11 @@ func computeFkCheckColumnIDs(
 
 	case sqlbase.ForeignKeyReference_FULL:
 		var missingColumns []string
-		for i, writeColID := range writeIdx.ColumnIDs[:prefixLen] {
+		for i, writeColID := range mutatedIdx.ColumnIDs[:prefixLen] {
 			if found, ok := colMap[writeColID]; ok {
 				ids[searchIdx.ColumnIDs[i]] = found
 			} else {
-				missingColumns = append(missingColumns, writeIdx.ColumnNames[i])
+				missingColumns = append(missingColumns, mutatedIdx.ColumnNames[i])
 			}
 		}
 
