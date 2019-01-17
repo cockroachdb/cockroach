@@ -83,10 +83,6 @@ func (o *sysbenchOptions) cmd() string {
 }
 
 func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions) {
-	if !c.isLocal() {
-		c.RemountNoBarrier(ctx)
-	}
-
 	allNodes := c.Range(1, c.nodes)
 	roachNodes := c.Range(1, c.nodes-1)
 	loadNode := c.Node(c.nodes)
