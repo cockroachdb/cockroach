@@ -60,9 +60,9 @@ const (
 
 var userPriorityNames = [...]string{
 	UnspecifiedUserPriority: "UNSPECIFIED",
-	Low:    "LOW",
-	Normal: "NORMAL",
-	High:   "HIGH",
+	Low:                     "LOW",
+	Normal:                  "NORMAL",
+	High:                    "HIGH",
 }
 
 func (up UserPriority) String() string {

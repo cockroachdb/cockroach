@@ -76,9 +76,9 @@ func TestMain(t *testing.T) {
 			Key:                "/cockroach/cockroach.darwin-amd64." + shaStub,
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/cockroach.darwin-amd64.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/cockroach.darwin-amd64.LATEST",
 			WebsiteRedirectLocation: "/cockroach/cockroach.darwin-amd64." + shaStub,
 		},
 		{
@@ -87,9 +87,9 @@ func TestMain(t *testing.T) {
 			Key:                "/cockroach/cockroach.linux-gnu-amd64." + shaStub,
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/cockroach.linux-gnu-amd64.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/cockroach.linux-gnu-amd64.LATEST",
 			WebsiteRedirectLocation: "/cockroach/cockroach.linux-gnu-amd64." + shaStub,
 		},
 		{
@@ -98,9 +98,9 @@ func TestMain(t *testing.T) {
 			Key:                "/cockroach/cockroach.race.linux-gnu-amd64." + shaStub,
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/cockroach.race.linux-gnu-amd64.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/cockroach.race.linux-gnu-amd64.LATEST",
 			WebsiteRedirectLocation: "/cockroach/cockroach.race.linux-gnu-amd64." + shaStub,
 		},
 		{
@@ -109,9 +109,9 @@ func TestMain(t *testing.T) {
 			Key:                "/cockroach/cockroach.linux-musl-amd64." + shaStub,
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/cockroach.linux-musl-amd64.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/cockroach.linux-musl-amd64.LATEST",
 			WebsiteRedirectLocation: "/cockroach/cockroach.linux-musl-amd64." + shaStub,
 		},
 		{
@@ -120,9 +120,9 @@ func TestMain(t *testing.T) {
 			Key:                "/cockroach/cockroach.windows-amd64." + shaStub + ".exe",
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/cockroach.windows-amd64.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/cockroach.windows-amd64.LATEST",
 			WebsiteRedirectLocation: "/cockroach/cockroach.windows-amd64." + shaStub + ".exe",
 		},
 		{
@@ -131,9 +131,9 @@ func TestMain(t *testing.T) {
 			Key:                "/cockroach/workload." + shaStub,
 		},
 		{
-			Bucket:       "cockroach",
-			CacheControl: "no-cache",
-			Key:          "cockroach/workload.LATEST",
+			Bucket:                  "cockroach",
+			CacheControl:            "no-cache",
+			Key:                     "cockroach/workload.LATEST",
 			WebsiteRedirectLocation: "/cockroach/workload." + shaStub,
 		},
 		{
