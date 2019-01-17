@@ -272,7 +272,12 @@ func (*CopyFrom) StatementTag() string { return "COPY" }
 func (*CreateChangefeed) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CreateChangefeed) StatementTag() string { return "CREATE CHANGEFEED" }
+func (n *CreateChangefeed) StatementTag() string {
+	if n.SinkURI == nil {
+		return "EXPERIMENTAL CHANGEFEED"
+	}
+	return "CREATE CHANGEFEED"
+}
 
 // StatementType implements the Statement interface.
 func (*CreateDatabase) StatementType() StatementType { return DDL }
