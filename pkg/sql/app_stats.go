@@ -252,12 +252,6 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 	s.Unlock()
 }
 
-func (s *sqlStats) getLastReset() time.Time {
-	s.Lock()
-	defer s.Unlock()
-	return s.lastReset
-}
-
 // Save the existing data for an application to the info log.
 func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtStats) {
 	if len(stats) == 0 {
@@ -310,12 +304,6 @@ func (s *sqlStats) getScrubbedStmtStats(
 	vt *VirtualSchemaHolder,
 ) []roachpb.CollectedStatementStatistics {
 	return s.getStmtStats(vt, true /* scrub */)
-}
-
-func (s *sqlStats) getUnscrubbedStmtStats(
-	vt *VirtualSchemaHolder,
-) []roachpb.CollectedStatementStatistics {
-	return s.getStmtStats(vt, false /* scrub */)
 }
 
 // InternalAppNamePrefix indicates that the application name is internal to

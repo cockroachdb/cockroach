@@ -340,59 +340,6 @@ func (s *Server) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics {
 	return s.sqlStats.getScrubbedStmtStats(s.cfg.VirtualSchemas)
 }
 
-// GetUnscrubbedStmtStats returns the same thing as GetScrubbedStmtStats, except
-// identifiers (e.g. table and column names) aren't scrubbed from the statements.
-func (s *Server) GetUnscrubbedStmtStats() []roachpb.CollectedStatementStatistics {
-	return s.sqlStats.getUnscrubbedStmtStats(s.cfg.VirtualSchemas)
-}
-
-// GetStmtStatsLastReset returns the time at which the statement statistics were
-// last cleared.
-func (s *Server) GetStmtStatsLastReset() time.Time {
-	return s.sqlStats.getLastReset()
-}
-
-func (s *Server) GetStmtExecutionsAggregated() []roachpb.CollectedStatementStatistics {
-	/*
-	   	statsQuery := `
-	   SELECT
-	       statement_key, node_id, application_name,
-	       distributed, optimized, has_error,
-	       sum(automatic_retry_count) AS retries,
-	       max(automatic_retry_count) AS max_retries,
-	       count(id) AS first_attempt_count,
-	       avg(rows_affected) AS rows_affected_mean,
-	       stddev(rows_affected) AS rows_affected_stddev,
-	       avg(parse_lat::DECIMAL) AS parse_lat_mean,
-	       stddev(parse_lat::DECIMAL) AS parse_lat_stddev,
-	       avg(plan_lat::DECIMAL) AS plan_lat_mean,
-	       stddev(plan_lat::DECIMAL) AS plan_lat_stddev,
-	       avg(run_lat::DECIMAL) AS run_lat_mean,
-	       stddev(run_lat::DECIMAL) AS run_lat_stddev,
-	       avg(
-	           service_lat::DECIMAL - parse_lat::DECIMAL - plan_lat::DECIMAL - run_lat::DECIMAL
-	       ) AS overhead_lat_mean,
-	       stddev(
-	           service_lat::DECIMAL - parse_lat::DECIMAL - plan_lat::DECIMAL - run_lat::DECIMAL
-	       ) AS overhead_lat_stddev,
-	       avg(service_lat::DECIMAL) AS service_lat,
-	       stddev(service_lat::DECIMAL) AS service_lat_stddev
-	   FROM (
-	       SELECT *, (CASE error WHEN '' THEN false ELSE true END) AS has_error
-	       FROM system.statement_executions
-	   )
-	   GROUP BY statement_key, node_id, application_name, distributed, optimized, has_error
-	   ORDER BY service_lat;
-	   `
-	*/
-	stats := make([]roachpb.CollectedStatementStatistics, 0)
-	return stats
-}
-
-func (s *Server) GetStmtExecutionsLastReset() time.Time {
-	return time.Time{}
-}
-
 // SetupConn creates a connExecutor for the client connection.
 //
 // When this method returns there are no resources allocated yet that

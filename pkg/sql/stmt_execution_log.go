@@ -108,7 +108,7 @@ func (e *executionLog) recordExecution(
 		errorMessage = err.Error()
 	}
 
-	stmtExecution := stmtExecution{
+	row := stmtExecution{
 		transactionID:       transactionID,
 		receivedAt:          receivedAt,
 		statement:           statement,
@@ -125,7 +125,7 @@ func (e *executionLog) recordExecution(
 	}
 
 	e.Lock()
-	e.stmtExecutions = append(e.stmtExecutions, stmtExecution)
+	e.stmtExecutions = append(e.stmtExecutions, row)
 	e.Unlock()
 }
 
