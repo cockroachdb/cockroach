@@ -115,10 +115,24 @@ type testSpec struct {
 	// tests. If no tags are specified, the set ["default"] is automatically
 	// given.
 	Tags []string
+
 	// Nodes provides the specification for the cluster to use for the test. Only
 	// a top-level testSpec may contain a nodes specification. The cluster is
 	// shared by all subtests.
 	Nodes []nodeSpec
+
+	// UseIOBarrier controls the local-ssd-no-ext4-barrier flag passed to
+	// roachprod when creating a cluster. If set, the flag is not passed, and so
+	// you get durable writes. If not set (the default!), the filesystem is
+	// mounted without the barrier.
+	//
+	// The default (false) is chosen because it the no-barrier option is needed
+	// explicitly by some tests (particularly benchmarks, ironically, since they'd
+	// rather measure other things than I/O) and the vast majority of other tests
+	// don't care - there's no durability across machine crashes that roachtests
+	// care about.
+	UseIOBarrier bool
+
 	// A testSpec must specify only one of Run or SubTests. All subtests run in
 	// the same cluster, without concurrency between them. Subtest should not
 	// assume any particular state for the cluster as the SubTest may be run in
@@ -1004,6 +1018,7 @@ func (r *registry) runAsync(
 				cfg := clusterConfig{
 					name:         name,
 					nodes:        t.spec.Nodes,
+					useIOBarrier: t.spec.UseIOBarrier,
 					artifactsDir: t.ArtifactsDir(),
 					localCluster: local,
 					teeOpt:       teeOpt,

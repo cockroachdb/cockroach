@@ -1367,7 +1367,7 @@ func main() {
 	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.UseLocalSSD,
 		"local-ssd", true, "Use local SSD")
 	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.NoExt4Barrier,
-		"local-ssd-no-ext4-barrier", false,
+		"local-ssd-no-ext4-barrier", true,
 		`Mount the local SSD with the "-o nobarrier" flag. `+
 			`Ignored if --local-ssd=false is specified.`)
 	createCmd.Flags().IntVarP(&numNodes,

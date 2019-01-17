@@ -659,6 +659,7 @@ type clusterConfig struct {
 	localCluster bool
 	teeOpt       teeOptType
 	user         string
+	useIOBarrier bool
 }
 
 // newCluster creates a new roachprod cluster.
@@ -715,6 +716,9 @@ func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, er
 	sargs = append(sargs, cfg.nodes[0].args()...)
 	if !local && zonesF != "" && cfg.nodes[0].Zones == "" {
 		sargs = append(sargs, "--gce-zones="+zonesF)
+	}
+	if !cfg.useIOBarrier {
+		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
 	}
 
 	c.status("creating cluster")
@@ -1255,14 +1259,6 @@ func (c *cluster) RunWithBuffer(
 	}
 	return execCmdWithBuffer(ctx, l,
 		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
-}
-
-// RemountNoBarrier remounts the cluster's local SSDs with the nobarrier option.
-func (c *cluster) RemountNoBarrier(ctx context.Context) {
-	c.Run(ctx, c.All(),
-		"sudo", "umount", "/mnt/data1", ";",
-		"sudo", "mount", "-o", "discard,defaults,nobarrier",
-		"$(awk '/\\/mnt\\/data1/ {print $1}' /etc/mtab)", "/mnt/data1")
 }
 
 // pgURL returns the Postgres endpoint for the specified node. It accepts a flag
