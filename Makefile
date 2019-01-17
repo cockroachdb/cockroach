@@ -177,7 +177,7 @@ $(info GOPATH set to $(GOPATH))
 
 # We install our vendored tools to a directory within this repository to avoid
 # overwriting any user-installed binaries of the same name in the default GOBIN.
-GO_INSTALL := GOBIN='$(abspath bin)' $(GO) install
+GO_INSTALL := GOBIN='$(abspath bin)' GOFLAGS= $(GO) install
 
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
@@ -868,7 +868,7 @@ stress stressrace:
 roachprod-stress roachprod-stressrace: bin/roachprod-stress
 	# The bootstrap target creates, among other things, ./bin/stress.
 	build/builder.sh make bin/.bootstrap
-	build/builder.sh make test GOFLAGS="$(GOFLAGS) -v -c -o $(notdir $(PKG)).test" PKG=$(PKG)
+	build/builder.sh make test GOFLAGS="$(GOFLAGS) -v -c -o $(notdir $(patsubst %/,%,$(PKG))).test" PKG=$(PKG)
 	@if [ -z "$(CLUSTER)" ]; then \
 	  echo "ERROR: missing or empty CLUSTER"; \
 	else \
