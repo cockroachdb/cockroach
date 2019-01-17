@@ -2173,7 +2173,7 @@ const (
 // ParseDInterval parses and returns the *DInterval Datum value represented by the provided
 // string, or an error if parsing is unsuccessful.
 func ParseDInterval(s string) (*DInterval, error) {
-	return parseDInterval(s, Second)
+	return ParseDIntervalWithField(s, Second)
 }
 
 // truncateDInterval truncates the input DInterval downward to the nearest
@@ -2209,6 +2209,7 @@ func ParseDIntervalWithField(s string, field DurationField) (*DInterval, error) 
 		return nil, err
 	}
 	truncateDInterval(d, field)
+	d.Duration = d.Round()
 	return d, nil
 }
 
@@ -2304,12 +2305,12 @@ func (d *DInterval) Next(_ *EvalContext) (Datum, bool) {
 
 // IsMax implements the Datum interface.
 func (d *DInterval) IsMax(_ *EvalContext) bool {
-	return d.Months == math.MaxInt64 && d.Days == math.MaxInt64 && d.Nanos == math.MaxInt64
+	return d.Duration == dMaxInterval.Duration
 }
 
 // IsMin implements the Datum interface.
 func (d *DInterval) IsMin(_ *EvalContext) bool {
-	return d.Months == math.MinInt64 && d.Days == math.MinInt64 && d.Nanos == math.MinInt64
+	return d.Duration == dMinInterval.Duration
 }
 
 var dMaxInterval = &DInterval{
@@ -2317,13 +2318,13 @@ var dMaxInterval = &DInterval{
 		Months: math.MaxInt64,
 		Days:   math.MaxInt64,
 		Nanos:  math.MaxInt64,
-	}}
+	}.Round()}
 var dMinInterval = &DInterval{
 	duration.Duration{
 		Months: math.MinInt64,
 		Days:   math.MinInt64,
 		Nanos:  math.MinInt64,
-	}}
+	}.Round()}
 
 // Max implements the Datum interface.
 func (d *DInterval) Max(_ *EvalContext) (Datum, bool) {

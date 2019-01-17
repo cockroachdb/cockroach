@@ -228,7 +228,7 @@ func TestLogGCTrigger(t *testing.T) {
 				maxTS,
 			)
 
-			_, err = db.Exec(fmt.Sprintf("SET CLUSTER SETTING server.%s.ttl='1ns'", tc.table))
+			_, err = db.Exec(fmt.Sprintf("SET CLUSTER SETTING server.%s.ttl='1us'", tc.table))
 			a.NoError(err)
 
 			<-gcDone

@@ -365,6 +365,43 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
+// TestNanos verifies that nanoseconds can only be present after Decode and
+// that any operation will remove them.
+func TestNanos(t *testing.T) {
+	d, err := Decode(1, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expect, actual := int64(1), d.Nanos; expect != actual {
+		t.Fatalf("expected %d, got %d", expect, actual)
+	}
+	if expect, actual := "00:00:00+1ns", d.StringNanos(); expect != actual {
+		t.Fatalf("expected %s, got %s", expect, actual)
+	}
+	// Add, even of a 0-duration interval, should call round.
+	d = d.Add(Duration{})
+	if expect, actual := int64(0), d.Nanos; expect != actual {
+		t.Fatalf("expected %d, got %d", expect, actual)
+	}
+	d, err = Decode(500, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expect, actual := int64(500), d.Nanos; expect != actual {
+		t.Fatalf("expected %d, got %d", expect, actual)
+	}
+	if expect, actual := "00:00:00+500ns", d.StringNanos(); expect != actual {
+		t.Fatalf("expected %s, got %s", expect, actual)
+	}
+	d = d.Add(Duration{})
+	if expect, actual := int64(1000), d.Nanos; expect != actual {
+		t.Fatalf("expected %d, got %d", expect, actual)
+	}
+	if expect, actual := "00:00:00.000001", d.StringNanos(); expect != actual {
+		t.Fatalf("expected %s, got %s", expect, actual)
+	}
+}
+
 func BenchmarkAdd(b *testing.B) {
 	b.Run("fast-path-by-no-months-in-duration", func(b *testing.B) {
 		s := time.Date(2018, 01, 01, 0, 0, 0, 0, time.UTC)
