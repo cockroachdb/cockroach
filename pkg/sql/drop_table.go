@@ -403,7 +403,7 @@ func (p *planner) initiateDropTable(
 }
 
 func (p *planner) removeFKBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor,
 ) error {
 	var t *sqlbase.MutableTableDescriptor
 	// We don't want to lookup/edit a second copy of the same table.
@@ -433,7 +433,7 @@ func (p *planner) removeFKBackReference(
 }
 
 func (p *planner) removeInterleaveBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil

@@ -489,7 +489,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, *idx); err != nil {
+				if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, idx); err != nil {
 					return err
 				}
 				idx.ForeignKey = sqlbase.ForeignKeyReference{}
