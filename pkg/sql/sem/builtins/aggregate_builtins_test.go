@@ -234,10 +234,7 @@ func makeIntervalTestDatum(count int) []tree.Datum {
 
 	vals := make([]tree.Datum, count)
 	for i := range vals {
-		vals[i] = &tree.DInterval{Duration: duration.Duration{Months: rng.Int63n(1000),
-			Days:  rng.Int63n(1000),
-			Nanos: rng.Int63n(1000000),
-		}}
+		vals[i] = &tree.DInterval{Duration: duration.MakeDuration(rng.Int63n(1000000), rng.Int63n(1000), rng.Int63n(1000))}
 	}
 	return vals
 }

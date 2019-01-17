@@ -163,7 +163,7 @@ SELECT variable,
 			case *settings.FloatSetting:
 				d = tree.NewDFloat(tree.DFloat(s.Get(&st.SV)))
 			case *settings.DurationSetting:
-				d = &tree.DInterval{Duration: duration.Duration{Nanos: s.Get(&st.SV).Nanoseconds()}}
+				d = &tree.DInterval{Duration: duration.MakeDuration(s.Get(&st.SV).Nanoseconds(), 0, 0)}
 			case *settings.EnumSetting:
 				d = tree.NewDInt(tree.DInt(s.Get(&st.SV)))
 			case *settings.ByteSizeSetting:

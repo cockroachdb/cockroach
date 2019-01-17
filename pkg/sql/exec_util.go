@@ -586,7 +586,7 @@ func golangFillQueryArguments(args ...interface{}) tree.Datums {
 		case time.Time:
 			d = tree.MakeDTimestamp(t, time.Microsecond)
 		case time.Duration:
-			d = &tree.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}
+			d = &tree.DInterval{Duration: duration.MakeDuration(t.Nanoseconds(), 0, 0)}
 		case bitarray.BitArray:
 			d = &tree.DBitArray{BitArray: t}
 		case *apd.Decimal:
@@ -1424,9 +1424,7 @@ func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error
 			opMap[spanIdx] = tree.NewDString(lrr.span.Operation)
 			if lrr.span.Duration != 0 {
 				durMap[spanIdx] = &tree.DInterval{
-					Duration: duration.Duration{
-						Nanos: lrr.span.Duration.Nanoseconds(),
-					},
+					Duration: duration.MakeDuration(lrr.span.Duration.Nanoseconds(), 0, 0),
 				}
 			}
 		}
@@ -1480,7 +1478,7 @@ func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error
 
 		ts := res[i][traceTimestampCol].(*tree.DTimestampTZ)
 		res[i][traceAgeCol] = &tree.DInterval{
-			Duration: duration.Duration{Nanos: ts.Sub(minTimestamp).Nanoseconds()},
+			Duration: duration.MakeDuration(ts.Sub(minTimestamp).Nanoseconds(), 0, 0),
 		}
 	}
 

@@ -78,7 +78,7 @@ func TestSchemaChangeLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaseDuration := time.Duration(leaseInterval.Duration.Nanos)
+	leaseDuration := time.Duration(leaseInterval.Duration.Nanos())
 	sqlRun.Exec(t, `
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);

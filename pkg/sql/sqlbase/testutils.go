@@ -123,11 +123,11 @@ func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tre
 		return &tree.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_INTERVAL:
 		sign := 1 - rng.Int63n(2)*2
-		return &tree.DInterval{Duration: duration.Duration{
-			Months: sign * rng.Int63n(1000),
-			Days:   sign * rng.Int63n(1000),
-			Nanos:  sign * rng.Int63n(25*3600*int64(1000000000)),
-		}}
+		return &tree.DInterval{Duration: duration.MakeDuration(
+			sign*rng.Int63n(25*3600*int64(1000000000)),
+			sign*rng.Int63n(1000),
+			sign*rng.Int63n(1000),
+		)}
 	case ColumnType_UUID:
 		return tree.NewDUuid(tree.DUuid{UUID: uuid.MakeV4()})
 	case ColumnType_INET:

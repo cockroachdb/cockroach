@@ -270,7 +270,7 @@ func toSettingString(
 			if f.Duration.Months > 0 || f.Duration.Days > 0 {
 				return "", errors.Errorf("cannot use day or month specifiers: %s", d.String())
 			}
-			d := time.Duration(f.Duration.Nanos) * time.Nanosecond
+			d := time.Duration(f.Duration.Nanos()) * time.Nanosecond
 			if err := setting.Validate(d); err != nil {
 				return "", err
 			}
