@@ -17,6 +17,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -606,10 +607,17 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		}
 	}
 
+	// We don't have a client whose context we can attach to, but we do want to limit how
+	// long this request is going to be around or it could leak a goroutine (in case of a
+	// long-lived network partition).
 	stopper := txn.db.ctx.Stopper
-	ctx, cancel := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
+	ctx, cancel1 := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
+	// NB: cancel2 makes cancel1 obsolete, but the linters don't know that.
+	ctx, cancel2 := context.WithTimeout(ctx, 3*time.Second)
+
 	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
-		defer cancel()
+		defer cancel1()
+		defer cancel2()
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
 		if _, pErr := txn.Send(ctx, ba); pErr != nil {
@@ -625,7 +633,8 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 			}
 		}
 	}); err != nil {
-		cancel()
+		cancel1()
+		cancel2()
 		return roachpb.NewError(err)
 	}
 	return nil
