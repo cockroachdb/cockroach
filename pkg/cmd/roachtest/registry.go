@@ -50,6 +50,7 @@ func registerTests(r *registry) {
 	registerKVScalability(r)
 	registerKVSplits(r)
 	registerLargeRange(r)
+	registerNetwork(r)
 	registerQueue(r)
 	registerRebalanceLoad(r)
 	registerReplicaGC(r)
