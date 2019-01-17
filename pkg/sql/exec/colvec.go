@@ -61,12 +61,24 @@ type ColVec interface {
 	// elements of this ColVec, assuming that both ColVecs are of type colType.
 	Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16)
 
+	// AppendSlice appends vec[sourceStartIdx:sourceEndIdx] elements to
+	// this ColVec starting at destinationStartIdx.
+	AppendSlice(vec ColVec, colType types.T, destinationStartIdx uint64, sourceStartIdx uint16, sourceEndIdx uint16)
+
 	// AppendWithSel appends into itself another column vector from a ColBatch with
 	// maximum size of ColBatchSize, filtered by the given selection vector.
 	AppendWithSel(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
 
+	// AppendSlice appends sourceEndIdx - sourceStartIdx elements to this ColVec starting
+	// at destinationStartIdx. These elements come from vec, filtered by the selection
+	// vector sel.
+	AppendSliceWithSel(vec ColVec, colType types.T, destinationStartIdx uint64, sourceStartIdx uint16, sourceEndIdx uint16, sel []uint16)
+
 	// Copy copies src[srcStartIdx:srcEndIdx] into this ColVec.
 	Copy(src ColVec, srcStartIdx, srcEndIdx uint64, typ types.T)
+
+	// Copy copies src[srcStartIdx:srcEndIdx] into this ColVec starting at destStartIdx.
+	CopyAt(src ColVec, destStartIdx, srcStartIdx, srcEndIdx uint64, typ types.T)
 
 	// CopyWithSelInt64 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
