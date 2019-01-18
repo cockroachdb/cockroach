@@ -44,7 +44,9 @@ const (
 // if the rangefeed processor is not able to keep up with the flow of incoming
 // events and is forced to drop events in order to not block.
 func newErrBufferCapacityExceeded() *roachpb.Error {
-	return roachpb.NewErrorf("rangefeed: buffer capacity exceeded due to slow consumer")
+	return roachpb.NewError(
+		roachpb.NewRangeFeedRetryError(roachpb.RangeFeedRetryError_REASON_SLOW_CONSUMER),
+	)
 }
 
 // Config encompasses the configuration required to create a Processor.

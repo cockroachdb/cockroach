@@ -469,6 +469,9 @@ message RangeFeedRetryError {
     REASON_RAFT_SNAPSHOT = 3;
     // A Raft command was missing a logical operation log.
     REASON_LOGICAL_OPS_MISSING = 4;
+    // The consumer was processing events too slowly to keep up with live raft
+    // events.
+    REASON_SLOW_CONSUMER = 5;
   }
   optional Reason reason = 1 [(gogoproto.nullable) = false];
 }
