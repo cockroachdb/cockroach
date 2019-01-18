@@ -5,15 +5,11 @@ CockroachDB clusters. Use at your own risk! ⚠️
 
 ## Setup
 
-Make sure you have [gcloud installed] and configured (`gcloud auth list` to
+1. Make sure you have [gcloud installed] and configured (`gcloud auth list` to
 check, `gcloud auth login` to authenticate). You may want to update old
 installations (`gcloud components update`).
-
-To build and install into `$GOPATH/bin`:
-
-```
-$ go get -u github.com/cockroachdb/roachprod
-```
+1. Build a local binary of `roachprod`: `make bin/roachprod`
+1. Add `$PWD/bin` to your `PATH` so you can run `roachprod` from the root directory of `cockroach`.
 
 ## Summary
 
@@ -74,6 +70,7 @@ Warning: this reference is incomplete. Be prepared to refer to the CLI help text
 and the source code.
 
 ### Create a cluster
+
 ```
 $ roachprod create foo
 Creating cluster marc-foo with 3 nodes
@@ -86,6 +83,7 @@ Syncing...
 ```
 
 ### Interact using crl-prod tools
+
 `roachprod` populates hosts files in `~/.roachprod/hosts`. These are used by
 `crl-prod` tools to map clusters to node addresses.
 
@@ -118,6 +116,7 @@ marc-foo: status 3/3
 ```
 
 ### SSH into hosts
+
 `roachprod` uses `gcloud` to sync the list of hostnames to `~/.ssh/config` and
 set up keys.
 
@@ -126,6 +125,7 @@ $ ssh marc-foo-0000.us-east1-b.cockroach-ephemeral
 ```
 
 ### List clusters
+
 ```
 $ roachprod list
 marc-foo: 23h58m27s remaining
@@ -136,6 +136,7 @@ Syncing...
 ```
 
 ### Destroy cluster
+
 ```
 $ roachprod destroy marc-foo
 Destroying cluster marc-foo with 3 nodes
