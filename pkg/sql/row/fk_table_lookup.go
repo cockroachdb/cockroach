@@ -55,8 +55,17 @@ type TableLookupsByID map[ID]TableLookup
 // can modify rows, and CHECK constraints must be applied to rows
 // modified by CASCADE.
 type TableLookup struct {
-	Table       *sqlbase.ImmutableTableDescriptor
-	IsAdding    bool
+	// Table is the descriptor of the table. This can be nil if eg.
+	// the table is not public.
+	Table *sqlbase.ImmutableTableDescriptor
+
+	// IsAdding indicates the descriptor is being created.
+	IsAdding bool
+
+	// CheckHelper is the utility responsible for CHECK constraint
+	// checks. The lookup function (see TableLookupFunction below) needs
+	// not populate this field; this is populated by the lookup queue
+	// below.
 	CheckHelper *sqlbase.CheckHelper
 }
 
