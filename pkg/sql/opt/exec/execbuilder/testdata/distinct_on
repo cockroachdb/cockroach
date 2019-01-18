@@ -277,9 +277,10 @@ render          ·            ·            (min)      ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
-distinct                  ·            ·            (min)      weak-key(min)
- └── render               ·            ·            (min)      ·
-      │                   render 0     agg0         ·          ·
+render                    ·            ·            (min)      ·
+ │                        render 0     agg0         ·          ·
+ └── limit                ·            ·            (y, agg0)  ·
+      │                   count        1            ·          ·
       └── filter          ·            ·            (y, agg0)  ·
            │              filter       agg0 = 1     ·          ·
            └── group      ·            ·            (y, agg0)  ·
@@ -395,3 +396,32 @@ render               ·            ·            (pk1)           ·
            └── scan  ·            ·            (x, y, z, pk1)  ·
 ·                    table        xyz@primary  ·               ·
 ·                    spans        ALL          ·               ·
+
+# Regression tests for #34112: distinct on constant column.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y
+----
+limit           ·       ·            (x, y)  +y
+ │              count   1            ·       ·
+ └── sort       ·       ·            (x, y)  +y
+      │         order   +y           ·       ·
+      └── scan  ·       ·            (x, y)  ·
+·               table   xyz@primary  ·       ·
+·               spans   ALL          ·       ·
+·               filter  x = 1        ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y)
+----
+group                     ·            ·             (count)  ·
+ │                        aggregate 0  count_rows()  ·        ·
+ │                        scalar       ·             ·        ·
+ └── render               ·            ·             ()       ·
+      └── limit           ·            ·             (x, y)   +y
+           │              count        1             ·        ·
+           └── sort       ·            ·             (x, y)   +y
+                │         order        +y            ·        ·
+                └── scan  ·            ·             (x, y)   ·
+·                         table        xyz@primary   ·        ·
+·                         spans        ALL           ·        ·
+·                         filter       x = 1         ·        ·

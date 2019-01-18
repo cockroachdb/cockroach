@@ -2952,17 +2952,17 @@ FROM a
 WHERE k=10 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i AND (SELECT x FROM xy LIMIT 1) = 100
 ----
 project
- ├── columns: k:1(int) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
  └── select
-      ├── columns: k:1(int) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) y:7(int!null)
+      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) y:7(int!null)
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-5,7)
-      ├── distinct-on
-      │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int)
+      ├── limit
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(1-5,7)
@@ -3007,19 +3007,7 @@ project
       │    │    │              │         └── fd: ()-->(8)
       │    │    │              └── const: 100 [type=int]
       │    │    └── filters (true)
-      │    └── aggregations
-      │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: i [type=int]
-      │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: f [type=float]
-      │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: s [type=string]
-      │         ├── const-agg [type=jsonb, outer=(5)]
-      │         │    └── variable: j [type=jsonb]
-      │         ├── first-agg [type=int, outer=(7)]
-      │         │    └── variable: y [type=int]
-      │         └── const-agg [type=int, outer=(1)]
-      │              └── variable: k [type=int]
+      │    └── const: 1 [type=int]
       └── filters
            └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 

@@ -558,3 +558,39 @@ project
            └── avg [type=decimal, outer=(4)]
                 └── agg-distinct [type=int]
                      └── variable: z [type=int]
+
+# --------------------------------------------------
+# EliminateDistinctOnNoColumns
+# --------------------------------------------------
+
+opt expect=EliminateDistinctOnNoColumns
+SELECT DISTINCT ON (a) a, b FROM abc WHERE a = 1
+----
+scan abc
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── constraint: /1/2/3: [/1 - /1]
+ ├── limit: 1
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+opt expect=EliminateDistinctOnNoColumns
+SELECT DISTINCT ON (b) b, c FROM abc WHERE b = 1 ORDER BY b, c
+----
+limit
+ ├── columns: b:2(int!null) c:3(int!null)
+ ├── internal-ordering: +3 opt(2)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2,3)
+ ├── sort
+ │    ├── columns: b:2(int!null) c:3(int!null)
+ │    ├── fd: ()-->(2)
+ │    ├── ordering: +3 opt(2) [provided: +3]
+ │    └── select
+ │         ├── columns: b:2(int!null) c:3(int!null)
+ │         ├── fd: ()-->(2)
+ │         ├── scan abc
+ │         │    └── columns: b:2(int!null) c:3(int!null)
+ │         └── filters
+ │              └── b = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ └── const: 1 [type=int]
