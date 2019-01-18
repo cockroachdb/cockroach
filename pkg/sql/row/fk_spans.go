@@ -30,14 +30,14 @@ type FkSpanCollector interface {
 	CollectSpansForValues(values tree.Datums) (roachpb.Spans, error)
 }
 
-var _ FkSpanCollector = fkInsertHelper{}
-var _ FkSpanCollector = fkDeleteHelper{}
-var _ FkSpanCollector = fkUpdateHelper{}
+var _ FkSpanCollector = fkExistenceCheckForInsert{}
+var _ FkSpanCollector = fkExistenceCheckForDelete{}
+var _ FkSpanCollector = fkExistenceCheckForUpdate{}
 
 // collectSpansForValuesWithFKMap produce r/w access spans for all the
 // given FK constraints and a given set of known datums.
 func collectSpansForValuesWithFKMap(
-	fks map[sqlbase.IndexID][]baseFKHelper, values tree.Datums,
+	fks map[sqlbase.IndexID][]fkExistenceCheckBaseHelper, values tree.Datums,
 ) (roachpb.Spans, error) {
 	var reads roachpb.Spans
 	for idx := range fks {
@@ -54,7 +54,7 @@ func collectSpansForValuesWithFKMap(
 
 // spanForValues produce access spans for a single FK constraint and a
 // tuple of columns.
-func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
+func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 	var key roachpb.Key
 	if values != nil {
 		span, _, err := sqlbase.EncodePartialIndexSpan(
@@ -67,7 +67,7 @@ func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 
 // collectSpansForValuesWithFKMap produce r/w access spans for all the
 // given FK constraints when the accessed values are not known.
-func collectSpansWithFKMap(fks map[sqlbase.IndexID][]baseFKHelper) roachpb.Spans {
+func collectSpansWithFKMap(fks map[sqlbase.IndexID][]fkExistenceCheckBaseHelper) roachpb.Spans {
 	var reads roachpb.Spans
 	for idx := range fks {
 		for _, fk := range fks[idx] {
@@ -78,7 +78,7 @@ func collectSpansWithFKMap(fks map[sqlbase.IndexID][]baseFKHelper) roachpb.Spans
 }
 
 // span produces a span for the entire prefix of the FK constraint.
-func (f baseFKHelper) span() roachpb.Span {
+func (f fkExistenceCheckBaseHelper) span() roachpb.Span {
 	key := roachpb.Key(f.searchPrefix)
 	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
 }

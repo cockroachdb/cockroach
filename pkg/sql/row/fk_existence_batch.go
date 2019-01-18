@@ -24,11 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// fkBatchChecker accumulates foreign key existence checks and sends
+// fkExistenceBatchChecker accumulates foreign key existence checks and sends
 // them out as a single kv batch on demand. Checks are accumulated in
 // order - the first failing check will be the one that produces an
 // error report.
-type fkBatchChecker struct {
+type fkExistenceBatchChecker struct {
 	// txn captures the current transaction.
 	//
 	// TODO(knz): Don't do this. txn objects, like contexts,
@@ -39,19 +39,19 @@ type fkBatchChecker struct {
 	batch roachpb.BatchRequest
 
 	// batchIdxToFk maps the index of the check request/response in the kv batch
-	// to the baseFKHelper that created it.
-	batchIdxToFk []*baseFKHelper
+	// to the fkExistenceCheckBaseHelper that created it.
+	batchIdxToFk []*fkExistenceCheckBaseHelper
 }
 
 // reset starts a new batch.
-func (f *fkBatchChecker) reset() {
+func (f *fkExistenceBatchChecker) reset() {
 	f.batch.Reset()
 	f.batchIdxToFk = f.batchIdxToFk[:0]
 }
 
-// addCheck adds a check for the given row and baseFKHelper to the batch.
-func (f *fkBatchChecker) addCheck(
-	ctx context.Context, row tree.Datums, source *baseFKHelper, traceKV bool,
+// addCheck adds a check for the given row and fkExistenceCheckBaseHelper to the batch.
+func (f *fkExistenceBatchChecker) addCheck(
+	ctx context.Context, row tree.Datums, source *fkExistenceCheckBaseHelper, traceKV bool,
 ) error {
 	span, err := source.spanForValues(row)
 	if err != nil {
@@ -76,7 +76,7 @@ func (f *fkBatchChecker) addCheck(
 // A pgerror.CodeForeignKeyViolationError is returned if a foreign key violation
 // is detected, corresponding to the first foreign key that was violated in
 // order of addition.
-func (f *fkBatchChecker) runCheck(
+func (f *fkExistenceBatchChecker) runCheck(
 	ctx context.Context, oldRow tree.Datums, newRow tree.Datums,
 ) error {
 	if len(f.batch.Requests) == 0 {
@@ -137,7 +137,7 @@ func (f *fkBatchChecker) runCheck(
 			}
 
 		default:
-			return pgerror.NewAssertionErrorf("impossible case: baseFKHelper has dir=%v", fk.dir)
+			return pgerror.NewAssertionErrorf("impossible case: fkExistenceCheckBaseHelper has dir=%v", fk.dir)
 		}
 	}
 
