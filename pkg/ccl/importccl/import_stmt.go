@@ -354,8 +354,8 @@ func (r fkResolver) LookupSchema(
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableLookup, error) {
-	return row.TableLookup{}, errSchemaResolver
+func (r fkResolver) LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableEntry, error) {
+	return row.TableEntry{}, errSchemaResolver
 }
 
 const csvDatabaseName = "csv"

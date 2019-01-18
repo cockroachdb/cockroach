@@ -44,7 +44,7 @@ type SchemaResolver interface {
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(required bool) CommonLookupFlags
 	ObjectLookupFlags(required bool, requireMutable bool) ObjectLookupFlags
-	LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableLookup, error)
+	LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableEntry, error)
 }
 
 var _ SchemaResolver = &planner{}
