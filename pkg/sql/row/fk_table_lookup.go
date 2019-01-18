@@ -80,20 +80,20 @@ type tableLookupQueue struct {
 
 	// alreadyChecked notes which tables / constraints have already been
 	// looked up, to avoid performing the same lookup work twice.
-	alreadyChecked map[ID]map[FKCheck]struct{}
+	alreadyChecked map[ID]map[FKCheckType]struct{}
 
-	// tableLookups contains the result of the overall lookup work.
-	tableLookups TableLookupsByID
+	// result contains the result of the overall lookup work.
+	result TableLookupsByID
 
-	// lookup is used to look up individual tables by ID. This
+	// tblLookupFn is used to look up individual tables by ID. This
 	// is typically provided by the caller, e.g. from the functions
 	// in the `sql` package.
-	lookup TableLookupFunction
+	tblLookupFn TableLookupFunction
 
-	// checkPrivilege is used to verify a table's privileges. This is
+	// privCheckFn is used to verify a table's privileges. This is
 	// typically provided by the caller, e.g. from the functions in the
 	// `sql` package.
-	checkPrivilege CheckPrivilegeFunction
+	privCheckFn CheckPrivilegeFunction
 
 	// analyzeExpr is used to perform semantic analysis on scalar
 	// expressions. This is not used for FK work directly but needed
@@ -105,24 +105,24 @@ type tableLookupQueue struct {
 // tableLookupQueueElement describes one unit of work in the lookup
 // queue.
 type tableLookupQueueElement struct {
-	// tableLookup is the metadata of the table to check for FK
+	// tableEntry is the metadata of the table to check for FK
 	// constraints.
-	tableLookup TableLookup
+	tableEntry TableLookup
 
 	// usage is the type of mutation for which to look up additional
 	// metadata. At the top level this is the type of SQL statement
 	// performing a mutation. Then when there are CASCADE clauses
 	// this is used to indicate the type of CASCADE action.
-	usage FKCheck
+	usage FKCheckType
 }
 
-// FKCheck indicates the type of mutation that triggers FK work
+// FKCheckType indicates the type of mutation that triggers FK work
 // (delete, insert, or both).
-type FKCheck int
+type FKCheckType int
 
 const (
 	// CheckDeletes checks if rows reference a changed value.
-	CheckDeletes FKCheck = iota
+	CheckDeletes FKCheckType = iota
 	// CheckInserts checks if a new value references an existing row.
 	CheckInserts
 	// CheckUpdates checks all references (CheckDeletes+CheckInserts).
@@ -156,7 +156,7 @@ func NoCheckPrivilege(_ context.Context, _ sqlbase.DescriptorProto, _ privilege.
 // created and initialized.
 func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLookup, error) {
 	// Do we already have an entry for this table?
-	if tableLookup, exists := q.tableLookups[tableID]; exists {
+	if tableLookup, exists := q.result[tableID]; exists {
 		// Yes, simply reuse it.
 		return tableLookup, nil
 	}
@@ -164,13 +164,13 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLooku
 	// We don't have this table yet.
 
 	// Ask the caller to retrieve it for us.
-	tableLookup, err := q.lookup(ctx, tableID)
+	tableLookup, err := q.tblLookupFn(ctx, tableID)
 	if err != nil {
 		return TableLookup{}, err
 	}
 	if !tableLookup.IsAdding && tableLookup.Table != nil {
 		// If we have a real table, we need first to verify the user has permission.
-		if err := q.checkPrivilege(ctx, tableLookup.Table, privilege.SELECT); err != nil {
+		if err := q.privCheckFn(ctx, tableLookup.Table, privilege.SELECT); err != nil {
 			return TableLookup{}, err
 		}
 
@@ -186,7 +186,7 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLooku
 	}
 
 	// Remember for next time.
-	q.tableLookups[tableID] = tableLookup
+	q.result[tableID] = tableLookup
 
 	return tableLookup, nil
 }
@@ -206,7 +206,7 @@ func (tl *TableLookup) addCheckHelper(
 }
 
 // enqueue prepares the lookup work for a given table.
-func (q *tableLookupQueue) enqueue(ctx context.Context, tableID ID, usage FKCheck) error {
+func (q *tableLookupQueue) enqueue(ctx context.Context, tableID ID, usage FKCheckType) error {
 	// Lookup the table.
 	tableLookup, err := q.getTable(ctx, tableID)
 	if err != nil {
@@ -225,7 +225,7 @@ func (q *tableLookupQueue) enqueue(ctx context.Context, tableID ID, usage FKChec
 			return nil
 		}
 	} else {
-		q.alreadyChecked[tableID] = make(map[FKCheck]struct{})
+		q.alreadyChecked[tableID] = make(map[FKCheckType]struct{})
 	}
 
 	// Remember we've done this check already for later.
@@ -243,27 +243,27 @@ func (q *tableLookupQueue) enqueue(ctx context.Context, tableID ID, usage FKChec
 	// already in that mutation's planning code.
 	// Also, there is no CASCADE action that can insert new rows.
 	case CheckDeletes:
-		if err := q.checkPrivilege(ctx, tableLookup.Table, privilege.DELETE); err != nil {
+		if err := q.privCheckFn(ctx, tableLookup.Table, privilege.DELETE); err != nil {
 			return err
 		}
 	case CheckUpdates:
-		if err := q.checkPrivilege(ctx, tableLookup.Table, privilege.UPDATE); err != nil {
+		if err := q.privCheckFn(ctx, tableLookup.Table, privilege.UPDATE); err != nil {
 			return err
 		}
 	}
 
 	// Queue more lookup processing.
-	(*q).queue = append((*q).queue, tableLookupQueueElement{tableLookup: tableLookup, usage: usage})
+	(*q).queue = append((*q).queue, tableLookupQueueElement{tableEntry: tableLookup, usage: usage})
 
 	return nil
 }
 
 // dequeue retrieves the next item in the queue (and pops it).
-func (q *tableLookupQueue) dequeue() (TableLookup, FKCheck, bool) {
+func (q *tableLookupQueue) dequeue() (TableLookup, FKCheckType, bool) {
 	if len((*q).queue) == 0 {
 		return TableLookup{}, 0, false
 	}
 	elem := (*q).queue[0]
 	(*q).queue = (*q).queue[1:]
-	return elem.tableLookup, elem.usage, true
+	return elem.tableEntry, elem.usage, true
 }

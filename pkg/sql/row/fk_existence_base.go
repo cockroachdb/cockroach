@@ -44,7 +44,7 @@ type fkExistenceCheckBaseHelper struct {
 	// it uses "searched" for the table/index where the existence
 	// is tested; and "mutated" for the table/index being written to.
 	//
-	dir FKCheck
+	dir FKCheckType
 
 	// rf is the row fetcher used to look up rows in the searched table.
 	rf *Fetcher
@@ -118,7 +118,7 @@ func makeFkExistenceCheckBaseHelper(
 	ref sqlbase.ForeignKeyReference,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
-	dir FKCheck,
+	dir FKCheckType,
 ) (ret fkExistenceCheckBaseHelper, err error) {
 	// Look up the searched table.
 	searchTable := otherTables[ref.Table].Table
