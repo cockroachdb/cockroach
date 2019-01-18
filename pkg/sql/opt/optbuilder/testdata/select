@@ -354,6 +354,43 @@ TABLE xyzw
       ├── y int
       └── x int not null
 
+# SELECT with index hints.
+
+build
+SELECT * FROM xyzw@primary
+----
+scan xyzw
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── flags: force-index=primary
+
+build
+SELECT * FROM xyzw@foo
+----
+scan xyzw
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── flags: force-index=foo
+
+build
+SELECT * FROM xyzw@{FORCE_INDEX=foo,ASC}
+----
+scan xyzw
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── flags: force-index=foo,fwd
+
+build
+SELECT * FROM xyzw@{FORCE_INDEX=foo,DESC}
+----
+scan xyzw,rev
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── flags: force-index=foo,rev
+
+build
+SELECT * FROM xyzw@{NO_INDEX_JOIN}
+----
+scan xyzw
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── flags: no-index-join
+
 build
 SELECT * FROM xyzw LIMIT x
 ----

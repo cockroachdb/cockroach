@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func scanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
@@ -73,6 +74,11 @@ func ScanPrivateCanProvide(
 		// it affects the results, not just their ordering).
 		direction = fwd
 		if s.HardLimit.Reverse() {
+			direction = rev
+		}
+	} else if s.Flags.Direction != 0 {
+		direction = fwd
+		if s.Flags.Direction == tree.Descending {
 			direction = rev
 		}
 	}

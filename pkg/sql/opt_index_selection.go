@@ -112,8 +112,9 @@ func (p *planner) selectIndex(
 		// An explicit secondary index was requested. Only add it to the candidate
 		// indexes list.
 		candidates = append(candidates, &indexInfo{
-			desc:  s.desc,
-			index: s.specifiedIndex,
+			desc:    s.desc,
+			index:   s.specifiedIndex,
+			reverse: s.specifiedIndexReverse,
 		})
 	} else {
 		candidates = append(candidates, &indexInfo{

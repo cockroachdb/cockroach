@@ -648,6 +648,8 @@ func TestParse(t *testing.T) {
 		{`SELECT 'a' FROM t@primary`},
 		{`SELECT 'a' FROM t@like`},
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN}`},
+		{`SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}`},
+		{`SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC}`},
 		{`SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'`},
 
 		{`SELECT BOOL 'foo', 'foo'::BOOL`},
@@ -1318,6 +1320,7 @@ func TestParse2(t *testing.T) {
 		{`SELECT CAST(1 AS "_int8")`, `SELECT CAST(1 AS INT8[])`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
+		{`SELECT 'a' FROM t@{ASC,FORCE_INDEX=idx}`, `SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=[123]}`, `SELECT 'a' FROM t@[123]`},
 		{`SELECT 'a' FROM [123 AS t]@{FORCE_INDEX=[456]}`, `SELECT 'a' FROM [123 AS t]@[456]`},
@@ -2230,9 +2233,9 @@ SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}`,
-			`FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN at or near "no_index_join"
+			`FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN at or near "}"
 SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
-                                   ^
+                                                ^
 `,
 		},
 		{
@@ -2240,6 +2243,20 @@ SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
 			`NO_INDEX_JOIN specified multiple times at or near "no_index_join"
 SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
                                  ^
+`,
+		},
+		{
+			`SELECT a FROM foo@{ASC}`,
+			`ASC/DESC must be specified in conjunction with an index at or near "}"
+SELECT a FROM foo@{ASC}
+                      ^
+`,
+		},
+		{
+			`SELECT a FROM foo@{DESC}`,
+			`ASC/DESC must be specified in conjunction with an index at or near "}"
+SELECT a FROM foo@{DESC}
+                       ^
 `,
 		},
 		{

@@ -263,11 +263,15 @@ type IndexID uint32
 // IndexFlags represents "@<index_name|index_id>" or "@{param[,param]}" where
 // param is one of:
 //  - FORCE_INDEX=<index_name|index_id>
+//  - ASC / DESC
 //  - NO_INDEX_JOIN
 // It is used optionally after a table name in SELECT statements.
 type IndexFlags struct {
 	Index   UnrestrictedName
 	IndexID IndexID
+	// Direction of the scan, if provided. Can only be set if
+	// one of Index or IndexID is set.
+	Direction Direction
 	// NoIndexJoin cannot be specified together with an index.
 	NoIndexJoin bool
 }
@@ -284,27 +288,46 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	if ih.NoIndexJoin && other.NoIndexJoin {
 		return errors.New("NO_INDEX_JOIN specified multiple times")
 	}
-	noIndexJoin := ih.NoIndexJoin || other.NoIndexJoin
+	result := *ih
+	result.NoIndexJoin = ih.NoIndexJoin || other.NoIndexJoin
 
-	if noIndexJoin && (ih.ForceIndex() || other.ForceIndex()) {
-		return errors.New("FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN")
+	if other.Direction != 0 {
+		if ih.Direction != 0 {
+			return errors.New("ASC/DESC specified multiple times")
+		}
+		result.Direction = other.Direction
 	}
 
 	if other.ForceIndex() {
 		if ih.ForceIndex() {
 			return errors.New("FORCE_INDEX specified multiple times")
 		}
-		ih.Index = other.Index
-		ih.IndexID = other.IndexID
+		result.Index = other.Index
+		result.IndexID = other.IndexID
 	}
 
-	ih.NoIndexJoin = noIndexJoin
+	// We only set at the end to avoid a partially changed structure in one of the
+	// error cases above.
+	*ih = result
+	return nil
+}
+
+// Check verifies if the flags are valid:
+//  - ascending/descending is not specified without an index;
+//  - no_index_join isn't specified with an index.
+func (ih *IndexFlags) Check() error {
+	if ih.NoIndexJoin && ih.ForceIndex() {
+		return errors.New("FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN")
+	}
+	if ih.Direction != 0 && !ih.ForceIndex() {
+		return errors.New("ASC/DESC must be specified in conjunction with an index")
+	}
 	return nil
 }
 
 // Format implements the NodeFormatter interface.
 func (ih *IndexFlags) Format(ctx *FmtCtx) {
-	if !ih.NoIndexJoin {
+	if !ih.NoIndexJoin && ih.Direction == 0 {
 		ctx.WriteByte('@')
 		if ih.Index != "" {
 			ctx.FormatNode(&ih.Index)
@@ -321,7 +344,14 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 			} else {
 				ctx.Printf("[%d]", ih.IndexID)
 			}
-			ctx.WriteString(",NO_INDEX_JOIN}")
+
+			if ih.Direction != 0 {
+				ctx.Printf(",%s", ih.Direction)
+			}
+			if ih.NoIndexJoin {
+				ctx.WriteString(",NO_INDEX_JOIN")
+			}
+			ctx.WriteString("}")
 		}
 	}
 }
@@ -517,7 +547,7 @@ func (node *OrderBy) Format(ctx *FmtCtx) {
 }
 
 // Direction for ordering results.
-type Direction int
+type Direction int8
 
 // Direction values.
 const (
