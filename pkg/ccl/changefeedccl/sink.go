@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -53,7 +54,7 @@ type Sink interface {
 	// asynchronous delivery on every partition of every topic that has been
 	// seen by EmitRow. The list of partitions used may be stale. An error may
 	// be returned if a previously enqueued message has failed.
-	EmitResolvedTimestamp(ctx context.Context, payload []byte, resolved hlc.Timestamp) error
+	EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error
 	// Flush blocks until every message enqueued by EmitRow and
 	// EmitResolvedTimestamp with a timestamp >= ts has been acknowledged by the
 	// sink. This is also a guarantee that rows that come in after will have an
@@ -155,6 +156,7 @@ type kafkaSink struct {
 
 	stopWorkerCh chan struct{}
 	worker       sync.WaitGroup
+	scratch      bufalloc.ByteAllocator
 
 	// Only synchronized between the client goroutine and the worker goroutine.
 	mu struct {
@@ -267,7 +269,7 @@ func (s *kafkaSink) EmitRow(
 
 // EmitResolvedTimestamp implements the Sink interface.
 func (s *kafkaSink) EmitResolvedTimestamp(
-	ctx context.Context, payload []byte, _ hlc.Timestamp,
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	// Periodically ping sarama to refresh its metadata. This means talking to
 	// zookeeper, so it shouldn't be done too often, but beyond that this
@@ -289,7 +291,13 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 	}
 
 	for topic := range s.topics {
-		// sarama caches this, which is why we have to periodically refresh. the
+		payload, err := encoder.EncodeResolvedTimestamp(topic, resolved)
+		if err != nil {
+			return err
+		}
+		s.scratch, payload = s.scratch.Copy(payload, 0 /* extraCap */)
+
+		// sarama caches this, which is why we have to periodically refresh the
 		// metadata above. Staleness here does not impact correctness. Some new
 		// partitions will miss this resolved timestamp, but they'll eventually
 		// be picked up and get later ones.
@@ -454,7 +462,8 @@ type sqlSink struct {
 	topics    map[string]struct{}
 	hasher    hash.Hash32
 
-	rowBuf []interface{}
+	rowBuf  []interface{}
+	scratch bufalloc.ByteAllocator
 }
 
 func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlSink, error) {
@@ -509,10 +518,15 @@ func (s *sqlSink) EmitRow(
 
 // EmitResolvedTimestamp implements the Sink interface.
 func (s *sqlSink) EmitResolvedTimestamp(
-	ctx context.Context, payload []byte, _ hlc.Timestamp,
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	var noKey, noValue []byte
 	for topic := range s.topics {
+		payload, err := encoder.EncodeResolvedTimestamp(topic, resolved)
+		if err != nil {
+			return err
+		}
+		s.scratch, payload = s.scratch.Copy(payload, 0 /* extraCap */)
 		for partition := int32(0); partition < sqlSinkNumPartitions; partition++ {
 			if err := s.emit(ctx, topic, partition, noKey, noValue, payload); err != nil {
 				return err
@@ -591,9 +605,10 @@ func (b *encDatumRowBuffer) Pop() sqlbase.EncDatumRow {
 }
 
 type bufferSink struct {
-	buf    encDatumRowBuffer
-	alloc  sqlbase.DatumAlloc
-	closed bool
+	buf     encDatumRowBuffer
+	alloc   sqlbase.DatumAlloc
+	scratch bufalloc.ByteAllocator
+	closed  bool
 }
 
 // EmitRow implements the Sink interface.
@@ -615,11 +630,17 @@ func (s *bufferSink) EmitRow(
 
 // EmitResolvedTimestamp implements the Sink interface.
 func (s *bufferSink) EmitResolvedTimestamp(
-	_ context.Context, payload []byte, _ hlc.Timestamp,
+	_ context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	if s.closed {
 		return errors.New(`cannot EmitResolvedTimestamp on a closed sink`)
 	}
+	var noTopic string
+	payload, err := encoder.EncodeResolvedTimestamp(noTopic, resolved)
+	if err != nil {
+		return err
+	}
+	s.scratch, payload = s.scratch.Copy(payload, 0 /* extraCap */)
 	s.buf.Push(sqlbase.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
 		{Datum: tree.DNull}, // topic
@@ -807,11 +828,18 @@ func (s *cloudStorageSink) EmitRow(
 
 // EmitResolvedTimestamp implements the Sink interface.
 func (s *cloudStorageSink) EmitResolvedTimestamp(
-	ctx context.Context, payload []byte, resolved hlc.Timestamp,
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
+
+	var noTopic string
+	payload, err := encoder.EncodeResolvedTimestamp(noTopic, resolved)
+	if err != nil {
+		return err
+	}
+	// Don't need to copy payload because we never buffer it anywhere.
 
 	es, err := storageccl.ExportStorageFromURI(ctx, s.base.String(), s.settings)
 	if err != nil {
@@ -830,6 +858,7 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	if log.V(1) {
 		log.Info(ctx, "writing ", name)
 	}
+
 	return es.WriteFile(ctx, name, bytes.NewReader(payload))
 }
 

@@ -223,6 +223,28 @@ func Registered() []Meta {
 	return gens
 }
 
+// FromFlags returns a new validated generator with the given flags. If anything
+// goes wrong, it panics. FromFlags is intended for use with unit test helpers
+// in individual generators, see its callers for examples.
+func FromFlags(meta Meta, flags ...string) Generator {
+	gen := meta.New()
+	if len(flags) > 0 {
+		f, ok := gen.(Flagser)
+		if !ok {
+			panic(fmt.Sprintf(`generator %s does not accept flags: %v`, meta.Name, flags))
+		}
+		if err := f.Flags().Parse(flags); err != nil {
+			panic(fmt.Sprintf(`generator %s parsing flags %v: %v`, meta.Name, flags, err))
+		}
+	}
+	if h, ok := gen.(Hookser); ok {
+		if err := h.Hooks().Validate(); err != nil {
+			panic(fmt.Sprintf(`generator %s flags %s did not validate: %v`, meta.Name, flags, err))
+		}
+	}
+	return gen
+}
+
 // ApproxDatumSize returns the canonical size of a datum as returned from a call
 // to `Table.InitialRowFn`. NB: These datums end up getting serialized in
 // different ways, which means there's no one size that will be correct for all

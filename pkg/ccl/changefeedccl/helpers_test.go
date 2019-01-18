@@ -70,7 +70,12 @@ func (s *benchSink) EmitRow(
 ) error {
 	return s.emit(int64(len(k) + len(v)))
 }
-func (s *benchSink) EmitResolvedTimestamp(_ context.Context, p []byte, _ hlc.Timestamp) error {
+func (s *benchSink) EmitResolvedTimestamp(_ context.Context, e Encoder, ts hlc.Timestamp) error {
+	var noTopic string
+	p, err := e.EncodeResolvedTimestamp(noTopic, ts)
+	if err != nil {
+		return err
+	}
 	return s.emit(int64(len(p)))
 }
 func (s *benchSink) Flush(_ context.Context, _ hlc.Timestamp) error { return nil }
@@ -170,9 +175,8 @@ func createBenchmarkChangefeed(
 				// of overhead here.
 				for _, rs := range resolvedSpans {
 					if sf.Forward(rs.Span, rs.Timestamp) {
-						if err := emitResolvedTimestamp(
-							ctx, encoder, sink, sf.Frontier(),
-						); err != nil {
+						frontier := sf.Frontier()
+						if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
 							return err
 						}
 					}
@@ -328,7 +332,7 @@ func (c *sinklessFeed) Next(
 		if err := c.rows.Scan(&maybeTopic, &key, &value); err != nil {
 			t.Fatal(err)
 		}
-		if maybeTopic.Valid {
+		if len(maybeTopic.String) > 0 {
 			// TODO(dan): This skips duplicates, since they're allowed by the
 			// semantics of our changefeeds. Now that we're switching to
 			// RangeFeed, this can actually happen (usually because of splits)
@@ -784,6 +788,31 @@ func assertPayloads(t testing.TB, f testfeed, expected []string) {
 	}
 }
 
+func jsonKeyValueAvro(
+	t testing.TB, reg *testSchemaRegistry, keyBytes, valueBytes []byte,
+) ([]byte, []byte) {
+	keyNative, err := reg.encodedAvroToNative(keyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valueNative, err := reg.encodedAvroToNative(valueBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The avro textual format is a more natural fit, but it's non-deterministic
+	// because of go's randomized map ordering. Instead, we use gojson.Marshal,
+	// which sorts its object keys and so is deterministic.
+	key, err := gojson.Marshal(keyNative)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := gojson.Marshal(valueNative)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key, value
+}
+
 func assertPayloadsAvro(t testing.TB, reg *testSchemaRegistry, f testfeed, expected []string) {
 	t.Helper()
 
@@ -792,15 +821,8 @@ func assertPayloadsAvro(t testing.TB, reg *testSchemaRegistry, f testfeed, expec
 		topic, _, keyBytes, valueBytes, _, ok := f.Next(t)
 		if !ok {
 			break
-		} else if keyBytes != nil {
-			key, err := reg.encodedAvroToJSON(keyBytes)
-			if err != nil {
-				t.Fatal(err)
-			}
-			value, err := reg.encodedAvroToJSON(valueBytes)
-			if err != nil {
-				t.Fatal(err)
-			}
+		} else if keyBytes != nil || valueBytes != nil {
+			key, value := jsonKeyValueAvro(t, reg, keyBytes, valueBytes)
 			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic, key, value))
 		}
 	}
@@ -860,6 +882,24 @@ func expectResolvedTimestamp(t testing.TB, f testfeed) hlc.Timestamp {
 	}
 
 	return parseTimeToHLC(t, valueRaw.CRDB.Resolved)
+}
+
+func expectResolvedTimestampAvro(t testing.TB, reg *testSchemaRegistry, f testfeed) hlc.Timestamp {
+	t.Helper()
+	topic, _, keyBytes, valueBytes, resolvedBytes, _ := f.Next(t)
+	if keyBytes != nil || valueBytes != nil {
+		key, value := jsonKeyValueAvro(t, reg, keyBytes, valueBytes)
+		t.Fatalf(`unexpected row %s: %s -> %s`, topic, key, value)
+	}
+	if resolvedBytes == nil {
+		t.Fatal(`expected a resolved timestamp notification`)
+	}
+	resolvedNative, err := reg.encodedAvroToNative(resolvedBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved := resolvedNative.(map[string]interface{})[`resolved`]
+	return parseTimeToHLC(t, resolved.(map[string]interface{})[`string`].(string))
 }
 
 func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*testing.T) {
