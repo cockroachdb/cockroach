@@ -367,10 +367,12 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `INSERT INTO add_column VALUES (1)`)
 			addColumn := f.Feed(t, `CREATE CHANGEFEED FOR add_column`)
 			defer addColumn.Close(t)
+			assertPayloads(t, addColumn, []string{
+				`add_column: [1]->{"a": 1}`,
+			})
 			sqlDB.Exec(t, `ALTER TABLE add_column ADD COLUMN b STRING`)
 			sqlDB.Exec(t, `INSERT INTO add_column VALUES (2, '2')`)
 			assertPayloads(t, addColumn, []string{
-				`add_column: [1]->{"a": 1}`,
 				`add_column: [2]->{"a": 2, "b": "2"}`,
 			})
 		})
