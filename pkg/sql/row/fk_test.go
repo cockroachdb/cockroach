@@ -31,12 +31,12 @@ import (
 )
 
 type testTables struct {
-	nextID       ID
-	tablesByID   map[ID]*sqlbase.ImmutableTableDescriptor
+	nextID       TableID
+	tablesByID   map[TableID]*sqlbase.ImmutableTableDescriptor
 	tablesByName map[string]*sqlbase.ImmutableTableDescriptor
 }
 
-func (t *testTables) createTestTable(name string) ID {
+func (t *testTables) createTestTable(name string) TableID {
 	table := sqlbase.NewImmutableTableDescriptor(sqlbase.TableDescriptor{
 		Name:        name,
 		ID:          t.nextID,
@@ -49,8 +49,8 @@ func (t *testTables) createTestTable(name string) ID {
 }
 
 func (t *testTables) createForeignKeyReference(
-	referencingID ID,
-	referencedID ID,
+	referencingID TableID,
+	referencedID TableID,
 	onDelete sqlbase.ForeignKeyReference_Action,
 	onUpdate sqlbase.ForeignKeyReference_Action,
 ) error {
@@ -97,17 +97,17 @@ func (t *testTables) createForeignKeyReference(
 // walking algorithm used in the function.
 func TestTablesNeededForFKs(t *testing.T) {
 	tables := testTables{
-		nextID:       ID(1),
-		tablesByID:   make(map[ID]*sqlbase.ImmutableTableDescriptor),
+		nextID:       TableID(1),
+		tablesByID:   make(map[TableID]*sqlbase.ImmutableTableDescriptor),
 		tablesByName: make(map[string]*sqlbase.ImmutableTableDescriptor),
 	}
 
 	// First setup the table we will be testing against.
 	xID := tables.createTestTable("X")
 
-	expectedInsertIDs := []ID{xID}
-	expectedUpdateIDs := []ID{xID}
-	expectedDeleteIDs := []ID{xID}
+	expectedInsertIDs := []TableID{xID}
+	expectedUpdateIDs := []TableID{xID}
+	expectedDeleteIDs := []TableID{xID}
 
 	// For all possible combinations of relationships for foreign keys, create a
 	// table that X references, and one that references X.
@@ -175,7 +175,7 @@ func TestTablesNeededForFKs(t *testing.T) {
 		t.Fatalf("Could not find table:%d", xID)
 	}
 
-	lookup := func(ctx context.Context, tableID ID) (TableEntry, error) {
+	lookup := func(ctx context.Context, tableID TableID) (TableEntry, error) {
 		table, exists := tables.tablesByID[tableID]
 		if !exists {
 			return TableEntry{}, errors.Errorf("Could not lookup table:%d", tableID)
@@ -183,7 +183,7 @@ func TestTablesNeededForFKs(t *testing.T) {
 		return TableEntry{Table: table}, nil
 	}
 
-	test := func(t *testing.T, usage FKCheckType, expectedIDs []ID) {
+	test := func(t *testing.T, usage FKCheckType, expectedIDs []TableID) {
 		tableLookups, err := TablesNeededForFKs(
 			context.TODO(),
 			xDesc,
@@ -195,7 +195,7 @@ func TestTablesNeededForFKs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var actualIDs []ID
+		var actualIDs []TableID
 		for id := range tableLookups {
 			actualIDs = append(actualIDs, id)
 		}

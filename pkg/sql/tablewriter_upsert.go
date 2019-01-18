@@ -263,7 +263,7 @@ type tableUpserter struct {
 	cleanedRow tree.Datums
 
 	// Set by init.
-	fkTables              row.TableLookupsByID // for fk checks in update case
+	fkTables              row.FkTableMetadata // for fk checks in update case
 	ru                    row.Updater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	fetchCols             []sqlbase.ColumnDescriptor

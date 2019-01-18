@@ -58,7 +58,7 @@ type Inserter struct {
 func MakeInserter(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables TableLookupsByID,
+	fkTables FkTableMetadata,
 	insertCols []sqlbase.ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	alloc *sqlbase.DatumAlloc,
@@ -392,7 +392,7 @@ const (
 func MakeUpdater(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables TableLookupsByID,
+	fkTables FkTableMetadata,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
 	updateType rowUpdaterType,
@@ -425,7 +425,7 @@ var returnTruePseudoError error = returnTrue{}
 func makeUpdaterWithoutCascader(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables TableLookupsByID,
+	fkTables FkTableMetadata,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
 	updateType rowUpdaterType,
@@ -844,7 +844,7 @@ type Deleter struct {
 func MakeDeleter(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables TableLookupsByID,
+	fkTables FkTableMetadata,
 	requestedCols []sqlbase.ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	evalCtx *tree.EvalContext,
@@ -871,7 +871,7 @@ func MakeDeleter(
 func makeRowDeleterWithoutCascader(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables TableLookupsByID,
+	fkTables FkTableMetadata,
 	requestedCols []sqlbase.ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	alloc *sqlbase.DatumAlloc,
