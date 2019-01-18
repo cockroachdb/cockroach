@@ -1041,7 +1041,7 @@ func (ef *execFactory) ConstructUpsert(
 	updateColDescs := makeColDescList(table, updateCols)
 
 	// Determine the foreign key tables involved in the upsert.
-	var fkCheckType row.FKCheck
+	var fkCheckType row.FKCheckType
 	if len(updateColDescs) == 0 {
 		fkCheckType = row.CheckInserts
 	} else {
