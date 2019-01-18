@@ -467,10 +467,12 @@ var noSnap IncomingSnapshot
 //
 // The returned string is nonzero whenever an error is returned to give a
 // non-sensitive cue as to what happened.
-func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) (handleRaftReadyStats, string, error) {
+func (r *Replica) handleRaftReady(
+	ctx context.Context, inSnap IncomingSnapshot,
+) (handleRaftReadyStats, string, error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	return r.handleRaftReadyRaftMuLocked(inSnap)
+	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 }
 
 // handleRaftReadyLocked is the same as handleRaftReady but requires that the
@@ -479,11 +481,10 @@ func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) (handleRaftReadyStats
 // The returned string is nonzero whenever an error is returned to give a
 // non-sensitive cue as to what happened.
 func (r *Replica) handleRaftReadyRaftMuLocked(
-	inSnap IncomingSnapshot,
+	ctx context.Context, inSnap IncomingSnapshot,
 ) (handleRaftReadyStats, string, error) {
 	var stats handleRaftReadyStats
 
-	ctx := r.AnnotateCtx(context.TODO())
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()

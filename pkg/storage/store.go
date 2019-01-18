@@ -3664,7 +3664,7 @@ func (s *Store) processRaftSnapshotRequest(
 			return roachpb.NewError(err)
 		}
 
-		if _, expl, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
+		if _, expl, err := r.handleRaftReadyRaftMuLocked(ctx, inSnap); err != nil {
 			fatalOnRaftReadyErr(ctx, expl, err)
 		}
 		removePlaceholder = false
@@ -3786,7 +3786,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 					// giving up the lock. Set lastRepl to nil, so we don't handle it
 					// down below as well.
 					lastRepl = nil
-					if _, expl, err := r.handleRaftReadyRaftMuLocked(noSnap); err != nil {
+					if _, expl, err := r.handleRaftReadyRaftMuLocked(ctx, noSnap); err != nil {
 						fatalOnRaftReadyErr(ctx, expl, err)
 					}
 				}
@@ -3819,8 +3819,9 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		// It's fine to relock it here (by calling handleRaftReady instead of
 		// handleRaftReadyRaftMuLocked) since racing to handle Raft Ready won't
 		// have any undesirable results.
-		if _, expl, err := lastRepl.handleRaftReady(noSnap); err != nil {
-			fatalOnRaftReadyErr(lastRepl.AnnotateCtx(ctx), expl, err)
+		ctx = lastRepl.AnnotateCtx(ctx)
+		if _, expl, err := lastRepl.handleRaftReady(ctx, noSnap); err != nil {
+			fatalOnRaftReadyErr(ctx, expl, err)
 		}
 	}
 }
@@ -3831,9 +3832,10 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 		return
 	}
 
-	start := timeutil.Now()
 	r := (*Replica)(value)
-	stats, expl, err := r.handleRaftReady(noSnap)
+	ctx = r.AnnotateCtx(ctx)
+	start := timeutil.Now()
+	stats, expl, err := r.handleRaftReady(ctx, noSnap)
 	if err != nil {
 		log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
 	}

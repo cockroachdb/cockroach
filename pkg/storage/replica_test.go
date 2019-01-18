@@ -6508,17 +6508,18 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := tc.store.removeReplicaImpl(context.TODO(), repl, repl.Desc().NextReplicaID, RemoveOptions{
+	ctx := repl.AnnotateCtx(context.Background())
+	if err := tc.store.removeReplicaImpl(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, _, err := repl.handleRaftReady(noSnap); err != nil {
+	if _, _, err := repl.handleRaftReady(ctx, noSnap); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, _, err := repl.handleRaftReady(noSnap); err != nil {
+	if _, _, err := repl.handleRaftReady(ctx, noSnap); err != nil {
 		t.Fatal(err)
 	}
 }
