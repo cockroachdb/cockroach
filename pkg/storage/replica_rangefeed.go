@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -111,11 +112,25 @@ func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
 	return tp.ir.cleanupTxnIntentsAsync(ctx, tp.r, endTxns, true /* allowSyncProcessing */)
 }
 
+type semaphoreLimitedIterator struct {
+	engine.SimpleIterator
+	sem limit.ConcurrentRequestLimiter
+}
+
+func (sli semaphoreLimitedIterator) Close() {
+	sli.SimpleIterator.Close()
+	sli.sem.Finish()
+}
+
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns with an optional error when the rangefeed is
-// complete.
+// complete. The provided ConcurrentRequestLimiter is used to limit the number
+// of rangefeeds using catchup iterators at the same time.
 func (r *Replica) RangeFeed(
-	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+	ctx context.Context,
+	args *roachpb.RangeFeedRequest,
+	stream roachpb.Internal_RangeFeedServer,
+	iteratorLimiter limit.ConcurrentRequestLimiter,
 ) *roachpb.Error {
 	if !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds are not enabled. See kv.rangefeed.enabled.")
@@ -140,6 +155,16 @@ func (r *Replica) RangeFeed(
 	lockedStream := &lockedRangefeedStream{wrapped: stream}
 	errC := make(chan *roachpb.Error, 1)
 
+	// If we will be using a catch-up iterator, wait for the limiter here before
+	// locking raftMu.
+	usingCatchupIter := false
+	if !args.Timestamp.IsEmpty() {
+		usingCatchupIter = true
+		if err := iteratorLimiter.Begin(ctx); err != nil {
+			return roachpb.NewError(err)
+		}
+	}
+
 	// Lock the raftMu, then register the stream as a new rangefeed registration.
 	// raftMu is held so that the catch-up iterator is captured in the same
 	// critical-section as the registration is established. This ensures that
@@ -147,6 +172,9 @@ func (r *Replica) RangeFeed(
 	r.raftMu.Lock()
 	if err := r.requestCanProceed(rspan, checkTS); err != nil {
 		r.raftMu.Unlock()
+		if usingCatchupIter {
+			iteratorLimiter.Finish()
+		}
 		return roachpb.NewError(err)
 	}
 
@@ -155,6 +183,9 @@ func (r *Replica) RangeFeed(
 	// never be able to advance its resolved timestamp.
 	if r.requiresExpiringLease() {
 		r.raftMu.Unlock()
+		if usingCatchupIter {
+			iteratorLimiter.Finish()
+		}
 		return roachpb.NewErrorf("expiration-based leases are incompatible with rangefeeds")
 	}
 
@@ -163,11 +194,15 @@ func (r *Replica) RangeFeed(
 
 	// Register the stream with a catch-up iterator.
 	var catchUpIter engine.SimpleIterator
-	if !args.Timestamp.IsEmpty() {
-		catchUpIter = r.Engine().NewIterator(engine.IterOptions{
+	if usingCatchupIter {
+		innerIter := r.Engine().NewIterator(engine.IterOptions{
 			UpperBound:       args.Span.EndKey,
 			MinTimestampHint: args.Timestamp,
 		})
+		catchUpIter = semaphoreLimitedIterator{
+			SimpleIterator: innerIter,
+			sem:            iteratorLimiter,
+		}
 	}
 	p.Register(rspan, args.Timestamp, catchUpIter, lockedStream, errC)
 	r.raftMu.Unlock()

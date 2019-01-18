@@ -37,6 +37,11 @@ type Limiters struct {
 	BulkIOWriteRate   *rate.Limiter
 	ConcurrentImports limit.ConcurrentRequestLimiter
 	ConcurrentExports limit.ConcurrentRequestLimiter
+	// concurrentRangefeedIters is a semaphore used to limit the number of
+	// rangefeeds in the "catch-up" state across the store. The "catch-up" state
+	// is a temporary state at the beginning of a rangefeed which is expensive
+	// because it uses an engine iterator.
+	ConcurrentRangefeedIters limit.ConcurrentRequestLimiter
 }
 
 // EvalContext is the interface through which command evaluation accesses the
