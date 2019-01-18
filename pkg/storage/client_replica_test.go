@@ -566,10 +566,10 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	l.replica1 = l.mtc.stores[1].LookupReplica(roachpb.RKey("a"))
 	{
 		var err error
-		if l.replica0Desc, err = l.replica0.GetReplicaDescriptor(); err != nil {
+		if l.replica0Desc, err = (*storage.ReplicaEvalContext)(l.replica0).GetReplicaDescriptor(); err != nil {
 			t.Fatal(err)
 		}
-		if l.replica1Desc, err = l.replica1.GetReplicaDescriptor(); err != nil {
+		if l.replica1Desc, err = (*storage.ReplicaEvalContext)(l.replica1).GetReplicaDescriptor(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -583,7 +583,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 
 func (l *leaseTransferTest) sendRead(storeIdx int) *roachpb.Error {
 	desc := l.mtc.stores[storeIdx].LookupReplica(keys.MustAddr(l.leftKey))
-	replicaDesc, err := desc.GetReplicaDescriptor()
+	replicaDesc, err := (*storage.ReplicaEvalContext)(desc).GetReplicaDescriptor()
 	if err != nil {
 		return roachpb.NewError(err)
 	}
@@ -665,7 +665,7 @@ func (l *leaseTransferTest) ensureLeaderAndRaftState(
 	t *testing.T, leader *storage.Replica, follower roachpb.ReplicaDescriptor,
 ) {
 	t.Helper()
-	leaderDesc, err := leader.GetReplicaDescriptor()
+	leaderDesc, err := (*storage.ReplicaEvalContext)(leader).GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -674,7 +674,7 @@ func (l *leaseTransferTest) ensureLeaderAndRaftState(
 		if r == nil {
 			return errors.Errorf("could not find raft leader replica for range %d", l.replica0.RangeID)
 		}
-		desc, err := r.GetReplicaDescriptor()
+		desc, err := (*storage.ReplicaEvalContext)(r).GetReplicaDescriptor()
 		if err != nil {
 			return errors.Wrap(err, "could not get replica descriptor")
 		}
@@ -711,13 +711,13 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 	t.Run("Transfer", func(t *testing.T) {
 		l := setupLeaseTransferTest(t)
 		defer l.mtc.Stop()
-		origLease, _ := l.replica0.GetLease()
+		origLease, _ := (*storage.ReplicaEvalContext)(l.replica0).GetLease()
 		{
 			// Transferring the lease to ourself should be a no-op.
 			if err := l.replica0.AdminTransferLease(context.Background(), l.replica0Desc.StoreID); err != nil {
 				t.Fatal(err)
 			}
-			newLease, _ := l.replica0.GetLease()
+			newLease, _ := (*storage.ReplicaEvalContext)(l.replica0).GetLease()
 			if !origLease.Equivalent(newLease) {
 				t.Fatalf("original lease %v and new lease %v not equivalent", origLease, newLease)
 			}
@@ -749,7 +749,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		// Check that replica1 now has the lease.
 		l.checkHasLease(t, 1)
 
-		replica1Lease, _ := l.replica1.GetLease()
+		replica1Lease, _ := (*storage.ReplicaEvalContext)(l.replica1).GetLease()
 
 		// We'd like to verify the timestamp cache's low water mark, but this is
 		// impossible to determine precisely in all cases because it may have
@@ -781,7 +781,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		// Initiate an extension.
 		renewalErrCh := make(chan error)
 		go func() {
-			lease, _ := l.replica1.GetLease()
+			lease, _ := (*storage.ReplicaEvalContext)(l.replica1).GetLease()
 			renewalErrCh <- l.forceLeaseExtension(1, lease)
 		}()
 
@@ -860,7 +860,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		// Initiate an extension.
 		renewalErrCh := make(chan error)
 		go func() {
-			lease, _ := l.replica1.GetLease()
+			lease, _ := (*storage.ReplicaEvalContext)(l.replica1).GetLease()
 			renewalErrCh <- l.forceLeaseExtension(1, lease)
 		}()
 
@@ -931,7 +931,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 
 	// Transfer the lease from node1 to node2.
 	replica2 := mtc.stores[1].LookupReplica(roachpb.RKey(keyA))
-	replica2Desc, err := replica2.GetReplicaDescriptor()
+	replica2Desc, err := (*storage.ReplicaEvalContext)(replica2).GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -939,8 +939,9 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 		if err := replica1.AdminTransferLease(context.Background(), replica2Desc.StoreID); err != nil {
 			t.Fatal(err)
 		}
-		lease, _ := replica2.GetLease()
-		if lease.Replica.NodeID != replica2.NodeID() {
+		eval2 := (*storage.ReplicaEvalContext)(replica2)
+		lease, _ := eval2.GetLease()
+		if lease.Replica.NodeID != eval2.NodeID() {
 			return errors.Errorf("expected lease transfer to node2: %s", lease)
 		}
 		return nil
@@ -1017,7 +1018,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < 2; i++ {
 			r := mtc.stores[i].LookupReplica(roachpb.RKeyMin)
-			if l, _ := r.GetLease(); l.Replica.StoreID != mtc.stores[1].StoreID() {
+			if l, _ := (*storage.ReplicaEvalContext)(r).GetLease(); l.Replica.StoreID != mtc.stores[1].StoreID() {
 				return errors.Errorf("expected lease to transfer to replica 2: got %s", l)
 			}
 		}
@@ -1107,7 +1108,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preRestartLease, _ := preRepl1.GetLease()
+	preRestartLease, _ := (*storage.ReplicaEvalContext)(preRepl1).GetLease()
 
 	mtc.manualClock.Increment(1E9)
 
@@ -1142,7 +1143,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	postRestartLease, _ := postRepl1.GetLease()
+	postRestartLease, _ := (*storage.ReplicaEvalContext)(postRepl1).GetLease()
 
 	// Verify that not only is a new lease requested, it also gets a new sequence
 	// number. This makes sure that previously proposed commands actually fail at
@@ -1480,8 +1481,8 @@ func TestRangeInfo(t *testing.T) {
 		}
 		return nil
 	})
-	lhsLease, _ := lhsReplica0.GetLease()
-	rhsLease, _ := rhsReplica0.GetLease()
+	lhsLease, _ := (*storage.ReplicaEvalContext)(lhsReplica0).GetLease()
+	rhsLease, _ := (*storage.ReplicaEvalContext)(rhsReplica0).GetLease()
 
 	// Verify range info is not set if unrequested.
 	getArgs := getArgs(splitKey.AsRawKey())
@@ -1590,7 +1591,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Change lease holders for both ranges and re-scan.
 	for _, r := range []*storage.Replica{lhsReplica1, rhsReplica1} {
-		replDesc, err := r.GetReplicaDescriptor()
+		replDesc, err := (*storage.ReplicaEvalContext)(r).GetReplicaDescriptor()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1603,8 +1604,8 @@ func TestRangeInfo(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	lhsLease, _ = lhsReplica1.GetLease()
-	rhsLease, _ = rhsReplica1.GetLease()
+	lhsLease, _ = (*storage.ReplicaEvalContext)(lhsReplica1).GetLease()
+	rhsLease, _ = (*storage.ReplicaEvalContext)(rhsReplica1).GetLease()
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *lhsReplica1.Desc(),

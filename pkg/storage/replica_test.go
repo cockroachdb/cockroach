@@ -127,7 +127,7 @@ const (
 // Replica may hold is expired. It is more precise than LeaseExpiration
 // in that it returns the minimal duration necessary.
 func leaseExpiry(repl *Replica) int64 {
-	l, _ := repl.GetLease()
+	l, _ := (*ReplicaEvalContext)(repl).GetLease()
 	if l.Type() != roachpb.LeaseExpiration {
 		panic("leaseExpiry only valid for expiration-based leases")
 	}
@@ -467,13 +467,13 @@ func TestReplicaContains(t *testing.T) {
 	r.mu.state.Desc = desc
 	r.rangeStr.store(0, desc)
 
-	if statsKey := keys.RangeStatsLegacyKey(desc.RangeID); !r.ContainsKey(statsKey) {
+	if statsKey := keys.RangeStatsLegacyKey(desc.RangeID); !(*ReplicaEvalContext)(r).ContainsKey(statsKey) {
 		t.Errorf("expected range to contain range stats key %q", statsKey)
 	}
-	if !r.ContainsKey(roachpb.Key("aa")) {
+	if !(*ReplicaEvalContext)(r).ContainsKey(roachpb.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
-	if !r.ContainsKey(keys.RangeDescriptorKey([]byte("aa"))) {
+	if !(*ReplicaEvalContext)(r).ContainsKey(keys.RangeDescriptorKey([]byte("aa"))) {
 		t.Errorf("expected range to contain range descriptor key for \"aa\"")
 	}
 	if !r.ContainsKeyRange(roachpb.Key("aa"), roachpb.Key("b")) {
@@ -489,7 +489,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
-	exLease, _ := r.GetLease()
+	exLease, _ := (*ReplicaEvalContext)(r).GetLease()
 	ch, _, _, pErr := r.propose(context.TODO(), exLease, ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
@@ -770,7 +770,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	lease, _ := tc.repl.GetLease()
+	lease, _ := (*ReplicaEvalContext)(tc.repl).GetLease()
 	invalidLease := lease
 	invalidLease.Sequence++
 	invalidLease.Replica.StoreID += 12345
@@ -1262,7 +1262,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 			StoreID:   2,
 		},
 	}
-	exLease, _ := tc.repl.GetLease()
+	exLease, _ := (*ReplicaEvalContext)(tc.repl).GetLease()
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
@@ -1455,7 +1455,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 
 	// Increment the clock's timestamp to expire the range lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
-	lease, _ := tc.repl.GetLease()
+	lease, _ := (*ReplicaEvalContext)(tc.repl).GetLease()
 	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).State != storagepb.LeaseState_EXPIRED {
 		t.Fatal("range lease should have been expired")
 	}
@@ -1907,7 +1907,7 @@ func TestAcquireLease(t *testing.T) {
 				defer stopper.Stop(context.TODO())
 				tc.Start(t, stopper)
 
-				lease, _ := tc.repl.GetLease()
+				lease, _ := (*ReplicaEvalContext)(tc.repl).GetLease()
 
 				// This is a single-replica test; since we're automatically pushing back
 				// the start of a lease as far as possible, and since there is an auto-
@@ -1935,7 +1935,7 @@ func TestAcquireLease(t *testing.T) {
 				if held, expired := hasLease(tc.repl, ts); !held || expired {
 					t.Errorf("expected lease acquisition")
 				}
-				lease, _ = tc.repl.GetLease()
+				lease, _ = (*ReplicaEvalContext)(tc.repl).GetLease()
 				if lease.Start != expStart {
 					t.Errorf("unexpected lease start: %s; expected %s", lease.Start, expStart)
 				}
@@ -1955,7 +1955,7 @@ func TestAcquireLease(t *testing.T) {
 				// Since the command we sent above does not get blocked on the lease
 				// extension, we need to wait for it to go through.
 				testutils.SucceedsSoon(t, func() error {
-					newLease, _ := tc.repl.GetLease()
+					newLease, _ := (*ReplicaEvalContext)(tc.repl).GetLease()
 					if !lease.Expiration.Less(*newLease.Expiration) {
 						return errors.Errorf("lease did not get extended: %+v to %+v", lease, newLease)
 					}
@@ -4687,7 +4687,7 @@ func TestAbortSpanError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := &SpanSetReplicaEvalContext{tc.repl, allSpans}
+	rec := &SpanSetReplicaEvalContext{(*ReplicaEvalContext)(tc.repl), allSpans}
 	pErr := checkIfTxnAborted(context.Background(), rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
@@ -5046,7 +5046,7 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	// Should not get a transaction back from PushTxn. It used to erroneously
 	// return args.PusherTxn.
 	var reply roachpb.PushTxnResponse
-	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{EvalCtx: tc.repl, Stats: &ms, Args: &pa}, &reply); err != nil {
+	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{EvalCtx: (*ReplicaEvalContext)(tc.repl), Stats: &ms, Args: &pa}, &reply); err != nil {
 		t.Fatal(err)
 	} else if reply.Txn != nil {
 		t.Fatalf("expected nil response txn, but got %s", reply.Txn)
@@ -5699,7 +5699,7 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// FirstIndex has changed.
-	firstIndex, err := tc.repl.GetFirstIndex()
+	firstIndex, err := (*ReplicaEvalContext)(tc.repl).GetFirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7351,7 +7351,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	// there is no re-evaluation of the request.
 	atomic.StoreInt32(&c, 0)
 	{
-		prevLease, _ := tc.repl.GetLease()
+		prevLease, _ := (*ReplicaEvalContext)(tc.repl).GetLease()
 		ba := ba
 		ba.Requests = nil
 
@@ -7391,7 +7391,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	tc.Start(t, stopper)
 	repl := tc.repl
 
-	repDesc, err := repl.GetReplicaDescriptor()
+	repDesc, err := (*ReplicaEvalContext)(repl).GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7406,7 +7406,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Timestamp = tc.Clock().Now()
 			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			lease, _ := repl.GetLease()
+			lease, _ := (*ReplicaEvalContext)(repl).GetLease()
 			proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, &allSpans)
 			if pErr != nil {
 				t.Fatal(pErr)
@@ -7450,7 +7450,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	tc.Start(t, stopper)
 
 	const num = 10
-	repDesc, err := tc.repl.GetReplicaDescriptor()
+	repDesc, err := (*ReplicaEvalContext)(tc.repl).GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7553,7 +7553,7 @@ func TestReplicaLeaseReproposal(t *testing.T) {
 	tc.Start(t, stopper)
 	repl := tc.repl
 
-	repDesc, err := repl.GetReplicaDescriptor()
+	repDesc, err := (*ReplicaEvalContext)(repl).GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7561,7 +7561,7 @@ func TestReplicaLeaseReproposal(t *testing.T) {
 	var ba roachpb.BatchRequest
 	ba.Requests = nil
 
-	prevLease, _ := tc.repl.GetLease()
+	prevLease, _ := (*ReplicaEvalContext)(tc.repl).GetLease()
 	lease := prevLease
 	lease.Sequence = 0
 
@@ -7624,7 +7624,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	// doing so concurrently.
 	r := tc.repl
 
-	repDesc, err := tc.repl.GetReplicaDescriptor()
+	repDesc, err := (*ReplicaEvalContext)(tc.repl).GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7677,7 +7677,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
-		lease, _ := r.GetLease()
+		lease, _ := (*ReplicaEvalContext)(r).GetLease()
 		cmd, pErr := r.requestToProposal(context.Background(), storagebase.CmdIDKey(id), ba, nil, &allSpans)
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -8401,7 +8401,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		ba.Header.RangeID = repl.RangeID
 		ba.Add(req)
 		ba.Txn = txn
-		if err := ba.SetActiveTimestamp(repl.Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(repl.store.Clock().Now); err != nil {
 			t.Fatal(err)
 		}
 		_, pErr := repl.Send(ctx, ba)
@@ -8650,7 +8650,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 		t.Fatalf("replica for key %s not found", rkey)
 	}
 
-	exLease, _ := repl.GetLease()
+	exLease, _ := (*ReplicaEvalContext)(repl).GetLease()
 	ch, _, _, pErr := repl.propose(
 		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
 	)
@@ -8697,7 +8697,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 	ba.AsyncConsensus = true
 
 	atomic.StoreInt32(&filterActive, 1)
-	exLease, _ := repl.GetLease()
+	exLease, _ := (*ReplicaEvalContext)(repl).GetLease()
 	ch, _, _, pErr := repl.propose(
 		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
 	)
@@ -8762,7 +8762,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	ba.Timestamp = tc.Clock().Now()
 
 	atomic.StoreInt32(&filterActive, 1)
-	exLease, _ := repl.GetLease()
+	exLease, _ := (*ReplicaEvalContext)(repl).GetLease()
 	_, _, _, pErr := repl.propose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -9719,7 +9719,7 @@ func TestReplicaBootstrapRangeAppliedStateKey(t *testing.T) {
 			}
 			assertEmptyStatsDelta := func(t *testing.T) {
 				t.Helper()
-				delta, err := computeStatsDelta(repl.DB())
+				delta, err := computeStatsDelta(repl.store.DB())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -9947,7 +9947,7 @@ func TestRangeStatsRequest(t *testing.T) {
 	// Write some random data to the range and verify that a RangeStatsRequest
 	// returns the same MVCC stats as the replica's in-memory state.
 	WriteRandomDataToRange(t, tc.store, tc.repl.RangeID, keyPrefix)
-	expMS := tc.repl.GetMVCCStats()
+	expMS := (*ReplicaEvalContext)(tc.repl).GetMVCCStats()
 	res, pErr := client.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{
 		RangeID: tc.repl.RangeID,
 	}, &roachpb.RangeStatsRequest{})

@@ -64,7 +64,7 @@ func TestRaftLogQueue(t *testing.T) {
 	if raftLeaderRepl == nil {
 		t.Fatalf("could not find raft leader replica for range %d", rangeID)
 	}
-	originalIndex, err := raftLeaderRepl.GetFirstIndex()
+	originalIndex, err := (*storage.ReplicaEvalContext)(raftLeaderRepl).GetFirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestRaftLogQueue(t *testing.T) {
 
 	// Ensure that firstIndex has increased indicating that the log
 	// truncation has occurred.
-	afterTruncationIndex, err := raftLeaderRepl.GetFirstIndex()
+	afterTruncationIndex, err := (*storage.ReplicaEvalContext)(raftLeaderRepl).GetFirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestRaftLogQueue(t *testing.T) {
 		store.MustForceRaftLogScanAndProcess()
 	}
 
-	after2ndTruncationIndex, err := raftLeaderRepl.GetFirstIndex()
+	after2ndTruncationIndex, err := (*storage.ReplicaEvalContext)(raftLeaderRepl).GetFirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}

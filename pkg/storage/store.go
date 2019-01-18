@@ -1288,7 +1288,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 			// Add this range and its stats to our counter.
 			s.metrics.ReplicaCount.Inc(1)
-			s.metrics.addMVCCStats(rep.GetMVCCStats())
+			s.metrics.addMVCCStats((*ReplicaEvalContext)(rep).GetMVCCStats())
 
 			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
 				// We are no longer a member of the range, but we didn't GC the replica
@@ -1970,7 +1970,7 @@ func (s *Store) lookupPrecedingReplica(key roachpb.RKey) *Replica {
 	defer s.mu.RUnlock()
 	var repl *Replica
 	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(key), func(item btree.Item) bool {
-		if r, ok := item.(*Replica); ok && !r.ContainsKey(key.AsRawKey()) {
+		if r, ok := item.(*Replica); ok && !(*ReplicaEvalContext)(r).ContainsKey(key.AsRawKey()) {
 			repl = r
 			return false // stop iterating
 		}
@@ -2452,7 +2452,7 @@ func (s *Store) MergeRange(
 		roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
 	)
 
-	if err := rightRepl.postDestroyRaftMuLocked(ctx, rightRepl.GetMVCCStats()); err != nil {
+	if err := rightRepl.postDestroyRaftMuLocked(ctx, (*ReplicaEvalContext)(rightRepl).GetMVCCStats()); err != nil {
 		return err
 	}
 
@@ -2479,8 +2479,8 @@ func (s *Store) MergeRange(
 	// left-hand replica, if necessary.
 	rightRepl.txnWaitQueue.Clear(true /* disable */)
 
-	leftLease, _ := leftRepl.GetLease()
-	rightLease, _ := rightRepl.GetLease()
+	leftLease, _ := (*ReplicaEvalContext)(leftRepl).GetLease()
+	rightLease, _ := (*ReplicaEvalContext)(rightRepl).GetLease()
 	if leftLease.OwnedBy(s.Ident.StoreID) && !rightLease.OwnedBy(s.Ident.StoreID) {
 		// We hold the lease for the LHS, but do not hold the lease for the RHS.
 		// That means we don't have up-to-date timestamp cache entries for the
@@ -2666,7 +2666,7 @@ func (s *Store) removeReplicaImpl(
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
-	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
+	s.metrics.subtractMVCCStats((*ReplicaEvalContext)(rep).GetMVCCStats())
 	s.metrics.ReplicaCount.Dec(1)
 	s.mu.Unlock()
 
@@ -2800,7 +2800,7 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 		if r.OwnsValidLease(now) {
 			leaseCount++
 		}
-		mvccStats := r.GetMVCCStats()
+		mvccStats := (*ReplicaEvalContext)(r).GetMVCCStats()
 		logicalBytes += mvccStats.Total()
 		bytesPerReplica = append(bytesPerReplica, float64(mvccStats.Total()))
 		// TODO(a-robinson): How dangerous is it that these numbers will be
@@ -3260,7 +3260,11 @@ func (s *Store) maybeWaitForPushee(
 	// txn response or else allow this request to proceed.
 	if ba.IsSinglePushTxnRequest() {
 		pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-		pushResp, pErr := repl.txnWaitQueue.MaybeWaitForPush(repl.AnnotateCtx(ctx), repl, pushReq)
+		pushResp, pErr := repl.txnWaitQueue.MaybeWaitForPush(
+			repl.AnnotateCtx(ctx),
+			txnwait.ContainsKeyFunc((*ReplicaEvalContext)(repl).ContainsKey),
+			pushReq,
+		)
 		// Copy the request in anticipation of setting the force arg and
 		// updating the Now timestamp (see below).
 		pushReqCopy := *pushReq
@@ -3287,7 +3291,11 @@ func (s *Store) maybeWaitForPushee(
 		// For query txn requests, wait in the txn wait queue either for
 		// transaction update or for dependent transactions to change.
 		queryReq := ba.Requests[0].GetInner().(*roachpb.QueryTxnRequest)
-		pErr := repl.txnWaitQueue.MaybeWaitForQuery(repl.AnnotateCtx(ctx), repl, queryReq)
+		pErr := repl.txnWaitQueue.MaybeWaitForQuery(
+			repl.AnnotateCtx(ctx),
+			txnwait.ContainsKeyFunc((*ReplicaEvalContext)(repl).ContainsKey),
+			queryReq,
+		)
 		if pErr != nil {
 			return nil, pErr
 		}
@@ -4394,7 +4402,7 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeyS
 		if bytes.Compare(startKey, desc.EndKey) >= 0 || bytes.Compare(desc.StartKey, endKey) >= 0 {
 			return true // continue
 		}
-		result.MVCC.Add(repl.GetMVCCStats())
+		result.MVCC.Add((*ReplicaEvalContext)(repl).GetMVCCStats())
 		result.ReplicaCount++
 		return true
 	})

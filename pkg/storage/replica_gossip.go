@@ -85,7 +85,7 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 		log.VEventf(ctx, 2, "not gossiping system config because the replica isn't initialized")
 		return nil
 	}
-	if !r.ContainsKey(keys.SystemConfigSpan.Key) {
+	if !(*ReplicaEvalContext)(r).ContainsKey(keys.SystemConfigSpan.Key) {
 		log.VEventf(ctx, 3,
 			"not gossiping system config because the replica doesn't contain the system config's start key")
 		return nil
@@ -240,7 +240,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 // if this is the first range and a range lease can be obtained. The Store
 // calls this periodically on first range replicas.
 func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
-	if !r.IsFirstRange() {
+	if !(*ReplicaEvalContext)(r).IsFirstRange() {
 		return nil
 	}
 

@@ -966,7 +966,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 				t.Fatal(err)
 			}
 			for {
-				if _, ok := repl.GetTxnWaitQueue().TrackedTxns()[txn1.ID()]; ok {
+				if _, ok := (*storage.ReplicaEvalContext)(repl).GetTxnWaitQueue().TrackedTxns()[txn1.ID()]; ok {
 					break
 				}
 				select {
@@ -3176,12 +3176,13 @@ func TestMergeQueue(t *testing.T) {
 
 	t.Run("combined-threshold", func(t *testing.T) {
 		reset(t)
+		eval := (*storage.ReplicaEvalContext)(lhs())
 
 		// The ranges are individually beneath the minimum size threshold, but
 		// together they'll exceed the maximum size threshold.
 		zone := config.DefaultZoneConfig()
-		zone.RangeMinBytes = proto.Int64(lhs().GetMVCCStats().Total() + 1)
-		zone.RangeMaxBytes = proto.Int64(lhs().GetMVCCStats().Total()*2 - 1)
+		zone.RangeMinBytes = proto.Int64(eval.GetMVCCStats().Total() + 1)
+		zone.RangeMaxBytes = proto.Int64(eval.GetMVCCStats().Total()*2 - 1)
 		setZones(zone)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)

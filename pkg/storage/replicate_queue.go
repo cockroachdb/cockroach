@@ -227,7 +227,7 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	// If the lease is valid, check to see if we should transfer it.
-	if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, now) {
+	if lease, _ := (*ReplicaEvalContext)(repl).GetLease(); repl.IsLeaseValid(lease, now) {
 		if rq.canTransferLease() &&
 			rq.allocator.ShouldTransferLease(
 				ctx, zone, desc.Replicas, lease.Replica.StoreID, desc.RangeID, repl.leaseholderStats) {

@@ -273,7 +273,7 @@ func doLookupWithToken(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if (useReverseScan && !r.ContainsKeyInverted(keyAddr)) || (!useReverseScan && !r.ContainsKey(keyAddr)) {
+	if (useReverseScan && !r.ContainsKeyInverted(keyAddr)) || (!useReverseScan && !(*ReplicaEvalContext)(r).ContainsKey(keyAddr)) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
 	return r, returnToken

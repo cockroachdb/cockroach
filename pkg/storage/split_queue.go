@@ -123,7 +123,7 @@ func shouldSplitRange(
 func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	shouldQ, priority = shouldSplitRange(repl.Desc(), repl.GetMVCCStats(),
+	shouldQ, priority = shouldSplitRange(repl.Desc(), (*ReplicaEvalContext)(repl).GetMVCCStats(),
 		0, /* Don't check for load based splitting yet. */
 		repl.SplitByLoadQPSThreshold(), repl.GetMaxBytes(), sysCfg)
 
@@ -192,7 +192,7 @@ func (sq *splitQueue) processAttempt(
 	// Next handle case of splitting due to size. Note that we don't perform
 	// size-based splitting if maxBytes is 0 (happens in certain test
 	// situations).
-	size := r.GetMVCCStats().Total()
+	size := (*ReplicaEvalContext)(r).GetMVCCStats().Total()
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && float64(size)/float64(maxBytes) > 1 {
 		_, err := r.adminSplitWithDescriptor(

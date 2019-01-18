@@ -134,7 +134,7 @@ func (r *Replica) RangeFeed(
 
 	checkTS := args.Timestamp
 	if checkTS.IsEmpty() {
-		checkTS = r.Clock().Now()
+		checkTS = r.store.Clock().Now()
 	}
 
 	lockedStream := &lockedRangefeedStream{wrapped: stream}
@@ -164,7 +164,7 @@ func (r *Replica) RangeFeed(
 	// Register the stream with a catch-up iterator.
 	var catchUpIter engine.SimpleIterator
 	if !args.Timestamp.IsEmpty() {
-		catchUpIter = r.Engine().NewIterator(engine.IterOptions{
+		catchUpIter = r.store.Engine().NewIterator(engine.IterOptions{
 			UpperBound:       args.Span.EndKey,
 			MinTimestampHint: args.Timestamp,
 		})
@@ -195,7 +195,7 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
 	cfg := rangefeed.Config{
 		AmbientContext:   r.AmbientContext,
-		Clock:            r.Clock(),
+		Clock:            r.store.Clock(),
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
 		EventChanCap:     256,
@@ -205,7 +205,7 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 	r.store.addReplicaWithRangefeed(r.RangeID)
 
 	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := r.Engine().NewIterator(engine.IterOptions{
+	rtsIter := r.store.Engine().NewIterator(engine.IterOptions{
 		UpperBound: desc.EndKey.AsRawKey(),
 		// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed
 		// we should periodically persist the resolved timestamp so that we
@@ -316,7 +316,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(ctx context.Context, ops *stora
 		// Read the value directly from the Engine. This is performed in the
 		// same raftMu critical section that the logical op's corresponding
 		// WriteBatch is applied, so the value should exist.
-		val, _, err := engine.MVCCGet(ctx, r.Engine(), key, ts, engine.MVCCGetOptions{Tombstones: true})
+		val, _, err := engine.MVCCGet(ctx, r.store.Engine(), key, ts, engine.MVCCGetOptions{Tombstones: true})
 		if val == nil && err == nil {
 			err = errors.New("value missing in engine")
 		}

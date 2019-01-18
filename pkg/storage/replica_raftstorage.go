@@ -343,21 +343,6 @@ func (r *Replica) raftFirstIndexLocked() (uint64, error) {
 	return (*replicaRaftStorage)(r).FirstIndex()
 }
 
-// GetFirstIndex is the same function as raftFirstIndexLocked but it requires
-// that r.mu is not held.
-func (r *Replica) GetFirstIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.raftFirstIndexLocked()
-}
-
-// GetLeaseAppliedIndex returns the lease index of the last applied command.
-func (r *Replica) GetLeaseAppliedIndex() uint64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mu.state.LeaseAppliedIndex
-}
-
 // Snapshot implements the raft.Storage interface. Snapshot requires that
 // r.mu is held. Note that the returned snapshot is a placeholder and
 // does not contain any of the replica data. The snapshot is actually generated
@@ -923,7 +908,7 @@ func (r *Replica) applySnapshot(
 	for _, sr := range subsumedRepls {
 		// We removed sr's data when we committed the batch. Finish subsumption by
 		// updating the in-memory bookkeping.
-		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
+		if err := sr.postDestroyRaftMuLocked(ctx, (*ReplicaEvalContext)(sr).GetMVCCStats()); err != nil {
 			log.Fatalf(ctx, "unable to finish destroying %s while applying snapshot: %s", sr, err)
 		}
 		// We already hold sr's raftMu, so we must call removeReplicaImpl directly.

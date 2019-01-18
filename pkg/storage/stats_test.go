@@ -44,7 +44,7 @@ func TestRangeStatsEmpty(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	ms := tc.repl.GetMVCCStats()
+	ms := (*ReplicaEvalContext)(tc.repl).GetMVCCStats()
 	if exp := initialStats(); !reflect.DeepEqual(ms, exp) {
 		t.Errorf("unexpected stats diff(exp, actual):\n%s", pretty.Diff(exp, ms))
 	}

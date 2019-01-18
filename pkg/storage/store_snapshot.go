@@ -569,7 +569,7 @@ func (s *Store) canApplySnapshotLocked(
 				// the leader of the range has cut off communication with this replica.
 				// Expiration based leases, by contrast, will expire quickly if the
 				// leader of the range stops sending this replica heartbeats.
-				lease, pendingLease := r.GetLease()
+				lease, pendingLease := (*ReplicaEvalContext)(r).GetLease()
 				now := s.Clock().Now()
 				return !r.IsLeaseValid(lease, now) &&
 					(pendingLease == (roachpb.Lease{}) || !r.IsLeaseValid(pendingLease, now))

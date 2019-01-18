@@ -212,8 +212,8 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 		return results
 	}
 
-	l := collect(store.LookupReplica(keys.MustAddr(left)).AbortSpan())
-	r := collect(store.LookupReplica(keys.MustAddr(right)).AbortSpan())
+	l := collect((*storage.ReplicaEvalContext)(store.LookupReplica(keys.MustAddr(left))).AbortSpan())
+	r := collect((*storage.ReplicaEvalContext)(store.LookupReplica(keys.MustAddr(right))).AbortSpan())
 
 	if !reflect.DeepEqual(expL, l) {
 		t.Fatalf("left hand side: expected %+v, got %+v", expL, l)
@@ -720,7 +720,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	if err := verifyRecomputedStats(snap, repl.Desc(), ms, manual.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range's stats before split: %v", err)
 	}
-	if inMemMS := repl.GetMVCCStats(); inMemMS != ms {
+	if inMemMS := (*storage.ReplicaEvalContext)(repl).GetMVCCStats(); inMemMS != ms {
 		t.Fatalf("in-memory and on-disk diverged:\n%+v\n!=\n%+v", inMemMS, ms)
 	}
 
@@ -1961,8 +1961,8 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 	}
 
 	repl := store.LookupReplica(roachpb.RKey(splitKey))
-	gcThreshold := repl.GetGCThreshold()
-	txnSpanGCThreshold := repl.GetTxnSpanGCThreshold()
+	gcThreshold := (*storage.ReplicaEvalContext)(repl).GetGCThreshold()
+	txnSpanGCThreshold := (*storage.ReplicaEvalContext)(repl).GetTxnSpanGCThreshold()
 
 	if !reflect.DeepEqual(gcThreshold, specifiedGCThreshold) {
 		t.Fatalf("expected RHS's GCThreshold is equal to %v, but got %v", specifiedGCThreshold, gcThreshold)

@@ -654,13 +654,6 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 	}
 }
 
-// GetLease returns the lease and, if available, the proposed next lease.
-func (r *Replica) GetLease() (roachpb.Lease, roachpb.Lease) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.getLeaseRLocked()
-}
-
 func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
 		return *r.mu.state.Lease, nextLease
@@ -933,9 +926,9 @@ func (r *Replica) redirectOnOrAcquireLease(
 							// removed (see processRaftCommand), so check for that case before
 							// falling back to a NotLeaseHolderError.
 							var err error
-							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
+							if _, descErr := (*ReplicaEvalContext)(r).GetReplicaDescriptor(); descErr != nil {
 								err = descErr
-							} else if lease, _ := r.GetLease(); !r.IsLeaseValid(lease, r.store.Clock().Now()) {
+							} else if lease, _ := (*ReplicaEvalContext)(r).GetLease(); !r.IsLeaseValid(lease, r.store.Clock().Now()) {
 								err = newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc())
 							} else {
 								err = newNotLeaseHolderError(&lease, r.store.StoreID(), r.Desc())

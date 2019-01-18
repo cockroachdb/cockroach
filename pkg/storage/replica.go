@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -433,8 +432,6 @@ type Replica struct {
 	}
 }
 
-var _ batcheval.EvalContext = &Replica{}
-
 // KeyRange is an interface type for the replicasByKey BTree, to compare
 // Replica and ReplicaPlaceholder.
 type KeyRange interface {
@@ -594,11 +591,6 @@ func (r *Replica) SetZoneConfig(zone *config.ZoneConfig) {
 	r.mu.zone = zone
 }
 
-// IsFirstRange returns true if this is the first range.
-func (r *Replica) IsFirstRange() bool {
-	return r.RangeID == 1
-}
-
 // IsDestroyed returns a non-nil error if the replica has been destroyed
 // and the reason if it has.
 func (r *Replica) IsDestroyed() (DestroyReason, error) {
@@ -621,6 +613,8 @@ func (r *Replica) DescAndZone() (*roachpb.RangeDescriptor, *config.ZoneConfig) {
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
 // the process.
+//
+// TODO(tbg): remove, use *ReplicaEvalContext instead.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -629,87 +623,6 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 
 func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
-}
-
-// NodeID returns the ID of the node this replica belongs to.
-func (r *Replica) NodeID() roachpb.NodeID {
-	return r.store.nodeDesc.NodeID
-}
-
-// ClusterSettings returns the node's ClusterSettings.
-func (r *Replica) ClusterSettings() *cluster.Settings {
-	return r.store.cfg.Settings
-}
-
-// StoreID returns the Replica's StoreID.
-func (r *Replica) StoreID() roachpb.StoreID {
-	return r.store.StoreID()
-}
-
-// EvalKnobs returns the EvalContext's Knobs.
-func (r *Replica) EvalKnobs() storagebase.BatchEvalTestingKnobs {
-	return r.store.cfg.TestingKnobs.EvalKnobs
-}
-
-// Clock returns the hlc clock shared by this replica.
-func (r *Replica) Clock() *hlc.Clock {
-	return r.store.Clock()
-}
-
-// DB returns the Replica's client DB.
-func (r *Replica) DB() *client.DB {
-	return r.store.DB()
-}
-
-// Engine returns the Replica's underlying Engine. In most cases the
-// evaluation Batch should be used instead.
-func (r *Replica) Engine() engine.Engine {
-	return r.store.Engine()
-}
-
-// AbortSpan returns the Replica's AbortSpan.
-func (r *Replica) AbortSpan() *abortspan.AbortSpan {
-	// Despite its name, the AbortSpan doesn't hold on-disk data in
-	// memory. It just provides methods that take a Batch, so SpanSet
-	// declarations are enforced there.
-	return r.abortSpan
-}
-
-// GetLimiters returns the Replica's limiters.
-func (r *Replica) GetLimiters() *batcheval.Limiters {
-	return &r.store.limiters
-}
-
-// GetTxnWaitQueue returns the Replica's txnwait.Queue.
-func (r *Replica) GetTxnWaitQueue() *txnwait.Queue {
-	return r.txnWaitQueue
-}
-
-// GetTerm returns the term of the given index in the raft log.
-func (r *Replica) GetTerm(i uint64) (uint64, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.raftTermRLocked(i)
-}
-
-// GetRangeID returns the Range ID.
-func (r *Replica) GetRangeID() roachpb.RangeID {
-	return r.RangeID
-}
-
-// GetGCThreshold returns the GC threshold.
-func (r *Replica) GetGCThreshold() hlc.Timestamp {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return *r.mu.state.GCThreshold
-}
-
-// GetTxnSpanGCThreshold returns the time of the replica's last transaction span
-// GC.
-func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return *r.mu.state.TxnSpanGCThreshold
 }
 
 func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
@@ -731,15 +644,6 @@ func (r *Replica) LastReplicaAdded() (roachpb.ReplicaID, time.Time) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.lastReplicaAdded, r.mu.lastReplicaAddedTime
-}
-
-// GetReplicaDescriptor returns the replica for this range from the range
-// descriptor. Returns a *RangeNotFoundError if the replica is not found.
-// No other errors are returned.
-func (r *Replica) GetReplicaDescriptor() (roachpb.ReplicaDescriptor, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.getReplicaDescriptorRLocked()
 }
 
 // getReplicaDescriptorRLocked is like getReplicaDescriptor, but assumes that
@@ -769,28 +673,6 @@ func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 	r.mu.Unlock()
 }
 
-// GetMVCCStats returns a copy of the MVCC stats object for this range.
-// This accessor is thread-safe, but provides no guarantees about its
-// synchronization with any concurrent writes.
-func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return *r.mu.state.Stats
-}
-
-// GetSplitQPS returns the Replica's queries/s request rate.
-// The value returned represents the QPS recorded at the time of the
-// last request which can be found using GetLastRequestTime().
-// NOTE: This should only be used for load based splitting, only
-// works when the load based splitting cluster setting is enabled.
-//
-// Use QueriesPerSecond() for current QPS stats for all other purposes.
-func (r *Replica) GetSplitQPS() float64 {
-	r.splitMu.Lock()
-	defer r.splitMu.Unlock()
-	return r.splitMu.qps
-}
-
 // GetLastRequestTime returns the most recent time in nanos
 // when the last rate was recorded.
 // NOTE: This should only be used for load based splitting, only
@@ -801,30 +683,10 @@ func (r *Replica) GetLastRequestTime() time.Time {
 	return r.splitMu.lastReqTime
 }
 
-// ContainsKey returns whether this range contains the specified key.
-//
-// TODO(bdarnell): This is not the same as RangeDescriptor.ContainsKey.
-func (r *Replica) ContainsKey(key roachpb.Key) bool {
-	return storagebase.ContainsKey(*r.Desc(), key)
-}
-
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
 	return storagebase.ContainsKeyRange(*r.Desc(), start, end)
-}
-
-// GetLastReplicaGCTimestamp reads the timestamp at which the replica was
-// last checked for removal by the replica gc queue.
-func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
-	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	var timestamp hlc.Timestamp
-	_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, &timestamp,
-		engine.MVCCGetOptions{})
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-	return timestamp, nil
 }
 
 func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
@@ -956,7 +818,7 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 			// Only return the correct range descriptor as a hint
 			// if we know the current lease holder for that range, which
 			// indicates that our knowledge is not stale.
-			if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, r.store.Clock().Now()) {
+			if lease, _ := (*ReplicaEvalContext)(repl).GetLease(); repl.IsLeaseValid(lease, r.store.Clock().Now()) {
 				mismatchErr.SuggestedRange = repl.Desc()
 			}
 		}
@@ -1276,7 +1138,7 @@ func (r *Replica) executeAdminBatch(
 	}
 
 	if ba.Header.ReturnRangeInfo {
-		returnRangeInfo(resp, r)
+		returnRangeInfo(resp, (*ReplicaEvalContext)(r))
 	}
 
 	br := &roachpb.BatchResponse{}
@@ -1346,7 +1208,7 @@ func (r *Replica) limitTxnMaxTimestamp(
 func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	desc := r.Desc()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intent, err := engine.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
+	_, intent, err := engine.MVCCGet(ctx, r.store.engine, descKey, r.store.Clock().Now(),
 		engine.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return err
@@ -1354,7 +1216,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		return nil
 	}
 	val, _, err := engine.MVCCGetAsTxn(
-		ctx, r.Engine(), descKey, intent.Txn.Timestamp, intent.Txn)
+		ctx, r.store.Engine(), descKey, intent.Txn.Timestamp, intent.Txn)
 	if err != nil {
 		return err
 	} else if val != nil {
@@ -1394,13 +1256,13 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 			// roachpb.PUSH_TOUCH, though it might appear more semantically correct,
 			// returns immediately and causes us to spin hot, whereas
 			// roachpb.PUSH_ABORT efficiently blocks until the transaction completes.
-			res, pErr := client.SendWrapped(ctx, r.DB().NonTransactionalSender(), &roachpb.PushTxnRequest{
+			res, pErr := client.SendWrapped(ctx, r.store.DB().NonTransactionalSender(), &roachpb.PushTxnRequest{
 				RequestHeader: roachpb.RequestHeader{Key: intent.Txn.Key},
 				PusherTxn: roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{Priority: roachpb.MinTxnPriority},
 				},
 				PusheeTxn: intent.Txn,
-				Now:       r.Clock().Now(),
+				Now:       r.store.Clock().Now(),
 				PushType:  roachpb.PUSH_ABORT,
 			})
 			if pErr != nil {
@@ -1438,7 +1300,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 			var getRes *roachpb.GetResponse
 			for retry := retry.Start(base.DefaultRetryOptions()); retry.Next(); {
 				metaKey := keys.RangeMetaKey(desc.EndKey)
-				res, pErr := client.SendWrappedWith(ctx, r.DB().NonTransactionalSender(), roachpb.Header{
+				res, pErr := client.SendWrappedWith(ctx, r.store.DB().NonTransactionalSender(), roachpb.Header{
 					// Use READ_UNCOMMITTED to avoid trying to resolve intents, since
 					// resolving those intents might involve sending requests to this
 					// range, and that could deadlock. See the comment on
@@ -1526,7 +1388,7 @@ func (r *Replica) maybeTransferRaftLeadershipLocked(ctx context.Context) {
 		return
 	}
 	lease := *r.mu.state.Lease
-	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(lease, r.Clock().Now()) {
+	if lease.OwnedBy(r.store.StoreID()) || !r.isLeaseValidRLocked(lease, r.store.Clock().Now()) {
 		return
 	}
 	raftStatus := r.raftStatusRLocked()

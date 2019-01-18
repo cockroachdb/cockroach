@@ -131,7 +131,7 @@ CREATE TABLE cttest.kv (id INT PRIMARY KEY, value STRING);
 	// the transfer basically always works.
 	for ok := false; !ok; time.Sleep(10 * time.Millisecond) {
 		for _, repl := range repls {
-			lease, _ := repl.GetLease()
+			lease, _ := (*storage.ReplicaEvalContext)(repl).GetLease()
 			if lease.Epoch != 0 {
 				ok = true
 				break

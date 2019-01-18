@@ -119,7 +119,7 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 func (rgcq *replicaGCQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
 ) (bool, float64) {
-	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
+	lastCheck, err := (*ReplicaEvalContext)(repl).GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
 		log.Errorf(ctx, "could not read last replica GC timestamp: %s", err)
 		return false, 0
@@ -133,7 +133,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		WallTime: repl.store.startedAt,
 	}
 
-	if lease, _ := repl.GetLease(); lease.ProposedTS != nil {
+	if lease, _ := (*ReplicaEvalContext)(repl).GetLease(); lease.ProposedTS != nil {
 		lastActivity.Forward(*lease.ProposedTS)
 	}
 

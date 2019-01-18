@@ -159,7 +159,7 @@ func (db *testSender) Send(
 		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), nil))
 	}
 	ba.RangeID = repl.RangeID
-	repDesc, err := repl.GetReplicaDescriptor()
+	repDesc, err := (*ReplicaEvalContext)(repl).GetReplicaDescriptor()
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -460,7 +460,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failure fetching range %d: %s", i, err)
 		}
-		rs := r.GetMVCCStats()
+		rs := (*ReplicaEvalContext)(r).GetMVCCStats()
 
 		// Stats should agree with a recomputation.
 		now := r.store.Clock().Now()

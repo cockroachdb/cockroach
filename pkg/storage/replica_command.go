@@ -233,7 +233,7 @@ func (r *Replica) adminSplitWithDescriptor(
 
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
-	if r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeMerges) {
+	if r.store.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeMerges) {
 		// To be safe, don't increment the generation counter unless all nodes are
 		// known to be aware of its existence. Since encoded range descriptors are
 		// used in CPut operations, it is theorized that non-nil generation counters
@@ -354,7 +354,7 @@ func (r *Replica) AdminMerge(
 ) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
 
-	if err := r.ClusterSettings().Version.CheckVersion(cluster.VersionRangeMerges, "range merges"); err != nil {
+	if err := r.store.ClusterSettings().Version.CheckVersion(cluster.VersionRangeMerges, "range merges"); err != nil {
 		return reply, roachpb.NewError(err)
 	}
 
@@ -538,7 +538,7 @@ func (r *Replica) AdminMerge(
 	// Note that client.DB.Txn performs retries using the same transaction, so we
 	// have to use our own retry loop.
 	for {
-		txn := client.NewTxn(ctx, r.store.DB(), r.NodeID(), client.RootTxn)
+		txn := client.NewTxn(ctx, r.store.DB(), r.store.nodeDesc.NodeID, client.RootTxn)
 		err := runMergeTxn(txn)
 		if err != nil {
 			txn.CleanupOnError(ctx, err)
@@ -897,7 +897,7 @@ func (r *Replica) sendSnapshot(
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
 
-	fromRepDesc, err := r.GetReplicaDescriptor()
+	fromRepDesc, err := (*ReplicaEvalContext)(r).GetReplicaDescriptor()
 	if err != nil {
 		return errors.Wrapf(err, "%s: change replicas failed", r)
 	}
@@ -923,7 +923,7 @@ func (r *Replica) sendSnapshot(
 				Snapshot: snap.RaftSnap,
 			},
 		},
-		RangeSize: r.GetMVCCStats().Total(),
+		RangeSize: (*ReplicaEvalContext)(r).GetMVCCStats().Total(),
 		// Recipients can choose to decline preemptive snapshots.
 		CanDecline: snapType == snapTypePreemptive,
 		Priority:   priority,

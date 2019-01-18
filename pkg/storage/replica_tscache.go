@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -292,8 +293,12 @@ func (r *Replica) applyTimestampCache(
 // In the diagram, CanCreateTxnRecord is consulted in both of the state
 // transitions that move away from the "no txn record" state. Updating
 // v1 and v2 is performed in updateTimestampCache.
-func (r *Replica) CanCreateTxnRecord(
-	txnID uuid.UUID, txnKey []byte, txnMinTSUpperBound hlc.Timestamp,
+func CanCreateTxnRecord(
+	tsCache tscache.Cache,
+	txnSpanGCThreshold hlc.Timestamp,
+	txnID uuid.UUID,
+	txnKey []byte,
+	txnMinTSUpperBound hlc.Timestamp,
 ) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason) {
 	// Consult the timestamp cache with the transaction's key. The timestamp
 	// cache is used in two ways for transactions without transaction records.
@@ -311,7 +316,7 @@ func (r *Replica) CanCreateTxnRecord(
 	// transaction, which indicates the minimum timestamp that the transaction
 	// can commit at. This is used by pushers to push the timestamp of a
 	// transaction that hasn't yet written its transaction record.
-	minCommitTS, _ = r.store.tsCache.GetMaxRead(key, nil /* end */)
+	minCommitTS, _ = tsCache.GetMaxRead(key, nil /* end */)
 
 	// Also look in the write timestamp cache to see if there is an entry for
 	// this transaction, which would indicate this transaction has already been
@@ -320,7 +325,7 @@ func (r *Replica) CanCreateTxnRecord(
 	// then the error will be transformed into an ambiguous one higher up.
 	// Otherwise, if the client is still waiting for a result, then this cannot
 	// be a "replay" of any sort.
-	wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil /* end */)
+	wTS, wTxnID := tsCache.GetMaxWrite(key, nil /* end */)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
 	if !wTS.Less(txnMinTSUpperBound) {
@@ -361,7 +366,7 @@ func (r *Replica) CanCreateTxnRecord(
 	// the write timestamp cache when we performed a GC then we wouldn't need this
 	// check at all. Another alternative is that we could rely on the PushTxn(ABORT)
 	// that the GC queue sends to bump the write timestamp cache on aborted txns.
-	if !r.GetTxnSpanGCThreshold().Less(txnMinTSUpperBound) {
+	if !txnSpanGCThreshold.Less(txnMinTSUpperBound) {
 		return false, minCommitTS, roachpb.ABORT_REASON_NEW_TXN_RECORD_TOO_OLD
 	}
 

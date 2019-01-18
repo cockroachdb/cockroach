@@ -1964,7 +1964,7 @@ func (r *Replica) processRaftCommand(
 
 	if expensiveSplitAssertion && raftCmd.ReplicatedEvalResult.Split != nil {
 		split := raftCmd.ReplicatedEvalResult.Split
-		lhsStatsMS := r.GetMVCCStats()
+		lhsStatsMS := (*ReplicaEvalContext)(r).GetMVCCStats()
 		lhsComputedMS, err := rditer.ComputeStatsForRange(&split.LeftDesc, r.store.Engine(), lhsStatsMS.LastUpdateNanos)
 		if err != nil {
 			log.Fatal(ctx, err)
@@ -1975,7 +1975,7 @@ func (r *Replica) processRaftCommand(
 			log.Fatal(ctx, err)
 		}
 
-		rhsStatsMS := rightReplica.GetMVCCStats()
+		rhsStatsMS := (*ReplicaEvalContext)(rightReplica).GetMVCCStats()
 		rhsComputedMS, err := rditer.ComputeStatsForRange(&split.RightDesc, r.store.Engine(), rhsStatsMS.LastUpdateNanos)
 		if err != nil {
 			log.Fatal(ctx, err)

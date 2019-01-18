@@ -1167,7 +1167,7 @@ func (m *multiTestContext) replicateRangeNonFatal(rangeID roachpb.RangeID, dests
 			if err != nil {
 				return err
 			}
-			repDesc, err := repl.GetReplicaDescriptor()
+			repDesc, err := (*storage.ReplicaEvalContext)(repl).GetReplicaDescriptor()
 			if err != nil {
 				return err
 			}

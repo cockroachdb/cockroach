@@ -144,6 +144,12 @@ type ReplicaInterface interface {
 	ContainsKey(roachpb.Key) bool
 }
 
+type ContainsKeyFunc func(roachpb.Key) bool
+
+var _ ReplicaInterface = ContainsKeyFunc(nil)
+
+func (f ContainsKeyFunc) ContainsKey(k roachpb.Key) bool { return f(k) }
+
 // TestingKnobs represents testing knobs for a Queue.
 type TestingKnobs struct {
 	// OnTxnWaitEnqueue is called when a would-be pusher joins a wait queue.

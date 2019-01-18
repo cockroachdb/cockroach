@@ -511,7 +511,7 @@ func (tc *TestCluster) WaitForSplitAndReplication(startKey roachpb.Key) error {
 			if err != nil {
 				return err
 			}
-			actualReplicaDesc, err := repl.GetReplicaDescriptor()
+			actualReplicaDesc, err := (*storage.ReplicaEvalContext)(repl).GetReplicaDescriptor()
 			if err != nil {
 				return err
 			}

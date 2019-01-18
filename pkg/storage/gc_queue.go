@@ -535,7 +535,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 
 	// Technically not needed since we're talking directly to the Replica.
 	ba.RangeID = r.repl.Desc().RangeID
-	ba.Timestamp = r.repl.Clock().Now()
+	ba.Timestamp = r.repl.store.Clock().Now()
 	ba.Add(&req)
 
 	if _, pErr := r.repl.Send(ctx, ba); pErr != nil {
@@ -590,7 +590,7 @@ func (gcq *gcQueue) processImpl(
 		return err
 	}
 
-	log.Eventf(ctx, "MVCC stats after GC: %+v", repl.GetMVCCStats())
+	log.Eventf(ctx, "MVCC stats after GC: %+v", (*ReplicaEvalContext)(repl).GetMVCCStats())
 	log.Eventf(ctx, "GC score after GC: %s", makeGCQueueScore(ctx, repl, repl.store.Clock().Now(), sysCfg))
 	info.updateMetrics(gcq.store.metrics)
 

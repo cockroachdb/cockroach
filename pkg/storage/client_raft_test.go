@@ -606,7 +606,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if mvcc, mvcc2 := repl.GetMVCCStats(), repl2.GetMVCCStats(); mvcc2 != mvcc {
+		if mvcc, mvcc2 := (*storage.ReplicaEvalContext)(repl).GetMVCCStats(), (*storage.ReplicaEvalContext)(repl2).GetMVCCStats(); mvcc2 != mvcc {
 			return errors.Errorf("expected stats on new range:\n%+v\not equal old:\n%+v", mvcc2, mvcc)
 		}
 		return nil
@@ -1289,11 +1289,11 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			repDesc, err := repl.GetReplicaDescriptor()
+			repDesc, err := (*storage.ReplicaEvalContext)(repl).GetReplicaDescriptor()
 			if err != nil {
 				t.Fatal(err)
 			}
-			if lease, _ := repl.GetLease(); lease.Replica != repDesc {
+			if lease, _ := (*storage.ReplicaEvalContext)(repl).GetLease(); lease.Replica != repDesc {
 				return errors.Errorf("lease not transferred yet; found %v", lease)
 			}
 			return nil
@@ -1533,7 +1533,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 				return errors.New("replica is not available yet")
 			}
 			var err error
-			corruptRep, err = r.GetReplicaDescriptor()
+			corruptRep, err = (*storage.ReplicaEvalContext)(r).GetReplicaDescriptor()
 			return err
 		})
 
@@ -2415,11 +2415,11 @@ outer:
 					if toStore == store {
 						continue
 					}
-					repDesc, err := repl.GetReplicaDescriptor()
+					repDesc, err := (*storage.ReplicaEvalContext)(repl).GetReplicaDescriptor()
 					if err != nil {
 						t.Fatal(err)
 					}
-					if lease, _ := repl.GetLease(); lease.Replica == repDesc {
+					if lease, _ := (*storage.ReplicaEvalContext)(repl).GetLease(); lease.Replica == repDesc {
 						mtc.transferLease(context.TODO(), rangeID, leaderIdx, replicaIdx)
 					}
 					mtc.unreplicateRange(rangeID, leaderIdx)
@@ -3816,7 +3816,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	if repl0 == nil {
 		t.Fatalf("no replica found for key '%s'", key)
 	}
-	rd0, err := repl0.GetReplicaDescriptor()
+	rd0, err := (*storage.ReplicaEvalContext)(repl0).GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3826,7 +3826,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	if repl1 == nil {
 		t.Fatalf("no replica found for key '%s'", key)
 	}
-	rd1, err := repl1.GetReplicaDescriptor()
+	rd1, err := (*storage.ReplicaEvalContext)(repl1).GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4080,7 +4080,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	mtc.replicateRange(repl.RangeID, 1)
 
 	// Find the leaseholder and then restart the test context.
-	lease, _ := repl.GetLease()
+	lease, _ := (*storage.ReplicaEvalContext)(repl).GetLease()
 	mtc.restart()
 
 	// Get replica from the store which isn't the leaseholder.

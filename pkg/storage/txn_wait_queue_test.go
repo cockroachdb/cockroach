@@ -65,6 +65,8 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	replI := txnwait.ContainsKeyFunc((*ReplicaEvalContext)(tc.repl).ContainsKey)
+
 	// Queue starts enabled.
 	q := tc.repl.txnWaitQueue
 	if !q.IsEnabled() {
@@ -85,7 +87,11 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req)
+		resp, pErr := q.MaybeWaitForPush(
+			context.Background(),
+			replI,
+			&req,
+		)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -125,7 +131,11 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 		t.Fatalf("expected update to silently fail since queue is disabled")
 	}
 
-	if resp, pErr := q.MaybeWaitForPush(context.TODO(), tc.repl, &req); resp != nil || pErr != nil {
+	if resp, pErr := q.MaybeWaitForPush(
+		context.TODO(),
+		replI,
+		&req,
+	); resp != nil || pErr != nil {
 		t.Errorf("expected nil resp and err as queue is disabled; got %+v, %s", resp, pErr)
 	}
 }
@@ -155,7 +165,11 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(ctx, tc.repl, &req)
+		resp, pErr := q.MaybeWaitForPush(
+			ctx,
+			txnwait.ContainsKeyFunc((*ReplicaEvalContext)(tc.repl).ContainsKey),
+			&req,
+		)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -209,9 +223,11 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	q.Enable()
 	q.Enqueue(txn)
 
+	replI := txnwait.ContainsKeyFunc((*ReplicaEvalContext)(tc.repl).ContainsKey)
+
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req1)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), replI, &req1)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -223,7 +239,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	})
 
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req2)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), replI, &req2)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -291,9 +307,11 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	q.Enable()
 	q.Enqueue(txn)
 
+	replI := txnwait.ContainsKeyFunc((*ReplicaEvalContext)(tc.repl).ContainsKey)
+
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, req)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), replI, req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -339,13 +357,15 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 		PusheeTxn: txn.TxnMeta,
 	}
 
+	replI := txnwait.ContainsKeyFunc((*ReplicaEvalContext)(tc.repl).ContainsKey)
+
 	q := tc.repl.txnWaitQueue
 	q.Enable()
 	q.Enqueue(txn)
 
 	retCh := make(chan RespWithErr, 1)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), replI, &req)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 
@@ -415,9 +435,11 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	q.Enable()
 	q.Enqueue(txn)
 
+	replI := txnwait.ContainsKeyFunc((*ReplicaEvalContext)(tc.repl).ContainsKey)
+
 	retCh := make(chan RespWithErr, 2)
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req1)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), replI, &req1)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -429,7 +451,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	})
 
 	go func() {
-		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req2)
+		resp, pErr := q.MaybeWaitForPush(context.Background(), replI, &req2)
 		retCh <- RespWithErr{resp, pErr}
 	}()
 	testutils.SucceedsSoon(t, func() error {
@@ -486,13 +508,15 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 			PusheeTxn: txn.TxnMeta,
 		}
 
+		replI := txnwait.ContainsKeyFunc((*ReplicaEvalContext)(tc.repl).ContainsKey)
+
 		q := tc.repl.txnWaitQueue
 		q.Enable()
 		q.Enqueue(txn)
 
 		retCh := make(chan RespWithErr, 1)
 		go func() {
-			resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req)
+			resp, pErr := q.MaybeWaitForPush(context.Background(), replI, &req)
 			retCh <- RespWithErr{resp, pErr}
 		}()
 
@@ -571,6 +595,8 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	q := tc.repl.txnWaitQueue
 	q.Enable()
 
+	replI := txnwait.ContainsKeyFunc((*ReplicaEvalContext)(tc.repl).ContainsKey)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	for _, txn := range []*roachpb.Transaction{txnA, txnB, txnC} {
 		q.Enqueue(txn)
@@ -579,7 +605,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	retCh := make(chan RespWithErr, 3)
 	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB, reqC} {
 		go func(req *roachpb.PushTxnRequest) {
-			resp, pErr := q.MaybeWaitForPush(ctx, tc.repl, req)
+			resp, pErr := q.MaybeWaitForPush(ctx, replI, req)
 			retCh <- RespWithErr{resp, pErr}
 		}(req)
 	}
@@ -647,6 +673,8 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	q := tc.repl.txnWaitQueue
 	q.Enable()
 
+	replI := txnwait.ContainsKeyFunc((*ReplicaEvalContext)(tc.repl).ContainsKey)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 		q.Enqueue(txn)
@@ -655,7 +683,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	retCh := make(chan ReqWithErr, 2)
 	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB} {
 		go func(req *roachpb.PushTxnRequest) {
-			_, pErr := q.MaybeWaitForPush(ctx, tc.repl, req)
+			_, pErr := q.MaybeWaitForPush(ctx, replI, req)
 			retCh <- ReqWithErr{req, pErr}
 		}(req)
 	}

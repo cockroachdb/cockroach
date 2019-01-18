@@ -288,7 +288,11 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 	// Gossip the first range whenever its lease is acquired. We check to make
 	// sure the lease is active so that a trailing replica won't process an old
 	// lease request and attempt to gossip the first range.
-	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
+	if leaseChangingHands &&
+		iAmTheLeaseHolder &&
+		(*ReplicaEvalContext)(r).IsFirstRange() &&
+		r.IsLeaseValid(newLease, r.store.Clock().Now()) {
+
 		r.gossipFirstRange(ctx)
 	}
 
@@ -903,7 +907,7 @@ func (r *Replica) evaluateProposal(
 		usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
 		r.mu.RUnlock()
 		if !usingAppliedStateKey &&
-			r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
+			r.store.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
 			if res.Replicated.State == nil {
 				res.Replicated.State = &storagepb.ReplicaState{}
 			}

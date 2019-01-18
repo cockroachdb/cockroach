@@ -169,7 +169,7 @@ func (mq *mergeQueue) shouldQueue(
 		return false, 0
 	}
 
-	sizeRatio := float64(repl.GetMVCCStats().Total()) / float64(repl.GetMinBytes())
+	sizeRatio := float64((*ReplicaEvalContext)(repl).GetMVCCStats().Total()) / float64(repl.GetMinBytes())
 	if math.IsNaN(sizeRatio) || sizeRatio >= 1 {
 		// This range is above the minimum size threshold. It does not need to be
 		// merged.
@@ -225,7 +225,7 @@ func (mq *mergeQueue) process(
 		return nil
 	}
 
-	lhsStats := lhsRepl.GetMVCCStats()
+	lhsStats := (*ReplicaEvalContext)(lhsRepl).GetMVCCStats()
 	minBytes := lhsRepl.GetMinBytes()
 	if lhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: LHS meets minimum size threshold %d with %d bytes",
@@ -233,7 +233,7 @@ func (mq *mergeQueue) process(
 		return nil
 	}
 
-	lhsQPS := lhsRepl.GetSplitQPS()
+	lhsQPS := (*ReplicaEvalContext)(lhsRepl).GetSplitQPS()
 	timeSinceLastReq := lhsRepl.store.Clock().PhysicalTime().Sub(lhsRepl.GetLastRequestTime())
 	rhsDesc, rhsStats, rhsQPS, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
 	if err != nil {
@@ -276,7 +276,7 @@ func (mq *mergeQueue) process(
 				NodeID: lhsReplDesc.NodeID, StoreID: lhsReplDesc.StoreID,
 			})
 		}
-		lease, _ := lhsRepl.GetLease()
+		lease, _ := (*ReplicaEvalContext)(lhsRepl).GetLease()
 		for i := range targets {
 			if targets[i].NodeID == lease.Replica.NodeID && targets[i].StoreID == lease.Replica.StoreID {
 				if i > 0 {

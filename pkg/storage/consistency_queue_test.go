@@ -453,7 +453,7 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ms := repl.GetMVCCStats()
+	ms := (*storage.ReplicaEvalContext)(repl).GetMVCCStats()
 	if ms.SysCount >= sysCountGarbage {
 		t.Fatalf("still have a SysCount of %d", ms.SysCount)
 	}

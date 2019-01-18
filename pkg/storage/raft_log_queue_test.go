@@ -529,7 +529,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			oldFirstIndex, err := r.GetFirstIndex()
+			oldFirstIndex, err := (*ReplicaEvalContext)(r).GetFirstIndex()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -546,7 +546,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 			// fairly quickly, there is a slight race between this check and the
 			// truncation, especially when under stress.
 			testutils.SucceedsSoon(t, func() error {
-				newFirstIndex, err := r.GetFirstIndex()
+				newFirstIndex, err := (*ReplicaEvalContext)(r).GetFirstIndex()
 				if err != nil {
 					t.Fatal(err)
 				}

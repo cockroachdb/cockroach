@@ -212,7 +212,7 @@ type RangeInfo struct {
 func rangeInfoForRepl(repl *Replica, desc *roachpb.RangeDescriptor) RangeInfo {
 	info := RangeInfo{
 		Desc:         desc,
-		LogicalBytes: repl.GetMVCCStats().Total(),
+		LogicalBytes: (*ReplicaEvalContext)(repl).GetMVCCStats().Total(),
 	}
 	if queriesPerSecond, dur := repl.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
 		info.QueriesPerSecond = queriesPerSecond

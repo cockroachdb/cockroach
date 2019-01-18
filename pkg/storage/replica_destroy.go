@@ -125,12 +125,12 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb.ReplicaID) error {
 	startTime := timeutil.Now()
 
-	ms := r.GetMVCCStats()
+	ms := (*ReplicaEvalContext)(r).GetMVCCStats()
 
 	const destroyData = true
-	batch := r.Engine().NewWriteOnlyBatch()
+	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
-	if err := r.preDestroyRaftMuLocked(ctx, r.Engine(), batch, nextReplicaID, destroyData); err != nil {
+	if err := r.preDestroyRaftMuLocked(ctx, r.store.Engine(), batch, nextReplicaID, destroyData); err != nil {
 		return err
 	}
 	preTime := timeutil.Now()

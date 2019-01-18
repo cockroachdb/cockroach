@@ -450,7 +450,7 @@ func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.
 	if bq.needsLease {
 		// Check to see if either we own the lease or do not know who the lease
 		// holder is.
-		if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, now) &&
+		if lease, _ := (*ReplicaEvalContext)(repl).GetLease(); repl.IsLeaseValid(lease, now) &&
 			!lease.OwnedBy(repl.store.StoreID()) {
 			if log.V(1) {
 				log.Infof(ctx, "needs lease; not adding: %+v", lease)

@@ -187,7 +187,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	{
 		repl := mtc.stores[0].LookupReplica(keys.MustAddr(span.Key))
 		var err error
-		if ba.Replica, err = repl.GetReplicaDescriptor(); err != nil {
+		if ba.Replica, err = (*storage.ReplicaEvalContext)(repl).GetReplicaDescriptor(); err != nil {
 			t.Fatal(err)
 		}
 		ba.RangeID = repl.RangeID
