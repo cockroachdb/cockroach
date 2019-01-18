@@ -367,10 +367,12 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `INSERT INTO add_column VALUES (1)`)
 			addColumn := f.Feed(t, `CREATE CHANGEFEED FOR add_column`)
 			defer addColumn.Close(t)
+			assertPayloads(t, addColumn, []string{
+				`add_column: [1]->{"a": 1}`,
+			})
 			sqlDB.Exec(t, `ALTER TABLE add_column ADD COLUMN b STRING`)
 			sqlDB.Exec(t, `INSERT INTO add_column VALUES (2, '2')`)
 			assertPayloads(t, addColumn, []string{
-				`add_column: [1]->{"a": 1}`,
 				`add_column: [2]->{"a": 2, "b": "2"}`,
 			})
 		})
@@ -1521,7 +1523,7 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'v0')`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'init')`)
 
 		foo1 := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
 		defer foo1.Close(t)
@@ -1530,6 +1532,12 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 		foo3 := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
 		defer foo3.Close(t)
 
+		// Make sure all the changefeeds are going.
+		assertPayloads(t, foo1, []string{`foo: [0]->{"a": 0, "b": "init"}`})
+		assertPayloads(t, foo2, []string{`foo: [0]->{"a": 0, "b": "init"}`})
+		assertPayloads(t, foo3, []string{`foo: [0]->{"a": 0, "b": "init"}`})
+
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'v0')`)
 		assertPayloads(t, foo1, []string{
 			`foo: [0]->{"a": 0, "b": "v0"}`,
 		})
