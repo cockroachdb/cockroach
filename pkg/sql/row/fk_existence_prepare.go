@@ -35,16 +35,16 @@ import (
 func TablesNeededForFKs(
 	ctx context.Context,
 	table *sqlbase.ImmutableTableDescriptor,
-	usage FKCheck,
+	usage FKCheckType,
 	lookup TableLookupFunction,
 	checkPrivilege CheckPrivilegeFunction,
 	analyzeExpr sqlbase.AnalyzeExprFunction,
 ) (TableLookupsByID, error) {
 	queue := tableLookupQueue{
-		tableLookups:   make(TableLookupsByID),
-		alreadyChecked: make(map[ID]map[FKCheck]struct{}),
-		lookup:         lookup,
-		checkPrivilege: checkPrivilege,
+		result:         make(TableLookupsByID),
+		alreadyChecked: make(map[ID]map[FKCheckType]struct{}),
+		tblLookupFn:    lookup,
+		privCheckFn:    checkPrivilege,
 		analyzeExpr:    analyzeExpr,
 	}
 	// Add the passed in table descriptor to the table lookup.
@@ -52,14 +52,14 @@ func TablesNeededForFKs(
 	if err := baseTableLookup.addCheckHelper(ctx, analyzeExpr); err != nil {
 		return nil, err
 	}
-	queue.tableLookups[table.ID] = baseTableLookup
+	queue.result[table.ID] = baseTableLookup
 	if err := queue.enqueue(ctx, table.ID, usage); err != nil {
 		return nil, err
 	}
 	for {
 		tableLookup, curUsage, exists := queue.dequeue()
 		if !exists {
-			return queue.tableLookups, nil
+			return queue.result, nil
 		}
 		// If the table descriptor is nil it means that there was no actual lookup
 		// performed. Meaning there is no need to walk any secondary relationships
@@ -94,7 +94,7 @@ func TablesNeededForFKs(
 						return nil, err
 					}
 					if curUsage == CheckDeletes {
-						var nextUsage FKCheck
+						var nextUsage FKCheckType
 						switch referencedIdx.ForeignKey.OnDelete {
 						case sqlbase.ForeignKeyReference_CASCADE:
 							nextUsage = CheckDeletes

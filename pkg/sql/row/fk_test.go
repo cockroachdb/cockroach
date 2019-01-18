@@ -183,7 +183,7 @@ func TestTablesNeededForFKs(t *testing.T) {
 		return TableLookup{Table: table}, nil
 	}
 
-	test := func(t *testing.T, usage FKCheck, expectedIDs []ID) {
+	test := func(t *testing.T, usage FKCheckType, expectedIDs []ID) {
 		tableLookups, err := TablesNeededForFKs(
 			context.TODO(),
 			xDesc,
@@ -216,8 +216,8 @@ func TestTablesNeededForFKs(t *testing.T) {
 	})
 }
 
-// BenchmarkMultiRowFKChecks performs several benchmarks that pertain to operations involving foreign keys and cascades.
-func BenchmarkMultiRowFKChecks(b *testing.B) {
+// BenchmarkMultiRowFKCheckTypes performs several benchmarks that pertain to operations involving foreign keys and cascades.
+func BenchmarkMultiRowFKCheckTypes(b *testing.B) {
 	if testing.Short() {
 		b.Skip("short flag")
 	}
