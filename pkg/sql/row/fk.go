@@ -17,7 +17,6 @@ package row
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -268,64 +267,3 @@ func TablesNeededForFKs(
 }
 
 var errSkipUnusedFK = errors.New("no columns involved in FK included in writer")
-
-func checkIdx(
-	ctx context.Context,
-	checker *fkBatchChecker,
-	fks map[sqlbase.IndexID][]baseFKHelper,
-	idx sqlbase.IndexID,
-	row tree.Datums,
-	traceKV bool,
-) error {
-outer:
-	for i, fk := range fks[idx] {
-		// See https://github.com/cockroachdb/cockroach/issues/20305 or
-		// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
-		// different composite foreign key matching methods.
-		switch fk.ref.Match {
-		case sqlbase.ForeignKeyReference_SIMPLE:
-			for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
-				found, ok := fk.ids[colID]
-				if !ok {
-					return pgerror.NewAssertionErrorf("fk ids (%v) missing column id %d", fk.ids, colID)
-				}
-				if row[found] == tree.DNull {
-					continue outer
-				}
-			}
-			if err := checker.addCheck(ctx, row, &fks[idx][i], traceKV); err != nil {
-				return err
-			}
-		case sqlbase.ForeignKeyReference_FULL:
-			var nulls, notNulls bool
-			for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
-				found, ok := fk.ids[colID]
-				if !ok {
-					return pgerror.NewAssertionErrorf("fk ids (%v) missing column id %d", fk.ids, colID)
-				}
-				if row[found] == tree.DNull {
-					nulls = true
-				} else {
-					notNulls = true
-				}
-				if nulls && notNulls {
-					// TODO(bram): expand this error to show more details.
-					return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
-						"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
-						row, fk.ref.Name,
-					)
-				}
-			}
-			// Never check references for MATCH FULL that are all nulls.
-			if nulls {
-				continue
-			}
-			if err := checker.addCheck(ctx, row, &fks[idx][i], traceKV); err != nil {
-				return err
-			}
-		default:
-			return pgerror.NewAssertionErrorf("unknown composite key match type: %v", fk.ref.Match)
-		}
-	}
-	return nil
-}
