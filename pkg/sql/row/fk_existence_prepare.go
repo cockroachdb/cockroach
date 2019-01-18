@@ -20,10 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// The utilities in this file facilitate the prepare phase of FK
-// existence checks, during or at the end of logical planning, and
-// before execution starts.
-
 // TablesNeededForFKs populates a map of TableLookupsByID for all the
 // TableDescriptors that might be needed when performing FK checking for delete
 // and/or insert operations. It uses the passed in lookup function to perform
@@ -34,66 +30,107 @@ import (
 // CheckHelpers are required.
 func TablesNeededForFKs(
 	ctx context.Context,
-	table *sqlbase.ImmutableTableDescriptor,
-	usage FKCheckType,
-	lookup TableLookupFunction,
-	checkPrivilege CheckPrivilegeFunction,
-	analyzeExpr sqlbase.AnalyzeExprFunction,
+	mutatedTable *sqlbase.ImmutableTableDescriptor,
+	startUsage FKCheckType,
+	tblLookupFn TableLookupFunction,
+	privCheckFn CheckPrivilegeFunction,
+	analyzeExprFn sqlbase.AnalyzeExprFunction,
 ) (TableLookupsByID, error) {
+	// Initialize the lookup queue.
 	queue := tableLookupQueue{
 		result:         make(TableLookupsByID),
 		alreadyChecked: make(map[ID]map[FKCheckType]struct{}),
-		tblLookupFn:    lookup,
-		privCheckFn:    checkPrivilege,
-		analyzeExpr:    analyzeExpr,
+		tblLookupFn:    tblLookupFn,
+		privCheckFn:    privCheckFn,
+		analyzeExprFn:  analyzeExprFn,
 	}
+
 	// Add the passed in table descriptor to the table lookup.
-	baseTableEntry := TableEntry{Table: table}
-	if err := baseTableEntry.addCheckHelper(ctx, analyzeExpr); err != nil {
+	//
+	// This logic is very close to (*tableLookupQueue).getTable()
+	// however differs in two important aspects:
+	// - we are not checking the privilege; the caller
+	//   will have done that given the type of SQL mutation statement.
+	//   For example UPDATE wants to check the table for UPDATE privilege.
+	// - we do process the mutatedTable that's given even if it is
+	//   in "adding" state or non-public.
+	//
+	startTableEntry := TableEntry{Table: mutatedTable}
+	if err := startTableEntry.addCheckHelper(ctx, analyzeExprFn); err != nil {
 		return nil, err
 	}
-	queue.result[table.ID] = baseTableEntry
-	if err := queue.enqueue(ctx, table.ID, usage); err != nil {
+	queue.result[mutatedTable.ID] = startTableEntry
+	if err := queue.enqueue(ctx, mutatedTable.ID, startUsage); err != nil {
 		return nil, err
 	}
+
+	// Main lookup queue.
 	for {
-		tableEntry, curUsage, exists := queue.dequeue()
-		if !exists {
+		// Pop one unit of work.
+		tableEntry, usage, hasWork := queue.dequeue()
+		if !hasWork {
 			return queue.result, nil
 		}
+
 		// If the table descriptor is nil it means that there was no actual lookup
 		// performed. Meaning there is no need to walk any secondary relationships
 		// and the table descriptor lookup will happen later.
+		//
+		// TODO(knz): the paragraph above is suspicious. A nil table desc
+		// indicates the table is non-public. In either case it seems that
+		// if there is a descriptor we ought to carry out the FK
+		// work. What gives?
 		if tableEntry.IsAdding || tableEntry.Table == nil {
 			continue
 		}
+
+		// Explore all the FK constraints on the table/.
 		for _, idx := range tableEntry.Table.AllNonDropIndexes() {
-			if curUsage == CheckInserts || curUsage == CheckUpdates {
+
+			if usage == CheckInserts || usage == CheckUpdates {
+				// If the mutation performed is an insertion or an update,
+				// we'll need to do existence checks on the referenced
+				// table(s), if any.
 				if idx.ForeignKey.IsSet() {
 					if _, err := queue.getTable(ctx, idx.ForeignKey.Table); err != nil {
 						return nil, err
 					}
 				}
 			}
-			if curUsage == CheckDeletes || curUsage == CheckUpdates {
+
+			if usage == CheckDeletes || usage == CheckUpdates {
+				// If the mutaiton performed is a deletion or an update,
+				// we'll need to do existence checks on the referencing
+				// table(s), if any, as well as cascading actions.
 				for _, ref := range idx.ReferencedBy {
-					// The table being referenced is required to know the relationship, so
+					// The referencing table is required to know the relationship, so
 					// fetch it here.
-					referencedTableEntry, err := queue.getTable(ctx, ref.Table)
+					referencingTableEntry, err := queue.getTable(ctx, ref.Table)
 					if err != nil {
 						return nil, err
 					}
+
 					// Again here if the table descriptor is nil it means that there was
 					// no actual lookup performed. Meaning there is no need to walk any
 					// secondary relationships.
-					if referencedTableEntry.IsAdding || referencedTableEntry.Table == nil {
+					//
+					// TODO(knz): this comment is suspicious for the same
+					// reasons as above.
+					if referencingTableEntry.IsAdding || referencingTableEntry.Table == nil {
 						continue
 					}
-					referencedIdx, err := referencedTableEntry.Table.FindIndexByID(ref.Index)
+
+					// Find the index that carries the constraint metadata.
+					//
+					// TODO(knz,bram): constraint metadata should not be carried
+					// by index descriptors! We need to find a different way to
+					// encode this.
+					referencedIdx, err := referencingTableEntry.Table.FindIndexByID(ref.Index)
 					if err != nil {
 						return nil, err
 					}
-					if curUsage == CheckDeletes {
+
+					if usage == CheckDeletes {
 						var nextUsage FKCheckType
 						switch referencedIdx.ForeignKey.OnDelete {
 						case sqlbase.ForeignKeyReference_CASCADE:
@@ -104,7 +141,7 @@ func TablesNeededForFKs(
 							// There is no need to check any other relationships.
 							continue
 						}
-						if err := queue.enqueue(ctx, referencedTableEntry.Table.ID, nextUsage); err != nil {
+						if err := queue.enqueue(ctx, referencingTableEntry.Table.ID, nextUsage); err != nil {
 							return nil, err
 						}
 					} else {
@@ -113,7 +150,7 @@ func TablesNeededForFKs(
 							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_DEFAULT ||
 							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_NULL {
 							if err := queue.enqueue(
-								ctx, referencedTableEntry.Table.ID, CheckUpdates,
+								ctx, referencingTableEntry.Table.ID, CheckUpdates,
 							); err != nil {
 								return nil, err
 							}
