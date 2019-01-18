@@ -1112,7 +1112,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 	_, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
 		// Keep track of the column mutations being reversed so that indexes
 		// referencing them can be dropped.
-		columnIDs := make(map[sqlbase.ColumnID]struct{})
+		columns := make(map[string]struct{})
 		droppedMutations = nil
 
 		for i, mutation := range desc.Mutations {
@@ -1132,16 +1132,16 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			}
 
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
-			desc.Mutations[i] = sc.reverseMutation(mutation, false /*notStarted*/, columnIDs)
+			desc.Mutations[i], columns = sc.reverseMutation(mutation, false /*notStarted*/, columns)
 
 			desc.Mutations[i].Rollback = true
 		}
 
 		// Delete all mutations that reference any of the reversed columns
 		// by running a graph traversal of the mutations.
-		if len(columnIDs) > 0 {
+		if len(columns) > 0 {
 			var err error
-			droppedMutations, err = sc.deleteMutationsWithReversedColumns(ctx, desc, columnIDs)
+			droppedMutations, err = sc.deleteIndexMutationsWithReversedColumns(ctx, desc, columns)
 			if err != nil {
 				return err
 			}
@@ -1282,47 +1282,33 @@ func (sc *SchemaChanger) createRollbackJob(
 	return nil, fmt.Errorf("no job found for table %d mutation %d", sc.tableID, sc.mutationID)
 }
 
-// deleteMutationsWithReversedColumns deletes mutations with a
+// deleteIndexMutationsWithReversedColumns deletes mutations with a
 // different mutationID than the schema changer and with an index that
 // references one of the reversed columns. Execute this as a breadth
 // first search graph traversal.
-func (sc *SchemaChanger) deleteMutationsWithReversedColumns(
-	ctx context.Context,
-	desc *sqlbase.MutableTableDescriptor,
-	columnIDs map[sqlbase.ColumnID]struct{},
+func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor, columns map[string]struct{},
 ) (map[sqlbase.MutationID]struct{}, error) {
 	dropMutations := make(map[sqlbase.MutationID]struct{})
 	// Run breadth first search traversal that reverses mutations
-
-	drop := func(mutation *sqlbase.DescriptorMutation) {
-		// Such an mutation has to be with direction ADD and in the
-		// DELETE_ONLY state. Live indexes/checks referencing live
-		// columns cannot be deleted and thus never have direction
-		// DROP. All mutations with the ADD direction start off in
-		// the DELETE_ONLY state.
-		if mutation.Direction != sqlbase.DescriptorMutation_ADD ||
-			mutation.State != sqlbase.DescriptorMutation_DELETE_ONLY {
-			panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
-		}
-		log.Warningf(ctx, "drop schema change mutation: %+v", mutation)
-		dropMutations[mutation.MutationID] = struct{}{}
-	}
-
 	for {
 		start := len(dropMutations)
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				if idx := mutation.GetIndex(); idx != nil {
-					for _, id := range idx.ColumnIDs {
-						if _, ok := columnIDs[id]; ok {
-							drop(&mutation)
-							break
-						}
-					}
-				} else if ck := mutation.GetCheck(); ck != nil {
-					for _, id := range ck.ColumnIDs {
-						if _, ok := columnIDs[id]; ok {
-							drop(&mutation)
+					for _, name := range idx.ColumnNames {
+						if _, ok := columns[name]; ok {
+							// Such an index mutation has to be with direction ADD and
+							// in the DELETE_ONLY state. Live indexes referencing live
+							// columns cannot be deleted and thus never have direction
+							// DROP. All mutations with the ADD direction start off in
+							// the DELETE_ONLY state.
+							if mutation.Direction != sqlbase.DescriptorMutation_ADD ||
+								mutation.State != sqlbase.DescriptorMutation_DELETE_ONLY {
+								panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
+							}
+							log.Warningf(ctx, "drop schema change mutation: %+v", mutation)
+							dropMutations[mutation.MutationID] = struct{}{}
 							break
 						}
 					}
@@ -1341,7 +1327,7 @@ func (sc *SchemaChanger) deleteMutationsWithReversedColumns(
 				// Reverse mutation. Update columns to reflect additional
 				// columns that have been purged. This mutation doesn't need
 				// a rollback because it was not started.
-				mutation = sc.reverseMutation(mutation, true /*notStarted*/, columnIDs)
+				mutation, columns = sc.reverseMutation(mutation, true /*notStarted*/, columns)
 				// Mark as complete because this mutation needs no backfill.
 				if err := desc.MakeMutationComplete(mutation); err != nil {
 					return nil, err
@@ -1360,14 +1346,14 @@ func (sc *SchemaChanger) deleteMutationsWithReversedColumns(
 // notStarted is set to true only if the schema change state machine
 // was not started for the mutation.
 func (sc *SchemaChanger) reverseMutation(
-	mutation sqlbase.DescriptorMutation, notStarted bool, columnIDs map[sqlbase.ColumnID]struct{},
-) sqlbase.DescriptorMutation {
+	mutation sqlbase.DescriptorMutation, notStarted bool, columns map[string]struct{},
+) (sqlbase.DescriptorMutation, map[string]struct{}) {
 	switch mutation.Direction {
 	case sqlbase.DescriptorMutation_ADD:
 		mutation.Direction = sqlbase.DescriptorMutation_DROP
 		// A column ADD being reversed gets placed in the map.
 		if col := mutation.GetColumn(); col != nil {
-			columnIDs[col.ID] = struct{}{}
+			columns[col.Name] = struct{}{}
 		}
 		if notStarted && mutation.State != sqlbase.DescriptorMutation_DELETE_ONLY {
 			panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
@@ -1379,7 +1365,7 @@ func (sc *SchemaChanger) reverseMutation(
 			panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
 		}
 	}
-	return mutation
+	return mutation, columns
 }
 
 // TestingSchemaChangerCollection is an exported (for testing) version of
