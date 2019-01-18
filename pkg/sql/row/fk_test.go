@@ -175,12 +175,12 @@ func TestTablesNeededForFKs(t *testing.T) {
 		t.Fatalf("Could not find table:%d", xID)
 	}
 
-	lookup := func(ctx context.Context, tableID ID) (TableLookup, error) {
+	lookup := func(ctx context.Context, tableID ID) (TableEntry, error) {
 		table, exists := tables.tablesByID[tableID]
 		if !exists {
-			return TableLookup{}, errors.Errorf("Could not lookup table:%d", tableID)
+			return TableEntry{}, errors.Errorf("Could not lookup table:%d", tableID)
 		}
-		return TableLookup{Table: table}, nil
+		return TableEntry{Table: table}, nil
 	}
 
 	test := func(t *testing.T, usage FKCheckType, expectedIDs []ID) {

@@ -48,26 +48,26 @@ func TablesNeededForFKs(
 		analyzeExpr:    analyzeExpr,
 	}
 	// Add the passed in table descriptor to the table lookup.
-	baseTableLookup := TableLookup{Table: table}
-	if err := baseTableLookup.addCheckHelper(ctx, analyzeExpr); err != nil {
+	baseTableEntry := TableEntry{Table: table}
+	if err := baseTableEntry.addCheckHelper(ctx, analyzeExpr); err != nil {
 		return nil, err
 	}
-	queue.result[table.ID] = baseTableLookup
+	queue.result[table.ID] = baseTableEntry
 	if err := queue.enqueue(ctx, table.ID, usage); err != nil {
 		return nil, err
 	}
 	for {
-		tableLookup, curUsage, exists := queue.dequeue()
+		tableEntry, curUsage, exists := queue.dequeue()
 		if !exists {
 			return queue.result, nil
 		}
 		// If the table descriptor is nil it means that there was no actual lookup
 		// performed. Meaning there is no need to walk any secondary relationships
 		// and the table descriptor lookup will happen later.
-		if tableLookup.IsAdding || tableLookup.Table == nil {
+		if tableEntry.IsAdding || tableEntry.Table == nil {
 			continue
 		}
-		for _, idx := range tableLookup.Table.AllNonDropIndexes() {
+		for _, idx := range tableEntry.Table.AllNonDropIndexes() {
 			if curUsage == CheckInserts || curUsage == CheckUpdates {
 				if idx.ForeignKey.IsSet() {
 					if _, err := queue.getTable(ctx, idx.ForeignKey.Table); err != nil {
@@ -79,17 +79,17 @@ func TablesNeededForFKs(
 				for _, ref := range idx.ReferencedBy {
 					// The table being referenced is required to know the relationship, so
 					// fetch it here.
-					referencedTableLookup, err := queue.getTable(ctx, ref.Table)
+					referencedTableEntry, err := queue.getTable(ctx, ref.Table)
 					if err != nil {
 						return nil, err
 					}
 					// Again here if the table descriptor is nil it means that there was
 					// no actual lookup performed. Meaning there is no need to walk any
 					// secondary relationships.
-					if referencedTableLookup.IsAdding || referencedTableLookup.Table == nil {
+					if referencedTableEntry.IsAdding || referencedTableEntry.Table == nil {
 						continue
 					}
-					referencedIdx, err := referencedTableLookup.Table.FindIndexByID(ref.Index)
+					referencedIdx, err := referencedTableEntry.Table.FindIndexByID(ref.Index)
 					if err != nil {
 						return nil, err
 					}
@@ -104,7 +104,7 @@ func TablesNeededForFKs(
 							// There is no need to check any other relationships.
 							continue
 						}
-						if err := queue.enqueue(ctx, referencedTableLookup.Table.ID, nextUsage); err != nil {
+						if err := queue.enqueue(ctx, referencedTableEntry.Table.ID, nextUsage); err != nil {
 							return nil, err
 						}
 					} else {
@@ -113,7 +113,7 @@ func TablesNeededForFKs(
 							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_DEFAULT ||
 							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_NULL {
 							if err := queue.enqueue(
-								ctx, referencedTableLookup.Table.ID, CheckUpdates,
+								ctx, referencedTableEntry.Table.ID, CheckUpdates,
 							); err != nil {
 								return nil, err
 							}

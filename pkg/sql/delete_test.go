@@ -119,12 +119,12 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 				}
 			}
 
-			lookup := func(ctx context.Context, tableID sqlbase.ID) (row.TableLookup, error) {
+			lookup := func(ctx context.Context, tableID sqlbase.ID) (row.TableEntry, error) {
 				table, exists := tablesByID[tableID]
 				if !exists {
-					return row.TableLookup{}, errors.Errorf("Could not lookup table:%d", tableID)
+					return row.TableEntry{}, errors.Errorf("Could not lookup table:%d", tableID)
 				}
-				return row.TableLookup{Table: table}, nil
+				return row.TableEntry{Table: table}, nil
 			}
 
 			fkTables, err := row.TablesNeededForFKs(
