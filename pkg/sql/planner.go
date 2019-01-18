@@ -398,7 +398,7 @@ func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.
 		}
 		return row.TableEntry{}, err
 	}
-	return row.TableEntry{Table: table}, nil
+	return row.TableEntry{Desc: table}, nil
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a

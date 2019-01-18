@@ -398,7 +398,7 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 	}
 
 	// if the base table is interleaved in another table, fail
-	for _, idx := range fkTables[table.ID].Table.AllNonDropIndexes() {
+	for _, idx := range fkTables[table.ID].Desc.AllNonDropIndexes() {
 		if len(idx.Interleave.Ancestors) > 0 {
 			return false
 		}
@@ -411,13 +411,13 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 		if _, ok := fkTables[tableID]; !ok {
 			return false
 		}
-		if fkTables[tableID].Table == nil {
+		if fkTables[tableID].Desc == nil {
 			return false
 		}
-		for _, idx := range fkTables[tableID].Table.AllNonDropIndexes() {
+		for _, idx := range fkTables[tableID].Desc.AllNonDropIndexes() {
 			// Don't allow any secondary indexes
 			// TODO(emmanuel): identify the cases where secondary indexes can still work with the fast path and allow them
-			if idx.ID != fkTables[tableID].Table.PrimaryIndex.ID {
+			if idx.ID != fkTables[tableID].Desc.PrimaryIndex.ID {
 				return false
 			}
 
@@ -439,7 +439,7 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 					return false
 				}
 
-				referencingIdx, err := fkTables[ref.Table].Table.FindIndexByID(ref.Index)
+				referencingIdx, err := fkTables[ref.Table].Desc.FindIndexByID(ref.Index)
 				if err != nil {
 					return false
 				}

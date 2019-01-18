@@ -121,7 +121,7 @@ func makeFkExistenceCheckBaseHelper(
 	dir FKCheckType,
 ) (ret fkExistenceCheckBaseHelper, err error) {
 	// Look up the searched table.
-	searchTable := otherTables[ref.Table].Table
+	searchTable := otherTables[ref.Table].Desc
 	if searchTable == nil {
 		return ret, pgerror.NewAssertionErrorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}

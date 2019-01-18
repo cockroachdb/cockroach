@@ -56,9 +56,9 @@ type FkTableMetadata map[TableID]TableEntry
 // can modify rows, and CHECK constraints must be applied to rows
 // modified by CASCADE.
 type TableEntry struct {
-	// Table is the descriptor of the table. This can be nil if eg.
+	// Desc is the descriptor of the table. This can be nil if eg.
 	// the table is not public.
-	Table *sqlbase.ImmutableTableDescriptor
+	Desc *sqlbase.ImmutableTableDescriptor
 
 	// IsAdding indicates the descriptor is being created.
 	IsAdding bool
@@ -178,9 +178,9 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID TableID) (Table
 	if err != nil {
 		return TableEntry{}, err
 	}
-	if !tableEntry.IsAdding && tableEntry.Table != nil {
+	if !tableEntry.IsAdding && tableEntry.Desc != nil {
 		// If we have a real table, we need first to verify the user has permission.
-		if err := q.privCheckFn(ctx, tableEntry.Table, privilege.SELECT); err != nil {
+		if err := q.privCheckFn(ctx, tableEntry.Desc, privilege.SELECT); err != nil {
 			return TableEntry{}, err
 		}
 
@@ -210,9 +210,9 @@ func (tl *TableEntry) addCheckHelper(
 	if analyzeExpr == nil {
 		return nil
 	}
-	tableName := tree.MakeUnqualifiedTableName(tree.Name(tl.Table.Name))
+	tableName := tree.MakeUnqualifiedTableName(tree.Name(tl.Desc.Name))
 	tl.CheckHelper = &sqlbase.CheckHelper{}
-	return tl.CheckHelper.Init(ctx, analyzeExpr, &tableName, tl.Table)
+	return tl.CheckHelper.Init(ctx, analyzeExpr, &tableName, tl.Desc)
 }
 
 // enqueue prepares the lookup work for a given table.
@@ -225,7 +225,7 @@ func (q *tableLookupQueue) enqueue(ctx context.Context, tableID TableID, usage F
 
 	// Don't enqueue if lookup returns an empty tableEntry. This just means that
 	// there is no need to walk any further.
-	if tableEntry.Table == nil {
+	if tableEntry.Desc == nil {
 		return nil
 	}
 
@@ -253,11 +253,11 @@ func (q *tableLookupQueue) enqueue(ctx context.Context, tableID TableID, usage F
 	// already in that mutation's planning code.
 	// Also, there is no CASCADE action that can insert new rows.
 	case CheckDeletes:
-		if err := q.privCheckFn(ctx, tableEntry.Table, privilege.DELETE); err != nil {
+		if err := q.privCheckFn(ctx, tableEntry.Desc, privilege.DELETE); err != nil {
 			return err
 		}
 	case CheckUpdates:
-		if err := q.privCheckFn(ctx, tableEntry.Table, privilege.UPDATE); err != nil {
+		if err := q.privCheckFn(ctx, tableEntry.Desc, privilege.UPDATE); err != nil {
 			return err
 		}
 	}

@@ -55,7 +55,7 @@ func TablesNeededForFKs(
 	// - we do process the mutatedTable that's given even if it is
 	//   in "adding" state or non-public.
 	//
-	startTableEntry := TableEntry{Table: mutatedTable}
+	startTableEntry := TableEntry{Desc: mutatedTable}
 	if err := startTableEntry.addCheckHelper(ctx, analyzeExprFn); err != nil {
 		return nil, err
 	}
@@ -80,12 +80,12 @@ func TablesNeededForFKs(
 		// indicates the table is non-public. In either case it seems that
 		// if there is a descriptor we ought to carry out the FK
 		// work. What gives?
-		if tableEntry.IsAdding || tableEntry.Table == nil {
+		if tableEntry.IsAdding || tableEntry.Desc == nil {
 			continue
 		}
 
 		// Explore all the FK constraints on the table/.
-		for _, idx := range tableEntry.Table.AllNonDropIndexes() {
+		for _, idx := range tableEntry.Desc.AllNonDropIndexes() {
 
 			if usage == CheckInserts || usage == CheckUpdates {
 				// If the mutation performed is an insertion or an update,
@@ -116,7 +116,7 @@ func TablesNeededForFKs(
 					//
 					// TODO(knz): this comment is suspicious for the same
 					// reasons as above.
-					if referencingTableEntry.IsAdding || referencingTableEntry.Table == nil {
+					if referencingTableEntry.IsAdding || referencingTableEntry.Desc == nil {
 						continue
 					}
 
@@ -125,7 +125,7 @@ func TablesNeededForFKs(
 					// TODO(knz,bram): constraint metadata should not be carried
 					// by index descriptors! We need to find a different way to
 					// encode this.
-					referencedIdx, err := referencingTableEntry.Table.FindIndexByID(ref.Index)
+					referencedIdx, err := referencingTableEntry.Desc.FindIndexByID(ref.Index)
 					if err != nil {
 						return nil, err
 					}
@@ -141,7 +141,7 @@ func TablesNeededForFKs(
 							// There is no need to check any other relationships.
 							continue
 						}
-						if err := queue.enqueue(ctx, referencingTableEntry.Table.ID, nextUsage); err != nil {
+						if err := queue.enqueue(ctx, referencingTableEntry.Desc.ID, nextUsage); err != nil {
 							return nil, err
 						}
 					} else {
@@ -150,7 +150,7 @@ func TablesNeededForFKs(
 							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_DEFAULT ||
 							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_NULL {
 							if err := queue.enqueue(
-								ctx, referencingTableEntry.Table.ID, CheckUpdates,
+								ctx, referencingTableEntry.Desc.ID, CheckUpdates,
 							); err != nil {
 								return nil, err
 							}
