@@ -1073,8 +1073,6 @@ func newProcessor(
 			return newIndexBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		case distsqlpb.BackfillerSpec_Column:
 			return newColumnBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
-		case distsqlpb.BackfillerSpec_Check:
-			return newCheckBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		}
 	}
 	if core.Sampler != nil {

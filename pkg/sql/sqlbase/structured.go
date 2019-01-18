@@ -118,10 +118,6 @@ type MutableTableDescriptor struct {
 type ImmutableTableDescriptor struct {
 	TableDescriptor
 
-	// publicAndNonPublicChecks is a list of public and non-public check constraints.
-	// It is partitioned by the state of the index: public, write-only, delete-only
-	publicAndNonPublicChecks []*TableDescriptor_CheckConstraint
-
 	// publicAndNonPublicCols is a list of public and non-public columns.
 	// It is partitioned by the state of the column: public, write-only, delete-only
 	publicAndNonPublicCols []ColumnDescriptor
@@ -130,7 +126,6 @@ type ImmutableTableDescriptor struct {
 	// It is partitioned by the state of the index: public, write-only, delete-only
 	publicAndNonPublicIndexes []IndexDescriptor
 
-	writeOnlyCheckCount int
 	writeOnlyColCount   int
 	writeOnlyIndexCount int
 
@@ -201,7 +196,6 @@ func NewMutableExistingTableDescriptor(tbl TableDescriptor) *MutableTableDescrip
 // NewImmutableTableDescriptor returns a ImmutableTableDescriptor from the
 // given TableDescriptor.
 func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor {
-	publicAndNonPublicChecks := tbl.Checks
 	publicAndNonPublicCols := tbl.Columns
 	publicAndNonPublicIndexes := tbl.Indexes
 
@@ -210,12 +204,10 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 	desc := &ImmutableTableDescriptor{TableDescriptor: tbl}
 
 	if len(tbl.Mutations) > 0 {
-		publicAndNonPublicChecks = make([]*TableDescriptor_CheckConstraint, 0, len(tbl.Checks)+len(tbl.Mutations))
 		publicAndNonPublicCols = make([]ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
 		publicAndNonPublicIndexes = make([]IndexDescriptor, 0, len(tbl.Indexes)+len(tbl.Mutations))
 		readableCols = make([]ColumnDescriptor, 0, len(tbl.Columns)+len(tbl.Mutations))
 
-		publicAndNonPublicChecks = append(publicAndNonPublicChecks, tbl.Checks...)
 		publicAndNonPublicCols = append(publicAndNonPublicCols, tbl.Columns...)
 		publicAndNonPublicIndexes = append(publicAndNonPublicIndexes, tbl.Indexes...)
 		readableCols = append(readableCols, tbl.Columns...)
@@ -231,9 +223,6 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 				} else if col := m.GetColumn(); col != nil {
 					publicAndNonPublicCols = append(publicAndNonPublicCols, *col)
 					desc.writeOnlyColCount++
-				} else if ck := m.GetCheck(); ck != nil {
-					publicAndNonPublicChecks = append(publicAndNonPublicChecks, ck)
-					desc.writeOnlyCheckCount++
 				}
 			}
 		}
@@ -245,8 +234,6 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 					publicAndNonPublicIndexes = append(publicAndNonPublicIndexes, *idx)
 				} else if col := m.GetColumn(); col != nil {
 					publicAndNonPublicCols = append(publicAndNonPublicCols, *col)
-				} else if ck := m.GetCheck(); ck != nil {
-					publicAndNonPublicChecks = append(publicAndNonPublicChecks, ck)
 				}
 			}
 		}
@@ -261,7 +248,6 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 	}
 
 	desc.ReadableColumns = readableCols
-	desc.publicAndNonPublicChecks = publicAndNonPublicChecks
 	desc.publicAndNonPublicCols = publicAndNonPublicCols
 	desc.publicAndNonPublicIndexes = publicAndNonPublicIndexes
 
@@ -548,9 +534,9 @@ func (desc *TableDescriptor) KeysPerRow(indexID IndexID) int {
 	return 1
 }
 
-// AllNonDropColumns returns all the columns, including those being added
+// allNonDropColumns returns all the columns, including those being added
 // in the mutations.
-func (desc *TableDescriptor) AllNonDropColumns() []ColumnDescriptor {
+func (desc *TableDescriptor) allNonDropColumns() []ColumnDescriptor {
 	cols := make([]ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
 	cols = append(cols, desc.Columns...)
 	for _, m := range desc.Mutations {
@@ -579,21 +565,6 @@ func (desc *TableDescriptor) AllNonDropIndexes() []IndexDescriptor {
 		}
 	}
 	return indexes
-}
-
-// allNonDropChecks returns all the checks, including those being added
-// in the mutations.
-func (desc *TableDescriptor) allNonDropChecks() []*TableDescriptor_CheckConstraint {
-	checks := make([]*TableDescriptor_CheckConstraint, 0, len(desc.Checks)+len(desc.Mutations))
-	checks = append(checks, desc.Checks...)
-	for _, m := range desc.Mutations {
-		if ck := m.GetCheck(); ck != nil {
-			if m.Direction == DescriptorMutation_ADD {
-				checks = append(checks, ck)
-			}
-		}
-	}
-	return checks
 }
 
 // ForeachNonDropIndex runs a function on all indexes, including those being
@@ -1243,7 +1214,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 
 	columnNames := make(map[string]ColumnID, len(desc.Columns))
 	columnIDs := make(map[ColumnID]string, len(desc.Columns))
-	for _, column := range desc.AllNonDropColumns() {
+	for _, column := range desc.allNonDropColumns() {
 		if err := validateName(column.Name, "column"); err != nil {
 			return err
 		}
@@ -1297,11 +1268,6 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 			if unSetEnums {
 				idx := desc.Index
 				return errors.Errorf("mutation in state %s, direction %s, index %s, id %v", m.State, m.Direction, idx.Name, idx.ID)
-			}
-		case *DescriptorMutation_Check:
-			if unSetEnums {
-				ck := desc.Check
-				return errors.Errorf("mutation in state %s, direction %s, check %s", m.State, m.Direction, ck.Name)
 			}
 		default:
 			return errors.Errorf("mutation in state %s, direction %s, and no column/index descriptor", m.State, m.Direction)
@@ -1750,7 +1716,7 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 func checkColumnsValidForIndex(tableDesc *MutableTableDescriptor, indexColNames []string) error {
 	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.AllNonDropColumns() {
+		for _, col := range tableDesc.allNonDropColumns() {
 			if col.Name == indexCol {
 				if !columnTypeIsIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
@@ -1772,7 +1738,7 @@ func checkColumnsValidForInvertedIndex(
 	}
 	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.AllNonDropColumns() {
+		for _, col := range tableDesc.allNonDropColumns() {
 			if col.Name == indexCol {
 				if !columnTypeIsInvertedIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
@@ -1784,11 +1750,6 @@ func checkColumnsValidForInvertedIndex(
 		return notIndexableError(invalidColumns, true)
 	}
 	return nil
-}
-
-// AddCheck adds a check constraint to the table.
-func (desc *MutableTableDescriptor) AddCheck(ck TableDescriptor_CheckConstraint) {
-	desc.Checks = append(desc.Checks, &ck)
 }
 
 // AddColumn adds a column to the table.
@@ -2057,21 +2018,6 @@ func (desc *ImmutableTableDescriptor) FindReadableColumnByID(
 	return nil, false, fmt.Errorf("column-id \"%d\" does not exist", id)
 }
 
-// LabeledRowValues returns a formatted string containing a row's values
-// and the column names.
-func LabeledRowValues(cols []ColumnDescriptor, values tree.Datums) string {
-	var s bytes.Buffer
-	for i := range cols {
-		if i != 0 {
-			s.WriteString(`, `)
-		}
-		s.WriteString(cols[i].Name)
-		s.WriteString(`=`)
-		s.WriteString(values[i].String())
-	}
-	return s.String()
-}
-
 // FindFamilyByID finds the family with specified ID.
 func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescriptor, error) {
 	for i, f := range desc.Families {
@@ -2211,12 +2157,6 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			if err := desc.AddIndex(*t.Index, false); err != nil {
 				return err
 			}
-
-		case *DescriptorMutation_Check:
-			if t.Check.Validity == ConstraintValidity_Validating {
-				t.Check.Validity = ConstraintValidity_Validated
-			}
-			desc.AddCheck(*t.Check)
 		}
 
 	case DescriptorMutation_DROP:
@@ -2224,29 +2164,10 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 		case *DescriptorMutation_Column:
 			desc.RemoveColumnFromFamily(t.Column.ID)
 		}
-		// Nothing else to be done. The column/index/check was already removed from the
-		// set of column/index/check descriptors at mutation creation time.
+		// Nothing else to be done. The column/index was already removed from the
+		// set of column/index descriptors at mutation creation time.
 	}
 	return nil
-}
-
-// MaybeAddCheckDropMutation adds a drop check constraint mutation to desc.Mutations
-// if the constraint has been validated.
-func (desc *MutableTableDescriptor) MaybeAddCheckDropMutation(c TableDescriptor_CheckConstraint) {
-	if c.Validity == ConstraintValidity_Validated {
-		// We cannot transition immediately to absent if the constraint has
-		// been validated because nodes on the current version expect every
-		// row to conform to the constraint.
-		desc.AddCheckMutation(c, DescriptorMutation_DROP)
-	}
-}
-
-// AddCheckMutation adds a check mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddCheckMutation(
-	c TableDescriptor_CheckConstraint, direction DescriptorMutation_Direction,
-) {
-	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Check{Check: &c}, Direction: direction}
-	desc.addMutation(m)
 }
 
 // AddColumnMutation adds a column mutation to desc.Mutations.
@@ -2537,7 +2458,7 @@ func (desc *ColumnDescriptor) SQLString() string {
 // binaries will not, in which case this needs to be computed when requested.
 //
 // TODO(nvanbenschoten): we can remove this in v2.1 and replace it with a sql
-// migration to backfill all CheckConstraint.ColumnIDs slices.
+// migration to backfill all TableDescriptor_CheckConstraint.ColumnIDs slices.
 // See #22322.
 func (cc *TableDescriptor_CheckConstraint) ColumnsUsed(desc *TableDescriptor) ([]ColumnID, error) {
 	if len(cc.ColumnIDs) > 0 {
@@ -2558,8 +2479,8 @@ func (cc *TableDescriptor_CheckConstraint) ColumnsUsed(desc *TableDescriptor) ([
 				return err, false, nil
 			}
 			if c, ok := v.(*tree.ColumnItem); ok {
-				col, dropped, err := desc.FindColumnByName(c.ColumnName)
-				if err != nil || dropped {
+				col, err := desc.FindActiveColumnByName(string(c.ColumnName))
+				if err != nil {
 					return errors.Errorf("column %q not found for constraint %q",
 						c.ColumnName, parsed.String()), false, nil
 				}
@@ -2781,7 +2702,7 @@ func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 		return nil, err
 	}
 
-	for _, c := range desc.AllNonDropColumns() {
+	for _, c := range desc.allNonDropColumns() {
 		for _, id := range c.UsesSequenceIds {
 			refs[id] = struct{}{}
 		}
@@ -2795,11 +2716,6 @@ func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 		refs[c.ID] = struct{}{}
 	}
 	return refs, nil
-}
-
-// WritableChecks returns a list of public and write-only mutation check constraints.
-func (desc *ImmutableTableDescriptor) WritableChecks() []*TableDescriptor_CheckConstraint {
-	return desc.publicAndNonPublicChecks[:len(desc.Checks)+desc.writeOnlyCheckCount]
 }
 
 // WritableColumns returns a list of public and write-only mutation columns.
