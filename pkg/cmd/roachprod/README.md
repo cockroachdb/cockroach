@@ -5,15 +5,11 @@ CockroachDB clusters. Use at your own risk! ⚠️
 
 ## Setup
 
-Make sure you have [gcloud installed] and configured (`gcloud auth list` to
+1. Make sure you have [gcloud installed] and configured (`gcloud auth list` to
 check, `gcloud auth login` to authenticate). You may want to update old
 installations (`gcloud components update`).
-
-To build and install into `$GOPATH/bin`:
-
-```
-$ go get -u github.com/cockroachdb/roachprod
-```
+1. Make sure `$GOPATH/bin` is on your `PATH`.
+1. Build a local binary of `roachprod`: `make bin/roachprod`
 
 ## Summary
 

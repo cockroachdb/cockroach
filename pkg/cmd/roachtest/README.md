@@ -4,14 +4,12 @@
 automated tests. It relies on the concurrently-developed (but
 separate) tool `roachprod`.
 
-# Prerequisites
+# Setup
 
-- Ensure that `$GOPATH/bin` is on your `PATH`.
-- Install roachprod: `go get -u github.com/cockroachdb/roachprod`
-- Build a linux release binary of `cockroach`: `build/builder.sh mkrelease amd64-linux-gnu`
-- Build a linux binary of the `workload` tool: `build/builder.sh make bin/workload`
-- Build a local binary of `roachtest`: `make bin/roachtest`
-- Set up `gcloud` and `google_compute_engine` ssh key (TODO: more details)
+1. [Set up `roachprod`](https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachprod/README.md), if you haven't already. This includes making sure `$GOPATH/bin` is on your `PATH` and `gcloud` is installed and properly configured.
+1. Build a linux release binary of `cockroach`: `build/builder.sh mkrelease amd64-linux-gnu`
+1. Build a linux binary of the `workload` tool: `build/builder.sh make bin/workload`
+1. Build a local binary of `roachtest`: `make bin/roachtest`
 
 # Usage
 
