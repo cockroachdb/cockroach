@@ -22,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// baseFKHelper is an auxiliary struct that facilitates FK existence
+// fkExistenceCheckBaseHelper is an auxiliary struct that facilitates FK existence
 // checks for one FK constraint.
 //
 // TODO(knz): the fact that this captures the txn is problematic. The
 // txn should be passed as argument.
-type baseFKHelper struct {
+type fkExistenceCheckBaseHelper struct {
 	// txn is the current KV transaction.
 	txn *client.Txn
 
@@ -83,7 +83,7 @@ type baseFKHelper struct {
 	mutatedIdx *sqlbase.IndexDescriptor
 }
 
-// makeBaseFKHelper instanciates a FK helper.
+// makeFkExistenceCheckBaseHelper instanciates a FK helper.
 //
 // - dir is the direction of the check.
 //
@@ -110,7 +110,7 @@ type baseFKHelper struct {
 // - otherTables is an object that provides schema extraction services.
 //   TODO(knz): this should become homogeneous across the 3 packages
 //   sql, sqlbase, row. The proliferation is annoying.
-func makeBaseFKHelper(
+func makeFkExistenceCheckBaseHelper(
 	txn *client.Txn,
 	otherTables TableLookupsByID,
 	mutatedIdx *sqlbase.IndexDescriptor,
@@ -118,7 +118,7 @@ func makeBaseFKHelper(
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
 	dir FKCheck,
-) (ret baseFKHelper, err error) {
+) (ret fkExistenceCheckBaseHelper, err error) {
 	// Look up the searched table.
 	searchTable := otherTables[ref.Table].Table
 	if searchTable == nil {
@@ -159,7 +159,7 @@ func makeBaseFKHelper(
 		return ret, err
 	}
 
-	return baseFKHelper{
+	return fkExistenceCheckBaseHelper{
 		txn:          txn,
 		dir:          dir,
 		rf:           rf,

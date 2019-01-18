@@ -23,58 +23,54 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// fkInsertHelper is an auxiliary object that facilitates the existence
-// checks on the referenced table when inserting new rows in
-// a referencing table.
-type fkInsertHelper struct {
-	// fks maps mutated index id to slice of baseFKHelper, the outgoing
-	// foreign key existence checkers for each mutated index.
-	//
-	// In an fkInsertHelper, these slices will have at most one entry,
-	// since there can be (currently) at most one outgoing foreign key
-	// per mutated index. We use this data structure instead of a
-	// one-to-one map for consistency with the other helpers.
-	//
-	// TODO(knz): this limitation in CockroachDB is arbitrary and
-	// incompatible with PostgreSQL. pg supports potentially multiple
-	// referencing FK constraints for a single column tuple.
-	fks map[sqlbase.IndexID][]baseFKHelper
+// fkExistenceCheckForDelete is an auxiliary object that facilitates the
+// existence checks on the referencing table when deleting rows in a
+// referenced table.
+type fkExistenceCheckForDelete struct {
+	// fks maps mutated index id to slice of fkExistenceCheckBaseHelper, which
+	// performs FK existence checks in referencing tables.
+	fks map[sqlbase.IndexID][]fkExistenceCheckBaseHelper
 
 	// checker is the object that actually carries out the lookups in
 	// KV.
-	checker *fkBatchChecker
+	checker *fkExistenceBatchChecker
 }
 
-// makeFKInsertHelper instantiates an insert helper.
-func makeFKInsertHelper(
+// makeFkExistenceCheckHelperForDelete instantiates a delete helper.
+func makeFkExistenceCheckHelperForDelete(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables TableLookupsByID,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
-) (fkInsertHelper, error) {
-	h := fkInsertHelper{
-		checker: &fkBatchChecker{
+) (fkExistenceCheckForDelete, error) {
+	h := fkExistenceCheckForDelete{
+		checker: &fkExistenceBatchChecker{
 			txn: txn,
 		},
 	}
 
-	// We need an existence check helper for every referenced
-	// table. Today, referenced tables are determined by
+	// We need an existence check helper for every referencing
+	// table. Today, referencing tables are determined by
 	// the index descriptors.
 	// TODO(knz): make foreign key constraints independent
 	// of index definitions.
 	for _, idx := range table.AllNonDropIndexes() {
-		if idx.ForeignKey.IsSet() {
-			fk, err := makeBaseFKHelper(txn, otherTables, idx, idx.ForeignKey, colMap, alloc, CheckInserts)
+		for _, ref := range idx.ReferencedBy {
+			if otherTables[ref.Table].IsAdding {
+				// We can assume that a table being added but not yet public is empty,
+				// and thus does not need to be checked for FK violations.
+				continue
+			}
+			fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, idx, ref, colMap, alloc, CheckDeletes)
 			if err == errSkipUnusedFK {
 				continue
 			}
 			if err != nil {
-				return h, err
+				return fkExistenceCheckForDelete{}, err
 			}
 			if h.fks == nil {
-				h.fks = make(map[sqlbase.IndexID][]baseFKHelper)
+				h.fks = make(map[sqlbase.IndexID][]fkExistenceCheckBaseHelper)
 			}
 			h.fks[idx.ID] = append(h.fks[idx.ID], fk)
 		}
@@ -83,10 +79,10 @@ func makeFKInsertHelper(
 	return h, nil
 }
 
-// addAllIdxChecks queues a FK existence check for every referenced table.
-func (h fkInsertHelper) addAllIdxChecks(ctx context.Context, row tree.Datums, traceKV bool) error {
+// addAllIdxChecks queues a FK existence check for every referencing table.
+func (h fkExistenceCheckForDelete) addAllIdxChecks(ctx context.Context, row tree.Datums, traceKV bool) error {
 	for idx := range h.fks {
-		if err := checkIdx(ctx, h.checker, h.fks, idx, row, traceKV); err != nil {
+		if err := queueFkExistenceChecksForRow(ctx, h.checker, h.fks, idx, row, traceKV); err != nil {
 			return err
 		}
 	}
@@ -94,11 +90,11 @@ func (h fkInsertHelper) addAllIdxChecks(ctx context.Context, row tree.Datums, tr
 }
 
 // CollectSpans implements the FkSpanCollector interface.
-func (h fkInsertHelper) CollectSpans() roachpb.Spans {
+func (h fkExistenceCheckForDelete) CollectSpans() roachpb.Spans {
 	return collectSpansWithFKMap(h.fks)
 }
 
 // CollectSpansForValues implements the FkSpanCollector interface.
-func (h fkInsertHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spans, error) {
+func (h fkExistenceCheckForDelete) CollectSpansForValues(values tree.Datums) (roachpb.Spans, error) {
 	return collectSpansForValuesWithFKMap(h.fks, values)
 }

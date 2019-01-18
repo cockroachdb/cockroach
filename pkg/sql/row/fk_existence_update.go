@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// fkUpdateHelper is an auxiliary object with two purposes:
+// fkExistenceCheckForUpdate is an auxiliary object with two purposes:
 //
 // - its main purpose is to facilitate the existence checks on both
 //   referencing and referenced tables when modifying rows in a table.
@@ -32,7 +32,7 @@ import (
 //   addCheckForIndex() on all mutated indexes, to register a mutated
 //   index for FK checking.
 //
-//   TODO(knz): why cannot the fkUpdateHelper make this determination
+//   TODO(knz): why cannot the fkExistenceCheckForUpdate make this determination
 //   itself, like the other helpers? The asymmetry is concerning.
 //
 // - its secondary purpose is to serve the boolean "hasFk()" for "does
@@ -44,11 +44,11 @@ import (
 //   object, so that the helper can specialize to only do existence
 //   checks!
 //
-type fkUpdateHelper struct {
+type fkExistenceCheckForUpdate struct {
 	// inbound is responsible for existence checks in referencing tables.
-	inbound fkDeleteHelper
+	inbound fkExistenceCheckForDelete
 	// output is responsible for existence checks in referenced tables.
-	outbound fkInsertHelper
+	outbound fkExistenceCheckForInsert
 
 	// indexIDsToCheck determines the list of indexes in the mutated
 	// table for which to perform FK checks.
@@ -62,29 +62,29 @@ type fkUpdateHelper struct {
 
 	// checker is the object that actually carries out the lookups in
 	// KV.
-	checker *fkBatchChecker
+	checker *fkExistenceBatchChecker
 }
 
-// makeFKUpdateHelper instantiates an update helper.
-func makeFKUpdateHelper(
+// makeFkExistenceCheckHelperForUpdate instantiates an update helper.
+func makeFkExistenceCheckHelperForUpdate(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables TableLookupsByID,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
-) (fkUpdateHelper, error) {
-	ret := fkUpdateHelper{
+) (fkExistenceCheckForUpdate, error) {
+	ret := fkExistenceCheckForUpdate{
 		indexIDsToCheck: make(map[sqlbase.IndexID]struct{}),
 	}
 
 	// Instantiate a helper for the referencing tables.
 	var err error
-	if ret.inbound, err = makeFKDeleteHelper(txn, table, otherTables, colMap, alloc); err != nil {
+	if ret.inbound, err = makeFkExistenceCheckHelperForDelete(txn, table, otherTables, colMap, alloc); err != nil {
 		return ret, err
 	}
 
 	// Instantiate a helper for the referenced table(s).
-	ret.outbound, err = makeFKInsertHelper(txn, table, otherTables, colMap, alloc)
+	ret.outbound, err = makeFkExistenceCheckHelperForInsert(txn, table, otherTables, colMap, alloc)
 	ret.outbound.checker = ret.inbound.checker
 
 	// We need *some* KV batch checker to perform the checks. It doesn't
@@ -97,7 +97,7 @@ func makeFKUpdateHelper(
 }
 
 // addCheckForIndex registers a mutated index to perform FK existence checks for.
-func (fks fkUpdateHelper) addCheckForIndex(
+func (fks fkExistenceCheckForUpdate) addCheckForIndex(
 	indexID sqlbase.IndexID, descriptorType sqlbase.IndexDescriptor_Type,
 ) {
 	if descriptorType == sqlbase.IndexDescriptor_FORWARD {
@@ -111,20 +111,20 @@ func (fks fkUpdateHelper) addCheckForIndex(
 // hasFKs determines whether the table being mutated has any forward
 // or backward FK constraints. This is the secondary purpose of the helper
 // and is unrelated to the task of FK existence checks.
-func (fks fkUpdateHelper) hasFKs() bool {
+func (fks fkExistenceCheckForUpdate) hasFKs() bool {
 	return len(fks.inbound.fks) > 0 || len(fks.outbound.fks) > 0
 }
 
 // addAllIdxChecks queues a FK existence check for the backward and forward
 // constraints for the indexes
-func (fks fkUpdateHelper) addIndexChecks(
+func (fks fkExistenceCheckForUpdate) addIndexChecks(
 	ctx context.Context, oldValues, newValues tree.Datums, traceKV bool,
 ) error {
 	for indexID := range fks.indexIDsToCheck {
-		if err := checkIdx(ctx, fks.checker, fks.inbound.fks, indexID, oldValues, traceKV); err != nil {
+		if err := queueFkExistenceChecksForRow(ctx, fks.checker, fks.inbound.fks, indexID, oldValues, traceKV); err != nil {
 			return err
 		}
-		if err := checkIdx(ctx, fks.checker, fks.outbound.fks, indexID, newValues, traceKV); err != nil {
+		if err := queueFkExistenceChecksForRow(ctx, fks.checker, fks.outbound.fks, indexID, newValues, traceKV); err != nil {
 			return err
 		}
 	}
@@ -132,14 +132,14 @@ func (fks fkUpdateHelper) addIndexChecks(
 }
 
 // CollectSpans implements the FkSpanCollector interface.
-func (fks fkUpdateHelper) CollectSpans() roachpb.Spans {
+func (fks fkExistenceCheckForUpdate) CollectSpans() roachpb.Spans {
 	inboundReads := fks.inbound.CollectSpans()
 	outboundReads := fks.outbound.CollectSpans()
 	return append(inboundReads, outboundReads...)
 }
 
 // CollectSpansForValues implements the FkSpanCollector interface.
-func (fks fkUpdateHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spans, error) {
+func (fks fkExistenceCheckForUpdate) CollectSpansForValues(values tree.Datums) (roachpb.Spans, error) {
 	inboundReads, err := fks.inbound.CollectSpansForValues(values)
 	if err != nil {
 		return nil, err
