@@ -439,13 +439,13 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 					return false
 				}
 
-				idx, err := fkTables[ref.Table].Table.FindIndexByID(ref.Index)
+				referencingIdx, err := fkTables[ref.Table].Table.FindIndexByID(ref.Index)
 				if err != nil {
 					return false
 				}
 
 				// All of these references MUST be ON DELETE CASCADE
-				if idx.ForeignKey.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
+				if referencingIdx.ForeignKey.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
 					return false
 				}
 			}
