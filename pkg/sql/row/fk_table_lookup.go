@@ -104,11 +104,11 @@ type tableLookupQueue struct {
 	// `sql` package.
 	privCheckFn CheckPrivilegeFunction
 
-	// analyzeExpr is used to perform semantic analysis on scalar
+	// analyzeExprFn is used to perform semantic analysis on scalar
 	// expressions. This is not used for FK work directly but needed
 	// during lookup to initialize the CHECK constraint helper in each
 	// TableEntry object.
-	analyzeExpr sqlbase.AnalyzeExprFunction
+	analyzeExprFn sqlbase.AnalyzeExprFunction
 }
 
 // tableLookupQueueElement describes one unit of work in the lookup
@@ -189,7 +189,7 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableEntry
 		// TODO(knz): the CHECK helper is always prepared here, even when
 		// there is no CASCADE work to perform. This should be moved to a
 		// different place.
-		if err := tableEntry.addCheckHelper(ctx, q.analyzeExpr); err != nil {
+		if err := tableEntry.addCheckHelper(ctx, q.analyzeExprFn); err != nil {
 			return TableEntry{}, err
 		}
 	}
