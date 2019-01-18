@@ -73,7 +73,7 @@ Outer:
 				// and thus does not need to be checked for cascading.
 				continue
 			}
-			referencingIndex, err := referencingTable.Table.FindIndexByID(ref.Index)
+			referencingIndex, err := referencingTable.Desc.FindIndexByID(ref.Index)
 			if err != nil {
 				return nil, err
 			}
@@ -144,7 +144,7 @@ Outer:
 				// and thus does not need to be checked for cascading.
 				continue
 			}
-			referencingIndex, err := referencingTable.Table.FindIndexByID(ref.Index)
+			referencingIndex, err := referencingTable.Desc.FindIndexByID(ref.Index)
 			if err != nil {
 				return nil, err
 			}
@@ -1040,7 +1040,7 @@ func (c *cascader) cascadeAll(
 					// and thus does not need to be checked for cascading.
 					continue
 				}
-				referencingIndex, err := referencingTable.Table.FindIndexByID(ref.Index)
+				referencingIndex, err := referencingTable.Desc.FindIndexByID(ref.Index)
 				if err != nil {
 					return err
 				}
@@ -1051,7 +1051,7 @@ func (c *cascader) cascadeAll(
 						deletedRows, colIDtoRowIndex, startIndex, err := c.deleteRows(
 							ctx,
 							referencedIndex,
-							referencingTable.Table,
+							referencingTable.Desc,
 							referencingIndex,
 							ref.Match,
 							elem,
@@ -1064,7 +1064,7 @@ func (c *cascader) cascadeAll(
 							// If a row was deleted, add the table to the queue.
 							if err := cascadeQ.enqueue(
 								ctx,
-								referencingTable.Table,
+								referencingTable.Desc,
 								deletedRows,
 								nil, /* updatedValues */
 								colIDtoRowIndex,
@@ -1077,7 +1077,7 @@ func (c *cascader) cascadeAll(
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
 							referencedIndex,
-							referencingTable.Table,
+							referencingTable.Desc,
 							referencingIndex,
 							ref.Match,
 							elem,
@@ -1091,7 +1091,7 @@ func (c *cascader) cascadeAll(
 							// A row was updated, so let's add it to the queue.
 							if err := cascadeQ.enqueue(
 								ctx,
-								referencingTable.Table,
+								referencingTable.Desc,
 								originalAffectedRows,
 								updatedAffectedRows,
 								colIDtoRowIndex,
@@ -1108,7 +1108,7 @@ func (c *cascader) cascadeAll(
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
 							referencedIndex,
-							referencingTable.Table,
+							referencingTable.Desc,
 							referencingIndex,
 							ref.Match,
 							elem,
@@ -1122,7 +1122,7 @@ func (c *cascader) cascadeAll(
 							// A row was updated, so let's add it to the queue.
 							if err := cascadeQ.enqueue(
 								ctx,
-								referencingTable.Table,
+								referencingTable.Desc,
 								originalAffectedRows,
 								updatedAffectedRows,
 								colIDtoRowIndex,

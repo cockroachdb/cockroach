@@ -180,7 +180,7 @@ func TestTablesNeededForFKs(t *testing.T) {
 		if !exists {
 			return TableEntry{}, errors.Errorf("Could not lookup table:%d", tableID)
 		}
-		return TableEntry{Table: table}, nil
+		return TableEntry{Desc: table}, nil
 	}
 
 	test := func(t *testing.T, usage FKCheckType, expectedIDs []TableID) {

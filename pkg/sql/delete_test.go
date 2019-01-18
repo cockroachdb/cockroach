@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 				if !exists {
 					return row.TableEntry{}, errors.Errorf("Could not lookup table:%d", tableID)
 				}
-				return row.TableEntry{Table: table}, nil
+				return row.TableEntry{Desc: table}, nil
 			}
 
 			fkTables, err := row.TablesNeededForFKs(
