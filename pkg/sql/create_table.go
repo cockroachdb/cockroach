@@ -1203,8 +1203,7 @@ func MakeTableDesc(
 			if err != nil {
 				return desc, err
 			}
-			ck.Validity = sqlbase.ConstraintValidity_Validated
-			desc.AddCheck(*ck)
+			desc.Checks = append(desc.Checks, ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
 			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable); err != nil {
@@ -1487,12 +1486,11 @@ func replaceVars(
 			return nil, true, expr
 		}
 
-		col, dropped, err := desc.FindColumnByName(c.ColumnName)
-		if err != nil || dropped {
+		col, err := desc.FindActiveColumnByName(string(c.ColumnName))
+		if err != nil {
 			return fmt.Errorf("column %q not found for constraint %q",
 				c.ColumnName, expr.String()), false, nil
 		}
-
 		colIDs[col.ID] = struct{}{}
 		// Convert to a dummy node of the correct type.
 		return nil, false, &dummyColumnItem{typ: col.Type.ToDatumType(), name: c.ColumnName}
@@ -1501,7 +1499,6 @@ func replaceVars(
 }
 
 // MakeCheckConstraint makes a descriptor representation of a check from a def.
-// It returns true if all referenced columns are public or in DELETE_AND_WRITE_ONLY.
 func MakeCheckConstraint(
 	ctx context.Context,
 	desc *sqlbase.MutableTableDescriptor,
@@ -1539,7 +1536,7 @@ func MakeCheckConstraint(
 	sort.Sort(sqlbase.ColumnIDs(colIDs))
 
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		tableName, sqlbase.ResultColumnsFromColDescs(desc.AllNonDropColumns()),
+		tableName, sqlbase.ResultColumnsFromColDescs(desc.Columns),
 	)
 	sources := sqlbase.MultiSourceInfo{sourceInfo}
 
@@ -1552,6 +1549,5 @@ func MakeCheckConstraint(
 		Expr:      tree.Serialize(expr),
 		Name:      name,
 		ColumnIDs: colIDs,
-		Validity:  sqlbase.ConstraintValidity_Validating,
 	}, nil
 }

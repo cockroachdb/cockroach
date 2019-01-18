@@ -59,8 +59,7 @@ func (*RowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatt
 }
 
 // descContainer is a helper type that implements tree.IndexedVarContainer; it
-// is used to type check computed columns and check constraints. It does not
-// support evaluation.
+// is used to type check computed columns and does not support evaluation.
 type descContainer struct {
 	cols []ColumnDescriptor
 }

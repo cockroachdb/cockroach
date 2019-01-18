@@ -45,8 +45,6 @@ func initBackfillerSpec(
 		ret.Type = distsqlpb.BackfillerSpec_Index
 	case columnBackfill:
 		ret.Type = distsqlpb.BackfillerSpec_Column
-	case checkConstraintBackfill:
-		ret.Type = distsqlpb.BackfillerSpec_Check
 	default:
 		return distsqlpb.BackfillerSpec{}, errors.Errorf("bad backfill type %d", backfillType)
 	}

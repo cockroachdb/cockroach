@@ -577,7 +577,6 @@ message BackfillerSpec {
     Invalid = 0;
     Column = 1;
     Index = 2;
-    Check = 3;
   }
   optional Type type = 1 [(gogoproto.nullable) = false];
   optional sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
