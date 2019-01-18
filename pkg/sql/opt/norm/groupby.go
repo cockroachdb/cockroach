@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
 // CanReduceGroupingCols is true if the given GroupBy operator has one or more
@@ -224,4 +225,39 @@ func (c *CustomFuncs) hasRemovableAggDistinct(
 	}
 
 	return true, v
+}
+
+// HasNoGroupingCols returns true if the GroupingCols in the private are empty.
+func (c *CustomFuncs) HasNoGroupingCols(private *memo.GroupingPrivate) bool {
+	return private.GroupingCols.Empty()
+}
+
+// GroupingInputOrdering returns the Ordering in the private.
+func (c *CustomFuncs) GroupingInputOrdering(private *memo.GroupingPrivate) physical.OrderingChoice {
+	return private.Ordering
+}
+
+// ConstructProjectionFromDistinctOn converts a DistinctOn to a projection; this
+// is correct when the input has at most one row. Note that DistinctOn can only
+// have aggregations of type FirstAgg or ConstAgg.
+func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
+	input memo.RelExpr, aggs memo.AggregationsExpr,
+) memo.RelExpr {
+	var passthrough opt.ColSet
+	var projections memo.ProjectionsExpr
+	for i := range aggs {
+		varExpr := memo.ExtractVarFromAggInput(aggs[i].Agg.Child(0).(opt.ScalarExpr))
+		inputCol := varExpr.Col
+		outputCol := aggs[i].Col
+		if inputCol == outputCol {
+			passthrough.Add(int(inputCol))
+		} else {
+			projections = append(projections, memo.ProjectionsItem{
+				Element:    varExpr,
+				ColPrivate: aggs[i].ColPrivate,
+				Typ:        aggs[i].Typ,
+			})
+		}
+	}
+	return c.f.ConstructProject(input, projections, passthrough)
 }
