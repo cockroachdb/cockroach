@@ -383,7 +383,7 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 	return d.run.rowCount, d.run.fastPath
 }
 
-func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.TableLookupsByID) bool {
+func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTableMetadata) bool {
 	// If there are no interleaved tables then don't take the fast path.
 	// This avoids superfluous use of DelRange in cases where there isn't as much of a performance boost.
 	hasInterleaved := false

@@ -31,22 +31,23 @@ import (
 // in cycles, the analysis algorithm to load the metadata uses a queue
 // (tableLookupQueue) instead of a naive recursion.
 //
-// TODO(knz): the redundancy between this API and the code in other
-// packages (sql, sqlbase) is troubling! Some of this should be
-// factored.
 
 //
 // ------- interface between prepare and execution of FK work --------
 //
 
-// TableLookupsByID maps table IDs to looked up descriptors or, for tables that
+// FkTableMetadata maps table IDs to looked up descriptors or, for tables that
 // exist but are not yet public/leasable, entries with just the IsAdding flag.
 //
 // This is populated by the lookup queue (below) and used as input to
 // the FK existence checkers and cascading actions.
-type TableLookupsByID map[ID]TableEntry
+//
+// TODO(knz): the redundancy between this struct and the code in other
+// packages (sql, sqlbase) is troubling! Some of this should be
+// factored.
+type FkTableMetadata map[TableID]TableEntry
 
-// TableEntry is the value type of TableLookupsByID: An optional table
+// TableEntry is the value type of FkTableMetadata: An optional table
 // descriptor, populated when the table is public/leasable, and an IsAdding
 // flag.
 //
@@ -73,11 +74,11 @@ type TableEntry struct {
 // ------- table metadata lookup logic, used at start of query execution -------
 //
 
-// ID is an alias for sqlbase.ID (table IDs).
-type ID = sqlbase.ID
+// TableID is an alias for sqlbase.TableID (table IDs).
+type TableID = sqlbase.ID
 
 // tableLookupQueue is the facility responsible for loading all
-// the table metadata used by FK work into a TableLookupsByID.
+// the table metadata used by FK work into a FkTableMetadata.
 //
 // The main lookup loop in TablesNeededForFKs repeats as follows: run
 // dequeue() once, inspects the table, queue()s zero or more FK
@@ -89,10 +90,10 @@ type tableLookupQueue struct {
 
 	// alreadyChecked notes which tables / constraints have already been
 	// looked up, to avoid performing the same lookup work twice.
-	alreadyChecked map[ID]map[FKCheckType]struct{}
+	alreadyChecked map[TableID]map[FKCheckType]struct{}
 
 	// result contains the result of the overall lookup work.
-	result TableLookupsByID
+	result FkTableMetadata
 
 	// tblLookupFn is used to look up individual tables by ID. This
 	// is typically provided by the caller, e.g. from the functions
@@ -140,12 +141,12 @@ const (
 
 // TableLookupFunction is the function type used by TablesNeededForFKs
 // that will perform the actual lookup of table metadata.
-type TableLookupFunction func(context.Context, ID) (TableEntry, error)
+type TableLookupFunction func(context.Context, TableID) (TableEntry, error)
 
 // NoLookup is a stub that can be used to not actually fetch metadata.
 // This can be used when the FK work is initialized from a pre-populated
-// TableLookupsByID map.
-func NoLookup(_ context.Context, _ ID) (TableEntry, error) {
+// FkTableMetadata map.
+func NoLookup(_ context.Context, _ TableID) (TableEntry, error) {
 	return TableEntry{}, nil
 }
 
@@ -155,7 +156,7 @@ type CheckPrivilegeFunction func(context.Context, sqlbase.DescriptorProto, privi
 
 // NoCheckPrivilege is a stub that can be used to not actually verify privileges.
 // This can be used when the FK work is initialized from a pre-populated
-// TableLookupsByID map.
+// FkTableMetadata map.
 func NoCheckPrivilege(_ context.Context, _ sqlbase.DescriptorProto, _ privilege.Kind) error {
 	return nil
 }
@@ -163,7 +164,7 @@ func NoCheckPrivilege(_ context.Context, _ sqlbase.DescriptorProto, _ privilege.
 // getTable retrieves one table's metadata during FK work preparation.
 // A cached TableEntry, if one exists, is reused; otherwise it is
 // created and initialized.
-func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableEntry, error) {
+func (q *tableLookupQueue) getTable(ctx context.Context, tableID TableID) (TableEntry, error) {
 	// Do we already have an entry for this table?
 	if tableEntry, exists := q.result[tableID]; exists {
 		// Yes, simply reuse it.
@@ -202,7 +203,7 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableEntry
 
 // addCheckHelper populates the CheckHelper field of a TableEntry
 // object. This is invoked the first time a table is encountered
-// in the graph of FK work and populated in the TableLookupsByID.
+// in the graph of FK work and populated in the FkTableMetadata.
 func (tl *TableEntry) addCheckHelper(
 	ctx context.Context, analyzeExpr sqlbase.AnalyzeExprFunction,
 ) error {
@@ -215,7 +216,7 @@ func (tl *TableEntry) addCheckHelper(
 }
 
 // enqueue prepares the lookup work for a given table.
-func (q *tableLookupQueue) enqueue(ctx context.Context, tableID ID, usage FKCheckType) error {
+func (q *tableLookupQueue) enqueue(ctx context.Context, tableID TableID, usage FKCheckType) error {
 	// Lookup the table.
 	tableEntry, err := q.getTable(ctx, tableID)
 	if err != nil {

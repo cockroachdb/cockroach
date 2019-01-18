@@ -69,7 +69,7 @@ type fkExistenceCheckForUpdate struct {
 func makeFkExistenceCheckHelperForUpdate(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
-	otherTables TableLookupsByID,
+	otherTables FkTableMetadata,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
 ) (fkExistenceCheckForUpdate, error) {
