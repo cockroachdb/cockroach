@@ -76,6 +76,11 @@ var ledgerMeta = workload.Meta{
 	},
 }
 
+// FromFlags returns a new ledger Generator configured with the given flags.
+func FromFlags(flags ...string) workload.Generator {
+	return workload.FromFlags(ledgerMeta, flags...)
+}
+
 // Meta implements the Generator interface.
 func (*ledger) Meta() workload.Meta { return ledgerMeta }
 

@@ -17,9 +17,39 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 )
+
+// The file contains a very specific marriage between avro and our SQL schemas.
+// It's not intended to be a general purpose avro utility.
+//
+// Avro is a spec for data schemas, a binary format for encoding a record
+// conforming to a given schema, and various container formats for those encoded
+// records. It also has rules for determining backward and forward compatibility
+// of schemas as they evolve.
+//
+// The Confluent ecosystem, Kafka plus other things, has first-class support for
+// Avro, including a server for registering schemas and referencing which
+// registered schema a Kafka record conforms to.
+//
+// We map a SQL table schema to an Avro record with 1:1 mapping between table
+// columns and Avro fields. The type of the column is mapped to a native Avro
+// type as faithfully as possible. This is then used to make an "optional" Avro
+// field for that column by unioning with null and explicitly specifying null as
+// default, regardless of whether the sql column allows NULLs. This may seem an
+// odd choice, but it allows for all adjacent Avro schemas for a given SQL table
+// to be backward and forward compatible with each other. Forward and backward
+// compatibility drastically eases use of the resulting data by downstream
+// systems, especially when working with long histories of archived data across
+// many schema changes (such as a data lake).
+//
+// One downside of the above is that it's not possible to recover the original
+// SQL table schema from an Avro one. (This is also true for other reasons, such
+// as lossy mappings from sql types to avro types.) To partially address this,
+// the SQL column type is embedded as metadata in the Avro field schema in a way
+// that Avro ignores it but passes it along.
 
 // avroSchemaType is one of the set of avro primitive types.
 type avroSchemaType interface{}
@@ -46,6 +76,8 @@ func avroUnionKey(t avroSchemaType) string {
 		return s
 	case avroLogicalType:
 		return avroUnionKey(s.SchemaType) + `.` + s.LogicalType
+	case *avroRecord:
+		return s.Name
 	default:
 		panic(fmt.Sprintf(`unsupported type %T %v`, t, t))
 	}
@@ -56,35 +88,60 @@ func avroUnionKey(t avroSchemaType) string {
 type avroSchemaField struct {
 	SchemaType avroSchemaType `json:"type"`
 	Name       string         `json:"name"`
+	Default    *string        `json:"default"`
+	Metadata   string         `json:"__crdb__,omitempty"`
 
-	// TODO(dan): typ should be derivable from the json `type` and `logicalType`
-	// fields. This would make it possible to roundtrip CockroachDB schemas
-	// through avro.
 	typ sqlbase.ColumnType
 
 	encodeFn func(tree.Datum) (interface{}, error)
 	decodeFn func(interface{}) (tree.Datum, error)
 }
 
-// avroSchemaRecord is our representation of the schema of an avro record.
-// Serializing it to JSON gives the standard schema representation.
-type avroSchemaRecord struct {
+// avroRecord is our representation of the schema of an avro record. Serializing
+// it to JSON gives the standard schema representation.
+type avroRecord struct {
 	SchemaType string             `json:"type"`
 	Name       string             `json:"name"`
 	Fields     []*avroSchemaField `json:"fields"`
+	codec      *goavro.Codec
+}
+
+// avroDataRecord is an `avroRecord` that represents the schema of a SQL table
+// or index.
+type avroDataRecord struct {
+	avroRecord
 
 	colIdxByFieldIdx map[int]int
 	fieldIdxByName   map[string]int
-	codec            *goavro.Codec
 	alloc            sqlbase.DatumAlloc
+}
+
+// avroMetadata is the `avroEnvelopeRecord` metadata.
+type avroMetadata map[string]interface{}
+
+// avroEnvelopeOpts controls which fields in avroEnvelopeRecord are set.
+type avroEnvelopeOpts struct {
+	updatedField, resolvedField bool
+	afterField                  bool
+}
+
+// avroEnvelopeRecord is an `avroRecord` that wraps a changed SQL row and some
+// metadata.
+type avroEnvelopeRecord struct {
+	avroRecord
+
+	opts  avroEnvelopeOpts
+	after *avroDataRecord
 }
 
 // columnDescToAvroSchema converts a column descriptor into its corresponding
 // avro field schema.
 func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField, error) {
 	schema := &avroSchemaField{
-		Name: SQLNameToAvroName(colDesc.Name),
-		typ:  colDesc.Type,
+		Name:     SQLNameToAvroName(colDesc.Name),
+		Metadata: colDesc.SQLString(),
+		Default:  nil,
+		typ:      colDesc.Type,
 	}
 
 	var avroType avroSchemaType
@@ -140,6 +197,17 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.MakeDTimestamp(x.(time.Time), time.Microsecond), nil
 		}
+	case sqlbase.ColumnType_TIMESTAMPTZ:
+		avroType = avroLogicalType{
+			SchemaType:  avroSchemaLong,
+			LogicalType: `timestamp-micros`,
+		}
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return d.(*tree.DTimestampTZ).Time, nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.MakeDTimestampTZ(x.(time.Time), time.Microsecond), nil
+		}
 	case sqlbase.ColumnType_DECIMAL:
 		if colDesc.Type.Precision == 0 {
 			return nil, errors.Errorf(
@@ -175,9 +243,14 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 	}
 	schema.SchemaType = avroType
 
-	if colDesc.Nullable {
+	// Make every field optional by unioning it with null, so that all schema
+	// evolutions for a table are considered "backward compatible" by avro. This
+	// means that the Avro type doesn't mirror the column's nullability, but it
+	// makes it much easier to work with long histories of table data afterward,
+	// especially for things like loading into analytics databases.
+	{
 		// The default for a union type is the default for the first element of
-		// the union. For nullable fields with no default, we want null.
+		// the union.
 		schema.SchemaType = []avroSchemaType{avroSchemaNull, avroType}
 		encodeFn := schema.encodeFn
 		decodeFn := schema.decodeFn
@@ -200,8 +273,6 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		}
 	}
 
-	// TODO(dan): Handle default and computed values.
-
 	return schema, nil
 }
 
@@ -209,10 +280,12 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 // record schema. The fields are kept in the same order as columns in the index.
 func indexToAvroSchema(
 	tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
-) (*avroSchemaRecord, error) {
-	schema := &avroSchemaRecord{
-		Name:             SQLNameToAvroName(tableDesc.Name),
-		SchemaType:       `record`,
+) (*avroDataRecord, error) {
+	schema := &avroDataRecord{
+		avroRecord: avroRecord{
+			Name:       SQLNameToAvroName(tableDesc.Name),
+			SchemaType: `record`,
+		},
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
 	}
@@ -244,10 +317,12 @@ func indexToAvroSchema(
 
 // tableToAvroSchema converts a column descriptor into its corresponding avro
 // record schema. The fields are kept in the same order as `tableDesc.Columns`.
-func tableToAvroSchema(tableDesc *sqlbase.TableDescriptor) (*avroSchemaRecord, error) {
-	schema := &avroSchemaRecord{
-		Name:             SQLNameToAvroName(tableDesc.Name),
-		SchemaType:       `record`,
+func tableToAvroSchema(tableDesc *sqlbase.TableDescriptor) (*avroDataRecord, error) {
+	schema := &avroDataRecord{
+		avroRecord: avroRecord{
+			Name:       SQLNameToAvroName(tableDesc.Name),
+			SchemaType: `record`,
+		},
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
 	}
@@ -273,7 +348,7 @@ func tableToAvroSchema(tableDesc *sqlbase.TableDescriptor) (*avroSchemaRecord, e
 }
 
 // textualFromRow encodes the given row data into avro's defined JSON format.
-func (r *avroSchemaRecord) textualFromRow(row sqlbase.EncDatumRow) ([]byte, error) {
+func (r *avroDataRecord) textualFromRow(row sqlbase.EncDatumRow) ([]byte, error) {
 	native, err := r.nativeFromRow(row)
 	if err != nil {
 		return nil, err
@@ -282,7 +357,7 @@ func (r *avroSchemaRecord) textualFromRow(row sqlbase.EncDatumRow) ([]byte, erro
 }
 
 // BinaryFromRow encodes the given row data into avro's defined binary format.
-func (r *avroSchemaRecord) BinaryFromRow(buf []byte, row sqlbase.EncDatumRow) ([]byte, error) {
+func (r *avroDataRecord) BinaryFromRow(buf []byte, row sqlbase.EncDatumRow) ([]byte, error) {
 	native, err := r.nativeFromRow(row)
 	if err != nil {
 		return nil, err
@@ -291,7 +366,7 @@ func (r *avroSchemaRecord) BinaryFromRow(buf []byte, row sqlbase.EncDatumRow) ([
 }
 
 // rowFromTextual decodes the given row data from avro's defined JSON format.
-func (r *avroSchemaRecord) rowFromTextual(buf []byte) (sqlbase.EncDatumRow, error) {
+func (r *avroDataRecord) rowFromTextual(buf []byte) (sqlbase.EncDatumRow, error) {
 	native, newBuf, err := r.codec.NativeFromTextual(buf)
 	if err != nil {
 		return nil, err
@@ -303,7 +378,7 @@ func (r *avroSchemaRecord) rowFromTextual(buf []byte) (sqlbase.EncDatumRow, erro
 }
 
 // RowFromBinary decodes the given row data from avro's defined binary format.
-func (r *avroSchemaRecord) RowFromBinary(buf []byte) (sqlbase.EncDatumRow, error) {
+func (r *avroDataRecord) RowFromBinary(buf []byte) (sqlbase.EncDatumRow, error) {
 	native, newBuf, err := r.codec.NativeFromBinary(buf)
 	if err != nil {
 		return nil, err
@@ -314,7 +389,7 @@ func (r *avroSchemaRecord) RowFromBinary(buf []byte) (sqlbase.EncDatumRow, error
 	return r.rowFromNative(native)
 }
 
-func (r *avroSchemaRecord) nativeFromRow(row sqlbase.EncDatumRow) (interface{}, error) {
+func (r *avroDataRecord) nativeFromRow(row sqlbase.EncDatumRow) (interface{}, error) {
 	avroDatums := make(map[string]interface{}, len(row))
 	for fieldIdx, field := range r.Fields {
 		d := row[r.colIdxByFieldIdx[fieldIdx]]
@@ -329,7 +404,7 @@ func (r *avroSchemaRecord) nativeFromRow(row sqlbase.EncDatumRow) (interface{}, 
 	return avroDatums, nil
 }
 
-func (r *avroSchemaRecord) rowFromNative(native interface{}) (sqlbase.EncDatumRow, error) {
+func (r *avroDataRecord) rowFromNative(native interface{}) (sqlbase.EncDatumRow, error) {
 	avroDatums, ok := native.(map[string]interface{})
 	if !ok {
 		return nil, errors.Errorf(`unknown avro native type: %T`, native)
@@ -349,6 +424,97 @@ func (r *avroSchemaRecord) rowFromNative(native interface{}) (sqlbase.EncDatumRo
 		row[r.colIdxByFieldIdx[fieldIdx]] = sqlbase.DatumToEncDatum(field.typ, decoded)
 	}
 	return row, nil
+}
+
+// envelopeToAvroSchema creates an avro record schema for an envelope containing
+// before and after versions of a row change and metadata about that row change.
+func envelopeToAvroSchema(
+	topic string, opts avroEnvelopeOpts, after *avroDataRecord,
+) (*avroEnvelopeRecord, error) {
+	schema := &avroEnvelopeRecord{
+		avroRecord: avroRecord{
+			Name:       SQLNameToAvroName(topic) + `_envelope`,
+			SchemaType: `record`,
+		},
+		opts: opts,
+	}
+
+	if opts.updatedField {
+		updatedField := &avroSchemaField{
+			SchemaType: []avroSchemaType{avroSchemaNull, avroSchemaString},
+			Name:       `updated`,
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, updatedField)
+	}
+	if opts.resolvedField {
+		resolvedField := &avroSchemaField{
+			SchemaType: []avroSchemaType{avroSchemaNull, avroSchemaString},
+			Name:       `resolved`,
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, resolvedField)
+	}
+	if opts.afterField {
+		schema.after = after
+		afterField := &avroSchemaField{
+			Name:       `after`,
+			SchemaType: []avroSchemaType{avroSchemaNull, after},
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, afterField)
+	}
+
+	schemaJSON, err := json.Marshal(schema)
+	if err != nil {
+		return nil, err
+	}
+	schema.codec, err = goavro.NewCodec(string(schemaJSON))
+	if err != nil {
+		return nil, err
+	}
+	return schema, nil
+}
+
+// BinaryFromRow encodes the given metadata and row data into avro's defined
+// binary format.
+func (r *avroEnvelopeRecord) BinaryFromRow(
+	buf []byte, meta avroMetadata, row sqlbase.EncDatumRow,
+) ([]byte, error) {
+	native := map[string]interface{}{
+		`after`: nil,
+	}
+	if r.opts.updatedField {
+		native[`updated`] = nil
+		if u, ok := meta[`updated`]; ok {
+			delete(meta, `updated`)
+			ts, ok := u.(hlc.Timestamp)
+			if !ok {
+				return nil, errors.Errorf(`unknown metadata timestamp type: %T`, u)
+			}
+			native[`updated`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
+		}
+	}
+	if r.opts.resolvedField {
+		native[`resolved`] = nil
+		if u, ok := meta[`resolved`]; ok {
+			delete(meta, `resolved`)
+			ts, ok := u.(hlc.Timestamp)
+			if !ok {
+				return nil, errors.Errorf(`unknown metadata timestamp type: %T`, u)
+			}
+			native[`resolved`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
+		}
+	}
+	// WIP verify that meta is now empty
+	if row != nil {
+		afterNative, err := r.after.nativeFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		native[`after`] = goavro.Union(avroUnionKey(&r.after.avroRecord), afterNative)
+	}
+	return r.codec.BinaryFromNative(buf, native)
 }
 
 // decimalToRat converts one of our apd decimals to the format expected by the
