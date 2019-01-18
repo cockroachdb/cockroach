@@ -40,7 +40,7 @@ type fkExistenceCheckForDelete struct {
 func makeFkExistenceCheckHelperForDelete(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
-	otherTables TableLookupsByID,
+	otherTables FkTableMetadata,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
 ) (fkExistenceCheckForDelete, error) {

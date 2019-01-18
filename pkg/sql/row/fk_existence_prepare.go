@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// TablesNeededForFKs populates a map of TableLookupsByID for all the
+// TablesNeededForFKs populates a map of FkTableMetadata for all the
 // TableDescriptors that might be needed when performing FK checking for delete
 // and/or insert operations. It uses the passed in lookup function to perform
 // the actual lookup. The AnalyzeExpr function, if provided, is used to
@@ -35,11 +35,11 @@ func TablesNeededForFKs(
 	tblLookupFn TableLookupFunction,
 	privCheckFn CheckPrivilegeFunction,
 	analyzeExprFn sqlbase.AnalyzeExprFunction,
-) (TableLookupsByID, error) {
+) (FkTableMetadata, error) {
 	// Initialize the lookup queue.
 	queue := tableLookupQueue{
-		result:         make(TableLookupsByID),
-		alreadyChecked: make(map[ID]map[FKCheckType]struct{}),
+		result:         make(FkTableMetadata),
+		alreadyChecked: make(map[TableID]map[FKCheckType]struct{}),
 		tblLookupFn:    tblLookupFn,
 		privCheckFn:    privCheckFn,
 		analyzeExprFn:  analyzeExprFn,

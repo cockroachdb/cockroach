@@ -49,7 +49,7 @@ type fkExistenceCheckForInsert struct {
 func makeFkExistenceCheckHelperForInsert(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
-	otherTables TableLookupsByID,
+	otherTables FkTableMetadata,
 	colMap map[sqlbase.ColumnID]int,
 	alloc *sqlbase.DatumAlloc,
 ) (fkExistenceCheckForInsert, error) {

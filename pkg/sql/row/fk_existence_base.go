@@ -113,7 +113,7 @@ type fkExistenceCheckBaseHelper struct {
 //   sql, sqlbase, row. The proliferation is annoying.
 func makeFkExistenceCheckBaseHelper(
 	txn *client.Txn,
-	otherTables TableLookupsByID,
+	otherTables FkTableMetadata,
 	mutatedIdx *sqlbase.IndexDescriptor,
 	ref sqlbase.ForeignKeyReference,
 	colMap map[sqlbase.ColumnID]int,
