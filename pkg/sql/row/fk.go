@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 // ID is an alias for sqlbase.ID.
@@ -265,5 +264,3 @@ func TablesNeededForFKs(
 		}
 	}
 }
-
-var errSkipUnusedFK = errors.New("no columns involved in FK included in writer")

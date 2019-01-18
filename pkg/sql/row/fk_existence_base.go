@@ -15,6 +15,7 @@
 package row
 
 import (
+	"errors"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -230,3 +231,5 @@ func computeFkCheckColumnIDs(
 		return nil, pgerror.NewAssertionErrorf("unknown composite key match type: %v", match)
 	}
 }
+
+var errSkipUnusedFK = errors.New("no columns involved in FK included in writer")
