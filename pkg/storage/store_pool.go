@@ -84,6 +84,11 @@ var TimeUntilStoreDead = settings.RegisterValidatedDurationSetting(
 	},
 )
 
+// The NodeCountFunc returns a count of the total number of nodes the user
+// intends for their to be in the cluster. The count includes dead nodes, but
+// not decommissioned nodes.
+type NodeCountFunc func() int
+
 // A NodeLivenessFunc accepts a node ID, current time and threshold before
 // a node is considered dead and returns whether or not the node is live.
 type NodeLivenessFunc func(roachpb.NodeID, time.Time, time.Duration) storagepb.NodeLivenessStatus
@@ -200,6 +205,7 @@ type StorePool struct {
 
 	clock          *hlc.Clock
 	gossip         *gossip.Gossip
+	nodeCountFn    NodeCountFunc
 	nodeLivenessFn NodeLivenessFunc
 	startTime      time.Time
 	deterministic  bool
@@ -224,6 +230,7 @@ func NewStorePool(
 	st *cluster.Settings,
 	g *gossip.Gossip,
 	clock *hlc.Clock,
+	nodeCountFn NodeCountFunc,
 	nodeLivenessFn NodeLivenessFunc,
 	deterministic bool,
 ) *StorePool {
@@ -232,6 +239,7 @@ func NewStorePool(
 		st:             st,
 		clock:          clock,
 		gossip:         g,
+		nodeCountFn:    nodeCountFn,
 		nodeLivenessFn: nodeLivenessFn,
 		startTime:      clock.PhysicalTime(),
 		deterministic:  deterministic,
@@ -443,33 +451,11 @@ func (sp *StorePool) decommissioningReplicas(
 	return
 }
 
-// AvailableNodeCount returns the number of nodes which are considered
-// available for use as allocation targets. This includes only nodes which are
-// not dead or decommissioning. It notably does include nodes that are not
-// considered live by node liveness but are also not yet considered dead.
+// AvailableNodeCount returns the number of nodes that are possible allocation
+// targets. This includes dead nodes, but not decommissioning or decommissioned
+// nodes.
 func (sp *StorePool) AvailableNodeCount() int {
-	sp.detailsMu.RLock()
-	defer sp.detailsMu.RUnlock()
-
-	now := sp.clock.PhysicalTime()
-	availableNodes := map[roachpb.NodeID]struct{}{}
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
-
-	for _, detail := range sp.detailsMu.storeDetails {
-		if detail.desc == nil {
-			continue
-		}
-		switch s := detail.status(now, timeUntilStoreDead, 0, sp.nodeLivenessFn); s {
-		case storeStatusThrottled, storeStatusAvailable, storeStatusUnknown, storeStatusReplicaCorrupted:
-			availableNodes[detail.desc.Node.NodeID] = struct{}{}
-		case storeStatusDead, storeStatusDecommissioning:
-			// Do nothing; this node can't/shouldn't have any replicas on it.
-		default:
-			panic(fmt.Sprintf("unknown store status: %d", s))
-		}
-	}
-
-	return len(availableNodes)
+	return sp.nodeCountFn()
 }
 
 // liveAndDeadReplicas divides the provided repls slice into two slices: the
