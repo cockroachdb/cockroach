@@ -376,8 +376,8 @@ func (rq *replicateQueue) processOneChange(
 			lastReplAdded = 0
 		}
 		candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas, lastReplAdded)
-		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal",
-			desc.Replicas, candidates)
+		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
+			desc.Replicas, candidates, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 		if len(candidates) == 0 {
 			// After rapid upreplication, the candidates for removal could still be catching up.
 			// Mark this error as benign so it doesn't create confusion in the logs.
@@ -569,7 +569,7 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 	zone config.ZoneConfig,
 	opts transferLeaseOptions,
 ) (bool, error) {
-	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas, 0 /* brandNewReplicaID */)
+	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone,

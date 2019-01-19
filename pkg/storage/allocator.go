@@ -1145,12 +1145,9 @@ func computeQuorum(nodes int) int {
 
 // filterBehindReplicas removes any "behind" replicas from the supplied
 // slice. A "behind" replica is one which is not at or past the quorum commit
-// index. We forgive brandNewReplicaID for being behind, since a new range can
-// take a little while to fully catch up.
+// index.
 func filterBehindReplicas(
-	raftStatus *raft.Status,
-	replicas []roachpb.ReplicaDescriptor,
-	brandNewReplicaID roachpb.ReplicaID,
+	raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	if raftStatus == nil || len(raftStatus.Progress) == 0 {
 		// raftStatus.Progress is only populated on the Raft leader which means we
@@ -1160,7 +1157,7 @@ func filterBehindReplicas(
 	}
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas))
 	for _, r := range replicas {
-		if !replicaIsBehind(raftStatus, r.ReplicaID) || r.ReplicaID == brandNewReplicaID {
+		if !replicaIsBehind(raftStatus, r.ReplicaID) {
 			candidates = append(candidates, r)
 		}
 	}
@@ -1186,13 +1183,20 @@ func replicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool 
 	return true
 }
 
+// simulateFilterUnremovableReplicas removes any unremovable replicas from the
+// supplied slice. Unlike filterUnremovableReplicas, brandNewReplicaID is
+// considered up-to-date (and thus can participiate in quorum), but is not
+// considered a candidate for removal.
 func simulateFilterUnremovableReplicas(
 	raftStatus *raft.Status,
 	replicas []roachpb.ReplicaDescriptor,
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {
 	status := *raftStatus
-	status.Progress[uint64(brandNewReplicaID)] = raft.Progress{Match: 0}
+	status.Progress[uint64(brandNewReplicaID)] = raft.Progress{
+		State: raft.ProgressStateReplicate,
+		Match: status.Commit,
+	}
 	return filterUnremovableReplicas(&status, replicas, brandNewReplicaID)
 }
 
@@ -1207,20 +1211,34 @@ func filterUnremovableReplicas(
 	replicas []roachpb.ReplicaDescriptor,
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {
-	upToDateReplicas := filterBehindReplicas(raftStatus, replicas, brandNewReplicaID)
+	upToDateReplicas := filterBehindReplicas(raftStatus, replicas)
 	quorum := computeQuorum(len(replicas) - 1)
 	if len(upToDateReplicas) < quorum {
 		// The number of up-to-date replicas is less than quorum. No replicas can
 		// be removed.
 		return nil
 	}
+
 	if len(upToDateReplicas) > quorum {
 		// The number of up-to-date replicas is larger than quorum. Any replica can
-		// be removed.
+		// be removed, though we want to filter out brandNewReplicaID.
+		if brandNewReplicaID != 0 {
+			candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas)-len(upToDateReplicas))
+			for _, r := range replicas {
+				if r.ReplicaID != brandNewReplicaID {
+					candidates = append(candidates, r)
+				}
+			}
+			return candidates
+		}
 		return replicas
 	}
+
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas)-len(upToDateReplicas))
 	necessary := func(r roachpb.ReplicaDescriptor) bool {
+		if r.ReplicaID == brandNewReplicaID {
+			return true
+		}
 		for _, t := range upToDateReplicas {
 			if t == r {
 				return true
