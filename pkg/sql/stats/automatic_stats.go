@@ -32,11 +32,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-// AutomaticStatisticsClusterMode controls the cluster default for when
-// automatic table statistics collection is enabled.
+// AutomaticStatisticsClusterMode controls the cluster setting for enabling
+// automatic table statistics collection.
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
-	"sql.defaults.experimental_automatic_statistics",
-	"default experimental automatic statistics mode",
+	"sql.stats.experimental_automatic",
+	"experimental automatic statistics mode",
 	false,
 )
 
