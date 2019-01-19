@@ -688,6 +688,7 @@ func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.Node
 		m.storeConfig.Settings,
 		m.gossips[idx],
 		m.clocks[idx],
+		nodeLiveness.GetNodeCount,
 		storage.MakeStorePoolNodeLivenessFunc(nodeLiveness),
 		/* deterministic */ false,
 	)
