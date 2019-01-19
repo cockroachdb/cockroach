@@ -5653,6 +5653,16 @@ index_flags_param:
     /* SKIP DOC */
     $$.val = &tree.IndexFlags{IndexID: tree.IndexID($4.int64())}
   }
+| ASC
+  {
+    /* SKIP DOC */
+    $$.val = &tree.IndexFlags{Direction: tree.Ascending}
+  }
+| DESC
+  {
+    /* SKIP DOC */
+    $$.val = &tree.IndexFlags{Direction: tree.Descending}
+  }
 |
   NO_INDEX_JOIN
   {
@@ -5687,7 +5697,12 @@ opt_index_flags:
   }
 | '@' '{' index_flags_param_list '}'
   {
-    $$.val = $3.indexFlags()
+    flags := $3.indexFlags()
+    if err := flags.Check(); err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = flags
   }
 | /* EMPTY */
   {
