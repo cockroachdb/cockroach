@@ -382,13 +382,18 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 		for _, v := range arg.Vals {
 			m := map[string]memo.ExprFmtFlags{
 				"show-all":         memo.ExprFmtShowAll,
-				"hide-all":         memo.ExprFmtHideAll,
+				"hide-miscprops":   memo.ExprFmtHideMiscProps,
+				"hide-constraints": memo.ExprFmtHideConstraints,
+				"hide-funcdeps":    memo.ExprFmtHideFuncDeps,
+				"hide-ruleprops":   memo.ExprFmtHideRuleProps,
 				"hide-stats":       memo.ExprFmtHideStats,
 				"hide-cost":        memo.ExprFmtHideCost,
-				"hide-constraints": memo.ExprFmtHideConstraints,
-				"hide-ruleprops":   memo.ExprFmtHideRuleProps,
-				"hide-scalars":     memo.ExprFmtHideScalars,
 				"hide-qual":        memo.ExprFmtHideQualifications,
+				"hide-scalars":     memo.ExprFmtHideScalars,
+				"hide-orderings":   memo.ExprFmtHideOrderings,
+				"hide-types":       memo.ExprFmtHideTypes,
+				"hide-columns":     memo.ExprFmtHideColumns,
+				"hide-all":         memo.ExprFmtHideAll,
 			}
 			if val, ok := m[v]; ok {
 				f.ExprFormat |= val
