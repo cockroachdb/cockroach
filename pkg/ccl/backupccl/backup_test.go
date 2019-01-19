@@ -2791,7 +2791,7 @@ func TestCreateStatsAfterRestore(t *testing.T) {
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.experimental_automatic_statistics=true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.experimental_automatic=true`)
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, localFoo)
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)

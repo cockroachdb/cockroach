@@ -61,7 +61,6 @@
 <tr><td><code>server.web_session_timeout</code></td><td>duration</td><td><code>168h0m0s</code></td><td>the duration that a newly created web session will be valid</td></tr>
 <tr><td><code>sql.defaults.default_int_size</code></td><td>integer</td><td><code>8</code></td><td>the size, in bytes, of an INT type</td></tr>
 <tr><td><code>sql.defaults.distsql</code></td><td>enumeration</td><td><code>1</code></td><td>default distributed SQL execution mode [off = 0, auto = 1, on = 2, 2.0-off = 3, 2.0-auto = 4]</td></tr>
-<tr><td><code>sql.defaults.experimental_automatic_statistics</code></td><td>boolean</td><td><code>false</code></td><td>default experimental automatic statistics mode</td></tr>
 <tr><td><code>sql.defaults.experimental_optimizer_mutations</code></td><td>boolean</td><td><code>false</code></td><td>default experimental_optimizer_mutations mode</td></tr>
 <tr><td><code>sql.defaults.experimental_vectorize</code></td><td>enumeration</td><td><code>0</code></td><td>default experimental_vectorize mode [off = 0, on = 1, always = 2]</td></tr>
 <tr><td><code>sql.defaults.optimizer</code></td><td>enumeration</td><td><code>1</code></td><td>default cost-based optimizer mode [off = 0, on = 1, local = 2]</td></tr>
@@ -81,6 +80,7 @@
 <tr><td><code>sql.metrics.statement_details.threshold</code></td><td>duration</td><td><code>0s</code></td><td>minimum execution time to cause statistics to be collected</td></tr>
 <tr><td><code>sql.parallel_scans.enabled</code></td><td>boolean</td><td><code>true</code></td><td>parallelizes scanning different ranges when the maximum result size can be deduced</td></tr>
 <tr><td><code>sql.query_cache.enabled</code></td><td>boolean</td><td><code>false</code></td><td>enable the query cache</td></tr>
+<tr><td><code>sql.stats.experimental_automatic</code></td><td>boolean</td><td><code>false</code></td><td>experimental automatic statistics mode</td></tr>
 <tr><td><code>sql.tablecache.lease.refresh_limit</code></td><td>integer</td><td><code>50</code></td><td>maximum number of tables to periodically refresh leases for</td></tr>
 <tr><td><code>sql.trace.log_statement_execute</code></td><td>boolean</td><td><code>false</code></td><td>set to true to enable logging of executed statements</td></tr>
 <tr><td><code>sql.trace.session_eventlog.enabled</code></td><td>boolean</td><td><code>false</code></td><td>set to true to enable session tracing</td></tr>
