@@ -5155,43 +5155,34 @@ func TestFilterBehindReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		commit            uint64
-		leader            uint64
-		progress          []uint64
-		brandNewReplicaID roachpb.ReplicaID
-		expected          []uint64
+		commit   uint64
+		leader   uint64
+		progress []uint64
+		expected []uint64
 	}{
-		{0, 99, []uint64{0}, 0, nil},
-		{1, 99, []uint64{1}, 0, []uint64{1}},
-		{2, 99, []uint64{2}, 0, []uint64{2}},
-		{1, 99, []uint64{0, 1}, 0, []uint64{1}},
-		{1, 99, []uint64{1, 2}, 0, []uint64{1, 2}},
-		{2, 99, []uint64{3, 2}, 0, []uint64{3, 2}},
-		{1, 99, []uint64{0, 0, 1}, 0, []uint64{1}},
-		{1, 99, []uint64{0, 1, 2}, 0, []uint64{1, 2}},
-		{2, 99, []uint64{1, 2, 3}, 0, []uint64{2, 3}},
-		{3, 99, []uint64{4, 3, 2}, 0, []uint64{4, 3}},
-		{1, 99, []uint64{1, 1, 1}, 0, []uint64{1, 1, 1}},
-		{1, 99, []uint64{1, 1, 2}, 0, []uint64{1, 1, 2}},
-		{2, 99, []uint64{1, 2, 2}, 0, []uint64{2, 2}},
-		{2, 99, []uint64{0, 1, 2, 3}, 0, []uint64{2, 3}},
-		{2, 99, []uint64{1, 2, 3, 4}, 0, []uint64{2, 3, 4}},
-		{3, 99, []uint64{5, 4, 3, 2}, 0, []uint64{5, 4, 3}},
-		{3, 99, []uint64{1, 2, 3, 4, 5}, 0, []uint64{3, 4, 5}},
-		{4, 99, []uint64{6, 5, 4, 3, 2}, 0, []uint64{6, 5, 4}},
-		{4, 99, []uint64{6, 5, 4, 3, 2}, 0, []uint64{6, 5, 4}},
-		{0, 1, []uint64{0}, 0, []uint64{0}},
-		{0, 1, []uint64{0, 0, 0}, 0, []uint64{0}},
-		{1, 1, []uint64{2, 0, 1}, 0, []uint64{2, 1}},
-		{1, 2, []uint64{0, 2, 1}, 0, []uint64{2, 1}},
-		{1, 99, []uint64{0, 1}, 1, []uint64{0, 1}},
-		{1, 99, []uint64{0, 1}, 2, []uint64{1}},
-		{9, 99, []uint64{0, 9}, 1, []uint64{0, 9}},
-		{9, 99, []uint64{0, 1}, 1, []uint64{0}},
-		{1, 1, []uint64{2, 0, 1}, 2, []uint64{2, 0, 1}},
-		{1, 1, []uint64{2, 0, 1}, 3, []uint64{2, 1}},
-		{4, 99, []uint64{6, 5, 4, 3, 2}, 5, []uint64{6, 5, 4, 2}},
-		{4, 99, []uint64{6, 5, 4, 3, 0}, 5, []uint64{6, 5, 4, 0}},
+		{0, 99, []uint64{0}, nil},
+		{1, 99, []uint64{1}, []uint64{1}},
+		{2, 99, []uint64{2}, []uint64{2}},
+		{1, 99, []uint64{0, 1}, []uint64{1}},
+		{1, 99, []uint64{1, 2}, []uint64{1, 2}},
+		{2, 99, []uint64{3, 2}, []uint64{3, 2}},
+		{1, 99, []uint64{0, 0, 1}, []uint64{1}},
+		{1, 99, []uint64{0, 1, 2}, []uint64{1, 2}},
+		{2, 99, []uint64{1, 2, 3}, []uint64{2, 3}},
+		{3, 99, []uint64{4, 3, 2}, []uint64{4, 3}},
+		{1, 99, []uint64{1, 1, 1}, []uint64{1, 1, 1}},
+		{1, 99, []uint64{1, 1, 2}, []uint64{1, 1, 2}},
+		{2, 99, []uint64{1, 2, 2}, []uint64{2, 2}},
+		{2, 99, []uint64{0, 1, 2, 3}, []uint64{2, 3}},
+		{2, 99, []uint64{1, 2, 3, 4}, []uint64{2, 3, 4}},
+		{3, 99, []uint64{5, 4, 3, 2}, []uint64{5, 4, 3}},
+		{3, 99, []uint64{1, 2, 3, 4, 5}, []uint64{3, 4, 5}},
+		{4, 99, []uint64{6, 5, 4, 3, 2}, []uint64{6, 5, 4}},
+		{4, 99, []uint64{6, 5, 4, 3, 2}, []uint64{6, 5, 4}},
+		{0, 1, []uint64{0}, []uint64{0}},
+		{0, 1, []uint64{0, 0, 0}, []uint64{0}},
+		{1, 1, []uint64{2, 0, 1}, []uint64{2, 1}},
+		{1, 2, []uint64{0, 2, 1}, []uint64{2, 1}},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -5216,7 +5207,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 					StoreID:   roachpb.StoreID(v),
 				})
 			}
-			candidates := filterBehindReplicas(status, replicas, c.brandNewReplicaID)
+			candidates := filterBehindReplicas(status, replicas)
 			var ids []uint64
 			for _, c := range candidates {
 				ids = append(ids, uint64(c.StoreID))
@@ -5248,13 +5239,16 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 		{3, []uint64{1, 2, 3, 4}, 0, []uint64{1, 2}},
 		{2, []uint64{1, 2, 3, 4, 5}, 0, []uint64{1, 2, 3, 4, 5}},
 		{3, []uint64{1, 2, 3, 4, 5}, 0, []uint64{1, 2}},
-		{1, []uint64{1, 0}, 2, []uint64{1, 0}},
+		{1, []uint64{1, 0}, 2, nil},
+		// TODO(peter): Is this the desired behavior? For a 2-replica range, we
+		// won't be able to process the removal of a replica unless both are
+		// up-to-date.
 		{1, []uint64{1, 0}, 1, []uint64{0}},
-		{3, []uint64{3, 2, 1}, 3, []uint64{2}},
-		{3, []uint64{3, 2, 0}, 3, []uint64{2}},
-		{3, []uint64{4, 3, 2, 1}, 4, []uint64{4, 3, 2, 1}},
-		{3, []uint64{4, 3, 2, 0}, 3, []uint64{4, 3, 2, 0}},
-		{3, []uint64{4, 3, 2, 0}, 4, []uint64{4, 3, 2, 0}},
+		{3, []uint64{3, 2, 1}, 3, nil},
+		{3, []uint64{3, 2, 0}, 3, nil},
+		{3, []uint64{4, 3, 2, 1}, 4, []uint64{2}},
+		{3, []uint64{4, 3, 2, 0}, 3, []uint64{0}},
+		{3, []uint64{4, 3, 2, 0}, 4, []uint64{2}},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -5283,6 +5277,61 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 			}
 
 			candidates := filterUnremovableReplicas(status, replicas, c.brandNewReplicaID)
+			var ids []uint64
+			for _, c := range candidates {
+				ids = append(ids, uint64(c.StoreID))
+			}
+			if !reflect.DeepEqual(c.expected, ids) {
+				t.Fatalf("expected %d, but got %d", c.expected, ids)
+			}
+		})
+	}
+}
+
+func TestSimulateFilterUnremovableReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		commit            uint64
+		progress          []uint64
+		brandNewReplicaID roachpb.ReplicaID
+		expected          []uint64
+	}{
+		{1, []uint64{1, 0}, 2, []uint64{1}},
+		{1, []uint64{1, 0}, 1, []uint64{0}},
+		{3, []uint64{3, 2, 1}, 3, []uint64{2}},
+		{3, []uint64{3, 2, 0}, 3, []uint64{2}},
+		{3, []uint64{4, 3, 2, 1}, 4, []uint64{4, 3, 2}},
+		{3, []uint64{4, 3, 2, 0}, 3, []uint64{4, 3, 0}},
+		{3, []uint64{4, 3, 2, 0}, 4, []uint64{4, 3, 2}},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			status := &raft.Status{
+				Progress: make(map[uint64]raft.Progress),
+			}
+			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
+			// valid replica IDs.
+			status.Lead = 99
+			status.Commit = c.commit
+			var replicas []roachpb.ReplicaDescriptor
+			for j, v := range c.progress {
+				p := raft.Progress{
+					Match: v,
+					State: raft.ProgressStateReplicate,
+				}
+				if v == 0 {
+					p.State = raft.ProgressStateProbe
+				}
+				replicaID := uint64(j + 1)
+				status.Progress[replicaID] = p
+				replicas = append(replicas, roachpb.ReplicaDescriptor{
+					ReplicaID: roachpb.ReplicaID(replicaID),
+					StoreID:   roachpb.StoreID(v),
+				})
+			}
+
+			candidates := simulateFilterUnremovableReplicas(status, replicas, c.brandNewReplicaID)
 			var ids []uint64
 			for _, c := range candidates {
 				ids = append(ids, uint64(c.StoreID))
