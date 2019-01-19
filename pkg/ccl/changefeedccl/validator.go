@@ -121,6 +121,10 @@ type fingerprintValidator struct {
 	origTable, fprintTable string
 	partitionResolved      map[string]hlc.Timestamp
 	resolved               hlc.Timestamp
+	// It's possible to get a resolved timestamp from before the table even
+	// exists, which is valid but complicates the way fingerprintValidator works.
+	// Don't create a fingerprint earlier than the first seen row.
+	firstRowTimestamp hlc.Timestamp
 
 	buffer []validatorRow
 
@@ -148,6 +152,9 @@ func NewFingerprintValidator(
 func (v *fingerprintValidator) NoteRow(
 	ignoredPartition string, key, value string, updated hlc.Timestamp,
 ) {
+	if v.firstRowTimestamp.IsEmpty() || updated.Less(v.firstRowTimestamp) {
+		v.firstRowTimestamp = updated
+	}
 	v.buffer = append(v.buffer, validatorRow{
 		key:     key,
 		value:   value,
@@ -243,7 +250,10 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		}
 	}
 
-	return v.fingerprint(v.resolved)
+	if !v.firstRowTimestamp.IsEmpty() && !resolved.Less(v.firstRowTimestamp) {
+		return v.fingerprint(resolved)
+	}
+	return nil
 }
 
 func (v *fingerprintValidator) fingerprint(ts hlc.Timestamp) error {

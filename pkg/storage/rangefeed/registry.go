@@ -15,6 +15,7 @@
 package rangefeed
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -214,10 +215,28 @@ func (r *registration) runCatchupScan() error {
 	startKey := engine.MakeMVCCMetadataKey(r.span.Key)
 	endKey := engine.MakeMVCCMetadataKey(r.span.EndKey)
 
+	// Iterator will encounter historical values for each key in
+	// reverse-chronological order. To output in chronological order, store
+	// events for the same key until a different key is encountered, then output
+	// the encountered values in reverse.
+	reorderBuf := make([]roachpb.RangeFeedEvent, 0, 5)
+	var lastKey []byte
+	outputEvents := func() error {
+		for i := len(reorderBuf) - 1; i >= 0; i-- {
+			e := reorderBuf[i]
+			if err := r.stream.Send(&e); err != nil {
+				return err
+			}
+		}
+		reorderBuf = reorderBuf[:0]
+		return nil
+	}
+
 	// Iterate though all keys using Next. We want to publish all committed
 	// versions of each key that are after the registration's startTS, so we
 	// can't use NextKey.
 	var meta enginepb.MVCCMetadata
+
 	for r.catchupIter.Seek(startKey); ; r.catchupIter.Next() {
 		if ok, err := r.catchupIter.Valid(); err != nil {
 			return err
@@ -252,6 +271,14 @@ func (r *registration) runCatchupScan() error {
 		a, val = a.Copy(unsafeVal, 0)
 		ts := unsafeKey.Timestamp
 
+		// Output values in order
+		if !bytes.Equal(key, lastKey) {
+			if err := outputEvents(); err != nil {
+				return err
+			}
+			lastKey = key
+		}
+
 		var event roachpb.RangeFeedEvent
 		event.MustSetValue(&roachpb.RangeFeedValue{
 			Key: key,
@@ -260,11 +287,11 @@ func (r *registration) runCatchupScan() error {
 				Timestamp: ts,
 			},
 		})
-		if err := r.stream.Send(&event); err != nil {
-			return err
-		}
+		reorderBuf = append(reorderBuf, event)
 	}
-	return nil
+
+	// Output events for the last key encountered.
+	return outputEvents()
 }
 
 // ID implements interval.Interface.
