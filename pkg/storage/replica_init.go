@@ -17,6 +17,7 @@ package storage
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -318,10 +319,17 @@ func (r *Replica) setDesc(ctx context.Context, desc *roachpb.RangeDescriptor) {
 			r.mu.state.Desc.StartKey, desc.StartKey)
 	}
 
+	// Determine if a new replica was added. This is true if the new max replica
+	// ID is greater than the old max replica ID.
+	oldMaxID := maxReplicaID(r.mu.state.Desc)
 	newMaxID := maxReplicaID(desc)
-	if newMaxID > r.mu.lastReplicaAdded {
+	if newMaxID > oldMaxID {
 		r.mu.lastReplicaAdded = newMaxID
 		r.mu.lastReplicaAddedTime = timeutil.Now()
+	} else if r.mu.lastReplicaAdded > newMaxID {
+		// The last replica added was removed.
+		r.mu.lastReplicaAdded = 0
+		r.mu.lastReplicaAddedTime = time.Time{}
 	}
 
 	r.rangeStr.store(r.mu.replicaID, desc)
