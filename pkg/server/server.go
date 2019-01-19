@@ -334,6 +334,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.st,
 		s.gossip,
 		s.clock,
+		s.nodeLiveness.GetNodeCount,
 		storage.MakeStorePoolNodeLivenessFunc(s.nodeLiveness),
 		/* deterministic */ false,
 	)
