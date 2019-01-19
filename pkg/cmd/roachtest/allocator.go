@@ -20,6 +20,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -76,18 +77,24 @@ func registerAllocator(r *registry) {
 	}
 
 	r.Add(testSpec{
-		Name:    `upreplicate/1to3`,
+		Name:    `replicate/up/1to3`,
 		Cluster: makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
 	r.Add(testSpec{
-		Name:    `rebalance/3to5`,
+		Name:    `replicate/rebalance/3to5`,
 		Cluster: makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
+	})
+	r.Add(testSpec{
+		Name:    `replicate/wide`,
+		Timeout: 10 * time.Minute,
+		Cluster: makeClusterSpec(9, cpu(1)),
+		Run:     runWideReplication,
 	})
 }
 
@@ -242,4 +249,135 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev fl
 			statsTimer.Reset(statsInterval)
 		}
 	}
+}
+
+func runWideReplication(ctx context.Context, t *test, c *cluster) {
+	nodes := c.nodes
+	if nodes != 9 {
+		t.Fatalf("9-node cluster required")
+	}
+
+	args := startArgs("--sequential", "--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	c.Put(ctx, cockroach, "./cockroach")
+	c.Start(ctx, t, c.All(), args)
+
+	db := c.Conn(ctx, 1)
+	defer db.Close()
+
+	zones := func() []string {
+		rows, err := db.Query(`SELECT zone_name FROM crdb_internal.zones`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var results []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				t.Fatal(err)
+			}
+			results = append(results, name)
+		}
+		return results
+	}
+
+	run := func(stmt string) {
+		t.l.Printf("%s\n", stmt)
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	setReplication := func(width int) {
+		// Change every zone to have the same number of replicas as the number of
+		// nodes in the cluster.
+		for _, zone := range zones() {
+			which := "RANGE"
+			if zone[0] == '.' {
+				zone = zone[1:]
+			} else if strings.Count(zone, ".") == 0 {
+				which = "DATABASE"
+			} else {
+				which = "TABLE"
+			}
+			run(fmt.Sprintf(`ALTER %s %s CONFIGURE ZONE USING num_replicas = %d`,
+				which, zone, width))
+		}
+	}
+	setReplication(nodes)
+
+	countMisreplicated := func(width int) int {
+		var count int
+		if err := db.QueryRow(
+			"SELECT count(*) FROM crdb_internal.ranges WHERE array_length(replicas,1) != $1",
+			width,
+		).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+
+	waitForReplication := func(width int) {
+		for count := -1; count != 0; time.Sleep(time.Second) {
+			count = countMisreplicated(width)
+			t.l.Printf("%d mis-replicated ranges\n", count)
+		}
+	}
+
+	waitForReplication(nodes)
+
+	numRanges := func() int {
+		var count int
+		if err := db.QueryRow(`SELECT count(*) FROM crdb_internal.ranges`).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}()
+
+	// Stop the cluster and restart 2/3 of the nodes.
+	c.Stop(ctx)
+	c.Start(ctx, t, c.Range(1, 6), args)
+
+	waitForUnderReplicated := func(count int) {
+		for ; ; time.Sleep(time.Second) {
+			query := `
+SELECT sum((metrics->>'ranges.unavailable')::DECIMAL)::INT AS ranges_unavailable,
+       sum((metrics->>'ranges.underreplicated')::DECIMAL)::INT AS ranges_underreplicated
+FROM crdb_internal.kv_store_status
+`
+			var unavailable, underReplicated int
+			if err := db.QueryRow(query).Scan(&unavailable, &underReplicated); err != nil {
+				t.Fatal(err)
+			}
+			t.l.Printf("%d unavailable, %d under-replicated ranges\n", unavailable, underReplicated)
+			if unavailable != 0 {
+				t.Fatalf("%d unavailable ranges", unavailable)
+			}
+			if underReplicated >= count {
+				break
+			}
+		}
+	}
+
+	waitForUnderReplicated(numRanges)
+	if n := countMisreplicated(9); n != 0 {
+		t.Fatalf("expected 0 mis-replicated ranges, but found %d", n)
+	}
+
+	decom := func(id int) {
+		c.Run(ctx, c.Node(1),
+			fmt.Sprintf("./cockroach node decommission --insecure --wait=none %d", id))
+	}
+
+	// Decommission a node. The ranges should down-replicate to 7 replicas.
+	decom(9)
+	waitForReplication(7)
+
+	// Set the replication width to 5. The replicas should down-replicate, though
+	// this currently requires the time-until-store-dead threshold to pass
+	// because the allocator cannot select a replica for removal that is on a
+	// store for which it doesn't have a store descriptor.
+	run(`SET CLUSTER SETTING server.time_until_store_dead = '90s'`)
+	setReplication(5)
+	waitForReplication(5)
 }

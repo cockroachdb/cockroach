@@ -279,8 +279,10 @@ func (sp *StorePool) String() string {
 		if status != storeStatusAvailable {
 			fmt.Fprintf(&buf, " (status=%d)", status)
 		}
-		fmt.Fprintf(&buf, ": range-count=%d fraction-used=%.2f",
-			detail.desc.Capacity.RangeCount, detail.desc.Capacity.FractionUsed())
+		if detail.desc != nil {
+			fmt.Fprintf(&buf, ": range-count=%d fraction-used=%.2f",
+				detail.desc.Capacity.RangeCount, detail.desc.Capacity.FractionUsed())
+		}
 		throttled := detail.throttledUntil.Sub(now)
 		if throttled > 0 {
 			fmt.Fprintf(&buf, " [throttled=%.1fs]", throttled.Seconds())
