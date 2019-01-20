@@ -353,7 +353,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				expr.Left = left.Left
 				expr.Right = newRightExpr
 				expr.memoizeFn()
-				if !isVar(v.ctx, expr.Left) {
+				if !isVar(v.ctx, expr.Left, true /*allowConstPlaceholders*/) {
 					// Continue as long as the left side of the comparison is not a
 					// variable.
 					continue
@@ -407,7 +407,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				expr.Left = left.Right
 				expr.Right = newRightExpr
 				expr.memoizeFn()
-				if !isVar(v.ctx, expr.Left) {
+				if !isVar(v.ctx, expr.Left, true /*allowConstPlaceholders*/) {
 					// Continue as long as the left side of the comparison is not a
 					// variable.
 					continue
@@ -820,7 +820,7 @@ var _ Visitor = &isConstVisitor{}
 
 func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.isConst {
-		if isVar(v.ctx, expr) {
+		if isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 			v.isConst = false
 			return false, expr
 		}
@@ -879,7 +879,7 @@ func (v *fastIsConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 			// NormalizeVisitor may have wrapped a NULL.
 			return true, expr
 		}
-		if _, ok := expr.(Datum); !ok || isVar(v.ctx, expr) {
+		if _, ok := expr.(Datum); !ok || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 			// If the child expression is not a const Datum, the parent expression is
 			// not constant. Note that all constant literals have already been
 			// normalized to Datum in TypeCheck.
@@ -892,7 +892,7 @@ func (v *fastIsConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	// If the parent expression is a variable or impure function, we know that it
 	// is not constant.
 
-	if isVar(v.ctx, expr) {
+	if isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 		v.isConst = false
 		return false, expr
 	}
@@ -918,26 +918,38 @@ func (v *fastIsConstVisitor) run(expr Expr) bool {
 }
 
 // isVar returns true if the expression's value can vary during plan
-// execution.
-func isVar(evalCtx *EvalContext, expr Expr) bool {
+// execution. The parameter allowConstPlaceholders should be true
+// in the common case of scalar expressions that will be evaluated
+// in the context of the execution of a prepared query, where the
+// placeholder will have the same value for every row processed.
+// It is set to false for scalar expressions that are not
+// evaluated as part of query execution, eg. DEFAULT expressions.
+func isVar(evalCtx *EvalContext, expr Expr, allowConstPlaceholders bool) bool {
 	switch expr.(type) {
 	case VariableExpr:
 		return true
 	case *Placeholder:
-		return evalCtx != nil && (!evalCtx.HasPlaceholders() || evalCtx.Placeholders.IsUnresolvedPlaceholder(expr))
+		if allowConstPlaceholders {
+			if evalCtx == nil || !evalCtx.HasPlaceholders() {
+				// The placeholder cannot be resolved -- it is variable.
+				return true
+			}
+			return evalCtx.Placeholders.IsUnresolvedPlaceholder(expr)
+		}
+		// Placeholders considered always variable.
+		return true
 	}
 	return false
 }
 
 type containsVarsVisitor struct {
-	evalCtx      *EvalContext
 	containsVars bool
 }
 
 var _ Visitor = &containsVarsVisitor{}
 
 func (v *containsVarsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if !v.containsVars && isVar(v.evalCtx, expr) {
+	if !v.containsVars && isVar(nil, expr, false /*allowConstPlaceholders*/) {
 		v.containsVars = true
 	}
 	if v.containsVars {
@@ -950,8 +962,8 @@ func (*containsVarsVisitor) VisitPost(expr Expr) Expr { return expr }
 
 // ContainsVars returns true if the expression contains any variables.
 // (variables = sub-expressions, placeholders, indexed vars, etc.)
-func ContainsVars(evalCtx *EvalContext, expr Expr) bool {
-	v := containsVarsVisitor{evalCtx: evalCtx, containsVars: false}
+func ContainsVars(expr Expr) bool {
+	v := containsVarsVisitor{containsVars: false}
 	WalkExprConst(&v, expr)
 	return v.containsVars
 }

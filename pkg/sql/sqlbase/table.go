@@ -30,14 +30,9 @@ import (
 // type and contains no variable expressions. It returns the type-checked and
 // constant-folded expression.
 func SanitizeVarFreeExpr(
-	expr tree.Expr,
-	expectedType types.T,
-	context string,
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
-	allowImpure bool,
+	expr tree.Expr, expectedType types.T, context string, semaCtx *tree.SemaContext, allowImpure bool,
 ) (tree.TypedExpr, error) {
-	if tree.ContainsVars(evalCtx, expr) {
+	if tree.ContainsVars(expr) {
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"variable sub-expressions are not allowed in %s", context)
 	}
@@ -78,13 +73,13 @@ func SanitizeVarFreeExpr(
 // SERIAL type and replace it with a suitable integer type and default
 // expression.
 //
-// semaCtx and evalCtx can be nil if no default expression is used for the
+// semaCtx can be nil if no default expression is used for the
 // column.
 //
 // The DEFAULT expression is returned in TypedExpr form for analysis (e.g. recording
 // sequence dependencies).
 func MakeColumnDefDescs(
-	d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+	d *tree.ColumnTableDef, semaCtx *tree.SemaContext,
 ) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
 	if _, ok := d.Type.(*coltypes.TSerial); ok {
 		// To the reader of this code: if control arrives here, this means
@@ -127,7 +122,7 @@ func MakeColumnDefDescs(
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
 		if typedExpr, err = SanitizeVarFreeExpr(
-			d.DefaultExpr.Expr, colDatumType, "DEFAULT", semaCtx, evalCtx, true, /* allowImpure */
+			d.DefaultExpr.Expr, colDatumType, "DEFAULT", semaCtx, true, /* allowImpure */
 		); err != nil {
 			return nil, nil, nil, err
 		}
