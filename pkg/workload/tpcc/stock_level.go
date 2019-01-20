@@ -111,15 +111,6 @@ func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
 	if err := crdb.ExecuteInTx(
 		ctx, (*workload.PgxTx)(tx),
 		func() error {
-			// This is the only join in the application, so we don't need to worry about
-			// this setting persisting incorrectly across queries.
-			// Note that this is not needed (and doesn't do anything) when the
-			// optimizer is on. We still set it for when the optimizer is disabled
-			// or when running against older versions of CRDB.
-			if _, err := tx.Exec(`set experimental_force_lookup_join=true`); err != nil {
-				return err
-			}
-
 			var dNextOID int
 			if err := s.selectDNextOID.QueryRowTx(
 				ctx, tx, wID, d.dID,
