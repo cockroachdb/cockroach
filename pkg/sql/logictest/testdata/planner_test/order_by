@@ -248,11 +248,10 @@ EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 sort             ·      ·
  │               order  +b,+a,+d
  └── index-join  ·      ·
-      ├── scan   ·      ·
-      │          table  abc@bc
-      │          spans  /11-
+      │          table  abc@primary
       └── scan   ·      ·
-·                table  abc@primary
+·                table  abc@bc
+·                spans  /11-
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
@@ -260,11 +259,10 @@ query TTT
 EXPLAIN SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
 index-join  ·      ·
- ├── scan   ·      ·
- │          table  abc@ba
- │          spans  /11-
+ │          table  abc@primary
  └── scan   ·      ·
-·           table  abc@primary
+·           table  abc@ba
+·           spans  /11-
 
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c

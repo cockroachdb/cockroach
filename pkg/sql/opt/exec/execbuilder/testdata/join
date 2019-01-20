@@ -1413,11 +1413,10 @@ EXPLAIN (VERBOSE) SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 filter           ·       ·
  │               filter  c = 6.0
  └── index-join  ·       ·
-      ├── scan   ·       ·
-      │          table   zigzag@b_idx
-      │          spans   /5-/6
+      │          table   zigzag@primary
       └── scan   ·       ·
-·                table   zigzag@primary
+·                table   zigzag@b_idx
+·                spans   /5-/6
 
 # Enable zigzag joins.
 statement ok
@@ -1447,18 +1446,17 @@ EXPLAIN (VERBOSE) SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ]
 ----
 lookup-join       ·          ·
+ │                table      zigzag@primary
  │                type       inner
- ├── zigzag-join  ·          ·
- │    │           type       inner
- │    │           pred       (@2 = 5) AND (@3 = 6.0)
- │    ├── scan    ·          ·
- │    │           table      zigzag@b_idx
- │    │           fixedvals  1 column
- │    └── scan    ·          ·
- │                table      zigzag@c_idx
- │                fixedvals  1 column
- └── scan         ·          ·
-·                 table      zigzag@primary
+ └── zigzag-join  ·          ·
+      │           type       inner
+      │           pred       (@2 = 5) AND (@3 = 6.0)
+      ├── scan    ·          ·
+      │           table      zigzag@b_idx
+      │           fixedvals  1 column
+      └── scan    ·          ·
+·                 table      zigzag@c_idx
+·                 fixedvals  1 column
 
 # Zigzag join nested inside a lookup, with an on condition on lookup join.
 query TTT
@@ -1467,16 +1465,15 @@ EXPLAIN (VERBOSE) SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ]
 ----
 lookup-join       ·          ·
+ │                table      zigzag@primary
  │                type       inner
  │                pred       @4 > 4.0
- ├── zigzag-join  ·          ·
- │    │           type       inner
- │    │           pred       (@2 = 5) AND (@3 = 6.0)
- │    ├── scan    ·          ·
- │    │           table      zigzag@b_idx
- │    │           fixedvals  1 column
- │    └── scan    ·          ·
- │                table      zigzag@c_idx
- │                fixedvals  1 column
- └── scan         ·          ·
-·                 table      zigzag@primary
+ └── zigzag-join  ·          ·
+      │           type       inner
+      │           pred       (@2 = 5) AND (@3 = 6.0)
+      ├── scan    ·          ·
+      │           table      zigzag@b_idx
+      │           fixedvals  1 column
+      └── scan    ·          ·
+·                 table      zigzag@c_idx
+·                 fixedvals  1 column

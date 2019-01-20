@@ -43,36 +43,33 @@ query TTT
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
 index-join  ·       ·
- ├── scan   ·       ·
- │          table   abcd@b
- │          spans   ALL
- │          filter  (a >= 20) AND (a <= 30)
+ │          table   abcd@primary
  └── scan   ·       ·
-·           table   abcd@primary
+·           table   abcd@b
+·           spans   ALL
+·           filter  (a >= 20) AND (a <= 30)
 
 # Force index b, reverse scan.
 query TTT
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,DESC} WHERE a >= 20 AND a <= 30
 ----
 index-join    ·       ·
- ├── revscan  ·       ·
- │            table   abcd@b
- │            spans   ALL
- │            filter  (a >= 20) AND (a <= 30)
- └── scan     ·       ·
-·             table   abcd@primary
+ │            table   abcd@primary
+ └── revscan  ·       ·
+·             table   abcd@b
+·             spans   ALL
+·             filter  (a >= 20) AND (a <= 30)
 
 # Force index cd
 query TTT
 EXPLAIN SELECT * FROM abcd@cd WHERE a >= 20 AND a <= 30
 ----
 index-join  ·       ·
- ├── scan   ·       ·
- │          table   abcd@cd
- │          spans   ALL
- │          filter  (a >= 20) AND (a <= 30)
+ │          table   abcd@primary
  └── scan   ·       ·
-·           table   abcd@primary
+·           table   abcd@cd
+·           spans   ALL
+·           filter  (a >= 20) AND (a <= 30)
 
 # Force index bcd
 query TTT
@@ -97,14 +94,12 @@ render     ·       ·
 query TTT
 EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 ----
-render           ·       ·
- └── index-join  ·       ·
-      ├── scan   ·       ·
-      │          table   abcd@b
-      │          spans   ALL
-      └── scan   ·       ·
-·                table   abcd@primary
-·                filter  (c >= 20) AND (c <= 30)
+render           ·      ·
+ └── index-join  ·      ·
+      │          table  abcd@primary
+      └── scan   ·      ·
+·                table  abcd@b
+·                spans  ALL
 
 # No hint, should be using index cd
 query TTT
@@ -129,36 +124,32 @@ render     ·       ·
 query TTT
 EXPLAIN SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 ----
-render           ·       ·
- └── index-join  ·       ·
-      ├── scan   ·       ·
-      │          table   abcd@b
-      │          spans   ALL
-      └── scan   ·       ·
-·                table   abcd@primary
-·                filter  (c >= 20) AND (c < 40)
+render           ·      ·
+ └── index-join  ·      ·
+      │          table  abcd@primary
+      └── scan   ·      ·
+·                table  abcd@b
+·                spans  ALL
 
 query TTT
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
 ----
 index-join  ·       ·
- ├── scan   ·       ·
- │          table   abcd@b
- │          spans   ALL
- │          filter  (a >= 20) AND (a <= 30)
+ │          table   abcd@primary
  └── scan   ·       ·
-·           table   abcd@primary
+·           table   abcd@b
+·           spans   ALL
+·           filter  (a >= 20) AND (a <= 30)
 
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
 ----
 render           ·      ·
  └── index-join  ·      ·
-      ├── scan   ·      ·
-      │          table  abcd@cd
-      │          spans  /10-/11
+      │          table  abcd@primary
       └── scan   ·      ·
-·                table  abcd@primary
+·                table  abcd@cd
+·                spans  /10-/11
 
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10

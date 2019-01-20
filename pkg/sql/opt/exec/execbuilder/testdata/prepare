@@ -68,9 +68,8 @@ query TTT retry
 EXECUTE change_stats
 ----
 lookup-join  ·      ·
+ │           table  cd@primary
  │           type   inner
- ├── scan    ·      ·
- │           table  ab@primary
- │           spans  ALL
  └── scan    ·      ·
-·            table  cd@primary
+·            table  ab@primary
+·            spans  ALL

@@ -28,16 +28,15 @@ count                                    ·         ·
                 │                        render 2  k
                 │                        render 3  v
                 └── lookup-join          ·         ·
-                     │                   type      inner
-                     ├── limit           ·         ·
-                     │    │              count     2
-                     │    └── sort       ·         ·
-                     │         │         order     -v
-                     │         └── scan  ·         ·
                      │                   table     kv@primary
-                     │                   spans     ALL
-                     └── scan            ·         ·
+                     │                   type      inner
+                     └── limit           ·         ·
+                          │              count     2
+                          └── sort       ·         ·
+                               │         order     -v
+                               └── scan  ·         ·
 ·                                        table     kv@primary
+·                                        spans     ALL
 
 # Regression test for #25726.
 # UPSERT over tables with column families, on the fast path, use the

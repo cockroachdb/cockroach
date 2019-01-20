@@ -240,6 +240,10 @@ type indexJoinRun struct {
 	colIDtoRowIndex map[sqlbase.ColumnID]int
 }
 
+func (n *indexJoinNode) startExec(params runParams) error {
+	return n.table.startExec(params)
+}
+
 const indexJoinBatchSize = 100
 
 func (n *indexJoinNode) Next(params runParams) (bool, error) {
