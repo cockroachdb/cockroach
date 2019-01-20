@@ -49,6 +49,10 @@ func (p *planner) CancelSessions(ctx context.Context, n *tree.CancelSessions) (p
 	}, nil
 }
 
+func (n *cancelSessionsNode) startExec(runParams) error {
+	return nil
+}
+
 func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 	// TODO(knz): instead of performing the cancels sequentially,
 	// accumulate all the query IDs and then send batches to each of the

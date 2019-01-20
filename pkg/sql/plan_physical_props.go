@@ -115,7 +115,6 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *dropViewNode:
 	case *explainDistSQLNode:
 	case *hookFnNode:
-	case *iterativeSortStrategy:
 	case *relocateNode:
 	case *renameColumnNode:
 	case *renameDatabaseNode:
@@ -133,9 +132,6 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *showTraceNode:
 	case *showTraceReplicaNode:
 	case *showZoneConfigNode:
-	case *sortAllStrategy:
-	case *sortTopKStrategy:
-	case *sortValues:
 	case *splitNode:
 	case *truncateNode:
 	case *unaryNode:

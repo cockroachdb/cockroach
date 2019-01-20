@@ -149,6 +149,10 @@ func isHidden(desc *ImmutableTableDescriptor, columnID sqlbase.ColumnID) bool {
 	panic("column not found in table")
 }
 
+func (*createStatsNode) startExec(runParams) error {
+	return pgerror.NewAssertionErrorf("createStatsNode cannot be executed locally")
+}
+
 func (*createStatsNode) Next(runParams) (bool, error) {
 	return false, pgerror.NewAssertionErrorf("createStatsNode cannot be executed locally")
 }

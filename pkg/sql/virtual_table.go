@@ -45,6 +45,10 @@ func (p *planner) newContainerVirtualTableNode(
 	}
 }
 
+func (n *virtualTableNode) startExec(runParams) error {
+	return nil
+}
+
 func (n *virtualTableNode) Next(params runParams) (bool, error) {
 	row, err := n.next()
 	if err != nil {

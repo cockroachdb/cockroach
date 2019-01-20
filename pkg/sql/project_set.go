@@ -243,6 +243,10 @@ type projectSetRun struct {
 	done []bool
 }
 
+func (n *projectSetNode) startExec(runParams) error {
+	return nil
+}
+
 func (n *projectSetNode) Next(params runParams) (bool, error) {
 	for {
 		// If there's a cancellation request or a timeout, process it here.
