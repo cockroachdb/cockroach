@@ -486,7 +486,9 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 		}
 	}
 
-	h.semaCtx.Placeholders.Init(len(h.query.args), nil /* typeHints */)
+	if err := h.semaCtx.Placeholders.Init(len(h.query.args), nil /* typeHints */); err != nil {
+		tb.Fatal(err)
+	}
 	if h.query.prepare {
 		// Prepare the query by normalizing it (if it has placeholders) or exploring
 		// it (if it doesn't have placeholders), and cache the resulting memo so that

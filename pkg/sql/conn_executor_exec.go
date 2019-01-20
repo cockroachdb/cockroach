@@ -398,7 +398,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
-	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
+	if err := p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders); err != nil {
+		return makeErrEvent(err)
+	}
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	ex.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt

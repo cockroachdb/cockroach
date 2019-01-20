@@ -35,8 +35,7 @@ import (
 func TestDetachMemo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	catalog := testcat.New()
-	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
-	if err != nil {
+	if _, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -47,13 +46,14 @@ func TestDetachMemo(t *testing.T) {
 
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
-	semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */)
+	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
+		t.Fatal(err)
+	}
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	var o xform.Optimizer
 	o.Init(&evalCtx)
-	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt.AST).Build()
-	if err != nil {
+	if err := optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt.AST).Build(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,7 +63,9 @@ func TestDetachMemo(t *testing.T) {
 		t.Error("memo expression should be reinitialized by DetachMemo")
 	}
 
-	semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */)
+	if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
+		t.Fatal(err)
+	}
 	o.Init(&evalCtx)
 
 	stmt2, err := parser.ParseOne("SELECT a=$1 FROM abc")
@@ -71,9 +73,10 @@ func TestDetachMemo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	semaCtx.Placeholders.Init(stmt2.NumPlaceholders, nil /* typeHints */)
-	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt2.AST).Build()
-	if err != nil {
+	if err := semaCtx.Placeholders.Init(stmt2.NumPlaceholders, nil /* typeHints */); err != nil {
+		t.Fatal(err)
+	}
+	if err := optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt2.AST).Build(); err != nil {
 		t.Fatal(err)
 	}
 

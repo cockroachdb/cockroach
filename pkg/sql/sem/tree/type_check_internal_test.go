@@ -38,7 +38,9 @@ func BenchmarkTypeCheck(b *testing.B) {
 		b.Fatalf("%s: %v", expr, err)
 	}
 	ctx := tree.MakeSemaContext(false)
-	ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */)
+	if err := ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
+		b.Fatal(err)
+	}
 	for i := 0; i < b.N; i++ {
 		_, err := tree.TypeCheck(expr, &ctx, types.Int)
 		if err != nil {
@@ -180,7 +182,9 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 	}
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
 		ctx := tree.MakeSemaContext(false)
-		ctx.Placeholders.Init(len(test.ptypes), clonePlaceholderTypes(test.ptypes))
+		if err := ctx.Placeholders.Init(len(test.ptypes), clonePlaceholderTypes(test.ptypes)); err != nil {
+			t.Fatal(err)
+		}
 		desired := types.Any
 		if test.desired != nil {
 			desired = test.desired
@@ -321,7 +325,10 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 	for i, d := range testData {
 		ctx := tree.MakeSemaContext(false)
-		ctx.Placeholders.Init(len(d.ptypes), d.ptypes)
+		if err := ctx.Placeholders.Init(len(d.ptypes), d.ptypes); err != nil {
+			t.Error(err)
+			continue
+		}
 		desired := types.Any
 		if d.desired != nil {
 			desired = d.desired
