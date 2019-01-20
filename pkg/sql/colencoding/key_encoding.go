@@ -17,6 +17,7 @@ package colencoding
 import (
 	"fmt"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -201,6 +202,14 @@ func decodeTableKeyToCol(
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
 		vec.Float64()[idx] = f
+	case sqlbase.ColumnType_DECIMAL:
+		var d apd.Decimal
+		if dir == sqlbase.IndexDescriptor_ASC {
+			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
+		} else {
+			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
+		}
+		vec.Decimal()[idx] = d
 	case sqlbase.ColumnType_BYTES, sqlbase.ColumnType_STRING, sqlbase.ColumnType_NAME:
 		var r []byte
 		if dir == sqlbase.IndexDescriptor_ASC {
