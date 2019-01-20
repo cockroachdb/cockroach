@@ -104,12 +104,11 @@ count                 ·         ·
       │               from      indexed
       │               strategy  deleter
       └── index-join  ·         ·
-           ├── scan   ·         ·
-           │          table     indexed@indexed_value_idx
-           │          spans     /5-/6
-           │          limit     10
+           │          table     indexed@primary
            └── scan   ·         ·
-·                     table     indexed@primary
+·                     table     indexed@indexed_value_idx
+·                     spans     /5-/6
+·                     limit     10
 
 query TTT
 EXPLAIN DELETE FROM indexed LIMIT 10
@@ -133,9 +132,8 @@ render                     ·         ·
            │               from      indexed
            │               strategy  deleter
            └── index-join  ·         ·
-                ├── scan   ·         ·
-                │          table     indexed@indexed_value_idx
-                │          spans     /5-/6
-                │          limit     10
+                │          table     indexed@primary
                 └── scan   ·         ·
-·                          table     indexed@primary
+·                          table     indexed@indexed_value_idx
+·                          spans     /5-/6
+·                          limit     10

@@ -216,18 +216,20 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.source.plan = v.visit(n.source.plan)
 
 	case *indexJoinNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.table.desc.Name, n.table.index.Name))
+		}
 		v.visitConcrete(n.index)
-		v.visitConcrete(n.table)
 
 	case *lookupJoinNode:
 		if v.observer.attr != nil {
+			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.table.desc.Name, n.table.index.Name))
 			v.observer.attr(name, "type", joinTypeStr(n.joinType))
 		}
 		if v.observer.expr != nil && n.onCond != nil && n.onCond != tree.DBoolTrue {
 			v.expr(name, "pred", -1, n.onCond)
 		}
 		n.input = v.visit(n.input)
-		v.visitConcrete(n.table)
 
 	case *zigzagJoinNode:
 		if v.observer.attr != nil {
