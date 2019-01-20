@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -293,20 +294,19 @@ func assignSequenceOptions(
 // e.g. `DEFAULT nextval('my_sequence')`.
 // The passed-in column descriptor is mutated, and the modified sequence descriptors are returned.
 func maybeAddSequenceDependencies(
+	ctx context.Context,
 	sc SchemaResolver,
 	tableDesc *sqlbase.MutableTableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	expr tree.TypedExpr,
-	evalCtx *tree.EvalContext,
 ) ([]*MutableTableDescriptor, error) {
-	ctx := evalCtx.Ctx()
 	seqNames, err := getUsedSequenceNames(expr)
 	if err != nil {
 		return nil, err
 	}
 	var seqDescs []*MutableTableDescriptor
 	for _, seqName := range seqNames {
-		parsedSeqName, err := evalCtx.Sequence.ParseQualifiedTableName(ctx, seqName)
+		parsedSeqName, err := parser.ParseTableName(seqName)
 		if err != nil {
 			return nil, err
 		}

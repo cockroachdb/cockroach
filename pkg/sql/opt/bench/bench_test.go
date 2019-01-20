@@ -518,7 +518,6 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 			typ,
 			"", /* context */
 			&h.semaCtx,
-			&h.evalCtx,
 			true, /* allowImpure */
 		)
 		if err != nil {

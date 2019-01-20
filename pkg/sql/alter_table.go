@@ -117,14 +117,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			d = newDef
 
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx)
 			if err != nil {
 				return err
 			}
 			// If the new column has a DEFAULT expression that uses a sequence, add references between
 			// its descriptor and this column descriptor.
 			if d.HasDefaultExpr() {
-				changedSeqDescs, err := maybeAddSequenceDependencies(params.p, n.tableDesc, col, expr, params.EvalContext())
+				changedSeqDescs, err := maybeAddSequenceDependencies(params.ctx, params.p, n.tableDesc, col, expr)
 				if err != nil {
 					return err
 				}
@@ -214,7 +214,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			case *tree.CheckConstraintTableDef:
 				ck, err := MakeCheckConstraint(params.ctx,
-					n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), n.n.Table)
+					n.tableDesc, d, inuseNames, &params.p.semaCtx, n.n.Table)
 				if err != nil {
 					return err
 				}
@@ -739,7 +739,7 @@ func applyColumnMutation(
 		} else {
 			colDatumType := col.Type.ToDatumType()
 			expr, err := sqlbase.SanitizeVarFreeExpr(
-				t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, params.EvalContext(), true, /* allowImpure */
+				t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, true, /* allowImpure */
 			)
 			if err != nil {
 				return err
@@ -748,7 +748,7 @@ func applyColumnMutation(
 			col.DefaultExpr = &s
 
 			// Add references to the sequence descriptors this column is now using.
-			changedSeqDescs, err := maybeAddSequenceDependencies(params.p, tableDesc, col, expr, params.EvalContext())
+			changedSeqDescs, err := maybeAddSequenceDependencies(params.ctx, params.p, tableDesc, col, expr)
 			if err != nil {
 				return err
 			}
