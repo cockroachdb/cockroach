@@ -253,8 +253,7 @@ message JoinReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
   // If 0, we use the primary index; each row in the input stream has a value
-  // for each primary key.
-  // TODO(radu): figure out the correct semantics when joining with an index.
+  // for each primary key. The index must provide all lookup columns.
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
 
   // Column indexes in the input stream specifying the columns which match with
