@@ -118,6 +118,10 @@ func (lj *lookupJoinNode) startExec(params runParams) error {
 		}
 	}
 
+	if err := lj.table.startExec(params); err != nil {
+		return err
+	}
+
 	rightSrc := planDataSource{
 		info: &sqlbase.DataSourceInfo{SourceColumns: planColumns(lj.table)},
 		plan: lj.table,
@@ -143,7 +147,10 @@ func (lj *lookupJoinNode) startExec(params runParams) error {
 		}
 	}
 	lj.run.n = params.p.makeJoinNode(leftSrc, rightSrc, pred)
-	return lj.run.n.startExec(params)
+	if err := lj.run.n.startExec(params); err != nil {
+		return err
+	}
+	return lj.table.startExec(params)
 }
 
 func (lj *lookupJoinNode) Next(params runParams) (bool, error) {

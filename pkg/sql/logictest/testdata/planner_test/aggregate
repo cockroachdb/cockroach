@@ -842,11 +842,10 @@ group                 ·            ·                        (z, max)          
       │               render 0     test.public.group_ord.z  ·                            ·
       │               render 1     test.public.group_ord.y  ·                            ·
       └── index-join  ·            ·                        (x[omitted], y, z)           x!=NULL; weak-key(x,z); +z
-           ├── scan   ·            ·                        (x, y[omitted], z[omitted])  x!=NULL; weak-key(x,z); +z
-           │          table        group_ord@foo            ·                            ·
-           │          spans        ALL                      ·                            ·
-           └── scan   ·            ·                        (x[omitted], y, z)           ·
-·                     table        group_ord@primary        ·                            ·
+           │          table        group_ord@primary        ·                            ·
+           └── scan   ·            ·                        (x, y[omitted], z[omitted])  x!=NULL; weak-key(x,z); +z
+·                     table        group_ord@foo            ·                            ·
+·                     spans        ALL                      ·                            ·
 
 # Test that a merge join is used on two aggregate subqueries with orderings on
 # the GROUP BY columns. Note that an ORDER BY is not necessary on the
@@ -878,11 +877,10 @@ join                       ·               ·                        (x, max, z
            │               render 0        test.public.group_ord.z  ·                            ·
            │               render 1        test.public.group_ord.y  ·                            ·
            └── index-join  ·               ·                        (x[omitted], y, z)           x!=NULL; weak-key(x,z); +z
-                ├── scan   ·               ·                        (x, y[omitted], z[omitted])  x!=NULL; weak-key(x,z); +z
-                │          table           group_ord@foo            ·                            ·
-                │          spans           ALL                      ·                            ·
-                └── scan   ·               ·                        (x[omitted], y, z)           ·
-·                          table           group_ord@primary        ·                            ·
+                │          table           group_ord@primary        ·                            ·
+                └── scan   ·               ·                        (x, y[omitted], z[omitted])  x!=NULL; weak-key(x,z); +z
+·                          table           group_ord@foo            ·                            ·
+·                          spans           ALL                      ·                            ·
 
 # Regression test for #25533 (crash when propagating filter through GROUP BY).
 query TTTTT

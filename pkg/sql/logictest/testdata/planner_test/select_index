@@ -188,17 +188,15 @@ render                     ·               ·
            │               equality        (b) = (b)
            │               mergeJoinOrder  +"(b=b)"
            ├── index-join  ·               ·
-           │    ├── scan   ·               ·
-           │    │          table           t@bc
-           │    │          spans           -/"3"
+           │    │          table           t@primary
            │    └── scan   ·               ·
-           │               table           t@primary
+           │               table           t@bc
+           │               spans           -/"3"
            └── index-join  ·               ·
-                ├── scan   ·               ·
-                │          table           t@bc
-                │          spans           -/"3"
+                │          table           t@primary
                 └── scan   ·               ·
-·                          table           t@primary
+·                          table           t@bc
+·                          spans           -/"3"
 
 statement ok
 TRUNCATE TABLE t
@@ -638,12 +636,11 @@ EXPLAIN SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 limit              ·      ·
  │                 count  20
  └── index-join    ·      ·
-      ├── revscan  ·      ·
-      │            table  test2@test2_k_key
-      │            spans  /!NULL-/"100"/PrefixEnd
-      │            limit  20
-      └── scan     ·      ·
-·                  table  test2@primary
+      │            table  test2@primary
+      └── revscan  ·      ·
+·                  table  test2@test2_k_key
+·                  spans  /!NULL-/"100"/PrefixEnd
+·                  limit  20
 
 # Result check: The following query must not issue more than the
 # requested LIMIT K/V reads, even though an index join batches 100
@@ -873,11 +870,10 @@ render           ·         ·                 (x, y)                           
  │               render 0  test.public.xy.x  ·                                        ·
  │               render 1  test.public.xy.y  ·                                        ·
  └── index-join  ·         ·                 (x, y, rowid[hidden,omitted])            y=CONST; rowid!=NULL; key(rowid)
-      ├── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y=CONST; rowid!=NULL; key(rowid)
-      │          table     xy@xy_y_idx       ·                                        ·
-      │          spans     /NULL-/!NULL      ·                                        ·
-      └── scan   ·         ·                 (x, y, rowid[hidden,omitted])            ·
-·                table     xy@primary        ·                                        ·
+      │          table     xy@primary        ·                                        ·
+      └── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y=CONST; rowid!=NULL; key(rowid)
+·                table     xy@xy_y_idx       ·                                        ·
+·                spans     /NULL-/!NULL      ·                                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
@@ -886,11 +882,10 @@ render           ·         ·                 (x, y)                           
  │               render 0  test.public.xy.x  ·                                        ·
  │               render 1  test.public.xy.y  ·                                        ·
  └── index-join  ·         ·                 (x, y, rowid[hidden,omitted])            y=CONST; rowid!=NULL; key(rowid)
-      ├── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y=CONST; rowid!=NULL; key(rowid)
-      │          table     xy@xy_y_idx       ·                                        ·
-      │          spans     /4-/5             ·                                        ·
-      └── scan   ·         ·                 (x, y, rowid[hidden,omitted])            ·
-·                table     xy@primary        ·                                        ·
+      │          table     xy@primary        ·                                        ·
+      └── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y=CONST; rowid!=NULL; key(rowid)
+·                table     xy@xy_y_idx       ·                                        ·
+·                spans     /4-/5             ·                                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
@@ -899,11 +894,10 @@ render           ·         ·                 (x, y)                           
  │               render 0  test.public.xy.x  ·                                        ·
  │               render 1  test.public.xy.y  ·                                        ·
  └── index-join  ·         ·                 (x, y, rowid[hidden,omitted])            y!=NULL; rowid!=NULL; key(y,rowid)
-      ├── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y!=NULL; rowid!=NULL; key(y,rowid)
-      │          table     xy@xy_y_idx       ·                                        ·
-      │          spans     /!NULL-           ·                                        ·
-      └── scan   ·         ·                 (x, y, rowid[hidden,omitted])            ·
-·                table     xy@primary        ·                                        ·
+      │          table     xy@primary        ·                                        ·
+      └── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y!=NULL; rowid!=NULL; key(y,rowid)
+·                table     xy@xy_y_idx       ·                                        ·
+·                spans     /!NULL-           ·                                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM 4
@@ -912,11 +906,10 @@ render           ·         ·                 (x, y)                           
  │               render 0  test.public.xy.x  ·                                        ·
  │               render 1  test.public.xy.y  ·                                        ·
  └── index-join  ·         ·                 (x, y, rowid[hidden,omitted])            y!=NULL; rowid!=NULL; key(y,rowid)
-      ├── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y!=NULL; rowid!=NULL; key(y,rowid)
-      │          table     xy@xy_y_idx       ·                                        ·
-      │          spans     -/4 /5-           ·                                        ·
-      └── scan   ·         ·                 (x, y, rowid[hidden,omitted])            ·
-·                table     xy@primary        ·                                        ·
+      │          table     xy@primary        ·                                        ·
+      └── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y!=NULL; rowid!=NULL; key(y,rowid)
+·                table     xy@xy_y_idx       ·                                        ·
+·                spans     -/4 /5-           ·                                        ·
 
 # Regression tests for #22670.
 statement ok
@@ -966,11 +959,10 @@ query TTT
 EXPLAIN SELECT * FROM noncover WHERE b = 2
 ----
 index-join  ·      ·
- ├── scan   ·      ·
- │          table  noncover@b
- │          spans  /2-/3
+ │          table  noncover@primary
  └── scan   ·      ·
-·           table  noncover@primary
+·           table  noncover@b
+·           spans  /2-/3
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM noncover WHERE b = 2; SET tracing = off
@@ -990,11 +982,10 @@ query TTT
 EXPLAIN SELECT * FROM noncover WHERE c = 6
 ----
 index-join  ·      ·
- ├── scan   ·      ·
- │          table  noncover@c
- │          spans  /6-/7
+ │          table  noncover@primary
  └── scan   ·      ·
-·           table  noncover@primary
+·           table  noncover@c
+·           spans  /6-/7
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM noncover WHERE c = 7; SET tracing = off
@@ -1014,32 +1005,28 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
 ----
 index-join    ·      ·                 (a, b, c, d)                             c!=NULL; key(c); -c
- ├── revscan  ·      ·                 (a, b[omitted], c[omitted], d[omitted])  c!=NULL; key(c); -c
- │            table  noncover@c        ·                                        ·
- │            spans  /1-               ·                                        ·
- └── scan     ·      ·                 (a, b, c, d)                             ·
-·             table  noncover@primary  ·                                        ·
+ │            table  noncover@primary  ·                                        ·
+ └── revscan  ·      ·                 (a, b[omitted], c[omitted], d[omitted])  c!=NULL; key(c); -c
+·             table  noncover@c        ·                                        ·
+·             spans  /1-               ·                                        ·
 
 query TTT
 EXPLAIN SELECT * FROM noncover WHERE c > 0 ORDER BY c
 ----
 index-join  ·      ·
- ├── scan   ·      ·
- │          table  noncover@c
- │          spans  /1-
+ │          table  noncover@primary
  └── scan   ·      ·
-·           table  noncover@primary
+·           table  noncover@c
+·           spans  /1-
 
 query TTT
 EXPLAIN SELECT * FROM noncover WHERE c > 0 AND d = 8
 ----
-index-join  ·       ·
- ├── scan   ·       ·
- │          table   noncover@c
- │          spans   /1-
- └── scan   ·       ·
-·           table   noncover@primary
-·           filter  d = 8
+index-join  ·      ·
+ │          table  noncover@primary
+ └── scan   ·      ·
+·           table  noncover@c
+·           spans  /1-
 
 # The following testcases verify that when we have a small limit, we prefer an
 # order-matching index.
@@ -1059,12 +1046,11 @@ EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
 limit            ·      ·
  │               count  5
  └── index-join  ·      ·
-      ├── scan   ·      ·
-      │          table  noncover@c
-      │          spans  ALL
-      │          limit  5
+      │          table  noncover@primary
       └── scan   ·      ·
-·                table  noncover@primary
+·                table  noncover@c
+·                spans  ALL
+·                limit  5
 
 query TTT
 SELECT tree, field, description FROM [
@@ -1088,12 +1074,11 @@ limit            ·       ·
  │               count   5
  │               offset  5
  └── index-join  ·       ·
-      ├── scan   ·       ·
-      │          table   noncover@c
-      │          spans   ALL
-      │          limit   10
+      │          table   noncover@primary
       └── scan   ·       ·
-·                table   noncover@primary
+·                table   noncover@c
+·                spans   ALL
+·                limit   10
 
 query TTT
 SELECT tree, field, description FROM [
@@ -1145,12 +1130,11 @@ EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ]
 ----
 index-join  ·       ·
- ├── scan   ·       ·
- │          table   t2@bc
- │          spans   /2-/3
- │          filter  (c % 2) = 0
+ │          table   t2@primary
  └── scan   ·       ·
-·           table   t2@primary
+·           table   t2@bc
+·           spans   /2-/3
+·           filter  (c % 2) = 0
 
 # We do NOT look up the table row for '21' and '23'.
 statement ok
@@ -1175,12 +1159,11 @@ EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
 ]
 ----
 index-join  ·       ·
- ├── scan   ·       ·
- │          table   t2@bc
- │          spans   /2/!NULL-/3
- │          filter  c != b
+ │          table   t2@primary
  └── scan   ·       ·
-·           table   t2@primary
+·           table   t2@bc
+·           spans   /2/!NULL-/3
+·           filter  c != b
 
 # We do NOT look up the table row for '22'.
 statement ok
@@ -1263,8 +1246,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s !
 render           ·         ·                 (a)                                      a!=NULL
  │               render 0  test.public.t2.a  ·                                        ·
  └── index-join  ·         ·                 (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
-      ├── scan   ·         ·                 (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
-      │          table     t2@bc             ·                                        ·
-      │          spans     /2-/3             ·                                        ·
-      └── scan   ·         ·                 (a, b[omitted], c[omitted], s[omitted])  ·
-·                table     t2@primary        ·                                        ·
+      │          table     t2@primary        ·                                        ·
+      └── scan   ·         ·                 (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
+·                table     t2@bc             ·                                        ·
+·                spans     /2-/3             ·                                        ·
