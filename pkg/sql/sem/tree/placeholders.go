@@ -141,31 +141,45 @@ type PlaceholderInfo struct {
 
 // Init initializes a PlaceholderInfo structure appropriate for the given number
 // of placeholders, and with the given (optional) type hints.
-func (p *PlaceholderInfo) Init(numPlaceholders int, typeHints PlaceholderTypes) {
+func (p *PlaceholderInfo) Init(numPlaceholders int, typeHints PlaceholderTypes) error {
 	p.Types = make(PlaceholderTypes, numPlaceholders)
 	if typeHints == nil {
 		p.TypeHints = make(PlaceholderTypes, numPlaceholders)
 	} else {
-		if len(typeHints) != numPlaceholders {
-			panic("typeHints of invalid length")
+		if err := checkPlaceholderArity(len(typeHints), numPlaceholders); err != nil {
+			return err
 		}
 		p.TypeHints = typeHints
 	}
 	p.Values = nil
 	p.permitUnassigned = false
+	return nil
 }
 
 // Assign resets the PlaceholderInfo to the contents of src.
 // If src is nil, a new structure is initialized.
-func (p *PlaceholderInfo) Assign(src *PlaceholderInfo, numPlaceholders int) {
+func (p *PlaceholderInfo) Assign(src *PlaceholderInfo, numPlaceholders int) error {
 	if src != nil {
-		if len(src.Types) != numPlaceholders {
-			panic("inconsistent number of placeholders")
+		if err := checkPlaceholderArity(len(src.Types), numPlaceholders); err != nil {
+			return err
 		}
 		*p = *src
-	} else {
-		p.Init(numPlaceholders, nil /* typeHints */)
+		return nil
 	}
+	return p.Init(numPlaceholders, nil /* typeHints */)
+}
+
+func checkPlaceholderArity(numTypes, numPlaceholders int) error {
+	if numTypes > numPlaceholders {
+		return pgerror.NewAssertionErrorf(
+			"unexpected placeholder types: got %d, expected %d",
+			numTypes, numPlaceholders)
+	} else if numTypes < numPlaceholders {
+		return pgerror.NewErrorf(pgerror.CodeUndefinedParameterError,
+			"could not find types for all placeholders: got %d, expected %d",
+			numTypes, numPlaceholders)
+	}
+	return nil
 }
 
 // PermitUnassigned permits unassigned placeholders during plan construction,

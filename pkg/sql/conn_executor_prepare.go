@@ -186,8 +186,11 @@ func (ex *connExecutor) populatePrepared(
 	placeholderHints tree.PlaceholderTypes,
 	p *planner,
 ) (planFlags, error) {
+	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
+		return 0, err
+	}
 	prepared := stmt.Prepared
-	p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints)
+
 	p.extendedEvalCtx.PrepareOnly = true
 	p.extendedEvalCtx.ActiveMemAcc = &prepared.memAcc
 	// constantMemAcc accounts for all constant folded values that are computed
