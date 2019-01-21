@@ -29,10 +29,8 @@ type VersionKey int
 //
 // To delete a version.
 //   - Remove its associated runtime checks.
-//   - Mark it as "unused" when it is only referenced in this file.
-//   - If the version key after a major or minor version is unused, remove it
-//     and its associated keyedVersion.
-//     - Apply recursively.
+//   - If the version is not the latest one, delete the constant and comment out
+//   its stanza and say "deleted" in the versionsSingleton.
 const (
 	VersionBase VersionKey = iota
 	VersionRaftLogTruncationBelowRaft
