@@ -63,7 +63,6 @@ const (
 	VersionAsyncConsensus           // unused
 	VersionBatchResponse
 	VersionCreateChangefeed
-	VersionRangeMerges
 	VersionBitArrayColumns
 	VersionLoadBasedRebalancing
 	Version2_1
@@ -269,11 +268,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionCreateChangefeed,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 11},
 	},
-	{
-		// VersionRangeMerges is https://github.com/cockroachdb/cockroach/pull/28865.
-		Key:     VersionRangeMerges,
-		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 12},
-	},
+	// deleted
+	// {
+	//   // VersionRangeMerges is https://github.com/cockroachdb/cockroach/pull/28865.
+	//   Key:     VersionRangeMerges,
+	//   Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 12},
+	// },
 	{
 		// VersionBitArrayColumns is https://github.com/cockroachdb/cockroach/pull/28807.
 		Key:     VersionBitArrayColumns,
