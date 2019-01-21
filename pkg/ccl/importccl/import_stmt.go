@@ -548,7 +548,7 @@ func importPlanHook(
 				}
 				// We need to handle the case where the user wants to skip records and the node
 				// interpreting the statement might be newer than other nodes in the cluster.
-				if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionImportSkipRecords) {
+				if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionImportSkipRecords) {
 					return errors.Errorf("Using non-CSV import format requires all nodes to be upgraded to %s",
 						cluster.VersionByKey(cluster.VersionImportSkipRecords))
 				}
@@ -646,7 +646,7 @@ func importPlanHook(
 		}
 
 		if format.Format != roachpb.IOFileFormat_CSV {
-			if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionImportFormats) {
+			if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionImportFormats) {
 				return errors.Errorf("Using %s requires all nodes to be upgraded to %s",
 					csvSkip, cluster.VersionByKey(cluster.VersionImportFormats))
 			}

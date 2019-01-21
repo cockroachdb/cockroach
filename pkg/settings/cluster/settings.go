@@ -95,7 +95,7 @@ var preserveDowngradeVersion = settings.RegisterValidatedStringSetting(
 		}
 		opaque := sv.Opaque()
 		st := opaque.(*Settings)
-		clusterVersion := st.Version.Version().MinimumVersion
+		clusterVersion := st.Version.Version().Version
 		downgradeVersion, err := roachpb.ParseVersion(s)
 		if err != nil {
 			return err
@@ -168,10 +168,7 @@ func (ecv *ExposedClusterVersion) Version() ClusterVersion {
 
 // BootstrapVersion returns the version a newly initialized cluster should have.
 func (ecv *ExposedClusterVersion) BootstrapVersion() ClusterVersion {
-	return ClusterVersion{
-		MinimumVersion: ecv.ServerVersion,
-		UseVersion:     ecv.ServerVersion,
-	}
+	return ClusterVersion{Version: ecv.ServerVersion}
 }
 
 // IsActive returns true if the features of the supplied version key are active
@@ -192,16 +189,10 @@ func (ecv *ExposedClusterVersion) IsActive(versionKey VersionKey) bool {
 	return ecv.Version().IsActive(versionKey)
 }
 
-// IsMinSupported returns true if the features of the supplied version will be
-// permanently available (i.e. cannot be downgraded away).
-func (ecv *ExposedClusterVersion) IsMinSupported(versionKey VersionKey) bool {
-	return ecv.Version().IsMinSupported(versionKey)
-}
-
-// CheckVersion is like IsMinSupported but returns an appropriate error in the
+// CheckVersion is like IsActive but returns an appropriate error in the
 // case of a cluster version which is too low.
 func (ecv *ExposedClusterVersion) CheckVersion(versionKey VersionKey, feature string) error {
-	if !ecv.Version().IsMinSupported(versionKey) {
+	if !ecv.Version().IsActive(versionKey) {
 		return pgerror.NewErrorf(
 			pgerror.CodeFeatureNotSupportedError,
 			"cluster version does not support %s (>= %s required)",
@@ -223,7 +214,6 @@ func MakeTestingClusterSettings() *Settings {
 func MakeTestingClusterSettingsWithVersion(minVersion, serverVersion roachpb.Version) *Settings {
 	st := MakeClusterSettings(minVersion, serverVersion)
 	cv := st.Version.BootstrapVersion()
-	cv.MinimumVersion = minVersion
 	// Initialize with all features enabled.
 	if err := st.InitializeVersion(cv); err != nil {
 		log.Fatalf(context.TODO(), "unable to initialize version: %s", err)
@@ -288,7 +278,7 @@ func (sv *stringedVersion) String() string {
 	if sv == nil {
 		sv = &stringedVersion{}
 	}
-	return sv.MinimumVersion.String()
+	return sv.Version.String()
 }
 
 // versionTransformer is the transformer function for the version StateMachine.
@@ -335,41 +325,44 @@ func versionTransformer(
 		// Round-trip the existing value, but only if it passes sanity
 		// checks. This is also the path taken when the setting gets updated
 		// via the gossip callback.
-		if serverVersion.Less(oldV.MinimumVersion) {
-			log.Fatalf(context.TODO(), "node at %s cannot run at %s", serverVersion, oldV.MinimumVersion)
+		if serverVersion.Less(oldV.Version) {
+			log.Fatalf(context.TODO(), "node at %s cannot run at %s", serverVersion, oldV.Version)
 		}
-		if (oldV.MinimumVersion != roachpb.Version{}) && oldV.MinimumVersion.Less(minSupportedVersion) {
-			log.Fatalf(context.TODO(), "node at %s cannot run at %s (minimum version is %s)", serverVersion, oldV.MinimumVersion, minSupportedVersion)
+		if (oldV.Version != roachpb.Version{}) && oldV.Less(minSupportedVersion) {
+			log.Fatalf(context.TODO(), "node at %s cannot run at %s (minimum version is %s)", serverVersion, oldV.Version, minSupportedVersion)
 		}
 		return curRawProto, &oldV, nil
 	}
 
 	// We have a new proposed update to the value, validate it.
-	minVersion, err := roachpb.ParseVersion(*versionBump)
+	newVersion, err := roachpb.ParseVersion(*versionBump)
 	if err != nil {
 		return nil, nil, err
 	}
-	newV := oldV
-	newV.UseVersion = minVersion
-	newV.MinimumVersion = minVersion
+	newV := ClusterVersion{Version: newVersion}
 
 	// Prevent cluster version upgrade until cluster.preserve_downgrade_option is reset.
 	if downgrade := preserveDowngradeVersion.Get(sv); downgrade != "" {
-		return nil, nil, errors.Errorf("cannot upgrade to %s: cluster.preserve_downgrade_option is set to %s", minVersion, downgrade)
+		return nil, nil, errors.Errorf(
+			"cannot upgrade to %s: cluster.preserve_downgrade_option is set to %s",
+			newVersion, downgrade)
 	}
 
-	if minVersion.Less(oldV.MinimumVersion) {
-		return nil, nil, errors.Errorf("cannot downgrade from %s to %s", oldV.MinimumVersion, minVersion)
+	if newVersion.Less(oldV.Version) {
+		return nil, nil, errors.Errorf(
+			"versions cannot be downgraded (attempting to downgrade from %s to %s)",
+			oldV.Version, newVersion)
 	}
 
-	if oldV != (ClusterVersion{}) && !oldV.MinimumVersion.CanBump(minVersion) {
-		return nil, nil, errors.Errorf("cannot upgrade directly from %s to %s", oldV.MinimumVersion, minVersion)
+	if oldV != (ClusterVersion{}) && !oldV.CanBump(newVersion) {
+		return nil, nil, errors.Errorf(
+			"cannot upgrade directly from %s to %s", oldV.Version, newVersion)
 	}
 
-	if serverVersion.Less(minVersion) {
+	if serverVersion.Less(newVersion) {
 		// TODO(tschottdorf): also ask gossip about other nodes.
 		return nil, nil, errors.Errorf("cannot upgrade to %s: node running %s",
-			minVersion, serverVersion)
+			newVersion, serverVersion)
 	}
 
 	b, err := protoutil.Marshal(&newV)

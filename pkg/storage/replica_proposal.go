@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 )
@@ -903,7 +903,7 @@ func (r *Replica) evaluateProposal(
 		usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
 		r.mu.RUnlock()
 		if !usingAppliedStateKey &&
-			r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
+			r.ClusterSettings().Version.IsActive(cluster.VersionRangeAppliedStateKey) {
 			if res.Replicated.State == nil {
 				res.Replicated.State = &storagepb.ReplicaState{}
 			}

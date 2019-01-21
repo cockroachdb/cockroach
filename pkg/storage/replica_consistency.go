@@ -120,7 +120,7 @@ func (r *Replica) CheckConsistency(
 		// If there's no delta (or some nodes in the cluster may not know
 		// RecomputeStats, in which case sending it to them could crash them),
 		// there's nothing else to do.
-		if delta == (enginepb.MVCCStats{}) || !r.ClusterSettings().Version.IsMinSupported(cluster.VersionRecomputeStats) {
+		if delta == (enginepb.MVCCStats{}) || !r.ClusterSettings().Version.IsActive(cluster.VersionRecomputeStats) {
 			return roachpb.CheckConsistencyResponse{}, nil
 		}
 

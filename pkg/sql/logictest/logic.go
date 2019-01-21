@@ -416,8 +416,7 @@ var logicTestConfigs = []testClusterConfig{
 	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1,
 		overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off",
 		bootstrapVersion: &cluster.ClusterVersion{
-			UseVersion:     cluster.VersionByKey(cluster.VersionBase),
-			MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
+			Version: cluster.VersionByKey(cluster.VersionBase),
 		},
 		serverVersion:  &roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: 1,
@@ -1009,7 +1008,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		paramsPerNode := map[int]base.TestServerArgs{}
 		minVersion := *cfg.serverVersion
 		if cfg.bootstrapVersion != nil {
-			minVersion = cfg.bootstrapVersion.MinimumVersion
+			minVersion = cfg.bootstrapVersion.Version
 		}
 		for i := 0; i < cfg.numNodes; i++ {
 			nodeParams := params.ServerArgs
