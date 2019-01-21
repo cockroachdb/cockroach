@@ -116,10 +116,11 @@ func (r *runParams) ExecCfg() *ExecutorConfig {
 // - planColumns()                 (plan_columns.go)
 //
 // Also, there are optional interfaces that new nodes may want to implement:
-// - execStartable
 // - autoCommitNode
 //
 type planNode interface {
+	startExec(params runParams) error
+
 	// Next performs one unit of work, returning false if an error is
 	// encountered or if there is no more work to do. For statements
 	// that return a result set, the Values() method will return one row
@@ -161,6 +162,8 @@ type planNodeFastPath interface {
 var _ planNode = &alterIndexNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &alterTableNode{}
+var _ planNode = &cancelQueriesNode{}
+var _ planNode = &cancelSessionsNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createIndexNode{}
 var _ planNode = &createSequenceNode{}
@@ -186,6 +189,7 @@ var _ planNode = &indexJoinNode{}
 var _ planNode = &insertNode{}
 var _ planNode = &joinNode{}
 var _ planNode = &limitNode{}
+var _ planNode = &max1RowNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &projectSetNode{}
 var _ planNode = &relocateNode{}
@@ -198,6 +202,7 @@ var _ planNode = &rowCountNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &scatterNode{}
 var _ planNode = &serializeNode{}
+var _ planNode = &sequenceSelectNode{}
 var _ planNode = &showFingerprintsNode{}
 var _ planNode = &showTraceNode{}
 var _ planNode = &sortNode{}
@@ -441,12 +446,6 @@ func startPlan(params runParams, plan planNode) error {
 	return nil
 }
 
-// execStartable is implemented by planNodes that have an initial
-// execution step.
-type execStartable interface {
-	startExec(params runParams) error
-}
-
 // autoCommitNode is implemented by planNodes that might be able to commit the
 // KV txn in which they operate. Some nodes might want to do this to take
 // advantage of the 1PC optimization in case they're running as an implicit
@@ -470,9 +469,8 @@ var _ autoCommitNode = &insertNode{}
 var _ autoCommitNode = &updateNode{}
 var _ autoCommitNode = &upsertNode{}
 
-// startExec calls startExec() on each planNode that supports
-// execStartable using a depth-first, post-order traversal.
-// The subqueries, if any, are also started.
+// startExec calls startExec() on each planNode using a depth-first, post-order
+// traversal.  The subqueries, if any, are also started.
 //
 // Reminder: walkPlan() ensures that subqueries and sub-plans are
 // started before startExec() is called.
@@ -492,10 +490,7 @@ func startExec(params runParams, plan planNode) error {
 			return true, nil
 		},
 		leaveNode: func(_ string, n planNode) error {
-			if s, ok := n.(execStartable); ok {
-				return s.startExec(params)
-			}
-			return nil
+			return n.startExec(params)
 		},
 	}
 	return walkPlan(params.ctx, plan, o)

@@ -36,6 +36,10 @@ type max1RowNode struct {
 	values tree.Datums
 }
 
+func (m *max1RowNode) startExec(runParams) error {
+	return nil
+}
+
 func (m *max1RowNode) Next(params runParams) (bool, error) {
 	if m.nexted {
 		return false, nil

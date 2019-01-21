@@ -49,6 +49,10 @@ func (p *planner) CancelQueries(ctx context.Context, n *tree.CancelQueries) (pla
 	}, nil
 }
 
+func (n *cancelQueriesNode) startExec(runParams) error {
+	return nil
+}
+
 func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 	// TODO(knz): instead of performing the cancels sequentially,
 	// accumulate all the query IDs and then send batches to each of the

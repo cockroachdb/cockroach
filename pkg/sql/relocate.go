@@ -133,6 +133,10 @@ type relocateRun struct {
 	storeMap map[roachpb.StoreID]roachpb.NodeID
 }
 
+func (n *relocateNode) startExec(runParams) error {
+	return nil
+}
+
 func (n *relocateNode) Next(params runParams) (bool, error) {
 	// Each Next call relocates one range (corresponding to one row from n.rows).
 	// TODO(radu): perform multiple relocations in parallel.

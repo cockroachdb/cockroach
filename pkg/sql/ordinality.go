@@ -93,6 +93,10 @@ type ordinalityRun struct {
 	curCnt int64
 }
 
+func (o *ordinalityNode) startExec(runParams) error {
+	return nil
+}
+
 func (o *ordinalityNode) Next(params runParams) (bool, error) {
 	hasNext, err := o.source.Next(params)
 	if !hasNext || err != nil {
