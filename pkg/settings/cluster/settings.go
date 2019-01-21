@@ -293,7 +293,8 @@ func (sv *stringedVersion) String() string {
 // versionBump: A string indicating the proposed new value of the setting. Can
 //   be nil, in which case validation is performed and the current value (or the
 //   "default") is returned. Gossip updates pass the incoming gossipped value to
-//   curRawProto and nil for versionBump.
+//   curRawProto and nil for versionBump. SHOW CLUSTE SETTING passes the KV
+//   value as curRawProto and nil as versionBump.
 func versionTransformer(
 	sv *settings.Values, curRawProto []byte, versionBump *string,
 ) (newRawProto []byte, versionStringer interface{}, _ error) {
