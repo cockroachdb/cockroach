@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -233,13 +232,7 @@ func (r *Replica) adminSplitWithDescriptor(
 
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
-	if r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeMerges) {
-		// To be safe, don't increment the generation counter unless all nodes are
-		// known to be aware of its existence. Since encoded range descriptors are
-		// used in CPut operations, it is theorized that non-nil generation counters
-		// in mixed-version clusters could cause subtle breakage.
-		leftDesc.IncrementGeneration()
-	}
+	leftDesc.IncrementGeneration()
 	leftDesc.EndKey = splitKey
 
 	var extra string
@@ -353,10 +346,6 @@ func (r *Replica) AdminMerge(
 	ctx context.Context, args roachpb.AdminMergeRequest, reason string,
 ) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
-
-	if err := r.ClusterSettings().Version.CheckVersion(cluster.VersionRangeMerges, "range merges"); err != nil {
-		return reply, roachpb.NewError(err)
-	}
 
 	origLeftDesc := r.Desc()
 	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
