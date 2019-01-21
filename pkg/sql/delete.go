@@ -98,7 +98,7 @@ func (p *planner) Delete(
 	}
 
 	// Determine what are the foreign key tables that are involved in the deletion.
-	fkTables, err := row.TablesNeededForFKs(
+	fkTables, err := row.MakeFkMetadata(
 		ctx,
 		desc,
 		row.CheckDeletes,
@@ -383,7 +383,7 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 	return d.run.rowCount, d.run.fastPath
 }
 
-func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.TableLookupsByID) bool {
+func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTableMetadata) bool {
 	// If there are no interleaved tables then don't take the fast path.
 	// This avoids superfluous use of DelRange in cases where there isn't as much of a performance boost.
 	hasInterleaved := false
@@ -398,7 +398,7 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.Tabl
 	}
 
 	// if the base table is interleaved in another table, fail
-	for _, idx := range fkTables[table.ID].Table.AllNonDropIndexes() {
+	for _, idx := range fkTables[table.ID].Desc.AllNonDropIndexes() {
 		if len(idx.Interleave.Ancestors) > 0 {
 			return false
 		}
@@ -411,13 +411,13 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.Tabl
 		if _, ok := fkTables[tableID]; !ok {
 			return false
 		}
-		if fkTables[tableID].Table == nil {
+		if fkTables[tableID].Desc == nil {
 			return false
 		}
-		for _, idx := range fkTables[tableID].Table.AllNonDropIndexes() {
+		for _, idx := range fkTables[tableID].Desc.AllNonDropIndexes() {
 			// Don't allow any secondary indexes
 			// TODO(emmanuel): identify the cases where secondary indexes can still work with the fast path and allow them
-			if idx.ID != fkTables[tableID].Table.PrimaryIndex.ID {
+			if idx.ID != fkTables[tableID].Desc.PrimaryIndex.ID {
 				return false
 			}
 
@@ -439,13 +439,13 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.Tabl
 					return false
 				}
 
-				idx, err := fkTables[ref.Table].Table.FindIndexByID(ref.Index)
+				referencingIdx, err := fkTables[ref.Table].Desc.FindIndexByID(ref.Index)
 				if err != nil {
 					return false
 				}
 
 				// All of these references MUST be ON DELETE CASCADE
-				if idx.ForeignKey.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
+				if referencingIdx.ForeignKey.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
 					return false
 				}
 			}

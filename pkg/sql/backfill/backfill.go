@@ -140,7 +140,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
-	fkTables, _ := row.TablesNeededForFKs(
+	fkTables, _ := row.MakeFkMetadata(
 		ctx,
 		tableDesc,
 		row.CheckUpdates,
@@ -155,11 +155,11 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			continue
 		}
 
-		found.Table = otherTables[i]
+		found.Desc = otherTables[i]
 		fkTables[fkTableDesc.ID] = found
 	}
 	for id, table := range fkTables {
-		if table.Table == nil {
+		if table.Desc == nil {
 			// We weren't passed all of the tables that we need by the coordinator.
 			return roachpb.Key{}, errors.Errorf("table %v not sent by coordinator", id)
 		}

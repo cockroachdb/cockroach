@@ -66,7 +66,7 @@ type optTableUpserter struct {
 	resultRow tree.Datums
 
 	// fkTables is used for foreign key checks in the update case.
-	fkTables row.TableLookupsByID
+	fkTables row.FkTableMetadata
 
 	// ru is used when updating rows.
 	ru row.Updater

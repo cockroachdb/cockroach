@@ -673,7 +673,7 @@ func addIndexForFK(
 		return added.ID, nil
 	}
 
-	if err := tbl.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD); err != nil {
+	if err := tbl.AddIndexMutation(&idx, sqlbase.DescriptorMutation_ADD); err != nil {
 		return 0, err
 	}
 	if err := tbl.AllocateIDs(); err != nil {
@@ -801,7 +801,7 @@ func addInterleave(
 // finalizeInterleave creates backreferences from an interleaving parent to the
 // child data being interleaved.
 func (p *planner) finalizeInterleave(
-	ctx context.Context, desc *sqlbase.MutableTableDescriptor, index sqlbase.IndexDescriptor,
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor, index *sqlbase.IndexDescriptor,
 ) error {
 	// TODO(dan): This is similar to finalizeFKs. Consolidate them
 	if len(index.Interleave.Ancestors) == 0 {
