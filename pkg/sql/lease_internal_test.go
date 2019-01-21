@@ -154,7 +154,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	var tables []sqlbase.ImmutableTableDescriptor
+	var tables []sqlbase.TableDescriptor
 	var expiration hlc.Timestamp
 	getLeases := func() {
 		for i := 0; i < 3; i++ {
@@ -165,7 +165,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			if err != nil {
 				t.Fatal(err)
 			}
-			tables = append(tables, *table)
+			tables = append(tables, *table.TableDesc())
 			expiration = exp
 			if err := leaseManager.Release(table); err != nil {
 				t.Fatal(err)
@@ -221,7 +221,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// without a lease.
 	ts.mu.Lock()
 	tableVersion := &tableVersionState{
-		ImmutableTableDescriptor: tables[0],
+		ImmutableTableDescriptor: *sqlbase.NewImmutableTableDescriptor(tables[0]),
 		expiration:               tables[5].ModificationTime,
 	}
 	ts.mu.active.insert(tableVersion)
