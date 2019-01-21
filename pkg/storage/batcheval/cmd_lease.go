@@ -148,7 +148,7 @@ func evalNewLease(
 		Lease: &lease,
 	}
 
-	if rec.ClusterSettings().Version.IsMinSupported(cluster.VersionProposedTSLeaseRequest) {
+	if rec.ClusterSettings().Version.IsActive(cluster.VersionProposedTSLeaseRequest) {
 		pd.Replicated.PrevLeaseProposal = prevLease.ProposedTS
 	}
 

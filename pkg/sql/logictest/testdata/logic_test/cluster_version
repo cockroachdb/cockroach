@@ -32,7 +32,7 @@ SET CLUSTER SETTING version = '2.0'
 statement error cannot upgrade directly from 1.0 to 2.1
 SET CLUSTER SETTING version = '2.1'
 
-statement error cannot downgrade from 1.0 to 0.9
+statement error versions cannot be downgraded \(attempting to downgrade from 1.0 to 0.9\)
 SET CLUSTER SETTING version = '0.9'
 
 statement ok
@@ -58,7 +58,7 @@ SET CLUSTER SETTING version = '1.2'
 statement ok
 SET CLUSTER SETTING version = crdb_internal.node_executable_version()
 
-statement error cannot downgrade from 1.1 to 1.0-2
+statement error versions cannot be downgraded \(attempting to downgrade from 1.1 to 1.0-2\)
 SET CLUSTER SETTING version = '1.0-2'
 
 query T

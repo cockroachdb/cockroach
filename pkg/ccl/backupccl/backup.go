@@ -1006,7 +1006,7 @@ func backupPlanHook(
 
 		// older nodes don't know about many new fields, e.g. MVCCAll and may
 		// incorrectly evaluate either an export RPC, or a resumed backup job.
-		if requireVersion2 && !p.ExecCfg().Settings.Version.IsMinSupported(cluster.Version2_0) {
+		if requireVersion2 && !p.ExecCfg().Settings.Version.IsActive(cluster.Version2_0) {
 			return errors.Errorf(
 				"BACKUP features introduced in 2.0 requires cluster version >= %s (",
 				cluster.VersionByKey(cluster.Version2_0).String(),

@@ -177,7 +177,7 @@ func TestClockOffsetMismatch(t *testing.T) {
 		Ping:           "testManual",
 		Addr:           "test",
 		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
-		ServerVersion:  hs.version.Version().MinimumVersion,
+		ServerVersion:  hs.version.Version().Version,
 	}
 	response, err := hs.Ping(context.Background(), request)
 	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
@@ -270,10 +270,7 @@ func TestVersionCheck(t *testing.T) {
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
 			settings := cluster.MakeClusterSettings(td.clusterVersion, td.clusterVersion)
-			cv := cluster.ClusterVersion{
-				MinimumVersion: td.clusterVersion,
-				UseVersion:     td.clusterVersion,
-			}
+			cv := cluster.ClusterVersion{Version: td.clusterVersion}
 			if err := settings.InitializeVersion(cv); err != nil {
 				t.Fatal(err)
 			}

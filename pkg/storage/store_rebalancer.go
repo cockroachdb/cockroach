@@ -190,7 +190,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				timer.Reset(jitteredInterval(storeRebalancerTimerDuration))
 			}
 
-			if !sr.st.Version.IsMinSupported(cluster.VersionLoadBasedRebalancing) {
+			if !sr.st.Version.IsActive(cluster.VersionLoadBasedRebalancing) {
 				continue
 			}
 

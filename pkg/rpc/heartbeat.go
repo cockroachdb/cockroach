@@ -62,14 +62,14 @@ func checkVersion(
 		// Cluster version predates this version check.
 		return nil
 	}
-	minVersion := clusterVersion.Version().MinimumVersion
+	activeVersion := clusterVersion.Version().Version
 	if peerVersion == (roachpb.Version{}) {
 		return errors.Errorf(
-			"cluster requires at least version %s, but peer did not provide a version", minVersion)
+			"cluster requires at least version %s, but peer did not provide a version", activeVersion)
 	}
-	if peerVersion.Less(minVersion) {
+	if peerVersion.Less(activeVersion) {
 		return errors.Errorf(
-			"cluster requires at least version %s, but peer has version %s", minVersion, peerVersion)
+			"cluster requires at least version %s, but peer has version %s", activeVersion, peerVersion)
 	}
 	return nil
 }

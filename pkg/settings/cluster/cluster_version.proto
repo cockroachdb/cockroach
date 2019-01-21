@@ -20,14 +20,8 @@ import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
 message ClusterVersion {
-  // The minimum_version required for any node to support. This
-  // value must monotonically increase.
-  roachpb.Version minimum_version = 1 [(gogoproto.nullable) = false];
-  // The version of functionality in use in the cluster. Unlike
-  // minimum_version, use_version may be downgraded, which will
-  // disable functionality requiring a higher version. However,
-  // some functionality, once in use, can not be discontinued.
-  // Support for that functionality is guaranteed by the ratchet
-  // of minimum_version.
-  roachpb.Version use_version = 2 [(gogoproto.nullable) = false];
+  reserved 1;
+  // The version of functionality in use in the cluster. This value must
+  // monotonically increase.
+  roachpb.Version active_version = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }

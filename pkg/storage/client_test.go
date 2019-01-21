@@ -191,7 +191,7 @@ func createTestStoreWithOpts(
 		err := store.WriteInitialData(
 			ctx,
 			kvs,
-			storeCfg.Settings.Version.ServerVersion,
+			storeCfg.Settings.Version.BootstrapVersion().Version,
 			1 /* numStores */, splits)
 		if err != nil {
 			t.Fatal(err)
@@ -842,7 +842,7 @@ func (m *multiTestContext) addStore(idx int) {
 		err := store.WriteInitialData(
 			ctx,
 			kvs,
-			cfg.Settings.Version.ServerVersion,
+			cfg.Settings.Version.BootstrapVersion().Version,
 			len(m.engines), splits)
 		if err != nil {
 			m.t.Fatal(err)
