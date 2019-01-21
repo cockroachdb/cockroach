@@ -605,26 +605,23 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 		// has been upgraded to 2.1 then we know nothing is running the job and it
 		// can be safely failed.
 		if nullProgress, ok := row[2].(*tree.DBool); ok && bool(*nullProgress) {
-			// TODO(mjibson): set this to cluster.Version_2_1 when it exists.
-			if r.settings.Version.IsMinSupported(cluster.VersionRangeMerges) {
-				payload.Error = "job predates cluster upgrade and must be re-run"
-				payloadBytes, err := protoutil.Marshal(payload)
-				if err != nil {
-					return err
-				}
+			payload.Error = "job predates cluster upgrade and must be re-run"
+			payloadBytes, err := protoutil.Marshal(payload)
+			if err != nil {
+				return err
+			}
 
-				// We can't use job.update here because it fails while attempting to unmarshal
-				// the progress. Setting the status to failed is idempotent so we don't care
-				// if multiple nodes execute this.
-				const updateStmt = `UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3`
-				updateArgs := []interface{}{StatusFailed, payloadBytes, *id}
-				err = r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-					_, err := r.ex.Exec(ctx, "job-update", txn, updateStmt, updateArgs...)
-					return err
-				})
-				if err != nil {
-					log.Warningf(ctx, "job %d: has no progress but unable to mark failed: %s", id, err)
-				}
+			// We can't use job.update here because it fails while attempting to unmarshal
+			// the progress. Setting the status to failed is idempotent so we don't care
+			// if multiple nodes execute this.
+			const updateStmt = `UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3`
+			updateArgs := []interface{}{StatusFailed, payloadBytes, *id}
+			err = r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				_, err := r.ex.Exec(ctx, "job-update", txn, updateStmt, updateArgs...)
+				return err
+			})
+			if err != nil {
+				log.Warningf(ctx, "job %d: has no progress but unable to mark failed: %s", id, err)
 			}
 			continue
 		}
