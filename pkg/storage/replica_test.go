@@ -198,6 +198,11 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		tc.transport = NewDummyRaftTransport(cfg.Settings)
 	}
 	ctx := context.TODO()
+	bootstrapVersion := cfg.Settings.Version.BootstrapVersion()
+	if ver := cfg.TestingKnobs.BootstrapVersion; ver != nil {
+		bootstrapVersion = *ver
+	}
+
 	if tc.store == nil {
 		cfg.Gossip = tc.gossip
 		cfg.Transport = tc.transport
@@ -207,11 +212,12 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		// store will be passed to the sender after it is created and bootstrapped.
 		factory := &testSenderFactory{}
 		cfg.DB = client.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
+
 		if err := Bootstrap(ctx, tc.engine, roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
-		}, cfg.Settings.Version.BootstrapVersion()); err != nil {
+		}, bootstrapVersion); err != nil {
 			t.Fatal(err)
 		}
 		tc.store = NewStore(cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
@@ -224,7 +230,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 
 		if tc.repl == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
 			if err := tc.store.WriteInitialData(
-				ctx, nil /* initialValues */, cfg.Settings.Version.ServerVersion,
+				ctx, nil /* initialValues */, bootstrapVersion.Version,
 				1 /* numStores */, nil, /* splits */
 			); err != nil {
 				t.Fatal(err)
@@ -243,13 +249,13 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 			testDesc := testRangeDescriptor()
 			if _, err := stateloader.WriteInitialState(
 				ctx,
-				tc.store.ClusterSettings(),
 				tc.store.Engine(),
 				enginepb.MVCCStats{},
 				*testDesc,
 				roachpb.BootstrapLease(),
 				hlc.Timestamp{},
 				hlc.Timestamp{},
+				bootstrapVersion.Version,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -9679,7 +9685,7 @@ func TestReplicaBootstrapRangeAppliedStateKey(t *testing.T) {
 
 			cfg := TestStoreConfig(nil)
 			cfg.Settings = cluster.MakeTestingClusterSettingsWithVersion(
-				c.version /* minVersion */, cluster.BinaryServerVersion /* serverVersion */)
+				c.version /* minVersion */, c.version /* serverVersion */)
 			tc := testContext{}
 			tc.StartWithStoreConfig(t, stopper, cfg)
 			repl := tc.repl

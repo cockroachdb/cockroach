@@ -1242,7 +1242,7 @@ func restorePlanHook(
 		// nodes if needed. VersionClearRange was introduced after many of these
 		// fields and the refactors to how jobs were saved and resumed, though we may
 		// want to bump this to 2.0 for simplicity.
-		if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionClearRange) {
+		if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
 			return errors.Errorf(
 				"running RESTORE on a 2.x node requires cluster version >= %s",
 				cluster.VersionByKey(cluster.VersionClearRange).String(),

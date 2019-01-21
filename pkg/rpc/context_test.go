@@ -1013,7 +1013,7 @@ func TestClusterIDMismatch(t *testing.T) {
 
 func setVersion(c *Context, v roachpb.Version) error {
 	settings := cluster.MakeClusterSettings(v, v)
-	cv := cluster.ClusterVersion{MinimumVersion: v, UseVersion: v}
+	cv := cluster.ClusterVersion{Version: v}
 	if err := settings.InitializeVersion(cv); err != nil {
 		return err
 	}

@@ -43,15 +43,18 @@ const (
 // entries already having applied. The supplied MVCCStats are used for the Stats
 // field after adjusting for persisting the state itself, and the updated stats
 // are returned.
+//
+// Args:
+// activeVersion: The cluster's version.
 func WriteInitialReplicaState(
 	ctx context.Context,
-	st *cluster.Settings,
 	eng engine.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
 	txnSpanGCThreshold hlc.Timestamp,
+	activeVersion roachpb.Version,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
 
@@ -69,10 +72,10 @@ func WriteInitialReplicaState(
 	s.GCThreshold = &gcThreshold
 	s.TxnSpanGCThreshold = &txnSpanGCThreshold
 
-	// If the MinSupported cluster version is high enough to guarantee that all
-	// nodes will understand the AppliedStateKey then we can just straight to
-	// using it without ever writing the legacy stats and index keys.
-	if st.Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
+	// If the version is high enough to guarantee that all nodes will understand
+	// the AppliedStateKey then we can just straight to using it without ever
+	// writing the legacy stats and index keys.
+	if !activeVersion.Less(cluster.VersionByKey(cluster.VersionRangeAppliedStateKey)) {
 		s.UsingAppliedStateKey = true
 	} else {
 		if err := engine.AccountForLegacyMVCCStats(s.Stats, desc.RangeID); err != nil {
@@ -110,17 +113,21 @@ func WriteInitialReplicaState(
 // SynthesizeRaftState. It is typically called during bootstrap. The supplied
 // MVCCStats are used for the Stats field after adjusting for persisting the
 // state itself, and the updated stats are returned.
+//
+// Args:
+// bootstrapVersion: The version at which the cluster is bootstrapped.
 func WriteInitialState(
 	ctx context.Context,
-	st *cluster.Settings,
 	eng engine.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
 	txnSpanGCThreshold hlc.Timestamp,
+	bootstrapVersion roachpb.Version,
 ) (enginepb.MVCCStats, error) {
-	newMS, err := WriteInitialReplicaState(ctx, st, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold)
+	newMS, err := WriteInitialReplicaState(
+		ctx, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold, bootstrapVersion)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}

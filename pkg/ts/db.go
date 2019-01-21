@@ -100,7 +100,7 @@ type DB struct {
 func NewDB(db *client.DB, settings *cluster.Settings) *DB {
 	pruneThresholdByResolution := map[Resolution]func() int64{
 		Resolution10s: func() int64 {
-			if settings.Version.IsMinSupported(cluster.VersionColumnarTimeSeries) {
+			if settings.Version.IsActive(cluster.VersionColumnarTimeSeries) {
 				return Resolution10sStorageTTL.Get(&settings.SV).Nanoseconds()
 			}
 			return DeprecatedResolution10StoreDuration.Get(&settings.SV).Nanoseconds()
@@ -338,11 +338,11 @@ func (db *DB) Metrics() *TimeSeriesMetrics {
 // WriteColumnar returns true if this DB should write data in the newer columnar
 // format.
 func (db *DB) WriteColumnar() bool {
-	return !db.forceRowFormat && db.st.Version.IsMinSupported(cluster.VersionColumnarTimeSeries)
+	return !db.forceRowFormat && db.st.Version.IsActive(cluster.VersionColumnarTimeSeries)
 }
 
 // WriteRollups returns true if this DB should write rollups for resolutions
 // targeted for a rollup resolution.
 func (db *DB) WriteRollups() bool {
-	return !db.forceRowFormat && db.st.Version.IsMinSupported(cluster.VersionColumnarTimeSeries)
+	return !db.forceRowFormat && db.st.Version.IsActive(cluster.VersionColumnarTimeSeries)
 }

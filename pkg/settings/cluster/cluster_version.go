@@ -19,7 +19,7 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 // IsActiveVersion returns true if the features of the supplied version are active at the running
 // version.
 func (cv ClusterVersion) IsActiveVersion(v roachpb.Version) bool {
-	return !cv.UseVersion.Less(v)
+	return !cv.Less(v)
 }
 
 // IsActive returns true if the features of the supplied version are active at
@@ -27,11 +27,4 @@ func (cv ClusterVersion) IsActiveVersion(v roachpb.Version) bool {
 func (cv ClusterVersion) IsActive(versionKey VersionKey) bool {
 	v := VersionByKey(versionKey)
 	return cv.IsActiveVersion(v)
-}
-
-// IsMinSupported returns true if the features of the supplied version will be
-// permanently available (i.e. cannot be downgraded away).
-func (cv ClusterVersion) IsMinSupported(versionKey VersionKey) bool {
-	v := VersionByKey(versionKey)
-	return !cv.MinimumVersion.Less(v)
 }

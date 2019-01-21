@@ -605,10 +605,7 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		v = cluster.VersionByKey(cluster.VersionBase)
 	}
 
-	b, err := protoutil.Marshal(&cluster.ClusterVersion{
-		MinimumVersion: v,
-		UseVersion:     v,
-	})
+	b, err := protoutil.Marshal(&cluster.ClusterVersion{Version: v})
 	if err != nil {
 		return errors.Wrap(err, "while marshaling version")
 	}

@@ -46,7 +46,7 @@ func (r *Replica) SplitByLoadQPSThreshold() float64 {
 // shared across all stores.
 func (r *Replica) SplitByLoadEnabled() bool {
 	return SplitByLoadEnabled.Get(&r.store.cfg.Settings.SV) &&
-		r.store.ClusterSettings().Version.IsMinSupported(cluster.VersionLoadSplits) &&
+		r.store.ClusterSettings().Version.IsActive(cluster.VersionLoadSplits) &&
 		!r.store.TestingKnobs().DisableLoadBasedSplitting
 }
 
