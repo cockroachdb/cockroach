@@ -80,7 +80,7 @@ type TableID = sqlbase.ID
 // tableLookupQueue is the facility responsible for loading all
 // the table metadata used by FK work into a FkTableMetadata.
 //
-// The main lookup loop in TablesNeededForFKs repeats as follows: run
+// The main lookup loop in MakeFkMetadata repeats as follows: run
 // dequeue() once, inspects the table, queue()s zero or more FK
 // constraints for further lookups. The lookup stops
 // when the queue becomes empty.
@@ -139,7 +139,7 @@ const (
 	CheckUpdates
 )
 
-// TableLookupFunction is the function type used by TablesNeededForFKs
+// TableLookupFunction is the function type used by MakeFkMetadata
 // that will perform the actual lookup of table metadata.
 type TableLookupFunction func(context.Context, TableID) (TableEntry, error)
 
@@ -150,7 +150,7 @@ func NoLookup(_ context.Context, _ TableID) (TableEntry, error) {
 	return TableEntry{}, nil
 }
 
-// CheckPrivilegeFunction is the function type used by TablesNeededForFKs that will
+// CheckPrivilegeFunction is the function type used by MakeFkMetadata that will
 // check the privileges of the current user to access specific tables.
 type CheckPrivilegeFunction func(context.Context, sqlbase.DescriptorProto, privilege.Kind) error
 

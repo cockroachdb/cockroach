@@ -118,7 +118,7 @@ func (p *planner) Insert(
 	} else {
 		fkCheckType = row.CheckUpdates
 	}
-	fkTables, err := row.TablesNeededForFKs(
+	fkTables, err := row.MakeFkMetadata(
 		ctx,
 		desc,
 		fkCheckType,

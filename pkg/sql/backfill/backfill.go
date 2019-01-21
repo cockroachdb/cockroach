@@ -140,7 +140,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
-	fkTables, _ := row.TablesNeededForFKs(
+	fkTables, _ := row.MakeFkMetadata(
 		ctx,
 		tableDesc,
 		row.CheckUpdates,

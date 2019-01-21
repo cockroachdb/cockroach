@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 				return row.TableEntry{Desc: table}, nil
 			}
 
-			fkTables, err := row.TablesNeededForFKs(
+			fkTables, err := row.MakeFkMetadata(
 				context.TODO(),
 				pd,
 				row.CheckDeletes,
