@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -122,7 +121,7 @@ func newMergeQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *mergeQue
 
 func (mq *mergeQueue) enabled() bool {
 	st := mq.store.ClusterSettings()
-	return st.Version.IsMinSupported(cluster.VersionRangeMerges) && storagebase.MergeQueueEnabled.Get(&st.SV)
+	return storagebase.MergeQueueEnabled.Get(&st.SV)
 }
 
 func (mq *mergeQueue) mergesDisabledForRange(desc *roachpb.RangeDescriptor) bool {
