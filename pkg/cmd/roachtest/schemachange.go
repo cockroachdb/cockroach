@@ -325,7 +325,7 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 }
 
 func registerSchemaChangeCancelIndexTPCC1000(r *registry) {
-	r.Add(makeIndexAddRollbackTpccTest(5, 1000, time.Minute*30))
+	r.Add(makeIndexAddRollbackTpccTest(5, 1000, time.Minute*90))
 }
 
 // Creates an index and job, returning the job ID and a notify channel for
