@@ -65,7 +65,6 @@ type zigzagJoinSide struct {
 	fixedVals *valuesNode
 }
 
-// startExec is part of the execStartable interface.
 func (zj *zigzagJoinNode) startExec(params runParams) error {
 	panic("zigzag joins cannot be executed outside of distsql")
 }

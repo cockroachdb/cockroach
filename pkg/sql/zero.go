@@ -37,6 +37,7 @@ func NewZeroNode(columns sqlbase.ResultColumns) PlanNode {
 	return newZeroNode(columns)
 }
 
-func (z *zeroNode) Next(runParams) (bool, error) { return false, nil }
-func (*zeroNode) Values() tree.Datums            { return nil }
-func (*zeroNode) Close(context.Context)          {}
+func (*zeroNode) startExec(runParams) error    { return nil }
+func (*zeroNode) Next(runParams) (bool, error) { return false, nil }
+func (*zeroNode) Values() tree.Datums          { return nil }
+func (*zeroNode) Close(context.Context)        {}

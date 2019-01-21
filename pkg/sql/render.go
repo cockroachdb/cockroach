@@ -368,6 +368,10 @@ type renderRun struct {
 	row tree.Datums
 }
 
+func (r *renderNode) startExec(runParams) error {
+	return nil
+}
+
 func (r *renderNode) Next(params runParams) (bool, error) {
 	if next, err := r.source.plan.Next(params); !next {
 		return false, err

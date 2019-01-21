@@ -50,6 +50,10 @@ func (f *filterNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return f.source.info.NodeFormatter(idx)
 }
 
+func (f *filterNode) startExec(runParams) error {
+	return nil
+}
+
 // Next implements the planNode interface.
 func (f *filterNode) Next(params runParams) (bool, error) {
 	for {

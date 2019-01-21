@@ -242,6 +242,10 @@ type indexJoinRun struct {
 
 const indexJoinBatchSize = 100
 
+func (n *indexJoinNode) startExec(runParams) error {
+	return nil
+}
+
 func (n *indexJoinNode) Next(params runParams) (bool, error) {
 	// Loop looking up the next row. We either are going to pull a row from the
 	// table or a batch of rows from the index. If we pull a batch of rows from

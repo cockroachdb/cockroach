@@ -62,7 +62,6 @@ func (n *controlJobsNode) FastPathResults() (int, bool) {
 	return n.numRows, true
 }
 
-// startExec implements the execStartable interface.
 func (n *controlJobsNode) startExec(params runParams) error {
 	reg := params.p.ExecCfg().JobRegistry
 	for {

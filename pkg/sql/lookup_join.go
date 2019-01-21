@@ -60,7 +60,6 @@ type lookupJoinRun struct {
 	n *joinNode
 }
 
-// startExec is part of the execStartable interface.
 func (lj *lookupJoinNode) startExec(params runParams) error {
 	// Make sure the table node has a span (full scan).
 	var err error

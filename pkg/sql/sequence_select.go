@@ -43,6 +43,10 @@ func (p *planner) SequenceSelectNode(desc *sqlbase.ImmutableTableDescriptor) (pl
 	}, nil
 }
 
+func (ss *sequenceSelectNode) startExec(runParams) error {
+	return nil
+}
+
 func (ss *sequenceSelectNode) Next(params runParams) (bool, error) {
 	if ss.done {
 		return false, nil
