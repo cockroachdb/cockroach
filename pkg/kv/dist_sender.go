@@ -566,7 +566,7 @@ func (ds *DistSender) initAndVerifyBatch(
 	// Make sure that MVCCScan requests aren't in batch form if our cluster
 	// version is too old.
 	// TODO(jordan): delete this stanza after 2.1 is released.
-	if !ds.st.Version.IsMinSupported(cluster.VersionBatchResponse) {
+	if !ds.st.Version.IsActive(cluster.VersionBatchResponse) {
 		for i := range ba.Requests {
 			switch req := ba.Requests[i].GetInner().(type) {
 			case *roachpb.ScanRequest:

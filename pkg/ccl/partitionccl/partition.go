@@ -243,7 +243,7 @@ func createPartitioning(
 	indexDesc *sqlbase.IndexDescriptor,
 	partBy *tree.PartitionBy,
 ) (sqlbase.PartitioningDescriptor, error) {
-	if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
+	if !st.Version.IsActive(cluster.VersionPartitioning) {
 		return sqlbase.PartitioningDescriptor{},
 			errors.New("cluster version does not support partitioning")
 	}

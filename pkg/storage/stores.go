@@ -294,11 +294,8 @@ func ReadVersionFromEngineOrDefault(
 
 	// These values should always exist in 1.1-initialized clusters, but may
 	// not on 1.0.x; we synthesize the missing version.
-	if cv.UseVersion == (roachpb.Version{}) {
-		cv.UseVersion = cluster.VersionByKey(cluster.VersionBase)
-	}
-	if cv.MinimumVersion == (roachpb.Version{}) {
-		cv.MinimumVersion = cluster.VersionByKey(cluster.VersionBase)
+	if cv.Version == (roachpb.Version{}) {
+		cv.Version = cluster.VersionByKey(cluster.VersionBase)
 	}
 	return cv, nil
 }
@@ -326,13 +323,8 @@ func SynthesizeClusterVersionFromEngines(
 		origin string
 	}
 
-	maxMinVersion := originVersion{
-		Version: minSupportedVersion,
-		origin:  "(no store)",
-	}
-
 	maxPossibleVersion := roachpb.Version{Major: 999999} // sort above any real version
-	minUseVersion := originVersion{
+	minStoreVersion := originVersion{
 		Version: maxPossibleVersion,
 		origin:  "(no store)",
 	}
@@ -341,7 +333,7 @@ func SynthesizeClusterVersionFromEngines(
 	// can decide whether the node catches a version error. However, we also
 	// want to name at least one engine that violates the version
 	// constraints, which at the latest the second loop will achieve
-	// (because then minUseVersion and maxMinVersion don't change any more).
+	// (because then minStoreVersion don't change any more).
 	for _, eng := range engines {
 		var cv cluster.ClusterVersion
 		cv, err := ReadVersionFromEngineOrDefault(ctx, eng)
@@ -351,23 +343,16 @@ func SynthesizeClusterVersionFromEngines(
 
 		// Avoid running a binary with a store that is too new. For example,
 		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
-		for _, v := range []roachpb.Version{cv.MinimumVersion, cv.UseVersion} {
-			if serverVersion.Less(v) {
-				return cluster.ClusterVersion{}, errors.Errorf("cockroach version v%s is incompatible with data in store %s; use version v%s or later",
-					serverVersion, eng, v)
-			}
+		if serverVersion.Less(cv.Version) {
+			return cluster.ClusterVersion{}, errors.Errorf(
+				"cockroach version v%s is incompatible with data in store %s; use version v%s or later",
+				serverVersion, eng, cv.Version)
 		}
 
-		// Track the highest minimum version encountered.
-		if maxMinVersion.Version.Less(cv.MinimumVersion) {
-			maxMinVersion.Version = cv.MinimumVersion
-			maxMinVersion.origin = fmt.Sprint(eng)
-
-		}
 		// Track smallest use version encountered.
-		if cv.UseVersion.Less(minUseVersion.Version) {
-			minUseVersion.Version = cv.UseVersion
-			minUseVersion.origin = fmt.Sprint(eng)
+		if cv.Version.Less(minStoreVersion.Version) {
+			minStoreVersion.Version = cv.Version
+			minStoreVersion.origin = fmt.Sprint(eng)
 		}
 	}
 
@@ -375,33 +360,30 @@ func SynthesizeClusterVersionFromEngines(
 	// minSupportedVersion. This is the case when a brand new node is
 	// joining an existing cluster (which may be on any older version
 	// this binary supports).
-	if minUseVersion.Version == maxPossibleVersion {
-		minUseVersion.Version = minSupportedVersion
+	if minStoreVersion.Version == maxPossibleVersion {
+		minStoreVersion.Version = minSupportedVersion
 	}
 
 	cv := cluster.ClusterVersion{
-		UseVersion:     minUseVersion.Version,
-		MinimumVersion: maxMinVersion.Version,
+		Version: minStoreVersion.Version,
 	}
 	log.Eventf(ctx, "read ClusterVersion %+v", cv)
 
-	for _, v := range []originVersion{minUseVersion, maxMinVersion} {
-		// Avoid running a binary too new for this store. This is what you'd catch
-		// if, say, you restarted directly from 1.0 into 1.2 (bumping the min
-		// version) without going through 1.1 first. It would also what you catch if
-		// you are starting 1.1 for the first time (after 1.0), but it crashes
-		// half-way through the startup sequence (so now some stores have 1.1, but
-		// some 1.0), in which case you are expected to run 1.1 again (hopefully
-		// without the crash this time) which would then rewrite all the stores.
-		//
-		// We only verify this now because as we iterate through the stores, we
-		// may not yet have picked up the final versions we're actually planning
-		// to use.
-		if v.Version.Less(minSupportedVersion) {
-			return cluster.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
-				"is too old for running version v%s (which requires data from v%s or later)",
-				v.origin, v.Version, serverVersion, minSupportedVersion)
-		}
+	// Avoid running a binary too new for this store. This is what you'd catch
+	// if, say, you restarted directly from 1.0 into 1.2 (bumping the min
+	// version) without going through 1.1 first. It would also be what you catch if
+	// you are starting 1.1 for the first time (after 1.0), but it crashes
+	// half-way through the startup sequence (so now some stores have 1.1, but
+	// some 1.0), in which case you are expected to run 1.1 again (hopefully
+	// without the crash this time) which would then rewrite all the stores.
+	//
+	// We only verify this now because as we iterate through the stores, we
+	// may not yet have picked up the final versions we're actually planning
+	// to use.
+	if minStoreVersion.Version.Less(minSupportedVersion) {
+		return cluster.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
+			"is too old for running version v%s (which requires data from v%s or later)",
+			minStoreVersion.origin, minStoreVersion.Version, serverVersion, minSupportedVersion)
 	}
 	// Write the "actual" version back to all stores. This is almost always a
 	// no-op, but will backfill the information for 1.0.x clusters, and also
@@ -414,8 +396,8 @@ func SynthesizeClusterVersionFromEngines(
 // (written to any of the configured stores (all of which are bootstrapped)).
 // The returned value is also replicated to all stores for consistency, in case
 // a new store was added or an old store re-configured. In case of non-identical
-// versions across the stores, returns a version that carries the largest
-// MinVersion and the smallest UseVersion.
+// versions across the stores, returns a version that carries the smallest
+// Version.
 //
 // If there aren't any stores, returns a ClusterVersion with MinSupportedVersion
 // and UseVersion set to the minimum supported version and server version of the
@@ -469,11 +451,11 @@ func (ls *Stores) OnClusterVersionChange(ctx context.Context, cv cluster.Cluster
 	if err != nil {
 		return errors.Wrap(err, "reading persisted cluster version")
 	}
-	// If the update downgrades the minimum version, ignore it. Must be a
+	// If the update downgrades the version, ignore it. Must be a
 	// reordering (this method is called from multiple goroutines via
 	// `(*Node).onClusterVersionChange)`). Note that we do carry out the upgrade if
 	// the MinVersion is identical, to backfill the engines that may still need it.
-	if cv.MinimumVersion.Less(synthCV.MinimumVersion) {
+	if cv.Version.Less(synthCV.Version) {
 		return nil
 	}
 	if err := ls.WriteClusterVersion(ctx, cv); err != nil {

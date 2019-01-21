@@ -467,7 +467,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	hasNewSubzones := !deleteZone && index != nil
 	execConfig := params.extendedEvalCtx.ExecCfg
 	zoneToWrite := partialZone
-	if !execConfig.Settings.Version.IsMinSupported(cluster.VersionCascadingZoneConfigs) {
+	if !execConfig.Settings.Version.IsActive(cluster.VersionCascadingZoneConfigs) {
 		zoneToWrite = completeZone
 	}
 
@@ -611,7 +611,7 @@ func writeZoneConfig(
 ) (numAffected int, err error) {
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
-		if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
+		if !st.Version.IsActive(cluster.VersionPartitioning) {
 			return 0, pgerror.NewError(pgerror.CodeCheckViolationError,
 				"cluster version does not support zone configs on indexes or partitions")
 		}
@@ -626,14 +626,14 @@ func writeZoneConfig(
 	}
 	if len(zone.Constraints) > 1 || (len(zone.Constraints) == 1 && zone.Constraints[0].NumReplicas != 0) {
 		st := execCfg.Settings
-		if !st.Version.IsMinSupported(cluster.VersionPerReplicaZoneConstraints) {
+		if !st.Version.IsActive(cluster.VersionPerReplicaZoneConstraints) {
 			return 0, pgerror.NewError(pgerror.CodeCheckViolationError,
 				"cluster version does not support zone configs with per-replica constraints")
 		}
 	}
 	if len(zone.LeasePreferences) > 0 {
 		st := execCfg.Settings
-		if !st.Version.IsMinSupported(cluster.VersionLeasePreferences) {
+		if !st.Version.IsActive(cluster.VersionLeasePreferences) {
 			return 0, pgerror.NewError(pgerror.CodeCheckViolationError,
 				"cluster version does not support zone configs with lease placement preferences")
 		}

@@ -61,7 +61,7 @@ func (th *testClusterWithHelpers) getVersionFromSelect(i int) string {
 	if err := protoutil.Unmarshal([]byte(version), &v); err != nil {
 		th.Fatalf("%d: %s", i, err)
 	}
-	return v.MinimumVersion.String()
+	return v.Version.String()
 }
 
 func (th *testClusterWithHelpers) getVersionFromSetting(i int) *cluster.ExposedClusterVersion {
@@ -157,10 +157,7 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	// new version (and not the old one).
 	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
 
-	bootstrapVersion := cluster.ClusterVersion{
-		UseVersion:     newVersion,
-		MinimumVersion: newVersion,
-	}
+	bootstrapVersion := cluster.ClusterVersion{Version: newVersion}
 
 	knobs := base.TestingKnobs{
 		Store: &storage.StoreTestingKnobs{
@@ -184,7 +181,7 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if cv.MinimumVersion != newVersion {
+				if cv.Version != newVersion {
 					return errors.Errorf("n%d: expected version %v, got %v", i+1, newVersion, cv)
 				}
 			}
@@ -208,10 +205,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	// version to upgrade automatically from oldVersion to newVersion.
 	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
 
-	bootstrapVersion := cluster.ClusterVersion{
-		UseVersion:     oldVersion,
-		MinimumVersion: oldVersion,
-	}
+	bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
 
 	knobs := base.TestingKnobs{
 		Store: &storage.StoreTestingKnobs{
@@ -259,7 +253,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 				return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
 			}
 
-			if tableV, curV := tc.getVersionFromSelect(i), v.Version().MinimumVersion.String(); tableV != curV {
+			if tableV, curV := tc.getVersionFromSelect(i), v.Version().Version.String(); tableV != curV {
 				return errors.Errorf("%d: read v%s from table, v%s from setting", i, tableV, curV)
 			}
 		}
@@ -290,7 +284,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
 			vers := tc.getVersionFromSetting(i)
-			if v := vers.Version().MinimumVersion.String(); v == curVersion {
+			if v := vers.Version().Version.String(); v == curVersion {
 				if isNoopUpdate {
 					continue
 				}
@@ -309,7 +303,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if act := cv.MinimumVersion.String(); act != exp {
+		if act := cv.Version.String(); act != exp {
 			t.Fatalf("%s: %s persisted, but should be %s", s, act, exp)
 		}
 		return nil
@@ -329,8 +323,7 @@ func TestClusterVersionBootstrapStrict(t *testing.T) {
 	} {
 		func() {
 			bootstrapVersion := cluster.ClusterVersion{
-				UseVersion:     roachpb.MustParseVersion(versions[0][0]),
-				MinimumVersion: roachpb.MustParseVersion(versions[0][0]),
+				Version: roachpb.MustParseVersion(versions[0][0]),
 			}
 
 			knobs := base.TestingKnobs{
@@ -344,7 +337,7 @@ func TestClusterVersionBootstrapStrict(t *testing.T) {
 			exp := versions[0][0]
 
 			for i := 0; i < tc.NumServers(); i++ {
-				if version := tc.getVersionFromSetting(i).Version().MinimumVersion.String(); version != exp {
+				if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
 					t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
 				}
 				if version := tc.getVersionFromShow(i); version != exp {
@@ -377,8 +370,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 
 	// Start by running 1.0.
 	bootstrapVersion := cluster.ClusterVersion{
-		UseVersion:     cluster.VersionByKey(cluster.VersionBase),
-		MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
+		Version: cluster.VersionByKey(cluster.VersionBase),
 	}
 
 	knobs := base.TestingKnobs{
@@ -404,7 +396,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	// Check that we can still talk to the first three nodes.
 	for i := 0; i < tc.NumServers()-1; i++ {
 		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.getVersionFromSetting(i).Version().MinimumVersion.String(); version != exp {
+			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
 				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
 			}
 			if version := tc.getVersionFromShow(i); version != exp {
@@ -434,8 +426,7 @@ func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 
 	// Try running 1.1.
 	bootstrapVersion := cluster.ClusterVersion{
-		UseVersion:     roachpb.Version{Major: 1, Minor: 1},
-		MinimumVersion: roachpb.Version{Major: 1, Minor: 1},
+		Version: roachpb.Version{Major: 1, Minor: 1},
 	}
 
 	knobs := base.TestingKnobs{
@@ -474,7 +465,7 @@ func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 	// Check that we can still talk to the first three nodes.
 	for i := 0; i < tc.NumServers()-1; i++ {
 		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.getVersionFromSetting(i).Version().MinimumVersion.String(); version != exp {
+			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
 				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
 			}
 			if version := tc.getVersionFromShow(i); version != exp {
