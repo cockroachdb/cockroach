@@ -403,7 +403,7 @@ func (sc *SchemaChanger) distBackfill(
 			// backfiller processor.
 			var otherTableDescs []sqlbase.TableDescriptor
 			if backfillType == columnBackfill {
-				fkTables, err := row.TablesNeededForFKs(
+				fkTables, err := row.MakeFkMetadata(
 					ctx,
 					tableDesc,
 					row.CheckUpdates,
@@ -595,7 +595,7 @@ func columnBackfillInTxn(
 	// otherTableDescs contains any other table descriptors required by the
 	// backfiller processor.
 	var otherTableDescs []*sqlbase.ImmutableTableDescriptor
-	fkTables, err := row.TablesNeededForFKs(
+	fkTables, err := row.MakeFkMetadata(
 		ctx,
 		tableDesc,
 		row.CheckUpdates,

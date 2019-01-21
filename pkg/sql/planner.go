@@ -389,18 +389,16 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) erro
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
 // CommonLookupFlags, it could use or skip the TableCollection cache. See
 // TableCollection.getTableVersionByID for how it's used.
-func (p *planner) LookupTableByID(
-	ctx context.Context, tableID sqlbase.ID,
-) (row.TableLookup, error) {
+func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.TableEntry, error) {
 	flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{avoidCached: p.avoidCachedDescriptors}}
 	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
 		if err == errTableAdding {
-			return row.TableLookup{IsAdding: true}, nil
+			return row.TableEntry{IsAdding: true}, nil
 		}
-		return row.TableLookup{}, err
+		return row.TableEntry{}, err
 	}
-	return row.TableLookup{Table: table}, nil
+	return row.TableEntry{Desc: table}, nil
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a

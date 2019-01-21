@@ -874,7 +874,7 @@ func (ef *execFactory) ConstructInsert(
 	colDescs := makeColDescList(table, insertCols)
 
 	// Determine the foreign key tables involved in the update.
-	fkTables, err := row.TablesNeededForFKs(
+	fkTables, err := row.MakeFkMetadata(
 		ef.planner.extendedEvalCtx.Context,
 		tabDesc,
 		row.CheckInserts,
@@ -948,7 +948,7 @@ func (ef *execFactory) ConstructUpdate(
 	}
 
 	// Determine the foreign key tables involved in the update.
-	fkTables, err := row.TablesNeededForFKs(
+	fkTables, err := row.MakeFkMetadata(
 		ef.planner.extendedEvalCtx.Context,
 		tabDesc,
 		row.CheckUpdates,
@@ -1041,7 +1041,7 @@ func (ef *execFactory) ConstructUpsert(
 	updateColDescs := makeColDescList(table, updateCols)
 
 	// Determine the foreign key tables involved in the upsert.
-	var fkCheckType row.FKCheck
+	var fkCheckType row.FKCheckType
 	if len(updateColDescs) == 0 {
 		fkCheckType = row.CheckInserts
 	} else {
@@ -1049,7 +1049,7 @@ func (ef *execFactory) ConstructUpsert(
 	}
 
 	// Determine the foreign key tables involved in the upsert.
-	fkTables, err := row.TablesNeededForFKs(
+	fkTables, err := row.MakeFkMetadata(
 		ef.planner.extendedEvalCtx.Context,
 		tabDesc,
 		fkCheckType,
@@ -1150,7 +1150,7 @@ func (ef *execFactory) ConstructDelete(
 	fetchColDescs := makeColDescList(table, fetchCols)
 
 	// Determine the foreign key tables involved in the update.
-	fkTables, err := row.TablesNeededForFKs(
+	fkTables, err := row.MakeFkMetadata(
 		ef.planner.extendedEvalCtx.Context,
 		tabDesc,
 		row.CheckDeletes,

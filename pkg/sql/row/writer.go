@@ -43,7 +43,7 @@ type Inserter struct {
 	Helper                rowHelper
 	InsertCols            []sqlbase.ColumnDescriptor
 	InsertColIDtoRowIndex map[sqlbase.ColumnID]int
-	Fks                   fkInsertHelper
+	Fks                   fkExistenceCheckForInsert
 
 	// For allocation avoidance.
 	marshaled []roachpb.Value
@@ -58,7 +58,7 @@ type Inserter struct {
 func MakeInserter(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables TableLookupsByID,
+	fkTables FkTableMetadata,
 	insertCols []sqlbase.ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	alloc *sqlbase.DatumAlloc,
@@ -78,7 +78,7 @@ func MakeInserter(
 
 	if checkFKs == CheckFKs {
 		var err error
-		if ri.Fks, err = makeFKInsertHelper(txn, tableDesc, fkTables,
+		if ri.Fks, err = makeFkExistenceCheckHelperForInsert(txn, tableDesc, fkTables,
 			ri.InsertColIDtoRowIndex, alloc); err != nil {
 			return ri, err
 		}
@@ -358,7 +358,7 @@ type Updater struct {
 	rd Deleter
 	ri Inserter
 
-	Fks      fkUpdateHelper
+	Fks      fkExistenceCheckForUpdate
 	cascader *cascader
 
 	// For allocation avoidance.
@@ -392,7 +392,7 @@ const (
 func MakeUpdater(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables TableLookupsByID,
+	fkTables FkTableMetadata,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
 	updateType rowUpdaterType,
@@ -425,7 +425,7 @@ var returnTruePseudoError error = returnTrue{}
 func makeUpdaterWithoutCascader(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables TableLookupsByID,
+	fkTables FkTableMetadata,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
 	updateType rowUpdaterType,
@@ -579,7 +579,7 @@ func makeUpdaterWithoutCascader(
 	}
 
 	var err error
-	if ru.Fks, err = makeFKUpdateHelper(txn, tableDesc, fkTables,
+	if ru.Fks, err = makeFkExistenceCheckHelperForUpdate(txn, tableDesc, fkTables,
 		ru.FetchColIDtoRowIndex, alloc); err != nil {
 		return Updater{}, err
 	}
@@ -830,7 +830,7 @@ type Deleter struct {
 	Helper               rowHelper
 	FetchCols            []sqlbase.ColumnDescriptor
 	FetchColIDtoRowIndex map[sqlbase.ColumnID]int
-	Fks                  fkDeleteHelper
+	Fks                  fkExistenceCheckForDelete
 	cascader             *cascader
 	// For allocation avoidance.
 	key roachpb.Key
@@ -844,7 +844,7 @@ type Deleter struct {
 func MakeDeleter(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables TableLookupsByID,
+	fkTables FkTableMetadata,
 	requestedCols []sqlbase.ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	evalCtx *tree.EvalContext,
@@ -871,7 +871,7 @@ func MakeDeleter(
 func makeRowDeleterWithoutCascader(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables TableLookupsByID,
+	fkTables FkTableMetadata,
 	requestedCols []sqlbase.ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	alloc *sqlbase.DatumAlloc,
@@ -918,7 +918,7 @@ func makeRowDeleterWithoutCascader(
 	}
 	if checkFKs == CheckFKs {
 		var err error
-		if rd.Fks, err = makeFKDeleteHelper(txn, tableDesc, fkTables,
+		if rd.Fks, err = makeFkExistenceCheckHelperForDelete(txn, tableDesc, fkTables,
 			fetchColIDtoRowIndex, alloc); err != nil {
 			return Deleter{}, err
 		}

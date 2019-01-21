@@ -112,13 +112,13 @@ func (p *planner) Insert(
 	}
 
 	// Determine what are the foreign key tables that are involved in the update.
-	var fkCheckType row.FKCheck
+	var fkCheckType row.FKCheckType
 	if n.OnConflict == nil || n.OnConflict.DoNothing {
 		fkCheckType = row.CheckInserts
 	} else {
 		fkCheckType = row.CheckUpdates
 	}
-	fkTables, err := row.TablesNeededForFKs(
+	fkTables, err := row.MakeFkMetadata(
 		ctx,
 		desc,
 		fkCheckType,

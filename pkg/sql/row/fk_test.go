@@ -31,12 +31,12 @@ import (
 )
 
 type testTables struct {
-	nextID       ID
-	tablesByID   map[ID]*sqlbase.ImmutableTableDescriptor
+	nextID       TableID
+	tablesByID   map[TableID]*sqlbase.ImmutableTableDescriptor
 	tablesByName map[string]*sqlbase.ImmutableTableDescriptor
 }
 
-func (t *testTables) createTestTable(name string) ID {
+func (t *testTables) createTestTable(name string) TableID {
 	table := sqlbase.NewImmutableTableDescriptor(sqlbase.TableDescriptor{
 		Name:        name,
 		ID:          t.nextID,
@@ -49,8 +49,8 @@ func (t *testTables) createTestTable(name string) ID {
 }
 
 func (t *testTables) createForeignKeyReference(
-	referencingID ID,
-	referencedID ID,
+	referencingID TableID,
+	referencedID TableID,
 	onDelete sqlbase.ForeignKeyReference_Action,
 	onUpdate sqlbase.ForeignKeyReference_Action,
 ) error {
@@ -93,21 +93,21 @@ func (t *testTables) createForeignKeyReference(
 	return nil
 }
 
-// TestTablesNeededForFKs creates an artificial set of tables to test the graph
+// TestMakeFkMetadata creates an artificial set of tables to test the graph
 // walking algorithm used in the function.
-func TestTablesNeededForFKs(t *testing.T) {
+func TestMakeFkMetadata(t *testing.T) {
 	tables := testTables{
-		nextID:       ID(1),
-		tablesByID:   make(map[ID]*sqlbase.ImmutableTableDescriptor),
+		nextID:       TableID(1),
+		tablesByID:   make(map[TableID]*sqlbase.ImmutableTableDescriptor),
 		tablesByName: make(map[string]*sqlbase.ImmutableTableDescriptor),
 	}
 
 	// First setup the table we will be testing against.
 	xID := tables.createTestTable("X")
 
-	expectedInsertIDs := []ID{xID}
-	expectedUpdateIDs := []ID{xID}
-	expectedDeleteIDs := []ID{xID}
+	expectedInsertIDs := []TableID{xID}
+	expectedUpdateIDs := []TableID{xID}
+	expectedDeleteIDs := []TableID{xID}
 
 	// For all possible combinations of relationships for foreign keys, create a
 	// table that X references, and one that references X.
@@ -175,16 +175,16 @@ func TestTablesNeededForFKs(t *testing.T) {
 		t.Fatalf("Could not find table:%d", xID)
 	}
 
-	lookup := func(ctx context.Context, tableID ID) (TableLookup, error) {
+	lookup := func(ctx context.Context, tableID TableID) (TableEntry, error) {
 		table, exists := tables.tablesByID[tableID]
 		if !exists {
-			return TableLookup{}, errors.Errorf("Could not lookup table:%d", tableID)
+			return TableEntry{}, errors.Errorf("Could not lookup table:%d", tableID)
 		}
-		return TableLookup{Table: table}, nil
+		return TableEntry{Desc: table}, nil
 	}
 
-	test := func(t *testing.T, usage FKCheck, expectedIDs []ID) {
-		tableLookups, err := TablesNeededForFKs(
+	test := func(t *testing.T, usage FKCheckType, expectedIDs []TableID) {
+		tableLookups, err := MakeFkMetadata(
 			context.TODO(),
 			xDesc,
 			usage,
@@ -195,7 +195,7 @@ func TestTablesNeededForFKs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var actualIDs []ID
+		var actualIDs []TableID
 		for id := range tableLookups {
 			actualIDs = append(actualIDs, id)
 		}
@@ -216,8 +216,8 @@ func TestTablesNeededForFKs(t *testing.T) {
 	})
 }
 
-// BenchmarkMultiRowFKChecks performs several benchmarks that pertain to operations involving foreign keys and cascades.
-func BenchmarkMultiRowFKChecks(b *testing.B) {
+// BenchmarkMultiRowFKCheckTypes performs several benchmarks that pertain to operations involving foreign keys and cascades.
+func BenchmarkMultiRowFKCheckTypes(b *testing.B) {
 	if testing.Short() {
 		b.Skip("short flag")
 	}

@@ -29,23 +29,23 @@ import (
 
 // cascader is used to handle all referential integrity cascading actions.
 type cascader struct {
-	txn        *client.Txn
-	tablesByID TableLookupsByID // TablesDescriptors by Table ID
-	alloc      *sqlbase.DatumAlloc
-	evalCtx    *tree.EvalContext
+	txn      *client.Txn
+	fkTables FkTableMetadata
+	alloc    *sqlbase.DatumAlloc
+	evalCtx  *tree.EvalContext
 
-	indexPKRowFetchers map[ID]map[sqlbase.IndexID]Fetcher // PK RowFetchers by Table ID and Index ID
+	indexPKRowFetchers map[TableID]map[sqlbase.IndexID]Fetcher // PK RowFetchers by Table ID and Index ID
 
 	// Row Deleters
-	rowDeleters        map[ID]Deleter               // RowDeleters by Table ID
-	deleterRowFetchers map[ID]Fetcher               // RowFetchers for rowDeleters by Table ID
-	deletedRows        map[ID]*sqlbase.RowContainer // Rows that have been deleted by Table ID
+	rowDeleters        map[TableID]Deleter               // RowDeleters by Table ID
+	deleterRowFetchers map[TableID]Fetcher               // RowFetchers for rowDeleters by Table ID
+	deletedRows        map[TableID]*sqlbase.RowContainer // Rows that have been deleted by Table ID
 
 	// Row Updaters
-	rowUpdaters        map[ID]Updater               // RowUpdaters by Table ID
-	updaterRowFetchers map[ID]Fetcher               // RowFetchers for rowUpdaters by Table ID
-	originalRows       map[ID]*sqlbase.RowContainer // Original values for rows that have been updated by Table ID
-	updatedRows        map[ID]*sqlbase.RowContainer // New values for rows that have been updated by Table ID
+	rowUpdaters        map[TableID]Updater               // RowUpdaters by Table ID
+	updaterRowFetchers map[TableID]Fetcher               // RowFetchers for rowUpdaters by Table ID
+	originalRows       map[TableID]*sqlbase.RowContainer // Original values for rows that have been updated by Table ID
+	updatedRows        map[TableID]*sqlbase.RowContainer // New values for rows that have been updated by Table ID
 }
 
 // makeDeleteCascader only creates a cascader if there is a chance that there is
@@ -53,7 +53,7 @@ type cascader struct {
 func makeDeleteCascader(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
-	tablesByID TableLookupsByID,
+	tablesByID FkTableMetadata,
 	evalCtx *tree.EvalContext,
 	alloc *sqlbase.DatumAlloc,
 ) (*cascader, error) {
@@ -73,7 +73,7 @@ Outer:
 				// and thus does not need to be checked for cascading.
 				continue
 			}
-			referencingIndex, err := referencingTable.Table.FindIndexByID(ref.Index)
+			referencingIndex, err := referencingTable.Desc.FindIndexByID(ref.Index)
 			if err != nil {
 				return nil, err
 			}
@@ -90,15 +90,15 @@ Outer:
 	}
 	return &cascader{
 		txn:                txn,
-		tablesByID:         tablesByID,
-		indexPKRowFetchers: make(map[ID]map[sqlbase.IndexID]Fetcher),
-		rowDeleters:        make(map[ID]Deleter),
-		deleterRowFetchers: make(map[ID]Fetcher),
-		deletedRows:        make(map[ID]*sqlbase.RowContainer),
-		rowUpdaters:        make(map[ID]Updater),
-		updaterRowFetchers: make(map[ID]Fetcher),
-		originalRows:       make(map[ID]*sqlbase.RowContainer),
-		updatedRows:        make(map[ID]*sqlbase.RowContainer),
+		fkTables:           tablesByID,
+		indexPKRowFetchers: make(map[TableID]map[sqlbase.IndexID]Fetcher),
+		rowDeleters:        make(map[TableID]Deleter),
+		deleterRowFetchers: make(map[TableID]Fetcher),
+		deletedRows:        make(map[TableID]*sqlbase.RowContainer),
+		rowUpdaters:        make(map[TableID]Updater),
+		updaterRowFetchers: make(map[TableID]Fetcher),
+		originalRows:       make(map[TableID]*sqlbase.RowContainer),
+		updatedRows:        make(map[TableID]*sqlbase.RowContainer),
 		evalCtx:            evalCtx,
 		alloc:              alloc,
 	}, nil
@@ -109,7 +109,7 @@ Outer:
 func makeUpdateCascader(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
-	tablesByID TableLookupsByID,
+	tablesByID FkTableMetadata,
 	updateCols []sqlbase.ColumnDescriptor,
 	evalCtx *tree.EvalContext,
 	alloc *sqlbase.DatumAlloc,
@@ -144,7 +144,7 @@ Outer:
 				// and thus does not need to be checked for cascading.
 				continue
 			}
-			referencingIndex, err := referencingTable.Table.FindIndexByID(ref.Index)
+			referencingIndex, err := referencingTable.Desc.FindIndexByID(ref.Index)
 			if err != nil {
 				return nil, err
 			}
@@ -161,15 +161,15 @@ Outer:
 	}
 	return &cascader{
 		txn:                txn,
-		tablesByID:         tablesByID,
-		indexPKRowFetchers: make(map[ID]map[sqlbase.IndexID]Fetcher),
-		rowDeleters:        make(map[ID]Deleter),
-		deleterRowFetchers: make(map[ID]Fetcher),
-		deletedRows:        make(map[ID]*sqlbase.RowContainer),
-		rowUpdaters:        make(map[ID]Updater),
-		updaterRowFetchers: make(map[ID]Fetcher),
-		originalRows:       make(map[ID]*sqlbase.RowContainer),
-		updatedRows:        make(map[ID]*sqlbase.RowContainer),
+		fkTables:           tablesByID,
+		indexPKRowFetchers: make(map[TableID]map[sqlbase.IndexID]Fetcher),
+		rowDeleters:        make(map[TableID]Deleter),
+		deleterRowFetchers: make(map[TableID]Fetcher),
+		deletedRows:        make(map[TableID]*sqlbase.RowContainer),
+		rowUpdaters:        make(map[TableID]Updater),
+		updaterRowFetchers: make(map[TableID]Fetcher),
+		originalRows:       make(map[TableID]*sqlbase.RowContainer),
+		updatedRows:        make(map[TableID]*sqlbase.RowContainer),
 		evalCtx:            evalCtx,
 		alloc:              alloc,
 	}, nil
@@ -409,7 +409,7 @@ func (c *cascader) addRowDeleter(
 	rowDeleter, err := makeRowDeleterWithoutCascader(
 		c.txn,
 		table,
-		c.tablesByID,
+		c.fkTables,
 		nil, /* requestedCol */
 		CheckFKs,
 		c.alloc,
@@ -468,7 +468,7 @@ func (c *cascader) addRowUpdater(
 	rowUpdater, err := makeUpdaterWithoutCascader(
 		c.txn,
 		table,
-		c.tablesByID,
+		c.fkTables,
 		table.Columns,
 		nil, /* requestedCol */
 		UpdaterDefault,
@@ -1031,7 +1031,7 @@ func (c *cascader) cascadeAll(
 		}
 		for _, referencedIndex := range elem.table.AllNonDropIndexes() {
 			for _, ref := range referencedIndex.ReferencedBy {
-				referencingTable, ok := c.tablesByID[ref.Table]
+				referencingTable, ok := c.fkTables[ref.Table]
 				if !ok {
 					return pgerror.NewAssertionErrorf("could not find table:%d in table descriptor map", ref.Table)
 				}
@@ -1040,7 +1040,7 @@ func (c *cascader) cascadeAll(
 					// and thus does not need to be checked for cascading.
 					continue
 				}
-				referencingIndex, err := referencingTable.Table.FindIndexByID(ref.Index)
+				referencingIndex, err := referencingTable.Desc.FindIndexByID(ref.Index)
 				if err != nil {
 					return err
 				}
@@ -1050,8 +1050,8 @@ func (c *cascader) cascadeAll(
 					case sqlbase.ForeignKeyReference_CASCADE:
 						deletedRows, colIDtoRowIndex, startIndex, err := c.deleteRows(
 							ctx,
-							&referencedIndex,
-							referencingTable.Table,
+							referencedIndex,
+							referencingTable.Desc,
 							referencingIndex,
 							ref.Match,
 							elem,
@@ -1064,7 +1064,7 @@ func (c *cascader) cascadeAll(
 							// If a row was deleted, add the table to the queue.
 							if err := cascadeQ.enqueue(
 								ctx,
-								referencingTable.Table,
+								referencingTable.Desc,
 								deletedRows,
 								nil, /* updatedValues */
 								colIDtoRowIndex,
@@ -1076,8 +1076,8 @@ func (c *cascader) cascadeAll(
 					case sqlbase.ForeignKeyReference_SET_NULL, sqlbase.ForeignKeyReference_SET_DEFAULT:
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
-							&referencedIndex,
-							referencingTable.Table,
+							referencedIndex,
+							referencingTable.Desc,
 							referencingIndex,
 							ref.Match,
 							elem,
@@ -1091,7 +1091,7 @@ func (c *cascader) cascadeAll(
 							// A row was updated, so let's add it to the queue.
 							if err := cascadeQ.enqueue(
 								ctx,
-								referencingTable.Table,
+								referencingTable.Desc,
 								originalAffectedRows,
 								updatedAffectedRows,
 								colIDtoRowIndex,
@@ -1107,8 +1107,8 @@ func (c *cascader) cascadeAll(
 					case sqlbase.ForeignKeyReference_CASCADE, sqlbase.ForeignKeyReference_SET_NULL, sqlbase.ForeignKeyReference_SET_DEFAULT:
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
-							&referencedIndex,
-							referencingTable.Table,
+							referencedIndex,
+							referencingTable.Desc,
 							referencingIndex,
 							ref.Match,
 							elem,
@@ -1122,7 +1122,7 @@ func (c *cascader) cascadeAll(
 							// A row was updated, so let's add it to the queue.
 							if err := cascadeQ.enqueue(
 								ctx,
-								referencingTable.Table,
+								referencingTable.Desc,
 								originalAffectedRows,
 								updatedAffectedRows,
 								colIDtoRowIndex,
@@ -1202,7 +1202,7 @@ func (c *cascader) cascadeAll(
 				return err
 			}
 			// Now check all check constraints for the table.
-			checkHelper := c.tablesByID[tableID].CheckHelper
+			checkHelper := c.fkTables[tableID].CheckHelper
 			if err := checkHelper.LoadRow(rowUpdater.UpdateColIDtoRowIndex, updatedRows.At(0), false); err != nil {
 				return err
 			}
@@ -1243,7 +1243,7 @@ func (c *cascader) cascadeAll(
 				return err
 			}
 			// Now check all check constraints for the table.
-			checkHelper := c.tablesByID[tableID].CheckHelper
+			checkHelper := c.fkTables[tableID].CheckHelper
 			if err := checkHelper.LoadRow(rowUpdater.UpdateColIDtoRowIndex, finalRow, false); err != nil {
 				return err
 			}

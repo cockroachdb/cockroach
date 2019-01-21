@@ -126,7 +126,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 		}
 		return nil, err
 	}
-	desc := tableLookup.Table
+	desc := tableLookup.Desc
 
 	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.resolver.Txn(), desc.ParentID)
 	if err != nil {

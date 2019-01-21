@@ -44,7 +44,7 @@ type SchemaResolver interface {
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(required bool) CommonLookupFlags
 	ObjectLookupFlags(required bool, requireMutable bool) ObjectLookupFlags
-	LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableLookup, error)
+	LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableEntry, error)
 }
 
 var _ SchemaResolver = &planner{}
@@ -519,9 +519,9 @@ func (p *planner) getTableAndIndex(
 	}
 
 	// Determine which index to use.
-	var index sqlbase.IndexDescriptor
+	var index *sqlbase.IndexDescriptor
 	if tableWithIndex == nil {
-		index = tableDesc.PrimaryIndex
+		index = &tableDesc.PrimaryIndex
 	} else {
 		idx, dropped, err := tableDesc.FindIndexByName(string(tableWithIndex.Index))
 		if err != nil {
@@ -532,7 +532,7 @@ func (p *planner) getTableAndIndex(
 		}
 		index = idx
 	}
-	return tableDesc, &index, nil
+	return tableDesc, index, nil
 }
 
 // expandTableGlob expands pattern into a list of tables represented

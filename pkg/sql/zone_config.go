@@ -318,7 +318,7 @@ func resolveSubzone(
 		if err != nil {
 			return nil, "", err
 		}
-		return &index, "", nil
+		return index, "", nil
 	} else if partitionName := string(zs.Partition); partitionName != "" {
 		_, index, err := table.FindNonDropPartitionByName(partitionName)
 		if err != nil {

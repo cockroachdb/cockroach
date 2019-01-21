@@ -207,10 +207,19 @@ func (p *planner) dropIndexByName(
 			droppedViews = append(droppedViews, cascadedViews...)
 		}
 	}
+
+	// Overwriting tableDesc.Index may mess up with the idx object we collected above. Make a copy.
+	idxCopy := *idx
+	idx = &idxCopy
+
 	found := false
-	for i := range tableDesc.Indexes {
-		if tableDesc.Indexes[i].ID == idx.ID {
-			if err := tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP); err != nil {
+	for i, idxEntry := range tableDesc.Indexes {
+		if idxEntry.ID == idx.ID {
+			// the idx we picked up with FindIndexByID at the top may not
+			// contain the same field any more due to other schema changes
+			// intervening since the initial lookup. So we send the recent
+			// copy idxEntry for drop instead.
+			if err := tableDesc.AddIndexMutation(&idxEntry, sqlbase.DescriptorMutation_DROP); err != nil {
 				return err
 			}
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
