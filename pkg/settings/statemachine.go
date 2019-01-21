@@ -117,7 +117,7 @@ func (s *StateMachineSetting) Validate(
 }
 
 func (s *StateMachineSetting) set(sv *Values, finalEncodedV []byte) error {
-	if _, _, err := s.transformer(sv, finalEncodedV, nil); err != nil {
+	if _, _, err := s.transformer(sv, finalEncodedV, nil /* update */); err != nil {
 		return err
 	}
 	if bytes.Equal([]byte(s.Get(sv)), finalEncodedV) {
@@ -128,7 +128,7 @@ func (s *StateMachineSetting) set(sv *Values, finalEncodedV []byte) error {
 }
 
 func (s *StateMachineSetting) setToDefault(sv *Values) {
-	defV, _, err := s.transformer(sv, nil, nil)
+	defV, _, err := s.transformer(sv, nil /* old */, nil /* update */)
 	if err != nil {
 		panic(err)
 	}
