@@ -56,6 +56,9 @@ func MakeFkMetadata(
 	//   in "adding" state or non-public.
 	//
 	startTableEntry := TableEntry{Desc: mutatedTable}
+	// TODO(knz): the CHECK helper is always prepared here, even when
+	// there is no CASCADE work to perform. This should be moved to a
+	// different place.
 	if err := startTableEntry.addCheckHelper(ctx, analyzeExprFn); err != nil {
 		return nil, err
 	}
