@@ -840,21 +840,8 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 		log.Infof(ctx, "removing n%d which was at same address (%s) as new node %v",
 			oldNodeID, desc.Address, desc)
 		g.removeNodeDescriptorLocked(oldNodeID)
-
-		// Deleting the local copy isn't enough to remove the node from the gossip
-		// network. We also have to clear it out in the infoStore by overwriting
-		// it with an empty descriptor, which can be represented as just an empty
-		// byte array due to how protocol buffers are serialized.
-		// Calling addInfoLocked here is somewhat recursive since
-		// updateNodeAddress is typically called in response to the infoStore
-		// being updated but won't lead to deadlock because it's called
-		// asynchronously.
-		key := MakeNodeIDKey(oldNodeID)
-		var emptyProto []byte
-		if err := g.addInfoLocked(key, emptyProto, NodeDescriptorTTL); err != nil {
-			log.Errorf(ctx, "failed to empty node descriptor for n%d: %s", oldNodeID, err)
-		}
 	}
+
 	// Add new address (if it's not already there) to bootstrap info and
 	// persist if possible.
 	added := g.maybeAddBootstrapAddressLocked(desc.Address, desc.NodeID)
