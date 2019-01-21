@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// TablesNeededForFKs populates a map of FkTableMetadata for all the
+// MakeFkMetadata populates a map of FkTableMetadata for all the
 // TableDescriptors that might be needed when performing FK checking for delete
 // and/or insert operations. It uses the passed in lookup function to perform
 // the actual lookup. The AnalyzeExpr function, if provided, is used to
@@ -28,7 +28,7 @@ import (
 // and CheckPrivilegeFunction are provided and not just placeholder functions
 // as well. If an operation may include a cascading operation then the
 // CheckHelpers are required.
-func TablesNeededForFKs(
+func MakeFkMetadata(
 	ctx context.Context,
 	mutatedTable *sqlbase.ImmutableTableDescriptor,
 	startUsage FKCheckType,

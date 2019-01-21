@@ -93,9 +93,9 @@ func (t *testTables) createForeignKeyReference(
 	return nil
 }
 
-// TestTablesNeededForFKs creates an artificial set of tables to test the graph
+// TestMakeFkMetadata creates an artificial set of tables to test the graph
 // walking algorithm used in the function.
-func TestTablesNeededForFKs(t *testing.T) {
+func TestMakeFkMetadata(t *testing.T) {
 	tables := testTables{
 		nextID:       TableID(1),
 		tablesByID:   make(map[TableID]*sqlbase.ImmutableTableDescriptor),
@@ -184,7 +184,7 @@ func TestTablesNeededForFKs(t *testing.T) {
 	}
 
 	test := func(t *testing.T, usage FKCheckType, expectedIDs []TableID) {
-		tableLookups, err := TablesNeededForFKs(
+		tableLookups, err := MakeFkMetadata(
 			context.TODO(),
 			xDesc,
 			usage,
