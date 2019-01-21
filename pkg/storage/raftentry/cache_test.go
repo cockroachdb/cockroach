@@ -388,6 +388,30 @@ func TestEntryCacheEviction(t *testing.T) {
 	}
 }
 
+// TestConcurrentUpdates ensures that concurrent updates to the same do not
+// race with each other.
+func TestConcurrentUpdates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	c := NewCache(10000)
+	ents := []raftpb.Entry{newEntry(20, 35), newEntry(21, 35)}
+	var wg sync.WaitGroup
+	const N = 10000
+	wg.Add(N)
+	for i := 0; i < N; i++ {
+		go func(i int) {
+			if i%2 == 1 {
+				c.Add(1, ents)
+			} else {
+				c.Clear(1, 22)
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+	c.Clear(1, 22)
+	verifyMetrics(t, c, 0, int64(initialSize.bytes()))
+}
+
 func TestPartitionList(t *testing.T) {
 	var l partitionList
 	first := l.pushFront(1)
