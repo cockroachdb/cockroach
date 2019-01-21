@@ -46,7 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
@@ -453,7 +453,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 
 	// If the cluster hasn't yet been definitively moved past the network stats
 	// phase, ensure that we provide latencies separately for backwards compatibility.
-	if !mr.settings.Version.IsMinSupported(cluster.VersionRPCNetworkStats) {
+	if !mr.settings.Version.IsActive(cluster.VersionRPCNetworkStats) {
 		nodeStat.Latencies = make(map[roachpb.NodeID]int64)
 		for nodeID, na := range nodeStat.Activity {
 			nodeStat.Latencies[nodeID] = na.Latency

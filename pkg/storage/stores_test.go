@@ -349,8 +349,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 		t.Fatal(err)
 	} else {
 		expCV := cluster.ClusterVersion{
-			MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
-			UseVersion:     cluster.VersionByKey(cluster.VersionBase),
+			Version: cluster.VersionByKey(cluster.VersionBase),
 		}
 		if !reflect.DeepEqual(initialCV, expCV) {
 			t.Fatalf("expected %+v; got %+v", expCV, initialCV)
@@ -361,7 +360,6 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 
 	versionA := roachpb.Version{Major: 1, Minor: 0, Unstable: 1} // 1.0-1
 	versionB := roachpb.Version{Major: 1, Minor: 0, Unstable: 2} // 1.0-2
-	versionC := roachpb.Version{Major: 1, Minor: 1}              // 1.1-0
 
 	// Verify that the initial read of an empty store synthesizes v1.0-0. This
 	// is the code path that runs after starting the 1.1 binary for the first
@@ -375,8 +373,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 			t.Fatal(err)
 		} else {
 			expCV := cluster.ClusterVersion{
-				MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
-				UseVersion:     cluster.VersionByKey(cluster.VersionBase),
+				Version: cluster.VersionByKey(cluster.VersionBase),
 			}
 			if !reflect.DeepEqual(initialCV, expCV) {
 				t.Fatalf("expected %+v; got %+v", expCV, initialCV)
@@ -388,8 +385,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 	// Note that there's still only one store.
 	{
 		cv := cluster.ClusterVersion{
-			MinimumVersion: versionA,
-			UseVersion:     versionB,
+			Version: versionB,
 		}
 		if err := ls0.WriteClusterVersion(ctx, cv); err != nil {
 			t.Fatal(err)
@@ -414,8 +410,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 		ls01.AddStore(stores[1])
 
 		expCV := cluster.ClusterVersion{
-			MinimumVersion: versionA,
-			UseVersion:     cluster.VersionByKey(cluster.VersionBase),
+			Version: cluster.VersionByKey(cluster.VersionBase),
 		}
 		if cv, err := ls01.SynthesizeClusterVersion(ctx); err != nil {
 			t.Fatal(err)
@@ -435,21 +430,18 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 			}
 		}
 
-		// Write an updated UseVersion to both stores.
+		// Write an updated Version to both stores.
 		cv := cluster.ClusterVersion{
-			MinimumVersion: versionA,
-			UseVersion:     versionB,
+			Version: versionB,
 		}
 		if err := ls01.WriteClusterVersion(ctx, cv); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// Third node comes along, for now it's alone. It has a higher (but
-	// compatible) MinimumVersion, and a lower use version.
+	// Third node comes along, for now it's alone. It has a lower use version.
 	cv := cluster.ClusterVersion{
-		MinimumVersion: versionC,
-		UseVersion:     versionA,
+		Version: versionA,
 	}
 
 	{
@@ -465,11 +457,10 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 		ls012.AddStore(store)
 	}
 
-	// Reading across all stores, we expect to pick up the highest min version
-	// and the lowest useVersion both from the third store.
+	// Reading across all stores, we expect to pick up the lowest useVersion both
+	// from the third store.
 	expCV := cluster.ClusterVersion{
-		MinimumVersion: versionC,
-		UseVersion:     versionA,
+		Version: versionA,
 	}
 	if cv, err := ls012.SynthesizeClusterVersion(ctx); err != nil {
 		t.Fatal(err)
@@ -491,43 +482,29 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 
 	type testFn func(*cluster.ClusterVersion, *Stores) string
 	for name, setter := range map[string]testFn{
-		"StoreTooNewUseVersion": func(cv *cluster.ClusterVersion, ls *Stores) string {
+		"StoreTooNew": func(cv *cluster.ClusterVersion, ls *Stores) string {
 			// This is what the running node requires from its stores.
 			ls.minSupportedVersion = vOne
 			// This is what the node is running.
 			ls.serverVersion = vOneDashOne
-			// MinimumVersion is harmless, it's the "running" version.
-			cv.MinimumVersion = ls.serverVersion
-			// UseVersion is way too high for this node.
-			cv.UseVersion = roachpb.Version{Major: 9}
+			// Version is way too high for this node.
+			cv.Version = roachpb.Version{Major: 9}
 			return `cockroach version v1\.0-1 is incompatible with data in store <no-attributes>=<in-mem>; use version v9\.0 or later`
 		},
-		"StoreTooNewMinVersion": func(cv *cluster.ClusterVersion, ls *Stores) string {
-			ls.minSupportedVersion = vOne
-			ls.serverVersion = vOneDashOne
-			// These two are switched compared to previous test case to make
-			// sure it doesn't change the outcome.
-			cv.UseVersion = ls.serverVersion
-			cv.MinimumVersion = roachpb.Version{Major: 9}
-			return `cockroach version v1\.0-1 is incompatible with data in store <no-attributes>=<in-mem>; use version v9\.0 or later`
-		},
-		"StoreTooOldUseVersion": func(cv *cluster.ClusterVersion, ls *Stores) string {
+		"StoreTooOldVersion": func(cv *cluster.ClusterVersion, ls *Stores) string {
 			// This is what the running node requires from its stores.
 			ls.minSupportedVersion = roachpb.Version{Major: 5}
 			// This is what the node is running.
 			ls.serverVersion = roachpb.Version{Major: 9}
-			// MinimumVersion is compatible in this test case.
-			cv.MinimumVersion = ls.serverVersion
-			// UseVersion is way too low.
-			cv.UseVersion = roachpb.Version{Major: 4}
+			// Version is way too low.
+			cv.Version = roachpb.Version{Major: 4}
 			return `store <no-attributes>=<in-mem>, last used with cockroach version v4\.0, is too old for running version v9\.0 \(which requires data from v5\.0 or later\)`
 		},
 		"StoreTooOldMinVersion": func(cv *cluster.ClusterVersion, ls *Stores) string {
 			// Like the previous test case, but this time cv.MinimumVersion is the culprit.
 			ls.minSupportedVersion = roachpb.Version{Major: 5}
 			ls.serverVersion = roachpb.Version{Major: 9}
-			cv.MinimumVersion = ls.serverVersion
-			cv.UseVersion = roachpb.Version{Major: 4}
+			cv.Version = roachpb.Version{Major: 4}
 			return `store <no-attributes>=<in-mem>, last used with cockroach version v4\.0, is too old for running version v9\.0 \(which requires data from v5\.0 or later\)`
 		},
 	} {

@@ -2152,10 +2152,10 @@ func (s *Store) WriteInitialData(
 
 		lease := roachpb.BootstrapLease()
 		_, err := stateloader.WriteInitialState(
-			ctx, s.cfg.Settings, batch,
+			ctx, batch,
 			enginepb.MVCCStats{},
 			*desc,
-			lease, hlc.Timestamp{}, hlc.Timestamp{})
+			lease, hlc.Timestamp{}, hlc.Timestamp{}, bootstrapVersion)
 		if err != nil {
 			return err
 		}

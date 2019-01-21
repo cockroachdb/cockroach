@@ -1245,7 +1245,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	}
 
 	if st != nil && st.Version.IsInitialized() {
-		if !st.Version.IsMinSupported(cluster.VersionBitArrayColumns) {
+		if !st.Version.IsActive(cluster.VersionBitArrayColumns) {
 			for _, def := range desc.Columns {
 				if def.Type.SemanticType == ColumnType_BIT {
 					return fmt.Errorf("cluster version does not support BIT (required: %s)",
