@@ -17,6 +17,7 @@ package exec
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -89,6 +90,15 @@ type Factory interface {
 	// the given input node. The projection can contain new expressions.
 	ConstructRender(
 		n Node, exprs tree.TypedExprs, colNames []string, reqOrdering OutputOrdering,
+	) (Node, error)
+
+	// ConstructApplyJoin returns a node that runs an apply join
+	ConstructApplyJoin(
+		joinType sqlbase.JoinType,
+		left Node,
+		memo *memo.Memo,
+		right memo.RelExpr,
+		onCond tree.TypedExpr,
 	) (Node, error)
 
 	// ConstructHashJoin returns a node that runs a hash-join between the results

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -288,6 +289,27 @@ func (ef *execFactory) ConstructHashJoin(
 	)
 
 	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
+}
+
+// ConstructApplyJoin is part of the exec.Factory interface.
+func (ef *execFactory) ConstructApplyJoin(
+	joinType sqlbase.JoinType,
+	left exec.Node,
+	memo *memo.Memo,
+	right memo.RelExpr,
+	onCond tree.TypedExpr,
+) (exec.Node, error) {
+	leftSrc := asDataSource(left)
+	// TODO(jordan): generate a DataSourceInfo from the right's memo.RelExpr.
+	rightSrcInfo := sqlbase.DataSourceInfo{}
+	p := ef.planner
+	pred, _, err := p.makeJoinPredicate(
+		context.TODO(), leftSrc.info, &rightSrcInfo, joinType, nil, /* cond */
+	)
+	if err != nil {
+		return nil, err
+	}
+	return newApplyJoinNode(joinType, asDataSource(left), right, pred, memo)
 }
 
 // ConstructMergeJoin is part of the exec.Factory interface.

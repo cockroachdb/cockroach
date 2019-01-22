@@ -233,7 +233,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 			break
 		}
 		if opt.IsJoinApplyOp(e) {
-			return execPlan{}, b.decorrelationError()
+			ep, err = b.buildApplyJoin(e)
+			break
 		}
 	}
 	if err != nil {
@@ -471,6 +472,61 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 	}
 	return res, nil
 }
+func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
+	switch join.Op() {
+	case opt.InnerJoinApplyOp, opt.LeftJoinApplyOp:
+	default:
+		return execPlan{}, fmt.Errorf("couldn't execute correlated subquery with op %s", join.Op())
+	}
+	joinType := joinOpToJoinType(join.Op())
+	leftExpr := join.Child(0).(memo.RelExpr)
+	rightExpr := join.Child(1).(memo.RelExpr)
+	filters := join.Child(2).(*memo.FiltersExpr)
+
+	left, err := b.buildRelational(leftExpr)
+	if err != nil {
+		return execPlan{}, nil
+	}
+
+	// TODO(jordan): how to get outputCols from non-built right side memo.RelExpr?
+	var rightOutputCols opt.ColMap
+	allCols := joinOutputMap(left.outputCols, rightOutputCols)
+
+	ctx := buildScalarCtx{
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivarMap: allCols,
+	}
+
+	var onExpr tree.TypedExpr
+	if len(*filters) != 0 {
+		onExpr, err = b.buildScalar(&ctx, filters)
+		if err != nil {
+			return execPlan{}, nil
+		}
+	}
+
+	var outputCols opt.ColMap
+	if joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin {
+		// For semi and anti join, only the left columns are output.
+		outputCols = left.outputCols
+	} else {
+		outputCols = allCols
+	}
+
+	ep := execPlan{outputCols: outputCols}
+
+	ep.root, err = b.factory.ConstructApplyJoin(
+		joinType,
+		left.root,
+		b.mem,
+		rightExpr,
+		onExpr,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return ep, nil
+}
 
 func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	joinType := joinOpToJoinType(join.Op())
@@ -592,22 +648,22 @@ func joinOutputMap(left, right opt.ColMap) opt.ColMap {
 
 func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
 	switch op {
-	case opt.InnerJoinOp:
+	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		return sqlbase.InnerJoin
 
-	case opt.LeftJoinOp:
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		return sqlbase.LeftOuterJoin
 
-	case opt.RightJoinOp:
+	case opt.RightJoinOp, opt.RightJoinApplyOp:
 		return sqlbase.RightOuterJoin
 
-	case opt.FullJoinOp:
+	case opt.FullJoinOp, opt.FullJoinApplyOp:
 		return sqlbase.FullOuterJoin
 
-	case opt.SemiJoinOp:
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
 		return sqlbase.LeftSemiJoin
 
-	case opt.AntiJoinOp:
+	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		return sqlbase.LeftAntiJoin
 
 	default:
