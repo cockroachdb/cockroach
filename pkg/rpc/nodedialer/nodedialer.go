@@ -102,7 +102,7 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 		breaker.Fail(err)
 		return nil, err
 	}
-	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	conn, err := n.rpcContext.GRPCDialNode(addr.String(), nodeID).Connect(ctx)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to grpc dial n%d at %v", nodeID, addr)
 		breaker.Fail(err)
@@ -145,7 +145,7 @@ func (n *Dialer) DialInternalClient(
 	breaker := n.getBreaker(nodeID)
 
 	log.VEventf(ctx, 2, "sending request to %s", addr)
-	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	conn, err := n.rpcContext.GRPCDialNode(addr.String(), nodeID).Connect(ctx)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
 		breaker.Fail(err)
@@ -189,7 +189,7 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID) error {
 		// The local client is always considered healthy.
 		return nil
 	}
-	conn := n.rpcContext.GRPCDial(addr.String())
+	conn := n.rpcContext.GRPCDialNode(addr.String(), nodeID)
 	return conn.Health()
 }
 
