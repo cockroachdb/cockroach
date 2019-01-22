@@ -885,8 +885,8 @@ group-by
 opt expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT i FROM a GROUP BY i) a WHERE i=1
 ----
-distinct-on
- ├── columns: i:2(int)
+limit
+ ├── columns: i:2(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2)
@@ -897,9 +897,7 @@ distinct-on
  │    │    └── columns: i:2(int)
  │    └── filters
  │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
- └── aggregations
-      └── const-agg [type=int, outer=(2)]
-           └── variable: i [type=int]
+ └── const: 1 [type=int]
 
 # Push down only conditions that do not depend on aggregations.
 opt expect=PushSelectIntoGroupBy
