@@ -722,7 +722,9 @@ func (ctx *Context) runHeartbeat(
 		Addr:           ctx.Addr,
 		MaxOffsetNanos: maxOffset.Nanoseconds(),
 		ClusterID:      &clusterID,
-		ServerVersion:  ctx.version.ServerVersion,
+		// !!! this needs to come from a server, not directly from the global
+		ServerVersion: cluster.BinaryServerVersion,
+		// !!! ServerVersion:  ctx.version.ServerVersion,
 	}
 	heartbeatClient := NewHeartbeatClient(conn.grpcConn)
 

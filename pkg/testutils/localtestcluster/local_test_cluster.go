@@ -109,6 +109,11 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
 
+	cfg.Settings.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	nodeID := roachpb.NodeID(1)
 	nodeDesc := &roachpb.NodeDescriptor{
 		NodeID:  nodeID,
@@ -124,7 +129,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20)
 	ltc.Stopper.AddCloser(ltc.Eng)
 
-	ltc.Stores = storage.NewStores(ambient, ltc.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	// !!! ltc.Stores = storage.NewStores(ambient, ltc.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	ltc.Stores = storage.NewStores(ambient, ltc.Clock, cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 
 	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper, ltc.Gossip)
 	if ltc.DBContext == nil {
@@ -174,7 +180,10 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	cfg.TimestampCachePageSize = tscache.TestSklPageSize
 	ctx := context.TODO()
 
-	if err := storage.Bootstrap(ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, cfg.Settings.Version.BootstrapVersion()); err != nil {
+	if err := storage.Bootstrap(
+		ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+	); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
@@ -194,7 +203,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	if err := ltc.Store.WriteInitialData(
 		ctx,
 		initialValues,
-		cfg.Settings.Version.ServerVersion,
+		cluster.BinaryServerVersion,
 		1, /* numStores */
 		splits,
 	); err != nil {

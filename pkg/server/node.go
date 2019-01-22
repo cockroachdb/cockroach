@@ -222,9 +222,14 @@ func bootstrapCluster(
 	tr := cfg.Settings.Tracer
 	defer tr.Close()
 	cfg.AmbientCtx.Tracer = tr
+
+	// !!! these should come from a config
+	minVer := cluster.BinaryMinimumSupportedVersion
+	serverVer := cluster.BinaryServerVersion
+
 	// Create a KV DB with a sender that routes all requests to the first range
 	// and first local store.
-	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock, minVer, serverVer)
 	localSender := client.Wrap(stores, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
 		ba.RangeID = 1
 		ba.Replica.StoreID = 1
@@ -244,7 +249,7 @@ func bootstrapCluster(
 	cfg.DB = client.NewDB(cfg.AmbientCtx, tcsFactory, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(cfg.Settings)
 	cfg.ClosedTimestamp = container.NoopContainer()
-	if err := cfg.Settings.InitializeVersion(bootstrapVersion); err != nil {
+	if err := cfg.Settings.InitializeVersion(bootstrapVersion, minVer, serverVer); err != nil {
 		return uuid.UUID{}, errors.Wrap(err, "while initializing cluster version")
 	}
 	for i, eng := range engines {
@@ -307,11 +312,14 @@ func NewNode(
 		eventLogger = sql.MakeEventLogger(execCfg)
 	}
 	n := &Node{
-		storeCfg:    cfg,
-		stopper:     stopper,
-		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:      storage.NewStores(cfg.AmbientCtx, cfg.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion),
+		storeCfg: cfg,
+		stopper:  stopper,
+		recorder: recorder,
+		metrics:  makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores: storage.NewStores(
+			cfg.AmbientCtx, cfg.Clock,
+			// !!! these should come from a config
+			cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
@@ -381,7 +389,11 @@ func (n *Node) start(
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	if err := n.storeCfg.Settings.InitializeVersion(cv); err != nil {
+	if err := n.storeCfg.Settings.InitializeVersion(
+		cv,
+		// !!! These should come from a config
+		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
+	); err != nil {
 		return errors.Wrap(err, "while initializing cluster version")
 	}
 
@@ -421,9 +433,11 @@ func (n *Node) start(
 		Attrs:           attrs,
 		Locality:        locality,
 		LocalityAddress: localityAddress,
-		ServerVersion:   n.storeCfg.Settings.Version.ServerVersion,
-		BuildTag:        build.GetInfo().Tag,
-		StartedAt:       n.startedAt,
+		// !!! ServerVersion:   n.storeCfg.Settings.Version.ServerVersion,
+		// !!! this should come from a config
+		ServerVersion: cluster.BinaryServerVersion,
+		BuildTag:      build.GetInfo().Tag,
+		StartedAt:     n.startedAt,
 	}
 	// Invoke any passed in nodeDescriptorCallback as soon as it's available, to
 	// ensure that other components (currently the DistSQLPlanner) are initialized

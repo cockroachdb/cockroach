@@ -182,6 +182,14 @@ func (tc *testContext) Start(t testing.TB, stopper *stop.Stopper) {
 // StartWithStoreConfig initializes the test context with a single
 // range covering the entire keyspace.
 func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper, cfg StoreConfig) {
+	tc.StartWithStoreConfigAndVersion(t, stopper, cfg, cluster.BinaryServerVersion)
+}
+
+// StartWithStoreConfigAndVersion is like StartWithStoreConfig but additionally
+// allows control over the bootstrap version.
+func (tc *testContext) StartWithStoreConfigAndVersion(
+	t testing.TB, stopper *stop.Stopper, cfg StoreConfig, bootstrapVersion roachpb.Version,
+) {
 	tc.TB = t
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
@@ -199,10 +207,10 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		tc.transport = NewDummyRaftTransport(cfg.Settings)
 	}
 	ctx := context.TODO()
-	bootstrapVersion := cfg.Settings.Version.BootstrapVersion()
-	if ver := cfg.TestingKnobs.BootstrapVersion; ver != nil {
-		bootstrapVersion = *ver
-	}
+	// !!! bootstrapVersion := cfg.Settings.Version.BootstrapVersion()
+	// if ver := cfg.TestingKnobs.BootstrapVersion; ver != nil {
+	//   bootstrapVersion = *ver
+	// }
 
 	if tc.store == nil {
 		cfg.Gossip = tc.gossip
@@ -214,13 +222,19 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		factory := &testSenderFactory{}
 		cfg.DB = client.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
 
+		cv := cluster.ClusterVersion{Version: bootstrapVersion}
 		if err := Bootstrap(ctx, tc.engine, roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
-		}, bootstrapVersion); err != nil {
+		},
+			cv); err != nil {
 			t.Fatal(err)
 		}
+		cfg.Settings.InitializeVersion(
+			cv,
+			cluster.BinaryMinimumSupportedVersion,
+			cluster.BinaryServerVersion)
 		tc.store = NewStore(cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
 		// Now that we have our actual store, monkey patch the factory used in cfg.DB.
 		factory.setStore(tc.store)
@@ -231,7 +245,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 
 		if tc.repl == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
 			if err := tc.store.WriteInitialData(
-				ctx, nil /* initialValues */, bootstrapVersion.Version,
+				ctx, nil /* initialValues */, bootstrapVersion,
 				1 /* numStores */, nil, /* splits */
 			); err != nil {
 				t.Fatal(err)
@@ -256,7 +270,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 				roachpb.BootstrapLease(),
 				hlc.Timestamp{},
 				hlc.Timestamp{},
-				bootstrapVersion.Version,
+				bootstrapVersion,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -9768,11 +9782,12 @@ func TestReplicaBootstrapRangeAppliedStateKey(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 
-			cfg := TestStoreConfig(nil)
-			cfg.Settings = cluster.MakeTestingClusterSettingsWithVersion(
-				c.version /* minVersion */, c.version /* serverVersion */)
+			cfg := TestStoreConfig(nil /* clock */)
+			// !!!
+			// cfg.Settings = cluster.MakeTestingClusterSettingsWithVersion(
+			//   c.version /* serverVersion */)
 			tc := testContext{}
-			tc.StartWithStoreConfig(t, stopper, cfg)
+			tc.StartWithStoreConfigAndVersion(t, stopper, cfg, c.version)
 			repl := tc.repl
 
 			// Check that that UsingAppliedStateKey flag in ReplicaState is set

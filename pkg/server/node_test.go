@@ -165,8 +165,10 @@ func createAndStartTestNode(
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		ctx, engines, cfg.Settings.Version.MinSupportedVersion,
-		cfg.Settings.Version.ServerVersion, node.clusterID)
+		ctx, engines,
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion,
+		node.clusterID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,9 +208,11 @@ func TestBootstrapCluster(t *testing.T) {
 	defer e.Close()
 	st := cluster.MakeTestingClusterSettings()
 	if _, err := bootstrapCluster(
-		context.TODO(), storage.StoreConfig{
-			Settings: st,
-		}, []engine.Engine{e}, st.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(),
+		storage.StoreConfig{Settings: st},
+		[]engine.Engine{e},
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +268,8 @@ func TestBootstrapNewStore(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		ctx, cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(),
+		ctx, cfg, []engine.Engine{e},
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
@@ -336,7 +341,7 @@ func TestNodeJoin(t *testing.T) {
 	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
 		ctx, cfg, []engine.Engine{e},
-		cfg.Settings.Version.BootstrapVersion(),
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
@@ -408,7 +413,9 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), cfg, []engine.Engine{e},
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -427,8 +434,10 @@ func TestCorruptedClusterID(t *testing.T) {
 	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	defer stopper.Stop(context.TODO())
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion,
-		cfg.Settings.Version.ServerVersion, node.clusterID)
+		context.TODO(), engines,
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion,
+		node.clusterID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -756,7 +765,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		cfg := bootstrapNodeConfig()
 		if _, err := bootstrapCluster(
 			ctx, cfg, []engine.Engine{e},
-			cfg.Settings.Version.BootstrapVersion(),
+			cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
 			kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {
 			t.Fatal(err)
