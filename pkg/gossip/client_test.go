@@ -66,6 +66,7 @@ func startGossipAtAddr(
 	registry *metric.Registry,
 ) *Gossip {
 	rpcContext := newInsecureRPCContext(stopper)
+	rpcContext.NodeID.Set(context.TODO(), nodeID)
 	server := rpc.NewServer(rpcContext)
 	g := NewTest(nodeID, rpcContext, server, stopper, registry)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
