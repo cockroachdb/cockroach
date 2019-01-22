@@ -66,7 +66,7 @@ func TestCloudStorageSink(t *testing.T) {
 	settings.ExternalIODir = dir
 	opts := map[string]string{
 		optFormat:   string(optFormatJSON),
-		optEnvelope: string(optEnvelopeValueOnly),
+		optEnvelope: string(optEnvelopeWrapped),
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
 	e := &jsonEncoder{}
@@ -348,13 +348,13 @@ func TestCloudStorage(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-	foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved, envelope=value_only`)
+	foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved, envelope=wrapped`)
 
 	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'b')`)
 
 	assertPayloads(t, foo, []string{
-		`foo: ->{"a": 1}`,
-		`foo: ->{"a": 2, "b": "b"}`,
+		`foo: ->{"after": {"a": 1}}`,
+		`foo: ->{"after": {"a": 2, "b": "b"}}`,
 	})
 }
