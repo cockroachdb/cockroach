@@ -278,7 +278,7 @@ ORDER BY schemaname, tablename
 sort
  ├── columns: oid:1(oid) schemaname:29(string) tablename:2(string) relacl:26(string[]) tableowner:133(string) description:134(string) relkind:17(string) cluster:92(string) hasoids:20(bool) hasindexes:13(bool) hasrules:22(bool) tablespace:33(string) param:27(string[]) hastriggers:23(bool) unlogged:15(string) ftoptions:120(string[]) srvname:122(string) reltuples:10(float) inhtable:135(bool) inhschemaname:69(string) inhtablename:42(string)
  ├── fd: ()-->(29), (1)-->(2,10,13,15,17,20,22,23,26,27,133,134), (2)-->(1,10,13,15,17,20,22,23,26,27,133,134)
- ├── ordering: +2 opt(29) [provided: +2]
+ ├── ordering: +2 opt(29) [actual: +2]
  └── project
       ├── columns: tableowner:133(string) description:134(string) inhtable:135(bool) c.oid:1(oid) c.relname:2(string) c.reltuples:10(float) c.relhasindex:13(bool) c.relpersistence:15(string) c.relkind:17(string) c.relhasoids:20(bool) c.relhasrules:22(bool) c.relhastriggers:23(bool) c.relacl:26(string[]) c.reloptions:27(string[]) n.nspname:29(string) spcname:33(string) c2.relname:42(string) n2.nspname:69(string) ci.relname:92(string) ftoptions:120(string[]) srvname:122(string)
       ├── fd: ()-->(29), (1)-->(2,10,13,15,17,20,22,23,26,27,133,134), (2)-->(1,10,13,15,17,20,22,23,26,27,133,134)

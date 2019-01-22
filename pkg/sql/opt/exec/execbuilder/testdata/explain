@@ -662,7 +662,7 @@ sort
  ├── stats: [rows=9.9, distinct(1)=1, null(1)=0]
  ├── cost: 51.3728708
  ├── fd: ()-->(1)
- ├── ordering: +2 opt(1) [provided: +2]
+ ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
  └── index-join tc
       ├── columns: a:1 b:2
@@ -686,7 +686,7 @@ sort
  ├── stats: [rows=9.9, distinct(1)=1, null(1)=0]
  ├── cost: 51.3728708
  ├── fd: ()-->(1)
- ├── ordering: +2 opt(1) [provided: +2]
+ ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
  └── index-join tc
       ├── columns: a:1(int!null) b:2(int)

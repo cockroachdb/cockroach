@@ -585,7 +585,7 @@ limit
  ├── sort
  │    ├── columns: b:2(int!null) c:3(int!null)
  │    ├── fd: ()-->(2)
- │    ├── ordering: +3 opt(2) [provided: +3]
+ │    ├── ordering: +3 opt(2) [actual: +3]
  │    └── select
  │         ├── columns: b:2(int!null) c:3(int!null)
  │         ├── fd: ()-->(2)
