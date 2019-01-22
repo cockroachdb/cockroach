@@ -15,6 +15,8 @@
 package distsqlrun
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -62,6 +64,7 @@ func (c *columnarizer) Init() {
 	for i := range c.buffered {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(typs))
 	}
+	c.input.Start(context.TODO())
 }
 
 func (c *columnarizer) Next() exec.ColBatch {
@@ -71,7 +74,9 @@ func (c *columnarizer) Next() exec.ColBatch {
 	for ; nRows < exec.ColBatchSize; nRows++ {
 		row, meta := c.input.Next()
 		if meta != nil {
-			panic("TODO(jordan): columnarizer needs to forward metadata.")
+			// TODO(asubiotto): Forward metadata.
+			nRows--
+			continue
 		}
 		if row == nil {
 			break
