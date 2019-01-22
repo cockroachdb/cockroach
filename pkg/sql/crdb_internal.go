@@ -1950,7 +1950,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// ATTENTION: This contents of this table should only access gossip data
+		// ATTENTION: The contents of this table should only access gossip data
 		// which is highly available. DO NOT CALL functions which require the
 		// cluster to be healthy, such as StatusServer.Nodes().
 
