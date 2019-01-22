@@ -108,7 +108,7 @@ func TestServer(t *testing.T) {
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata: %v", metas)
 	}
-	str := rows.String(twoIntCols)
+	str := rows.String(sqlbase.TwoIntCols)
 	expected := "[[1 10] [3 30]]"
 	if str != expected {
 		t.Errorf("invalid results: %s, expected %s'", str, expected)

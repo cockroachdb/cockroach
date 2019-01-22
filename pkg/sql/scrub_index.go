@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -57,7 +58,7 @@ type indexCheckOperation struct {
 type indexCheckRun struct {
 	started bool
 	// Intermediate values.
-	rows     *sqlbase.RowContainer
+	rows     *rowcontainer.RowContainer
 	rowIndex int
 }
 

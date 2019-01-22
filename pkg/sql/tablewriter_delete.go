@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -57,7 +58,7 @@ func (td *tableDeleter) flushAndStartNewBatch(ctx context.Context) error {
 // finalize is part of the tableWriter interface.
 func (td *tableDeleter) finalize(
 	ctx context.Context, autoCommit autoCommitOpt, _ bool,
-) (*sqlbase.RowContainer, error) {
+) (*rowcontainer.RowContainer, error) {
 	return nil, td.tableWriterBase.finalize(ctx, autoCommit, td.rd.Helper.TableDesc)
 }
 

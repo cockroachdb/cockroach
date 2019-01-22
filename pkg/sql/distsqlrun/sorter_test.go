@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -38,7 +39,7 @@ func TestSorter(t *testing.T) {
 
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = intEncDatum(i)
+		v[i] = sqlbase.IntEncDatum(i)
 	}
 
 	asc := encoding.Ascending
@@ -63,7 +64,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
-			types: threeIntCols,
+			types: sqlbase.ThreeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -94,7 +95,7 @@ func TestSorter(t *testing.T) {
 					}),
 			},
 			post:  distsqlpb.PostProcessSpec{Limit: 4},
-			types: threeIntCols,
+			types: sqlbase.ThreeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[3], v[3], v[0]},
 				{v[3], v[4], v[1]},
@@ -122,7 +123,7 @@ func TestSorter(t *testing.T) {
 					}),
 			},
 			post:  distsqlpb.PostProcessSpec{Offset: 2, Limit: 2},
-			types: threeIntCols,
+			types: sqlbase.ThreeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[3], v[3], v[0]},
 				{v[3], v[4], v[1]},
@@ -148,7 +149,7 @@ func TestSorter(t *testing.T) {
 					}),
 			},
 			post:  distsqlpb.PostProcessSpec{Filter: distsqlpb.Expression{Expr: "@1 + @2 < 7"}},
-			types: threeIntCols,
+			types: sqlbase.ThreeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[3], v[3], v[0]},
 				{v[3], v[4], v[1]},
@@ -176,7 +177,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
-			types: threeIntCols,
+			types: sqlbase.ThreeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[0], v[1], v[2]},
 				{v[0], v[1], v[0]},
@@ -213,7 +214,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 3, Direction: asc},
 					}),
 			},
-			types: []sqlbase.ColumnType{intType, intType, intType, intType},
+			types: []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.IntType, sqlbase.IntType},
 			input: sqlbase.EncDatumRows{
 				{v[1], v[1], v[2], v[5]},
 				{v[0], v[1], v[2], v[4]},
@@ -245,7 +246,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 3, Direction: asc},
 					}),
 			},
-			types: []sqlbase.ColumnType{intType, intType, intType, intType},
+			types: []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.IntType, sqlbase.IntType},
 			input: sqlbase.EncDatumRows{
 				{v[1], v[1], v[2], v[2]},
 				{v[0], v[1], v[2], v[3]},
@@ -352,14 +353,14 @@ func TestSorter(t *testing.T) {
 								expStr, retStr)
 						}
 
-						// Check whether the diskBackedRowContainer spilled to disk.
+						// Check whether the DiskBackedRowContainer spilled to disk.
 						spilled := s.(rowsAccessor).getRows().Spilled()
 						if memLimit.expSpill != spilled {
 							t.Errorf("expected spill to disk=%t, found %t", memLimit.expSpill, spilled)
 						}
 						if spilled {
 							if scp, ok := s.(*sortChunksProcessor); ok {
-								if scp.rows.(*diskBackedRowContainer).UsingDisk() {
+								if scp.rows.(*rowcontainer.DiskBackedRowContainer).UsingDisk() {
 									t.Errorf("expected chunks processor to reset to use memory")
 								}
 							}
@@ -398,7 +399,7 @@ func BenchmarkSortAll(b *testing.B) {
 
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			input := NewRepeatableRowSource(twoIntCols, makeRandIntRows(rng, numRows, numCols))
+			input := NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeRandIntRows(rng, numRows, numCols))
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -437,7 +438,7 @@ func BenchmarkSortLimit(b *testing.B) {
 
 	const numRows = 1 << 16
 	b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-		input := NewRepeatableRowSource(twoIntCols, makeRandIntRows(rng, numRows, numCols))
+		input := NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeRandIntRows(rng, numRows, numCols))
 		for _, limit := range []uint64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 			post := distsqlpb.PostProcessSpec{Limit: limit}
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
@@ -486,11 +487,11 @@ func BenchmarkSortChunks(b *testing.B) {
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		for chunkSize := 1; chunkSize <= numRows; chunkSize *= 4 {
 			b.Run(fmt.Sprintf("rows=%d,ChunkSize=%d", numRows, chunkSize), func(b *testing.B) {
-				rows := makeRandIntRows(rng, numRows, numCols)
+				rows := sqlbase.MakeRandIntRows(rng, numRows, numCols)
 				for i, row := range rows {
-					row[0] = intEncDatum(i / chunkSize)
+					row[0] = sqlbase.IntEncDatum(i / chunkSize)
 				}
-				input := NewRepeatableRowSource(twoIntCols, rows)
+				input := NewRepeatableRowSource(sqlbase.TwoIntCols, rows)
 				b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {

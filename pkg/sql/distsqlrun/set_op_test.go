@@ -83,7 +83,7 @@ func intersectAllTestCases() []setOpTestCase {
 			// Check that INTERSECT ALL only returns rows that are in both the left
 			// and right side.
 			setOpType:   sqlbase.IntersectAllJoin,
-			columnTypes: twoIntCols,
+			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -111,7 +111,7 @@ func intersectAllTestCases() []setOpTestCase {
 			// Check that INTERSECT ALL returns the correct number of duplicates when
 			// the left side contains more duplicates of a row than the right side.
 			setOpType:   sqlbase.IntersectAllJoin,
-			columnTypes: twoIntCols,
+			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -140,7 +140,7 @@ func intersectAllTestCases() []setOpTestCase {
 			// Check that INTERSECT ALL returns the correct number of duplicates when
 			// the right side contains more duplicates of a row than the left side.
 			setOpType:   sqlbase.IntersectAllJoin,
-			columnTypes: twoIntCols,
+			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -181,7 +181,7 @@ func exceptAllTestCases() []setOpTestCase {
 			// Check that EXCEPT ALL only returns rows that are on the left side
 			// but not the right side.
 			setOpType:   sqlbase.ExceptAllJoin,
-			columnTypes: twoIntCols,
+			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -205,7 +205,7 @@ func exceptAllTestCases() []setOpTestCase {
 			// Check that EXCEPT ALL returns the correct number of duplicates when
 			// the left side contains more duplicates of a row than the right side.
 			setOpType:   sqlbase.ExceptAllJoin,
-			columnTypes: twoIntCols,
+			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -231,7 +231,7 @@ func exceptAllTestCases() []setOpTestCase {
 			// Check that EXCEPT ALL returns the correct number of duplicates when
 			// the right side contains more duplicates of a row than the left side.
 			setOpType:   sqlbase.ExceptAllJoin,
-			columnTypes: twoIntCols,
+			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},

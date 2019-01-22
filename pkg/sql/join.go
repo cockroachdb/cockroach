@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -133,7 +134,7 @@ func (p *planner) makeJoinNode(
 	}
 
 	n.run.buffer = &RowBuffer{
-		RowContainer: sqlbase.NewRowContainer(
+		RowContainer: rowcontainer.NewRowContainer(
 			p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
 		),
 	}
@@ -141,7 +142,7 @@ func (p *planner) makeJoinNode(
 	n.run.bucketsMemAcc = p.EvalContext().Mon.MakeBoundAccount()
 	n.run.buckets = buckets{
 		buckets: make(map[string]*bucket),
-		rowContainer: sqlbase.NewRowContainer(
+		rowContainer: rowcontainer.NewRowContainer(
 			p.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(planColumns(n.right.plan)),
 			0,
@@ -693,7 +694,7 @@ func (b *bucket) AddRow(row tree.Datums) {
 
 type buckets struct {
 	buckets      map[string]*bucket
-	rowContainer *sqlbase.RowContainer
+	rowContainer *rowcontainer.RowContainer
 }
 
 func (b *buckets) Buckets() map[string]*bucket {
@@ -712,7 +713,7 @@ func (b *buckets) AddRow(
 	if err != nil {
 		return err
 	}
-	if err := acc.Grow(ctx, sqlbase.SizeOfDatums); err != nil {
+	if err := acc.Grow(ctx, rowcontainer.SizeOfDatums); err != nil {
 		return err
 	}
 	bk.AddRow(rowCopy)

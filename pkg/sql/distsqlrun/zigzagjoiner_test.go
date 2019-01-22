@@ -41,7 +41,7 @@ type zigzagJoinerTestCase struct {
 func intCols(numCols int) []sqlbase.ColumnType {
 	cols := make([]sqlbase.ColumnType, numCols)
 	for i := range cols {
-		cols[i] = intType
+		cols[i] = sqlbase.IntType
 	}
 	return cols
 }
@@ -567,7 +567,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
-	encRow[0] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(1))
+	encRow[0] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(1))
 
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.

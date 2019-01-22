@@ -110,7 +110,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := NewRowBuffer(threeIntCols, srcRows, RowBufferArgs{})
+			rowBuf := NewRowBuffer(sqlbase.ThreeIntCols, srcRows, RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -131,8 +131,8 @@ func TestOrderedSync(t *testing.T) {
 			}
 			retRows = append(retRows, row)
 		}
-		expStr := c.expected.String(threeIntCols)
-		retStr := retRows.String(threeIntCols)
+		expStr := c.expected.String(sqlbase.ThreeIntCols)
+		retStr := retRows.String(sqlbase.ThreeIntCols)
 		if expStr != retStr {
 			t.Errorf("invalid results for case %d; expected:\n   %s\ngot:\n   %s",
 				testIdx, expStr, retStr)
@@ -177,7 +177,7 @@ func TestUnorderedSync(t *testing.T) {
 		for _, row := range retRows {
 			if int(tree.MustBeDInt(row[0].Datum)) == i {
 				if int(tree.MustBeDInt(row[1].Datum)) != j {
-					t.Errorf("Expected [%d %d], got %s", i, j, row.String(twoIntCols))
+					t.Errorf("Expected [%d %d], got %s", i, j, row.String(sqlbase.TwoIntCols))
 				}
 				j++
 			}

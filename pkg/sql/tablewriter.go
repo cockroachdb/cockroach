@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -69,7 +70,7 @@ type tableWriter interface {
 	// which it was operating once all writes are performed.
 	finalize(
 		ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
-	) (*sqlbase.RowContainer, error)
+	) (*rowcontainer.RowContainer, error)
 
 	// tableDesc returns the TableDescriptor for the table that the tableWriter
 	// will modify.

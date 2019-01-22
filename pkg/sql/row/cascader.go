@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -37,15 +38,15 @@ type cascader struct {
 	indexPKRowFetchers map[TableID]map[sqlbase.IndexID]Fetcher // PK RowFetchers by Table ID and Index ID
 
 	// Row Deleters
-	rowDeleters        map[TableID]Deleter               // RowDeleters by Table ID
-	deleterRowFetchers map[TableID]Fetcher               // RowFetchers for rowDeleters by Table ID
-	deletedRows        map[TableID]*sqlbase.RowContainer // Rows that have been deleted by Table ID
+	rowDeleters        map[TableID]Deleter                    // RowDeleters by Table ID
+	deleterRowFetchers map[TableID]Fetcher                    // RowFetchers for rowDeleters by Table ID
+	deletedRows        map[TableID]*rowcontainer.RowContainer // Rows that have been deleted by Table ID
 
 	// Row Updaters
-	rowUpdaters        map[TableID]Updater               // RowUpdaters by Table ID
-	updaterRowFetchers map[TableID]Fetcher               // RowFetchers for rowUpdaters by Table ID
-	originalRows       map[TableID]*sqlbase.RowContainer // Original values for rows that have been updated by Table ID
-	updatedRows        map[TableID]*sqlbase.RowContainer // New values for rows that have been updated by Table ID
+	rowUpdaters        map[TableID]Updater                    // RowUpdaters by Table ID
+	updaterRowFetchers map[TableID]Fetcher                    // RowFetchers for rowUpdaters by Table ID
+	originalRows       map[TableID]*rowcontainer.RowContainer // Original values for rows that have been updated by Table ID
+	updatedRows        map[TableID]*rowcontainer.RowContainer // New values for rows that have been updated by Table ID
 }
 
 // makeDeleteCascader only creates a cascader if there is a chance that there is
@@ -94,11 +95,11 @@ Outer:
 		indexPKRowFetchers: make(map[TableID]map[sqlbase.IndexID]Fetcher),
 		rowDeleters:        make(map[TableID]Deleter),
 		deleterRowFetchers: make(map[TableID]Fetcher),
-		deletedRows:        make(map[TableID]*sqlbase.RowContainer),
+		deletedRows:        make(map[TableID]*rowcontainer.RowContainer),
 		rowUpdaters:        make(map[TableID]Updater),
 		updaterRowFetchers: make(map[TableID]Fetcher),
-		originalRows:       make(map[TableID]*sqlbase.RowContainer),
-		updatedRows:        make(map[TableID]*sqlbase.RowContainer),
+		originalRows:       make(map[TableID]*rowcontainer.RowContainer),
+		updatedRows:        make(map[TableID]*rowcontainer.RowContainer),
 		evalCtx:            evalCtx,
 		alloc:              alloc,
 	}, nil
@@ -165,11 +166,11 @@ Outer:
 		indexPKRowFetchers: make(map[TableID]map[sqlbase.IndexID]Fetcher),
 		rowDeleters:        make(map[TableID]Deleter),
 		deleterRowFetchers: make(map[TableID]Fetcher),
-		deletedRows:        make(map[TableID]*sqlbase.RowContainer),
+		deletedRows:        make(map[TableID]*rowcontainer.RowContainer),
 		rowUpdaters:        make(map[TableID]Updater),
 		updaterRowFetchers: make(map[TableID]Fetcher),
-		originalRows:       make(map[TableID]*sqlbase.RowContainer),
-		updatedRows:        make(map[TableID]*sqlbase.RowContainer),
+		originalRows:       make(map[TableID]*rowcontainer.RowContainer),
+		updatedRows:        make(map[TableID]*rowcontainer.RowContainer),
 		evalCtx:            evalCtx,
 		alloc:              alloc,
 	}, nil
@@ -319,7 +320,7 @@ func batchRequestForPKValues(
 	ctx context.Context,
 	table *sqlbase.ImmutableTableDescriptor,
 	fetchColIDtoRowIndex map[sqlbase.ColumnID]int,
-	values *sqlbase.RowContainer,
+	values *rowcontainer.RowContainer,
 	traceKV bool,
 ) (roachpb.BatchRequest, error) {
 	var req roachpb.BatchRequest
@@ -518,7 +519,7 @@ func (c *cascader) deleteRows(
 	match sqlbase.ForeignKeyReference_Match,
 	values cascadeQueueElement,
 	traceKV bool,
-) (*sqlbase.RowContainer, map[sqlbase.ColumnID]int, int, error) {
+) (*rowcontainer.RowContainer, map[sqlbase.ColumnID]int, int, error) {
 	// Create the span to search for index values.
 	// TODO(bram): This initial index lookup can be skipped if the index is the
 	// primary index.
@@ -555,7 +556,7 @@ func (c *cascader) deleteRows(
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	primaryKeysToDelete := sqlbase.NewRowContainer(
+	primaryKeysToDelete := rowcontainer.NewRowContainer(
 		c.evalCtx.Mon.MakeBoundAccount(), pkColTypeInfo, values.originalValues.Len(),
 	)
 	defer primaryKeysToDelete.Close(ctx)
@@ -617,7 +618,7 @@ func (c *cascader) deleteRows(
 		if err != nil {
 			return nil, nil, 0, err
 		}
-		c.deletedRows[referencingTable.ID] = sqlbase.NewRowContainer(
+		c.deletedRows[referencingTable.ID] = rowcontainer.NewRowContainer(
 			c.evalCtx.Mon.MakeBoundAccount(), colTypeInfo, primaryKeysToDelete.Len(),
 		)
 	}
@@ -672,7 +673,7 @@ func (c *cascader) updateRows(
 	values cascadeQueueElement,
 	action sqlbase.ForeignKeyReference_Action,
 	traceKV bool,
-) (*sqlbase.RowContainer, *sqlbase.RowContainer, map[sqlbase.ColumnID]int, int, error) {
+) (*rowcontainer.RowContainer, *rowcontainer.RowContainer, map[sqlbase.ColumnID]int, int, error) {
 	// Create the span to search for index values.
 	if traceKV {
 		log.VEventf(ctx, 2, "cascading update into table: %d using index: %d",
@@ -696,10 +697,10 @@ func (c *cascader) updateRows(
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
-		c.originalRows[referencingTable.ID] = sqlbase.NewRowContainer(
+		c.originalRows[referencingTable.ID] = rowcontainer.NewRowContainer(
 			c.evalCtx.Mon.MakeBoundAccount(), colTypeInfo, values.originalValues.Len(),
 		)
-		c.updatedRows[referencingTable.ID] = sqlbase.NewRowContainer(
+		c.updatedRows[referencingTable.ID] = rowcontainer.NewRowContainer(
 			c.evalCtx.Mon.MakeBoundAccount(), colTypeInfo, values.originalValues.Len(),
 		)
 	}
@@ -786,7 +787,7 @@ func (c *cascader) updateRows(
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
-		primaryKeysToUpdate := sqlbase.NewRowContainer(
+		primaryKeysToUpdate := rowcontainer.NewRowContainer(
 			c.evalCtx.Mon.MakeBoundAccount(), pkColTypeInfo, values.originalValues.Len(),
 		)
 		defer primaryKeysToUpdate.Close(ctx)
@@ -937,8 +938,8 @@ type cascadeQueueElement struct {
 	// exist, every row in originalValues must have a corresponding row in
 	// updatedValues at the exact same index. They also must have the exact same
 	// rank.
-	originalValues  *sqlbase.RowContainer
-	updatedValues   *sqlbase.RowContainer
+	originalValues  *rowcontainer.RowContainer
+	updatedValues   *rowcontainer.RowContainer
 	colIDtoRowIndex map[sqlbase.ColumnID]int
 	startIndex      int // Start of the range of rows in the row container.
 	endIndex        int // End of the range of rows (exclusive) in the row container.
@@ -954,8 +955,8 @@ type cascadeQueue []cascadeQueueElement
 func (q *cascadeQueue) enqueue(
 	ctx context.Context,
 	table *sqlbase.ImmutableTableDescriptor,
-	originalValues *sqlbase.RowContainer,
-	updatedValues *sqlbase.RowContainer,
+	originalValues *rowcontainer.RowContainer,
+	updatedValues *rowcontainer.RowContainer,
 	colIDtoRowIndex map[sqlbase.ColumnID]int,
 	startIndex int,
 ) error {
@@ -997,16 +998,16 @@ func (c *cascader) cascadeAll(
 	if err != nil {
 		return err
 	}
-	originalRowContainer := sqlbase.NewRowContainer(
+	originalRowContainer := rowcontainer.NewRowContainer(
 		c.evalCtx.Mon.MakeBoundAccount(), colTypeInfo, len(originalValues),
 	)
 	defer originalRowContainer.Close(ctx)
 	if _, err := originalRowContainer.AddRow(ctx, originalValues); err != nil {
 		return err
 	}
-	var updatedRowContainer *sqlbase.RowContainer
+	var updatedRowContainer *rowcontainer.RowContainer
 	if updatedValues != nil {
-		updatedRowContainer = sqlbase.NewRowContainer(
+		updatedRowContainer = rowcontainer.NewRowContainer(
 			c.evalCtx.Mon.MakeBoundAccount(), colTypeInfo, len(updatedValues),
 		)
 		defer updatedRowContainer.Close(ctx)

@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -95,7 +96,7 @@ type routerOutput struct {
 		// The "level 2" rowContainer is used when we need to buffer more rows than
 		// rowBuf allows. The row container always contains rows "older" than those
 		// in rowBuf. The oldest rows are at the beginning of the row container.
-		rowContainer diskBackedRowContainer
+		rowContainer rowcontainer.DiskBackedRowContainer
 		producerDone bool
 	}
 	// TODO(radu): add padding of size sys.CacheLineSize to ensure there is no
@@ -253,7 +254,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []sqlbas
 			diskMonitor = NewMonitor(ctx, diskMonitor, diskMonitorName)
 		}
 
-		rb.outputs[i].mu.rowContainer.init(
+		rb.outputs[i].mu.rowContainer.Init(
 			nil, /* ordering */
 			types,
 			evalCtx,
