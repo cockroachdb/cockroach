@@ -1063,7 +1063,7 @@ func (ctx *Context) runHeartbeat(
 				MaxOffsetNanos: maxOffsetNanos,
 				ClusterID:      &clusterID,
 				NodeID:         conn.remoteNodeID,
-				ServerVersion:  ctx.version.ServerVersion,
+				ServerVersion:  cluster.BinaryServerVersion,
 			}
 
 			var response *PingResponse

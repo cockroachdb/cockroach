@@ -179,12 +179,7 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	// new version (and not the old one).
 	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
 
-	bootstrapVersion := cluster.ClusterVersion{Version: newVersion}
-
 	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: 1,
 		},
@@ -197,18 +192,15 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	defer tc.TestCluster.Stopper().Stop(ctx)
 
 	for i := 0; i < len(tc.TestCluster.Servers); i++ {
-		testutils.SucceedsSoon(t, func() error {
-			for _, engine := range tc.TestCluster.Servers[i].Engines() {
-				cv, err := storage.ReadClusterVersion(ctx, engine)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if cv.Version != newVersion {
-					return errors.Errorf("n%d: expected version %v, got %v", i+1, newVersion, cv)
-				}
+		for _, engine := range tc.TestCluster.Servers[i].Engines() {
+			cv, err := storage.ReadClusterVersion(ctx, engine)
+			if err != nil {
+				t.Fatal(err)
 			}
-			return nil
-		})
+			if cv.Version != newVersion {
+				t.Fatalf("n%d: expected version %v, got %v", i+1, newVersion, cv)
+			}
+		}
 	}
 }
 
@@ -216,29 +208,52 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	dir, finish := testutils.TempDir(t)
-	defer finish()
+	// // !!! is this dir needed?
+	// dir, finish := testutils.TempDir(t)
+	// defer finish()
 
 	var newVersion = cluster.BinaryServerVersion
 	var oldVersion = prev(newVersion)
 
-	// Starts 3 nodes that have cluster versions set to be oldVersion and
-	// self-declared binary version set to be newVersion. Expect cluster
-	// version to upgrade automatically from oldVersion to newVersion.
-	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
-
-	bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
+	// !!!
+	// // Starts 3 nodes that have cluster versions set to be oldVersion and
+	// // self-declared binary version set to be newVersion. Expect cluster
+	// // version to upgrade automatically from oldVersion to newVersion.
+	// versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
+	//
+	// bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
+	//
+	// knobs := base.TestingKnobs{
+	//   Store: &storage.StoreTestingKnobs{
+	//     BootstrapVersion: &bootstrapVersion,
+	//   },
+	//   Server: &server.TestingKnobs{
+	//     DisableAutomaticVersionUpgrade: 1,
+	//   },
+	// }
+	// tc := setupMixedCluster(t, knobs, versions, dir)
+	// defer tc.TestCluster.Stopper().Stop(ctx)
 
 	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
 		Server: &server.TestingKnobs{
+			BootstrapVersionOverride:       oldVersion,
 			DisableAutomaticVersionUpgrade: 1,
 		},
 	}
-	tc := setupMixedCluster(t, knobs, versions, dir)
-	defer tc.TestCluster.Stopper().Stop(ctx)
+
+	rawTC := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		// !!! remove this replication mode?
+		ReplicationMode: base.ReplicationManual, // speeds up test
+		ServerArgs: base.TestServerArgs{
+			Knobs: knobs,
+		},
+		// !!! 	ServerArgsPerNode: twh.args(),
+	})
+	defer rawTC.Stopper().Stop(ctx)
+	tc := testClusterWithHelpers{
+		T:           t,
+		TestCluster: rawTC,
+	}
 
 	{
 		// Regression test for the fix for this issue:
@@ -414,16 +429,10 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	versions := [][2]string{{v0s, v1s}, {v0s, v1s}, {v0s, v1s}, {v0s, v0s}}
 
 	// Start by running v1.
-	bootstrapVersion := cluster.ClusterVersion{
-		Version: v0,
-	}
-
 	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: 1,
+			BootstrapVersionOverride:       v0,
 		},
 	}
 	tc := setupMixedCluster(t, knobs, versions, "")

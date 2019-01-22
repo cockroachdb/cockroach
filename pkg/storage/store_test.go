@@ -219,7 +219,8 @@ func createTestStoreWithoutStart(
 	store := NewStore(context.TODO(), *cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 	factory.setStore(store)
 	if err := InitEngine(
-		context.TODO(), eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1}, cfg.Settings.Version.BootstrapVersion(),
+		context.TODO(), eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +234,8 @@ func createTestStoreWithoutStart(
 		})
 	}
 	if err := WriteInitialClusterData(
-		context.TODO(), eng, kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
+		context.TODO(), eng, kvs, /* initialValues */
+		cluster.BinaryServerVersion,
 		1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 	); err != nil {
 		t.Fatal(err)
@@ -422,8 +424,11 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		}
 
 		// Bootstrap with a fake ident.
-		if err := InitEngine(ctx, eng, testIdent, cfg.Settings.Version.BootstrapVersion()); err != nil {
-			t.Errorf("error bootstrapping store: %+v", err)
+		if err := InitEngine(
+			ctx, eng, testIdent,
+			cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		); err != nil {
+			t.Fatalf("error bootstrapping store: %+v", err)
 		}
 
 		// Verify we can read the store ident after a flush.
@@ -444,7 +449,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		})
 
 		if err := WriteInitialClusterData(
-			ctx, eng, kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
+			ctx, eng, kvs /* initialValues */, cluster.BinaryServerVersion,
 			1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 		); err != nil {
 			t.Errorf("failure to create first range: %+v", err)
@@ -500,7 +505,10 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 
 	// Bootstrap should fail on non-empty engine.
-	switch err := errors.Cause(InitEngine(ctx, eng, testIdent, cfg.Settings.Version.BootstrapVersion())); err.(type) {
+	switch err := errors.Cause(InitEngine(
+		ctx, eng, testIdent,
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+	)); err.(type) {
 	case *NotBootstrappedError:
 	default:
 		t.Errorf("unexpected error bootstrapping non-empty store: %+v", err)

@@ -851,6 +851,10 @@ type ListenError struct {
 	Addr string
 }
 
+// inspectEngines goes through engines and checks which ones are bootstrapped
+// and which ones are empty.
+// It also calls SynthesizeClusterVersionFromEngines to get the cluster version,
+// or to set it if no engines have a version in them already.
 func inspectEngines(
 	ctx context.Context,
 	engines []engine.Engine,
@@ -1320,8 +1324,9 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	bootstrappedEngines, _, _, err := inspectEngines(
-		ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion,
-		s.cfg.Settings.Version.ServerVersion, &s.rpcContext.ClusterID)
+		ctx, s.engines,
+		s.cfg.Settings.BinaryMinSupportedVersion(), s.cfg.Settings.BinaryVersion(),
+		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}
@@ -1429,7 +1434,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 		doBootstrap = initRes == needBootstrap
 		if doBootstrap {
-			if err := s.bootstrapCluster(ctx); err != nil {
+			if err := s.bootstrapCluster(ctx, s.bootstrapVersion()); err != nil {
 				return err
 			}
 		}
@@ -1441,8 +1446,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// We ran this before, but might've bootstrapped in the meantime. This time
 	// we'll get the actual list of bootstrapped and empty engines.
 	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(
-		ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion,
-		s.cfg.Settings.Version.ServerVersion, &s.rpcContext.ClusterID)
+		ctx, s.engines,
+		s.cfg.Settings.BinaryMinSupportedVersion(), s.cfg.Settings.BinaryVersion(),
+		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}
@@ -1911,15 +1917,21 @@ func (s *Server) startServeSQL(
 	return nil
 }
 
-func (s *Server) bootstrapCluster(ctx context.Context) error {
-	bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
-	if s.cfg.TestingKnobs.Store != nil {
-		if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
-			bootstrapVersion = *storeKnobs.BootstrapVersion
+func (s *Server) bootstrapVersion() roachpb.Version {
+	v := cluster.BinaryServerVersion
+	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
+		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
+			v = ov
 		}
 	}
+	return v
+}
 
-	if err := s.node.bootstrapCluster(ctx, s.engines, bootstrapVersion, &s.cfg.DefaultZoneConfig, &s.cfg.DefaultSystemZoneConfig); err != nil {
+func (s *Server) bootstrapCluster(ctx context.Context, bootstrapVersion roachpb.Version) error {
+	if err := s.node.bootstrapCluster(
+		ctx, s.engines, cluster.ClusterVersion{Version: bootstrapVersion},
+		&s.cfg.DefaultZoneConfig, &s.cfg.DefaultSystemZoneConfig,
+	); err != nil {
 		return err
 	}
 	// Force all the system ranges through the replication queue so they

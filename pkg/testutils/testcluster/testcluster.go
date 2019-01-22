@@ -119,7 +119,7 @@ func (tc *TestCluster) StopServer(idx int) {
 
 // StartTestCluster starts up a TestCluster made up of `nodes` in-memory testing
 // servers.
-// The cluster should be stopped using cluster.Stop().
+// The cluster should be stopped using TestCluster.Stopper().Stop().
 func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestCluster {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)

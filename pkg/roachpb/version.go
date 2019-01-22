@@ -18,35 +18,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// CanBump computes whether an update from version v to version o is possible.
-// The main constraint is that either nothing changes; or the major version is
-// bumped by one (and the new minor is zero); or the major version remains
-// constant and the minor version is bumped by one. The unstable version may
-// change without restrictions.
-func (v Version) CanBump(o Version) bool {
-	if o.Less(v) {
-		return false
-	}
-	if o.Patch != 0 {
-		// Reminder that we don't use Patch versions at all. It's just a
-		// placeholder.
-		return false
-	}
-
-	if o.Major == v.Major {
-		return o.Minor <= v.Minor+1
-	}
-	if o.Major <= 2 {
-		// The semver era, 1.0 to 2.1
-		return o.Major == v.Major+1 && o.Minor == 0
-	} else if v.Major == 2 && o.Major == 19 {
-		// Transitioning from 2.1 to 19.1
-		return v.Minor == 1 && o.Minor == 1
-	}
-	// The calver era, 19.1 and onwards.
-	return o.Major == v.Major+1 && o.Minor == 1
-}
-
 // Less compares two Versions.
 func (v Version) Less(otherV Version) bool {
 	if v.Major < otherV.Major {

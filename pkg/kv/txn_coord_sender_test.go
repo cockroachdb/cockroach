@@ -805,11 +805,18 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				return reply, pErr
 			}
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+			st := cluster.MakeClusterSettings()
+			st.InitializeVersion(
+				cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+				cluster.BinaryMinimumSupportedVersion,
+				cluster.BinaryServerVersion)
+
 			tsf := NewTxnCoordSenderFactory(
 				TxnCoordSenderFactoryConfig{
 					AmbientCtx: ambient,
 					Clock:      clock,
 					Stopper:    stopper,
+					Settings:   st,
 				},
 				senderFn,
 			)
@@ -937,11 +944,19 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		return br, nil
 	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		senderFn,
 	)
@@ -1305,11 +1320,18 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				return br, nil
 			}
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+			st := cluster.MakeClusterSettings()
+			st.InitializeVersion(
+				cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+				cluster.BinaryMinimumSupportedVersion,
+				cluster.BinaryServerVersion)
+
 			factory := NewTxnCoordSenderFactory(
 				TxnCoordSenderFactoryConfig{
 					AmbientCtx: ambient,
 					Clock:      clock,
 					Stopper:    stopper,
+					Settings:   st,
 				},
 				senderFn,
 			)
@@ -1383,11 +1405,19 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
+
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		sender,
 	)
@@ -1449,11 +1479,19 @@ func TestOnePCErrorTracking(t *testing.T) {
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
+
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		sender,
 	)
@@ -1537,11 +1575,18 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 		return nil, nil
 	})
 
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		sender,
 	)
@@ -1602,11 +1647,18 @@ func TestCommitMutatingTransaction(t *testing.T) {
 		return br, nil
 	})
 
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		sender,
 	)
@@ -1685,11 +1737,18 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		return nil, nil
 	})
 
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		sender,
 	)
@@ -1736,11 +1795,18 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		return br, nil
 	})
 
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 			TestingKnobs: ClientTestingKnobs{
 				// Disable span refresh, otherwise it kicks and retries batches by
 				// itself.
@@ -1817,11 +1883,18 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		}
 		return br, nil
 	})
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		sender,
 	)
@@ -1870,11 +1943,19 @@ func TestSequenceNumbers(t *testing.T) {
 		br.Txn = ba.Txn
 		return br, nil
 	})
+
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		sender,
 	)
@@ -1920,11 +2001,19 @@ func TestConcurrentTxnRequests(t *testing.T) {
 		}
 		return br, nil
 	})
+
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		sender,
 	)
@@ -1967,11 +2056,18 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		sender,
 	)
@@ -2040,11 +2136,19 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		}
 		return nil, nil
 	})
+
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		sender,
 	)
@@ -2182,11 +2286,18 @@ func TestAnchorKey(t *testing.T) {
 		return br, nil
 	}
 
+	st := cluster.MakeClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   st,
 		},
 		senderFn,
 	)
