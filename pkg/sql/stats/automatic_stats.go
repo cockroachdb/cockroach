@@ -35,8 +35,8 @@ import (
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
-	"sql.stats.experimental_automatic",
-	"experimental automatic statistics mode",
+	"sql.stats.experimental_automatic_collection.enabled",
+	"experimental automatic statistics collection mode",
 	false,
 )
 
