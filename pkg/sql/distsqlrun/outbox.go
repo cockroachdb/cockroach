@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 )
 
@@ -224,7 +224,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				return err
 			}
 		} else {
-			conn, err = m.flowCtx.rpcCtx.GRPCDial(m.addr).Connect(ctx)
+			conn, err = m.flowCtx.rpcCtx.GRPCDialNode(m.addr, m.nodeID).Connect(ctx)
 			if err != nil {
 				return err
 			}
