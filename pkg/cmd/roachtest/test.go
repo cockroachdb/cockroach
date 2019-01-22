@@ -40,10 +40,14 @@ import (
 )
 
 var (
-	count        = 1
-	debugEnabled = false
-	postIssues   = true
-	gceNameRE    = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
+	count                   = 1
+	debugEnabled            = false
+	postIssues              = true
+	gceNameRE               = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
+	majorMinorToPredecessor = map[string]string{
+		"2.2": "2.1.3",
+		"2.1": "2.0.7",
+	}
 )
 
 // testFilter holds the name and tag filters for filtering tests.
@@ -266,6 +270,20 @@ func (r *registry) loadBuildVersion() error {
 		return err
 	}
 	return r.setBuildVersion(buildTag)
+}
+
+// PredecessorVersion returns a recent predecessor of the build version (i.e.
+// the build tag of the main binary). For example, if the running binary is from
+// the master branch prior to releasing 2.2.0, this will return a recent
+// (ideally though not necessarily the latest) 2.1 patch release.
+func (r *registry) PredecessorVersion() string {
+	if r.buildVersion == nil {
+		return ""
+	}
+
+	buildVersionMajorMinor := fmt.Sprintf("%d.%d", r.buildVersion.Major(), r.buildVersion.Minor())
+
+	return majorMinorToPredecessor[buildVersionMajorMinor]
 }
 
 // verifyValidClusterName verifies that the test name can be turned into a cluster
