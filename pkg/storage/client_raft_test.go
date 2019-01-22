@@ -5159,9 +5159,6 @@ func TestUpgradeFromPreemptiveSnapshot(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &storage.StoreTestingKnobs{
-						BootstrapVersion: &cluster.ClusterVersion{
-							Version: cluster.VersionByKey(cluster.Version19_1),
-						},
 						DisableLoadBasedSplitting: true,
 						DisableMergeQueue:         true,
 						TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
@@ -5169,6 +5166,7 @@ func TestUpgradeFromPreemptiveSnapshot(t *testing.T) {
 						},
 					},
 					Server: &server.TestingKnobs{
+						BootstrapVersionOverride:       cluster.VersionByKey(cluster.Version19_1),
 						DisableAutomaticVersionUpgrade: 1,
 					},
 				},

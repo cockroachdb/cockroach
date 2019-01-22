@@ -163,8 +163,10 @@ func createAndStartTestNode(
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		ctx, engines, cfg.Settings.Version.MinSupportedVersion,
-		cfg.Settings.Version.ServerVersion, node.clusterID)
+		ctx, engines,
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion,
+		node.clusterID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,11 +409,13 @@ func TestCorruptedClusterID(t *testing.T) {
 	}
 
 	engines := []engine.Engine{e}
-	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
+	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	defer stopper.Stop(ctx)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		ctx, engines, cfg.Settings.Version.MinSupportedVersion,
-		cfg.Settings.Version.ServerVersion, node.clusterID)
+		ctx, engines,
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion,
+		node.clusterID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,10 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
 )
-
-const maxSettings = 256
 
 type dummy struct {
 	msg1       string
@@ -70,40 +67,51 @@ func (d *dummy) String() string {
 	return fmt.Sprintf("&{%s %s}", d.msg1, d.growsbyone)
 }
 
-var dummyTransformer = func(sv *settings.Values, old []byte, update *string) ([]byte, interface{}, error) {
+type dummyTransformer struct{}
+
+var d settings.StateMachineSettingImpl = &dummyTransformer{}
+
+func (d *dummyTransformer) Decode(val []byte) (interface{}, error) {
 	var oldD dummy
-
-	// If no old value supplied, fill in the default.
-	if old == nil {
-		oldD.msg1 = "default"
-		oldD.growsbyone = "-"
-		var err error
-		old, err = oldD.Marshal()
-		if err != nil {
-			return nil, nil, err
-		}
+	if err := protoutil.Unmarshal(val, &oldD); err != nil {
+		return nil, err
 	}
+	return oldD, nil
+}
+
+func (d *dummyTransformer) DecodeToString(val []byte) (string, error) {
+	dum, err := d.Decode(val)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%v", dum), nil
+}
+
+func (d *dummyTransformer) ValidateLogical(
+	sv *settings.Values, old []byte, newV string,
+) ([]byte, error) {
+	var oldD dummy
 	if err := protoutil.Unmarshal(old, &oldD); err != nil {
-		return nil, nil, err
-	}
-
-	if update == nil {
-		// Round-trip the existing value, but only if it passes sanity checks.
-		b, err := oldD.Marshal()
-		if err != nil {
-			return nil, nil, err
-		}
-		return b, &oldD, err
+		return nil, err
 	}
 
 	// We have a new proposed update to the value, validate it.
-	if len(*update) != len(oldD.growsbyone)+1 {
-		return nil, nil, errors.New("dashes component must grow by exactly one")
+	if len(newV) != len(oldD.growsbyone)+1 {
+		return nil, errors.New("dashes component must grow by exactly one")
 	}
 	newD := oldD
-	newD.growsbyone = *update
+	newD.growsbyone = newV
 	b, err := newD.Marshal()
-	return b, &newD, err
+	return b, err
+}
+
+func (d *dummyTransformer) ValidateGossipUpdate(sv *settings.Values, val []byte) error {
+	var updateVal dummy
+	return protoutil.Unmarshal(val, &updateVal)
+}
+
+func (d *dummyTransformer) SettingsListDefault() string {
+	panic("unimplemented")
 }
 
 const mb = int64(1024 * 1024)
@@ -129,7 +137,7 @@ var fA = settings.RegisterFloatSetting("f", "desc", 5.4)
 var dA = settings.RegisterDurationSetting("d", "desc", time.Second)
 var eA = settings.RegisterEnumSetting("e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
-var mA = settings.RegisterStateMachineSetting("statemachine", "foo", dummyTransformer)
+var mA = settings.RegisterStateMachineSetting("statemachine", "foo", &dummyTransformer{})
 
 func init() {
 	settings.RegisterBoolSetting("sekretz", "desc", false).SetConfidential()
@@ -175,35 +183,46 @@ func TestCache(t *testing.T) {
 	mA.SetOnChange(sv, func() { changes.mA++ })
 
 	t.Run("StateMachineSetting", func(t *testing.T) {
-		mB := settings.RegisterStateMachineSetting("local.m", "foo", dummyTransformer)
-		if exp, act := "&{default -}", mB.String(sv); exp != act {
+		u := settings.NewUpdater(sv)
+		mB := settings.RegisterStateMachineSetting("local.m", "foo", &dummyTransformer{})
+		// State-machine settings don't have defaults, so we need to start by
+		// setting it to something.
+		if err := u.Set("local.m", "default.X", "m"); err != nil {
+			t.Fatal(err)
+		}
+
+		if exp, act := "{default X}", mB.String(sv); exp != act {
 			t.Fatalf("wanted %q, got %q", exp, act)
 		}
+
 		growsTooFast := "grows too fast"
-		if _, _, err := mB.Validate(sv, nil, &growsTooFast); !testutils.IsError(err, "must grow by exactly one") {
+		curVal := []byte(mB.Get(sv))
+		if _, err := mB.Validate(sv, curVal, growsTooFast); !testutils.IsError(err, "must grow by exactly one") {
 			t.Fatal(err)
 		}
+
 		hasDots := "a."
-		if _, _, err := mB.Validate(sv, nil, &hasDots); !testutils.IsError(err, "must not contain dots") {
+		if _, err := mB.Validate(sv, curVal, hasDots); !testutils.IsError(err, "must not contain dots") {
 			t.Fatal(err)
 		}
+
 		ab := "ab"
-		if _, _, err := mB.Validate(sv, nil, &ab); err != nil {
+		if _, err := mB.Validate(sv, curVal, ab); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := mB.Validate(sv, []byte("takes.precedence"), &ab); !testutils.IsError(err, "must grow by exactly one") {
+
+		if _, err := mB.Validate(sv, []byte("takes.precedence"), ab); !testutils.IsError(err, "must grow by exactly one") {
 			t.Fatal(err)
 		}
 		precedenceX := "precedencex"
-		if _, _, err := mB.Validate(sv, []byte("takes.precedence"), &precedenceX); err != nil {
+		if _, err := mB.Validate(sv, []byte("takes.precedence"), precedenceX); err != nil {
 			t.Fatal(err)
 		}
-		u := settings.NewUpdater(sv)
 		if err := u.Set("local.m", "default.XX", "m"); err != nil {
 			t.Fatal(err)
 		}
 		u.ResetRemaining()
-		if exp, act := "&{default XX}", mB.String(sv); exp != act {
+		if exp, act := "{default XX}", mB.String(sv); exp != act {
 			t.Fatalf("wanted %q, got %q", exp, act)
 		}
 	})
@@ -254,9 +273,8 @@ func TestCache(t *testing.T) {
 		if expected, actual := int64(1), eA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "default.-", mA.Get(sv); expected != actual {
-			t.Fatalf("expected %v, got %v", expected, actual)
-		}
+		// Note that we don't test the state-machine setting for a default, since it
+		// doesn't have one and it would crash.
 	})
 
 	t.Run("lookup", func(t *testing.T) {
@@ -614,110 +632,4 @@ func TestHide(t *testing.T) {
 	if _, ok := keys["sekretz"]; ok {
 		t.Errorf("expected 'sekretz' to be hidden")
 	}
-}
-
-func TestOnChangeWithMaxSettings(t *testing.T) {
-	// Register maxSettings settings to ensure that no errors occur.
-	maxName, err := batchRegisterSettings(t, t.Name(), maxSettings-1-len(settings.Keys()))
-	if err != nil {
-		t.Errorf("expected no error to register 128 settings, but get error : %s", err)
-	}
-
-	// Change the max slotIdx setting to ensure that no errors occur.
-	sv := &settings.Values{}
-	sv.Init(settings.TestOpaque)
-	var changes int
-	intSetting, ok := settings.Lookup(maxName)
-	if !ok {
-		t.Errorf("expected lookup of %s to succeed", maxName)
-	}
-	intSetting.SetOnChange(sv, func() { changes++ })
-
-	u := settings.NewUpdater(sv)
-	if err := u.Set(maxName, settings.EncodeInt(9), "i"); err != nil {
-		t.Fatal(err)
-	}
-
-	if changes != 1 {
-		t.Errorf("expected the max slot setting changed")
-	}
-}
-
-func TestMaxSettingsPanics(t *testing.T) {
-	var origRegistry = make(map[string]settings.Setting)
-	for k, v := range settings.Registry {
-		origRegistry[k] = v
-	}
-	defer func() {
-		settings.Registry = origRegistry
-	}()
-
-	// Register too many settings which will cause a panic which is caught and converted to an error.
-	_, err := batchRegisterSettings(t, t.Name(), maxSettings-len(settings.Keys()))
-	expectedErr := "too many settings; increase maxSettings"
-	if err == nil || err.Error() != expectedErr {
-		t.Errorf("expected error %v, but got %v", expectedErr, err)
-	}
-
-}
-
-func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name string, err error) {
-	defer func() {
-		// Catch panic and convert it to an error.
-		if r := recover(); r != nil {
-			// Check exactly what the panic was and create error.
-			switch x := r.(type) {
-			case string:
-				err = errors.New(x)
-			case error:
-				err = x
-			default:
-				err = errors.Errorf("unknown panic: %v", x)
-			}
-		}
-	}()
-	for i := 0; i < count; i++ {
-		name = fmt.Sprintf("%s_%3d", keyPrefix, i)
-		settings.RegisterValidatedIntSetting(name, "desc", 0, nil)
-	}
-	return name, err
-}
-
-var overrideBool = settings.RegisterBoolSetting("override.bool", "desc", true)
-var overrideInt = settings.RegisterIntSetting("override.int", "desc", 0)
-var overrideDuration = settings.RegisterDurationSetting("override.duration", "desc", time.Second)
-var overrideFloat = settings.RegisterFloatSetting("override.float", "desc", 1.0)
-
-func TestOverride(t *testing.T) {
-	sv := &settings.Values{}
-	sv.Init(settings.TestOpaque)
-
-	// Test override for bool setting.
-	require.Equal(t, true, overrideBool.Get(sv))
-	overrideBool.Override(sv, false)
-	require.Equal(t, false, overrideBool.Get(sv))
-	u := settings.NewUpdater(sv)
-	u.ResetRemaining()
-	require.Equal(t, false, overrideBool.Get(sv))
-
-	// Test override for int setting.
-	require.Equal(t, int64(0), overrideInt.Get(sv))
-	overrideInt.Override(sv, 42)
-	require.Equal(t, int64(42), overrideInt.Get(sv))
-	u.ResetRemaining()
-	require.Equal(t, int64(42), overrideInt.Get(sv))
-
-	// Test override for duration setting.
-	require.Equal(t, time.Second, overrideDuration.Get(sv))
-	overrideDuration.Override(sv, 42*time.Second)
-	require.Equal(t, 42*time.Second, overrideDuration.Get(sv))
-	u.ResetRemaining()
-	require.Equal(t, 42*time.Second, overrideDuration.Get(sv))
-
-	// Test override for float setting.
-	require.Equal(t, 1.0, overrideFloat.Get(sv))
-	overrideFloat.Override(sv, 42.0)
-	require.Equal(t, 42.0, overrideFloat.Get(sv))
-	u.ResetRemaining()
-	require.Equal(t, 42.0, overrideFloat.Get(sv))
 }

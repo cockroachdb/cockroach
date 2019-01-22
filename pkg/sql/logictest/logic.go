@@ -395,7 +395,7 @@ type testClusterConfig struct {
 	skipShort bool
 	// If not empty, bootstrapVersion controls what version the cluster will be
 	// bootstrapped at.
-	bootstrapVersion cluster.ClusterVersion
+	bootstrapVersion roachpb.Version
 	// If not empty, serverVersion is used to set what the Server will consider to
 	// be "the server version".
 	// TODO(andrei): clarify this comment and many others around the "server
@@ -429,7 +429,7 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            1,
 		overrideDistSQLMode: "off",
 		overrideAutoStats:   "false",
-		bootstrapVersion:    cluster.ClusterVersion{Version: roachpb.Version{Major: 19, Minor: 1}},
+		bootstrapVersion:    roachpb.Version{Major: 19, Minor: 1},
 		serverVersion:       roachpb.Version{Major: 19, Minor: 2},
 		disableUpgrade:      true,
 	},
@@ -438,11 +438,9 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            1,
 		overrideDistSQLMode: "off",
 		overrideAutoStats:   "false",
-		bootstrapVersion: cluster.ClusterVersion{
-			Version: roachpb.Version{Major: 1},
-		},
-		serverVersion:  roachpb.Version{Major: 1, Minor: 1},
-		disableUpgrade: true,
+		bootstrapVersion:    roachpb.Version{Major: 1},
+		serverVersion:       roachpb.Version{Major: 1, Minor: 1},
+		disableUpgrade:      true,
 	},
 	{
 		name:              "local-vec",
@@ -1077,8 +1075,11 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		distSQLKnobs.MetadataTestLevel = execinfra.On
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
-	if cfg.bootstrapVersion != (cluster.ClusterVersion{}) {
-		params.ServerArgs.Knobs.Store.(*storage.StoreTestingKnobs).BootstrapVersion = &cfg.bootstrapVersion
+	if cfg.bootstrapVersion != (roachpb.Version{}) {
+		if params.ServerArgs.Knobs.Server == nil {
+			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
+		}
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BootstrapVersionOverride = cfg.bootstrapVersion
 	}
 	if cfg.disableUpgrade {
 		if params.ServerArgs.Knobs.Server == nil {
@@ -1092,8 +1093,8 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		// supports at least the bootstrap version.
 		paramsPerNode := map[int]base.TestServerArgs{}
 		minVersion := cfg.serverVersion
-		if cfg.bootstrapVersion != (cluster.ClusterVersion{}) {
-			minVersion = cfg.bootstrapVersion.Version
+		if cfg.bootstrapVersion != (roachpb.Version{}) {
+			minVersion = cfg.bootstrapVersion
 		}
 		for i := 0; i < cfg.numNodes; i++ {
 			nodeParams := params.ServerArgs

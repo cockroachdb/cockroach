@@ -15,7 +15,11 @@ option go_package = "cluster";
 import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
+// !!! can I replace this with roachpb.Version if I change the tag on that one
+// to 2?
 message ClusterVersion {
+  option (gogoproto.goproto_stringer) = false;
+
   reserved 1;
   // The version of functionality in use in the cluster. This value must
   // monotonically increase.

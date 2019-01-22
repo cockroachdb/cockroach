@@ -188,6 +188,7 @@ type Setting interface {
 	// Typ returns the short (1 char) string denoting the type of setting.
 	Typ() string
 	String(sv *Values) string
+	// Encoded returns the encoded value of the current value of the setting.
 	Encoded(sv *Values) string
 
 	EncodedDefault() string

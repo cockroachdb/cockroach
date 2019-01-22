@@ -271,11 +271,13 @@ func NewNode(
 		eventLogger = sql.MakeEventLogger(execCfg)
 	}
 	n := &Node{
-		storeCfg:    cfg,
-		stopper:     stopper,
-		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:      storage.NewStores(cfg.AmbientCtx, cfg.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion),
+		storeCfg: cfg,
+		stopper:  stopper,
+		recorder: recorder,
+		metrics:  makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores: storage.NewStores(
+			cfg.AmbientCtx, cfg.Clock,
+			cfg.Settings.BinaryMinSupportedVersion(), cfg.Settings.BinaryVersion()),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
@@ -395,7 +397,7 @@ func (n *Node) start(
 		Locality:        locality,
 		LocalityAddress: localityAddress,
 		ClusterName:     clusterName,
-		ServerVersion:   n.storeCfg.Settings.Version.ServerVersion,
+		ServerVersion:   n.storeCfg.Settings.BinaryVersion(),
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
 	}
