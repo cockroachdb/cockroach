@@ -1,0 +1,151 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, str STRING);
+CREATE TABLE u (l INT PRIMARY KEY, str2 STRING);
+CREATE TABLE v (m INT PRIMARY KEY, str3 STRING);
+INSERT INTO t SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+INSERT INTO u SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+INSERT INTO v SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+
+statement ok
+SET allow_prepare_as_opt_plan = ON
+
+# InnerJoinApply tests.
+
+statement ok
+PREPARE a AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Var "k") (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2")
+  (NoOrdering)
+)'
+
+query ITIT rowsort
+EXECUTE a
+----
+1  one    1  one
+2  two    2  two
+3  three  3  three
+4  four   4  four
+5  five   5  five
+
+# LeftJoinApply tests.
+
+statement ok
+PREPARE b AS OPT PLAN '
+(Root
+  (LeftJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k") (Const 1)) (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2")
+  (NoOrdering)
+)'
+
+query ITIT rowsort
+EXECUTE b
+----
+1  one      2  two
+2  two      3  three
+3  three    4  four
+4  four     5  five
+5  five     NULL NULL
+
+# SemiJoinApply tests.
+
+statement ok
+PREPARE c AS OPT PLAN '
+(Root
+  (SemiJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k") (Const 1)) (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT rowsort
+EXECUTE c
+----
+1  one
+2  two
+3  three
+4  four
+
+# AntiJoinApply tests.
+
+statement ok
+PREPARE d AS OPT PLAN '
+(Root
+  (AntiJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k") (Const 1)) (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT rowsort
+EXECUTE d
+----
+5  five
+
+# Nested Apply, with outer columns of the outer apply on the left and right of
+# the inner apply.
+
+statement ok
+PREPARE e AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (InnerJoinApply
+      (Select
+        (Scan [(Table "u") (Cols "l,str2") ])
+        [ (Eq (Var "k") (Var "l") )]
+      )
+      (Select
+        (Scan [(Table "v") (Cols "m,str3") ])
+        [ (Eq (Var "k") (Var "m") )]
+      )
+      [ (Eq (Var "k") (Var "l")) ]
+      []
+    )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2,m,str3")
+  (NoOrdering)
+)'
+
+query ITITIT rowsort
+EXECUTE e
+----
+1  one    1  one    1  one
+2  two    2  two    2  two
+3  three  3  three  3  three
+4  four   4  four   4  four
+5  five   5  five   5  five

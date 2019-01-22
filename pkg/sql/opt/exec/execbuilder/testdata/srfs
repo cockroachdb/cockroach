@@ -196,12 +196,23 @@ CREATE TABLE groups(
   primary key (id)
 )
 
-query error could not decorrelate subquery
+query TTTTT
 EXPLAIN (VERBOSE) SELECT
   g.data->>'name' AS group_name,
   jsonb_array_elements( (SELECT gg.data->'members' FROM groups gg WHERE gg.data->>'name' = g.data->>'name') )
 FROM
   groups g
+----
+render                ·         ·                         (group_name, jsonb_array_elements)        ·
+ │                    render 0  data->>'name'             ·                                         ·
+ │                    render 1  jsonb_array_elements      ·                                         ·
+ └── project set      ·         ·                         (data, "?column?", jsonb_array_elements)  ·
+      │               render 0  jsonb_array_elements(@2)  ·                                         ·
+      └── apply-join  ·         ·                         (data, "?column?")                        ·
+           │          type      left outer                ·                                         ·
+           └── scan   ·         ·                         (data)                                    ·
+·                     table     groups@primary            ·                                         ·
+·                     spans     ALL                       ·                                         ·
 
 # Regression test for #32162.
 query TTTTT
