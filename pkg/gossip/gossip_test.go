@@ -61,8 +61,7 @@ func TestGossipInfoStore(t *testing.T) {
 }
 
 // TestGossipMoveNode verifies that if a node is moved to a new address, it
-// gets properly updated in gossip (including that any other node that was
-// previously at that address gets removed from the cluster).
+// gets properly updated in gossip.
 func TestGossipMoveNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()

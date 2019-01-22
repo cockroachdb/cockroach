@@ -93,6 +93,7 @@ func TestHeartbeatCB(t *testing.T) {
 			clock:              clock,
 			remoteClockMonitor: serverCtx.RemoteClocks,
 			clusterID:          &serverCtx.ClusterID,
+			nodeID:             &serverCtx.NodeID,
 			version:            serverCtx.version,
 		})
 
@@ -341,6 +342,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
+		nodeID:             &serverCtx.NodeID,
 		version:            serverCtx.version,
 	})
 
@@ -515,6 +517,7 @@ func TestOffsetMeasurement(t *testing.T) {
 		clock:              serverClock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
+		nodeID:             &serverCtx.NodeID,
 		version:            serverCtx.version,
 	})
 
@@ -682,6 +685,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			clock:              clock,
 			remoteClockMonitor: nodeCtxs[i].ctx.RemoteClocks,
 			clusterID:          &nodeCtxs[i].ctx.ClusterID,
+			nodeID:             &nodeCtxs[i].ctx.NodeID,
 			version:            nodeCtxs[i].ctx.version,
 		})
 		ln, err := netutil.ListenAndServeGRPC(nodeCtxs[i].ctx.Stopper, s, util.TestAddr)
@@ -829,6 +833,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 					clock:              clock,
 					remoteClockMonitor: serverCtx.RemoteClocks,
 					clusterID:          &serverCtx.ClusterID,
+					nodeID:             &serverCtx.NodeID,
 					version:            serverCtx.version,
 				},
 				interval: msgInterval,
@@ -1011,6 +1016,50 @@ func TestClusterIDMismatch(t *testing.T) {
 	wg.Wait()
 }
 
+func TestNodeIDMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+	serverCtx := newTestContext(clock, stopper)
+	uuid1 := uuid.MakeV4()
+	serverCtx.ClusterID.Set(context.TODO(), uuid1)
+	serverCtx.NodeID.Set(context.TODO(), 1)
+	s := newTestServer(t, serverCtx)
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		clusterID:          &serverCtx.ClusterID,
+		nodeID:             &serverCtx.NodeID,
+		version:            serverCtx.version,
+	})
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+
+	clientCtx := newTestContext(clock, stopper)
+	clientCtx.ClusterID.Set(context.TODO(), uuid1)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			_, err := clientCtx.GRPCDialNode(remoteAddr, 2).Connect(context.Background())
+			expected := "initial connection heartbeat failed.*doesn't match server node ID"
+			if !testutils.IsError(err, expected) {
+				t.Errorf("expected %s error, got %v", expected, err)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+}
+
 func setVersion(c *Context, v roachpb.Version) error {
 	settings := cluster.MakeClusterSettings(v, v)
 	cv := cluster.ClusterVersion{Version: v}
@@ -1048,6 +1097,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 			clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
 			serverCtx := newTestContext(clock, stopper)
 			serverCtx.ClusterID.Set(context.TODO(), uuid.MakeV4())
+			serverCtx.NodeID.Set(context.TODO(), 1)
 			if err := setVersion(serverCtx, td.serverVersion); err != nil {
 				t.Fatal(err)
 			}
@@ -1056,6 +1106,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				clock:              clock,
 				remoteClockMonitor: serverCtx.RemoteClocks,
 				clusterID:          &serverCtx.ClusterID,
+				nodeID:             &serverCtx.NodeID,
 				version:            serverCtx.version,
 			})
 
