@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	_ "github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 func registerUpgrade(r *registry) {
@@ -36,7 +37,7 @@ func registerUpgrade(r *registry) {
 
 		b, err := binfetcher.Download(ctx, binfetcher.Options{
 			Binary:  "cockroach",
-			Version: oldVersion,
+			Version: "v" + oldVersion,
 			GOOS:    goos,
 			GOARCH:  "amd64",
 		})
@@ -63,6 +64,11 @@ func registerUpgrade(r *registry) {
 
 		db := c.Conn(ctx, 1)
 		defer db.Close()
+		// Without this line, the test reliably fails (at least on OSX), presumably
+		// because a connection to a node that gets restarted somehow sticks around
+		// in the pool and throws an error at the next client using it (instead of
+		// transparently reconnecting).
+		db.SetMaxIdleConns(0)
 
 		if _, err := db.ExecContext(ctx,
 			"SET CLUSTER SETTING server.time_until_store_dead = $1", timeUntilStoreDead.String(),
@@ -101,7 +107,7 @@ func registerUpgrade(r *registry) {
 		clusterVersion := func() (string, error) {
 			var version string
 			if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&version); err != nil {
-				return "", err
+				return "", errors.Wrap(err, "determining cluster version")
 			}
 			return version, nil
 		}
@@ -253,15 +259,21 @@ func registerUpgrade(r *registry) {
 		}
 	}
 
-	const oldVersion = "v2.1.3"
+	mixedWithVersion := r.PredecessorVersion()
+	var skip string
+	if mixedWithVersion == "" {
+		skip = "unable to determine predecessor version"
+	}
+
 	for _, n := range []int{5} {
 		r.Add(testSpec{
-			Name:       fmt.Sprintf("upgrade/oldVersion=%s/nodes=%d", oldVersion, n),
-			MinVersion: "v2.2.0",
+			Name:       fmt.Sprintf("upgrade/mixedWith=%s/nodes=%d", mixedWithVersion, n),
+			MinVersion: "v2.1.0",
 			Nodes:      nodes(n),
 			Run: func(ctx context.Context, t *test, c *cluster) {
-				runUpgrade(ctx, t, c, oldVersion)
+				runUpgrade(ctx, t, c, mixedWithVersion)
 			},
+			Skip: skip,
 		})
 	}
 }

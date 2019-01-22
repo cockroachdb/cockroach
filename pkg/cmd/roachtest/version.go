@@ -33,7 +33,7 @@ func registerVersion(r *registry) {
 
 		b, err := binfetcher.Download(ctx, binfetcher.Options{
 			Binary:  "cockroach",
-			Version: version,
+			Version: "v" + version,
 			GOOS:    goos,
 			GOARCH:  "amd64",
 		})
@@ -110,6 +110,8 @@ func registerVersion(r *registry) {
 
 			db := c.Conn(ctx, 1)
 			defer db.Close()
+			// See analogous comment in the upgrade/mixedWith roachtest.
+			db.SetMaxIdleConns(0)
 
 			// First let the load generators run in the cluster at `version`.
 			if err := sleepAndCheck(); err != nil {
@@ -223,15 +225,21 @@ func registerVersion(r *registry) {
 		m.Wait()
 	}
 
-	const version = "v2.0.5"
+	mixedWithVersion := r.PredecessorVersion()
+	var skip string
+	if mixedWithVersion == "" {
+		skip = "unable to determine predecessor version"
+	}
+
 	for _, n := range []int{3, 5} {
 		r.Add(testSpec{
-			Name:       fmt.Sprintf("version/mixedWith=%s/nodes=%d", version, n),
+			Name:       fmt.Sprintf("version/mixedWith=%s/nodes=%d", mixedWithVersion, n),
 			MinVersion: "v2.1.0",
 			Nodes:      nodes(n + 1),
 			Run: func(ctx context.Context, t *test, c *cluster) {
-				runVersion(ctx, t, c, version)
+				runVersion(ctx, t, c, mixedWithVersion)
 			},
+			Skip: skip,
 		})
 	}
 }
