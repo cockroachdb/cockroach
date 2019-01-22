@@ -2,7 +2,7 @@
 # groupby.opt contains normalization rules for the GroupBy operator.
 # =============================================================================
 
-# ConvertGroupByToDsitinct converts a GroupBy operator that has no aggregations
+# ConvertGroupByToDistinct converts a GroupBy operator that has no aggregations
 # to an equivalent DistinctOn operator.
 [ConvertGroupByToDistinct, Normalize]
 (GroupBy
@@ -75,4 +75,21 @@ $input
     $input
     (RemoveAggDistinctForKeys $aggregations $groupingPrivate $input)
     $groupingPrivate
+)
+
+# EliminateDistinctOnNoColumns eliminates a DistinctOn with no grouping columns,
+# replacing it with a projection and a LIMIT 1. For example:
+#   SELECT DISTINCT ON (a) a, b FROM ab WHERE a=1
+# is equivalent to:
+#   SELECT a, b FROM ab WHERE a=1 LIMIT 1
+[EliminateDistinctOnNoColumns, Normalize]
+(DistinctOn
+    $input:*
+    $aggregations:*
+    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate)
+)
+=>
+(ConstructProjectionFromDistinctOn
+    (Limit $input (Const 1) (GroupingInputOrdering $groupingPrivate))
+    $aggregations
 )

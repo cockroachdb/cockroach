@@ -703,6 +703,11 @@ func (b *Builder) extractAggregateConstArgs(agg opt.ScalarExpr) tree.Datums {
 }
 
 func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error) {
+	if distinct.GroupingCols.Empty() {
+		// A DistinctOn with no grouping columns should have been converted to a
+		// LIMIT 1 by normalization rules.
+		return execPlan{}, fmt.Errorf("cannot execute distinct on no columns")
+	}
 	input, err := b.buildGroupByInput(distinct)
 	if err != nil {
 		return execPlan{}, err

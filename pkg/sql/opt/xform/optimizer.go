@@ -841,6 +841,10 @@ func (o *Optimizer) disableRules(probability float64) {
 		// Needed to prevent stack overflow.
 		int(opt.PushFilterIntoJoinLeftAndRight),
 		int(opt.PruneSelectCols),
+		// Needed to prevent execbuilder error.
+		// TODO(radu): the DistinctOn execution path should be fixed up so it
+		// supports distinct on an empty column set.
+		int(opt.EliminateDistinctOnNoColumns),
 	)
 
 	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
