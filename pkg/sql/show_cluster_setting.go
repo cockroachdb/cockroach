@@ -17,7 +17,6 @@ package sql
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -59,39 +58,54 @@ func (p *planner) showStateMachineSetting(
 			if err != nil {
 				return err
 			}
-			var prevRawVal []byte
+			var kvRawVal []byte
+			var kvStrDatum *tree.DString
 			if len(datums) != 0 {
 				dStr, ok := datums[0].(*tree.DString)
 				if !ok {
 					return errors.New("the existing value is not a string")
 				}
-				prevRawVal = []byte(string(*dStr))
-			}
-			// Note that if no entry is found, we pretend that an entry
-			// exists which is the version used for the running binary. This
-			// may not be 100.00% correct, but it will do. The input is
-			// checked more thoroughly when a user tries to change the
-			// value, and the corresponding sql migration that makes sure
-			// the above select finds something usually runs pretty quickly
-			// when the cluster is bootstrapped.
-			kvRawVal, kvObj, err := s.Validate(&st.SV, prevRawVal, nil /* update */)
-			if err != nil {
-				return errors.Errorf("unable to read existing value: %s", err)
+				kvStrDatum = dStr
+				kvRawVal = []byte(string(*dStr))
+			} else {
+				return errors.Errorf("no value found")
 			}
 
+			// !!!
+			// // Note that if no entry is found, we pretend that an entry
+			// // exists which is the version used for the running binary. This
+			// // may not be 100.00% correct, but it will do. The input is
+			// // checked more thoroughly when a user tries to change the
+			// // value, and the corresponding sql migration that makes sure
+			// // the above select finds something usually runs pretty quickly
+			// // when the cluster is bootstrapped.
+			// kvRawVal, kvObj, err := s.Validate(&st.SV, prevRawVal, nil /* update */)
+			// if err != nil {
+			//   return errors.Errorf("unable to read existing value: %s", err)
+			// }
+
+			// !!! comment
 			// NB: if there is no persisted cluster version yet, this will match
 			// kvRawVal (which is taken from `st.SV` in this case too).
 			gossipRawVal := []byte(s.Get(&st.SV))
 
-			_, gossipObj, err := s.Validate(&st.SV, gossipRawVal, nil /* update */)
-			if err != nil {
-				gossipObj = fmt.Sprintf("<error: %s>", err)
-			}
 			if !bytes.Equal(gossipRawVal, kvRawVal) {
-				return errors.Errorf("value differs between gossip (%v) and KV (%v); try again later (%v after %s)", gossipObj, kvObj, retryCtx.Err(), timeutil.Since(tBegin))
+				return errors.Errorf(
+					"value differs between gossip (%v) and KV (%v); try again later (%v after %s)",
+					gossipRawVal, kvRawVal, retryCtx.Err(), timeutil.Since(tBegin))
 			}
 
-			d = tree.NewDString(kvObj.(fmt.Stringer).String())
+			// !!!
+			// _, gossipObj, err := s.Validate(&st.SV, gossipRawVal, nil /* update */)
+			// if err != nil {
+			//   gossipObj = fmt.Sprintf("<error: %s>", err)
+			// }
+			// if !bytes.Equal(gossipRawVal, kvRawVal) {
+			//   return errors.Errorf("value differs between gossip (%v) and KV (%v); try again later (%v after %s)", gossipObj, kvObj, retryCtx.Err(), timeutil.Since(tBegin))
+			// }
+
+			// !!! d = tree.NewDString(kvObj.(fmt.Stringer).String())
+			d = kvStrDatum
 			return nil
 		})
 	}); err != nil {
