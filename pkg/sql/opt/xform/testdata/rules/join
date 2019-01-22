@@ -709,7 +709,7 @@ right-join (merge)
  │    ├── left ordering: +1,+2
  │    ├── right ordering: +5,+6
  │    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
- │    ├── ordering: +(1|5) [provided: +1]
+ │    ├── ordering: +(1|5) [actual: +1]
  │    ├── scan abc@ab
  │    │    ├── columns: a:1(int) b:2(int) c:3(int)
  │    │    └── ordering: +1,+2
@@ -740,7 +740,7 @@ left-join (merge)
  │    ├── left ordering: +1,+2
  │    ├── right ordering: +5,+6
  │    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
- │    ├── ordering: +(1|5),+(2|6) [provided: +1,+2]
+ │    ├── ordering: +(1|5),+(2|6) [actual: +1,+2]
  │    ├── scan abc@ab
  │    │    ├── columns: a:1(int) b:2(int) c:3(int)
  │    │    └── ordering: +1,+2

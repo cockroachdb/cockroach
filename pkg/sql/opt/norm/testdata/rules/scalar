@@ -1160,7 +1160,7 @@ project
  │    │    ├── columns: b.i:2(int) a.k:7(int) a.i:8(int) rownum:15(int!null)
  │    │    ├── key: (7,15)
  │    │    ├── fd: (15)-->(2), (7)-->(8)
- │    │    ├── ordering: +7 opt(8) [provided: +7]
+ │    │    ├── ordering: +7 opt(8) [actual: +7]
  │    │    └── left-join
  │    │         ├── columns: b.i:2(int) a.k:7(int) a.i:8(int) rownum:15(int!null)
  │    │         ├── key: (7,15)

@@ -1247,7 +1247,7 @@ sort
  ├── cardinality: [0 - 2]
  ├── side-effects, mutations
  ├── fd: (1)==(2), (2)==(1)
- ├── ordering: +(1|2) [provided: +1]
+ ├── ordering: +(1|2) [actual: +1]
  └── select
       ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
       ├── cardinality: [0 - 2]
@@ -1364,7 +1364,7 @@ sort
  ├── cardinality: [0 - 10]
  ├── side-effects, mutations
  ├── fd: (2)==(3), (3)==(2)
- ├── ordering: +(2|3),+4 [provided: +2,+4]
+ ├── ordering: +(2|3),+4 [actual: +2,+4]
  ├── prune: (1-4)
  └── project
       ├── columns: a:1(int) b:2(int!null) c:3(int!null) d:4(int)
@@ -1517,7 +1517,7 @@ sort
  ├── cardinality: [0 - 10]
  ├── side-effects, mutations
  ├── fd: (2)==(3), (3)==(2)
- ├── ordering: +(2|3),+4 [provided: +2,+4]
+ ├── ordering: +(2|3),+4 [actual: +2,+4]
  ├── prune: (1-4)
  └── project
       ├── columns: a:1(int) b:2(int!null) c:3(int!null) d:4(int)
