@@ -888,9 +888,33 @@ a  d
 statement ok
 ROLLBACK TRANSACTION
 
+# Same virtual table in different catalogs (these virtual table instances have
+# the same table ID).
+statement ok
+CREATE SEQUENCE seq
+
+statement ok
+PREPARE pg_catalog_query AS SELECT * FROM pg_catalog.pg_sequence
+
+query OOIIIIIB colnames
+EXECUTE pg_catalog_query
+----
+seqrelid    seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
+1121544076  20        1         1             9223372036854775807  1       1         false
+
+statement ok
+USE test
+
+query OOIIIIIB colnames
+EXECUTE pg_catalog_query
+----
+seqrelid    seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
+
+# Verify error when placeholders are used without prepare.
 statement error no value provided for placeholder: \$1
 SELECT $1:::int
 
+# Verify sequences get re-resolved.
 statement ok
 CREATE SEQUENCE seq
 

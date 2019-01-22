@@ -40,8 +40,8 @@ import (
 // same StableID, they can have different schema if the schema has changed over
 // time. See the Version type comments for more details.
 //
-// For sqlbase objects, the StableID is the 32-bit descriptor ID.
-type StableID uint32
+// For most sqlbase objects, the StableID is the 32-bit descriptor ID.
+type StableID uint64
 
 // SchemaName is an alias for tree.TableNamePrefix, since it consists of the
 // catalog + schema name.
