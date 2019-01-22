@@ -338,6 +338,10 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContext(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
 			m.transportStopper, &st.Version)
+		// We are sharing the same RPC context for all simulated nodes, so we can't enforce
+		// some of the RPC check validation.
+		m.rpcContext.TestingAllowNamedRPCToAnonymousServer = true
+
 		// Create a breaker which never trips and never backs off to avoid
 		// introducing timing-based flakes.
 		m.rpcContext.BreakerFactory = func() *circuit.Breaker {
@@ -901,7 +905,7 @@ func (m *multiTestContext) addStore(idx int) {
 	// having to worry about such conditions we pre-warm the connection
 	// cache. See #8440 for an example of the headaches the long dial times
 	// cause.
-	if _, err := m.rpcContext.GRPCDial(ln.Addr().String()).Connect(ctx); err != nil {
+	if _, err := m.rpcContext.GRPCDialNode(ln.Addr().String(), nodeID).Connect(ctx); err != nil {
 		m.t.Fatal(err)
 	}
 

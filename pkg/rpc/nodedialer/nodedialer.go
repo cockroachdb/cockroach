@@ -125,7 +125,7 @@ func (n *Dialer) DialInternalClient(
 	return ctx, roachpb.NewInternalClient(conn), err
 }
 
-// dial performs the dialing of the remove connection.
+// dial performs the dialing of the remote connection.
 func (n *Dialer) dial(
 	ctx context.Context, nodeID roachpb.NodeID, addr net.Addr, breaker *wrappedBreaker,
 ) (_ *grpc.ClientConn, err error) {
@@ -143,7 +143,7 @@ func (n *Dialer) dial(
 			log.Infof(ctx, "unable to connect to n%d: %s", nodeID, err)
 		}
 	}()
-	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	conn, err := n.rpcContext.GRPCDialNode(addr.String(), nodeID).Connect(ctx)
 	if err != nil {
 		// If we were canceled during the dial, don't trip the breaker.
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -192,7 +192,7 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID) error {
 		// The local client is always considered healthy.
 		return nil
 	}
-	conn := n.rpcContext.GRPCDial(addr.String())
+	conn := n.rpcContext.GRPCDialNode(addr.String(), nodeID)
 	return conn.Health()
 }
 
@@ -206,7 +206,7 @@ func (n *Dialer) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
 func (n *Dialer) getBreaker(nodeID roachpb.NodeID) *wrappedBreaker {
 	value, ok := n.breakers.Load(int64(nodeID))
 	if !ok {
-		name := fmt.Sprintf("rpc %v->%v", n.rpcContext.Config.Addr, nodeID)
+		name := fmt.Sprintf("rpc %v [n%d]", n.rpcContext.Config.Addr, nodeID)
 		breaker := &wrappedBreaker{Breaker: n.rpcContext.NewBreaker(name), EveryN: log.Every(logPerNodeFailInterval)}
 		value, _ = n.breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
 	}
