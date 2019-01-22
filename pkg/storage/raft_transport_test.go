@@ -98,11 +98,12 @@ func (s channelServer) HandleSnapshot(
 // Typical usage will add multiple nodes with AddNode, attach channels
 // to at least one store with ListenStore, and send messages with Send.
 type raftTransportTestContext struct {
-	t              testing.TB
-	stopper        *stop.Stopper
-	transports     map[roachpb.NodeID]*storage.RaftTransport
-	nodeRPCContext *rpc.Context
-	gossip         *gossip.Gossip
+	t               testing.TB
+	stopper         *stop.Stopper
+	transports      map[roachpb.NodeID]*storage.RaftTransport
+	nodeRPCContext  *rpc.Context
+	gossip          *gossip.Gossip
+	restoreRPCCheck func()
 }
 
 func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
@@ -122,11 +123,22 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	rttc.gossip = gossip.NewTest(
 		1, rttc.nodeRPCContext, server, rttc.stopper, metric.NewRegistry(),
 	)
+
+	// TODO(knz,tbg): the heartbeat node ID checks want a separate node
+	// ID for every simulated server, however the
+	// raftTransportTestContext uses a single rpc.Context for
+	// everything. This breaks the heartbeat testing logic. So we
+	// disable this particular check for every test that uses a
+	// raftTransportTestContext. Of course, the raftTransportTestContext
+	// should be fixed so as to not require this testing knob!
+	rttc.restoreRPCCheck = rpc.TestingAllowNamedRPCToAnonymousServer()
+
 	return rttc
 }
 
 func (rttc *raftTransportTestContext) Stop() {
 	rttc.stopper.Stop(context.TODO())
+	rttc.restoreRPCCheck()
 }
 
 // AddNode registers a node with the cluster. Nodes must be added

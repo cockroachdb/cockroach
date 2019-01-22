@@ -280,6 +280,10 @@ type multiTestContext struct {
 	stoppers       []*stop.Stopper
 	idents         []roachpb.StoreIdent
 	nodeLivenesses []*storage.NodeLiveness
+
+	// restoreRPCCheck is the callback returned by
+	// rpc.TestingAllowNamedRPCToAnonymousServer.
+	restoreRPCCheck func()
 }
 
 func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, error) {
@@ -312,6 +316,14 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	}
 
 	m.t = t
+
+	// TODO(knz,tbg): the heartbeat node ID checks want a separate node
+	// ID for every simulated server, however the multiTestcontext uses
+	// a single rpc.Context for everything. This breaks the heartbeat
+	// testing logic. So we disable this particular check for every test
+	// that uses a multiTestcontext. Of course, the multiTestContext
+	// should be fixed so as to not require this testing knob!
+	m.restoreRPCCheck = rpc.TestingAllowNamedRPCToAnonymousServer()
 
 	m.nodeIDtoAddrMu.RWMutex = &syncutil.RWMutex{}
 	m.mu = &syncutil.RWMutex{}
@@ -432,6 +444,8 @@ func (m *multiTestContext) Stop() {
 			s.AssertInvariants()
 		}
 	}
+
+	m.restoreRPCCheck()
 }
 
 // gossipStores forces each store to gossip its store descriptor and then
@@ -892,7 +906,7 @@ func (m *multiTestContext) addStore(idx int) {
 	// having to worry about such conditions we pre-warm the connection
 	// cache. See #8440 for an example of the headaches the long dial times
 	// cause.
-	if _, err := m.rpcContext.GRPCDial(ln.Addr().String()).Connect(ctx); err != nil {
+	if _, err := m.rpcContext.GRPCDialNode(ln.Addr().String(), nodeID).Connect(ctx); err != nil {
 		m.t.Fatal(err)
 	}
 

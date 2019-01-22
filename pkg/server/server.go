@@ -1484,6 +1484,14 @@ func (s *Server) Start(ctx context.Context) error {
 		time.NewTicker,
 	)
 
+	// Node ID should have been determined by this point.
+	if s.NodeID() == 0 {
+		log.Fatal(ctx, "Node ID failed to be determined during node startup.")
+	}
+	// Now that we have a node ID, ensure that incoming RPC connections
+	// are validated against this node ID.
+	s.rpcContext.NodeID.Set(ctx, s.NodeID())
+
 	// Cluster ID should have been determined by this point.
 	if s.rpcContext.ClusterID.Get() == uuid.Nil {
 		log.Fatal(ctx, "Cluster ID failed to be determined during node startup.")
