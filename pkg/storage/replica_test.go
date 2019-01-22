@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -178,6 +179,14 @@ func (tc *testContext) Start(t testing.TB, stopper *stop.Stopper) {
 // StartWithStoreConfig initializes the test context with a single
 // range covering the entire keyspace.
 func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper, cfg StoreConfig) {
+	tc.StartWithStoreConfigAndVersion(t, stopper, cfg, cluster.BinaryServerVersion)
+}
+
+// StartWithStoreConfigAndVersion is like StartWithStoreConfig but additionally
+// allows control over the bootstrap version.
+func (tc *testContext) StartWithStoreConfigAndVersion(
+	t testing.TB, stopper *stop.Stopper, cfg StoreConfig, bootstrapVersion roachpb.Version,
+) {
 	tc.TB = t
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
@@ -195,12 +204,13 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		tc.transport = NewDummyRaftTransport(cfg.Settings)
 	}
 	ctx := context.TODO()
-	bootstrapVersion := cfg.Settings.Version.BootstrapVersion()
-	if ver := cfg.TestingKnobs.BootstrapVersion; ver != nil {
-		bootstrapVersion = *ver
-	}
+	// !!! bootstrapVersion := cfg.Settings.Version.BootstrapVersion()
+	// if ver := cfg.TestingKnobs.BootstrapVersion; ver != nil {
+	//   bootstrapVersion = *ver
+	// }
 
 	if tc.store == nil {
+		cv := cluster.ClusterVersion{Version: bootstrapVersion}
 		cfg.Gossip = tc.gossip
 		cfg.Transport = tc.transport
 		cfg.StorePool = NewTestStorePool(cfg)
@@ -214,9 +224,14 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
-		}, bootstrapVersion); err != nil {
+		},
+			cv); err != nil {
 			t.Fatal(err)
 		}
+		cfg.Settings.InitializeVersion(
+			cv,
+			cluster.BinaryMinimumSupportedVersion,
+			cluster.BinaryServerVersion)
 		tc.store = NewStore(ctx, cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
 		// Now that we have our actual store, monkey patch the factory used in cfg.DB.
 		factory.setStore(tc.store)
@@ -229,7 +244,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 			if err := WriteInitialClusterData(
 				ctx, tc.store.Engine(),
 				nil, /* initialValues */
-				bootstrapVersion.Version,
+				bootstrapVersion,
 				1 /* numStores */, nil /* splits */, cfg.Clock.PhysicalNow(),
 			); err != nil {
 				t.Fatal(err)
@@ -254,7 +269,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 				roachpb.BootstrapLease(),
 				hlc.Timestamp{},
 				hlc.Timestamp{},
-				bootstrapVersion.Version,
+				bootstrapVersion,
 				stateloader.TruncatedStateUnreplicated,
 			); err != nil {
 				t.Fatal(err)

@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -39,6 +38,7 @@ import (
 type testClusterWithHelpers struct {
 	*testing.T
 	*testcluster.TestCluster
+	// !!! can this args go away?
 	args func() map[int]base.TestServerArgs
 }
 
@@ -90,6 +90,8 @@ func (th *testClusterWithHelpers) resetDowngrade(i int) error {
 	return err
 }
 
+// !!! this function no longer does anything with the versions
+//
 // Set up a mixed cluster with the given initial bootstrap version and
 // len(versions) servers that each run at MinSupportedVersion=v[0] and
 // ServerVersion=v[1] (i.e. they identify as a binary that can run with
@@ -103,8 +105,9 @@ func setupMixedCluster(
 		T: t,
 		args: func() map[int]base.TestServerArgs {
 			serverArgsPerNode := map[int]base.TestServerArgs{}
-			for i, v := range versions {
-				st := cluster.MakeClusterSettings(roachpb.MustParseVersion(v[0]), roachpb.MustParseVersion(v[1]))
+			for i /* !!!, v */ := range versions {
+				// !!! st := cluster.MakeClusterSettings(roachpb.MustParseVersion(v[0]), roachpb.MustParseVersion(v[1]))
+				st := cluster.MakeClusterSettings()
 				args := base.TestServerArgs{
 					Settings: st,
 					Knobs:    knobs,
@@ -145,6 +148,8 @@ func prev(version roachpb.Version) roachpb.Version {
 	}
 }
 
+// !!! This test doesn't seem to need any mucking with the versions. It seems to
+// simply be about starting a cluster. Simplify it and rename it.
 func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -158,36 +163,39 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	// new version (and not the old one).
 	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
 
-	bootstrapVersion := cluster.ClusterVersion{Version: newVersion}
+	// !!! bootstrapVersion := cluster.ClusterVersion{Version: newVersion}
 
 	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
+		// !!!
+		// Store: &storage.StoreTestingKnobs{
+		//   BootstrapVersion: &bootstrapVersion,
+		// },
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: 1,
 		},
 	}
 
 	ctx := context.Background()
+	// !!! is this dir needed?
 	dir, finish := testutils.TempDir(t)
 	defer finish()
 	tc := setupMixedCluster(t, knobs, versions, dir)
 	defer tc.TestCluster.Stopper().Stop(ctx)
 
 	for i := 0; i < len(tc.TestCluster.Servers); i++ {
-		testutils.SucceedsSoon(t, func() error {
-			for _, engine := range tc.TestCluster.Servers[i].Engines() {
-				cv, err := storage.ReadClusterVersion(ctx, engine)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if cv.Version != newVersion {
-					return errors.Errorf("n%d: expected version %v, got %v", i+1, newVersion, cv)
-				}
+		// !!! testutils.SucceedsSoon(t, func() error {
+		for _, engine := range tc.TestCluster.Servers[i].Engines() {
+			cv, err := storage.ReadClusterVersion(ctx, engine)
+			if err != nil {
+				t.Fatal(err)
 			}
-			return nil
-		})
+			if cv.Version != newVersion {
+				// !!! return errors.Errorf("n%d: expected version %v, got %v", i+1, newVersion, cv)
+				t.Fatalf("n%d: expected version %v, got %v", i+1, newVersion, cv)
+			}
+		}
+		// !!! return nil
+		// !!! })
 	}
 }
 
@@ -368,29 +376,52 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	dir, finish := testutils.TempDir(t)
-	defer finish()
+	// // !!! is this dir needed?
+	// dir, finish := testutils.TempDir(t)
+	// defer finish()
 
 	var newVersion = cluster.BinaryServerVersion
 	var oldVersion = prev(newVersion)
 
-	// Starts 3 nodes that have cluster versions set to be oldVersion and
-	// self-declared binary version set to be newVersion. Expect cluster
-	// version to upgrade automatically from oldVersion to newVersion.
-	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
-
-	bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
+	// !!!
+	// // Starts 3 nodes that have cluster versions set to be oldVersion and
+	// // self-declared binary version set to be newVersion. Expect cluster
+	// // version to upgrade automatically from oldVersion to newVersion.
+	// versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
+	//
+	// bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
+	//
+	// knobs := base.TestingKnobs{
+	//   Store: &storage.StoreTestingKnobs{
+	//     BootstrapVersion: &bootstrapVersion,
+	//   },
+	//   Server: &server.TestingKnobs{
+	//     DisableAutomaticVersionUpgrade: 1,
+	//   },
+	// }
+	// tc := setupMixedCluster(t, knobs, versions, dir)
+	// defer tc.TestCluster.Stopper().Stop(ctx)
 
 	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
 		Server: &server.TestingKnobs{
+			BootstrapVersionOverride:       oldVersion,
 			DisableAutomaticVersionUpgrade: 1,
 		},
 	}
-	tc := setupMixedCluster(t, knobs, versions, dir)
-	defer tc.TestCluster.Stopper().Stop(ctx)
+
+	rawTC := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		// !!! remove this replication mode?
+		ReplicationMode: base.ReplicationManual, // speeds up test
+		ServerArgs: base.TestServerArgs{
+			Knobs: knobs,
+		},
+		// !!! 	ServerArgsPerNode: twh.args(),
+	})
+	defer rawTC.Stopper().Stop(ctx)
+	tc := testClusterWithHelpers{
+		T:           t,
+		TestCluster: rawTC,
+	}
 
 	// Set CLUSTER SETTING cluster.preserve_downgrade_option to oldVersion to prevent upgrade.
 	if err := tc.setDowngrade(0, oldVersion.String()); err != nil {

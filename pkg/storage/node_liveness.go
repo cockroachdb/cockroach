@@ -186,6 +186,7 @@ func NewNodeLiveness(
 	st *cluster.Settings,
 	histogramWindow time.Duration,
 ) *NodeLiveness {
+	log.Infof(context.TODO(), "!!! NewNodeLiveness. version active: %t [%p]", st.Version.IsInitialized(), &st.Version)
 	nl := &NodeLiveness{
 		ambientCtx:        ambient,
 		clock:             clock,
@@ -434,6 +435,7 @@ func (nl *NodeLiveness) IsHealthy(nodeID roachpb.NodeID) (bool, error) {
 func (nl *NodeLiveness) StartHeartbeat(
 	ctx context.Context, stopper *stop.Stopper, alive HeartbeatCallback,
 ) {
+	log.Infof(context.TODO(), "!!! StartHeartbeat. version active: %t [%p]", nl.st.Version.IsInitialized(), &nl.st.Version)
 	log.VEventf(ctx, 1, "starting liveness heartbeat")
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()

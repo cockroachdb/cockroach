@@ -2784,7 +2784,8 @@ may increase either contention or retry errors, or both.`,
 				// are many random places that create an ad-hoc EvalContext that
 				// they only partially populate.
 				if st := ctx.Settings; st != nil {
-					v = st.Version.ServerVersion.String()
+					// find another place to get the BinaryVersion from. EvalContext?
+					v = st.BinaryVersion().String() // !!!st.Version.ServerVersion.String()
 				}
 				return tree.NewDString(v), nil
 			},

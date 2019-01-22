@@ -132,8 +132,10 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	serverOffset.Offset = -serverOffset.Offset
 	hs.remoteClockMonitor.UpdateOffset(ctx, args.Addr, serverOffset, 0 /* roundTripLatency */)
 	return &PingResponse{
-		Pong:          args.Ping,
-		ServerTime:    hs.clock.PhysicalNow(),
-		ServerVersion: hs.version.ServerVersion,
+		Pong:       args.Ping,
+		ServerTime: hs.clock.PhysicalNow(),
+		// !!! this needs to come from a server, not directly from the global
+		ServerVersion: cluster.BinaryServerVersion,
+		// ServerVersion: hs.version.ServerVersion,
 	}, nil
 }

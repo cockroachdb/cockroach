@@ -208,6 +208,13 @@ func (n *setClusterSettingNode) Next(_ runParams) (bool, error) { return false, 
 func (n *setClusterSettingNode) Values() tree.Datums            { return nil }
 func (n *setClusterSettingNode) Close(_ context.Context)        {}
 
+// tosSettingString takes in a datum that's supposed to become the value for a
+// Setting and validates it, returning the string representation of the new
+// value as it needs to be inserted into the system.settings table.
+//
+// Args:
+// prev: Only specified if the setting is a StateMachineSetting. Represents the
+//   current value of the setting, read from the system.settings table.
 func toSettingString(
 	ctx context.Context, st *cluster.Settings, name string, s settings.Setting, d, prev tree.Datum,
 ) (string, error) {
@@ -227,7 +234,7 @@ func toSettingString(
 				return "", errors.New("the existing value is not a string")
 			}
 			prevRawVal := []byte(string(*dStr))
-			newBytes, _, err := setting.Validate(&st.SV, prevRawVal, (*string)(s))
+			newBytes, err := setting.Validate(&st.SV, prevRawVal, string(*s))
 			if err != nil {
 				return "", err
 			}

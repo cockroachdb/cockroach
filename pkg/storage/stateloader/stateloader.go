@@ -81,6 +81,7 @@ func (rsl StateLoader) Load(
 		return storagepb.ReplicaState{}, err
 	} else if as != nil {
 		s.UsingAppliedStateKey = true
+		log.Infof(ctx, "!!! stateloader true")
 
 		s.RaftAppliedIndex = as.RaftAppliedIndex
 		s.LeaseAppliedIndex = as.LeaseAppliedIndex

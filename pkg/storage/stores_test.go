@@ -340,7 +340,11 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 		return ls
 	}
 
-	ls0 := makeStores()
+	// Hard-code MinSupportedVersion of 1.0 for this test.
+	v1_0 := roachpb.Version{Major: 1}
+	minSupportedVersion := v1_0
+	// Hard-code ServerVersion of 1.1 for this test.
+	serverVersion := roachpb.Version{Major: 1, Minor: 1}
 
 	// If there are no stores, default to minSupportedVersion
 	// (v1_0 in this test)

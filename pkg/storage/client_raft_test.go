@@ -101,6 +101,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 			t.Errorf("key %q: expected 28 but got %v", key2, val)
 		}
 	}
+	log.Infof(context.TODO(), "!!! 0.1")
 
 	// First, populate the store with data across two ranges. Each range contains commands
 	// that both predate and postdate the split.
@@ -116,6 +117,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 				dontCreateSystemRanges: true,
 			},
 			stopper)
+		log.Infof(context.TODO(), "!!! 0.2")
 
 		increment := func(rangeID roachpb.RangeID, key roachpb.Key, value int64) (*roachpb.IncrementResponse, *roachpb.Error) {
 			args := incrementArgs(key, value)
@@ -149,6 +151,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		validate(store)
 	}()
 
+	log.Infof(context.TODO(), "!!! 1")
 	// Now create a new store with the same engine and make sure the expected data is present.
 	// We must use the same clock because a newly-created manual clock will be behind the one
 	// we wrote with and so will see stale MVCC data.
@@ -159,6 +162,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 			cfg:           &storeCfg,
 		},
 		engineStopper)
+	log.Infof(context.TODO(), "!!! 2")
 
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.

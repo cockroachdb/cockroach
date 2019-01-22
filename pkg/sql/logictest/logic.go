@@ -396,12 +396,12 @@ type testClusterConfig struct {
 	skipShort bool
 	// If not empty, bootstrapVersion controls what version the cluster will be
 	// bootstrapped at.
-	bootstrapVersion cluster.ClusterVersion
+	bootstrapVersion roachpb.Version
 	// If not empty, serverVersion is used to set what the Server will consider to
 	// be "the server version".
 	// TODO(andrei): clarify this comment and many others around the "server
 	// version".
-	serverVersion  roachpb.Version
+	// !!! serverVersion  roachpb.Version
 	disableUpgrade bool
 }
 
@@ -413,12 +413,10 @@ type testClusterConfig struct {
 // via -config).
 var logicTestConfigs = []testClusterConfig{
 	{name: "local", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
-	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1,
+	{name: "local@v2.0-noupgrade", numNodes: 1,
 		overrideDistSQLMode: "off", overrideOptimizerMode: "off",
-		bootstrapVersion: cluster.ClusterVersion{
-			Version: roachpb.Version{Major: 1},
-		},
-		serverVersion:  roachpb.Version{Major: 1, Minor: 1},
+		bootstrapVersion: cluster.VersionByKey(cluster.Version2_0),
+		// !!! serverVersion:    roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: true,
 	},
 	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "on", overrideAutoStats: "false"},
@@ -963,8 +961,12 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		distSQLKnobs.MetadataTestLevel = distsqlrun.On
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
-	if cfg.bootstrapVersion != (cluster.ClusterVersion{}) {
-		params.ServerArgs.Knobs.Store.(*storage.StoreTestingKnobs).BootstrapVersion = &cfg.bootstrapVersion
+	if cfg.bootstrapVersion != (roachpb.Version{}) {
+		// !!! params.ServerArgs.Knobs.Store.(*storage.StoreTestingKnobs).BootstrapVersion = &cfg.bootstrapVersion
+		if params.ServerArgs.Knobs.Server == nil {
+			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
+		}
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BootstrapVersionOverride = cfg.bootstrapVersion
 	}
 	if cfg.disableUpgrade {
 		if params.ServerArgs.Knobs.Server == nil {
@@ -973,21 +975,22 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = 1
 	}
 
-	if cfg.serverVersion != (roachpb.Version{}) {
-		// If we want to run a specific server version, we assume that it
-		// supports at least the bootstrap version.
-		paramsPerNode := map[int]base.TestServerArgs{}
-		minVersion := cfg.serverVersion
-		if cfg.bootstrapVersion != (cluster.ClusterVersion{}) {
-			minVersion = cfg.bootstrapVersion.Version
-		}
-		for i := 0; i < cfg.numNodes; i++ {
-			nodeParams := params.ServerArgs
-			nodeParams.Settings = cluster.MakeClusterSettings(minVersion, cfg.serverVersion)
-			paramsPerNode[i] = nodeParams
-		}
-		params.ServerArgsPerNode = paramsPerNode
-	}
+	// !!!
+	// if cfg.serverVersion != (roachpb.Version{}) {
+	//   // If we want to run a specific server version, we assume that it
+	//   // supports at least the bootstrap version.
+	//   paramsPerNode := map[int]base.TestServerArgs{}
+	//   minVersion := cfg.serverVersion
+	//   if cfg.bootstrapVersion != (roachpb.Version{}) {
+	//     minVersion = cfg.bootstrapVersion.Version
+	//   }
+	//   for i := 0; i < cfg.numNodes; i++ {
+	//     nodeParams := params.ServerArgs
+	//     nodeParams.Settings = cluster.MakeClusterSettings(minVersion, cfg.serverVersion)
+	//     paramsPerNode[i] = nodeParams
+	//   }
+	//   params.ServerArgsPerNode = paramsPerNode
+	// }
 
 	// Update the defaults for automatic statistics to avoid delays in testing.
 	// Avoid making the DefaultAsOfTime too small to avoid interacting with

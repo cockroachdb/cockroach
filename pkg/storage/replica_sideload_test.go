@@ -105,7 +105,7 @@ func testSideloadingSideloadedStorage(
 	defer cleanup()
 
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
+	st := cluster.MakeTestingClusterSettingsWithVersion(cluster.BinaryServerVersion)
 
 	cleanup, cache, eng := newRocksDB(t)
 	defer cleanup()
@@ -394,10 +394,10 @@ func TestSideloadedStorageReplicaIDMigration(t *testing.T) {
 
 	ctx := context.Background()
 	preV := cluster.VersionByKey(cluster.VersionSideloadedStorageNoReplicaID - 1)
-	stPre := cluster.MakeTestingClusterSettingsWithVersion(preV, preV)
+	stPre := cluster.MakeTestingClusterSettingsWithVersion(preV)
 
 	postV := cluster.VersionByKey(cluster.VersionSideloadedStorageNoReplicaID)
-	stPost := cluster.MakeTestingClusterSettingsWithVersion(postV, postV)
+	stPost := cluster.MakeTestingClusterSettingsWithVersion(postV)
 
 	const rangeID = roachpb.RangeID(1)
 
