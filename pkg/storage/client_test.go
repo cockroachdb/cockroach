@@ -891,7 +891,7 @@ func (m *multiTestContext) addStore(idx int) {
 	// having to worry about such conditions we pre-warm the connection
 	// cache. See #8440 for an example of the headaches the long dial times
 	// cause.
-	if _, err := m.rpcContext.GRPCDial(ln.Addr().String()).Connect(ctx); err != nil {
+	if _, err := m.rpcContext.GRPCDialNode(ln.Addr().String(), nodeID).Connect(ctx); err != nil {
 		m.t.Fatal(err)
 	}
 
