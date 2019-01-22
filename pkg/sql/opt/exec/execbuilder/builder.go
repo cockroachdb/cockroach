@@ -35,6 +35,12 @@ type Builder struct {
 	// expressions we built. Each entry is associated with a tree.Subquery
 	// expression node.
 	subqueries []exec.Subquery
+
+	// nullifyMissingVarExprs, if greater than 0, tells the builder to replace
+	// VariableExprs that have no bindings with DNull. This is useful for apply
+	// join, which needs to be able to create a plan that has outer columns.
+	// The number indicates the depth of apply joins.
+	nullifyMissingVarExprs int
 }
 
 // New constructs an instance of the execution node builder using the

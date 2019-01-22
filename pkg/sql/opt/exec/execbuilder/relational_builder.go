@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -233,7 +234,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 			break
 		}
 		if opt.IsJoinApplyOp(e) {
-			return execPlan{}, b.decorrelationError()
+			ep, err = b.buildApplyJoin(e)
+			break
 		}
 	}
 	if err != nil {
@@ -472,6 +474,132 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 	return res, nil
 }
 
+// ReplaceVars replaces the VariableExprs within a RelExpr with constant Datums
+// provided by the vars map, which maps opt column id for each VariableExpr to
+// replace to the Datum that should replace it. The memo within the input
+// norm.Factory will be replaced with the result.
+// requiredPhysical is the set of physical properties that are required of the
+// root of the new expression.
+func ReplaceVars(
+	f *norm.Factory,
+	applyInput memo.RelExpr,
+	requiredPhysical *physical.Required,
+	vars map[opt.ColumnID]tree.Datum,
+) {
+	var replaceFn norm.ReplaceFunc
+	replaceFn = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			if d, ok := vars[t.Col]; ok {
+				return f.ConstructConstVal(d, t.Typ)
+			}
+		}
+		return f.CopyAndReplaceDefault(e, replaceFn)
+	}
+	f.CopyAndReplace(applyInput, requiredPhysical, replaceFn)
+}
+
+func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
+	switch join.Op() {
+	case opt.InnerJoinApplyOp, opt.LeftJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+	default:
+		return execPlan{}, fmt.Errorf("couldn't execute correlated subquery with op %s", join.Op())
+	}
+	joinType := joinOpToJoinType(join.Op())
+	leftExpr := join.Child(0).(memo.RelExpr)
+	rightExpr := join.Child(1).(memo.RelExpr)
+	filters := join.Child(2).(*memo.FiltersExpr)
+
+	// Create a fake version of the right-side plan that contains NULL for all
+	// outer columns, so that we can figure out the output columns and various
+	// other attributes.
+	var f norm.Factory
+	f.Init(b.evalCtx)
+	fakeBindings := make(map[opt.ColumnID]tree.Datum)
+	rightExpr.Relational().OuterCols.ForEach(func(k int) {
+		fakeBindings[opt.ColumnID(k)] = tree.DNull
+	})
+	ReplaceVars(&f, rightExpr, rightExpr.RequiredPhysical(), fakeBindings)
+
+	// We increment nullifyMissingVarExprs here to instruct the scalar builder to
+	// replace the outer column VariableExprs with null for the current scope.
+	b.nullifyMissingVarExprs++
+	fakeRight, err := b.buildRelational(rightExpr)
+	b.nullifyMissingVarExprs--
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Make a copy of the required props.
+	requiredProps := *rightExpr.RequiredPhysical()
+	requiredProps.Presentation = make(physical.Presentation, fakeRight.outputCols.Len())
+	fakeRight.outputCols.ForEach(func(k, v int) {
+		requiredProps.Presentation[opt.ColumnID(v)] = opt.AliasedColumn{
+			ID:    opt.ColumnID(k),
+			Alias: join.Memo().Metadata().ColumnMeta(opt.ColumnID(k)).Alias,
+		}
+	})
+
+	left, err := b.buildRelational(leftExpr)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// leftBoundCols is the set of columns that this apply join binds.
+	leftBoundCols := leftExpr.Relational().OutputCols.Intersection(rightExpr.Relational().OuterCols)
+	// leftBoundColMap is a map from opt.ColumnID to opt.ColumnOrdinal that maps
+	// a column bound by the left side of this apply join to the column ordinal
+	// in the left side that contains the binding.
+	var leftBoundColMap opt.ColMap
+	for k, ok := leftBoundCols.Next(0); ok; k, ok = leftBoundCols.Next(k + 1) {
+		v, ok := left.outputCols.Get(k)
+		if !ok {
+			return execPlan{}, fmt.Errorf("couldn't find binding column %d in output columns", k)
+		}
+		leftBoundColMap.Set(k, v)
+	}
+
+	allCols := joinOutputMap(left.outputCols, fakeRight.outputCols)
+
+	ctx := buildScalarCtx{
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivarMap: allCols,
+	}
+
+	var onExpr tree.TypedExpr
+	if len(*filters) != 0 {
+		onExpr, err = b.buildScalar(&ctx, filters)
+		if err != nil {
+			return execPlan{}, nil
+		}
+	}
+
+	var outputCols opt.ColMap
+	if joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin {
+		// For semi and anti join, only the left columns are output.
+		outputCols = left.outputCols
+	} else {
+		outputCols = allCols
+	}
+
+	ep := execPlan{outputCols: outputCols}
+
+	ep.root, err = b.factory.ConstructApplyJoin(
+		joinType,
+		left.root,
+		leftBoundColMap,
+		b.mem,
+		&requiredProps,
+		fakeRight.root,
+		rightExpr,
+		onExpr,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return ep, nil
+}
+
 func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	if f := join.Private().(*memo.JoinPrivate).Flags; f.DisallowHashJoin {
 		hint := tree.AstLookup
@@ -603,22 +731,22 @@ func joinOutputMap(left, right opt.ColMap) opt.ColMap {
 
 func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
 	switch op {
-	case opt.InnerJoinOp:
+	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		return sqlbase.InnerJoin
 
-	case opt.LeftJoinOp:
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		return sqlbase.LeftOuterJoin
 
-	case opt.RightJoinOp:
+	case opt.RightJoinOp, opt.RightJoinApplyOp:
 		return sqlbase.RightOuterJoin
 
-	case opt.FullJoinOp:
+	case opt.FullJoinOp, opt.FullJoinApplyOp:
 		return sqlbase.FullOuterJoin
 
-	case opt.SemiJoinOp:
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
 		return sqlbase.LeftSemiJoin
 
-	case opt.AntiJoinOp:
+	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		return sqlbase.LeftAntiJoin
 
 	default:

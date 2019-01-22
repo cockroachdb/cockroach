@@ -233,8 +233,15 @@ root            ·              ·                  ("array")  ·
 ·               spans          ALL                ·          ·
 
 # Case where the plan has an apply join.
-query error could not decorrelate subquery
-SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
+query TTTTT
+EXPLAIN(verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
+----
+apply-join  ·      ·            (a, b, c)  ·
+ │          type   semi         ·          ·
+ │          pred   column1 = a  ·          ·
+ └── scan   ·      ·            (a, b, c)  ·
+·           table  abc@primary  ·          ·
+·           spans  ALL          ·          ·
 
 # Case where the EXISTS subquery still has outer columns in the subquery
 # (regression test for #28816).
