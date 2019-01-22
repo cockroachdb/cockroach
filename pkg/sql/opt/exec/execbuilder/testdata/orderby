@@ -229,11 +229,10 @@ render                ·      ·
  └── sort             ·      ·
       │               order  +b,+a,+d
       └── index-join  ·      ·
-           ├── scan   ·      ·
-           │          table  abc@bc
-           │          spans  /11-/30
+           │          table  abc@primary
            └── scan   ·      ·
-·                     table  abc@primary
+·                     table  abc@bc
+·                     spans  /11-/30
 
 # An inequality should not be enough to force the use of the index.
 query TTT
@@ -744,13 +743,12 @@ render                      ·              ·                 (k)              
            │                render 0       k                 ·                ·
            │                render 1       v                 ·                ·
            └── lookup-join  ·              ·                 (column1, k, v)  ·
+                │           table          kv@primary        ·                ·
                 │           type           inner             ·                ·
-                ├── values  ·              ·                 (column1)        ·
-                │           size           1 column, 2 rows  ·                ·
-                │           row 0, expr 0  1                 ·                ·
-                │           row 1, expr 0  3                 ·                ·
-                └── scan    ·              ·                 (k, v)           ·
-·                           table          kv@primary        ·                ·
+                └── values  ·              ·                 (column1)        ·
+·                           size           1 column, 2 rows  ·                ·
+·                           row 0, expr 0  1                 ·                ·
+·                           row 1, expr 0  3                 ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
@@ -780,8 +778,7 @@ sort                  ·       ·                (x, y, z)              +x
  └── filter           ·       ·                (x, y, z)              ·
       │               filter  x = y            ·                      ·
       └── index-join  ·       ·                (x, y, z)              ·
-           ├── scan   ·       ·                (y, z, rowid[hidden])  ·
-           │          table   xyz@xyz_z_y_idx  ·                      ·
-           │          spans   /1/!NULL-/2      ·                      ·
-           └── scan   ·       ·                (x, y, z)              ·
-·                     table   xyz@primary      ·                      ·
+           │          table   xyz@primary      ·                      ·
+           └── scan   ·       ·                (y, z, rowid[hidden])  ·
+·                     table   xyz@xyz_z_y_idx  ·                      ·
+·                     spans   /1/!NULL-/2      ·                      ·

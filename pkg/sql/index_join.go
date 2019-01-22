@@ -242,8 +242,8 @@ type indexJoinRun struct {
 
 const indexJoinBatchSize = 100
 
-func (n *indexJoinNode) startExec(runParams) error {
-	return nil
+func (n *indexJoinNode) startExec(params runParams) error {
+	return n.table.startExec(params)
 }
 
 func (n *indexJoinNode) Next(params runParams) (bool, error) {

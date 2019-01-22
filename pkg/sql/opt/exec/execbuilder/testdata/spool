@@ -73,11 +73,10 @@ limit                                      ·         ·
                 └── render                 ·         ·
                      └── render            ·         ·
                           └── lookup-join  ·         ·
+                               │           table     t@primary
                                │           type      left outer
-                               ├── values  ·         ·
-                               │           size      1 column, 2 rows
-                               └── scan    ·         ·
-·                                          table     t@primary
+                               └── values  ·         ·
+·                                          size      1 column, 2 rows
 
 # Ditto all mutations, with the statement source syntax.
 query TTT
@@ -141,11 +140,10 @@ limit                                      ·         ·
                 └── render                 ·         ·
                      └── render            ·         ·
                           └── lookup-join  ·         ·
+                               │           table     t@primary
                                │           type      left outer
-                               ├── values  ·         ·
-                               │           size      1 column, 2 rows
-                               └── scan    ·         ·
-·                                          table     t@primary
+                               └── values  ·         ·
+·                                          size      1 column, 2 rows
 
 # Check that a spool is also inserted for other processings than LIMIT.
 query TTT

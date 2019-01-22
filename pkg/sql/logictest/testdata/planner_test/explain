@@ -437,11 +437,10 @@ sort                  ·         ·                 (a, b)                      
       │               render 0  test.public.tc.a  ·                                        ·
       │               render 1  test.public.tc.b  ·                                        ·
       └── index-join  ·         ·                 (a, b, rowid[hidden,omitted])            a=CONST; rowid!=NULL; key(rowid)
-           ├── scan   ·         ·                 (a[omitted], b[omitted], rowid[hidden])  a=CONST; rowid!=NULL; key(rowid)
-           │          table     tc@c              ·                                        ·
-           │          spans     /10-/11           ·                                        ·
-           └── scan   ·         ·                 (a, b, rowid[hidden,omitted])            ·
-·                     table     tc@primary        ·                                        ·
+           │          table     tc@primary        ·                                        ·
+           └── scan   ·         ·                 (a[omitted], b[omitted], rowid[hidden])  a=CONST; rowid!=NULL; key(rowid)
+·                     table     tc@c              ·                                        ·
+·                     spans     /10-/11           ·                                        ·
 
 query TTTTT colnames
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
@@ -696,16 +695,14 @@ CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-render           ·         ·                             (x int, y int)                                       x!=NULL; y!=NULL
- │               render 0  (x)[int]                      ·                                                    ·
- │               render 1  (y)[int]                      ·                                                    ·
- └── index-join  ·         ·                             (x int, y int, rowid[hidden,omitted] int)            x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
-      ├── scan   ·         ·                             (x[omitted] int, y[omitted] int, rowid[hidden] int)  x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
-      │          table     tt@a                          ·                                                    ·
-      │          spans     /!NULL-/10                    ·                                                    ·
-      └── scan   ·         ·                             (x int, y int, rowid[hidden,omitted] int)            ·
-·                table     tt@primary                    ·                                                    ·
-·                filter    ((y)[int] > (10)[int])[bool]  ·                                                    ·
+render           ·         ·           (x int, y int)                                       x!=NULL; y!=NULL
+ │               render 0  (x)[int]    ·                                                    ·
+ │               render 1  (y)[int]    ·                                                    ·
+ └── index-join  ·         ·           (x int, y int, rowid[hidden,omitted] int)            x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
+      │          table     tt@primary  ·                                                    ·
+      └── scan   ·         ·           (x[omitted] int, y[omitted] int, rowid[hidden] int)  x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
+·                table     tt@a        ·                                                    ·
+·                spans     /!NULL-/10  ·                                                    ·
 
 query TTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT * FROM tt WHERE x < 10 AND y > 10

@@ -73,11 +73,10 @@ EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3) AND (a,b,c) < (8
 filter           ·       ·                                                     (a, b, c)              ·
  │               filter  ((a, b, c) > (1, 2, 3)) AND ((a, b, c) < (8, 9, 10))  ·                      ·
  └── index-join  ·       ·                                                     (a, b, c)              ·
-      ├── scan   ·       ·                                                     (a, b, rowid[hidden])  ·
-      │          table   abc@abc_a_b_idx                                       ·                      ·
-      │          spans   /1/2-/8/10                                            ·                      ·
-      └── scan   ·       ·                                                     (a, b, c)              ·
-·                table   abc@primary                                           ·                      ·
+      │          table   abc@primary                                           ·                      ·
+      └── scan   ·       ·                                                     (a, b, rowid[hidden])  ·
+·                table   abc@abc_a_b_idx                                       ·                      ·
+·                spans   /1/2-/8/10                                            ·                      ·
 
 statement ok
 DROP TABLE abc

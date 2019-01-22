@@ -232,11 +232,10 @@ render                ·               ·
       │               table           multiples@primary
       │               spans           ALL
       └── index-join  ·               ·
-           ├── scan   ·               ·
-           │          table           multiples@bc
-           │          spans           ALL
+           │          table           multiples@primary
            └── scan   ·               ·
-·                     table           multiples@primary
+·                     table           multiples@bc
+·                     spans           ALL
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b]
