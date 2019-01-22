@@ -1348,8 +1348,11 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	bootstrappedEngines, _, _, err := inspectEngines(
-		ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion,
-		s.cfg.Settings.Version.ServerVersion, &s.rpcContext.ClusterID)
+		ctx, s.engines,
+		// !!! s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion,
+		// !!! these should come from a config
+		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
+		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}
@@ -1475,8 +1478,11 @@ func (s *Server) Start(ctx context.Context) error {
 	// We ran this before, but might've bootstrapped in the meantime. This time
 	// we'll get the actual list of bootstrapped and empty engines.
 	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(
-		ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion,
-		s.cfg.Settings.Version.ServerVersion, &s.rpcContext.ClusterID)
+		ctx, s.engines,
+		// !!! s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion,
+		// !!! these should come from a config
+		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
+		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}
@@ -1758,7 +1764,9 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 func (s *Server) bootstrapCluster(ctx context.Context) error {
-	bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
+	// !!! bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
+	// !!! this should come from a config.
+	bootstrapVersion := cluster.ClusterVersion{Version: cluster.BinaryServerVersion}
 	if s.cfg.TestingKnobs.Store != nil {
 		if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
 			bootstrapVersion = *storeKnobs.BootstrapVersion
