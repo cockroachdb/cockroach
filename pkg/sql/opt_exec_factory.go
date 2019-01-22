@@ -875,11 +875,18 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 }
 
 func (ef *execFactory) ConstructInsert(
-	input exec.Node, table cat.Table, insertCols exec.ColumnOrdinalSet, rowsNeeded bool,
+	input exec.Node,
+	table cat.Table,
+	insertCols exec.ColumnOrdinalSet,
+	checks exec.CheckOrdinalSet,
+	rowsNeeded bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
 	tabDesc := table.(*optTable).desc
 	colDescs := makeColDescList(table, insertCols)
+
+	// Construct the check helper if there are any check constraints.
+	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
 
 	// Determine the foreign key tables involved in the update.
 	fkTables, err := row.MakeFkMetadata(
@@ -889,6 +896,7 @@ func (ef *execFactory) ConstructInsert(
 		ef.planner.LookupTableByID,
 		ef.planner.CheckPrivilege,
 		ef.planner.analyzeExpr,
+		checkHelper,
 	)
 	if err != nil {
 		return nil, err
@@ -917,7 +925,7 @@ func (ef *execFactory) ConstructInsert(
 		columns: returnCols,
 		run: insertRun{
 			ti:          tableInserter{ri: ri},
-			checkHelper: fkTables[tabDesc.ID].CheckHelper,
+			checkHelper: checkHelper,
 			rowsNeeded:  rowsNeeded,
 			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
 				Cols:    tabDesc.Columns,
@@ -940,7 +948,12 @@ func (ef *execFactory) ConstructInsert(
 }
 
 func (ef *execFactory) ConstructUpdate(
-	input exec.Node, table cat.Table, fetchCols, updateCols exec.ColumnOrdinalSet, rowsNeeded bool,
+	input exec.Node,
+	table cat.Table,
+	fetchCols exec.ColumnOrdinalSet,
+	updateCols exec.ColumnOrdinalSet,
+	checks exec.CheckOrdinalSet,
+	rowsNeeded bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
 	tabDesc := table.(*optTable).desc
@@ -955,6 +968,9 @@ func (ef *execFactory) ConstructUpdate(
 		sourceSlots[i] = scalarSlot{column: updateColDescs[i], sourceIndex: len(fetchColDescs) + i}
 	}
 
+	// Construct the check helper if there are any check constraints.
+	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
+
 	// Determine the foreign key tables involved in the update.
 	fkTables, err := row.MakeFkMetadata(
 		ef.planner.extendedEvalCtx.Context,
@@ -963,6 +979,7 @@ func (ef *execFactory) ConstructUpdate(
 		ef.planner.LookupTableByID,
 		ef.planner.CheckPrivilege,
 		ef.planner.analyzeExpr,
+		checkHelper,
 	)
 	if err != nil {
 		return nil, err
@@ -1008,7 +1025,7 @@ func (ef *execFactory) ConstructUpdate(
 		columns: returnCols,
 		run: updateRun{
 			tu:          tableUpdater{ru: ru},
-			checkHelper: fkTables[tabDesc.ID].CheckHelper,
+			checkHelper: checkHelper,
 			rowsNeeded:  rowsNeeded,
 			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
 				CurSourceRow: make(tree.Datums, len(ru.FetchCols)),
@@ -1040,6 +1057,7 @@ func (ef *execFactory) ConstructUpsert(
 	insertCols exec.ColumnOrdinalSet,
 	fetchCols exec.ColumnOrdinalSet,
 	updateCols exec.ColumnOrdinalSet,
+	checks exec.CheckOrdinalSet,
 	rowsNeeded bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
@@ -1056,6 +1074,9 @@ func (ef *execFactory) ConstructUpsert(
 		fkCheckType = row.CheckUpdates
 	}
 
+	// Construct the check helper if there are any check constraints.
+	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
+
 	// Determine the foreign key tables involved in the upsert.
 	fkTables, err := row.MakeFkMetadata(
 		ef.planner.extendedEvalCtx.Context,
@@ -1064,6 +1085,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.LookupTableByID,
 		ef.planner.CheckPrivilege,
 		ef.planner.analyzeExpr,
+		checkHelper,
 	)
 	if err != nil {
 		return nil, err
@@ -1117,7 +1139,7 @@ func (ef *execFactory) ConstructUpsert(
 		source:  input.(planNode),
 		columns: returnCols,
 		run: upsertRun{
-			checkHelper: fkTables[tabDesc.ID].CheckHelper,
+			checkHelper: checkHelper,
 			insertCols:  insertColDescs,
 			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
 				Cols:    tabDesc.Columns,
@@ -1165,6 +1187,7 @@ func (ef *execFactory) ConstructDelete(
 		ef.planner.LookupTableByID,
 		ef.planner.CheckPrivilege,
 		ef.planner.analyzeExpr,
+		nil, /* checkHelper */
 	)
 	if err != nil {
 		return nil, err

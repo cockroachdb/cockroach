@@ -1146,6 +1146,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
 	colList := make(opt.ColList, 0, len(ins.InsertCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
+	colList = appendColsWhenPresent(colList, ins.CheckCols)
 	input, err = b.ensureColumns(input, colList, nil, ins.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
@@ -1154,7 +1155,14 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	// Construct the Insert node.
 	tab := b.mem.Metadata().Table(ins.Table)
 	insertOrds := ordinalSetFromColList(ins.InsertCols)
-	node, err := b.factory.ConstructInsert(input.root, tab, insertOrds, ins.NeedResults)
+	checkOrds := ordinalSetFromColList(ins.CheckCols)
+	node, err := b.factory.ConstructInsert(
+		input.root,
+		tab,
+		insertOrds,
+		checkOrds,
+		ins.NeedResults,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1189,6 +1197,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols))
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
+	colList = appendColsWhenPresent(colList, upd.CheckCols)
 	input, err = b.ensureColumns(input, colList, nil, upd.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
@@ -1199,7 +1208,15 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	tab := md.Table(upd.Table)
 	fetchColOrds := ordinalSetFromColList(upd.FetchCols)
 	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
-	node, err := b.factory.ConstructUpdate(input.root, tab, fetchColOrds, updateColOrds, upd.NeedResults)
+	checkOrds := ordinalSetFromColList(upd.CheckCols)
+	node, err := b.factory.ConstructUpdate(
+		input.root,
+		tab,
+		fetchColOrds,
+		updateColOrds,
+		checkOrds,
+		upd.NeedResults,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1238,6 +1255,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	colList = appendColsWhenPresent(colList, ups.FetchCols)
 	colList = appendColsWhenPresent(colList, ups.UpdateCols)
 	colList = append(colList, ups.CanaryCol)
+	colList = appendColsWhenPresent(colList, ups.CheckCols)
 	input, err = b.ensureColumns(input, colList, nil, ups.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
@@ -1250,8 +1268,17 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
 	fetchColOrds := ordinalSetFromColList(ups.FetchCols)
 	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
+	checkOrds := ordinalSetFromColList(ups.CheckCols)
 	node, err := b.factory.ConstructUpsert(
-		input.root, tab, canaryCol, insertColOrds, fetchColOrds, updateColOrds, ups.NeedResults)
+		input.root,
+		tab,
+		canaryCol,
+		insertColOrds,
+		fetchColOrds,
+		updateColOrds,
+		checkOrds,
+		ups.NeedResults,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}

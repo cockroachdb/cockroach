@@ -22,41 +22,41 @@ CREATE TABLE t9 (
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t9 SET b = 2 WHERE a = 5
 ----
-count                ·         ·             ()                         ·
- └── update          ·         ·             ()                         ·
-      │              table     t9            ·                          ·
-      │              set       b             ·                          ·
-      │              strategy  updater       ·                          ·
-      │              check 0   t9.a > t9.b   ·                          ·
-      │              check 1   t9.d IS NULL  ·                          ·
-      └── render     ·         ·             (a, b, c, d, e, column11)  ·
-           │         render 0  a             ·                          ·
-           │         render 1  b             ·                          ·
-           │         render 2  c             ·                          ·
-           │         render 3  d             ·                          ·
-           │         render 4  e             ·                          ·
-           │         render 5  2             ·                          ·
-           └── scan  ·         ·             (a, b, c, d, e)            ·
-·                    table     t9@primary    ·                          ·
-·                    spans     /5-/5/#       ·                          ·
+count                ·         ·           ()                                         ·
+ └── update          ·         ·           ()                                         ·
+      │              table     t9          ·                                          ·
+      │              set       b           ·                                          ·
+      │              strategy  updater     ·                                          ·
+      └── render     ·         ·           (a, b, c, d, e, column11, check1, check2)  ·
+           │         render 0  a           ·                                          ·
+           │         render 1  b           ·                                          ·
+           │         render 2  c           ·                                          ·
+           │         render 3  d           ·                                          ·
+           │         render 4  e           ·                                          ·
+           │         render 5  2           ·                                          ·
+           │         render 6  a > 2       ·                                          ·
+           │         render 7  d IS NULL   ·                                          ·
+           └── scan  ·         ·           (a, b, c, d, e)                            ·
+·                    table     t9@primary  ·                                          ·
+·                    spans     /5-/5/#     ·                                          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t9 SET a = 2 WHERE a = 5
 ----
-count                ·         ·             ()                         ·
- └── update          ·         ·             ()                         ·
-      │              table     t9            ·                          ·
-      │              set       a             ·                          ·
-      │              strategy  updater       ·                          ·
-      │              check 0   t9.a > t9.b   ·                          ·
-      │              check 1   t9.d IS NULL  ·                          ·
-      └── render     ·         ·             (a, b, c, d, e, column11)  ·
-           │         render 0  a             ·                          ·
-           │         render 1  b             ·                          ·
-           │         render 2  c             ·                          ·
-           │         render 3  d             ·                          ·
-           │         render 4  e             ·                          ·
-           │         render 5  2             ·                          ·
-           └── scan  ·         ·             (a, b, c, d, e)            ·
-·                    table     t9@primary    ·                          ·
-·                    spans     /5-/5/#       ·                          ·
+count                ·         ·           ()                                         ·
+ └── update          ·         ·           ()                                         ·
+      │              table     t9          ·                                          ·
+      │              set       a           ·                                          ·
+      │              strategy  updater     ·                                          ·
+      └── render     ·         ·           (a, b, c, d, e, column11, check1, check2)  ·
+           │         render 0  a           ·                                          ·
+           │         render 1  b           ·                                          ·
+           │         render 2  c           ·                                          ·
+           │         render 3  d           ·                                          ·
+           │         render 4  e           ·                                          ·
+           │         render 5  2           ·                                          ·
+           │         render 6  b < 2       ·                                          ·
+           │         render 7  d IS NULL   ·                                          ·
+           └── scan  ·         ·           (a, b, c, d, e)                            ·
+·                    table     t9@primary  ·                                          ·
+·                    spans     /5-/5/#     ·                                          ·

@@ -23,11 +23,12 @@ import (
 // MakeFkMetadata populates a map of FkTableMetadata for all the
 // TableDescriptors that might be needed when performing FK checking for delete
 // and/or insert operations. It uses the passed in lookup function to perform
-// the actual lookup. The AnalyzeExpr function, if provided, is used to
-// initialize the CheckHelper, and this requires that the TableLookupFunction
-// and CheckPrivilegeFunction are provided and not just placeholder functions
-// as well. If an operation may include a cascading operation then the
-// CheckHelpers are required.
+// the actual lookup. The caller is expected to create the CheckHelper for the
+// given mutatedTable. However, if cascading is required, then the FK code will
+// need to create additional CheckHelpers. It does this using the
+// AnalyzeExprFunction, TableLookupFunction, and CheckPrivilegeFunction
+// functions, so these must be provided if there's a possibility of a cascading
+// operation.
 func MakeFkMetadata(
 	ctx context.Context,
 	mutatedTable *sqlbase.ImmutableTableDescriptor,
@@ -35,6 +36,7 @@ func MakeFkMetadata(
 	tblLookupFn TableLookupFunction,
 	privCheckFn CheckPrivilegeFunction,
 	analyzeExprFn sqlbase.AnalyzeExprFunction,
+	checkHelper *sqlbase.CheckHelper,
 ) (FkTableMetadata, error) {
 	// Initialize the lookup queue.
 	queue := tableLookupQueue{
@@ -55,14 +57,7 @@ func MakeFkMetadata(
 	// - we do process the mutatedTable that's given even if it is
 	//   in "adding" state or non-public.
 	//
-	startTableEntry := TableEntry{Desc: mutatedTable}
-	// TODO(knz): the CHECK helper is always prepared here, even when
-	// there is no CASCADE work to perform. This should be moved to a
-	// different place.
-	if err := startTableEntry.addCheckHelper(ctx, analyzeExprFn); err != nil {
-		return nil, err
-	}
-	queue.result[mutatedTable.ID] = startTableEntry
+	queue.result[mutatedTable.ID] = TableEntry{Desc: mutatedTable, CheckHelper: checkHelper}
 	if err := queue.enqueue(ctx, mutatedTable.ID, startUsage); err != nil {
 		return nil, err
 	}

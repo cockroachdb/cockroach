@@ -294,19 +294,16 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if len(colList) == 0 {
 			tp.Child("columns: <none>")
 		}
-		tpChild := tp.Child("insert-mapping:")
-		f.formatMutation(e, tpChild, t.InsertCols, t.Table)
+		f.formatMutation(e, tp, "insert-mapping:", t.InsertCols, t.Table)
+		f.formatColList(e, tp, "check columns:", t.CheckCols)
 
 	case *UpdateExpr:
 		if len(colList) == 0 {
 			tp.Child("columns: <none>")
 		}
 		f.formatColList(e, tp, "fetch columns:", t.FetchCols)
-		tpChild := tp.Child("update-mapping:")
-		f.formatMutation(e, tpChild, t.UpdateCols, t.Table)
-
-	case *CreateTableExpr:
-		tp.Child(t.Syntax.String())
+		f.formatMutation(e, tp, "update-mapping:", t.UpdateCols, t.Table)
+		f.formatColList(e, tp, "check columns:", t.CheckCols)
 
 	case *UpsertExpr:
 		if len(colList) == 0 {
@@ -314,16 +311,18 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 		tp.Childf("canary column: %d", t.CanaryCol)
 		f.formatColList(e, tp, "fetch columns:", t.FetchCols)
-		tpChild := tp.Child("insert-mapping:")
-		f.formatMutation(e, tpChild, t.InsertCols, t.Table)
-		tpChild = tp.Child("update-mapping:")
-		f.formatMutation(e, tpChild, t.UpdateCols, t.Table)
+		f.formatMutation(e, tp, "insert-mapping:", t.InsertCols, t.Table)
+		f.formatMutation(e, tp, "update-mapping:", t.UpdateCols, t.Table)
+		f.formatColList(e, tp, "check columns:", t.CheckCols)
 
 	case *DeleteExpr:
 		if len(colList) == 0 {
 			tp.Child("columns: <none>")
 		}
 		f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+
+	case *CreateTableExpr:
+		tp.Child(t.Syntax.String())
 	}
 
 	if !f.HasFlags(ExprFmtHideMiscProps) {
@@ -638,15 +637,20 @@ func (f *ExprFmtCtx) formatColList(
 //   a:1 => x:4
 //
 func (f *ExprFmtCtx) formatMutation(
-	nd RelExpr, tp treeprinter.Node, colList opt.ColList, tabID opt.TableID,
+	nd RelExpr, tp treeprinter.Node, heading string, colList opt.ColList, tabID opt.TableID,
 ) {
+	if len(colList) == 0 {
+		return
+	}
+
+	tpChild := tp.Child(heading)
 	for i, col := range colList {
 		if col != 0 {
 			f.Buffer.Reset()
 			formatCol(f, "" /* label */, col, opt.ColSet{}, true /* omitType */)
 			f.Buffer.WriteString(" =>")
 			formatCol(f, "" /* label */, tabID.ColumnID(i), opt.ColSet{}, true /* omitType */)
-			tp.Child(f.Buffer.String())
+			tpChild.Child(f.Buffer.String())
 		}
 	}
 }
