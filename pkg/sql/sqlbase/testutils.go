@@ -603,3 +603,86 @@ func randNumColFams(rng *rand.Rand, nCols int) int {
 	}
 	return rng.Intn(nCols) + 1
 }
+
+var (
+	IntType      = ColumnType{SemanticType: ColumnType_INT}
+	BoolType     = ColumnType{SemanticType: ColumnType_BOOL}
+	DecType      = ColumnType{SemanticType: ColumnType_DECIMAL}
+	StrType      = ColumnType{SemanticType: ColumnType_STRING}
+	OneIntCol    = []ColumnType{IntType}
+	TwoIntCols   = []ColumnType{IntType, IntType}
+	ThreeIntCols = []ColumnType{IntType, IntType, IntType}
+)
+
+func MakeIntCols(numCols int) []ColumnType {
+	ret := make([]ColumnType, numCols)
+	for i := 0; i < numCols; i++ {
+		ret[i] = IntType
+	}
+	return ret
+}
+
+func IntEncDatum(i int) EncDatum {
+	return EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
+}
+
+func StrEncDatum(s string) EncDatum {
+	return EncDatum{Datum: tree.NewDString(s)}
+}
+
+func NullEncDatum() EncDatum {
+	return EncDatum{Datum: tree.DNull}
+}
+
+// genEncDatumRowsInt converts rows of ints to rows of EncDatum DInts.
+// If an int is negative, the corresponding value is NULL.
+func GenEncDatumRowsInt(inputRows [][]int) EncDatumRows {
+	rows := make(EncDatumRows, len(inputRows))
+	for i, inputRow := range inputRows {
+		for _, x := range inputRow {
+			if x < 0 {
+				rows[i] = append(rows[i], NullEncDatum())
+			} else {
+				rows[i] = append(rows[i], IntEncDatum(x))
+			}
+		}
+	}
+	return rows
+}
+
+// makeIntRows constructs a numRows x numCols table where rows[i][j] = i + j.
+func MakeIntRows(numRows, numCols int) EncDatumRows {
+	rows := make(EncDatumRows, numRows)
+	for i := range rows {
+		rows[i] = make(EncDatumRow, numCols)
+		for j := 0; j < numCols; j++ {
+			rows[i][j] = IntEncDatum(i + j)
+		}
+	}
+	return rows
+}
+
+// makeRandIntRows constructs a numRows x numCols table where the values are random.
+func MakeRandIntRows(rng *rand.Rand, numRows int, numCols int) EncDatumRows {
+	rows := make(EncDatumRows, numRows)
+	for i := range rows {
+		rows[i] = make(EncDatumRow, numCols)
+		for j := 0; j < numCols; j++ {
+			rows[i][j] = IntEncDatum(rng.Int())
+		}
+	}
+	return rows
+}
+
+// makeRepeatedIntRows constructs a numRows x numCols table where blocks of n
+// consecutive rows have the same value.
+func MakeRepeatedIntRows(n int, numRows int, numCols int) EncDatumRows {
+	rows := make(EncDatumRows, numRows)
+	for i := range rows {
+		rows[i] = make(EncDatumRow, numCols)
+		for j := 0; j < numCols; j++ {
+			rows[i][j] = IntEncDatum(i/n + j)
+		}
+	}
+	return rows
+}

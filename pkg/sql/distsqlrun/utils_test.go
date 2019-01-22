@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"math/rand"
 	"net"
 	"testing"
 	"time"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -130,52 +130,6 @@ func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
 		res = append(res, row)
 	}
 	return res
-}
-
-var (
-	intType      = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
-	boolType     = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
-	decType      = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}
-	strType      = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
-	oneIntCol    = []sqlbase.ColumnType{intType}
-	twoIntCols   = []sqlbase.ColumnType{intType, intType}
-	threeIntCols = []sqlbase.ColumnType{intType, intType, intType}
-)
-
-func makeIntCols(numCols int) []sqlbase.ColumnType {
-	ret := make([]sqlbase.ColumnType, numCols)
-	for i := 0; i < numCols; i++ {
-		ret[i] = intType
-	}
-	return ret
-}
-
-func intEncDatum(i int) sqlbase.EncDatum {
-	return sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
-}
-
-func strEncDatum(s string) sqlbase.EncDatum {
-	return sqlbase.EncDatum{Datum: tree.NewDString(s)}
-}
-
-func nullEncDatum() sqlbase.EncDatum {
-	return sqlbase.EncDatum{Datum: tree.DNull}
-}
-
-// genEncDatumRowsInt converts rows of ints to rows of EncDatum DInts.
-// If an int is negative, the corresponding value is NULL.
-func genEncDatumRowsInt(inputRows [][]int) sqlbase.EncDatumRows {
-	rows := make(sqlbase.EncDatumRows, len(inputRows))
-	for i, inputRow := range inputRows {
-		for _, x := range inputRow {
-			if x < 0 {
-				rows[i] = append(rows[i], nullEncDatum())
-			} else {
-				rows[i] = append(rows[i], intEncDatum(x))
-			}
-		}
-	}
-	return rows
 }
 
 // startMockDistSQLServer starts a MockDistSQLServer and returns the address on
@@ -292,43 +246,6 @@ func createDummyStream() (
 	return serverStream, clientStream, cleanup, nil
 }
 
-// makeIntRows constructs a numRows x numCols table where rows[i][j] = i + j.
-func makeIntRows(numRows, numCols int) sqlbase.EncDatumRows {
-	rows := make(sqlbase.EncDatumRows, numRows)
-	for i := range rows {
-		rows[i] = make(sqlbase.EncDatumRow, numCols)
-		for j := 0; j < numCols; j++ {
-			rows[i][j] = intEncDatum(i + j)
-		}
-	}
-	return rows
-}
-
-// makeRandIntRows constructs a numRows x numCols table where the values are random.
-func makeRandIntRows(rng *rand.Rand, numRows int, numCols int) sqlbase.EncDatumRows {
-	rows := make(sqlbase.EncDatumRows, numRows)
-	for i := range rows {
-		rows[i] = make(sqlbase.EncDatumRow, numCols)
-		for j := 0; j < numCols; j++ {
-			rows[i][j] = intEncDatum(rng.Int())
-		}
-	}
-	return rows
-}
-
-// makeRepeatedIntRows constructs a numRows x numCols table where blocks of n
-// consecutive rows have the same value.
-func makeRepeatedIntRows(n int, numRows int, numCols int) sqlbase.EncDatumRows {
-	rows := make(sqlbase.EncDatumRows, numRows)
-	for i := range rows {
-		rows[i] = make(sqlbase.EncDatumRow, numCols)
-		for j := 0; j < numCols; j++ {
-			rows[i][j] = intEncDatum(i/n + j)
-		}
-	}
-	return rows
-}
-
 // runProcessorTest instantiates a processor with the provided spec, runs it
 // with the given inputs, and asserts that the outputted rows are as expected.
 func runProcessorTest(
@@ -389,9 +306,9 @@ func runProcessorTest(
 }
 
 type rowsAccessor interface {
-	getRows() *diskBackedRowContainer
+	getRows() *rowcontainer.DiskBackedRowContainer
 }
 
-func (s *sorterBase) getRows() *diskBackedRowContainer {
-	return s.rows.(*diskBackedRowContainer)
+func (s *sorterBase) getRows() *rowcontainer.DiskBackedRowContainer {
+	return s.rows.(*rowcontainer.DiskBackedRowContainer)
 }

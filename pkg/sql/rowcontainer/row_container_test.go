@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package distsqlrun
+package rowcontainer
 
 import (
 	"context"
@@ -32,11 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-// verifyRows verifies that the rows read with the given rowIterator match up
+// verifyRows verifies that the rows read with the given RowIterator match up
 // with  the given rows. evalCtx and ordering are used to compare rows.
 func verifyRows(
 	ctx context.Context,
-	i rowIterator,
+	i RowIterator,
 	expectedRows sqlbase.EncDatumRows,
 	evalCtx *tree.EvalContext,
 	ordering sqlbase.ColumnOrdering,
@@ -52,7 +52,7 @@ func verifyRows(
 			return err
 		}
 		if cmp, err := compareRows(
-			oneIntCol, row, expectedRows[0], evalCtx, &sqlbase.DatumAlloc{}, ordering,
+			sqlbase.OneIntCol, row, expectedRows[0], evalCtx, &sqlbase.DatumAlloc{}, ordering,
 		); err != nil {
 			return err
 		} else if cmp != 0 {
@@ -97,8 +97,8 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	)
 	defer m.Stop(ctx)
 
-	var mc memRowContainer
-	mc.initWithMon(
+	var mc MemRowContainer
+	mc.InitWithMon(
 		sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}},
 		[]sqlbase.ColumnType{typeInt, typeStr}, evalCtx, &m,
 	)
@@ -136,13 +136,13 @@ func TestRowContainerIterators(t *testing.T) {
 
 	const numRows = 10
 	const numCols = 1
-	rows := makeIntRows(numRows, numCols)
+	rows := sqlbase.MakeIntRows(numRows, numCols)
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	var mc memRowContainer
-	mc.init(
+	var mc MemRowContainer
+	mc.Init(
 		ordering,
-		oneIntCol,
+		sqlbase.OneIntCol,
 		evalCtx,
 	)
 	defer mc.Close(ctx)
@@ -154,7 +154,7 @@ func TestRowContainerIterators(t *testing.T) {
 	}
 
 	// NewIterator verifies that we read the expected rows from the
-	// memRowContainer and can recreate an iterator.
+	// MemRowContainer and can recreate an iterator.
 	t.Run("NewIterator", func(t *testing.T) {
 		for k := 0; k < 2; k++ {
 			func() {
@@ -168,8 +168,8 @@ func TestRowContainerIterators(t *testing.T) {
 	})
 
 	// NewFinalIterator verifies that we read the expected rows from the
-	// memRowContainer and as we do so, these rows are deleted from the
-	// memRowContainer.
+	// MemRowContainer and as we do so, these rows are deleted from the
+	// MemRowContainer.
 	t.Run("NewFinalIterator", func(t *testing.T) {
 		i := mc.NewFinalIterator(ctx)
 		defer i.Close()
@@ -177,7 +177,7 @@ func TestRowContainerIterators(t *testing.T) {
 			t.Fatal(err)
 		}
 		if mc.Len() != 0 {
-			t.Fatal("memRowContainer is not empty")
+			t.Fatal("MemRowContainer is not empty")
 		}
 	})
 }
@@ -216,13 +216,13 @@ func TestDiskBackedRowContainer(t *testing.T) {
 
 	const numRows = 10
 	const numCols = 1
-	rows := makeIntRows(numRows, numCols)
+	rows := sqlbase.MakeIntRows(numRows, numCols)
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	rc := diskBackedRowContainer{}
-	rc.init(
+	rc := DiskBackedRowContainer{}
+	rc.Init(
 		ordering,
-		oneIntCol,
+		sqlbase.OneIntCol,
 		&evalCtx,
 		tempEngine,
 		&memoryMonitor,
@@ -230,9 +230,9 @@ func TestDiskBackedRowContainer(t *testing.T) {
 	)
 	defer rc.Close(ctx)
 
-	// NormalRun adds rows to a diskBackedRowContainer, makes it spill to disk
+	// NormalRun adds rows to a DiskBackedRowContainer, makes it spill to disk
 	// halfway through, keeps on adding rows, and then verifies that all rows
-	// were properly added to the diskBackedRowContainer.
+	// were properly added to the DiskBackedRowContainer.
 	t.Run("NormalRun", func(t *testing.T) {
 		memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 		defer memoryMonitor.Stop(ctx)

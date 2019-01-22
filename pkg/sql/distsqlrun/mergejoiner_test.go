@@ -64,7 +64,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -73,13 +73,13 @@ func TestMergeJoiner(t *testing.T) {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			expectedTypes: threeIntCols,
+			expectedTypes: sqlbase.ThreeIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -100,12 +100,12 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -113,7 +113,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[0], v[5]},
 				{v[0], v[4]},
 			},
-			expectedTypes: threeIntCols,
+			expectedTypes: sqlbase.ThreeIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[0], v[0], v[1]},
@@ -142,14 +142,14 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[0]},
 				{v[1], v[1]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -162,7 +162,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[1], v[5]},
 				{v[1], v[4]},
 			},
-			expectedTypes: threeIntCols,
+			expectedTypes: sqlbase.ThreeIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[0], v[0], v[5]},
@@ -193,7 +193,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -207,7 +207,7 @@ func TestMergeJoiner(t *testing.T) {
 
 				{v[6], v[0]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[5]},
 				{v[0], v[5]},
@@ -222,7 +222,7 @@ func TestMergeJoiner(t *testing.T) {
 
 				{v[5], v[0]},
 			},
-			expectedTypes: threeIntCols,
+			expectedTypes: sqlbase.ThreeIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[0], null},
 				{v[0], v[0], null},
@@ -257,7 +257,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -266,13 +266,13 @@ func TestMergeJoiner(t *testing.T) {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			expectedTypes: threeIntCols,
+			expectedTypes: sqlbase.ThreeIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[0], null, null},
 				{v[1], v[0], v[4]},
@@ -296,13 +296,13 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{3, 1, 2},
-			leftTypes: threeIntCols,
+			leftTypes: sqlbase.ThreeIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -311,7 +311,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			expectedTypes: threeIntCols,
+			expectedTypes: sqlbase.ThreeIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[0], null, null},
 				{v[1], v[0], v[4]},
@@ -335,7 +335,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -343,14 +343,14 @@ func TestMergeJoiner(t *testing.T) {
 				{v[3], v[1]},
 				{v[4], v[5]},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 				{v[5], v[5], v[1]},
 			},
-			expectedTypes: threeIntCols,
+			expectedTypes: sqlbase.ThreeIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[0], null, null},
 				{v[1], v[0], v[4]},
@@ -375,21 +375,21 @@ func TestMergeJoiner(t *testing.T) {
 				Type: sqlbase.FullOuterJoin,
 			},
 			outCols:   []uint32{0, 1, 2, 3},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{null, v[4]},
 				{v[0], null},
 				{v[0], v[1]},
 				{v[2], v[4]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{null, v[4]},
 				{v[0], null},
 				{v[0], v[1]},
 				{v[2], v[4]},
 			},
-			expectedTypes: []sqlbase.ColumnType{intType, intType, intType, intType},
+			expectedTypes: []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.IntType, sqlbase.IntType},
 			expected: sqlbase.EncDatumRows{
 				{null, v[4], null, null},
 				{null, null, null, v[4]},
@@ -413,17 +413,17 @@ func TestMergeJoiner(t *testing.T) {
 				Type: sqlbase.InnerJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: oneIntCol,
+			leftTypes: sqlbase.OneIntCol,
 			leftInput: sqlbase.EncDatumRows{
 				{null},
 				{v[0]},
 			},
-			rightTypes: oneIntCol,
+			rightTypes: sqlbase.OneIntCol,
 			rightInput: sqlbase.EncDatumRows{
 				{null},
 				{v[1]},
 			},
-			expectedTypes: twoIntCols,
+			expectedTypes: sqlbase.TwoIntCols,
 			expected:      sqlbase.EncDatumRows{},
 		},
 		{
@@ -441,18 +441,18 @@ func TestMergeJoiner(t *testing.T) {
 				Type: sqlbase.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[1], v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[2], v[2]},
 				{v[2], v[2]},
 				{v[3], v[3]},
 			},
-			expectedTypes: twoIntCols,
+			expectedTypes: sqlbase.TwoIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[2], v[3]},
 			},
@@ -472,7 +472,7 @@ func TestMergeJoiner(t *testing.T) {
 				Type: sqlbase.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[1], v[2]},
 				{v[1], v[2]},
@@ -480,12 +480,12 @@ func TestMergeJoiner(t *testing.T) {
 				{v[3], v[4]},
 				{v[3], v[5]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[2], v[2]},
 				{v[3], v[3]},
 			},
-			expectedTypes: twoIntCols,
+			expectedTypes: sqlbase.TwoIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[2], v[3]},
 				{v[3], v[4]},
@@ -506,18 +506,18 @@ func TestMergeJoiner(t *testing.T) {
 				Type: sqlbase.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{null, v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{null, v[3]},
 				{v[2], v[4]},
 				{v[2], v[5]},
 			},
-			expectedTypes: twoIntCols,
+			expectedTypes: sqlbase.TwoIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[2], v[3]},
 			},
@@ -538,7 +538,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -549,7 +549,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[6], v[0]},
 				{v[6], v[1]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -562,7 +562,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[5], v[5]},
 				{v[5], v[4]},
 			},
-			expectedTypes: twoIntCols,
+			expectedTypes: sqlbase.TwoIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[5], v[0]},
 				{v[5], v[1]},
@@ -583,7 +583,7 @@ func TestMergeJoiner(t *testing.T) {
 				Type: sqlbase.LeftAntiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[1], v[2]},
 				{v[1], v[3]},
@@ -591,12 +591,12 @@ func TestMergeJoiner(t *testing.T) {
 				{v[3], v[4]},
 				{v[3], v[5]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[2], v[2]},
 				{v[3], v[3]},
 			},
-			expectedTypes: twoIntCols,
+			expectedTypes: sqlbase.TwoIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[1], v[2]},
 				{v[1], v[3]},
@@ -616,18 +616,18 @@ func TestMergeJoiner(t *testing.T) {
 				Type: sqlbase.LeftAntiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{null, v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{null, v[3]},
 				{v[2], v[4]},
 				{v[2], v[5]},
 			},
-			expectedTypes: twoIntCols,
+			expectedTypes: sqlbase.TwoIntCols,
 			expected: sqlbase.EncDatumRows{
 				{null, v[2]},
 			},
@@ -648,7 +648,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -659,7 +659,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[6], v[0]},
 				{v[6], v[1]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -672,7 +672,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[5], v[5]},
 				{v[5], v[4]},
 			},
-			expectedTypes: twoIntCols,
+			expectedTypes: sqlbase.TwoIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -761,8 +761,8 @@ func TestConsumerClosed(t *testing.T) {
 		// Implicit @1 = @2 constraint.
 	}
 	outCols := []uint32{0}
-	leftTypes := oneIntCol
-	rightTypes := oneIntCol
+	leftTypes := sqlbase.OneIntCol
+	rightTypes := sqlbase.OneIntCol
 
 	testCases := []struct {
 		typ       sqlbase.JoinType
@@ -857,9 +857,9 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	const numCols = 1
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
-			rows := makeIntRows(inputSize, numCols)
-			leftInput := NewRepeatableRowSource(oneIntCol, rows)
-			rightInput := NewRepeatableRowSource(oneIntCol, rows)
+			rows := sqlbase.MakeIntRows(inputSize, numCols)
+			leftInput := NewRepeatableRowSource(sqlbase.OneIntCol, rows)
+			rightInput := NewRepeatableRowSource(sqlbase.OneIntCol, rows)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -877,8 +877,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		numRepeats := inputSize
 		b.Run(fmt.Sprintf("OneSideRepeatInputSize=%d", inputSize), func(b *testing.B) {
-			leftInput := NewRepeatableRowSource(oneIntCol, makeIntRows(inputSize, numCols))
-			rightInput := NewRepeatableRowSource(oneIntCol, makeRepeatedIntRows(numRepeats, inputSize, numCols))
+			leftInput := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(inputSize, numCols))
+			rightInput := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeRepeatedIntRows(numRepeats, inputSize, numCols))
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -896,9 +896,9 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		numRepeats := int(math.Sqrt(float64(inputSize)))
 		b.Run(fmt.Sprintf("BothSidesRepeatInputSize=%d", inputSize), func(b *testing.B) {
-			row := makeRepeatedIntRows(100, numRepeats, numCols)
-			leftInput := NewRepeatableRowSource(oneIntCol, row)
-			rightInput := NewRepeatableRowSource(oneIntCol, row)
+			row := sqlbase.MakeRepeatedIntRows(100, numRepeats, numCols)
+			leftInput := NewRepeatableRowSource(sqlbase.OneIntCol, row)
+			rightInput := NewRepeatableRowSource(sqlbase.OneIntCol, row)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,7 +85,7 @@ type hashJoiner struct {
 	// We read a portion of both streams, in the hope that one is small. One of
 	// the containers will contain the entire "stored" stream, the other just the
 	// start of the other stream.
-	rows [2]memRowContainer
+	rows [2]rowcontainer.MemRowContainer
 
 	// storedSide is set by the initial buffering phase and indicates which
 	// stream we store fully and build the hashRowContainer from.
@@ -95,7 +96,7 @@ type hashJoiner struct {
 	nullEquality bool
 
 	useTempStorage bool
-	storedRows     hashRowContainer
+	storedRows     rowcontainer.HashRowContainer
 
 	// Used by tests to force a storedSide.
 	forcedStoredSide *joinSide
@@ -106,7 +107,7 @@ type hashJoiner struct {
 		row sqlbase.EncDatumRow
 		// iter is an iterator over the bucket that matches row on the equality
 		// columns.
-		iter rowMarkerIterator
+		iter rowcontainer.RowMarkerIterator
 		// matched represents whether any row that matches row on equality columns
 		// has also passed the ON condition.
 		matched bool
@@ -114,7 +115,7 @@ type hashJoiner struct {
 
 	// emittingUnmatchedState is used when hjEmittingUnmatched.
 	emittingUnmatchedState struct {
-		iter rowIterator
+		iter rowcontainer.RowIterator
 	}
 
 	// testingKnobMemFailPoint specifies a state in which the hashJoiner will
@@ -209,10 +210,10 @@ func newHashJoiner(
 		h.finishTrace = h.outputStatsToTrace
 	}
 
-	h.rows[leftSide].initWithMon(
+	h.rows[leftSide].InitWithMon(
 		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, h.MemMonitor,
 	)
-	h.rows[rightSide].initWithMon(
+	h.rows[rightSide].InitWithMon(
 		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, h.MemMonitor,
 	)
 
@@ -379,10 +380,10 @@ func (h *hashJoiner) consumeStoredSide() (hashJoinerState, sqlbase.EncDatumRow, 
 		if row == nil {
 			// The stored side has been fully consumed, move on to hjReadingProbeSide.
 			// If storedRows is in-memory, pre-reserve the memory needed to mark.
-			if rc, ok := h.storedRows.(*hashMemRowContainer); ok {
+			if rc, ok := h.storedRows.(*rowcontainer.HashMemRowContainer); ok {
 				err = h.maybeMakeMemErr("reserving mark memory")
 				if err == nil {
-					err = rc.reserveMarkMemoryMaybe(h.Ctx)
+					err = rc.ReserveMarkMemoryMaybe(h.Ctx)
 				}
 				if err != nil {
 					if spilled, spillErr := h.maybeSpillToDisk(err); spilled {
@@ -681,11 +682,11 @@ func (h *hashJoiner) shouldEmitUnmatched(
 
 // initStoredRows initializes a hashRowContainer and sets h.storedRows.
 func (h *hashJoiner) initStoredRows() error {
-	storedMemRows := makeHashMemRowContainer(&h.rows[h.storedSide])
+	storedMemRows := rowcontainer.MakeHashMemRowContainer(&h.rows[h.storedSide])
 	err := storedMemRows.Init(
 		h.Ctx,
 		shouldMark(h.storedSide, h.joinType),
-		h.rows[h.storedSide].types,
+		h.rows[h.storedSide].Types(),
 		h.eqCols[h.storedSide],
 		h.nullEquality,
 	)
@@ -710,12 +711,12 @@ func (h *hashJoiner) initStoredRows() error {
 }
 
 // maybeSpillToDisk checks err and spills h.rows[h.storedSide] to disk if the
-// error is a memory error and h.storedRows is not a hashDiskRowContainer. On
+// error is a memory error and h.storedRows is not a HashDiskRowContainer. On
 // a successful disk spill, maybeSpillToDisk Close()s whatever h.storedRows
-// previously pointed to and sets h.storedRows a hashDiskRowContainer.
+// previously pointed to and sets h.storedRows a HashDiskRowContainer.
 // Returns whether the hashJoiner spilled to disk and an error if one occurred
 // while doing so.
-// TODO(asubiotto): This should be behind an auto-fallback hashDiskRowContainer.
+// TODO(asubiotto): This should be behind an auto-fallback HashDiskRowContainer.
 func (h *hashJoiner) maybeSpillToDisk(err error) (bool, error) {
 	newDiskSpillErr := func(errString string) error {
 		return fmt.Errorf("error while attempting hashJoiner disk spill: %s", errString)
@@ -726,15 +727,15 @@ func (h *hashJoiner) maybeSpillToDisk(err error) (bool, error) {
 	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
 		return false, nil
 	}
-	if _, ok := h.storedRows.(*hashDiskRowContainer); ok {
+	if _, ok := h.storedRows.(*rowcontainer.HashDiskRowContainer); ok {
 		return false, newDiskSpillErr("already using disk")
 	}
 
-	storedDiskRows := makeHashDiskRowContainer(h.diskMonitor, h.flowCtx.TempStorage)
+	storedDiskRows := rowcontainer.MakeHashDiskRowContainer(h.diskMonitor, h.flowCtx.TempStorage)
 	if err := storedDiskRows.Init(
 		h.Ctx,
 		shouldMark(h.storedSide, h.joinType),
-		h.rows[h.storedSide].types,
+		h.rows[h.storedSide].Types(),
 		h.eqCols[h.storedSide],
 		h.nullEquality,
 	); err != nil {
@@ -870,33 +871,4 @@ func shouldShortCircuit(storedSide joinSide, joinType sqlbase.JoinType) bool {
 	default:
 		return false
 	}
-}
-
-// encodeColumnsOfRow returns the encoding for the grouping columns. This is
-// then used as our group key to determine which bucket to add to.
-// If the row contains any NULLs and encodeNull is false, hasNull is true and
-// no encoding is returned. If encodeNull is true, hasNull is never set.
-func encodeColumnsOfRow(
-	da *sqlbase.DatumAlloc,
-	appendTo []byte,
-	row sqlbase.EncDatumRow,
-	cols columns,
-	colTypes []sqlbase.ColumnType,
-	encodeNull bool,
-) (encoding []byte, hasNull bool, err error) {
-	for i, colIdx := range cols {
-		if row[colIdx].IsNull() && !encodeNull {
-			return nil, true, nil
-		}
-		// Note: we cannot compare VALUE encodings because they contain column IDs
-		// which can vary.
-		// TODO(radu): we should figure out what encoding is readily available and
-		// use that (though it needs to be consistent across all rows). We could add
-		// functionality to compare VALUE encodings ignoring the column ID.
-		appendTo, err = row[colIdx].Encode(&colTypes[i], da, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
-		if err != nil {
-			return appendTo, false, err
-		}
-	}
-	return appendTo, false, nil
 }

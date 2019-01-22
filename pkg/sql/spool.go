@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -28,7 +29,7 @@ import (
 // the child node is still run to completion.
 type spoolNode struct {
 	source    planNode
-	rows      *sqlbase.RowContainer
+	rows      *rowcontainer.RowContainer
 	hardLimit int64
 	curRowIdx int
 }
@@ -48,7 +49,7 @@ func (s *spoolNode) startExec(params runParams) error {
 		}
 	}
 
-	s.rows = sqlbase.NewRowContainer(
+	s.rows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(planColumns(s.source)),
 		0, /* rowCapacity */

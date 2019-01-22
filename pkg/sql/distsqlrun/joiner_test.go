@@ -50,7 +50,7 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.InnerJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -59,7 +59,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -77,12 +77,12 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.InnerJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -111,14 +111,14 @@ func joinerTestCases() []joinerTestCase {
 			onExpr:      distsqlpb.Expression{Expr: "@4 >= 4"},
 			// Implicit AND @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[0]},
 				{v[1], v[1]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -152,7 +152,7 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftOuterJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -161,7 +161,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -182,13 +182,13 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.RightOuterJoin,
 			// Implicit @1 = @4 constraint.
 			outCols:   []uint32{3, 1, 2},
-			leftTypes: threeIntCols,
+			leftTypes: sqlbase.ThreeIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -212,7 +212,7 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.FullOuterJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -220,7 +220,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[3], v[1]},
 				{v[4], v[5]},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -242,7 +242,7 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.InnerJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[2], v[4]},
@@ -250,7 +250,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -268,7 +268,7 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftOuterJoin,
 			onExpr:      distsqlpb.Expression{Expr: "@3 = 9"},
 			outCols:     []uint32{0, 1},
-			leftTypes:   oneIntCol,
+			leftTypes:   sqlbase.OneIntCol,
 			leftInput: sqlbase.EncDatumRows{
 				{v[1]},
 				{v[2]},
@@ -277,7 +277,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[6]},
 				{v[7]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[2], v[8]},
 				{v[3], v[9]},
@@ -312,13 +312,13 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.RightOuterJoin,
 			onExpr:      distsqlpb.Expression{Expr: "@2 > 1"},
 			outCols:     []uint32{0, 1},
-			leftTypes:   oneIntCol,
+			leftTypes:   sqlbase.OneIntCol,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0]},
 				{v[1]},
 				{v[2]},
 			},
-			rightTypes: oneIntCol,
+			rightTypes: sqlbase.OneIntCol,
 			rightInput: sqlbase.EncDatumRows{
 				{v[1]},
 				{v[2]},
@@ -337,13 +337,13 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.FullOuterJoin,
 			onExpr:      distsqlpb.Expression{Expr: "@2 > 1"},
 			outCols:     []uint32{0, 1},
-			leftTypes:   oneIntCol,
+			leftTypes:   sqlbase.OneIntCol,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0]},
 				{v[1]},
 				{v[2]},
 			},
-			rightTypes: oneIntCol,
+			rightTypes: sqlbase.OneIntCol,
 			rightInput: sqlbase.EncDatumRows{
 				{v[1]},
 				{v[2]},
@@ -365,14 +365,14 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.InnerJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], null},
 				{null, v[2]},
 				{null, null},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[1], null, v[5]},
@@ -390,14 +390,14 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftOuterJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], null},
 				{null, v[2]},
 				{null, null},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[1], null, v[5]},
@@ -418,14 +418,14 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.RightOuterJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], null},
 				{null, v[2]},
 				{null, null},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[1], null, v[5]},
@@ -446,14 +446,14 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.FullOuterJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], null},
 				{null, v[2]},
 				{null, null},
 			},
-			rightTypes: threeIntCols,
+			rightTypes: sqlbase.ThreeIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[1], null, v[5]},
@@ -479,7 +479,7 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[2], v[0]},
@@ -488,7 +488,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[3], v[4]},
 				{v[3], v[3]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -510,14 +510,14 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[2], v[0]},
@@ -540,14 +540,14 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{null, v[1]},
@@ -568,14 +568,14 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{null, v[1]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{null, v[1]},
@@ -595,14 +595,14 @@ func joinerTestCases() []joinerTestCase {
 			onExpr:      distsqlpb.Expression{Expr: "@1 > 1"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 				{v[2], v[2]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[4]},
@@ -623,14 +623,14 @@ func joinerTestCases() []joinerTestCase {
 			onExpr:      distsqlpb.Expression{Expr: "@4 > 4 and @2 + @4 = 8"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 				{v[2], v[2]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[4]},
@@ -650,13 +650,13 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[2], v[5]},
@@ -675,7 +675,7 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -684,7 +684,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[2], v[1]},
 				{v[3], v[4]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[2], v[5]},
@@ -703,7 +703,7 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -712,7 +712,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[2], v[1]},
 				{v[3], v[4]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{null, v[5]},
@@ -731,7 +731,7 @@ func joinerTestCases() []joinerTestCase {
 			joinType:    sqlbase.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -740,7 +740,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[2], v[1]},
 				{v[3], v[4]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{null, v[5]},
@@ -761,7 +761,7 @@ func joinerTestCases() []joinerTestCase {
 			onExpr:      distsqlpb.Expression{Expr: "(@2 + @4) % 2 = 0"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[1], v[2]},
@@ -769,7 +769,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[2], v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[2]},
 				{v[2], v[1]},
@@ -790,7 +790,7 @@ func joinerTestCases() []joinerTestCase {
 			onExpr:      distsqlpb.Expression{Expr: "(@2 + @4) % 2 = 0"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[1], v[2]},
@@ -798,7 +798,7 @@ func joinerTestCases() []joinerTestCase {
 				{v[2], v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[2]},
 				{v[2], v[1]},
@@ -850,14 +850,14 @@ func joinerErrorTestCases() []joinerErrorTestCase {
 			joinType:    sqlbase.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 2},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 				{v[2], v[2]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[4]},
@@ -874,14 +874,14 @@ func joinerErrorTestCases() []joinerErrorTestCase {
 			joinType:    sqlbase.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 2},
-			leftTypes: twoIntCols,
+			leftTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 				{v[2], v[2]},
 			},
-			rightTypes: twoIntCols,
+			rightTypes: sqlbase.TwoIntCols,
 			rightInput: sqlbase.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[4]},

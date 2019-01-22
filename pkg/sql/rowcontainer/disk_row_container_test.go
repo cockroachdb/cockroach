@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package distsqlrun
+package rowcontainer
 
 import (
 	"context"
@@ -187,8 +187,8 @@ func TestDiskRowContainer(t *testing.T) {
 
 				// Make another row container that stores all the rows then sort
 				// it to compare equality.
-				var sortedRows memRowContainer
-				sortedRows.init(ordering, types, &evalCtx)
+				var sortedRows MemRowContainer
+				sortedRows.Init(ordering, types, &evalCtx)
 				defer sortedRows.Close(ctx)
 				for _, row := range rows {
 					if err := sortedRows.AddRow(ctx, row); err != nil {
@@ -306,12 +306,12 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	d := makeDiskRowContainer(&diskMonitor, oneIntCol, nil /* ordering */, tempEngine)
+	d := makeDiskRowContainer(&diskMonitor, sqlbase.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const numCols = 1
 	const numRows = 100
-	rows := makeIntRows(numRows, numCols)
+	rows := sqlbase.MakeIntRows(numRows, numCols)
 	for _, row := range rows {
 		if err := d.AddRow(ctx, row); err != nil {
 			t.Fatal(err)
@@ -321,13 +321,13 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	// checkEqual checks that the given row is equal to otherRow.
 	checkEqual := func(row sqlbase.EncDatumRow, otherRow sqlbase.EncDatumRow) error {
 		for j, c := range row {
-			if cmp, err := c.Compare(&intType, alloc, &evalCtx, &otherRow[j]); err != nil {
+			if cmp, err := c.Compare(&sqlbase.IntType, alloc, &evalCtx, &otherRow[j]); err != nil {
 				return err
 			} else if cmp != 0 {
 				return fmt.Errorf(
 					"unexpected row %v, expected %v",
-					row.String(oneIntCol),
-					otherRow.String(oneIntCol),
+					row.String(sqlbase.OneIntCol),
+					otherRow.String(sqlbase.OneIntCol),
 				)
 			}
 		}
@@ -381,7 +381,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	}
 
 	// Add a couple extra rows to check that they're picked up by the iterator.
-	extraRows := makeIntRows(4, 1)
+	extraRows := sqlbase.MakeIntRows(4, 1)
 	for _, row := range extraRows {
 		if err := d.AddRow(ctx, row); err != nil {
 			t.Fatal(err)
@@ -433,14 +433,14 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 
-	d := makeDiskRowContainer(&monitor, oneIntCol, nil /* ordering */, tempEngine)
+	d := makeDiskRowContainer(&monitor, sqlbase.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const (
 		numCols = 1
 		numRows = 100
 	)
-	rows := makeIntRows(numRows, numCols)
+	rows := sqlbase.MakeIntRows(numRows, numCols)
 
 	const (
 		numResets            = 4
@@ -471,8 +471,8 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if row.String(oneIntCol) != firstRow.String(oneIntCol) {
-				t.Fatalf("unexpected row read %s, expected %s", row.String(oneIntCol), firstRow.String(oneIntCol))
+			if row.String(sqlbase.OneIntCol) != firstRow.String(sqlbase.OneIntCol) {
+				t.Fatalf("unexpected row read %s, expected %s", row.String(sqlbase.OneIntCol), firstRow.String(sqlbase.OneIntCol))
 			}
 		}()
 

@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package distsqlrun
+package rowcontainer
 
 import (
 	"container/heap"
@@ -27,27 +27,27 @@ import (
 	"github.com/pkg/errors"
 )
 
-// sortableRowContainer is a container used to store rows and optionally sort
+// SortableRowContainer is a container used to store rows and optionally sort
 // these.
-type sortableRowContainer interface {
+type SortableRowContainer interface {
 	Len() int
 	AddRow(context.Context, sqlbase.EncDatumRow) error
 	// Sort sorts the rows according to an ordering specified at initialization.
 	Sort(context.Context)
-	// NewIterator returns a rowIterator that can be used to iterate over
+	// NewIterator returns a RowIterator that can be used to iterate over
 	// the rows.
-	NewIterator(context.Context) rowIterator
-	// NewFinalIterator returns a rowIterator that can be used to iterate over the
+	NewIterator(context.Context) RowIterator
+	// NewFinalIterator returns a RowIterator that can be used to iterate over the
 	// rows, possibly freeing resources along the way. Subsequent calls to
 	// NewIterator or NewFinalIterator are not guaranteed to return any rows.
-	NewFinalIterator(context.Context) rowIterator
+	NewFinalIterator(context.Context) RowIterator
 
 	// UnsafeReset resets the container, allowing for reuse. It renders all
 	// previously allocated rows unsafe.
 	UnsafeReset(context.Context) error
 
 	// InitTopK enables optimizations in cases where the caller cares only about
-	// the top k rows where k is the size of the sortableRowContainer when
+	// the top k rows where k is the size of the SortableRowContainer when
 	// InitTopK is called. Once InitTopK is called, callers should not call
 	// AddRow. Iterators created after calling InitTopK are guaranteed to read the
 	// top k rows only.
@@ -56,13 +56,13 @@ type sortableRowContainer interface {
 	// potentially evicting a row in favor of the given row.
 	MaybeReplaceMax(context.Context, sqlbase.EncDatumRow) error
 
-	// Close frees up resources held by the sortableRowContainer.
+	// Close frees up resources held by the SortableRowContainer.
 	Close(context.Context)
 }
 
-// rowIterator is a simple iterator used to iterate over sqlbase.EncDatumRows.
+// RowIterator is a simple iterator used to iterate over sqlbase.EncDatumRows.
 // Example use:
-// 	var i rowIterator
+// 	var i RowIterator
 // 	for i.Rewind(); ; i.Next() {
 // 		if ok, err := i.Valid(); err != nil {
 // 			// Handle error.
@@ -76,7 +76,7 @@ type sortableRowContainer interface {
 //		// Do something.
 // 	}
 //
-type rowIterator interface {
+type RowIterator interface {
 	// Rewind seeks to the first row.
 	Rewind()
 	// Valid must be called after any call to Rewind() or Next(). It returns
@@ -94,11 +94,11 @@ type rowIterator interface {
 	Close()
 }
 
-// memRowContainer is the wrapper around sqlbase.RowContainer that provides more
+// MemRowContainer is the wrapper around rowcontainer.RowContainer that provides more
 // functionality, especially around converting to/from EncDatumRows and
 // facilitating sorting.
-type memRowContainer struct {
-	sqlbase.RowContainer
+type MemRowContainer struct {
+	RowContainer
 	types         []sqlbase.ColumnType
 	invertSorting bool // Inverts the sorting predicate.
 	ordering      sqlbase.ColumnOrdering
@@ -110,20 +110,20 @@ type memRowContainer struct {
 	datumAlloc sqlbase.DatumAlloc
 }
 
-var _ heap.Interface = &memRowContainer{}
-var _ sortableRowContainer = &memRowContainer{}
+var _ heap.Interface = &MemRowContainer{}
+var _ SortableRowContainer = &MemRowContainer{}
 
-// init initializes the memRowContainer. The memRowContainer uses evalCtx.Mon
+// Init initializes the MemRowContainer. The MemRowContainer uses evalCtx.Mon
 // to track memory usage.
-func (mc *memRowContainer) init(
+func (mc *MemRowContainer) Init(
 	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) {
-	mc.initWithMon(ordering, types, evalCtx, evalCtx.Mon)
+	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon)
 }
 
-// initWithMon initializes the memRowContainer with an explicit monitor. Only
-// use this if the default memRowContainer.init() function is insufficient.
-func (mc *memRowContainer) initWithMon(
+// InitWithMon initializes the MemRowContainer with an explicit monitor. Only
+// use this if the default MemRowContainer.Init() function is insufficient.
+func (mc *MemRowContainer) InitWithMon(
 	ordering sqlbase.ColumnOrdering,
 	types []sqlbase.ColumnType,
 	evalCtx *tree.EvalContext,
@@ -138,8 +138,13 @@ func (mc *memRowContainer) initWithMon(
 	mc.evalCtx = evalCtx
 }
 
+// Types returns the MemRowContainer's types.
+func (mc *MemRowContainer) Types() []sqlbase.ColumnType {
+	return mc.types
+}
+
 // Less is part of heap.Interface and is only meant to be used internally.
-func (mc *memRowContainer) Less(i, j int) bool {
+func (mc *MemRowContainer) Less(i, j int) bool {
 	cmp := sqlbase.CompareDatums(mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
 	if mc.invertSorting {
 		cmp = -cmp
@@ -149,7 +154,7 @@ func (mc *memRowContainer) Less(i, j int) bool {
 
 // EncRow returns the idx-th row as an EncDatumRow. The slice itself is reused
 // so it is only valid until the next call to EncRow.
-func (mc *memRowContainer) EncRow(idx int) sqlbase.EncDatumRow {
+func (mc *MemRowContainer) EncRow(idx int) sqlbase.EncDatumRow {
 	datums := mc.At(idx)
 	for i, d := range datums {
 		mc.scratchEncRow[i] = sqlbase.DatumToEncDatum(mc.types[i], d)
@@ -158,7 +163,7 @@ func (mc *memRowContainer) EncRow(idx int) sqlbase.EncDatumRow {
 }
 
 // AddRow adds a row to the container.
-func (mc *memRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (mc *MemRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	if len(row) != len(mc.types) {
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(mc.types))
 	}
@@ -173,21 +178,21 @@ func (mc *memRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	return err
 }
 
-func (mc *memRowContainer) Sort(ctx context.Context) {
+func (mc *MemRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
 	cancelChecker := sqlbase.NewCancelChecker(ctx)
 	sqlbase.Sort(mc, cancelChecker)
 }
 
 // Push is part of heap.Interface.
-func (mc *memRowContainer) Push(_ interface{}) { panic("unimplemented") }
+func (mc *MemRowContainer) Push(_ interface{}) { panic("unimplemented") }
 
 // Pop is part of heap.Interface.
-func (mc *memRowContainer) Pop() interface{} { panic("unimplemented") }
+func (mc *MemRowContainer) Pop() interface{} { panic("unimplemented") }
 
 // MaybeReplaceMax replaces the maximum element with the given row, if it is
 // smaller. Assumes InitTopK was called.
-func (mc *memRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (mc *MemRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncDatumRow) error {
 	max := mc.At(0)
 	cmp, err := row.CompareToDatums(mc.types, &mc.datumAlloc, mc.ordering, mc.evalCtx, max)
 	if err != nil {
@@ -209,127 +214,127 @@ func (mc *memRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncD
 	return nil
 }
 
-// InitTopK rearranges the rows in the memRowContainer into a Max-Heap.
-func (mc *memRowContainer) InitTopK() {
+// InitTopK rearranges the rows in the MemRowContainer into a Max-Heap.
+func (mc *MemRowContainer) InitTopK() {
 	mc.invertSorting = true
 	heap.Init(mc)
 }
 
-// memRowIterator is a rowIterator that iterates over a memRowContainer. This
-// iterator doesn't iterate over a snapshot of memRowContainer.
+// memRowIterator is a RowIterator that iterates over a MemRowContainer. This
+// iterator doesn't iterate over a snapshot of MemRowContainer.
 type memRowIterator struct {
-	*memRowContainer
+	*MemRowContainer
 	curIdx int
 }
 
-var _ rowIterator = &memRowIterator{}
+var _ RowIterator = &memRowIterator{}
 
 // NewIterator returns an iterator that can be used to iterate over a
-// memRowContainer. Note that this iterator doesn't iterate over a snapshot
-// of memRowContainer.
-func (mc *memRowContainer) NewIterator(_ context.Context) rowIterator {
-	return &memRowIterator{memRowContainer: mc}
+// MemRowContainer. Note that this iterator doesn't iterate over a snapshot
+// of MemRowContainer.
+func (mc *MemRowContainer) NewIterator(_ context.Context) RowIterator {
+	return &memRowIterator{MemRowContainer: mc}
 }
 
-// Rewind implements the rowIterator interface.
+// Rewind implements the RowIterator interface.
 func (i *memRowIterator) Rewind() {
 	i.curIdx = 0
 }
 
-// Valid implements the rowIterator interface.
+// Valid implements the RowIterator interface.
 func (i *memRowIterator) Valid() (bool, error) {
 	return i.curIdx < i.Len(), nil
 }
 
-// Next implements the rowIterator interface.
+// Next implements the RowIterator interface.
 func (i *memRowIterator) Next() {
 	i.curIdx++
 }
 
-// Row implements the rowIterator interface.
+// Row implements the RowIterator interface.
 func (i *memRowIterator) Row() (sqlbase.EncDatumRow, error) {
 	return i.EncRow(i.curIdx), nil
 }
 
-// Close implements the rowIterator interface.
+// Close implements the RowIterator interface.
 func (i *memRowIterator) Close() {}
 
-// memRowFinalIterator is a rowIterator that iterates over a memRowContainer.
-// This iterator doesn't iterate over a snapshot of memRowContainer and deletes
+// memRowFinalIterator is a RowIterator that iterates over a MemRowContainer.
+// This iterator doesn't iterate over a snapshot of MemRowContainer and deletes
 // rows as soon as they are iterated over to free up memory eagerly.
 type memRowFinalIterator struct {
-	*memRowContainer
+	*MemRowContainer
 }
 
 // NewFinalIterator returns an iterator that can be used to iterate over a
-// memRowContainer. Note that this iterator doesn't iterate over a snapshot
-// of memRowContainer and that it deletes rows as soon as they are iterated
+// MemRowContainer. Note that this iterator doesn't iterate over a snapshot
+// of MemRowContainer and that it deletes rows as soon as they are iterated
 // over.
-func (mc *memRowContainer) NewFinalIterator(_ context.Context) rowIterator {
-	return memRowFinalIterator{memRowContainer: mc}
+func (mc *MemRowContainer) NewFinalIterator(_ context.Context) RowIterator {
+	return memRowFinalIterator{MemRowContainer: mc}
 }
 
-var _ rowIterator = memRowFinalIterator{}
+var _ RowIterator = memRowFinalIterator{}
 
-// Rewind implements the rowIterator interface.
+// Rewind implements the RowIterator interface.
 func (i memRowFinalIterator) Rewind() {}
 
-// Valid implements the rowIterator interface.
+// Valid implements the RowIterator interface.
 func (i memRowFinalIterator) Valid() (bool, error) {
 	return i.Len() > 0, nil
 }
 
-// Next implements the rowIterator interface.
+// Next implements the RowIterator interface.
 func (i memRowFinalIterator) Next() {
 	i.PopFirst()
 }
 
-// Row implements the rowIterator interface.
+// Row implements the RowIterator interface.
 func (i memRowFinalIterator) Row() (sqlbase.EncDatumRow, error) {
 	return i.EncRow(0), nil
 }
 
-// Close implements the rowIterator interface.
+// Close implements the RowIterator interface.
 func (i memRowFinalIterator) Close() {}
 
-// diskBackedRowContainer is a sortableRowContainer that uses a memRowContainer
+// DiskBackedRowContainer is a SortableRowContainer that uses a MemRowContainer
 // to store rows and spills back to disk automatically if memory usage exceeds a
 // given budget.
-type diskBackedRowContainer struct {
-	// src is the current sortableRowContainer that is being used to store rows.
-	// All the sortableRowContainer methods are redefined rather than delegating
+type DiskBackedRowContainer struct {
+	// src is the current SortableRowContainer that is being used to store rows.
+	// All the SortableRowContainer methods are redefined rather than delegating
 	// to an embedded struct because of how defer works:
-	// 	rc.init(...)
+	// 	rc.Init(...)
 	//	defer rc.Close(ctx)
-	// The Close will call memRowContainer.Close(ctx) even after spilling to disk.
-	src sortableRowContainer
+	// The Close will call MemRowContainer.Close(ctx) even after spilling to disk.
+	src SortableRowContainer
 
-	mrc *memRowContainer
-	drc *diskRowContainer
+	mrc *MemRowContainer
+	drc *DiskRowContainer
 
 	spilled bool
 
-	// The following fields are used to create a diskRowContainer when spilling
+	// The following fields are used to create a DiskRowContainer when spilling
 	// to disk.
 	engine      diskmap.Factory
 	diskMonitor *mon.BytesMonitor
 }
 
-var _ sortableRowContainer = &diskBackedRowContainer{}
+var _ SortableRowContainer = &DiskBackedRowContainer{}
 
-// init initializes a diskBackedRowContainer.
+// Init initializes a DiskBackedRowContainer.
 // Arguments:
 //  - ordering is the output ordering; the order in which rows should be sorted.
 //  - types is the schema of rows that will be added to this container.
 //  - evalCtx defines the context in which to evaluate comparisons, only used
 //    when storing rows in memory.
 //  - engine is the store used for rows when spilling to disk.
-//  - memoryMonitor is used to monitor the diskBackedRowContainer's memory usage.
-//    If this monitor denies an allocation, the diskBackedRowContainer will
+//  - memoryMonitor is used to monitor the DiskBackedRowContainer's memory usage.
+//    If this monitor denies an allocation, the DiskBackedRowContainer will
 //    spill to disk.
-//  - diskMonitor is used to monitor the diskBackedRowContainer's disk usage if
+//  - diskMonitor is used to monitor the DiskBackedRowContainer's disk usage if
 //    and when it spills to disk.
-func (f *diskBackedRowContainer) init(
+func (f *DiskBackedRowContainer) Init(
 	ordering sqlbase.ColumnOrdering,
 	types []sqlbase.ColumnType,
 	evalCtx *tree.EvalContext,
@@ -337,19 +342,19 @@ func (f *diskBackedRowContainer) init(
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 ) {
-	mrc := memRowContainer{}
-	mrc.initWithMon(ordering, types, evalCtx, memoryMonitor)
+	mrc := MemRowContainer{}
+	mrc.InitWithMon(ordering, types, evalCtx, memoryMonitor)
 	f.mrc = &mrc
 	f.src = &mrc
 	f.engine = engine
 	f.diskMonitor = diskMonitor
 }
 
-func (f *diskBackedRowContainer) Len() int {
+func (f *DiskBackedRowContainer) Len() int {
 	return f.src.Len()
 }
 
-func (f *diskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (f *DiskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	if err := f.src.AddRow(ctx, row); err != nil {
 		if spilled, spillErr := f.spillIfMemErr(ctx, err); !spilled && spillErr == nil {
 			// The error was not an out of memory error.
@@ -364,31 +369,31 @@ func (f *diskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatu
 	return nil
 }
 
-func (f *diskBackedRowContainer) Sort(ctx context.Context) {
+func (f *DiskBackedRowContainer) Sort(ctx context.Context) {
 	f.src.Sort(ctx)
 }
 
-func (f *diskBackedRowContainer) InitTopK() {
+func (f *DiskBackedRowContainer) InitTopK() {
 	f.src.InitTopK()
 }
 
-func (f *diskBackedRowContainer) MaybeReplaceMax(
+func (f *DiskBackedRowContainer) MaybeReplaceMax(
 	ctx context.Context, row sqlbase.EncDatumRow,
 ) error {
 	return f.src.MaybeReplaceMax(ctx, row)
 }
 
-func (f *diskBackedRowContainer) NewIterator(ctx context.Context) rowIterator {
+func (f *DiskBackedRowContainer) NewIterator(ctx context.Context) RowIterator {
 	return f.src.NewIterator(ctx)
 }
 
-func (f *diskBackedRowContainer) NewFinalIterator(ctx context.Context) rowIterator {
+func (f *DiskBackedRowContainer) NewFinalIterator(ctx context.Context) RowIterator {
 	return f.src.NewFinalIterator(ctx)
 }
 
-// UnsafeReset resets the container for reuse. The diskBackedRowContainer will
+// UnsafeReset resets the container for reuse. The DiskBackedRowContainer will
 // reset to use memory if it is using disk.
-func (f *diskBackedRowContainer) UnsafeReset(ctx context.Context) error {
+func (f *DiskBackedRowContainer) UnsafeReset(ctx context.Context) error {
 	if f.drc != nil {
 		f.drc.Close(ctx)
 		f.src = f.mrc
@@ -398,29 +403,29 @@ func (f *diskBackedRowContainer) UnsafeReset(ctx context.Context) error {
 	return f.mrc.UnsafeReset(ctx)
 }
 
-func (f *diskBackedRowContainer) Close(ctx context.Context) {
+func (f *DiskBackedRowContainer) Close(ctx context.Context) {
 	if f.drc != nil {
 		f.drc.Close(ctx)
 	}
 	f.mrc.Close(ctx)
 }
 
-// Spilled returns whether or not the diskBackedRowContainer spilled to disk
+// Spilled returns whether or not the DiskBackedRowContainer spilled to disk
 // in its lifetime.
-func (f *diskBackedRowContainer) Spilled() bool {
+func (f *DiskBackedRowContainer) Spilled() bool {
 	return f.spilled
 }
 
-// UsingDisk returns whether or not the diskBackedRowContainer is currently
+// UsingDisk returns whether or not the DiskBackedRowContainer is currently
 // using disk.
-func (f *diskBackedRowContainer) UsingDisk() bool {
+func (f *DiskBackedRowContainer) UsingDisk() bool {
 	return f.drc != nil
 }
 
 // spillIfMemErr checks err and calls spillToDisk if the given err is an out of
-// memory error. Returns whether the diskBackedRowContainer spilled to disk and
+// memory error. Returns whether the DiskBackedRowContainer spilled to disk and
 // an error if one occurred while doing so.
-func (f *diskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
+func (f *DiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
 	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
 		return false, nil
 	}
@@ -431,7 +436,7 @@ func (f *diskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (
 	return true, nil
 }
 
-func (f *diskBackedRowContainer) spillToDisk(ctx context.Context) error {
+func (f *DiskBackedRowContainer) spillToDisk(ctx context.Context) error {
 	if f.UsingDisk() {
 		return errors.New("already using disk")
 	}

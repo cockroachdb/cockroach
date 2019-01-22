@@ -70,12 +70,12 @@ func TestSampleAggregator(t *testing.T) {
 	numSamplers := 3
 
 	samplerOutTypes := []sqlbase.ColumnType{
-		intType,                                  // original column
-		intType,                                  // original column
-		intType,                                  // rank
-		intType,                                  // sketch index
-		intType,                                  // num rows
-		intType,                                  // null vals
+		sqlbase.IntType,                          // original column
+		sqlbase.IntType,                          // original column
+		sqlbase.IntType,                          // rank
+		sqlbase.IntType,                          // sketch index
+		sqlbase.IntType,                          // num rows
+		sqlbase.IntType,                          // null vals
 		{SemanticType: sqlbase.ColumnType_BYTES}, // sketch data
 	}
 
@@ -103,8 +103,8 @@ func TestSampleAggregator(t *testing.T) {
 
 	outputs := make([]*RowBuffer, numSamplers)
 	for i := 0; i < numSamplers; i++ {
-		rows := genEncDatumRowsInt(rowPartitions[i])
-		in := NewRowBuffer(twoIntCols, rows, RowBufferArgs{})
+		rows := sqlbase.GenEncDatumRowsInt(rowPartitions[i])
+		in := NewRowBuffer(sqlbase.TwoIntCols, rows, RowBufferArgs{})
 		outputs[i] = NewRowBuffer(samplerOutTypes, nil /* rows */, RowBufferArgs{})
 
 		spec := &distsqlpb.SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}
@@ -221,13 +221,13 @@ func TestSampleAggregator(t *testing.T) {
 
 			for _, b := range h.Buckets {
 				ed, _, err := sqlbase.EncDatumFromBuffer(
-					&intType, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+					&sqlbase.IntType, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					t.Fatal(err)
 				}
 				var d sqlbase.DatumAlloc
-				if err := ed.EnsureDecoded(&intType, &d); err != nil {
+				if err := ed.EnsureDecoded(&sqlbase.IntType, &d); err != nil {
 					t.Fatal(err)
 				}
 				r.buckets = append(r.buckets, resultBucket{

@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package distsqlrun
+package rowcontainer
 
 import (
 	"context"
@@ -25,11 +25,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-// diskRowContainer is a sortableRowContainer that stores rows on disk according
-// to the ordering specified in diskRowContainer.ordering. The underlying store
+// DiskRowContainer is a SortableRowContainer that stores rows on disk according
+// to the ordering specified in DiskRowContainer.ordering. The underlying store
 // is a SortedDiskMap so the sorting itself is delegated. Use an iterator
 // created through NewIterator() to read the rows in sorted order.
-type diskRowContainer struct {
+type DiskRowContainer struct {
 	diskMap diskmap.SortedDiskMap
 	// diskAcc keeps track of disk usage.
 	diskAcc mon.BoundAccount
@@ -66,12 +66,12 @@ type diskRowContainer struct {
 	datumAlloc sqlbase.DatumAlloc
 }
 
-var _ sortableRowContainer = &diskRowContainer{}
+var _ SortableRowContainer = &DiskRowContainer{}
 
-// makeDiskRowContainer creates a diskRowContainer with the given engine as the
+// makeDiskRowContainer creates a DiskRowContainer with the given engine as the
 // underlying store that rows are stored on.
 // Arguments:
-// 	- diskMonitor is used to monitor this diskRowContainer's disk usage.
+// 	- diskMonitor is used to monitor this DiskRowContainer's disk usage.
 // 	- types is the schema of rows that will be added to this container.
 // 	- ordering is the output ordering; the order in which rows should be sorted.
 // 	- e is the underlying store that rows are stored on.
@@ -80,9 +80,9 @@ func makeDiskRowContainer(
 	types []sqlbase.ColumnType,
 	ordering sqlbase.ColumnOrdering,
 	e diskmap.Factory,
-) diskRowContainer {
+) DiskRowContainer {
 	diskMap := e.NewSortedDiskMap()
-	d := diskRowContainer{
+	d := DiskRowContainer{
 		diskMap:       diskMap,
 		diskAcc:       diskMonitor.MakeBoundAccount(),
 		types:         types,
@@ -123,11 +123,11 @@ func makeDiskRowContainer(
 	return d
 }
 
-func (d *diskRowContainer) Len() int {
+func (d *DiskRowContainer) Len() int {
 	return int(d.rowID)
 }
 
-func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (d *DiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	if len(row) != len(d.types) {
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(d.types))
 	}
@@ -165,20 +165,20 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 
 // Sort is a noop because the use of a SortedDiskMap as the underlying store
 // keeps the rows in sorted order.
-func (d *diskRowContainer) Sort(context.Context) {}
+func (d *DiskRowContainer) Sort(context.Context) {}
 
 // InitTopK limits iterators to read the first k rows.
-func (d *diskRowContainer) InitTopK() {
+func (d *DiskRowContainer) InitTopK() {
 	d.topK = d.Len()
 }
 
-// MaybeReplaceMax adds row to the diskRowContainer. The SortedDiskMap will
+// MaybeReplaceMax adds row to the DiskRowContainer. The SortedDiskMap will
 // sort this row into the top k if applicable.
-func (d *diskRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (d *DiskRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncDatumRow) error {
 	return d.AddRow(ctx, row)
 }
 
-func (d *diskRowContainer) UnsafeReset(ctx context.Context) error {
+func (d *DiskRowContainer) UnsafeReset(ctx context.Context) error {
 	_ = d.bufferedRows.Close(ctx)
 	if err := d.diskMap.Clear(); err != nil {
 		return err
@@ -190,7 +190,7 @@ func (d *diskRowContainer) UnsafeReset(ctx context.Context) error {
 	return nil
 }
 
-func (d *diskRowContainer) Close(ctx context.Context) {
+func (d *DiskRowContainer) Close(ctx context.Context) {
 	// We can ignore the error here because the flushed data is immediately cleared
 	// in the following Close.
 	_ = d.bufferedRows.Close(ctx)
@@ -201,7 +201,7 @@ func (d *diskRowContainer) Close(ctx context.Context) {
 // keyValToRow decodes a key and a value byte slice stored with AddRow() into
 // a sqlbase.EncDatumRow. The returned EncDatumRow is only valid until the next
 // call to keyValToRow().
-func (d *diskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow, error) {
+func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow, error) {
 	for i, orderInfo := range d.ordering {
 		// Types with composite key encodings are decoded from the value.
 		if sqlbase.HasCompositeKeyEncoding(d.types[orderInfo.ColIdx].SemanticType) {
@@ -230,25 +230,25 @@ func (d *diskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow,
 	return d.scratchEncRow, nil
 }
 
-// diskRowIterator iterates over the rows in a diskRowContainer.
+// diskRowIterator iterates over the rows in a DiskRowContainer.
 type diskRowIterator struct {
-	rowContainer *diskRowContainer
+	rowContainer *DiskRowContainer
 	diskmap.SortedDiskMapIterator
 }
 
-var _ rowIterator = diskRowIterator{}
+var _ RowIterator = diskRowIterator{}
 
-func (d *diskRowContainer) newIterator(ctx context.Context) diskRowIterator {
+func (d *DiskRowContainer) newIterator(ctx context.Context) diskRowIterator {
 	if err := d.bufferedRows.Flush(); err != nil {
 		log.Fatal(ctx, err)
 	}
 	return diskRowIterator{rowContainer: d, SortedDiskMapIterator: d.diskMap.NewIterator()}
 }
 
-func (d *diskRowContainer) NewIterator(ctx context.Context) rowIterator {
+func (d *DiskRowContainer) NewIterator(ctx context.Context) RowIterator {
 	i := d.newIterator(ctx)
 	if d.topK > 0 {
-		return &diskRowTopKIterator{rowIterator: i, k: d.topK}
+		return &diskRowTopKIterator{RowIterator: i, k: d.topK}
 	}
 	return i
 }
@@ -275,19 +275,19 @@ type diskRowFinalIterator struct {
 	diskRowIterator
 }
 
-var _ rowIterator = diskRowFinalIterator{}
+var _ RowIterator = diskRowFinalIterator{}
 
 // NewFinalIterator returns an iterator that reads rows exactly once throughout
-// the lifetime of a diskRowContainer. Rows are not actually discarded from the
-// diskRowContainer, but the lastReadKey is kept track of in order to serve as
+// the lifetime of a DiskRowContainer. Rows are not actually discarded from the
+// DiskRowContainer, but the lastReadKey is kept track of in order to serve as
 // the start key for future diskRowFinalIterators.
 // NOTE: Don't use NewFinalIterator if you passed in an ordering for the rows
 // and will be adding rows between iterations. New rows could sort before the
 // current row.
-func (d *diskRowContainer) NewFinalIterator(ctx context.Context) rowIterator {
+func (d *DiskRowContainer) NewFinalIterator(ctx context.Context) RowIterator {
 	i := diskRowFinalIterator{diskRowIterator: d.newIterator(ctx)}
 	if d.topK > 0 {
-		return &diskRowTopKIterator{rowIterator: i, k: d.topK}
+		return &diskRowTopKIterator{RowIterator: i, k: d.topK}
 	}
 	return i
 }
@@ -309,16 +309,16 @@ func (r diskRowFinalIterator) Row() (sqlbase.EncDatumRow, error) {
 }
 
 type diskRowTopKIterator struct {
-	rowIterator
+	RowIterator
 	position int
 	// k is the limit of rows to read.
 	k int
 }
 
-var _ rowIterator = &diskRowTopKIterator{}
+var _ RowIterator = &diskRowTopKIterator{}
 
 func (d *diskRowTopKIterator) Rewind() {
-	d.rowIterator.Rewind()
+	d.RowIterator.Rewind()
 	d.position = 0
 }
 
@@ -326,10 +326,10 @@ func (d *diskRowTopKIterator) Valid() (bool, error) {
 	if d.position >= d.k {
 		return false, nil
 	}
-	return d.rowIterator.Valid()
+	return d.RowIterator.Valid()
 }
 
 func (d *diskRowTopKIterator) Next() {
 	d.position++
-	d.rowIterator.Next()
+	d.RowIterator.Next()
 }

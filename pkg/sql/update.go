@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -410,7 +411,7 @@ type updateRun struct {
 	done bool
 
 	// rows contains the accumulated result rows if rowsNeeded is set.
-	rows *sqlbase.RowContainer
+	rows *rowcontainer.RowContainer
 
 	// autoCommit indicates whether the last KV batch processed by
 	// this update will also commit the KV txn.
@@ -485,7 +486,7 @@ func (u *updateNode) startExec(params runParams) error {
 	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
 	if u.run.rowsNeeded {
-		u.run.rows = sqlbase.NewRowContainer(
+		u.run.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(u.columns), 0)
 	}
