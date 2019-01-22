@@ -438,6 +438,14 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 		if agg.Distinct {
 			f.setDistinct()
 		}
+
+		if agg.Filter == -1 {
+			// A value of -1 means the aggregate had no filter.
+			f.filterRenderIdx = noRenderIdx
+		} else {
+			f.filterRenderIdx = int(agg.Filter)
+		}
+
 		n.funcs = append(n.funcs, f)
 		n.columns = append(n.columns, sqlbase.ResultColumn{
 			Name: fmt.Sprintf("agg%d", i),

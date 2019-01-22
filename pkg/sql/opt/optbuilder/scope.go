@@ -432,7 +432,8 @@ func (s *scope) getAggregateCols() []scopeColumn {
 
 // getAggregateArgCols returns the columns in this scope corresponding
 // to arguments to aggregate functions. This call is only valid on an
-// aggInScope.
+// aggInScope. If the aggregate has a filter, the column corresponding
+// to its input will immediately follow its inputs.
 func (s *scope) getAggregateArgCols(groupingsLen int) []scopeColumn {
 	// Aggregate args are always clustered at the beginning of the column list.
 	return s.cols[:len(s.cols)-groupingsLen]
@@ -460,7 +461,7 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 
 	for i, a := range s.groupby.aggs {
 		// Find an existing aggregate that uses the same function overload.
-		if a.def.Overload == agg.def.Overload && a.distinct == agg.distinct {
+		if a.def.Overload == agg.def.Overload && a.distinct == agg.distinct && a.filter == agg.filter {
 			// Now check that the arguments are identical.
 			if len(a.args) == len(agg.args) {
 				match := true
@@ -929,10 +930,6 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 // aggregate references no variables). The aggOutScope.groupby.aggs slice is
 // used later by the Builder to build aggregations in the aggregation scope.
 func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
-	if f.Filter != nil {
-		panic(unimplementedf("aggregates with FILTER are not supported yet"))
-	}
-
 	f, def = s.replaceCount(f, def)
 
 	// We need to save and restore the previous value of the field in
@@ -944,6 +941,23 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 		tree.RejectNestedAggregates|tree.RejectWindowApplications)
 
 	expr := f.Walk(s)
+
+	// We need to do this check here to ensure that we check the usage of special
+	// functions with the right error message.
+	if f.Filter != nil {
+		func() {
+			oldProps := s.builder.semaCtx.Properties
+			defer func() { s.builder.semaCtx.Properties.Restore(oldProps) }()
+
+			s.builder.semaCtx.Properties.Require("FILTER", tree.RejectSpecial)
+			_, err := tree.TypeCheck(expr.(*tree.FuncExpr).Filter, s.builder.semaCtx, types.Any)
+			if err != nil {
+				panic(builderError{err})
+			}
+
+		}()
+	}
+
 	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
 	if err != nil {
 		panic(builderError{err})
@@ -982,11 +996,31 @@ func (s *scope) replaceCount(
 
 	if strings.EqualFold(def.Name, "count") && f.Type == 0 {
 		if _, ok := vn.(tree.UnqualifiedStar); ok {
-			// Special case handling for COUNT(*). This is a special construct to
-			// count the number of rows; in this case * does NOT refer to a set of
-			// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
-			// Replace the function with COUNT_ROWS (which doesn't take any
-			// arguments).
+			if f.Filter != nil {
+				// If we have a COUNT(*) with a FILTER, we need to synthesize an input
+				// for the aggregation to be over, because otherwise we have no input
+				// to hang the AggFilter off of.
+				// Thus, we convert
+				//   COUNT(*) FILTER (WHERE foo)
+				// to
+				//   COUNT(true) FILTER (WHERE foo).
+				cpy := *f
+				e := &cpy
+				e.Exprs = tree.Exprs{tree.DBoolTrue}
+
+				newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
+				if err != nil {
+					panic(builderError{err})
+				}
+
+				return e, newDef
+			}
+
+			// Special case handling for COUNT(*) with no FILTER. This is a special
+			// construct to count the number of rows; in this case * does NOT refer
+			// to a set of columns. A * is invalid elsewhere (and will be caught by
+			// TypeCheck()).  Replace the function with COUNT_ROWS (which doesn't
+			// take any arguments).
 			e := &tree.FuncExpr{
 				Func: tree.ResolvableFunctionReference{
 					FunctionReference: &tree.UnresolvedName{

@@ -873,6 +873,16 @@ define AggDistinct {
     Input ScalarExpr
 }
 
+# AggFilter is used as a modifier that wraps the input of an aggregate
+# function. It causes only rows for which the filter expression is true
+# to be processed. AggFilter should always occur on top of AggDistinct
+# if they are both present.
+[Scalar]
+define AggFilter {
+    Input  ScalarExpr
+    Filter ScalarExpr
+}
+
 # ScalarList is a list expression that has scalar expression items of type
 # opt.ScalarExpr. opt.ScalarExpr is an external type that is defined outside of
 # Optgen. It is hard-coded in the code generator to be the item type for

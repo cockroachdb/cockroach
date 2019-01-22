@@ -74,10 +74,13 @@ SELECT * FROM test.t WHERE 2*v > (SELECT max(v) FROM test.t)
 
 # Fall back to heuristic planner when feature is not support in cost-based
 # optimizer.
-query I rowsort
-SELECT count(*) FILTER (WHERE v>10) FROM t
+query T
+SELECT avg(k) OVER () FROM t ORDER BY 1
 ----
-3
+2.5
+2.5
+2.5
+2.5
 
 query II rowsort
 SELECT * FROM tview
@@ -101,8 +104,8 @@ query error pq: unsupported statement: \*tree\.AlterTable
 ALTER TABLE test DROP COLUMN v;
 
 # Don't fall back to heuristic planner in ALWAYS mode.
-query error pq: aggregates with FILTER are not supported yet
-SELECT count(*) FILTER (WHERE v>10) FROM t
+query error pq: window functions are not supported
+SELECT avg(k) OVER () FROM t ORDER BY 1
 
 query error pq: sequences are not supported
 SELECT * FROM seq
