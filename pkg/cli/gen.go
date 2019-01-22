@@ -208,9 +208,14 @@ Output the list of cluster settings known to this binary.
 			if !ok {
 				panic(fmt.Sprintf("unknown setting type %q", setting.Typ()))
 			}
-			defaultVal := setting.String(&s.SV)
-			if override, ok := sqlmigrations.SettingsDefaultOverrides[name]; ok {
-				defaultVal = override
+			var defaultVal string
+			if sm, ok := setting.(*settings.StateMachineSetting); ok {
+				defaultVal = sm.SettingsListDefault()
+			} else {
+				defaultVal = setting.String(&s.SV)
+				if override, ok := sqlmigrations.SettingsDefaultOverrides[name]; ok {
+					defaultVal = override
+				}
 			}
 			row := []string{wrapCode(name), typ, wrapCode(defaultVal), setting.Description()}
 			rows = append(rows, row)

@@ -271,11 +271,14 @@ func NewNode(
 		eventLogger = sql.MakeEventLogger(execCfg)
 	}
 	n := &Node{
-		storeCfg:    cfg,
-		stopper:     stopper,
-		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:      storage.NewStores(cfg.AmbientCtx, cfg.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion),
+		storeCfg: cfg,
+		stopper:  stopper,
+		recorder: recorder,
+		metrics:  makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores: storage.NewStores(
+			cfg.AmbientCtx, cfg.Clock,
+			cluster.Version.BinaryMinSupportedVersion(cfg.Settings),
+			cluster.Version.BinaryVersion(cfg.Settings)),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
@@ -327,8 +330,7 @@ func (n *Node) bootstrapCluster(
 	return nil
 }
 
-func (n *Node) onClusterVersionChange(cv cluster.ClusterVersion) {
-	ctx := n.AnnotateCtx(context.Background())
+func (n *Node) onClusterVersionChange(ctx context.Context, cv cluster.ClusterVersion) {
 	if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
 		log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %v", cv))
 	}
@@ -350,8 +352,8 @@ func (n *Node) start(
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	if err := n.storeCfg.Settings.InitializeVersion(cv); err != nil {
-		return errors.Wrap(err, "while initializing cluster version")
+	if err := cluster.Version.Initialize(ctx, cv.Version, n.storeCfg.Settings); err != nil {
+		return err
 	}
 
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
@@ -395,7 +397,7 @@ func (n *Node) start(
 		Locality:        locality,
 		LocalityAddress: localityAddress,
 		ClusterName:     clusterName,
-		ServerVersion:   n.storeCfg.Settings.Version.ServerVersion,
+		ServerVersion:   cluster.Version.BinaryVersion(n.storeCfg.Settings),
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
 	}
@@ -494,11 +496,14 @@ func (n *Node) start(
 
 	// Now that we've created all our stores, install the gossip version update
 	// handler to write version updates to them.
-	n.storeCfg.Settings.Version.OnChange(n.onClusterVersionChange)
+	// It's important that we persist new versions to the engines before the node
+	// starts using it, otherwise the node might regress the version after a
+	// crash.
+	cluster.Version.SetBeforeChange(ctx, n.storeCfg.Settings, n.onClusterVersionChange)
 	// Invoke the callback manually once so that we persist the updated value that
 	// gossip might have already received.
-	clusterVersion := n.storeCfg.Settings.Version.Version()
-	n.onClusterVersionChange(clusterVersion)
+	clusterVersion := cluster.Version.ActiveVersion(ctx, n.storeCfg.Settings)
+	n.onClusterVersionChange(ctx, clusterVersion)
 
 	// Be careful about moving this line above `startStores`; store migrations rely
 	// on the fact that the cluster version has not been updated via Gossip (we

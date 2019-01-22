@@ -205,7 +205,7 @@ func TestStopServer(t *testing.T) {
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{Tracer: tc.Server(0).ClusterSettings().Tracer},
 		tc.Server(1).RPCContext().Config, tc.Server(1).Clock(), tc.Stopper(),
-		&tc.Server(1).ClusterSettings().Version,
+		tc.Server(1).ClusterSettings(),
 	)
 	conn, err := rpcContext.GRPCDialNode(server1.ServingRPCAddr(), server1.NodeID(),
 		rpc.DefaultClass).Connect(context.Background())

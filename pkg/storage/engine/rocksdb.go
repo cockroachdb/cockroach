@@ -1056,7 +1056,8 @@ func (r *rocksDBReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogical
 
 // NewBatch returns a new batch wrapping this rocksdb engine.
 func (r *RocksDB) NewBatch() Batch {
-	return newRocksDBBatch(r, false /* writeOnly */)
+	b := newRocksDBBatch(r, false /* writeOnly */)
+	return b
 }
 
 // NewWriteOnlyBatch returns a new write-only batch wrapping this rocksdb

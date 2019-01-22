@@ -1016,7 +1016,7 @@ func backupPlanHook(
 			return err
 		}
 		if len(to) > 1 &&
-			!p.ExecCfg().Settings.Version.IsActive(cluster.VersionPartitionedBackup) {
+			!cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionPartitionedBackup) {
 			return errors.Errorf("partitioned backups can only be made on a cluster that has been fully upgraded to version 19.2")
 		}
 
