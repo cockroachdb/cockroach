@@ -21,6 +21,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -133,7 +134,7 @@ func (p *planner) window(
 
 	window.replaceIndexVarsAndAggFuncs(s)
 	acc := p.EvalContext().Mon.MakeBoundAccount()
-	window.run.wrappedRenderVals = sqlbase.NewRowContainer(
+	window.run.wrappedRenderVals = rowcontainer.NewRowContainer(
 		acc, sqlbase.ColTypeInfoFromResCols(s.columns), 0,
 	)
 
@@ -158,7 +159,7 @@ type windowRun struct {
 	//     we need to buffer all values here while we compute window function results. We
 	//     then index into these values in colContainer.IndexedVarEval and
 	//     aggContainer.IndexedVarEval. (see replaceIndexVarsAndAggFuncs)
-	wrappedRenderVals *sqlbase.RowContainer
+	wrappedRenderVals *rowcontainer.RowContainer
 
 	// The populated values for this windowNode.
 	values    valuesNode
@@ -192,7 +193,7 @@ func (n *windowNode) Next(params runParams) (bool, error) {
 			if err := n.computeWindows(params.ctx, params.EvalContext()); err != nil {
 				return false, err
 			}
-			n.run.values.rows = sqlbase.NewRowContainer(
+			n.run.values.rows = rowcontainer.NewRowContainer(
 				params.EvalContext().Mon.MakeBoundAccount(),
 				sqlbase.ColTypeInfoFromResCols(n.run.values.columns),
 				n.run.wrappedRenderVals.Len(),
@@ -594,7 +595,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 type partitionSorter struct {
 	evalCtx       *tree.EvalContext
 	rows          indexedRows
-	windowDefVals *sqlbase.RowContainer
+	windowDefVals *rowcontainer.RowContainer
 	ordering      sqlbase.ColumnOrdering
 }
 

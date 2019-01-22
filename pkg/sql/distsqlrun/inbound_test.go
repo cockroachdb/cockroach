@@ -76,14 +76,14 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 
 	streamID := distsqlpb.StreamID(1)
 	outbox := newOutbox(&flowCtx, staticNodeID, distsqlpb.FlowID{}, streamID)
-	outbox.init(oneIntCol)
+	outbox.init(sqlbase.OneIntCol)
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no
 	// goroutines were leaked. Grab the flow's waitGroup to avoid a copy warning.
 	f := &Flow{}
 
 	// Use RegisterFlow to register our consumer, which we will control.
-	consumer := NewRowBuffer(oneIntCol, nil /* rows */, RowBufferArgs{})
+	consumer := NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, RowBufferArgs{})
 	connectionInfo := map[distsqlpb.StreamID]*inboundStreamInfo{
 		streamID: {
 			receiver:  consumer,
@@ -104,7 +104,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	// below.
 	consumer.ConsumerDone()
 
-	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(0)))}
+	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(0)))}
 
 	// Now push a row to the outbox's RowChannel and expect the consumer status
 	// returned to be DrainRequested. This is wrapped in a SucceedsSoon because

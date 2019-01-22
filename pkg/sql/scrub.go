@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -543,9 +544,9 @@ func scrubRunDistSQL(
 	p *planner,
 	plan *PhysicalPlan,
 	columnTypes []sqlbase.ColumnType,
-) (*sqlbase.RowContainer, error) {
+) (*rowcontainer.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
-	rows := sqlbase.NewRowContainer(*p.extendedEvalCtx.ActiveMemAcc, ci, 0 /* rowCapacity */)
+	rows := rowcontainer.NewRowContainer(*p.extendedEvalCtx.ActiveMemAcc, ci, 0 /* rowCapacity */)
 	rowResultWriter := NewRowResultWriter(rows)
 	recv := MakeDistSQLReceiver(
 		ctx,

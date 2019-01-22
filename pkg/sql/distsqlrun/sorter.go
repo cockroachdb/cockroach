@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -34,8 +35,8 @@ type sorterBase struct {
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
 
-	rows sortableRowContainer
-	i    rowIterator
+	rows rowcontainer.SortableRowContainer
+	i    rowcontainer.RowIterator
 
 	// Only set if the ability to spill to disk is enabled.
 	diskMonitor *mon.BytesMonitor
@@ -86,8 +87,8 @@ func (s *sorterBase) init(
 
 	if useTempStorage {
 		s.diskMonitor = NewMonitor(ctx, flowCtx.diskMonitor, "sorter-disk")
-		rc := diskBackedRowContainer{}
-		rc.init(
+		rc := rowcontainer.DiskBackedRowContainer{}
+		rc.Init(
 			ordering,
 			input.OutputTypes(),
 			s.evalCtx,
@@ -97,8 +98,8 @@ func (s *sorterBase) init(
 		)
 		s.rows = &rc
 	} else {
-		rc := memRowContainer{}
-		rc.initWithMon(ordering, input.OutputTypes(), s.evalCtx, memMonitor)
+		rc := rowcontainer.MemRowContainer{}
+		rc.InitWithMon(ordering, input.OutputTypes(), s.evalCtx, memMonitor)
 		s.rows = &rc
 	}
 
