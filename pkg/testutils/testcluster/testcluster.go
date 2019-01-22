@@ -563,7 +563,14 @@ func (tc *TestCluster) WaitForFullReplication() error {
 				// Force the first node to upreplicate everything. Otherwise, if we rely
 				// on the scanner to do it, it'll take a while.
 				if i == 0 {
-					if err := s.ForceReplicationScanAndProcess(); err != nil {
+					if err := s.ForceReplicationScanAndProcess(); err == storage.ErrSystemConfigUnavailable {
+						// If we're restoring from old store directories and a
+						// node other than n1 had the lease for the system config
+						// range, we may need to wait for that node's lease to
+						// expire.
+						notReplicated = true
+						return nil
+					} else if err != nil {
 						return err
 					}
 				}

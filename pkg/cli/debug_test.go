@@ -132,7 +132,6 @@ func TestOpenReadOnlyStore(t *testing.T) {
 
 func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skipf("33495")
 	ctx := context.Background()
 
 	baseDir, dirCleanupFn := testutils.TempDir(t)

@@ -130,6 +130,10 @@ var ExportRequestsLimit = settings.RegisterPositiveIntSetting(
 	3,
 )
 
+// ErrSystemConfigUnavailable is returned when an operation is unable to
+// proceed because the system config has not yet been gossiped.
+var ErrSystemConfigUnavailable error = errors.New("system config not available in gossip")
+
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	if clock == nil {
@@ -4550,7 +4554,7 @@ func forceScanAndProcess(s *Store, q *baseQueue) error {
 	// it's not available, some queues silently fail to process any replicas,
 	// which is undesirable for this method.
 	if cfg := s.Gossip().GetSystemConfig(); cfg == nil {
-		return errors.Errorf("system config not available in gossip")
+		return ErrSystemConfigUnavailable
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
