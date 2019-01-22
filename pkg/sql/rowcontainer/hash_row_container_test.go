@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package distsqlrun
+package rowcontainer
 
 import (
 	"context"
@@ -64,12 +64,12 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 
 	const numRows = 10
 	const numCols = 1
-	rows := makeIntRows(numRows, numCols)
+	rows := sqlbase.MakeIntRows(numRows, numCols)
 	storedEqColumns := columns{0}
-	types := []sqlbase.ColumnType{intType}
+	types := sqlbase.OneIntCol
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	rc := makeHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)
+	rc := MakeHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)
 	err = rc.Init(
 		ctx,
 		false, /* shouldMark */
@@ -225,12 +225,12 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 	const numRowsInBucket = 4
 	const numRows = 12
 	const numCols = 2
-	rows := makeRepeatedIntRows(numRowsInBucket, numRows, numCols)
+	rows := sqlbase.MakeRepeatedIntRows(numRowsInBucket, numRows, numCols)
 	storedEqColumns := columns{0}
-	types := []sqlbase.ColumnType{intType, intType}
+	types := []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType}
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	rc := makeHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)
+	rc := MakeHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)
 	err = rc.Init(
 		ctx,
 		true, /* shouldMark */
@@ -329,7 +329,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 				t.Fatalf("verifying memory rows failed with: %s", err)
 			}
 		}()
-		if err := rc.reserveMarkMemoryMaybe(ctx); err != nil {
+		if err := rc.ReserveMarkMemoryMaybe(ctx); err != nil {
 			t.Fatal(err)
 		}
 		func() {

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -214,7 +215,7 @@ type deleteRun struct {
 	done bool
 
 	// rows contains the accumulated result rows if rowsNeeded is set.
-	rows *sqlbase.RowContainer
+	rows *rowcontainer.RowContainer
 
 	// autoCommit indicates whether the last KV batch processed by
 	// this delete will also commit the KV txn.
@@ -244,7 +245,7 @@ func (d *deleteNode) startExec(params runParams) error {
 	}
 
 	if d.run.rowsNeeded {
-		d.run.rows = sqlbase.NewRowContainer(
+		d.run.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(d.columns), 0)
 	}

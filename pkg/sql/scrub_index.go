@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -57,7 +58,7 @@ type indexCheckOperation struct {
 type indexCheckRun struct {
 	started bool
 	// Intermediate values.
-	rows     *sqlbase.RowContainer
+	rows     *rowcontainer.RowContainer
 	rowIndex int
 }
 
@@ -315,15 +316,15 @@ func createIndexCheckQuery(
 				WHERE (%[7]s) OR
 							(%[8]s)`
 	return fmt.Sprintf(checkIndexQuery,
-		tableColumnsProjection("leftside", columnNames),  // 1
-		tableColumnsProjection("rightside", columnNames), // 2
-		tableName.String(),             // 3
-		indexDesc.ID,                   // 4
-		strings.Join(columnNames, ","), // 5
+		tableColumnsProjection("leftside", columnNames),                                                        // 1
+		tableColumnsProjection("rightside", columnNames),                                                       // 2
+		tableName.String(),                                                                                     // 3
+		indexDesc.ID,                                                                                           // 4
+		strings.Join(columnNames, ","),                                                                         // 5
 		tableColumnsEQ("leftside", "rightside", columnNames, columnNames),                                      // 6
 		tableColumnsIsNullPredicate("leftside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */),  // 7
 		tableColumnsIsNullPredicate("rightside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */), // 8
-		strings.Join(columnNames, ","), // 9
-		asOfClauseStr,                  // 10
+		strings.Join(columnNames, ","),                                                                         // 9
+		asOfClauseStr,                                                                                          // 10
 	)
 }

@@ -622,7 +622,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	for {
 		row, meta := out.Next()
 		if row != nil {
-			t.Fatalf("row was pushed unexpectedly: %s", row.String(oneIntCol))
+			t.Fatalf("row was pushed unexpectedly: %s", row.String(sqlbase.OneIntCol))
 		}
 		if meta == nil {
 			break

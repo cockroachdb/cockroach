@@ -59,7 +59,7 @@ func TestIndexJoiner(t *testing.T) {
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = intEncDatum(i)
+		v[i] = sqlbase.IntEncDatum(i)
 	}
 
 	testCases := []struct {
@@ -81,7 +81,7 @@ func TestIndexJoiner(t *testing.T) {
 				{v[1], v[0]},
 				{v[1], v[5]},
 			},
-			outputTypes: threeIntCols,
+			outputTypes: sqlbase.ThreeIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[2], v[2]},
 				{v[0], v[5], v[5]},
@@ -106,13 +106,13 @@ func TestIndexJoiner(t *testing.T) {
 				{v[5], v[1]},
 				{v[5], v[0]},
 			},
-			outputTypes: []sqlbase.ColumnType{strType},
+			outputTypes: []sqlbase.ColumnType{sqlbase.StrType},
 			expected: sqlbase.EncDatumRows{
-				{strEncDatum("one")},
-				{strEncDatum("five")},
-				{strEncDatum("two-one")},
-				{strEncDatum("one-three")},
-				{strEncDatum("five-zero")},
+				{sqlbase.StrEncDatum("one")},
+				{sqlbase.StrEncDatum("five")},
+				{sqlbase.StrEncDatum("two-one")},
+				{sqlbase.StrEncDatum("one-three")},
+				{sqlbase.StrEncDatum("five-zero")},
 			},
 		},
 	}
@@ -128,7 +128,7 @@ func TestIndexJoiner(t *testing.T) {
 				t,
 				distsqlpb.ProcessorCoreUnion{JoinReader: &spec},
 				c.post,
-				twoIntCols,
+				sqlbase.TwoIntCols,
 				c.input,
 				c.outputTypes,
 				c.expected,

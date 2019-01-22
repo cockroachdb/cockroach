@@ -590,7 +590,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	fr := makeFlowRegistry(0)
 	wg := sync.WaitGroup{}
 	rc := &RowChannel{}
-	rc.initWithBufSizeAndNumSenders(oneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
+	rc.initWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
 		0: {
 			receiver:  rc,
@@ -622,7 +622,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	// occurred.
 	pushChan := make(chan *ProducerMetadata)
 	rc := NewRowBuffer(
-		oneIntCol,
+		sqlbase.OneIntCol,
 		nil, /* rows */
 		RowBufferArgs{
 			OnPush: func(_ sqlbase.EncDatumRow, meta *ProducerMetadata) {

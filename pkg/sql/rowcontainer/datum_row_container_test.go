@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sqlbase
+package rowcontainer
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -32,15 +33,15 @@ func TestRowContainer(t *testing.T) {
 	for _, numCols := range []int{0, 1, 2, 3, 5, 10, 15} {
 		for _, numRows := range []int{5, 10, 100} {
 			for _, numPops := range []int{0, 1, 2, numRows / 3, numRows / 2} {
-				resCol := make(ResultColumns, numCols)
+				resCol := make(sqlbase.ResultColumns, numCols)
 				for i := range resCol {
-					resCol[i] = ResultColumn{Typ: types.Int}
+					resCol[i] = sqlbase.ResultColumn{Typ: types.Int}
 				}
 				st := cluster.MakeTestingClusterSettings()
 				m := mon.MakeUnlimitedMonitor(
 					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 				)
-				rc := NewRowContainer(m.MakeBoundAccount(), ColTypeInfoFromResCols(resCol), 0)
+				rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCol), 0)
 				row := make(tree.Datums, numCols)
 				for i := 0; i < numRows; i++ {
 					for j := range row {
@@ -86,8 +87,8 @@ func TestRowContainerAtOutOfRange(t *testing.T) {
 	m := mon.MakeUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
 	defer m.Stop(ctx)
 
-	resCols := ResultColumns{ResultColumn{Typ: types.Int}}
-	rc := NewRowContainer(m.MakeBoundAccount(), ColTypeInfoFromResCols(resCols), 0)
+	resCols := sqlbase.ResultColumns{sqlbase.ResultColumn{Typ: types.Int}}
+	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCols), 0)
 	defer rc.Close(ctx)
 
 	// Verify that a panic is thrown for out-of-range conditions.
@@ -113,7 +114,7 @@ func TestRowContainerZeroCols(t *testing.T) {
 	m := mon.MakeUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
 	defer m.Stop(ctx)
 
-	rc := NewRowContainer(m.MakeBoundAccount(), ColTypeInfoFromResCols(nil), 0)
+	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(nil), 0)
 	defer rc.Close(ctx)
 
 	const numRows = 10
@@ -144,12 +145,12 @@ func BenchmarkRowContainerAt(b *testing.B) {
 	)
 	defer m.Stop(context.Background())
 
-	resCol := make(ResultColumns, numCols)
+	resCol := make(sqlbase.ResultColumns, numCols)
 	for i := range resCol {
-		resCol[i] = ResultColumn{Typ: types.Int}
+		resCol[i] = sqlbase.ResultColumn{Typ: types.Int}
 	}
 
-	rc := NewRowContainer(m.MakeBoundAccount(), ColTypeInfoFromResCols(resCol), 0)
+	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCol), 0)
 	defer rc.Close(context.Background())
 
 	row := make(tree.Datums, numCols)

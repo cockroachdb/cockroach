@@ -33,7 +33,7 @@ type joinerBase struct {
 	// eqCols contains the indices of the columns that are constrained to be
 	// equal. Specifically column eqCols[0][i] on the left side must match the
 	// column eqCols[1][i] on the right side.
-	eqCols [2]columns
+	eqCols [2][]uint32
 
 	// numMergedEqualityColumns specifies how many of the equality
 	// columns must be merged at the beginning of each result row. This
