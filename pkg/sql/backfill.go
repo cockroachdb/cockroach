@@ -704,7 +704,8 @@ func (sc *SchemaChanger) distBackfill(
 	filter backfill.MutationFilter,
 	targetSpans []roachpb.Span,
 ) error {
-	inMemoryStatusEnabled := sc.execCfg.Settings.Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger)
+	inMemoryStatusEnabled := cluster.Version.IsActive(
+		ctx, sc.execCfg.Settings, cluster.VersionAtomicChangeReplicasTrigger)
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
 		duration = sc.testingKnobs.WriteCheckpointInterval

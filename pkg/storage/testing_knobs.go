@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -168,8 +167,6 @@ type StoreTestingKnobs struct {
 	// only changes in the number of replicas can cause the store to gossip its
 	// capacity.
 	DisableLeaseCapacityGossip bool
-	// BootstrapVersion overrides the version the stores will be bootstrapped with.
-	BootstrapVersion *cluster.ClusterVersion
 	// SystemLogsGCPeriod is used to override the period of GC of system logs.
 	SystemLogsGCPeriod time.Duration
 	// SystemLogsGCGCDone is used to notify when system logs GC is done.

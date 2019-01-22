@@ -76,7 +76,7 @@ func NewNetwork(
 		&base.Config{Insecure: true},
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		n.Stopper,
-		&cluster.MakeTestingClusterSettings().Version,
+		cluster.MakeTestingClusterSettings(),
 	)
 	var err error
 	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()

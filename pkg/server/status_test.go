@@ -335,7 +335,7 @@ func startServer(t *testing.T) *TestServer {
 func newRPCTestContext(ts *TestServer, cfg *base.Config) *rpc.Context {
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, cfg, ts.Clock(), ts.Stopper(),
-		&ts.ClusterSettings().Version)
+		ts.ClusterSettings())
 	// Ensure that the RPC client context validates the server cluster ID.
 	// This ensures that a test where the server is restarted will not let
 	// its test RPC client talk to a server started by an unrelated concurrent test.

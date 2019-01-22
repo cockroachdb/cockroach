@@ -147,7 +147,7 @@ func (tc *txnCommitter) SendLocked(
 	// to the EndTransaction request to the IntentSpans and clear the in-flight
 	// write set; no writes will be in-flight concurrently with the EndTransaction
 	// request.
-	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallelWithWrites(ba, et) {
+	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallelWithWrites(ctx, ba, et) {
 		// NB: when parallel commits is disabled, this is the best place to
 		// detect whether the batch has only distinct spans. We can set this
 		// flag based on whether any of previously declared in-flight writes
@@ -278,9 +278,9 @@ func (tc *txnCommitter) sendLockedWithElidedEndTransaction(
 // canCommitInParallelWithWrites determines whether the batch can issue its
 // committing EndTransaction in parallel with other in-flight writes.
 func (tc *txnCommitter) canCommitInParallelWithWrites(
-	ba roachpb.BatchRequest, et *roachpb.EndTransactionRequest,
+	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTransactionRequest,
 ) bool {
-	if !tc.st.Version.IsActive(cluster.VersionParallelCommits) {
+	if !cluster.Version.IsActive(ctx, tc.st, cluster.VersionParallelCommits) {
 		return false
 	}
 	if !parallelCommitsEnabled.Get(&tc.st.SV) {

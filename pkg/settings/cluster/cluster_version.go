@@ -24,3 +24,7 @@ func (cv ClusterVersion) IsActive(versionKey VersionKey) bool {
 	v := VersionByKey(versionKey)
 	return cv.IsActiveVersion(v)
 }
+
+func (cv ClusterVersion) String() string {
+	return cv.Version.String()
+}

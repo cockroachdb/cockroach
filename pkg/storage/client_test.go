@@ -101,7 +101,7 @@ type testStoreOpts struct {
 	eng engine.Engine
 }
 
-// createTestStoreWithEngine creates a test store using the given engine and clock.
+// createTestStoreWithOpts creates a test store using the given engine and clock.
 // TestStoreConfig() can be used for creating a config suitable for most
 // tests.
 func createTestStoreWithOpts(
@@ -125,7 +125,7 @@ func createTestStoreWithOpts(
 	storeCfg.AmbientCtx = ac
 
 	rpcContext := rpc.NewContext(
-		ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper, &storeCfg.Settings.Version)
+		ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper, storeCfg.Settings)
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
@@ -139,7 +139,9 @@ func createTestStoreWithOpts(
 		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(), storeCfg.DefaultZoneConfig,
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
-	stores := storage.NewStores(ac, storeCfg.Clock, storeCfg.Settings.Version.MinSupportedVersion, storeCfg.Settings.Version.ServerVersion)
+	stores := storage.NewStores(
+		ac, storeCfg.Clock,
+		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 
 	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
@@ -150,6 +152,7 @@ func createTestStoreWithOpts(
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
 		AmbientCtx: ac,
 		Clock:      storeCfg.Clock,
+		Settings:   storeCfg.Settings,
 		RPCContext: rpcContext,
 		TestingKnobs: kv.ClientTestingKnobs{
 			TransportFactory: kv.SenderTransportFactory(tracer, stores),
@@ -174,7 +177,7 @@ func createTestStoreWithOpts(
 	if !opts.dontBootstrap {
 		if err := storage.InitEngine(
 			ctx, eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
-			storeCfg.Settings.Version.BootstrapVersion(),
+			cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -195,7 +198,7 @@ func createTestStoreWithOpts(
 			ctx,
 			eng,
 			kvs, /* initialValues */
-			storeCfg.Settings.Version.BootstrapVersion().Version,
+			cluster.BinaryServerVersion,
 			1 /* numStores */, splits, storeCfg.Clock.PhysicalNow())
 		if err != nil {
 			t.Fatal(err)
@@ -350,7 +353,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	st := cluster.MakeTestingClusterSettings()
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContextWithTestingKnobs(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
-			m.transportStopper, &st.Version, m.rpcTestingKnobs)
+			m.transportStopper, st, m.rpcTestingKnobs)
 		// Ensure that tests using this test context and restart/shut down
 		// their servers do not inadvertently start talking to servers from
 		// unrelated concurrent tests.
@@ -735,7 +738,7 @@ func (mrdb mtcRangeDescriptorDB) RangeLookup(
 	return (*mrdb.ds).RangeLookup(ctx, key, useReverseScan)
 }
 
-func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
+func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *stop.Stopper) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	ambient := m.storeConfig.AmbientCtx
@@ -747,6 +750,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 			multiTestContext: m,
 			ds:               &m.distSenders[idx],
 		},
+		Settings: st,
 		TestingKnobs: kv.ClientTestingKnobs{
 			TransportFactory: m.kvTransportFactory,
 		},
@@ -839,7 +843,7 @@ func (m *multiTestContext) addStore(idx int) {
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
-	m.populateDB(idx, stopper)
+	m.populateDB(idx, cfg.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
 		ambient, m.clocks[idx], m.dbs[idx], m.engines, m.gossips[idx],
@@ -855,7 +859,9 @@ func (m *multiTestContext) addStore(idx int) {
 		if err := storage.InitEngine(ctx, eng, roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
-		}, cfg.Settings.Version.BootstrapVersion()); err != nil {
+		},
+			cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		); err != nil {
 			m.t.Fatal(err)
 		}
 	}
@@ -874,7 +880,7 @@ func (m *multiTestContext) addStore(idx int) {
 			ctx,
 			eng,
 			kvs, /* initialValues */
-			cfg.Settings.Version.BootstrapVersion().Version,
+			cluster.BinaryServerVersion,
 			len(m.engines), splits, cfg.Clock.PhysicalNow())
 		if err != nil {
 			m.t.Fatal(err)
@@ -885,7 +891,9 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatal(err)
 	}
 
-	sender := storage.NewStores(ambient, clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	sender := storage.NewStores(ambient, clock,
+		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
+	)
 	sender.AddStore(store)
 	perReplicaServer := storage.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
 	storage.RegisterPerReplicaServer(grpcServer, perReplicaServer)
@@ -1016,7 +1024,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	stopper := stop.NewStopper()
 	m.stoppers[i] = stopper
 	cfg := m.makeStoreConfig(i)
-	m.populateDB(i, stopper)
+	m.populateDB(i, m.storeConfig.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
 		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.engines,

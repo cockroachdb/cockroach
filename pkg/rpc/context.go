@@ -283,7 +283,7 @@ func NewServerWithInterceptor(
 		disableClusterNameVerification:        ctx.disableClusterNameVerification,
 		clusterID:                             &ctx.ClusterID,
 		nodeID:                                &ctx.NodeID,
-		version:                               ctx.version,
+		settings:                              ctx.settings,
 		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
 	})
 	return s
@@ -397,7 +397,7 @@ type Context struct {
 
 	ClusterID base.ClusterIDContainer
 	NodeID    base.NodeIDContainer
-	version   *cluster.ExposedClusterVersion
+	settings  *cluster.Settings
 
 	clusterName                    string
 	disableClusterNameVerification bool
@@ -436,9 +436,9 @@ func NewContext(
 	baseCtx *base.Config,
 	hlcClock *hlc.Clock,
 	stopper *stop.Stopper,
-	version *cluster.ExposedClusterVersion,
+	st *cluster.Settings,
 ) *Context {
-	return NewContextWithTestingKnobs(ambient, baseCtx, hlcClock, stopper, version,
+	return NewContextWithTestingKnobs(ambient, baseCtx, hlcClock, stopper, st,
 		ContextTestingKnobs{})
 }
 
@@ -448,7 +448,7 @@ func NewContextWithTestingKnobs(
 	baseCtx *base.Config,
 	hlcClock *hlc.Clock,
 	stopper *stop.Stopper,
-	version *cluster.ExposedClusterVersion,
+	st *cluster.Settings,
 	knobs ContextTestingKnobs,
 ) *Context {
 	if hlcClock == nil {
@@ -462,7 +462,7 @@ func NewContextWithTestingKnobs(
 			clock: hlcClock,
 		},
 		rpcCompression:                 enableRPCCompression,
-		version:                        version,
+		settings:                       st,
 		clusterName:                    baseCtx.ClusterName,
 		disableClusterNameVerification: baseCtx.DisableClusterNameVerification,
 		testingKnobs:                   knobs,
@@ -1063,7 +1063,7 @@ func (ctx *Context) runHeartbeat(
 				MaxOffsetNanos: maxOffsetNanos,
 				ClusterID:      &clusterID,
 				NodeID:         conn.remoteNodeID,
-				ServerVersion:  ctx.version.ServerVersion,
+				ServerVersion:  cluster.Version.BinaryVersion(ctx.settings),
 			}
 
 			var response *PingResponse
@@ -1097,7 +1097,7 @@ func (ctx *Context) runHeartbeat(
 
 			if err == nil {
 				err = errors.Wrap(
-					checkVersion(ctx.version, response.ServerVersion),
+					checkVersion(goCtx, ctx.settings, response.ServerVersion),
 					"version compatibility check failed on ping response")
 			}
 

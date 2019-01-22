@@ -28,13 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func (p *planner) showStateMachineSetting(
 	ctx context.Context, st *cluster.Settings, s *settings.StateMachineSetting, name string,
-) (*tree.DString, error) {
-	var d *tree.DString
+) (string, error) {
+	var res string
 	// For statemachine settings (at the time of writing, this is only the cluster version setting)
 	// we show the value from the KV store and additionally wait for the local Gossip instance to
 	// have observed the value as well. This makes sure that cluster version bumps become visible
@@ -56,48 +56,40 @@ func (p *planner) showStateMachineSetting(
 					if err != nil {
 						return err
 					}
-					var prevRawVal []byte
+					var kvRawVal []byte
 					if len(datums) != 0 {
 						dStr, ok := datums[0].(*tree.DString)
 						if !ok {
 							return errors.New("the existing value is not a string")
 						}
-						prevRawVal = []byte(string(*dStr))
-					}
-					// Note that if no entry is found, we pretend that an entry
-					// exists which is the version used for the running binary. This
-					// may not be 100.00% correct, but it will do. The input is
-					// checked more thoroughly when a user tries to change the
-					// value, and the corresponding sql migration that makes sure
-					// the above select finds something usually runs pretty quickly
-					// when the cluster is bootstrapped.
-					kvRawVal, kvObj, err := s.Validate(&st.SV, prevRawVal, nil /* update */)
-					if err != nil {
-						return errors.Errorf("unable to read existing value: %s", err)
+						kvRawVal = []byte(string(*dStr))
+					} else {
+						// There should always be a version saved; there's a migration
+						// populating it.
+						return errors.AssertionFailedf("no value found for version setting")
 					}
 
-					// NB: if there is no persisted cluster version yet, this will match
-					// kvRawVal (which is taken from `st.SV` in this case too).
 					gossipRawVal := []byte(s.Get(&st.SV))
-
-					_, gossipObj, err := s.Validate(&st.SV, gossipRawVal, nil /* update */)
-					if err != nil {
-						gossipObj = fmt.Sprintf("<error: %s>", err)
-					}
 					if !bytes.Equal(gossipRawVal, kvRawVal) {
-						return errors.Errorf("value differs between gossip (%v) and KV (%v); try again later (%v after %s)",
-							gossipObj, kvObj, ctx.Err(), timeutil.Since(tBegin))
+						return errors.Errorf(
+							"value differs between gossip (%v) and KV (%v); try again later (%v after %s)",
+							gossipRawVal, kvRawVal, ctx.Err(), timeutil.Since(tBegin))
 					}
 
-					d = tree.NewDString(kvObj.(fmt.Stringer).String())
+					val, err := s.Decode(kvRawVal)
+					if err != nil {
+						return err
+					}
+					res = val.(fmt.Stringer).String()
+
 					return nil
 				})
 			})
 		}); err != nil {
-		return nil, err
+		return "", err
 	}
 
-	return d, nil
+	return res, nil
 }
 
 func (p *planner) ShowClusterSetting(
@@ -143,10 +135,11 @@ func (p *planner) ShowClusterSetting(
 				d = tree.NewDString(s.String(&st.SV))
 			case *settings.StateMachineSetting:
 				var err error
-				d, err = p.showStateMachineSetting(ctx, st, s, name)
+				valStr, err := p.showStateMachineSetting(ctx, st, s, name)
 				if err != nil {
 					return nil, err
 				}
+				d = tree.NewDString(valStr)
 			case *settings.BoolSetting:
 				d = tree.MakeDBool(tree.DBool(s.Get(&st.SV)))
 			case *settings.FloatSetting:
