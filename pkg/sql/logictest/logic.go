@@ -399,10 +399,16 @@ type testClusterConfig struct {
 	// if set, any logic statement expected to succeed and parallelizable
 	// using RETURNING NOTHING syntax will be parallelized transparently.
 	// See logicStatement.parallelizeStmts.
-	parallelStmts    bool
-	bootstrapVersion *cluster.ClusterVersion
-	serverVersion    *roachpb.Version
-	disableUpgrade   int32
+	parallelStmts bool
+	// If not empty, bootstrapVersion controls what version the cluster will be
+	// bootstrapped at.
+	bootstrapVersion cluster.ClusterVersion
+	// If not empty, serverVersion is used to set what the Server will consider to
+	// be "the server version".
+	// TODO(andrei): clarify this comment and many others around the "server
+	// version".
+	serverVersion  roachpb.Version
+	disableUpgrade bool
 }
 
 // logicTestConfigs contains all possible cluster configs. A test file can
@@ -415,11 +421,11 @@ var logicTestConfigs = []testClusterConfig{
 	{name: "local", numNodes: 1, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
 	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1,
 		overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off",
-		bootstrapVersion: &cluster.ClusterVersion{
+		bootstrapVersion: cluster.ClusterVersion{
 			Version: cluster.VersionByKey(cluster.VersionBase),
 		},
-		serverVersion:  &roachpb.Version{Major: 1, Minor: 1},
-		disableUpgrade: 1,
+		serverVersion:  roachpb.Version{Major: 1, Minor: 1},
+		disableUpgrade: true,
 	},
 	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "on"},
 	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
@@ -969,7 +975,6 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 				Store: &storage.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
 					DisableConsistencyQueue: true,
-					BootstrapVersion:        cfg.bootstrapVersion,
 				},
 				SQLEvalContext: &tree.EvalContextTestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
@@ -977,9 +982,6 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 					AssertFuncExprReturnTypes:       true,
 					DisableOptimizerRuleProbability: *disableOptRuleProbability,
 					OptimizerCostPerturbation:       *optimizerCostPerturbation,
-				},
-				Upgrade: &server.UpgradeTestingKnobs{
-					DisableUpgrade: cfg.disableUpgrade,
 				},
 			},
 			UseDatabase: "test",
@@ -1001,18 +1003,27 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		distSQLKnobs.MetadataTestLevel = distsqlrun.On
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
+	if cfg.bootstrapVersion != (cluster.ClusterVersion{}) {
+		params.ServerArgs.Knobs.Store.(*storage.StoreTestingKnobs).BootstrapVersion = &cfg.bootstrapVersion
+	}
+	if cfg.disableUpgrade {
+		if params.ServerArgs.Knobs.Server == nil {
+			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
+		}
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = 1
+	}
 
-	if cfg.serverVersion != nil {
+	if cfg.serverVersion != (roachpb.Version{}) {
 		// If we want to run a specific server version, we assume that it
 		// supports at least the bootstrap version.
 		paramsPerNode := map[int]base.TestServerArgs{}
-		minVersion := *cfg.serverVersion
-		if cfg.bootstrapVersion != nil {
+		minVersion := cfg.serverVersion
+		if cfg.bootstrapVersion != (cluster.ClusterVersion{}) {
 			minVersion = cfg.bootstrapVersion.Version
 		}
 		for i := 0; i < cfg.numNodes; i++ {
 			nodeParams := params.ServerArgs
-			nodeParams.Settings = cluster.MakeClusterSettings(minVersion, *cfg.serverVersion)
+			nodeParams.Settings = cluster.MakeClusterSettings(minVersion, cfg.serverVersion)
 			paramsPerNode[i] = nodeParams
 		}
 		params.ServerArgsPerNode = paramsPerNode
