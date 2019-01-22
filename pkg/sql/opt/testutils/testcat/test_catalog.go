@@ -414,6 +414,7 @@ type Table struct {
 	Columns    []*Column
 	Indexes    []*Index
 	Stats      TableStats
+	Checks     []cat.CheckConstraint
 	IsVirtual  bool
 	Catalog    cat.Catalog
 	Mutations  []cat.MutationColumn
@@ -485,6 +486,16 @@ func (tt *Table) StatisticCount() int {
 // Statistic is part of the cat.Table interface.
 func (tt *Table) Statistic(i int) cat.TableStatistic {
 	return tt.Stats[i]
+}
+
+// CheckCount is part of the cat.Table interface.
+func (tt *Table) CheckCount() int {
+	return len(tt.Checks)
+}
+
+// Check is part of the cat.Table interface.
+func (tt *Table) Check(i int) cat.CheckConstraint {
+	return tt.Checks[i]
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.

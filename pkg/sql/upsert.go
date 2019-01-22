@@ -386,14 +386,23 @@ func (n *upsertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		return err
 	}
 
-	// Run the CHECK constraints, if any.
-	if len(n.run.checkHelper.Exprs) > 0 {
-		insertColIDtoRowIndex := n.run.iVarContainerForComputedCols.Mapping
-		if err := n.run.checkHelper.LoadRow(insertColIDtoRowIndex, rowVals, false); err != nil {
-			return err
-		}
-		if err := n.run.checkHelper.Check(params.EvalContext()); err != nil {
-			return err
+	// Run the CHECK constraints, if any. CheckHelper will either evaluate the
+	// constraints itself, or else inspect boolean columns from the input that
+	// contain the results of evaluation.
+	if n.run.checkHelper != nil {
+		if n.run.checkHelper.NeedsEval() {
+			insertColIDtoRowIndex := n.run.iVarContainerForComputedCols.Mapping
+			if err := n.run.checkHelper.LoadEvalRow(insertColIDtoRowIndex, rowVals, false); err != nil {
+				return err
+			}
+			if err := n.run.checkHelper.CheckEval(params.EvalContext()); err != nil {
+				return err
+			}
+		} else {
+			checkVals := sourceVals[len(sourceVals)-n.run.checkHelper.Count():]
+			if err := n.run.checkHelper.CheckInput(checkVals); err != nil {
+				return err
+			}
 		}
 	}
 

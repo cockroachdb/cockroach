@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -190,29 +189,17 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID TableID) (Table
 		// TODO(knz): the CHECK helper is always prepared here, even when
 		// there is no CASCADE work to perform. This should be moved to a
 		// different place.
-		if err := tableEntry.addCheckHelper(ctx, q.analyzeExprFn); err != nil {
+		checkHelper, err := sqlbase.NewEvalCheckHelper(ctx, q.analyzeExprFn, tableEntry.Desc)
+		if err != nil {
 			return TableEntry{}, err
 		}
+		tableEntry.CheckHelper = checkHelper
 	}
 
 	// Remember for next time.
 	q.result[tableID] = tableEntry
 
 	return tableEntry, nil
-}
-
-// addCheckHelper populates the CheckHelper field of a TableEntry
-// object. This is invoked the first time a table is encountered
-// in the graph of FK work and populated in the FkTableMetadata.
-func (tl *TableEntry) addCheckHelper(
-	ctx context.Context, analyzeExpr sqlbase.AnalyzeExprFunction,
-) error {
-	if analyzeExpr == nil {
-		return nil
-	}
-	tableName := tree.MakeUnqualifiedTableName(tree.Name(tl.Desc.Name))
-	tl.CheckHelper = &sqlbase.CheckHelper{}
-	return tl.CheckHelper.Init(ctx, analyzeExpr, &tableName, tl.Desc)
 }
 
 // enqueue prepares the lookup work for a given table.

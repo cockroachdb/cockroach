@@ -60,6 +60,23 @@ TABLE mutation
  └── INDEX primary
       └── m int not null
 
+exec-ddl
+CREATE TABLE checks (
+	a INT PRIMARY KEY CHECK (a > 0),
+	b INT,
+	c INT,
+	CHECK (checks.b < c)
+)
+----
+TABLE checks
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── INDEX primary
+ │    └── a int not null
+ ├── CHECK (checks.b < c)
+ └── CHECK (a > 0)
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -1335,3 +1352,127 @@ build
 UPDATE mutation SET m=1 ORDER BY o LIMIT 2
 ----
 error (42P10): column "o" is being backfilled
+
+# ------------------------------------------------------------------------------
+# Test check constraints
+# ------------------------------------------------------------------------------
+
+# Update all columns to be constant.
+build
+UPDATE checks SET a=1, b=2, c=3
+----
+update checks
+ ├── columns: <none>
+ ├── fetch columns: a:4(int) b:5(int) c:6(int)
+ ├── update-mapping:
+ │    ├──  column7:7 => a:1
+ │    ├──  column8:8 => b:2
+ │    └──  column9:9 => c:3
+ ├── check columns: check1:10(bool) check2:11(bool)
+ └── project
+      ├── columns: check1:10(bool) check2:11(bool) a:4(int!null) b:5(int) c:6(int) column7:7(int!null) column8:8(int!null) column9:9(int!null)
+      ├── project
+      │    ├── columns: column7:7(int!null) column8:8(int!null) column9:9(int!null) a:4(int!null) b:5(int) c:6(int)
+      │    ├── scan checks
+      │    │    └── columns: a:4(int!null) b:5(int) c:6(int)
+      │    └── projections
+      │         ├── const: 1 [type=int]
+      │         ├── const: 2 [type=int]
+      │         └── const: 3 [type=int]
+      └── projections
+           ├── lt [type=bool]
+           │    ├── variable: column8 [type=int]
+           │    └── variable: column9 [type=int]
+           └── gt [type=bool]
+                ├── variable: column7 [type=int]
+                └── const: 0 [type=int]
+
+# Do not update columns for one of the constraints.
+build
+UPDATE checks SET a=1
+----
+update checks
+ ├── columns: <none>
+ ├── fetch columns: a:4(int) b:5(int) c:6(int)
+ ├── update-mapping:
+ │    └──  column7:7 => a:1
+ ├── check columns: check1:8(bool) check2:9(bool)
+ └── project
+      ├── columns: check1:8(bool) check2:9(bool) a:4(int!null) b:5(int) c:6(int) column7:7(int!null)
+      ├── project
+      │    ├── columns: column7:7(int!null) a:4(int!null) b:5(int) c:6(int)
+      │    ├── scan checks
+      │    │    └── columns: a:4(int!null) b:5(int) c:6(int)
+      │    └── projections
+      │         └── const: 1 [type=int]
+      └── projections
+           ├── lt [type=bool]
+           │    ├── variable: b [type=int]
+           │    └── variable: c [type=int]
+           └── gt [type=bool]
+                ├── variable: column7 [type=int]
+                └── const: 0 [type=int]
+
+# Update one column in constraint, but not the other.
+build
+UPDATE checks SET b=2
+----
+update checks
+ ├── columns: <none>
+ ├── fetch columns: a:4(int) b:5(int) c:6(int)
+ ├── update-mapping:
+ │    └──  column7:7 => b:2
+ ├── check columns: check1:8(bool) check2:9(bool)
+ └── project
+      ├── columns: check1:8(bool) check2:9(bool) a:4(int!null) b:5(int) c:6(int) column7:7(int!null)
+      ├── project
+      │    ├── columns: column7:7(int!null) a:4(int!null) b:5(int) c:6(int)
+      │    ├── scan checks
+      │    │    └── columns: a:4(int!null) b:5(int) c:6(int)
+      │    └── projections
+      │         └── const: 2 [type=int]
+      └── projections
+           ├── lt [type=bool]
+           │    ├── variable: column7 [type=int]
+           │    └── variable: c [type=int]
+           └── gt [type=bool]
+                ├── variable: a [type=int]
+                └── const: 0 [type=int]
+
+# Update using tuple and subquery.
+build
+UPDATE checks SET (a, b)=(SELECT a, b FROM abcde WHERE abcde.a=checks.a)
+----
+update checks
+ ├── columns: <none>
+ ├── fetch columns: checks.a:4(int) checks.b:5(int) checks.c:6(int)
+ ├── update-mapping:
+ │    ├──  abcde.a:7 => checks.a:1
+ │    └──  abcde.b:8 => checks.b:2
+ ├── check columns: check1:13(bool) check2:14(bool)
+ └── project
+      ├── columns: check1:13(bool) check2:14(bool) checks.a:4(int!null) checks.b:5(int) checks.c:6(int) abcde.a:7(int) abcde.b:8(int)
+      ├── left-join-apply
+      │    ├── columns: checks.a:4(int!null) checks.b:5(int) checks.c:6(int) abcde.a:7(int) abcde.b:8(int)
+      │    ├── scan checks
+      │    │    └── columns: checks.a:4(int!null) checks.b:5(int) checks.c:6(int)
+      │    ├── max1-row
+      │    │    ├── columns: abcde.a:7(int!null) abcde.b:8(int)
+      │    │    └── project
+      │    │         ├── columns: abcde.a:7(int!null) abcde.b:8(int)
+      │    │         └── select
+      │    │              ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │              ├── scan abcde
+      │    │              │    └── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │              └── filters
+      │    │                   └── eq [type=bool]
+      │    │                        ├── variable: abcde.a [type=int]
+      │    │                        └── variable: checks.a [type=int]
+      │    └── filters (true)
+      └── projections
+           ├── lt [type=bool]
+           │    ├── variable: abcde.b [type=int]
+           │    └── variable: checks.c [type=int]
+           └── gt [type=bool]
+                ├── variable: abcde.a [type=int]
+                └── const: 0 [type=int]

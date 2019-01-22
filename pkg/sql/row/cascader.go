@@ -1203,11 +1203,13 @@ func (c *cascader) cascadeAll(
 			}
 			// Now check all check constraints for the table.
 			checkHelper := c.fkTables[tableID].CheckHelper
-			if err := checkHelper.LoadRow(rowUpdater.UpdateColIDtoRowIndex, updatedRows.At(0), false); err != nil {
-				return err
-			}
-			if err := checkHelper.Check(c.evalCtx); err != nil {
-				return err
+			if checkHelper != nil {
+				if err := checkHelper.LoadEvalRow(rowUpdater.UpdateColIDtoRowIndex, updatedRows.At(0), false); err != nil {
+					return err
+				}
+				if err := checkHelper.CheckEval(c.evalCtx); err != nil {
+					return err
+				}
 			}
 			continue
 		}
@@ -1244,11 +1246,13 @@ func (c *cascader) cascadeAll(
 			}
 			// Now check all check constraints for the table.
 			checkHelper := c.fkTables[tableID].CheckHelper
-			if err := checkHelper.LoadRow(rowUpdater.UpdateColIDtoRowIndex, finalRow, false); err != nil {
-				return err
-			}
-			if err := checkHelper.Check(c.evalCtx); err != nil {
-				return err
+			if checkHelper != nil {
+				if err := checkHelper.LoadEvalRow(rowUpdater.UpdateColIDtoRowIndex, finalRow, false); err != nil {
+					return err
+				}
+				if err := checkHelper.CheckEval(c.evalCtx); err != nil {
+					return err
+				}
 			}
 		}
 	}

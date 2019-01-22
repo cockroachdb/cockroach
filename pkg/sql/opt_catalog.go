@@ -469,6 +469,17 @@ func (ot *optTable) ensureColMap() {
 	}
 }
 
+// CheckCount is part of the cat.Table interface.
+func (ot *optTable) CheckCount() int {
+	return len(ot.desc.Checks)
+}
+
+// Check is part of the cat.Table interface.
+func (ot *optTable) Check(i int) cat.CheckConstraint {
+	check := ot.desc.Checks[i]
+	return cat.CheckConstraint(check.Expr)
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {

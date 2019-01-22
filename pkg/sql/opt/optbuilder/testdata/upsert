@@ -82,6 +82,23 @@ TABLE mutation
  └── INDEX primary
       └── m int not null
 
+exec-ddl
+CREATE TABLE checks (
+	a INT PRIMARY KEY CHECK (a > 0),
+	b INT,
+	c INT,
+	CHECK (checks.b < c)
+)
+----
+TABLE checks
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── INDEX primary
+ │    └── a int not null
+ ├── CHECK (checks.b < c)
+ └── CHECK (a > 0)
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -1364,3 +1381,288 @@ build
 UPSERT INTO xyz (x, unknown) VALUES (1)
 ----
 error (42703): column "unknown" does not exist
+
+# ------------------------------------------------------------------------------
+# Test check constraints
+# ------------------------------------------------------------------------------
+
+# INSERT..ON CONFLICT
+build
+INSERT INTO checks (a, b) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b=3, c=4
+----
+upsert checks
+ ├── columns: <none>
+ ├── canary column: 7
+ ├── fetch columns: upsert_a:12(int) b:8(int) c:9(int)
+ ├── insert-mapping:
+ │    ├──  upsert_a:12 => a:1
+ │    ├──  upsert_b:13 => b:2
+ │    └──  upsert_c:14 => c:3
+ ├── update-mapping:
+ │    ├──  upsert_b:13 => b:2
+ │    └──  upsert_c:14 => c:3
+ ├── check columns: check1:15(bool) check2:16(bool)
+ └── project
+      ├── columns: check1:15(bool) check2:16(bool) a:7(int) b:8(int) c:9(int) upsert_a:12(int) upsert_b:13(int) upsert_c:14(int)
+      ├── project
+      │    ├── columns: upsert_a:12(int) upsert_b:13(int) upsert_c:14(int) a:7(int) b:8(int) c:9(int)
+      │    ├── project
+      │    │    ├── columns: column10:10(int!null) column11:11(int!null) column1:4(int) column2:5(int) column6:6(int) a:7(int) b:8(int) c:9(int)
+      │    │    ├── left-join
+      │    │    │    ├── columns: column1:4(int) column2:5(int) column6:6(int) a:7(int) b:8(int) c:9(int)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column6:6(int) column1:4(int) column2:5(int)
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:4(int) column2:5(int)
+      │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │    │         └── const: 2 [type=int]
+      │    │    │    │    └── projections
+      │    │    │    │         └── cast: INT8 [type=int]
+      │    │    │    │              └── null [type=unknown]
+      │    │    │    ├── scan checks
+      │    │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int)
+      │    │    │    └── filters
+      │    │    │         └── eq [type=bool]
+      │    │    │              ├── variable: column1 [type=int]
+      │    │    │              └── variable: a [type=int]
+      │    │    └── projections
+      │    │         ├── const: 3 [type=int]
+      │    │         └── const: 4 [type=int]
+      │    └── projections
+      │         ├── case [type=int]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=int]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: a [type=int]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: column1 [type=int]
+      │         │    └── variable: a [type=int]
+      │         ├── case [type=int]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=int]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: a [type=int]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: column2 [type=int]
+      │         │    └── variable: column10 [type=int]
+      │         └── case [type=int]
+      │              ├── true [type=bool]
+      │              ├── when [type=int]
+      │              │    ├── is [type=bool]
+      │              │    │    ├── variable: a [type=int]
+      │              │    │    └── null [type=unknown]
+      │              │    └── variable: column6 [type=int]
+      │              └── variable: column11 [type=int]
+      └── projections
+           ├── lt [type=bool]
+           │    ├── variable: upsert_b [type=int]
+           │    └── variable: upsert_c [type=int]
+           └── gt [type=bool]
+                ├── variable: upsert_a [type=int]
+                └── const: 0 [type=int]
+
+# INSERT..ON CONFLICT DO NOTHING
+build
+INSERT INTO checks (a, b) VALUES (1, 2) ON CONFLICT (a) DO NOTHING
+----
+insert checks
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:4 => checks.a:1
+ │    ├──  column2:5 => checks.b:2
+ │    └──  column6:6 => checks.c:3
+ ├── check columns: check1:10(bool) check2:11(bool)
+ └── project
+      ├── columns: check1:10(bool) check2:11(bool) column1:4(int) column2:5(int) column6:6(int)
+      ├── project
+      │    ├── columns: column1:4(int) column2:5(int) column6:6(int)
+      │    └── select
+      │         ├── columns: column1:4(int) column2:5(int) column6:6(int) checks_1.a:7(int) checks_1.b:8(int) checks_1.c:9(int)
+      │         ├── left-join
+      │         │    ├── columns: column1:4(int) column2:5(int) column6:6(int) checks_1.a:7(int) checks_1.b:8(int) checks_1.c:9(int)
+      │         │    ├── project
+      │         │    │    ├── columns: column6:6(int) column1:4(int) column2:5(int)
+      │         │    │    ├── values
+      │         │    │    │    ├── columns: column1:4(int) column2:5(int)
+      │         │    │    │    └── tuple [type=tuple{int, int}]
+      │         │    │    │         ├── const: 1 [type=int]
+      │         │    │    │         └── const: 2 [type=int]
+      │         │    │    └── projections
+      │         │    │         └── cast: INT8 [type=int]
+      │         │    │              └── null [type=unknown]
+      │         │    ├── scan checks_1
+      │         │    │    └── columns: checks_1.a:7(int!null) checks_1.b:8(int) checks_1.c:9(int)
+      │         │    └── filters
+      │         │         └── eq [type=bool]
+      │         │              ├── variable: column1 [type=int]
+      │         │              └── variable: checks_1.a [type=int]
+      │         └── filters
+      │              └── is [type=bool]
+      │                   ├── variable: checks_1.a [type=int]
+      │                   └── null [type=unknown]
+      └── projections
+           ├── lt [type=bool]
+           │    ├── variable: column2 [type=int]
+           │    └── variable: column6 [type=int]
+           └── gt [type=bool]
+                ├── variable: column1 [type=int]
+                └── const: 0 [type=int]
+
+# UPSERT
+build
+UPSERT INTO checks (a, b) VALUES (1, 2)
+----
+upsert checks
+ ├── columns: <none>
+ ├── canary column: 7
+ ├── fetch columns: upsert_a:10(int) b:8(int) upsert_c:12(int)
+ ├── insert-mapping:
+ │    ├──  upsert_a:10 => a:1
+ │    ├──  upsert_b:11 => b:2
+ │    └──  upsert_c:12 => c:3
+ ├── update-mapping:
+ │    └──  upsert_b:11 => b:2
+ ├── check columns: check1:13(bool) check2:14(bool)
+ └── project
+      ├── columns: check1:13(bool) check2:14(bool) a:7(int) b:8(int) c:9(int) upsert_a:10(int) upsert_b:11(int) upsert_c:12(int)
+      ├── project
+      │    ├── columns: upsert_a:10(int) upsert_b:11(int) upsert_c:12(int) a:7(int) b:8(int) c:9(int)
+      │    ├── left-join
+      │    │    ├── columns: column1:4(int) column2:5(int) column6:6(int) a:7(int) b:8(int) c:9(int)
+      │    │    ├── project
+      │    │    │    ├── columns: column6:6(int) column1:4(int) column2:5(int)
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:4(int) column2:5(int)
+      │    │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │    │         ├── const: 1 [type=int]
+      │    │    │    │         └── const: 2 [type=int]
+      │    │    │    └── projections
+      │    │    │         └── cast: INT8 [type=int]
+      │    │    │              └── null [type=unknown]
+      │    │    ├── scan checks
+      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int)
+      │    │    └── filters
+      │    │         └── eq [type=bool]
+      │    │              ├── variable: column1 [type=int]
+      │    │              └── variable: a [type=int]
+      │    └── projections
+      │         ├── case [type=int]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=int]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: a [type=int]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: column1 [type=int]
+      │         │    └── variable: a [type=int]
+      │         ├── case [type=int]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=int]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: a [type=int]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: column2 [type=int]
+      │         │    └── variable: column2 [type=int]
+      │         └── case [type=int]
+      │              ├── true [type=bool]
+      │              ├── when [type=int]
+      │              │    ├── is [type=bool]
+      │              │    │    ├── variable: a [type=int]
+      │              │    │    └── null [type=unknown]
+      │              │    └── variable: column6 [type=int]
+      │              └── variable: c [type=int]
+      └── projections
+           ├── lt [type=bool]
+           │    ├── variable: upsert_b [type=int]
+           │    └── variable: upsert_c [type=int]
+           └── gt [type=bool]
+                ├── variable: upsert_a [type=int]
+                └── const: 0 [type=int]
+
+# Use subqueries and excluded.
+build
+INSERT INTO checks
+SELECT a, b FROM abc
+ON CONFLICT (a) DO UPDATE SET a=excluded.a, b=(SELECT x FROM xyz WHERE x=checks.a)
+----
+upsert checks
+ ├── columns: <none>
+ ├── canary column: 9
+ ├── fetch columns: checks.a:9(int) checks.b:10(int) upsert_c:18(int)
+ ├── insert-mapping:
+ │    ├──  upsert_a:16 => checks.a:1
+ │    ├──  upsert_b:17 => checks.b:2
+ │    └──  upsert_c:18 => checks.c:3
+ ├── update-mapping:
+ │    ├──  upsert_a:16 => checks.a:1
+ │    └──  upsert_b:17 => checks.b:2
+ ├── check columns: check1:19(bool) check2:20(bool)
+ └── project
+      ├── columns: check1:19(bool) check2:20(bool) checks.a:9(int) checks.b:10(int) checks.c:11(int) upsert_a:16(int) upsert_b:17(int) upsert_c:18(int)
+      ├── project
+      │    ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) checks.a:9(int) checks.b:10(int) checks.c:11(int)
+      │    ├── project
+      │    │    ├── columns: column15:15(int) abc.a:4(int!null) abc.b:5(int) column8:8(int) checks.a:9(int) checks.b:10(int) checks.c:11(int)
+      │    │    ├── left-join
+      │    │    │    ├── columns: abc.a:4(int!null) abc.b:5(int) column8:8(int) checks.a:9(int) checks.b:10(int) checks.c:11(int)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column8:8(int) abc.a:4(int!null) abc.b:5(int)
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: abc.a:4(int!null) abc.b:5(int)
+      │    │    │    │    │    └── scan abc
+      │    │    │    │    │         └── columns: abc.a:4(int!null) abc.b:5(int) abc.c:6(int) rowid:7(int!null)
+      │    │    │    │    └── projections
+      │    │    │    │         └── cast: INT8 [type=int]
+      │    │    │    │              └── null [type=unknown]
+      │    │    │    ├── scan checks
+      │    │    │    │    └── columns: checks.a:9(int!null) checks.b:10(int) checks.c:11(int)
+      │    │    │    └── filters
+      │    │    │         └── eq [type=bool]
+      │    │    │              ├── variable: abc.a [type=int]
+      │    │    │              └── variable: checks.a [type=int]
+      │    │    └── projections
+      │    │         └── subquery [type=int]
+      │    │              └── max1-row
+      │    │                   ├── columns: x:12(int!null)
+      │    │                   └── project
+      │    │                        ├── columns: x:12(int!null)
+      │    │                        └── select
+      │    │                             ├── columns: x:12(int!null) y:13(int) z:14(int)
+      │    │                             ├── scan xyz
+      │    │                             │    └── columns: x:12(int!null) y:13(int) z:14(int)
+      │    │                             └── filters
+      │    │                                  └── eq [type=bool]
+      │    │                                       ├── variable: x [type=int]
+      │    │                                       └── variable: checks.a [type=int]
+      │    └── projections
+      │         ├── case [type=int]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=int]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: checks.a [type=int]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: abc.a [type=int]
+      │         │    └── variable: abc.a [type=int]
+      │         ├── case [type=int]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=int]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: checks.a [type=int]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: abc.b [type=int]
+      │         │    └── variable: column15 [type=int]
+      │         └── case [type=int]
+      │              ├── true [type=bool]
+      │              ├── when [type=int]
+      │              │    ├── is [type=bool]
+      │              │    │    ├── variable: checks.a [type=int]
+      │              │    │    └── null [type=unknown]
+      │              │    └── variable: column8 [type=int]
+      │              └── variable: checks.c [type=int]
+      └── projections
+           ├── lt [type=bool]
+           │    ├── variable: upsert_b [type=int]
+           │    └── variable: upsert_c [type=int]
+           └── gt [type=bool]
+                ├── variable: upsert_a [type=int]
+                └── const: 0 [type=int]

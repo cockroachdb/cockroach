@@ -105,6 +105,7 @@ func (p *planner) Delete(
 		p.LookupTableByID,
 		p.CheckPrivilege,
 		p.analyzeExpr,
+		nil, /* checkHelper */
 	)
 	if err != nil {
 		return nil, err

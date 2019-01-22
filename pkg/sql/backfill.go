@@ -410,6 +410,7 @@ func (sc *SchemaChanger) distBackfill(
 					row.NoLookup,
 					row.NoCheckPrivilege,
 					nil, /* AnalyzeExprFunction */
+					nil, /* CheckHelper */
 				)
 				if err != nil {
 					return err
@@ -602,6 +603,7 @@ func columnBackfillInTxn(
 		row.NoLookup,
 		row.NoCheckPrivilege,
 		nil, /* AnalyzeExprFunction */
+		nil, /* CheckHelper */
 	)
 	if err != nil {
 		return err

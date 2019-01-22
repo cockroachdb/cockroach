@@ -84,6 +84,9 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			if def.PrimaryKey {
 				tab.addIndex(&def.IndexTableDef, primaryIndex)
 			}
+
+		case *tree.CheckConstraintTableDef:
+			tab.Checks = append(tab.Checks, cat.CheckConstraint(tree.Serialize(def.Expr)))
 		}
 	}
 
