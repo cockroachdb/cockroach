@@ -192,6 +192,11 @@ func (m *Memo) checkExpr(e opt.Expr) {
 			panic(fmt.Sprintf("zigzag join with mismatching eq columns"))
 		}
 
+	case *AggDistinctExpr:
+		if t.Input.Op() == opt.AggFilterOp {
+			panic("AggFilter should always be on top of AggDistinct")
+		}
+
 	default:
 		if !opt.IsListOp(e) {
 			for i := 0; i < e.ChildCount(); i++ {

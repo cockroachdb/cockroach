@@ -457,6 +457,17 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		}
 
 		return
+
+	case opt.AggFilterOp:
+		f.Buffer.Reset()
+		fmt.Fprintf(f.Buffer, "%v", scalar.Op())
+		f.FormatScalarProps(scalar)
+		tp = tp.Child(f.Buffer.String())
+
+		f.formatExpr(scalar.Child(0), tp)
+		f.formatExpr(scalar.Child(1), tp.Child("filter"))
+
+		return
 	}
 
 	// Don't show scalar-list, as it's redundant with its parent.
