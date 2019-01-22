@@ -167,14 +167,8 @@ func TestKafkaSinkEscaping(t *testing.T) {
 
 type testEncoder struct{}
 
-func (testEncoder) EncodeKey(t *sqlbase.TableDescriptor, _ sqlbase.EncDatumRow) ([]byte, error) {
-	panic(`unimplemented`)
-}
-func (testEncoder) EncodeValue(
-	t *sqlbase.TableDescriptor, _ sqlbase.EncDatumRow, _ hlc.Timestamp,
-) ([]byte, error) {
-	panic(`unimplemented`)
-}
+func (testEncoder) EncodeKey(encodeRow) ([]byte, error)   { panic(`unimplemented`) }
+func (testEncoder) EncodeValue(encodeRow) ([]byte, error) { panic(`unimplemented`) }
 func (testEncoder) EncodeResolvedTimestamp(_ string, ts hlc.Timestamp) ([]byte, error) {
 	return []byte(ts.String()), nil
 }

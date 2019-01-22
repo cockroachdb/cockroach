@@ -101,10 +101,10 @@ func TestChangefeedEnvelope(t *testing.T) {
 			defer foo.Close(t)
 			assertPayloads(t, foo, []string{`foo: [1]->`})
 		})
-		t.Run(`envelope=value_only`, func(t *testing.T) {
-			foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH envelope='value_only'`)
+		t.Run(`envelope=wrapped`, func(t *testing.T) {
+			foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH envelope='wrapped'`)
 			defer foo.Close(t)
-			assertPayloads(t, foo, []string{`foo: ->{"a": 1, "b": "a"}`})
+			assertPayloads(t, foo, []string{`foo: [1]->{"after": {"a": 1, "b": "a"}}`})
 		})
 	}
 
@@ -1294,10 +1294,6 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	sqlDB.ExpectErr(
-		t, `envelope=diff is not yet supported`,
-		`CREATE CHANGEFEED FOR foo WITH envelope=diff`,
-	)
-	sqlDB.ExpectErr(
 		t, `unknown envelope: nope`,
 		`CREATE CHANGEFEED FOR foo WITH envelope=nope`,
 	)
@@ -1358,14 +1354,14 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO dec VALUES (1.0)`)
 	sqlDB.ExpectErr(
 		t, `pq: column a: decimal with no precision`,
-		`CREATE CHANGEFEED FOR dec WITH format=$1, confluent_schema_registry=$2`,
+		`CREATE CHANGEFEED FOR dec WITH envelope=wrapped, format=$1, confluent_schema_registry=$2`,
 		optFormatAvro, `bar`,
 	)
 	sqlDB.Exec(t, `CREATE TABLE "uuid" (a UUID PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO "uuid" VALUES (gen_random_uuid())`)
 	sqlDB.ExpectErr(
 		t, `pq: column a: type UUID not yet supported with avro`,
-		`CREATE CHANGEFEED FOR "uuid" WITH format=$1, confluent_schema_registry=$2`,
+		`CREATE CHANGEFEED FOR "uuid" WITH envelope=wrapped, format=$1, confluent_schema_registry=$2`,
 		optFormatAvro, `bar`,
 	)
 
