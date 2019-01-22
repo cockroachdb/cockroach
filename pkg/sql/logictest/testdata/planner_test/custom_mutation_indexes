@@ -70,9 +70,8 @@ count                      ·         ·
       │                    strategy  updater
       └── render           ·         ·
            └── index-join  ·         ·
-                ├── scan   ·         ·
-                │          table     a@a_a_e_k_l_idx
-                │          spans     /10-/11
-                │          filter    ((b = '10') AND (c = 1)) AND (d = 3)
+                │          table     a@primary
                 └── scan   ·         ·
-·                          table     a@primary
+·                          table     a@a_a_e_k_l_idx
+·                          spans     /10-/11
+·                          filter    ((b = '10') AND (c = 1)) AND (d = 3)
