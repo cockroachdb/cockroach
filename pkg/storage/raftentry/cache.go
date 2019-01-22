@@ -29,9 +29,7 @@ import (
 
 // Cache is a specialized data structure for storing deserialized raftpb.Entry
 // values tailored to the access patterns of the storage package.
-// Cache is safe for concurrent access to different ranges or for concurrent
-// read access to the same range. It is unsafe for multiple goroutines to write
-// to the same range concurrently.
+// Cache is safe for concurrent access.
 type Cache struct {
 	metrics  Metrics
 	maxBytes int32
@@ -145,14 +143,21 @@ func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry) {
 	if len(c.parts) == 0 { // Get p again if we evicted everything.
 		p = c.getPartLocked(id, true /* create */, false /* recordUse */)
 	}
-	p.size = p.size.add(bytesGuessed, 0)
-	orig := p.size
+	// Use the atomic (load|set)Size partition methods to avoid a race condition
+	// on p.size and to ensure that p.size.bytes() reflects the number of bytes
+	// in c.bytes associated with p in the face of concurrent updates due to calls
+	// to c.recordUpdate.
+	for {
+		prev := p.loadSize()
+		if p.setSize(prev, prev.add(bytesGuessed, 0)) {
+			break
+		}
+	}
 	c.mu.Unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
 	bytesAdded, entriesAdded := p.add(ents)
-	c.recordUpdate(p, orig, bytesAdded, bytesGuessed, entriesAdded)
+	c.recordUpdate(p, bytesAdded, bytesGuessed, entriesAdded)
 }
 
 // Clear removes all entries on the given range with index less than hi.
@@ -163,13 +168,11 @@ func (c *Cache) Clear(id roachpb.RangeID, hi uint64) {
 		c.mu.Unlock()
 		return
 	}
-	orig := p.size
 	c.mu.Unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
 	bytesRemoved, entriesRemoved := p.clear(hi)
-	c.recordUpdate(p, orig, -1*bytesRemoved, 0, -1*entriesRemoved)
+	c.recordUpdate(p, -1*bytesRemoved, 0, -1*entriesRemoved)
 }
 
 // Get returns the entry for the specified index and true for the second return
@@ -246,16 +249,38 @@ func (c *Cache) evictLocked(toAdd int32) {
 	}
 }
 
-func (c *Cache) recordUpdate(
-	p *partition, origSize cacheSize, bytesAdded, bytesGuessed, entriesAdded int32,
-) {
-	// The only way that the stats here could change is if we were evicted so
-	// we'll atomically try to update the partition and if it turns out it's been
-	// evicted then don't update the cache.
+// recordUpdate adjusts the partition and cache bookkeeping to account for the
+// changes which actually occurred in an update relative to the guess made
+// before the update.
+func (c *Cache) recordUpdate(p *partition, bytesAdded, bytesGuessed, entriesAdded int32) {
+	// This method is always called while p.mu is held.
+	// The below code takes care to ensure that all bytes in c due to p are
+	// updated appropriately.
+
+	// NB: The loop and atomics are used because p.size can be modified
+	// concurrently to calls to recordUpdate. In all cases where p.size is updated
+	// outside of this function occur while c.mu is held inside of c.Add. These
+	// occur when either:
+	//
+	//   1) a new write adds its guessed write size to p
+	//   2) p is evicted to make room for a write
+	//
+	// Thus p.size is either increasing or becomes evicted while we attempt to
+	// record the update to p. Once p is evicted it stays evicted forever.
+	// These facts combine to ensure that p.size never becomes negative from the
+	// below call to add.
+
 	delta := bytesAdded - bytesGuessed
-	newSize := origSize.add(delta, entriesAdded)
-	if notEvicted := p.setSize(origSize, newSize); notEvicted {
-		c.updateGauges(c.addBytes(delta), c.addEntries(entriesAdded))
+	for {
+		curSize := p.loadSize()
+		if curSize == evicted {
+			return
+		}
+		newSize := curSize.add(delta, entriesAdded)
+		if updated := p.setSize(curSize, newSize); updated {
+			c.updateGauges(c.addBytes(delta), c.addEntries(entriesAdded))
+			return
+		}
 	}
 }
 
@@ -281,14 +306,13 @@ func newPartition(id roachpb.RangeID) *partition {
 	}
 }
 
+const evicted cacheSize = 0
+
 func (p *partition) evict() (bytes, entries int32) {
-	const evicted = 0
-	// A partition size is never equal to evicted while a partition exists and
-	// Cache.mu is not held because a partition carries the byte size of its
-	// struct and does not permit concurrent mutations. Atomically setting the
-	// size to zero is used to signal the partition that it has been evicted and
-	// changes which have happened concurrent to the eviction should not be
-	// reflected in Cache.
+	// Atomically setting size to evicted signals that the partition has been
+	// evicted. Changes to p which happen concurrently with the eviction should
+	// not be reflected in the Cache. The loop in recordUpdate detects the action
+	// of this call.
 	cs := p.loadSize()
 	for !p.setSize(cs, evicted) {
 		cs = p.loadSize()
