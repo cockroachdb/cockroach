@@ -597,12 +597,17 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 }
 
 func (b *Builder) buildDistinct(ev memo.ExprView) (execPlan, error) {
+	def := ev.Private().(*memo.GroupByDef)
+	if def.GroupingCols.Empty() {
+		// A DistinctOn with no grouping columns should have been converted to a
+		// LIMIT 1 by normalization rules.
+		return execPlan{}, fmt.Errorf("cannot execute distinct on no columns")
+	}
 	input, err := b.buildGroupByInput(ev)
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	def := ev.Private().(*memo.GroupByDef)
 	distinctCols := input.getColumnOrdinalSet(def.GroupingCols)
 	orderedCols := input.getColumnOrdinalSet(def.StreamingAggCols(&ev.Physical().Ordering))
 	node, err := b.factory.ConstructDistinct(input.root, distinctCols, orderedCols)

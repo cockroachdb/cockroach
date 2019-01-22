@@ -223,3 +223,41 @@ func (c *CustomFuncs) hasRemovableAggDistinct(
 	}
 	return false, 0
 }
+
+// HasNoGroupingCols returns true if the GroupingCols in the private are empty.
+func (c *CustomFuncs) HasNoGroupingCols(def memo.PrivateID) bool {
+	return c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols.Empty()
+}
+
+// GroupingInputOrdering returns the Ordering in the private.
+func (c *CustomFuncs) GroupingInputOrdering(def memo.PrivateID) memo.PrivateID {
+	groupByDef := c.f.mem.LookupPrivate(def).(*memo.GroupByDef)
+	return c.f.mem.InternOrderingChoice(&groupByDef.Ordering)
+}
+
+// ConstructProjectionFromDistinctOn converts a DistinctOn to a projection; this
+// is correct when the input has at most one row. Note that DistinctOn can only
+// have aggregations of type FirstAgg or ConstAgg.
+func (c *CustomFuncs) ConstructProjectionFromDistinctOn(input, aggs memo.GroupID) memo.GroupID {
+	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
+	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+	aggsColList := c.ExtractColList(aggsExpr.Cols())
+
+	var def memo.ProjectionsOpDef
+	var projections []memo.GroupID
+	for i, outputCol := range aggsColList {
+		aggExpr := memo.MakeNormExprView(c.mem, aggsElems[i])
+		varExpr := memo.ExtractVarFromAggInput(aggExpr.Child(0))
+		inputCol := varExpr.Private().(opt.ColumnID)
+		if inputCol == outputCol {
+			def.PassthroughCols.Add(int(inputCol))
+		} else {
+			def.SynthesizedCols = append(def.SynthesizedCols, outputCol)
+			projections = append(projections, varExpr.Group())
+		}
+	}
+	return c.f.ConstructProject(
+		input,
+		c.f.ConstructProjections(c.f.InternList(projections), c.f.InternProjectionsOpDef(&def)),
+	)
+}
