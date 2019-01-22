@@ -54,6 +54,11 @@ message PingRequest {
     (gogoproto.customname) = "ClusterID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   optional roachpb.Version server_version = 6 [(gogoproto.nullable) = false];
+  // Node ID to prevent connections from being misrouted to an invalid node inside the cluster.
+  optional int32 node_id = 7 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
 // A PingResponse contains the echoed ping request string.

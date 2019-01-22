@@ -2092,7 +2092,7 @@ func (s *adminServer) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	conn, err := s.server.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	conn, err := s.server.rpcContext.GRPCDialNode(addr.String(), nodeID).Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
