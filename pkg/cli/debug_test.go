@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -132,7 +133,6 @@ func TestOpenReadOnlyStore(t *testing.T) {
 
 func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skipf("33495")
 	ctx := context.Background()
 
 	baseDir, dirCleanupFn := testutils.TempDir(t)
@@ -236,10 +236,43 @@ func TestRemoveDeadReplicas(t *testing.T) {
 
 	// Now that the data is salvaged, we can restart the cluster. The
 	// nodes with the in-memory stores will be assigned new node IDs 4
-	// and 5. StartTestCluster will even wait for all the ranges to be
-	// replicated to the new nodes.
+	// and 5.
+	//
+	// This activates the adaptive zone config feature (using 5x
+	// replication for clusters of 5 nodes or more), so we must
+	// decommission nodes 2 or 3 for WaitForFullReplication to complete.
+	// (note that the cluster is working even when it doesn't consider
+	// itself fully replicated - that's what allows the decommissioning
+	// to succeed. We're just waiting for full replication so that we
+	// can validate that ranges were moved from {1,2,3} to {1,4,5}).
+	//
+	// Set replication mode to manual so that TestCluster doesn't call
+	// WaitForFullReplication before we've decommissioned the nodes.
+	clusterArgs.ReplicationMode = base.ReplicationManual
 	tc := testcluster.StartTestCluster(t, 3, clusterArgs)
 	defer tc.Stopper().Stop(ctx)
+
+	grpcConn, err := tc.Server(0).RPCContext().GRPCDial(tc.Server(0).ServingAddr()).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminClient := serverpb.NewAdminClient(grpcConn)
+
+	if err := runDecommissionNodeImpl(
+		ctx, adminClient, nodeDecommissionWaitNone, []string{"2", "3"},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := tc.Servers[0].Stores().GetStore(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.SetReplicateQueueActive(true)
+	if err := tc.WaitForFullReplication(); err != nil {
+		t.Fatal(err)
+	}
+
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
 	row := s.QueryRow(t, "select replicas from [show experimental_ranges from table system.namespace] limit 1")
 	var replicaStr string
