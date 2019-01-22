@@ -268,6 +268,23 @@ func (r *registry) loadBuildVersion() error {
 	return r.setBuildVersion(buildTag)
 }
 
+// PredecessorVersion returns a recent predecessor of the build version (i.e.
+// the build tag of the main binary). For example, if the running binary is from
+// the master branch prior to releasing 2.2.0, this will return a recent
+// (ideally though not necessarily the latest) 2.1 patch release.
+func (r *registry) PredecessorVersion() string {
+	if r.buildVersion == nil {
+		return ""
+	}
+
+	buildVersionMajorMinor := fmt.Sprintf("%d.%d", r.buildVersion.Major(), r.buildVersion.Minor())
+
+	return map[string]string{
+		"2.2": "2.1.3",
+		"2.1": "2.0.7",
+	}[buildVersionMajorMinor]
+}
+
 // verifyValidClusterName verifies that the test name can be turned into a cluster
 // name when run by TeamCity. Outside of TeamCity runs, depending on the user
 // running it and the "cluster id" component of a cluster name, the name may
