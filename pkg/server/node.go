@@ -415,6 +415,9 @@ func (n *Node) start(
 		nodeID = newID
 	}
 
+	// Inform the RPC context of the node ID.
+	n.storeCfg.RPCContext.NodeID.Set(ctx, nodeID)
+
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
 	n.Descriptor = roachpb.NodeDescriptor{
 		NodeID:          nodeID,
