@@ -91,6 +91,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.resultColumns
 	case *projectSetNode:
 		return n.columns
+	case *applyJoinNode:
+		return n.columns
 	case *lookupJoinNode:
 		return n.columns
 	case *zigzagJoinNode:
