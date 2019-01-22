@@ -54,37 +54,3 @@ func TestVersionLess(t *testing.T) {
 		})
 	}
 }
-
-func TestVersionCanBump(t *testing.T) {
-	v := func(major, minor, patch, unstable int32) Version {
-		return Version{
-			Major:    major,
-			Minor:    minor,
-			Patch:    patch,
-			Unstable: unstable,
-		}
-	}
-	testData := []struct {
-		v1, v2  Version
-		canBump bool
-	}{
-		{v1: v(2, 0, 0, 0), v2: v(2, 1, 0, 0), canBump: true},
-		{v1: v(2, 0, 0, 0), v2: v(19, 1, 0, 0), canBump: false},
-		{v1: v(2, 1, 0, 0), v2: v(19, 1, 0, 0), canBump: true},
-		{v1: v(2, 1, 6, 0), v2: v(19, 1, 0, 0), canBump: true},
-		{v1: v(2, 1, 0, 10), v2: v(19, 1, 0, 0), canBump: true},
-		{v1: v(19, 1, 0, 0), v2: v(19, 2, 0, 0), canBump: true},
-		{v1: v(19, 1, 0, 0), v2: v(19, 3, 0, 0), canBump: false},
-		{v1: v(19, 2, 0, 0), v2: v(20, 1, 0, 0), canBump: true},
-		{v1: v(19, 2, 0, 0), v2: v(20, 2, 0, 0), canBump: false},
-	}
-
-	for _, test := range testData {
-		t.Run("", func(t *testing.T) {
-			if a, e := test.v1.CanBump(test.v2), test.canBump; a != e {
-				t.Errorf("expected %s can bump to %s? %t; got %t",
-					pretty.Sprint(test.v1), pretty.Sprint(test.v2), e, a)
-			}
-		})
-	}
-}

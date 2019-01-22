@@ -14,6 +14,7 @@ import (
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
 
@@ -47,6 +48,20 @@ type TestingKnobs struct {
 	// TODO(bdarnell): That doesn't give us a good way to clean up if the
 	// server fails to start.
 	RPCListener net.Listener
+
+	// BootstrapVersionOverride, if not empty, will be used for bootstrapping
+	// clusters instead of cluster.BinaryServerVersion (if this server
+	// is the one bootstrapping the cluster).
+	//
+	// This can be used by tests to essentially pretend that a new cluster is not
+	// starting from scratch, but instead is "created" by a node starting up with
+	// engines that had already been bootstrapped, at this
+	// BootstrapVersionOverride. For example, it allows convenient creation of a
+	// cluster from a 2.1 binary, but that's running at version 2.0.
+	//
+	// NOTE: When setting this, you probably also want to set
+	// DisableAutomaticVersionUpgrade.
+	BootstrapVersionOverride roachpb.Version
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

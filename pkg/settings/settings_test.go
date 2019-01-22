@@ -11,6 +11,7 @@
 package settings_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -68,40 +69,60 @@ func (d *dummy) String() string {
 	return fmt.Sprintf("&{%s %s}", d.msg1, d.growsbyone)
 }
 
-var dummyTransformer = func(sv *settings.Values, old []byte, update *string) ([]byte, interface{}, error) {
+type dummyTransformer struct{}
+
+var d settings.StateMachineSettingImpl = &dummyTransformer{}
+
+func (d *dummyTransformer) Decode(val []byte) (interface{}, error) {
 	var oldD dummy
-
-	// If no old value supplied, fill in the default.
-	if old == nil {
-		oldD.msg1 = "default"
-		oldD.growsbyone = "-"
-		var err error
-		old, err = oldD.Marshal()
-		if err != nil {
-			return nil, nil, err
-		}
+	if err := protoutil.Unmarshal(val, &oldD); err != nil {
+		return nil, err
 	}
+	return oldD, nil
+}
+
+func (d *dummyTransformer) DecodeToString(val []byte) (string, error) {
+	dum, err := d.Decode(val)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%v", dum), nil
+}
+
+func (d *dummyTransformer) ValidateLogical(
+	ctx context.Context, sv *settings.Values, old []byte, newV string,
+) ([]byte, error) {
+	var oldD dummy
 	if err := protoutil.Unmarshal(old, &oldD); err != nil {
-		return nil, nil, err
-	}
-
-	if update == nil {
-		// Round-trip the existing value, but only if it passes sanity checks.
-		b, err := oldD.Marshal()
-		if err != nil {
-			return nil, nil, err
-		}
-		return b, &oldD, err
+		return nil, err
 	}
 
 	// We have a new proposed update to the value, validate it.
-	if len(*update) != len(oldD.growsbyone)+1 {
-		return nil, nil, errors.New("dashes component must grow by exactly one")
+	if len(newV) != len(oldD.growsbyone)+1 {
+		return nil, errors.New("dashes component must grow by exactly one")
 	}
 	newD := oldD
-	newD.growsbyone = *update
+	newD.growsbyone = newV
 	b, err := newD.Marshal()
-	return b, &newD, err
+	return b, err
+}
+
+func (d *dummyTransformer) ValidateGossipUpdate(
+	ctx context.Context, sv *settings.Values, val []byte,
+) error {
+	var updateVal dummy
+	return protoutil.Unmarshal(val, &updateVal)
+}
+
+func (d *dummyTransformer) SettingsListDefault() string {
+	panic("unimplemented")
+}
+
+// BeforeChange is part of the StateMachineSettingImpl interface.
+func (d *dummyTransformer) BeforeChange(
+	ctx context.Context, encodedVal []byte, sv *settings.Values,
+) {
+	// noop
 }
 
 const mb = int64(1024 * 1024)
@@ -127,7 +148,7 @@ var fA = settings.RegisterFloatSetting("f", "desc", 5.4)
 var dA = settings.RegisterDurationSetting("d", "desc", time.Second)
 var eA = settings.RegisterEnumSetting("e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
-var mA = settings.RegisterStateMachineSetting("statemachine", "foo", dummyTransformer)
+var mA = settings.RegisterStateMachineSettingImpl("statemachine", "foo", &dummyTransformer{})
 
 func init() {
 	settings.RegisterBoolSetting("sekretz", "desc", false).SetConfidential()
@@ -160,6 +181,7 @@ var iVal = settings.RegisterValidatedIntSetting(
 	})
 
 func TestCache(t *testing.T) {
+	ctx := context.Background()
 	sv := &settings.Values{}
 	sv.Init(settings.TestOpaque)
 
@@ -173,35 +195,49 @@ func TestCache(t *testing.T) {
 	mA.SetOnChange(sv, func() { changes.mA++ })
 
 	t.Run("StateMachineSetting", func(t *testing.T) {
-		mB := settings.RegisterStateMachineSetting("local.m", "foo", dummyTransformer)
-		if exp, act := "&{default -}", mB.String(sv); exp != act {
+		u := settings.NewUpdater(sv)
+		mB := settings.RegisterStateMachineSettingImpl("local.m", "foo", &dummyTransformer{})
+		// State-machine settings don't have defaults, so we need to start by
+		// setting it to something.
+		if err := u.Set("local.m", "default.X", "m"); err != nil {
+			t.Fatal(err)
+		}
+
+		if exp, act := "{default X}", mB.String(sv); exp != act {
 			t.Fatalf("wanted %q, got %q", exp, act)
 		}
+
 		growsTooFast := "grows too fast"
-		if _, _, err := mB.Validate(sv, nil, &growsTooFast); !testutils.IsError(err, "must grow by exactly one") {
+		curVal := []byte(mB.Get(sv))
+		if _, err := mB.Validate(ctx, sv, curVal, growsTooFast); !testutils.IsError(err,
+			"must grow by exactly one") {
 			t.Fatal(err)
 		}
+
 		hasDots := "a."
-		if _, _, err := mB.Validate(sv, nil, &hasDots); !testutils.IsError(err, "must not contain dots") {
+		if _, err := mB.Validate(ctx, sv, curVal, hasDots); !testutils.IsError(err,
+			"must not contain dots") {
 			t.Fatal(err)
 		}
+
 		ab := "ab"
-		if _, _, err := mB.Validate(sv, nil, &ab); err != nil {
+		if _, err := mB.Validate(ctx, sv, curVal, ab); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := mB.Validate(sv, []byte("takes.precedence"), &ab); !testutils.IsError(err, "must grow by exactly one") {
+
+		if _, err := mB.Validate(ctx, sv, []byte("takes.precedence"), ab); !testutils.IsError(err,
+			"must grow by exactly one") {
 			t.Fatal(err)
 		}
 		precedenceX := "precedencex"
-		if _, _, err := mB.Validate(sv, []byte("takes.precedence"), &precedenceX); err != nil {
+		if _, err := mB.Validate(ctx, sv, []byte("takes.precedence"), precedenceX); err != nil {
 			t.Fatal(err)
 		}
-		u := settings.NewUpdater(sv)
 		if err := u.Set("local.m", "default.XX", "m"); err != nil {
 			t.Fatal(err)
 		}
 		u.ResetRemaining()
-		if exp, act := "&{default XX}", mB.String(sv); exp != act {
+		if exp, act := "{default XX}", mB.String(sv); exp != act {
 			t.Fatalf("wanted %q, got %q", exp, act)
 		}
 	})
@@ -252,9 +288,8 @@ func TestCache(t *testing.T) {
 		if expected, actual := int64(1), eA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "default.-", mA.Get(sv); expected != actual {
-			t.Fatalf("expected %v, got %v", expected, actual)
-		}
+		// Note that we don't test the state-machine setting for a default, since it
+		// doesn't have one and it would crash.
 	})
 
 	t.Run("lookup", func(t *testing.T) {

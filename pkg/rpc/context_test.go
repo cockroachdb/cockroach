@@ -96,7 +96,7 @@ func newTestContextWithKnobs(
 		testutils.NewNodeTestBaseContext(),
 		clock,
 		stopper,
-		&cluster.MakeTestingClusterSettings().Version,
+		cluster.MakeTestingClusterSettings(),
 		knobs,
 	)
 }
@@ -129,7 +129,7 @@ func TestHeartbeatCB(t *testing.T) {
 			remoteClockMonitor: serverCtx.RemoteClocks,
 			clusterID:          &serverCtx.ClusterID,
 			nodeID:             &serverCtx.NodeID,
-			version:            serverCtx.version,
+			settings:           serverCtx.settings,
 		})
 
 		ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -227,7 +227,7 @@ func TestHeartbeatHealth(t *testing.T) {
 		stopper:            stopper,
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
-		version:            serverCtx.version,
+		settings:           serverCtx.settings,
 		nodeID:             &serverCtx.NodeID,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
@@ -490,7 +490,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
 		nodeID:             &serverCtx.NodeID,
-		version:            serverCtx.version,
+		settings:           serverCtx.settings,
 	})
 
 	mu := struct {
@@ -671,7 +671,7 @@ func TestOffsetMeasurement(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
 		nodeID:             &serverCtx.NodeID,
-		version:            serverCtx.version,
+		settings:           serverCtx.settings,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -742,7 +742,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		ready:              make(chan error),
 		stopper:            stopper,
-		version:            serverCtx.version,
+		settings:           serverCtx.settings,
 		nodeID:             &serverCtx.NodeID,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
@@ -851,7 +851,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			remoteClockMonitor: nodeCtxs[i].ctx.RemoteClocks,
 			clusterID:          &nodeCtxs[i].ctx.ClusterID,
 			nodeID:             &nodeCtxs[i].ctx.NodeID,
-			version:            nodeCtxs[i].ctx.version,
+			settings:           nodeCtxs[i].ctx.settings,
 		})
 		ln, err := netutil.ListenAndServeGRPC(nodeCtxs[i].ctx.Stopper, s, util.TestAddr)
 		if err != nil {
@@ -1045,7 +1045,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 			remoteClockMonitor: serverCtx.RemoteClocks,
 			clusterID:          &serverCtx.ClusterID,
 			nodeID:             &serverCtx.NodeID,
-			version:            serverCtx.version,
+			settings:           serverCtx.settings,
 		},
 		interval: msgInterval,
 	}
@@ -1109,7 +1109,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 
 	// Perform an initial request-response round trip.
 	log.Infof(ctx, "first ping")
-	request := PingRequest{ServerVersion: clientCtx.version.ServerVersion}
+	request := PingRequest{ServerVersion: cluster.Version.BinaryVersion(clientCtx.settings)}
 	if err := heartbeatClient.Send(&request); err != nil {
 		return err
 	}
@@ -1242,7 +1242,7 @@ func TestClusterIDMismatch(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
 		nodeID:             &serverCtx.NodeID,
-		version:            serverCtx.version,
+		settings:           serverCtx.settings,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -1315,7 +1315,7 @@ func TestClusterNameMismatch(t *testing.T) {
 				remoteClockMonitor:             serverCtx.RemoteClocks,
 				clusterID:                      &serverCtx.ClusterID,
 				nodeID:                         &serverCtx.NodeID,
-				version:                        serverCtx.version,
+				settings:                       serverCtx.settings,
 				clusterName:                    serverCtx.clusterName,
 				disableClusterNameVerification: serverCtx.disableClusterNameVerification,
 			})
@@ -1365,7 +1365,7 @@ func TestNodeIDMismatch(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
 		nodeID:             &serverCtx.NodeID,
-		version:            serverCtx.version,
+		settings:           serverCtx.settings,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -1392,12 +1392,8 @@ func TestNodeIDMismatch(t *testing.T) {
 }
 
 func setVersion(c *Context, v roachpb.Version) error {
-	settings := cluster.MakeClusterSettings(v, v)
-	cv := cluster.ClusterVersion{Version: v}
-	if err := settings.InitializeVersion(cv); err != nil {
-		return err
-	}
-	c.version = &settings.Version
+	st := cluster.MakeTestingClusterSettingsWithVersion(v, v)
+	c.settings = st
 	return nil
 }
 
@@ -1442,7 +1438,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				remoteClockMonitor: serverCtx.RemoteClocks,
 				clusterID:          &serverCtx.ClusterID,
 				nodeID:             &serverCtx.NodeID,
-				version:            serverCtx.version,
+				settings:           serverCtx.settings,
 			})
 
 			ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -1488,7 +1484,7 @@ func TestGRPCDialClass(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
 		nodeID:             &serverCtx.NodeID,
-		version:            serverCtx.version,
+		settings:           serverCtx.settings,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -1546,7 +1542,7 @@ func TestTestingKnobs(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
 		nodeID:             &serverCtx.NodeID,
-		version:            serverCtx.version,
+		settings:           serverCtx.settings,
 	})
 
 	// The test will inject interceptors for both stream and unary calls and then
