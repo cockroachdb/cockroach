@@ -49,15 +49,15 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected table id")
 	}
 
-	md.AddDependency(tab, privilege.CREATE)
+	md.AddDataSourceDependency(tab.Name(), tab, privilege.CREATE)
 	depsUpToDate, err := md.CheckDependencies(context.TODO(), testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked")
 	}
 
-	// Call AddMetadata and verify that same objects are present in new metadata.
+	// Call CopyFrom and verify that same objects are present in new metadata.
 	var mdNew opt.Metadata
-	mdNew.AddMetadata(&md)
+	mdNew.CopyFrom(&md)
 	if mdNew.Schema(schID) != testCat.Schema() {
 		t.Fatalf("unexpected schema")
 	}

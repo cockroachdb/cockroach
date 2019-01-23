@@ -78,6 +78,14 @@ func (tp *TableNamePrefix) Catalog() string {
 	return string(tp.CatalogName)
 }
 
+// Equals returns true if the two table name prefixes are identical.
+func (tp *TableNamePrefix) Equals(other *TableNamePrefix) bool {
+	return tp.SchemaName == other.SchemaName &&
+		tp.CatalogName == other.CatalogName &&
+		tp.ExplicitSchema == other.ExplicitSchema &&
+		tp.ExplicitCatalog == other.ExplicitCatalog
+}
+
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(ctx *FmtCtx) {
 	if ctx.tableNameFormatter != nil {
@@ -101,6 +109,11 @@ func (t *TableName) FQString() string {
 // Table retrieves the unqualified table name.
 func (t *TableName) Table() string {
 	return string(t.TableName)
+}
+
+// Equals returns true if the two table names are identical.
+func (t *TableName) Equals(other *TableName) bool {
+	return t.TableName == other.TableName && t.TableNamePrefix.Equals(&other.TableNamePrefix)
 }
 
 // tableExpr implements the TableExpr interface.
