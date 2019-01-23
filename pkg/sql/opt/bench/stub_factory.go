@@ -238,3 +238,7 @@ func (f *stubFactory) ConstructDelete(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructSequenceSelect(seq cat.Sequence) (exec.Node, error) {
+	return struct{}{}, nil
+}

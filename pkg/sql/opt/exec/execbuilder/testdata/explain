@@ -316,6 +316,13 @@ EXPLAIN (VERBOSE) SELECT * FROM select_test
 tree             field  description  columns                           ordering
 sequence select  ·      ·            (last_value, log_cnt, is_called)  ·
 
+query TTTTT colnames
+EXPLAIN (VERBOSE) SELECT @1 FROM select_test
+----
+tree                  field     description  columns                           ordering
+render                ·         ·            ("?column?")                      ·
+ │                    render 0  last_value   ·                                 ·
+ └── sequence select  ·         ·            (last_value, log_cnt, is_called)  ·
 
 statement ok
 CREATE TABLE t (

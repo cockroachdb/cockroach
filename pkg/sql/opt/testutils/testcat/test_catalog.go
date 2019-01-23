@@ -175,6 +175,10 @@ func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privil
 		if t.Revoked {
 			return fmt.Errorf("user does not have privilege to access %v", t.ViewName)
 		}
+	case *Sequence:
+		if t.Revoked {
+			return fmt.Errorf("user does not have privilege to access %v", t.SeqName)
+		}
 	default:
 		panic("invalid Object")
 	}
@@ -256,6 +260,15 @@ func (tc *Catalog) AddView(view *View) {
 	tc.dataSources[fq] = view
 }
 
+// AddSequence adds the given test sequence to the catalog.
+func (tc *Catalog) AddSequence(seq *Sequence) {
+	fq := seq.SeqName.FQString()
+	if _, ok := tc.dataSources[fq]; ok {
+		panic(fmt.Errorf("sequence %q already exists", tree.ErrString(&seq.SeqName)))
+	}
+	tc.dataSources[fq] = seq
+}
+
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
 // catalog. This is used to test without spinning up a cluster.
 func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
@@ -284,6 +297,10 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 	case *tree.DropTable:
 		tc.DropTable(stmt)
 		return "", nil
+
+	case *tree.CreateSequence:
+		seq := tc.CreateSequence(stmt)
+		return seq.String(), nil
 
 	default:
 		return "", fmt.Errorf("unsupported statement: %v", stmt)
@@ -720,4 +737,47 @@ func (ts TableStats) Less(i, j int) bool {
 // Swap is part of the Sorter interface.
 func (ts TableStats) Swap(i, j int) {
 	ts[i], ts[j] = ts[j], ts[i]
+}
+
+// Sequence implements the cat.Sequence interface for testing purposes.
+type Sequence struct {
+	SeqID      cat.StableID
+	SeqVersion int
+	SeqName    tree.TableName
+	Catalog    cat.Catalog
+
+	// If Revoked is true, then the user has had privileges on the sequence revoked.
+	Revoked bool
+}
+
+var _ cat.Sequence = &Sequence{}
+
+// ID is part of the cat.DataSource interface.
+func (ts *Sequence) ID() cat.StableID {
+	return ts.SeqID
+}
+
+// Equals is part of the cat.DataSource interface.
+func (ts *Sequence) Equals(other cat.DataSource) bool {
+	otherSequence, ok := other.(*Sequence)
+	if !ok {
+		return false
+	}
+	return ts.SeqID == otherSequence.SeqID && ts.SeqVersion == otherSequence.SeqVersion
+}
+
+// Name is part of the cat.DataSource interface.
+func (ts *Sequence) Name() *tree.TableName {
+	return &ts.SeqName
+}
+
+// SequenceName is part of the cat.Sequence interface.
+func (ts *Sequence) SequenceName() *tree.TableName {
+	return ts.Name()
+}
+
+func (ts *Sequence) String() string {
+	tp := treeprinter.New()
+	cat.FormatCatalogSequence(ts.Catalog, ts, tp)
+	return tp.String()
 }

@@ -179,7 +179,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		f.Buffer.WriteByte(')')
 
 	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
-		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr:
+		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *SequenceSelectExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
@@ -764,6 +764,10 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		// Always fully qualify virtual table names.
 		tabMeta := f.Memo.metadata.TableMeta(t.Table)
 		fmt.Fprintf(f.Buffer, " %s", tabMeta.Table.Name())
+
+	case *SequenceSelectPrivate:
+		seq := f.Memo.metadata.Sequence(t.Sequence)
+		fmt.Fprintf(f.Buffer, " %s", seq.Name())
 
 	case *MutationPrivate:
 		fmt.Fprintf(f.Buffer, " %s", tableName(f, t.Table))

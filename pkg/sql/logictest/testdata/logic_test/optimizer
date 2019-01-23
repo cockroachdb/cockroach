@@ -95,9 +95,6 @@ SELECT job_id FROM crdb_internal.jobs
 ----
 
 statement ok
-CREATE SEQUENCE seq
-
-statement ok
 SET OPTIMIZER = ALWAYS
 
 query error pq: unsupported statement: \*tree\.AlterTable
@@ -106,9 +103,6 @@ ALTER TABLE test DROP COLUMN v;
 # Don't fall back to heuristic planner in ALWAYS mode.
 query error pq: window functions are not supported
 SELECT avg(k) OVER () FROM t ORDER BY 1
-
-query error pq: sequences are not supported
-SELECT * FROM seq
 
 statement ok
 SET OPTIMIZER = LOCAL
