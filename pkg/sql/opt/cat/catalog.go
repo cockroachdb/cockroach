@@ -50,17 +50,29 @@ type SchemaName = tree.TableNamePrefix
 // Catalog is an interface to a database catalog, exposing only the information
 // needed by the query optimizer.
 type Catalog interface {
-	// ResolveSchema locates a schema with the given name. If no such schema
-	// exists, then ResolveSchema returns an error. As a side effect, the name
-	// parameter is updated to be fully qualified if it was not before (i.e. to
-	// include catalog and schema names).
-	ResolveSchema(ctx context.Context, name *SchemaName) (Schema, error)
+	// ResolveSchema locates a schema with the given name and returns it along
+	// with the resolved SchemaName (which has all components filled in).
+	//
+	// The resolved SchemaName is the same with the resulting Schema.Name() except
+	// that it has the ExplicitCatalog/ExplicitSchema flags set to correspond to
+	// the input name. Its use is mainly for cosmetic purposes.
+	//
+	// If no such schema exists, then ResolveSchema returns an error.
+	ResolveSchema(ctx context.Context, name *SchemaName) (Schema, SchemaName, error)
 
-	// ResolveDataSource locates a data source with the given name and returns it.
-	// If no such data source exists, then ResolveDataSource returns an error. As
-	// a side effect, the name parameter is updated to be fully qualified if it
-	// was not before (i.e. to include catalog and schema names).
-	ResolveDataSource(ctx context.Context, name *DataSourceName) (DataSource, error)
+	// ResolveDataSource locates a data source with the given name and returns it
+	// along with the resolved DataSourceName.
+	//
+	// The resolved DataSourceName is the same with the resulting
+	// DataSource.Name() except that it has the ExplicitCatalog/ExplicitSchema
+	// flags set to correspond to the input name. Its use is mainly for cosmetic
+	// purposes. For example: the input name might be "t". The fully qualified
+	// DataSource.Name() would be "currentdb.public.t"; the returned
+	// DataSourceName would have the same fields but would still be formatted as
+	// "t".
+	//
+	// If no such data source exists, then ResolveDataSource returns an error.
+	ResolveDataSource(ctx context.Context, name *DataSourceName) (DataSource, DataSourceName, error)
 
 	// ResolveDataSourceByID is similar to ResolveDataSource, except that it
 	// locates a data source by its StableID. See the comment for StableID for
