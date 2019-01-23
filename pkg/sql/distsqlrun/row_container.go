@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"container/heap"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -458,4 +459,155 @@ func (f *diskBackedRowContainer) spillToDisk(ctx context.Context) error {
 	f.drc = &drc
 	f.spilled = true
 	return nil
+}
+
+// diskBackedIndexedRowContainer is a wrapper around diskBackedRowContainer
+// that adds an index to each row added in the order of addition of those rows
+// by storing an extra int column at the end of each row.
+type diskBackedIndexedRowContainer struct {
+	diskBackedRowContainer
+
+	ctx           context.Context
+	scratchEncRow sqlbase.EncDatumRow
+	storedTypes   []sqlbase.ColumnType
+	datumAlloc    sqlbase.DatumAlloc
+	idx           uint64 // the index of the next row to be added
+
+	// These two fields are for an optimization when container spilled to disk.
+	// See comment for GetRow().
+	diskRowIter rowIterator
+	idxRowIter  int
+}
+
+func makeDiskBackedIndexedRowContainer(
+	ordering sqlbase.ColumnOrdering,
+	types []sqlbase.ColumnType,
+	evalCtx *tree.EvalContext,
+	engine diskmap.Factory,
+	memoryMonitor *mon.BytesMonitor,
+	diskMonitor *mon.BytesMonitor,
+) diskBackedIndexedRowContainer {
+	d := diskBackedIndexedRowContainer{}
+	d.storedTypes = make([]sqlbase.ColumnType, len(types)+1)
+	copy(d.storedTypes, types)
+	d.storedTypes[len(d.storedTypes)-1] = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	d.scratchEncRow = make(sqlbase.EncDatumRow, len(d.storedTypes))
+	d.diskBackedRowContainer.init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor)
+	return d
+}
+
+// AddRow implements sortableRowContainer.
+func (f *diskBackedIndexedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	f.ctx = ctx
+	copy(f.scratchEncRow, row)
+	f.scratchEncRow[len(f.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
+		sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+		tree.NewDInt(tree.DInt(f.idx)),
+	)
+	f.idx++
+	return f.diskBackedRowContainer.AddRow(ctx, f.scratchEncRow)
+}
+
+// Close implements sortableRowContainer.
+func (f *diskBackedIndexedRowContainer) Close(ctx context.Context) {
+	if f.diskRowIter != nil {
+		f.diskRowIter.Close()
+	}
+	f.diskBackedRowContainer.Close(ctx)
+}
+
+// GetRow implements IndexedRows.
+//
+// Getting a row by index is fast from an in-memory row container but is a lot
+// slower from a disk-backed one. In order to mitigate the impact we add an
+// optimization of storing a disk iterator along with the index of the row it
+// currently points at. If a new call to GetRow() is with index not smaller
+// than "position" of the stored iterator, we can just use the iterator without
+// rewinding and advance the iterator to the desired row; otherwise, we rewind
+// the iterator and then advance it. This optimization should be especially
+// beneficial when the container is used by peerGroupChecker (used while
+// computing window functions) since it access rows in the sequential order.
+func (f *diskBackedIndexedRowContainer) GetRow(idx int) tree.IndexedRow {
+	var rowWithIdx sqlbase.EncDatumRow
+	var err error
+	if f.UsingDisk() {
+		if f.diskRowIter == nil {
+			f.diskRowIter = f.diskBackedRowContainer.drc.NewIterator(f.ctx)
+			f.diskRowIter.Rewind()
+		}
+		if f.idxRowIter <= idx {
+			// Reusing the iterator without Rewind()-ing.
+			for ; ; f.diskRowIter.Next() {
+				if ok, err := f.diskRowIter.Valid(); err != nil {
+					panic(err)
+				} else if !ok {
+					panic(fmt.Sprintf("row at idx %d not found", idx))
+				}
+				if f.idxRowIter == idx {
+					rowWithIdx, err = f.diskRowIter.Row()
+					if err != nil {
+						panic(err)
+					}
+					break
+				}
+				f.idxRowIter++
+			}
+		} else {
+			// The iterator has been advanced further than we need, so we need to
+			// start iterating from the beginning.
+			f.idxRowIter = 0
+			for f.diskRowIter.Rewind(); ; f.diskRowIter.Next() {
+				if ok, err := f.diskRowIter.Valid(); err != nil {
+					panic(err)
+				} else if !ok {
+					panic(fmt.Sprintf("row at idx %d not found", idx))
+				}
+				if f.idxRowIter == idx {
+					rowWithIdx, err = f.diskRowIter.Row()
+					if err != nil {
+						panic(err)
+					}
+					break
+				}
+				f.idxRowIter++
+			}
+		}
+		for i := range rowWithIdx {
+			// TODO(yuzefovich): account for the extra memory.
+			if err := rowWithIdx[i].EnsureDecoded(&f.storedTypes[i], &f.datumAlloc); err != nil {
+				panic(err)
+			}
+		}
+	} else {
+		rowWithIdx = f.diskBackedRowContainer.mrc.EncRow(idx)
+	}
+	if rowIdx, ok := rowWithIdx[len(rowWithIdx)-1].Datum.(*tree.DInt); ok {
+		return indexedRow{int(*rowIdx), rowWithIdx[:len(rowWithIdx)-1]}
+	} else {
+		panic("unexpected last column: should be integer idx")
+	}
+}
+
+type indexedRow struct {
+	idx int
+	row sqlbase.EncDatumRow
+}
+
+// GetIdx implements IndexedRow.
+func (ir indexedRow) GetIdx() int {
+	return ir.idx
+}
+
+// GetDatum implements IndexedRow.
+func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
+	return ir.row[colIdx].Datum
+}
+
+// GetDatums implements IndexedRow.
+func (ir indexedRow) GetDatums(startColIdx, endColIdx int) tree.Datums {
+	datums := make(tree.Datums, 0, endColIdx-startColIdx)
+	for idx := startColIdx; idx < endColIdx; idx++ {
+		datums = append(datums, ir.row[idx].Datum)
+	}
+	return datums
 }
