@@ -56,9 +56,9 @@ const (
 	optFormatJSON formatType = `json`
 	optFormatAvro formatType = `experimental_avro`
 
-	sinkParamBucketSize       = `bucket_size`
 	sinkParamSchemaTopic      = `schema_topic`
 	sinkParamTopicPrefix      = `topic_prefix`
+	sinkParamFileSize         = `file_size`
 	sinkSchemeBuffer          = ``
 	sinkSchemeExperimentalSQL = `experimental-sql`
 	sinkSchemeKafka           = `kafka`
@@ -226,7 +226,8 @@ func changefeedPlanHook(
 		// the CREATE CHANGEFEED statement. To do this, we create a "canary" sink,
 		// which will be immediately closed, only to check for errors.
 		{
-			canarySink, err := getSink(details.SinkURI, details.Opts, details.Targets, settings)
+			nodeID := p.ExtendedEvalContext().NodeID
+			canarySink, err := getSink(details.SinkURI, nodeID, details.Opts, details.Targets, settings)
 			if err != nil {
 				// In this context, we don't want to retry even retryable errors from the
 				// sync. Unwrap any retryable errors encountered.
