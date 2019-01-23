@@ -572,14 +572,22 @@ func (gcq *gcQueue) processImpl(
 
 	info, err := RunGC(ctx, desc, snap, now, *zone.GC, &replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
-			intentCount, err := repl.store.intentResolver.cleanupIntents(ctx, intents, now, roachpb.PUSH_ABORT)
+			intentCount, err := repl.store.intentResolver.CleanupIntents(ctx, intents, now, roachpb.PUSH_ABORT)
 			if err == nil {
+
 				gcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
 			}
 			return err
 		},
 		func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent) error {
-			err := repl.store.intentResolver.cleanupTxnIntentsOnGCAsync(ctx, txn, intents, now)
+			err := repl.store.intentResolver.CleanupTxnIntentsOnGCAsync(ctx, repl.RangeID, txn, intents, now, func(pushed, succeeded bool) {
+				if pushed {
+					gcq.store.metrics.GCPushTxn.Inc(1)
+				}
+				if succeeded {
+					gcq.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
+				}
+			})
 			if errors.Cause(err) == stop.ErrThrottled {
 				log.Eventf(ctx, "processing txn %s: %s; skipping for future GC", txn.ID.Short(), err)
 				return nil
