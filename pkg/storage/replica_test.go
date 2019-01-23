@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -3838,12 +3839,12 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 				t.Fatal("txn record missing")
 			}
 
-			if pErr := tc.store.intentResolver.resolveIntents(context.TODO(),
+			if pErr := tc.store.intentResolver.ResolveIntents(context.TODO(),
 				[]roachpb.Intent{{
 					Span:   roachpb.Span{Key: key},
 					Txn:    txnRecord.TxnMeta,
 					Status: txnRecord.Status,
-				}}, ResolveOptions{Wait: true, Poison: true}); pErr != nil {
+				}}, intentresolver.ResolveOptions{Wait: true, Poison: true}); pErr != nil {
 				t.Fatal(pErr)
 			}
 		}
@@ -4530,12 +4531,12 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey, true /* commit */)
 	txn := newTransaction("name", key, 1, tc.Clock())
 	txn.Status = roachpb.COMMITTED
-	if pErr := tc.store.intentResolver.resolveIntents(context.Background(),
+	if pErr := tc.store.intentResolver.ResolveIntents(context.Background(),
 		[]roachpb.Intent{{
 			Span:   roachpb.Span{Key: key},
 			Txn:    txn.TxnMeta,
 			Status: txn.Status,
-		}}, ResolveOptions{Wait: false, Poison: true /* irrelevant */}); pErr != nil {
+		}}, intentresolver.ResolveOptions{Wait: false, Poison: true /* irrelevant */}); pErr != nil {
 		t.Fatal(pErr)
 	}
 	testutils.SucceedsSoon(t, func() error {

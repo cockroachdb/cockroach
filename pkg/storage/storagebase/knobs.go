@@ -44,3 +44,17 @@ type BatchEvalTestingKnobs struct {
 	// assertion can be performed unconditionally.
 	DisallowUnsequencedTransactionalWrites bool
 }
+
+// IntentResolverTestingKnobs contains testing helpers that are used during
+// intent resolution.
+type IntentResolverTestingKnobs struct {
+	// DisableAsyncIntentResolution disables the async intent resolution
+	// path (but leaves synchronous resolution). This can avoid some
+	// edge cases in tests that start and stop servers.
+	DisableAsyncIntentResolution bool
+
+	// ForceSyncIntentResolution forces all asynchronous intent resolution to be
+	// performed synchronously. It is equivalent to setting IntentResolverTaskLimit
+	// to -1.
+	ForceSyncIntentResolution bool
+}

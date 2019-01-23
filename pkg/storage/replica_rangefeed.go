@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -62,7 +63,7 @@ func (s *lockedRangefeedStream) Send(e *roachpb.RangeFeedEvent) error {
 // rangefeedTxnPusher is a shim around intentResolver that implements the
 // rangefeed.TxnPusher interface.
 type rangefeedTxnPusher struct {
-	ir *intentResolver
+	ir *intentresolver.IntentResolver
 	r  *Replica
 }
 
@@ -86,7 +87,7 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		},
 	}
 
-	pushedTxnMap, pErr := tp.ir.maybePushTransactions(
+	pushedTxnMap, pErr := tp.ir.MaybePushTransactions(
 		ctx, pushTxnMap, h, roachpb.PUSH_TIMESTAMP, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
@@ -108,7 +109,7 @@ func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
 	for i, txn := range txns {
 		endTxns[i].Txn = txn
 	}
-	return tp.ir.cleanupTxnIntentsAsync(ctx, tp.r, endTxns, true /* allowSyncProcessing */)
+	return tp.ir.CleanupTxnIntentsAsync(ctx, tp.r.RangeID, endTxns, true /* allowSyncProcessing */)
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
