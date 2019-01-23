@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -285,7 +286,12 @@ func TestCloudStorage(t *testing.T) {
 	ctx := context.Background()
 
 	dir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
+	defer func() {
+		if !t.Failed() {
+			dirCleanupFn()
+		}
+	}()
+	log.Info(ctx, dir)
 
 	flushCh := make(chan struct{}, 1)
 	defer close(flushCh)
