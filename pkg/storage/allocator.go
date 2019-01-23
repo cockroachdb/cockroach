@@ -1224,16 +1224,19 @@ func filterUnremovableReplicas(
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {
 	upToDateReplicas := filterBehindReplicas(raftStatus, replicas)
-	quorum := computeQuorum(len(replicas) - 1)
-	if len(upToDateReplicas) < quorum {
-		// The number of up-to-date replicas is less than quorum. No replicas can
-		// be removed.
+	oldQuorum := computeQuorum(len(replicas))
+	if len(upToDateReplicas) < oldQuorum {
+		// The number of up-to-date replicas is less than the old quorum. No
+		// replicas can be removed. A below quorum range won't be able to process a
+		// replica removal in any case. The logic here prevents any attempt to even
+		// try the removal.
 		return nil
 	}
 
-	if len(upToDateReplicas) > quorum {
-		// The number of up-to-date replicas is larger than quorum. Any replica can
-		// be removed, though we want to filter out brandNewReplicaID.
+	newQuorum := computeQuorum(len(replicas) - 1)
+	if len(upToDateReplicas) > newQuorum {
+		// The number of up-to-date replicas is larger than the new quorum. Any
+		// replica can be removed, though we want to filter out brandNewReplicaID.
 		if brandNewReplicaID != 0 {
 			candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas)-len(upToDateReplicas))
 			for _, r := range replicas {
@@ -1246,6 +1249,9 @@ func filterUnremovableReplicas(
 		return replicas
 	}
 
+	// The number of up-to-date replicas is equal to the new quorum. Only allow
+	// removal of behind replicas (except for brandNewReplicaID which is given a
+	// free pass).
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas)-len(upToDateReplicas))
 	necessary := func(r roachpb.ReplicaDescriptor) bool {
 		if r.ReplicaID == brandNewReplicaID {
