@@ -78,8 +78,8 @@ func (s *benchSink) EmitResolvedTimestamp(_ context.Context, e Encoder, ts hlc.T
 	}
 	return s.emit(int64(len(p)))
 }
-func (s *benchSink) Flush(_ context.Context, _ hlc.Timestamp) error { return nil }
-func (s *benchSink) Close() error                                   { return nil }
+func (s *benchSink) Flush(_ context.Context) error { return nil }
+func (s *benchSink) Close() error                  { return nil }
 func (s *benchSink) emit(bytes int64) error {
 	s.Lock()
 	defer s.Unlock()
@@ -598,7 +598,7 @@ func (f *cloudFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 	}
 	feedDir := strconv.Itoa(f.feedIdx)
 	f.feedIdx++
-	createStmt.SinkURI = tree.NewStrVal(`experimental-nodelocal:///` + feedDir + `?bucket_size=10ms`)
+	createStmt.SinkURI = tree.NewStrVal(`experimental-nodelocal:///` + feedDir)
 
 	// Nodelocal puts its dir under `ExternalIODir`, which is passed into
 	// cloudFeedFactory.
