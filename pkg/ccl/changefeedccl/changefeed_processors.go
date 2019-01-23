@@ -117,9 +117,10 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// early returns if errors are detected.
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 
+	nodeID := ca.flowCtx.EvalCtx.NodeID
 	var err error
 	if ca.sink, err = getSink(
-		ca.spec.Feed.SinkURI, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Settings,
+		ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Settings,
 	); err != nil {
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
@@ -393,9 +394,10 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	// early returns if errors are detected.
 	ctx = cf.StartInternal(ctx, changeFrontierProcName)
 
+	nodeID := cf.flowCtx.EvalCtx.NodeID
 	var err error
 	if cf.sink, err = getSink(
-		cf.spec.Feed.SinkURI, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Settings,
+		cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Settings,
 	); err != nil {
 		cf.MoveToDraining(err)
 		return ctx

@@ -73,7 +73,7 @@ func TestKafkaSink(t *testing.T) {
 	}()
 
 	// No inflight
-	if err := sink.Flush(ctx, zeroTS); err != nil {
+	if err := sink.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -85,19 +85,19 @@ func TestKafkaSink(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		timeoutCtx, cancel := context.WithTimeout(ctx, time.Millisecond)
 		defer cancel()
-		if err := sink.Flush(timeoutCtx, zeroTS); !testutils.IsError(
+		if err := sink.Flush(timeoutCtx); !testutils.IsError(
 			err, `context deadline exceeded`,
 		) {
 			t.Fatalf(`expected "context deadline exceeded" error got: %+v`, err)
 		}
 	}
 	go func() { p.successesCh <- m1 }()
-	if err := sink.Flush(ctx, zeroTS); err != nil {
+	if err := sink.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
 
 	// Check no inflight again now that we've sent something
-	if err := sink.Flush(ctx, zeroTS); err != nil {
+	if err := sink.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,7 +122,7 @@ func TestKafkaSink(t *testing.T) {
 		}
 	}()
 	go func() { p.successesCh <- m4 }()
-	if err := sink.Flush(ctx, zeroTS); !testutils.IsError(err, `m3`) {
+	if err := sink.Flush(ctx); !testutils.IsError(err, `m3`) {
 		t.Fatalf(`expected "m3" error got: %+v`, err)
 	}
 
@@ -132,7 +132,7 @@ func TestKafkaSink(t *testing.T) {
 	}
 	m5 := <-p.inputCh
 	go func() { p.successesCh <- m5 }()
-	if err := sink.Flush(ctx, zeroTS); err != nil {
+	if err := sink.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -205,7 +205,7 @@ func TestSQLSink(t *testing.T) {
 	defer func() { require.NoError(t, sink.Close()) }()
 
 	// Empty
-	require.NoError(t, sink.Flush(ctx, zeroTS))
+	require.NoError(t, sink.Flush(ctx))
 
 	// Undeclared topic
 	require.EqualError(t,
@@ -216,7 +216,7 @@ func TestSQLSink(t *testing.T) {
 	sqlDB.CheckQueryResults(t, `SELECT key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{},
 	)
-	require.NoError(t, sink.Flush(ctx, zeroTS))
+	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t, `SELECT key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{{`k1`, `v0`}},
 	)
@@ -230,7 +230,7 @@ func TestSQLSink(t *testing.T) {
 	}
 	// Should have auto flushed after sqlSinkRowBatchSize
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`3`}})
-	require.NoError(t, sink.Flush(ctx, zeroTS))
+	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`4`}})
 	sqlDB.Exec(t, `TRUNCATE sink`)
 
@@ -238,7 +238,7 @@ func TestSQLSink(t *testing.T) {
 	require.NoError(t, sink.EmitRow(ctx, table(`foo`), []byte(`kfoo`), []byte(`v0`), zeroTS))
 	require.NoError(t, sink.EmitRow(ctx, table(`bar`), []byte(`kbar`), []byte(`v0`), zeroTS))
 	require.NoError(t, sink.EmitRow(ctx, table(`foo`), []byte(`kfoo`), []byte(`v1`), zeroTS))
-	require.NoError(t, sink.Flush(ctx, zeroTS))
+	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t, `SELECT topic, key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{{`bar`, `kbar`, `v0`}, {`foo`, `kfoo`, `v0`}, {`foo`, `kfoo`, `v1`}},
 	)
@@ -254,7 +254,7 @@ func TestSQLSink(t *testing.T) {
 		require.NoError(t,
 			sink.EmitRow(ctx, table(`foo`), []byte(`v`+strconv.Itoa(i)), []byte(`v1`), zeroTS))
 	}
-	require.NoError(t, sink.Flush(ctx, zeroTS))
+	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t, `SELECT partition, key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{
 			{`0`, `v3`, `v0`},
@@ -274,7 +274,7 @@ func TestSQLSink(t *testing.T) {
 	require.NoError(t, sink.EmitResolvedTimestamp(ctx, e, zeroTS))
 	require.NoError(t, sink.EmitRow(ctx, table(`foo`), []byte(`foo0`), []byte(`v0`), zeroTS))
 	require.NoError(t, sink.EmitResolvedTimestamp(ctx, e, hlc.Timestamp{WallTime: 1}))
-	require.NoError(t, sink.Flush(ctx, zeroTS))
+	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t,
 		`SELECT topic, partition, key, value, resolved FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{
