@@ -31,7 +31,8 @@ import (
 // particular point is reached) or to change the behavior by returning
 // an error (which aborts all further processing for the command).
 type StoreTestingKnobs struct {
-	EvalKnobs storagebase.BatchEvalTestingKnobs
+	EvalKnobs           storagebase.BatchEvalTestingKnobs
+	IntentResolverKnobs storagebase.IntentResolverTestingKnobs
 
 	// TestingRequestFilter is called before evaluating each command on a
 	// replica. The filter is run before the request acquires latches, so
@@ -160,14 +161,6 @@ type StoreTestingKnobs struct {
 	// SkipMinSizeCheck, if set, makes the store creation process skip the check
 	// for a minimum size.
 	SkipMinSizeCheck bool
-	// DisableAsyncIntentResolution disables the async intent resolution
-	// path (but leaves synchronous resolution). This can avoid some
-	// edge cases in tests that start and stop servers.
-	DisableAsyncIntentResolution bool
-	// ForceSyncIntentResolution forces all asynchronous intent resolution to be
-	// performed synchronously. It is equivalent to setting IntentResolverTaskLimit
-	// to -1.
-	ForceSyncIntentResolution bool
 	// DisableLeaseCapacityGossip disables the ability of a changing number of
 	// leases to trigger the store to gossip its capacity. With this enabled,
 	// only changes in the number of replicas can cause the store to gossip its

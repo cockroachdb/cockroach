@@ -116,7 +116,7 @@ func (r *Replica) executeReadOnlyBatch(
 		// range descriptor cache has an in-flight RangeLookup request which
 		// prohibits any concurrent requests for the same range. See #17760.
 		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
-		if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, intents, allowSyncProcessing); err != nil {
+		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, allowSyncProcessing); err != nil {
 			log.Warning(ctx, err)
 		}
 	}

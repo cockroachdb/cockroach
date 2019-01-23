@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
+	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -379,7 +380,7 @@ type Store struct {
 	scanner            *replicaScanner             // Replica scanner
 	consistencyQueue   *consistencyQueue           // Replica consistency check queue
 	metrics            *StoreMetrics
-	intentResolver     *intentResolver
+	intentResolver     *intentresolver.IntentResolver
 	raftEntryCache     *raftentry.Cache
 	limiters           batcheval.Limiters
 
@@ -720,11 +721,6 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
-	if sc.IntentResolverTaskLimit == -1 || sc.TestingKnobs.ForceSyncIntentResolution {
-		sc.IntentResolverTaskLimit = 0
-	} else if sc.IntentResolverTaskLimit == 0 {
-		sc.IntentResolverTaskLimit = defaultIntentResolverTaskLimit
-	}
 	if sc.concurrentSnapshotApplyLimit == 0 {
 		// NB: setting this value higher than 1 is likely to degrade client
 		// throughput.
@@ -774,7 +770,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		})
 	}
 	s.replRankings = newReplicaRankings()
-	s.intentResolver = newIntentResolver(s, cfg.IntentResolverTaskLimit)
+
 	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(s.metrics, s, storeSchedulerConcurrency)
 
@@ -1250,6 +1246,19 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err != nil {
 		return err
 	}
+
+	// create the intent resolver
+	s.intentResolver = intentresolver.New(intentresolver.Config{
+		Clock:        s.cfg.Clock,
+		DB:           s.db,
+		Stopper:      stopper,
+		TaskLimit:    s.cfg.IntentResolverTaskLimit,
+		AmbientCtx:   s.cfg.AmbientCtx,
+		TestingKnobs: s.cfg.TestingKnobs.IntentResolverKnobs,
+	})
+
+	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
+
 	s.rangeIDAlloc = idAlloc
 
 	now := s.cfg.Clock.Now()
@@ -3169,7 +3178,7 @@ func (s *Store) Send(
 					cleanupAfterWriteIntentError(t, nil)
 				}
 				if cleanupAfterWriteIntentError, pErr =
-					s.intentResolver.processWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
+					s.intentResolver.ProcessWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
 					// Do not propagate ambiguous results; assume success and retry original op.
 					if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
 						// Preserve the error index.

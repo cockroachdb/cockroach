@@ -13,10 +13,9 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package storage
+package intentresolver
 
 import (
-	"container/list"
 	"context"
 	"sort"
 	"time"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,13 +35,21 @@ import (
 	"github.com/pkg/errors"
 )
 
+// CleanupFunc is used to report the result of later writes in the face of
+// WriteIntentError. It should never be called with both a newWIErr and a
+// newIntentTxn.
+type CleanupFunc func(
+	newWIErr *roachpb.WriteIntentError,
+	newIntentTxn *enginepb.TxnMeta,
+)
+
 const (
-	// defaultIntentResolverTaskLimit is the maximum number of asynchronous tasks
+	// defaultTaskLimit is the maximum number of asynchronous tasks
 	// that may be started by intentResolver. When this limit is reached
 	// asynchronous tasks will start to block to apply backpressure.  This is a
 	// last line of defense against issues like #4925.
 	// TODO(bdarnell): how to determine best value?
-	defaultIntentResolverTaskLimit = 100
+	defaultTaskLimit = 1000
 
 	// intentResolverTimeout is the timeout when processing a group of intents.
 	// The timeout prevents intent resolution from getting stuck. Since
@@ -57,327 +65,28 @@ const (
 	intentResolverBatchSize = 100
 )
 
-type pusher struct {
-	txn      *roachpb.Transaction
-	waitCh   chan *enginepb.TxnMeta
-	detectCh chan struct{}
+// Config contains the dependencies to construct an IntentResolver.
+type Config struct {
+	Clock        *hlc.Clock
+	DB           *client.DB
+	Stopper      *stop.Stopper
+	TaskLimit    int
+	AmbientCtx   log.AmbientContext
+	TestingKnobs storagebase.IntentResolverTestingKnobs
 }
 
-func newPusher(txn *roachpb.Transaction) *pusher {
-	p := &pusher{
-		txn:    txn,
-		waitCh: make(chan *enginepb.TxnMeta, 1),
-	}
-	if p.activeTxn() {
-		p.detectCh = make(chan struct{}, 1)
-		// Signal the channel in order to begin dependency cycle detection.
-		p.detectCh <- struct{}{}
-	}
-	return p
-}
-
-func (p *pusher) activeTxn() bool {
-	return p.txn != nil && p.txn.Key != nil
-}
-
-type contendedKey struct {
-	ll *list.List
-	// lastTxnMeta is the most recent txn to own the intent. Active
-	// transactions in the contention queue for this intent must push
-	// this txn record in order to detect dependency cycles.
-	lastTxnMeta *enginepb.TxnMeta
-}
-
-func newContendedKey() *contendedKey {
-	return &contendedKey{
-		ll: list.New(),
-	}
-}
-
-// setLastTxnMeta sets the most recent txn meta and sends to all
-// pushers w/ active txns still in the queue to push, to guarantee
-// detection of dependency cycles.
-func (ck *contendedKey) setLastTxnMeta(txnMeta *enginepb.TxnMeta) {
-	ck.lastTxnMeta = txnMeta
-	for e := ck.ll.Front(); e != nil; e = e.Next() {
-		p := e.Value.(*pusher)
-		if p.detectCh != nil {
-			select {
-			case p.detectCh <- struct{}{}:
-			default:
-			}
-		}
-	}
-}
-
-// contentionQueue handles contention on keys with conflicting intents
-// by forming queues of "pushers" which are requests that experienced
-// a WriteIntentError. There is a queue for each key with one or more
-// pushers. Queues are complicated by the difference between pushers
-// with writing transactions (i.e. they may have a transaction record
-// which can be pushed) and non-writing transactions (e.g.,
-// non-transactional requests, and read-only transactions).
-//
-// Queues are linked lists, with each element containing a transaction
-// (can be nil), and a wait channel. The wait channel is closed when
-// the request is dequeued and run to completion, whether to success
-// or failure. Pushers wait on the most recent pusher in the queue to
-// complete. However, pushers with an active transaction (i.e., txns
-// with a non-nil key) must send a PushTxn RPC. This is necessary in
-// order to properly detect dependency cycles.
-type contentionQueue struct {
-	// keys is a map from key to a linked list of pusher instances,
-	// ordered as a FIFO queue.
-	store *Store
-	mu    struct {
-		syncutil.Mutex
-		keys map[string]*contendedKey
-	}
-}
-
-func newContentionQueue(store *Store) *contentionQueue {
-	cq := &contentionQueue{
-		store: store,
-	}
-	cq.mu.keys = map[string]*contendedKey{}
-	return cq
-}
-
-func txnID(txn *roachpb.Transaction) string {
-	if txn == nil {
-		return "nil txn"
-	}
-	return txn.ID.Short()
-}
-
-// add adds the intent specified in the supplied wiErr to the
-// contention queue. This may block the current goroutine if the
-// pusher has no transaction or the transaction is not yet writing
-// (i.e. read-only or hasn't successfully executed BeginTxn).
-//
-// Note that the supplied wiErr write intent error must have only a
-// single intent (len(wiErr.Intents) == 1).
-//
-// Returns a cleanup function to be invoked by the caller after the
-// original request completes, a possibly updated WriteIntentError and
-// a bool indicating whether the intent resolver should regard the
-// original push / resolve as no longer applicable and skip those
-// steps to retry the original request that generated the
-// WriteIntentError. The cleanup function takes two arguments, a
-// newWIErr, non-nil in case the re-executed request experienced
-// another write intent error and could not complete; and
-// newIntentTxn, nil if the re-executed request left no intent, and
-// non-nil if it did. At most one of these two arguments should be
-// provided.
-func (cq *contentionQueue) add(
-	ctx context.Context, wiErr *roachpb.WriteIntentError, h roachpb.Header,
-) (
-	func(newWIErr *roachpb.WriteIntentError, newIntentTxn *enginepb.TxnMeta),
-	*roachpb.WriteIntentError,
-	bool,
-) {
-	if len(wiErr.Intents) != 1 {
-		log.Fatalf(ctx, "write intent error must contain only a single intent: %s", wiErr)
-	}
-	intent := wiErr.Intents[0]
-	key := string(intent.Span.Key)
-	curPusher := newPusher(h.Txn)
-	log.VEventf(ctx, 3, "adding %s to contention queue on intent %s @%s", txnID(h.Txn), intent.Key, intent.Txn.ID.Short())
-
-	// Consider prior pushers in reverse arrival order to build queue
-	// by waiting on the most recent overlapping pusher.
-	var waitCh chan *enginepb.TxnMeta
-	var curElement *list.Element
-
-	cq.mu.Lock()
-	contended, ok := cq.mu.keys[key]
-	if !ok {
-		contended = newContendedKey()
-		contended.setLastTxnMeta(&intent.Txn)
-		cq.mu.keys[key] = contended
-	} else if contended.lastTxnMeta.ID != intent.Txn.ID {
-		contended.setLastTxnMeta(&intent.Txn)
-	}
-
-	// Get the prior pusher to wait on.
-	if e := contended.ll.Back(); e != nil {
-		p := e.Value.(*pusher)
-		waitCh = p.waitCh
-		log.VEventf(ctx, 3, "%s waiting on %s", txnID(curPusher.txn), txnID(p.txn))
-	}
-
-	// Append the current pusher to the queue.
-	curElement = contended.ll.PushBack(curPusher)
-	cq.mu.Unlock()
-
-	// Delay before pushing in order to detect dependency cycles.
-	const dependencyCyclePushDelay = 100 * time.Millisecond
-
-	// Wait on prior pusher, if applicable.
-	var done bool
-	if waitCh != nil {
-		var detectCh chan struct{}
-		var detectReady <-chan time.Time
-		// If the current pusher has an active txn, we need to push the
-		// transaction which owns the intent to detect dependency cycles.
-		// To avoid unnecessary push traffic, insert a delay by
-		// instantiating the detectReady, which sets detectCh when it
-		// fires. When detectCh receives, it sends a push to the most
-		// recent txn to own the intent.
-		if curPusher.detectCh != nil {
-			detectReady = time.After(dependencyCyclePushDelay)
-		}
-
-	Loop:
-		for {
-			select {
-			case txnMeta, ok := <-waitCh:
-				if !ok {
-					log.Fatalf(ctx, "the wait channel of a prior pusher was used twice (pusher=%s)", txnMeta)
-				}
-				// If the prior pusher wrote an intent, push it instead by
-				// creating a copy of the WriteIntentError with updated txn.
-				if txnMeta != nil {
-					log.VEventf(ctx, 3, "%s exiting contention queue to push %s", txnID(curPusher.txn), txnMeta.ID.Short())
-					wiErrCopy := *wiErr
-					wiErrCopy.Intents = []roachpb.Intent{
-						{
-							Span:   intent.Span,
-							Txn:    *txnMeta,
-							Status: roachpb.PENDING,
-						},
-					}
-					wiErr = &wiErrCopy
-				} else {
-					// No intent was left by the prior pusher; don't push, go
-					// immediately to retrying the conflicted request.
-					log.VEventf(ctx, 3, "%s exiting contention queue to proceed", txnID(curPusher.txn))
-					done = true
-				}
-				break Loop
-
-			case <-ctx.Done():
-				// The pusher's context is done. Return without pushing.
-				done = true
-				break Loop
-
-			case <-detectReady:
-				// When the detect timer fires, set detectCh and loop.
-				log.VEventf(ctx, 3, "%s cycle detection is ready", txnID(curPusher.txn))
-				detectCh = curPusher.detectCh
-
-			case <-detectCh:
-				cq.mu.Lock()
-				frontOfQueue := curElement == contended.ll.Front()
-				pusheeTxn := contended.lastTxnMeta
-				cq.mu.Unlock()
-				// If we're at the start of the queue loop and wait
-				// for the wait channel to signal.
-				if frontOfQueue {
-					log.VEventf(ctx, 3, "%s at front of queue; breaking from loop", txnID(curPusher.txn))
-					break Loop
-				}
-				pushReq := &roachpb.PushTxnRequest{
-					RequestHeader: roachpb.RequestHeader{
-						Key: pusheeTxn.Key,
-					},
-					PusherTxn: getPusherTxn(h),
-					PusheeTxn: *pusheeTxn,
-					PushTo:    h.Timestamp,
-					Now:       cq.store.Clock().Now(),
-					PushType:  roachpb.PUSH_ABORT,
-				}
-				b := &client.Batch{}
-				b.AddRawRequest(pushReq)
-				log.VEventf(ctx, 3, "%s pushing %s to detect dependency cycles", txnID(curPusher.txn), pusheeTxn.ID.Short())
-				if err := cq.store.db.Run(ctx, b); err != nil {
-					log.VErrEventf(ctx, 2, "while waiting in push contention queue to push %s: %s", pusheeTxn.ID.Short(), b.MustPErr())
-					done = true // done=true to avoid uselessly trying to push and resolve
-					break Loop
-				}
-				// Note that this pusher may have aborted the pushee, but it
-				// should still wait on the previous pusher's wait channel.
-				detectCh = nil
-				detectReady = time.After(dependencyCyclePushDelay)
-			}
-		}
-	}
-
-	return func(newWIErr *roachpb.WriteIntentError, newIntentTxn *enginepb.TxnMeta) {
-		if newWIErr != nil && newIntentTxn != nil {
-			// The need for this implies that the function should be split
-			// into a more rigidly defined handle with multiple accessors.
-			// TODO(nvanbenschoten): clean this up and test better when we're
-			// not intending the change to be backported.
-			panic("newWIErr and newIntentTxn both provided")
-		}
-		if newWIErr == nil {
-			log.VEventf(ctx, 3, "%s finished, leaving intent? %t (owned by %s)", txnID(curPusher.txn), newIntentTxn != nil, newIntentTxn)
-		} else {
-			log.VEventf(ctx, 3, "%s encountered another write intent error %s", txnID(curPusher.txn), newWIErr)
-		}
-		cq.mu.Lock()
-		defer cq.mu.Unlock()
-
-		// Remove the current element from its list of pushers.
-		// If the current element isn't the front, it's being removed
-		// because its context was canceled. Swap the wait channel with
-		// the previous element.
-		if curElement != contended.ll.Front() {
-			prevPusher := curElement.Prev().Value.(*pusher)
-			if waitCh != nil && prevPusher.waitCh != waitCh {
-				log.Fatalf(ctx, "expected previous pusher's wait channel to be the one current pusher waited on")
-			}
-			prevPusher.waitCh, curPusher.waitCh = curPusher.waitCh, prevPusher.waitCh
-		}
-		contended.ll.Remove(curElement)
-
-		if contended.ll.Len() == 0 {
-			// If the contendedKey's list is now empty, remove it. We don't need
-			// to send on or close our waitCh because no one is or ever will wait
-			// on it.
-			delete(cq.mu.keys, key)
-		} else {
-			// If the pusher re-executed its request and encountered another
-			// write intent error, check if it's for the same intent; if so,
-			// we can set the newIntentTxn to match the new intent. If not,
-			// make sure that we don't pollute the old contendedKey with any
-			// new information.
-			if newWIErr != nil {
-				sameKey := len(newWIErr.Intents) == 1 && newWIErr.Intents[0].Span.Equal(intent.Span)
-				if sameKey {
-					newIntentTxn = &newWIErr.Intents[0].Txn
-				} else {
-					// If the pusher re-executed and found a different intent, make
-					// sure that we don't tell the old contendedKey anything about
-					// the new intent's transaction. This new intent could be from
-					// an earlier request in the batch than the one that previously
-					// hit the error, so we don't know anything about the state of
-					// the old intent.
-					newIntentTxn = nil
-				}
-			}
-			if newIntentTxn != nil {
-				// Shallow copy the TxnMeta. After this request returns (i.e.
-				// now), we might mutate it (DistSender and such), but the
-				// receiver of the channel will read it.
-				newIntentTxnCopy := *newIntentTxn
-				newIntentTxn = &newIntentTxnCopy
-				contended.setLastTxnMeta(newIntentTxn)
-			}
-			curPusher.waitCh <- newIntentTxn
-			close(curPusher.waitCh)
-		}
-	}, wiErr, done
-}
-
-// intentResolver manages the process of pushing transactions and
+// IntentResolver manages the process of pushing transactions and
 // resolving intents.
-type intentResolver struct {
-	store *Store
+type IntentResolver struct {
+	Metrics Metrics
 
-	sem         chan struct{}    // Semaphore to limit async goroutines.
-	contentionQ *contentionQueue // manages contention on individual keys
+	clock        *hlc.Clock
+	db           *client.DB
+	stopper      *stop.Stopper
+	testingKnobs storagebase.IntentResolverTestingKnobs
+	ambientCtx   log.AmbientContext
+	sem          chan struct{}    // Semaphore to limit async goroutines.
+	contentionQ  *contentionQueue // manages contention on individual keys
 
 	mu struct {
 		syncutil.Mutex
@@ -391,19 +100,36 @@ type intentResolver struct {
 	every log.EveryN
 }
 
-func newIntentResolver(store *Store, taskLimit int) *intentResolver {
-	ir := &intentResolver{
-		store:       store,
-		sem:         make(chan struct{}, taskLimit),
-		contentionQ: newContentionQueue(store),
-		every:       log.Every(time.Minute),
+// New creates an new IntentResolver.
+func New(c Config) *IntentResolver {
+	if c.TaskLimit == 0 {
+		c.TaskLimit = defaultTaskLimit
+	}
+	if c.TaskLimit == -1 || c.TestingKnobs.ForceSyncIntentResolution {
+		c.TaskLimit = 0
+	}
+	ir := &IntentResolver{
+		clock:        c.Clock,
+		db:           c.DB,
+		stopper:      c.Stopper,
+		sem:          make(chan struct{}, c.TaskLimit),
+		contentionQ:  newContentionQueue(c.Clock, c.DB),
+		every:        log.Every(time.Minute),
+		Metrics:      makeMetrics(),
+		testingKnobs: c.TestingKnobs,
 	}
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
 	return ir
 }
 
-// processWriteIntentError tries to push the conflicting
+// NumContended exists to ease writing tests at the storage level above which
+// want to verify that contention is occurring within the IntentResolver.
+func (ir *IntentResolver) NumContended(key roachpb.Key) int {
+	return ir.contentionQ.numContended(key)
+}
+
+// ProcessWriteIntentError tries to push the conflicting
 // transaction(s) responsible for the given WriteIntentError, and to
 // resolve those intents if possible. Returns a cleanup function and
 // potentially a new error to be used in place of the original. The
@@ -411,13 +137,13 @@ func newIntentResolver(store *Store, taskLimit int) *intentResolver {
 // which experienced the conflict has completed with a parameter
 // specifying a transaction in the event that the request left its own
 // intent.
-func (ir *intentResolver) processWriteIntentError(
+func (ir *IntentResolver) ProcessWriteIntentError(
 	ctx context.Context,
 	wiPErr *roachpb.Error,
 	args roachpb.Request,
 	h roachpb.Header,
 	pushType roachpb.PushTxnType,
-) (func(newWIErr *roachpb.WriteIntentError, newIntentTxn *enginepb.TxnMeta), *roachpb.Error) {
+) (CleanupFunc, *roachpb.Error) {
 	wiErr, ok := wiPErr.GetDetail().(*roachpb.WriteIntentError)
 	if !ok {
 		return nil, roachpb.NewErrorf("not a WriteIntentError: %v", wiPErr)
@@ -440,7 +166,7 @@ func (ir *intentResolver) processWriteIntentError(
 		}
 	}
 
-	resolveIntents, pErr := ir.maybePushIntents(
+	resolveIntents, pErr := ir.MaybePushIntents(
 		ctx, wiErr.Intents, h, pushType, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
@@ -457,7 +183,7 @@ func (ir *intentResolver) processWriteIntentError(
 	//
 	// To do better here, we need per-intent information on whether we need to
 	// poison.
-	if err := ir.resolveIntents(ctx, resolveIntents,
+	if err := ir.ResolveIntents(ctx, resolveIntents,
 		ResolveOptions{Wait: false, Poison: true}); err != nil {
 		return cleanup, roachpb.NewError(err)
 	}
@@ -479,14 +205,14 @@ func getPusherTxn(h roachpb.Header) roachpb.Transaction {
 	return *txn
 }
 
-// maybePushIntents tries to push the conflicting transaction(s)
+// MaybePushIntents tries to push the conflicting transaction(s)
 // responsible for the given intents: either move its
 // timestamp forward on a read/write conflict, abort it on a
 // write/write conflict, or do nothing if the transaction is no longer
 // pending.
 //
 // Returns a slice of intents which can now be resolved, and an error.
-// The returned intents should be resolved via intentResolver.resolveIntents.
+// The returned intents should be resolved via IntentResolver.ResolveIntents.
 //
 // If skipIfInFlight is true, then no PushTxns will be sent and no
 // intents will be returned for any transaction for which there is
@@ -503,7 +229,7 @@ func getPusherTxn(h roachpb.Header) roachpb.Transaction {
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (ir *intentResolver) maybePushIntents(
+func (ir *IntentResolver) MaybePushIntents(
 	ctx context.Context,
 	intents []roachpb.Intent,
 	h roachpb.Header,
@@ -523,7 +249,7 @@ func (ir *intentResolver) maybePushIntents(
 		pushTxns[intent.Txn.ID] = intent.Txn
 	}
 
-	pushedTxns, pErr := ir.maybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
+	pushedTxns, pErr := ir.MaybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -546,11 +272,11 @@ func (ir *intentResolver) maybePushIntents(
 	return resolveIntents, nil
 }
 
-// maybePushTransactions is like maybePushIntents except it takes a set of
+// MaybePushTransactions is like maybePushIntents except it takes a set of
 // transactions to push instead of a set of intents. This set of provided
 // transactions may be modified by the method. It returns a set of transaction
 // protos corresponding to the pushed transactions.
-func (ir *intentResolver) maybePushTransactions(
+func (ir *IntentResolver) MaybePushTransactions(
 	ctx context.Context,
 	pushTxns map[uuid.UUID]enginepb.TxnMeta,
 	h roachpb.Header,
@@ -593,7 +319,7 @@ func (ir *intentResolver) maybePushTransactions(
 	log.Eventf(ctx, "pushing %d transaction(s)", len(pushTxns))
 
 	// Attempt to push the transaction(s).
-	now := ir.store.Clock().Now()
+	now := ir.clock.Now()
 	pusherTxn := getPusherTxn(h)
 	var pushReqs []roachpb.Request
 	for _, pushTxn := range pushTxns {
@@ -616,7 +342,7 @@ func (ir *intentResolver) maybePushTransactions(
 	b := &client.Batch{}
 	b.AddRawRequest(pushReqs...)
 	var pErr *roachpb.Error
-	if err := ir.store.db.Run(ctx, b); err != nil {
+	if err := ir.db.Run(ctx, b); err != nil {
 		pErr = b.MustPErr()
 	}
 	cleanupInFlightPushes()
@@ -641,24 +367,24 @@ func (ir *intentResolver) maybePushTransactions(
 // there is spare capacity in the limited async task semaphore, it's
 // run asynchronously; otherwise, it's run synchronously if
 // allowSyncProcessing is true; if false, an error is returned.
-func (ir *intentResolver) runAsyncTask(
-	ctx context.Context, r *Replica, allowSyncProcessing bool, taskFn func(context.Context),
+func (ir *IntentResolver) runAsyncTask(
+	ctx context.Context, allowSyncProcessing bool, taskFn func(context.Context),
 ) error {
-	if r.store.TestingKnobs().DisableAsyncIntentResolution {
+	if ir.testingKnobs.DisableAsyncIntentResolution {
 		return errors.New("intents not processed as async resolution is disabled")
 	}
-	err := r.store.Stopper().RunLimitedAsyncTask(
+	err := ir.stopper.RunLimitedAsyncTask(
 		// If we've successfully launched a background task, dissociate
 		// this work from our caller's context and timeout.
-		ir.store.AnnotateCtx(context.Background()),
-		"storage.intentResolver: processing intents",
+		ir.ambientCtx.AnnotateCtx(context.Background()),
+		"storage.IntentResolver: processing intents",
 		ir.sem,
 		false, /* wait */
 		taskFn,
 	)
 	if err != nil {
 		if err == stop.ErrThrottled {
-			ir.store.metrics.IntentResolverAsyncThrottled.Inc(1)
+			ir.Metrics.IntentResolverAsyncThrottled.Inc(1)
 			if allowSyncProcessing {
 				// A limited task was not available. Rather than waiting for
 				// one, we reuse the current goroutine.
@@ -671,17 +397,17 @@ func (ir *intentResolver) runAsyncTask(
 	return nil
 }
 
-// cleanupIntentsAsync asynchronously processes intents which were
+// CleanupIntentsAsync asynchronously processes intents which were
 // encountered during another command but did not interfere with the
 // execution of that command. This occurs during inconsistent
 // reads.
-func (ir *intentResolver) cleanupIntentsAsync(
-	ctx context.Context, r *Replica, intents []result.IntentsWithArg, allowSyncProcessing bool,
+func (ir *IntentResolver) CleanupIntentsAsync(
+	ctx context.Context, intents []result.IntentsWithArg, allowSyncProcessing bool,
 ) error {
-	now := r.store.Clock().Now()
+	now := ir.clock.Now()
 	for _, item := range intents {
-		if err := ir.runAsyncTask(ctx, r, allowSyncProcessing, func(ctx context.Context) {
-			if _, err := ir.cleanupIntents(ctx, item.Intents, now, roachpb.PUSH_TOUCH); err != nil {
+		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
+			if _, err := ir.CleanupIntents(ctx, item.Intents, now, roachpb.PUSH_TOUCH); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warning(ctx, err)
 				}
@@ -693,17 +419,17 @@ func (ir *intentResolver) cleanupIntentsAsync(
 	return nil
 }
 
-// cleanupIntents processes a collection of intents by pushing each
+// CleanupIntents processes a collection of intents by pushing each
 // implicated transaction using the specified pushType. Intents
 // belonging to non-pending transactions after the push are resolved.
 // On success, returns the number of resolved intents. On error, a
 // subset of the intents may have been resolved, but zero will be
 // returned.
-func (ir *intentResolver) cleanupIntents(
+func (ir *IntentResolver) CleanupIntents(
 	ctx context.Context, intents []roachpb.Intent, now hlc.Timestamp, pushType roachpb.PushTxnType,
 ) (int, error) {
 	h := roachpb.Header{Timestamp: now}
-	resolveIntents, pushErr := ir.maybePushIntents(
+	resolveIntents, pushErr := ir.MaybePushIntents(
 		ctx, intents, h, pushType, true, /* skipIfInFlight */
 	)
 	if pushErr != nil {
@@ -729,7 +455,7 @@ func (ir *intentResolver) cleanupIntents(
 	//   same situation as above.
 	//
 	// Thus, we must poison.
-	if err := ir.resolveIntents(
+	if err := ir.ResolveIntents(
 		ctx, resolveIntents, ResolveOptions{Wait: true, Poison: true},
 	); err != nil {
 		return 0, errors.Wrapf(err, "failed to resolve intents")
@@ -737,21 +463,24 @@ func (ir *intentResolver) cleanupIntents(
 	return len(resolveIntents), nil
 }
 
-// cleanupTxnIntentsAsync asynchronously cleans up intents owned by
+// CleanupTxnIntentsAsync asynchronously cleans up intents owned by
 // a transaction on completion.
-func (ir *intentResolver) cleanupTxnIntentsAsync(
-	ctx context.Context, r *Replica, endTxns []result.EndTxnIntents, allowSyncProcessing bool,
+func (ir *IntentResolver) CleanupTxnIntentsAsync(
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	endTxns []result.EndTxnIntents,
+	allowSyncProcessing bool,
 ) error {
-	now := r.store.Clock().Now()
+	now := ir.clock.Now()
 	for _, et := range endTxns {
-		if err := ir.runAsyncTask(ctx, r, allowSyncProcessing, func(ctx context.Context) {
+		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
 			locked, release := ir.lockInFlightTxnCleanup(ctx, et.Txn.ID)
 			if !locked {
 				return
 			}
 			defer release()
 			intents := roachpb.AsIntents(et.Txn.Intents, &et.Txn)
-			if err := ir.cleanupFinishedTxnIntents(ctx, &et.Txn, intents, now, et.Poison); err != nil {
+			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, &et.Txn, intents, now, et.Poison); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
 				}
@@ -767,9 +496,9 @@ func (ir *intentResolver) cleanupTxnIntentsAsync(
 // to cleanup the intents belonging to the specified transaction. Returns
 // whether this attempt to lock succeeded and if so, a function to release
 // the lock, to be invoked subsequently by the caller.
-func (ir *intentResolver) lockInFlightTxnCleanup(
+func (ir *IntentResolver) lockInFlightTxnCleanup(
 	ctx context.Context, txnID uuid.UUID,
-) (bool, func()) {
+) (locked bool, release func()) {
 	ir.mu.Lock()
 	defer ir.mu.Unlock()
 	_, inFlight := ir.mu.inFlightTxnCleanups[txnID]
@@ -785,19 +514,26 @@ func (ir *intentResolver) lockInFlightTxnCleanup(
 	}
 }
 
-// cleanupTxnIntentsOnGCAsync cleans up extant intents owned by a
+// CleanupTxnIntentsOnGCAsync cleans up extant intents owned by a
 // single transaction, asynchronously (but returning an error if the
-// intentResolver's semaphore is maxed out). If the transaction is
-// PENDING, but expired, it is pushed first to abort it. This method
-// updates the metrics for intents resolved on GC on success.
-func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
-	ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent, now hlc.Timestamp,
+// IntentResolver's semaphore is maxed out). If the transaction is
+// PENDING, but expired, it is pushed first to abort it. onComplete is
+// called if non-nil upon completion of async task with the intention that
+// it be used as a hook to update metrics. It will not be called if an error
+// is returned.
+func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	txn *roachpb.Transaction,
+	intents []roachpb.Intent,
+	now hlc.Timestamp,
+	onComplete func(pushed, succeeded bool),
 ) error {
-	return ir.store.Stopper().RunLimitedAsyncTask(
+	return ir.stopper.RunLimitedAsyncTask(
 		// If we've successfully launched a background task,
 		// dissociate this work from our caller's context and
 		// timeout.
-		ir.store.AnnotateCtx(context.Background()),
+		ir.ambientCtx.AnnotateCtx(context.Background()),
 		"processing txn intents",
 		ir.sem,
 		// We really do not want to hang up the GC queue on this kind of
@@ -808,12 +544,15 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 		// the meantime.
 		false, /* wait */
 		func(ctx context.Context) {
+			var pushed, succeeded bool
+			if onComplete != nil {
+				defer func() { onComplete(pushed, succeeded) }()
+			}
 			locked, release := ir.lockInFlightTxnCleanup(ctx, txn.ID)
 			if !locked {
 				return
 			}
 			defer release()
-
 			// If the transaction is still pending, but expired, push it
 			// before resolving the intents.
 			if txn.Status == roachpb.PENDING {
@@ -831,8 +570,8 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 					Now:       now,
 					PushType:  roachpb.PUSH_ABORT,
 				})
-				ir.store.metrics.GCPushTxn.Inc(1)
-				if err := ir.store.DB().Run(ctx, b); err != nil {
+				pushed = true
+				if err := ir.db.Run(ctx, b); err != nil {
 					log.VErrEventf(ctx, 2, "failed to push PENDING, expired txn (%s): %s", txn, err)
 					return
 				}
@@ -844,12 +583,12 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 				}
 			}
 
-			if err := ir.cleanupFinishedTxnIntents(ctx, txn, intents, now, false /* poison */); err != nil {
+			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, txn, intents, now, false /* poison */); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
 				}
 			} else {
-				ir.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
+				succeeded = true
 			}
 		},
 	)
@@ -858,8 +597,9 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 // cleanupFinishedTxnIntents cleans up extant intents owned by a
 // single transaction and when all intents have been successfully
 // resolved, the transaction record is GC'ed.
-func (ir *intentResolver) cleanupFinishedTxnIntents(
+func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	ctx context.Context,
+	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
 	intents []roachpb.Intent,
 	now hlc.Timestamp,
@@ -868,7 +608,7 @@ func (ir *intentResolver) cleanupFinishedTxnIntents(
 	// Resolve intents.
 	min, _ := txn.InclusiveTimeBounds()
 	opts := ResolveOptions{Wait: true, Poison: poison, MinTimestamp: min}
-	if err := ir.resolveIntents(ctx, intents, opts); err != nil {
+	if err := ir.ResolveIntents(ctx, intents, opts); err != nil {
 		return errors.Wrapf(err, "failed to resolve intents")
 	}
 
@@ -903,16 +643,14 @@ func (ir *intentResolver) cleanupFinishedTxnIntents(
 			EndKey: endKey.AsRawKey(),
 		}
 	}
-
 	gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{
 		Key: txnKey,
 	})
 	b.AddRawRequest(&gcArgs)
-	if err := ir.store.db.Run(ctx, b); err != nil {
+	if err := ir.db.Run(ctx, b); err != nil {
 		return errors.Wrapf(err, "could not GC completed transaction anchored at %s",
 			roachpb.Key(txn.Key))
 	}
-
 	return nil
 }
 
@@ -935,7 +673,8 @@ type ResolveOptions struct {
 	MinTimestamp hlc.Timestamp
 }
 
-func (ir *intentResolver) resolveIntents(
+// ResolveIntents synchronously resolves intents accordings to opts.
+func (ir *IntentResolver) ResolveIntents(
 	ctx context.Context, intents []roachpb.Intent, opts ResolveOptions,
 ) error {
 	if len(intents) == 0 {
@@ -997,7 +736,7 @@ func (ir *intentResolver) resolveIntents(
 		// txn record, causing an infinite loop on that txn record, where
 		// the same initial set of intents is endlessly re-resolved.
 		ctxWithTimeout, cancel := context.WithTimeout(ctx, intentResolverTimeout)
-		err := ir.store.DB().Run(ctxWithTimeout, b)
+		err := ir.db.Run(ctxWithTimeout, b)
 		cancel()
 		if err != nil {
 			// Bail out on the first error.
@@ -1014,7 +753,7 @@ func (ir *intentResolver) resolveIntents(
 			b.Header.MaxSpanRequestKeys = intentResolverBatchSize
 			b.AddRawRequest(req)
 			ctxWithTimeout, cancel := context.WithTimeout(ctx, intentResolverTimeout)
-			err := ir.store.DB().Run(ctxWithTimeout, b)
+			err := ir.db.Run(ctxWithTimeout, b)
 			cancel()
 			if err != nil {
 				// Bail out on the first error.
