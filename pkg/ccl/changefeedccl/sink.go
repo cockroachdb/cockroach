@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -46,23 +47,21 @@ type Sink interface {
 		updated hlc.Timestamp,
 	) error
 	// EmitResolvedTimestamp enqueues a resolved timestamp message for
-	// asynchronous delivery on every partition of every topic that has been
-	// seen by EmitRow. The list of partitions used may be stale. An error may
-	// be returned if a previously enqueued message has failed.
+	// asynchronous delivery on every topic that has been seen by EmitRow. An
+	// error may be returned if a previously enqueued message has failed.
 	EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error
 	// Flush blocks until every message enqueued by EmitRow and
-	// EmitResolvedTimestamp with a timestamp >= ts has been acknowledged by the
-	// sink. This is also a guarantee that rows that come in after will have an
-	// updated timestamp <= ts (which can be useful for gc inside the sink). If
-	// an error is returned, no guarantees are given about which messages have
-	// been delivered or not delivered.
-	Flush(ctx context.Context, ts hlc.Timestamp) error
+	// EmitResolvedTimestamp has been acknowledged by the sink. If an error is
+	// returned, no guarantees are given about which messages have been
+	// delivered or not delivered.
+	Flush(ctx context.Context) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
 }
 
 func getSink(
 	sinkURI string,
+	nodeID roachpb.NodeID,
 	opts map[string]string,
 	targets jobspb.ChangefeedTargets,
 	settings *cluster.Settings,
@@ -92,18 +91,17 @@ func getSink(
 		}
 	case `experimental-s3`, `experimental-gs`, `experimental-nodelocal`, `experimental-http`,
 		`experimental-https`, `experimental-azure`:
+		fileSizeParam := q.Get(sinkParamFileSize)
+		q.Del(sinkParamFileSize)
+		var fileSize int64 = 16 << 20 // 16MB
+		if fileSizeParam != `` {
+			if fileSize, err = humanizeutil.ParseBytes(fileSizeParam); err != nil {
+				return nil, errors.Wrapf(err, `parsing %s`, fileSizeParam)
+			}
+		}
 		sinkURI = strings.TrimPrefix(sinkURI, `experimental-`)
-		bucketSizeStr := q.Get(sinkParamBucketSize)
-		q.Del(sinkParamBucketSize)
-		if bucketSizeStr == `` {
-			return nil, errors.Errorf(`sink param %s is required`, sinkParamBucketSize)
-		}
-		bucketSize, err := time.ParseDuration(bucketSizeStr)
-		if err != nil {
-			return nil, err
-		}
 		makeSink = func() (Sink, error) {
-			return makeCloudStorageSink(sinkURI, bucketSize, settings, opts)
+			return makeCloudStorageSink(sinkURI, nodeID, fileSize, settings, opts)
 		}
 	case sinkSchemeExperimentalSQL:
 		// Swap the changefeed prefix for the sql connection one that sqlSink
@@ -316,10 +314,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 }
 
 // Flush implements the Sink interface.
-func (s *kafkaSink) Flush(ctx context.Context, _ hlc.Timestamp) error {
-	// Ignore the timestamp and flush everything, which necessarily means that
-	// we've flushed everything >= the timestamp.
-
+func (s *kafkaSink) Flush(ctx context.Context) error {
 	flushCh := make(chan struct{}, 1)
 
 	s.mu.Lock()
@@ -540,17 +535,13 @@ func (s *sqlSink) emit(
 	messageID := builtins.GenerateUniqueInt(roachpb.NodeID(partition))
 	s.rowBuf = append(s.rowBuf, topic, partition, messageID, key, value, resolved)
 	if len(s.rowBuf)/sqlSinkEmitCols >= sqlSinkRowBatchSize {
-		var gcTs hlc.Timestamp
-		return s.Flush(ctx, gcTs)
+		return s.Flush(ctx)
 	}
 	return nil
 }
 
 // Flush implements the Sink interface.
-func (s *sqlSink) Flush(ctx context.Context, _ hlc.Timestamp) error {
-	// Ignore the timestamp and flush everything, which necessarily means that
-	// we've flushed everything >= the timestamp.
-
+func (s *sqlSink) Flush(ctx context.Context) error {
 	if len(s.rowBuf) == 0 {
 		return nil
 	}
@@ -646,7 +637,7 @@ func (s *bufferSink) EmitResolvedTimestamp(
 }
 
 // Flush implements the Sink interface.
-func (s *bufferSink) Flush(_ context.Context, _ hlc.Timestamp) error {
+func (s *bufferSink) Flush(_ context.Context) error {
 	return nil
 }
 
