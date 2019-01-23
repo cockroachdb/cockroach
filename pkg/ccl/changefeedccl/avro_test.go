@@ -75,7 +75,7 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 		for colIdx, expr := range rowTuple {
 			col := tableDesc.Columns[colIdx]
 			typedExpr, err := sqlbase.SanitizeVarFreeExpr(
-				expr, col.Type.ToDatumType(), "avro", semaCtx, evalCtx, false /* allowImpure */)
+				expr, col.Type.ToDatumType(), "avro", semaCtx, false /* allowImpure */)
 			if err != nil {
 				return nil, err
 			}

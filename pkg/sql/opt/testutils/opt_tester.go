@@ -812,7 +812,9 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	if err != nil {
 		return err
 	}
-	ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */)
+	if err := ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
+		return err
+	}
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
 	b.AllowUnsupportedExpr = ot.Flags.AllowUnsupportedExpr
 	if ot.Flags.FullyQualifyNames {
