@@ -111,7 +111,7 @@ const saveFingerprintPlanOnceEvery = 1000
 //
 // samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
 func (a *appStats) recordStatement(
-	stmt Statement,
+	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
 	optUsed bool,
@@ -157,7 +157,7 @@ func (a *appStats) recordStatement(
 
 // getStatsForStmt retrieves the per-stmt stat object.
 func (a *appStats) getStatsForStmt(
-	stmt Statement, distSQLUsed bool, optimizerUsed bool, err error, createIfNonexistent bool,
+	stmt *Statement, distSQLUsed bool, optimizerUsed bool, err error, createIfNonexistent bool,
 ) *stmtStats {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
@@ -185,7 +185,7 @@ func (a *appStats) getStatsForStmtWithKey(key stmtKey, createIfNonexistent bool)
 	return s
 }
 
-func anonymizeStmt(stmt Statement) string {
+func anonymizeStmt(stmt *Statement) string {
 	return tree.AsStringWithFlags(stmt.AST, tree.FmtHideConstants)
 }
 

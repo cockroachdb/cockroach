@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -255,6 +255,7 @@ func (dsp *DistSQLPlanner) Run(
 	// We need to close the planNode tree we translated into a DistSQL plan before
 	// flow.Cleanup, which closes memory accounts that expect to be emptied.
 	if planCtx.planner != nil && !planCtx.ignoreClose {
+		planCtx.planner.curPlan.execErr = recv.resultWriter.Err()
 		planCtx.planner.curPlan.close(ctx)
 	}
 	flow.Cleanup(ctx)
