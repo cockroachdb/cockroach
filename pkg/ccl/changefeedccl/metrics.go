@@ -62,9 +62,9 @@ func (s *metricsSink) EmitResolvedTimestamp(
 	return err
 }
 
-func (s *metricsSink) Flush(ctx context.Context, gc hlc.Timestamp) error {
+func (s *metricsSink) Flush(ctx context.Context) error {
 	start := timeutil.Now()
-	err := s.wrapped.Flush(ctx, gc)
+	err := s.wrapped.Flush(ctx)
 	if err == nil {
 		s.metrics.Flushes.Inc(1)
 		s.metrics.FlushNanos.Inc(timeutil.Since(start).Nanoseconds())

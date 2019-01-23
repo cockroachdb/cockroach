@@ -251,20 +251,31 @@ func emitEntries(
 			}
 		}
 
-		// Use the poll interval as a rough approximation of how
-		// latency-sensitive the changefeed user is. The current poller
-		// implementation means we emit a changefeed-level resolved timestamps
-		// to the user once per changefeedPollInterval. This buffering adds on
-		// average timeBetweenFlushes/2 to that latency. With timeBetweenFlushes
-		// and changefeedPollInterval both set to 1s, TPCC was seeing about 100x
-		// more time spent emitting than flushing. Dividing by 5 tries to
-		// balance these a bit, but ultimately is fairly unprincipled.
+		// If the resolved timestamp frequency is specified, use it as a rough
+		// approximation of how latency-sensitive the changefeed user is. If
+		// it's not, fall back to the poll interval.
+		//
+		// The current poller implementation means we emit a changefeed-level
+		// resolved timestamps to the user once per changefeedPollInterval. This
+		// buffering adds on average timeBetweenFlushes/2 to that latency. With
+		// timeBetweenFlushes and changefeedPollInterval both set to 1s, TPCC
+		// was seeing about 100x more time spent emitting than flushing.
+		// Dividing by 5 tries to balance these a bit, but ultimately is fairly
+		// unprincipled.
 		//
 		// NB: As long as we periodically get new span-level resolved timestamps
 		// from the poller (which should always happen, even if the watched data
 		// is not changing), then this is sufficient and we don't have to do
 		// anything fancy with timers.
-		timeBetweenFlushes := changefeedPollInterval.Get(&settings.SV) / 5
+		var timeBetweenFlushes time.Duration
+		if r, ok := details.Opts[optResolvedTimestamps]; ok && r != `` {
+			var err error
+			if timeBetweenFlushes, err = time.ParseDuration(r); err != nil {
+				return nil, err
+			}
+		} else {
+			timeBetweenFlushes = changefeedPollInterval.Get(&settings.SV) / 5
+		}
 		if len(resolvedSpans) == 0 || timeutil.Since(lastFlush) < timeBetweenFlushes {
 			return nil, nil
 		}
@@ -273,7 +284,7 @@ func emitEntries(
 		// otherwise, we could lose buffered messages and violate the
 		// at-least-once guarantee. This is also true for checkpointing the
 		// resolved spans in the job progress.
-		if err := sink.Flush(ctx, watchedSF.Frontier()); err != nil {
+		if err := sink.Flush(ctx); err != nil {
 			return nil, err
 		}
 		lastFlush = timeutil.Now()
