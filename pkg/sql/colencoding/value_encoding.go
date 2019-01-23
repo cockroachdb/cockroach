@@ -89,10 +89,10 @@ func decodeUntaggedDatumToCol(
 			vec.Int16()[idx] = int16(i)
 		case 32:
 			vec.Int32()[idx] = int32(i)
-		case 0, 64:
-			vec.Int64()[idx] = i
 		default:
-			return buf, errors.Errorf("unknown integer width %d", t.Width)
+			// Pre-2.1 BIT was using INT encoding with arbitrary sizes.
+			// We map these to 64-bit INT now. See #34161.
+			vec.Int64()[idx] = i
 		}
 	default:
 		return buf, errors.Errorf("couldn't decode type %s", t)
