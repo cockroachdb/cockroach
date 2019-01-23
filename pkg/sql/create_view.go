@@ -226,8 +226,7 @@ func (n *createViewNode) makeViewTableDesc(
 		}
 		// The new types in the CREATE VIEW column specs never use
 		// SERIAL so we need not process SERIAL types here.
-		col, _, _, err := sqlbase.MakeColumnDefDescs(
-			&columnTableDef, &params.p.semaCtx, params.EvalContext())
+		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -266,7 +265,7 @@ func MakeViewTableDesc(
 		}
 		// The new types in the CREATE VIEW column specs never use
 		// SERIAL so we need not process SERIAL types here.
-		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
+		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx)
 		if err != nil {
 			return desc, err
 		}

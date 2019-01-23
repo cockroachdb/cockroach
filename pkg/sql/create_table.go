@@ -141,7 +141,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 		desc, err = makeTableDescIfAs(
 			n.n, n.dbDesc.ID, id, creationTime, asCols,
-			privs, &params.p.semaCtx, params.EvalContext())
+			privs, &params.p.semaCtx)
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
@@ -899,7 +899,6 @@ func makeTableDescIfAs(
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
 ) (desc sqlbase.MutableTableDescriptor, err error) {
 	desc = InitTableDescriptor(id, parentID, p.Table.Table(), creationTime, privileges)
 	for i, colRes := range resultColumns {
@@ -915,7 +914,7 @@ func makeTableDescIfAs(
 
 		// The new types in the CREATE TABLE AS column specs never use
 		// SERIAL so we need not process SERIAL types here.
-		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
+		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -1004,13 +1003,13 @@ func MakeTableDesc(
 					)
 				}
 			}
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx, evalCtx)
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx)
 			if err != nil {
 				return desc, err
 			}
 
 			if d.HasDefaultExpr() {
-				changedSeqDescs, err := maybeAddSequenceDependencies(vt, &desc, col, expr, evalCtx)
+				changedSeqDescs, err := maybeAddSequenceDependencies(ctx, vt, &desc, col, expr)
 				if err != nil {
 					return desc, err
 				}
@@ -1190,7 +1189,7 @@ func MakeTableDesc(
 			// Now that we have all the other columns set up, we can validate any
 			// computed columns.
 			if d.IsComputed() {
-				if err := validateComputedColumn(&desc, n, d, semaCtx, evalCtx); err != nil {
+				if err := validateComputedColumn(&desc, n, d, semaCtx); err != nil {
 					return desc, err
 				}
 			}
@@ -1199,7 +1198,7 @@ func MakeTableDesc(
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
-			ck, err := MakeCheckConstraint(ctx, &desc, d, generatedNames, semaCtx, evalCtx, n.Table)
+			ck, err := MakeCheckConstraint(ctx, &desc, d, generatedNames, semaCtx, n.Table)
 			if err != nil {
 				return desc, err
 			}
@@ -1278,7 +1277,7 @@ func makeTableDesc(
 			privileges,
 			affected,
 			&params.p.semaCtx,
-			params.p.EvalContext(),
+			params.EvalContext(),
 		)
 	})
 	return ret, err
@@ -1400,7 +1399,6 @@ func validateComputedColumn(
 	t *tree.CreateTable,
 	d *tree.ColumnTableDef,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
 ) error {
 	if d.HasDefaultExpr() {
 		return pgerror.NewError(
@@ -1453,7 +1451,7 @@ func validateComputedColumn(
 	}
 
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		replacedExpr, coltypes.CastTargetToDatumType(d.Type), "computed column", semaCtx, evalCtx, false, /* allowImpure */
+		replacedExpr, coltypes.CastTargetToDatumType(d.Type), "computed column", semaCtx, false, /* allowImpure */
 	); err != nil {
 		return err
 	}
@@ -1505,7 +1503,6 @@ func MakeCheckConstraint(
 	d *tree.CheckConstraintTableDef,
 	inuseNames map[string]struct{},
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
 	tableName tree.TableName,
 ) (*sqlbase.TableDescriptor_CheckConstraint, error) {
 	name := string(d.Name)
@@ -1524,7 +1521,7 @@ func MakeCheckConstraint(
 	}
 
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		expr, types.Bool, "CHECK", semaCtx, evalCtx, true, /* allowImpure */
+		expr, types.Bool, "CHECK", semaCtx, true, /* allowImpure */
 	); err != nil {
 		return nil, err
 	}
