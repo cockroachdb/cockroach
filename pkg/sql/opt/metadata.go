@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -77,11 +78,34 @@ type Metadata struct {
 	// sequences stores information about each metadata sequence, indexed by SequenceID.
 	sequences []cat.Sequence
 
-	// deps stores information about all unique data sources depended on by the
-	// query, as well as the privileges required to access those data sources.
-	// The map key is the data source so that each data source is referenced at
-	// most once. The map value is the union of all required privileges.
-	deps map[cat.Object]privilegeBitmap
+	// deps stores information about all catalog objects depended on by the query,
+	// as well as the privileges required to access those objects. The objects are
+	// deduplicated: any name/object pair shows up at most once.
+	// Note: the same object can appear multiple times if different names were
+	// used. For example, in the query `SELECT * from t, db.t` the two tables
+	// might resolve to the same object now but to different objects later; we
+	// want to verify the resolution of both names.
+	deps []mdDep
+}
+
+type mdDep struct {
+	object cat.Object
+
+	// name is the unresolved name from the query that was used to resolve the
+	// object. It stores either a cat.DataSourceName, or cat.SchemaName in its
+	// TablePrefix portion, depending on the type of the object.
+	name tree.TableName
+
+	// privileges is the union of all required privileges.
+	privileges privilegeBitmap
+}
+
+func (d *mdDep) dsName() *cat.DataSourceName {
+	return &d.name
+}
+
+func (d *mdDep) schemaName() *cat.SchemaName {
+	return &d.name.TableNamePrefix
 }
 
 // Init prepares the metadata for use (or reuse).
@@ -100,37 +124,59 @@ func (md *Metadata) Init() {
 	md.schemas = md.schemas[:0]
 	md.cols = md.cols[:0]
 	md.tables = md.tables[:0]
-	md.deps = nil
+	md.deps = md.deps[:0]
 }
 
-// AddMetadata initializes the metadata with a copy of the provided metadata.
+// CopyFrom initializes the metadata with a copy of the provided metadata.
 // This metadata can then be modified independent of the copied metadata.
-func (md *Metadata) AddMetadata(from *Metadata) {
+func (md *Metadata) CopyFrom(from *Metadata) {
 	if len(md.cols) != 0 || len(md.tables) != 0 || len(md.deps) != 0 {
-		panic("AddMetadata not supported when destination metadata is not empty")
+		panic("CopyFrom requires empty destination")
 	}
 	md.schemas = append(md.schemas, from.schemas...)
 	md.cols = append(md.cols, from.cols...)
 	md.tables = append(md.tables, from.tables...)
-	md.deps = make(map[cat.Object]privilegeBitmap, len(from.deps))
-	for ds, privs := range from.deps {
-		md.deps[ds] = privs
-	}
+	md.deps = append(md.deps, from.deps...)
 }
 
-// AddDependency tracks one of the catalog objects on which the query depends,
-// as well as the privilege required to access that object. If the Memo using
-// this metadata is cached, then a call to CheckDependencies can detect if
-// changes to schema or permissions on the object has invalidated the cached
-// metadata.
-func (md *Metadata) AddDependency(o cat.Object, priv privilege.Kind) {
-	if md.deps == nil {
-		md.deps = make(map[cat.Object]privilegeBitmap)
+// AddDataSourceDependency tracks one of the catalog data sources on which the
+// query depends, as well as the privilege required to access that data source.
+// If the Memo using this metadata is cached, then a call to CheckDependencies
+// can detect if the name resolves to a different data source now, or if changes
+// to schema or permissions on the data source has invalidated the cached metadata.
+func (md *Metadata) AddDataSourceDependency(
+	name *cat.DataSourceName, ds cat.DataSource, priv privilege.Kind,
+) {
+	// Search for the same name / object pair.
+	for i := range md.deps {
+		if md.deps[i].object == ds && md.deps[i].dsName().Equals(name) {
+			md.deps[i].privileges |= (1 << priv)
+			return
+		}
 	}
+	md.deps = append(md.deps, mdDep{
+		object:     ds,
+		name:       *name,
+		privileges: (1 << priv),
+	})
+}
 
-	// Use shift operator to store union of privileges required of the object.
-	existing := md.deps[o]
-	md.deps[o] = existing | (1 << priv)
+// AddSchemaDependency tracks one of the catalog schemas on which the query depends,
+// as well as the privilege required to access that schema. If the Memo using
+// this metadata is cached, then a call to CheckDependencies can detect if
+// the name resolves to a different schema, or if the permissions on the schema
+// are no longer sufficient.
+func (md *Metadata) AddSchemaDependency(name *cat.SchemaName, s cat.Schema, priv privilege.Kind) {
+	// Search for the same name / object pair.
+	for i := range md.deps {
+		if md.deps[i].object == s && md.deps[i].schemaName().Equals(name) {
+			md.deps[i].privileges |= (1 << priv)
+			return
+		}
+	}
+	d := mdDep{object: s, privileges: (1 << priv)}
+	d.name.TableNamePrefix = *name
+	md.deps = append(md.deps, d)
 }
 
 // CheckDependencies resolves each data source and schema on which this metadata
@@ -145,35 +191,39 @@ func (md *Metadata) AddDependency(o cat.Object, priv privilege.Kind) {
 func (md *Metadata) CheckDependencies(
 	ctx context.Context, catalog cat.Catalog,
 ) (upToDate bool, err error) {
-	for dep, privs := range md.deps {
+	for i := range md.deps {
+		obj := md.deps[i].object
 		var toCheck cat.Object
-		if old, ok := dep.(cat.DataSource); ok {
+		switch obj.(type) {
+		case cat.DataSource:
+			name := *md.deps[i].dsName()
 			// Resolve data source object.
-			new, _, err := catalog.ResolveDataSource(ctx, old.Name())
+			new, _, err := catalog.ResolveDataSource(ctx, &name)
 			if err != nil {
 				return false, err
 			}
-			if !new.Equals(old) {
-				return false, nil
-			}
 			toCheck = new
-		} else if old, ok := dep.(cat.Schema); ok {
+
+		case cat.Schema:
+			name := *md.deps[i].schemaName()
 			// Resolve schema object.
-			new, _, err := catalog.ResolveSchema(ctx, old.Name())
+			new, _, err := catalog.ResolveSchema(ctx, &name)
 			if err != nil {
 				return false, err
 			}
 			toCheck = new
-		} else {
-			return false, pgerror.NewAssertionErrorf("unknown dependency type: %v", dep)
+
+		default:
+			return false, pgerror.NewAssertionErrorf("unknown dependency type: %v", obj)
 		}
 
-		// Ensure that dependency's ID has not changed.
-		if toCheck.ID() != dep.ID() {
+		// Ensure that it's the same object, and there were no schema or table
+		// statistics changes.
+		if !toCheck.Equals(obj) {
 			return false, nil
 		}
 
-		for privs != 0 {
+		for privs := md.deps[i].privileges; privs != 0; {
 			// Strip off each privilege bit and make call to CheckPrivilege for it.
 			// Note that priv == 0 can occur when a dependency was added with
 			// privilege.Kind = 0 (e.g. for a table within a view, where the table

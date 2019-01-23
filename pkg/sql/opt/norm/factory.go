@@ -185,7 +185,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 
 	// Copy all metadata so that referenced tables and columns can keep the same
 	// ids they had in the "from" memo.
-	f.mem.Metadata().AddMetadata(from.Metadata())
+	f.mem.Metadata().CopyFrom(from.Metadata())
 
 	// Replace all placeholders with their assigned values.
 	dst := f.assignPlaceholders(src)

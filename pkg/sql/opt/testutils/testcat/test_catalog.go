@@ -359,9 +359,15 @@ type Schema struct {
 
 var _ cat.Schema = &Schema{}
 
-// ID is part of the cat.Schema interface.
+// ID is part of the cat.Object interface.
 func (s *Schema) ID() cat.StableID {
 	return s.SchemaID
+}
+
+// Equals is part of the cat.Object interface.
+func (s *Schema) Equals(other cat.Object) bool {
+	otherSchema, ok := other.(*Schema)
+	return ok && s.SchemaID == otherSchema.SchemaID
 }
 
 // Name is part of the cat.Schema interface.
@@ -394,8 +400,8 @@ func (tv *View) ID() cat.StableID {
 	return tv.ViewID
 }
 
-// Equals is part of the cat.DataSource interface.
-func (tv *View) Equals(other cat.DataSource) bool {
+// Equals is part of the cat.Object interface.
+func (tv *View) Equals(other cat.Object) bool {
 	otherView, ok := other.(*View)
 	if !ok {
 		return false
@@ -453,8 +459,8 @@ func (tt *Table) ID() cat.StableID {
 	return tt.TabID
 }
 
-// Equals is part of the cat.DataSource interface.
-func (tt *Table) Equals(other cat.DataSource) bool {
+// Equals is part of the cat.Object interface.
+func (tt *Table) Equals(other cat.Object) bool {
 	otherTable, ok := other.(*Table)
 	if !ok {
 		return false
@@ -757,8 +763,8 @@ func (ts *Sequence) ID() cat.StableID {
 	return ts.SeqID
 }
 
-// Equals is part of the cat.DataSource interface.
-func (ts *Sequence) Equals(other cat.DataSource) bool {
+// Equals is part of the cat.Object interface.
+func (ts *Sequence) Equals(other cat.Object) bool {
 	otherSequence, ok := other.(*Sequence)
 	if !ok {
 		return false
