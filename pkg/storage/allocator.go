@@ -242,15 +242,15 @@ func MakeAllocator(
 // GetNeededReplicas calculates the number of replicas a range should
 // have given its zone config and the number of nodes available for
 // up-replication (i.e. not dead and not decommissioning).
-func GetNeededReplicas(zoneConfigReplicaCount int32, availableNodes int) int {
+func GetNeededReplicas(zoneConfigReplicaCount int32, clusterNodes int) int {
 	numZoneReplicas := int(zoneConfigReplicaCount)
 	need := numZoneReplicas
 
 	// Adjust the replication factor for all ranges if there are fewer
 	// nodes than replicas specified in the zone config, so the cluster
 	// can still function.
-	if availableNodes < need {
-		need = availableNodes
+	if clusterNodes < need {
+		need = clusterNodes
 	}
 
 	// Ensure that we don't up- or down-replicate to an even number of replicas
@@ -290,8 +290,8 @@ func (a *Allocator) ComputeAction(
 
 	have := len(rangeInfo.Desc.Replicas)
 	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
-	availableNodes := a.storePool.AvailableNodeCount()
-	need := GetNeededReplicas(zone.NumReplicas, availableNodes)
+	clusterNodes := a.storePool.ClusterNodeCount()
+	need := GetNeededReplicas(zone.NumReplicas, clusterNodes)
 	desiredQuorum := computeQuorum(need)
 	quorum := computeQuorum(have)
 

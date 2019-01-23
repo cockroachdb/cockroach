@@ -443,10 +443,10 @@ func (sp *StorePool) decommissioningReplicas(
 	return
 }
 
-// AvailableNodeCount returns the number of nodes that are possible allocation
+// ClusterNodeCount returns the number of nodes that are possible allocation
 // targets. This includes dead nodes, but not decommissioning or decommissioned
 // nodes.
-func (sp *StorePool) AvailableNodeCount() int {
+func (sp *StorePool) ClusterNodeCount() int {
 	return sp.nodeCountFn()
 }
 

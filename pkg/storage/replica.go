@@ -6890,7 +6890,7 @@ func (r *Replica) Metrics(
 	now hlc.Timestamp,
 	cfg config.SystemConfig,
 	livenessMap map[roachpb.NodeID]bool,
-	availableNodes int,
+	clusterNodes int,
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
@@ -6914,7 +6914,7 @@ func (r *Replica) Metrics(
 		&r.store.cfg.RaftConfig,
 		cfg,
 		livenessMap,
-		availableNodes,
+		clusterNodes,
 		desc,
 		raftStatus,
 		leaseStatus,
@@ -6942,7 +6942,7 @@ func calcReplicaMetrics(
 	raftCfg *base.RaftConfig,
 	cfg config.SystemConfig,
 	livenessMap map[roachpb.NodeID]bool,
-	availableNodes int,
+	clusterNodes int,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
 	leaseStatus LeaseStatus,
@@ -6994,7 +6994,7 @@ func calcReplicaMetrics(
 		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
 			log.Error(ctx, err)
 		} else {
-			if GetNeededReplicas(zoneConfig.NumReplicas, availableNodes) > liveReplicas {
+			if GetNeededReplicas(zoneConfig.NumReplicas, clusterNodes) > liveReplicas {
 				m.Underreplicated = true
 			}
 		}
