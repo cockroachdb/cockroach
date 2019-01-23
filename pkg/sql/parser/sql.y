@@ -142,6 +142,9 @@ func (u *sqlSymUnion) nameList() tree.NameList {
 func (u *sqlSymUnion) unresolvedName() *tree.UnresolvedName {
     return u.val.(*tree.UnresolvedName)
 }
+func (u *sqlSymUnion) unresolvedObjectName() *tree.UnresolvedObjectName {
+    return u.val.(*tree.UnresolvedObjectName)
+}
 func (u *sqlSymUnion) functionReference() tree.FunctionReference {
     return u.val.(tree.FunctionReference)
 }
@@ -771,7 +774,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
-%type <*tree.UnresolvedName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target create_stats_target
@@ -882,7 +885,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Exprs> rowsfrom_list
 %type <tree.Expr> rowsfrom_item
 %type <tree.TableExpr> joined_table
-%type <*tree.UnresolvedName> relation_expr
+%type <*tree.UnresolvedObjectName> relation_expr
 %type <tree.TableExpr> table_name_expr_opt_alias_idx table_name_expr_with_index
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
@@ -1152,20 +1155,12 @@ alter_sequence_stmt:
 alter_sequence_options_stmt:
   ALTER SEQUENCE sequence_name sequence_option_list
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.AlterSequence{Name: name, Options: $4.seqOpts(), IfExists: false}
   }
 | ALTER SEQUENCE IF EXISTS sequence_name sequence_option_list
   {
-    name, err := tree.NormalizeTableName($5.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.AlterSequence{Name: name, Options: $6.seqOpts(), IfExists: true}
   }
 
@@ -1235,20 +1230,12 @@ alter_index_stmt:
 alter_onetable_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.AlterTable{Table: name, IfExists: false, Cmds: $4.alterTableCmds()}
   }
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
-    name, err := tree.NormalizeTableName($5.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.AlterTable{Table: name, IfExists: true, Cmds: $6.alterTableCmds()}
   }
 
@@ -1265,11 +1252,7 @@ alter_oneindex_stmt:
 alter_split_stmt:
   ALTER TABLE table_name SPLIT AT select_stmt
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Split{Table: &name, Rows: $6.slct()}
   }
 
@@ -1287,11 +1270,7 @@ alter_relocate_stmt:
   ALTER TABLE table_name relocate_kw select_stmt
   {
     /* SKIP DOC */
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Relocate{Table: &name, Rows: $5.slct()}
   }
 
@@ -1306,11 +1285,7 @@ alter_relocate_lease_stmt:
   ALTER TABLE table_name relocate_kw LEASE select_stmt
   {
     /* SKIP DOC */
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Relocate{Table: &name, Rows: $6.slct(), RelocateLease: true}
   }
 
@@ -1360,11 +1335,7 @@ alter_zone_database_stmt:
 alter_zone_table_stmt:
   ALTER TABLE table_name set_zone_config
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     s := $4.setZoneConfig()
     s.ZoneSpecifier = tree.ZoneSpecifier{
        TableOrIndex: tree.TableIndexName{Table: name},
@@ -1373,11 +1344,7 @@ alter_zone_table_stmt:
   }
 | ALTER PARTITION partition_name OF TABLE table_name set_zone_config
   {
-    name, err := tree.NormalizeTableName($6.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $6.unresolvedObjectName().ToTableName()
     s := $7.setZoneConfig()
     s.ZoneSpecifier = tree.ZoneSpecifier{
        TableOrIndex: tree.TableIndexName{Table: name},
@@ -1417,20 +1384,12 @@ var_set_list:
 alter_scatter_stmt:
   ALTER TABLE table_name SCATTER
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Scatter{Table: &name}
   }
 | ALTER TABLE table_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Scatter{Table: &name, From: $7.exprs(), To: $11.exprs()}
   }
 
@@ -1753,38 +1712,22 @@ import_stmt:
 | IMPORT TABLE table_name FROM import_format '(' string_or_placeholder ')' opt_with_options
   {
     /* SKIP DOC */
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$7.expr()}, Options: $9.kvOptions()}
   }
 | IMPORT TABLE table_name FROM import_format string_or_placeholder opt_with_options
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$6.expr()}, Options: $7.kvOptions()}
   }
 | IMPORT TABLE table_name CREATE USING string_or_placeholder import_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Import{Table: &name, CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 | IMPORT TABLE table_name '(' table_elem_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Import{Table: &name, CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 | IMPORT error // SHOW HELP: IMPORT
@@ -1885,11 +1828,7 @@ opt_with_options:
 copy_from_stmt:
   COPY table_name opt_column_list FROM STDIN
   {
-    name, err := tree.NormalizeTableName($2.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $2.unresolvedObjectName().ToTableName()
     $$.val = &tree.CopyFrom{
        Table: name,
        Columns: $3.nameList(),
@@ -2008,11 +1947,7 @@ comment_stmt:
   }
 | COMMENT ON TABLE table_name IS comment_text
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CommentOnTable{Table: name, Comment: $6.strPtr()}
   }
 | COMMENT ON COLUMN column_path IS comment_text
@@ -2161,11 +2096,7 @@ opt_stats_columns:
 create_stats_target:
   table_name
   {
-    name, err := tree.NormalizeTableName($1.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $1.unresolvedObjectName().ToTableName()
     $$.val = &name
   }
 | '[' iconst64 ']'
@@ -2199,11 +2130,11 @@ changefeed_targets:
 single_table_pattern_list:
   table_name
   {
-    $$.val = tree.TablePatterns{$1.unresolvedName()}
+    $$.val = tree.TablePatterns{$1.unresolvedObjectName().ToUnresolvedName()}
   }
 | single_table_pattern_list ',' table_name
   {
-    $$.val = append($1.tablePatterns(), $3.unresolvedName())
+    $$.val = append($1.tablePatterns(), $3.unresolvedObjectName().ToUnresolvedName())
   }
 
 
@@ -2396,20 +2327,12 @@ drop_role_stmt:
 table_name_list:
   table_name
   {
-    name, err := tree.NormalizeTableName($1.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $1.unresolvedObjectName().ToTableName()
     $$.val = tree.TableNames{name}
   }
 | table_name_list ',' table_name
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = append($1.tableNames(), name)
   }
 
@@ -2765,11 +2688,7 @@ scrub_database_stmt:
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE table_name opt_as_of_clause opt_scrub_options_clause
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.Scrub{
       Typ: tree.ScrubTable,
       Table: name,
@@ -3133,21 +3052,13 @@ session_var:
 show_stats_stmt:
   SHOW STATISTICS FOR TABLE table_name
   {
-    name, err := tree.NormalizeTableName($5.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowTableStats{Table: name}
   }
 | SHOW STATISTICS USING JSON FOR TABLE table_name
   {
     /* SKIP DOC */
-    name, err := tree.NormalizeTableName($7.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowTableStats{Table: name, UsingJSON: true}
   }
 | SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
@@ -3231,11 +3142,7 @@ show_csettings_stmt:
 show_columns_stmt:
   SHOW COLUMNS FROM table_name
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowColumns{Table: name}
   }
 | SHOW COLUMNS error // SHOW HELP: SHOW COLUMNS
@@ -3279,31 +3186,19 @@ show_grants_stmt:
 show_indexes_stmt:
   SHOW INDEX FROM table_name
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowIndex{Table: name}
   }
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
 | SHOW INDEXES FROM table_name
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowIndex{Table: name}
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
 | SHOW KEYS FROM table_name
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowIndex{Table: name}
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
@@ -3315,21 +3210,13 @@ show_indexes_stmt:
 show_constraints_stmt:
   SHOW CONSTRAINT FROM table_name
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowConstraints{Table: name}
   }
 | SHOW CONSTRAINT error // SHOW HELP: SHOW CONSTRAINTS
 | SHOW CONSTRAINTS FROM table_name
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowConstraints{Table: name}
   }
 | SHOW CONSTRAINTS error // SHOW HELP: SHOW CONSTRAINTS
@@ -3499,21 +3386,13 @@ show_transaction_stmt:
 show_create_stmt:
   SHOW CREATE table_name
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowCreate{Name: name}
   }
 | SHOW CREATE create_kw table_name
   {
     /* SKIP DOC */
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowCreate{Name: name}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
@@ -3556,22 +3435,14 @@ show_zone_stmt:
   }
 | SHOW ZONE CONFIGURATION FOR TABLE table_name opt_partition
   {
-    name, err := tree.NormalizeTableName($6.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $6.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
         TableOrIndex: tree.TableIndexName{Table: name},
     }}
   }
 | SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF TABLE table_name
   {
-    name, err := tree.NormalizeTableName($9.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $9.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
       TableOrIndex: tree.TableIndexName{Table: name},
         Partition: tree.Name($6),
@@ -3600,11 +3471,7 @@ show_zone_stmt:
 show_ranges_stmt:
   SHOW ranges_kw FROM TABLE table_name
   {
-    name, err := tree.NormalizeTableName($5.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowRanges{Table: &name}
   }
 | SHOW ranges_kw FROM INDEX table_index_name
@@ -3621,11 +3488,7 @@ show_fingerprints_stmt:
   SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
   {
     /* SKIP DOC */
-    name, err := tree.NormalizeTableName($5.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowFingerprints{Table: name}
   }
 
@@ -3897,11 +3760,7 @@ pause_stmt:
 create_table_stmt:
   CREATE opt_temp TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: false,
@@ -3914,11 +3773,7 @@ create_table_stmt:
   }
 | CREATE opt_temp TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
-    name, err := tree.NormalizeTableName($7.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: true,
@@ -3938,11 +3793,7 @@ opt_table_with:
 create_table_as_stmt:
   CREATE opt_temp TABLE table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: false,
@@ -3954,11 +3805,7 @@ create_table_as_stmt:
   }
 | CREATE opt_temp TABLE IF NOT EXISTS table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
   {
-    name, err := tree.NormalizeTableName($7.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: true,
@@ -4028,11 +3875,7 @@ table_elem:
 opt_interleave:
   INTERLEAVE IN PARENT table_name '(' name_list ')' opt_interleave_drop_behavior
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.InterleaveDef{
       Parent: name,
       Fields: $6.nameList(),
@@ -4232,11 +4075,7 @@ col_qualification_elem:
   }
 | REFERENCES table_name opt_name_parens key_match reference_actions
  {
-    name, err := tree.NormalizeTableName($2.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $2.unresolvedObjectName().ToTableName()
     $$.val = &tree.ColumnFKConstraint{
       Table: name,
       Col: tree.Name($3),
@@ -4343,11 +4182,7 @@ constraint_elem:
 | FOREIGN KEY '(' name_list ')' REFERENCES table_name
     opt_column_list key_match reference_actions opt_deferrable
   {
-    name, err := tree.NormalizeTableName($7.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.ForeignKeyConstraintTableDef{
       Table: name,
       FromCols: $4.nameList(),
@@ -4523,20 +4358,12 @@ numeric_only:
 create_sequence_stmt:
   CREATE opt_temp SEQUENCE sequence_name opt_sequence_option_list
   {
-    name, err := tree.NormalizeTableName($4.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateSequence{Name: name, Options: $5.seqOpts()}
   }
 | CREATE opt_temp SEQUENCE IF NOT EXISTS sequence_name opt_sequence_option_list
   {
-    name, err := tree.NormalizeTableName($7.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateSequence{Name: name, Options: $8.seqOpts(), IfNotExists: true}
   }
 | CREATE opt_temp SEQUENCE error // SHOW HELP: CREATE SEQUENCE
@@ -4638,11 +4465,7 @@ role_or_group:
 create_view_stmt:
   CREATE opt_temp opt_view_recursive VIEW view_name opt_column_list AS select_stmt
   {
-    name, err := tree.NormalizeTableName($5.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
       Name: name,
       ColumnNames: $6.nameList(),
@@ -4687,11 +4510,7 @@ create_type_stmt:
 create_index_stmt:
   CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
   {
-    table, err := tree.NormalizeTableName($6.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    table := $6.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
       Name:    tree.Name($4),
       Table:   table,
@@ -4705,11 +4524,7 @@ create_index_stmt:
   }
 | CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
   {
-    table, err := tree.NormalizeTableName($9.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    table := $9.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($7),
       Table:       table,
@@ -4724,11 +4539,7 @@ create_index_stmt:
   }
 | CREATE opt_unique INVERTED INDEX opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
   {
-    table, err := tree.NormalizeTableName($7.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    table := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
       Name:       tree.Name($5),
       Table:      table,
@@ -4742,11 +4553,7 @@ create_index_stmt:
   }
 | CREATE opt_unique INVERTED INDEX IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
   {
-    table, err := tree.NormalizeTableName($10.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    table := $10.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($8),
       Table:       table,
@@ -4859,39 +4666,19 @@ alter_user_password_stmt:
 alter_rename_table_stmt:
   ALTER TABLE relation_expr RENAME TO table_name
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    newName, err := tree.NormalizeTableName($6.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
+    newName := $6.unresolvedObjectName().ToTableName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: false, IsView: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO table_name
   {
-    name, err := tree.NormalizeTableName($5.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    newName, err := tree.NormalizeTableName($8.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $5.unresolvedObjectName().ToTableName()
+    newName := $8.unresolvedObjectName().ToTableName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsView: false}
   }
 | ALTER TABLE relation_expr RENAME opt_column column_name TO column_name
   {
-    table, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    table := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.RenameColumn{
       Table:    table,
       Name:     tree.Name($6),
@@ -4901,11 +4688,7 @@ alter_rename_table_stmt:
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME opt_column column_name TO column_name
   {
-    table, err := tree.NormalizeTableName($5.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    table := $5.unresolvedObjectName().ToTableName()
     $$.val = &tree.RenameColumn{
       Table:    table,
       Name:     tree.Name($8),
@@ -4921,60 +4704,28 @@ alter_rename_table_stmt:
 alter_rename_view_stmt:
   ALTER VIEW relation_expr RENAME TO view_name
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    newName, err := tree.NormalizeTableName($6.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
+    newName := $6.unresolvedObjectName().ToTableName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: false, IsView: true}
   }
 | ALTER VIEW IF EXISTS relation_expr RENAME TO view_name
   {
-    name, err := tree.NormalizeTableName($5.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    newName, err := tree.NormalizeTableName($8.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $5.unresolvedObjectName().ToTableName()
+    newName := $8.unresolvedObjectName().ToTableName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsView: true}
   }
 
 alter_rename_sequence_stmt:
   ALTER SEQUENCE relation_expr RENAME TO sequence_name
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    newName, err := tree.NormalizeTableName($6.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
+    newName := $6.unresolvedObjectName().ToTableName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: false, IsSequence: true}
   }
 | ALTER SEQUENCE IF EXISTS relation_expr RENAME TO sequence_name
   {
-    name, err := tree.NormalizeTableName($5.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    newName, err := tree.NormalizeTableName($8.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $5.unresolvedObjectName().ToTableName()
+    newName := $8.unresolvedObjectName().ToTableName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsSequence: true}
   }
 
@@ -5335,11 +5086,7 @@ upsert_stmt:
 insert_target:
   table_name
   {
-    name, err := tree.NormalizeTableName($1.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $1.unresolvedObjectName().ToTableName()
     $$.val = &name
   }
 // Can't easily make AS optional here, because VALUES in insert_rest would have
@@ -5348,11 +5095,7 @@ insert_target:
 // divergence from other places. So just require AS for now.
 | table_name AS table_alias_name
   {
-    name, err := tree.NormalizeTableName($1.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $1.unresolvedObjectName().ToTableName()
     $$.val = &tree.AliasedTableExpr{Expr: &name, As: tree.AliasClause{Alias: tree.Name($3)}}
   }
 
@@ -5859,20 +5602,12 @@ sortby:
   }
 | PRIMARY KEY table_name opt_asc_desc
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Order{OrderType: tree.OrderByIndex, Direction: $4.dir(), Table: name}
   }
 | INDEX table_name '@' index_name opt_asc_desc
   {
-    name, err := tree.NormalizeTableName($2.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $2.unresolvedObjectName().ToTableName()
     $$.val = &tree.Order{
       OrderType: tree.OrderByIndex,
       Direction: $5.dir(),
@@ -6157,11 +5892,7 @@ table_ref:
   }
 | relation_expr opt_index_flags opt_ordinality opt_alias_clause
   {
-    name, err := tree.NormalizeTableName($1.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $1.unresolvedObjectName().ToTableName()
     $$.val = &tree.AliasedTableExpr{
       Expr:       &name,
       IndexFlags: $2.indexFlags(),
@@ -6375,28 +6106,20 @@ join_qual:
   }
 
 relation_expr:
-  table_name              { $$.val = $1.unresolvedName() }
-| table_name '*'          { $$.val = $1.unresolvedName() }
-| ONLY table_name         { $$.val = $2.unresolvedName() }
-| ONLY '(' table_name ')' { $$.val = $3.unresolvedName() }
+  table_name              { $$.val = $1.unresolvedObjectName() }
+| table_name '*'          { $$.val = $1.unresolvedObjectName() }
+| ONLY table_name         { $$.val = $2.unresolvedObjectName() }
+| ONLY '(' table_name ')' { $$.val = $3.unresolvedObjectName() }
 
 relation_expr_list:
   relation_expr
   {
-    name, err := tree.NormalizeTableName($1.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $1.unresolvedObjectName().ToTableName()
     $$.val = tree.TableNames{name}
   }
 | relation_expr_list ',' relation_expr
   {
-    name, err := tree.NormalizeTableName($3.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $3.unresolvedObjectName().ToTableName()
     $$.val = append($1.tableNames(), name)
   }
 
@@ -6428,11 +6151,7 @@ table_name_expr_opt_alias_idx:
 table_name_expr_with_index:
   table_name opt_index_flags
   {
-    name, err := tree.NormalizeTableName($1.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $1.unresolvedObjectName().ToTableName()
     $$.val = &tree.AliasedTableExpr{
       Expr: &name,
       IndexFlags: $2.indexFlags(),
@@ -8484,11 +8203,7 @@ table_pattern_list:
 table_index_name:
   table_name '@' index_name
   {
-    name, err := tree.NormalizeTableName($1.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $1.unresolvedObjectName().ToTableName()
     $$.val = tree.TableIndexName{
        Table: name,
        Index: tree.UnrestrictedName($3),
@@ -8497,11 +8212,7 @@ table_index_name:
 | standalone_index_name
   {
     // Treat it as a table name, then pluck out the TableName.
-    name, err := tree.NormalizeTableName($1.unresolvedName())
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    name := $1.unresolvedObjectName().ToTableName()
     indexName := tree.UnrestrictedName(name.TableName)
     name.TableName = ""
     $$.val = tree.TableIndexName{
@@ -8522,12 +8233,18 @@ table_index_name:
 //   *
 table_pattern:
   simple_db_object_name
+  {
+     $$.val = $1.unresolvedObjectName().ToUnresolvedName()
+  }
 | complex_table_pattern
 
 // complex_table_pattern is the part of table_pattern which recognizes
 // every pattern not composed of a single identifier.
 complex_table_pattern:
   complex_db_object_name
+  {
+     $$.val = $1.unresolvedObjectName().ToUnresolvedName()
+  }
 | db_object_name_component '.' unrestricted_name '.' '*'
   {
      $$.val = &tree.UnresolvedName{Star: true, NumParts: 3, Parts: tree.NameParts{"", $3, $1}}
@@ -8760,7 +8477,12 @@ db_object_name:
 simple_db_object_name:
   db_object_name_component
   {
-    $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
+    res, err := tree.NewUnresolvedObjectName(1, [3]string{$1})
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = res
   }
 
 // complex_db_object_name is the part of db_object_name that recognizes
@@ -8770,11 +8492,21 @@ simple_db_object_name:
 complex_db_object_name:
   db_object_name_component '.' unrestricted_name
   {
-    $$.val = &tree.UnresolvedName{NumParts:2, Parts: tree.NameParts{$3,$1}}
+    res, err := tree.NewUnresolvedObjectName(2, [3]string{$3, $1})
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = res
   }
 | db_object_name_component '.' unrestricted_name '.' unrestricted_name
   {
-    $$.val = &tree.UnresolvedName{NumParts:3, Parts: tree.NameParts{$5,$3,$1}}
+    res, err := tree.NewUnresolvedObjectName(3, [3]string{$5, $3, $1})
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = res
   }
 
 // DB object name component -- this cannot not include any reserved

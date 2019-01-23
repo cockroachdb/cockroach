@@ -511,7 +511,7 @@ func newInvColRef(fmt string, n *UnresolvedName) error {
 	return pgerror.NewErrorWithDepthf(1, pgerror.CodeInvalidColumnReferenceError, fmt, n)
 }
 
-func newInvTableNameError(n *UnresolvedName) error {
+func newInvTableNameError(n fmt.Stringer) error {
 	return pgerror.NewErrorWithDepthf(1, pgerror.CodeInvalidNameError,
 		"invalid table name: %s", n)
 }

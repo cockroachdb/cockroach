@@ -108,7 +108,7 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`*.b`, ``, ``, `syntax error at or near "\."`},
 		{`"".*`, ``, ``, `invalid table name: "".\*`},
 		{`a."".*`, ``, ``, `invalid table name: a\.""\.\*`},
-		{`a.b."".*`, ``, ``, `syntax error at or near "\."`},
+		{`a.b."".*`, ``, ``, `invalid table name: a.b.""`},
 		// CockroachDB extension: empty catalog name.
 		{`"".b.*`, `"".b.*`, `"".b.*`, ``},
 
