@@ -137,7 +137,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		500, "Size in GB of EBS volume, only used if local-ssd=false")
 	flags.IntVar(&o.EBSProvisionedIOPs, ProviderName+"-ebs-iops",
 		1000, "Number of IOPs to provision, only used if "+ProviderName+
-			"-ebs-volume-type=io2")
+			"-ebs-volume-type=io1")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet) {
