@@ -133,35 +133,33 @@ func TestSplitFinderKey(t *testing.T) {
 
 	testCases := []struct {
 		reservoir      [splitKeySampleSize]sample
-		splitByLoad    bool
 		splitByLoadKey roachpb.Key
 	}{
 		// Test an empty reservoir.
-		{basicReservoir, false, nil},
+		{basicReservoir, nil},
 		// Test reservoir with no load should have no splits.
-		{noLoadReservoir, false, nil},
+		{noLoadReservoir, nil},
 		// Test a uniform reservoir (Splits at the first key)
-		{uniformReservoir, true, keys.MakeTablePrefix(ReservoirKeyOffset)},
+		{uniformReservoir, keys.MakeTablePrefix(ReservoirKeyOffset)},
 		// Testing a non-uniform reservoir.
-		{nonUniformReservoir, true, keys.MakeTablePrefix(ReservoirKeyOffset + splitKeySampleSize/2)},
+		{nonUniformReservoir, keys.MakeTablePrefix(ReservoirKeyOffset + splitKeySampleSize/2)},
 		// Test a load heavy reservoir on a single hot key. Splitting can't help here.
-		{singleHotKeyReservoir, false, nil},
+		{singleHotKeyReservoir, nil},
 		// Test a load heavy reservoir on multiple hot keys. Splits between the hot keys.
-		{multipleHotKeysReservoir, true, keys.MakeTablePrefix(ReservoirKeyOffset + 1)},
+		{multipleHotKeysReservoir, keys.MakeTablePrefix(ReservoirKeyOffset + 1)},
 		// Test a spanning reservoir. Splitting will be bad here. Should avoid it.
-		{spanningReservoir, false, nil},
+		{spanningReservoir, nil},
 		// Test that splits happen between two heavy spans.
-		{multipleSpanReservoir, true, keys.MakeTablePrefix(ReservoirKeyOffset + splitKeySampleSize/2)},
+		{multipleSpanReservoir, keys.MakeTablePrefix(ReservoirKeyOffset + splitKeySampleSize/2)},
 	}
 
 	for i, test := range testCases {
-		finder := New(timeutil.Now())
+		finder := NewFinder(timeutil.Now())
 		finder.samples = test.reservoir
-		if splitByLoad, splitByLoadKey := finder.Key(); splitByLoad != test.splitByLoad ||
-			!bytes.Equal(splitByLoadKey, test.splitByLoadKey) {
+		if splitByLoadKey := finder.Key(); !bytes.Equal(splitByLoadKey, test.splitByLoadKey) {
 			t.Errorf(
-				"%d: expected splitByLoad: %t and splitByLoadKey: %v, but got splitByLoad: %t and splitByLoadKey: %v",
-				i, test.splitByLoad, test.splitByLoadKey, splitByLoad, splitByLoadKey)
+				"%d: expected splitByLoadKey: %v, but got splitByLoadKey: %v",
+				i, test.splitByLoadKey, splitByLoadKey)
 		}
 	}
 }
@@ -266,7 +264,7 @@ func TestSplitFinderRecorder(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		finder := New(timeutil.Now())
+		finder := NewFinder(timeutil.Now())
 		finder.samples = test.currReservoir
 		finder.count = test.currCount
 		finder.Record(test.recordSpan, test.intNFn)

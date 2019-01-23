@@ -41,36 +41,31 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	config.TestingSetZoneConfig(2000, config.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
 	config.TestingSetZoneConfig(2002, config.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
 
-	minQPSForSplit := SplitByLoadQPSThreshold.Get(&tc.store.ClusterSettings().SV)
-
 	testCases := []struct {
 		start, end roachpb.RKey
 		bytes      int64
-		QPS        float64
 		maxBytes   int64
 		shouldQ    bool
 		priority   float64
 	}{
 		// No intersection, no bytes, no load.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 0, 0, 64 << 20, false, 0},
+		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 0, 64 << 20, false, 0},
 		// Intersection in zone, no bytes, no load.
-		{keys.MakeTablePrefix(2001), roachpb.RKeyMax, 0, 0, 64 << 20, true, 1},
+		{keys.MakeTablePrefix(2001), roachpb.RKeyMax, 0, 64 << 20, true, 1},
 		// Already split at largest ID, no load.
-		{keys.MakeTablePrefix(2002), roachpb.RKeyMax, 0, 0, 32 << 20, false, 0},
+		{keys.MakeTablePrefix(2002), roachpb.RKeyMax, 0, 32 << 20, false, 0},
 		// Multiple intersections, no bytes, no load.
-		{roachpb.RKeyMin, roachpb.RKeyMax, 0, 0, 64 << 20, true, 1},
+		{roachpb.RKeyMin, roachpb.RKeyMax, 0, 64 << 20, true, 1},
 		// No intersection, max bytes, no load.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 20, 0, 64 << 20, false, 0},
+		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 20, 64 << 20, false, 0},
 		// No intersection, max bytes+1, no load.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64<<20 + 1, 0, 64 << 20, true, 1},
+		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64<<20 + 1, 64 << 20, true, 1},
 		// No intersection, max bytes * 2, no load.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 21, 0, 64 << 20, true, 2},
+		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 21, 64 << 20, true, 2},
 		// Intersection, max bytes +1, no load.
-		{keys.MakeTablePrefix(2000), roachpb.RKeyMax, 32<<20 + 1, 0, 32 << 20, true, 2},
+		{keys.MakeTablePrefix(2000), roachpb.RKeyMax, 32<<20 + 1, 32 << 20, true, 2},
 		// Split needed at table boundary, but no zone config, no load.
-		{keys.MakeTablePrefix(2001), roachpb.RKeyMax, 32<<20 + 1, 0, 64 << 20, true, 1},
-		// Split needed because of load.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 0, float64(minQPSForSplit), 64 << 20, true, 1},
+		{keys.MakeTablePrefix(2001), roachpb.RKeyMax, 32<<20 + 1, 64 << 20, true, 1},
 	}
 
 	cfg := tc.gossip.GetSystemConfig()
@@ -93,9 +88,6 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		repl.mu.Lock()
 		repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: test.bytes}
 		repl.mu.Unlock()
-		repl.splitMu.Lock()
-		repl.splitMu.qps = test.QPS
-		repl.splitMu.Unlock()
 		zoneConfig := config.DefaultZoneConfig()
 		zoneConfig.RangeMaxBytes = proto.Int64(test.maxBytes)
 		repl.SetZoneConfig(&zoneConfig)
@@ -103,8 +95,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// Testing using shouldSplitRange instead of shouldQueue to avoid using the splitFinder
 		// This tests the merge queue behavior too as a result. For splitFinder tests,
 		// see split/split_test.go.
-		shouldQ, priority := shouldSplitRange(repl.Desc(), repl.GetMVCCStats(),
-			repl.GetSplitQPS(), repl.SplitByLoadQPSThreshold(), repl.GetMaxBytes(), cfg)
+		shouldQ, priority := shouldSplitRange(repl.Desc(), repl.GetMVCCStats(), repl.GetMaxBytes(), cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}
@@ -113,8 +104,3 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		}
 	}
 }
-
-////
-// NOTE: tests which actually verify processing of the split queue are
-// in client_split_test.go, which is in a different test package in
-// order to allow for distributed transactions with a proper client.
