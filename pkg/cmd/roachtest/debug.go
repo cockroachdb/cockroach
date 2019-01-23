@@ -80,8 +80,8 @@ func registerDebug(r *registry) {
 
 	for _, n := range []int{3} {
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("debug/nodes=%d", n),
-			Nodes: nodes(n),
+			Name:    fmt.Sprintf("debug/nodes=%d", n),
+			Cluster: makeClusterSpec(n),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runDebug(ctx, t, c)
 			},
@@ -147,8 +147,8 @@ func registerDebugHeap(r *registry) {
 
 	for _, n := range []int{3} {
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("debug/heap/nodes=%d", n),
-			Nodes: nodes(n),
+			Name:    fmt.Sprintf("debug/heap/nodes=%d", n),
+			Cluster: makeClusterSpec(n),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runDebug(ctx, t, c)
 			},

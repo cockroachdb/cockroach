@@ -224,7 +224,7 @@ func registerRestore(r *registry) {
 	} {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf("restore2TB/nodes=%d", item.nodes),
-			Nodes:   nodes(item.nodes),
+			Cluster: makeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Put(ctx, cockroach, "./cockroach")

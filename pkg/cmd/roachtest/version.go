@@ -235,7 +235,7 @@ func registerVersion(r *registry) {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("version/mixedWith=%s/nodes=%d", mixedWithVersion, n),
 			MinVersion: "v2.1.0",
-			Nodes:      nodes(n + 1),
+			Cluster:    makeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runVersion(ctx, t, c, mixedWithVersion)
 			},

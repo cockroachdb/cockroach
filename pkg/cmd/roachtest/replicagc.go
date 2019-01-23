@@ -24,15 +24,15 @@ import (
 func registerReplicaGC(r *registry) {
 
 	r.Add(testSpec{
-		Name:  "replicagc-changed-peers/withRestart",
-		Nodes: nodes(6),
+		Name:    "replicagc-changed-peers/withRestart",
+		Cluster: makeClusterSpec(6),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runReplicaGCChangedPeers(ctx, t, c, true /* withRestart */)
 		},
 	})
 	r.Add(testSpec{
-		Name:  "replicagc-changed-peers/noRestart",
-		Nodes: nodes(6),
+		Name:    "replicagc-changed-peers/noRestart",
+		Cluster: makeClusterSpec(6),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runReplicaGCChangedPeers(ctx, t, c, false /* withRestart */)
 		},

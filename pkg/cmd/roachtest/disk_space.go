@@ -77,7 +77,7 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 		cmd := cmd // Copy is important for goroutine.
 		i := i     // Ditto.
 
-		cmd = fmt.Sprintf(cmd, nodes)
+		cmd = fmt.Sprintf(cmd, makeClusterSpec)
 		m.Go(func() error {
 			quietL, err := c.l.ChildLogger("kv-"+strconv.Itoa(i), quietStdout)
 			if err != nil {
@@ -318,7 +318,7 @@ func registerDiskUsage(r *registry) {
 		r.Add(
 			testSpec{
 				Name:       fmt.Sprintf("disk_space/tc=%s", testCase.name),
-				Nodes:      nodes(numNodes),
+				Cluster:    makeClusterSpec(numNodes),
 				MinVersion: "v2.1.0", // cockroach debug ballast
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					if local {

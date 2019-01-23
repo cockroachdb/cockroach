@@ -115,11 +115,10 @@ type testSpec struct {
 	// tests. If no tags are specified, the set ["default"] is automatically
 	// given.
 	Tags []string
-
-	// Nodes provides the specification for the cluster to use for the test. Only
+	// Cluster provides the specification for the cluster to use for the test. Only
 	// a top-level testSpec may contain a nodes specification. The cluster is
 	// shared by all subtests.
-	Nodes []nodeSpec
+	Cluster clusterSpec
 
 	// UseIOBarrier controls the local-ssd-no-ext4-barrier flag passed to
 	// roachprod when creating a cluster. If set, the flag is not passed, and so
@@ -356,7 +355,7 @@ func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 		return fmt.Errorf("%s: timeouts only apply to tests specifying Run", spec.Name)
 	}
 
-	if depth > 0 && len(spec.Nodes) > 0 {
+	if depth > 0 && spec.Cluster.NodeCount > 0 {
 		return fmt.Errorf("%s: subtest may not provide cluster specification", spec.Name)
 	}
 
@@ -1034,7 +1033,7 @@ func (r *registry) runAsync(
 				}
 				cfg := clusterConfig{
 					name:         name,
-					nodes:        t.spec.Nodes,
+					nodes:        t.spec.Cluster,
 					useIOBarrier: t.spec.UseIOBarrier,
 					artifactsDir: t.ArtifactsDir(),
 					localCluster: local,
@@ -1051,7 +1050,7 @@ func (r *registry) runAsync(
 					skipWipe:       r.config.skipClusterWipeOnAttach,
 				}
 				var err error
-				c, err = attachToExistingCluster(ctx, clusterName, t.l, t.spec.Nodes, opt)
+				c, err = attachToExistingCluster(ctx, clusterName, t.l, t.spec.Cluster, opt)
 				FatalIfErr(t, err)
 			}
 			if c != nil {
