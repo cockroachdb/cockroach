@@ -310,10 +310,10 @@ func UnmarshalColumnValueToCol(
 			vec.Int16()[idx] = int16(v)
 		case 32:
 			vec.Int32()[idx] = int32(v)
-		case 0, 64:
-			vec.Int64()[idx] = v
 		default:
-			return errors.Errorf("invalid int width: %d", typ.Width)
+			// Pre-2.1 BIT was using INT encoding with arbitrary sizes.
+			// We map these to 64-bit INT now. See #34161.
+			vec.Int64()[idx] = v
 		}
 	case sqlbase.ColumnType_FLOAT:
 		var v float64

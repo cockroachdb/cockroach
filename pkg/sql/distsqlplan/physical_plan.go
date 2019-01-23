@@ -903,17 +903,22 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 // type alias, which doesn't effect the merging of values. There is
 // also special handling for "naked" int types of no defined size.
 func equivalentTypes(c, other *sqlbase.ColumnType) bool {
-	// Convert a "naked" INT type to INT8. The 64-bit value is for
-	// historical compatibility before all INTs were assigned an
-	// explicit width at parse time.
+	// Convert pre-2.1 and pre-2.2 INTs to INT8.
 	lhs := *c
-	if lhs.SemanticType == sqlbase.ColumnType_INT && lhs.Width == 0 {
-		lhs.Width = 64
+	if lhs.SemanticType == sqlbase.ColumnType_INT {
+		// Pre-2.2 INT without size was assigned width 0.
+		// Pre-2.1 BIT was assigned arbitrary width, and is mapped to INT8 post-2.1. See #34161.
+		if lhs.Width != 64 && lhs.Width != 32 && lhs.Width != 16 {
+			lhs.Width = 64
+		}
 	}
 
 	rhs := *other
-	if rhs.SemanticType == sqlbase.ColumnType_INT && rhs.Width == 0 {
-		rhs.Width = 64
+	if rhs.SemanticType == sqlbase.ColumnType_INT {
+		// See above.
+		if rhs.Width != 64 && rhs.Width != 32 && rhs.Width != 16 {
+			rhs.Width = 64
+		}
 	}
 	rhs.VisibleType = c.VisibleType
 	return lhs.Equal(rhs)
