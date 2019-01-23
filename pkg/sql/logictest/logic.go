@@ -163,9 +163,9 @@ import (
 //            test will be retried with exponential backoff up to some maximum
 //            duration. If the test succeeds at any time during that period, it
 //            is considered successful. Otherwise, it is a failure. See
-//            testutils.SucceedsSoon for more information. If run with the flag
-//            -rewrite-results-in-testfiles=true, inserts a 500ms sleep before
-//            executing the query once.
+//            testutils.SucceedsSoon for more information. If run with the
+//            -rewrite flag, inserts a 500ms sleep before executing the query
+//            once.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -356,7 +356,7 @@ var (
 			"or -flex-types.",
 	)
 	rewriteResultsInTestfiles = flag.Bool(
-		"rewrite-results-in-testfiles", false,
+		"rewrite", false,
 		"ignore the expected results and rewrite the test files with the actual results from this "+
 			"run. Used to update tests when a change affects many cases; please verify the testfile "+
 			"diffs carefully!",
@@ -1500,8 +1500,8 @@ func (t *logicTest) processSubtest(
 									// even if there is whitespace in the value.
 									query.expectedResults = append(query.expectedResults, strings.Join(results, " "))
 								} else {
-									// Don't error if --rewrite-results-in-testfiles is specified,
-									// since the expected results are ignored in that case.
+									// Don't error if --rewrite is specified, since the expected
+									// results are ignored in that case.
 									if !*rewriteResultsInTestfiles && len(results) != len(query.colTypes) {
 										return errors.Errorf("expected results are invalid: unexpected column count")
 									}
