@@ -5245,25 +5245,27 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 	}{
 		{0, []uint64{0}, 0, nil},
 		{1, []uint64{1}, 0, nil},
-		{1, []uint64{0, 1}, 0, []uint64{0}},
+		{1, []uint64{0, 1}, 0, nil},
+		{1, []uint64{1, 2}, 0, []uint64{1, 2}},
 		{1, []uint64{1, 2, 3}, 0, []uint64{1, 2, 3}},
 		{2, []uint64{1, 2, 3}, 0, []uint64{1}},
 		{3, []uint64{1, 2, 3}, 0, nil},
 		{1, []uint64{1, 2, 3, 4}, 0, []uint64{1, 2, 3, 4}},
 		{2, []uint64{1, 2, 3, 4}, 0, []uint64{1, 2, 3, 4}},
-		{3, []uint64{1, 2, 3, 4}, 0, []uint64{1, 2}},
+		{3, []uint64{1, 2, 3, 4}, 0, nil},
 		{2, []uint64{1, 2, 3, 4, 5}, 0, []uint64{1, 2, 3, 4, 5}},
 		{3, []uint64{1, 2, 3, 4, 5}, 0, []uint64{1, 2}},
 		{1, []uint64{1, 0}, 2, nil},
-		// TODO(peter): Is this the desired behavior? For a 2-replica range, we
-		// won't be able to process the removal of a replica unless both are
-		// up-to-date.
-		{1, []uint64{1, 0}, 1, []uint64{0}},
+		{1, []uint64{2, 1}, 2, []uint64{2}},
+		{1, []uint64{1, 0}, 1, nil},
+		{1, []uint64{2, 1}, 1, []uint64{1}},
 		{3, []uint64{3, 2, 1}, 3, nil},
 		{3, []uint64{3, 2, 0}, 3, nil},
-		{3, []uint64{4, 3, 2, 1}, 4, []uint64{2}},
-		{3, []uint64{4, 3, 2, 0}, 3, []uint64{0}},
-		{3, []uint64{4, 3, 2, 0}, 4, []uint64{2}},
+		{2, []uint64{4, 3, 2, 1}, 4, []uint64{4, 3, 2}},
+		{2, []uint64{4, 3, 2, 0}, 3, []uint64{4, 3, 0}},
+		{2, []uint64{4, 3, 2, 0}, 4, []uint64{4, 3, 2}},
+		{3, []uint64{4, 3, 2, 1}, 0, nil},
+		{3, []uint64{4, 3, 2, 1}, 4, nil},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -5313,7 +5315,7 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 		expected          []uint64
 	}{
 		{1, []uint64{1, 0}, 2, []uint64{1}},
-		{1, []uint64{1, 0}, 1, []uint64{0}},
+		{1, []uint64{1, 0}, 1, nil},
 		{3, []uint64{3, 2, 1}, 3, []uint64{2}},
 		{3, []uint64{3, 2, 0}, 3, []uint64{2}},
 		{3, []uint64{4, 3, 2, 1}, 4, []uint64{4, 3, 2}},
