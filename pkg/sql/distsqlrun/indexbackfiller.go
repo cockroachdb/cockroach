@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -121,6 +122,27 @@ func (ib *indexBackfiller) runChunk(
 		return nil, err
 	}
 
+	// TODO(dt): Skip bulk-adder if there are too few entries for SST overhead.
+	enabled := backfill.BulkWriteIndex.Get(&ib.flowCtx.Settings.SV)
+	if enabled {
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Key.Compare(entries[j].Key) < 0
+		})
+		adder, err := ib.flowCtx.BullkAdder(ctx, ib.flowCtx.ClientDB, 32<<10, readAsOf)
+		if err != nil {
+			return nil, err
+		}
+		defer adder.Close()
+		for i := range entries {
+			if err := adder.Add(ctx, entries[i].Key, entries[i].Value.RawBytes); err != nil {
+				return nil, err
+			}
+		}
+		if err := adder.Flush(ctx); err != nil {
+			return nil, err
+		}
+		return key, nil
+	}
 	retried := false
 	// Write the new index values.
 	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
