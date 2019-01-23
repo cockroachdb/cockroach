@@ -91,12 +91,15 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	tn, alias := getAliasedTableName(upd.Table)
 
 	// Find which table we're working on, check the permissions.
-	tab := b.resolveTable(tn, privilege.UPDATE)
+	tab, resName := b.resolveTable(tn, privilege.UPDATE)
 
 	// Check Select permission as well, since existing values must be read.
 	b.checkPrivilege(tab, privilege.SELECT)
 
 	var mb mutationBuilder
+	if alias == nil {
+		alias = &resName
+	}
 	mb.init(b, opt.UpdateOp, tab, alias)
 
 	// Build the input expression that selects the rows that will be updated:

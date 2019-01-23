@@ -155,7 +155,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	tn, alias := getAliasedTableName(ins.Table)
 
 	// Find which table we're working on, check the permissions.
-	tab := b.resolveTable(tn, privilege.INSERT)
+	tab, resName := b.resolveTable(tn, privilege.INSERT)
 
 	if ins.OnConflict != nil {
 		// UPSERT and INDEX ON CONFLICT will read from the table to check for
@@ -170,6 +170,9 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	}
 
 	var mb mutationBuilder
+	if alias == nil {
+		alias = &resName
+	}
 	mb.init(b, opt.InsertOp, tab, alias)
 
 	// Compute target columns in two cases:

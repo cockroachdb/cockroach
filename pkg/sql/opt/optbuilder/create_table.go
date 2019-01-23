@@ -29,7 +29,8 @@ import (
 // buildCreateTable constructs a CreateTable operator based on the CREATE TABLE
 // statement.
 func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outScope *scope) {
-	sch := b.resolveSchemaForCreate(&ct.Table)
+	sch, resName := b.resolveSchemaForCreate(&ct.Table)
+	ct.Table.TableNamePrefix = resName
 	schID := b.factory.Metadata().AddSchema(sch)
 
 	// HoistConstraints normalizes any column constraints in the CreateTable AST
