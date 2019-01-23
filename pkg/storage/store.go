@@ -4252,10 +4252,10 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	if s.cfg.NodeLiveness != nil {
 		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
 	}
-	availableNodes := s.AvailableNodeCount()
+	clusterNodes := s.ClusterNodeCount()
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
-		metrics := rep.Metrics(ctx, timestamp, livenessMap, availableNodes)
+		metrics := rep.Metrics(ctx, timestamp, livenessMap, clusterNodes)
 		if metrics.Leader {
 			raftLeaderCount++
 			if metrics.LeaseValid && !metrics.Leaseholder {
@@ -4347,15 +4347,14 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	return nil
 }
 
-// AvailableNodeCount returns this store's view of the number of nodes
-// in the cluster. This is the metric used for adapative zone configs;
-// ranges will not be reported as underreplicated if it is low. Tests
-// that wait for full replication by tracking the underreplicated
-// metric must also check for the expected AvailableNodeCount to avoid
-// catching the cluster while the first node is initialized but the
-// other nodes are not.
-func (s *Store) AvailableNodeCount() int {
-	return s.cfg.StorePool.AvailableNodeCount()
+// ClusterNodeCount returns this store's view of the number of nodes in the
+// cluster. This is the metric used for adapative zone configs; ranges will not
+// be reported as underreplicated if it is low. Tests that wait for full
+// replication by tracking the underreplicated metric must also check for the
+// expected ClusterNodeCount to avoid catching the cluster while the first node
+// is initialized but the other nodes are not.
+func (s *Store) ClusterNodeCount() int {
+	return s.cfg.StorePool.ClusterNodeCount()
 }
 
 // HotReplicaInfo contains a range descriptor and its QPS.
