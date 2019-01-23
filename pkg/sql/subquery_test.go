@@ -33,7 +33,8 @@ func TestStartSubqueriesReturnsError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.makePlan(context.TODO(), Statement{Statement: stmt}); err != nil {
+	p.stmt = &Statement{Statement: stmt}
+	if err := p.makePlan(context.TODO()); err != nil {
 		t.Fatal(err)
 	}
 	params := runParams{ctx: context.TODO(), p: p, extendedEvalCtx: &p.extendedEvalCtx}

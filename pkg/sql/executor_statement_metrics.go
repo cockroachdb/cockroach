@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -86,23 +87,30 @@ var _ metric.Struct = EngineMetrics{}
 // MetricStruct is part of the metric.Struct interface.
 func (EngineMetrics) MetricStruct() {}
 
+func (ex *connExecutor) maybeSavePlan(
+	ctx context.Context, p *planner,
+) *roachpb.ExplainTreePlanNode {
+	if ex.saveLogicalPlanDescription(
+		p.stmt,
+		p.curPlan.flags.IsSet(planFlagDistributed),
+		p.curPlan.flags.IsSet(planFlagOptUsed),
+		p.curPlan.execErr) {
+		// If statement plan sample is requested, collect a sample.
+		return planToTree(ctx, &p.curPlan)
+	}
+	return nil
+}
+
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.
-// - samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
 // - distSQLUsed reports whether the query was distributed.
 // - automaticRetryCount is the count of implicit txn retries
 //   so far.
 // - result is the result set computed by the query/statement.
 // - err is the error encountered, if any.
 func (ex *connExecutor) recordStatementSummary(
-	planner *planner,
-	stmt Statement,
-	samplePlanDescription *roachpb.ExplainTreePlanNode,
-	planFlags planFlags,
-	automaticRetryCount int,
-	rowsAffected int,
-	err error,
+	ctx context.Context, planner *planner, automaticRetryCount int, rowsAffected int, err error,
 ) {
 	phaseTimes := planner.statsCollector.PhaseTimes()
 
@@ -127,10 +135,12 @@ func (ex *connExecutor) recordStatementSummary(
 	// overhead latency: txn/retry management, error checking, etc
 	execOverhead := svcLat - processingLat
 
+	stmt := planner.stmt
+	flags := planner.curPlan.flags
 	if automaticRetryCount == 0 {
-		ex.updateOptCounters(planFlags)
+		ex.updateOptCounters(flags)
 		m := &ex.metrics.EngineMetrics
-		if planFlags.IsSet(planFlagDistributed) {
+		if flags.IsSet(planFlagDistributed) {
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)
 			}
@@ -141,9 +151,15 @@ func (ex *connExecutor) recordStatementSummary(
 		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 	}
 
+	// Close the plan if this was not done earlier.
+	// This also ensures that curPlan.savedPlanForStats is
+	// collected (see maybeSavePlan).
+	planner.curPlan.execErr = err
+	planner.curPlan.close(ctx)
+
 	planner.statsCollector.RecordStatement(
-		stmt, samplePlanDescription,
-		planFlags.IsSet(planFlagDistributed), planFlags.IsSet(planFlagOptUsed),
+		stmt, planner.curPlan.savedPlanForStats,
+		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagOptUsed),
 		automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)
