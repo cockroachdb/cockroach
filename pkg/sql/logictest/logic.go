@@ -38,8 +38,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -63,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 // This file is home to TestLogic, a general-purpose engine for
@@ -349,7 +348,7 @@ var (
 			"or -flex-types.",
 	)
 	rewriteResultsInTestfiles = flag.Bool(
-		"rewrite-results-in-testfiles", false,
+		"rewrite", false,
 		"ignore the expected results and rewrite the test files with the actual results from this "+
 			"run. Used to update tests when a change affects many cases; please verify the testfile "+
 			"diffs carefully!",
@@ -1445,8 +1444,8 @@ func (t *logicTest) processSubtest(
 									// even if there is whitespace in the value.
 									query.expectedResults = append(query.expectedResults, strings.Join(results, " "))
 								} else {
-									// Don't error if --rewrite-results-in-testfiles is specified,
-									// since the expected results are ignored in that case.
+									// Don't error if --rewrite is specified, since the expected
+									// results are ignored in that case.
 									if !*rewriteResultsInTestfiles && len(results) != len(query.colTypes) {
 										return errors.Errorf("expected results are invalid: unexpected column count")
 									}
