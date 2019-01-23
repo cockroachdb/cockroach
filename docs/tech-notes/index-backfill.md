@@ -199,3 +199,186 @@ tombstone when it expects a `9` and fails. When retried transactionally, the
 The above scenarios are exercised in a unit test in
 `pkg/sql/indexbackfiller_test.go`. If this tech note is updated, please ensure
 that the updates are propagated to that test.
+
+# Bulk-backfill via AddSSTable
+
+Writing lots and lots of data put-by-put is expensive -- the write amplification
+of putting them all in the Raft, the WAL, compacting, etc all adds up. While we
+pay these costs on normal writes because we need the benefits those mechanisms
+are providing (durability, txn isolation, etc), when doing big, bulk operations
+using bulk-friendly operations can have significant benefits.
+
+Specifically, AddSSTable is relatively cheaper way to ingest a large amount of
+data compare to putting it via KV, even in batches. Given that an index backfill
+potentially needs to ingest a large amount of data, this is an appealing option.
+
+However, part of what makes these requests cheaper is the different semantics,
+such as their lack of transactional semantics, so it is not quite a drop-in
+replacement for the current batches of init-puts, and of course raises different
+correctness and stability concerns.
+
+## Bulk-backfill Overview
+
+More specifically, we'll want to read much larger chunks at a time and build
+SSTables of the produced entries.
+
+There are two main questions / challenges to address with this approach though:
+1) How we actually build and ingest the SSTs i.e. how many files we make and how
+  much they overlap.
+2) How we handle the difference in transitional / KV semantics between InitPuts
+  (which have transactional isolation and return an error if they hit an
+  existing row) and AddSSTable (which does not have transactional isolation or
+  InitPut semantics).
+
+## Challenge: Index entries produced from some chunk of the source table span many ranges.
+
+As each chunk of the table is read and batches of index entries are produced,
+those entries can be all over the key space of the index. Simply making the
+whole batch a single SST will require many retires to correctly split since
+AddSSTable can only add to a single range.
+
+### Fix for SSTs that span ranges: Teach SST builder to split at known range boundaries
+
+We're still need to handle an unexpected split and retry with rebuilt SSTs for
+either side of the split, but we can use the local cache to at least _try_ to
+avoid building an SST across a split, and instead flush before crossing the
+split boundary.
+
+## Challenge: SSTs of Index entries from separate chunks of the table overlap and ingest at higher levels
+
+The batches of entries produced by separate chunks of the table overlap so
+ingesting those SST will  mean placing them at higher levels -- since they have
+to be placed at the highest non-overlapping level, they will likely end up in L0
+relatively quickly. One of the major benefits of ingesting raw SSTs is avoiding
+write amplification, part of which is from lower ingestion avoiding rewriting in
+compactions.
+
+## Challenge: too many overlapping ingestions can kill RocksDB
+
+With many chunk readers producing lots of potentially small, overlapping files
+e.g. one producer per node, each producer potentially reads a chunk produces has
+at least 2 keys for every range that span the range, thus every range receives
+num-nodes files that overlap at least all but one end up in L0. Every
+overlapping ingestion can cause a memtable flush and its associated overhead,
+plus the raw number of files in L0 can be an issue -- Rocks will back pressure
+and eventually stop writes if we spam it too much.
+
+### Potential fix for too many L0 files: Sort all produced entries across nodes before ingestion
+
+IMPORT has exactly one writer responsible for making and adding the SSTs some
+key range -- any producer that makes a key for that range must send it to that
+writer rather than produce and apply its own SST. Currently this writer buffers
+all the keys sent to it before iterating them in order to produce ordered,
+non-overlapping SSTs to add. Combined with writing to new, unused key space,
+this means IMPORTS ssts are ingested at L6 and see almost no compaction-derived
+write application.
+
+However, we currently believe this process -- the distributed sort and buffering
+-- is expensive.
+
+### Challenge: Dist-sort/buffering/non-overlapping writing is slow and requires lots of buffer space
+
+We currently buffer the entire content before we start writing to ensure we can
+sort and write completely non-overlapping SSTs, meaning we require significant
+(i.e. 2x the data size) available free space in order to import.
+
+The buffering and reading itself is also slow -- currently it is actually
+writing each key to another RocksDB to buffer it, which obviously has some of
+the same costs we initially tried to avoid be writing entire SSTs instead of
+writing keys to a RocksDB.
+
+#### Fix for costly dist-sort/buffering: tune the buffering and flush the writer
+
+We could likely tune this sort and its buffering steps to reduce this cost.
+
+One proposed fix for the cost of buffering and sorting is replacing the RocksDB
+buffering with a simpler buffer-n-entries before flush to SST, then use
+multi-iterator over SSTs for ordered reading.
+
+Another proposal is to sort and ingest the buffered data when it reaches some
+threshold, even if more is being produced --this would allow _some_ potential
+for overlapping ingestion which might push some files higher, but would no
+longer require unbounded buffering space to do the total sort required to avoid
+overlapping files.
+
+Any wins here would likely help IMPORT as well.
+
+### Potential fix for L0 spam without a sort
+
+We could also back pressure AddSSTable before regular writes to let the
+compactor catch up. If we get the worst-case key distribution where we produce
+many small files, then the compactor should be able to compact them relatively
+quickly and the delay should be minimal. If we're producing lots of large files,
+then we need to back off anyway to let the compactor catch up. We will see
+higher write application, but we've to some degree just moved it from the
+buffering stage down to the compactor (theory: rocks is pretty good at
+compacting, and we're not great at buffering).
+
+This approach can probably be used in IMPORT too if it works, eliminating the
+dist-sort?
+
+
+## Challenge: AddSSTable is non-transactional and does not have InitPut semantics
+
+Currently the schema change advances an index to the DELETE_AND_WRITE state
+before backfilling -- this means that CRUD ops will write index entries, and
+these writes and the backfill writes are both transactional and thus protected
+against the usual anomalies. If a query were to try to write a duplicate value,
+one of either the index backfill write or the query write will succeed and the
+other will (perhaps after being pushed/retried), get a conflict from its InitPut
+and yield a uniqueness violation error.
+
+AddSSTable however adds its batch of keys, which can each have any timestamp,
+without consulting the timestamp cache, potentially rewriting history out from
+under prior reads or shadowing existing keys at lower timestamps. This means the
+backfiller could add a batch of entries including clobbering an entry written by
+a query when one of the two should have instead failed.
+
+### Rejected Fix: Teach AddSSTable to be transactional
+
+We've looked at, and opted against, trying to teach AddSSTable to be more
+transactional -- the point of it is to be cheaper than KV, and teaching it KV's
+fancy tricks would likely start to defeat that purpose. For example, if we e.g.
+teach it to check the timestamp cache (and optionally ensure the keys in the SST
+match the command time), retrying a whole SST because of a conflicting is
+expensive, and again, our goal is to make this cheaper.
+
+### Rejected Fix: Teach AddSSTable to behave like InitPut w.r.t existing keys
+
+Furthermore, we'd need more than just proper transactional semantics -- the
+current index backfill relies on the InitPut semantics to correctly return
+uniqueness conflict errors. Here again, we considered, and rejected, teaching
+AddSST to support those semantics. Doing so would likely use a flag that added a
+check the current iteration of the underlying range (for computing merged MVCC
+stats) to check if any of the existing keys conflicted with keys in the SST --
+and if so, return an error instead of ingesting it. However, as with
+transactional isolation, it isn't clear that we actually want to reject the
+whole SST. A rejected SST would be retried -- it might then find an actual
+anomaly, or it might find that a query's point-write changed a stored column or
+something. Retrying might have other challenges -- a) we want to make big SSTs
+to minimize overhead, but that maximizes retry cost and also maximizes the
+chance a given SST will require a retry -- with it eventually approaching a
+certainty. It also isn't clear how we'd actually do the retry -- e.g. in a
+dist-sort based approach, the chunk readers are divorced from the actual SST
+that was rejected, so we'd need to figure that out. And, at a high level, the
+simplicity of ingestion is what makes AddSSTable fast. The more we mess with it,
+the more likely it could lose the attribute that makes it appealing in the first
+place.
+
+### Conflict and Anomaly Fix: Counting Entries
+
+Overall it seems easier to simply cede perfect conflict detection during the
+backfill and instead look for violations after the backfill has completed. We
+think we can do this cheaply, by simply counting the entries in the backfilled
+index --  violations potentially allowed by the lack of initput semantics or
+transactional conflicts would manifest as writers for two different rows to the
+same index entry (one of which should have failed), meaning that there would be
+fewer index entries than rows. By comparing the table row count to the index
+entry count we can determine if this happened (and potentially then do a more
+expensive search for an actual violation to provide in the error message?).
+
+Obviously just having the correct number of keys does not prove an index has the
+right keys, or that they have the right values, but for the specific failure
+mode of the anomalies and semantics changes we're introducing, it appears to
+suffice and is hopefully inexpensive (easily parallelized, potentially able to
+use a fast MVCC count or other pushed-down op).
