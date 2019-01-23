@@ -39,6 +39,10 @@ func TestMemo(t *testing.T) {
 	runDataDrivenTest(t, "testdata/memo", flags)
 }
 
+func TestFormat(t *testing.T) {
+	runDataDrivenTest(t, "testdata/format", memo.ExprFmtShowAll)
+}
+
 func TestLogicalProps(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications | memo.ExprFmtHideStats
 	runDataDrivenTest(t, "testdata/logprops/", flags)

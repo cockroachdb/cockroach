@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,14 +12,12 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package testutils
+package execbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -55,7 +53,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, nd opt.Expr) bool {
 	}
 
 	// Build the scalar expression and format it as a single tree node.
-	bld := execbuilder.New(nil /* factory */, f.Memo, nd, nil /* evalCtx */)
+	bld := New(nil /* factory */, f.Memo, nd, nil /* evalCtx */)
 	md := f.Memo.Metadata()
 	ivh := tree.MakeIndexedVarHelper(nil /* container */, md.NumColumns())
 	expr, err := bld.BuildScalar(&ivh)
@@ -86,36 +84,4 @@ func onlyScalars(nd opt.Expr) bool {
 		}
 	}
 	return true
-}
-
-type indexedVarContainer struct {
-	md *opt.Metadata
-}
-
-var _ tree.IndexedVarContainer = &indexedVarContainer{}
-
-// IndexedVarEval is part of the tree.IndexedVarContainer interface.
-func (c *indexedVarContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	panic("not implemented")
-}
-
-// IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
-func (c *indexedVarContainer) IndexedVarResolvedType(idx int) types.T {
-	return c.md.ColumnMeta(opt.ColumnID(idx)).Type
-}
-
-// IndexedVarEval is part of the tree.IndexedVarContainer interface.
-func (c *indexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return &varFormatter{alias: c.md.ColumnMeta(opt.ColumnID(idx)).Alias}
-}
-
-type varFormatter struct {
-	alias string
-}
-
-var _ tree.NodeFormatter = &varFormatter{}
-
-// Format is part of the tree.NodeFormatter interface.
-func (v *varFormatter) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(v.alias)
 }

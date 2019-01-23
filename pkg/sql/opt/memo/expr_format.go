@@ -68,7 +68,19 @@ const (
 	// them with the SQL expression (if possible).
 	ExprFmtHideScalars
 
-	// ExprFmtHideAll shows only the most basic properties of the expression.
+	// ExprFmtHideOrderings hides all orderings.
+	ExprFmtHideOrderings
+
+	// ExprFmtHideTypes hides type information from columns and scalar
+	// expressions.
+	ExprFmtHideTypes
+
+	// ExprFmtHideColumns removes column information.
+	ExprFmtHideColumns
+
+	// ExprFmtHideAll shows only the basic structure of the expression.
+	// Note: this flag should be used judiciously, as its meaning changes whenever
+	// we add more flags.
 	ExprFmtHideAll ExprFmtFlags = (1 << iota) - 1
 )
 
@@ -214,20 +226,20 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	// and internal ordering in addition to full set of columns.
 	case *GroupByExpr, *ScalarGroupByExpr, *DistinctOnExpr:
 		private := e.Private().(*GroupingPrivate)
-		if !private.GroupingCols.Empty() {
+		if !f.HasFlags(ExprFmtHideColumns) && !private.GroupingCols.Empty() {
 			f.formatColList(e, tp, "grouping columns:", opt.ColSetToList(private.GroupingCols))
 		}
-		if !private.Ordering.Any() {
+		if !f.HasFlags(ExprFmtHideOrderings) && !private.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", private.Ordering)
 		}
 
 	case *LimitExpr:
-		if !t.Ordering.Any() {
+		if !f.HasFlags(ExprFmtHideOrderings) && !t.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", t.Ordering)
 		}
 
 	case *OffsetExpr:
-		if !t.Ordering.Any() {
+		if !f.HasFlags(ExprFmtHideOrderings) && !t.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", t.Ordering)
 		}
 
@@ -235,9 +247,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	// input columns that correspond to the output columns.
 	case *UnionExpr, *IntersectExpr, *ExceptExpr,
 		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr:
-		private := e.Private().(*SetPrivate)
-		f.formatColList(e, tp, "left columns:", private.LeftCols)
-		f.formatColList(e, tp, "right columns:", private.RightCols)
+		if !f.HasFlags(ExprFmtHideColumns) {
+			private := e.Private().(*SetPrivate)
+			f.formatColList(e, tp, "left columns:", private.LeftCols)
+			f.formatColList(e, tp, "right columns:", private.RightCols)
+		}
 
 	case *ScanExpr:
 		if t.Constraint != nil {
@@ -269,57 +283,71 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		for i := range idxCols {
 			idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal)
 		}
-		tp.Childf("key columns: %v = %v", t.KeyCols, idxCols)
+		if !f.HasFlags(ExprFmtHideColumns) {
+			tp.Childf("key columns: %v = %v", t.KeyCols, idxCols)
+		}
 
 	case *ZigzagJoinExpr:
-		tp.Childf("eq columns: %v = %v", t.LeftEqCols, t.RightEqCols)
-		leftVals := make([]tree.Datum, len(t.LeftFixedCols))
-		rightVals := make([]tree.Datum, len(t.RightFixedCols))
-		// FixedVals is always going to be a ScalarListExpr, containing tuples,
-		// containing one ScalarListExpr, containing ConstExprs.
-		for i := range t.LeftFixedCols {
-			leftVals[i] = t.FixedVals[0].Child(0).Child(i).(*ConstExpr).Value
+		if !f.HasFlags(ExprFmtHideColumns) {
+			tp.Childf("eq columns: %v = %v", t.LeftEqCols, t.RightEqCols)
+			leftVals := make([]tree.Datum, len(t.LeftFixedCols))
+			rightVals := make([]tree.Datum, len(t.RightFixedCols))
+			// FixedVals is always going to be a ScalarListExpr, containing tuples,
+			// containing one ScalarListExpr, containing ConstExprs.
+			for i := range t.LeftFixedCols {
+				leftVals[i] = t.FixedVals[0].Child(0).Child(i).(*ConstExpr).Value
+			}
+			for i := range t.RightFixedCols {
+				rightVals[i] = t.FixedVals[1].Child(0).Child(i).(*ConstExpr).Value
+			}
+			tp.Childf("left fixed columns: %v = %v", t.LeftFixedCols, leftVals)
+			tp.Childf("right fixed columns: %v = %v", t.RightFixedCols, rightVals)
 		}
-		for i := range t.RightFixedCols {
-			rightVals[i] = t.FixedVals[1].Child(0).Child(i).(*ConstExpr).Value
-		}
-		tp.Childf("left fixed columns: %v = %v", t.LeftFixedCols, leftVals)
-		tp.Childf("right fixed columns: %v = %v", t.RightFixedCols, rightVals)
 
 	case *MergeJoinExpr:
-		tp.Childf("left ordering: %s", t.LeftEq)
-		tp.Childf("right ordering: %s", t.RightEq)
+		if !f.HasFlags(ExprFmtHideOrderings) {
+			tp.Childf("left ordering: %s", t.LeftEq)
+			tp.Childf("right ordering: %s", t.RightEq)
+		}
 
 	case *InsertExpr:
-		if len(colList) == 0 {
-			tp.Child("columns: <none>")
+		if !f.HasFlags(ExprFmtHideColumns) {
+			if len(colList) == 0 {
+				tp.Child("columns: <none>")
+			}
+			f.formatMutation(e, tp, "insert-mapping:", t.InsertCols, t.Table)
+			f.formatColList(e, tp, "check columns:", t.CheckCols)
 		}
-		f.formatMutation(e, tp, "insert-mapping:", t.InsertCols, t.Table)
-		f.formatColList(e, tp, "check columns:", t.CheckCols)
 
 	case *UpdateExpr:
-		if len(colList) == 0 {
-			tp.Child("columns: <none>")
+		if !f.HasFlags(ExprFmtHideColumns) {
+			if len(colList) == 0 {
+				tp.Child("columns: <none>")
+			}
+			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+			f.formatMutation(e, tp, "update-mapping:", t.UpdateCols, t.Table)
+			f.formatColList(e, tp, "check columns:", t.CheckCols)
 		}
-		f.formatColList(e, tp, "fetch columns:", t.FetchCols)
-		f.formatMutation(e, tp, "update-mapping:", t.UpdateCols, t.Table)
-		f.formatColList(e, tp, "check columns:", t.CheckCols)
 
 	case *UpsertExpr:
-		if len(colList) == 0 {
-			tp.Child("columns: <none>")
+		if !f.HasFlags(ExprFmtHideColumns) {
+			if len(colList) == 0 {
+				tp.Child("columns: <none>")
+			}
+			tp.Childf("canary column: %d", t.CanaryCol)
+			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+			f.formatMutation(e, tp, "insert-mapping:", t.InsertCols, t.Table)
+			f.formatMutation(e, tp, "update-mapping:", t.UpdateCols, t.Table)
+			f.formatColList(e, tp, "check columns:", t.CheckCols)
 		}
-		tp.Childf("canary column: %d", t.CanaryCol)
-		f.formatColList(e, tp, "fetch columns:", t.FetchCols)
-		f.formatMutation(e, tp, "insert-mapping:", t.InsertCols, t.Table)
-		f.formatMutation(e, tp, "update-mapping:", t.UpdateCols, t.Table)
-		f.formatColList(e, tp, "check columns:", t.CheckCols)
 
 	case *DeleteExpr:
-		if len(colList) == 0 {
-			tp.Child("columns: <none>")
+		if !f.HasFlags(ExprFmtHideColumns) {
+			if len(colList) == 0 {
+				tp.Child("columns: <none>")
+			}
+			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
 		}
-		f.formatColList(e, tp, "fetch columns:", t.FetchCols)
 
 	case *CreateTableExpr:
 		tp.Child(t.Syntax.String())
@@ -383,7 +411,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 	}
 
-	if !required.Ordering.Any() {
+	if !f.HasFlags(ExprFmtHideOrderings) && !required.Ordering.Any() {
 		if f.HasFlags(ExprFmtHideMiscProps) {
 			tp.Childf("ordering: %s", required.Ordering.String())
 		} else {
@@ -511,7 +539,7 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 			fmt.Fprintf(f.Buffer, format, args...)
 		}
 
-		if typ != types.Any {
+		if !f.HasFlags(ExprFmtHideTypes) && typ != types.Any {
 			writeProp("type=%s", typ)
 		}
 
@@ -586,6 +614,9 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 func (f *ExprFmtCtx) formatColumns(
 	nd RelExpr, tp treeprinter.Node, cols opt.ColList, presentation physical.Presentation,
 ) {
+	if f.HasFlags(ExprFmtHideColumns) {
+		return
+	}
 	if presentation.Any() {
 		f.formatColList(nd, tp, "columns:", cols)
 		return
@@ -687,7 +718,7 @@ func formatCol(
 	f.Buffer.WriteString(label)
 	f.Buffer.WriteByte(':')
 	fmt.Fprintf(f.Buffer, "%d", id)
-	if !omitType {
+	if !f.HasFlags(ExprFmtHideTypes) && !omitType {
 		f.Buffer.WriteByte('(')
 		f.Buffer.WriteString(colMeta.Type.String())
 

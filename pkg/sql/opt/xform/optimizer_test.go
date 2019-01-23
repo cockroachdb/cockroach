@@ -121,7 +121,17 @@ func TestCoster(t *testing.T) {
 //   ...
 func TestPhysicalProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runDataDrivenTest(t, "testdata/physprops/", memo.ExprFmtHideAll)
+	runDataDrivenTest(
+		t, "testdata/physprops/",
+		memo.ExprFmtHideMiscProps|
+			memo.ExprFmtHideConstraints|
+			memo.ExprFmtHideFuncDeps|
+			memo.ExprFmtHideRuleProps|
+			memo.ExprFmtHideStats|
+			memo.ExprFmtHideCost|
+			memo.ExprFmtHideQualifications|
+			memo.ExprFmtHideScalars,
+	)
 }
 
 // TestRuleProps files can be run separately like this:
