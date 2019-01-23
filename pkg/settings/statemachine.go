@@ -88,7 +88,7 @@ func (*StateMachineSetting) Typ() string {
 func (s *StateMachineSetting) Get(sv *Values) string {
 	encV := sv.getGeneric(s.slotIdx)
 	if encV == nil {
-		defV, _, err := s.transformer(sv, nil, nil)
+		defV, _, err := s.transformer(sv, nil /* old */, nil /* update */)
 		if err != nil {
 			panic(err)
 		}
@@ -116,8 +116,9 @@ func (s *StateMachineSetting) Validate(
 	return s.transformer(sv, old, update)
 }
 
+// set is part of the Setting interface.
 func (s *StateMachineSetting) set(sv *Values, finalEncodedV []byte) error {
-	if _, _, err := s.transformer(sv, finalEncodedV, nil); err != nil {
+	if _, _, err := s.transformer(sv, finalEncodedV, nil /* update */); err != nil {
 		return err
 	}
 	if bytes.Equal([]byte(s.Get(sv)), finalEncodedV) {
@@ -127,15 +128,11 @@ func (s *StateMachineSetting) set(sv *Values, finalEncodedV []byte) error {
 	return nil
 }
 
-func (s *StateMachineSetting) setToDefault(sv *Values) {
-	defV, _, err := s.transformer(sv, nil, nil)
-	if err != nil {
-		panic(err)
-	}
-	if err := s.set(sv, defV); err != nil {
-		panic(err)
-	}
-}
+// setToDefault is part of the Setting interface.
+//
+// This is a no-op for StateMachineSettings. They don't have defaults that they
+// can go back to at any time.
+func (s *StateMachineSetting) setToDefault(_ *Values) {}
 
 // RegisterStateMachineSetting registers a StateMachineSetting. See the comment
 // for StateMachineSetting for details.

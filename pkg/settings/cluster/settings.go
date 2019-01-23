@@ -242,7 +242,7 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 	s.Tracer.Configure(sv)
 
 	version.SetOnChange(sv, func() {
-		_, obj, err := version.Validate(sv, []byte(version.Get(sv)), nil)
+		_, obj, err := version.Validate(sv, []byte(version.Get(sv)), nil /* update */)
 		if err != nil {
 			log.Fatal(context.Background(), err)
 		}
@@ -285,6 +285,16 @@ func (sv *stringedVersion) String() string {
 // It has access to the Settings struct via the opaque member of settings.Values.
 // The returned versionStringer must, when printed, only return strings that are
 // safe to include in diagnostics reporting.
+//
+// Args:
+// curRawProto: The current value of the setting - an encoded ClusterVersion
+//   proto. Can be empty if the setting is not yet set, in which case the
+//   "default" value will be used.
+// versionBump: A string indicating the proposed new value of the setting. Can
+//   be nil, in which case validation is performed and the current value (or the
+//   "default") is returned. Gossip updates pass the incoming gossipped value to
+//   curRawProto and nil for versionBump. SHOW CLUSTE SETTING passes the KV
+//   value as curRawProto and nil as versionBump.
 func versionTransformer(
 	sv *settings.Values, curRawProto []byte, versionBump *string,
 ) (newRawProto []byte, versionStringer interface{}, _ error) {

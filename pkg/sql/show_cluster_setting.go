@@ -74,7 +74,7 @@ func (p *planner) showStateMachineSetting(
 			// value, and the corresponding sql migration that makes sure
 			// the above select finds something usually runs pretty quickly
 			// when the cluster is bootstrapped.
-			kvRawVal, kvObj, err := s.Validate(&st.SV, prevRawVal, nil)
+			kvRawVal, kvObj, err := s.Validate(&st.SV, prevRawVal, nil /* update */)
 			if err != nil {
 				return errors.Errorf("unable to read existing value: %s", err)
 			}
@@ -83,7 +83,7 @@ func (p *planner) showStateMachineSetting(
 			// kvRawVal (which is taken from `st.SV` in this case too).
 			gossipRawVal := []byte(s.Get(&st.SV))
 
-			_, gossipObj, err := s.Validate(&st.SV, gossipRawVal, nil)
+			_, gossipObj, err := s.Validate(&st.SV, gossipRawVal, nil /* update */)
 			if err != nil {
 				gossipObj = fmt.Sprintf("<error: %s>", err)
 			}
