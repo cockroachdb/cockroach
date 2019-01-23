@@ -30,12 +30,4 @@ type DataSource interface {
 	// ExplicitCatalog and ExplicitSchema fields will always be true, since all
 	// parts of the name are always specified.
 	Name() *DataSourceName
-
-	// Equals returns true if this DataSource is identical to the given
-	// DataSource.
-	//
-	// This is used for invalidating cached plans and must return false whenever
-	// the schema or statistics of a data source changed between the times the two
-	// data sources were resolved.
-	Equals(other DataSource) bool
 }

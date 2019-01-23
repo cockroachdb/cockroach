@@ -541,7 +541,33 @@ query error pq: relation "othertable" does not exist
 EXECUTE change_db_2
 
 statement ok
+CREATE TABLE othertable (a INT PRIMARY KEY, b INT); INSERT INTO othertable (a, b) VALUES (2, 20)
+
+query II
+EXECUTE change_db_2
+----
+2  20
+
+# Same test with a query which refers to the same table twice initially, but
+# later the two tables are different.
+statement ok
+PREPARE change_db_3 AS SELECT * from othertable AS t1, test.othertable AS t2
+
+query IIII
+EXECUTE change_db_3
+----
+2 20 2 20
+
+statement ok
 USE otherdb
+
+query IIII
+EXECUTE change_db_3
+----
+1 10 2 20
+
+statement ok
+DROP TABLE test.othertable
 
 ## Search path change: Change the search path and ensure that the prepared plan
 ## is invalidated.
@@ -558,6 +584,49 @@ SET search_path = pg_catalog
 
 query error pq: relation "othertable" does not exist
 EXECUTE change_search_path
+
+## New table in search path: check tricky case where originally resolved table
+## still exists but re-resolving with new search path yields another table.
+statement ok
+SET search_path=public,pg_catalog
+
+# During prepare, pg_type resolves to pg_catalog.pg_type.
+statement ok
+PREPARE new_table_in_search_path AS SELECT typname FROM pg_type
+
+statement ok
+CREATE TABLE pg_type(typname STRING); INSERT INTO pg_type VALUES('test')
+
+# Now, it should resolve to the table we just created.
+query T
+EXECUTE new_table_in_search_path
+----
+test
+
+statement ok
+DROP TABLE pg_type
+
+## Even more tricky case: the query has two table references that resolve to
+## the same table now, but later resolve to separate tables.
+statement ok
+PREPARE new_table_in_search_path_2 AS
+  SELECT a.typname, b.typname FROM pg_type AS a, pg_catalog.pg_type AS b ORDER BY a.typname, b.typname LIMIT 1
+
+query TT
+EXECUTE new_table_in_search_path_2
+----
+_bit _bit
+
+statement ok
+CREATE TABLE pg_type(typname STRING); INSERT INTO pg_type VALUES('test')
+
+query TT
+EXECUTE new_table_in_search_path_2
+----
+test _bit
+
+statement ok
+DROP TABLE pg_type
 
 statement ok
 RESET search_path

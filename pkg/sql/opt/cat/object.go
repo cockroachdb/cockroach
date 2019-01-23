@@ -19,4 +19,13 @@ type Object interface {
 	// ID is the unique, stable identifier for this object. See the comment for
 	// StableID for more detail.
 	ID() StableID
+
+	// Equals returns true if this object is identical to the given Object.
+	//
+	// Two objects are identical if they have the same identifier and there were
+	// no changes to schema or table statistics between the times the two objects
+	// were resolved.
+	//
+	// Used for invalidating cached plans.
+	Equals(other Object) bool
 }
