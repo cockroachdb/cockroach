@@ -1421,7 +1421,17 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 	if explain.Options.Mode == tree.ExplainOpt {
 		// Special case: EXPLAIN (OPT). Put the formatted expression in
 		// a valuesNode.
-		textRows := strings.Split(strings.Trim(explain.Input.String(), "\n"), "\n")
+		fmtFlags := memo.ExprFmtHideAll
+		switch {
+		case explain.Options.Flags.Contains(tree.ExplainFlagVerbose):
+			fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
+
+		case explain.Options.Flags.Contains(tree.ExplainFlagTypes):
+			fmtFlags = memo.ExprFmtHideQualifications
+		}
+		f := memo.MakeExprFmtCtx(fmtFlags, b.mem)
+		f.FormatExpr(explain.Input)
+		textRows := strings.Split(strings.Trim(f.Buffer.String(), "\n"), "\n")
 		rows := make([][]tree.TypedExpr, len(textRows))
 		for i := range textRows {
 			rows[i] = []tree.TypedExpr{tree.NewDString(textRows[i])}

@@ -46,7 +46,10 @@ func registerUpgrade(r *registry) {
 		}
 
 		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
-		c.Start(ctx, t, c.Range(1, nodes))
+
+		// NB: remove startArgsDontEncrypt across this file once we're not running
+		// roachtest against v2.1 any more (which would start a v2.0 cluster here).
+		c.Start(ctx, t, c.Range(1, nodes), startArgsDontEncrypt)
 
 		const stageDuration = 30 * time.Second
 		const timeUntilStoreDead = 90 * time.Second
@@ -143,7 +146,7 @@ func registerUpgrade(r *registry) {
 				t.Fatal(err)
 			}
 			c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-			c.Start(ctx, t, c.Node(i))
+			c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
 			}
@@ -165,7 +168,7 @@ func registerUpgrade(r *registry) {
 			t.Fatal(err)
 		}
 		c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
-		c.Start(ctx, t, c.Node(nodes))
+		c.Start(ctx, t, c.Node(nodes), startArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -206,7 +209,7 @@ func registerUpgrade(r *registry) {
 		}
 
 		// Restart the previously stopped node.
-		c.Start(ctx, t, c.Node(nodes-1))
+		c.Start(ctx, t, c.Node(nodes-1), startArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -353,7 +356,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 				for _, node := range nodes {
 					t.l.Printf("%s: upgrading node %d\n", newVersion, node)
 					c.Stop(ctx, c.Node(node))
-					c.Start(ctx, t, c.Node(node), args)
+					c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
 
 					checkNode(node, newVersion)
 
@@ -537,7 +540,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	// Hack to skip initializing settings which doesn't work on very old versions
 	// of cockroach.
 	c.Run(ctx, c.Node(1), "mkdir -p {store-dir} && touch {store-dir}/settings-initialized")
-	c.Start(ctx, t, nodes, args)
+	c.Start(ctx, t, nodes, args, startArgsDontEncrypt)
 
 	func() {
 		// Create a bunch of tables, over the batch size on which some migrations
