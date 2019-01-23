@@ -396,8 +396,8 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 // resolveSchemaForCreate returns the schema that will contain a newly created
 // catalog object with the given name. If the current user does not have the
 // CREATE privilege, then resolveSchemaForCreate raises an error.
-func (b *Builder) resolveSchemaForCreate(name *tree.TableName) cat.Schema {
-	sch, err := b.catalog.ResolveSchema(b.ctx, &name.TableNamePrefix)
+func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.SchemaName) {
+	sch, resName, err := b.catalog.ResolveSchema(b.ctx, &name.TableNamePrefix)
 	if err != nil {
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.
@@ -411,36 +411,41 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) cat.Schema {
 	}
 
 	// Only allow creation of objects in the public schema.
-	if name.Schema() != tree.PublicSchema {
+	if resName.Schema() != tree.PublicSchema {
 		panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidNameError,
-			"schema cannot be modified: %q", tree.ErrString(&name.TableNamePrefix))})
+			"schema cannot be modified: %q", tree.ErrString(&resName))})
 	}
 
 	b.checkPrivilege(sch, privilege.CREATE)
-	return sch
+	return sch, resName
 }
 
 // resolveTable returns the data source in the catalog with the given name. If
 // the name does not resolve to a table, or if the current user does not have
 // the given privilege, then resolveTable raises an error.
-func (b *Builder) resolveTable(tn *tree.TableName, priv privilege.Kind) cat.Table {
-	tab, ok := b.resolveDataSource(tn, priv).(cat.Table)
+func (b *Builder) resolveTable(
+	tn *tree.TableName, priv privilege.Kind,
+) (cat.Table, tree.TableName) {
+	ds, resName := b.resolveDataSource(tn, priv)
+	tab, ok := ds.(cat.Table)
 	if !ok {
 		panic(builderError{sqlbase.NewWrongObjectTypeError(tn, "table")})
 	}
-	return tab
+	return tab, resName
 }
 
 // resolveDataSource returns the data source in the catalog with the given name.
 // If the name does not resolve to a table, or if the current user does not have
 // the given privilege, then resolveDataSource raises an error.
-func (b *Builder) resolveDataSource(tn *tree.TableName, priv privilege.Kind) cat.DataSource {
-	ds, err := b.catalog.ResolveDataSource(b.ctx, tn)
+func (b *Builder) resolveDataSource(
+	tn *tree.TableName, priv privilege.Kind,
+) (cat.DataSource, cat.DataSourceName) {
+	ds, resName, err := b.catalog.ResolveDataSource(b.ctx, tn)
 	if err != nil {
 		panic(builderError{err})
 	}
 	b.checkPrivilege(ds, priv)
-	return ds
+	return ds, resName
 }
 
 // resolveDataSourceFromRef returns the data source in the catalog that matches

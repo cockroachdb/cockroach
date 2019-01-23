@@ -149,7 +149,7 @@ func (md *Metadata) CheckDependencies(
 		var toCheck cat.Object
 		if old, ok := dep.(cat.DataSource); ok {
 			// Resolve data source object.
-			new, err := catalog.ResolveDataSource(ctx, old.Name())
+			new, _, err := catalog.ResolveDataSource(ctx, old.Name())
 			if err != nil {
 				return false, err
 			}
@@ -159,7 +159,7 @@ func (md *Metadata) CheckDependencies(
 			toCheck = new
 		} else if old, ok := dep.(cat.Schema); ok {
 			// Resolve schema object.
-			new, err := catalog.ResolveSchema(ctx, old.Name())
+			new, _, err := catalog.ResolveSchema(ctx, old.Name())
 			if err != nil {
 				return false, err
 			}

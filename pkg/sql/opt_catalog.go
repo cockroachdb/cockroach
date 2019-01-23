@@ -75,7 +75,9 @@ func (os *optSchema) Name() *cat.SchemaName {
 }
 
 // ResolveSchema is part of the cat.Catalog interface.
-func (oc *optCatalog) ResolveSchema(ctx context.Context, name *cat.SchemaName) (cat.Schema, error) {
+func (oc *optCatalog) ResolveSchema(
+	ctx context.Context, name *cat.SchemaName,
+) (cat.Schema, cat.SchemaName, error) {
 	p := oc.resolver.(*planner)
 	defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
 	p.avoidCachedDescriptors = true
@@ -85,6 +87,7 @@ func (oc *optCatalog) ResolveSchema(ctx context.Context, name *cat.SchemaName) (
 	// assumes that a data source object is being resolved, which is not the case
 	// for ResolveSchema. Therefore, call ResolveTarget directly and produce a
 	// more general error.
+	oc.tn.TableName = ""
 	oc.tn.TableNamePrefix = *name
 	found, desc, err := oc.tn.ResolveTarget(
 		ctx,
@@ -93,25 +96,29 @@ func (oc *optCatalog) ResolveSchema(ctx context.Context, name *cat.SchemaName) (
 		oc.resolver.CurrentSearchPath(),
 	)
 	if err != nil {
-		return nil, err
+		return nil, cat.SchemaName{}, err
 	}
 	if !found {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+		return nil, cat.SchemaName{}, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
 			"target database or schema does not exist")
 	}
-	*name = oc.tn.TableNamePrefix
-	return &optSchema{desc: desc.(*DatabaseDescriptor)}, nil
+	return &optSchema{desc: desc.(*DatabaseDescriptor)}, oc.tn.TableNamePrefix, nil
 }
 
 // ResolveDataSource is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveDataSource(
 	ctx context.Context, name *cat.DataSourceName,
-) (cat.DataSource, error) {
-	desc, err := ResolveExistingObject(ctx, oc.resolver, name, true /* required */, anyDescType)
+) (cat.DataSource, cat.DataSourceName, error) {
+	oc.tn = *name
+	desc, err := ResolveExistingObject(ctx, oc.resolver, &oc.tn, true /* required */, anyDescType)
 	if err != nil {
-		return nil, err
+		return nil, cat.DataSourceName{}, err
 	}
-	return oc.newDataSource(desc, name)
+	ds, err := oc.newDataSource(desc, &oc.tn)
+	if err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+	return ds, oc.tn, nil
 }
 
 // ResolveDataSourceByID is part of the cat.Catalog interface.

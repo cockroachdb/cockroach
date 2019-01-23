@@ -512,9 +512,8 @@ func resultsNeeded(r tree.ReturningClause) bool {
 }
 
 // getAliasedTableName returns the underlying table name for a TableExpr that
-// could be either an alias or a normal table name. It also returns the original
-// table name, which will be equal to the alias name if the input is an alias,
-// or identical to the table name if the input is a normal table name.
+// could be either an alias or a normal table name. It also returns the alias,
+// if there is one.
 //
 // This is not meant to perform name resolution, but rather simply to extract
 // the name indicated after FROM in DELETE/INSERT/UPDATE/UPSERT.
@@ -534,9 +533,6 @@ func getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName) {
 		panic(builderError{pgerror.Unimplemented(
 			"complex table expression in UPDATE/DELETE",
 			"cannot use a complex table name with DELETE/UPDATE")})
-	}
-	if alias == nil {
-		alias = tn
 	}
 	return tn, alias
 }

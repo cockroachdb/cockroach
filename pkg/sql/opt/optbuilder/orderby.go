@@ -116,7 +116,7 @@ func (b *Builder) addExtraColumn(
 func (b *Builder) analyzeOrderByIndex(
 	order *tree.Order, inScope, projectionsScope, orderByScope *scope,
 ) {
-	tab := b.resolveTable(&order.Table, privilege.SELECT)
+	tab, _ := b.resolveTable(&order.Table, privilege.SELECT)
 	index, err := b.findIndexByName(tab, order.Index)
 	if err != nil {
 		panic(builderError{err})
