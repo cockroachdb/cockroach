@@ -235,15 +235,15 @@ func registerNetwork(r *registry) {
 	const numNodes = 4
 
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("network/sanity/nodes=%d", numNodes),
-		Nodes: nodes(numNodes),
+		Name:    fmt.Sprintf("network/sanity/nodes=%d", numNodes),
+		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runNetworkSanity(ctx, t, c, numNodes)
 		},
 	})
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
-		Nodes: nodes(numNodes),
+		Name:    fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
+		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runNetworkTPCC(ctx, t, c, numNodes)
 		},

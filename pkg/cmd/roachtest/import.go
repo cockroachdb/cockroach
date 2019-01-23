@@ -60,7 +60,7 @@ func registerImportTPCC(r *registry) {
 	for _, numNodes := range []int{4, 32} {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
-			Nodes:   nodes(numNodes),
+			Cluster: makeClusterSpec(numNodes),
 			Timeout: 5 * time.Hour,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runImportTPCC(ctx, t, c, warehouses)
@@ -81,7 +81,7 @@ func registerImportTPCH(r *registry) {
 		item := item
 		r.Add(testSpec{
 			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
-			Nodes:   nodes(item.nodes),
+			Cluster: makeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Put(ctx, cockroach, "./cockroach")

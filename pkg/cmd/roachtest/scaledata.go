@@ -48,7 +48,7 @@ func registerScaleData(r *registry) {
 			r.Add(testSpec{
 				Name:    fmt.Sprintf("scaledata/%s/nodes=%d", app, n),
 				Timeout: 2 * duration,
-				Nodes:   nodes(n + 1),
+				Cluster: makeClusterSpec(n + 1),
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runSqlapp(ctx, t, c, app, flags, duration)
 				},
