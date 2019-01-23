@@ -60,55 +60,6 @@ func TestGossipInfoStore(t *testing.T) {
 	}
 }
 
-// TestGossipOverwriteNode verifies that if a new node is added with the same
-// address as an old node, that old node is removed from the cluster.
-func TestGossipOverwriteNode(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	rpcContext := newInsecureRPCContext(stopper)
-	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry())
-	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")}
-	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2:2")}
-	if err := g.SetNodeDescriptor(node1); err != nil {
-		t.Fatal(err)
-	}
-	if err := g.SetNodeDescriptor(node2); err != nil {
-		t.Fatal(err)
-	}
-	if val, err := g.GetNodeDescriptor(node1.NodeID); err != nil {
-		t.Error(err)
-	} else if val.NodeID != node1.NodeID {
-		t.Errorf("expected n%d, got %+v", node1.NodeID, val)
-	}
-	if val, err := g.GetNodeDescriptor(node2.NodeID); err != nil {
-		t.Error(err)
-	} else if val.NodeID != node2.NodeID {
-		t.Errorf("expected n%d, got %+v", node2.NodeID, val)
-	}
-
-	// Give node3 the same address as node1, which should cause node1 to be
-	// removed from the cluster.
-	node3 := &roachpb.NodeDescriptor{NodeID: 3, Address: node1.Address}
-	if err := g.SetNodeDescriptor(node3); err != nil {
-		t.Fatal(err)
-	}
-	if val, err := g.GetNodeDescriptor(node3.NodeID); err != nil {
-		t.Error(err)
-	} else if val.NodeID != node3.NodeID {
-		t.Errorf("expected n%d, got %+v", node3.NodeID, val)
-	}
-
-	testutils.SucceedsSoon(t, func() error {
-		expectedErr := `n\d+ has been removed from the cluster`
-		if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
-			return fmt.Errorf("expected error %q fetching n%d; got error %v and node %+v",
-				expectedErr, node1.NodeID, err, val)
-		}
-		return nil
-	})
-}
-
 // TestGossipMoveNode verifies that if a node is moved to a new address, it
 // gets properly updated in gossip (including that any other node that was
 // previously at that address gets removed from the cluster).
@@ -137,8 +88,7 @@ func TestGossipMoveNode(t *testing.T) {
 		}
 	}
 
-	// Move node 2 to the address of node 3, which should cause node 3 to be
-	// removed from the cluster.
+	// Move node 2 to the address of node 3.
 	movedNode := nodes[1]
 	replacedNode := nodes[2]
 	movedNode.Address = replacedNode.Address
@@ -151,11 +101,6 @@ func TestGossipMoveNode(t *testing.T) {
 			return err
 		} else if !proto.Equal(movedNode, val) {
 			return fmt.Errorf("expected node %+v, got %+v", movedNode, val)
-		}
-		expectedErr := `n\d+ has been removed from the cluster`
-		if val, err := g.GetNodeDescriptor(replacedNode.NodeID); !testutils.IsError(err, expectedErr) {
-			return fmt.Errorf("expected error %q fetching n%d; got error %v and node %+v",
-				expectedErr, replacedNode.NodeID, err, val)
 		}
 		return nil
 	})
