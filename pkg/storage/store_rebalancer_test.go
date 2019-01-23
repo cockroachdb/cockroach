@@ -117,7 +117,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
 	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
@@ -200,7 +200,7 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
 	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
@@ -310,7 +310,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
 	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)

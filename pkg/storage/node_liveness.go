@@ -971,3 +971,17 @@ func (nl *NodeLiveness) AsLiveClock() closedts.LiveClockFn {
 		return now, ctpb.Epoch(liveness.Epoch), nil
 	}
 }
+
+// GetNodeCount returns a count of the number of nodes in the cluster,
+// including dead nodes, but excluding decommissioning or decommissioned nodes.
+func (nl *NodeLiveness) GetNodeCount() int {
+	nl.mu.Lock()
+	defer nl.mu.Unlock()
+	var count int
+	for _, l := range nl.mu.nodes {
+		if !l.Decommissioning {
+			count++
+		}
+	}
+	return count
+}

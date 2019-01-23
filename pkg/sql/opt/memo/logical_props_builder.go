@@ -151,6 +151,38 @@ func (b *logicalPropsBuilder) buildVirtualScanProps(scan *VirtualScanExpr, rel *
 	b.sb.buildVirtualScan(scan, rel)
 }
 
+func (b *logicalPropsBuilder) buildSequenceSelectProps(
+	seq *SequenceSelectExpr, rel *props.Relational,
+) {
+	// Output Columns
+	// --------------
+	// Output columns are stored in the definition.
+	rel.OutputCols = seq.Cols.ToSet()
+
+	// Not Null Columns
+	// ----------------
+	// Every column is not null.
+	rel.NotNullCols = rel.OutputCols
+
+	// Outer Columns
+	// -------------
+	// The operator never has outer columns.
+
+	// Functional Dependencies
+	// -----------------------
+	rel.FuncDeps.MakeMax1Row(rel.OutputCols)
+
+	// Cardinality
+	// -----------
+	rel.Cardinality = props.OneCardinality
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildSequenceSelect(rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relational) {
 	BuildSharedProps(b.mem, sel, &rel.Shared)
 

@@ -95,6 +95,24 @@ define VirtualScanPrivate {
 	Cols ColSet
 }
 
+# SequenceSelect represents a read from a sequence as a data source. It always returns
+# three columns, last_value, log_cnt, and is_called, with a single row. last_value is
+# the most recent value returned from the sequence and log_cnt and is_called are
+# always 0 and true, respectively.
+[Relational]
+define SequenceSelect {
+    _ SequenceSelectPrivate
+}
+
+[Private]
+define SequenceSelectPrivate {
+  # Sequence identifies the sequence to read from.
+  Sequence SequenceID
+
+  # Cols is the 3 element list of column IDs returned by the operator.
+  Cols ColList
+}
+
 # Values returns a manufactured result set containing a constant number of rows.
 # specified by the Rows list field. Each row must contain the same set of
 # columns in the same order.

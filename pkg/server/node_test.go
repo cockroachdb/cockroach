@@ -121,6 +121,7 @@ func createTestNode(
 		st,
 		cfg.Gossip,
 		cfg.Clock,
+		cfg.NodeLiveness.GetNodeCount,
 		storage.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
 		/* deterministic */ false,
 	)

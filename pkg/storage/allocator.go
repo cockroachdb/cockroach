@@ -254,15 +254,15 @@ func MakeAllocator(
 // GetNeededReplicas calculates the number of replicas a range should
 // have given its zone config and the number of nodes available for
 // up-replication (i.e. not dead and not decommissioning).
-func GetNeededReplicas(zoneConfigReplicaCount int32, availableNodes int) int {
+func GetNeededReplicas(zoneConfigReplicaCount int32, clusterNodes int) int {
 	numZoneReplicas := int(zoneConfigReplicaCount)
 	need := numZoneReplicas
 
 	// Adjust the replication factor for all ranges if there are fewer
 	// nodes than replicas specified in the zone config, so the cluster
 	// can still function.
-	if availableNodes < need {
-		need = availableNodes
+	if clusterNodes < need {
+		need = clusterNodes
 	}
 
 	// Ensure that we don't up- or down-replicate to an even number of replicas
@@ -302,8 +302,8 @@ func (a *Allocator) ComputeAction(
 
 	have := len(rangeInfo.Desc.Replicas)
 	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
-	availableNodes := a.storePool.AvailableNodeCount()
-	need := GetNeededReplicas(*zone.NumReplicas, availableNodes)
+	clusterNodes := a.storePool.ClusterNodeCount()
+	need := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
 	desiredQuorum := computeQuorum(need)
 	quorum := computeQuorum(have)
 
@@ -1157,12 +1157,9 @@ func computeQuorum(nodes int) int {
 
 // filterBehindReplicas removes any "behind" replicas from the supplied
 // slice. A "behind" replica is one which is not at or past the quorum commit
-// index. We forgive brandNewReplicaID for being behind, since a new range can
-// take a little while to fully catch up.
+// index.
 func filterBehindReplicas(
-	raftStatus *raft.Status,
-	replicas []roachpb.ReplicaDescriptor,
-	brandNewReplicaID roachpb.ReplicaID,
+	raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	if raftStatus == nil || len(raftStatus.Progress) == 0 {
 		// raftStatus.Progress is only populated on the Raft leader which means we
@@ -1172,7 +1169,7 @@ func filterBehindReplicas(
 	}
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas))
 	for _, r := range replicas {
-		if !replicaIsBehind(raftStatus, r.ReplicaID) || r.ReplicaID == brandNewReplicaID {
+		if !replicaIsBehind(raftStatus, r.ReplicaID) {
 			candidates = append(candidates, r)
 		}
 	}
@@ -1198,13 +1195,20 @@ func replicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool 
 	return true
 }
 
+// simulateFilterUnremovableReplicas removes any unremovable replicas from the
+// supplied slice. Unlike filterUnremovableReplicas, brandNewReplicaID is
+// considered up-to-date (and thus can participiate in quorum), but is not
+// considered a candidate for removal.
 func simulateFilterUnremovableReplicas(
 	raftStatus *raft.Status,
 	replicas []roachpb.ReplicaDescriptor,
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {
 	status := *raftStatus
-	status.Progress[uint64(brandNewReplicaID)] = raft.Progress{Match: 0}
+	status.Progress[uint64(brandNewReplicaID)] = raft.Progress{
+		State: raft.ProgressStateReplicate,
+		Match: status.Commit,
+	}
 	return filterUnremovableReplicas(&status, replicas, brandNewReplicaID)
 }
 
@@ -1219,20 +1223,40 @@ func filterUnremovableReplicas(
 	replicas []roachpb.ReplicaDescriptor,
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {
-	upToDateReplicas := filterBehindReplicas(raftStatus, replicas, brandNewReplicaID)
-	quorum := computeQuorum(len(replicas) - 1)
-	if len(upToDateReplicas) < quorum {
-		// The number of up-to-date replicas is less than quorum. No replicas can
-		// be removed.
+	upToDateReplicas := filterBehindReplicas(raftStatus, replicas)
+	oldQuorum := computeQuorum(len(replicas))
+	if len(upToDateReplicas) < oldQuorum {
+		// The number of up-to-date replicas is less than the old quorum. No
+		// replicas can be removed. A below quorum range won't be able to process a
+		// replica removal in any case. The logic here prevents any attempt to even
+		// try the removal.
 		return nil
 	}
-	if len(upToDateReplicas) > quorum {
-		// The number of up-to-date replicas is larger than quorum. Any replica can
-		// be removed.
+
+	newQuorum := computeQuorum(len(replicas) - 1)
+	if len(upToDateReplicas) > newQuorum {
+		// The number of up-to-date replicas is larger than the new quorum. Any
+		// replica can be removed, though we want to filter out brandNewReplicaID.
+		if brandNewReplicaID != 0 {
+			candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas)-len(upToDateReplicas))
+			for _, r := range replicas {
+				if r.ReplicaID != brandNewReplicaID {
+					candidates = append(candidates, r)
+				}
+			}
+			return candidates
+		}
 		return replicas
 	}
+
+	// The number of up-to-date replicas is equal to the new quorum. Only allow
+	// removal of behind replicas (except for brandNewReplicaID which is given a
+	// free pass).
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas)-len(upToDateReplicas))
 	necessary := func(r roachpb.ReplicaDescriptor) bool {
+		if r.ReplicaID == brandNewReplicaID {
+			return true
+		}
 		for _, t := range upToDateReplicas {
 			if t == r {
 				return true

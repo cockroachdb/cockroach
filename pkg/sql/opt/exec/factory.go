@@ -322,6 +322,10 @@ type Factory interface {
 	// ConstructCreateTable returns a node that implements a CREATE TABLE
 	// statement.
 	ConstructCreateTable(input Node, schema cat.Schema, ct *tree.CreateTable) (Node, error)
+
+	// ConstructSequenceSelect creates a node that implements a scan of a sequence
+	// as a data source.
+	ConstructSequenceSelect(sequence cat.Sequence) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

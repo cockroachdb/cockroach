@@ -221,6 +221,10 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		cfg.Settings,
 		cfg.Gossip,
 		cfg.Clock,
+		// NodeCountFunc
+		func() int {
+			return 1
+		},
 		func(roachpb.NodeID, time.Time, time.Duration) storagepb.NodeLivenessStatus {
 			return storagepb.NodeLivenessStatus_LIVE
 		},

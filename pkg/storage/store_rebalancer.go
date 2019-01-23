@@ -503,8 +503,8 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		log.VEventf(ctx, 3, "considering replica rebalance for r%d with %.2f qps",
 			desc.RangeID, replWithStats.qps)
 
-		availableNodes := sr.rq.allocator.storePool.AvailableNodeCount()
-		desiredReplicas := GetNeededReplicas(*zone.NumReplicas, availableNodes)
+		clusterNodes := sr.rq.allocator.storePool.ClusterNodeCount()
+		desiredReplicas := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
 		targets := make([]roachpb.ReplicationTarget, 0, desiredReplicas)
 		targetReplicas := make([]roachpb.ReplicaDescriptor, 0, desiredReplicas)
 
