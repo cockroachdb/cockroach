@@ -18,10 +18,13 @@ run build/builder.sh make bin/roachprod bin/workload bin/roachtest
 tc_end_block "Compile roachprod/workload/roachtest"
 
 tc_start_block "Run local roachtests"
+# Grab a testing license good for one hour.
+COCKROACH_DEV_LICENSE=$(curl "https://register.cockroachdb.com/api/prodtest")
 # TODO(peter,dan): curate a suite of the tests that works locally.
-run build/builder.sh \
+run build/builder.sh env \
+  COCKROACH_DEV_LICENSE="$COCKROACH_DEV_LICENSE" \
 	stdbuf -oL -eL \
-	./bin/roachtest run '(acceptance|kv/splits)' \
+	./bin/roachtest run '(acceptance|kv/splits|cdc/bank)' \
   --local \
   --cockroach "cockroach" \
   --roachprod "bin/roachprod" \
