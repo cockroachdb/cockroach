@@ -188,6 +188,7 @@ func runTestImport(t *testing.T, batchSize int64) {
 				t.Fatalf("expected %d split-caused retries, got %d", expectedSplitRetries, splitRetries)
 			}
 			cancel()
+
 			added := b.GetSummary()
 			t.Logf("Wrote %d total", added.DataSize)
 
