@@ -58,7 +58,10 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	tn, alias := getAliasedTableName(del.Table)
 
 	// Find which table we're working on, check the permissions.
-	tab := b.resolveTable(tn, privilege.DELETE)
+	tab, resName := b.resolveTable(tn, privilege.DELETE)
+	if alias == nil {
+		alias = &resName
+	}
 
 	// Check Select permission as well, since existing values must be read.
 	b.checkPrivilege(tab, privilege.SELECT)
