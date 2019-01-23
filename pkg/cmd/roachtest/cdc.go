@@ -234,7 +234,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 	m := newMonitor(workloadCtx, c, crdbNodes)
 	var doneAtomic int64
 	m.Go(func(ctx context.Context) error {
-		err := c.RunE(ctx, workloadNode, `./workload run bank {pgurl:1}`)
+		err := c.RunE(ctx, workloadNode, `./workload run bank {pgurl:1} --max-rate=10`)
 		if atomic.LoadInt64(&doneAtomic) > 0 {
 			return nil
 		}
@@ -263,7 +263,10 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		//  return errors.New("test requires at least 2 partitions to be interesting")
 		// }
 
-		const requestedResolved = 100
+		var requestedResolved = 100
+		if local {
+			requestedResolved = 10
+		}
 		var numResolved, rowsSinceResolved int
 		v := changefeedccl.Validators{
 			changefeedccl.NewOrderValidator(`bank`),
