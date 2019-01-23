@@ -52,7 +52,7 @@ type ReplicaMetrics struct {
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context, now hlc.Timestamp, livenessMap IsLiveMap, availableNodes int,
+	ctx context.Context, now hlc.Timestamp, livenessMap IsLiveMap, clusterNodes int,
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
@@ -75,7 +75,7 @@ func (r *Replica) Metrics(
 		&r.store.cfg.RaftConfig,
 		zone,
 		livenessMap,
-		availableNodes,
+		clusterNodes,
 		desc,
 		raftStatus,
 		leaseStatus,
@@ -94,7 +94,7 @@ func calcReplicaMetrics(
 	raftCfg *base.RaftConfig,
 	zone *config.ZoneConfig,
 	livenessMap IsLiveMap,
-	availableNodes int,
+	clusterNodes int,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
 	leaseStatus storagepb.LeaseStatus,
@@ -120,7 +120,7 @@ func calcReplicaMetrics(
 	m.Ticking = ticking
 
 	m.RangeCounter, m.Unavailable, m.Underreplicated =
-		calcRangeCounter(storeID, desc, livenessMap, *zone.NumReplicas, availableNodes)
+		calcRangeCounter(storeID, desc, livenessMap, *zone.NumReplicas, clusterNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
@@ -157,7 +157,7 @@ func calcRangeCounter(
 	desc *roachpb.RangeDescriptor,
 	livenessMap IsLiveMap,
 	numReplicas int32,
-	availableNodes int,
+	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated bool) {
 	for _, rd := range desc.Replicas {
 		if livenessMap[rd.NodeID].IsLive {
@@ -172,7 +172,7 @@ func calcRangeCounter(
 		if liveReplicas < computeQuorum(len(desc.Replicas)) {
 			unavailable = true
 		}
-		if GetNeededReplicas(numReplicas, availableNodes) > liveReplicas {
+		if GetNeededReplicas(numReplicas, clusterNodes) > liveReplicas {
 			underreplicated = true
 		}
 	}
