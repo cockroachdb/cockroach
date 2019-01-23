@@ -39,14 +39,15 @@ import (
 // isCorrelated is set in error cases if we detect a correlated subquery; it is
 // used in the fallback case to create a better error.
 func (p *planner) prepareUsingOptimizer(
-	ctx context.Context, stmt Statement,
+	ctx context.Context,
 ) (_ planFlags, isCorrelated bool, _ error) {
+	stmt := p.stmt
 	if err := checkOptSupportForTopStatement(stmt.AST); err != nil {
 		return 0, false, err
 	}
 
 	var opc optPlanningCtx
-	opc.init(p, stmt)
+	opc.init(p)
 
 	if opc.useCache {
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, stmt.SQL)
@@ -119,19 +120,18 @@ func (p *planner) prepareUsingOptimizer(
 //
 // isCorrelated is set in error cases if we detect a correlated subquery; it is
 // used in the fallback case to create a better error.
-func (p *planner) makeOptimizerPlan(
-	ctx context.Context, stmt Statement,
-) (_ *planTop, _ planFlags, isCorrelated bool, _ error) {
+func (p *planner) makeOptimizerPlan(ctx context.Context) (_ *planTop, isCorrelated bool, _ error) {
+	stmt := p.stmt
 	if err := checkOptSupportForTopStatement(stmt.AST); err != nil {
-		return nil, 0, false, err
+		return nil, false, err
 	}
 
 	var opc optPlanningCtx
-	opc.init(p, stmt)
+	opc.init(p)
 
 	execMemo, isCorrelated, err := opc.buildExecMemo(ctx)
 	if err != nil {
-		return nil, 0, isCorrelated, err
+		return nil, isCorrelated, err
 	}
 
 	// Build the plan tree.
@@ -139,22 +139,23 @@ func (p *planner) makeOptimizerPlan(
 	execFactory := makeExecFactory(p)
 	plan, err := execbuilder.New(&execFactory, execMemo, root, p.EvalContext()).Build()
 	if err != nil {
-		return nil, 0, false, err
+		return nil, false, err
 	}
 
 	result := plan.(*planTop)
 	result.AST = stmt.AST
+	result.flags = opc.flags
 
 	cols := planColumns(result.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return nil, 0, false, pgerror.NewError(
+			return nil, false, pgerror.NewError(
 				pgerror.CodeFeatureNotSupportedError, "cached plan must not change result type",
 			)
 		}
 	}
 
-	return result, opc.flags, false, nil
+	return result, false, nil
 }
 
 func checkOptSupportForTopStatement(AST tree.Statement) error {
@@ -171,8 +172,7 @@ func checkOptSupportForTopStatement(AST tree.Statement) error {
 }
 
 type optPlanningCtx struct {
-	p    *planner
-	stmt Statement
+	p *planner
 
 	catalog optCatalog
 
@@ -186,9 +186,8 @@ type optPlanningCtx struct {
 	flags planFlags
 }
 
-func (opc *optPlanningCtx) init(p *planner, stmt Statement) {
+func (opc *optPlanningCtx) init(p *planner) {
 	opc.p = p
-	opc.stmt = stmt
 	opc.catalog.init(p.execCfg.TableStatsCache, p)
 	p.optimizer.Init(p.EvalContext())
 
@@ -205,7 +204,7 @@ func (opc *optPlanningCtx) init(p *planner, stmt Statement) {
 
 func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
 	if log.VDepth(1, 1) {
-		log.InfofDepth(ctx, 1, "%s: %s", msg, opc.stmt)
+		log.InfofDepth(ctx, 1, "%s: %s", msg, opc.p.stmt)
 	} else {
 		log.Event(ctx, msg)
 	}
@@ -229,7 +228,7 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	// that there's even less to do during the EXECUTE phase.
 	//
 	f := p.optimizer.Factory()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.stmt.AST)
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
 	bld.KeepPlaceholders = true
 	if err := bld.Build(); err != nil {
 		return nil, bld.IsCorrelated, err
@@ -282,7 +281,7 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 func (opc *optPlanningCtx) buildExecMemo(
 	ctx context.Context,
 ) (_ *memo.Memo, isCorrelated bool, _ error) {
-	prepared := opc.stmt.Prepared
+	prepared := opc.p.stmt.Prepared
 	p := opc.p
 	if opc.allowMemoReuse && prepared != nil && prepared.Memo != nil {
 		// We are executing a previously prepared statement and a reusable memo is
@@ -304,7 +303,7 @@ func (opc *optPlanningCtx) buildExecMemo(
 
 	if opc.useCache {
 		// Consult the query cache.
-		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.stmt.SQL)
+		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
 		if ok {
 			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog); err != nil {
 				return nil, false, err
@@ -333,7 +332,7 @@ func (opc *optPlanningCtx) buildExecMemo(
 	// We are executing a statement for which there is no reusable memo
 	// available.
 	f := opc.p.optimizer.Factory()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.stmt.AST)
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
 	if err := bld.Build(); err != nil {
 		return nil, bld.IsCorrelated, err
 	}
@@ -345,7 +344,7 @@ func (opc *optPlanningCtx) buildExecMemo(
 	if opc.useCache && !bld.HadPlaceholders {
 		memo := p.optimizer.DetachMemo()
 		cachedData := querycache.CachedData{
-			SQL:  opc.stmt.SQL,
+			SQL:  opc.p.stmt.SQL,
 			Memo: memo,
 		}
 		p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)

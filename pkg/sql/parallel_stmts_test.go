@@ -329,7 +329,8 @@ func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*pl
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.makePlan(context.TODO(), Statement{Statement: stmt}); err != nil {
+	p.stmt = &Statement{Statement: stmt}
+	if err := p.makePlan(context.TODO()); err != nil {
 		t.Fatal(err)
 	}
 	return p, func() {

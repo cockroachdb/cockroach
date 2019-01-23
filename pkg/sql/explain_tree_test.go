@@ -375,10 +375,11 @@ func assertExpectedPlansForTests(t *testing.T, sqlSetup string, plansToTest []*T
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := p.makePlan(ctx, Statement{Statement: stmt}); err != nil {
+		p.stmt = &Statement{Statement: stmt}
+		if err := p.makePlan(ctx); err != nil {
 			t.Fatal(err)
 		}
-		actualPlanTree := planToTree(ctx, p.curPlan)
+		actualPlanTree := planToTree(ctx, &p.curPlan)
 		assert.Equal(t, test.ExpectedPlanTree, actualPlanTree,
 			"planToTree for %s:\nexpected:%s\nactual:%s", test.SQL, test.ExpectedPlanTree, actualPlanTree)
 		actualPlanString := planToString(ctx, p.curPlan.plan, p.curPlan.subqueryPlans)

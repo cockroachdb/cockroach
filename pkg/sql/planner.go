@@ -551,7 +551,7 @@ type sqlStatsCollector interface {
 	//
 	// samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
 	RecordStatement(
-		stmt Statement,
+		stmt *Statement,
 		samplePlanDescription *roachpb.ExplainTreePlanNode,
 		distSQLUsed bool,
 		optUsed bool,

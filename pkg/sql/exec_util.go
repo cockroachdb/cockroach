@@ -1739,7 +1739,7 @@ func (s *sqlStatsCollectorImpl) PhaseTimes() *phaseTimes {
 //
 // samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
 func (s *sqlStatsCollectorImpl) RecordStatement(
-	stmt Statement,
+	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
 	optUsed bool,
