@@ -1398,12 +1398,12 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `this sink is incompatible with format=experimental_avro`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro'`,
-		`experimental-nodelocal:///bar?bucket_size=0ns`,
+		`experimental-nodelocal:///bar`,
 	)
 	sqlDB.ExpectErr(
 		t, `this sink is incompatible with envelope=key_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='key_only'`,
-		`experimental-nodelocal:///bar?bucket_size=0ns`,
+		`experimental-nodelocal:///bar`,
 	)
 }
 
