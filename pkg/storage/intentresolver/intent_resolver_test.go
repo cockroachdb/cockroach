@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -530,6 +531,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 			},
 		},
 	}
+
 	cases := []testCase{
 		{
 			intents:   testEndTxnIntents,
@@ -552,16 +554,38 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			sendFuncs := c.sendFuncs
+			var sendFuncCalled int64
+			numSendFuncs := int64(len(c.sendFuncs))
+			sendFuncs := counterSendFuncs(&sendFuncCalled, c.sendFuncs)
 			ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
 			if c.before != nil {
 				defer c.before(&c, ir)()
 			}
 			err := ir.CleanupTxnIntentsAsync(context.Background(), 1, c.intents, false)
+			testutils.SucceedsSoon(t, func() error {
+				if called := atomic.LoadInt64(&sendFuncCalled); called < numSendFuncs {
+					return fmt.Errorf("still waiting for %d calls", numSendFuncs-called)
+				}
+				return nil
+			})
 			stopper.Stop(context.Background())
 			assert.Nil(t, err)
 			assert.Len(t, sendFuncs, 0)
 		})
+	}
+}
+
+func counterSendFuncs(counter *int64, funcs []sendFunc) []sendFunc {
+	for i, f := range funcs {
+		funcs[i] = counterSendFunc(counter, f)
+	}
+	return funcs
+}
+
+func counterSendFunc(counter *int64, f sendFunc) sendFunc {
+	return func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		defer atomic.AddInt64(counter, 1)
+		return f(ba)
 	}
 }
 
@@ -693,9 +717,10 @@ func newIntentResolverWithSendFuncs(
 		Tracer: tracing.NewTracer(),
 	}, txnSenderFactory, clock)
 	return New(Config{
-		Stopper: stopper,
-		DB:      db,
-		Clock:   clock,
+		Stopper:        stopper,
+		DB:             db,
+		Clock:          clock,
+		MaxGCBatchWait: time.Nanosecond,
 	})
 }
 
