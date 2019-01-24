@@ -80,9 +80,15 @@ var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 )
 
 var sampleLogicalPlans = settings.RegisterBoolSetting(
-	"sql.metrics.statement_details.sample_logical_plans",
+	"sql.metrics.statement_details.plan_collection.enabled",
 	"periodically save a logical plan for each fingerprint",
 	true,
+)
+
+var logicalPlanCollectionPeriod = settings.RegisterNonNegativeDurationSetting(
+	"sql.metrics.statement_details.plan_collection.period",
+	"the time until a new logical plan is collected",
+	5*time.Minute,
 )
 
 func (s stmtKey) String() string {
@@ -102,10 +108,6 @@ func (s stmtKey) flags() string {
 	}
 	return b.String()
 }
-
-// saveFingerprintPlanOnceEvery is the number of queries for a given fingerprint that go by before
-// we save the plan again.
-const saveFingerprintPlanOnceEvery = 1000
 
 // recordStatement saves per-statement statistics.
 //
@@ -140,6 +142,7 @@ func (a *appStats) recordStatement(
 	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
 	if samplePlanDescription != nil {
 		s.data.SensitiveInfo.MostRecentPlanDescription = *samplePlanDescription
+		s.data.SensitiveInfo.MostRecentPlanTimestamp = timeutil.Now()
 	}
 	if automaticRetryCount == 0 {
 		s.data.FirstAttemptCount++
