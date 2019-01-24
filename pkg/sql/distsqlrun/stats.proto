@@ -72,7 +72,7 @@ message SorterStats {
 message JoinReaderStats {
   InputStats input_stats = 1 [(gogoproto.nullable) = false];
   InputStats index_lookup_stats = 2 [(gogoproto.nullable) = false];
-  InputStats primary_index_lookup_stats = 3;
+  reserved 3;
 }
 
 // OutboxStats are the stats collected by an outbox.
