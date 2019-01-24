@@ -51,6 +51,7 @@ type cdcTestArgs struct {
 	rangefeed          bool
 	kafkaChaos         bool
 	crdbChaos          bool
+	cloudStorageSink   bool
 
 	targetInitialScanLatency time.Duration
 	targetSteadyLatency      time.Duration
@@ -73,13 +74,23 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		t.Fatal(err)
 	}
 
-	t.Status("installing kafka")
 	kafka := kafkaManager{
 		c:     c,
 		nodes: kafkaNode,
 	}
-	kafka.install(ctx)
-	kafka.start(ctx)
+
+	var sinkURI string
+	if args.cloudStorageSink {
+		ts := timeutil.Now().Format(`20060102150405`)
+		// cockroach-tmp is a multi-region bucket with a TTL to clean up old
+		// data.
+		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts
+	} else {
+		t.Status("installing kafka")
+		kafka.install(ctx)
+		kafka.start(ctx)
+		sinkURI = kafka.sinkURL(ctx)
+	}
 
 	m := newMonitor(ctx, c, crdbNodes)
 	workloadCompleteCh := make(chan struct{}, 1)
@@ -143,7 +154,8 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		} else {
 			targets = `ledger.customer, ledger.transaction, ledger.entry, ledger.session`
 		}
-		jobID, err := createChangefeed(db, targets, kafka.sinkURL(ctx), args.initialScan)
+
+		jobID, err := createChangefeed(db, targets, sinkURI, args)
 		if err != nil {
 			return err
 		}
@@ -414,6 +426,23 @@ func registerCDC(r *registry) {
 				targetInitialScanLatency: 10 * time.Minute,
 				targetSteadyLatency:      time.Minute,
 				targetTxnPerSecond:       575,
+			})
+		},
+	})
+	r.Add(testSpec{
+		Name:       "cdc/cloud-sink",
+		MinVersion: "v2.2.0",
+		Cluster:    makeClusterSpec(4, cpu(16)),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       100,
+				workloadDuration:         "30m",
+				initialScan:              true,
+				kafkaChaos:               false,
+				cloudStorageSink:         true,
+				targetInitialScanLatency: 30 * time.Minute,
+				targetSteadyLatency:      time.Minute,
 			})
 		},
 	})
@@ -703,11 +732,16 @@ func (lv *latencyVerifier) maybeLogLatencyHist() {
 	)
 }
 
-func createChangefeed(db *gosql.DB, targets, sinkURL string, initialScan bool) (int, error) {
+func createChangefeed(db *gosql.DB, targets, sinkURL string, args cdcTestArgs) (int, error) {
 	var jobID int
-	createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR %s INTO $1 WITH resolved`, targets)
+	createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR %s INTO $1`, targets)
 	extraArgs := []interface{}{sinkURL}
-	if !initialScan {
+	if args.cloudStorageSink {
+		createStmt += ` WITH resolved='10s', envelope=value_only`
+	} else {
+		createStmt += ` WITH resolved`
+	}
+	if !args.initialScan {
 		createStmt += `, cursor='-1s'`
 	}
 	if err := db.QueryRow(createStmt, extraArgs...).Scan(&jobID); err != nil {
