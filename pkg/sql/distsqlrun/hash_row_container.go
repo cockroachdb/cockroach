@@ -19,6 +19,7 @@ import (
 	"context"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
@@ -214,6 +215,7 @@ func (h *hashMemRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRo
 
 // Close implements the hashRowContainer interface.
 func (h *hashMemRowContainer) Close(ctx context.Context) {
+	h.memRowContainer.Close(ctx)
 	h.bucketsAcc.Close(ctx)
 }
 
@@ -657,4 +659,235 @@ func (i *hashDiskRowIterator) isRowMarked() bool {
 
 	rowVal := i.Value()
 	return bytes.Equal(rowVal[len(rowVal)-len(encodedTrue):], encodedTrue)
+}
+
+// hashDiskBackedRowContainer is a hashRowContainer that uses a
+// hashMemRowContainer to store rows and spills to disk automatically if memory
+// usage exceeds a given budget. When spilled to disk, the rows are stored with
+// an extra boolean column to keep track of that row's mark.
+type hashDiskBackedRowContainer struct {
+	// src is the current hashRowContainer that is being used to store rows.
+	// All the hashRowContainer methods are redefined rather than delegated
+	// to an embedded struct because of how defer works:
+	//  rc.init(...)
+	//  defer rc.Close(ctx)
+	// Close will call hashMemRowContainer.Close(ctx) even after spilling to
+	// disk.
+	src hashRowContainer
+
+	hmrc *hashMemRowContainer
+	hdrc *hashDiskRowContainer
+
+	// shouldMark specifies whether the caller cares about marking rows.
+	shouldMark   bool
+	types        []sqlbase.ColumnType
+	storedEqCols columns
+	encodeNull   bool
+
+	// mrc is used to build hashMemRowContainer upon.
+	mrc *memRowContainer
+
+	evalCtx       *tree.EvalContext
+	memoryMonitor *mon.BytesMonitor
+	diskMonitor   *mon.BytesMonitor
+	engine        diskmap.Factory
+	scratchEncRow sqlbase.EncDatumRow
+}
+
+var _ hashRowContainer = &hashDiskBackedRowContainer{}
+
+// mrc (the first argument) can either be nil (in which case
+// hashMemRowContainer will be built upon an empty memRowContainer) or non-nil
+// (in which case mrc is used as underlying memRowContainer under
+// hashMemRowContainer). The latter case is used by the hashJoiner since when
+// initializing hashDiskBackedRowContainer it will have accumulated rows from
+// both sides of the join in memRowContainers, and we can reuse one of them.
+func makeHashDiskBackedRowContainer(
+	mrc *memRowContainer,
+	evalCtx *tree.EvalContext,
+	memoryMonitor *mon.BytesMonitor,
+	diskMonitor *mon.BytesMonitor,
+	engine diskmap.Factory,
+) hashDiskBackedRowContainer {
+	return hashDiskBackedRowContainer{
+		mrc:           mrc,
+		evalCtx:       evalCtx,
+		memoryMonitor: memoryMonitor,
+		diskMonitor:   diskMonitor,
+		engine:        engine,
+	}
+}
+
+// Init implements the hashRowContainer interface.
+func (h *hashDiskBackedRowContainer) Init(
+	ctx context.Context,
+	shouldMark bool,
+	types []sqlbase.ColumnType,
+	storedEqCols columns,
+	encodeNull bool,
+) error {
+	h.shouldMark = shouldMark
+	h.types = types
+	h.storedEqCols = storedEqCols
+	h.encodeNull = encodeNull
+	if shouldMark {
+		// We might need to preserve the marks when spilling to disk which requires
+		// adding an extra boolean column to the row when read from memory.
+		h.scratchEncRow = make(sqlbase.EncDatumRow, len(types)+1)
+	}
+
+	// Provide the memRowContainer with an ordering on the equality columns of
+	// the rows that we will store. This will result in rows with the
+	// same equality columns occurring contiguously in the keyspace.
+	ordering := make(sqlbase.ColumnOrdering, len(storedEqCols))
+	for i := range ordering {
+		ordering[i] = sqlbase.ColumnOrderInfo{
+			ColIdx:    int(storedEqCols[i]),
+			Direction: encoding.Ascending,
+		}
+	}
+	if h.mrc == nil {
+		h.mrc = &memRowContainer{}
+		h.mrc.initWithMon(ordering, types, h.evalCtx, h.memoryMonitor)
+	}
+	hmrc := makeHashMemRowContainer(h.mrc)
+	h.hmrc = &hmrc
+	h.src = h.hmrc
+	if err := h.hmrc.Init(ctx, shouldMark, types, storedEqCols, encodeNull); err != nil {
+		if spilled, spillErr := h.spillIfMemErr(ctx, err); !spilled && spillErr == nil {
+			// The error was not an out of memory error.
+			return err
+		} else if spillErr != nil {
+			// A disk spill was attempted but there was an error in doing so.
+			return spillErr
+		}
+	}
+
+	return nil
+}
+
+// AddRow adds a row to the hashDiskBackedRowContainer. This row is unmarked by default.
+func (h *hashDiskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	if err := h.src.AddRow(ctx, row); err != nil {
+		if spilled, spillErr := h.spillIfMemErr(ctx, err); !spilled && spillErr == nil {
+			// The error was not an out of memory error.
+			return err
+		} else if spillErr != nil {
+			// A disk spill was attempted but there was an error in doing so.
+			return spillErr
+		}
+		// Add the row that caused the memory error.
+		return h.src.AddRow(ctx, row)
+	}
+	return nil
+}
+
+// Close implements the hashRowContainer interface.
+func (h *hashDiskBackedRowContainer) Close(ctx context.Context) {
+	if h.hdrc != nil {
+		h.hdrc.Close(ctx)
+	}
+	h.hmrc.Close(ctx)
+}
+
+// UsingDisk returns whether or not the hashDiskBackedRowContainer is currently
+// using disk.
+func (h *hashDiskBackedRowContainer) UsingDisk() bool {
+	return h.hdrc != nil
+}
+
+// reserveMarkMemoryMaybe attempts to reserve memory for marks if we're using
+// an in-memory container at the moment. If there is not enough memory left, it
+// spills to disk.
+func (h *hashDiskBackedRowContainer) reserveMarkMemoryMaybe(ctx context.Context) error {
+	if !h.UsingDisk() {
+		// We're assuming that the disk space is infinite, so we only need to
+		// reserve the memory for marks if we're using in-memory container.
+		if err := h.hmrc.reserveMarkMemoryMaybe(ctx); err != nil {
+			return h.spillToDisk(ctx)
+		}
+	}
+	return nil
+}
+
+// spillIfMemErr checks err and calls spillToDisk if the given err is an out of
+// memory error. Returns whether the hashDiskBackedRowContainer spilled to disk
+// and an error if one occurred while doing so.
+func (h *hashDiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
+	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+		return false, nil
+	}
+	if spillErr := h.spillToDisk(ctx); spillErr != nil {
+		return false, spillErr
+	}
+	log.VEventf(ctx, 2, "spilled to disk: %v", err)
+	return true, nil
+}
+
+// spillToDisk creates a disk backed row container, injects all the data from
+// the in-memory container into it, and clears the in-memory one afterwards.
+func (h *hashDiskBackedRowContainer) spillToDisk(ctx context.Context) error {
+	if h.UsingDisk() {
+		return errors.New("already using disk")
+	}
+	hdrc := makeHashDiskRowContainer(h.diskMonitor, h.engine)
+	if err := hdrc.Init(ctx, h.shouldMark, h.types, h.storedEqCols, h.encodeNull); err != nil {
+		return err
+	}
+
+	// rowIdx is used to look up the mark on the row and is only updated and used
+	// if marks are present.
+	rowIdx := 0
+	i := h.hmrc.NewFinalIterator(ctx)
+	defer i.Close()
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		row, err := i.Row()
+		if err != nil {
+			return err
+		}
+		if h.shouldMark && h.hmrc.marked != nil {
+			// We need to preserve the mark on this row.
+			copy(h.scratchEncRow, row)
+			h.scratchEncRow[len(h.types)] = sqlbase.EncDatum{Datum: tree.MakeDBool(tree.DBool(h.hmrc.marked[rowIdx]))}
+			row = h.scratchEncRow
+			rowIdx++
+		}
+		if err := hdrc.AddRow(ctx, row); err != nil {
+			return err
+		}
+	}
+	h.hmrc.Clear(ctx)
+
+	h.src = &hdrc
+	h.hdrc = &hdrc
+	return nil
+}
+
+// NewBucketIterator implements the hashRowContainer interface.
+func (h *hashDiskBackedRowContainer) NewBucketIterator(
+	ctx context.Context, row sqlbase.EncDatumRow, probeEqCols columns,
+) (rowMarkerIterator, error) {
+	return h.src.NewBucketIterator(ctx, row, probeEqCols)
+}
+
+// NewUnmarkedIterator implements the hashRowContainer interface.
+func (h *hashDiskBackedRowContainer) NewUnmarkedIterator(ctx context.Context) rowIterator {
+	return h.src.NewUnmarkedIterator(ctx)
+}
+
+// UnsafeReset resets the container for reuse. The hashDiskBackedRowContainer
+// will reset to using memory if it is using disk.
+func (h *hashDiskBackedRowContainer) UnsafeReset(ctx context.Context) error {
+	if h.hdrc != nil {
+		h.hdrc.Close(ctx)
+		h.src = h.hmrc
+		h.hdrc = nil
+		return nil
+	}
+	return h.hmrc.UnsafeReset(ctx)
 }
