@@ -17,7 +17,7 @@ package tree
 // AlterIndex represents an ALTER INDEX statement.
 type AlterIndex struct {
 	IfExists bool
-	Index    *TableNameWithIndex
+	Index    *TableIndexName
 	Cmds     AlterIndexCmds
 }
 

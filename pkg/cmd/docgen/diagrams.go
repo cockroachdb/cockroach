@@ -405,7 +405,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "alter_zone_index_stmt",
-		inline:  []string{"table_name_with_index", "set_zone_config", "var_set_list"},
+		inline:  []string{"table_index_name", "set_zone_config", "var_set_list"},
 		replace: map[string]string{"var_name": "variable", "var_value": "value"},
 		unlink:  []string{"variable", "value"},
 	},
@@ -639,7 +639,7 @@ var specs = []stmtSpec{
 		name:   "drop_index",
 		stmt:   "drop_index_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'INDEX'")},
-		inline: []string{"opt_drop_behavior", "table_name_with_index_list", "table_name_with_index"},
+		inline: []string{"opt_drop_behavior", "table_index_name_list", "table_index_name"},
 		regreplace: map[string]string{
 			regList: "",
 		},
@@ -854,7 +854,7 @@ var specs = []stmtSpec{
 		name:    "rename_index",
 		stmt:    "alter_rename_index_stmt",
 		match:   []*regexp.Regexp{regexp.MustCompile("'ALTER' 'INDEX'")},
-		inline:  []string{"table_name_with_index"},
+		inline:  []string{"table_index_name"},
 		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"},
 		unlink:  []string{"table_name", "index_name"}},
 	{
@@ -1152,7 +1152,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "show_zone_stmt",
-		inline: []string{"opt_partition", "table_name_with_index", "partition"},
+		inline: []string{"opt_partition", "table_index_name", "partition"},
 	},
 	{
 		name:   "sort_clause",
@@ -1161,7 +1161,7 @@ var specs = []stmtSpec{
 	{
 		name:    "split_index_at",
 		stmt:    "alter_split_index_stmt",
-		inline:  []string{"table_name_with_index"},
+		inline:  []string{"table_index_name"},
 		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"},
 		unlink:  []string{"table_name", "index_name"},
 	},

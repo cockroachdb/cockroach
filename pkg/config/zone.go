@@ -79,7 +79,7 @@ func ZoneSpecifierFromID(
 		return tree.ZoneSpecifier{}, err
 	}
 	return tree.ZoneSpecifier{
-		TableOrIndex: tree.TableNameWithIndex{
+		TableOrIndex: tree.TableIndexName{
 			Table: tree.MakeTableName(tree.Name(db), tree.Name(name)),
 		},
 	}, nil
@@ -137,7 +137,7 @@ func ParseCLIZoneSpecifier(s string) (tree.ZoneSpecifier, error) {
 		}
 	}
 	return tree.ZoneSpecifier{
-		TableOrIndex: tree.TableNameWithIndex{
+		TableOrIndex: tree.TableIndexName{
 			Table:       tree.MakeTableName(database, table),
 			Index:       parsed.Index,
 			SearchTable: false,

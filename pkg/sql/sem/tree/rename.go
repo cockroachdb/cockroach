@@ -68,7 +68,7 @@ func (node *RenameTable) Format(ctx *FmtCtx) {
 
 // RenameIndex represents a RENAME INDEX statement.
 type RenameIndex struct {
-	Index    *TableNameWithIndex
+	Index    *TableIndexName
 	NewName  UnrestrictedName
 	IfExists bool
 }

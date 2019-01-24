@@ -19,7 +19,7 @@ type ZoneSpecifier struct {
 	// Only one of NamedZone, Database or TableOrIndex may be set.
 	NamedZone    UnrestrictedName
 	Database     Name
-	TableOrIndex TableNameWithIndex
+	TableOrIndex TableIndexName
 
 	// Partition is only respected when Table is set.
 	Partition Name
