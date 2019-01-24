@@ -208,24 +208,21 @@ func (fr *flowRegistry) RegisterFlow(
 	if len(inboundStreams) > 0 {
 		// Set up a function to time out inbound streams after a while.
 		entry.streamTimer = time.AfterFunc(timeout, func() {
+			var timedOutReceivers []RowReceiver
 			fr.Lock()
-			defer fr.Unlock()
-			numTimedOut := 0
 			for streamID, is := range entry.inboundStreams {
 				if !is.connected && !is.canceled {
 					is.canceled = true
-					numTimedOut++
 					// We're giving up waiting for this inbound stream. Send an error to
-					// its consumer; the error will propagate and eventually drain all the
-					// processors.
-					is.receiver.Push(
-						nil, /* row */
-						&ProducerMetadata{Err: errors.Errorf("no inbound stream connection")})
-					is.receiver.ProducerDone()
+					// its consumer once we return and unlock the flow registry lock; the
+					// error will propagate and eventually drain all the processors. We
+					// don't Push directly here to avoid scenarios in which the Push
+					// blocks indefinitely while holding the mutex.
+					timedOutReceivers = append(timedOutReceivers, is.receiver)
 					fr.finishInboundStreamLocked(id, streamID)
 				}
 			}
-			if numTimedOut != 0 {
+			if len(timedOutReceivers) != 0 {
 				// The span in the context might be finished by the time this runs. In
 				// principle, we could ForkCtxSpan() beforehand, but we don't want to
 				// create the extra span every time.
@@ -234,9 +231,16 @@ func (fr *flowRegistry) RegisterFlow(
 					timeoutCtx,
 					"flow id:%s : %d inbound streams timed out after %s; propagated error throughout flow",
 					id,
-					numTimedOut,
+					len(timedOutReceivers),
 					timeout,
 				)
+			}
+			fr.Unlock()
+			for _, r := range timedOutReceivers {
+				r.Push(
+					nil, /* row */
+					&ProducerMetadata{Err: errors.Errorf("no inbound stream connection")})
+				r.ProducerDone()
 			}
 		})
 	}

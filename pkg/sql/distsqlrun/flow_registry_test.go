@@ -245,9 +245,12 @@ func TestStreamConnectionTimeout(t *testing.T) {
 		return nil
 	})
 
-	if !consumer.ProducerClosed() {
-		t.Fatalf("expected consumer to have been closed when the flow timed out")
-	}
+	testutils.SucceedsSoon(t, func() error {
+		if !consumer.ProducerClosed() {
+			return errors.New("expected consumer to have been closed when the flow timed out")
+		}
+		return nil
+	})
 
 	// Create a dummy server stream to pass to ConnectInboundStream.
 	serverStream, _ /* clientStream */, cleanup, err := createDummyStream()
@@ -586,10 +589,11 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 
 	fr := makeFlowRegistry(0)
 	wg := sync.WaitGroup{}
-	rb := &RowBuffer{}
+	rc := &RowChannel{}
+	rc.initWithBufSizeAndNumSenders(oneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
 		0: {
-			receiver:  rb,
+			receiver:  rc,
 			waitGroup: &wg,
 		},
 	}
@@ -600,9 +604,82 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 		t.Fatal(err)
 	}
 	wg.Wait()
-	if _, meta := rb.Next(); meta == nil {
+	if _, meta := rc.Next(); meta == nil {
 		t.Fatal("expected error but got no meta")
 	} else if !testutils.IsSQLRetryableError(meta.Err) {
 		t.Fatalf("unexpected error: %v", meta.Err)
 	}
+}
+
+// TestUnlockBeforePush verifies that in the case of a timeout error, the flow
+// registry lock is unlocked before attempting to push the error downstream.
+// This could otherwise result in holding the lock indefinitely (#34041).
+func TestUnlockBeforePush(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	fr := makeFlowRegistry(0)
+	wg := sync.WaitGroup{}
+	rc := &RowChannel{}
+	rc.initWithBufSizeAndNumSenders(oneIntCol, 1, 1)
+	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
+		0: {
+			receiver:  rc,
+			waitGroup: &wg,
+		},
+	}
+	rc.Push(makeIntRows(1, 1)[0], nil /* meta */)
+	wg.Add(1)
+	if err := fr.RegisterFlow(
+		ctx, distsqlpb.FlowID{}, &Flow{}, inboundStreams, 0, /* timeout */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify to a high degree of certainty that the timeout has been triggered
+	// and the flow is attempting to push to the RowChannel. Due to this test
+	// using the flow registry lock, a timeout here indicates that the timeout
+	// goroutine in RegisterFlow is still holding the lock while pushing.
+	testutils.SucceedsSoon(t, func() error {
+		fr.Lock()
+		defer fr.Unlock()
+		e, ok := fr.flows[distsqlpb.FlowID{}]
+		if !ok {
+			return errors.New("flow not found")
+		}
+		// Check that the inbound stream has been canceled.
+		if !e.inboundStreams[0].canceled {
+			return errors.New("inbound stream not canceled")
+		}
+		return nil
+	})
+
+	// Attempt to register a couple flows.
+	for i := 0; i < 5; i++ {
+		if err := fr.RegisterFlow(
+			ctx, distsqlpb.FlowID{UUID: uuid.MakeV4()}, &Flow{}, nil /* inboundStreams */, 0, /* timeout */
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Unblock the Push from the first RegisterFlow call.
+	row, meta := rc.Next()
+	if row == nil || meta != nil {
+		// Since we pushed a row to block the channel, this is an unexpected read.
+		t.Fatalf("unexpected read from RowChannel row=%v, meta=%v", row, meta)
+	}
+
+	// Read the pushed timeout error.
+	row, meta = rc.Next()
+	if row != nil || meta == nil {
+		t.Fatalf("unexpected read from RowChannel row=%v, meta=%v", row, meta)
+	}
+
+	if meta.Err == nil {
+		t.Fatal("meta had no error")
+	}
+
+	// Wait for the goroutine spawned in the first RegisterFlow call.
+	wg.Wait()
 }
