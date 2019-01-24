@@ -438,52 +438,45 @@ func expandIndexName(
 	requireTable bool,
 ) (tn *tree.TableName, desc *MutableTableDescriptor, err error) {
 	tn = &index.Table
-	if !index.SearchTable {
+	if tn.Table() != "" {
 		// The index and its table prefix must exist already. Resolve the table.
 		desc, err = ResolveMutableExistingObject(ctx, sc, tn, requireTable, requireTableDesc)
 		if err != nil {
 			return nil, nil, err
 		}
-	} else {
-		// On the first call to expandMutableIndexName(), index.SearchTable is
-		// true, index.Index is empty and tn.Table() is the index
-		// name. Once the table name is resolved for the index below,
-		// index.Table references a new table name (not the index), so a
-		// subsequent call to expandMutableIndexName() will generate tn using the
-		// new value of index.Table, which is a table name.
+		return tn, desc, nil
+	}
 
-		// Just an assertion: if we got there, there cannot be a value in index.Index yet.
-		if index.Index != "" {
-			return nil, nil, pgerror.NewAssertionErrorf("programmer error: not-searched index name found already qualified: %s@%s", tn, index.Index)
-		}
+	// On the first call to expandMutableIndexName(), index.Table.Table() is empty.
+	// Once the table name is resolved for the index below, index.Table
+	// references the table name.
 
-		index.Index = tree.UnrestrictedName(tn.TableName)
+	// Look up the table prefix.
+	found, _, err := tn.TableNamePrefix.Resolve(ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	if err != nil {
+		return nil, nil, err
+	}
+	if !found {
+		if requireTable {
+			return nil, nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+				"schema or database was not found while searching index: %q",
+				tree.ErrString(&index.Index)).SetHintf(
+				"check the current database and search_path are valid")
+		}
+		return nil, nil, nil
+	}
 
-		// Look up the table prefix.
-		found, _, err := tn.TableNamePrefix.Resolve(ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
-		if err != nil {
-			return nil, nil, err
-		}
-		if !found {
-			if requireTable {
-				return nil, nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
-					"schema or database was not found while searching index: %q",
-					tree.ErrString(&index.Index)).SetHintf(
-					"check the current database and search_path are valid")
-			}
-			return nil, nil, nil
-		}
+	lookupFlags := sc.CommonLookupFlags(requireTable)
+	var foundTn *tree.TableName
+	foundTn, desc, err = findTableContainingIndex(ctx, txn, sc, tn.Catalog(), tn.Schema(), index.Index, lookupFlags)
+	if err != nil {
+		return nil, nil, err
+	}
 
-		lookupFlags := sc.CommonLookupFlags(requireTable)
-		var foundTn *tree.TableName
-		foundTn, desc, err = findTableContainingIndex(ctx, txn, sc, tn.Catalog(), tn.Schema(), index.Index, lookupFlags)
-		if err != nil {
-			return nil, nil, err
-		} else if foundTn != nil {
-			// Memoize the table name that was found. tn is a reference to the table name
-			// stored in index.Table.
-			*tn = *foundTn
-		}
+	if foundTn != nil {
+		// Memoize the table name that was found. tn is a reference to the table name
+		// stored in index.Table.
+		*tn = *foundTn
 	}
 	return tn, desc, nil
 }

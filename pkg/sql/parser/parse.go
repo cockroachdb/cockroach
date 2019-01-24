@@ -240,8 +240,8 @@ func ParseOne(sql string) (Statement, error) {
 	return p.parseOneWithDepth(1, sql)
 }
 
-// ParseTableNameWithIndex parses a table name with index.
-func ParseTableNameWithIndex(sql string) (tree.TableIndexName, error) {
+// ParseTableIndexName parses a table name with index.
+func ParseTableIndexName(sql string) (tree.TableIndexName, error) {
 	// We wrap the name we want to parse into a dummy statement since our parser
 	// can only parse full statements.
 	stmt, err := ParseOne(fmt.Sprintf("ALTER INDEX %s RENAME TO x", sql))
