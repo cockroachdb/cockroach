@@ -61,21 +61,23 @@ func New() *Catalog {
 }
 
 // ResolveSchema is part of the cat.Catalog interface.
-func (tc *Catalog) ResolveSchema(_ context.Context, name *cat.SchemaName) (cat.Schema, error) {
+func (tc *Catalog) ResolveSchema(
+	_ context.Context, name *cat.SchemaName,
+) (cat.Schema, cat.SchemaName, error) {
 	// This is a simplified version of tree.TableName.ResolveTarget() from
 	// sql/tree/name_resolution.go.
 	toResolve := *name
 	if name.ExplicitSchema {
 		if name.ExplicitCatalog {
 			// Already 2 parts: nothing to do.
-			return tc.resolveSchema(&toResolve, name)
+			return tc.resolveSchema(&toResolve)
 		}
 
 		// Only one part specified; assume it's a schema name and determine
 		// whether the current database has that schema.
 		toResolve.CatalogName = testDB
-		if sch, err := tc.resolveSchema(&toResolve, name); err == nil {
-			return sch, nil
+		if sch, resName, err := tc.resolveSchema(&toResolve); err == nil {
+			return sch, resName, nil
 		}
 
 		// No luck so far. Compatibility with CockroachDB v1.1: use D.public
@@ -83,19 +85,19 @@ func (tc *Catalog) ResolveSchema(_ context.Context, name *cat.SchemaName) (cat.S
 		toResolve.CatalogName = name.SchemaName
 		toResolve.SchemaName = tree.PublicSchemaName
 		toResolve.ExplicitCatalog = true
-		return tc.resolveSchema(&toResolve, name)
+		return tc.resolveSchema(&toResolve)
 	}
 
 	// Neither schema or catalog was specified, so use t.public.
 	toResolve.CatalogName = tree.Name(testDB)
 	toResolve.SchemaName = tree.PublicSchemaName
-	return tc.resolveSchema(&toResolve, name)
+	return tc.resolveSchema(&toResolve)
 }
 
 // ResolveDataSource is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSource(
 	_ context.Context, name *cat.DataSourceName,
-) (cat.DataSource, error) {
+) (cat.DataSource, cat.DataSourceName, error) {
 	// This is a simplified version of tree.TableName.ResolveExisting() from
 	// sql/tree/name_resolution.go.
 	var ds cat.DataSource
@@ -103,16 +105,16 @@ func (tc *Catalog) ResolveDataSource(
 	toResolve := *name
 	if name.ExplicitSchema && name.ExplicitCatalog {
 		// Already 3 parts.
-		ds, err = tc.resolveDataSource(&toResolve, name)
+		ds, err = tc.resolveDataSource(&toResolve)
 		if err == nil {
-			return ds, nil
+			return ds, toResolve, nil
 		}
 	} else if name.ExplicitSchema {
 		// Two parts: Try to use the current database, and be satisfied if it's
 		// sufficient to find the object.
 		toResolve.CatalogName = testDB
-		if tab, err := tc.resolveDataSource(&toResolve, name); err == nil {
-			return tab, nil
+		if tab, err := tc.resolveDataSource(&toResolve); err == nil {
+			return tab, toResolve, nil
 		}
 
 		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T
@@ -120,17 +122,17 @@ func (tc *Catalog) ResolveDataSource(
 		toResolve.CatalogName = name.SchemaName
 		toResolve.SchemaName = tree.PublicSchemaName
 		toResolve.ExplicitCatalog = true
-		ds, err = tc.resolveDataSource(&toResolve, name)
+		ds, err = tc.resolveDataSource(&toResolve)
 		if err == nil {
-			return ds, nil
+			return ds, toResolve, nil
 		}
 	} else {
 		// This is a naked data source name. Use the current database.
 		toResolve.CatalogName = tree.Name(testDB)
 		toResolve.SchemaName = tree.PublicSchemaName
-		ds, err = tc.resolveDataSource(&toResolve, name)
+		ds, err = tc.resolveDataSource(&toResolve)
 		if err == nil {
-			return ds, nil
+			return ds, toResolve, nil
 		}
 	}
 
@@ -139,12 +141,12 @@ func (tc *Catalog) ResolveDataSource(
 	if table, ok := resolveVTable(name); ok {
 		// We rely on the check in CreateTable against this table's schema to infer
 		// that this is a virtual table.
-		return tc.CreateTable(table), nil
+		return tc.CreateTable(table), *name, nil
 	}
 
 	// If this didn't end up being a virtual table, then return the original
 	// error returned by resolveDataSource.
-	return nil, err
+	return nil, cat.DataSourceName{}, err
 }
 
 // ResolveDataSourceByID is part of the cat.Catalog interface.
@@ -185,29 +187,27 @@ func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privil
 	return nil
 }
 
-func (tc *Catalog) resolveSchema(toResolve, name *cat.SchemaName) (cat.Schema, error) {
+func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
 	if string(toResolve.CatalogName) != testDB {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+		return nil, cat.SchemaName{}, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
 			"cannot create %q because the target database or schema does not exist",
 			tree.ErrString(&toResolve.CatalogName)).
 			SetHintf("verify that the current database and search_path are valid and/or the target database exists")
 	}
 
 	if string(toResolve.SchemaName) != tree.PublicSchema {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+		return nil, cat.SchemaName{}, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
 			"schema cannot be modified: %q", tree.ErrString(toResolve))
 	}
 
-	*name = *toResolve
-	return &tc.testSchema, nil
+	return &tc.testSchema, *toResolve, nil
 }
 
 // resolveDataSource checks if `toResolve` exists among the data sources in this
-// Catalog. If it does, resolveDataSource updates `name` to match `toResolve`,
-// and returns the corresponding data source. Otherwise, it returns an error.
-func (tc *Catalog) resolveDataSource(toResolve, name *cat.DataSourceName) (cat.DataSource, error) {
+// Catalog. If it does, returns the corresponding data source. Otherwise, it
+// returns an error.
+func (tc *Catalog) resolveDataSource(toResolve *cat.DataSourceName) (cat.DataSource, error) {
 	if table, ok := tc.dataSources[toResolve.FQString()]; ok {
-		*name = *toResolve
 		return table, nil
 	}
 	return nil, fmt.Errorf("no data source matches prefix: %q", tree.ErrString(toResolve))
@@ -220,7 +220,7 @@ func (tc *Catalog) Schema() *Schema {
 
 // Table returns the test table that was previously added with the given name.
 func (tc *Catalog) Table(name *tree.TableName) *Table {
-	ds, err := tc.ResolveDataSource(context.TODO(), name)
+	ds, _, err := tc.ResolveDataSource(context.TODO(), name)
 	if err != nil {
 		panic(err)
 	}
@@ -241,7 +241,7 @@ func (tc *Catalog) AddTable(tab *Table) {
 
 // View returns the test view that was previously added with the given name.
 func (tc *Catalog) View(name *cat.DataSourceName) *View {
-	ds, err := tc.ResolveDataSource(context.TODO(), name)
+	ds, _, err := tc.ResolveDataSource(context.TODO(), name)
 	if err != nil {
 		panic(err)
 	}
