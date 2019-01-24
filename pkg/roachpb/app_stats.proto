@@ -17,6 +17,7 @@ package cockroach.sql;
 option go_package = "roachpb";
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
 
 message StatementStatistics {
   // Count is the total number of times this statement was executed
@@ -88,6 +89,9 @@ message SensitiveInfo {
 
   // MostRecentPlanDescription is a serialized representation of the logical plan most recently captured for this query.
   optional ExplainTreePlanNode most_recent_plan_description = 2 [(gogoproto.nullable) = false];
+
+  // Timestamp is the time at which the logical plan was last sampled.
+  optional google.protobuf.Timestamp most_recent_plan_timestamp = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
 message NumericStat {

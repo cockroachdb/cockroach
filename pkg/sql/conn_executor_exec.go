@@ -921,7 +921,7 @@ func (ex *connExecutor) sampleLogicalPlanDescription(
 }
 
 // saveLogicalPlanDescription returns if we should save this as a sample logical plan
-// for its corresponding fingerprint. We use `saveFingerprintPlanOnceEvery`
+// for its corresponding fingerprint. We use `logicalPlanSamplingFrequencyInMinutes`
 // to assess how frequently to sample logical plans.
 func (ex *connExecutor) saveLogicalPlanDescription(stmt Statement, optimizerUsed bool) bool {
 	stats := ex.appStats.getStatsForStmt(stmt, true /* distSQLUsed */, optimizerUsed, nil, false /* createIfNonexistent */)
@@ -931,8 +931,8 @@ func (ex *connExecutor) saveLogicalPlanDescription(stmt Statement, optimizerUsed
 	}
 	stats.Lock()
 	defer stats.Unlock()
-
-	return stats.data.Count%saveFingerprintPlanOnceEvery == 0
+	timeLastSampled := stats.data.SensitiveInfo.MostRecentPlanTimestamp
+	return int(timeutil.Since(timeLastSampled).Minutes()) >= logicalPlanSamplingFrequencyInMinutes
 }
 
 // canFallbackFromOpt returns whether we can fallback on the heuristic planner

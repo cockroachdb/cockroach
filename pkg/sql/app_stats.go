@@ -103,9 +103,8 @@ func (s stmtKey) flags() string {
 	return b.String()
 }
 
-// saveFingerprintPlanOnceEvery is the number of queries for a given fingerprint that go by before
-// we save the plan again.
-const saveFingerprintPlanOnceEvery = 1000
+// logicalPlanSamplingFrequencyInMinutes is frequency at which we save a logical plan for each fingerprint.
+const logicalPlanSamplingFrequencyInMinutes = 5
 
 // recordStatement saves per-statement statistics.
 //
@@ -140,6 +139,7 @@ func (a *appStats) recordStatement(
 	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
 	if samplePlanDescription != nil {
 		s.data.SensitiveInfo.MostRecentPlanDescription = *samplePlanDescription
+		s.data.SensitiveInfo.MostRecentPlanTimestamp = timeutil.Now()
 	}
 	if automaticRetryCount == 0 {
 		s.data.FirstAttemptCount++
