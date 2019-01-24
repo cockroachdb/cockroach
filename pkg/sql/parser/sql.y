@@ -771,7 +771,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
-%type <*tree.UnresolvedName> table_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <*tree.UnresolvedName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target create_stats_target
@@ -8468,6 +8468,19 @@ table_pattern_list:
     $$.val = append($1.tablePatterns(), $3.unresolvedName())
   }
 
+// An index can be specified in a few different ways:
+//
+//   - with explicit table name:
+//       <table>@<index>
+//       <schema>.<table>@<index>
+//       <catalog/db>.<table>@<index>
+//       <catalog/db>.<schema>.<table>@<index>
+//
+//   - without explicit table name:
+//       <index>
+//       <schema>.<index>
+//       <catalog/db>.<index>
+//       <catalog/db>.<schema>.<index>
 table_index_name:
   table_name '@' index_name
   {
@@ -8481,18 +8494,19 @@ table_index_name:
        Index: tree.UnrestrictedName($3),
     }
   }
-| table_name
+| standalone_index_name
   {
-    // This case allows specifying just an index name (potentially schema-qualified).
-    // We temporarily store the index name in Table (see tree.TableIndexName).
+    // Treat it as a table name, then pluck out the TableName.
     name, err := tree.NormalizeTableName($1.unresolvedName())
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
+    indexName := tree.UnrestrictedName(name.TableName)
+    name.TableName = ""
     $$.val = tree.TableIndexName{
         Table: name,
-        SearchTable: true,
+        Index: indexName,
     }
   }
 
@@ -8624,43 +8638,45 @@ interval:
 
 // Note: newlines between non-terminals matter to the doc generator.
 
-collation_name:      unrestricted_name
+collation_name:        unrestricted_name
 
-partition_name:      unrestricted_name
+partition_name:        unrestricted_name
 
-index_name:          unrestricted_name
+index_name:            unrestricted_name
 
-opt_index_name:      opt_name
+opt_index_name:        opt_name
 
-zone_name:           unrestricted_name
+zone_name:             unrestricted_name
 
-target_name:         unrestricted_name
+target_name:           unrestricted_name
 
-constraint_name:     name
+constraint_name:       name
 
-database_name:       name
+database_name:         name
 
-column_name:         name
+column_name:           name
 
-family_name:         name
+family_name:           name
 
-opt_family_name:     opt_name
+opt_family_name:       opt_name
 
-table_alias_name:    name
+table_alias_name:      name
 
-statistics_name:     name
+statistics_name:       name
 
-window_name:         name
+window_name:           name
 
-view_name:           table_name
+view_name:             table_name
 
-type_name:           db_object_name
+type_name:             db_object_name
 
-sequence_name:       db_object_name
+sequence_name:         db_object_name
 
-table_name:          db_object_name
+table_name:            db_object_name
 
-explain_option_name: non_reserved_word
+standalone_index_name: db_object_name
+
+explain_option_name:   non_reserved_word
 
 // Names for column references.
 // Accepted patterns:
