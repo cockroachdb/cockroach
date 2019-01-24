@@ -76,50 +76,53 @@ func TestCache(t *testing.T) {
 	// In this test, all entries have the same size: avgCachedSize.
 	c := New(3 * avgCachedSize)
 
+	var s Session
+	s.Init()
+
 	expect(t, c, "")
-	c.Add(data("a", sa, avgCachedSize))
+	c.Add(&s, data("a", sa, avgCachedSize))
 	expect(t, c, "a")
-	c.Add(data("b", sb, avgCachedSize))
+	c.Add(&s, data("b", sb, avgCachedSize))
 	expect(t, c, "b,a")
-	c.Add(data("c", sc, avgCachedSize))
+	c.Add(&s, data("c", sc, avgCachedSize))
 	expect(t, c, "c,b,a")
-	c.Add(data("d", sd, avgCachedSize))
+	c.Add(&s, data("d", sd, avgCachedSize))
 	expect(t, c, "d,c,b")
-	if _, ok := c.Find("a"); ok {
+	if _, ok := c.Find(&s, "a"); ok {
 		t.Errorf("a shouldn't be in the cache")
 	}
-	if res, ok := c.Find("c"); !ok {
+	if res, ok := c.Find(&s, "c"); !ok {
 		t.Errorf("c should be in the cache")
 	} else if res.Memo != sc {
 		t.Errorf("invalid Memo for c")
 	}
 	expect(t, c, "c,d,b")
 
-	if res, ok := c.Find("b"); !ok {
+	if res, ok := c.Find(&s, "b"); !ok {
 		t.Errorf("b should be in the cache")
 	} else if res.Memo != sb {
 		t.Errorf("invalid Memo for b")
 	}
 	expect(t, c, "b,c,d")
 
-	c.Add(data("a", sa, avgCachedSize))
+	c.Add(&s, data("a", sa, avgCachedSize))
 	expect(t, c, "a,b,c")
 
 	c.Purge("b")
 	expect(t, c, "a,c")
-	if _, ok := c.Find("b"); ok {
+	if _, ok := c.Find(&s, "b"); ok {
 		t.Errorf("b shouldn't be in the cache")
 	}
 
 	c.Purge("c")
 	expect(t, c, "a")
 
-	c.Add(data("b", sb, avgCachedSize))
+	c.Add(&s, data("b", sb, avgCachedSize))
 	expect(t, c, "b,a")
 
 	c.Clear()
 	expect(t, c, "")
-	if _, ok := c.Find("b"); ok {
+	if _, ok := c.Find(&s, "b"); ok {
 		t.Errorf("b shouldn't be in the cache")
 	}
 }
@@ -128,55 +131,57 @@ func TestCacheMemory(t *testing.T) {
 	m := &memo.Memo{}
 
 	c := New(10 * avgCachedSize)
+	var s Session
+	s.Init()
 	expect(t, c, "")
 	for i := 0; i < 10; i++ {
-		c.Add(data(fmt.Sprintf("%d", i), m, avgCachedSize/2))
+		c.Add(&s, data(fmt.Sprintf("%d", i), m, avgCachedSize/2))
 	}
 	expect(t, c, "9,8,7,6,5,4,3,2,1,0")
 
 	// Verify handling when we have no more entries.
-	c.Add(data("10", m, avgCachedSize/2))
+	c.Add(&s, data("10", m, avgCachedSize/2))
 	expect(t, c, "10,9,8,7,6,5,4,3,2,1")
 
 	// Verify handling when we have larger entries.
-	c.Add(data("large", m, avgCachedSize*8))
+	c.Add(&s, data("large", m, avgCachedSize*8))
 	expect(t, c, "large,10,9,8,7")
-	c.Add(data("verylarge", m, avgCachedSize*10))
+	c.Add(&s, data("verylarge", m, avgCachedSize*10))
 	expect(t, c, "verylarge")
 
 	for i := 0; i < 10; i++ {
-		c.Add(data(fmt.Sprintf("%d", i), m, avgCachedSize))
+		c.Add(&s, data(fmt.Sprintf("%d", i), m, avgCachedSize))
 	}
 	expect(t, c, "9,8,7,6,5,4,3,2,1,0")
 
 	// Verify that we don't try to add an entry that's larger than the cache size.
-	c.Add(data("large", m, avgCachedSize*11))
+	c.Add(&s, data("large", m, avgCachedSize*11))
 	expect(t, c, "9,8,7,6,5,4,3,2,1,0")
 
 	// Verify handling when we update an existing entry with one that uses more
 	// memory.
-	c.Add(data("5", m, avgCachedSize*5))
+	c.Add(&s, data("5", m, avgCachedSize*5))
 	expect(t, c, "5,9,8,7,6,4")
 
-	c.Add(data("0", m, avgCachedSize))
+	c.Add(&s, data("0", m, avgCachedSize))
 	expect(t, c, "0,5,9,8,7,6")
 
 	// Verify handling when we update an existing entry with one that uses less
 	// memory.
-	c.Add(data("5", m, avgCachedSize))
+	c.Add(&s, data("5", m, avgCachedSize))
 	expect(t, c, "5,0,9,8,7,6")
-	c.Add(data("1", m, avgCachedSize))
-	c.Add(data("2", m, avgCachedSize))
-	c.Add(data("3", m, avgCachedSize))
-	c.Add(data("4", m, avgCachedSize))
+	c.Add(&s, data("1", m, avgCachedSize))
+	c.Add(&s, data("2", m, avgCachedSize))
+	c.Add(&s, data("3", m, avgCachedSize))
+	c.Add(&s, data("4", m, avgCachedSize))
 	expect(t, c, "4,3,2,1,5,0,9,8,7,6")
 
 	// Verify Purge updates the available memory.
 	c.Purge("3")
 	expect(t, c, "4,2,1,5,0,9,8,7,6")
-	c.Add(data("x", m, avgCachedSize))
+	c.Add(&s, data("x", m, avgCachedSize))
 	expect(t, c, "x,4,2,1,5,0,9,8,7,6")
-	c.Add(data("y", m, avgCachedSize))
+	c.Add(&s, data("y", m, avgCachedSize))
 	expect(t, c, "y,x,4,2,1,5,0,9,8,7")
 }
 
@@ -192,6 +197,8 @@ func TestSynchronization(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func() {
 			rng, _ := randutil.NewPseudoRand()
+			var s Session
+			s.Init()
 			for j := 0; j < 5000; j++ {
 				sql := fmt.Sprintf("%d", rng.Intn(2*size))
 				switch r := rng.Intn(100); {
@@ -203,10 +210,10 @@ func TestSynchronization(t *testing.T) {
 					c.Purge(sql)
 				case r <= 35:
 					// 25% of the time, add an entry.
-					c.Add(data(sql, &memo.Memo{}, int64(256+rng.Intn(10*avgCachedSize))))
+					c.Add(&s, data(sql, &memo.Memo{}, int64(256+rng.Intn(10*avgCachedSize))))
 				default:
 					// The rest of the time, find an entry.
-					_, _ = c.Find(sql)
+					_, _ = c.Find(&s, sql)
 				}
 				c.check()
 			}
@@ -216,35 +223,87 @@ func TestSynchronization(t *testing.T) {
 	wg.Wait()
 }
 
+func TestSession(t *testing.T) {
+	var s Session
+	s.Init()
+
+	// Find the number of misses that are necessary to reach the high miss ratio.
+	n := 1
+	for {
+		n++
+		s.registerMiss()
+		if s.highMissRatio() {
+			break
+		}
+	}
+	if n < 1000 {
+		t.Errorf("high miss ratio threshold reached too quickly (n=%d)", n)
+	} else if n > 10000 {
+		t.Errorf("high miss ratio threshold reached too slowly (n=%d)", n)
+	}
+
+	// Verify we can get the average close to 0.5.
+	for i := 0; i < 2000; i++ {
+		s.registerHit()
+		s.registerMiss()
+	}
+	v := float64(s.missRatioMMA) / mmaScale
+	if v < 0.5 || v > 0.6 {
+		t.Errorf("invalid miss ratio %f, expected close to 0.5", v)
+	}
+	// Verify we can get the average close to 0.
+	for i := 0; i < 2000; i++ {
+		s.registerHit()
+	}
+	v = float64(s.missRatioMMA) / mmaScale
+	if v > 0.1 {
+		t.Errorf("invalid miss ratio %f, expected close to 0", v)
+	}
+}
+
 // BenchmarkWorstCase is a worst case benchmark where every session
 // misses the cache. The result of the benchmark is the time to do a pair of
 // Find, Add operations.
 //
 // For server-level benchmarks, see BenchmarkQueryCache in pkg/sql.
 func BenchmarkWorstCase(b *testing.B) {
-	for _, numWorkers := range []int{1, 10, 100} {
-		b.Run(fmt.Sprintf("%d", numWorkers), func(b *testing.B) {
-			const cacheSize = 10
-			c := New(cacheSize * maxCachedSize)
-			numOpsPerWorker := (b.N + numWorkers - 1) / numWorkers
-			var wg sync.WaitGroup
-			wg.Add(numWorkers)
-			for i := 0; i < numWorkers; i++ {
-				workerID := i
-				go func() {
-					cd := CachedData{Memo: &memo.Memo{}}
-					for j := 0; j < numOpsPerWorker; j++ {
-						str := fmt.Sprintf("%d/%d", workerID, j)
-						if _, ok := c.Find(str); ok {
-							panic("found")
-						}
-						cd.SQL = str
-						c.Add(&cd)
+	for _, mitigation := range []bool{false, true} {
+		name := "NoMitigation"
+		if mitigation {
+			name = "WithMitigation"
+		}
+		b.Run(name, func(b *testing.B) {
+			for _, numWorkers := range []int{1, 10, 100} {
+				b.Run(fmt.Sprintf("%d", numWorkers), func(b *testing.B) {
+					const cacheSize = 10
+					c := New(cacheSize * maxCachedSize)
+					numOpsPerWorker := (b.N + numWorkers - 1) / numWorkers
+					var wg sync.WaitGroup
+					wg.Add(numWorkers)
+					for i := 0; i < numWorkers; i++ {
+						workerID := i
+						go func() {
+							var s Session
+							s.Init()
+							cd := CachedData{Memo: &memo.Memo{}}
+							for j := 0; j < numOpsPerWorker; j++ {
+								str := fmt.Sprintf("%d/%d", workerID, j)
+								if _, ok := c.Find(&s, str); ok {
+									panic("found")
+								}
+								cd.SQL = str
+								if !mitigation {
+									// Disable the mitigation mechanism.
+									s.missRatioMMA = 0
+								}
+								c.Add(&s, &cd)
+							}
+							wg.Done()
+						}()
 					}
-					wg.Done()
-				}()
+					wg.Wait()
+				})
 			}
-			wg.Wait()
 		})
 	}
 }
