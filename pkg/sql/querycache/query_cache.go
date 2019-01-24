@@ -16,6 +16,7 @@ package querycache
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -24,6 +25,9 @@ import (
 
 // C is a query cache, keyed on SQL statement strings (which can contain
 // placeholders).
+//
+// A cache can be used by multiple threads in parallel; however each different
+// context must use its own Session.
 type C struct {
 	totalMem int64
 
@@ -133,14 +137,16 @@ func New(memorySize int64) *C {
 //
 // If any cached data needs to be updated, it must be done via Add. In
 // particular, PrepareMetadata in the returned CachedData must not be modified.
-func (c *C) Find(sql string) (_ CachedData, ok bool) {
+func (c *C) Find(session *Session, sql string) (_ CachedData, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	e := c.mu.m[sql]
 	if e == nil {
+		session.registerMiss()
 		return CachedData{}, false
 	}
+	session.registerHit()
 	// Move the entry to the front of the used list.
 	e.remove()
 	e.insertAfter(&c.mu.used)
@@ -150,7 +156,19 @@ func (c *C) Find(sql string) (_ CachedData, ok bool) {
 // Add adds an entry to the cache (possibly evicting some other entry). If the
 // cache already has a corresponding entry for d.SQL, it is updated.
 // Note: d.PrepareMetadata cannot be modified once this method is called.
-func (c *C) Add(d *CachedData) {
+func (c *C) Add(session *Session, d *CachedData) {
+	if session.highMissRatio() {
+		// If the recent miss ratio in this session is high, we want to avoid the
+		// overhead of moving things in and out of the cache. But we do want the
+		// cache to "recover" if the workload becomes cacheable again. So we still
+		// add the entry, but only once in a while.
+		if session.r == nil {
+			session.r = rand.New(rand.NewSource(1 /* seed */))
+		}
+		if session.r.Intn(100) != 0 {
+			return
+		}
+	}
 	mem := d.memoryEstimate()
 	if d.SQL == "" || mem > maxCachedSize || mem > c.totalMem {
 		return
@@ -277,4 +295,48 @@ func (c *C) check() {
 			memUsed, c.mu.availableMem, c.totalMem,
 		))
 	}
+}
+
+// Session stores internal information related to a single session. A session
+// cannot be used by multiple threads in parallel.
+type Session struct {
+	// missRatioMMA is a running average of the recent miss ratio. This is a
+	// Modified Moving Average, which is an exponential moving average with factor
+	// 1/N. See:
+	//   https://en.wikipedia.org/wiki/Moving_average#Modified_moving_average.
+	//
+	// To avoid unnecessary floating point operations, the value is scaled by
+	// mmaScale and stored as an integer (specifically, a value of mmaScale means
+	// a 100% miss ratio).
+	missRatioMMA int64
+
+	// Initialized lazily as needed.
+	r *rand.Rand
+}
+
+// mmaN is the N factor and is chosen so that the miss ratio doesn't reach the
+// threshold until we've seen on the order of a thousand queries (we don't want
+// to reach the limit before we even get a chance to fill up the cache).
+const mmaN = 1024
+const mmaScale = 1000000000
+
+// Init initializes or resets a Session.
+func (s *Session) Init() {
+	s.missRatioMMA = 0
+	s.r = nil
+}
+
+func (s *Session) registerHit() {
+	s.missRatioMMA = s.missRatioMMA * (mmaN - 1) / mmaN
+}
+
+func (s *Session) registerMiss() {
+	s.missRatioMMA = (s.missRatioMMA*(mmaN-1) + mmaScale) / mmaN
+}
+
+// highMissRatio returns true if the recent average miss ratio is above a
+// certain threshold (80%).
+func (s *Session) highMissRatio() bool {
+	const threshold = mmaScale * 80 / 100
+	return s.missRatioMMA > threshold
 }

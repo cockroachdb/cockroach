@@ -49,7 +49,7 @@ func (p *planner) prepareUsingOptimizer(
 	opc.init(p, stmt)
 
 	if opc.useCache {
-		cachedData, ok := p.execCfg.QueryCache.Find(stmt.SQL)
+		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, stmt.SQL)
 		if ok && cachedData.PrepareMetadata != nil {
 			pm := cachedData.PrepareMetadata
 			// Check that the type hints match (the type hints affect type checking).
@@ -108,7 +108,7 @@ func (p *planner) prepareUsingOptimizer(
 				// PreparedStatement fields.
 				PrepareMetadata: &stmt.Prepared.PrepareMetadata,
 			}
-			p.execCfg.QueryCache.Add(&cachedData)
+			p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 		}
 	}
 	return opc.flags, false, nil
@@ -304,7 +304,7 @@ func (opc *optPlanningCtx) buildExecMemo(
 
 	if opc.useCache {
 		// Consult the query cache.
-		cachedData, ok := p.execCfg.QueryCache.Find(opc.stmt.SQL)
+		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.stmt.SQL)
 		if ok {
 			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog); err != nil {
 				return nil, false, err
@@ -316,7 +316,7 @@ func (opc *optPlanningCtx) buildExecMemo(
 				// Update the plan in the cache. If the cache entry had PrepareMetadata
 				// populated, it may no longer be valid.
 				cachedData.PrepareMetadata = nil
-				p.execCfg.QueryCache.Add(&cachedData)
+				p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 				opc.log(ctx, "query cache hit but needed update")
 				opc.flags.Set(planFlagOptCacheMiss)
 			} else {
@@ -348,7 +348,7 @@ func (opc *optPlanningCtx) buildExecMemo(
 			SQL:  opc.stmt.SQL,
 			Memo: memo,
 		}
-		p.execCfg.QueryCache.Add(&cachedData)
+		p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 		opc.log(ctx, "query cache add")
 		return memo, false, nil
 	}

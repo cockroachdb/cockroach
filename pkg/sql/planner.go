@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -161,6 +162,8 @@ type planner struct {
 	// optimizer caches an instance of the cost-based optimizer that can be reused
 	// to plan queries (reused in order to reduce allocations).
 	optimizer xform.Optimizer
+
+	queryCacheSession querycache.Session
 }
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
@@ -263,6 +266,8 @@ func newInternalPlanner(
 
 	acc := plannerMon.MakeBoundAccount()
 	p.extendedEvalCtx.ActiveMemAcc = &acc
+
+	p.queryCacheSession.Init()
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create

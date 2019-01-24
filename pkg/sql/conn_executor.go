@@ -1895,6 +1895,8 @@ func (ex *connExecutor) resetPlanner(
 	p.autoCommit = false
 	p.isPreparing = false
 	p.avoidCachedDescriptors = false
+
+	p.queryCacheSession.Init()
 }
 
 // txnStateTransitionsApplyWrapper is a wrapper on top of Machine built with the
