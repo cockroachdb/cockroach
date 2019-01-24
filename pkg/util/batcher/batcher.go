@@ -50,13 +50,12 @@ import (
 // Another wrinkle is dealing with the different ways in which sending a batch
 // may fail. A batch may fail in an ambiguous way (RPC/network errors), it may
 // fail completely (which is likely indistinguishable from the ambiguous
-// failure) and lastly it may fail partially.
+// failure) and lastly it may fail partially (is this true? should it be true?).
 
-// TODO(ajwerner): Consider the difference between a batch key
-// (node/destination) and an order key which might imply a data dependency
-// between operations. For the initial motivating use cases for this library
-// there are no data dependencies between operations and the only key will be
-// the guess for where an operation should go.
+// TODO(ajwerner): Do we need to consider ordering dependencies between
+// operations? For the initial motivating use cases for this library there are
+// no data dependencies between operations and the only key will be the guess
+// for where an operation should go.
 
 // TODO(ajwerner): Consider providing a limit on maximum number of requests in
 // flight at a time. This may ultimately lead to a need for queuing. Furthermore
@@ -70,7 +69,7 @@ import (
 // historical operations and stay idle only some other percentile. For example
 // imagine if the max delay was the 50th and the max idle was the 10th? This
 // has a problem when much of the prior workload was say local operations and
-// happened very rapidly. Perhaps we need to provide some envelope?
+// happened very rapidly. Perhaps we need to provide some bounding envelope?
 
 // Config contains the dependencies and configuration for a Batcher.
 type Config struct {
@@ -78,29 +77,32 @@ type Config struct {
 	// Name of the batcher, used for logging and stopper.
 	Name string
 
-	// Sender can round-trip a batch.
+	// Sender can round-trip a batch. Sender must not be nil.
 	Sender client.Sender
 
-	// Stopper controls the lifecycle of the Batcher.
+	// Stopper controls the lifecycle of the Batcher. Stopper must not be nil.
 	Stopper *stop.Stopper
 
 	// MaxSizePerBatch is the maximum number of bytes in individual requests in a
 	// batch.
 	MaxSizePerBatch int
 
-	// MaxMsgsPerBatch is the maximum number of messages
+	// MaxMsgsPerBatch is the maximum number of requests which a batch may contain
+	// before being sent.
 	MaxMsgsPerBatch int
 
 	// MaxWait is the maximum amount of time a message should wait in a batch
-	// before being sent.
+	// before being sent. If zero roughly no batching will occur.
 	MaxWait time.Duration
 
 	// MaxIdle is the amount of time a batch should wait between message additions
 	// before being sent. The idle timer allows clients to observe low latencies
-	// when throughput is low.
+	// when throughput is low. If zero roughly no batching will occur.
 	MaxIdle time.Duration
 }
 
+// BatchSender sends requests in batches based on the guessed range ID according
+// to a specified batching policy.
 type Batcher struct {
 	pool pool
 	cfg  Config
@@ -110,11 +112,9 @@ type Batcher struct {
 	requestChan chan *request
 }
 
-// New creates a new Batcher.
+// New creates a new Batcher. New will panic if cfg has a nil Stopper or Sender.
 func New(cfg Config) *Batcher {
-	if cfg.Stopper == nil {
-		panic("cannot pass nil stopper!")
-	}
+	validateConfig(&cfg)
 	b := &Batcher{
 		cfg:         cfg,
 		pool:        makePool(),
@@ -123,6 +123,14 @@ func New(cfg Config) *Batcher {
 	}
 	cfg.Stopper.RunAsyncTask(context.Background(), b.cfg.Name, b.run)
 	return b
+}
+
+func validateConfig(cfg *Config) {
+	if cfg.Stopper == nil {
+		panic("cannot construct a Batcher with a nil Stopper")
+	} else if cfg.Sender == nil {
+		panic("cannot construct a Batcher with a nil Sender")
+	}
 }
 
 // Send sends req as a part of a batch. An error is returned if the context
@@ -336,7 +344,7 @@ func (p *pool) newBatch(now time.Time) *batch {
 }
 
 // batchQueue is a container for batch objects which offers O(1) get based on
-// rangeID and peekFront as well asO(n*log(n)) upsert, removal, popFront.
+// rangeID and peekFront as well as O(n*log(n)) upsert, removal, popFront.
 // Note that the batch struct stores its index in the batches slice and is -1
 // when not part of the queue. The heap methods update the batch indices when
 // updating the heap. Take care not to ever put a batch in to multiple

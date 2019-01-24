@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/util/batcher"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -63,6 +64,14 @@ const (
 	// split into many batches by the DistSender, leading to high CPU overhead
 	// and quadratic memory usage.
 	intentResolverBatchSize = 100
+
+	// defaultGCBatchIdle is the default duration which the gc request batcher
+	// will wait between requests for a range before sending it.
+	defaultGCBatchIdle = 50 * time.Millisecond
+
+	// defaultGCBatchWait is the default duration which the gc request batcher
+	// will wait between requests for a range before sending it.
+	defaultGCBatchWait = 500 * time.Millisecond
 )
 
 // Config contains the dependencies to construct an IntentResolver.
@@ -70,9 +79,12 @@ type Config struct {
 	Clock        *hlc.Clock
 	DB           *client.DB
 	Stopper      *stop.Stopper
-	TaskLimit    int
 	AmbientCtx   log.AmbientContext
 	TestingKnobs storagebase.IntentResolverTestingKnobs
+
+	TaskLimit      int
+	MaxGCBatchWait time.Duration
+	MaxGCBatchIdle time.Duration
 }
 
 // IntentResolver manages the process of pushing transactions and
@@ -88,6 +100,8 @@ type IntentResolver struct {
 	sem          chan struct{}    // Semaphore to limit async goroutines.
 	contentionQ  *contentionQueue // manages contention on individual keys
 
+	batcher *batcher.Batcher
+
 	mu struct {
 		syncutil.Mutex
 		// Map from txn ID being pushed to a refcount of requests waiting on the push.
@@ -100,14 +114,24 @@ type IntentResolver struct {
 	every log.EveryN
 }
 
-// New creates an new IntentResolver.
-func New(c Config) *IntentResolver {
+func setConfigDefaults(c *Config) {
 	if c.TaskLimit == 0 {
 		c.TaskLimit = defaultTaskLimit
 	}
 	if c.TaskLimit == -1 || c.TestingKnobs.ForceSyncIntentResolution {
 		c.TaskLimit = 0
 	}
+	if c.MaxGCBatchIdle == 0 {
+		c.MaxGCBatchIdle = defaultGCBatchIdle
+	}
+	if c.MaxGCBatchWait == 0 {
+		c.MaxGCBatchWait = defaultGCBatchWait
+	}
+}
+
+// New creates an new IntentResolver.
+func New(c Config) *IntentResolver {
+	setConfigDefaults(&c)
 	ir := &IntentResolver{
 		clock:        c.Clock,
 		db:           c.DB,
@@ -120,6 +144,15 @@ func New(c Config) *IntentResolver {
 	}
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
+	ir.batcher = batcher.New(batcher.Config{
+		Name:            "intent_resolver_batcher",
+		MaxMsgsPerBatch: 100,
+		MaxWait:         c.MaxGCBatchWait,
+		MaxIdle:         c.MaxGCBatchIdle,
+		Stopper:         c.Stopper,
+		Sender:          c.DB.NonTransactionalSender(),
+	})
+
 	return ir
 }
 
@@ -614,7 +647,6 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 
 	// We successfully resolved the intents, so we're able to GC from
 	// the txn span directly.
-	b := &client.Batch{}
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
 
 	// This is pretty tricky. Transaction keys are range-local and
@@ -646,10 +678,14 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{
 		Key: txnKey,
 	})
-	b.AddRawRequest(&gcArgs)
-	if err := ir.db.Run(ctx, b); err != nil {
-		return errors.Wrapf(err, "could not GC completed transaction anchored at %s",
+	_, pErr, err := ir.batcher.Send(ctx, rangeID, &gcArgs)
+	if err != nil {
+		return errors.Wrapf(ctx.Err(), "could not GC completed transaction anchored at %s",
 			roachpb.Key(txn.Key))
+	}
+	if pErr != nil {
+		return errors.Errorf("could not GC completed transaction anchored at %s: %v",
+			roachpb.Key(txn.Key), pErr)
 	}
 	return nil
 }
