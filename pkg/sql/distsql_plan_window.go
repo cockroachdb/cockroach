@@ -195,18 +195,6 @@ func (s *windowPlanState) adjustColumnIndices(funcsInProgress []*windowFuncHolde
 	}
 }
 
-func createWindowerSpecFunc(funcStr string) (distsqlpb.WindowerSpec_Func, error) {
-	if aggBuiltin, ok := distsqlpb.AggregatorSpec_Func_value[funcStr]; ok {
-		aggSpec := distsqlpb.AggregatorSpec_Func(aggBuiltin)
-		return distsqlpb.WindowerSpec_Func{AggregateFunc: &aggSpec}, nil
-	} else if winBuiltin, ok := distsqlpb.WindowerSpec_WindowFunc_value[funcStr]; ok {
-		winSpec := distsqlpb.WindowerSpec_WindowFunc(winBuiltin)
-		return distsqlpb.WindowerSpec_Func{WindowFunc: &winSpec}, nil
-	} else {
-		return distsqlpb.WindowerSpec_Func{}, errors.Errorf("unknown aggregate/window function %s", funcStr)
-	}
-}
-
 func (s *windowPlanState) createWindowFnSpec(
 	funcInProgress *windowFuncHolder,
 ) (distsqlpb.WindowerSpec_WindowFn, sqlbase.ColumnType, error) {
@@ -215,7 +203,7 @@ func (s *windowPlanState) createWindowFnSpec(
 	}
 	// Figure out which built-in to compute.
 	funcStr := strings.ToUpper(funcInProgress.expr.Func.String())
-	funcSpec, err := createWindowerSpecFunc(funcStr)
+	funcSpec, err := distsqlrun.CreateWindowerSpecFunc(funcStr)
 	if err != nil {
 		return distsqlpb.WindowerSpec_WindowFn{}, sqlbase.ColumnType{}, err
 	}
