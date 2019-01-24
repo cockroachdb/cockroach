@@ -8468,6 +8468,19 @@ table_pattern_list:
     $$.val = append($1.tablePatterns(), $3.unresolvedName())
   }
 
+// An index can be specified in a few different ways:
+//
+//   - with explicit table name:
+//       <table>@<index>
+//       <schema>.<table>@<index>
+//       <catalog/db>.<table>@<index>
+//       <catalog/db>.<schema>.<table>@<index>
+//
+//   - without explicit table name:
+//       <index>
+//       <schema>.<index>
+//       <catalog/db>.<index>
+//       <catalog/db>.<schema>.<index>
 table_index_name:
   table_name '@' index_name
   {
@@ -8481,18 +8494,19 @@ table_index_name:
        Index: tree.UnrestrictedName($3),
     }
   }
-| table_name
+| db_object_name
   {
-    // This case allows specifying just an index name (potentially schema-qualified).
-    // We temporarily store the index name in Table (see tree.TableIndexName).
+    // Treat it as a table name, then pluck out the TableName.
     name, err := tree.NormalizeTableName($1.unresolvedName())
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
+    indexName := tree.UnrestrictedName(name.TableName)
+    name.TableName = ""
     $$.val = tree.TableIndexName{
         Table: name,
-        SearchTable: true,
+        Index: indexName,
     }
   }
 

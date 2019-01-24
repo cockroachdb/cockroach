@@ -1118,7 +1118,7 @@ ranges_kw ::=
 
 table_index_name ::=
 	table_name '@' index_name
-	| table_name
+	| db_object_name
 
 with_comment ::=
 	'WITH' 'COMMENT'
