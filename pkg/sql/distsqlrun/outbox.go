@@ -421,6 +421,9 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 
 func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 	err := m.mainLoop(ctx)
+	if err != nil {
+		log.Errorf(ctx, "outbox main loop for flow %s encountered error %s", m.flowCtx.id, err)
+	}
 	if stream, ok := m.stream.(distsqlpb.DistSQL_FlowStreamClient); ok {
 		closeErr := stream.CloseSend()
 		if err == nil {
