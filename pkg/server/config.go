@@ -243,10 +243,11 @@ type Config struct {
 	EventLogEnabled bool
 
 	// ReadyFn is called when the server has started listening on its
-	// sockets. The boolean argument indicates (iff true) that the
+	// sockets.
+	// The argument waitForInit indicates (iff true) that the
 	// server is not bootstrapped yet, will not bootstrap itself and
-	// will be waiting for an `init` command. This can be used to inform
-	// the user.
+	// will be waiting for an `init` command or accept bootstrapping
+	// from a joined node.
 	ReadyFn func(waitForInit bool)
 
 	// DelayedBootstrapFn is called if the boostrap process does not complete

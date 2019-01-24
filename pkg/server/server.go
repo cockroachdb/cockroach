@@ -1416,10 +1416,8 @@ func (s *Server) Start(ctx context.Context) error {
 		// We have no existing stores and we've been told to join a cluster. Wait
 		// for the initServer to bootstrap the cluster or connect to an existing
 		// one.
-		if s.cfg.ReadyFn != nil {
-			s.cfg.ReadyFn(true /*waitForInit*/)
-		}
-		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
+		//
+		// TODO(knz): This may need tweaking when #24118 is addressed.
 
 		s.stopper.RunWorker(workersCtx, func(context.Context) {
 			serveOnMux.Do(func() {
@@ -1427,10 +1425,38 @@ func (s *Server) Start(ctx context.Context) error {
 			})
 		})
 
+		ready := make(chan struct{})
+		if s.cfg.ReadyFn != nil {
+			// s.cfg.ReadyFn must be called in any case because the `start`
+			// command requires it to signal readiness to a process manager.
+			//
+			// However we want to be somewhat precisely informative to the user
+			// about whether the node is waiting on init / join, or whether
+			// the join was successful straight away. So we spawn this gogoroutine
+			// and either:
+			// - its timer will fire after 2 seconds and we call ReadyFn(true)
+			// - bootstrap completes earlier and the ready chan gets closed,
+			//   then we call ReadyFn(false).
+			go func() {
+				waitForInit := false
+				tm := time.After(2 * time.Second)
+				select {
+				case <-tm:
+					waitForInit = true
+				case <-ready:
+				}
+				s.cfg.ReadyFn(waitForInit)
+			}()
+		}
+
+		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command or join with an already initialized node.")
+
 		initRes, err := s.initServer.awaitBootstrap()
+		close(ready)
 		if err != nil {
 			return err
 		}
+
 		doBootstrap = initRes == needBootstrap
 		if doBootstrap {
 			if err := s.bootstrapCluster(ctx); err != nil {
