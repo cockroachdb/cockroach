@@ -35,7 +35,7 @@ datestyle                          ISO, MDY
 default_int_size                   8
 default_transaction_isolation      serializable
 default_transaction_read_only      off
-distsql                            2.0-off
+distsql                            off
 experimental_enable_zigzag_join    off
 experimental_force_lookup_join     off
 experimental_force_split_at        off
@@ -66,7 +66,7 @@ query I colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
 ----
 sql.defaults.distsql
-3
+0
 
 query TTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'

@@ -188,16 +188,10 @@ func BytesEncodeFormatFromString(val string) (_ BytesEncodeFormat, ok bool) {
 	}
 }
 
-// DistSQLExecMode controls if and when the Executor uses DistSQL and
-// distributes queries.
-// In 2.0, these settings controlled whether we use DistSQL or we use the
-// local path.
-//
-// Since 2.1, we normally run everything through the DistSQL infrastructure,
+// DistSQLExecMode controls if and when the Executor distributes queries.
+// Since 2.1, we run everything through the DistSQL infrastructure,
 // and these settings control whether to use a distributed plan, or use a plan
-// that only involves local DistSQL processors. We still support 2.0-style
-// "off" and "auto" settings for now (for benchmarks, or in case of
-// regressions).
+// that only involves local DistSQL processors.
 type DistSQLExecMode int64
 
 const (
@@ -208,12 +202,6 @@ const (
 	DistSQLAuto
 	// DistSQLOn means that we distribute queries that are supported.
 	DistSQLOn
-	// DistSQL2Dot0Off means that we use the "off" setting from 2.0 - never use
-	// the DistSQL engine.
-	DistSQL2Dot0Off
-	// DistSQL2Dot0Auto means that we use the "auto" setting from 2.0 - fall back
-	// to local unless distribution is recommended.
-	DistSQL2Dot0Auto
 	// DistSQLAlways means that we only distribute; unsupported queries fail.
 	DistSQLAlways
 )
@@ -226,10 +214,6 @@ func (m DistSQLExecMode) String() string {
 		return "auto"
 	case DistSQLOn:
 		return "on"
-	case DistSQL2Dot0Auto:
-		return "2.0-auto"
-	case DistSQL2Dot0Off:
-		return "2.0-off"
 	case DistSQLAlways:
 		return "always"
 	default:
@@ -246,10 +230,6 @@ func DistSQLExecModeFromString(val string) (_ DistSQLExecMode, ok bool) {
 		return DistSQLAuto, true
 	case "ON":
 		return DistSQLOn, true
-	case "2.0-AUTO":
-		return DistSQL2Dot0Auto, true
-	case "2.0-OFF":
-		return DistSQL2Dot0Off, true
 	case "ALWAYS":
 		return DistSQLAlways, true
 	default:

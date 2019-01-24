@@ -714,23 +714,17 @@ func (ex *connExecutor) execStmtInParallel(
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 
-		shouldUseDistSQL := shouldUseDistSQL(distributePlan, ex.sessionData.DistSQLMode)
 		samplePlanDescription := ex.sampleLogicalPlanDescription(
-			stmt, shouldUseDistSQL, false /* optimizerUsed */, planner)
+			stmt, false /* optimizerUsed */, planner)
 
 		var flags planFlags
-		if shouldUseDistSQL {
-			if distributePlan {
-				flags.Set(planFlagDistributed)
-			} else {
-				flags.Set(planFlagDistSQLLocal)
-			}
-			ex.sessionTracing.TraceExecStart(ctx, "distributed-parallel")
-			err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
+		if distributePlan {
+			flags.Set(planFlagDistributed)
 		} else {
-			ex.sessionTracing.TraceExecStart(ctx, "local-parallel")
-			err = ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
+			flags.Set(planFlagDistSQLLocal)
 		}
+		ex.sessionTracing.TraceExecStart(ctx, "parallel")
+		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 		ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
@@ -851,21 +845,15 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
-	shouldUseDistSQL := shouldUseDistSQL(distributePlan, ex.sessionData.DistSQLMode)
-	samplePlanDescription := ex.sampleLogicalPlanDescription(stmt, shouldUseDistSQL, flags.IsSet(planFlagOptUsed), planner)
+	samplePlanDescription := ex.sampleLogicalPlanDescription(stmt, flags.IsSet(planFlagOptUsed), planner)
 
-	if shouldUseDistSQL {
-		if distributePlan {
-			flags.Set(planFlagDistributed)
-		} else {
-			flags.Set(planFlagDistSQLLocal)
-		}
-		ex.sessionTracing.TraceExecStart(ctx, "distributed")
-		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
+	if distributePlan {
+		flags.Set(planFlagDistributed)
 	} else {
-		ex.sessionTracing.TraceExecStart(ctx, "local")
-		err = ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
+		flags.Set(planFlagDistSQLLocal)
 	}
+	ex.sessionTracing.TraceExecStart(ctx, "distributed")
+	err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 	if err != nil {
@@ -920,13 +908,13 @@ func (ex *connExecutor) makeExecPlan(
 // sampleLogicalPlanDescription returns a serialized representation of a statement's logical plan.
 // The returned ExplainTreePlanNode will be nil if plan should not be sampled.
 func (ex *connExecutor) sampleLogicalPlanDescription(
-	stmt Statement, useDistSQL bool, optimizerUsed bool, planner *planner,
+	stmt Statement, optimizerUsed bool, planner *planner,
 ) *roachpb.ExplainTreePlanNode {
 	if !sampleLogicalPlans.Get(&ex.appStats.st.SV) {
 		return nil
 	}
 
-	if ex.saveLogicalPlanDescription(stmt, useDistSQL, optimizerUsed) {
+	if ex.saveLogicalPlanDescription(stmt, optimizerUsed) {
 		return planToTree(context.Background(), planner.curPlan)
 	}
 	return nil
@@ -935,10 +923,8 @@ func (ex *connExecutor) sampleLogicalPlanDescription(
 // saveLogicalPlanDescription returns if we should save this as a sample logical plan
 // for its corresponding fingerprint. We use `saveFingerprintPlanOnceEvery`
 // to assess how frequently to sample logical plans.
-func (ex *connExecutor) saveLogicalPlanDescription(
-	stmt Statement, useDistSQL bool, optimizerUsed bool,
-) bool {
-	stats := ex.appStats.getStatsForStmt(stmt, useDistSQL, optimizerUsed, nil, false /* createIfNonexistent */)
+func (ex *connExecutor) saveLogicalPlanDescription(stmt Statement, optimizerUsed bool) bool {
+	stats := ex.appStats.getStatsForStmt(stmt, true /* distSQLUsed */, optimizerUsed, nil, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
@@ -975,68 +961,6 @@ func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt State
 		}
 	}
 	return true
-}
-
-// execWithLocalEngine runs a plan using the local (non-distributed) SQL
-// engine.
-// If an error is returned, the connection needs to stop processing queries.
-// Such errors are also written to res.
-// Query execution errors are written to res; they are not returned.
-func (ex *connExecutor) execWithLocalEngine(
-	ctx context.Context, planner *planner, stmtType tree.StatementType, res RestrictedCommandResult,
-) error {
-	// Create a BoundAccount to track the memory usage of each row.
-	rowAcc := planner.extendedEvalCtx.Mon.MakeBoundAccount()
-	planner.extendedEvalCtx.ActiveMemAcc = &rowAcc
-	defer rowAcc.Close(ctx)
-
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &planner.extendedEvalCtx,
-		p:               planner,
-	}
-
-	if err := planner.curPlan.start(params); err != nil {
-		res.SetError(err)
-		return nil
-	}
-
-	switch stmtType {
-	case tree.RowsAffected:
-		count, err := countRowsAffected(params, planner.curPlan.plan)
-		if err != nil {
-			res.SetError(err)
-			return nil
-		}
-		res.IncrementRowsAffected(count)
-		return nil
-	case tree.Rows:
-		consumeCtx, cleanup := ex.sessionTracing.TraceExecConsume(ctx)
-		defer cleanup()
-
-		var commErr error
-		queryErr := ex.forEachRow(params, planner.curPlan.plan, func(values tree.Datums) error {
-			for _, val := range values {
-				if err := checkResultType(val.ResolvedType()); err != nil {
-					return err
-				}
-			}
-			ex.sessionTracing.TraceExecRowsResult(consumeCtx, values)
-			commErr = res.AddRow(consumeCtx, values)
-			return commErr
-		})
-		if commErr != nil {
-			res.SetError(commErr)
-			return commErr
-		}
-		if queryErr != nil {
-			res.SetError(queryErr)
-		}
-		return nil
-	default:
-		// Calling StartPlan is sufficient for other statement types.
-		return nil
-	}
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -1088,31 +1012,6 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	ex.server.cfg.DistSQLPlanner.PlanAndRun(
 		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv)
 	return recv.commErr
-}
-
-// forEachRow calls the provided closure for each successful call to
-// planNode.Next with planNode.Values, making sure to properly track memory
-// usage.
-//
-// f is not allowed to hold on to the row slice. It needs to make a copy if it
-// want to use the memory later.
-//
-// Errors returned by this method are to be considered query errors. If the
-// caller wants to handle some errors within the callback differently, it has to
-// capture those itself.
-func (ex *connExecutor) forEachRow(params runParams, p planNode, f func(tree.Datums) error) error {
-	next, err := p.Next(params)
-	for ; next; next, err = p.Next(params) {
-		// If we're tracking memory, clear the previous row's memory account.
-		if params.extendedEvalCtx.ActiveMemAcc != nil {
-			params.extendedEvalCtx.ActiveMemAcc.Clear(params.ctx)
-		}
-
-		if err := f(p.Values()); err != nil {
-			return err
-		}
-	}
-	return err
 }
 
 // execStmtInNoTxnState "executes" a statement when no transaction is in scope.
