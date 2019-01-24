@@ -209,12 +209,12 @@ func (r *Replica) tryExecuteWriteBatch(
 				// both leave intents to GC that don't hit this code path. No good
 				// solution presents itself at the moment and such intents will be
 				// resolved on reads.
-				if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, propResult.Intents, true /* allowSync */); err != nil {
+				if err := r.store.intentResolver.CleanupIntentsAsync(ctx, propResult.Intents, true /* allowSync */); err != nil {
 					log.Warning(ctx, err)
 				}
 			}
 			if len(propResult.EndTxns) > 0 {
-				if err := r.store.intentResolver.cleanupTxnIntentsAsync(ctx, r, propResult.EndTxns, true /* allowSync */); err != nil {
+				if err := r.store.intentResolver.CleanupTxnIntentsAsync(ctx, r.RangeID, propResult.EndTxns, true /* allowSync */); err != nil {
 					log.Warning(ctx, err)
 				}
 			}

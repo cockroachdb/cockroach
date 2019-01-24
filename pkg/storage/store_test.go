@@ -411,7 +411,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-
+	factory := &testSenderFactory{}
+	cfg.DB = client.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
 	{
 		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		// Can't start as haven't bootstrapped.

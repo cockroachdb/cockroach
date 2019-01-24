@@ -17,8 +17,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -29,34 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
 )
-
-// TestPushTransactionsWithNonPendingIntent verifies that maybePushIntents
-// returns an error when a non-pending intent is passed.
-func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-
-	testCases := [][]roachpb.Intent{
-		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
-			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.ABORTED}},
-		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
-			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.COMMITTED}},
-	}
-	for _, intents := range testCases {
-		if _, pErr := tc.store.intentResolver.maybePushIntents(
-			context.Background(), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true,
-		); !testutils.IsPError(pErr, "unexpected (ABORTED|COMMITTED) intent") {
-			t.Errorf("expected error on aborted/resolved intent, but got %s", pErr)
-		}
-		if cnt := len(tc.store.intentResolver.mu.inFlightPushes); cnt != 0 {
-			t.Errorf("expected no inflight pushes refcount map entries, found %d", cnt)
-		}
-	}
-}
 
 func beginTransaction(
 	t *testing.T, store *Store, pri roachpb.UserPriority, key roachpb.Key, putKey bool,
@@ -82,84 +52,6 @@ func beginTransaction(
 	return txn
 }
 
-// TestContendedIntent verifies that multiple transactions, some actively
-// writing and others read-only, are queued if processing write intent
-// errors on a contended key. The test verifies the expected ordering in
-// the queue.
-func TestContendedIntent(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	key := roachpb.Key("a")
-	span := roachpb.Span{Key: key}
-	origTxn := beginTransaction(t, store, 1, key, true /* putKey */)
-
-	roTxn1 := newTransaction("test", key, 1, store.Clock())
-	roTxn2 := newTransaction("test", key, 1, store.Clock())
-	roTxn3 := newTransaction("test", key, 1, store.Clock())
-	rwTxn1 := beginTransaction(t, store, 1, roachpb.Key("b"), true /* putKey */)
-	rwTxn2 := beginTransaction(t, store, 1, roachpb.Key("c"), true /* putKey */)
-
-	testCases := []struct {
-		pusher  *roachpb.Transaction
-		expTxns []*roachpb.Transaction
-	}{
-		// First establish a chain of three read-only txns.
-		{pusher: roTxn1, expTxns: []*roachpb.Transaction{roTxn1}},
-		{pusher: roTxn2, expTxns: []*roachpb.Transaction{roTxn1, roTxn2}},
-		{pusher: roTxn3, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3}},
-		// Now, verify that a writing txn is inserted at the end of the queue.
-		{pusher: rwTxn1, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3, rwTxn1}},
-		// And a second writing txn is inserted after it.
-		{pusher: rwTxn2, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3, rwTxn1, rwTxn2}},
-	}
-
-	var wg sync.WaitGroup
-	ir := store.intentResolver
-	for _, tc := range testCases {
-		t.Run("", func(t *testing.T) {
-			wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Txn: origTxn.TxnMeta, Span: span}}}
-			h := roachpb.Header{Txn: tc.pusher}
-			wg.Add(1)
-			go func() {
-				_, pErr := ir.processWriteIntentError(ctx, roachpb.NewError(wiErr), nil, h, roachpb.PUSH_ABORT)
-				if pErr != nil && !testutils.IsPError(pErr, "context canceled") {
-					panic(pErr)
-				}
-				wg.Done()
-			}()
-			testutils.SucceedsSoon(t, func() error {
-				ir.contentionQ.mu.Lock()
-				defer ir.contentionQ.mu.Unlock()
-				contended, ok := ir.contentionQ.mu.keys[string(key)]
-				if !ok {
-					return errors.Errorf("key not contended")
-				}
-				if lc, let := contended.ll.Len(), len(tc.expTxns); lc != let {
-					return errors.Errorf("expected len %d; got %d", let, lc)
-				}
-				var idx int
-				for e := contended.ll.Front(); e != nil; e = e.Next() {
-					p := e.Value.(*pusher)
-					if p.txn != tc.expTxns[idx] {
-						return errors.Errorf("expected txn %s at index %d; got %s", tc.expTxns[idx], idx, p.txn)
-					}
-					idx++
-				}
-				return nil
-			})
-		})
-	}
-
-	// Free up all waiters to complete the test.
-	cancel()
-	wg.Wait()
-}
-
 // TestContendedIntentWithDependencyCycle verifies that a queue of
 // writers on a contended key, each pushing the prior writer, will
 // still notice a dependency cycle. In this case, txn3 writes "a",
@@ -169,6 +61,9 @@ func TestContendedIntent(t *testing.T) {
 // Additional non-transactional reads on the same contended key are
 // inserted to verify they do not interfere with writing transactions
 // always pushing to ensure the dependency cycle can be detected.
+//
+// This test is something of an integration test which exercises both
+// the IntentResolver as well as the txnWaitQueue.
 func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -334,7 +229,7 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 	txn4 := beginTransaction(t, store, -5, keyD, false /* putKey */)
 	txn5 := beginTransaction(t, store, -1, keyD, false /* putKey */)
 
-	fmt.Println(txn1.ID, txn2.ID, txn3.ID, txn4.ID, txn5.ID)
+	t.Log(txn1.ID, txn2.ID, txn3.ID, txn4.ID, txn5.ID)
 
 	txnCh1 := make(chan error, 1)
 	txnCh3 := make(chan error, 1)
@@ -345,15 +240,9 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 	// number of pushers in the contentionQueue.
 	waitForContended := func(key roachpb.Key, count int) {
 		testutils.SucceedsSoon(t, func() error {
-			ir := store.intentResolver
-			ir.contentionQ.mu.Lock()
-			defer ir.contentionQ.mu.Unlock()
-			contended, ok := ir.contentionQ.mu.keys[string(key)]
-			if !ok {
-				return errors.Errorf("key not contended")
-			}
-			if lc := contended.ll.Len(); lc != count {
-				return errors.Errorf("expected len %d; got %d", count, lc)
+			contentionCount := store.intentResolver.NumContended(key)
+			if contentionCount != count {
+				return errors.Errorf("expected len %d; got %d", count, contentionCount)
 			}
 			return nil
 		})
