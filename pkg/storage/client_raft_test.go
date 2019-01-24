@@ -382,16 +382,6 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// TODO(bdarnell): use the stopper.Quiesce() method. The problem
-	// right now is that raft isn't creating a task for high-level work
-	// it's creating while snapshotting and catching up. Ideally we'll
-	// be able to capture that and then can just invoke
-	// mtc.stopper.Quiesce() here.
-
-	// TODO(bdarnell): initial creation and replication needs to be atomic;
-	// cutting off the process too soon currently results in a corrupted range.
-	time.Sleep(500 * time.Millisecond)
-
 	mtc.restart()
 
 	// Send a command on each store. The original store (the lease holder still)
