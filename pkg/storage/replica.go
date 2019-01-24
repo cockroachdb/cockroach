@@ -1600,6 +1600,7 @@ func (r *Replica) GetLeaseHistory() []roachpb.Lease {
 	if r.leaseHistory == nil {
 		return nil
 	}
+
 	return r.leaseHistory.get()
 }
 

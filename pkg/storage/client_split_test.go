@@ -1374,7 +1374,7 @@ func runSetupSplitSnapshotRace(
 	sc.TestingKnobs.DisableReplicateQueue = true
 	// Async intent resolution can sometimes lead to hangs when we stop
 	// most of the stores at the end of this function.
-	sc.TestingKnobs.DisableAsyncIntentResolution = true
+	sc.TestingKnobs.IntentResolverKnobs.DisableAsyncIntentResolution = true
 	// Avoid fighting with the merge queue while trying to reproduce this race.
 	sc.TestingKnobs.DisableMergeQueue = true
 	// Disable the split delay mechanism, or it'll spend 10s going in circles.
@@ -3009,10 +3009,12 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
-				DisableSplitQueue:         true,
-				DisableMergeQueue:         true,
-				ForceSyncIntentResolution: true,
-				TestingResponseFilter:     respFilter,
+				DisableSplitQueue:     true,
+				DisableMergeQueue:     true,
+				TestingResponseFilter: respFilter,
+				IntentResolverKnobs: storagebase.IntentResolverTestingKnobs{
+					ForceSyncIntentResolution: true,
+				},
 			},
 		},
 	})
@@ -3090,7 +3092,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 
 	// Disable async tasks in the intent resolver. All tasks will be synchronous.
 	cfg := storage.TestStoreConfig(nil)
-	cfg.TestingKnobs.ForceSyncIntentResolution = true
+	cfg.TestingKnobs.IntentResolverKnobs.ForceSyncIntentResolution = true
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.DisableMergeQueue = true
 	cfg.TestingKnobs.TestingProposalFilter =

@@ -191,7 +191,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 		// This is called from handleLocalEvalResult (with raftMu locked),
 		// so disallow synchronous processing (which blocks that mutex for
 		// too long and is a potential deadlock).
-		if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, intents, false /* allowSync */); err != nil {
+		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, false /* allowSync */); err != nil {
 			log.Warning(ctx, err)
 		}
 		return nil, errSystemConfigIntent
