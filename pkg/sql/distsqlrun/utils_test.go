@@ -132,6 +132,29 @@ func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
 	return res
 }
 
+// callbackRowChannel wraps a RowChannel and calls callbacks provided in init
+// when the corresponding method is called. Currently only supports Push().
+type callbackRowChannel struct {
+	RowChannel
+	pushCallback func()
+}
+
+var _ RowReceiver = &callbackRowChannel{}
+
+func (c *callbackRowChannel) init(
+	types []sqlbase.ColumnType, pushCallback func(), bufSize, numSenders int,
+) {
+	c.pushCallback = pushCallback
+	c.RowChannel.initWithBufSizeAndNumSenders(types, bufSize, numSenders)
+}
+
+func (c *callbackRowChannel) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+	if c.pushCallback != nil {
+		c.pushCallback()
+	}
+	return c.RowChannel.Push(row, meta)
+}
+
 var (
 	intType      = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	boolType     = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
