@@ -188,22 +188,6 @@ func TestJoinReader(t *testing.T) {
 			expected:        "[['one-two']]",
 		},
 		{
-			description: "Test lookup join on non-covering secondary index",
-			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{4},
-			},
-			input: [][]tree.Datum{
-				{aFn(2), bFn(2)},
-			},
-			lookupCols:      []uint32{1},
-			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
-			inputTypes:      twoIntCols,
-			outputTypes:     oneIntCol,
-			expected:        "[[3]]",
-		},
-		{
 			description: "Test left outer lookup join on primary index",
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -236,24 +220,6 @@ func TestJoinReader(t *testing.T) {
 			inputTypes:      twoIntCols,
 			outputTypes:     []sqlbase.ColumnType{intType, strType},
 			expected:        "[[10 NULL] [2 'one-two']]",
-		},
-		{
-			description: "Test left outer lookup join on non-covering secondary index",
-			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 4},
-			},
-			input: [][]tree.Datum{
-				{tree.NewDInt(10), tree.DNull},
-				{tree.NewDInt(2), tree.DNull},
-			},
-			lookupCols:      []uint32{0},
-			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
-			joinType:        sqlbase.LeftOuterJoin,
-			inputTypes:      twoIntCols,
-			outputTypes:     []sqlbase.ColumnType{intType, intType},
-			expected:        "[[10 NULL] [2 3]]",
 		},
 		{
 			description: "Test lookup join on secondary index with NULL lookup value",
@@ -370,124 +336,6 @@ func TestJoinReader(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-// TestJoinReaderPrimaryLookup tests running the same secondary lookup join
-// with different index configurations. It verifies that the results are always
-// correct and the primary index is only fetched from when necessary.
-func TestJoinReaderPrimaryLookup(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	if _, err := sqlDB.Exec("CREATE DATABASE test"); err != nil {
-		t.Fatalf("error creating database: %v", err)
-	}
-
-	// In each test case we will perform a lookup join on a table with four int
-	// columns: a, b, c, d. We join on column b and output the value of column d.
-	// We expect a primary index lookup only when column d is not covered by the
-	// secondary index.
-	testCases := []struct {
-		description         string
-		indexSchemas        string
-		expectPrimaryLookup bool
-	}{
-		{
-			description:         "Test output column not covered by index",
-			indexSchemas:        "PRIMARY KEY (a), INDEX bc (b, c)",
-			expectPrimaryLookup: true,
-		},
-		{
-			description:         "Test output column in indexed columns",
-			indexSchemas:        "PRIMARY KEY (a), INDEX bd (b, d)",
-			expectPrimaryLookup: false,
-		},
-		{
-			description:         "Test output column in extra columns",
-			indexSchemas:        "PRIMARY KEY (a, d), INDEX b (b)",
-			expectPrimaryLookup: false,
-		},
-		{
-			description:         "Test output column in stored columns",
-			indexSchemas:        "PRIMARY KEY (a), INDEX bd (b) STORING (d)",
-			expectPrimaryLookup: false,
-		},
-	}
-	for _, c := range testCases {
-		t.Run(c.description, func(t *testing.T) {
-			q := `
-DROP TABLE IF EXISTS test.t;
-CREATE TABLE test.t (a INT, b INT, c INT, d INT, %s);
-INSERT INTO test.t VALUES
-  (1, 2, 3, 4),
-  (5, 6, 7, 8),
-  (9, 10, 11, 12),
-  (13, 14, 15, 16)`
-			if _, err := sqlDB.Exec(fmt.Sprintf(q, c.indexSchemas)); err != nil {
-				t.Fatalf("error creating table: %v", err)
-			}
-			td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
-
-			st := cluster.MakeTestingClusterSettings()
-			evalCtx := tree.MakeTestingEvalContext(st)
-			defer evalCtx.Stop(ctx)
-
-			// Initialize join reader args.
-			indexIdx := uint32(1) // first (and only) secondary index
-			flowCtx := FlowCtx{
-				EvalCtx:  &evalCtx,
-				Settings: st,
-				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-			}
-			lookupCols := []uint32{0}
-			in := NewRowBuffer(oneIntCol, genEncDatumRowsInt([][]int{{6}, {10}}), RowBufferArgs{})
-			post := distsqlpb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{4}, // the 'd' column
-			}
-			out := &RowBuffer{}
-
-			// Create and run joinReader.
-			jr, err := newJoinReader(
-				&flowCtx,
-				0, /* processorID */
-				&distsqlpb.JoinReaderSpec{Table: *td, IndexIdx: indexIdx, LookupColumns: lookupCols},
-				in,
-				&post,
-				out,
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// Set a lower batch size to force multiple batches.
-			jr.batchSize = 2
-
-			jr.Run(ctx)
-
-			// Check results.
-			var res sqlbase.EncDatumRows
-			for {
-				row := out.NextNoMeta(t)
-				if row == nil {
-					break
-				}
-				res = append(res, row)
-			}
-			expected := "[[8] [12]]"
-			if result := res.String(oneIntCol); result != expected {
-				t.Errorf("invalid results: %s, expected %s'", result, expected)
-			}
-
-			// Check that the primary index was used only if expected.
-			if !c.expectPrimaryLookup && jr.primaryFetcher != nil {
-				t.Errorf("jr.primaryFetcher is non-nil but did not expect a primary key lookup")
-			}
-		})
 	}
 }
 

@@ -929,7 +929,6 @@ func (p *PhysicalPlan) AddJoinStage(
 	leftTypes, rightTypes []sqlbase.ColumnType,
 	leftMergeOrd, rightMergeOrd distsqlpb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
-	includeRight bool,
 ) {
 	pIdxStart := ProcessorIdx(len(p.Processors))
 	stageID := p.NewStageID()
@@ -937,9 +936,7 @@ func (p *PhysicalPlan) AddJoinStage(
 	for _, n := range nodes {
 		inputs := make([]distsqlpb.InputSyncSpec, 0, 2)
 		inputs = append(inputs, distsqlpb.InputSyncSpec{ColumnTypes: leftTypes})
-		if includeRight {
-			inputs = append(inputs, distsqlpb.InputSyncSpec{ColumnTypes: rightTypes})
-		}
+		inputs = append(inputs, distsqlpb.InputSyncSpec{ColumnTypes: rightTypes})
 
 		proc := Processor{
 			Node: n,
@@ -958,22 +955,17 @@ func (p *PhysicalPlan) AddJoinStage(
 		// Parallel hash or merge join: we distribute rows (by hash of
 		// equality columns) to len(nodes) join processors.
 
-		routerType := distsqlpb.OutputRouterSpec_BY_HASH
-		if !includeRight {
-			routerType = distsqlpb.OutputRouterSpec_PASS_THROUGH
-		}
-
 		// Set up the left routers.
 		for _, resultProc := range leftRouters {
 			p.Processors[resultProc].Spec.Output[0] = distsqlpb.OutputRouterSpec{
-				Type:        routerType,
+				Type:        distsqlpb.OutputRouterSpec_BY_HASH,
 				HashColumns: leftEqCols,
 			}
 		}
 		// Set up the right routers.
 		for _, resultProc := range rightRouters {
 			p.Processors[resultProc].Spec.Output[0] = distsqlpb.OutputRouterSpec{
-				Type:        routerType,
+				Type:        distsqlpb.OutputRouterSpec_BY_HASH,
 				HashColumns: rightEqCols,
 			}
 		}
@@ -985,15 +977,11 @@ func (p *PhysicalPlan) AddJoinStage(
 	for bucket := 0; bucket < len(nodes); bucket++ {
 		pIdx := pIdxStart + ProcessorIdx(bucket)
 
-		if includeRight {
-			// Connect left routers to the processor's first input. Currently the join
-			// node doesn't care about the orderings of the left and right results.
-			p.MergeResultStreams(leftRouters, bucket, leftMergeOrd, pIdx, 0)
-			// Connect right routers to the processor's second input if it has one.
-			p.MergeResultStreams(rightRouters, bucket, rightMergeOrd, pIdx, 1)
-		} else {
-			p.MergeResultStreams(leftRouters[bucket:bucket+1], 0, leftMergeOrd, pIdx, 0)
-		}
+		// Connect left routers to the processor's first input. Currently the join
+		// node doesn't care about the orderings of the left and right results.
+		p.MergeResultStreams(leftRouters, bucket, leftMergeOrd, pIdx, 0)
+		// Connect right routers to the processor's second input if it has one.
+		p.MergeResultStreams(rightRouters, bucket, rightMergeOrd, pIdx, 1)
 
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
