@@ -245,9 +245,12 @@ func TestStreamConnectionTimeout(t *testing.T) {
 		return nil
 	})
 
-	if !consumer.ProducerClosed() {
-		t.Fatalf("expected consumer to have been closed when the flow timed out")
-	}
+	testutils.SucceedsSoon(t, func() error {
+		if !consumer.ProducerClosed() {
+			return errors.New("expected consumer to have been closed when the flow timed out")
+		}
+		return nil
+	})
 
 	// Create a dummy server stream to pass to ConnectInboundStream.
 	serverStream, _ /* clientStream */, cleanup, err := createDummyStream()
@@ -586,10 +589,11 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 
 	fr := makeFlowRegistry(0)
 	wg := sync.WaitGroup{}
-	rb := &RowBuffer{}
+	rc := &RowChannel{}
+	rc.initWithBufSizeAndNumSenders(oneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
 		0: {
-			receiver:  rb,
+			receiver:  rc,
 			waitGroup: &wg,
 		},
 	}
@@ -600,9 +604,67 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 		t.Fatal(err)
 	}
 	wg.Wait()
-	if _, meta := rb.Next(); meta == nil {
+	if _, meta := rc.Next(); meta == nil {
 		t.Fatal("expected error but got no meta")
 	} else if !testutils.IsSQLRetryableError(meta.Err) {
 		t.Fatalf("unexpected error: %v", meta.Err)
 	}
+}
+
+// TestTimeoutPushDoesntBlockRegister verifies that in the case of a timeout
+// error, we are still able to register flows while Pushing the error (#34041).
+func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	fr := makeFlowRegistry(0)
+	wg := sync.WaitGroup{}
+	// pushChan is used to be able to tell when a Push on the RowBuffer has
+	// occurred. blockChan then blocks this Push until blockChan is read from.
+	pushChan := make(chan struct{})
+	defer close(pushChan)
+	blockChan := make(chan struct{})
+	defer close(blockChan)
+	rc := NewRowBuffer(
+		oneIntCol,
+		nil, /* rows */
+		RowBufferArgs{
+			OnPush: func() {
+				pushChan <- struct{}{}
+				blockChan <- struct{}{}
+			},
+		},
+	)
+
+	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
+		0: {
+			receiver:  rc,
+			waitGroup: &wg,
+		},
+	}
+
+	wg.Add(1)
+	// RegisterFlow with an immediate timeout.
+	if err := fr.RegisterFlow(
+		ctx, distsqlpb.FlowID{}, &Flow{}, inboundStreams, 0, /* timeout */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure RegisterFlow performs a Push. Pushes can only occur with flows that
+	// have inbound streams.
+	<-pushChan
+
+	// Attempt to register a flow. Note that this flow has no inbound streams.
+	if err := fr.RegisterFlow(
+		ctx, distsqlpb.FlowID{UUID: uuid.MakeV4()}, &Flow{}, nil /* inboundStreams */, time.Hour, /* timeout */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Unblock the first RegisterFlow.
+	<-blockChan
+
+	// Wait for the goroutine spawned in the first RegisterFlow call.
+	wg.Wait()
 }
