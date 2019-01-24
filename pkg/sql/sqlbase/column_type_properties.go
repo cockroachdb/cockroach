@@ -252,7 +252,13 @@ func (c *ColumnType) SQLString() string {
 		}
 		return typName
 	case ColumnType_INT:
-		if name, ok := coltypes.IntegerTypeNames[int(c.Width)]; ok {
+		// Pre-2.1 BIT was using column type INT with arbitrary width We
+		// map this to INT now. See #34161.
+		width := c.Width
+		if width != 0 && width != 64 && width != 32 && width != 16 {
+			width = 64
+		}
+		if name, ok := coltypes.IntegerTypeNames[int(width)]; ok {
 			return name
 		}
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
@@ -383,7 +389,7 @@ func (c *ColumnType) InformationSchemaVisibleType() string {
 // expectations.
 func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 	switch c.SemanticType {
-	case ColumnType_INT, ColumnType_STRING, ColumnType_COLLATEDSTRING, ColumnType_BIT:
+	case ColumnType_STRING, ColumnType_COLLATEDSTRING, ColumnType_BIT:
 		if c.Width > 0 {
 			return c.Width, true
 		}
@@ -422,7 +428,9 @@ func (c *ColumnType) NumericPrecision() (int32, bool) {
 	switch c.SemanticType {
 	case ColumnType_INT:
 		width := c.Width
-		if width == 0 {
+		// Pre-2.1 BIT was using column type INT with arbitrary
+		// widths. Clamp them to fixed/known widths. See #34161.
+		if width != 64 && width != 32 && width != 16 {
 			width = 64
 		}
 		return width, true
