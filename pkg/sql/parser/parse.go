@@ -241,16 +241,16 @@ func ParseOne(sql string) (Statement, error) {
 }
 
 // ParseTableNameWithIndex parses a table name with index.
-func ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, error) {
+func ParseTableNameWithIndex(sql string) (tree.TableIndexName, error) {
 	// We wrap the name we want to parse into a dummy statement since our parser
 	// can only parse full statements.
 	stmt, err := ParseOne(fmt.Sprintf("ALTER INDEX %s RENAME TO x", sql))
 	if err != nil {
-		return tree.TableNameWithIndex{}, err
+		return tree.TableIndexName{}, err
 	}
 	rename, ok := stmt.AST.(*tree.RenameIndex)
 	if !ok {
-		return tree.TableNameWithIndex{}, pgerror.NewAssertionErrorf("expected an ALTER INDEX statement, but found %T", stmt)
+		return tree.TableIndexName{}, pgerror.NewAssertionErrorf("expected an ALTER INDEX statement, but found %T", stmt)
 	}
 	return *rename.Index, nil
 }

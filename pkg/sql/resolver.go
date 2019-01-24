@@ -422,7 +422,7 @@ func findTableContainingIndex(
 // on the lookup path. This can be used in the caller to avoid a 2nd
 // lookup.
 func expandMutableIndexName(
-	ctx context.Context, p *planner, index *tree.TableNameWithIndex, requireTable bool,
+	ctx context.Context, p *planner, index *tree.TableIndexName, requireTable bool,
 ) (tn *tree.TableName, desc *MutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		tn, desc, err = expandIndexName(ctx, p.txn, p, index, requireTable)
@@ -434,7 +434,7 @@ func expandIndexName(
 	ctx context.Context,
 	txn *client.Txn,
 	sc SchemaResolver,
-	index *tree.TableNameWithIndex,
+	index *tree.TableIndexName,
 	requireTable bool,
 ) (tn *tree.TableName, desc *MutableTableDescriptor, err error) {
 	tn = &index.Table
@@ -496,7 +496,7 @@ func expandIndexName(
 func (p *planner) getTableAndIndex(
 	ctx context.Context,
 	table *tree.TableName,
-	tableWithIndex *tree.TableNameWithIndex,
+	tableWithIndex *tree.TableIndexName,
 	privilege privilege.Kind,
 ) (*MutableTableDescriptor, *sqlbase.IndexDescriptor, error) {
 	var tableDesc *MutableTableDescriptor

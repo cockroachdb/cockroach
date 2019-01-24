@@ -183,9 +183,9 @@ func (ts *TableNames) Format(ctx *FmtCtx) {
 }
 func (ts *TableNames) String() string { return AsString(ts) }
 
-// TableNameWithIndex represents a "table@index", used in statements that
+// TableIndexName represents a "table@index", used in statements that
 // specifically refer to an index.
-type TableNameWithIndex struct {
+type TableIndexName struct {
 	Table TableName
 	Index UnrestrictedName
 
@@ -198,20 +198,20 @@ type TableNameWithIndex struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (n *TableNameWithIndex) Format(ctx *FmtCtx) {
+func (n *TableIndexName) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&n.Table)
 	if n.Index != "" {
 		ctx.WriteByte('@')
 		ctx.FormatNode(&n.Index)
 	}
 }
-func (n *TableNameWithIndex) String() string { return AsString(n) }
+func (n *TableIndexName) String() string { return AsString(n) }
 
-// TableNameWithIndexList is a list of indexes.
-type TableNameWithIndexList []*TableNameWithIndex
+// TableIndexNames is a list of indexes.
+type TableIndexNames []*TableIndexName
 
 // Format implements the NodeFormatter interface.
-func (n *TableNameWithIndexList) Format(ctx *FmtCtx) {
+func (n *TableIndexNames) Format(ctx *FmtCtx) {
 	sep := ""
 	for _, tni := range *n {
 		ctx.WriteString(sep)
