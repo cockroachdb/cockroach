@@ -181,7 +181,7 @@ DEALLOCATE ALL
 statement
 PREPARE x AS SELECT avg(column1) OVER (PARTITION BY column2) FROM (VALUES (1, 2), (3, 4))
 
-query R
+query R rowsort
 EXECUTE x
 ----
 1
@@ -190,7 +190,7 @@ EXECUTE x
 statement
 PREPARE y AS SELECT avg(a.column1) OVER (PARTITION BY a.column2) FROM (VALUES (1, 2), (3, 4)) a
 
-query R
+query R rowsort
 EXECUTE y
 ----
 1

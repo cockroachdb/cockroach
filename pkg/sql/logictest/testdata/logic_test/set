@@ -101,7 +101,7 @@ query T colnames
 SHOW distsql
 ----
 distsql
-2.0-off
+off
 
 ## Test that our no-op compatibility vars work
 
@@ -165,12 +165,6 @@ SET distsql = on
 statement ok
 SET distsql = off
 
-statement ok
-SET distsql = '2.0-off'
-
-statement ok
-SET distsql = '2.0-auto'
-
 statement error invalid value for parameter "distsql": "bogus"
 SET distsql = bogus
 
@@ -178,10 +172,10 @@ statement ok
 SET experimental_vectorize = on
 
 statement ok
-SET experimental_vectorize = off
+SET experimental_vectorize = always
 
 statement ok
-SET experimental_vectorize = always
+SET experimental_vectorize = off
 
 statement error invalid value for parameter "experimental_vectorize": "bogus"
 SET experimental_vectorize = bogus
