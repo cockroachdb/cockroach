@@ -548,6 +548,8 @@ type RowBufferArgs struct {
 	// If it returns an empty row and metadata, then RowBuffer.Next() is allowed
 	// to run normally. Otherwise, the values are returned from RowBuffer.Next().
 	OnNext func(*RowBuffer) (sqlbase.EncDatumRow, *ProducerMetadata)
+	// OnPush, if specified, is called as the first thing in the Push() method.
+	OnPush func(sqlbase.EncDatumRow, *ProducerMetadata)
 }
 
 // NewRowBuffer creates a RowBuffer with the given schema and initial rows.
@@ -568,6 +570,9 @@ func NewRowBuffer(
 
 // Push is part of the RowReceiver interface.
 func (rb *RowBuffer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+	if rb.args.OnPush != nil {
+		rb.args.OnPush(row, meta)
+	}
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 	if rb.mu.producerClosed {
