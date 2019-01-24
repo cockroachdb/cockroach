@@ -86,10 +86,10 @@ func (b *Builder) buildDataSource(
 			return outScope
 		}
 
-		ds := b.resolveDataSource(tn, privilege.SELECT)
+		ds, resName := b.resolveDataSource(tn, privilege.SELECT)
 		switch t := ds.(type) {
 		case cat.Table:
-			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, excludeMutations, inScope)
+			return b.buildScan(t, &resName, nil /* ordinals */, indexFlags, excludeMutations, inScope)
 		case cat.View:
 			return b.buildView(t, inScope)
 		case cat.Sequence:
