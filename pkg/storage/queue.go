@@ -638,17 +638,17 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 					annotatedCtx := repl.AnnotateCtx(ctx)
 					if stopper.RunAsyncTask(
 						annotatedCtx, fmt.Sprintf("storage.%s: processing replica", bq.name),
-						func(annotatedCtx context.Context) {
+						func(ctx context.Context) {
 							// Release semaphore when finished processing.
 							defer func() { <-bq.processSem }()
 
 							start := timeutil.Now()
-							err := bq.processReplica(annotatedCtx, repl)
+							err := bq.processReplica(ctx, repl)
 
 							duration := timeutil.Since(start)
-							bq.recordProcessDuration(annotatedCtx, duration)
+							bq.recordProcessDuration(ctx, duration)
 
-							bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
+							bq.finishProcessingReplica(ctx, stopper, repl, err)
 						}) != nil {
 						// Release semaphore on task failure.
 						<-bq.processSem
@@ -915,9 +915,9 @@ func (bq *baseQueue) addToPurgatoryLocked(
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if stopper.RunTask(
 							annotatedCtx, fmt.Sprintf("storage.%s: purgatory processing replica", bq.name),
-							func(annotatedCtx context.Context) {
-								err := bq.processReplica(annotatedCtx, repl)
-								bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
+							func(ctx context.Context) {
+								err := bq.processReplica(ctx, repl)
+								bq.finishProcessingReplica(ctx, stopper, repl, err)
 							}) != nil {
 							return
 						}
