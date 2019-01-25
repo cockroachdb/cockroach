@@ -102,7 +102,7 @@ var NoSettings *Settings // = nil
 const KeyVersionSetting = "version"
 
 var version = settings.RegisterStateMachineSetting(KeyVersionSetting,
-	"set the active cluster version in the format '<major>.<minor>'.", // hide optional `-<unstable>`
+	"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<unstable>`
 	settings.TransformerFn(versionTransformer),
 )
 

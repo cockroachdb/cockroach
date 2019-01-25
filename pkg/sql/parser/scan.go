@@ -871,6 +871,29 @@ func SplitFirstStatement(sql string) (pos int, ok bool) {
 	}
 }
 
+// Tokens decomposes the input into lexical tokens.
+func Tokens(sql string) (tokens []TokenString, ok bool) {
+	s := makeScanner(sql)
+	for {
+		var lval sqlSymType
+		s.scan(&lval)
+		if lval.id == ERROR {
+			return nil, false
+		}
+		if lval.id == 0 {
+			break
+		}
+		tokens = append(tokens, TokenString{TokenID: lval.id, Str: lval.str})
+	}
+	return tokens, true
+}
+
+// TokenString is the unit value returned by Tokens.
+type TokenString struct {
+	TokenID int32
+	Str     string
+}
+
 // LastLexicalToken returns the last lexical token. If the string has no lexical
 // tokens, returns 0 and ok=false.
 func LastLexicalToken(sql string) (lastTok int, ok bool) {
