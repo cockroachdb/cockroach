@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -88,12 +89,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 }
 
 func shouldSplitRange(
-	desc *roachpb.RangeDescriptor,
-	ms enginepb.MVCCStats,
-	reqRate float64,
-	splitByLoadQPSThreshold float64,
-	maxBytes int64,
-	sysCfg *config.SystemConfig,
+	desc *roachpb.RangeDescriptor, ms enginepb.MVCCStats, maxBytes int64, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if sysCfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Set priority to 1 in the event the range is split by zone configs.
@@ -108,12 +104,7 @@ func shouldSplitRange(
 		shouldQ = true
 	}
 
-	// Check if the request rate is higher than the QPS threshold.
-	if reqRate >= splitByLoadQPSThreshold {
-		priority += reqRate / splitByLoadQPSThreshold
-		shouldQ = true
-	}
-	return
+	return shouldQ, priority
 }
 
 // shouldQueue determines whether a range should be queued for
@@ -124,15 +115,11 @@ func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	shouldQ, priority = shouldSplitRange(repl.Desc(), repl.GetMVCCStats(),
-		0, /* Don't check for load based splitting yet. */
-		repl.SplitByLoadQPSThreshold(), repl.GetMaxBytes(), sysCfg)
+		repl.GetMaxBytes(), sysCfg)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
-		repl.splitMu.Lock()
-		defer repl.splitMu.Unlock()
-		if splitByLoad, _ := repl.splitMu.splitFinder.Key(); splitByLoad {
-			priority++
-			shouldQ = true
+		if splitKey := repl.loadBasedSplitter.MaybeSplitKey(timeutil.Now()); splitKey != nil {
+			shouldQ, priority = true, 1.0 // default priority
 		}
 	}
 
@@ -205,30 +192,11 @@ func (sq *splitQueue) processAttempt(
 		return err
 	}
 
-	// Decide whether to split by load. This is the case if there's an engaged
-	// split finder which is Ready() and has identified a key suitable for
-	// splitting at.
-	var splitByLoadKey roachpb.Key
-	var splitQPS float64
-
-	// If this replica was added to the split queue based on load, we want to
-	// make sure the criteria still hold. For example, if a range was added for
-	// a split due to a 10s write burst that suddenly stopped, we don't want to
-	// split it when it is processed a minute later.
-	r.splitMu.Lock()
-	if _, shouldSplit := r.needsSplitByLoadLocked(); shouldSplit {
-		var splitByLoad bool
-		splitByLoad, splitByLoadKey = r.splitMu.splitFinder.Key()
-		splitQPS = r.splitMu.qps
-		if splitByLoad {
-			r.splitMu.splitFinder = nil
-		}
-	}
-	r.splitMu.Unlock()
-
-	if splitByLoadKey != nil {
+	now := timeutil.Now()
+	if splitByLoadKey := r.loadBasedSplitter.MaybeSplitKey(now); splitByLoadKey != nil {
 		batchHandledQPS := r.QueriesPerSecond()
 		raftAppliedQPS := r.WritesPerSecond()
+		splitQPS := r.loadBasedSplitter.LastQPS(now)
 		reason := fmt.Sprintf(
 			"load at key %s (%.2f splitQPS, %.2f batches/sec, %.2f raft mutations/sec)",
 			splitByLoadKey,

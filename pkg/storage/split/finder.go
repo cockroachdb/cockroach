@@ -69,8 +69,8 @@ type Finder struct {
 	count     int
 }
 
-// New initiates a Finder with the given time.
-func New(startTime time.Time) *Finder {
+// NewFinder initiates a Finder with the given time.
+func NewFinder(startTime time.Time) *Finder {
 	return &Finder{
 		startTime: startTime,
 	}
@@ -122,11 +122,11 @@ func (f *Finder) Record(span roachpb.Span, intNFn func(int) int) {
 	f.samples[idx] = sample{key: span.Key}
 }
 
-// Key finds an appropriate split point based on the Reservoir
-// sampling method.
-func (f *Finder) Key() (bool, roachpb.Key) {
+// Key finds an appropriate split point based on the Reservoir sampling method.
+// Returns a nil key if no appropriate key was found.
+func (f *Finder) Key() roachpb.Key {
 	if f == nil {
-		return false, nil
+		return nil
 	}
 
 	var bestIdx = -1
@@ -149,7 +149,7 @@ func (f *Finder) Key() (bool, roachpb.Key) {
 	}
 
 	if bestIdx == -1 {
-		return false, nil
+		return nil
 	}
-	return true, f.samples[bestIdx].key
+	return f.samples[bestIdx].key
 }
