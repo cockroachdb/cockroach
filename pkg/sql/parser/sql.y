@@ -1170,13 +1170,11 @@ alter_sequence_stmt:
 alter_sequence_options_stmt:
   ALTER SEQUENCE sequence_name sequence_option_list
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.AlterSequence{Name: name, Options: $4.seqOpts(), IfExists: false}
+    $$.val = &tree.AlterSequence{Name: $3.unresolvedObjectName(), Options: $4.seqOpts(), IfExists: false}
   }
 | ALTER SEQUENCE IF EXISTS sequence_name sequence_option_list
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.AlterSequence{Name: name, Options: $6.seqOpts(), IfExists: true}
+    $$.val = &tree.AlterSequence{Name: $5.unresolvedObjectName(), Options: $6.seqOpts(), IfExists: true}
   }
 
 // %Help: ALTER USER - change user properties

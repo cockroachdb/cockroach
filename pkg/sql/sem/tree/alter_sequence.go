@@ -19,7 +19,7 @@ package tree
 // RenameTable node.
 type AlterSequence struct {
 	IfExists bool
-	Name     TableName
+	Name     *UnresolvedObjectName
 	Options  SequenceOptions
 }
 
@@ -29,6 +29,6 @@ func (node *AlterSequence) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(&node.Name)
+	ctx.FormatNode(node.Name)
 	ctx.FormatNode(&node.Options)
 }
