@@ -277,6 +277,40 @@ func TestCloudStorageSink(t *testing.T) {
 			"v9\n",
 		}, slurpDir(t, dir))
 	})
+
+	t.Run(`file-ordering`, func(t *testing.T) {
+		t1 := &sqlbase.TableDescriptor{Name: `t1`}
+
+		dir := `file-ordering`
+		s, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts)
+		require.NoError(t, err)
+
+		// Simulate initial scan, which emits data at a timestamp, then an equal
+		// resolved timestamp.
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`is1`), ts(1)))
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`is2`), ts(1)))
+		require.NoError(t, s.Flush(ctx))
+		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(1)))
+
+		// Test some edge cases.
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e2`), ts(2)))
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e3prev`), ts(3).Prev()))
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e3`), ts(3)))
+		require.NoError(t, s.Flush(ctx))
+		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(3)))
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e3next`), ts(3).Next()))
+		require.NoError(t, s.Flush(ctx))
+		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(4)))
+
+		require.Equal(t, []string{
+			"is1\nis2\n",
+			`{"__crdb__":{"resolved":"1.0000000000"}}`,
+			"e2\ne3prev\ne3\n",
+			`{"__crdb__":{"resolved":"3.0000000000"}}`,
+			"e3next\n",
+			`{"__crdb__":{"resolved":"4.0000000000"}}`,
+		}, slurpDir(t, dir))
+	})
 }
 
 // TODO(dan): Validations-based cloudStorageSink testing.
