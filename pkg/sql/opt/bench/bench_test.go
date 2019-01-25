@@ -517,7 +517,6 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 			h.semaCtx.Placeholders.TypeHints[name],
 			"", /* context */
 			&h.semaCtx,
-			&h.evalCtx,
 			true, /* allowImpure */
 		)
 		if err != nil {
