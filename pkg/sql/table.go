@@ -59,7 +59,7 @@ type namespaceKey struct {
 // system.namespace.
 func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey, error) {
 	namespace := map[sqlbase.ID]namespaceKey{}
-	rows, _ /* cols */, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
 		ctx, "get-all-names", p.txn,
 		`SELECT id, "parentID", name FROM system.namespace`,
 	)

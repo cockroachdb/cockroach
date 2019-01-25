@@ -346,7 +346,7 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
 	// flattened for quick reads, but we'd rather only report the non-defaults.
-	if datums, _, err := s.internalExecutor.Query(
+	if datums, err := s.internalExecutor.Query(
 		ctx, "read-setting", nil /* txn */, "SELECT name FROM system.settings",
 	); err != nil {
 		log.Warningf(ctx, "failed to read settings: %s", err)
@@ -358,7 +358,7 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		}
 	}
 
-	if datums, _, err := s.internalExecutor.Query(
+	if datums, err := s.internalExecutor.Query(
 		ctx,
 		"read-zone-configs",
 		nil, /* txn */
