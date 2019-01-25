@@ -280,6 +280,15 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		table:    tt,
 	}
 
+	// Look for name suffixes indicating this is a mutation index.
+	if name, ok := extractWriteOnlyIndex(def); ok {
+		idx.IdxName = name
+		tt.writeOnlyIdxCount++
+	} else if name, ok := extractDeleteOnlyIndex(def); ok {
+		idx.IdxName = name
+		tt.deleteOnlyIdxCount++
+	}
+
 	// Add explicit columns and mark primary key columns as not null.
 	notNullIndex := true
 	for _, colDef := range def.Columns {
@@ -440,4 +449,18 @@ func isMutationColumn(def *tree.ColumnTableDef) bool {
 		return true
 	}
 	return false
+}
+
+func extractWriteOnlyIndex(def *tree.IndexTableDef) (name string, ok bool) {
+	if !strings.HasSuffix(string(def.Name), ":write-only") {
+		return "", false
+	}
+	return strings.TrimSuffix(string(def.Name), ":write-only"), true
+}
+
+func extractDeleteOnlyIndex(def *tree.IndexTableDef) (name string, ok bool) {
+	if !strings.HasSuffix(string(def.Name), ":delete-only") {
+		return "", false
+	}
+	return strings.TrimSuffix(string(def.Name), ":delete-only"), true
 }

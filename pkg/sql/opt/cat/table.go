@@ -26,6 +26,21 @@ import (
 
 // Table is an interface to a database table, exposing only the information
 // needed by the query optimizer.
+//
+// Both columns and indexes are grouped into three sets: public, write-only, and
+// delete-only. When a column or index is added or dropped, it proceeds through
+// each of the three states as that schema change is incrementally rolled out to
+// the cluster without blocking ongoing queries. In the public state, reads,
+// writes, and deletes are allowed. In the write-only state, only writes and
+// deletes are allowed. Finally, in the delete-only state, only deletes are
+// allowed. Further details about "online schema change" can be found in:
+//
+//   docs/RFCS/20151014_online_schema_change.md
+//
+// Calling code must take care to use the right collection of columns or
+// indexes. Usually this should be the public collections, since most usages are
+// read-only, but mutation operators generally need to consider non-public
+// columns and indexes.
 type Table interface {
 	DataSource
 
@@ -40,13 +55,13 @@ type Table interface {
 	// case).
 	ColumnCount() int
 
-	// WritableColumnCount returns the number of public and writable columns in
-	// the table. Although writable columns are not visible, any inserts and
+	// WritableColumnCount returns the number of public and write-only columns in
+	// the table. Although write-only columns are not visible, any inserts and
 	// updates must still set them. WritableColumnCount is always >= ColumnCount.
 	WritableColumnCount() int
 
-	// DeletableColumnCount returns the number of public, writable, and deletable
-	// columns in the table. DeletableColumnCount is always >=
+	// DeletableColumnCount returns the number of public, write-only, and
+	// delete- only columns in the table. DeletableColumnCount is always >=
 	// WritableColumnCount.
 	DeletableColumnCount() int
 
@@ -63,9 +78,23 @@ type Table interface {
 	// by deletable columns.
 	Column(i int) Column
 
-	// IndexCount returns the number of indexes defined on this table. This
-	// includes the primary index, so the count is always >= 1.
+	// IndexCount returns the number of public indexes defined on this table.
+	// Public indexes are not currently being added or dropped from the table.
+	// This method should be used when mutation columns can be ignored (the common
+	// case). The returned indexes include the primary index, so the count is
+	// always >= 1.
 	IndexCount() int
+
+	// WritableIndexCount returns the number of public and write-only indexes
+	// defined on this table. Although write-only indexes are not visible, any
+	// table mutation operations must still be applied to them. WritableIndexCount
+	// is always >= IndexCount.
+	WritableIndexCount() int
+
+	// DeletableIndexCount returns the number of public, write-only, and
+	// delete-onlyindexes defined on this table. DeletableIndexCount is always
+	// >= WritableIndexCount.
+	DeletableIndexCount() int
 
 	// Index returns the ith index, where i < IndexCount. The table's primary
 	// index is always the 0th index, and is always present (use cat.PrimaryIndex
@@ -166,8 +195,8 @@ func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 		child.Child(buf.String())
 	}
 
-	for i := 0; i < tab.IndexCount(); i++ {
-		formatCatalogIndex(tab.Index(i), i == PrimaryIndex, child)
+	for i := 0; i < tab.DeletableIndexCount(); i++ {
+		formatCatalogIndex(tab, i, child)
 	}
 
 	for i := 0; i < tab.IndexCount(); i++ {
@@ -185,16 +214,21 @@ func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for
 // debugging and testing.
-func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
+func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
+	idx := tab.Index(ord)
 	inverted := ""
 	if idx.IsInverted() {
 		inverted = "INVERTED "
 	}
-	child := tp.Childf("%sINDEX %s", inverted, idx.Name())
+	mutation := ""
+	if IsMutationIndex(tab, ord) {
+		mutation = " (mutation)"
+	}
+	child := tp.Childf("%sINDEX %s%s", inverted, idx.Name(), mutation)
 
 	var buf bytes.Buffer
 	colCount := idx.ColumnCount()
-	if isPrimary {
+	if ord == PrimaryIndex {
 		// Omit the "stored" columns from the primary index.
 		colCount = idx.KeyColumnCount()
 	}
