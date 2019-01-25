@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"sync/atomic"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,12 +24,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-// cloudStorageFormatTime formats times as YYYYMMDDHHMMSSNNNNNNNNN.
-func cloudStorageFormatTime(t time.Time) string {
-	// TODO(dan): Instead do the minimal thing necessary to differentiate times
-	// truncated to some bucket size.
+// cloudStorageFormatTime formats times as YYYYMMDDHHMMSSNNNNNNNNNLLLLLLLLLL.
+func cloudStorageFormatTime(ts hlc.Timestamp) string {
+	// TODO(dan): This is an absurdly long way to print out this timestamp, but
+	// I kept hitting bugs while trying to do something clever to make it
+	// shorter. Revisit.
 	const f = `20060102150405`
-	return fmt.Sprintf(`%s%09d`, t.Format(f), t.Nanosecond())
+	t := ts.GoTime()
+	return fmt.Sprintf(`%s%09d%010d`, t.Format(f), t.Nanosecond(), ts.Logical)
 }
 
 type cloudStorageSinkKey struct {
@@ -200,12 +201,7 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	}
 	// Don't need to copy payload because we never buffer it anywhere.
 
-	// Since cloudStorageFormatTime truncates the logical time, we have to write
-	// the resolved timestamp for the previous nanosecond. Otherwise a resolved
-	// timestamp for <walltime>.0 would sort after an update for <walltime>.1
-	// and the updated would be incorrectly ignored.
-	resolvedTime := resolved.GoTime().Add(-time.Nanosecond)
-	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolvedTime))
+	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
 	if log.V(1) {
 		log.Info(ctx, "writing ", filename)
 	}
@@ -238,7 +234,7 @@ func (s *cloudStorageSink) flushFile(
 		return nil
 	}
 
-	ts := cloudStorageFormatTime(file.earliestTs.GoTime())
+	ts := cloudStorageFormatTime(file.earliestTs)
 	fileID := s.fileID
 	s.fileID++
 	filename := fmt.Sprintf(`%s-%s-%d-%d-%d-%d%s`,
