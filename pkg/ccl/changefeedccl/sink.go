@@ -99,9 +99,13 @@ func getSink(
 				return nil, errors.Wrapf(err, `parsing %s`, fileSizeParam)
 			}
 		}
-		sinkURI = strings.TrimPrefix(sinkURI, `experimental-`)
+		u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
+		// Transfer "ownership" of validating all remaining query parameters to
+		// ExportStorage.
+		u.RawQuery = q.Encode()
+		q = url.Values{}
 		makeSink = func() (Sink, error) {
-			return makeCloudStorageSink(sinkURI, nodeID, fileSize, settings, opts)
+			return makeCloudStorageSink(u.String(), nodeID, fileSize, settings, opts)
 		}
 	case sinkSchemeExperimentalSQL:
 		// Swap the changefeed prefix for the sql connection one that sqlSink
