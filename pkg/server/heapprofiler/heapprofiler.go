@@ -43,7 +43,7 @@ var (
 	maxProfiles = settings.RegisterIntSetting(
 		"server.heap_profile.max_profiles",
 		"maximum number of profiles to be kept. "+
-			"Profiles with lower score are GC'ed, but latest profile is always kept",
+			"Profiles with lower score are GC'ed, but latest profile is always kept.",
 		5,
 	)
 )

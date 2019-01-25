@@ -48,14 +48,15 @@ var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-// DeprecatedResolution10StoreDuration is a deprecated setting that previously configured
-// how long time series data was retained; it has been replaced with
-// Resolution10sStorageTTL. We retain this setting for backwards compatibility
-// during a version upgrade.
-var DeprecatedResolution10StoreDuration = settings.RegisterDurationSetting(
-	"timeseries.resolution_10s.storage_duration",
-	"deprecated setting: the amount of time to store timeseries data. "+
-		"Replaced by timeseries.storage.10s_resolution_ttl.",
+// deprecatedResolution10StoreDuration1 is retained for backward compatibility during a version upgrade.
+var deprecatedResolution10StoreDuration1 = settings.RegisterDurationSetting(
+	"timeseries.resolution_10s.storage_duration", "do not use - replaced by timeseries.storage.resolution_10s.ttl",
+	deprecatedResolution10sDefaultPruneThreshold,
+)
+
+// deprecatedResolution10StoreDuration2 is retained for backward compatibility during a version upgrade.
+var deprecatedResolution10StoreDuration2 = settings.RegisterDurationSetting(
+	"timeseries.storage.10s_resolution_ttl", "do not use - replaced by timeseries.storage.resolution_10s.ttl",
 	deprecatedResolution10sDefaultPruneThreshold,
 )
 
@@ -63,17 +64,23 @@ var DeprecatedResolution10StoreDuration = settings.RegisterDurationSetting(
 // at he 10 second resolution. Data older than this is subject to being "rolled
 // up" into the 30 minute resolution and then deleted.
 var Resolution10sStorageTTL = settings.RegisterDurationSetting(
-	"timeseries.storage.10s_resolution_ttl",
+	"timeseries.storage.resolution_10s.ttl",
 	"the maximum age of time series data stored at the 10 second resolution. Data older than this "+
 		"is subject to rollup and deletion.",
 	resolution10sDefaultRollupThreshold,
+)
+
+// deprecatedResolution30StoreDuration is retained for backward compatibility during a version upgrade.
+var deprecatedResolution30StoreDuration = settings.RegisterDurationSetting(
+	"timeseries.storage.30m_resolution_ttl", "do not use - replaced by timeseries.storage.resolution_30m.ttl",
+	resolution30mDefaultPruneThreshold,
 )
 
 // Resolution30mStorageTTL defines the maximum age of data that will be
 // retained at he 30 minute resolution. Data older than this is subject to
 // deletion.
 var Resolution30mStorageTTL = settings.RegisterDurationSetting(
-	"timeseries.storage.30m_resolution_ttl",
+	"timeseries.storage.resolution_30m.ttl",
 	"the maximum age of time series data stored at the 30 minute resolution. Data older than this "+
 		"is subject to deletion.",
 	resolution30mDefaultPruneThreshold,
@@ -103,7 +110,12 @@ func NewDB(db *client.DB, settings *cluster.Settings) *DB {
 			if settings.Version.IsActive(cluster.VersionColumnarTimeSeries) {
 				return Resolution10sStorageTTL.Get(&settings.SV).Nanoseconds()
 			}
-			return DeprecatedResolution10StoreDuration.Get(&settings.SV).Nanoseconds()
+			t1 := deprecatedResolution10StoreDuration1.Get(&settings.SV).Nanoseconds()
+			t2 := deprecatedResolution10StoreDuration2.Get(&settings.SV).Nanoseconds()
+			if t1 < t2 {
+				return t2
+			}
+			return t1
 		},
 		Resolution30m:  func() int64 { return Resolution30mStorageTTL.Get(&settings.SV).Nanoseconds() },
 		resolution1ns:  func() int64 { return resolution1nsDefaultRollupThreshold.Nanoseconds() },
