@@ -460,8 +460,7 @@ UPDATE t29494 SET x = 124 WHERE x = 12 RETURNING *
 ----
 124
 
-# The HP and CBO show different errors for this case.
-statement error [column "y" does not exist | column "y" is being backfilled]
+statement error column "y" does not exist
 UPDATE t29494 SET y = 123
 
 # Check the new column is not usable in assignments. We need to

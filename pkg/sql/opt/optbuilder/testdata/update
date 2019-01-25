@@ -55,8 +55,8 @@ CREATE TABLE mutation (
 TABLE mutation
  ├── m int not null
  ├── n int
- ├── o int
- ├── p int
+ ├── o int (mutation)
+ ├── p int (mutation)
  └── INDEX primary
       └── m int not null
 
@@ -1333,7 +1333,7 @@ error (42703): column "o" does not exist
 build
 UPDATE mutation SET o=10
 ----
-error (42P10): column "o" is being backfilled
+error (42703): column "o" does not exist
 
 # Try to use mutation column in WHERE clause.
 build
