@@ -20,108 +20,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
-
-type mockEvalCtx struct {
-	clusterSettings *cluster.Settings
-	desc            *roachpb.RangeDescriptor
-	clock           *hlc.Clock
-	stats           enginepb.MVCCStats
-	qps             float64
-	abortSpan       *abortspan.AbortSpan
-	gcThreshold     hlc.Timestamp
-}
-
-func (m *mockEvalCtx) String() string {
-	return "mock"
-}
-func (m *mockEvalCtx) ClusterSettings() *cluster.Settings {
-	return m.clusterSettings
-}
-func (m *mockEvalCtx) EvalKnobs() storagebase.BatchEvalTestingKnobs {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) Engine() engine.Engine {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) Clock() *hlc.Clock {
-	return m.clock
-}
-func (m *mockEvalCtx) DB() *client.DB {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) GetLimiters() *Limiters {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) AbortSpan() *abortspan.AbortSpan {
-	return m.abortSpan
-}
-func (m *mockEvalCtx) GetTxnWaitQueue() *txnwait.Queue {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) NodeID() roachpb.NodeID {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) StoreID() roachpb.StoreID {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) GetRangeID() roachpb.RangeID {
-	return m.desc.RangeID
-}
-func (m *mockEvalCtx) IsFirstRange() bool {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) GetFirstIndex() (uint64, error) {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) GetTerm(uint64) (uint64, error) {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) GetLeaseAppliedIndex() uint64 {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) Desc() *roachpb.RangeDescriptor {
-	return m.desc
-}
-func (m *mockEvalCtx) ContainsKey(key roachpb.Key) bool {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) GetMVCCStats() enginepb.MVCCStats {
-	return m.stats
-}
-func (m *mockEvalCtx) GetSplitQPS() float64 {
-	return m.qps
-}
-func (m *mockEvalCtx) CanCreateTxnRecord(
-	uuid.UUID, []byte, hlc.Timestamp,
-) (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) GetGCThreshold() hlc.Timestamp {
-	return m.gcThreshold
-}
-func (m *mockEvalCtx) GetTxnSpanGCThreshold() hlc.Timestamp {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {
-	panic("unimplemented")
-}
-func (m *mockEvalCtx) GetLease() (roachpb.Lease, roachpb.Lease) {
-	panic("unimplemented")
-}
 
 func TestDeclareKeysResolveIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -198,7 +105,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 				h.RangeID = desc.RangeID
 
 				cArgs := CommandArgs{Header: h}
-				cArgs.EvalCtx = &mockEvalCtx{abortSpan: ac}
+				cArgs.EvalCtx = &MockEvalCtx{abortSpan: ac}
 
 				if !ranged {
 					cArgs.Args = &ri

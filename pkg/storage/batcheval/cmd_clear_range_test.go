@@ -108,7 +108,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			h.RangeID = desc.RangeID
 
 			cArgs := CommandArgs{Header: h}
-			cArgs.EvalCtx = &mockEvalCtx{desc: &desc, clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), stats: stats}
+			cArgs.EvalCtx = &MockEvalCtx{desc: &desc, clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), stats: stats}
 			cArgs.Args = &roachpb.ClearRangeRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key:    startKey,
