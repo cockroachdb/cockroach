@@ -16,6 +16,11 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"sort"
 	"time"
 
@@ -464,7 +469,92 @@ func (sc *SchemaChanger) distBackfill(
 			return err
 		}
 	}
+	if backfillType == indexBackfill {
+		return sc.validateIndexes(ctx, evalCtx, lease)
+	}
 	return nil
+}
+
+// validate the new indexes being added
+func (sc *SchemaChanger) validateIndexes(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+) error {
+	readAsOf := sc.clock.Now()
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		txn.SetFixedTimestamp(ctx, readAsOf)
+		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+
+		if err := sc.ExtendLease(ctx, lease); err != nil {
+			return err
+		}
+
+		start := timeutil.Now()
+		// Count the number of rows in the table.
+		cnt, err := evalCtx.InternalExecutor.QueryRow(ctx, "VERIFY INDEX", txn,
+			fmt.Sprintf(`SELECT COUNT(1) FROM [%d AS t]`, tableDesc.ID))
+		if err != nil {
+			return err
+		}
+		expectedRowCount := int64(tree.MustBeDInt(cnt[0]))
+		tableRowCountTime := timeutil.Since(start)
+
+		if err := sc.ExtendLease(ctx, lease); err != nil {
+			return err
+		}
+
+		start = timeutil.Now()
+		// Compute the size of each index.
+		for _, m := range tableDesc.Mutations {
+			if sc.mutationID != m.MutationID {
+				break
+			}
+			idx := m.GetIndex()
+			// An inverted index doesn't matchup in length.
+			if idx == nil || idx.Type == sqlbase.IndexDescriptor_INVERTED || m.Direction == sqlbase.DescriptorMutation_DROP {
+				continue
+			}
+
+			keyEnc := keys.MakeTablePrefix(uint32(tableDesc.ID))
+			key := roachpb.Key(encoding.EncodeUvarintAscending(keyEnc, uint64(idx.ID)))
+			span := roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
+			var idxLen int64
+			for {
+				kvs, err := txn.Scan(ctx, span.Key, span.EndKey, 1000000)
+				if err != nil {
+					return err
+				}
+				if len(kvs) == 0 {
+					break
+				}
+				idxLen += int64(len(kvs))
+				span.Key = kvs[len(kvs)-1].Key.PrefixEnd()
+
+				if err := sc.ExtendLease(ctx, lease); err != nil {
+					return err
+				}
+			}
+
+			log.Infof(ctx, "index %s/%s row count = %d/%d, took %s/%s",
+				tableDesc.Name, idx.Name, expectedRowCount, idxLen,
+				tableRowCountTime, timeutil.Since(start))
+
+			if idxLen != expectedRowCount {
+				// TODO(vivek): find the offending row and include it in the error.
+				return pgerror.NewErrorf(
+					pgerror.CodeUniqueViolationError,
+					"index %q uniqueness violation: %d entries, expected %d",
+					idx.Name, idxLen, expectedRowCount,
+				)
+			}
+		}
+		log.Infof(ctx, "%d expected rows", expectedRowCount)
+		return nil
+	})
 }
 
 func (sc *SchemaChanger) backfillIndexes(
