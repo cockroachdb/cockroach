@@ -80,6 +80,30 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 		return max
 	}())
 
+var ingestDelayL0Threshold = settings.RegisterIntSetting(
+	"rocksdb.ingest_backpressure.l0_file_count_threshold",
+	"number of L0 files after which to backpressure SST ingestions",
+	20,
+)
+
+var ingestDelayPerFile = settings.RegisterDurationSetting(
+	"rocksdb.ingest_backpressure.delay_l0_file",
+	"delay to add to ingestions per file in L0 over the configured limit",
+	time.Millisecond*200,
+)
+
+var ingestDelayPendingLimit = settings.RegisterByteSizeSetting(
+	"rocksdb.ingest_backpressure.pending_compaction_threshold",
+	"pending compaction estimate above which to backpressure ingestions",
+	64<<30,
+)
+
+var ingestDelayTime = settings.RegisterDurationSetting(
+	"rocksdb.ingest_backpressure.max_delay",
+	"maximum amount of time to backpressure ingestions",
+	time.Second*5,
+)
+
 // Set to true to perform expensive iterator debug leak checking. In normal
 // operation, we perform inexpensive iterator leak checking but those checks do
 // not indicate where the leak arose. The expensive checking tracks the stack
@@ -1195,6 +1219,7 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 		Compactions:                    int64(s.compactions),
 		TableReadersMemEstimate:        int64(s.table_readers_mem_estimate),
 		PendingCompactionBytesEstimate: int64(s.pending_compaction_bytes_estimate),
+		L0FileCount:                    int64(s.l0_file_count),
 	}, nil
 }
 
@@ -2964,6 +2989,60 @@ func (r *RocksDB) setAuxiliaryDir(d string) error {
 	}
 	r.auxDir = d
 	return nil
+}
+
+var PreIngestDefaultDelayLimit time.Duration
+
+// PreIngestDelay may choose to block for some duration if L0 has an excessive
+// number of files in it or if PendingCompactionBytesEstimate is elevated. This
+// it is intended to be called before ingesting a new SST since we'd rather
+// backpressure the bulk operation adding SSTs than slow down the whole RocksDB
+// instance and impact forground traffic. After the number of L0 files exceeds
+// the configured limit, it gradually begins delaying more for each additional
+// file until hitting maxDelay. If the pending compaction limit is exceeded, it
+// waits for maxDelay.
+func (r *RocksDB) PreIngestDelay(ctx context.Context, maxDelay time.Duration) {
+	if r.cfg.Settings == nil {
+		return
+	}
+	stats, err := r.GetStats()
+	if err != nil {
+		log.Warningf(ctx, "failed to read stats: %+v", err)
+		return
+	}
+	targetDelay := r.calculatePreIngestDelay(stats, maxDelay)
+
+	if targetDelay == 0 {
+		return
+	}
+	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %db pending compaction", targetDelay, stats.L0FileCount, stats.PendingCompactionBytesEstimate)
+
+	select {
+	case <-time.After(targetDelay):
+	case <-ctx.Done():
+	}
+}
+
+func (r *RocksDB) calculatePreIngestDelay(stats *Stats, maxDelay time.Duration) time.Duration {
+	if maxDelay == PreIngestDefaultDelayLimit {
+		maxDelay = ingestDelayTime.Get(&r.cfg.Settings.SV)
+	}
+	l0Filelimit := ingestDelayL0Threshold.Get(&r.cfg.Settings.SV)
+	compactionLimit := ingestDelayPendingLimit.Get(&r.cfg.Settings.SV)
+
+	if stats.PendingCompactionBytesEstimate >= compactionLimit {
+		return maxDelay
+	}
+	const ramp = 10
+	if stats.L0FileCount > l0Filelimit {
+		delayPerFile := maxDelay / time.Duration(ramp)
+		targetDelay := time.Duration(stats.L0FileCount-l0Filelimit) * delayPerFile
+		if targetDelay > maxDelay {
+			return maxDelay
+		}
+		return targetDelay
+	}
+	return 0
 }
 
 // IngestExternalFiles atomically links a slice of files into the RocksDB

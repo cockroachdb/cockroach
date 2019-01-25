@@ -2764,6 +2764,10 @@ func (s *Store) Send(
 			return nil, roachpb.NewError(err)
 		}
 		defer s.limiters.ConcurrentAddSSTableRequests.Finish()
+		const maxDelay = time.Second * 15
+		if rocks, ok := s.engine.(*engine.RocksDB); ok {
+			rocks.PreIngestDelay(ctx, maxDelay)
+		}
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {

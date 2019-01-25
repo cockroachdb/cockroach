@@ -404,6 +404,7 @@ type Stats struct {
 	Compactions                    int64
 	TableReadersMemEstimate        int64
 	PendingCompactionBytesEstimate int64
+	L0FileCount                    int64
 }
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
