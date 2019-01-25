@@ -1790,7 +1790,7 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 		// The retry is required because of errors caused by node restarts. Retry 30 times.
 		if err := retry.WithMaxAttempts(ctx, retryOptions, 30, func() error {
 			var err error
-			rows, _, err = m.LeaseStore.execCfg.InternalExecutor.Query(
+			rows, err = m.LeaseStore.execCfg.InternalExecutor.Query(
 				ctx, "read orphaned table leases", nil /*txn*/, sqlQuery)
 			return err
 		}); err != nil {

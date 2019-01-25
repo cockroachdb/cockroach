@@ -1739,7 +1739,7 @@ CREATE TABLE crdb_internal.zones (
 			return 0, "", fmt.Errorf("object with ID %d does not exist", id)
 		}
 
-		rows, _ /* cols */, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
 			ctx, "crdb-internal-zones-table", p.txn, `SELECT id, config FROM system.zones`)
 		if err != nil {
 			return err

@@ -223,7 +223,7 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 func execQuery(
 	ctx context.Context, query string, s serverutils.TestServerInterface, c *conn,
 ) error {
-	rows, cols, err := s.InternalExecutor().(sqlutil.InternalExecutor).Query(
+	rows, cols, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryWithCols(
 		ctx, "test", nil /* txn */, query,
 	)
 	if err != nil {
