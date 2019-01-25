@@ -2735,16 +2735,6 @@ func (desc *ImmutableTableDescriptor) MutationColumns() []ColumnDescriptor {
 	return desc.publicAndNonPublicCols[len(desc.Columns):]
 }
 
-// WriteOnlyColumns returns a list of write-only mutation columns.
-func (desc *ImmutableTableDescriptor) WriteOnlyColumns() []ColumnDescriptor {
-	return desc.publicAndNonPublicCols[len(desc.Columns) : len(desc.Columns)+desc.writeOnlyColCount]
-}
-
-// DeleteOnlyColumns returns a list of delete-only mutation columns.
-func (desc *ImmutableTableDescriptor) DeleteOnlyColumns() []ColumnDescriptor {
-	return desc.publicAndNonPublicCols[len(desc.Columns)+desc.writeOnlyColCount:]
-}
-
 // WritableIndexes returns a list of public and write-only mutation indexes.
 func (desc *ImmutableTableDescriptor) WritableIndexes() []IndexDescriptor {
 	return desc.publicAndNonPublicIndexes[:len(desc.Indexes)+desc.writeOnlyIndexCount]

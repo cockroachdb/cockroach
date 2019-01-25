@@ -405,9 +405,10 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 }
 
 // addTargetTableColsForInsert adds up to maxCols columns to the list of columns
-// that will be set by an INSERT operation. Columns are added from the target
-// table in the same order they appear in its schema. This method is used when
-// the target columns are not explicitly specified in the INSERT statement:
+// that will be set by an INSERT operation. Non-mutation olumns are added from
+// the target table in the same order they appear in its schema. This method is
+// used when the target columns are not explicitly specified in the INSERT
+// statement:
 //
 //   INSERT INTO t VALUES (1, 2, 3)
 //
@@ -418,6 +419,8 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 		panic("addTargetTableColsForInsert cannot be called more than once")
 	}
 
+	// Only consider non-mutation columns, since mutation columns are hidden from
+	// the SQL user.
 	numCols := 0
 	for i, n := 0, mb.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
 		// Skip hidden columns.
@@ -465,6 +468,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 			desiredTypes[i] = mb.md.ColumnMeta(colID).Type
 		}
 	} else {
+		// Do not target mutation columns.
 		desiredTypes = make([]types.T, 0, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			tabCol := mb.tab.Column(i)
@@ -637,7 +641,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 		)
 	}
 
-	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
+	mb.targetColList = make(opt.ColList, 0, mb.tab.DeletableColumnCount())
 	mb.targetColSet = opt.ColSet{}
 }
 
@@ -733,7 +737,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		mb.b.buildWhere(where, mb.outScope)
 	}
 
-	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
+	mb.targetColList = make(opt.ColList, 0, mb.tab.DeletableColumnCount())
 	mb.targetColSet = opt.ColSet{}
 }
 
@@ -836,8 +840,8 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 	}
 
 	// Project a column for each target table column that needs to be either
-	// inserted or updated.
-	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+	// inserted or updated. This can include mutation columns.
+	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
 		insertColID := mb.insertColList[i]
 		updateColID := mb.updateColList[i]
 		if updateColID == 0 {

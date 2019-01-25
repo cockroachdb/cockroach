@@ -216,7 +216,7 @@ func (md *Metadata) AddTable(tab cat.Table) TableID {
 	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab})
 	tabMeta := md.TableMeta(tabID)
 
-	colCount := tab.ColumnCount()
+	colCount := tab.DeletableColumnCount()
 	if md.cols == nil {
 		md.cols = make([]ColumnMeta, 0, colCount)
 	}

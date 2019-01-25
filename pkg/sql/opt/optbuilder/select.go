@@ -316,7 +316,13 @@ func (b *Builder) buildScan(
 
 	colCount := len(ordinals)
 	if colCount == 0 {
-		colCount = tab.ColumnCount()
+		// If scanning mutation columns, then include writable and deletable
+		// columns in the output, in addition to public columns.
+		if scanMutationCols {
+			colCount = tab.DeletableColumnCount()
+		} else {
+			colCount = tab.ColumnCount()
+		}
 	}
 
 	var tabColIDs opt.ColSet
@@ -328,16 +334,11 @@ func (b *Builder) buildScan(
 			ord = ordinals[i]
 		}
 
-		// Exclude any mutation columns if they were not requested.
-		isMutation := cat.IsMutationColumn(tab, ord)
-		if !scanMutationCols && isMutation {
-			continue
-		}
-
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(int(colID))
 		name := col.ColName()
+		isMutation := cat.IsMutationColumn(tab, ord)
 		outScope.cols = append(outScope.cols, scopeColumn{
 			id:       colID,
 			name:     name,
