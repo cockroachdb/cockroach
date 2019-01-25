@@ -480,7 +480,7 @@ show_queries_stmt ::=
 
 show_ranges_stmt ::=
 	'SHOW' ranges_kw 'FROM' 'TABLE' table_name
-	| 'SHOW' ranges_kw 'FROM' 'INDEX' table_name_with_index
+	| 'SHOW' ranges_kw 'FROM' 'INDEX' table_index_name
 
 show_roles_stmt ::=
 	'SHOW' 'ROLES'
@@ -518,7 +518,7 @@ show_zone_stmt ::=
 	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'DATABASE' database_name
 	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'TABLE' table_name opt_partition
 	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'PARTITION' partition_name 'OF' 'TABLE' table_name
-	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'INDEX' table_name_with_index
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'INDEX' table_index_name
 	| 'SHOW' 'ZONE' 'CONFIGURATIONS'
 	| 'SHOW' 'ALL' 'ZONE' 'CONFIGURATIONS'
 
@@ -990,8 +990,8 @@ drop_database_stmt ::=
 	| 'DROP' 'DATABASE' 'IF' 'EXISTS' database_name opt_drop_behavior
 
 drop_index_stmt ::=
-	'DROP' 'INDEX' table_name_with_index_list opt_drop_behavior
-	| 'DROP' 'INDEX' 'IF' 'EXISTS' table_name_with_index_list opt_drop_behavior
+	'DROP' 'INDEX' table_index_name_list opt_drop_behavior
+	| 'DROP' 'INDEX' 'IF' 'EXISTS' table_index_name_list opt_drop_behavior
 
 drop_table_stmt ::=
 	'DROP' 'TABLE' table_name_list opt_drop_behavior
@@ -1116,9 +1116,9 @@ ranges_kw ::=
 	'TESTING_RANGES'
 	| 'EXPERIMENTAL_RANGES'
 
-table_name_with_index ::=
+table_index_name ::=
 	table_name '@' index_name
-	| table_name
+	| standalone_index_name
 
 with_comment ::=
 	'WITH' 'COMMENT'
@@ -1209,22 +1209,22 @@ alter_rename_table_stmt ::=
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'RENAME' opt_column column_name 'TO' column_name
 
 alter_oneindex_stmt ::=
-	'ALTER' 'INDEX' table_name_with_index alter_index_cmds
-	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name_with_index alter_index_cmds
+	'ALTER' 'INDEX' table_index_name alter_index_cmds
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_index_name alter_index_cmds
 
 alter_split_index_stmt ::=
-	'ALTER' 'INDEX' table_name_with_index 'SPLIT' 'AT' select_stmt
+	'ALTER' 'INDEX' table_index_name 'SPLIT' 'AT' select_stmt
 
 alter_scatter_index_stmt ::=
-	'ALTER' 'INDEX' table_name_with_index 'SCATTER'
-	| 'ALTER' 'INDEX' table_name_with_index 'SCATTER' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')'
+	'ALTER' 'INDEX' table_index_name 'SCATTER'
+	| 'ALTER' 'INDEX' table_index_name 'SCATTER' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')'
 
 alter_rename_index_stmt ::=
-	'ALTER' 'INDEX' table_name_with_index 'RENAME' 'TO' index_name
-	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name_with_index 'RENAME' 'TO' index_name
+	'ALTER' 'INDEX' table_index_name 'RENAME' 'TO' index_name
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_index_name 'RENAME' 'TO' index_name
 
 alter_zone_index_stmt ::=
-	'ALTER' 'INDEX' table_name_with_index set_zone_config
+	'ALTER' 'INDEX' table_index_name set_zone_config
 
 alter_rename_view_stmt ::=
 	'ALTER' 'VIEW' relation_expr 'RENAME' 'TO' view_name
@@ -1352,8 +1352,8 @@ target_elem ::=
 	| a_expr
 	| '*'
 
-table_name_with_index_list ::=
-	( table_name_with_index ) ( ( ',' table_name_with_index ) )*
+table_index_name_list ::=
+	( table_index_name ) ( ( ',' table_index_name ) )*
 
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
@@ -1481,6 +1481,9 @@ extra_var_value ::=
 targets_roles ::=
 	'ROLE' name_list
 	| targets
+
+standalone_index_name ::=
+	db_object_name
 
 partition ::=
 	'PARTITION' partition_name

@@ -79,7 +79,7 @@ func ZoneSpecifierFromID(
 		return tree.ZoneSpecifier{}, err
 	}
 	return tree.ZoneSpecifier{
-		TableOrIndex: tree.TableNameWithIndex{
+		TableOrIndex: tree.TableIndexName{
 			Table: tree.MakeTableName(tree.Name(db), tree.Name(name)),
 		},
 	}, nil
@@ -98,15 +98,23 @@ func ParseCLIZoneSpecifier(s string) (tree.ZoneSpecifier, error) {
 		}
 		return tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName(name)}, nil
 	}
-	// ParseTableNameWithIndex is not vulnerable to SQL injection, so passing s
+	// ParseTableIndexName is not vulnerable to SQL injection, so passing s
 	// directly is safe. See #8389 for details.
-	parsed, err := parser.ParseTableNameWithIndex(s)
+	parsed, err := parser.ParseTableIndexName(s)
 	if err != nil {
 		return tree.ZoneSpecifier{}, fmt.Errorf("malformed name: %q", s)
 	}
 
-	// To reuse the SQL parsing code, we unfortunately have to abuse TableName
-	// here. A table name is of the form:
+	tn := parsed.Table
+	if tn.Table() == "" {
+		// In this case, the input was parsed as [[CATALOG.]SCHEMA.]INDEX
+		// (this is the syntax when specifying an index, e.g. for ALTER INDEX).
+		tn.TableName = tree.Name(parsed.Index)
+		parsed.Index = ""
+	}
+
+	// To reuse the SQL parsing code, we unfortunately have to abuse TableIndexName
+	// here. A table index name is of the form:
 	//   [[CATALOG.]SCHEMA.]TABLE[@INDEX]
 	// and we want to reinterpret this as
 	//   DATABASE[.TABLE[.PARTITION|@INDEX]]
@@ -116,31 +124,31 @@ func ParseCLIZoneSpecifier(s string) (tree.ZoneSpecifier, error) {
 	//   2) two parts:   SCHEMA.TABLE -> DATABASE.TABLE
 	//   3) three parts: CATALOG.SCHEMA.TABLE -> DATABASE.TABLE.PARTITION
 
-	tn := &parsed.Table
 	if !tn.ExplicitSchema {
 		// Case 1: TABLE -> DATABASE.
 		return tree.ZoneSpecifier{Database: tn.TableName}, nil
 	}
-	var database, table, partition tree.Name
+
 	if !tn.ExplicitCatalog {
 		// Case 2: SCHEMA.TABLE -> DATABASE.TABLE
-		database = tn.SchemaName
-		table = tn.TableName
-	} else {
-		// Case 3: CATALOG.SCHEMA.TABLE -> DATABASE.TABLE.PARTITION
-		database = tn.CatalogName
-		table = tn.SchemaName
-		partition = tn.TableName
-		if parsed.Index != "" {
-			return tree.ZoneSpecifier{}, fmt.Errorf(
-				"index and partition cannot be specified simultaneously: %q", s)
-		}
+		database, table := tn.SchemaName, tn.TableName
+		return tree.ZoneSpecifier{
+			TableOrIndex: tree.TableIndexName{
+				Table: tree.MakeTableName(database, table),
+				Index: parsed.Index,
+			},
+		}, nil
 	}
+
+	// Case 3: CATALOG.SCHEMA.TABLE -> DATABASE.TABLE.PARTITION
+	if parsed.Index != "" {
+		return tree.ZoneSpecifier{}, fmt.Errorf(
+			"index and partition cannot be specified simultaneously: %q", s)
+	}
+	database, table, partition := tn.CatalogName, tn.SchemaName, tn.TableName
 	return tree.ZoneSpecifier{
-		TableOrIndex: tree.TableNameWithIndex{
-			Table:       tree.MakeTableName(database, table),
-			Index:       parsed.Index,
-			SearchTable: false,
+		TableOrIndex: tree.TableIndexName{
+			Table: tree.MakeTableName(database, table),
 		},
 		Partition: partition,
 	}, nil

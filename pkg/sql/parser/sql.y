@@ -88,7 +88,7 @@ type sqlSymUnion struct {
 //   not. A panic occurs if the type assertion is incorrect; no panic occurs
 //   if a nil is not expected but present. (TODO(knz): split this category of
 //   accessor in two; with one checking for unexpected nils.)
-//   Examples: bool(), tableWithIdx().
+//   Examples: bool(), tableIndexName().
 //
 // - Interfaces where a nil is admissible are handled differently
 //   because a nil instance of an interface inserted into the empty interface
@@ -126,15 +126,15 @@ func (u *sqlSymUnion) strPtr() *string {
 func (u *sqlSymUnion) strs() []string {
     return u.val.([]string)
 }
-func (u *sqlSymUnion) newTableWithIdx() *tree.TableNameWithIndex {
-    tn := u.val.(tree.TableNameWithIndex)
+func (u *sqlSymUnion) newTableIndexName() *tree.TableIndexName {
+    tn := u.val.(tree.TableIndexName)
     return &tn
 }
-func (u *sqlSymUnion) tableWithIdx() tree.TableNameWithIndex {
-    return u.val.(tree.TableNameWithIndex)
+func (u *sqlSymUnion) tableIndexName() tree.TableIndexName {
+    return u.val.(tree.TableIndexName)
 }
-func (u *sqlSymUnion) newTableWithIdxList() tree.TableNameWithIndexList {
-    return u.val.(tree.TableNameWithIndexList)
+func (u *sqlSymUnion) newTableIndexNames() tree.TableIndexNames {
+    return u.val.(tree.TableIndexNames)
 }
 func (u *sqlSymUnion) nameList() tree.NameList {
     return u.val.(tree.NameList)
@@ -771,13 +771,13 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
-%type <*tree.UnresolvedName> table_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <*tree.UnresolvedName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target create_stats_target
 
-%type <*tree.TableNameWithIndex> table_name_with_index
-%type <tree.TableNameWithIndexList> table_name_with_index_list
+%type <*tree.TableIndexName> table_index_name
+%type <tree.TableIndexNames> table_index_name_list
 
 %type <tree.Operator> math_op
 
@@ -1253,13 +1253,13 @@ alter_onetable_stmt:
   }
 
 alter_oneindex_stmt:
-  ALTER INDEX table_name_with_index alter_index_cmds
+  ALTER INDEX table_index_name alter_index_cmds
   {
-    $$.val = &tree.AlterIndex{Index: $3.newTableWithIdx(), IfExists: false, Cmds: $4.alterIndexCmds()}
+    $$.val = &tree.AlterIndex{Index: $3.newTableIndexName(), IfExists: false, Cmds: $4.alterIndexCmds()}
   }
-| ALTER INDEX IF EXISTS table_name_with_index alter_index_cmds
+| ALTER INDEX IF EXISTS table_index_name alter_index_cmds
   {
-    $$.val = &tree.AlterIndex{Index: $5.newTableWithIdx(), IfExists: true, Cmds: $6.alterIndexCmds()}
+    $$.val = &tree.AlterIndex{Index: $5.newTableIndexName(), IfExists: true, Cmds: $6.alterIndexCmds()}
   }
 
 alter_split_stmt:
@@ -1274,9 +1274,9 @@ alter_split_stmt:
   }
 
 alter_split_index_stmt:
-  ALTER INDEX table_name_with_index SPLIT AT select_stmt
+  ALTER INDEX table_index_name SPLIT AT select_stmt
   {
-    $$.val = &tree.Split{Index: $3.newTableWithIdx(), Rows: $6.slct()}
+    $$.val = &tree.Split{Index: $3.newTableIndexName(), Rows: $6.slct()}
   }
 
 relocate_kw:
@@ -1296,10 +1296,10 @@ alter_relocate_stmt:
   }
 
 alter_relocate_index_stmt:
-  ALTER INDEX table_name_with_index relocate_kw select_stmt
+  ALTER INDEX table_index_name relocate_kw select_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.Relocate{Index: $3.newTableWithIdx(), Rows: $5.slct()}
+    $$.val = &tree.Relocate{Index: $3.newTableIndexName(), Rows: $5.slct()}
   }
 
 alter_relocate_lease_stmt:
@@ -1315,10 +1315,10 @@ alter_relocate_lease_stmt:
   }
 
 alter_relocate_index_lease_stmt:
-  ALTER INDEX table_name_with_index relocate_kw LEASE select_stmt
+  ALTER INDEX table_index_name relocate_kw LEASE select_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.Relocate{Index: $3.newTableWithIdx(), Rows: $6.slct(), RelocateLease: true}
+    $$.val = &tree.Relocate{Index: $3.newTableIndexName(), Rows: $6.slct(), RelocateLease: true}
   }
 
 alter_zone_range_stmt:
@@ -1367,7 +1367,7 @@ alter_zone_table_stmt:
     }
     s := $4.setZoneConfig()
     s.ZoneSpecifier = tree.ZoneSpecifier{
-       TableOrIndex: tree.TableNameWithIndex{Table: name},
+       TableOrIndex: tree.TableIndexName{Table: name},
     }
     $$.val = s
   }
@@ -1380,18 +1380,18 @@ alter_zone_table_stmt:
     }
     s := $7.setZoneConfig()
     s.ZoneSpecifier = tree.ZoneSpecifier{
-       TableOrIndex: tree.TableNameWithIndex{Table: name},
+       TableOrIndex: tree.TableIndexName{Table: name},
        Partition: tree.Name($3),
     }
     $$.val = s
   }
 
 alter_zone_index_stmt:
-  ALTER INDEX table_name_with_index set_zone_config
+  ALTER INDEX table_index_name set_zone_config
   {
     s := $4.setZoneConfig()
     s.ZoneSpecifier = tree.ZoneSpecifier{
-       TableOrIndex: $3.tableWithIdx(),
+       TableOrIndex: $3.tableIndexName(),
     }
     $$.val = s
   }
@@ -1435,13 +1435,13 @@ alter_scatter_stmt:
   }
 
 alter_scatter_index_stmt:
-  ALTER INDEX table_name_with_index SCATTER
+  ALTER INDEX table_index_name SCATTER
   {
-    $$.val = &tree.Scatter{Index: $3.newTableWithIdx()}
+    $$.val = &tree.Scatter{Index: $3.newTableIndexName()}
   }
-| ALTER INDEX table_name_with_index SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
+| ALTER INDEX table_index_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
   {
-    $$.val = &tree.Scatter{Index: $3.newTableWithIdx(), From: $7.exprs(), To: $11.exprs()}
+    $$.val = &tree.Scatter{Index: $3.newTableIndexName(), From: $7.exprs(), To: $11.exprs()}
   }
 
 alter_table_cmds:
@@ -2322,18 +2322,18 @@ drop_table_stmt:
 // %Text: DROP INDEX [IF EXISTS] <idxname> [, ...] [CASCADE | RESTRICT]
 // %SeeAlso: WEBDOCS/drop-index.html
 drop_index_stmt:
-  DROP INDEX table_name_with_index_list opt_drop_behavior
+  DROP INDEX table_index_name_list opt_drop_behavior
   {
     $$.val = &tree.DropIndex{
-      IndexList: $3.newTableWithIdxList(),
+      IndexList: $3.newTableIndexNames(),
       IfExists: false,
       DropBehavior: $4.dropBehavior(),
     }
   }
-| DROP INDEX IF EXISTS table_name_with_index_list opt_drop_behavior
+| DROP INDEX IF EXISTS table_index_name_list opt_drop_behavior
   {
     $$.val = &tree.DropIndex{
-      IndexList: $5.newTableWithIdxList(),
+      IndexList: $5.newTableIndexNames(),
       IfExists: true,
       DropBehavior: $6.dropBehavior(),
     }
@@ -3562,7 +3562,7 @@ show_zone_stmt:
       return 1
     }
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: tree.TableNameWithIndex{Table: name},
+        TableOrIndex: tree.TableIndexName{Table: name},
     }}
   }
 | SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF TABLE table_name
@@ -3573,14 +3573,14 @@ show_zone_stmt:
       return 1
     }
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-      TableOrIndex: tree.TableNameWithIndex{Table: name},
+      TableOrIndex: tree.TableIndexName{Table: name},
         Partition: tree.Name($6),
     }}
   }
-| SHOW ZONE CONFIGURATION FOR INDEX table_name_with_index
+| SHOW ZONE CONFIGURATION FOR INDEX table_index_name
   {
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-      TableOrIndex: $6.tableWithIdx(),
+      TableOrIndex: $6.tableIndexName(),
     }}
   }
 | SHOW ZONE CONFIGURATIONS
@@ -3607,9 +3607,9 @@ show_ranges_stmt:
     }
     $$.val = &tree.ShowRanges{Table: &name}
   }
-| SHOW ranges_kw FROM INDEX table_name_with_index
+| SHOW ranges_kw FROM INDEX table_index_name
   {
-    $$.val = &tree.ShowRanges{Index: $5.newTableWithIdx()}
+    $$.val = &tree.ShowRanges{Index: $5.newTableIndexName()}
   }
 | SHOW ranges_kw error // SHOW HELP: SHOW RANGES
 
@@ -4979,13 +4979,13 @@ alter_rename_sequence_stmt:
   }
 
 alter_rename_index_stmt:
-  ALTER INDEX table_name_with_index RENAME TO index_name
+  ALTER INDEX table_index_name RENAME TO index_name
   {
-    $$.val = &tree.RenameIndex{Index: $3.newTableWithIdx(), NewName: tree.UnrestrictedName($6), IfExists: false}
+    $$.val = &tree.RenameIndex{Index: $3.newTableIndexName(), NewName: tree.UnrestrictedName($6), IfExists: false}
   }
-| ALTER INDEX IF EXISTS table_name_with_index RENAME TO index_name
+| ALTER INDEX IF EXISTS table_index_name RENAME TO index_name
   {
-    $$.val = &tree.RenameIndex{Index: $5.newTableWithIdx(), NewName: tree.UnrestrictedName($8), IfExists: true}
+    $$.val = &tree.RenameIndex{Index: $5.newTableIndexName(), NewName: tree.UnrestrictedName($8), IfExists: true}
   }
 
 opt_column:
@@ -8448,14 +8448,14 @@ target_elem:
 
 // Names and constants.
 
-table_name_with_index_list:
-  table_name_with_index
+table_index_name_list:
+  table_index_name
   {
-    $$.val = tree.TableNameWithIndexList{$1.newTableWithIdx()}
+    $$.val = tree.TableIndexNames{$1.newTableIndexName()}
   }
-| table_name_with_index_list ',' table_name_with_index
+| table_index_name_list ',' table_index_name
   {
-    $$.val = append($1.newTableWithIdxList(), $3.newTableWithIdx())
+    $$.val = append($1.newTableIndexNames(), $3.newTableIndexName())
   }
 
 table_pattern_list:
@@ -8468,7 +8468,20 @@ table_pattern_list:
     $$.val = append($1.tablePatterns(), $3.unresolvedName())
   }
 
-table_name_with_index:
+// An index can be specified in a few different ways:
+//
+//   - with explicit table name:
+//       <table>@<index>
+//       <schema>.<table>@<index>
+//       <catalog/db>.<table>@<index>
+//       <catalog/db>.<schema>.<table>@<index>
+//
+//   - without explicit table name:
+//       <index>
+//       <schema>.<index>
+//       <catalog/db>.<index>
+//       <catalog/db>.<schema>.<index>
+table_index_name:
   table_name '@' index_name
   {
     name, err := tree.NormalizeTableName($1.unresolvedName())
@@ -8476,23 +8489,24 @@ table_name_with_index:
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = tree.TableNameWithIndex{
+    $$.val = tree.TableIndexName{
        Table: name,
        Index: tree.UnrestrictedName($3),
     }
   }
-| table_name
+| standalone_index_name
   {
-    // This case allows specifying just an index name (potentially schema-qualified).
-    // We temporarily store the index name in Table (see tree.TableNameWithIndex).
+    // Treat it as a table name, then pluck out the TableName.
     name, err := tree.NormalizeTableName($1.unresolvedName())
     if err != nil {
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = tree.TableNameWithIndex{
+    indexName := tree.UnrestrictedName(name.TableName)
+    name.TableName = ""
+    $$.val = tree.TableIndexName{
         Table: name,
-        SearchTable: true,
+        Index: indexName,
     }
   }
 
@@ -8624,43 +8638,45 @@ interval:
 
 // Note: newlines between non-terminals matter to the doc generator.
 
-collation_name:      unrestricted_name
+collation_name:        unrestricted_name
 
-partition_name:      unrestricted_name
+partition_name:        unrestricted_name
 
-index_name:          unrestricted_name
+index_name:            unrestricted_name
 
-opt_index_name:      opt_name
+opt_index_name:        opt_name
 
-zone_name:           unrestricted_name
+zone_name:             unrestricted_name
 
-target_name:         unrestricted_name
+target_name:           unrestricted_name
 
-constraint_name:     name
+constraint_name:       name
 
-database_name:       name
+database_name:         name
 
-column_name:         name
+column_name:           name
 
-family_name:         name
+family_name:           name
 
-opt_family_name:     opt_name
+opt_family_name:       opt_name
 
-table_alias_name:    name
+table_alias_name:      name
 
-statistics_name:     name
+statistics_name:       name
 
-window_name:         name
+window_name:           name
 
-view_name:           table_name
+view_name:             table_name
 
-type_name:           db_object_name
+type_name:             db_object_name
 
-sequence_name:       db_object_name
+sequence_name:         db_object_name
 
-table_name:          db_object_name
+table_name:            db_object_name
 
-explain_option_name: non_reserved_word
+standalone_index_name: db_object_name
+
+explain_option_name:   non_reserved_word
 
 // Names for column references.
 // Accepted patterns:

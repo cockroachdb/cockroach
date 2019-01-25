@@ -320,7 +320,7 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 // Only one of Table and Index can be set.
 type ShowRanges struct {
 	Table *TableName
-	Index *TableNameWithIndex
+	Index *TableIndexName
 }
 
 // Format implements the NodeFormatter interface.

@@ -65,7 +65,7 @@ func (node *DropDatabase) Format(ctx *FmtCtx) {
 
 // DropIndex represents a DROP INDEX statement.
 type DropIndex struct {
-	IndexList    TableNameWithIndexList
+	IndexList    TableIndexNames
 	IfExists     bool
 	DropBehavior DropBehavior
 }

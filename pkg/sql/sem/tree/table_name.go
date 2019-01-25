@@ -183,35 +183,51 @@ func (ts *TableNames) Format(ctx *FmtCtx) {
 }
 func (ts *TableNames) String() string { return AsString(ts) }
 
-// TableNameWithIndex represents a "table@index", used in statements that
+// TableIndexName is the name of an index, used in statements that
 // specifically refer to an index.
-type TableNameWithIndex struct {
+//
+// The table name is optional. It is possible to specify the schema or catalog
+// without specifying a table name; in this case, Table.TableNamePrefix has the
+// fields set but Table.TableName is empty.
+type TableIndexName struct {
 	Table TableName
 	Index UnrestrictedName
-
-	// SearchTable indicates that we have just an index (no table name); we will
-	// need to search for a table that has an index with the given name.
-	//
-	// To allow schema-qualified index names in this case, the index is actually
-	// specified in Table as the table name, and Index is empty.
-	SearchTable bool
 }
 
 // Format implements the NodeFormatter interface.
-func (n *TableNameWithIndex) Format(ctx *FmtCtx) {
-	ctx.FormatNode(&n.Table)
-	if n.Index != "" {
+func (n *TableIndexName) Format(ctx *FmtCtx) {
+	if n.Index == "" {
+		// This case is only for ZoneSpecifier.TableOrIndex; normally an empty Index
+		// is not valid.
+		ctx.FormatNode(&n.Table)
+		return
+	}
+
+	if n.Table.TableName != "" {
+		// The table is specified.
+		ctx.FormatNode(&n.Table)
 		ctx.WriteByte('@')
 		ctx.FormatNode(&n.Index)
+		return
 	}
-}
-func (n *TableNameWithIndex) String() string { return AsString(n) }
 
-// TableNameWithIndexList is a list of indexes.
-type TableNameWithIndexList []*TableNameWithIndex
+	// The table is not specified. The schema/catalog can still be specified.
+	if n.Table.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
+		ctx.FormatNode(&n.Table.TableNamePrefix)
+		ctx.WriteByte('.')
+	}
+	// In this case, we must format the index name as a restricted name (quotes
+	// must be added for reserved keywords).
+	ctx.FormatNode((*Name)(&n.Index))
+}
+
+func (n *TableIndexName) String() string { return AsString(n) }
+
+// TableIndexNames is a list of indexes.
+type TableIndexNames []*TableIndexName
 
 // Format implements the NodeFormatter interface.
-func (n *TableNameWithIndexList) Format(ctx *FmtCtx) {
+func (n *TableIndexNames) Format(ctx *FmtCtx) {
 	sep := ""
 	for _, tni := range *n {
 		ctx.WriteString(sep)

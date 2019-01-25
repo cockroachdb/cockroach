@@ -17,9 +17,11 @@ package tree
 // ZoneSpecifier represents a reference to a configurable zone of the keyspace.
 type ZoneSpecifier struct {
 	// Only one of NamedZone, Database or TableOrIndex may be set.
-	NamedZone    UnrestrictedName
-	Database     Name
-	TableOrIndex TableNameWithIndex
+	NamedZone UnrestrictedName
+	Database  Name
+	// TODO(radu): TableOrIndex abuses TableIndexName: it allows for the case when
+	// an index is not specified, in which case TableOrIndex.Index is empty.
+	TableOrIndex TableIndexName
 
 	// Partition is only respected when Table is set.
 	Partition Name
@@ -33,7 +35,7 @@ func (node ZoneSpecifier) TargetsTable() bool {
 
 // TargetsIndex returns whether the zone specifier targets an index.
 func (node ZoneSpecifier) TargetsIndex() bool {
-	return node.TargetsTable() && (node.TableOrIndex.Index != "" || node.TableOrIndex.SearchTable)
+	return node.TargetsTable() && node.TableOrIndex.Index != ""
 }
 
 // Format implements the NodeFormatter interface.
