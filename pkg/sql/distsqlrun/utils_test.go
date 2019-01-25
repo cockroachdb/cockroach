@@ -363,7 +363,7 @@ func runProcessorTest(
 	}
 
 	p.Run(context.Background(), nil /* wg */)
-	if !out.ProducerClosed {
+	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
 	}
 	var res sqlbase.EncDatumRows

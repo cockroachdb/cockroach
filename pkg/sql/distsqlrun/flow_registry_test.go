@@ -242,7 +242,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 		return nil
 	})
 
-	if !consumer.ProducerClosed {
+	if !consumer.ProducerClosed() {
 		t.Fatalf("expected consumer to have been closed when the flow timed out")
 	}
 

@@ -16,9 +16,8 @@ package distsqlrun
 
 import (
 	"context"
-	"testing"
-
 	"fmt"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -129,7 +128,7 @@ func TestDistinct(t *testing.T) {
 			}
 
 			d.Run(context.Background(), nil /* wg */)
-			if !out.ProducerClosed {
+			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
 			var res sqlbase.EncDatumRows

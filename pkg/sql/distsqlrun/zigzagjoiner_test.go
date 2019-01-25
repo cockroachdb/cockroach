@@ -510,7 +510,7 @@ func TestZigzagJoiner(t *testing.T) {
 
 			z.Run(ctx, nil /* wg */)
 
-			if !out.ProducerClosed {
+			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
 
