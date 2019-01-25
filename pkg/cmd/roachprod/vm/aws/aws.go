@@ -78,6 +78,11 @@ type providerOpts struct {
 	EBSProvisionedIOPs int
 }
 
+const (
+	defaultSSDMachineType = "m5d.xlarge"
+	defaultMachineType    = "m5.xlarge"
+)
+
 // ConfigureCreateFlags is part of the vm.ProviderFlags interface.
 // This method sets up a lot of maps between the various EC2
 // regions and the ids of the things we want to use there.  This is
@@ -95,12 +100,12 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"AMI images for each region")
 
 	// m5.xlarge is a 4core, 16Gb instance, approximately equal to a GCE n1-standard-4
-	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "m5.xlarge",
+	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", defaultMachineType,
 		"Machine type (see https://aws.amazon.com/ec2/instance-types/)")
 
 	// The m5 devices only support EBS volumes, so we need a different instance type
 	// for directly-attached SSD support. This is 4 core, 16GB ram, 150GB ssd.
-	flags.StringVar(&o.SSDMachineType, ProviderName+"-machine-type-ssd", "m5d.xlarge",
+	flags.StringVar(&o.SSDMachineType, ProviderName+"-machine-type-ssd", defaultSSDMachineType,
 		"Machine type for --local-ssd (see https://aws.amazon.com/ec2/instance-types/)")
 
 	// The subnet actually controls placement into a particular AZ
@@ -514,6 +519,23 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 // we need to do a bit of work to look up all of the various ids that
 // we need in order to actually allocate an instance.
 func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) error {
+	// There exist different flags to control the machine type when ssd is true.
+	// This enables sane defaults for either setting but the behavior can be
+	// confusing when a user attempts to use `--aws-machine-type` and the command
+	// succeeds but the flag is ignored. Rather than permit this behavior we
+	// return an error instructing the user to use the other flag.
+	if opts.SSDOpts.UseLocalSSD &&
+		p.opts.MachineType != defaultMachineType &&
+		p.opts.SSDMachineType == defaultSSDMachineType {
+		return errors.Errorf("use the --aws-machine-type-ssd flag to set the " +
+			"machine type when --local-ssd=true")
+	} else if !opts.SSDOpts.UseLocalSSD &&
+		p.opts.MachineType != defaultMachineType &&
+		p.opts.SSDMachineType == defaultSSDMachineType {
+		return errors.Errorf("use the --aws-machine-type flag to set the " +
+			"machine type when --local-ssd=false")
+	}
+
 	region, err := zoneToRegion(zone)
 	if err != nil {
 		return err
