@@ -256,6 +256,7 @@ func (td *truncateDecision) NumNewRaftSnapshots() int {
 
 func (td *truncateDecision) String() string {
 	var buf strings.Builder
+	_, _ = fmt.Fprintf(&buf, "should truncate: %t [", td.ShouldTruncate())
 	_, _ = fmt.Fprintf(
 		&buf,
 		"truncate %d entries to first index %d (chosen via: %s)",
@@ -272,6 +273,7 @@ func (td *truncateDecision) String() string {
 	if n := td.NumNewRaftSnapshots(); n > 0 {
 		_, _ = fmt.Fprintf(&buf, "; implies %d Raft snapshot%s", n, util.Pluralize(int64(n)))
 	}
+	buf.WriteRune(']')
 
 	return buf.String()
 }
@@ -429,7 +431,7 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 	// Can and should the raft logs be truncated?
 	if decision.ShouldTruncate() {
 		if n := decision.NumNewRaftSnapshots(); log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
-			log.Info(ctx, decision)
+			log.Info(ctx, decision.String())
 		} else {
 			log.VEvent(ctx, 1, decision.String())
 		}
@@ -443,6 +445,8 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 			return err
 		}
 		r.store.metrics.RaftLogTruncated.Inc(int64(decision.NumTruncatableIndexes()))
+	} else {
+		log.VEventf(ctx, 3, decision.String())
 	}
 	return nil
 }
