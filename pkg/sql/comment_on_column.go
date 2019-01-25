@@ -30,11 +30,10 @@ type commentOnColumnNode struct {
 // CommentOnColumn add comment on a column.
 // Privileges: CREATE on table.
 func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) (planNode, error) {
-	tableName, err := tree.NormalizeTableName(&n.ColumnItem.TableName)
-	if err != nil {
-		return nil, err
+	var tableName tree.TableName
+	if n.ColumnItem.TableName != nil {
+		tableName = n.ColumnItem.TableName.ToTableName()
 	}
-
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true, requireTableDesc)
 	if err != nil {
 		return nil, err

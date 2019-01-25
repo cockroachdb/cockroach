@@ -17,8 +17,7 @@ package tree
 // TableName corresponds to the name of a table in a FROM clause,
 // INSERT or UPDATE statement, etc.
 //
-// This is constructed for incoming SQL queries by normalizing an
-// UnresolvedName using NormalizeTableName.
+// This is constructed for incoming SQL queries from an UnresolvedObjectName,
 //
 // Internal uses of this struct should not construct instances of
 // TableName directly, and instead use the NewTableName /
