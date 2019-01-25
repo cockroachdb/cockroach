@@ -507,14 +507,14 @@ type RowBuffer struct {
 	mu struct {
 		syncutil.Mutex
 
+		// producerClosed is used when the RowBuffer is used as a RowReceiver; it is
+		// set to true when the sender calls ProducerDone().
+		producerClosed bool
+
 		// records represent the data that has been buffered. Push appends a row
 		// to the back, Next removes a row from the front.
 		records []BufferedRecord
 	}
-
-	// ProducerClosed is used when the RowBuffer is used as a RowReceiver; it is
-	// set to true when the sender calls ProducerDone().
-	ProducerClosed bool
 
 	// Done is used when the RowBuffer is used as a RowSource; it is set to true
 	// when the receiver read all the rows.
@@ -568,7 +568,7 @@ func NewRowBuffer(
 
 // Push is part of the RowReceiver interface.
 func (rb *RowBuffer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
-	if rb.ProducerClosed {
+	if rb.ProducerClosed() {
 		panic("Push called after ProducerDone")
 	}
 	// We mimic the behavior of RowChannel.
@@ -595,12 +595,23 @@ func (rb *RowBuffer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Consu
 	return status
 }
 
+// ProducerClosed is a utility function used by tests to check whether the
+// RowBuffer has had ProducerDone() called on it.
+func (rb *RowBuffer) ProducerClosed() bool {
+	rb.mu.Lock()
+	c := rb.mu.producerClosed
+	rb.mu.Unlock()
+	return c
+}
+
 // ProducerDone is part of the RowSource interface.
 func (rb *RowBuffer) ProducerDone() {
-	if rb.ProducerClosed {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if rb.mu.producerClosed {
 		panic("RowBuffer already closed")
 	}
-	rb.ProducerClosed = true
+	rb.mu.producerClosed = true
 }
 
 // Types is part of the RowReceiver interface.

@@ -129,7 +129,7 @@ func TestDistinct(t *testing.T) {
 			}
 
 			d.Run(context.Background())
-			if !out.ProducerClosed {
+			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
 			var res sqlbase.EncDatumRows
