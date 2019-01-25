@@ -22,13 +22,12 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 // Processor contains the information associated with a processor in a plan.
@@ -898,9 +897,24 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 // another for the purpose of UNION. This excludes its VisibleType
 // type alias, which doesn't effect the merging of values.
 func equivalentTypes(c, other *sqlbase.ColumnType) bool {
+	// Convert pre-2.1 INTs to INT8.
+	lhs := *c
+	if lhs.SemanticType == sqlbase.ColumnType_INT {
+		// Pre-2.1 BIT was assigned arbitrary width, and is mapped to INT8 post-2.1. See #34161.
+		if lhs.Width != 64 && lhs.Width != 32 && lhs.Width != 16 {
+			lhs.Width = 64
+		}
+	}
+
 	rhs := *other
+	if rhs.SemanticType == sqlbase.ColumnType_INT {
+		// See above.
+		if rhs.Width != 64 && rhs.Width != 32 && rhs.Width != 16 {
+			rhs.Width = 64
+		}
+	}
 	rhs.VisibleType = c.VisibleType
-	return c.Equal(rhs)
+	return rhs.Equal(lhs)
 }
 
 // AddJoinStage adds join processors at each of the specified nodes, and wires
