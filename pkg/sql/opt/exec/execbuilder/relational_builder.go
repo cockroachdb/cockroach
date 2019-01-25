@@ -301,7 +301,7 @@ func (b *Builder) getColumns(
 	needed := exec.ColumnOrdinalSet{}
 	output := opt.ColMap{}
 
-	columnCount := b.mem.Metadata().Table(tableID).ColumnCount()
+	columnCount := b.mem.Metadata().Table(tableID).DeletableColumnCount()
 	n := 0
 	for i := 0; i < columnCount; i++ {
 		colID := tableID.ColumnID(i)
@@ -1539,7 +1539,7 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 
 	var colMap opt.ColMap
 	ord := 0
-	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+	for i, n := 0, tab.DeletableColumnCount(); i < n; i++ {
 		colID := int(private.Table.ColumnID(i))
 		if outCols.Contains(colID) {
 			colMap.Set(colID, ord)

@@ -440,10 +440,12 @@ type Table struct {
 	Checks     []cat.CheckConstraint
 	IsVirtual  bool
 	Catalog    cat.Catalog
-	Mutations  []cat.MutationColumn
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
+
+	writeOnlyColCount  int
+	deleteOnlyColCount int
 }
 
 var _ cat.Table = &Table{}
@@ -480,15 +482,22 @@ func (tt *Table) IsVirtualTable() bool {
 
 // ColumnCount is part of the cat.Table interface.
 func (tt *Table) ColumnCount() int {
-	return len(tt.Columns) + len(tt.Mutations)
+	return len(tt.Columns) - tt.writeOnlyColCount - tt.deleteOnlyColCount
+}
+
+// WritableColumnCount is part of the cat.Table interface.
+func (tt *Table) WritableColumnCount() int {
+	return len(tt.Columns) - tt.deleteOnlyColCount
+}
+
+// DeletableColumnCount is part of the cat.Table interface.
+func (tt *Table) DeletableColumnCount() int {
+	return len(tt.Columns)
 }
 
 // Column is part of the cat.Table interface.
 func (tt *Table) Column(i int) cat.Column {
-	if i < len(tt.Columns) {
-		return tt.Columns[i]
-	}
-	return &tt.Mutations[i-len(tt.Columns)]
+	return tt.Columns[i]
 }
 
 // IndexCount is part of the cat.Table interface.

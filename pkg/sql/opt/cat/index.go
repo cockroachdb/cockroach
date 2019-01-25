@@ -119,6 +119,16 @@ type Index interface {
 	ForeignKey() (ForeignKeyReference, bool)
 }
 
+type MutationIndex struct {
+	// Index is the Table.Index that is being added or dropped.
+	Index
+
+	// IsDeleteOnly is true if the index only needs special handling by Delete
+	// operations; Update and Insert operations can ignore the index. See
+	// sqlbase.DescriptorMutation_DELETE_ONLY for more information.
+	IsDeleteOnly bool
+}
+
 // IndexColumn describes a single column that is part of an index definition.
 type IndexColumn struct {
 	// Column is a reference to the column returned by Table.Column, given the

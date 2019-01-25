@@ -76,9 +76,9 @@ CREATE TABLE mutation (
 TABLE mutation
  ├── m int not null
  ├── n int
- ├── o int
- ├── p int
- ├── q int
+ ├── o int (mutation)
+ ├── p int (mutation)
+ ├── q int (mutation)
  └── INDEX primary
       └── m int not null
 

@@ -1301,11 +1301,11 @@ func (rb *renderBuilder) addExpr(expr tree.TypedExpr, colName string) {
 // included if their ordinal position in the table schema is in the cols set.
 func makeColDescList(table cat.Table, cols exec.ColumnOrdinalSet) []sqlbase.ColumnDescriptor {
 	colDescs := make([]sqlbase.ColumnDescriptor, 0, cols.Len())
-	for i, n := 0, table.ColumnCount(); i < n; i++ {
+	for i, n := 0, table.DeletableColumnCount(); i < n; i++ {
 		if !cols.Contains(i) {
 			continue
 		}
-		colDescs = append(colDescs, *extractColumnDescriptor(table.Column(i)))
+		colDescs = append(colDescs, *table.Column(i).(*sqlbase.ColumnDescriptor))
 	}
 	return colDescs
 }
@@ -1324,18 +1324,8 @@ func makeScanColumnsConfig(table cat.Table, cols exec.ColumnOrdinalSet) scanColu
 		visibility:    publicAndNonPublicColumns,
 	}
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		desc := extractColumnDescriptor(table.Column(c))
+		desc := table.Column(c).(*sqlbase.ColumnDescriptor)
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
 	}
 	return colCfg
-}
-
-// extractColumnDescriptor extracts the underlying sqlbase.ColumnDescriptor from
-// the given cat.Column. If the column is a mutation column, this involves one
-// level of indirection.
-func extractColumnDescriptor(col cat.Column) *sqlbase.ColumnDescriptor {
-	if mut, ok := col.(*cat.MutationColumn); ok {
-		return mut.Column.(*sqlbase.ColumnDescriptor)
-	}
-	return col.(*sqlbase.ColumnDescriptor)
 }

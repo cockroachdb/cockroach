@@ -34,8 +34,21 @@ type Table interface {
 	// information_schema tables.
 	IsVirtualTable() bool
 
-	// ColumnCount returns the number of columns in the table.
+	// ColumnCount returns the number of public columns in the table. Public
+	// columns are not currently being added or dropped from the table. This
+	// method should be used when mutation columns can be ignored (the common
+	// case).
 	ColumnCount() int
+
+	// WritableColumnCount returns the number of public and writable columns in
+	// the table. Although writable columns are not visible, any inserts and
+	// updates must still set them. WritableColumnCount is always >= ColumnCount.
+	WritableColumnCount() int
+
+	// DeletableColumnCount returns the number of public, writable, and deletable
+	// columns in the table. DeletableColumnCount is always >=
+	// WritableColumnCount.
+	DeletableColumnCount() int
 
 	// Column returns a Column interface to the column at the ith ordinal
 	// position within the table, where i < ColumnCount. Note that the Columns
@@ -46,8 +59,8 @@ type Table interface {
 	//
 	//   cockroachdb/cockroach/docs/RFCS/20151014_online_schema_change.md
 	//
-	// To determine if the column is a mutation column, try to cast it to
-	// *MutationColumn.
+	// Writable columns are always situated after public columns, and are followed
+	// by deletable columns.
 	Column(i int) Column
 
 	// IndexCount returns the number of indexes defined on this table. This
@@ -130,8 +143,8 @@ type ForeignKeyReference struct {
 	Match tree.CompositeKeyMatchMethod
 }
 
-// FindTableColumnByName returns the ordinal of the column having the given
-// name, if one exists in the given table. Otherwise, it returns -1.
+// FindTableColumnByName returns the ordinal of the non-mutation column having
+// the given name, if one exists in the given table. Otherwise, it returns -1.
 func FindTableColumnByName(tab Table, name tree.Name) int {
 	for ord, n := 0, tab.ColumnCount(); ord < n; ord++ {
 		if tab.Column(ord).ColName() == name {
@@ -147,9 +160,9 @@ func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	child := tp.Childf("TABLE %s", tab.Name().TableName)
 
 	var buf bytes.Buffer
-	for i := 0; i < tab.ColumnCount(); i++ {
+	for i := 0; i < tab.DeletableColumnCount(); i++ {
 		buf.Reset()
-		formatColumn(tab.Column(i), &buf)
+		formatColumn(tab.Column(i), IsMutationColumn(tab, i), &buf)
 		child.Child(buf.String())
 	}
 
@@ -161,7 +174,7 @@ func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 		fkRef, ok := tab.Index(i).ForeignKey()
 
 		if ok {
-			formatCatalogFKRef(cat, tab, tab.Index(i), fkRef, child)
+			formatCatalogFKRef(cat, tab.Index(i), fkRef, child)
 		}
 	}
 
@@ -190,7 +203,7 @@ func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
 		buf.Reset()
 
 		idxCol := idx.Column(i)
-		formatColumn(idxCol.Column, &buf)
+		formatColumn(idxCol.Column, false /* isMutationCol */, &buf)
 		if idxCol.Descending {
 			fmt.Fprintf(&buf, " desc")
 		}
@@ -221,9 +234,7 @@ func formatColPrefix(idx Index, prefixLen int) string {
 
 // formatCatalogFKRef nicely formats a catalog foreign key reference using a
 // treeprinter for debugging and testing.
-func formatCatalogFKRef(
-	cat Catalog, tab Table, idx Index, fkRef ForeignKeyReference, tp treeprinter.Node,
-) {
+func formatCatalogFKRef(cat Catalog, idx Index, fkRef ForeignKeyReference, tp treeprinter.Node) {
 	ds, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.TableID)
 	if err != nil {
 		panic(err)
@@ -247,12 +258,15 @@ func formatCatalogFKRef(
 	)
 }
 
-func formatColumn(col Column, buf *bytes.Buffer) {
+func formatColumn(col Column, isMutationCol bool, buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "%s %s", col.ColName(), col.DatumType())
 	if !col.IsNullable() {
 		fmt.Fprintf(buf, " not null")
 	}
 	if col.IsHidden() {
 		fmt.Fprintf(buf, " (hidden)")
+	}
+	if isMutationCol {
+		fmt.Fprintf(buf, " (mutation)")
 	}
 }
