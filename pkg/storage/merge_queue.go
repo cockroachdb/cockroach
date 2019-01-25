@@ -233,7 +233,6 @@ func (mq *mergeQueue) process(
 	}
 
 	lhsQPS := lhsRepl.GetSplitQPS()
-	timeSinceLastReq := lhsRepl.store.Clock().PhysicalTime().Sub(lhsRepl.GetLastRequestTime())
 	rhsDesc, rhsStats, rhsQPS, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
 	if err != nil {
 		return err
@@ -250,10 +249,9 @@ func (mq *mergeQueue) process(
 	}
 	mergedStats := lhsStats
 	mergedStats.Add(rhsStats)
+
 	var mergedQPS float64
-	// Consider the mergedReqRate only if the last request is recent. If no request has been
-	// found for over 10 seconds, the merge queue should feel free to merge the ranges.
-	if lhsRepl.SplitByLoadEnabled() && timeSinceLastReq <= (10*time.Second) {
+	if lhsRepl.SplitByLoadEnabled() {
 		mergedQPS = lhsQPS + rhsQPS
 	}
 
@@ -261,9 +259,11 @@ func (mq *mergeQueue) process(
 	// Use a lower threshold for load based splitting so we don't find ourselves
 	// in a situation where we keep merging ranges that would be split soon after
 	// by a small increase in load.
-	if ok, _ := shouldSplitRange(mergedDesc, mergedStats, mergedQPS,
-		lhsRepl.SplitByLoadQPSThreshold()/2, lhsRepl.GetMaxBytes(), sysCfg); ok {
-		log.VEventf(ctx, 2, "skipping merge: merged range %s would need to be split (estimated size, estimated QPS: %d, %v)",
+	loadBasedSplitPossible := lhsRepl.SplitByLoadQPSThreshold() < 2*mergedQPS
+	if ok, _ := shouldSplitRange(mergedDesc, mergedStats, lhsRepl.GetMaxBytes(), sysCfg); ok || loadBasedSplitPossible {
+		log.VEventf(ctx, 2,
+			"skipping merge to avoid thrashing: merged range %s may split "+
+				"(estimated size, estimated QPS: %d, %v)",
 			mergedDesc, mergedStats.Total(), mergedQPS)
 		return nil
 	}

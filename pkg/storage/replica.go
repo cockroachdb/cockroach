@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/rand"
 	"reflect"
 	"sync/atomic"
 	"time"
@@ -418,14 +417,8 @@ type Replica struct {
 		draining bool
 	}
 
-	// Split keeps information for load-based splitting.
-	splitMu struct {
-		syncutil.Mutex
-		lastReqTime time.Time // most recent time recorded by requests.
-		count       int64     // reqs since last nanos
-		qps         float64   // last reqs/s rate
-		splitFinder *split.Finder
-	}
+	// loadBasedSplitter keeps information about load-based splitting.
+	loadBasedSplitter split.Decider
 
 	unreachablesMu struct {
 		syncutil.Mutex
@@ -779,26 +772,13 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 }
 
 // GetSplitQPS returns the Replica's queries/s request rate.
-// The value returned represents the QPS recorded at the time of the
-// last request which can be found using GetLastRequestTime().
+//
 // NOTE: This should only be used for load based splitting, only
 // works when the load based splitting cluster setting is enabled.
 //
 // Use QueriesPerSecond() for current QPS stats for all other purposes.
 func (r *Replica) GetSplitQPS() float64 {
-	r.splitMu.Lock()
-	defer r.splitMu.Unlock()
-	return r.splitMu.qps
-}
-
-// GetLastRequestTime returns the most recent time in nanos
-// when the last rate was recorded.
-// NOTE: This should only be used for load based splitting, only
-// works when the load based splitting cluster setting is enabled.
-func (r *Replica) GetLastRequestTime() time.Time {
-	r.splitMu.Lock()
-	defer r.splitMu.Unlock()
-	return r.splitMu.lastReqTime
+	return r.loadBasedSplitter.LastQPS(timeutil.Now())
 }
 
 // ContainsKey returns whether this range contains the specified key.
@@ -1158,17 +1138,14 @@ func (r *Replica) beginCmds(
 
 	// Handle load-based splitting.
 	if r.SplitByLoadEnabled() {
-		r.splitMu.Lock()
-		r.splitMu.count += int64(len(ba.Requests))
-		record, split := r.needsSplitByLoadLocked()
-		if record {
-			if boundarySpan := spans.BoundarySpan(spanset.SpanGlobal); boundarySpan != nil {
-				r.splitMu.splitFinder.Record(*boundarySpan, rand.Intn)
+		shouldInitSplit := r.loadBasedSplitter.Record(timeutil.Now(), len(ba.Requests), func() roachpb.Span {
+			boundarySpan := spans.BoundarySpan(spanset.SpanGlobal)
+			if boundarySpan == nil {
+				return roachpb.Span{}
 			}
-		}
-		r.splitMu.Unlock()
-		// Add to the split queue after releasing splitMu.
-		if split {
+			return *boundarySpan
+		})
+		if shouldInitSplit {
 			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 		}
 	}
