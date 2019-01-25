@@ -568,7 +568,7 @@ func (c *tableFeed) Close(t testing.TB) {
 	c.urlCleanup()
 }
 
-var cloudFeedFileRE = regexp.MustCompile(`^\d{23}-(.+?)-(\d+)-`)
+var cloudFeedFileRE = regexp.MustCompile(`^\d{33}-(.+?)-(\d+)-`)
 
 type cloudFeedFactory struct {
 	s       serverutils.TestServerInterface
