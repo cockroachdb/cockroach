@@ -18,7 +18,7 @@ package tree
 type Split struct {
 	// Only one of Table and Index can be set.
 	Table *TableName
-	Index *TableNameWithIndex
+	Index *TableIndexName
 	// Each row contains values for the columns in the PK or index (or a prefix
 	// of the columns).
 	Rows *Select
@@ -45,7 +45,7 @@ type Relocate struct {
 	// TODO(a-robinson): It's not great that this can only work on ranges that
 	// are part of a currently valid table or index.
 	Table *TableName
-	Index *TableNameWithIndex
+	Index *TableIndexName
 	// Each row contains an array with store ids and values for the columns in the
 	// PK or index (or a prefix of the columns).
 	// See docs/RFCS/sql_split_syntax.md.
@@ -75,7 +75,7 @@ func (node *Relocate) Format(ctx *FmtCtx) {
 type Scatter struct {
 	// Only one of Table and Index can be set.
 	Table *TableName
-	Index *TableNameWithIndex
+	Index *TableIndexName
 	// Optional from and to values for the columns in the PK or index (or a prefix
 	// of the columns).
 	// See docs/RFCS/sql_split_syntax.md.
