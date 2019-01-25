@@ -568,7 +568,7 @@ func (c *tableFeed) Close(t testing.TB) {
 	c.urlCleanup()
 }
 
-var cloudFeedFileRE = regexp.MustCompile(`^\d{23}-(.+?)-(\d+)-`)
+var cloudFeedFileRE = regexp.MustCompile(`^\d{33}-(.+?)-(\d+)-`)
 
 type cloudFeedFactory struct {
 	s       serverutils.TestServerInterface
@@ -598,7 +598,11 @@ func (f *cloudFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 	}
 	feedDir := strconv.Itoa(f.feedIdx)
 	f.feedIdx++
-	createStmt.SinkURI = tree.NewStrVal(`experimental-nodelocal:///` + feedDir)
+	sinkURI := `experimental-nodelocal:///` + feedDir
+	// TODO(dan): This is a pretty unsatisfying way to test that the sink passes
+	// through params it doesn't understand to ExportStorage.
+	sinkURI += `?should_be=ignored`
+	createStmt.SinkURI = tree.NewStrVal(sinkURI)
 
 	// Nodelocal puts its dir under `ExternalIODir`, which is passed into
 	// cloudFeedFactory.
