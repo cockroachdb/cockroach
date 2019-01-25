@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 const testCacheSize = 1 << 30 // 1 GB
@@ -1737,4 +1738,34 @@ func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 			t.Fatalf("wal size was expected to increase, got %d -> %d", before, after)
 		}
 	})
+}
+
+func TestIngestDelayLimit(t *testing.T) {
+	r := &RocksDB{cfg: RocksDBConfig{Settings: cluster.MakeTestingClusterSettings()}}
+
+	max, ramp := time.Second*5, time.Second*5/10
+
+	for _, tc := range []struct {
+		exp   time.Duration
+		stats Stats
+		max   time.Duration
+	}{
+		{0, Stats{}, PreIngestDefaultDelayLimit},
+		{0, Stats{L0FileCount: 19}, PreIngestDefaultDelayLimit},
+		{0, Stats{L0FileCount: 20}, PreIngestDefaultDelayLimit},
+		{ramp, Stats{L0FileCount: 21}, PreIngestDefaultDelayLimit},
+		{ramp * 2, Stats{L0FileCount: 22}, PreIngestDefaultDelayLimit},
+		{max, Stats{L0FileCount: 35}, PreIngestDefaultDelayLimit},
+		{max, Stats{L0FileCount: 55}, PreIngestDefaultDelayLimit},
+		{time.Second * 2, Stats{L0FileCount: 35}, time.Second * 2},
+		{0, Stats{PendingCompactionBytesEstimate: 20 << 30}, PreIngestDefaultDelayLimit},
+		{time.Second * 2, Stats{PendingCompactionBytesEstimate: 80 << 30}, time.Second * 2},
+		{max, Stats{L0FileCount: 35, PendingCompactionBytesEstimate: 20 << 30}, PreIngestDefaultDelayLimit},
+		{time.Second * 2, Stats{L0FileCount: 15, PendingCompactionBytesEstimate: 80 << 30}, time.Second * 2},
+		{time.Second * 2, Stats{L0FileCount: 25, PendingCompactionBytesEstimate: 80 << 30}, time.Second * 2},
+		{max, Stats{L0FileCount: 25, PendingCompactionBytesEstimate: 80 << 30}, PreIngestDefaultDelayLimit},
+	} {
+		require.Equal(t, tc.exp, r.calculatePreIngestDelay(&tc.stats, tc.max))
+	}
+
 }
