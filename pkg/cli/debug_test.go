@@ -132,6 +132,7 @@ func TestOpenReadOnlyStore(t *testing.T) {
 
 func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skipf("incompatible with adaptive replication factor on 2.1")
 	ctx := context.Background()
 
 	baseDir, dirCleanupFn := testutils.TempDir(t)
