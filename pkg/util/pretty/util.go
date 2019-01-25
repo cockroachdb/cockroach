@@ -113,7 +113,7 @@ func AlignUnder(head, nested Doc) Doc {
 	g := Group(nested)
 	a := ConcatSpace(head, Align(g))
 	b := Concat(head, NestT(Concat(Line, g)))
-	return Group(union{a, b})
+	return Group(&union{a, b})
 }
 
 // Fold applies f recursively to all Docs in d.
@@ -282,7 +282,7 @@ func RLTable(align bool, rows ...RLTableRow) Doc {
 		}
 		alignedTable := Stack(items...)
 
-		finalDoc = union{alignedTable, nestedSections}
+		finalDoc = &union{alignedTable, nestedSections}
 	}
 
 	return Group(finalDoc)
