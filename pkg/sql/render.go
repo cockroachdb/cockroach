@@ -652,7 +652,7 @@ func (r *renderNode) colIdxByRenderAlias(
 			return 0, err
 		}
 
-		if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Parts[0] == "" {
+		if c, ok := v.(*tree.ColumnItem); ok && c.TableName == nil {
 			// Look for an output column that matches the name. This
 			// handles cases like:
 			//
