@@ -100,31 +100,34 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
   }
 
   renderNodeResponse(details: EnqueueRangeResponse.IDetails) {
-    if (details.error) {
-      return <React.Fragment><b>Error:</b> {details.error}</React.Fragment>;
-    }
-
     return (
-      <table className="enqueue-range-table">
-        <thead>
-          <tr className="enqueue-range-table__row enqueue-range-table__row--header">
-            <th className="enqueue-range-table__cell enqueue-range-table__cell--header">Timestamp</th>
-            <th className="enqueue-range-table__cell enqueue-range-table__cell--header">Message</th>
-          </tr>
-        </thead>
-        <tbody>
-          {details.events.map((event) => (
-            <tr className="enqueue-range-table__row--body">
-              <td className="enqueue-range-table__cell enqueue-range-table__cell--date">
-                {Print.Timestamp(event.time)}
-              </td>
-              <td className="enqueue-range-table__cell">
-                <pre>{event.message}</pre>
-              </td>
+      <React.Fragment>
+        <p>
+          {details.error
+            ? <React.Fragment><b>Error:</b> {details.error}</React.Fragment>
+            : "Call succeeded"}
+        </p>
+        <table className="enqueue-range-table">
+          <thead>
+            <tr className="enqueue-range-table__row enqueue-range-table__row--header">
+              <th className="enqueue-range-table__cell enqueue-range-table__cell--header">Timestamp</th>
+              <th className="enqueue-range-table__cell enqueue-range-table__cell--header">Message</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {details.events.map((event) => (
+              <tr className="enqueue-range-table__row--body">
+                <td className="enqueue-range-table__cell enqueue-range-table__cell--date">
+                  {Print.Timestamp(event.time)}
+                </td>
+                <td className="enqueue-range-table__cell">
+                  <pre>{event.message}</pre>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </React.Fragment>
     );
   }
 
@@ -204,6 +207,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
                     value={this.state.nodeID}
                     placeholder="NodeID (optional)"
                   />
+                  &nbsp;If not specified, we'll attempt to enqueue on all the nodes.
                 </label>
                 <br />
                 <label>
