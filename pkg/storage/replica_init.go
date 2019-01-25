@@ -16,6 +16,7 @@ package storage
 
 import (
 	"context"
+	"math/rand"
 	"os"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
+	"github.com/cockroachdb/cockroach/pkg/storage/split"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -46,6 +48,9 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r.mu.stateLoader = stateloader.Make(rangeID)
 	r.mu.quiescent = true
 	r.mu.zone = config.DefaultZoneConfigRef()
+	split.Init(&r.loadBasedSplitter, rand.Intn, func() float64 {
+		return float64(SplitByLoadQPSThreshold.Get(&store.cfg.Settings.SV))
+	})
 
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
