@@ -203,6 +203,9 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
   rep->GetIntProperty("rocksdb.estimate-pending-compaction-bytes",
                       &pending_compaction_bytes_estimate);
 
+  std::string l0_file_count_str;
+  rep->GetProperty("rocksdb.num-files-at-level0", &l0_file_count_str);
+
   stats->block_cache_hits = (int64_t)s->getTickerCount(rocksdb::BLOCK_CACHE_HIT);
   stats->block_cache_misses = (int64_t)s->getTickerCount(rocksdb::BLOCK_CACHE_MISS);
   stats->block_cache_usage = (int64_t)block_cache->GetUsage();
@@ -216,6 +219,7 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
   stats->compactions = (int64_t)event_listener->GetCompactions();
   stats->table_readers_mem_estimate = table_readers_mem_estimate;
   stats->pending_compaction_bytes_estimate = pending_compaction_bytes_estimate;
+  stats->l0_file_count = std::atoi(l0_file_count_str.c_str());
   return kSuccess;
 }
 
