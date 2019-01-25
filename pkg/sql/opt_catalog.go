@@ -419,6 +419,24 @@ func (ot *optTable) IndexCount() int {
 	return 1 + len(ot.desc.Indexes)
 }
 
+// WritableIndexCount is part of the cat.Table interface.
+func (ot *optTable) WritableIndexCount() int {
+	if ot.desc.IsVirtualTable() {
+		return 0
+	}
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.WritableIndexes())
+}
+
+// DeletableIndexCount is part of the cat.Table interface.
+func (ot *optTable) DeletableIndexCount() int {
+	if ot.desc.IsVirtualTable() {
+		return 0
+	}
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.DeletableIndexes())
+}
+
 // Index is part of the cat.Table interface.
 func (ot *optTable) Index(i int) cat.Index {
 	// Primary index is always 0th index.
@@ -426,8 +444,8 @@ func (ot *optTable) Index(i int) cat.Index {
 		return &ot.primary
 	}
 
-	// Bias i to account for lack of primary index in Indexes slice.
-	desc := &ot.desc.Indexes[i-1]
+	// Bias i to account for lack of primary index in DeletableIndexes slice.
+	desc := &ot.desc.DeletableIndexes()[i-1]
 
 	// Check to see if there's already a wrapper for this index descriptor.
 	if ot.wrappers == nil {

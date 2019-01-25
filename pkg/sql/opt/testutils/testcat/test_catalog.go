@@ -440,6 +440,8 @@ type Table struct {
 
 	writeOnlyColCount  int
 	deleteOnlyColCount int
+	writeOnlyIdxCount  int
+	deleteOnlyIdxCount int
 }
 
 var _ cat.Table = &Table{}
@@ -496,6 +498,16 @@ func (tt *Table) Column(i int) cat.Column {
 
 // IndexCount is part of the cat.Table interface.
 func (tt *Table) IndexCount() int {
+	return len(tt.Indexes) - tt.writeOnlyIdxCount - tt.deleteOnlyIdxCount
+}
+
+// WritableIndexCount is part of the cat.Table interface.
+func (tt *Table) WritableIndexCount() int {
+	return len(tt.Indexes) - tt.deleteOnlyIdxCount
+}
+
+// DeletableIndexCount is part of the cat.Table interface.
+func (tt *Table) DeletableIndexCount() int {
 	return len(tt.Indexes)
 }
 

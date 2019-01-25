@@ -63,9 +63,23 @@ type Table interface {
 	// by deletable columns.
 	Column(i int) Column
 
-	// IndexCount returns the number of indexes defined on this table. This
-	// includes the primary index, so the count is always >= 1.
+	// IndexCount returns the number of public indexes defined on this table.
+	// Public indexes are not currently being added or dropped from the table.
+	// This method should be used when mutation columns can be ignored (the common
+	// case). The returned indexes include the primary index, so the count is
+	// always >= 1.
 	IndexCount() int
+
+	// WritableIndexCount returns the number of public and writable indexes
+	// defined on this table. Although writable indexes are not visible, any
+	// table mutation operations must still be applied to them. WritableIndexCount
+	// is always >= IndexCount.
+	WritableIndexCount() int
+
+	// DeletableIndexCount returns the number of public, writable, and deletable
+	// indexes defined on this table. DeletableIndexCount is always >=
+	// WritableIndexCount.
+	DeletableIndexCount() int
 
 	// Index returns the ith index, where i < IndexCount. The table's primary
 	// index is always the 0th index, and is always present (use cat.PrimaryIndex
@@ -166,8 +180,8 @@ func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 		child.Child(buf.String())
 	}
 
-	for i := 0; i < tab.IndexCount(); i++ {
-		formatCatalogIndex(tab.Index(i), i == PrimaryIndex, child)
+	for i := 0; i < tab.DeletableIndexCount(); i++ {
+		formatCatalogIndex(tab, i, child)
 	}
 
 	for i := 0; i < tab.IndexCount(); i++ {
@@ -185,16 +199,21 @@ func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for
 // debugging and testing.
-func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
+func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
+	idx := tab.Index(ord)
 	inverted := ""
 	if idx.IsInverted() {
 		inverted = "INVERTED "
 	}
-	child := tp.Childf("%sINDEX %s", inverted, idx.Name())
+	mutation := ""
+	if IsMutationIndex(tab, ord) {
+		mutation = " (mutation)"
+	}
+	child := tp.Childf("%sINDEX %s%s", inverted, idx.Name(), mutation)
 
 	var buf bytes.Buffer
 	colCount := idx.ColumnCount()
-	if isPrimary {
+	if ord == PrimaryIndex {
 		// Omit the "stored" columns from the primary index.
 		colCount = idx.KeyColumnCount()
 	}
