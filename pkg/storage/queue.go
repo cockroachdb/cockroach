@@ -178,9 +178,8 @@ type queueImpl interface {
 		context.Context, hlc.Timestamp, *Replica, *config.SystemConfig,
 	) (shouldQueue bool, priority float64)
 
-	// process accepts lease status, a replica, and the system config
-	// and executes queue-specific work on it. The Replica is guaranteed
-	// to be initialized.
+	// process accepts a replica, and the system config and executes
+	// queue-specific work on it. The Replica is guaranteed to be initialized.
 	process(context.Context, *Replica, *config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
