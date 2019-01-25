@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -199,7 +198,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 type testInternalExecutor interface {
 	Query(
 		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
-	) ([]tree.Datums, sqlbase.ResultColumns, error)
+	) ([]tree.Datums, error)
 	Exec(
 		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
 	) (int, error)
@@ -212,7 +211,7 @@ func testInternalExecutorAppNameInitialization(
 	ie testInternalExecutor,
 ) {
 	// Check that the application_name is set properly in the executor.
-	if rows, _, err := ie.Query(context.TODO(), "test-query", nil,
+	if rows, err := ie.Query(context.TODO(), "test-query", nil,
 		"SHOW application_name"); err != nil {
 		t.Fatal(err)
 	} else if len(rows) != 1 {
@@ -225,7 +224,7 @@ func testInternalExecutorAppNameInitialization(
 	// have this keep running until we cancel it below.
 	errChan := make(chan error)
 	go func() {
-		_, _, err := ie.Query(context.TODO(),
+		_, err := ie.Query(context.TODO(),
 			"test-query",
 			nil, /* txn */
 			"SELECT pg_sleep(1337666)")
@@ -241,7 +240,7 @@ func testInternalExecutorAppNameInitialization(
 	// When it does, we capture the query ID.
 	var queryID string
 	testutils.SucceedsSoon(t, func() error {
-		rows, _, err := ie.Query(context.TODO(),
+		rows, err := ie.Query(context.TODO(),
 			"find-query",
 			nil, /* txn */
 			// We need to assemble the magic string so that this SELECT
@@ -270,7 +269,7 @@ func testInternalExecutorAppNameInitialization(
 	})
 
 	// Check that the query shows up in the internal tables without error.
-	if rows, _, err := ie.Query(context.TODO(), "find-query", nil,
+	if rows, err := ie.Query(context.TODO(), "find-query", nil,
 		"SELECT application_name FROM crdb_internal.node_queries WHERE query LIKE '%337' || '666%'"); err != nil {
 		t.Fatal(err)
 	} else if len(rows) != 1 {
@@ -295,7 +294,7 @@ func testInternalExecutorAppNameInitialization(
 	}
 
 	// Now check that it was properly registered in statistics.
-	if rows, _, err := ie.Query(context.TODO(), "find-query", nil,
+	if rows, err := ie.Query(context.TODO(), "find-query", nil,
 		"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep(%'"); err != nil {
 		t.Fatal(err)
 	} else if len(rows) != 1 {
