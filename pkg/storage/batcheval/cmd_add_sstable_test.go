@@ -348,7 +348,8 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				RequestHeader: roachpb.RequestHeader{Key: keys.MinKey, EndKey: keys.MaxKey},
 				Data:          sstBytes,
 			},
-			Stats: &enginepb.MVCCStats{},
+			Stats:   &enginepb.MVCCStats{},
+			EvalCtx: &batcheval.MockEvalCtx{MockEngine: e},
 		}
 		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
 		if err != nil {

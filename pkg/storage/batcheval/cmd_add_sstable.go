@@ -76,6 +76,15 @@ func EvalAddSSTable(
 	}
 	ms.Add(stats)
 
+	// If using RocksDB, check if we want to back-pressure due to L0 files now in
+	// the hopes of avoiding it later when we're actually ingesting during raft
+	// application. Note: this will only protect the proposer, so replicas could
+	// still end up backpressuring during apply but this at least avoids an easily
+	// detected and avoidable blocking of our own raft application.
+	if rocks, ok := cArgs.EvalCtx.Engine().(*engine.RocksDB); ok {
+		rocks.PreIngestDelay(ctx)
+	}
+
 	return result.Result{
 		Replicated: storagepb.ReplicatedEvalResult{
 			AddSSTable: &storagepb.ReplicatedEvalResult_AddSSTable{

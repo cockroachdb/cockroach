@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	humanize "github.com/dustin/go-humanize"
@@ -2905,11 +2906,45 @@ func (r *RocksDB) setAuxiliaryDir(d string) error {
 	return nil
 }
 
+func (r *RocksDB) l0FileCount() int {
+	// TODO(dt): we could push a L0FileCount() method down instead of pulling all
+	// the files back with all their attributes just to count them.
+	var files int
+	for _, sst := range r.GetSSTables() {
+		if sst.Level == 0 {
+			files++
+		}
+	}
+	return files
+}
+
+// PreIngestDelay may choose to block for some duration if L0 has an exessive
+// number of files in it -- it is intended to be called before ingesting a new
+// SST since we'd rather backpressure the bulk operation adding SSTs before we
+// hit the global slowdown trigger that would also impact forground traffic or
+// potentially cause liveness problems and associated unavailability.
+func (r *RocksDB) PreIngestDelay(ctx context.Context) {
+	// options.cc specifies 20 files for the global write slowdown so backpressure
+	// SST additions well before then at 10.
+	const l0SlowdownFiles = 10
+	for i, re := 1, retry.StartWithCtx(ctx, retry.Options{MaxRetries: 6}); re.Next(); i++ {
+		files := r.l0FileCount()
+		if files < l0SlowdownFiles {
+			return
+		}
+		log.Warningf(ctx, "delaying SST ingestion due to %d files in L0 (attempt %d)", files, i)
+		// TODO(dt): ideally we'd only backpressure if this SST is going to l0 -- if
+		// it doesn't overlap and is going lower, we're not actually adding to the
+		// problem so this isn't needed.
+	}
+}
+
 // IngestExternalFiles atomically links a slice of files into the RocksDB
 // log-structured merge-tree.
 func (r *RocksDB) IngestExternalFiles(
 	ctx context.Context, paths []string, allowFileModifications bool,
 ) error {
+	r.PreIngestDelay(ctx)
 	cPaths := make([]*C.char, len(paths))
 	for i := range paths {
 		cPaths[i] = C.CString(paths[i])
