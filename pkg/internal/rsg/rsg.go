@@ -267,7 +267,7 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 		d := tree.MakeDTime(timeofday.FromInt(i))
 		v = fmt.Sprintf(`'%s'`, d)
 	case types.Interval:
-		d := duration.Duration{Nanos: r.Int63()}
+		d := duration.MakeDuration(r.Int63(), 0, 0)
 		v = fmt.Sprintf(`'%s'`, &tree.DInterval{Duration: d})
 	case types.UUID:
 		u := uuid.MakeV4()

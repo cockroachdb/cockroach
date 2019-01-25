@@ -179,6 +179,20 @@ func TestPGIntervalSyntax(t *testing.T) {
 		{`123`, ``, `interval: missing unit at position 3: "123"`},
 		{`123blah`, ``, `interval: unknown unit "blah" in duration "123blah"`},
 
+		// ns/us boundary
+		{`499ns`, `00:00:00`, ``},
+		{`500ns`, `00:00:00.000001`, ``},
+		{`.499us`, `00:00:00`, ``},
+		{`.5us`, `00:00:00.000001`, ``},
+		{`-499ns`, `00:00:00`, ``},
+		{`-500ns`, `-00:00:00.000001`, ``},
+		{`-0.499us`, `00:00:00`, ``},
+		{`-0.5us`, `-00:00:00.000001`, ``},
+		{`0.000000499s`, `00:00:00`, ``},
+		{`0.0000005s`, `00:00:00.000001`, ``},
+		{`-0.000000499s`, `00:00:00`, ``},
+		{`-0.0000005s`, `-00:00:00.000001`, ``},
+
 		{`1.2 nanosecond`, `00:00:00`, ``},
 		{`1.2 nanoseconds`, `00:00:00`, ``},
 		{`1.2 ns`, `00:00:00`, ``},
@@ -226,7 +240,7 @@ func TestPGIntervalSyntax(t *testing.T) {
 		{`1.2s`, `00:00:01.2`, ``},
 		{`1.2sec`, `00:00:01.2`, ``},
 		{`1.2secs`, `00:00:01.2`, ``},
-		{`0.2304506708s`, `00:00:00.23045`, ``},
+		{`0.2304506708s`, `00:00:00.230451`, ``},
 		{`0.0002304506708s`, `00:00:00.00023`, ``},
 		{`0.0000002304506s`, `00:00:00`, ``},
 		{`75.5s`, `00:01:15.5`, ``},
@@ -282,7 +296,7 @@ func TestPGIntervalSyntax(t *testing.T) {
 		{`1 mon 2 week`, `1 mon 14 days`, ``},
 		{`1.1mon`, `1 mon 3 days`, ``},
 		{`1.2mon`, `1 mon 6 days`, ``},
-		{`1.11mon`, `1 mon 3 days 07:11:59.999999`, ``},
+		{`1.11mon`, `1 mon 3 days 07:12:00`, ``},
 		{`-9223372036854775808mon`, `-768614336404564650 years -8 mons`, ``},
 		{`9223372036854775807mon`, `768614336404564650 years 7 mons`, ``},
 
@@ -316,49 +330,46 @@ func TestPGIntervalSyntax(t *testing.T) {
 		// This was 1ns off due to float rounding.
 		{`50 years 6 mons 75 days 1572897:25:58.535696141`, `50 years 6 mons 75 days 1572897:25:58.535696`, ``},
 	}
-	for i, test := range testData {
-		dur, err := parseDuration(test.input)
-		if err != nil {
-			if test.error != "" {
-				if err.Error() != test.error {
-					t.Errorf(`%d: %q: got error "%v", expected "%s"`, i, test.input, err, test.error)
+	for _, test := range testData {
+		t.Run(test.input, func(t *testing.T) {
+			dur, err := parseDuration(test.input)
+			if err != nil {
+				if test.error != "" {
+					if err.Error() != test.error {
+						t.Fatalf(`%q: got error "%v", expected "%s"`, test.input, err, test.error)
+					}
+				} else {
+					t.Fatalf("%q: %v", test.input, err)
 				}
+				return
 			} else {
-				t.Errorf("%d: %q: %v", i, test.input, err)
+				if test.error != "" {
+					t.Fatalf(`%q: expected error "%q"`, test.input, test.error)
+				}
 			}
-			continue
-		} else {
-			if test.error != "" {
-				t.Errorf(`%d: %q: expected error "%q"`, i, test.input, test.error)
-				continue
+			s := dur.String()
+			if s != test.output {
+				t.Fatalf(`%q: got "%s", expected "%s"`, test.input, s, test.output)
 			}
-		}
-		s := dur.String()
-		if s != test.output {
-			t.Errorf(`%d: %q: got "%s", expected "%s"`, i, test.input, s, test.output)
-			continue
-		}
 
-		dur2, err := parseDuration(s)
-		if err != nil {
-			t.Errorf(`%d: %q: repr "%s" is not parsable: %v`, i, test.input, s, err)
-			continue
-		}
-		s2 := dur2.String()
-		if s2 != s {
-			t.Errorf(`%d: %q: repr "%s" does not round-trip, got "%s" instead`,
-				i, test.input, s, s2)
-		}
+			dur2, err := parseDuration(s)
+			if err != nil {
+				t.Fatalf(`%q: repr "%s" is not parsable: %v`, test.input, s, err)
+			}
+			s2 := dur2.String()
+			if s2 != s {
+				t.Fatalf(`%q: repr "%s" does not round-trip, got "%s" instead`, test.input, s, s2)
+			}
 
-		// Test that a Datum recognizes the format.
-		di, err := parseDInterval(test.input, Second)
-		if err != nil {
-			t.Errorf(`%d: %q: unrecognized as datum: %v`, i, test.input, err)
-			continue
-		}
-		s3 := di.Duration.String()
-		if s3 != test.output {
-			t.Errorf(`%d: %q: as datum, got "%s", expected "%s"`, i, test.input, s3, test.output)
-		}
+			// Test that a Datum recognizes the format.
+			di, err := parseDInterval(test.input, Second)
+			if err != nil {
+				t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
+			}
+			s3 := di.Duration.String()
+			if s3 != test.output {
+				t.Fatalf(`%q: as datum, got "%s", expected "%s"`, test.input, s3, test.output)
+			}
+		})
 	}
 }

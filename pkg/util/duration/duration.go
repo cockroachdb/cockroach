@@ -59,22 +59,63 @@ var ErrEncodeOverflow = errors.New("overflow during Encode")
 // For the purposes of Compare and Encode, 1 month is considered equivalent to
 // 30 days and 1 day is equivalent to 24 * 60 * 60 * 1E9 nanoseconds.
 //
+// Although the Nanos field is a number of nanoseconds, all operations
+// round to the nearest microsecond. Any setting of this field should avoid
+// setting with precision below microseconds. The only exceptions are the
+// encode/decode operations.
+//
 // TODO(dan): Until the overflow and underflow handling is fixed, this is only
 // useful for durations of < 292 years.
 type Duration struct {
 	Months int64
 	Days   int64
-	Nanos  int64
+	// nanos is an unexported field so that it cannot be misused by other
+	// packages. It should almost always be rounded to the nearest microsecond.
+	nanos int64
 }
 
-// Round rounds Nanos to the nearest microsecond.
-func (d Duration) Round() Duration {
-	d.Nanos = d.rounded()
+// MakeDuration returns a Duration rounded to the nearest microsecond.
+func MakeDuration(nanos, days, months int64) Duration {
+	return Duration{
+		Months: months,
+		Days:   days,
+		nanos:  rounded(nanos),
+	}
+}
+
+// DecodeDuration returns a Duration without rounding nanos.
+func DecodeDuration(months, days, nanos int64) Duration {
+	return Duration{
+		Months: months,
+		Days:   days,
+		nanos:  nanos,
+	}
+}
+
+// Nanos returns the nanos of d.
+func (d Duration) Nanos() int64 {
+	return d.nanos
+}
+
+// SetNanos rounds and sets nanos.
+func (d *Duration) SetNanos(nanos int64) {
+	d.nanos = rounded(nanos)
+}
+
+// round rounds nanos to the nearest microsecond.
+func (d Duration) round() Duration {
+	d.nanos = rounded(d.nanos)
 	return d
 }
 
+// rounded returns nanos rounded to the nearest microsecond.
 func (d Duration) rounded() int64 {
-	dur := time.Duration(d.Nanos) * time.Nanosecond
+	return rounded(d.nanos)
+}
+
+// rounded returns nanos rounded to the nearest microsecond.
+func rounded(nanos int64) int64 {
+	dur := time.Duration(nanos) * time.Nanosecond
 	v := dur.Round(time.Microsecond).Nanoseconds()
 	// Near the boundaries of int64 will return the argument unchanged. Check
 	// for those cases and truncate instead of round so that we never have nanos.
@@ -97,9 +138,9 @@ func (d Duration) Compare(x Duration) int {
 		return -1
 	} else if normD.Days > normX.Days {
 		return 1
-	} else if normD.Nanos < normX.Nanos {
+	} else if normD.nanos < normX.nanos {
 		return -1
-	} else if normD.Nanos > normX.Nanos {
+	} else if normD.nanos > normX.nanos {
 		return 1
 	}
 	return 0
@@ -110,7 +151,7 @@ func (d Duration) Compare(x Duration) int {
 func FromInt64(x int64) Duration {
 	days := x / (nanosInDay / nanosInSecond)
 	seconds := x % (nanosInDay / nanosInSecond)
-	d := Duration{Days: days, Nanos: seconds * nanosInSecond}
+	d := Duration{Days: days, nanos: seconds * nanosInSecond}
 	return d.normalize()
 }
 
@@ -121,8 +162,8 @@ func FromFloat64(x float64) Duration {
 	secDays := math.Mod(x, float64(nanosInMonth/nanosInSecond))
 	days := int64(secDays / float64(nanosInDay/nanosInSecond))
 	secsRem := math.Mod(secDays, float64(nanosInDay/nanosInSecond))
-	d := Duration{Months: months, Days: days, Nanos: int64(secsRem * 1e9)}
-	return d.normalize().Round()
+	d := Duration{Months: months, Days: days, nanos: int64(secsRem * 1e9)}
+	return d.normalize().round()
 }
 
 // FromBigInt converts a big.Int number of nanoseconds to a duration. Inverse
@@ -141,8 +182,8 @@ func FromBigInt(src *big.Int) (Duration, bool) {
 	// Note: we do not need to check for overflow of daysDec because any
 	// excess bits were spilled into months above already.
 
-	d := Duration{Months: monthsDec.Int64(), Days: daysDec.Int64(), Nanos: nanosRem.Int64()}
-	return d.normalize().Round(), true
+	d := Duration{Months: monthsDec.Int64(), Days: daysDec.Int64(), nanos: nanosRem.Int64()}
+	return d.normalize().round(), true
 }
 
 // AsInt64 converts a duration to an int64 number of seconds.
@@ -160,13 +201,14 @@ func (d Duration) AsInt64() (int64, bool) {
 	if dSecs, ok = arith.AddWithOverflow(mSecs, dSecs); !ok {
 		return 0, ok
 	}
-	return arith.AddWithOverflow(dSecs, d.Nanos/nanosInSecond)
+	return arith.AddWithOverflow(dSecs, d.nanos/nanosInSecond)
 }
 
 // AsFloat64 converts a duration to a float64 number of seconds.
 func (d Duration) AsFloat64() float64 {
 	mSecs := float64(d.Months) * float64(nanosInMonth/nanosInSecond)
 	dSecs := float64(d.Days) * float64(nanosInDay/nanosInSecond)
+	// Uses rounded instead of nanos here to remove any on-disk nanos.
 	return float64(d.rounded())/float64(nanosInSecond) + mSecs + dSecs
 }
 
@@ -176,6 +218,7 @@ func (d Duration) AsBigInt(dst *big.Int) {
 	dst.Mul(dst, bigDaysInMonth)
 	dst.Add(dst, big.NewInt(d.Days))
 	dst.Mul(dst, bigNanosInDay)
+	// Uses rounded instead of nanos here to remove any on-disk nanos.
 	dst.Add(dst, big.NewInt(d.rounded()))
 }
 
@@ -187,7 +230,7 @@ const (
 
 // Format emits a string representation of a Duration to a Buffer truncated to microseconds.
 func (d Duration) Format(buf *bytes.Buffer) {
-	if d.Nanos == 0 && d.Days == 0 && d.Months == 0 {
+	if d.nanos == 0 && d.Days == 0 && d.Months == 0 {
 		buf.WriteString("00:00:00")
 		return
 	}
@@ -217,24 +260,24 @@ func (d Duration) Format(buf *bytes.Buffer) {
 		fmt.Fprintf(buf, "%d day%s", d.Days, isPlural(d.Days))
 	}
 
-	if d.Nanos == 0 {
+	if d.nanos == 0 {
 		return
 	}
 
 	wrotePrev(wrote, buf)
 
-	if d.Nanos/nanosInMicro < 0 {
+	if d.nanos/nanosInMicro < 0 {
 		buf.WriteString("-")
 	} else if negDays {
 		buf.WriteString("+")
 	}
 
-	// Extract abs(d.Nanos). See https://play.golang.org/p/U3_gNMpyUew.
+	// Extract abs(d.nanos). See https://play.golang.org/p/U3_gNMpyUew.
 	var nanos uint64
-	if d.Nanos >= 0 {
-		nanos = uint64(d.Nanos)
+	if d.nanos >= 0 {
+		nanos = uint64(d.nanos)
 	} else {
-		nanos = uint64(-d.Nanos)
+		nanos = uint64(-d.nanos)
 	}
 
 	hn := nanos / hourNanos
@@ -275,12 +318,13 @@ func (d Duration) String() string {
 	return buf.String()
 }
 
-// StringNanos returns a string representation of a Duration including its
-// hidden nanoseconds value. To be used only by the encoding/decoding packages.
+// StringNanos returns a string representation of a Duration including
+// its hidden nanoseconds value. To be used only by the encoding/decoding
+// packages for pretty printing of on-disk values.
 func (d Duration) StringNanos() string {
 	var buf bytes.Buffer
 	d.Format(&buf)
-	nanos := d.Nanos % nanosInMicro
+	nanos := d.nanos % nanosInMicro
 	if nanos != 0 {
 		fmt.Fprintf(&buf, "%+dns", nanos)
 	}
@@ -296,12 +340,12 @@ func (d Duration) Encode() (sortNanos int64, months int64, days int64, err error
 	//
 	// TODO(dan): Compute overflow exactly, then document that EncodeBigInt can be
 	// used in overflow cases.
-	years := d.Months/12 + d.Days/daysInMonth/12 + d.Nanos/nanosInMonth/12
+	years := d.Months/12 + d.Days/daysInMonth/12 + d.nanos/nanosInMonth/12
 	if years > maxYearsInDuration || years < minYearsInDuration {
 		return 0, 0, 0, ErrEncodeOverflow
 	}
 
-	totalNanos := d.Months*nanosInMonth + d.Days*nanosInDay + d.Nanos
+	totalNanos := d.Months*nanosInMonth + d.Days*nanosInDay + d.nanos
 	return totalNanos, d.Months, d.Days, nil
 }
 
@@ -312,7 +356,7 @@ func (d Duration) EncodeBigInt() (sortNanos *big.Int, months int64, days int64) 
 	bigMonths.Mul(bigMonths, big.NewInt(nanosInMonth))
 	bigDays := big.NewInt(d.Days)
 	bigDays.Mul(bigDays, big.NewInt(nanosInDay))
-	totalNanos := big.NewInt(d.Nanos)
+	totalNanos := big.NewInt(d.nanos)
 	totalNanos.Add(totalNanos, bigMonths).Add(totalNanos, bigDays)
 	return totalNanos, d.Months, d.Days
 }
@@ -323,7 +367,7 @@ func Decode(sortNanos int64, months int64, days int64) (Duration, error) {
 	nanos := sortNanos - months*nanosInMonth - days*nanosInDay
 	// TODO(dan): Handle underflow, then document that DecodeBigInt can be used
 	// in underflow cases.
-	return Duration{Months: months, Days: days, Nanos: nanos}, nil
+	return Duration{Months: months, Days: days, nanos: nanos}, nil
 }
 
 // TODO(dan): Write DecodeBigInt.
@@ -375,7 +419,7 @@ func Add(ctx Context, t time.Time, d Duration) time.Time {
 	// or if the day number that we're starting from can never result
 	// in normalization.
 	if mode == AdditionModeLegacy || d.Months == 0 || t.Day() <= 28 {
-		return t.AddDate(0, int(d.Months), int(d.Days)).Add(time.Duration(d.Nanos))
+		return t.AddDate(0, int(d.Months), int(d.Days)).Add(time.Duration(d.nanos))
 	}
 
 	// Adjustments for 1-based math.
@@ -416,45 +460,45 @@ func Add(ctx Context, t time.Time, d Duration) time.Time {
 			res.Nanosecond(), res.Location())
 	}
 
-	return res.AddDate(0, 0, int(d.Days)).Add(time.Duration(d.Nanos))
+	return res.AddDate(0, 0, int(d.Days)).Add(time.Duration(d.nanos))
 }
 
 // Add returns a Duration representing a time length of d+x.
 func (d Duration) Add(x Duration) Duration {
-	return Duration{d.Months + x.Months, d.Days + x.Days, d.Nanos + x.Nanos}.Round()
+	return MakeDuration(d.nanos+x.nanos, d.Days+x.Days, d.Months+x.Months)
 }
 
 // Sub returns a Duration representing a time length of d-x.
 func (d Duration) Sub(x Duration) Duration {
-	return Duration{d.Months - x.Months, d.Days - x.Days, d.Nanos - x.Nanos}.Round()
+	return MakeDuration(d.nanos-x.nanos, d.Days-x.Days, d.Months-x.Months)
 }
 
 // Mul returns a Duration representing a time length of d*x.
 func (d Duration) Mul(x int64) Duration {
-	return Duration{d.Months * x, d.Days * x, d.Nanos * x}.Round()
+	return MakeDuration(d.nanos*x, d.Days*x, d.Months*x)
 }
 
 // Div returns a Duration representing a time length of d/x.
 func (d Duration) Div(x int64) Duration {
-	return Duration{d.Months / x, d.Days / x, d.Nanos / x}.Round()
+	return MakeDuration(d.nanos/x, d.Days/x, d.Months/x)
 }
 
 // MulFloat returns a Duration representing a time length of d*x.
 func (d Duration) MulFloat(x float64) Duration {
-	return Duration{
-		int64(float64(d.Months) * x),
-		int64(float64(d.Days) * x),
-		int64(float64(d.Nanos) * x),
-	}.Round()
+	return MakeDuration(
+		int64(float64(d.nanos)*x),
+		int64(float64(d.Days)*x),
+		int64(float64(d.Months)*x),
+	)
 }
 
 // DivFloat returns a Duration representing a time length of d/x.
 func (d Duration) DivFloat(x float64) Duration {
-	return Duration{
-		int64(float64(d.Months) / x),
-		int64(float64(d.Days) / x),
-		int64(float64(d.Nanos) / x),
-	}.Round()
+	return MakeDuration(
+		int64(float64(d.nanos)/x),
+		int64(float64(d.Days)/x),
+		int64(float64(d.Months)/x),
+	)
 }
 
 // normalized returns a new Duration transformed using the equivalence rules.
@@ -472,10 +516,10 @@ func (d Duration) normalize() Duration {
 	//   made a full month.
 	// - Months did hit MaxInt64 or MinInt64, in which case there can be no more
 	//   months. We only need to shift nanos.
-	if d.Nanos > 0 {
+	if d.nanos > 0 {
 		d = d.shiftPosNanosToDays()
 		d = d.shiftPosDaysToMonths()
-	} else if d.Nanos < 0 {
+	} else if d.nanos < 0 {
 		d = d.shiftNegNanosToDays()
 		d = d.shiftNegDaysToMonths()
 	}
@@ -502,9 +546,9 @@ func (d Duration) shiftPosNanosToDays() Duration {
 		// rate, we can never transfer more than math.MaxInt64 anyway.
 		maxDays = math.MaxInt64 - d.Days
 	}
-	daysFromNanos := int64Min(d.Nanos/nanosInDay, maxDays)
+	daysFromNanos := int64Min(d.nanos/nanosInDay, maxDays)
 	d.Days += daysFromNanos
-	d.Nanos -= daysFromNanos * nanosInDay
+	d.nanos -= daysFromNanos * nanosInDay
 	return d
 }
 
@@ -528,9 +572,9 @@ func (d Duration) shiftNegNanosToDays() Duration {
 		// rate, we can never transfer more than math.MaxInt64 anyway.
 		minDays = math.MinInt64 - d.Days
 	}
-	daysFromNanos := int64Max(d.Nanos/nanosInDay, minDays)
+	daysFromNanos := int64Max(d.nanos/nanosInDay, minDays)
 	d.Days += daysFromNanos
-	d.Nanos -= daysFromNanos * nanosInDay
+	d.nanos -= daysFromNanos * nanosInDay
 	return d
 }
 

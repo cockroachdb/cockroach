@@ -156,16 +156,16 @@ func (l *intervalLexer) consumeSpaces() {
 
 // ISO Units.
 var isoDateUnitMap = map[string]duration.Duration{
-	"D": {Days: 1},
-	"W": {Days: 7},
-	"M": {Months: 1},
-	"Y": {Months: 12},
+	"D": duration.MakeDuration(0, 1, 0),
+	"W": duration.MakeDuration(0, 7, 0),
+	"M": duration.MakeDuration(0, 0, 1),
+	"Y": duration.MakeDuration(0, 0, 12),
 }
 
 var isoTimeUnitMap = map[string]duration.Duration{
-	"S": {Nanos: time.Second.Nanoseconds()},
-	"M": {Nanos: time.Minute.Nanoseconds()},
-	"H": {Nanos: time.Hour.Nanoseconds()},
+	"S": duration.MakeDuration(time.Second.Nanoseconds(), 0, 0),
+	"M": duration.MakeDuration(time.Minute.Nanoseconds(), 0, 0),
+	"H": duration.MakeDuration(time.Hour.Nanoseconds(), 0, 0),
 }
 
 const errInvalidSQLDuration = "invalid input syntax for type interval %s"
@@ -268,7 +268,7 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 			if err != nil {
 				return d, makeParseError(part, types.Interval, err)
 			}
-			d = d.Add(duration.Duration{Nanos: dur.Nanoseconds()})
+			d = d.Add(duration.MakeDuration(dur.Nanoseconds(), 0, 0))
 		} else if strings.ContainsRune(part, '-') {
 			// Try to parse as Year-Month.
 			if parsedIdx >= yearMonthParsed {
@@ -287,7 +287,7 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 				month, errMonth = strconv.Atoi(yms[1])
 			}
 			if errYear == nil && errMonth == nil {
-				delta := duration.Duration{Months: 1}.Mul(int64(year)*12 + int64(month))
+				delta := duration.MakeDuration(0, 0, 1).Mul(int64(year)*12 + int64(month))
 				if neg {
 					d = d.Sub(delta)
 				} else {
@@ -317,12 +317,12 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 				if err != nil {
 					return d, newInvalidSQLDurationError(s)
 				}
-				d = d.Add(duration.Duration{Nanos: dur.Nanoseconds()})
+				d = d.Add(duration.MakeDuration(dur.Nanoseconds(), 0, 0))
 				parsedIdx = hmsParsed
 			} else if parsedIdx == hmsParsed {
 				// Day part.
 				// TODO(hainesc): support float value in day part?
-				delta := duration.Duration{Days: 1}.Mul(int64(value))
+				delta := duration.MakeDuration(0, 1, 0).Mul(int64(value))
 				if neg {
 					d = d.Sub(delta)
 				} else {
@@ -393,16 +393,18 @@ var unitMap = func(
 	}
 	return units
 }(map[string]duration.Duration{
-	"nanosecond":  {Nanos: time.Nanosecond.Nanoseconds()},
-	"microsecond": {Nanos: time.Microsecond.Nanoseconds()},
-	"millisecond": {Nanos: time.Millisecond.Nanoseconds()},
-	"second":      {Nanos: time.Second.Nanoseconds()},
-	"minute":      {Nanos: time.Minute.Nanoseconds()},
-	"hour":        {Nanos: time.Hour.Nanoseconds()},
-	"day":         {Days: 1},
-	"week":        {Days: 7},
-	"month":       {Months: 1},
-	"year":        {Months: 12},
+	// Use DecodeDuration here because ns is the only unit for which we do not
+	// want to round nanoseconds since it is only used for multiplication.
+	"nanosecond":  duration.DecodeDuration(0, 0, time.Nanosecond.Nanoseconds()),
+	"microsecond": duration.MakeDuration(time.Microsecond.Nanoseconds(), 0, 0),
+	"millisecond": duration.MakeDuration(time.Millisecond.Nanoseconds(), 0, 0),
+	"second":      duration.MakeDuration(time.Second.Nanoseconds(), 0, 0),
+	"minute":      duration.MakeDuration(time.Minute.Nanoseconds(), 0, 0),
+	"hour":        duration.MakeDuration(time.Hour.Nanoseconds(), 0, 0),
+	"day":         duration.MakeDuration(0, 1, 0),
+	"week":        duration.MakeDuration(0, 7, 0),
+	"month":       duration.MakeDuration(0, 0, 1),
+	"year":        duration.MakeDuration(0, 0, 12),
 }, map[string][]string{
 	"nanosecond": {"ns", "nsec", "nsecs", "nsecond", "nseconds"},
 	// Include PostgreSQL's unit keywords for compatibility; see
@@ -502,11 +504,13 @@ func (l *intervalLexer) parseShortDuration(h int64, hasSign bool) (duration.Dura
 	// represent minutes. Get this out of the way first.
 	if hasDecimal {
 		l.consumeSpaces()
-		return duration.Duration{
-			Nanos: h*time.Minute.Nanoseconds() +
+		return duration.MakeDuration(
+			h*time.Minute.Nanoseconds()+
 				sign*(m*time.Second.Nanoseconds()+
 					floatToNanos(mp)),
-		}, nil
+			0,
+			0,
+		), nil
 	}
 
 	// Remaining formats
@@ -523,13 +527,15 @@ func (l *intervalLexer) parseShortDuration(h int64, hasSign bool) (duration.Dura
 	}
 
 	l.consumeSpaces()
-	return duration.Duration{
-		Nanos: h*time.Hour.Nanoseconds() +
+	return duration.MakeDuration(
+		h*time.Hour.Nanoseconds()+
 			sign*(m*time.Minute.Nanoseconds()+
 				int64(mp*float64(time.Minute.Nanoseconds()))+
 				s*time.Second.Nanoseconds()+
 				floatToNanos(sp)),
-	}, nil
+		0,
+		0,
+	), nil
 }
 
 // addFrac increases the duration given as first argument by the unit
@@ -543,14 +549,14 @@ func addFrac(d duration.Duration, unit duration.Duration, f float64) duration.Du
 		f = math.Mod(f, 1) * 30
 		d.Days += int64(f)
 		f = math.Mod(f, 1) * 24
-		d.Nanos += int64(float64(time.Hour.Nanoseconds()) * f)
+		d.SetNanos(d.Nanos() + int64(float64(time.Hour.Nanoseconds())*f))
 	} else if unit.Days > 0 {
 		f = f * float64(unit.Days)
 		d.Days += int64(f)
 		f = math.Mod(f, 1) * 24
-		d.Nanos += int64(float64(time.Hour.Nanoseconds()) * f)
+		d.SetNanos(d.Nanos() + int64(float64(time.Hour.Nanoseconds())*f))
 	} else {
-		d.Nanos += int64(float64(unit.Nanos) * f)
+		d.SetNanos(d.Nanos() + int64(float64(unit.Nanos())*f))
 	}
 	return d
 }

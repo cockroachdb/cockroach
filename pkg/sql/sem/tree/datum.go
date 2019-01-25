@@ -2183,16 +2183,16 @@ func truncateDInterval(d *DInterval, field DurationField) {
 	case Year:
 		d.Duration.Months = d.Duration.Months - d.Duration.Months%12
 		d.Duration.Days = 0
-		d.Duration.Nanos = 0
+		d.Duration.SetNanos(0)
 	case Month:
 		d.Duration.Days = 0
-		d.Duration.Nanos = 0
+		d.Duration.SetNanos(0)
 	case Day:
-		d.Duration.Nanos = 0
+		d.Duration.SetNanos(0)
 	case Hour:
-		d.Duration.Nanos = d.Duration.Nanos - d.Duration.Nanos%time.Hour.Nanoseconds()
+		d.Duration.SetNanos(d.Duration.Nanos() - d.Duration.Nanos()%time.Hour.Nanoseconds())
 	case Minute:
-		d.Duration.Nanos = d.Duration.Nanos - d.Duration.Nanos%time.Minute.Nanoseconds()
+		d.Duration.SetNanos(d.Duration.Nanos() - d.Duration.Nanos()%time.Minute.Nanoseconds())
 	case Second:
 		// Postgres doesn't truncate to whole seconds.
 	}
@@ -2209,7 +2209,6 @@ func ParseDIntervalWithField(s string, field DurationField) (*DInterval, error) 
 		return nil, err
 	}
 	truncateDInterval(d, field)
-	d.Duration = d.Round()
 	return d, nil
 }
 
@@ -2245,13 +2244,13 @@ func parseDInterval(s string, field DurationField) (*DInterval, error) {
 		case Day:
 			ret.Days = int64(f)
 		case Hour:
-			ret.Nanos = time.Hour.Nanoseconds() * int64(f)
+			ret.SetNanos(time.Hour.Nanoseconds() * int64(f))
 		case Minute:
-			ret.Nanos = time.Minute.Nanoseconds() * int64(f)
+			ret.SetNanos(time.Minute.Nanoseconds() * int64(f))
 		case Second:
-			ret.Nanos = int64(float64(time.Second.Nanoseconds()) * f)
+			ret.SetNanos(int64(float64(time.Second.Nanoseconds()) * f))
 		case Millisecond:
-			ret.Nanos = int64(float64(time.Millisecond.Nanoseconds()) * f)
+			ret.SetNanos(int64(float64(time.Millisecond.Nanoseconds()) * f))
 		default:
 			panic(fmt.Sprintf("unhandled DurationField constant %d", field))
 		}
@@ -2313,18 +2312,10 @@ func (d *DInterval) IsMin(_ *EvalContext) bool {
 	return d.Duration == dMinInterval.Duration
 }
 
-var dMaxInterval = &DInterval{
-	duration.Duration{
-		Months: math.MaxInt64,
-		Days:   math.MaxInt64,
-		Nanos:  math.MaxInt64,
-	}.Round()}
-var dMinInterval = &DInterval{
-	duration.Duration{
-		Months: math.MinInt64,
-		Days:   math.MinInt64,
-		Nanos:  math.MinInt64,
-	}.Round()}
+var (
+	dMaxInterval = &DInterval{duration.MakeDuration(math.MaxInt64, math.MaxInt64, math.MaxInt64)}
+	dMinInterval = &DInterval{duration.MakeDuration(math.MinInt64, math.MinInt64, math.MinInt64)}
+)
 
 // Max implements the Datum interface.
 func (d *DInterval) Max(_ *EvalContext) (Datum, bool) {
