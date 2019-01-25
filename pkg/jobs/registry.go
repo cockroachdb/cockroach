@@ -542,7 +542,7 @@ func AddResumeHook(fn ResumeHookFn) {
 
 func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 	const stmt = `SELECT id, payload, progress IS NULL FROM system.jobs WHERE status IN ($1, $2) ORDER BY created DESC`
-	rows, _ /* cols */, err := r.ex.Query(
+	rows, err := r.ex.Query(
 		ctx, "adopt-job", nil /* txn */, stmt, StatusPending, StatusRunning,
 	)
 	if err != nil {

@@ -138,7 +138,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	}
 
 	// Check if auto upgrade is enabled at current version.
-	datums, _, err := s.internalExecutor.Query(
+	datums, err := s.internalExecutor.Query(
 		ctx, "read-downgrade", nil, /* txn */
 		"SELECT value FROM system.settings WHERE name = 'cluster.preserve_downgrade_option';",
 	)
@@ -162,7 +162,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 // (which returns the version from the KV store as opposed to the possibly
 // lagging settings subsystem).
 func (s *Server) clusterVersion(ctx context.Context) (string, error) {
-	datums, _, err := s.internalExecutor.Query(
+	datums, err := s.internalExecutor.Query(
 		ctx, "show-version", nil, /* txn */
 		"SHOW CLUSTER SETTING version;",
 	)
