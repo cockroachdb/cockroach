@@ -1193,6 +1193,12 @@ func (ef *execFactory) ConstructDelete(
 		return nil, err
 	}
 
+	fastPathInterleaved := canDeleteFastInterleaved(tabDesc, fkTables)
+	if fastPathNode, ok := maybeCreateDeleteFastNode(
+		context.TODO(), input.(planNode), tabDesc, fastPathInterleaved, rowsNeeded); ok {
+		return fastPathNode, nil
+	}
+
 	// Create the table deleter, which does the bulk of the work. In the HP,
 	// the deleter derives the columns that need to be fetched. By contrast, the
 	// CBO will have already determined the set of fetch columns, and passes

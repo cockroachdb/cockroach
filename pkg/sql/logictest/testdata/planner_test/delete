@@ -57,15 +57,11 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 query TTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-tree                 field     description
-count                ·         ·
- └── delete          ·         ·
-      │              from      unindexed
-      │              strategy  fast deleter
-      └── render     ·         ·
-           └── scan  ·         ·
-·                    table     unindexed@primary
-·                    spans     ALL
+tree               field  description
+count              ·      ·
+ └── delete range  ·      ·
+·                  from   unindexed
+·                  spans  -
 
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
@@ -96,6 +92,45 @@ count                     ·         ·
 ·                         table     unindexed@primary
 ·                         spans     ALL
 ·                         filter    v = 5
+
+# Check fast DELETE.
+query TTT
+EXPLAIN DELETE FROM unindexed WHERE k > 0
+----
+count              ·      ·
+ └── delete range  ·      ·
+·                  from   unindexed
+·                  spans  /1-
+
+
+# Check fast DELETE with reverse scan (not supported by heuristic planner)
+query TTT
+EXPLAIN DELETE FROM unindexed WHERE k > 0 ORDER BY k DESC
+----
+count                   ·         ·
+ └── delete             ·         ·
+      │                 from      unindexed
+      │                 strategy  deleter
+      └── render        ·         ·
+           └── revscan  ·         ·
+·                       table     unindexed@primary
+·                       spans     /1-
+
+# Check that limits don't permit fast deletes.
+query TTT
+EXPLAIN DELETE FROM unindexed WHERE k > 0 LIMIT 1
+----
+count                     ·         ·
+ └── delete               ·         ·
+      │                   from      unindexed
+      │                   strategy  deleter
+      └── limit           ·         ·
+           │              count     1
+           └── render     ·         ·
+                └── scan  ·         ·
+·                         table     unindexed@primary
+·                         spans     /1-
+·                         limit     1
 
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
