@@ -28,7 +28,7 @@ func (n *CommentOnDatabase) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&n.Name)
 	ctx.WriteString(" IS ")
 	if n.Comment != nil {
-		lex.EncodeSQLStringWithFlags(ctx.Buffer, *n.Comment, ctx.flags.EncodeFlags())
+		lex.EncodeSQLStringWithFlags(&ctx.Buffer, *n.Comment, ctx.flags.EncodeFlags())
 	} else {
 		ctx.WriteString("NULL")
 	}

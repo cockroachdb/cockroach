@@ -45,7 +45,7 @@ func (p *planner) ShowCreate(ctx context.Context, n *tree.ShowCreate) (planNode,
 func ShowCreateView(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE VIEW ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
@@ -95,11 +95,12 @@ func printForeignKeyConstraint(
 		fkTableName.ExplicitSchema = false
 		fkTableName.ExplicitSchema = false
 	}
-	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
 	buf.WriteString("FOREIGN KEY (")
 	formatQuoteNames(buf, idx.ColumnNames[0:idx.ForeignKey.SharedPrefixLen]...)
 	buf.WriteString(") REFERENCES ")
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	fmtCtx.FormatNode(&fkTableName)
+	buf.WriteString(fmtCtx.CloseAndGetString())
 	buf.WriteString(" (")
 	formatQuoteNames(buf, refNames...)
 	buf.WriteByte(')')
@@ -125,7 +126,7 @@ func printForeignKeyConstraint(
 func ShowCreateSequence(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE SEQUENCE ")
 	f.FormatNode(tn)
 	opts := desc.SequenceOpts
@@ -157,7 +158,7 @@ func ShowCreateTable(
 ) (string, error) {
 	a := &sqlbase.DatumAlloc{}
 
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE TABLE ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
@@ -176,7 +177,7 @@ func ShowCreateTable(
 	}
 	if primaryKeyIsOnVisibleColumn {
 		f.WriteString(",\n\tCONSTRAINT ")
-		formatQuoteNames(f.Buffer, desc.PrimaryIndex.Name)
+		formatQuoteNames(&f.Buffer, desc.PrimaryIndex.Name)
 		f.WriteString(" ")
 		f.WriteString(desc.PrimaryKeyString())
 	}
@@ -187,7 +188,7 @@ func ShowCreateTable(
 			f.WriteString(",\n\tCONSTRAINT ")
 			f.FormatNameP(&fk.Name)
 			f.WriteString(" ")
-			if err := printForeignKeyConstraint(ctx, f.Buffer, dbPrefix, idx, lCtx); err != nil {
+			if err := printForeignKeyConstraint(ctx, &f.Buffer, dbPrefix, idx, lCtx); err != nil {
 				return "", err
 			}
 		}
@@ -197,11 +198,11 @@ func ShowCreateTable(
 			f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
 			// Showing the INTERLEAVE and PARTITION BY for the primary index are
 			// handled last.
-			if err := showCreateInterleave(ctx, idx, f.Buffer, dbPrefix, lCtx); err != nil {
+			if err := showCreateInterleave(ctx, idx, &f.Buffer, dbPrefix, lCtx); err != nil {
 				return "", err
 			}
 			if err := ShowCreatePartitioning(
-				a, desc, idx, &idx.Partitioning, f.Buffer, 1 /* indent */, 0, /* colOffset */
+				a, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
 			); err != nil {
 				return "", err
 			}
@@ -216,9 +217,9 @@ func ShowCreateTable(
 			}
 		}
 		f.WriteString(",\n\tFAMILY ")
-		formatQuoteNames(f.Buffer, fam.Name)
+		formatQuoteNames(&f.Buffer, fam.Name)
 		f.WriteString(" (")
-		formatQuoteNames(f.Buffer, activeColumnNames...)
+		formatQuoteNames(&f.Buffer, activeColumnNames...)
 		f.WriteString(")")
 	}
 
@@ -226,7 +227,7 @@ func ShowCreateTable(
 		f.WriteString(",\n\t")
 		if len(e.Name) > 0 {
 			f.WriteString("CONSTRAINT ")
-			formatQuoteNames(f.Buffer, e.Name)
+			formatQuoteNames(&f.Buffer, e.Name)
 			f.WriteString(" ")
 		}
 		f.WriteString("CHECK (")
@@ -236,11 +237,11 @@ func ShowCreateTable(
 
 	f.WriteString("\n)")
 
-	if err := showCreateInterleave(ctx, &desc.PrimaryIndex, f.Buffer, dbPrefix, lCtx); err != nil {
+	if err := showCreateInterleave(ctx, &desc.PrimaryIndex, &f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
 	}
@@ -250,13 +251,14 @@ func ShowCreateTable(
 
 // formatQuoteNames quotes and adds commas between names.
 func formatQuoteNames(buf *bytes.Buffer, names ...string) {
-	f := tree.MakeFmtCtx(buf, tree.FmtSimple)
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	for i := range names {
 		if i > 0 {
 			f.WriteString(", ")
 		}
 		f.FormatNameP(&names[i])
 	}
+	buf.WriteString(f.CloseAndGetString())
 }
 
 // showCreateInterleave returns an INTERLEAVE IN PARENT clause for the specified
@@ -299,9 +301,10 @@ func showCreateInterleave(
 	for _, ancestor := range intl.Ancestors {
 		sharedPrefixLen += int(ancestor.SharedPrefixLen)
 	}
-	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
 	buf.WriteString(" INTERLEAVE IN PARENT ")
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	fmtCtx.FormatNode(&parentName)
+	buf.WriteString(fmtCtx.CloseAndGetString())
 	buf.WriteString(" (")
 	formatQuoteNames(buf, idx.ColumnNames[:sharedPrefixLen]...)
 	buf.WriteString(")")
@@ -347,7 +350,7 @@ func ShowCreatePartitioning(
 		buf.WriteString(idxDesc.ColumnNames[colOffset+i])
 	}
 	buf.WriteString(`) (`)
-	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	for i := range partDesc.List {
 		part := &partDesc.List[i]
 		if i != 0 {
@@ -357,6 +360,7 @@ func ShowCreatePartitioning(
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
 		fmtCtx.FormatNameP(&part.Name)
+		_, _ = fmtCtx.Buffer.WriteTo(buf)
 		buf.WriteString(` VALUES IN (`)
 		for j, values := range part.Values {
 			if j != 0 {

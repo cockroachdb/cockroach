@@ -804,8 +804,7 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 
 	// Fall back on a string representation which can be used to check for
 	// equivalence.
-	buf := bytes.NewBuffer(b)
-	ctx := tree.MakeFmtCtx(buf, tree.FmtCheckEquivalence)
-	val.Format(&ctx)
-	return buf.Bytes()
+	ctx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
+	val.Format(ctx)
+	return ctx.Bytes()
 }
