@@ -223,7 +223,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		if sp.spec.Options.NullEncoding != nil {
 			nullsAs = *sp.spec.Options.NullEncoding
 		}
-		f := tree.NewFmtCtxWithBuf(tree.FmtExport)
+		f := tree.NewFmtCtx(tree.FmtExport)
 		defer f.Close()
 
 		csvRow := make([]string, len(types))
@@ -255,7 +255,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 					if err := ed.EnsureDecoded(&types[i], alloc); err != nil {
 						return err
 					}
-					ed.Datum.Format(&f.FmtCtx)
+					ed.Datum.Format(f)
 					csvRow[i] = f.String()
 					f.Reset()
 				}

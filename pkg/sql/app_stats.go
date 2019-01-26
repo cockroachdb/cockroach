@@ -286,22 +286,28 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	}
 
 	// Re-format to remove most names.
-	f := tree.NewFmtCtxWithBuf(tree.FmtAnonymize)
-	f.WithReformatTableNames(
-		func(ctx *tree.FmtCtx, tn *tree.TableName) {
-			virtual, err := vt.getVirtualTableEntry(tn)
-			if err != nil || virtual.desc == nil {
-				ctx.WriteByte('_')
-				return
-			}
-			// Virtual table: we want to keep the name; however
-			// we need to scrub the database name prefix.
-			newTn := *tn
-			newTn.CatalogName = "_"
-			keepNameCtx := ctx.CopyWithFlags(tree.FmtParsable)
-			keepNameCtx.WithReformatTableNames(nil)
-			keepNameCtx.FormatNode(&newTn)
-		})
+	f := tree.NewFmtCtx(tree.FmtAnonymize)
+
+	var reformatFn func(ctx *tree.FmtCtx, tn *tree.TableName)
+
+	reformatFn = func(ctx *tree.FmtCtx, tn *tree.TableName) {
+		virtual, err := vt.getVirtualTableEntry(tn)
+		if err != nil || virtual.desc == nil {
+			ctx.WriteByte('_')
+			return
+		}
+		// Virtual table: we want to keep the name; however
+		// we need to scrub the database name prefix.
+		newTn := *tn
+		newTn.CatalogName = "_"
+
+		oldFlags := ctx.ChangeFlags(tree.FmtParsable)
+		ctx.WithReformatTableNames(nil)
+		ctx.FormatNode(&newTn)
+		ctx.WithReformatTableNames(reformatFn)
+		ctx.ChangeFlags(oldFlags)
+	}
+	f.WithReformatTableNames(reformatFn)
 	f.FormatNode(stmt.AST)
 	return f.CloseAndGetString(), true
 }

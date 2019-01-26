@@ -763,7 +763,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
 						return err
 					}
-					f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+					f := tree.NewFmtCtx(tree.FmtSimple)
 					f.WriteString("UNIQUE (")
 					con.Index.ColNamesFormat(f)
 					f.WriteByte(')')

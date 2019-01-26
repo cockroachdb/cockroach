@@ -142,8 +142,7 @@ func TestFormatTableName(t *testing.T) {
 		// `GRANT SELECT ON xoxoxo TO foo`},
 	}
 
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
-	defer f.Close()
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.TableName) {
 		ctx.WriteString("xoxoxo")
 	})
@@ -443,7 +442,7 @@ func BenchmarkFormatRandomStatements(b *testing.B) {
 	b.Run("format", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			for i, stmt := range stmts {
-				f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+				f := tree.NewFmtCtx(tree.FmtSimple)
 				f.FormatNode(stmt)
 				strs[i] = f.CloseAndGetString()
 			}

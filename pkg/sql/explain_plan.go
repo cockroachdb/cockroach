@@ -110,8 +110,9 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 			// We also avoid calling ctx.FormatNode because when
 			// types are visible, this would cause the type information
 			// to be printed twice.
-			nCtx := *ctx
-			placeholder.Format(nCtx.WithPlaceholderFormat(nil))
+			ctx.WithPlaceholderFormat(nil)
+			placeholder.Format(ctx)
+			ctx.WithPlaceholderFormat(e.showPlaceholderValues)
 			return
 		}
 		ctx.FormatNode(d)
@@ -387,7 +388,7 @@ func (e *explainer) expr(v observeVerbosity, nodeName, fieldName string, n int, 
 			fieldName = fmt.Sprintf("%s %d", fieldName, n)
 		}
 
-		f := tree.NewFmtCtxWithBuf(e.fmtFlags)
+		f := tree.NewFmtCtx(e.fmtFlags)
 		f.WithPlaceholderFormat(e.showPlaceholderValues)
 		f.FormatNode(expr)
 		e.attr(nodeName, fieldName, f.CloseAndGetString())
@@ -425,7 +426,7 @@ func (e *explainer) leaveNode(name string, _ planNode) error {
 // planNode to a string. The column types are printed iff the 2nd
 // argument specifies so.
 func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteByte('(')
 	for i := range cols {
 		rCol := &cols[i]
