@@ -95,7 +95,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 		userNames[normalizedUsername] = struct{}{}
 	}
 
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	defer f.Close()
 
 	// Now check whether the user still has permission on any object in the database.
@@ -148,7 +148,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 
 	// Was there any object dependin on that user?
 	if f.Len() > 0 {
-		fnl := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+		fnl := tree.NewFmtCtx(tree.FmtSimple)
 		defer fnl.Close()
 		for i, name := range names {
 			if i > 0 {

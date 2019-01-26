@@ -64,7 +64,7 @@ func (stmts Statements) String() string {
 
 // StringWithFlags returns the AST formatted as a string (with the given flags).
 func (stmts Statements) StringWithFlags(flags tree.FmtFlags) string {
-	ctx := tree.NewFmtCtxWithBuf(flags)
+	ctx := tree.NewFmtCtx(flags)
 	for i, s := range stmts {
 		if i > 0 {
 			ctx.WriteString("; ")

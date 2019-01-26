@@ -96,12 +96,11 @@ func (w *random) Tables() []workload.Table {
 	rng := rand.New(rand.NewSource(w.seed))
 	for i := 0; i < w.tables; i++ {
 		createTable := sqlbase.RandCreateTable(rng, rng.Int())
-		var buf bytes.Buffer
-		ctx := tree.MakeFmtCtx(&buf, tree.FmtParsable)
-		createTable.FormatBody(&ctx)
+		ctx := tree.NewFmtCtx(tree.FmtParsable)
+		createTable.FormatBody(ctx)
 		tables[i] = workload.Table{
 			Name:   createTable.Table.String(),
-			Schema: ctx.String(),
+			Schema: ctx.CloseAndGetString(),
 		}
 	}
 	return tables

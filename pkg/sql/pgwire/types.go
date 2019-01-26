@@ -82,11 +82,11 @@ func (b *writeBuffer) writeTextDatum(
 	switch v := tree.UnwrapDatum(nil, d).(type) {
 	case *tree.DBitArray:
 		b.textFormatter.FormatNode(v)
-		b.writeLengthPrefixedVariablePutbuf()
+		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DBool:
 		b.textFormatter.FormatNode(v)
-		b.writeLengthPrefixedVariablePutbuf()
+		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DInt:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
@@ -154,7 +154,7 @@ func (b *writeBuffer) writeTextDatum(
 
 	case *tree.DTuple:
 		b.textFormatter.FormatNode(v)
-		b.writeLengthPrefixedVariablePutbuf()
+		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DArray:
 		switch d.ResolvedType().Oid() {
@@ -163,7 +163,7 @@ func (b *writeBuffer) writeTextDatum(
 			sep := ""
 			// TODO(justin): add a test for nested arrays.
 			for _, d := range v.Array {
-				b.variablePutbuf.WriteString(sep)
+				b.textFormatter.WriteString(sep)
 				b.textFormatter.FormatNode(d)
 				sep = " "
 			}
@@ -171,7 +171,7 @@ func (b *writeBuffer) writeTextDatum(
 			// Uses the default pgwire text format for arrays.
 			b.textFormatter.FormatNode(v)
 		}
-		b.writeLengthPrefixedVariablePutbuf()
+		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DOid:
 		b.writeLengthPrefixedDatum(v)

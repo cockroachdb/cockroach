@@ -1079,20 +1079,20 @@ CREATE TABLE crdb_internal.create_statements (
 					for i := range allIdx {
 						idx := &allIdx[i]
 						if fk := &idx.ForeignKey; fk.IsSet() {
-							f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+							f := tree.NewFmtCtx(tree.FmtSimple)
 							f.WriteString("ALTER TABLE ")
 							f.FormatNode(tn)
 							f.WriteString(" ADD CONSTRAINT ")
 							f.FormatNameP(&fk.Name)
 							f.WriteByte(' ')
-							if err := printForeignKeyConstraint(ctx, f.Buffer, contextName, idx, lCtx); err != nil {
+							if err := printForeignKeyConstraint(ctx, &f.Buffer, contextName, idx, lCtx); err != nil {
 								return err
 							}
 							if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
 								return err
 							}
 
-							f = tree.NewFmtCtxWithBuf(tree.FmtSimple)
+							f = tree.NewFmtCtx(tree.FmtSimple)
 							f.WriteString("ALTER TABLE ")
 							f.FormatNode(tn)
 							f.WriteString(" VALIDATE CONSTRAINT ")

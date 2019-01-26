@@ -409,7 +409,7 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []IndexDescriptor_Dire
 
 // ColNamesFormat writes a string describing the column names and directions
 // in this index to the given buffer.
-func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtxWithBuf) {
+func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtx) {
 	for i := range desc.ColumnNames {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -425,7 +425,7 @@ func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtxWithBuf) {
 // ColNamesString returns a string describing the column names and directions
 // in this index.
 func (desc *IndexDescriptor) ColNamesString() string {
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	desc.ColNamesFormat(f)
 	return f.CloseAndGetString()
 }
@@ -433,7 +433,7 @@ func (desc *IndexDescriptor) ColNamesString() string {
 // SQLString returns the SQL string describing this index. If non-empty,
 // "ON tableName" is included in the output in the correct place.
 func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	if desc.Unique {
 		f.WriteString("UNIQUE ")
 	}
@@ -2434,7 +2434,7 @@ func (desc TableDescriptor) GetNameMetadataKey() roachpb.Key {
 
 // SQLString returns the SQL statement describing the column.
 func (desc *ColumnDescriptor) SQLString() string {
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.FormatNameP(&desc.Name)
 	f.WriteByte(' ')
 	f.WriteString(desc.Type.SQLString())

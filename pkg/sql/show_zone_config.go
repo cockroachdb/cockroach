@@ -178,7 +178,7 @@ func generateZoneConfigIntrospectionValues(
 		prefs = strings.TrimSpace(prefs)
 
 		useComma := false
-		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
+		f := tree.NewFmtCtx(tree.FmtParsable)
 		f.WriteString("ALTER ")
 		f.FormatNode(zs)
 		f.WriteString(" CONFIGURE ZONE USING\n")
@@ -224,7 +224,7 @@ func generateZoneConfigIntrospectionValues(
 }
 
 // Writes a comma followed by a newline if useComma is true.
-func writeComma(f *tree.FmtCtxWithBuf, useComma bool) {
+func writeComma(f *tree.FmtCtx, useComma bool) {
 	if useComma {
 		f.Printf(",\n")
 	}

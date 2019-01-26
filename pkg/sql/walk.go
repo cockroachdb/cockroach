@@ -259,7 +259,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			v.observer.attr(name, "type", jType)
 
 			if len(n.pred.leftColNames) > 0 {
-				f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+				f := tree.NewFmtCtx(tree.FmtSimple)
 				f.WriteByte('(')
 				f.FormatNode(&n.pred.leftColNames)
 				f.WriteString(") = (")

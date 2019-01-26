@@ -60,7 +60,7 @@ type PartitionTuple struct {
 }
 
 func (t *PartitionTuple) String() string {
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteByte('(')
 	for i := 0; i < len(t.Datums)+t.SpecialCount; i++ {
 		if i > 0 {
