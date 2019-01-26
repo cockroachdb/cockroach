@@ -501,7 +501,6 @@ render               ·         ·          (b)        ·
  └── run             ·         ·          (a, b, c)  ·
       └── delete     ·         ·          (a, b, c)  ·
            │         from      t          ·          ·
-           │         strategy  deleter    ·          ·
            └── scan  ·         ·          (a, b, c)  ·
 ·                    table     t@primary  ·          ·
 ·                    spans     /3-/3/#    ·          ·

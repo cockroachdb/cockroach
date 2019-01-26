@@ -517,7 +517,6 @@ render               ·         ·                (b)        key()
  └── run             ·         ·                (a, b, c)  a=CONST; key()
       └── delete     ·         ·                (a, b, c)  a=CONST; key()
            │         from      t                ·          ·
-           │         strategy  deleter          ·          ·
            └── scan  ·         ·                (a, b, c)  a=CONST; key()
 ·                    table     t@primary        ·          ·
 ·                    spans     /3-/3/#          ·          ·

@@ -47,6 +47,7 @@ func planPhysicalProps(plan planNode) physicalProps {
 		if n.run.rowsNeeded {
 			return planPhysicalProps(n.source)
 		}
+	case *deleteRangeNode:
 	case *projectSetNode:
 		return n.props
 

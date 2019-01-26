@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -176,12 +175,11 @@ func (p *planner) Delete(
 		source:  rows,
 		columns: columns,
 		run: deleteRun{
-			td:         tableDeleter{rd: rd, alloc: &p.alloc},
-			rowsNeeded: rowsNeeded,
+			td:                  tableDeleter{rd: rd, alloc: &p.alloc},
+			rowsNeeded:          rowsNeeded,
+			fastPathInterleaved: canDeleteFastInterleaved(desc, fkTables),
 		},
 	}
-
-	dn.run.fastPathInterleaved = canDeleteFastInterleaved(desc, fkTables)
 
 	// Finally, handle RETURNING, if any.
 	r, err := p.Returning(ctx, dn, n.Returning, desiredTypes, alias)
@@ -197,16 +195,11 @@ type deleteRun struct {
 	td         tableDeleter
 	rowsNeeded bool
 
-	// fastPath indicates whether the delete operation is running to
-	// completion during startExec.
-	fastPath bool
-
 	// fastPathInterleaved indicates whether the delete operation can run
 	// the interleaved fast path (all interleaved tables have no indexes and ON DELETE CASCADE).
 	fastPathInterleaved bool
 
-	// rowCount is the total row count if fastPath is set,
-	// or the number of rows in the current batch otherwise.
+	// rowCount is the number of rows in the current batch.
 	rowCount int
 
 	// done informs a new call to BatchedNext() that the previous call
@@ -238,11 +231,6 @@ func (d *deleteNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	if scan, ok := canDeleteFast(params.ctx, d.source, &d.run); ok {
-		d.run.fastPath = true
-		return d.fastDelete(params, scan, d.run.fastPathInterleaved)
-	}
-
 	if d.run.rowsNeeded {
 		d.run.rows = sqlbase.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
@@ -263,7 +251,7 @@ func (d *deleteNode) Values() tree.Datums { panic("not valid") }
 
 // BatchedNext implements the batchedPlanNode interface.
 func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
-	if d.run.fastPath || d.run.done {
+	if d.run.done {
 		return false, nil
 	}
 
@@ -379,11 +367,6 @@ func (d *deleteNode) Close(ctx context.Context) {
 	deleteNodePool.Put(d)
 }
 
-// FastPathResults implements the planNodeFastPath interface.
-func (d *deleteNode) FastPathResults() (int, bool) {
-	return d.run.rowCount, d.run.fastPath
-}
-
 func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTableMetadata) bool {
 	// If there are no interleaved tables then don't take the fast path.
 	// This avoids superfluous use of DelRange in cases where there isn't as much of a performance boost.
@@ -458,89 +441,6 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 		}
 	}
 	return true
-}
-
-// canDeleteFast determines if the deletion of `rows` can be done
-// without actually scanning them.
-// This should be called after plan simplification for optimal results.
-func canDeleteFast(ctx context.Context, source planNode, r *deleteRun) (*scanNode, bool) {
-	// Check that there are no secondary indexes, interleaving, FK
-	// references checks, etc., ie. there is no extra work to be done
-	// per row deleted.
-	if !r.td.fastPathAvailable(ctx) && !r.fastPathInterleaved {
-		return nil, false
-	}
-
-	// If the rows are needed (a RETURNING clause), we can't skip them.
-	if r.rowsNeeded {
-		return nil, false
-	}
-
-	// Check whether the source plan is "simple": that it contains no remaining
-	// filtering, limiting, sorting, etc. Note that this logic must be kept in
-	// sync with the logic for setting scanNode.isDeleteSource (see doExpandPlan.)
-	// TODO(dt): We could probably be smarter when presented with an
-	// index-join, but this goes away anyway once we push-down more of
-	// SQL.
-	maybeScan := source
-	if sel, ok := maybeScan.(*renderNode); ok {
-		// There may be a projection to drop/rename some columns which the
-		// optimizations did not remove at this point. We just ignore that
-		// projection for the purpose of this check.
-		maybeScan = sel.source.plan
-	}
-
-	scan, ok := maybeScan.(*scanNode)
-	if !ok {
-		// Not simple enough. Bail.
-		return nil, false
-	}
-
-	// A scan ought to be simple enough, except when it's not: a scan
-	// may have a remaining filter. We can't be fast over that.
-	if scan.filter != nil {
-		if log.V(2) {
-			log.Infof(ctx, "delete forced to scan: values required for filter (%s)", scan.filter)
-		}
-		return nil, false
-	}
-
-	return scan, true
-}
-
-// `fastDelete` skips the scan of rows and just deletes the ranges that
-// `scan` would scan. Should only be used if `canDeleteFast` indicates
-// that it is safe to do so.
-func (d *deleteNode) fastDelete(params runParams, scan *scanNode, interleavedFastPath bool) error {
-	if err := scan.initScan(params); err != nil {
-		return err
-	}
-	if err := d.run.td.init(params.p.txn, params.EvalContext()); err != nil {
-		return err
-	}
-	if err := params.p.cancelChecker.Check(); err != nil {
-		return err
-	}
-	if interleavedFastPath {
-		for i, span := range scan.spans {
-			span.EndKey = span.EndKey.PrefixEnd()
-			scan.spans[i] = span
-		}
-	}
-	var err error
-	if d.run.rowCount, err = d.run.td.fastDelete(
-		params.ctx, scan, d.run.autoCommit, d.run.traceKV); err != nil {
-		return err
-	}
-
-	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(
-		&params.EvalContext().Settings.SV,
-		d.run.td.tableDesc().ID,
-		d.run.rowCount,
-	)
-
-	return nil
 }
 
 // enableAutoCommit is part of the autoCommitNode interface.

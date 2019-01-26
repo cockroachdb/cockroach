@@ -275,6 +275,7 @@ func (p *planner) propagateFilters(
 		if n.source, err = p.triggerFilterPropagation(ctx, n.source); err != nil {
 			return plan, extraFilter, err
 		}
+	case *deleteRangeNode:
 
 	case *rowCountNode:
 		newSource, err := p.triggerFilterPropagation(ctx, n.source)

@@ -215,6 +215,8 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *deleteNode:
 		setNeededColumns(n.source, allColumns(n.source))
 
+	case *deleteRangeNode:
+
 	case *updateNode:
 		setNeededColumns(n.source, allColumns(n.source))
 

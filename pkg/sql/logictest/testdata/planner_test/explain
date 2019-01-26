@@ -563,7 +563,6 @@ EXPLAIN (TYPES,NOEXPAND) DELETE FROM t WHERE v > 1
 count                ·         ·                            ()              ·
  └── delete          ·         ·                            ()              ·
       │              from      t                            ·               ·
-      │              strategy  deleter                      ·               ·
       └── render     ·         ·                            (k int)         ·
            │         render 0  (k)[int]                     ·               ·
            └── scan  ·         ·                            (k int, v int)  ·
@@ -576,7 +575,6 @@ EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 count                ·         ·                            ()              ·
  └── delete          ·         ·                            ()              ·
       │              from      t                            ·               ·
-      │              strategy  deleter                      ·               ·
       └── render     ·         ·                            (k int)         k!=NULL; key(k)
            │         render 0  (k)[int]                     ·               ·
            └── scan  ·         ·                            (k int, v int)  k!=NULL; v!=NULL; key(k)
