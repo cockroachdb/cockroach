@@ -93,14 +93,13 @@ func (n *UnresolvedName) NormalizeVarName() (VarName, error) {
 // columns in a table when used in a SELECT clause.
 // (e.g. `table.*`).
 type AllColumnsSelector struct {
-	// TableName corresponds to the table prefix, before the star. The
-	// UnresolvedName within is guaranteed to not contain a star itself.
-	TableName UnresolvedName
+	// TableName corresponds to the table prefix, before the star.
+	TableName *UnresolvedObjectName
 }
 
 // Format implements the NodeFormatter interface.
 func (a *AllColumnsSelector) Format(ctx *FmtCtx) {
-	ctx.FormatNode(&a.TableName)
+	ctx.FormatNode(a.TableName)
 	ctx.WriteString(".*")
 }
 func (a *AllColumnsSelector) String() string { return AsString(a) }
@@ -120,13 +119,14 @@ func (*AllColumnsSelector) ResolvedType() types.T {
 
 // ColumnItem corresponds to the name of a column in an expression.
 type ColumnItem struct {
-	// TableName holds the table prefix, if the name refers to a column.
+	// TableName holds the table prefix, if the name refers to a column. It is
+	// optional.
 	//
-	// This uses UnresolvedName because we need to preserve the
+	// This uses UnresolvedObjectName because we need to preserve the
 	// information about which parts were initially specified in the SQL
 	// text. ColumnItems are intermediate data structures anyway, that
 	// still need to undergo name resolution.
-	TableName UnresolvedName
+	TableName *UnresolvedObjectName
 	// ColumnName names the designated column.
 	ColumnName Name
 
@@ -139,7 +139,7 @@ type ColumnItem struct {
 
 // Format implements the NodeFormatter interface.
 func (c *ColumnItem) Format(ctx *FmtCtx) {
-	if c.TableName.NumParts > 0 {
+	if c.TableName != nil {
 		c.TableName.Format(ctx)
 		ctx.WriteByte('.')
 	}
@@ -179,18 +179,19 @@ func NewColumnItem(tn *TableName, colName Name) *ColumnItem {
 // MakeColumnItem constructs a column item from an already valid
 // TableName. This can be used for e.g. pretty-printing.
 func MakeColumnItem(tn *TableName, colName Name) ColumnItem {
-	c := ColumnItem{
-		TableName: UnresolvedName{
-			Parts: NameParts{tn.Table(), tn.Schema(), tn.Catalog()},
-		},
-		ColumnName: colName,
-	}
-	if tn.ExplicitCatalog {
-		c.TableName.NumParts = 3
-	} else if tn.ExplicitSchema {
-		c.TableName.NumParts = 2
-	} else {
-		c.TableName.NumParts = 1
+	c := ColumnItem{ColumnName: colName}
+	if tn.Table() != "" {
+		numParts := 1
+		if tn.ExplicitCatalog {
+			numParts = 3
+		} else if tn.ExplicitSchema {
+			numParts = 2
+		}
+
+		c.TableName = &UnresolvedObjectName{
+			NumParts: numParts,
+			Parts:    [3]string{tn.Table(), tn.Schema(), tn.Catalog()},
+		}
 	}
 	return c
 }
