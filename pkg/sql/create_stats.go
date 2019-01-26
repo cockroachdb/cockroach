@@ -229,7 +229,9 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	}
 
 	// Create a job to run statistics creation.
-	statement := tree.AsStringWithFlags(n, tree.FmtAlwaysQualifyTableNames)
+	statement := tree.AsStringWithFlagsEx(
+		n, tree.FmtAlwaysQualifyTableNames, n.p.EvalContext().Annotations,
+	)
 	var description string
 	if n.Name == stats.AutoStatsName {
 		// Use a user-friendly description for automatic statistics.

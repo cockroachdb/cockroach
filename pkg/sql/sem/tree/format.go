@@ -81,6 +81,7 @@ const (
 
 	// FmtAlwaysQualifyTableNames instructs the pretty-printer to
 	// qualify table names, even if originally omitted.
+	// Requires Annotations in the formatting context.
 	FmtAlwaysQualifyTableNames
 
 	// FmtAlwaysGroupExprs instructs the pretty-printer to enclose
@@ -167,6 +168,8 @@ const (
 	FmtExport FmtFlags = FmtBareStrings | fmtRawStrings
 )
 
+const flagsRequiringAnnotations FmtFlags = FmtAlwaysQualifyTableNames
+
 // FmtCtx is suitable for passing to Format() methods.
 // It also exposes the underlying bytes.Buffer interface for
 // convenience.
@@ -180,6 +183,9 @@ type FmtCtx struct {
 
 	// The flags to use for pretty-printing.
 	flags FmtFlags
+	// AST Annotations (used by some flags). Can be unset if those flags are not
+	// used.
+	ann *Annotations
 	// indexedVarFormat is an optional interceptor for
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
@@ -193,10 +199,20 @@ type FmtCtx struct {
 	_ util.NoCopy
 }
 
-// NewFmtCtx creates a FmtCtx.
+// NewFmtCtx creates a FmtCtx; only flags that don't require Annotations
+// can be used.
 func NewFmtCtx(f FmtFlags) *FmtCtx {
+	return NewFmtCtxEx(f, nil)
+}
+
+// NewFmtCtxEx creates a FmtCtx.
+func NewFmtCtxEx(f FmtFlags, ann *Annotations) *FmtCtx {
+	if f&flagsRequiringAnnotations != 0 && ann == nil {
+		panic("no Annotations provided")
+	}
 	ctx := fmtCtxPool.Get().(*FmtCtx)
 	ctx.flags = f
+	ctx.ann = ann
 	return ctx
 }
 
@@ -220,6 +236,9 @@ func (ctx *FmtCtx) WithReformatTableNames(tableNameFmt func(*FmtCtx, *TableName)
 // WithFlags changes the flags in the FmtCtx, runs the given function, then
 // restores the old flags.
 func (ctx *FmtCtx) WithFlags(flags FmtFlags, fn func()) {
+	if ctx.ann == nil && flags&flagsRequiringAnnotations != 0 {
+		panic("no Annotations provided")
+	}
 	oldFlags := ctx.flags
 	ctx.flags = flags
 	defer func() { ctx.flags = oldFlags }()
@@ -349,9 +368,17 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 	}
 }
 
-// AsStringWithFlags pretty prints a node to a string given specific flags.
+// AsStringWithFlags pretty prints a node to a string given specific flags; only
+// flags that don't require Annotations can be used.
 func AsStringWithFlags(n NodeFormatter, fl FmtFlags) string {
 	ctx := NewFmtCtx(fl)
+	ctx.FormatNode(n)
+	return ctx.CloseAndGetString()
+}
+
+// AsStringWithFlagsEx pretty prints a node to a string given specific flags.
+func AsStringWithFlagsEx(n NodeFormatter, fl FmtFlags, ann *Annotations) string {
+	ctx := NewFmtCtxEx(fl, ann)
 	ctx.FormatNode(n)
 	return ctx.CloseAndGetString()
 }

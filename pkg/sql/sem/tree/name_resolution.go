@@ -96,7 +96,11 @@ func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 	var tn *UnresolvedObjectName
 	if n.NumParts > 1 {
 		var err error
-		tn, err = NewUnresolvedObjectName(n.NumParts-1, [3]string{n.Parts[1], n.Parts[2], n.Parts[3]})
+		tn, err = NewUnresolvedObjectName(
+			n.NumParts-1,
+			[3]string{n.Parts[1], n.Parts[2], n.Parts[3]},
+			NoAnnotation,
+		)
 		if err != nil {
 			return nil, err
 		}

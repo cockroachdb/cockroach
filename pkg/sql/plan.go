@@ -98,6 +98,11 @@ func (r *runParams) ExecCfg() *ExecutorConfig {
 	return r.extendedEvalCtx.ExecCfg
 }
 
+// FormatAST is a convenience wrapper for tree.AsStringWithFlagsEx.
+func (r *runParams) FormatAST(n tree.NodeFormatter, flags tree.FmtFlags) string {
+	return tree.AsStringWithFlagsEx(n, flags, r.EvalContext().Annotations)
+}
+
 // planNode defines the interface for executing a query or portion of a query.
 //
 // The following methods apply to planNodes and contain special cases

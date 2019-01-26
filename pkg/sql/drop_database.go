@@ -135,7 +135,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		ctx,
 		tableDescs,
 		droppedTableDetails,
-		tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
+		params.FormatAST(n.n, tree.FmtAlwaysQualifyTableNames),
 		true, /* drainNames */
 		n.dbDesc.ID)
 	if err != nil {

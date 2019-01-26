@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -68,4 +69,39 @@ func TestUnresolvedObjectName(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestUnresolvedNameAnnotation verifies that we use the annotation
+// to produce a fully qualified name when required.
+func TestUnresolvedNameAnnotation(t *testing.T) {
+	aIdx := tree.AnnotationIdx(1)
+	u, err := tree.NewUnresolvedObjectName(1, [3]string{"t"}, aIdx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ann := tree.MakeAnnotations(aIdx)
+
+	expect := func(expected string) {
+		t.Helper()
+		ctx := tree.NewFmtCtxEx(tree.FmtAlwaysQualifyTableNames, &ann)
+		ctx.FormatNode(u)
+		if actual := ctx.CloseAndGetString(); actual != expected {
+			t.Errorf("expected: `%s`, got `%s`", expected, actual)
+		}
+	}
+
+	// No annotation set.
+	expect("t")
+
+	tn, err := parser.ParseTableName("db.public.t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.SetAnnotation(&ann, tn)
+
+	expect("db.public.t")
+
+	// No annotation.
+	u.AnnIdx = 0
+	expect("t")
 }
