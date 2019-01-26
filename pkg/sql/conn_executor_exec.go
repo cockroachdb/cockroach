@@ -318,6 +318,7 @@ func (ex *connExecutor) execStmtInOpenState(
 					SQL:             tree.AsStringWithFlags(s.Statement, tree.FmtParsable),
 					AST:             s.Statement,
 					NumPlaceholders: stmt.NumPlaceholders,
+					NumAnnotations:  stmt.NumAnnotations,
 				},
 			},
 			typeHints,
@@ -358,7 +359,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
-	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
+	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS, stmt.NumAnnotations)
 
 	if os.ImplicitTxn.Get() {
 		asOfTs, err := p.isAsOf(stmt.AST)
@@ -396,6 +397,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		return makeErrEvent(err)
 	}
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	ex.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
 	p.discardRows = discardRows
@@ -881,6 +883,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		evalCtxFactory := func() *extendedEvalContext {
 			ex.resetEvalCtx(&evalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			evalCtx.Placeholders = &planner.semaCtx.Placeholders
+			evalCtx.Annotations = &planner.semaCtx.Annotations
 			return &evalCtx
 		}
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
@@ -920,7 +923,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		return rwMode, now.GoTime(), nil, nil
 	}
 	p := &ex.planner
-	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime())
+	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime(), 0 /* numAnnotations */)
 	ts, err := p.EvalAsOfTimestamp(s.Modes.AsOf)
 	if err != nil {
 		return 0, time.Time{}, nil, err

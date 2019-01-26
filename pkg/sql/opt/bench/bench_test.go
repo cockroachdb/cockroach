@@ -537,6 +537,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 		h.semaCtx.Placeholders.Values[i] = texpr
 	}
 	h.evalCtx.Placeholders = &h.semaCtx.Placeholders
+	h.evalCtx.Annotations = &h.semaCtx.Annotations
 }
 
 func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared bool) {

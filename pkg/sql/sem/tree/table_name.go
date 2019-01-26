@@ -100,7 +100,13 @@ func (t *TableName) String() string { return AsString(t) }
 // FQString renders the table name in full, not omitting the prefix
 // schema and catalog names. Suitable for logging, etc.
 func (t *TableName) FQString() string {
-	return AsStringWithFlags(t, FmtAlwaysQualifyTableNames)
+	ctx := NewFmtCtx(FmtSimple)
+	ctx.FormatNode(&t.CatalogName)
+	ctx.WriteByte('.')
+	ctx.FormatNode(&t.SchemaName)
+	ctx.WriteByte('.')
+	ctx.FormatNode(&t.TableName)
+	return ctx.CloseAndGetString()
 }
 
 // Table retrieves the unqualified table name.
@@ -112,6 +118,25 @@ func (t *TableName) Table() string {
 // the ExplicitSchema/ExplicitCatalog flags).
 func (t *TableName) Equals(other *TableName) bool {
 	return *t == *other
+}
+
+// ToUnresolvedObjectName converts the table name to an unresolved object name.
+// Schema and catalog are included if indicated by the ExplicitSchema and
+// ExplicitCatalog flags.
+func (t *TableName) ToUnresolvedObjectName() *UnresolvedObjectName {
+	u := &UnresolvedObjectName{}
+
+	u.NumParts = 1
+	u.Parts[0] = string(t.TableName)
+	if t.ExplicitSchema {
+		u.Parts[u.NumParts] = string(t.SchemaName)
+		u.NumParts++
+	}
+	if t.ExplicitCatalog {
+		u.Parts[u.NumParts] = string(t.CatalogName)
+		u.NumParts++
+	}
+	return u
 }
 
 // tableExpr implements the TableExpr interface.

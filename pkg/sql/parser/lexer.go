@@ -39,6 +39,7 @@ type lexer struct {
 	stmt tree.Statement
 	// numPlaceholders is 1 + the highest placeholder index encountered.
 	numPlaceholders int
+	numAnnotations  tree.AnnotationIdx
 
 	lastError *pgerror.Error
 }
@@ -49,6 +50,7 @@ func (l *lexer) init(sql string, tokens []sqlSymType, nakedIntType *types.T) {
 	l.lastPos = -1
 	l.stmt = nil
 	l.numPlaceholders = 0
+	l.numAnnotations = 0
 	l.lastError = nil
 
 	l.nakedIntType = nakedIntType
@@ -122,6 +124,12 @@ func (l *lexer) lastToken() sqlSymType {
 		}
 	}
 	return l.tokens[l.lastPos]
+}
+
+// NewAnnotation returns a new annotation index.
+func (l *lexer) NewAnnotation() tree.AnnotationIdx {
+	l.numAnnotations++
+	return l.numAnnotations
 }
 
 // SetStmt is called from the parser when the statement is constructed.
