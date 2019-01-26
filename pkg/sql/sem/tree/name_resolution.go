@@ -33,32 +33,6 @@ import (
 //   or pattern to something looked up from the database.
 //
 
-// NormalizeTableName transforms an UnresolvedName into a TableName.
-// This does not perform name resolution.
-func NormalizeTableName(n *UnresolvedName) (res TableName, err error) {
-	if n.NumParts < 1 || n.NumParts > 3 || n.Star {
-		// The Star part of the condition is really an assertion. The
-		// parser should not have let this star propagate to a point where
-		// this method is called.
-		return res, newInvTableNameError(n)
-	}
-
-	// Check that all the parts specified are not empty.
-	// It's OK if the catalog name is empty.
-	// We allow this in e.g. `select * from "".crdb_internal.tables`.
-	lastCheck := n.NumParts
-	if lastCheck > 2 {
-		lastCheck = 2
-	}
-	for i := 0; i < lastCheck; i++ {
-		if len(n.Parts[i]) == 0 {
-			return res, newInvTableNameError(n)
-		}
-	}
-
-	return makeTableNameFromUnresolvedName(n), nil
-}
-
 // classifyTablePattern distinguishes between a TableName (last name
 // part is a table name) and an AllTablesSelector.
 // Used e.g. for GRANT.
@@ -119,12 +93,16 @@ func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 	}
 
 	// Construct the result.
-	tn := UnresolvedName{
-		NumParts: n.NumParts - 1,
-		Parts:    NameParts{n.Parts[1], n.Parts[2], n.Parts[3]},
+	var tn *UnresolvedObjectName
+	if n.NumParts > 1 {
+		var err error
+		tn, err = NewUnresolvedObjectName(n.NumParts-1, [3]string{n.Parts[1], n.Parts[2], n.Parts[3]})
+		if err != nil {
+			return nil, err
+		}
 	}
 	if n.Star {
-		return &AllColumnsSelector{tn}, nil
+		return &AllColumnsSelector{TableName: tn}, nil
 	}
 	return &ColumnItem{TableName: tn, ColumnName: Name(n.Parts[0])}, nil
 }
@@ -192,7 +170,7 @@ type ColumnResolutionResult interface {
 func (a *AllColumnsSelector) Resolve(
 	ctx context.Context, r ColumnItemResolver,
 ) (srcName *TableName, srcMeta ColumnSourceMeta, err error) {
-	prefix := makeTableNameFromUnresolvedName(&a.TableName)
+	prefix := a.TableName.ToTableName()
 
 	// Is there a data source with this prefix?
 	var res NumResolutionResults
@@ -223,7 +201,7 @@ func (c *ColumnItem) Resolve(
 	ctx context.Context, r ColumnItemResolver,
 ) (ColumnResolutionResult, error) {
 	colName := c.ColumnName
-	if c.TableName.NumParts == 0 {
+	if c.TableName == nil {
 		// Naked column name: simple case.
 		srcName, srcMeta, cHint, err := r.FindSourceProvidingColumn(ctx, colName)
 		if err != nil {
@@ -233,7 +211,7 @@ func (c *ColumnItem) Resolve(
 	}
 
 	// There is a prefix. We need to search for it.
-	prefix := makeTableNameFromUnresolvedName(&c.TableName)
+	prefix := c.TableName.ToTableName()
 
 	// Is there a data source with this prefix?
 	res, srcName, srcMeta, err := r.FindSourceMatchingName(ctx, prefix)
@@ -253,7 +231,7 @@ func (c *ColumnItem) Resolve(
 		}
 	}
 	if res == NoResults {
-		return nil, newSourceNotFoundError("no data source matches prefix: %s", &c.TableName)
+		return nil, newSourceNotFoundError("no data source matches prefix: %s", c.TableName)
 	}
 	return r.Resolve(ctx, srcName, srcMeta, -1, colName)
 }
@@ -511,7 +489,7 @@ func newInvColRef(fmt string, n *UnresolvedName) error {
 	return pgerror.NewErrorWithDepthf(1, pgerror.CodeInvalidColumnReferenceError, fmt, n)
 }
 
-func newInvTableNameError(n *UnresolvedName) error {
+func newInvTableNameError(n fmt.Stringer) error {
 	return pgerror.NewErrorWithDepthf(1, pgerror.CodeInvalidNameError,
 		"invalid table name: %s", n)
 }

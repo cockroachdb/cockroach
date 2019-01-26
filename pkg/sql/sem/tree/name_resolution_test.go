@@ -27,55 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
-func TestNormalizeTableName(t *testing.T) {
-	testCases := []struct {
-		in, out  string
-		expanded string
-		err      string
-	}{
-		{`a`, `a`, `""."".a`, ``},
-		{`a.b`, `a.b`, `"".a.b`, ``},
-		{`a.b.c`, `a.b.c`, `a.b.c`, ``},
-		{`a.b.c.d`, ``, ``, `syntax error at or near "\."`},
-		{`a.""`, ``, ``, `invalid table name: a\.""`},
-		{`a.b.""`, ``, ``, `invalid table name: a\.b\.""`},
-		{`a.b.c.""`, ``, ``, `syntax error at or near "\."`},
-		{`a."".c`, ``, ``, `invalid table name: a\.""\.c`},
-
-		// CockroachDB extension: empty catalog name.
-		{`"".b.c`, `"".b.c`, `"".b.c`, ``},
-
-		// Check keywords: disallowed in first position, ok afterwards.
-		{`user.x.y`, ``, ``, `syntax error`},
-		{`"user".x.y`, `"user".x.y`, `"user".x.y`, ``},
-		{`x.user.y`, `x."user".y`, `x."user".y`, ``},
-		{`x.user`, `x."user"`, `"".x."user"`, ``},
-
-		{`foo@bar`, ``, ``, `syntax error at or near "@"`},
-		{`test.*`, ``, ``, `syntax error at or near "\*"`},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.in, func(t *testing.T) {
-			tn, err := parser.ParseTableName(tc.in)
-			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
-			}
-			if tc.err != "" {
-				return
-			}
-			if out := tn.String(); tc.out != out {
-				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.out, out)
-			}
-			tn.ExplicitSchema = true
-			tn.ExplicitCatalog = true
-			if out := tn.String(); tc.expanded != out {
-				t.Fatalf("%s: expected full %s, but found %s", tc.in, tc.expanded, out)
-			}
-		})
-	}
-}
-
 func TestClassifyTablePattern(t *testing.T) {
 	testCases := []struct {
 		in, out  string
@@ -108,7 +59,7 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`*.b`, ``, ``, `syntax error at or near "\."`},
 		{`"".*`, ``, ``, `invalid table name: "".\*`},
 		{`a."".*`, ``, ``, `invalid table name: a\.""\.\*`},
-		{`a.b."".*`, ``, ``, `syntax error at or near "\."`},
+		{`a.b."".*`, ``, ``, `invalid table name: a.b.""`},
 		// CockroachDB extension: empty catalog name.
 		{`"".b.*`, `"".b.*`, `"".b.*`, ``},
 
