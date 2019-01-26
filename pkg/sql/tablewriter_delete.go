@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -70,73 +69,28 @@ func (td *tableDeleter) row(ctx context.Context, values tree.Datums, traceKV boo
 	return td.rd.DeleteRow(ctx, td.b, values, row.CheckFKs, traceKV)
 }
 
-// fastPathAvailable returns true if the fastDelete optimization can be used.
-func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
-	if len(td.rd.Helper.Indexes) != 0 {
+// fastPathDeleteAvailable returns true if the fastDelete optimization can be used.
+func fastPathDeleteAvailable(ctx context.Context, desc *ImmutableTableDescriptor) bool {
+	indexes := desc.DeletableIndexes()
+	if len(indexes) != 0 {
 		if log.V(2) {
-			log.Infof(ctx, "delete forced to scan: values required to update %d secondary indexes", len(td.rd.Helper.Indexes))
+			log.Infof(ctx, "delete forced to scan: values required to update %d secondary indexes", len(indexes))
 		}
 		return false
 	}
-	if td.rd.Helper.TableDesc.IsInterleaved() {
+	if desc.IsInterleaved() {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
 		return false
 	}
-	if len(td.rd.Helper.TableDesc.PrimaryIndex.ReferencedBy) > 0 {
+	if len(desc.PrimaryIndex.ReferencedBy) > 0 {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is referenced by foreign keys")
 		}
 		return false
 	}
 	return true
-}
-
-// fastDelete adds to the batch the kv operations necessary to delete sql rows
-// without knowing the values that are currently present. fastDelete calls
-// finalize, so it should not be called after.
-func (td *tableDeleter) fastDelete(
-	ctx context.Context, scan *scanNode, autoCommit autoCommitOpt, traceKV bool,
-) (rowCount int, err error) {
-	for _, span := range scan.spans {
-		log.VEvent(ctx, 2, "fast delete: skipping scan")
-		if traceKV {
-			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
-		}
-		td.b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
-	}
-
-	_, err = td.finalize(ctx, autoCommit, traceKV)
-	if err != nil {
-		return 0, err
-	}
-
-	for _, r := range td.b.Results {
-		var prev []byte
-		for _, i := range r.Keys {
-			// If prefix is same, don't bother decoding key.
-			if len(prev) > 0 && bytes.HasPrefix(i, prev) {
-				continue
-			}
-
-			after, ok, err := scan.run.fetcher.ReadIndexKey(i)
-			if err != nil {
-				return 0, err
-			}
-			if !ok {
-				return 0, errors.Errorf("key did not match descriptor")
-			}
-			k := i[:len(i)-len(after)]
-			if !bytes.Equal(k, prev) {
-				prev = k
-				rowCount++
-			}
-		}
-	}
-
-	td.b = nil
-	return rowCount, nil
 }
 
 // deleteAllRows runs the kv operations necessary to delete all sql rows in the

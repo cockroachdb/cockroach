@@ -89,7 +89,7 @@ func containsMutations(plan planNode) (bool, error) {
 	err := walkPlan(context.Background(), plan, planObserver{
 		enterNode: func(_ context.Context, _ string, node planNode) (bool, error) {
 			switch node.(type) {
-			case *insertNode, *deleteNode, *upsertNode, *updateNode:
+			case *insertNode, *deleteNode, *deleteRangeNode, *upsertNode, *updateNode:
 				seenMutation = true
 			default:
 			}
