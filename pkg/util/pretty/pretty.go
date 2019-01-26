@@ -123,7 +123,7 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 	switch t := d.d.(type) {
 	case nilDoc:
 		res = b.be(k, z)
-	case concat:
+	case *concat:
 		res = b.be(k, b.iDoc(d.i, t.a, b.iDoc(d.i, t.b, z)))
 	case nests:
 		res = b.be(k, b.iDoc(docPos{d.i.tabs, d.i.spaces + t.n}, t.d, z))
@@ -141,7 +141,7 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 			i:   d.i,
 			d:   b.be(d.i, z),
 		})
-	case union:
+	case *union:
 		res = b.better(k,
 			b.be(k, b.iDoc(d.i, t.x, z)),
 			// We eta-lift the second argument to avoid eager evaluation.

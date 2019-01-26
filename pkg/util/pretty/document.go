@@ -47,10 +47,10 @@ func (text) isDoc()      {}
 func (line) isDoc()      {}
 func (softbreak) isDoc() {}
 func (nilDoc) isDoc()    {}
-func (concat) isDoc()    {}
+func (*concat) isDoc()   {}
 func (nestt) isDoc()     {}
 func (nests) isDoc()     {}
-func (union) isDoc()     {}
+func (*union) isDoc()    {}
 func (*scolumn) isDoc()  {}
 func (*snesting) isDoc() {}
 func (pad) isDoc()       {}
@@ -105,7 +105,7 @@ type concat struct {
 // This uses simplifyNil to avoid actually inserting NIL docs
 // in the abstract tree.
 func Concat(a, b Doc) Doc {
-	return simplifyNil(a, b, func(a, b Doc) Doc { return concat{a, b} })
+	return simplifyNil(a, b, func(a, b Doc) Doc { return &concat{a, b} })
 }
 
 // nests represents (NESTS Int DOC) :: DOC -- nesting a doc "under" another.
@@ -149,7 +149,7 @@ type union struct {
 
 // Group will format d on one line if possible.
 func Group(d Doc) Doc {
-	return union{flatten(d), d}
+	return &union{flatten(d), d}
 }
 
 var textSpace = Text(" ")
@@ -158,7 +158,7 @@ func flatten(d Doc) Doc {
 	switch t := d.(type) {
 	case nilDoc:
 		return Nil
-	case concat:
+	case *concat:
 		return Concat(flatten(t.a), flatten(t.b))
 	case nestt:
 		return NestT(flatten(t.d))
@@ -170,7 +170,7 @@ func flatten(d Doc) Doc {
 		return textSpace
 	case softbreak:
 		return Nil
-	case union:
+	case *union:
 		return flatten(t.x)
 	case *scolumn:
 		return &scolumn{f: func(c int16) Doc { return flatten(t.f(c)) }}
