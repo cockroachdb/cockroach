@@ -39,6 +39,7 @@ func BuildQuery(
 	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
 		t.Fatal(err)
 	}
+	semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	o.Init(evalCtx)
 	err = optbuilder.New(ctx, &semaCtx, evalCtx, catalog, o.Factory(), stmt.AST).Build()
 	if err != nil {

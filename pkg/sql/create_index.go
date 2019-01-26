@@ -128,8 +128,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 		}
 	}
 
-	mutationID, err := params.p.createOrUpdateSchemaChangeJob(params.ctx, n.tableDesc,
-		tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
+	mutationID, err := params.p.createOrUpdateSchemaChangeJob(
+		params.ctx, n.tableDesc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	)
 	if err != nil {
 		return err
 	}

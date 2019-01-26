@@ -87,7 +87,11 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 }
 
 func importJobDescription(
-	orig *tree.Import, defs tree.TableDefs, files []string, opts map[string]string,
+	p sql.PlanHookState,
+	orig *tree.Import,
+	defs tree.TableDefs,
+	files []string,
+	opts map[string]string,
 ) (string, error) {
 	stmt := *orig
 	stmt.CreateFile = nil
@@ -111,7 +115,8 @@ func importJobDescription(
 		stmt.Options = append(stmt.Options, opt)
 	}
 	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
-	return tree.AsStringWithFlags(&stmt, tree.FmtAlwaysQualifyTableNames), nil
+	ann := p.ExtendedEvalContext().Annotations
+	return tree.AsStringWithFQNames(&stmt, ann), nil
 }
 
 // importPlanHook implements sql.PlanHookFn.
@@ -425,7 +430,7 @@ func importPlanHook(
 				return errors.Errorf("table definition not found for %q", table.TableName.String())
 			}
 
-			descStr, err := importJobDescription(importStmt, nil, files, opts)
+			descStr, err := importJobDescription(p, importStmt, nil, files, opts)
 			if err != nil {
 				return err
 			}
@@ -464,7 +469,7 @@ func importPlanHook(
 				return err
 			}
 			tableDescs = []*sqlbase.TableDescriptor{tbl.TableDesc()}
-			descStr, err := importJobDescription(importStmt, create.Defs, files, opts)
+			descStr, err := importJobDescription(p, importStmt, create.Defs, files, opts)
 			if err != nil {
 				return err
 			}

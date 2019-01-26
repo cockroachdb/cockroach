@@ -397,7 +397,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						if err := params.p.dropIndexByName(
 							params.ctx, tn, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
 							t.DropBehavior, ignoreIdxConstraint,
-							tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
+							tree.AsStringWithFQNames(n.n, params.Ann()),
 						); err != nil {
 							return err
 						}
@@ -662,8 +662,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 	mutationID := sqlbase.InvalidMutationID
 	if addedMutations {
 		var err error
-		mutationID, err = params.p.createOrUpdateSchemaChangeJob(params.ctx, n.tableDesc,
-			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
+		mutationID, err = params.p.createOrUpdateSchemaChangeJob(
+			params.ctx, n.tableDesc,
+			tree.AsStringWithFQNames(n.n, params.Ann()),
+		)
 		if err != nil {
 			return err
 		}

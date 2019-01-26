@@ -8741,7 +8741,8 @@ db_object_name:
 simple_db_object_name:
   db_object_name_component
   {
-    res, err := tree.NewUnresolvedObjectName(1, [3]string{$1})
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(1, [3]string{$1}, aIdx)
     if err != nil { return setErr(sqllex, err) }
     $$.val = res
   }
@@ -8753,13 +8754,15 @@ simple_db_object_name:
 complex_db_object_name:
   db_object_name_component '.' unrestricted_name
   {
-    res, err := tree.NewUnresolvedObjectName(2, [3]string{$3, $1})
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(2, [3]string{$3, $1}, aIdx)
     if err != nil { return setErr(sqllex, err) }
     $$.val = res
   }
 | db_object_name_component '.' unrestricted_name '.' unrestricted_name
   {
-    res, err := tree.NewUnresolvedObjectName(3, [3]string{$5, $3, $1})
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(3, [3]string{$5, $3, $1}, aIdx)
     if err != nil { return setErr(sqllex, err) }
     $$.val = res
   }

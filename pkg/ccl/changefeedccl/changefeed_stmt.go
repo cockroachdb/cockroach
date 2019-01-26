@@ -161,7 +161,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		jobDescription, err := changefeedJobDescription(changefeedStmt, sinkURI, opts)
+		jobDescription, err := changefeedJobDescription(p, changefeedStmt, sinkURI, opts)
 		if err != nil {
 			return err
 		}
@@ -341,7 +341,7 @@ func changefeedPlanHook(
 }
 
 func changefeedJobDescription(
-	changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
+	p sql.PlanHookState, changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
 ) (string, error) {
 	cleanedSinkURI, err := storageccl.SanitizeExportStorageURI(sinkURI)
 	if err != nil {
@@ -359,7 +359,8 @@ func changefeedJobDescription(
 		c.Options = append(c.Options, opt)
 	}
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
-	return tree.AsStringWithFlags(c, tree.FmtAlwaysQualifyTableNames), nil
+	ann := p.ExtendedEvalContext().Annotations
+	return tree.AsStringWithFQNames(c, ann), nil
 }
 
 func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails, error) {
