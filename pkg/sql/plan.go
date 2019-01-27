@@ -507,8 +507,6 @@ func startExec(params runParams, plan planNode) error {
 			case *showTraceNode:
 				// showTrace needs to override the params struct, and does so in its startExec() method.
 				return false, nil
-			case *createStatsNode:
-				return false, errors.Errorf("statistics can only be created via DistSQL")
 			}
 			return true, nil
 		},
