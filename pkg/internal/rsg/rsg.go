@@ -19,18 +19,11 @@ import (
 	"math"
 	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // RSG is a random syntax generator.
@@ -232,7 +225,7 @@ func (r *RSG) Float64() float64 {
 // GenerateRandomArg generates a random, valid, SQL function argument of
 // the specified type.
 func (r *RSG) GenerateRandomArg(typ types.T) string {
-	switch r.Intn(10) {
+	switch r.Intn(20) {
 	case 0:
 		return "NULL"
 	case 1:
@@ -240,89 +233,14 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 	case 2:
 		return fmt.Sprintf("(SELECT NULL)::%s", typ)
 	}
-	var v interface{}
-	switch types.UnwrapType(typ) {
-	case types.Int:
-		v = r.Int()
-	case types.BitArray:
-		v = bitArrayArgs[r.Intn(len(bitArrayArgs))]
-	case types.Float, types.Decimal:
-		v = r.Float64()
-	case types.String:
-		v = stringArgs[r.Intn(len(stringArgs))]
-	case types.Bytes:
-		v = fmt.Sprintf("b%s", stringArgs[r.Intn(len(stringArgs))])
-	case types.Timestamp, types.TimestampTZ:
-		t := timeutil.Unix(0, r.Int63())
-		v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
-	case types.Bool:
-		v = boolArgs[r.Intn(2)]
-	case types.Date:
-		i := r.Int63()
-		i -= r.Int63()
-		d := tree.NewDDate(tree.DDate(i))
-		v = fmt.Sprintf(`'%s'`, d)
-	case types.Time:
-		i := r.Int63n(int64(timeofday.Max))
-		d := tree.MakeDTime(timeofday.FromInt(i))
-		v = fmt.Sprintf(`'%s'`, d)
-	case types.Interval:
-		d := duration.Duration{Nanos: r.Int63()}
-		v = fmt.Sprintf(`'%s'`, &tree.DInterval{Duration: d})
-	case types.UUID:
-		u := uuid.MakeV4()
-		v = fmt.Sprintf(`'%s'`, u)
-	case types.INet:
-		r.lock.Lock()
-		ipAddr := ipaddr.RandIPAddr(r.src)
-		r.lock.Unlock()
-		v = fmt.Sprintf(`'%s'`, ipAddr)
-	case types.Oid,
-		types.RegClass,
-		types.RegNamespace,
-		types.RegProc,
-		types.RegProcedure,
-		types.RegType,
-		types.AnyArray,
-		types.Any:
-		v = "NULL"
-	case types.JSON:
-		r.lock.Lock()
-		j, err := json.Random(20, r.src)
-		r.lock.Unlock()
-		if err != nil {
-			panic(err)
-		}
-		v = fmt.Sprintf(`'%s'`, tree.DJSON{JSON: j})
-	default:
-		// Check types that can't be compared using equality
-		switch types.UnwrapType(typ).(type) {
-		case types.TTuple,
-			types.TArray:
-			v = "NULL"
-		default:
-			panic(fmt.Errorf("unknown arg type: %s (%T)", typ, typ))
-		}
+	coltype, err := sqlbase.DatumTypeToColumnType(typ)
+	if err != nil {
+		return "NULL"
 	}
-	return fmt.Sprintf("%v::%s", v, typ.String())
-}
 
-var stringArgs = map[int]string{
-	0: `''`,
-	1: `'1'`,
-	2: `'12345'`,
-	3: `'1234567890'`,
-	4: `'12345678901234567890'`,
-	5: `'123456789123456789123456789123456789123456789123456789123456789123456789'`,
-}
+	r.lock.Lock()
+	datum := sqlbase.RandDatumWithNullChance(r.src, coltype, 0)
+	r.lock.Unlock()
 
-var bitArrayArgs = map[int]string{
-	0: `B''`,
-	1: `B'1'`,
-	2: `B'10010'`,
-}
-
-var boolArgs = map[int]string{
-	0: "false",
-	1: "true",
+	return fmt.Sprintf("%s::%s", datum, typ.String())
 }
