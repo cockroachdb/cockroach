@@ -15,9 +15,17 @@
 package sql
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/pkg/errors"
 )
 
@@ -32,7 +40,10 @@ const histogramSamples = 10000
 const histogramBuckets = 200
 
 func (dsp *DistSQLPlanner) createStatsPlan(
-	planCtx *PlanningCtx, desc *sqlbase.ImmutableTableDescriptor, stats []requestedStat,
+	planCtx *PlanningCtx,
+	desc *sqlbase.ImmutableTableDescriptor,
+	stats []requestedStat,
+	job *jobs.Job,
 ) (PhysicalPlan, error) {
 	if len(stats) == 0 {
 		return PhysicalPlan{}, errors.New("no stats requested")
@@ -144,6 +155,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		SampleSize:       sampler.SampleSize,
 		SampledColumnIDs: sampledColumnIDs,
 		TableID:          desc.ID,
+		InputProcCnt:     uint32(len(p.ResultRouters)),
+		JobID:            *job.ID(),
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
 	node := dsp.nodeDesc.NodeID
@@ -161,17 +174,54 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 }
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
-	planCtx *PlanningCtx, n *createStatsNode,
+	planCtx *PlanningCtx, job *jobs.Job,
 ) (PhysicalPlan, error) {
-	stats := make([]requestedStat, len(n.columns))
+	details := job.Details().(jobspb.CreateStatsDetails)
+	stats := make([]requestedStat, len(details.ColumnLists))
 	for i := 0; i < len(stats); i++ {
 		stats[i] = requestedStat{
-			columns:             n.columns[i],
-			histogram:           len(n.columns[i]) == 1,
+			columns:             details.ColumnLists[i].IDs,
+			histogram:           len(details.ColumnLists[i].IDs) == 1,
 			histogramMaxBuckets: histogramBuckets,
-			name:                string(n.Name),
+			name:                string(details.Name),
 		}
 	}
 
-	return dsp.createStatsPlan(planCtx, n.tableDesc, stats)
+	tableDesc := sqlbase.NewImmutableTableDescriptor(details.Table)
+	return dsp.createStatsPlan(planCtx, tableDesc, stats, job)
+}
+
+func (dsp *DistSQLPlanner) planAndRunCreateStats(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	txn *client.Txn,
+	job *jobs.Job,
+	resultRows *RowResultWriter,
+) error {
+	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
+
+	physPlan, err := dsp.createPlanForCreateStats(planCtx, job)
+	if err != nil {
+		return err
+	}
+
+	dsp.FinalizePlan(planCtx, &physPlan)
+
+	recv := MakeDistSQLReceiver(
+		ctx,
+		resultRows,
+		tree.DDL,
+		evalCtx.ExecCfg.RangeDescriptorCache,
+		evalCtx.ExecCfg.LeaseHolderCache,
+		txn,
+		func(ts hlc.Timestamp) {
+			_ = evalCtx.ExecCfg.Clock.Update(ts)
+		},
+		evalCtx.Tracing,
+	)
+	defer recv.Release()
+
+	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	return resultRows.Err()
 }

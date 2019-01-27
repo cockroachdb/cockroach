@@ -118,8 +118,12 @@ func TestSampleAggregator(t *testing.T) {
 	samplerResults := NewRowBuffer(samplerOutTypes, nil /* rows */, RowBufferArgs{})
 	for len(outputs) > 0 {
 		i := rng.Intn(len(outputs))
-		row := outputs[i].NextNoMeta(t)
-		if row == nil {
+		row, meta := outputs[i].Next()
+		if meta != nil {
+			if meta.Progress == nil {
+				t.Fatalf("unexpected metadata: %v", meta)
+			}
+		} else if row == nil {
 			outputs = append(outputs[:i], outputs[i+1:]...)
 		} else {
 			samplerResults.Push(row, nil /* meta */)

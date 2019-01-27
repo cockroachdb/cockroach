@@ -100,6 +100,10 @@ func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
 		enc.Value = &distsqlpb.RemoteProducerMetadata_RowNum_{
 			RowNum: meta.RowNum,
 		}
+	} else if meta.Progress != nil {
+		enc.Value = &distsqlpb.RemoteProducerMetadata_Progress{
+			Progress: meta.Progress,
+		}
 	} else {
 		enc.Value = &distsqlpb.RemoteProducerMetadata_Error{
 			Error: distsqlpb.NewError(meta.Err),
