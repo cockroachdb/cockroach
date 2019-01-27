@@ -35,8 +35,9 @@ import (
 
 // RSG is a random syntax generator.
 type RSG struct {
+	Rnd *rand.Rand
+
 	lock  syncutil.Mutex
-	src   *rand.Rand
 	seen  map[string]bool
 	prods map[string][]*yacc.ExpressionNode
 }
@@ -49,7 +50,7 @@ func NewRSG(seed int64, y string, allowDuplicates bool) (*RSG, error) {
 		return nil, err
 	}
 	rsg := RSG{
-		src:   rand.New(rand.NewSource(seed)),
+		Rnd:   rand.New(&lockedSource{src: rand.NewSource(seed).(rand.Source64)}),
 		prods: make(map[string][]*yacc.ExpressionNode),
 	}
 	if !allowDuplicates {
@@ -143,34 +144,24 @@ func (r *RSG) generate(root string, depth int) []string {
 
 // Int63n returns a random int64 in [0,n).
 func (r *RSG) Int63n(n int64) int64 {
-	r.lock.Lock()
-	v := r.src.Int63n(n)
-	r.lock.Unlock()
-	return v
+	return r.Rnd.Int63n(n)
 }
 
 // Intn returns a random int.
 func (r *RSG) Intn(n int) int {
-	r.lock.Lock()
-	v := r.src.Intn(n)
-	r.lock.Unlock()
-	return v
+	return r.Rnd.Intn(n)
 }
 
 // Int63 returns a random int64.
 func (r *RSG) Int63() int64 {
-	r.lock.Lock()
-	v := r.src.Int63()
-	r.lock.Unlock()
-	return v
+	return r.Rnd.Int63()
 }
 
 // Int returns a random int. It attempts to distribute results among small,
 // large, and normal scale numbers.
 func (r *RSG) Int() int64 {
-	r.lock.Lock()
 	var i int64
-	switch r.src.Intn(9) {
+	switch r.Rnd.Intn(9) {
 	case 0:
 		i = 0
 	case 1:
@@ -187,29 +178,27 @@ func (r *RSG) Int() int64 {
 		// math.MinInt64 isn't a valid integer in SQL
 		i = math.MinInt64 + 1
 	case 7:
-		i = r.src.Int63()
-		if r.src.Intn(2) == 1 {
+		i = r.Rnd.Int63()
+		if r.Rnd.Intn(2) == 1 {
 			i = -i
 		}
 	case 8:
-		for v := r.src.Intn(10) + 1; v > 0; v-- {
+		for v := r.Rnd.Intn(10) + 1; v > 0; v-- {
 			i *= 10
-			i += r.src.Int63n(10)
+			i += r.Rnd.Int63n(10)
 		}
-		if r.src.Intn(2) == 1 {
+		if r.Rnd.Intn(2) == 1 {
 			i = -i
 		}
 	}
-	r.lock.Unlock()
 	return i
 }
 
 // Float64 returns a random float. It is sometimes +/-Inf, NaN, and attempts to
 // be distributed among very small, large, and normal scale numbers.
 func (r *RSG) Float64() float64 {
-	r.lock.Lock()
-	v := r.src.Float64()*2 - 1
-	switch r.src.Intn(10) {
+	v := r.Rnd.Float64()*2 - 1
+	switch r.Rnd.Intn(10) {
 	case 0:
 		v = 0
 	case 1:
@@ -219,13 +208,12 @@ func (r *RSG) Float64() float64 {
 	case 3:
 		v = math.NaN()
 	case 4, 5:
-		i := r.src.Intn(50)
+		i := r.Rnd.Intn(50)
 		v *= math.Pow10(i)
 	case 6, 7:
-		i := r.src.Intn(50)
+		i := r.Rnd.Intn(50)
 		v *= math.Pow10(-i)
 	}
-	r.lock.Unlock()
 	return v
 }
 
@@ -273,9 +261,7 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 		u := uuid.MakeV4()
 		v = fmt.Sprintf(`'%s'`, u)
 	case types.INet:
-		r.lock.Lock()
-		ipAddr := ipaddr.RandIPAddr(r.src)
-		r.lock.Unlock()
+		ipAddr := ipaddr.RandIPAddr(r.Rnd)
 		v = fmt.Sprintf(`'%s'`, ipAddr)
 	case types.Oid,
 		types.RegClass,
@@ -288,7 +274,7 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 		v = "NULL"
 	case types.JSON:
 		r.lock.Lock()
-		j, err := json.Random(20, r.src)
+		j, err := json.Random(20, r.Rnd)
 		r.lock.Unlock()
 		if err != nil {
 			panic(err)
@@ -325,4 +311,30 @@ var bitArrayArgs = map[int]string{
 var boolArgs = map[int]string{
 	0: "false",
 	1: "true",
+}
+
+// lockedSource is a thread safe math/rand.Source. See math/rand/rand.go.
+type lockedSource struct {
+	lk  syncutil.Mutex
+	src rand.Source64
+}
+
+func (r *lockedSource) Int63() (n int64) {
+	r.lk.Lock()
+	n = r.src.Int63()
+	r.lk.Unlock()
+	return
+}
+
+func (r *lockedSource) Uint64() (n uint64) {
+	r.lk.Lock()
+	n = r.src.Uint64()
+	r.lk.Unlock()
+	return
+}
+
+func (r *lockedSource) Seed(seed int64) {
+	r.lk.Lock()
+	r.src.Seed(seed)
+	r.lk.Unlock()
 }
