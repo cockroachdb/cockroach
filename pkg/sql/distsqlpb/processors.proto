@@ -757,6 +757,9 @@ message SketchSpec {
 message SamplerSpec {
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
   optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+
+  // Records progress of the CREATE STATISTICS job.
+  optional JobProgress progress = 9 [(gogoproto.nullable) = false];
 }
 
 // SampleAggregatorSpec is the specification of a processor that aggregates the

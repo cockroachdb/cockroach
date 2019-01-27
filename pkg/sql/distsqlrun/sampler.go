@@ -18,6 +18,8 @@ import (
 	"context"
 
 	"github.com/axiomhq/hyperloglog"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -41,6 +43,7 @@ type sketchInfo struct {
 type samplerProcessor struct {
 	ProcessorBase
 
+	spec     *distsqlpb.SamplerSpec
 	flowCtx  *FlowCtx
 	input    RowSource
 	sr       stats.SampleReservoir
@@ -57,6 +60,8 @@ type samplerProcessor struct {
 var _ Processor = &samplerProcessor{}
 
 const samplerProcName = "sampler"
+
+const samplerProgressInterval = 10000
 
 var supportedSketchTypes = map[distsqlpb.SketchType]struct{}{
 	// The code currently hardcodes the use of this single type of sketch
@@ -82,6 +87,7 @@ func newSamplerProcessor(
 	}
 
 	s := &samplerProcessor{
+		spec:     spec,
 		flowCtx:  flowCtx,
 		input:    input,
 		sketches: make([]sketchInfo, len(spec.Sketches)),
@@ -155,10 +161,31 @@ func (s *samplerProcessor) Run(ctx context.Context) {
 	}
 }
 
-func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
+func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err error) {
+	var job *jobs.Job
+	job, err = s.flowCtx.JobRegistry.LoadJob(ctx, s.spec.Progress.JobID)
+	if err != nil {
+		return false, err
+	}
+
+	progFn := func(pct float32) error {
+		return job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			d := details.(*jobspb.Progress_CreateStats).CreateStats
+			slotpct := pct * s.spec.Progress.Contribution
+			d.SamplerProgress[s.spec.Progress.Slot] = slotpct
+			return d.Completed()
+		})
+	}
+	defer func() {
+		if err == nil {
+			err = progFn(1.0)
+		}
+	}()
+
 	rng, _ := randutil.NewPseudoRand()
 	var da sqlbase.DatumAlloc
 	var buf []byte
+	rowCount := 0
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
@@ -170,6 +197,18 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		}
 		if row == nil {
 			break
+		}
+
+		rowCount++
+		if rowCount%samplerProgressInterval == 0 {
+			// TODO(rytaft): We could have more intermediate measures of progress if
+			// we were to run this at the kv layer where we know how many spans have
+			// been processed out of the total. For now, report 0 progress until all
+			// rows have been processed. The purpose of this function call is to
+			// periodically check that the job has not been paused or canceled.
+			if err := progFn(0); err != nil {
+				return false, err
+			}
 		}
 
 		for i := range s.sketches {
@@ -184,7 +223,6 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 			// We need to use a KEY encoding because equal values should have the same
 			// encoding.
 			// TODO(radu): a fast path for simple columns (like integer)?
-			var err error
 			buf, err = row[col].Encode(&s.outTypes[col], &da, sqlbase.DatumEncoding_ASCENDING_KEY, buf[:0])
 			if err != nil {
 				return false, err

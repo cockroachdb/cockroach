@@ -224,7 +224,6 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *CreateUserNode:
 	case *createViewNode:
 	case *createSequenceNode:
-	case *createStatsNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:

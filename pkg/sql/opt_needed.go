@@ -272,7 +272,6 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *CreateUserNode:
 	case *createViewNode:
 	case *createSequenceNode:
-	case *createStatsNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:

@@ -167,7 +167,6 @@ var _ planNode = &cancelSessionsNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createIndexNode{}
 var _ planNode = &createSequenceNode{}
-var _ planNode = &createStatsNode{}
 var _ planNode = &createTableNode{}
 var _ planNode = &CreateUserNode{}
 var _ planNode = &createViewNode{}
@@ -484,8 +483,6 @@ func startExec(params runParams, plan planNode) error {
 			case *showTraceNode:
 				// showTrace needs to override the params struct, and does so in its startExec() method.
 				return false, nil
-			case *createStatsNode:
-				return false, errors.Errorf("statistics can only be created via DistSQL")
 			}
 			return true, nil
 		},
@@ -642,8 +639,6 @@ func (p *planner) newPlan(
 		return p.CreateView(ctx, n)
 	case *tree.CreateSequence:
 		return p.CreateSequence(ctx, n)
-	case *tree.CreateStats:
-		return p.CreateStatistics(ctx, n)
 	case *tree.Deallocate:
 		return p.Deallocate(ctx, n)
 	case *tree.Delete:

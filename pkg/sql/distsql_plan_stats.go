@@ -15,9 +15,18 @@
 package sql
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/pkg/errors"
 )
 
@@ -32,7 +41,10 @@ const histogramSamples = 10000
 const histogramBuckets = 200
 
 func (dsp *DistSQLPlanner) createStatsPlan(
-	planCtx *PlanningCtx, desc *sqlbase.ImmutableTableDescriptor, stats []requestedStat,
+	planCtx *PlanningCtx,
+	desc *sqlbase.ImmutableTableDescriptor,
+	stats []requestedStat,
+	job *jobs.Job,
 ) (PhysicalPlan, error) {
 	if len(stats) == 0 {
 		return PhysicalPlan{}, errors.New("no stats requested")
@@ -131,12 +143,32 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// A BYTES column with the sketch data.
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
 
-	p.AddNoGroupingStage(
-		distsqlpb.ProcessorCoreUnion{Sampler: sampler},
+	p.AddNoGroupingStageWithCoreFunc(
+		func(procIdx int, _ *distsqlplan.Processor) distsqlpb.ProcessorCoreUnion {
+			// TODO(rytaft): We could make the contribution estimate more precise by
+			// determining how many spans each processor is responsible for.
+			sampler.Progress = distsqlpb.JobProgress{
+				JobID:        *job.ID(),
+				Contribution: 1.0 / float32(len(p.ResultRouters)),
+				Slot:         int32(procIdx),
+			}
+			return distsqlpb.ProcessorCoreUnion{Sampler: sampler}
+		},
 		distsqlpb.PostProcessSpec{},
 		outTypes,
 		distsqlpb.Ordering{},
 	)
+
+	// Prep the sampler progress tracking.
+	if err := job.FractionProgressed(planCtx.ctx,
+		func(ctx context.Context, progress jobspb.ProgressDetails) float32 {
+			prog := progress.(*jobspb.Progress_CreateStats).CreateStats
+			prog.SamplerProgress = make([]float32, len(p.ResultRouters))
+			return prog.Completed()
+		},
+	); err != nil {
+		return PhysicalPlan{}, err
+	}
 
 	// Set up the final SampleAggregator stage.
 	agg := &distsqlpb.SampleAggregatorSpec{
@@ -161,17 +193,54 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 }
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
-	planCtx *PlanningCtx, n *createStatsNode,
+	planCtx *PlanningCtx, job *jobs.Job,
 ) (PhysicalPlan, error) {
-	stats := make([]requestedStat, len(n.columns))
+	details := job.Details().(jobspb.CreateStatsDetails)
+	stats := make([]requestedStat, len(details.Columns))
 	for i := 0; i < len(stats); i++ {
 		stats[i] = requestedStat{
-			columns:             n.columns[i],
-			histogram:           len(n.columns[i]) == 1,
+			columns:             details.Columns[i].IDs,
+			histogram:           len(details.Columns[i].IDs) == 1,
 			histogramMaxBuckets: histogramBuckets,
-			name:                string(n.Name),
+			name:                string(details.Name),
 		}
 	}
 
-	return dsp.createStatsPlan(planCtx, n.tableDesc, stats)
+	tableDesc := sqlbase.NewImmutableTableDescriptor(details.Table)
+	return dsp.createStatsPlan(planCtx, tableDesc, stats, job)
+}
+
+func (dsp *DistSQLPlanner) planAndRunCreateStats(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	txn *client.Txn,
+	job *jobs.Job,
+	resultRows *RowResultWriter,
+) error {
+	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
+
+	physPlan, err := dsp.createPlanForCreateStats(planCtx, job)
+	if err != nil {
+		return err
+	}
+
+	dsp.FinalizePlan(planCtx, &physPlan)
+
+	recv := MakeDistSQLReceiver(
+		ctx,
+		resultRows,
+		tree.DDL,
+		evalCtx.ExecCfg.RangeDescriptorCache,
+		evalCtx.ExecCfg.LeaseHolderCache,
+		txn,
+		func(ts hlc.Timestamp) {
+			_ = evalCtx.ExecCfg.Clock.Update(ts)
+		},
+		evalCtx.Tracing,
+	)
+	defer recv.Release()
+
+	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	return resultRows.Err()
 }

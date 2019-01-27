@@ -104,7 +104,6 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *createSequenceNode:
-	case *createStatsNode:
 	case *createTableNode:
 	case *createViewNode:
 	case *delayedNode:

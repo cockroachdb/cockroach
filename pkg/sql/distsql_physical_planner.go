@@ -296,7 +296,6 @@ func (dsp *DistSQLPlanner) mustWrapNode(node planNode) bool {
 	case *unionNode:
 	case *valuesNode:
 	case *virtualTableNode:
-	case *createStatsNode:
 	case *projectSetNode:
 	case *unaryNode:
 	case *zeroNode:
@@ -451,8 +450,6 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			}
 		}
 		return canDistribute, nil
-	case *createStatsNode:
-		return shouldDistribute, nil
 
 	case *insertNode, *updateNode, *deleteNode, *upsertNode:
 		// This is a potential hot path.
@@ -2355,8 +2352,6 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		} else {
 			plan, err = dsp.createPlanForValues(planCtx, n)
 		}
-	case *createStatsNode:
-		plan, err = dsp.createPlanForCreateStats(planCtx, n)
 
 	case *projectSetNode:
 		plan, err = dsp.createPlanForProjectSet(planCtx, n)
