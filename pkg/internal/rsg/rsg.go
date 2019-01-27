@@ -29,8 +29,9 @@ import (
 
 // RSG is a random syntax generator.
 type RSG struct {
+	Rnd *rand.Rand
+
 	lock  syncutil.Mutex
-	src   *rand.Rand
 	seen  map[string]bool
 	prods map[string][]*yacc.ExpressionNode
 }
@@ -43,7 +44,7 @@ func NewRSG(seed int64, y string, allowDuplicates bool) (*RSG, error) {
 		return nil, err
 	}
 	rsg := RSG{
-		src:   rand.New(rand.NewSource(seed)),
+		Rnd:   rand.New(&lockedSource{src: rand.NewSource(seed).(rand.Source64)}),
 		prods: make(map[string][]*yacc.ExpressionNode),
 	}
 	if !allowDuplicates {
@@ -137,26 +138,19 @@ func (r *RSG) generate(root string, depth int) []string {
 
 // Intn returns a random int.
 func (r *RSG) Intn(n int) int {
-	r.lock.Lock()
-	v := r.src.Intn(n)
-	r.lock.Unlock()
-	return v
+	return r.Rnd.Intn(n)
 }
 
 // Int63 returns a random int64.
 func (r *RSG) Int63() int64 {
-	r.lock.Lock()
-	v := r.src.Int63()
-	r.lock.Unlock()
-	return v
+	return r.Rnd.Int63()
 }
 
 // Float64 returns a random float. It is sometimes +/-Inf, NaN, and attempts to
 // be distributed among very small, large, and normal scale numbers.
 func (r *RSG) Float64() float64 {
-	r.lock.Lock()
-	v := r.src.Float64()*2 - 1
-	switch r.src.Intn(10) {
+	v := r.Rnd.Float64()*2 - 1
+	switch r.Rnd.Intn(10) {
 	case 0:
 		v = 0
 	case 1:
@@ -166,13 +160,12 @@ func (r *RSG) Float64() float64 {
 	case 3:
 		v = math.NaN()
 	case 4, 5:
-		i := r.src.Intn(50)
+		i := r.Rnd.Intn(50)
 		v *= math.Pow10(i)
 	case 6, 7:
-		i := r.src.Intn(50)
+		i := r.Rnd.Intn(50)
 		v *= math.Pow10(-i)
 	}
-	r.lock.Unlock()
 	return v
 }
 
@@ -193,8 +186,34 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 	}
 
 	r.lock.Lock()
-	datum := sqlbase.RandDatumWithNullChance(r.src, coltype, 0)
+	datum := sqlbase.RandDatumWithNullChance(r.Rnd, coltype, 0)
 	r.lock.Unlock()
 
 	return tree.Serialize(datum)
+}
+
+// lockedSource is a thread safe math/rand.Source. See math/rand/rand.go.
+type lockedSource struct {
+	lk  syncutil.Mutex
+	src rand.Source64
+}
+
+func (r *lockedSource) Int63() (n int64) {
+	r.lk.Lock()
+	n = r.src.Int63()
+	r.lk.Unlock()
+	return
+}
+
+func (r *lockedSource) Uint64() (n uint64) {
+	r.lk.Lock()
+	n = r.src.Uint64()
+	r.lk.Unlock()
+	return
+}
+
+func (r *lockedSource) Seed(seed int64) {
+	r.lk.Lock()
+	r.src.Seed(seed)
+	r.lk.Unlock()
 }
