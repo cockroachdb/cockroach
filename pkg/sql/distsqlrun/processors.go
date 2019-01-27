@@ -255,16 +255,15 @@ func emitHelper(
 		}
 		// Bypass EmitRow() and send directly to output.output.
 		consumerStatus = output.output.Push(nil /* row */, meta)
+		if meta.Err != nil {
+			consumerStatus = ConsumerClosed
+		}
 	} else {
 		var err error
 		consumerStatus, err = output.EmitRow(ctx, row)
 		if err != nil {
 			output.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-			for _, input := range inputs {
-				input.ConsumerClosed()
-			}
-			output.Close()
-			return false
+			consumerStatus = ConsumerClosed
 		}
 	}
 	switch consumerStatus {

@@ -192,6 +192,25 @@ message ChangefeedProgress {
   repeated ResolvedSpan resolved_spans = 2 [(gogoproto.nullable) = false];
 }
 
+message CreateStatsDetails {
+  message ColList {
+    repeated uint32 ids = 1 [
+      (gogoproto.customname) = "IDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
+    ];
+  }
+  string name = 1 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.Name"
+  ];
+  sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
+  repeated ColList column_lists = 3 [(gogoproto.nullable) = false];
+  string Statement = 4;
+}
+
+message CreateStatsProgress {
+
+}
+
 message Payload {
   string description = 1;
   string username = 2;
@@ -215,6 +234,7 @@ message Payload {
     SchemaChangeDetails schemaChange = 12;
     ImportDetails import = 13;
     ChangefeedDetails changefeed = 14;
+    CreateStatsDetails createStats = 15;
   }
 }
 
@@ -232,6 +252,7 @@ message Progress {
     SchemaChangeProgress schemaChange = 12;
     ImportProgress import = 13;
     ChangefeedProgress changefeed = 14;
+    CreateStatsProgress createStats = 15;
   }
 }
 
@@ -245,4 +266,5 @@ enum Type {
   SCHEMA_CHANGE = 3 [(gogoproto.enumvalue_customname) = "TypeSchemaChange"];
   IMPORT = 4 [(gogoproto.enumvalue_customname) = "TypeImport"];
   CHANGEFEED = 5 [(gogoproto.enumvalue_customname) = "TypeChangefeed"];
+  CREATE_STATS = 6 [(gogoproto.enumvalue_customname) = "TypeCreateStats"];
 }

@@ -290,12 +290,6 @@ func (r *Refresher) maybeRefreshStats(
 		return
 	}
 
-	// TODO(rytaft): Add logic to create a Job ID for this refresh and use the
-	// Job ID to lock automatic stats creation for this table with a lock
-	// manager. If the lock succeeds, check the stats cache one more time to
-	// make sure a new statistic was not just added. If not, proceed to the next
-	// step.
-
 	if err := r.refreshStats(ctx, tableID, asOf); err != nil {
 		pgerr, ok := errors.Cause(err).(*pgerror.Error)
 		if ok && pgerr.Code == pgerror.CodeUndefinedTableError {

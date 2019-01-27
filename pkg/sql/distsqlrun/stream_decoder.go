@@ -115,6 +115,9 @@ func (sd *StreamDecoder) AddMessage(msg *distsqlpb.ProducerMessage) error {
 			case *distsqlpb.RemoteProducerMetadata_RowNum_:
 				meta.RowNum = v.RowNum
 
+			case *distsqlpb.RemoteProducerMetadata_Progress:
+				meta.Progress = v.Progress
+
 			case *distsqlpb.RemoteProducerMetadata_Error:
 				meta.Err = v.Error.ErrorDetail()
 

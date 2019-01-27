@@ -16,13 +16,18 @@ package distsqlrun
 
 import (
 	"context"
+	"time"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -32,6 +37,7 @@ import (
 type sampleAggregator struct {
 	ProcessorBase
 
+	spec    *distsqlpb.SampleAggregatorSpec
 	input   RowSource
 	inTypes []sqlbase.ColumnType
 	sr      stats.SampleReservoir
@@ -51,6 +57,10 @@ type sampleAggregator struct {
 var _ Processor = &sampleAggregator{}
 
 const sampleAggregatorProcName = "sample aggregator"
+
+// SampleAggregatorProgressInterval is the frequency at which the
+// SampleAggregator processor will report progress. It is mutable for testing.
+var SampleAggregatorProgressInterval = time.Second
 
 func newSampleAggregator(
 	flowCtx *FlowCtx,
@@ -77,6 +87,7 @@ func newSampleAggregator(
 
 	rankCol := len(spec.SampledColumnIDs)
 	s := &sampleAggregator{
+		spec:         spec,
 		input:        input,
 		inTypes:      input.OutputTypes(),
 		tableID:      spec.TableID,
@@ -130,13 +141,48 @@ func (s *sampleAggregator) Run(ctx context.Context) {
 	}
 }
 
-func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
+func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err error) {
+	var job *jobs.Job
+	jobID := s.spec.JobID
+	// Some tests run this code without a job, so check if the jobID is 0.
+	if jobID != 0 {
+		job, err = s.flowCtx.JobRegistry.LoadJob(ctx, s.spec.JobID)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	progFn := func(pct float32) error {
+		if jobID == 0 {
+			return nil
+		}
+		return job.FractionProgressed(ctx, func(ctx context.Context, _ jobspb.ProgressDetails) float32 {
+			// Float addition can round such that the sum is > 1.
+			if pct > 1 {
+				pct = 1
+			}
+			return pct
+		})
+	}
+
+	fractionCompleted := float32(0)
+	progressUpdates := util.Every(SampleAggregatorProgressInterval)
 	var da sqlbase.DatumAlloc
 	var tmpSketch hyperloglog.Sketch
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
-			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+			if meta.Progress != nil {
+				inputProg := meta.Progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted
+				fractionCompleted += inputProg / float32(s.spec.InputProcCnt)
+				if progressUpdates.ShouldProcess(timeutil.Now()) {
+					// Periodically report fraction progressed and check that the job has
+					// not been paused or canceled.
+					if err := progFn(fractionCompleted); err != nil {
+						return false, err
+					}
+				}
+			} else if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
 			}
@@ -145,6 +191,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		if row == nil {
 			break
 		}
+
 		// The row is either:
 		//  - a sampled row, which has NULLs on all columns from sketchIdxCol
 		//    onward, or
@@ -196,6 +243,11 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		if err := s.sketches[sketchIdx].sketch.Merge(&tmpSketch); err != nil {
 			return false, errors.Wrapf(err, "merging sketch data")
 		}
+	}
+	// Report progress one last time so we don't write results if the job was
+	// canceled.
+	if err = progFn(1.0); err != nil {
+		return false, err
 	}
 	return false, s.writeResults(ctx)
 }
