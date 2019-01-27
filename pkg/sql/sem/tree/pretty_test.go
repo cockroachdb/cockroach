@@ -38,31 +38,37 @@ var (
 	flagWritePretty = flag.Bool("rewrite-pretty", false, "rewrite pretty test outputs")
 )
 
-// TestPrettyData reads in a single SQL statement from a file, formats it at
-// all line lengths, and compares that output to a known-good output file. It
-// is most useful when changing or implementing the doc interface for a node,
-// and should be used to compare and verify the changed output.
-func TestPrettyData(t *testing.T) {
+// TestPrettyData reads in a single SQL statement from a file, formats
+// it at 40 characters width, and compares that output to a known-good
+// output file. It is most useful when changing or implementing the
+// doc interface for a node, and should be used to compare and verify
+// the changed output.
+func TestPrettyDataShort(t *testing.T) {
 	matches, err := filepath.Glob(filepath.Join("testdata", "pretty", "*.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	if *flagWritePretty {
+		t.Log("WARNING: do not forget to run TestPrettyData with build flag 'nightly' and the -rewrite-pretty flag too!")
+	}
 	cfg := tree.DefaultPrettyCfg()
 	cfg.Align = tree.PrettyNoAlign
 	t.Run("ref", func(t *testing.T) {
-		runTestPrettyData(t, "ref", cfg, matches)
+		runTestPrettyData(t, "ref", cfg, matches, true /*short*/)
 	})
 	cfg.Align = tree.PrettyAlignAndDeindent
 	t.Run("align-deindent", func(t *testing.T) {
-		runTestPrettyData(t, "align-deindent", cfg, matches)
+		runTestPrettyData(t, "align-deindent", cfg, matches, true /*short*/)
 	})
 	cfg.Align = tree.PrettyAlignOnly
 	t.Run("align-only", func(t *testing.T) {
-		runTestPrettyData(t, "align-only", cfg, matches)
+		runTestPrettyData(t, "align-only", cfg, matches, true /*short*/)
 	})
 }
 
-func runTestPrettyData(t *testing.T, prefix string, cfg tree.PrettyCfg, matches []string) {
+func runTestPrettyData(
+	t *testing.T, prefix string, cfg tree.PrettyCfg, matches []string, short bool,
+) {
 	for _, m := range matches {
 		m := m
 		t.Run(filepath.Base(m), func(t *testing.T) {
@@ -79,18 +85,28 @@ func runTestPrettyData(t *testing.T, prefix string, cfg tree.PrettyCfg, matches 
 			// lengths. We use the length of the string + 10 as the upper bound to try to
 			// find what happens at the longest line length. Preallocate a result slice and
 			// work chan, then fire off a bunch of workers to compute all of the variants.
-			res := make([]string, len(sql)+10)
-			work := make(chan int, len(res))
-			for i := range res {
-				work <- i + 1
+			var res []string
+			if short {
+				res = []string{""}
+			} else {
+				res = make([]string, len(sql)+10)
+			}
+			type param struct{ idx, numCols int }
+			work := make(chan param, len(res))
+			if short {
+				work <- param{0, 40}
+			} else {
+				for i := range res {
+					work <- param{i, i + 1}
+				}
 			}
 			close(work)
 			g, _ := errgroup.WithContext(context.Background())
 			worker := func() error {
-				for i := range work {
+				for p := range work {
 					thisCfg := cfg
-					thisCfg.LineWidth = i
-					res[i-1] = thisCfg.Pretty(stmt.AST)
+					thisCfg.LineWidth = p.numCols
+					res[p.idx] = thisCfg.Pretty(stmt.AST)
 				}
 				return nil
 			}
@@ -117,6 +133,9 @@ func runTestPrettyData(t *testing.T, prefix string, cfg tree.PrettyCfg, matches 
 
 			ext := filepath.Ext(m)
 			outfile := m[:len(m)-len(ext)] + "." + prefix + ".golden"
+			if short {
+				outfile = outfile + ".short"
+			}
 
 			if *flagWritePretty {
 				if err := ioutil.WriteFile(outfile, []byte(got), 0666); err != nil {
