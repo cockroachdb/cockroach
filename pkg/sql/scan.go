@@ -110,7 +110,7 @@ type scanNode struct {
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
 	// will link to it by reference after checkRenderStar / analyzeExpr.
 	// Enforce this using NoCopy.
-	noCopy util.NoCopy
+	_ util.NoCopy
 
 	// Set when the scanNode is created via the exec factory.
 	createdByOpt bool

@@ -72,7 +72,7 @@ type joinPredicate struct {
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
 	// will link to it by reference after checkRenderStar / analyzeExpr.
 	// Enforce this using NoCopy.
-	noCopy util.NoCopy
+	_ util.NoCopy
 }
 
 // tryAddEqualityFilter attempts to turn the given filter expression into

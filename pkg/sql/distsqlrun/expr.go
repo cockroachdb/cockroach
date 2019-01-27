@@ -99,7 +99,7 @@ func processExpression(
 // exprHelper implements the common logic around evaluating an expression that
 // depends on a set of values.
 type exprHelper struct {
-	noCopy util.NoCopy
+	_ util.NoCopy
 
 	expr tree.TypedExpr
 	// vars is used to generate IndexedVars that are "backed" by the values in

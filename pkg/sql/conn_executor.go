@@ -233,7 +233,7 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 // Server is the top level singleton for handling SQL connections. It creates
 // connExecutors to server every incoming connection.
 type Server struct {
-	noCopy util.NoCopy
+	_ util.NoCopy
 
 	cfg *ExecutorConfig
 
@@ -776,7 +776,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 }
 
 type connExecutor struct {
-	noCopy util.NoCopy
+	_ util.NoCopy
 
 	// The server to which this connExecutor is attached. The reference is used
 	// for getting access to configuration settings.
