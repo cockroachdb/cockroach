@@ -793,6 +793,12 @@ message SampleAggregatorSpec {
     (gogoproto.customname) = "TableID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];
+
+  // JobID is the id of the CREATE STATISTICS job.
+  optional int64 job_id = 5 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID"
+  ];
 }
 
 // InterleavedReaderJoinerSpec is the specification for a processor that performs

@@ -16,9 +16,12 @@ package distsqlrun
 
 import (
 	"context"
+	time "time"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,6 +35,7 @@ import (
 type sampleAggregator struct {
 	ProcessorBase
 
+	spec    *distsqlpb.SampleAggregatorSpec
 	input   RowSource
 	inTypes []sqlbase.ColumnType
 	sr      stats.SampleReservoir
@@ -51,6 +55,10 @@ type sampleAggregator struct {
 var _ Processor = &sampleAggregator{}
 
 const sampleAggregatorProcName = "sample aggregator"
+
+// sampleAggregatorProgressInterval is the frequency at which the
+// SampleAggregator processor will report progress.
+const sampleAggregatorProgressInterval = time.Second
 
 func newSampleAggregator(
 	flowCtx *FlowCtx,
@@ -77,6 +85,7 @@ func newSampleAggregator(
 
 	rankCol := len(spec.SampledColumnIDs)
 	s := &sampleAggregator{
+		spec:         spec,
 		input:        input,
 		inTypes:      input.OutputTypes(),
 		tableID:      spec.TableID,
@@ -130,10 +139,44 @@ func (s *sampleAggregator) Run(ctx context.Context) {
 	}
 }
 
-func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
+func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err error) {
+	var job *jobs.Job
+	jobID := s.spec.JobID
+	if jobID != 0 {
+		job, err = s.flowCtx.JobRegistry.LoadJob(ctx, s.spec.JobID)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	progFn := func(pct float32) error {
+		if jobID == 0 {
+			return nil
+		}
+		return job.FractionProgressed(ctx, func(ctx context.Context, _ jobspb.ProgressDetails) float32 {
+			return pct
+		})
+	}
+
+	timer := time.NewTimer(sampleAggregatorProgressInterval)
 	var da sqlbase.DatumAlloc
 	var tmpSketch hyperloglog.Sketch
 	for {
+		select {
+		case <-timer.C:
+			// Periodically report fraction progressed.
+			// TODO(rytaft): We could have more intermediate measures of progress if
+			// we were to run this at the kv layer where we know how many spans have
+			// been processed out of the total. For now, report 0 progress until all
+			// rows have been processed. The purpose of this function call is to
+			// periodically check that the job has not been paused or canceled.
+			if err := progFn(0); err != nil {
+				return false, err
+			}
+			timer.Reset(sampleAggregatorProgressInterval)
+		default:
+		}
+
 		row, meta := s.input.Next()
 		if meta != nil {
 			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
@@ -145,6 +188,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		if row == nil {
 			break
 		}
+
 		// The row is either:
 		//  - a sampled row, which has NULLs on all columns from sketchIdxCol
 		//    onward, or
@@ -196,6 +240,11 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		if err := s.sketches[sketchIdx].sketch.Merge(&tmpSketch); err != nil {
 			return false, errors.Wrapf(err, "merging sketch data")
 		}
+	}
+	// Report progress one last time so we don't write results if the job was
+	// canceled.
+	if err = progFn(1.0); err != nil {
+		return false, err
 	}
 	return false, s.writeResults(ctx)
 }
