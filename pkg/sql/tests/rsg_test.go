@@ -28,10 +28,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -183,7 +185,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 
 	const rootStmt = "target_list"
 
-	testRandomSyntax(t, false, func(ctx context.Context, db *verifyFormatDB) error {
+	testRandomSyntax(t, false, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		return db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		targets := r.Generate(rootStmt, 300)
@@ -301,7 +303,7 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 		"alter_user_stmt",
 	}
 
-	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB) error {
+	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		return db.exec(ctx, `
 			CREATE DATABASE ident;
 		`)
@@ -319,7 +321,7 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 		"alter_table_cmd",
 	}
 
-	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB) error {
+	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		return db.exec(ctx, `
 			CREATE DATABASE ident;
 			CREATE TABLE ident.ident (ident decimal);
@@ -327,6 +329,33 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
 		s := fmt.Sprintf("ALTER TABLE ident.ident %s", r.Generate(roots[n], 500))
+		return db.exec(ctx, s)
+	})
+}
+
+func TestRandomSyntaxSQLSmith(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var smither *sqlsmith.Smither
+
+	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		if err := db.exec(ctx, "USE defaultdb"); err != nil {
+			return err
+		}
+
+		// Create some random tables for the smither's column references and INSERT.
+		for i := 0; i < 10; i++ {
+			create := sqlbase.RandCreateTable(r.Rnd, i)
+			stmt := create.String()
+			if err := db.exec(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		var err error
+		smither, err = sqlsmith.NewSmither(db.db, r.Rnd)
+		return err
+	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		s := smither.Generate()
 		return db.exec(ctx, s)
 	})
 }
@@ -339,7 +368,7 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 func testRandomSyntax(
 	t *testing.T,
 	allowDuplicates bool,
-	setup func(context.Context, *verifyFormatDB) error,
+	setup func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 	fn func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 ) {
 	if *flagRSGTime == 0 {
@@ -355,13 +384,6 @@ func testRandomSyntax(
 	defer s.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
 
-	if setup != nil {
-		err := setup(ctx, db)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	yBytes, err := ioutil.ReadFile(filepath.Join("..", "parser", "sql.y"))
 	if err != nil {
 		t.Fatal(err)
@@ -370,6 +392,14 @@ func testRandomSyntax(
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if setup != nil {
+		err := setup(ctx, db, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// Broadcast channel for all workers.
 	done := make(chan struct{})
 	time.AfterFunc(*flagRSGTime, func() {
