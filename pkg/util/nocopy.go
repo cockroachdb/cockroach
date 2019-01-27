@@ -21,5 +21,11 @@ package util
 // for details.
 type NoCopy struct{}
 
+// Silence unused warnings.
+var _ = NoCopy{}
+
 // Lock is a no-op used by -copylocks checker from `go vet`.
 func (*NoCopy) Lock() {}
+
+// Unlock is a no-op used by -copylocks checker from `go vet`.
+func (*NoCopy) Unlock() {}

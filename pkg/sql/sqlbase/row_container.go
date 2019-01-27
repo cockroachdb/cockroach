@@ -74,7 +74,7 @@ type RowContainer struct {
 
 	// We should not copy this structure around; each copy would have a different
 	// memAcc (among other things like aliasing chunks).
-	noCopy util.NoCopy
+	_ util.NoCopy
 }
 
 // ColTypeInfo is a type that allows multiple representations of column type

@@ -29,7 +29,7 @@ import (
 // for writing PGWire results. The buffer preserves any errors it encounters when writing,
 // and will turn all subsequent write attempts into no-ops until finishMsg is called.
 type writeBuffer struct {
-	noCopy util.NoCopy
+	_ util.NoCopy
 
 	wrapped bytes.Buffer
 	err     error
