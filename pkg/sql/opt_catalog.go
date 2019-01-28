@@ -390,6 +390,21 @@ func (ot *optTable) IsVirtualTable() bool {
 	return ot.desc.IsVirtualTable()
 }
 
+// IsInterleaved is part of the cat.Table interface.
+func (ot *optTable) IsInterleaved() bool {
+	return ot.desc.IsInterleaved()
+}
+
+// IsReferenced is part of the cat.Table interface.
+func (ot *optTable) IsReferenced() bool {
+	for i, n := 0, ot.DeletableIndexCount(); i < n; i++ {
+		if len(ot.Index(i).(*optIndex).desc.ReferencedBy) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // ColumnCount is part of the cat.Table interface.
 func (ot *optTable) ColumnCount() int {
 	return len(ot.desc.Columns)

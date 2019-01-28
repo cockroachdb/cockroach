@@ -463,6 +463,9 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 // canDeleteFast determines if the deletion of `rows` can be done
 // without actually scanning them.
 // This should be called after plan simplification for optimal results.
+//
+// This logic should be kept in sync with exec.Builder.canUseDeleteRange.
+// TODO(andyk): Remove when the heuristic planner code is removed.
 func canDeleteFast(ctx context.Context, source planNode, r *deleteRun) (*scanNode, bool) {
 	// Check that there are no secondary indexes, interleaving, FK
 	// references checks, etc., ie. there is no extra work to be done
@@ -502,6 +505,11 @@ func canDeleteFast(ctx context.Context, source planNode, r *deleteRun) (*scanNod
 		if log.V(2) {
 			log.Infof(ctx, "delete forced to scan: values required for filter (%s)", scan.filter)
 		}
+		return nil, false
+	}
+
+	// Delete range does not support limits.
+	if scan.hardLimit != 0 {
 		return nil, false
 	}
 

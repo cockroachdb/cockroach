@@ -34,10 +34,6 @@ import (
 // mutations are applied, or the order of any returned rows (i.e. it won't
 // become a physical property required of the Delete operator).
 func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope) {
-	if !b.evalCtx.SessionData.OptimizerMutations {
-		panic(unimplementedf("cost-based optimizer is not planning DELETE statements"))
-	}
-
 	// UX friendliness safeguard.
 	if del.Where == nil && b.evalCtx.SessionData.SafeUpdates {
 		panic(builderError{pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")})

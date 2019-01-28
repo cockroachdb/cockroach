@@ -95,20 +95,31 @@ count                ·         ·
 ·                    spans     ALL
 ·                    filter    v = 5
 
-# TODO(andyk): Prune columns so that index-join is not necessary.
+# Check DELETE with LIMIT clause that gets pushed into scan.
+# The fast deleter should not be used, since it can't handle LIMIT.
+query TTT
+EXPLAIN DELETE FROM unindexed WHERE k > 5 LIMIT 10
+----
+count           ·         ·
+ └── delete     ·         ·
+      │         from      unindexed
+      │         strategy  deleter
+      └── scan  ·         ·
+·               table     unindexed@primary
+·               spans     /6-
+·               limit     10
+
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
-count                 ·         ·
- └── delete           ·         ·
-      │               from      indexed
-      │               strategy  deleter
-      └── index-join  ·         ·
-           │          table     indexed@primary
-           └── scan   ·         ·
-·                     table     indexed@indexed_value_idx
-·                     spans     /5-/6
-·                     limit     10
+count           ·         ·
+ └── delete     ·         ·
+      │         from      indexed
+      │         strategy  deleter
+      └── scan  ·         ·
+·               table     indexed@indexed_value_idx
+·               spans     /5-/6
+·               limit     10
 
 query TTT
 EXPLAIN DELETE FROM indexed LIMIT 10
@@ -118,7 +129,7 @@ count           ·         ·
       │         from      indexed
       │         strategy  deleter
       └── scan  ·         ·
-·               table     indexed@primary
+·               table     indexed@indexed_value_idx
 ·               spans     ALL
 ·               limit     10
 

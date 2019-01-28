@@ -65,18 +65,44 @@ func (ef *execFactory) ConstructValues(
 func (ef *execFactory) ConstructScan(
 	table cat.Table,
 	index cat.Index,
-	cols exec.ColumnOrdinalSet,
+	needed exec.ColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
 	reverse bool,
 	maxResults uint64,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	return ef.constructScan(
+		table,
+		index,
+		needed,
+		indexConstraint,
+		hardLimit,
+		reverse,
+		maxResults,
+		reqOrdering,
+		false, /* forDelete */
+	)
+}
+
+// constructScan is a private helper method used by ConstructScan and
+// ConstructDeleteRange.
+func (ef *execFactory) constructScan(
+	table cat.Table,
+	index cat.Index,
+	needed exec.ColumnOrdinalSet,
+	indexConstraint *constraint.Constraint,
+	hardLimit int64,
+	reverse bool,
+	maxResults uint64,
+	reqOrdering exec.OutputOrdering,
+	forDelete bool,
+) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
 	// Create a scanNode.
 	scan := ef.planner.Scan()
-	colCfg := makeScanColumnsConfig(table, cols)
+	colCfg := makeScanColumnsConfig(table, needed)
 
 	// initTable checks that the current user has the correct privilege to access
 	// the table. However, the privilege has already been checked in optbuilder,
@@ -99,8 +125,7 @@ func (ef *execFactory) ConstructScan(
 	scan.maxResults = maxResults
 	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&ef.planner.extendedEvalCtx.Settings.SV)
 	var err error
-	scan.spans, err = spansFromConstraint(
-		tabDesc, indexDesc, indexConstraint, cols, scan.isDeleteSource)
+	scan.spans, err = spansFromConstraint(tabDesc, indexDesc, indexConstraint, needed, forDelete)
 	if err != nil {
 		return nil, err
 	}
@@ -1240,6 +1265,30 @@ func (ef *execFactory) ConstructDelete(
 	// We could use serializeNode here, but using rowCountNode is an
 	// optimization that saves on calls to Next() by the caller.
 	return &rowCountNode{source: del}, nil
+}
+
+func (ef *execFactory) ConstructDeleteRange(
+	table cat.Table, needed exec.ColumnOrdinalSet, indexConstraint *constraint.Constraint,
+) (exec.Node, error) {
+	// Setting the "forDelete" flag instructs the scan to include all column
+	// families in case where a single record is deleted.
+	input, err := ef.constructScan(
+		table,
+		table.Index(cat.PrimaryIndex),
+		needed,
+		indexConstraint,
+		0,     /* hardLimit */
+		false, /* reverse */
+		0,     /* maxResults */
+		nil,   /* reqOrdering */
+		true,  /* forDelete */
+	)
+	if err != nil {
+		return input, err
+	}
+
+	// TODO(andyk): Construct new DeleteRange operator once it's been merged.
+	return ef.ConstructDelete(input, table, needed, false /* rowsNeeded */)
 }
 
 func (ef *execFactory) ConstructCreateTable(
