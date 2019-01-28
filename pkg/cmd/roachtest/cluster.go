@@ -924,6 +924,37 @@ func (c *cluster) FetchDebugZip(ctx context.Context) error {
 	return execCmd(execCtx, c.l, roachprod, "get", c.name+":1", zipName /* src */, path /* dest */)
 }
 
+// FetchDmesg grabs the dmesg logs if possible. This requires being able to run
+// `sudo dmesg` on the remote nodes.
+func (c *cluster) FetchDmesg(ctx context.Context) error {
+	if c.nodes == 0 || c.isLocal() {
+		// No nodes can happen during unit tests and implies nothing to do.
+		// Also, don't grab dmesg on local runs.
+		return nil
+	}
+
+	c.l.Printf("fetching dmesg\n")
+	c.status("fetching dmesg")
+
+	// Don't hang forever.
+	execCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	const name = "dmesg.txt"
+	path := filepath.Join(c.t.ArtifactsDir(), name)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	if err := execCmd(
+		execCtx, c.l, roachprod, "ssh", c.name, "--",
+		"/bin/bash", "-c", "'sudo dmesg > "+name+"'", /* src */
+	); err != nil {
+		// Don't error out because it might've worked on some nodes. Fetching will
+		// error out below but will get everything it can first.
+		c.l.Printf("during dmesg fetching: %s", err)
+	}
+	return execCmd(execCtx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
+}
+
 func (c *cluster) Destroy(ctx context.Context) {
 	if c.nodes == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
