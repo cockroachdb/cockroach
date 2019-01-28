@@ -870,15 +870,13 @@ func expectResolvedTimestamp(t testing.TB, f testfeed) hlc.Timestamp {
 	}
 
 	var valueRaw struct {
-		CRDB struct {
-			Resolved string `json:"resolved"`
-		} `json:"__crdb__"`
+		Resolved string `json:"resolved"`
 	}
 	if err := gojson.Unmarshal(resolved, &valueRaw); err != nil {
 		t.Fatal(err)
 	}
 
-	return parseTimeToHLC(t, valueRaw.CRDB.Resolved)
+	return parseTimeToHLC(t, valueRaw.Resolved)
 }
 
 func expectResolvedTimestampAvro(t testing.TB, reg *testSchemaRegistry, f testfeed) hlc.Timestamp {

@@ -283,7 +283,7 @@ func TestAvroEncoder(t *testing.T) {
 		).Scan(&ts1)
 
 		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo `+
-			`WITH envelope=wrapped, format=$1, confluent_schema_registry=$2, resolved`,
+			`WITH format=$1, confluent_schema_registry=$2, resolved`,
 			optFormatAvro, reg.server.URL)
 		defer foo.Close(t)
 		assertPayloadsAvro(t, reg, foo, []string{
@@ -296,7 +296,7 @@ func TestAvroEncoder(t *testing.T) {
 		}
 
 		fooUpdated := f.Feed(t, `CREATE CHANGEFEED FOR foo `+
-			`WITH envelope=wrapped, format=$1, confluent_schema_registry=$2, updated`,
+			`WITH format=$1, confluent_schema_registry=$2, updated`,
 			optFormatAvro, reg.server.URL)
 		defer fooUpdated.Close(t)
 		// Skip over the first two rows since we don't know the statement timestamp.
@@ -334,7 +334,7 @@ func TestAvroSchemaChange(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
 		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo `+
-			`WITH envelope=wrapped, format=$1, confluent_schema_registry=$2`,
+			`WITH format=$1, confluent_schema_registry=$2`,
 			optFormatAvro, reg.server.URL)
 		defer foo.Close(t)
 		assertPayloadsAvro(t, reg, foo, []string{
@@ -369,7 +369,7 @@ func TestAvroLedger(t *testing.T) {
 		require.NoError(t, err)
 
 		ledger := f.Feed(t, `CREATE CHANGEFEED FOR customer, transaction, entry, session
-	                       WITH envelope=wrapped, format=$1, confluent_schema_registry=$2
+	                       WITH format=$1, confluent_schema_registry=$2
 	               `, optFormatAvro, reg.server.URL)
 		defer ledger.Close(t)
 

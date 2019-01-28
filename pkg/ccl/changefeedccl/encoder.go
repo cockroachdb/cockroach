@@ -131,7 +131,7 @@ func (e *jsonEncoder) EncodeKey(row encodeRow) ([]byte, error) {
 
 // EncodeValue implements the Encoder interface.
 func (e *jsonEncoder) EncodeValue(row encodeRow) ([]byte, error) {
-	if e.keyOnly || !e.wrapped && row.deleted {
+	if e.keyOnly || (!e.wrapped && row.deleted) {
 		return nil, nil
 	}
 

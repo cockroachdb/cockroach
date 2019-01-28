@@ -131,7 +131,7 @@ func TestFingerprintValidator(t *testing.T) {
 	t.Run(`wrong_data`, func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE wrong_data (k INT PRIMARY KEY, v INT)`)
 		v := NewFingerprintValidator(sqlDBRaw, `foo`, `wrong_data`, []string{`p`})
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":10}`, ts[1])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":10}}`, ts[1])
 		noteResolved(t, v, `p`, ts[1])
 		assertValidatorFailures(t, v,
 			`fingerprints did not match at `+ts[1].AsOfSystemTime()+
@@ -144,12 +144,12 @@ func TestFingerprintValidator(t *testing.T) {
 		if err := v.NoteResolved(`p`, ts[0]); err != nil {
 			t.Fatal(err)
 		}
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":1}`, ts[1])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
 		noteResolved(t, v, `p`, ts[1])
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":2}`, ts[2])
-		v.NoteRow(ignored, `[1]`, `{"k":2,"v":2}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":2,"v":2}}`, ts[2])
 		noteResolved(t, v, `p`, ts[2])
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":3}`, ts[3])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3])
 		noteResolved(t, v, `p`, ts[3])
 		noteResolved(t, v, `p`, ts[4])
 		assertValidatorFailures(t, v)
@@ -157,10 +157,10 @@ func TestFingerprintValidator(t *testing.T) {
 	t.Run(`rows_unsorted`, func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE rows_unsorted (k INT PRIMARY KEY, v INT)`)
 		v := NewFingerprintValidator(sqlDBRaw, `foo`, `rows_unsorted`, []string{`p`})
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":3}`, ts[3])
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":2}`, ts[2])
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":1}`, ts[1])
-		v.NoteRow(ignored, `[1]`, `{"k":2,"v":2}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":2,"v":2}}`, ts[2])
 		noteResolved(t, v, `p`, ts[4])
 		assertValidatorFailures(t, v)
 	})
@@ -169,8 +169,8 @@ func TestFingerprintValidator(t *testing.T) {
 		v := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_initial`, []string{`p`})
 		noteResolved(t, v, `p`, ts[0])
 		// Intentionally missing {"k":1,"v":1} at ts[1].
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":2}`, ts[2])
-		v.NoteRow(ignored, `[1]`, `{"k":2,"v":2}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":2,"v":2}}`, ts[2])
 		noteResolved(t, v, `p`, ts[2])
 		assertValidatorFailures(t, v,
 			`fingerprints did not match at `+ts[2].Prev().AsOfSystemTime()+
@@ -181,10 +181,10 @@ func TestFingerprintValidator(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE missed_middle (k INT PRIMARY KEY, v INT)`)
 		v := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_middle`, []string{`p`})
 		noteResolved(t, v, `p`, ts[0])
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":1}`, ts[1])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
 		// Intentionally missing {"k":1,"v":2} at ts[2].
-		v.NoteRow(ignored, `[1]`, `{"k":2,"v":2}`, ts[2])
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":3}`, ts[3])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":2,"v":2}}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3])
 		noteResolved(t, v, `p`, ts[3])
 		assertValidatorFailures(t, v,
 			`fingerprints did not match at `+ts[2].AsOfSystemTime()+
@@ -197,9 +197,9 @@ func TestFingerprintValidator(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE missed_end (k INT PRIMARY KEY, v INT)`)
 		v := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_end`, []string{`p`})
 		noteResolved(t, v, `p`, ts[0])
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":1}`, ts[1])
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":2}`, ts[2])
-		v.NoteRow(ignored, `[1]`, `{"k":2,"v":2}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":2,"v":2}}`, ts[2])
 		// Intentionally missing {"k":1,"v":3} at ts[3].
 		noteResolved(t, v, `p`, ts[3])
 		assertValidatorFailures(t, v,
@@ -210,8 +210,8 @@ func TestFingerprintValidator(t *testing.T) {
 	t.Run(`initial_scan`, func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE initial_scan (k INT PRIMARY KEY, v INT)`)
 		v := NewFingerprintValidator(sqlDBRaw, `foo`, `initial_scan`, []string{`p`})
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":3}`, ts[4])
-		v.NoteRow(ignored, `[1]`, `{"k":2,"v":2}`, ts[4])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[4])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":2,"v":2}}`, ts[4])
 		noteResolved(t, v, `p`, ts[4])
 		assertValidatorFailures(t, v)
 	})
@@ -224,7 +224,7 @@ func TestFingerprintValidator(t *testing.T) {
 	t.Run(`resolved_unsorted`, func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE resolved_unsorted (k INT PRIMARY KEY, v INT)`)
 		v := NewFingerprintValidator(sqlDBRaw, `foo`, `resolved_unsorted`, []string{`p`})
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":1}`, ts[1])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
 		noteResolved(t, v, `p`, ts[1])
 		noteResolved(t, v, `p`, ts[1])
 		noteResolved(t, v, `p`, ts[0])
@@ -233,8 +233,8 @@ func TestFingerprintValidator(t *testing.T) {
 	t.Run(`two_partitions`, func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE two_partitions (k INT PRIMARY KEY, v INT)`)
 		v := NewFingerprintValidator(sqlDBRaw, `foo`, `two_partitions`, []string{`p0`, `p1`})
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":1}`, ts[1])
-		v.NoteRow(ignored, `[1]`, `{"k":1,"v":2}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
+		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
 		// Intentionally missing {"k":2,"v":2}.
 		noteResolved(t, v, `p0`, ts[2])
 		noteResolved(t, v, `p0`, ts[4])
