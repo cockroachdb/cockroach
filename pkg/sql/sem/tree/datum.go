@@ -565,13 +565,13 @@ func (*DBitArray) AmbiguousFormat() bool { return false }
 func (d *DBitArray) Format(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(fmtPgwireFormat) {
-		d.BitArray.Format(ctx.Buffer)
+		d.BitArray.Format(&ctx.Buffer)
 	} else {
 		withQuotes := !f.HasFlags(FmtFlags(lex.EncBareStrings))
 		if withQuotes {
 			ctx.WriteString("B'")
 		}
-		d.BitArray.Format(ctx.Buffer)
+		d.BitArray.Format(&ctx.Buffer)
 		if withQuotes {
 			ctx.WriteByte('\'')
 		}
@@ -1122,7 +1122,7 @@ func (*DString) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(ctx *FmtCtx) {
-	buf, f := ctx.Buffer, ctx.flags
+	buf, f := &ctx.Buffer, ctx.flags
 	if f.HasFlags(fmtRawStrings) {
 		buf.WriteString(string(*d))
 	} else {
@@ -1191,9 +1191,9 @@ func (*DCollatedString) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(ctx *FmtCtx) {
-	lex.EncodeSQLString(ctx.Buffer, d.Contents)
+	lex.EncodeSQLString(&ctx.Buffer, d.Contents)
 	ctx.WriteString(" COLLATE ")
-	lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, d.Locale, lex.EncNoFlags)
+	lex.EncodeUnrestrictedSQLIdent(&ctx.Buffer, d.Locale, lex.EncNoFlags)
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -2350,7 +2350,7 @@ func (d *DInterval) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	d.Duration.Format(ctx.Buffer)
+	d.Duration.Format(&ctx.Buffer)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2530,9 +2530,9 @@ func (d *DJSON) Format(ctx *FmtCtx) {
 	// escape things to be inside SQL strings in order to avoid this allocation.
 	s := d.JSON.String()
 	if ctx.flags.HasFlags(fmtRawStrings) {
-		ctx.Buffer.WriteString(s)
+		ctx.WriteString(s)
 	} else {
-		lex.EncodeSQLStringWithFlags(ctx.Buffer, s, ctx.flags.EncodeFlags())
+		lex.EncodeSQLStringWithFlags(&ctx.Buffer, s, ctx.flags.EncodeFlags())
 	}
 }
 
@@ -2765,7 +2765,7 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 			// case, if necessary, so just skip the annotation and continue.
 			if err == nil {
 				ctx.WriteString("::")
-				coltype.Format(ctx.Buffer, ctx.flags.EncodeFlags())
+				coltype.Format(&ctx.Buffer, ctx.flags.EncodeFlags())
 			}
 		}
 		comma = ", "
@@ -3223,12 +3223,12 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		ctx.WriteByte('(')
 		d.DInt.Format(ctx)
 		ctx.WriteByte(',')
-		lex.EncodeSQLStringWithFlags(ctx.Buffer, d.name, lex.EncNoFlags)
+		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lex.EncNoFlags)
 		ctx.WriteByte(')')
 	} else {
 		// This is used to print the name of pseudo-procedures in e.g.
 		// pg_catalog.pg_type.typinput
-		lex.EncodeSQLStringWithFlags(ctx.Buffer, d.name, lex.EncBareStrings)
+		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lex.EncBareStrings)
 	}
 }
 

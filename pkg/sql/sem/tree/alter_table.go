@@ -140,7 +140,7 @@ func (node *AlterTableAlterColumnType) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ALTER COLUMN ")
 	ctx.FormatNode(&node.Column)
 	ctx.WriteString(" SET DATA TYPE ")
-	node.ToType.Format(ctx.Buffer, ctx.flags.EncodeFlags())
+	node.ToType.Format(&ctx.Buffer, ctx.flags.EncodeFlags())
 	if len(node.Collation) > 0 {
 		ctx.WriteString(" COLLATE ")
 		ctx.WriteString(node.Collation)

@@ -15,7 +15,6 @@
 package distsqlpb
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -75,8 +74,8 @@ func ConvertToMappedSpecOrdering(
 // ExprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.
-func ExprFmtCtxBase(buf *bytes.Buffer, evalCtx *tree.EvalContext) tree.FmtCtx {
-	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtCheckEquivalence)
+func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
+	fmtCtx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
 	fmtCtx.WithPlaceholderFormat(
 		func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
 			d, err := p.Eval(evalCtx)
@@ -116,11 +115,11 @@ func (e *Expression) Empty() bool {
 // String implements the Stringer interface.
 func (e Expression) String() string {
 	if e.LocalExpr != nil {
-		buf := bytes.Buffer{}
-		ctx := tree.MakeFmtCtx(&buf, tree.FmtCheckEquivalence)
+		ctx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
 		ctx.FormatNode(e.LocalExpr)
-		return ctx.String()
-	} else if e.Expr != "" {
+		return ctx.CloseAndGetString()
+	}
+	if e.Expr != "" {
 		return e.Expr
 	}
 	return "none"

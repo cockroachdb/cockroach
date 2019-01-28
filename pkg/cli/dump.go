@@ -426,7 +426,7 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 	}
 	vals := make([]driver.Value, 2)
 	coltypes := make(map[string]coltypes.T)
-	colnames := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	colnames := tree.NewFmtCtx(tree.FmtSimple)
 	defer colnames.Close()
 	for {
 		if err := rows.Next(vals); err == io.EOF {
@@ -587,7 +587,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 	g.GoCtx(func(ctx context.Context) error {
 		// Convert SQL rows into VALUE strings.
 		defer close(stringsCh)
-		f := tree.NewFmtCtxWithBuf(tree.FmtParsableNumerics)
+		f := tree.NewFmtCtx(tree.FmtParsableNumerics)
 		defer f.Close()
 		done := ctx.Done()
 		for vals := range valsCh {
@@ -674,7 +674,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				default:
 					return errors.Errorf("unknown field type: %T (%s)", t, cols[si])
 				}
-				d.Format(&f.FmtCtx)
+				d.Format(f)
 			}
 			select {
 			case <-done:

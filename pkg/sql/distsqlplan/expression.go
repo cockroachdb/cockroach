@@ -18,7 +18,6 @@
 package distsqlplan
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -95,8 +94,7 @@ func MakeExpression(
 		}
 	}
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
-	var buf bytes.Buffer
-	fmtCtx := distsqlpb.ExprFmtCtxBase(&buf, evalCtx)
+	fmtCtx := distsqlpb.ExprFmtCtxBase(evalCtx)
 	if indexVarMap != nil {
 		fmtCtx.WithIndexedVarFormat(
 			func(ctx *tree.FmtCtx, idx int) {
@@ -110,9 +108,9 @@ func MakeExpression(
 	}
 	fmtCtx.FormatNode(outExpr)
 	if log.V(1) {
-		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(outExpr))
+		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(outExpr))
 	}
-	return distsqlpb.Expression{Expr: buf.String()}, nil
+	return distsqlpb.Expression{Expr: fmtCtx.CloseAndGetString()}, nil
 }
 
 type evalAndReplaceSubqueryVisitor struct {

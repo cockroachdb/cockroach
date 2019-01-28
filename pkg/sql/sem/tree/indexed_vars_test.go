@@ -76,7 +76,7 @@ func TestIndexedVars(t *testing.T) {
 	}
 
 	// Test formatting using the indexed var format interceptor.
-	f := NewFmtCtxWithBuf(FmtSimple)
+	f := NewFmtCtx(FmtSimple)
 	f.WithIndexedVarFormat(
 		func(ctx *FmtCtx, idx int) {
 			ctx.Printf("customVar%d", idx)

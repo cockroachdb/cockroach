@@ -167,7 +167,7 @@ func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
 
 	// The table name may have a schema specifier. CLI zone specifiers
 	// do not support this, so strip it.
-	ctx := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	ctx := tree.NewFmtCtx(tree.FmtSimple)
 	catalog := tree.Name(ti.Table.Catalog())
 	ctx.FormatNode(&catalog)
 	ctx.WriteByte('.')

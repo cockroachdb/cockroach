@@ -26,7 +26,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestFormatStatement(t *testing.T) {
@@ -143,8 +142,7 @@ func TestFormatTableName(t *testing.T) {
 		// `GRANT SELECT ON xoxoxo TO foo`},
 	}
 
-	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
-	defer f.Close()
+	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.TableName) {
 		ctx.WriteString("xoxoxo")
 	})
@@ -406,7 +404,9 @@ func BenchmarkFormatRandomStatements(b *testing.B) {
 	if err != nil {
 		b.Fatalf("error reading grammar: %v", err)
 	}
-	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(yBytes), false)
+	// Use a constant seed so multiple runs are consistent.
+	const seed = 1134
+	r, err := rsg.NewRSG(seed, string(yBytes), false)
 	if err != nil {
 		b.Fatalf("error instantiating RSG: %v", err)
 	}
@@ -442,7 +442,7 @@ func BenchmarkFormatRandomStatements(b *testing.B) {
 	b.Run("format", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			for i, stmt := range stmts {
-				f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+				f := tree.NewFmtCtx(tree.FmtSimple)
 				f.FormatNode(stmt)
 				strs[i] = f.CloseAndGetString()
 			}

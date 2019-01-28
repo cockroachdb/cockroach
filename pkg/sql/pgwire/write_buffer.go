@@ -34,16 +34,11 @@ type writeBuffer struct {
 	wrapped bytes.Buffer
 	err     error
 
-	// These two buffers are used as temporary storage. Use putbuf when the
-	// length of the required temp space is known. Use variablePutbuf when the length
-	// of the required temp space is unknown, or when a bytes.Buffer is needed.
-	//
-	// We keep both of these because there are operations that are only possible to
-	// perform (efficiently) with one or the other, such as strconv.AppendInt with
-	// putbuf or Datum.Format with variablePutbuf.
-	putbuf         [64]byte
-	variablePutbuf bytes.Buffer
-	textFormatter  tree.FmtCtx
+	// Buffer used for temporary storage.
+	putbuf [64]byte
+
+	textFormatter   *tree.FmtCtx
+	simpleFormatter *tree.FmtCtx
 
 	// bytecount counts the number of bytes written across all pgwire connections, not just this
 	// buffer. This is passed in so that finishMsg can track all messages we've sent to a network
@@ -60,7 +55,8 @@ func newWriteBuffer(bytecount *metric.Counter) *writeBuffer {
 // init exists to avoid the allocation imposed by newWriteBuffer.
 func (b *writeBuffer) init(bytecount *metric.Counter) {
 	b.bytecount = bytecount
-	b.textFormatter = tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtPgwireText)
+	b.textFormatter = tree.NewFmtCtx(tree.FmtPgwireText)
+	b.simpleFormatter = tree.NewFmtCtx(tree.FmtSimple)
 }
 
 // Write implements the io.Write interface.
@@ -93,15 +89,15 @@ func (b *writeBuffer) nullTerminate() {
 	}
 }
 
-// writeLengthPrefixedVariablePutbuf writes the current contents of
-// variablePutbuf with a length prefix. The function will reset
-// variablePutbuf.
-func (b *writeBuffer) writeLengthPrefixedVariablePutbuf() {
+// WriteFromFmtCtx writes the current contents of
+// the given formatter with a length prefix.
+// The function resets the contents of the formatter.
+func (b *writeBuffer) writeFromFmtCtx(fmtCtx *tree.FmtCtx) {
 	if b.err == nil {
-		b.putInt32(int32(b.variablePutbuf.Len()))
+		b.putInt32(int32(fmtCtx.Buffer.Len()))
 
 		// bytes.Buffer.WriteTo resets the Buffer.
-		_, b.err = b.variablePutbuf.WriteTo(&b.wrapped)
+		_, b.err = fmtCtx.Buffer.WriteTo(&b.wrapped)
 	}
 }
 
@@ -126,9 +122,8 @@ func (b *writeBuffer) writeLengthPrefixedString(s string) {
 // writeLengthPrefixedDatum writes a length-prefixed Datum in its
 // string representation. The length is encoded as an int32.
 func (b *writeBuffer) writeLengthPrefixedDatum(d tree.Datum) {
-	fmtCtx := tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtSimple)
-	fmtCtx.FormatNode(d)
-	b.writeLengthPrefixedVariablePutbuf()
+	b.simpleFormatter.FormatNode(d)
+	b.writeFromFmtCtx(b.simpleFormatter)
 }
 
 // writeTerminatedString writes a null-terminated string.
