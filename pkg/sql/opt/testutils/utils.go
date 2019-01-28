@@ -54,7 +54,7 @@ func ParseScalarExpr(sql string, ivc tree.IndexedVarContainer) (tree.TypedExpr, 
 		return nil, err
 	}
 
-	sema := tree.MakeSemaContext(false /* privileged */)
+	sema := tree.MakeSemaContext()
 	sema.IVarContainer = ivc
 
 	return expr.TypeCheck(&sema, types.Any)
