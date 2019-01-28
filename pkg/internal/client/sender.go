@@ -339,8 +339,11 @@ func (m *MockTransactionalSender) CommitTimestampFixed() bool {
 }
 
 // SetFixedTimestamp is part of the TxnSender interface.
-func (m *MockTransactionalSender) SetFixedTimestamp(context.Context, hlc.Timestamp) {
-	panic("unimplemented")
+func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Timestamp) {
+	m.txn.Timestamp = ts
+	m.txn.OrigTimestamp = ts
+	m.txn.MaxTimestamp = ts
+	m.txn.OrigTimestampWasObserved = true
 }
 
 // ManualRestart is part of the TxnSender interface.
