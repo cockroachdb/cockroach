@@ -28,7 +28,7 @@ import (
 // multiple layers. It allows setting and getting the value. Once a value is
 // set, the value cannot change.
 type NodeIDContainer struct {
-	noCopy util.NoCopy
+	_ util.NoCopy
 
 	// nodeID is atomically updated under the mutex; it can be read atomically
 	// without the mutex.

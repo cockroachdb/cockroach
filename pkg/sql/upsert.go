@@ -503,7 +503,7 @@ type upsertHelper struct {
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
 	// will link to it by reference after checkRenderStar / analyzeExpr.
 	// Enforce this using NoCopy.
-	noCopy util.NoCopy
+	_ util.NoCopy
 }
 
 var _ tableUpsertEvaler = (*upsertHelper)(nil)
