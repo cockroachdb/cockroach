@@ -48,9 +48,10 @@ const (
 	optResolvedTimestamps      = `resolved`
 	optUpdatedTimestamps       = `updated`
 
-	optEnvelopeKeyOnly envelopeType = `key_only`
-	optEnvelopeRow     envelopeType = `row`
-	optEnvelopeWrapped envelopeType = `wrapped`
+	optEnvelopeKeyOnly       envelopeType = `key_only`
+	optEnvelopeRow           envelopeType = `row`
+	optEnvelopeDeprecatedRow envelopeType = `deprecated_row`
+	optEnvelopeWrapped       envelopeType = `wrapped`
 
 	optFormatJSON formatType = `json`
 	optFormatAvro formatType = `experimental_avro`
@@ -315,11 +316,11 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 	}
 
 	switch envelopeType(details.Opts[optEnvelope]) {
-	case ``, optEnvelopeRow:
+	case optEnvelopeRow, optEnvelopeDeprecatedRow:
 		details.Opts[optEnvelope] = string(optEnvelopeRow)
 	case optEnvelopeKeyOnly:
 		details.Opts[optEnvelope] = string(optEnvelopeKeyOnly)
-	case optEnvelopeWrapped:
+	case ``, optEnvelopeWrapped:
 		details.Opts[optEnvelope] = string(optEnvelopeWrapped)
 	default:
 		return jobspb.ChangefeedDetails{}, errors.Errorf(
