@@ -828,6 +828,10 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.limiters.ConcurrentExports = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
+	// TODO: Make this configurable as the other limiters.
+	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
+		"rangefeedIterLimiter", 64,
+	)
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
 	exportCores := runtime.NumCPU() - 1
@@ -3255,7 +3259,7 @@ func (s *Store) RangeFeed(
 			},
 		})
 	}
-	return repl.RangeFeed(ctx, args, stream)
+	return repl.RangeFeed(ctx, args, stream, s.limiters.ConcurrentRangefeedIters)
 }
 
 // maybeWaitForPushee potentially diverts the incoming request to

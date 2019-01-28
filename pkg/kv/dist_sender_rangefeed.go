@@ -28,6 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
+type singleRangeInfo struct {
+	desc  *roachpb.RangeDescriptor
+	rs    roachpb.RSpan
+	token *EvictionToken
+}
+
 // RangeFeed divides a RangeFeed request on range boundaries and establishes a
 // RangeFeed to each of the individual ranges. It streams back results on the
 // provided channel.
@@ -49,18 +55,36 @@ func (ds *DistSender) RangeFeed(
 	rs := roachpb.RSpan{Key: startRKey, EndKey: endRKey}
 
 	g := ctxgroup.WithContext(ctx)
+	// Goroutine that processes subdivided ranges and creates a rangefeed for
+	// each.
+	rangeCh := make(chan singleRangeInfo, 16)
 	g.GoCtx(func(ctx context.Context) error {
-		return ds.divideAndSendRangeFeedToRanges(ctx, &g, args, rs, eventCh)
+		for {
+			select {
+			case sri := <-rangeCh:
+				// Spawn a child goroutine to process this feed.
+				g.GoCtx(func(ctx context.Context) error {
+					return ds.partialRangeFeed(ctx, *args, &sri, rangeCh, eventCh)
+				})
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
 	})
+
+	// Kick off the initial set of ranges.
+	g.GoCtx(func(ctx context.Context) error {
+		return ds.divideAndSendRangeFeedToRanges(ctx, args, rs, rangeCh)
+	})
+
 	return roachpb.NewError(g.Wait())
 }
 
 func (ds *DistSender) divideAndSendRangeFeedToRanges(
 	ctx context.Context,
-	g *ctxgroup.Group,
 	args *roachpb.RangeFeedRequest,
 	rs roachpb.RSpan,
-	eventCh chan<- *roachpb.RangeFeedEvent,
+	rangeCh chan<- singleRangeInfo,
 ) error {
 	ri := NewRangeIterator(ds)
 	for ri.Seek(ctx, rs.Key, Ascending); ri.Valid(); ri.Next(ctx) {
@@ -69,8 +93,15 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 		if err != nil {
 			return err
 		}
-
-		ds.partialRangeFeed(g, *args, partialRS, desc, ri.Token(), eventCh)
+		select {
+		case rangeCh <- singleRangeInfo{
+			desc:  desc,
+			rs:    partialRS,
+			token: ri.Token(),
+		}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 		if !ri.NeedAnother(rs) {
 			break
 		}
@@ -80,79 +111,77 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 
 // partialRangeFeed establishes a RangeFeed to the range specified by desc. It
 // manages lifecycle events of the range in order to maintain the RangeFeed
-// connection.
+// connection; this may involve instructing higher-level functions to retry
+// this rangefeed, or subdividing the range further in the event of a split.
 func (ds *DistSender) partialRangeFeed(
-	g *ctxgroup.Group,
+	ctx context.Context,
 	argsCopy roachpb.RangeFeedRequest,
-	partialRS roachpb.RSpan,
-	desc *roachpb.RangeDescriptor,
-	evictToken *EvictionToken,
+	rangeInfo *singleRangeInfo,
+	rangeCh chan<- singleRangeInfo,
 	eventCh chan<- *roachpb.RangeFeedEvent,
-) {
-	g.GoCtx(func(ctx context.Context) error {
-		// Bound the partial rangefeed to the partial span.
-		argsCopy.Span = partialRS.AsRawSpanWithNoLocals()
+) error {
+	// Bound the partial rangefeed to the partial span.
+	argsCopy.Span = rangeInfo.rs.AsRawSpanWithNoLocals()
 
-		// Start a retry loop for sending the batch to the range.
-		for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
-			// If we've cleared the descriptor on a send failure, re-lookup.
-			if desc == nil {
-				var err error
-				desc, evictToken, err = ds.getDescriptor(ctx, partialRS.Key, nil, false)
-				if err != nil {
-					log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
-					continue
-				}
+	// Start a retry loop for sending the batch to the range.
+	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
+		// If we've cleared the descriptor on a send failure, re-lookup.
+		if rangeInfo.desc == nil {
+			var err error
+			rangeInfo.desc, rangeInfo.token, err = ds.getDescriptor(ctx, rangeInfo.rs.Key, nil, false)
+			if err != nil {
+				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
+				continue
 			}
-
-			// Establish a RangeFeed for a single Range.
-			maxTS, pErr := ds.singleRangeFeed(ctx, argsCopy, desc, eventCh)
-
-			// Forward the timestamp of the request in case we end up sending it
-			// again.
-			argsCopy.Timestamp.Forward(maxTS)
-
-			if pErr != nil {
-				switch t := pErr.GetDetail().(type) {
-				case *roachpb.SendError, *roachpb.RangeNotFoundError:
-					// Evict the decriptor from the cache and reload on next attempt.
-					if err := evictToken.Evict(ctx); err != nil {
-						return err
-					}
-					desc = nil
-					continue
-				case *roachpb.RangeKeyMismatchError:
-					// Evict the decriptor from the cache.
-					if err := evictToken.Evict(ctx); err != nil {
-						return err
-					}
-					return ds.divideAndSendRangeFeedToRanges(ctx, g, &argsCopy, partialRS, eventCh)
-				case *roachpb.RangeFeedRetryError:
-					switch t.Reason {
-					case roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
-						roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
-						roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING:
-						// Try again with same descriptor. These are transient
-						// errors that should not show up again.
-						continue
-					case roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
-						roachpb.RangeFeedRetryError_REASON_RANGE_MERGED:
-						// Evict the decriptor from the cache.
-						if err := evictToken.Evict(ctx); err != nil {
-							return err
-						}
-						return ds.divideAndSendRangeFeedToRanges(ctx, g, &argsCopy, partialRS, eventCh)
-					default:
-						log.Fatalf(ctx, "unexpected RangeFeedRetryError reason %v", t.Reason)
-					}
-				default:
-					return t
-				}
-			}
-			break
 		}
-		return nil
-	})
+
+		// Establish a RangeFeed for a single Range.
+		maxTS, pErr := ds.singleRangeFeed(ctx, argsCopy, rangeInfo.desc, eventCh)
+
+		// Forward the timestamp of the request in case we end up sending it
+		// again.
+		argsCopy.Timestamp.Forward(maxTS)
+
+		if pErr != nil {
+			switch t := pErr.GetDetail().(type) {
+			case *roachpb.SendError, *roachpb.RangeNotFoundError:
+				// Evict the decriptor from the cache and reload on next attempt.
+				if err := rangeInfo.token.Evict(ctx); err != nil {
+					return err
+				}
+				rangeInfo.desc = nil
+				continue
+			case *roachpb.RangeKeyMismatchError:
+				// Evict the decriptor from the cache.
+				if err := rangeInfo.token.Evict(ctx); err != nil {
+					return err
+				}
+				return ds.divideAndSendRangeFeedToRanges(ctx, &argsCopy, rangeInfo.rs, rangeCh)
+			case *roachpb.RangeFeedRetryError:
+				switch t.Reason {
+				case roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
+					roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
+					roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
+					roachpb.RangeFeedRetryError_REASON_SLOW_CONSUMER:
+					// Try again with same descriptor. These are transient
+					// errors that should not show up again.
+					continue
+				case roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
+					roachpb.RangeFeedRetryError_REASON_RANGE_MERGED:
+					// Evict the decriptor from the cache.
+					if err := rangeInfo.token.Evict(ctx); err != nil {
+						return err
+					}
+					return ds.divideAndSendRangeFeedToRanges(ctx, &argsCopy, rangeInfo.rs, rangeCh)
+				default:
+					log.Fatalf(ctx, "unexpected RangeFeedRetryError reason %v", t.Reason)
+				}
+			default:
+				return t
+			}
+		}
+	}
+	return nil
 }
 
 // singleRangeFeed gathers and rearranges the replicas, and makes a RangeFeed
