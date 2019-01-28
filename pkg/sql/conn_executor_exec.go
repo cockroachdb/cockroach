@@ -420,7 +420,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	defer constantMemAcc.Close(ctx)
 
 	if runInParallel {
-		cols, err := ex.execStmtInParallel(ctx, stmt, p, queryDone)
+		cols, err := ex.execStmtInParallel(ctx, p, queryDone)
 		queryDone = nil
 		if err != nil {
 			return makeErrEvent(err)
@@ -429,12 +429,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		// statement's result type:
 		// - tree.Rows -> an empty set of rows
 		// - tree.RowsAffected -> zero rows affected
-		if err := ex.initStatementResult(ctx, res, stmt, cols); err != nil {
+		if err := ex.initStatementResult(ctx, res, p.stmt, cols); err != nil {
 			return makeErrEvent(err)
 		}
 	} else {
 		p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
-		if err := ex.dispatchToExecutionEngine(ctx, stmt, p, res); err != nil {
+		if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 			return nil, nil, err
 		}
 		if err := res.Err(); err != nil {
@@ -651,10 +651,7 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 // Args:
 // queryDone: A cleanup function to be called when the execution is done.
 func (ex *connExecutor) execStmtInParallel(
-	ctx context.Context,
-	stmt Statement,
-	planner *planner,
-	queryDone func(context.Context, RestrictedCommandResult),
+	ctx context.Context, planner *planner, queryDone func(context.Context, RestrictedCommandResult),
 ) (sqlbase.ResultColumns, error) {
 	params := runParams{
 		ctx:             ctx,
@@ -662,9 +659,25 @@ func (ex *connExecutor) execStmtInParallel(
 		p:               planner,
 	}
 
+	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
-	err := planner.makePlan(ctx, stmt)
+	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
+
+	err := planner.makePlan(ctx)
+	// Ensure that the plan is collected just before closing.
+	if sampleLogicalPlans.Get(&ex.appStats.st.SV) {
+		// Note: if sampleLogicalPlans is false,
+		// planner.curPlan.maybeSavePlan remains nil (because makePlan has
+		// cleared curPlan at this point) and plan collection will not
+		// happen.
+		planner.curPlan.maybeSavePlan = func(ctx context.Context) *roachpb.ExplainTreePlanNode {
+			return ex.maybeSavePlan(ctx, planner)
+		}
+	}
+
+	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
 	ex.sessionTracing.TracePlanEnd(ctx, err)
+
 	if err != nil {
 		planner.maybeLogStatement(ctx, "par-prepare" /* lbl */, 0 /* rows */, err)
 		return nil, err
@@ -714,23 +727,33 @@ func (ex *connExecutor) execStmtInParallel(
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 
-		samplePlanDescription := ex.sampleLogicalPlanDescription(
-			stmt, false /* optimizerUsed */, planner)
+		// We need to set the "exec done" flag early because
+		// curPlan.close(), which will need to observe it, may be closed
+		// during execution (distsqlrun.PlanAndRun).
+		//
+		// TODO(knz): This is a mis-design. Andrei says "it's OK if
+		// execution closes the plan" but it transfers responsibility to
+		// run any "finalizers" on the plan (including plan sampling for
+		// stats) to the execution engine. That's a lot of responsibility
+		// to transfer! It would be better if this responsibility remained
+		// around here.
+		planner.curPlan.flags.Set(planFlagExecDone)
 
-		var flags planFlags
 		if distributePlan {
-			flags.Set(planFlagDistributed)
+			planner.curPlan.flags.Set(planFlagDistributed)
 		} else {
-			flags.Set(planFlagDistSQLLocal)
+			planner.curPlan.flags.Set(planFlagDistSQLLocal)
 		}
 		ex.sessionTracing.TraceExecStart(ctx, "parallel")
 		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 		ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
+		// Record the statement summary. This also closes the plan if the
+		// plan has not been closed earlier.
 		ex.recordStatementSummary(
-			planner, stmt, samplePlanDescription, flags, ex.extraTxnState.autoRetryCounter,
-			res.RowsAffected(), err,
+			ctx, planner, ex.extraTxnState.autoRetryCounter,
+			res.RowsAffected(), res.Err(),
 		)
 		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 			ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -792,13 +815,23 @@ func enhanceErrWithCorrelation(err error, isCorrelated bool) {
 // expected that the caller will inspect res and react to query errors by
 // producing an appropriate state machine event.
 func (ex *connExecutor) dispatchToExecutionEngine(
-	ctx context.Context, stmt Statement, planner *planner, res RestrictedCommandResult,
+	ctx context.Context, planner *planner, res RestrictedCommandResult,
 ) error {
+	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
 
-	flags, err := ex.makeExecPlan(ctx, stmt, planner)
+	err := ex.makeExecPlan(ctx, planner)
+	// We'll be closing the plan manually below after execution; this
+	// defer is a catch-all in case some other return path is taken.
 	defer planner.curPlan.close(ctx)
+
+	// Ensure that the plan is collected just before closing.
+	if sampleLogicalPlans.Get(&ex.appStats.st.SV) {
+		planner.curPlan.maybeSavePlan = func(ctx context.Context) *roachpb.ExplainTreePlanNode {
+			return ex.maybeSavePlan(ctx, planner)
+		}
+	}
 
 	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
 
@@ -845,99 +878,98 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
-	samplePlanDescription := ex.sampleLogicalPlanDescription(stmt, flags.IsSet(planFlagOptUsed), planner)
+	// We need to set the "exec done" flag early because
+	// curPlan.close(), which will need to observe it, may be closed
+	// during execution (distsqlrun.PlanAndRun).
+	//
+	// TODO(knz): This is a mis-design. Andrei says "it's OK if
+	// execution closes the plan" but it transfers responsibility to
+	// run any "finalizers" on the plan (including plan sampling for
+	// stats) to the execution engine. That's a lot of responsibility
+	// to transfer! It would be better if this responsibility remained
+	// around here.
+	planner.curPlan.flags.Set(planFlagExecDone)
 
 	if distributePlan {
-		flags.Set(planFlagDistributed)
+		planner.curPlan.flags.Set(planFlagDistributed)
 	} else {
-		flags.Set(planFlagDistSQLLocal)
+		planner.curPlan.flags.Set(planFlagDistSQLLocal)
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
-	if err != nil {
-		return err
-	}
+
+	// Record the statement summary. This also closes the plan if the
+	// plan has not been closed earlier.
 	ex.recordStatementSummary(
-		planner, stmt, samplePlanDescription, flags,
+		ctx, planner,
 		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(),
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
 	}
 
-	return nil
+	return err
 }
 
 // makeExecPlan creates an execution plan and populates planner.curPlan, using
 // either the optimizer or the heuristic planner.
-func (ex *connExecutor) makeExecPlan(
-	ctx context.Context, stmt Statement, planner *planner,
-) (planFlags, error) {
+func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
+	stmt := planner.stmt
 	// Initialize planner.curPlan.AST early; it might be used by maybeLogStatement
 	// in error cases.
 	planner.curPlan = planTop{AST: stmt.AST}
 
-	var flags planFlags
 	var isCorrelated bool
 	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
 		log.VEvent(ctx, 2, "generating optimizer plan")
 		var result *planTop
 		var err error
-		result, flags, isCorrelated, err = planner.makeOptimizerPlan(ctx, stmt)
+		result, isCorrelated, err = planner.makeOptimizerPlan(ctx)
 		if err == nil {
 			planner.curPlan = *result
-			return flags, nil
+			return nil
 		}
 		log.VEventf(ctx, 1, "optimizer plan failed (isCorrelated=%t): %v", isCorrelated, err)
 		if !canFallbackFromOpt(err, optMode, stmt) {
-			return 0, err
+			return err
 		}
-		flags = planFlagOptFallback
+		planner.curPlan.flags.Set(planFlagOptFallback)
 		log.VEvent(ctx, 1, "optimizer falls back on heuristic planner")
 	} else {
 		log.VEvent(ctx, 2, "optimizer disabled")
 	}
 	// Use the heuristic planner.
-	err := planner.makePlan(ctx, stmt)
+	optFlags := planner.curPlan.flags
+	err := planner.makePlan(ctx)
+	planner.curPlan.flags |= optFlags
 	enhanceErrWithCorrelation(err, isCorrelated)
-	return flags, err
+	return err
 }
 
-// sampleLogicalPlanDescription returns a serialized representation of a statement's logical plan.
-// The returned ExplainTreePlanNode will be nil if plan should not be sampled.
-func (ex *connExecutor) sampleLogicalPlanDescription(
-	stmt Statement, optimizerUsed bool, planner *planner,
-) *roachpb.ExplainTreePlanNode {
-	if !sampleLogicalPlans.Get(&ex.appStats.st.SV) {
-		return nil
-	}
-
-	if ex.saveLogicalPlanDescription(stmt, optimizerUsed) {
-		return planToTree(context.Background(), planner.curPlan)
-	}
-	return nil
-}
-
-// saveLogicalPlanDescription returns if we should save this as a sample logical plan
+// saveLogicalPlanDescription returns whether we should save this as a sample logical plan
 // for its corresponding fingerprint. We use `saveFingerprintPlanOnceEvery`
 // to assess how frequently to sample logical plans.
-func (ex *connExecutor) saveLogicalPlanDescription(stmt Statement, optimizerUsed bool) bool {
-	stats := ex.appStats.getStatsForStmt(stmt, true /* distSQLUsed */, optimizerUsed, nil, false /* createIfNonexistent */)
+func (ex *connExecutor) saveLogicalPlanDescription(
+	stmt *Statement, useDistSQL bool, optimizerUsed bool, err error,
+) bool {
+	stats := ex.appStats.getStatsForStmt(
+		stmt, useDistSQL, optimizerUsed, err, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
 	}
 	stats.Lock()
-	defer stats.Unlock()
+	count := stats.data.Count
+	stats.Unlock()
 
-	return stats.data.Count%saveFingerprintPlanOnceEvery == 0
+	return count%saveFingerprintPlanOnceEvery == 0
 }
 
 // canFallbackFromOpt returns whether we can fallback on the heuristic planner
 // when the optimizer hits an error.
-func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt Statement) bool {
+func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt *Statement) bool {
 	pgerr, ok := err.(*pgerror.Error)
 	if !ok || pgerr.Code != pgerror.CodeFeatureNotSupportedError {
 		// We only fallback on "feature not supported" errors.

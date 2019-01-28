@@ -102,7 +102,8 @@ func (dsp *DistSQLPlanner) Exec(
 		return err
 	}
 	p := localPlanner.(*planner)
-	if err := p.makePlan(ctx, Statement{Statement: stmt}); err != nil {
+	p.stmt = &Statement{Statement: stmt}
+	if err := p.makePlan(ctx); err != nil {
 		return err
 	}
 	rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {

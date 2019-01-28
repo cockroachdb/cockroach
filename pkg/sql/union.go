@@ -65,7 +65,9 @@ import (
 type unionNode struct {
 	// right and left are the data source operands.
 	// right is read first, to populate the `emit` field.
-	right, left planNode
+	right, left             planNode
+	rightClosed, leftClosed bool
+
 	// columns contains the metadata for the results of this node.
 	columns sqlbase.ResultColumns
 	// inverted, when true, indicates that the right plan corresponds to
@@ -198,34 +200,28 @@ func (n *unionNode) Next(params runParams) (bool, error) {
 	if err := params.p.cancelChecker.Check(); err != nil {
 		return false, err
 	}
-	if n.right != nil {
+	if !n.rightClosed {
 		return n.readRight(params)
 	}
-	if n.left != nil {
+	if !n.leftClosed {
 		return n.readLeft(params)
 	}
 	return false, nil
 }
 
 func (n *unionNode) Values() tree.Datums {
-	if n.right != nil {
+	if !n.rightClosed {
 		return n.right.Values()
 	}
-	if n.left != nil {
+	if !n.leftClosed {
 		return n.left.Values()
 	}
 	return nil
 }
 
 func (n *unionNode) Close(ctx context.Context) {
-	if n.right != nil {
-		n.right.Close(ctx)
-		n.right = nil
-	}
-	if n.left != nil {
-		n.left.Close(ctx)
-		n.left = nil
-	}
+	n.right.Close(ctx)
+	n.left.Close(ctx)
 }
 
 func (n *unionNode) readRight(params runParams) (bool, error) {
@@ -250,8 +246,7 @@ func (n *unionNode) readRight(params runParams) (bool, error) {
 		return false, err
 	}
 
-	n.right.Close(params.ctx)
-	n.right = nil
+	n.rightClosed = true
 	return n.readLeft(params)
 }
 
@@ -273,8 +268,8 @@ func (n *unionNode) readLeft(params runParams) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	n.left.Close(params.ctx)
-	n.left = nil
+
+	n.leftClosed = true
 	return false, nil
 }
 

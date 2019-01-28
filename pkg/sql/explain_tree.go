@@ -44,7 +44,7 @@ import (
 //   leaveNode              // keep root node on stack (base case because it's the root).
 //
 // and planToTree would return the join node.
-func planToTree(ctx context.Context, top planTop) *roachpb.ExplainTreePlanNode {
+func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode {
 	nodeStack := &planNodeStack{}
 	observer := planObserver{
 		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
