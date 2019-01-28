@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // Memo is a data structure for efficiently storing a forest of query plans.
@@ -137,14 +136,6 @@ type Memo struct {
 	// comparisons. If the location changes, then this memo is invalidated.
 	locName string
 
-	// dbName is the current database at the time the memo was compiled. If this
-	// changes, then the memo is invalidated.
-	dbName string
-
-	// searchPath is the current search path at the time the memo was compiled.
-	// If this changes, then the memo is invalidated.
-	searchPath sessiondata.SearchPath
-
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
 }
@@ -163,8 +154,6 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.rootProps = nil
 	m.memEstimate = 0
 	m.locName = evalCtx.GetLocation().String()
-	m.dbName = evalCtx.SessionData.Database
-	m.searchPath = evalCtx.SessionData.SearchPath
 }
 
 // IsEmpty returns true if there are no expressions in the memo.
@@ -256,16 +245,6 @@ func (m *Memo) HasPlaceholders() bool {
 func (m *Memo) IsStale(
 	ctx context.Context, evalCtx *tree.EvalContext, catalog cat.Catalog,
 ) (bool, error) {
-	// Memo is stale if the current database has changed.
-	if m.dbName != evalCtx.SessionData.Database {
-		return true, nil
-	}
-
-	// Memo is stale if the search path has changed.
-	if !m.searchPath.Equals(&evalCtx.SessionData.SearchPath) {
-		return true, nil
-	}
-
 	// Memo is stale if the location has changed.
 	if m.locName != evalCtx.GetLocation().String() {
 		return true, nil

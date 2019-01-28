@@ -130,7 +130,7 @@ func TestMemoIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	o.Memo().Metadata().AddDependency(catalog.Schema(), privilege.CREATE)
+	o.Memo().Metadata().AddSchemaDependency(catalog.Schema().Name(), catalog.Schema(), privilege.CREATE)
 	o.Memo().Metadata().AddSchema(catalog.Schema())
 
 	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
@@ -138,30 +138,6 @@ func TestMemoIsStale(t *testing.T) {
 	} else if isStale {
 		t.Errorf("memo should not be stale")
 	}
-
-	// Stale current database.
-	evalCtx.SessionData.Database = "newdb"
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if !isStale {
-		t.Errorf("expected stale current database")
-	}
-	evalCtx.SessionData.Database = "t"
-
-	// Stale search path.
-	evalCtx.SessionData.SearchPath = sessiondata.SearchPath{}
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if !isStale {
-		t.Errorf("expected stale search path")
-	}
-	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath([]string{"path1", "path2"})
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if isStale {
-		t.Errorf("memo should not be stale")
-	}
-	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath(searchPath)
 
 	// Stale location.
 	evalCtx.SessionData.DataConversion.Location = time.FixedZone("PST", -8*60*60)
