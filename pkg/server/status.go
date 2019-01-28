@@ -1233,7 +1233,7 @@ func (s *statusServer) Ranges(
 		cfg = config.SystemConfig{}
 	}
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
-	availableNodes := s.storePool.AvailableNodeCount()
+	clusterNodes := s.storePool.ClusterNodeCount()
 
 	err = s.stores.VisitStores(func(store *storage.Store) error {
 		timestamp := store.Clock().Now()
@@ -1253,7 +1253,7 @@ func (s *statusServer) Ranges(
 							desc,
 							rep,
 							store.Ident.StoreID,
-							rep.Metrics(ctx, timestamp, cfg, isLiveMap, availableNodes),
+							rep.Metrics(ctx, timestamp, cfg, isLiveMap, clusterNodes),
 						))
 					return false, nil
 				})
@@ -1273,7 +1273,7 @@ func (s *statusServer) Ranges(
 					*desc,
 					rep,
 					store.Ident.StoreID,
-					rep.Metrics(ctx, timestamp, cfg, isLiveMap, availableNodes),
+					rep.Metrics(ctx, timestamp, cfg, isLiveMap, clusterNodes),
 				))
 		}
 		return nil
