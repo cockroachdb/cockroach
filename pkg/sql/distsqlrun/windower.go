@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -444,9 +445,9 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
 			return err
 		}
-		rows := make([]indexedRow, 0, len(encodedPartition))
+		rows := make([]rowcontainer.IndexedRow, 0, len(encodedPartition))
 		for idx := 0; idx < len(encodedPartition); idx++ {
-			rows = append(rows, indexedRow{idx: idx, row: encodedPartition[idx]})
+			rows = append(rows, rowcontainer.IndexedRow{Idx: idx, Row: encodedPartition[idx]})
 		}
 		partitions[partitionIdx] = indexedRows{rows: rows}
 		partitionIdx++
@@ -766,8 +767,8 @@ const sizeOfIndexedRowsStruct = int64(unsafe.Sizeof(indexedRows{}))
 const indexedRowsStructSliceOverhead = int64(unsafe.Sizeof([]indexedRows{}))
 const sizeOfSliceOfIndexedRows = int64(unsafe.Sizeof([]indexedRows{}))
 const sliceOfIndexedRowsSliceOverhead = int64(unsafe.Sizeof([][]indexedRows{}))
-const sizeOfIndexedRowStruct = int64(unsafe.Sizeof(indexedRow{}))
-const indexedRowStructSliceOverhead = int64(unsafe.Sizeof([]indexedRow{}))
+const sizeOfIndexedRowStruct = int64(unsafe.Sizeof(rowcontainer.IndexedRow{}))
+const indexedRowStructSliceOverhead = int64(unsafe.Sizeof([]rowcontainer.IndexedRow{}))
 const sizeOfSliceOfRows = int64(unsafe.Sizeof([][]tree.Datum{}))
 const sliceOfRowsSliceOverhead = int64(unsafe.Sizeof([][][]tree.Datum{}))
 const sizeOfRow = int64(unsafe.Sizeof([]tree.Datum{}))
@@ -777,7 +778,7 @@ const datumSliceOverhead = int64(unsafe.Sizeof([]tree.Datum(nil)))
 
 // indexedRows are rows with the corresponding indices.
 type indexedRows struct {
-	rows []indexedRow
+	rows []rowcontainer.IndexedRow
 }
 
 // Len implements tree.IndexedRows interface.
@@ -791,34 +792,9 @@ func (ir indexedRows) GetRow(_ context.Context, idx int) (tree.IndexedRow, error
 }
 
 func (ir indexedRows) makeCopy() indexedRows {
-	ret := indexedRows{rows: make([]indexedRow, ir.Len())}
+	ret := indexedRows{rows: make([]rowcontainer.IndexedRow, ir.Len())}
 	copy(ret.rows, ir.rows)
 	return ret
-}
-
-// indexedRow is a row with a corresponding index.
-type indexedRow struct {
-	idx int
-	row sqlbase.EncDatumRow
-}
-
-// GetIdx implements tree.IndexedRow interface.
-func (ir indexedRow) GetIdx() int {
-	return ir.idx
-}
-
-// GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
-	return ir.row[colIdx].Datum, nil
-}
-
-// GetDatums implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatums(startColIdx, endColIdx int) (tree.Datums, error) {
-	datums := make(tree.Datums, 0, endColIdx-startColIdx)
-	for idx := startColIdx; idx < endColIdx; idx++ {
-		datums = append(datums, ir.row[idx].Datum)
-	}
-	return datums, nil
 }
 
 // CreateWindowerSpecFunc creates a WindowerSpec_Func based on the function
