@@ -465,21 +465,23 @@ func (f *DiskBackedRowContainer) UsingDisk() bool {
 	return f.drc != nil
 }
 
-// spillIfMemErr checks err and calls spillToDisk if the given err is an out of
+// spillIfMemErr checks err and calls SpillToDisk if the given err is an out of
 // memory error. Returns whether the DiskBackedRowContainer spilled to disk and
 // an error if one occurred while doing so.
 func (f *DiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
 	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
 		return false, nil
 	}
-	if spillErr := f.spillToDisk(ctx); spillErr != nil {
+	if spillErr := f.SpillToDisk(ctx); spillErr != nil {
 		return false, spillErr
 	}
 	log.VEventf(ctx, 2, "spilled to disk: %v", err)
 	return true, nil
 }
 
-func (f *DiskBackedRowContainer) spillToDisk(ctx context.Context) error {
+// SpillToDisk creates a disk row container, injects all the data from the
+// in-memory container into it, and clears the in-memory one afterwards.
+func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if f.UsingDisk() {
 		return errors.New("already using disk")
 	}

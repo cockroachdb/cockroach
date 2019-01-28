@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"unsafe"
 
@@ -109,7 +108,7 @@ type windowerState int
 const (
 	windowerStateUnknown windowerState = iota
 	// windowerAccumulating means that rows are being read from the input
-	// and accumulated in encodedPartitions.
+	// and accumulated in allRowsPartitioned.
 	windowerAccumulating
 	// windowerEmittingRows means that all rows have been read and
 	// output rows are being emitted.
@@ -133,30 +132,24 @@ type windower struct {
 	inputTypes   []sqlbase.ColumnType
 	outputTypes  []sqlbase.ColumnType
 	datumAlloc   sqlbase.DatumAlloc
-	rowAlloc     sqlbase.EncDatumRowAlloc
-
-	// We choose to not track certain slices (like outputTypes, windowFns and
-	// a couple of slices within computeWindowFunctions) since they are likely
-	// to have very low (although varible) memory usage.
-	accumulationAcc mon.BoundAccount
-	decodingAcc     mon.BoundAccount
-	resultsAcc      mon.BoundAccount
-	partitionsAcc   mon.BoundAccount
+	acc          mon.BoundAccount
 
 	scratch       []byte
 	cancelChecker *sqlbase.CancelChecker
 
-	partitionBy       []uint32
-	encodedPartitions map[string][]sqlbase.EncDatumRow
-	windowFns         []*windowFunc
+	partitionBy                []uint32
+	allRowsPartitioned         *rowcontainer.HashDiskBackedRowContainer
+	partition                  *rowcontainer.DiskBackedIndexedRowContainer
+	orderOfWindowFnsProcessing []int
+	windowFns                  []*windowFunc
 
-	populated            bool
-	buckets              []string
-	bucketToPartitionIdx []int
-	bucketIter           int
-	rowsInBucketEmitted  int
-	windowValues         [][][]tree.Datum
-	outputRow            sqlbase.EncDatumRow
+	populated           bool
+	partitionIdx        int
+	rowsInBucketEmitted int
+	partitionSizes      []int
+	windowValues        [][][]tree.Datum
+	allRowsIterator     rowcontainer.RowIterator
+	outputRow           sqlbase.EncDatumRow
 }
 
 var _ Processor = &windower{}
@@ -175,21 +168,35 @@ func newWindower(
 	w := &windower{
 		input: input,
 	}
+	evalCtx := flowCtx.NewEvalCtx()
 	w.inputTypes = input.OutputTypes()
-	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "windower-mem")
-	w.accumulationAcc = memMonitor.MakeBoundAccount()
-	w.decodingAcc = memMonitor.MakeBoundAccount()
-	w.resultsAcc = memMonitor.MakeBoundAccount()
-	w.partitionsAcc = memMonitor.MakeBoundAccount()
+	ctx := evalCtx.Ctx()
+	memMonitor := NewMonitor(ctx, evalCtx.Mon, "windower-mem")
+	w.acc = memMonitor.MakeBoundAccount()
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		w.input = NewInputStatCollector(w.input)
 		w.finishTrace = w.outputStatsToTrace
 	}
 
 	windowFns := spec.WindowFns
-	w.encodedPartitions = make(map[string][]sqlbase.EncDatumRow)
 	w.partitionBy = spec.PartitionBy
+	allRowsPartitioned := rowcontainer.MakeHashDiskBackedRowContainer(
+		nil, /* memRowContainer */
+		evalCtx,
+		memMonitor,
+		flowCtx.diskMonitor,
+		flowCtx.TempStorage,
+	)
+	w.allRowsPartitioned = &allRowsPartitioned
+	if err := w.allRowsPartitioned.Init(
+		ctx,
+		false, /* shouldMark */
+		w.inputTypes,
+		w.partitionBy,
+		true, /* encodeNull */
+	); err != nil {
+		return nil, err
+	}
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
 	w.outputTypes = make([]sqlbase.ColumnType, 0, len(w.inputTypes))
 
@@ -230,11 +237,12 @@ func newWindower(
 	w.outputTypes = append(w.outputTypes, w.inputTypes[inputColIdx:]...)
 	w.outputRow = make(sqlbase.EncDatumRow, len(w.outputTypes))
 
-	if err := w.Init(
+	if err := w.InitWithEvalCtx(
 		w,
 		post,
 		w.outputTypes,
 		flowCtx,
+		evalCtx,
 		processorID,
 		output,
 		memMonitor,
@@ -289,18 +297,21 @@ func (w *windower) ConsumerClosed() {
 
 func (w *windower) close() {
 	if w.InternalClose() {
-		w.encodedPartitions = nil
-		w.accumulationAcc.Close(w.Ctx)
-		w.decodingAcc.Close(w.Ctx)
-		w.resultsAcc.Close(w.Ctx)
-		w.partitionsAcc.Close(w.Ctx)
+		if w.allRowsIterator != nil {
+			w.allRowsIterator.Close()
+		}
+		w.allRowsPartitioned.Close(w.Ctx)
+		if w.partition != nil {
+			w.partition.Close(w.Ctx)
+		}
+		w.acc.Close(w.Ctx)
 		w.MemMonitor.Stop(w.Ctx)
 	}
 }
 
 // accumulateRows continually reads rows from the input and accumulates them
-// in encodedPartitions. If it encounters metadata, the metadata is immediately
-// returned. Subsequent calls of this function will resume row accumulation.
+// in allRowsPartitioned. If it encounters metadata, the metadata is returned
+// immediately. Subsequent calls of this function will resume row accumulation.
 func (w *windower) accumulateRows() (windowerState, sqlbase.EncDatumRow, *ProducerMetadata) {
 	for {
 		row, meta := w.input.Next()
@@ -316,67 +327,26 @@ func (w *windower) accumulateRows() (windowerState, sqlbase.EncDatumRow, *Produc
 		if row == nil {
 			log.VEvent(w.Ctx, 1, "accumulation complete")
 			w.inputDone = true
+			// We need to sort all the rows based on partitionBy columns so that all
+			// rows belonging to the same hash bucket are contiguous.
+			w.allRowsPartitioned.Sort(w.Ctx)
 			break
 		}
 
-		if err := w.accumulationAcc.Grow(w.Ctx, int64(row.Size())); err != nil {
+		// The underlying row container will decode all datums as necessary, so we
+		// don't need to worry about that.
+		if err := w.allRowsPartitioned.AddRow(w.Ctx, row); err != nil {
 			w.MoveToDraining(err)
 			return windowerStateUnknown, nil, w.DrainHelper()
-		}
-		if len(w.partitionBy) == 0 {
-			w.encodedPartitions[""] = append(w.encodedPartitions[""], w.rowAlloc.CopyRow(row))
-		} else {
-			// We need to hash the row according to partitionBy
-			// to figure out which partition the row belongs to.
-			w.scratch = w.scratch[:0]
-			for _, col := range w.partitionBy {
-				if int(col) >= len(row) {
-					panic(fmt.Sprintf("hash column %d, row with only %d columns", col, len(row)))
-				}
-				var err error
-				w.scratch, err = row[int(col)].Encode(&w.inputTypes[int(col)], &w.datumAlloc, preferredEncoding, w.scratch)
-				if err != nil {
-					w.MoveToDraining(err)
-					return windowerStateUnknown, nil, w.DrainHelper()
-				}
-			}
-			encodedPartition := w.encodedPartitions[string(w.scratch)]
-			if encodedPartition == nil {
-				// Account for the new memory we'll use to store the partition in the map.
-				if err := w.accumulationAcc.Grow(w.Ctx, int64(len(w.scratch))); err != nil {
-					w.MoveToDraining(nil /* err */)
-					return windowerStateUnknown, nil, meta
-				}
-			}
-			w.encodedPartitions[string(w.scratch)] = append(encodedPartition, w.rowAlloc.CopyRow(row))
 		}
 	}
 
 	return windowerEmittingRows, nil, nil
 }
 
-// decodePartitions ensures that all EncDatums of each row in each encoded
-// partition are decoded. It should be called after accumulation of rows is
-// complete.
-func (w *windower) decodePartitions() error {
-	for _, encodedPartition := range w.encodedPartitions {
-		for _, encRow := range encodedPartition {
-			for i := range encRow {
-				if err := encRow[i].EnsureDecoded(&w.inputTypes[i], &w.datumAlloc); err != nil {
-					return err
-				}
-				if err := w.decodingAcc.Grow(w.Ctx, int64(encRow[i].Datum.Size())); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
 // emitRow emits the next row if output rows have already been populated;
-// if they haven't, it first decodes all rows, computes all window functions
-// over all partitions (i.e. populates outputRows), and then emits the first row.
+// if they haven't, it first computes all window functions over all partitions
+// (i.e. populates w.windowValues), and then emits the first row.
 //
 // emitRow() might move to stateDraining. It might also not return a row if the
 // ProcOutputHelper filtered the current row out.
@@ -388,11 +358,6 @@ func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *ProducerMetad
 				return windowerStateUnknown, nil, w.DrainHelper()
 			}
 
-			if err := w.decodePartitions(); err != nil {
-				w.MoveToDraining(err)
-				return windowerStateUnknown, nil, w.DrainHelper()
-			}
-
 			if err := w.computeWindowFunctions(w.Ctx, w.evalCtx); err != nil {
 				w.MoveToDraining(err)
 				return windowerStateUnknown, nil, w.DrainHelper()
@@ -400,7 +365,10 @@ func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *ProducerMetad
 			w.populated = true
 		}
 
-		if w.populateNextOutputRow() {
+		if rowOutputted, err := w.populateNextOutputRow(); err != nil {
+			w.MoveToDraining(err)
+			return windowerStateUnknown, nil, nil
+		} else if rowOutputted {
 			return windowerEmittingRows, w.ProcessRowHelper(w.outputRow), nil
 		}
 
@@ -412,80 +380,105 @@ func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *ProducerMetad
 	return windowerStateUnknown, nil, w.DrainHelper()
 }
 
-// computeWindowFunctions computes all window functions over all partitions.
-// The output of windowFn is put in column windowFn.argIdxStart of outputRows.
-// Each window function is "responsible" for columns in the interval
-// [prevWindowFn.argIdxStart + 1, curWindowFn.argIdxStart] meaning
-// that non-argument columns are first copied and then the result is appended.
-// After all window functions have been computed, the remaining columns
-// are also simply appended to corresponding rows in outputRows.
-func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.EvalContext) error {
-	var peerGrouper tree.PeerGroupChecker
-	usage := sliceOfRowsSliceOverhead + sizeOfSliceOfRows*int64(len(w.windowFns))
-	if err := w.resultsAcc.Grow(w.Ctx, usage); err != nil {
-		return err
+// spillAllRowsToDisk attempts to first spill w.allRowsPartitioned to disk if
+// it's using memory. We choose to not to force w.partition to spill right away
+// since it might be resorted multiple times with different orderings, so it's
+// better to keep it in memory (if it hasn't spilled on its own). If
+// w.allRowsPartitioned is already using disk, we attempt to spill w.partition.
+func (w *windower) spillAllRowsToDisk() error {
+	if w.allRowsPartitioned != nil {
+		if !w.allRowsPartitioned.UsingDisk() {
+			if err := w.allRowsPartitioned.SpillToDisk(w.Ctx); err != nil {
+				return err
+			}
+		} else {
+			// w.allRowsPartitioned has already been spilled, so we have to spill
+			// w.partition if possible.
+			if w.partition != nil {
+				if !w.partition.UsingDisk() {
+					if err := w.partition.SpillToDisk(w.Ctx); err != nil {
+						return err
+					}
+				}
+			}
+		}
 	}
-	w.windowValues = make([][][]tree.Datum, len(w.windowFns))
+	return nil
+}
 
-	usage = indexedRowsStructSliceOverhead + sizeOfIndexedRowsStruct*int64(len(w.encodedPartitions))
-	if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
-		return err
-	}
-	partitions := make([]indexedRows, len(w.encodedPartitions))
-
-	w.buckets = make([]string, 0, len(w.encodedPartitions))
-	w.bucketToPartitionIdx = make([]int, 0, len(w.encodedPartitions))
-	partitionIdx := 0
-	for bucket, encodedPartition := range w.encodedPartitions {
-		// We want to fix some order of iteration over encoded partitions
-		// to be consistent.
-		w.buckets = append(w.buckets, bucket)
-		w.bucketToPartitionIdx = append(w.bucketToPartitionIdx, partitionIdx)
-		usage = indexedRowStructSliceOverhead + sizeOfIndexedRowStruct*int64(len(encodedPartition))
-		if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
+// growMemAccount attempts to grow acc by usage, and if it encounters OOM
+// error, it forces all rows to spill and attempts to grow acc by usage
+// one more time.
+func (w *windower) growMemAccount(acc *mon.BoundAccount, usage int64) error {
+	if err := acc.Grow(w.Ctx, usage); err != nil {
+		if sqlbase.IsOutOfMemoryError(err) {
+			if err := w.spillAllRowsToDisk(); err != nil {
+				return err
+			}
+			if err := acc.Grow(w.Ctx, usage); err != nil {
+				return err
+			}
+		} else {
 			return err
 		}
-		rows := make([]rowcontainer.IndexedRow, 0, len(encodedPartition))
-		for idx := 0; idx < len(encodedPartition); idx++ {
-			rows = append(rows, rowcontainer.IndexedRow{Idx: idx, Row: encodedPartition[idx]})
-		}
-		partitions[partitionIdx] = indexedRows{rows: rows}
-		partitionIdx++
 	}
+	return nil
+}
 
-	// partitionPreviouslySortedFuncIdx maps index of a window function f1
-	// to the index of another window function f2 with the same ORDER BY
-	// clause such that f2 will have been processed before f1.
-	usage = sliceOfIndexedRowsSliceOverhead + sizeOfSliceOfIndexedRows*int64(len(w.windowFns))
-	if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
-		return err
-	}
-	sortedPartitionsCache := make([][]indexedRows, len(w.windowFns))
-	partitionPreviouslySortedFuncIdx := make([]int, len(w.windowFns))
-	for i := 0; i < len(w.windowFns); i++ {
-		partitionPreviouslySortedFuncIdx[i] = -1
-	}
-	shouldCacheSortedPartitions := make([]bool, len(w.windowFns))
-	for windowFnIdx, windowFn := range w.windowFns {
-		for laterFnIdx := windowFnIdx + 1; laterFnIdx < len(w.windowFns); laterFnIdx++ {
-			if partitionPreviouslySortedFuncIdx[laterFnIdx] != -1 {
-				// We've already found equal ordering for laterFn
-				// among previous window functions.
+// findOrderOfWindowFnsToProcessIn finds an ordering of window functions such
+// that all window functions that have the same ORDER BY clause are computed
+// one after another. The order is stored in w.orderOfWindowFnsProcessing.
+// This allows for using the same row container without having to resort it
+// multiple times.
+func (w *windower) findOrderOfWindowFnsToProcessIn() {
+	w.orderOfWindowFnsProcessing = make([]int, 0, len(w.windowFns))
+	windowFnAdded := make([]bool, len(w.windowFns))
+	for i, windowFn := range w.windowFns {
+		if !windowFnAdded[i] {
+			w.orderOfWindowFnsProcessing = append(w.orderOfWindowFnsProcessing, i)
+			windowFnAdded[i] = true
+		}
+		for j := i + 1; j < len(w.windowFns); j++ {
+			if windowFnAdded[j] {
+				// j'th windowFn has been already added to orderOfWindowFnsProcessing.
 				continue
 			}
-			if windowFn.ordering.Equal(w.windowFns[laterFnIdx].ordering) {
-				partitionPreviouslySortedFuncIdx[laterFnIdx] = windowFnIdx
-				shouldCacheSortedPartitions[windowFnIdx] = true
+			if windowFn.ordering.Equal(w.windowFns[j].ordering) {
+				w.orderOfWindowFnsProcessing = append(w.orderOfWindowFnsProcessing, j)
+				windowFnAdded[j] = true
 			}
 		}
 	}
+}
 
-	for windowFnIdx, windowFn := range w.windowFns {
-		usage = rowSliceOverhead + sizeOfRow*int64(len(w.encodedPartitions))
-		if err := w.resultsAcc.Grow(w.Ctx, usage); err != nil {
-			return err
-		}
-		w.windowValues[windowFnIdx] = make([][]tree.Datum, len(w.encodedPartitions))
+// processPartition computes all window functions over the given partition and
+// puts the result of computations in w.windowValues[partitionIdx]. It computes
+// window functions in the order specified in w.orderOfWindowFnsProcessing.
+// The same ReorderableRowContainer for partition is reused with changing the
+// ordering and being resorted as necessary.
+//
+// Note: partition must have the ordering as needed by the first window
+// function to be processed.
+func (w *windower) processPartition(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	partition *rowcontainer.DiskBackedIndexedRowContainer,
+	partitionIdx int,
+) error {
+	var peerGrouper tree.PeerGroupChecker
+	usage := sizeOfSliceOfRows + rowSliceOverhead + sizeOfRow*int64(len(w.windowFns))
+	if err := w.growMemAccount(&w.acc, usage); err != nil {
+		return err
+	}
+	w.windowValues = append(w.windowValues, make([][]tree.Datum, len(w.windowFns)))
+
+	// Partition has ordering as first window function to be processed needs, but
+	// we need to sort the partition for the ordering to take effect.
+	partition.Sort(ctx)
+
+	var prevWindowFn *windowFunc
+	for _, windowFnIdx := range w.orderOfWindowFnsProcessing {
+		windowFn := w.windowFns[windowFnIdx]
 
 		frameRun := &tree.WindowFrameRun{
 			ArgCount:     windowFn.argCount,
@@ -560,140 +553,232 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 			}
 		}
 
-		for partitionIdx := 0; partitionIdx < len(partitions); partitionIdx++ {
-			builtin := windowFn.create(evalCtx)
-			defer builtin.Close(ctx, evalCtx)
+		builtin := windowFn.create(evalCtx)
+		defer builtin.Close(ctx, evalCtx)
 
-			partition := partitions[partitionIdx]
-			usage = datumSliceOverhead + sizeOfDatum*int64(partition.Len())
-			if err := w.resultsAcc.Grow(w.Ctx, usage); err != nil {
-				return err
-			}
-			w.windowValues[windowFnIdx][partitionIdx] = make([]tree.Datum, partition.Len())
+		usage = datumSliceOverhead + sizeOfDatum*int64(partition.Len())
+		if err := w.growMemAccount(&w.acc, usage); err != nil {
+			return err
+		}
+		w.windowValues[partitionIdx][windowFnIdx] = make([]tree.Datum, partition.Len())
 
-			var sorter *partitionSorter
-			if len(windowFn.ordering.Columns) > 0 {
-				// If an ORDER BY clause is provided, order the partition and use the
-				// sorter as our peerGroupChecker.
-				if funcIdx := partitionPreviouslySortedFuncIdx[windowFnIdx]; funcIdx != -1 {
-					// We have cached sorted partitions - no need to resort them.
-					partition = sortedPartitionsCache[funcIdx][partitionIdx]
-					sorter = &partitionSorter{
-						evalCtx:  evalCtx,
-						rows:     partition,
-						ordering: windowFn.ordering,
-					}
-				} else {
-					sorter = &partitionSorter{
-						evalCtx:  evalCtx,
-						rows:     partition,
-						ordering: windowFn.ordering,
-					}
-					sort.Sort(sorter)
-					if sorter.err != nil {
-						// An error occurred while sorting.
-						return sorter.err
-					}
-					if shouldCacheSortedPartitions[windowFnIdx] {
-						// Later window functions will need rows in the same order,
-						// so we cache copies of all sorted partitions.
-						if sortedPartitionsCache[windowFnIdx] == nil {
-							usage = indexedRowsStructSliceOverhead + sizeOfIndexedRowsStruct*int64(len(partitions))
-							if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
-								return err
-							}
-							sortedPartitionsCache[windowFnIdx] = make([]indexedRows, len(partitions))
-						}
-						// TODO(yuzefovich): figure out how to avoid making this deep copy.
-						usage = indexedRowStructSliceOverhead + sizeOfIndexedRowStruct*int64(partition.Len())
-						if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
-							return err
-						}
-						sortedPartitionsCache[windowFnIdx][partitionIdx] = partition.makeCopy()
-					}
-				}
-				peerGrouper = sorter
-			} else {
-				// If ORDER BY clause is not provided, all rows are peers.
-				peerGrouper = allPeers{}
-			}
-
-			frameRun.Rows = partition
-			frameRun.RowIdx = 0
-
-			if !frameRun.IsDefaultFrame() {
-				// We have a custom frame not equivalent to default one, so if we have
-				// an aggregate function, we want to reset it for each row.
-				// Not resetting is an optimization since we're not computing
-				// the result over the whole frame but only as a result of the current
-				// row and previous results of aggregation.
-				builtins.ShouldReset(builtin)
-			}
-
-			if err := frameRun.PeerHelper.Init(frameRun, peerGrouper); err != nil {
-				return err
-			}
-			frameRun.CurRowPeerGroupNum = 0
-
-			for frameRun.RowIdx < partition.Len() {
-				// Perform calculations on each row in the current peer group.
-				peerGroupEndIdx := frameRun.PeerHelper.GetFirstPeerIdx(frameRun.CurRowPeerGroupNum) + frameRun.PeerHelper.GetRowCount(frameRun.CurRowPeerGroupNum)
-				for ; frameRun.RowIdx < peerGroupEndIdx; frameRun.RowIdx++ {
-					res, err := builtin.Compute(ctx, evalCtx, frameRun)
-					if err != nil {
-						return err
-					}
-					row, err := frameRun.Rows.GetRow(ctx, frameRun.RowIdx)
-					if err != nil {
-						return err
-					}
-					w.windowValues[windowFnIdx][partitionIdx][row.GetIdx()] = res
-				}
-				if err := frameRun.PeerHelper.Update(frameRun); err != nil {
+		if len(windowFn.ordering.Columns) > 0 {
+			// If an ORDER BY clause is provided, we check whether the partition is
+			// already sorted as we need (i.e. prevWindowFn has the same ordering),
+			// and if it is not, we change the ordering to the needed and resort the
+			// container.
+			if prevWindowFn != nil && !windowFn.ordering.Equal(prevWindowFn.ordering) {
+				if err := partition.Reorder(ctx, distsqlpb.ConvertToColumnOrdering(windowFn.ordering)); err != nil {
 					return err
 				}
-				frameRun.CurRowPeerGroupNum++
+				partition.Sort(ctx)
 			}
+			peerGrouper = &partitionPeerGrouper{
+				ctx:       ctx,
+				evalCtx:   evalCtx,
+				partition: partition,
+				ordering:  windowFn.ordering,
+				rowCopy:   make(sqlbase.EncDatumRow, len(w.inputTypes)),
+			}
+		} else {
+			// If ORDER BY clause is not provided, all rows are peers.
+			peerGrouper = allPeers{}
 		}
+
+		frameRun.Rows = partition
+		frameRun.RowIdx = 0
+
+		if !frameRun.IsDefaultFrame() {
+			// We have a custom frame not equivalent to default one, so if we have
+			// an aggregate function, we want to reset it for each row.
+			// Not resetting is an optimization since we're not computing
+			// the result over the whole frame but only as a result of the current
+			// row and previous results of aggregation.
+			builtins.ShouldReset(builtin)
+		}
+
+		if err := frameRun.PeerHelper.Init(frameRun, peerGrouper); err != nil {
+			return err
+		}
+		frameRun.CurRowPeerGroupNum = 0
+
+		for frameRun.RowIdx < partition.Len() {
+			// Perform calculations on each row in the current peer group.
+			peerGroupEndIdx := frameRun.PeerHelper.GetFirstPeerIdx(frameRun.CurRowPeerGroupNum) + frameRun.PeerHelper.GetRowCount(frameRun.CurRowPeerGroupNum)
+			for ; frameRun.RowIdx < peerGroupEndIdx; frameRun.RowIdx++ {
+				if err := w.cancelChecker.Check(); err != nil {
+					return err
+				}
+				res, err := builtin.Compute(ctx, evalCtx, frameRun)
+				if err != nil {
+					return err
+				}
+				row, err := frameRun.Rows.GetRow(ctx, frameRun.RowIdx)
+				if err != nil {
+					return err
+				}
+				w.windowValues[partitionIdx][windowFnIdx][row.GetIdx()] = res
+			}
+			if err := frameRun.PeerHelper.Update(frameRun); err != nil {
+				return err
+			}
+			frameRun.CurRowPeerGroupNum++
+		}
+
+		prevWindowFn = windowFn
 	}
 
+	if err := w.growMemAccount(&w.acc, sizeOfInt); err != nil {
+		return err
+	}
+	w.partitionSizes = append(w.partitionSizes, w.partition.Len())
 	return nil
+}
+
+// computeWindowFunctions computes all window functions over all partitions.
+// Partitions are processed one at a time with the underlying row container
+// reused (and reordered if needed).
+func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.EvalContext) error {
+	w.findOrderOfWindowFnsToProcessIn()
+
+	// We don't know how many partitions there are, so we'll be accounting for
+	// this memory right before every append to these slices.
+	usage := sliceOfIntsOverhead + sliceOfRowsSliceOverhead
+	if err := w.growMemAccount(&w.acc, usage); err != nil {
+		return err
+	}
+	w.partitionSizes = make([]int, 0, 8)
+	w.windowValues = make([][][]tree.Datum, 0, 8)
+	bucket := ""
+
+	// w.partition will have ordering as needed by the first window function to
+	// be processed.
+	ordering := distsqlpb.ConvertToColumnOrdering(w.windowFns[w.orderOfWindowFnsProcessing[0]].ordering)
+	w.partition = rowcontainer.MakeDiskBackedIndexedRowContainer(
+		ordering,
+		w.inputTypes,
+		w.evalCtx,
+		w.flowCtx.TempStorage,
+		w.MemMonitor,
+		w.flowCtx.diskMonitor,
+		0,
+	)
+	i, err := w.allRowsPartitioned.NewAllRowsIterator(ctx)
+	if err != nil {
+		return err
+	}
+	defer i.Close()
+
+	// We iterate over all the rows and add them to w.partition one by one. When
+	// a row from a different partition is encountered, we process the partition
+	// and reset w.partition for reusing.
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		row, err := i.Row()
+		if err != nil {
+			return err
+		}
+		if err := w.cancelChecker.Check(); err != nil {
+			return err
+		}
+		if len(w.partitionBy) > 0 {
+			// We need to hash the row according to partitionBy
+			// to figure out which partition the row belongs to.
+			w.scratch = w.scratch[:0]
+			for _, col := range w.partitionBy {
+				if int(col) >= len(row) {
+					panic(fmt.Sprintf("hash column %d, row with only %d columns", col, len(row)))
+				}
+				var err error
+				w.scratch, err = row[int(col)].Encode(&w.inputTypes[int(col)], &w.datumAlloc, preferredEncoding, w.scratch)
+				if err != nil {
+					return err
+				}
+			}
+			if string(w.scratch) != bucket {
+				// Current row is from the new bucket, so we "finalize" the previous
+				// bucket (if current row is not the first row among all rows in
+				// allRowsPartitioned). We then process this partition, reset the
+				// container for reuse by the next partition.
+				if bucket != "" {
+					if err := w.processPartition(ctx, evalCtx, w.partition, len(w.partitionSizes)); err != nil {
+						return err
+					}
+				}
+				bucket = string(w.scratch)
+				if err := w.partition.UnsafeReset(ctx); err != nil {
+					return err
+				}
+				if !w.windowFns[w.orderOfWindowFnsProcessing[0]].ordering.Equal(w.windowFns[w.orderOfWindowFnsProcessing[len(w.windowFns)-1]].ordering) {
+					// The container no longer has the ordering as needed by the first
+					// window function to be processed, so we need to change it.
+					if err = w.partition.Reorder(ctx, ordering); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		if err := w.partition.AddRow(w.Ctx, row); err != nil {
+			return err
+		}
+	}
+	return w.processPartition(ctx, evalCtx, w.partition, len(w.partitionSizes))
 }
 
 // populateNextOutputRow combines results of computing window functions with
 // non-argument columns of the input row to produce an output row.
-func (w *windower) populateNextOutputRow() bool {
-	if w.bucketIter < len(w.encodedPartitions) {
+// The output of windowFn is put in column windowFn.argIdxStart of w.outputRow.
+// All columns that were arguments to window functions are omitted, and columns
+// that were not such are passed through.
+func (w *windower) populateNextOutputRow() (bool, error) {
+	if w.partitionIdx < len(w.partitionSizes) {
+		if w.allRowsIterator == nil {
+			w.allRowsIterator = w.allRowsPartitioned.NewUnmarkedIterator(w.Ctx)
+			w.allRowsIterator.Rewind()
+		}
 		// We reuse the same EncDatumRow since caller of Next() should've copied it.
 		w.outputRow = w.outputRow[:0]
-		// rowIdx is the index of the next row to be emitted from partition with
-		// hash w.buckets[w.bucketIter].
+		// rowIdx is the index of the next row to be emitted from the
+		// partitionIdx'th partition.
 		rowIdx := w.rowsInBucketEmitted
-		inputRow := w.encodedPartitions[w.buckets[w.bucketIter]][rowIdx]
-		partitionIdx := w.bucketToPartitionIdx[w.bucketIter]
+		if ok, err := w.allRowsIterator.Valid(); err != nil {
+			return false, err
+		} else if !ok {
+			return false, nil
+		}
+		inputRow, err := w.allRowsIterator.Row()
+		w.allRowsIterator.Next()
+		if err != nil {
+			return false, err
+		}
 		inputColIdx := 0
 		for windowFnIdx, windowFn := range w.windowFns {
 			// We simply pass through columns in [inputColIdx, windowFn.argIdxStart).
 			w.outputRow = append(w.outputRow, inputRow[inputColIdx:windowFn.argIdxStart]...)
-			windowFnRes := w.windowValues[windowFnIdx][partitionIdx][rowIdx]
+			windowFnRes := w.windowValues[w.partitionIdx][windowFnIdx][rowIdx]
 			encWindowFnRes := sqlbase.DatumToEncDatum(w.outputTypes[len(w.outputRow)], windowFnRes)
 			w.outputRow = append(w.outputRow, encWindowFnRes)
 			// We skip all columns that were arguments to windowFn.
 			inputColIdx = windowFn.argIdxStart + windowFn.argCount
 		}
-		// We simply pass through all columns after all arguments to window functions.
+		// We simply pass through all columns after all arguments to window
+		// functions.
 		w.outputRow = append(w.outputRow, inputRow[inputColIdx:]...)
 		w.rowsInBucketEmitted++
-		if w.rowsInBucketEmitted == len(w.encodedPartitions[w.buckets[w.bucketIter]]) {
+		if w.rowsInBucketEmitted == w.partitionSizes[w.partitionIdx] {
 			// We have emitted all rows from the current bucket, so we advance the
 			// iterator.
-			w.bucketIter++
+			w.partitionIdx++
 			w.rowsInBucketEmitted = 0
 		}
-		return true
+		return true, nil
 
 	}
-	return false
+	return false, nil
 }
 
 type windowFunc struct {
@@ -705,57 +790,48 @@ type windowFunc struct {
 	filterColIdx int
 }
 
-type partitionSorter struct {
-	evalCtx  *tree.EvalContext
-	rows     indexedRows
-	ordering distsqlpb.Ordering
-	err      error
+type partitionPeerGrouper struct {
+	ctx       context.Context
+	evalCtx   *tree.EvalContext
+	partition *rowcontainer.DiskBackedIndexedRowContainer
+	ordering  distsqlpb.Ordering
+	rowCopy   sqlbase.EncDatumRow
+	err       error
 }
 
-// partitionSorter implements the sort.Interface interface.
-func (n *partitionSorter) Len() int { return n.rows.Len() }
-func (n *partitionSorter) Swap(i, j int) {
-	n.rows.rows[i], n.rows.rows[j] = n.rows.rows[j], n.rows.rows[i]
-}
-func (n *partitionSorter) Less(i, j int) bool {
+func (n *partitionPeerGrouper) InSameGroup(i, j int) (bool, error) {
 	if n.err != nil {
-		// An error occurred in previous calls to Less(). We want to be done with
-		// sorting and to propagate that error to the caller of Sort().
-		return false
+		return false, n.err
 	}
-	cmp, err := n.Compare(i, j)
+	indexedRow, err := n.partition.GetRow(n.ctx, i)
 	if err != nil {
 		n.err = err
-		return false
+		return false, err
 	}
-	return cmp < 0
-}
-
-// partitionSorter implements the tree.PeerGroupChecker interface.
-func (n *partitionSorter) InSameGroup(i, j int) (bool, error) {
-	cmp, err := n.Compare(i, j)
-	return cmp == 0, err
-}
-
-func (n *partitionSorter) Compare(i, j int) (int, error) {
-	ra, rb := n.rows.rows[i], n.rows.rows[j]
+	row := indexedRow.(rowcontainer.IndexedRow)
+	// We need to copy the row explicitly since n.partition might be reusing
+	// the underlying memory when GetRow() is called.
+	copy(n.rowCopy, row.Row)
+	rb, err := n.partition.GetRow(n.ctx, j)
+	if err != nil {
+		n.err = err
+		return false, n.err
+	}
 	for _, o := range n.ordering.Columns {
-		da, err := ra.GetDatum(int(o.ColIdx))
-		if err != nil {
-			return 0, err
-		}
+		da := n.rowCopy[o.ColIdx].Datum
 		db, err := rb.GetDatum(int(o.ColIdx))
 		if err != nil {
-			return 0, err
+			n.err = err
+			return false, n.err
 		}
 		if c := da.Compare(n.evalCtx, db); c != 0 {
 			if o.Direction != distsqlpb.Ordering_Column_ASC {
-				return -c, nil
+				return false, nil
 			}
-			return c, nil
+			return false, nil
 		}
 	}
-	return 0, nil
+	return true, nil
 }
 
 type allPeers struct{}
@@ -763,39 +839,14 @@ type allPeers struct{}
 // allPeers implements the PeerGroupChecker interface.
 func (allPeers) InSameGroup(i, j int) (bool, error) { return true, nil }
 
-const sizeOfIndexedRowsStruct = int64(unsafe.Sizeof(indexedRows{}))
-const indexedRowsStructSliceOverhead = int64(unsafe.Sizeof([]indexedRows{}))
-const sizeOfSliceOfIndexedRows = int64(unsafe.Sizeof([]indexedRows{}))
-const sliceOfIndexedRowsSliceOverhead = int64(unsafe.Sizeof([][]indexedRows{}))
-const sizeOfIndexedRowStruct = int64(unsafe.Sizeof(rowcontainer.IndexedRow{}))
-const indexedRowStructSliceOverhead = int64(unsafe.Sizeof([]rowcontainer.IndexedRow{}))
+const sizeOfInt = int64(unsafe.Sizeof(int(0)))
+const sliceOfIntsOverhead = int64(unsafe.Sizeof([]int{}))
 const sizeOfSliceOfRows = int64(unsafe.Sizeof([][]tree.Datum{}))
 const sliceOfRowsSliceOverhead = int64(unsafe.Sizeof([][][]tree.Datum{}))
 const sizeOfRow = int64(unsafe.Sizeof([]tree.Datum{}))
 const rowSliceOverhead = int64(unsafe.Sizeof([][]tree.Datum{}))
 const sizeOfDatum = int64(unsafe.Sizeof(tree.Datum(nil)))
 const datumSliceOverhead = int64(unsafe.Sizeof([]tree.Datum(nil)))
-
-// indexedRows are rows with the corresponding indices.
-type indexedRows struct {
-	rows []rowcontainer.IndexedRow
-}
-
-// Len implements tree.IndexedRows interface.
-func (ir indexedRows) Len() int {
-	return len(ir.rows)
-}
-
-// GetRow implements tree.IndexedRows interface.
-func (ir indexedRows) GetRow(_ context.Context, idx int) (tree.IndexedRow, error) {
-	return ir.rows[idx], nil
-}
-
-func (ir indexedRows) makeCopy() indexedRows {
-	ret := indexedRows{rows: make([]rowcontainer.IndexedRow, ir.Len())}
-	copy(ret.rows, ir.rows)
-	return ret
-}
 
 // CreateWindowerSpecFunc creates a WindowerSpec_Func based on the function
 // name or returns an error if unknown function name is provided.
