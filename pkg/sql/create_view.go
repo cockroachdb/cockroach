@@ -74,7 +74,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	// We use tree.FormatNode merely as a traversal method; its output buffer is
 	// discarded immediately after the traversal because it is not needed further.
 	{
-		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
+		f := tree.NewFmtCtx(tree.FmtParsable)
 		f.WithReformatTableNames(
 			func(_ *tree.FmtCtx, tn *tree.TableName) {
 				// Persist the database prefix expansion.

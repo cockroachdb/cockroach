@@ -38,9 +38,9 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 		switch dv := UnwrapDatum(nil, v).(type) {
 		case dNull:
 		case *DString:
-			pgwireFormatStringInTuple(ctx.Buffer, string(*dv))
+			pgwireFormatStringInTuple(&ctx.Buffer, string(*dv))
 		case *DCollatedString:
-			pgwireFormatStringInTuple(ctx.Buffer, dv.Contents)
+			pgwireFormatStringInTuple(&ctx.Buffer, dv.Contents)
 			// Bytes cannot use the default case because they will be incorrectly
 			// double escaped.
 		case *DBytes:
@@ -48,10 +48,10 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 		case *DJSON:
 			var buf bytes.Buffer
 			dv.JSON.Format(&buf)
-			pgwireFormatStringInTuple(ctx.Buffer, buf.String())
+			pgwireFormatStringInTuple(&ctx.Buffer, buf.String())
 		default:
 			s := AsStringWithFlags(v, ctx.flags)
-			pgwireFormatStringInTuple(ctx.Buffer, s)
+			pgwireFormatStringInTuple(&ctx.Buffer, s)
 		}
 		comma = ","
 	}
@@ -98,16 +98,16 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 		case dNull:
 			ctx.WriteString("NULL")
 		case *DString:
-			pgwireFormatStringInArray(ctx.Buffer, string(*dv))
+			pgwireFormatStringInArray(&ctx.Buffer, string(*dv))
 		case *DCollatedString:
-			pgwireFormatStringInArray(ctx.Buffer, dv.Contents)
+			pgwireFormatStringInArray(&ctx.Buffer, dv.Contents)
 			// Bytes cannot use the default case because they will be incorrectly
 			// double escaped.
 		case *DBytes:
 			ctx.FormatNode(dv)
 		default:
 			s := AsStringWithFlags(v, ctx.flags)
-			pgwireFormatStringInArray(ctx.Buffer, s)
+			pgwireFormatStringInArray(&ctx.Buffer, s)
 		}
 		comma = ","
 	}

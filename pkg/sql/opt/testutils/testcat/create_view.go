@@ -14,11 +14,7 @@
 
 package testcat
 
-import (
-	"bytes"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // CreateView creates a test view from a parsed DDL statement and adds it to the
 // catalog.
@@ -26,14 +22,13 @@ func (tc *Catalog) CreateView(stmt *tree.CreateView) *View {
 	// Update the view name to include catalog and schema if not provided.
 	tc.qualifyTableName(&stmt.Name)
 
-	var buf bytes.Buffer
-	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtParsable)
-	stmt.AsSource.Format(&fmtCtx)
+	fmtCtx := tree.NewFmtCtx(tree.FmtParsable)
+	stmt.AsSource.Format(fmtCtx)
 
 	view := &View{
 		ViewID:      tc.nextStableID(),
 		ViewName:    stmt.Name,
-		QueryText:   buf.String(),
+		QueryText:   fmtCtx.CloseAndGetString(),
 		ColumnNames: stmt.ColumnNames,
 	}
 

@@ -59,7 +59,7 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 // Format implements the NodeFormatter interface.
 func (node *Grant) Format(ctx *FmtCtx) {
 	ctx.WriteString("GRANT ")
-	node.Privileges.Format(ctx.Buffer)
+	node.Privileges.Format(&ctx.Buffer)
 	ctx.WriteString(" ON ")
 	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" TO ")

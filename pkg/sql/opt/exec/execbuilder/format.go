@@ -61,14 +61,16 @@ func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, nd opt.Expr) bool {
 		// Not all scalar operators are supported (e.g. Projections).
 		return false
 	}
-	f.Buffer.Reset()
-	fmtCtx := tree.MakeFmtCtx(f.Buffer, tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	fmtCtx.WithIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
 		fullyQualify := !f.HasFlags(memo.ExprFmtHideQualifications)
 		alias := md.ColumnMeta(opt.ColumnID(idx + 1)).QualifiedAlias(fullyQualify)
 		ctx.WriteString(alias)
 	})
-	expr.Format(&fmtCtx)
+	expr.Format(fmtCtx)
+	f.Buffer.Reset()
+	_, _ = fmtCtx.WriteTo(f.Buffer)
+	fmtCtx.Close()
 	f.FormatScalarProps(nd.(opt.ScalarExpr))
 	tp.Child(f.Buffer.String())
 	return true

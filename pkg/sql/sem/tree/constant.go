@@ -395,7 +395,7 @@ func (expr *StrVal) RawString() string {
 
 // Format implements the NodeFormatter interface.
 func (expr *StrVal) Format(ctx *FmtCtx) {
-	buf, f := ctx.Buffer, ctx.flags
+	buf, f := &ctx.Buffer, ctx.flags
 	if expr.scannedAsBytes {
 		lex.EncodeSQLBytes(buf, expr.s)
 	} else {

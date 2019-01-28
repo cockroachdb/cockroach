@@ -41,29 +41,33 @@ func IsHexDigit(ch int) bool {
 		(ch >= 'A' && ch <= 'F')
 }
 
-// lookaheadKeywords are those keywords for which we need one token
-// of lookahead extra to determine their token type.
-var lookaheadKeywords = map[string]struct{}{
-	"between":    {},
-	"ilike":      {},
-	"in":         {},
-	"like":       {},
-	"of":         {},
-	"ordinality": {},
-	"similar":    {},
-	"time":       {},
+// reservedOrLookaheadKeywords are the reserved keywords plus those keywords for
+// which we need one token of lookahead extra to determine their token type.
+var reservedOrLookaheadKeywords = make(map[string]struct{})
+
+func init() {
+	for s := range reservedKeywords {
+		reservedOrLookaheadKeywords[s] = struct{}{}
+	}
+	for _, s := range []string{
+		"between",
+		"ilike",
+		"in",
+		"like",
+		"of",
+		"ordinality",
+		"similar",
+		"time",
+	} {
+		reservedOrLookaheadKeywords[s] = struct{}{}
+	}
 }
 
 // isReservedKeyword returns true if the keyword is reserved, or needs
 // one extra token of lookahead.
 func isReservedKeyword(s string) bool {
-	if _, ok := reservedKeywords[s]; ok {
-		return true
-	}
-	if _, ok := lookaheadKeywords[s]; ok {
-		return true
-	}
-	return false
+	_, ok := reservedOrLookaheadKeywords[s]
+	return ok
 }
 
 // isBareIdentifier returns true if the input string is a permissible bare SQL
