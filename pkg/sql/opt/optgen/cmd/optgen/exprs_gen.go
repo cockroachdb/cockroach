@@ -200,6 +200,7 @@ func (g *exprsGen) genExprStruct(define *lang.DefineExpr) {
 		if g.needsDataTypeField(define) {
 			fmt.Fprintf(g.w, "  Typ types.T\n")
 		}
+		fmt.Fprintf(g.w, "  id  opt.ScalarID\n")
 	} else if define.Tags.Contains("Enforcer") {
 		fmt.Fprintf(g.w, "  Input RelExpr\n")
 		fmt.Fprintf(g.w, "  best  bestProps\n")
@@ -220,6 +221,11 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 
 	if define.Tags.Contains("Scalar") {
 		fmt.Fprintf(g.w, "var _ opt.ScalarExpr = &%s{}\n\n", opTyp.name)
+
+		// Generate the ID method.
+		fmt.Fprintf(g.w, "func (e *%s) ID() opt.ScalarID {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return e.id\n")
+		fmt.Fprintf(g.w, "}\n\n")
 	} else {
 		fmt.Fprintf(g.w, "var _ RelExpr = &%s{}\n\n", opTyp.name)
 	}
@@ -499,6 +505,11 @@ func (g *exprsGen) genListExprFuncs(define *lang.DefineExpr) {
 	opTyp := g.md.typeOf(define)
 	fmt.Fprintf(g.w, "var _ opt.ScalarExpr = &%s{}\n\n", opTyp.name)
 
+	// Generate the ID method.
+	fmt.Fprintf(g.w, "func (e *%s) ID() opt.ScalarID {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  panic(\"lists have no id\")")
+	fmt.Fprintf(g.w, "}\n\n")
+
 	// Generate the Op method.
 	fmt.Fprintf(g.w, "func (e *%s) Op() opt.Operator {\n", opTyp.name)
 	fmt.Fprintf(g.w, "  return opt.%sOp\n", define.Name)
@@ -598,6 +609,7 @@ func (g *exprsGen) genMemoizeFuncs() {
 		}
 
 		if define.Tags.Contains("Scalar") {
+			fmt.Fprintf(g.w, "   id: m.NextID(),\n")
 			fmt.Fprintf(g.w, "  }\n")
 			if g.needsDataTypeField(define) {
 				fmt.Fprintf(g.w, "  e.Typ = InferType(m, e)\n")

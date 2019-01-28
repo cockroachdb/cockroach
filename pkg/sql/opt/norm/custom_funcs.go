@@ -1460,3 +1460,35 @@ func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr
 	}
 	return c.f.ConstructConstVal(result)
 }
+
+// AreFiltersSorted determines whether the expressions in a FiltersExpr are
+// ordered by their expression IDs.
+func (c *CustomFuncs) AreFiltersSorted(f memo.FiltersExpr) bool {
+	for i, n := 0, f.ChildCount(); i < n-1; i++ {
+		if f.Child(i).Child(0).(opt.ScalarExpr).ID() > f.Child(i+1).Child(0).(opt.ScalarExpr).ID() {
+			return false
+		}
+	}
+	return true
+}
+
+// SortFilters sorts a filter list by the IDs of the expressions. This has the
+// effect of canonicalizing FiltersExprs which may have the same filters, but
+// in a different order.
+func (c *CustomFuncs) SortFilters(f memo.FiltersExpr) memo.FiltersExpr {
+	result := make(memo.FiltersExpr, len(f))
+	for i, n := 0, f.ChildCount(); i < n; i++ {
+		fi := f.Child(i).(*memo.FiltersItem)
+		result[i] = *fi
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Child(0).(opt.ScalarExpr).ID() < result[j].Child(0).(opt.ScalarExpr).ID()
+	})
+	return result
+}
+
+// ShouldReorderJoins returns whether the optimizer should attempt to find
+// a better ordering of inner joins.
+func (c *CustomFuncs) ShouldReorderJoins() bool {
+	return c.f.evalCtx.SessionData.ReorderJoins
+}
