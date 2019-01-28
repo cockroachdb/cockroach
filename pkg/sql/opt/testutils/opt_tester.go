@@ -116,6 +116,10 @@ type OptTesterFlags struct {
 	// 0.5, and the estimated cost of an expression is c, the cost returned by
 	// the coster will be in the range [c - 0.5 * c, c + 0.5 * c).
 	PerturbCost float64
+
+	// ReorderJoins indicates whether the optimizer should attempt to find a
+	// better join order than the one that was specified.
+	ReorderJoins bool
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -222,6 +226,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		if err := ot.Flags.Set(a); err != nil {
 			d.Fatalf(tb, "%s", err)
 		}
+	}
+
+	if ot.Flags.ReorderJoins {
+		defer func(oldValue bool) {
+			ot.evalCtx.SessionData.ReorderJoins = oldValue
+		}(ot.evalCtx.SessionData.ReorderJoins)
+		ot.evalCtx.SessionData.ReorderJoins = true
 	}
 
 	ot.Flags.Verbose = testing.Verbose()
@@ -422,6 +433,9 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 			}
 			f.DisableRules.Add(int(r))
 		}
+
+	case "reorder-joins":
+		f.ReorderJoins = true
 
 	case "rule":
 		if len(arg.Vals) != 1 {

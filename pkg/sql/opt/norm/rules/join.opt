@@ -447,3 +447,18 @@ $left
 )
 =>
 (ExtractJoinEquality (OpName) $left $right $on $item)
+
+# SortFiltersInJoin ensures that any filters in an inner join are canonicalized
+# by sorting them.
+[SortFiltersInJoin, Normalize]
+(InnerJoin
+    $left:*
+    $right:*
+    $on:* & ^(AreFiltersSorted $on)
+)
+=>
+(InnerJoin
+  $left
+  $right
+  (SortFilters $on)
+)

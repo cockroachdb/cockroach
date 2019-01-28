@@ -342,6 +342,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`experimental_reorder_joins`: {
+		GetStringVal: makeBoolGetStringValFn(`experimental_reorder_joins`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetReorderJoins(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.ReorderJoins)
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`experimental_vectorize`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.VectorizeExecModeFromString(s)
