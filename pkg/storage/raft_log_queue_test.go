@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -373,6 +374,34 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 			updateRaftProgressFromActivity(ctx, prs, tc.replicas, tc.lastUpdate, tc.now)
 			assert.Equal(t, expPRs, prs)
 		})
+	}
+}
+
+func TestNewTruncateDecisionMaxSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	cfg := TestStoreConfig(hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond))
+	const exp = 1881
+	cfg.RaftLogTruncationThreshold = exp
+	store := createTestStoreWithConfig(
+		t, stopper, testStoreOpts{createSystemRanges: true}, &cfg,
+	)
+
+	repl, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	td, err := newTruncateDecision(ctx, repl)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if td.Input.MaxLogSize != exp {
+		t.Fatalf("MaxLogSize %d is unexpected, wanted %d", td.Input.MaxLogSize, exp)
 	}
 }
 

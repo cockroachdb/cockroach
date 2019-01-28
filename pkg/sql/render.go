@@ -87,7 +87,7 @@ type renderNode struct {
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
 	// will link to it by reference after checkRenderStar / analyzeExpr.
 	// Enforce this using NoCopy.
-	noCopy util.NoCopy
+	_ util.NoCopy
 }
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
