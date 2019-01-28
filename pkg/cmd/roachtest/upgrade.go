@@ -132,7 +132,7 @@ func registerUpgrade(r *registry) {
 			if _, err := db.ExecContext(ctx,
 				"SET CLUSTER SETTING cluster.preserve_downgrade_option = $1;", version,
 			); err == nil {
-				return fmt.Errorf("cluster.preserve_downgrade_option shouldn't be set to any other values besides current cluster version")
+				return fmt.Errorf("cluster.preserve_downgrade_option shouldn't be set to any other values besides current cluster version; was able to set it to %s", version)
 			} else if !testutils.IsError(err, "cannot set cluster.preserve_downgrade_option") {
 				return err
 			}
@@ -190,10 +190,10 @@ func registerUpgrade(r *registry) {
 
 		// Check cannot set cluster setting cluster.preserve_downgrade_option to any
 		// value besides the old cluster version.
-		if err := checkDowngradeOption("2.0"); err != nil {
+		if err := checkDowngradeOption("1.9"); err != nil {
 			t.Fatal(err)
 		}
-		if err := checkDowngradeOption("2.3"); err != nil {
+		if err := checkDowngradeOption("99.9"); err != nil {
 			t.Fatal(err)
 		}
 
