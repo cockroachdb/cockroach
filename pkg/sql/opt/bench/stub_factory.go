@@ -214,12 +214,6 @@ func (f *stubFactory) ConstructUpdate(
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructCreateTable(
-	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
-) (exec.Node, error) {
-	return struct{}{}, nil
-}
-
 func (f *stubFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,
@@ -235,6 +229,18 @@ func (f *stubFactory) ConstructUpsert(
 
 func (f *stubFactory) ConstructDelete(
 	input exec.Node, table cat.Table, fetchCols exec.ColumnOrdinalSet, rowsNeeded bool,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructDeleteRange(
+	table cat.Table, needed exec.ColumnOrdinalSet, indexConstraint *constraint.Constraint,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructCreateTable(
+	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

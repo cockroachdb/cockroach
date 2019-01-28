@@ -405,7 +405,7 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 }
 
 // addTargetTableColsForInsert adds up to maxCols columns to the list of columns
-// that will be set by an INSERT operation. Non-mutation olumns are added from
+// that will be set by an INSERT operation. Non-mutation columns are added from
 // the target table in the same order they appear in its schema. This method is
 // used when the target columns are not explicitly specified in the INSERT
 // statement:
@@ -589,7 +589,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 		// the two tables in the self-join.
 		tn := mb.tab.Name().TableName
 		alias := tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s_%d", tn, idx+1)))
-		tabID := mb.md.AddTableWithAlias(mb.tab, alias)
+		tabID := mb.md.AddTableWithAlias(mb.tab, &alias)
 		scanScope := mb.b.buildScan(
 			tabID,
 			nil, /* ordinals */
@@ -671,7 +671,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	// Build the right side of the left outer join. Include mutation columns
 	// because they can be used by computed update expressions. Use a different
 	// instance of table metadata so that col IDs do not overlap.
-	inputTabID := mb.md.AddTableWithAlias(mb.tab, mb.alias)
+	inputTabID := mb.md.AddTableWithAlias(mb.tab, &mb.alias)
 	fetchScope := mb.b.buildScan(
 		inputTabID,
 		nil, /* ordinals */
