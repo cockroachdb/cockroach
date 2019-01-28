@@ -1204,23 +1204,36 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 
 			// Send a Put request. This should be backpressured on the split, so it should
 			// not be able to succeed until we allow the split to continue.
-			writeRes := make(chan *roachpb.Error)
+			putRes := make(chan error)
 			go func() {
 				// Write to the first key of the range to make sure that
 				// we don't end up on the wrong side of the split.
-				pArgs := putArgs(splitKey.AsRawKey(), []byte("test"))
-				header := roachpb.Header{RangeID: repl.RangeID}
-				_, pErr := client.SendWrappedWith(context.Background(), store, header, pArgs)
-				writeRes <- pErr
+				putRes <- store.DB().Put(ctx, splitKey, "test")
+			}()
+
+			// Send a Delete request in a transaction. Should also be backpressured on the split,
+			// so it should not be able to succeed until we allow the split to continue.
+			delRes := make(chan error)
+			go func() {
+				// Write to the first key of the range to make sure that
+				// we don't end up on the wrong side of the split.
+				delRes <- store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+					b := txn.NewBatch()
+					b.Del(splitKey)
+					return txn.CommitInBatch(ctx, b)
+				})
 			}()
 
 			// Make sure the write doesn't return while a split is ongoing. If no
 			// split is ongoing, the write will return an error immediately.
 			if tc.splitOngoing {
 				select {
-				case pErr := <-writeRes:
+				case err := <-putRes:
 					close(blockSplits)
-					t.Fatalf("write was not blocked on split, returned err %v", pErr)
+					t.Fatalf("put was not blocked on split, returned err %v", err)
+				case err := <-delRes:
+					close(blockSplits)
+					t.Fatalf("delete was not blocked on split, returned err %v", err)
 				case <-time.After(100 * time.Millisecond):
 				}
 
@@ -1228,15 +1241,21 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				close(blockSplits)
 			}
 
-			if pErr := <-writeRes; tc.expErr == "" {
-				if pErr != nil {
-					t.Fatalf("write returned err %v, expected success", pErr)
-				}
-			} else {
-				if !testutils.IsPError(pErr, tc.expErr) {
-					t.Fatalf("write returned err %s, expected pattern %q", pErr, tc.expErr)
+			for op, resCh := range map[string]chan error{
+				"put":    putRes,
+				"delete": delRes,
+			} {
+				if err := <-resCh; tc.expErr == "" {
+					if err != nil {
+						t.Fatalf("%s returned err %v, expected success", op, err)
+					}
+				} else {
+					if !testutils.IsError(err, tc.expErr) {
+						t.Fatalf("%s returned err %s, expected pattern %q", op, err, tc.expErr)
+					}
 				}
 			}
+
 		})
 	}
 }

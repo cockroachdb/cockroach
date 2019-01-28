@@ -45,11 +45,9 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 )
 
 // backpressurableReqMethods is the set of all request methods that can
-// be backpressured. If a batch contains any method outside of this set,
-// it will not be backpressured.
+// be backpressured. If a batch contains any method in this set, it may
+// be backpressured.
 var backpressurableReqMethods = util.MakeFastIntSet(
-	int(roachpb.BeginTransaction),
-	int(roachpb.EndTransaction),
 	int(roachpb.Put),
 	int(roachpb.InitPut),
 	int(roachpb.ConditionalPut),
@@ -57,12 +55,11 @@ var backpressurableReqMethods = util.MakeFastIntSet(
 	int(roachpb.Increment),
 	int(roachpb.Delete),
 	int(roachpb.DeleteRange),
-	int(roachpb.ClearRange),
 )
 
 // backpressurableSpans contains spans of keys where write backpressuring
-// is permitted. Writes to any keys outside of these spans will never be
-// backpressured.
+// is permitted. Writes to any keys within these spans may cause a batch
+// to be backpressured.
 var backpressurableSpans = []roachpb.Span{
 	{Key: keys.TimeseriesPrefix, EndKey: keys.TimeseriesKeyMax},
 	{Key: keys.TableDataMin, EndKey: keys.TableDataMax},
@@ -76,26 +73,21 @@ func canBackpressureBatch(ba roachpb.BatchRequest) bool {
 		return false
 	}
 
-	// Only backpressure batches consisting exclusively of "backpressurable"
-	// methods that are all within "backpressurable" key spans.
-	for _, union := range ba.Requests {
-		req := union.GetInner()
+	// Only backpressure batches containing a "backpressurable"
+	// method that is within a "backpressurable" key span.
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
 		if !backpressurableReqMethods.Contains(int(req.Method())) {
-			return false
+			continue
 		}
 
-		inSpan := false
 		for _, s := range backpressurableSpans {
 			if s.Contains(req.Header().Span()) {
-				inSpan = true
-				break
+				return true
 			}
 		}
-		if !inSpan {
-			return false
-		}
 	}
-	return true
+	return false
 }
 
 // shouldBackpressureWrites returns whether writes to the range should be
