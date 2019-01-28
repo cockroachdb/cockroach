@@ -4952,6 +4952,10 @@ transaction_mode:
   {
     $$.val = tree.TransactionModes{ReadWriteMode: $1.readWriteMode()}
   }
+| as_of_clause
+  {
+    $$.val = tree.TransactionModes{AsOf: $1.asOfClause()}
+  }
 
 transaction_user_priority:
   PRIORITY user_priority

@@ -87,6 +87,10 @@ type txnState struct {
 	// The transaction's read only state.
 	readOnly bool
 
+	// Set to true when the current transaction is using a historical timestamp
+	// through the use of AS OF SYSTEM TIME.
+	isHistorical bool
+
 	// mon tracks txn-bound objects like the running state of
 	// planNode in the midst of performing a computation.
 	mon *mon.BytesMonitor
@@ -131,6 +135,8 @@ const (
 // 	 used for everything that happens within this SQL transaction.
 // txnType: The type of the starting txn.
 // sqlTimestamp: The timestamp to report for current_timestamp(), now() etc.
+// historicalTimestamp: If non-nil indicates that the transaction is historical
+//   and should be fixed to this timestamp.
 // priority: The transaction's priority.
 // readOnly: The read-only character of the new txn.
 // txn: If not nil, this txn will be used instead of creating a new txn. If so,
@@ -140,6 +146,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
 	txnType txnType,
 	sqlTimestamp time.Time,
+	historicalTimestamp *hlc.Timestamp,
 	priority roachpb.UserPriority,
 	readOnly tree.ReadWriteMode,
 	txn *client.Txn,
@@ -147,6 +154,7 @@ func (ts *txnState) resetForNewSQLTxn(
 ) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
+	ts.isHistorical = false
 
 	// Create a context for this transaction. It will include a root span that
 	// will contain everything executed as part of the upcoming SQL txn, including
@@ -197,16 +205,18 @@ func (ts *txnState) resetForNewSQLTxn(
 	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
 
 	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
-
 	ts.mu.Lock()
 	if txn == nil {
 		ts.mu.txn = client.NewTxn(ts.Ctx, tranCtx.db, tranCtx.nodeID, client.RootTxn)
 		ts.mu.txn.SetDebugName(opName)
+
 	} else {
 		ts.mu.txn = txn
 	}
 	ts.mu.Unlock()
-
+	if historicalTimestamp != nil {
+		ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp)
+	}
 	if err := ts.setPriority(priority); err != nil {
 		panic(err)
 	}
@@ -278,6 +288,19 @@ func (ts *txnState) finishExternalTxn() {
 	ts.mu.Unlock()
 }
 
+func (ts *txnState) setHistoricalTimestamp(ctx context.Context, historicalTimestamp hlc.Timestamp) {
+	ts.mu.Lock()
+	ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp)
+	ts.mu.Unlock()
+	ts.isHistorical = true
+}
+
+func (ts *txnState) getOrigTimestamp() hlc.Timestamp {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	return ts.mu.txn.OrigTimestamp()
+}
+
 func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
 	ts.mu.Lock()
 	err := ts.mu.txn.SetUserPriority(userPriority)
@@ -296,6 +319,9 @@ func (ts *txnState) setReadOnlyMode(mode tree.ReadWriteMode) error {
 	case tree.ReadOnly:
 		ts.readOnly = true
 	case tree.ReadWrite:
+		if ts.isHistorical {
+			return tree.ErrAsOfSpecifiedWithReadWrite
+		}
 		ts.readOnly = false
 	default:
 		return errors.Errorf("unknown read mode: %s", mode)

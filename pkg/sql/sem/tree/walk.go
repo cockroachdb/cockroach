@@ -1320,6 +1320,25 @@ func (stmt *ValuesClause) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+// copyNode makes a copy of this Statement.
+func (stmt *BeginTransaction) copyNode() *BeginTransaction {
+	stmtCopy := *stmt
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (stmt *BeginTransaction) walkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.Modes.AsOf.Expr != nil {
+		e, changed := WalkExpr(v, stmt.Modes.AsOf.Expr)
+		if changed {
+			ret = stmt.copyNode()
+			ret.Modes.AsOf.Expr = e
+		}
+	}
+	return ret
+}
+
 var _ walkableStmt = &CreateTable{}
 var _ walkableStmt = &Backup{}
 var _ walkableStmt = &Delete{}
@@ -1337,6 +1356,7 @@ var _ walkableStmt = &ValuesClause{}
 var _ walkableStmt = &CancelQueries{}
 var _ walkableStmt = &CancelSessions{}
 var _ walkableStmt = &ControlJobs{}
+var _ walkableStmt = &BeginTransaction{}
 
 // walkStmt walks the entire parsed stmt calling WalkExpr on each
 // expression, and replacing each expression with the one returned

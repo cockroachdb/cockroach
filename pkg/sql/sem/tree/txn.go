@@ -100,6 +100,7 @@ type TransactionModes struct {
 	Isolation     IsolationLevel
 	UserPriority  UserPriority
 	ReadWriteMode ReadWriteMode
+	AsOf          AsOfClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -116,12 +117,23 @@ func (node *TransactionModes) Format(ctx *FmtCtx) {
 	if node.ReadWriteMode != UnspecifiedReadWriteMode {
 		ctx.Printf("%s READ %s", sep, node.ReadWriteMode)
 	}
+	if node.AsOf.Expr != nil {
+		ctx.WriteString(sep)
+		ctx.WriteString(" ")
+		node.AsOf.Format(ctx)
+	}
 }
 
 var (
 	errIsolationLevelSpecifiedMultipleTimes = pgerror.NewError(pgerror.CodeSyntaxError, "isolation level specified multiple times")
 	errUserPrioritySpecifiedMultipleTimes   = pgerror.NewError(pgerror.CodeSyntaxError, "user priority specified multiple times")
 	errReadModeSpecifiedMultipleTimes       = pgerror.NewError(pgerror.CodeSyntaxError, "read mode specified multiple times")
+	errAsOfSpecifiedMultipleTimes           = pgerror.NewError(pgerror.CodeSyntaxError, "AS OF SYSTEM TIME specified multiple times")
+
+	// ErrAsOfSpecifiedWithReadWrite is returned when a statement attempts to set
+	// a historical query to READ WRITE which conflicts with its implied READ ONLY
+	// mode.
+	ErrAsOfSpecifiedWithReadWrite = pgerror.NewError(pgerror.CodeSyntaxError, "AS OF SYSTEM TIME specified with READ WRITE mode")
 )
 
 // Merge groups two sets of transaction modes together.
@@ -139,11 +151,22 @@ func (node *TransactionModes) Merge(other TransactionModes) error {
 		}
 		node.UserPriority = other.UserPriority
 	}
+	if other.AsOf.Expr != nil {
+		if node.AsOf.Expr != nil {
+			return errAsOfSpecifiedMultipleTimes
+		}
+		node.AsOf.Expr = other.AsOf.Expr
+	}
 	if other.ReadWriteMode != UnspecifiedReadWriteMode {
 		if node.ReadWriteMode != UnspecifiedReadWriteMode {
 			return errReadModeSpecifiedMultipleTimes
 		}
 		node.ReadWriteMode = other.ReadWriteMode
+	}
+	if node.ReadWriteMode != UnspecifiedReadWriteMode &&
+		node.ReadWriteMode != ReadOnly &&
+		node.AsOf.Expr != nil {
+		return ErrAsOfSpecifiedWithReadWrite
 	}
 	return nil
 }
