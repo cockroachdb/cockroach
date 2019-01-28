@@ -48,8 +48,6 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 // be backpressured. If a batch contains any method outside of this set,
 // it will not be backpressured.
 var backpressurableReqMethods = util.MakeFastIntSet(
-	int(roachpb.BeginTransaction),
-	int(roachpb.EndTransaction),
 	int(roachpb.Put),
 	int(roachpb.InitPut),
 	int(roachpb.ConditionalPut),
@@ -57,7 +55,6 @@ var backpressurableReqMethods = util.MakeFastIntSet(
 	int(roachpb.Increment),
 	int(roachpb.Delete),
 	int(roachpb.DeleteRange),
-	int(roachpb.ClearRange),
 )
 
 // backpressurableSpans contains spans of keys where write backpressuring
