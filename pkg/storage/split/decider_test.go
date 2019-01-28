@@ -155,4 +155,19 @@ func TestDecider(t *testing.T) {
 	// the decision.
 	assert.True(t, d.mu.splitFinder.Ready(ms(tick)))
 	assert.Equal(t, roachpb.Key(nil), d.MaybeSplitKey(ms(tick)))
+
+	for i := 0; i < 1000; i++ {
+		o := op("z")
+		if i%2 != 0 {
+			o = op("a")
+		}
+		d.Record(ms(tick), 11, o)
+		tick += 500
+	}
+
+	assert.True(t, d.mu.splitFinder.Ready(ms(tick)))
+	assert.Equal(t, roachpb.Key("z"), d.MaybeSplitKey(ms(tick)))
+	d.Reset()
+	assert.Nil(t, d.MaybeSplitKey(ms(tick)))
+	assert.Nil(t, d.mu.splitFinder)
 }
