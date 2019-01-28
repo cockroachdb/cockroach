@@ -128,6 +128,15 @@ type TableMeta struct {
 	anns [maxTableAnnIDCount]interface{}
 }
 
+// Columns returns the metadata IDs for all non-mutation columns in the table.
+func (tm *TableMeta) Columns() ColSet {
+	var cols ColSet
+	for i, n := 0, tm.Table.ColumnCount(); i < n; i++ {
+		cols.Add(int(tm.MetaID.ColumnID(i)))
+	}
+	return cols
+}
+
 // IndexColumns returns the metadata IDs for the set of columns in the given
 // index.
 // TODO(justin): cache this value in the table metadata.
@@ -135,7 +144,20 @@ func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
 
 	var indexCols ColSet
-	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
+	for i, n := 0, index.ColumnCount(); i < n; i++ {
+		ord := index.Column(i).Ordinal
+		indexCols.Add(int(tm.MetaID.ColumnID(ord)))
+	}
+	return indexCols
+}
+
+// IndexKeyColumns returns the metadata IDs for the set of strict key columns in
+// the given index.
+func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
+	index := tm.Table.Index(indexOrd)
+
+	var indexCols ColSet
+	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
 		ord := index.Column(i).Ordinal
 		indexCols.Add(int(tm.MetaID.ColumnID(ord)))
 	}
