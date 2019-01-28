@@ -218,6 +218,7 @@ func IsQueryCanceledError(err error) bool {
 func IsOutOfMemoryError(err error) bool {
 	return errHasCode(err, pgerror.CodeOutOfMemoryError)
 }
+
 func errHasCode(err error, code ...string) bool {
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		for _, c := range code {

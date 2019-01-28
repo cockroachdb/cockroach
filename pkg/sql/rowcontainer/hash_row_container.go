@@ -379,6 +379,12 @@ func (i *hashMemRowBucketIterator) Close() {}
 type hashMemRowIterator struct {
 	*HashMemRowContainer
 	curIdx int
+
+	// curKey contains the key that would be assigned to the current row if it
+	// were to be put on disk. It is needed to optimize the recreation of the
+	// iterators when HashDiskBackedRowContainer spills to disk and is computed
+	// once, right before the spilling occurs.
+	curKey []byte
 }
 
 var _ RowIterator = &hashMemRowIterator{}
@@ -398,6 +404,22 @@ func (i *hashMemRowIterator) Rewind() {
 // Valid implements the RowIterator interface.
 func (i *hashMemRowIterator) Valid() (bool, error) {
 	return i.curIdx < i.Len(), nil
+}
+
+// computeKey calculates the key for the current row as if the row is put on
+// disk. This method must be kept in sync with AddRow() of DiskRowContainer.
+func (i *hashMemRowIterator) computeKey() error {
+	row := i.EncRow(i.curIdx)
+	i.curKey = i.curKey[:0]
+	for _, col := range i.storedEqCols {
+		var err error
+		i.curKey, err = row[col].Encode(&i.types[col], &i.columnEncoder.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, i.curKey)
+		if err != nil {
+			return err
+		}
+	}
+	i.curKey = encoding.EncodeUvarintAscending(i.curKey, uint64(i.curIdx))
+	return nil
 }
 
 // Next implements the RowIterator interface.
@@ -512,7 +534,7 @@ func (h *HashDiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumR
 
 // hashDiskRowBucketIterator iterates over the rows in a bucket.
 type hashDiskRowBucketIterator struct {
-	diskRowIterator
+	*diskRowIterator
 	*HashDiskRowContainer
 	probeEqCols columns
 	// haveMarkedRows returns true if we've marked rows since the last time we
@@ -532,7 +554,7 @@ func (h *HashDiskRowContainer) NewBucketIterator(
 	ret := &hashDiskRowBucketIterator{
 		HashDiskRowContainer: h,
 		probeEqCols:          probeEqCols,
-		diskRowIterator:      h.NewIterator(ctx).(diskRowIterator),
+		diskRowIterator:      h.NewIterator(ctx).(*diskRowIterator),
 	}
 	if err := ret.Reset(ctx, row); err != nil {
 		return nil, err
@@ -584,7 +606,7 @@ func (i *hashDiskRowBucketIterator) Reset(ctx context.Context, row sqlbase.EncDa
 		// TODO(jordan): do this less by keeping a cache of written marks.
 		i.haveMarkedRows = false
 		i.diskRowIterator.Close()
-		i.diskRowIterator = i.HashDiskRowContainer.NewIterator(ctx).(diskRowIterator)
+		i.diskRowIterator = i.HashDiskRowContainer.NewIterator(ctx).(*diskRowIterator)
 	}
 	return nil
 }
@@ -633,7 +655,7 @@ func (i *hashDiskRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 // hashDiskRowIterator iterates over all unmarked rows in a
 // HashDiskRowContainer.
 type hashDiskRowIterator struct {
-	diskRowIterator
+	*diskRowIterator
 }
 
 var _ RowIterator = &hashDiskRowIterator{}
@@ -642,7 +664,7 @@ var _ RowIterator = &hashDiskRowIterator{}
 func (h *HashDiskRowContainer) NewUnmarkedIterator(ctx context.Context) RowIterator {
 	if h.shouldMark {
 		return &hashDiskRowIterator{
-			diskRowIterator: h.NewIterator(ctx).(diskRowIterator),
+			diskRowIterator: h.NewIterator(ctx).(*diskRowIterator),
 		}
 	}
 	return h.NewIterator(ctx)
@@ -722,6 +744,12 @@ type HashDiskBackedRowContainer struct {
 	diskMonitor   *mon.BytesMonitor
 	engine        diskmap.Factory
 	scratchEncRow sqlbase.EncDatumRow
+
+	// allRowsIterators keeps track of all iterators created via
+	// NewAllRowsIterator(). If the container spills to disk, these become
+	// invalid, so the container actively recreates the iterators, advances them
+	// to appropriate positions, and updates each iterator in-place.
+	allRowsIterators []*AllRowsIterator
 }
 
 var _ HashRowContainer = &HashDiskBackedRowContainer{}
@@ -741,11 +769,12 @@ func MakeHashDiskBackedRowContainer(
 	engine diskmap.Factory,
 ) HashDiskBackedRowContainer {
 	return HashDiskBackedRowContainer{
-		mrc:           mrc,
-		evalCtx:       evalCtx,
-		memoryMonitor: memoryMonitor,
-		diskMonitor:   diskMonitor,
-		engine:        engine,
+		mrc:              mrc,
+		evalCtx:          evalCtx,
+		memoryMonitor:    memoryMonitor,
+		diskMonitor:      diskMonitor,
+		engine:           engine,
+		allRowsIterators: make([]*AllRowsIterator, 0, 1),
 	}
 }
 
@@ -835,34 +864,40 @@ func (h *HashDiskBackedRowContainer) ReserveMarkMemoryMaybe(ctx context.Context)
 		// We're assuming that the disk space is infinite, so we only need to
 		// reserve the memory for marks if we're using in-memory container.
 		if err := h.hmrc.ReserveMarkMemoryMaybe(ctx); err != nil {
-			return h.spillToDisk(ctx)
+			return h.SpillToDisk(ctx)
 		}
 	}
 	return nil
 }
 
-// spillIfMemErr checks err and calls spillToDisk if the given err is an out of
+// spillIfMemErr checks err and calls SpillToDisk if the given err is an out of
 // memory error. Returns whether the HashDiskBackedRowContainer spilled to disk
 // and an error if one occurred while doing so.
 func (h *HashDiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
 	if !sqlbase.IsOutOfMemoryError(err) {
 		return false, nil
 	}
-	if spillErr := h.spillToDisk(ctx); spillErr != nil {
+	if spillErr := h.SpillToDisk(ctx); spillErr != nil {
 		return false, spillErr
 	}
 	log.VEventf(ctx, 2, "spilled to disk: %v", err)
 	return true, nil
 }
 
-// spillToDisk creates a disk backed row container, injects all the data from
-// the in-memory container into it, and clears the in-memory one afterwards.
-func (h *HashDiskBackedRowContainer) spillToDisk(ctx context.Context) error {
+// SpillToDisk creates a disk row container, injects all the data from the
+// in-memory container into it, and clears the in-memory one afterwards.
+func (h *HashDiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if h.UsingDisk() {
 		return errors.New("already using disk")
 	}
 	hdrc := MakeHashDiskRowContainer(h.diskMonitor, h.engine)
 	if err := hdrc.Init(ctx, h.shouldMark, h.types, h.storedEqCols, h.encodeNull); err != nil {
+		return err
+	}
+
+	// We compute the "current" keys of the iterators that will need to be
+	// recreated.
+	if err := h.computeKeysForAllRowsIterators(); err != nil {
 		return err
 	}
 
@@ -896,7 +931,8 @@ func (h *HashDiskBackedRowContainer) spillToDisk(ctx context.Context) error {
 
 	h.src = &hdrc
 	h.hdrc = &hdrc
-	return nil
+
+	return h.recreateAllRowsIterators(ctx)
 }
 
 // NewBucketIterator implements the hashRowContainer interface.
@@ -914,6 +950,7 @@ func (h *HashDiskBackedRowContainer) NewUnmarkedIterator(ctx context.Context) Ro
 // UnsafeReset resets the container for reuse. The HashDiskBackedRowContainer
 // will reset to using memory if it is using disk.
 func (h *HashDiskBackedRowContainer) UnsafeReset(ctx context.Context) error {
+	h.allRowsIterators = h.allRowsIterators[:0]
 	if h.hdrc != nil {
 		h.hdrc.Close(ctx)
 		h.src = h.hmrc
@@ -921,4 +958,78 @@ func (h *HashDiskBackedRowContainer) UnsafeReset(ctx context.Context) error {
 		return nil
 	}
 	return h.hmrc.UnsafeReset(ctx)
+}
+
+// Sort sorts the underlying row container based on stored equality columns
+// which forces all rows from the same hash bucket to be contiguous.
+func (h *HashDiskBackedRowContainer) Sort(ctx context.Context) {
+	if !h.UsingDisk() && len(h.storedEqCols) > 0 {
+		// We need to explicitly sort only if we're using in-memory container since
+		// if we're using disk, the underlying sortedDiskMap will be sorted
+		// already.
+		h.hmrc.Sort(ctx)
+	}
+}
+
+// AllRowsIterator iterates over all rows in HashDiskBackedRowContainer which
+// should be initialized to not do marking. This iterator will be recreated
+// in-place if the container spills to disk.
+type AllRowsIterator struct {
+	RowIterator
+
+	container *HashDiskBackedRowContainer
+}
+
+// Close implements RowIterator interface.
+func (i *AllRowsIterator) Close() {
+	i.RowIterator.Close()
+	for j, iterator := range i.container.allRowsIterators {
+		if i == iterator {
+			i.container.allRowsIterators = append(i.container.allRowsIterators[:j], i.container.allRowsIterators[j+1:]...)
+			return
+		}
+	}
+}
+
+// NewAllRowsIterator creates AllRowsIterator that can iterate over all rows
+// (equivalent to an unmarked iterator when the container doesn't do marking)
+// and will be recreated if the spilling to disk occurs.
+func (h *HashDiskBackedRowContainer) NewAllRowsIterator(
+	ctx context.Context,
+) (*AllRowsIterator, error) {
+	if h.shouldMark {
+		return nil, errors.Errorf("AllRowsIterator can only be created when the container doesn't do marking")
+	}
+	i := AllRowsIterator{h.src.NewUnmarkedIterator(ctx), h}
+	h.allRowsIterators = append(h.allRowsIterators, &i)
+	return &i, nil
+}
+
+func (h *HashDiskBackedRowContainer) computeKeysForAllRowsIterators() error {
+	var oldIterator *hashMemRowIterator
+	var ok bool
+	for _, iterator := range h.allRowsIterators {
+		if oldIterator, ok = (*iterator).RowIterator.(*hashMemRowIterator); !ok {
+			return errors.Errorf("the iterator is unexpectedly not hashMemRowIterator")
+		}
+		if err := oldIterator.computeKey(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *HashDiskBackedRowContainer) recreateAllRowsIterators(ctx context.Context) error {
+	var oldIterator *hashMemRowIterator
+	var ok bool
+	for _, iterator := range h.allRowsIterators {
+		if oldIterator, ok = (*iterator).RowIterator.(*hashMemRowIterator); !ok {
+			return errors.Errorf("the iterator is unexpectedly not hashMemRowIterator")
+		}
+		newIterator := h.NewUnmarkedIterator(ctx)
+		newIterator.(*diskRowIterator).Seek(oldIterator.curKey)
+		(*iterator).RowIterator.Close()
+		iterator.RowIterator = newIterator
+	}
+	return nil
 }
