@@ -267,7 +267,7 @@ func TestFormatExpr(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ctx := tree.MakeSemaContext(false)
+			ctx := tree.MakeSemaContext()
 			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
 			if err != nil {
 				t.Fatal(err)
@@ -323,7 +323,7 @@ func TestFormatExpr2(t *testing.T) {
 
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
-			ctx := tree.MakeSemaContext(false)
+			ctx := tree.MakeSemaContext()
 			typeChecked, err := tree.TypeCheck(test.expr, &ctx, types.Any)
 			if err != nil {
 				t.Fatal(err)
@@ -379,7 +379,7 @@ func TestFormatPgwireText(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ctx := tree.MakeSemaContext(false)
+			ctx := tree.MakeSemaContext()
 			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
 			if err != nil {
 				t.Fatal(err)

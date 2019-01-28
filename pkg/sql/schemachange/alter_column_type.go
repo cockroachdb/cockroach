@@ -200,7 +200,7 @@ func ClassifyConversion(
 	}
 
 	// See if there's existing cast logic.  If so, return general.
-	ctx := tree.MakeSemaContext(false)
+	ctx := tree.MakeSemaContext()
 	if err := ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
 		return ColumnConversionImpossible, err
 	}

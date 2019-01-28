@@ -67,7 +67,7 @@ func TestMemoInit(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	semaCtx := tree.MakeSemaContext()
 	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestMemoIsStale(t *testing.T) {
 	catalog.Table(tree.NewTableName("t", "abc")).Revoked = true
 
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	// Initialize context with starting values.

@@ -77,10 +77,6 @@ type FunctionProperties struct {
 	// get rid of this blacklist.
 	DistsqlBlacklist bool
 
-	// Privileged is set to true when the built-in can only be used by
-	// security.RootUser.
-	Privileged bool
-
 	// Class is the kind of built-in function (normal/aggregate/window/etc.)
 	Class FunctionClass
 
