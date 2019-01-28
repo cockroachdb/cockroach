@@ -153,7 +153,7 @@ func (r *Replica) maybeBackpressureWriteBatch(ctx context.Context, ba roachpb.Ba
 			return errors.Wrap(ctx.Err(), "aborted while applying backpressure")
 		case err := <-splitC:
 			if err != nil {
-				return errors.Wrap(err, "split failed while applying backpressure")
+				return errors.Wrap(err, "split failed while applying backpressure; are rows updated in a tight loop?")
 			}
 		}
 	}
