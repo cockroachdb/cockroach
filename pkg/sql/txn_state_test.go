@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/gogo/protobuf/proto"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -297,9 +298,10 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createNoTxnState()
 				return s, ts, nil
 			},
-			ev:        eventTxnStart{ImplicitTxn: True},
-			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(), tranCtx),
-			expState:  stateOpen{ImplicitTxn: True, RetryIntent: False},
+			ev: eventTxnStart{ImplicitTxn: True},
+			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
+				nil /* historicalTimestamp */, tranCtx),
+			expState: stateOpen{ImplicitTxn: True, RetryIntent: False},
 			expAdv: expAdvance{
 				// We expect to stayInPlace; upon starting a txn the statement is
 				// executed again, this time in state Open.
@@ -321,9 +323,10 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createNoTxnState()
 				return s, ts, nil
 			},
-			ev:        eventTxnStart{ImplicitTxn: False},
-			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(), tranCtx),
-			expState:  stateOpen{ImplicitTxn: False, RetryIntent: False},
+			ev: eventTxnStart{ImplicitTxn: False},
+			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
+				nil /* historicalTimestamp */, tranCtx),
+			expState: stateOpen{ImplicitTxn: False, RetryIntent: False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   txnStart,
@@ -647,14 +650,36 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createAbortedState(retryIntentSet)
 				return s, ts, nil
 			},
-			ev:        eventTxnStart{ImplicitTxn: False},
-			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(), tranCtx),
-			expState:  stateOpen{ImplicitTxn: False, RetryIntent: True},
+			ev: eventTxnStart{ImplicitTxn: False},
+			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
+				nil /* historicalTimestamp */, tranCtx),
+			expState: stateOpen{ImplicitTxn: False, RetryIntent: True},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   noEvent,
 			},
 			expTxn: &expKVTxn{},
+		},
+		{
+			// The txn is starting again (e.g. ROLLBACK TO SAVEPOINT while in Aborted).
+			// Verify that the historical timestamp from the evPayload is propagated
+			// to the expTxn.
+			name: "Aborted->Starting (historical)",
+			init: func() (State, *txnState, error) {
+				s, ts := testCon.createAbortedState(retryIntentSet)
+				return s, ts, nil
+			},
+			ev: eventTxnStart{ImplicitTxn: False},
+			evPayload: makeEventTxnStartPayload(pri, tree.ReadOnly, now.GoTime(),
+				&now, tranCtx),
+			expState: stateOpen{ImplicitTxn: False, RetryIntent: True},
+			expAdv: expAdvance{
+				expCode: advanceOne,
+				expEv:   noEvent,
+			},
+			expTxn: &expKVTxn{
+				tsNanos: proto.Int64(now.WallTime),
+			},
 		},
 		//
 		// Tests starting from the RestartWait state.

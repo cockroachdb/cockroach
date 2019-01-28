@@ -1182,6 +1182,7 @@ kv_option ::=
 transaction_mode ::=
 	transaction_user_priority
 	| transaction_read_mode
+	| as_of_clause
 
 opt_comma ::=
 	','
