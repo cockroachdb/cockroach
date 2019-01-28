@@ -100,7 +100,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	b.checkPrivilege(tn, tab, privilege.SELECT)
 
 	var mb mutationBuilder
-	mb.init(b, opt.UpdateOp, tab, alias)
+	mb.init(b, opt.UpdateOp, tab, *alias)
 
 	// Build the input expression that selects the rows that will be updated:
 	//

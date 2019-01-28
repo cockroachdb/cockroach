@@ -173,7 +173,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	}
 
 	var mb mutationBuilder
-	mb.init(b, opt.InsertOp, tab, alias)
+	mb.init(b, opt.InsertOp, tab, *alias)
 
 	// Compute target columns in two cases:
 	//
@@ -584,12 +584,14 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 			continue
 		}
 
-		// Build the right side of the left outer join.
+		// Build the right side of the left outer join. Use a new metadata instance
+		// of the mutation table so that a different set of column IDs are used for
+		// the two tables in the self-join.
 		tn := mb.tab.Name().TableName
 		alias := tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s_%d", tn, idx+1)))
+		tabID := mb.md.AddTableWithAlias(mb.tab, alias)
 		scanScope := mb.b.buildScan(
-			mb.tab,
-			&alias,
+			tabID,
 			nil, /* ordinals */
 			nil, /* indexFlags */
 			excludeMutations,
@@ -667,10 +669,11 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	}
 
 	// Build the right side of the left outer join. Include mutation columns
-	// because they can be used by computed update expressions.
+	// because they can be used by computed update expressions. Use a different
+	// instance of table metadata so that col IDs do not overlap.
+	inputTabID := mb.md.AddTableWithAlias(mb.tab, mb.alias)
 	fetchScope := mb.b.buildScan(
-		mb.tab,
-		mb.alias,
+		inputTabID,
 		nil, /* ordinals */
 		nil, /* indexFlags */
 		includeMutations,
