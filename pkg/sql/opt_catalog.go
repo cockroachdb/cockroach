@@ -69,6 +69,12 @@ func (os *optSchema) ID() cat.StableID {
 	return cat.StableID(os.desc.ID)
 }
 
+// Equals is part of the cat.Object interface.
+func (os *optSchema) Equals(other cat.Object) bool {
+	otherSchema, ok := other.(*optSchema)
+	return ok && os.desc.ID == otherSchema.desc.ID
+}
+
 // Name is part of the cat.Schema interface.
 func (os *optSchema) Name() *cat.SchemaName {
 	return &os.name
@@ -228,8 +234,8 @@ func (ov *optView) ID() cat.StableID {
 	return cat.StableID(ov.desc.ID)
 }
 
-// Equals is part of the cat.DataSource interface.
-func (ov *optView) Equals(other cat.DataSource) bool {
+// Equals is part of the cat.Object interface.
+func (ov *optView) Equals(other cat.Object) bool {
 	otherView, ok := other.(*optView)
 	if !ok {
 		return false
@@ -285,8 +291,8 @@ func (os *optSequence) ID() cat.StableID {
 	return cat.StableID(os.desc.ID)
 }
 
-// Equals is part of the cat.DataSource interface.
-func (os *optSequence) Equals(other cat.DataSource) bool {
+// Equals is part of the cat.Object interface.
+func (os *optSequence) Equals(other cat.Object) bool {
 	otherSeq, ok := other.(*optSequence)
 	if !ok {
 		return false
@@ -386,8 +392,8 @@ func (ot *optTable) ID() cat.StableID {
 	return cat.StableID(ot.desc.ID)
 }
 
-// Equals is part of the cat.DataSource interface.
-func (ot *optTable) Equals(other cat.DataSource) bool {
+// Equals is part of the cat.Object interface.
+func (ot *optTable) Equals(other cat.Object) bool {
 	otherTable, ok := other.(*optTable)
 	if !ok {
 		return false

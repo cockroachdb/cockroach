@@ -416,7 +416,13 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 			"schema cannot be modified: %q", tree.ErrString(&resName))})
 	}
 
-	b.checkPrivilege(sch, privilege.CREATE)
+	if err := b.catalog.CheckPrivilege(b.ctx, sch, privilege.CREATE); err != nil {
+		panic(builderError{err})
+	}
+
+	// Add dependency on this schema to the metadata, so that the metadata can be
+	// cached and later checked for freshness.
+	b.factory.Metadata().AddSchemaDependency(&name.TableNamePrefix, sch, privilege.CREATE)
 	return sch, resName
 }
 
@@ -444,7 +450,7 @@ func (b *Builder) resolveDataSource(
 	if err != nil {
 		panic(builderError{err})
 	}
-	b.checkPrivilege(ds, priv)
+	b.checkPrivilege(tn, ds, priv)
 	return ds, resName
 }
 
@@ -457,17 +463,20 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) 
 	if err != nil {
 		panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
 	}
-	b.checkPrivilege(ds, priv)
+	b.checkPrivilege(ds.Name(), ds, priv)
 	return ds
 }
 
 // checkPrivilege ensures that the current user has the privilege needed to
 // access the given object in the catalog. If not, then checkPrivilege raises an
-// error. It also adds the object as a dependency to the metadata, so that the
-// privileges can be re-checked on reuse of the memo.
-func (b *Builder) checkPrivilege(o cat.Object, priv privilege.Kind) {
-	if priv != privilege.SELECT || !b.skipSelectPrivilegeChecks {
-		err := b.catalog.CheckPrivilege(b.ctx, o, priv)
+// error. It also adds the object and it's original unresolved name as a
+// dependency to the metadata, so that the privileges can be re-checked on reuse
+// of the memo.
+func (b *Builder) checkPrivilege(
+	origName *cat.DataSourceName, ds cat.DataSource, priv privilege.Kind,
+) {
+	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
+		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
 		if err != nil {
 			panic(builderError{err})
 		}
@@ -478,5 +487,5 @@ func (b *Builder) checkPrivilege(o cat.Object, priv privilege.Kind) {
 
 	// Add dependency on this object to the metadata, so that the metadata can be
 	// cached and later checked for freshness.
-	b.factory.Metadata().AddDependency(o, priv)
+	b.factory.Metadata().AddDataSourceDependency(origName, ds, priv)
 }
