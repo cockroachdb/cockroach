@@ -16,6 +16,7 @@ package opt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -117,21 +118,14 @@ type TableMeta struct {
 	// Table is a reference to the table in the catalog.
 	Table cat.Table
 
-	// Alias is an alternate name for the base table to be used for formatting,
-	// debugging, EXPLAIN output, etc. It is set to "" if no alias was specified.
-	Alias string
+	// Alias stores the identifier used in the query to identify the table. This
+	// might be explicitly qualified (e.g. <catalog>.<schema>.<table>), or not
+	// (e.g. <table>). Or, it may be an alias used in the query, in which case it
+	// is always an unqualified name.
+	Alias tree.TableName
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
-}
-
-// Name returns the table alias, if it was specified, or else the table's name
-// as a string.
-func (tm *TableMeta) Name() string {
-	if tm.Alias != "" {
-		return tm.Alias
-	}
-	return string(tm.Table.Name().TableName)
 }
 
 // IndexColumns returns the metadata IDs for the set of columns in the given

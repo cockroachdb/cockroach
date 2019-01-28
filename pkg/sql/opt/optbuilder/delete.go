@@ -67,7 +67,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	b.checkPrivilege(tab, privilege.SELECT)
 
 	var mb mutationBuilder
-	mb.init(b, opt.DeleteOp, tab, alias)
+	mb.init(b, opt.DeleteOp, tab, *alias)
 
 	// Build the input expression that selects the rows that will be deleted:
 	//
