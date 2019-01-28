@@ -40,3 +40,11 @@ SELECT * FROM t AS OF SYSTEM TIME '-1h'
 
 statement error cannot specify timestamp in the future
 SELECT * FROM t AS OF SYSTEM TIME '10s'
+
+# Verify that the TxnTimestamp used to generate now() and current_timestamp() is
+# set to the historical timestamp.
+
+query T
+SELECT * FROM (SELECT now()) AS OF SYSTEM TIME '2018-01-01'
+----
+2018-01-01 00:00:00 +0000 UTC
