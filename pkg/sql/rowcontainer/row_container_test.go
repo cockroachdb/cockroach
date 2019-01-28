@@ -266,7 +266,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 				t.Fatalf("verifying memory rows failed with: %s", err)
 			}
 		}()
-		if err := rc.spillToDisk(ctx); err != nil {
+		if err := rc.SpillToDisk(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if !rc.Spilled() {
@@ -444,7 +444,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 				if rc.Spilled() {
 					t.Fatal("unexpectedly using disk")
 				}
-				if err := rc.spillToDisk(ctx); err != nil {
+				if err := rc.SpillToDisk(ctx); err != nil {
 					t.Fatal(err)
 				}
 				if !rc.Spilled() {
@@ -528,7 +528,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 						}
 					}
 				}
-				if err := rc.spillToDisk(ctx); err != nil {
+				if err := rc.SpillToDisk(ctx); err != nil {
 					t.Fatal(err)
 				}
 				if !rc.Spilled() {
@@ -618,7 +618,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			func() {
 				d := MakeDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
 				defer d.Close(ctx)
-				if err := d.spillToDisk(ctx); err != nil {
+				if err := d.SpillToDisk(ctx); err != nil {
 					t.Fatal(err)
 				}
 				for i := 0; i < numRows; i++ {
@@ -806,7 +806,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 	b.Run("OnDiskWithCache", func(b *testing.B) {
 		rc := MakeDiskBackedIndexedRowContainer(nil, sqlbase.OneIntCol, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
 		defer rc.Close(ctx)
-		if err := rc.spillToDisk(ctx); err != nil {
+		if err := rc.SpillToDisk(ctx); err != nil {
 			b.Fatal(err)
 		}
 		for i := 0; i < len(rows); i++ {
@@ -831,7 +831,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 	b.Run("OnDiskWithoutCache", func(b *testing.B) {
 		rc := MakeDiskBackedIndexedRowContainer(nil, sqlbase.OneIntCol, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
 		defer rc.Close(ctx)
-		if err := rc.spillToDisk(ctx); err != nil {
+		if err := rc.SpillToDisk(ctx); err != nil {
 			b.Fatal(err)
 		}
 		for i := 0; i < len(rows); i++ {

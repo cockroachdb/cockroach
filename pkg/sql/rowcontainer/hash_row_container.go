@@ -722,6 +722,12 @@ type HashDiskBackedRowContainer struct {
 	diskMonitor   *mon.BytesMonitor
 	engine        diskmap.Factory
 	scratchEncRow sqlbase.EncDatumRow
+
+	// unmarkedIterators keeps track of all iterators created via
+	// NewUnmarkedIterator(). If the container spills to disk, these become
+	// invalid, so the container actively recreates the iterators, advances them
+	// appropriate positions, and updates unmarkedIterators in-place.
+	unmarkedIterators []*RowIterator
 }
 
 var _ HashRowContainer = &HashDiskBackedRowContainer{}
@@ -741,11 +747,12 @@ func MakeHashDiskBackedRowContainer(
 	engine diskmap.Factory,
 ) HashDiskBackedRowContainer {
 	return HashDiskBackedRowContainer{
-		mrc:           mrc,
-		evalCtx:       evalCtx,
-		memoryMonitor: memoryMonitor,
-		diskMonitor:   diskMonitor,
-		engine:        engine,
+		mrc:               mrc,
+		evalCtx:           evalCtx,
+		memoryMonitor:     memoryMonitor,
+		diskMonitor:       diskMonitor,
+		engine:            engine,
+		unmarkedIterators: make([]*RowIterator, 0, 1),
 	}
 }
 
@@ -835,29 +842,29 @@ func (h *HashDiskBackedRowContainer) ReserveMarkMemoryMaybe(ctx context.Context)
 		// We're assuming that the disk space is infinite, so we only need to
 		// reserve the memory for marks if we're using in-memory container.
 		if err := h.hmrc.ReserveMarkMemoryMaybe(ctx); err != nil {
-			return h.spillToDisk(ctx)
+			return h.SpillToDisk(ctx)
 		}
 	}
 	return nil
 }
 
-// spillIfMemErr checks err and calls spillToDisk if the given err is an out of
+// spillIfMemErr checks err and calls SpillToDisk if the given err is an out of
 // memory error. Returns whether the HashDiskBackedRowContainer spilled to disk
 // and an error if one occurred while doing so.
 func (h *HashDiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
 	if !sqlbase.IsOutOfMemoryError(err) {
 		return false, nil
 	}
-	if spillErr := h.spillToDisk(ctx); spillErr != nil {
+	if spillErr := h.SpillToDisk(ctx); spillErr != nil {
 		return false, spillErr
 	}
 	log.VEventf(ctx, 2, "spilled to disk: %v", err)
 	return true, nil
 }
 
-// spillToDisk creates a disk backed row container, injects all the data from
+// SpillToDisk creates a disk backed row container, injects all the data from
 // the in-memory container into it, and clears the in-memory one afterwards.
-func (h *HashDiskBackedRowContainer) spillToDisk(ctx context.Context) error {
+func (h *HashDiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if h.UsingDisk() {
 		return errors.New("already using disk")
 	}
@@ -896,6 +903,10 @@ func (h *HashDiskBackedRowContainer) spillToDisk(ctx context.Context) error {
 
 	h.src = &hdrc
 	h.hdrc = &hdrc
+
+	if err := h.recreateUnmarkedIterators(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -908,7 +919,9 @@ func (h *HashDiskBackedRowContainer) NewBucketIterator(
 
 // NewUnmarkedIterator implements the hashRowContainer interface.
 func (h *HashDiskBackedRowContainer) NewUnmarkedIterator(ctx context.Context) RowIterator {
-	return h.src.NewUnmarkedIterator(ctx)
+	i := h.src.NewUnmarkedIterator(ctx)
+	h.unmarkedIterators = append(h.unmarkedIterators, &i)
+	return i
 }
 
 // UnsafeReset resets the container for reuse. The HashDiskBackedRowContainer
@@ -921,4 +934,40 @@ func (h *HashDiskBackedRowContainer) UnsafeReset(ctx context.Context) error {
 		return nil
 	}
 	return h.hmrc.UnsafeReset(ctx)
+}
+
+// Sort sorts the underlying row container based on stored equality columns
+// which forces all rows from the same hash bucket to be contiguous.
+func (h *HashDiskBackedRowContainer) Sort(ctx context.Context) {
+	if !h.UsingDisk() && len(h.storedEqCols) > 0 {
+		// We need to explicitly sort only if we're using in-memory container since
+		// if we're using disk, the underlying sortedDiskMap will be sorted
+		// already.
+		h.hmrc.Sort(ctx)
+	}
+}
+
+func (h *HashDiskBackedRowContainer) recreateUnmarkedIterators(ctx context.Context) error {
+	for _, iterator := range h.unmarkedIterators {
+		if oldIterator, ok := (*iterator).(*hashMemRowIterator); !ok {
+			return errors.Errorf("unmarked iterator is unexpectedly not hashMemRowIterator")
+		} else {
+			newIterator := h.NewUnmarkedIterator(ctx)
+			i := 0
+			for newIterator.Rewind(); ; newIterator.Next() {
+				if ok, err := newIterator.Valid(); err != nil {
+					return err
+				} else if !ok {
+					return errors.Errorf("recreation of unmarked iterators failed:"+
+						"needed to advance to %d but advanced only to %d", oldIterator.curIdx)
+				}
+				if i == oldIterator.curIdx {
+					break
+				}
+				i++
+			}
+			*iterator = newIterator
+		}
+	}
+	return nil
 }
