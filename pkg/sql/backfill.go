@@ -38,6 +38,12 @@ const (
 	// TODO(vivek): Replace these constants with a runtime budget for the
 	// operation chunk involved.
 
+	// checkConstraintBackfillChunkSize is the maximum number of rows
+	// processed per chunk during check constraint validation. This value
+	// is larger than the other chunk constants because the operation involves
+	// only running a scan and does not write.
+	checkConstraintBackfillChunkSize = 1600
+
 	// columnTruncateAndBackfillChunkSize is the maximum number of columns
 	// processed per chunk during column truncate or backfill.
 	columnTruncateAndBackfillChunkSize = 200
@@ -121,6 +127,8 @@ func (sc *SchemaChanger) runBackfill(
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexDescs []sqlbase.IndexDescriptor
 
+	var checksToValidate []sqlbase.DescriptorMutation_ConstraintToValidate
+
 	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
@@ -152,6 +160,10 @@ func (sc *SchemaChanger) runBackfill(
 				}
 			case *sqlbase.DescriptorMutation_Index:
 				addedIndexDescs = append(addedIndexDescs, *t.Index)
+			case *sqlbase.DescriptorMutation_Constraint:
+				if t.Constraint.ConstraintType == sqlbase.DescriptorMutation_ConstraintToValidate_CHECK {
+					checksToValidate = append(checksToValidate, *t.Constraint)
+				}
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
 			}
@@ -164,6 +176,8 @@ func (sc *SchemaChanger) runBackfill(
 				if !sc.canClearRangeForDrop(t.Index) {
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				}
+			case *sqlbase.DescriptorMutation_Constraint:
+				// no-op
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
 			}
@@ -194,6 +208,12 @@ func (sc *SchemaChanger) runBackfill(
 		}
 	}
 
+	if len(checksToValidate) > 0 {
+		if err := sc.validateChecks(ctx, evalCtx, lease, version); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -208,6 +228,18 @@ func (sc *SchemaChanger) getTableVersion(
 		return nil, makeErrTableVersionMismatch(tableDesc.Version, version)
 	}
 	return tableDesc, nil
+}
+
+func (sc *SchemaChanger) validateChecks(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	version sqlbase.DescriptorVersion,
+) error {
+	return sc.distBackfill(
+		ctx, evalCtx,
+		lease, version, checkConstraintBackfill, checkConstraintBackfillChunkSize,
+		backfill.CheckMutationFilter)
 }
 
 func (sc *SchemaChanger) truncateIndexes(
@@ -294,6 +326,7 @@ const (
 	_ backfillType = iota
 	columnBackfill
 	indexBackfill
+	checkConstraintBackfill
 )
 
 // getJobIDForMutationWithDescriptor returns a job id associated with a mutation given
@@ -534,7 +567,7 @@ func runSchemaChangesInTxn(
 
 	// Only needed because columnBackfillInTxn() backfills
 	// all column mutations.
-	doneColumnBackfill := false
+	doneColumnBackfill, doneCheckValidation := false, false
 	for _, m := range tableDesc.Mutations {
 		immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc.TableDesc())
 		switch m.Direction {
@@ -554,6 +587,18 @@ func runSchemaChangesInTxn(
 					return err
 				}
 
+			case *sqlbase.DescriptorMutation_Constraint:
+				check, err := tableDesc.FindCheckByName(m.GetConstraint().Name)
+				if err != nil {
+					return err
+				}
+				if doneCheckValidation || check.Validity == sqlbase.ConstraintValidity_Validated {
+					break
+				}
+				if err := checkValidateInTxn(ctx, txn, evalCtx, immutDesc, traceKV); err != nil {
+					return err
+				}
+				doneCheckValidation = true
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
 			}
@@ -575,6 +620,9 @@ func runSchemaChangesInTxn(
 					return err
 				}
 
+			case *sqlbase.DescriptorMutation_Constraint:
+				return errors.Errorf("constraint validation mutation cannot be in the DROP state within the same transaction: %+v", m)
+
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
 			}
@@ -586,6 +634,29 @@ func runSchemaChangesInTxn(
 	}
 	tableDesc.Mutations = nil
 
+	return nil
+}
+
+func checkValidateInTxn(
+	ctx context.Context,
+	txn *client.Txn,
+	evalCtx *tree.EvalContext,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	traceKV bool,
+) error {
+	var backfiller backfill.CheckBackfiller
+	if err := backfiller.Init(evalCtx, tableDesc); err != nil {
+		return err
+	}
+
+	sp := tableDesc.PrimaryIndexSpan()
+	for sp.Key != nil {
+		var err error
+		sp.Key, err = backfiller.RunCheckBackfillChunk(ctx, txn, tableDesc, sp, checkConstraintBackfillChunkSize, traceKV)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

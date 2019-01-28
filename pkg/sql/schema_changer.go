@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1134,6 +1135,30 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
 			desc.Mutations[i], columns = sc.reverseMutation(mutation, false /*notStarted*/, columns)
 
+			// If the mutation is for validating a constraint that is being added,
+			// drop the constraint because validation has failed
+			if constraint := mutation.GetConstraint(); constraint != nil &&
+				mutation.Direction == sqlbase.DescriptorMutation_ADD {
+				switch constraint.ConstraintType {
+				case sqlbase.DescriptorMutation_ConstraintToValidate_CHECK:
+					check, err := desc.FindCheckByName(constraint.Name)
+					if err != nil {
+						return err
+					}
+					// This isn't possible right now, but will be when it becomes possible to add constraints as NOT VALID
+					if check.Validity == sqlbase.ConstraintValidity_Unvalidated {
+						break
+					}
+
+					for j, c := range desc.Checks {
+						if c.Name == constraint.Name {
+							desc.Checks = append(desc.Checks[:j], desc.Checks[j+1:]...)
+							break
+						}
+					}
+				}
+			}
+
 			desc.Mutations[i].Rollback = true
 		}
 
@@ -1810,6 +1835,7 @@ func createSchemaChangeEvalCtx(
 		DataConversion: sessiondata.DataConversionConfig{
 			Location: dummyLocation,
 		},
+		User: security.NodeUser,
 	}
 
 	evalCtx := extendedEvalContext{

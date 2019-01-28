@@ -193,6 +193,10 @@ message ColumnType {
 enum ConstraintValidity {
   Validated = 0;
   Unvalidated = 1;
+  // The state for a constraint that was just added, but whose validation
+  // backfill job for existing rows is not yet complete. If validation fails,
+  //the constraint will be dropped.
+  Validating = 2;
 }
 
 message ForeignKeyReference {
@@ -494,9 +498,18 @@ message IndexDescriptor {
 // schema change will have a DescriptorMutation FIFO queue
 // containing each column/index descriptor being added or dropped.
 message DescriptorMutation {
+  message ConstraintToValidate {
+    enum ConstraintType {
+      CHECK = 0;
+    }
+    required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
+    required string name = 2 [(gogoproto.nullable) = false];
+  }
+
   oneof descriptor {
     ColumnDescriptor column = 1;
     IndexDescriptor index = 2;
+    ConstraintToValidate constraint = 8;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to

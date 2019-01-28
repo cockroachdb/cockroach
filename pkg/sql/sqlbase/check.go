@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -69,12 +70,67 @@ type AnalyzeExprFunction func(
 	typingContext string,
 ) (tree.TypedExpr, error)
 
+// MakeCheckExprs returns a slice of typed check expressions for the
+// slice of input check constraint descriptors.
+// The length of the result slice matches the length of the input
+// constraint descriptors.
+func MakeCheckExprs(
+	checks []TableDescriptor_CheckConstraint,
+	tn *tree.TableName,
+	cols []ColumnDescriptor,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+) ([]tree.TypedExpr, error) {
+	typedExprs := make([]tree.TypedExpr, 0, len(checks))
+
+	exprStrings := make([]string, 0, len(cols))
+	for _, ck := range checks {
+		exprStrings = append(exprStrings, ck.Expr)
+	}
+	exprs, err := parser.ParseExprs(exprStrings)
+	if err != nil {
+		return nil, err
+	}
+
+	// We need an ivarHelper and sourceInfo for type checking that each
+	// expressions results in a boolean.
+	iv := &descContainer{cols}
+	ivarHelper := tree.MakeIndexedVarHelper(iv, len(cols))
+
+	sourceInfo := NewSourceInfoForSingleTable(
+		*tn, ResultColumnsFromColDescs(cols),
+	)
+
+	semaCtx := tree.MakeSemaContext(false)
+	semaCtx.IVarContainer = iv
+
+	for _, raw := range exprs {
+		expr, _, _, err := ResolveNames(raw,
+			MakeMultiSourceInfo(sourceInfo),
+			ivarHelper, evalCtx.SessionData.SearchPath)
+		if err != nil {
+			return nil, err
+		}
+
+		typedExpr, err := tree.TypeCheck(expr, &semaCtx, types.Bool)
+		if err != nil {
+			return nil, err
+		}
+		if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
+			return nil, err
+		}
+		typedExprs = append(typedExprs, typedExpr)
+	}
+
+	return typedExprs, nil
+}
+
 // NewEvalCheckHelper constructs a new instance of the CheckHelper, to be used
 // in the "Eval" mode (see comment for the CheckHelper struct).
 func NewEvalCheckHelper(
 	ctx context.Context, analyzeExpr AnalyzeExprFunction, tableDesc *ImmutableTableDescriptor,
 ) (*CheckHelper, error) {
-	if len(tableDesc.Checks) == 0 {
+	if len(tableDesc.AllChecks()) == 0 {
 		return nil, nil
 	}
 
@@ -85,9 +141,9 @@ func NewEvalCheckHelper(
 		ResultColumnsFromColDescs(tableDesc.Columns),
 	)
 
-	c.Exprs = make([]tree.TypedExpr, len(tableDesc.Checks))
-	exprStrings := make([]string, len(tableDesc.Checks))
-	for i, check := range tableDesc.Checks {
+	c.Exprs = make([]tree.TypedExpr, len(tableDesc.AllChecks()))
+	exprStrings := make([]string, len(tableDesc.AllChecks()))
+	for i, check := range tableDesc.AllChecks() {
 		exprStrings[i] = check.Expr
 	}
 	exprs, err := parser.ParseExprs(exprStrings)
@@ -213,7 +269,7 @@ func (c *CheckHelper) CheckInput(checkVals tree.Datums) error {
 			"mismatched check constraint columns: expected %d, got %d", c.checkSet.Len(), len(checkVals))
 	}
 
-	for i := range c.tableDesc.Checks {
+	for i, check := range c.tableDesc.AllChecks() {
 		if !c.checkSet.Contains(i) {
 			continue
 		}
@@ -223,7 +279,7 @@ func (c *CheckHelper) CheckInput(checkVals tree.Datums) error {
 		} else if !res && checkVals[i] != tree.DNull {
 			// Failed to satisfy CHECK constraint.
 			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
-				"failed to satisfy CHECK constraint (%s)", c.tableDesc.Checks[i].Expr)
+				"failed to satisfy CHECK constraint (%s)", check.Expr)
 		}
 	}
 	return nil

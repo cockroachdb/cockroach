@@ -346,7 +346,8 @@ func (desc *TableDescriptor) collectConstraintInfo(
 			return nil, errors.Errorf("duplicate constraint name: %q", c.Name)
 		}
 		detail := ConstraintDetail{Kind: ConstraintTypeCheck}
-		detail.Unvalidated = c.Validity == ConstraintValidity_Unvalidated
+		// Constraints in the Validating state are considered Unvalidated for this purpose
+		detail.Unvalidated = c.Validity != ConstraintValidity_Validated
 		if tableLookup != nil {
 			detail.Details = c.Expr
 			detail.CheckConstraint = c
