@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -238,7 +237,7 @@ func newInternalPlanner(
 	p.stmt = nil
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
-	p.semaCtx = tree.MakeSemaContext(sd.User == security.RootUser /* privileged */)
+	p.semaCtx = tree.MakeSemaContext()
 	p.semaCtx.Location = &sd.DataConversion.Location
 	p.semaCtx.SearchPath = sd.SearchPath
 

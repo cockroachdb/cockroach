@@ -169,7 +169,7 @@ func MakeComputedExprs(
 		*tn, ResultColumnsFromColDescs(tableDesc.Columns),
 	)}
 
-	semaCtx := tree.MakeSemaContext(false)
+	semaCtx := tree.MakeSemaContext()
 	semaCtx.IVarContainer = iv
 
 	addColumnInfo := func(col ColumnDescriptor) {

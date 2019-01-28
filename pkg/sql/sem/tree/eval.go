@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -50,9 +51,10 @@ import (
 )
 
 var (
-	errIntOutOfRange   = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "integer out of range")
-	errFloatOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "float out of range")
-	errDecOutOfRange   = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "decimal out of range")
+	errIntOutOfRange    = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "integer out of range")
+	errFloatOutOfRange  = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "float out of range")
+	errDecOutOfRange    = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "decimal out of range")
+	errInsufficientPriv = pgerror.NewError(pgerror.CodeInsufficientPrivilegeError, "insufficient privilege")
 
 	// ErrDivByZero is reported on a division by zero.
 	ErrDivByZero = pgerror.NewError(pgerror.CodeDivisionByZeroError, "division by zero")
@@ -3572,6 +3574,11 @@ func (expr *FuncExpr) evalArgs(ctx *EvalContext) (bool, Datums, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
+	// Check that the built-in is allowed for the current user.
+	if expr.fnProps.Privileged && ctx.SessionData.User != security.RootUser {
+		return nil, errors.Wrapf(errInsufficientPriv, "%s()", expr.Func.String())
+	}
+
 	nullResult, args, err := expr.evalArgs(ctx)
 	if err != nil {
 		return nil, err
