@@ -1113,6 +1113,9 @@ func (r *registry) runAsync(
 					c.l.Printf("failed to download debug zip: %s", err)
 				}
 			}
+			if err := c.FetchDmesg(ctx); err != nil {
+				c.l.Printf("failed to fetch dmesg: %s", err)
+			}
 			// NB: fetch the logs even when we have a debug zip because
 			// debug zip can't ever get the logs for down nodes.
 			// We only save artifacts for failed tests in CI, so this
