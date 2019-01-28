@@ -42,13 +42,13 @@ SELECT count(DISTINCT l_suppkey) FROM lineitem
 SELECT count(*) FROM lineitem JOIN supplier ON l_suppkey = s_suppkey
 
 -- Merge join
-SELECT count(*) FROM lineitem@l_sk JOIN supplier@s_sk ON l_suppkey = s_suppkey
+SELECT count(*) FROM lineitem@l_sk JOIN supplier@primary ON l_suppkey = s_suppkey
 
 -- count(col)
 SELECT count(c_name) FROM customer
 
 -- Index join
-SELECT count(c_name) FROM customer@c_ck
+SELECT count(c_name) FROM customer@primary
 
 -- Filter with expression evaluation
 SELECT count(*) FROM lineitem WHERE l_discount * l_extendedprice > 10000
