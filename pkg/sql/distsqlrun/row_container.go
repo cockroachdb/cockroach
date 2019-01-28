@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"container/heap"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/pkg/errors"
 )
 
@@ -32,8 +34,12 @@ import (
 type sortableRowContainer interface {
 	Len() int
 	AddRow(context.Context, sqlbase.EncDatumRow) error
-	// Sort sorts the rows according to an ordering specified at initialization.
+	// Sort sorts the rows according to the current ordering.
 	Sort(context.Context)
+	// ChangeOrdering changes the ordering on which rows will be sorted. In order
+	// for the ordering to take effect, Sort() must be called. It returns
+	// (possibly new) row container and an error if occurred.
+	ChangeOrdering(context.Context, sqlbase.ColumnOrdering) (sortableRowContainer, error)
 	// NewIterator returns a rowIterator that can be used to iterate over
 	// the rows.
 	NewIterator(context.Context) rowIterator
@@ -118,7 +124,7 @@ var _ sortableRowContainer = &memRowContainer{}
 func (mc *memRowContainer) init(
 	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) {
-	mc.initWithMon(ordering, types, evalCtx, evalCtx.Mon)
+	mc.initWithMon(ordering, types, evalCtx, evalCtx.Mon, 0 /* rowCapacity */)
 }
 
 // initWithMon initializes the memRowContainer with an explicit monitor. Only
@@ -128,9 +134,10 @@ func (mc *memRowContainer) initWithMon(
 	types []sqlbase.ColumnType,
 	evalCtx *tree.EvalContext,
 	mon *mon.BytesMonitor,
+	rowCapacity int,
 ) {
 	acc := mon.MakeBoundAccount()
-	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), 0)
+	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), rowCapacity)
 	mc.types = types
 	mc.ordering = ordering
 	mc.scratchRow = make(tree.Datums, len(types))
@@ -173,10 +180,20 @@ func (mc *memRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	return err
 }
 
+// Sort implements sortableRowContainer.
 func (mc *memRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
 	cancelChecker := sqlbase.NewCancelChecker(ctx)
 	sqlbase.Sort(mc, cancelChecker)
+}
+
+// ChangeOrdering implements sortableRowContainer. We don't need to create
+// a new memRowContainer and can just change the ordering on-the-fly.
+func (mc *memRowContainer) ChangeOrdering(
+	_ context.Context, ordering sqlbase.ColumnOrdering,
+) (sortableRowContainer, error) {
+	mc.ordering = ordering
+	return mc, nil
 }
 
 // Push is part of heap.Interface.
@@ -329,6 +346,8 @@ var _ sortableRowContainer = &diskBackedRowContainer{}
 //    spill to disk.
 //  - diskMonitor is used to monitor the diskBackedRowContainer's disk usage if
 //    and when it spills to disk.
+//  - shouldUseDiskFromStart tells the container to use diskRowContainer from
+//    the initialization.
 func (f *diskBackedRowContainer) init(
 	ordering sqlbase.ColumnOrdering,
 	types []sqlbase.ColumnType,
@@ -336,9 +355,17 @@ func (f *diskBackedRowContainer) init(
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
+	rowCapacity int,
 ) {
+	if shouldUseDiskFromStart {
+		drc := makeDiskRowContainer(diskMonitor, types, ordering, engine)
+		f.src = &drc
+		f.drc = &drc
+		f.spilled = true
+		return
+	}
 	mrc := memRowContainer{}
-	mrc.initWithMon(ordering, types, evalCtx, memoryMonitor)
+	mrc.initWithMon(ordering, types, evalCtx, memoryMonitor, rowCapacity)
 	f.mrc = &mrc
 	f.src = &mrc
 	f.engine = engine
@@ -364,8 +391,29 @@ func (f *diskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatu
 	return nil
 }
 
+// Sort implements sortableRowContainer.
 func (f *diskBackedRowContainer) Sort(ctx context.Context) {
 	f.src.Sort(ctx)
+}
+
+// ChangeOrdering implements sortableRowContainer.
+func (f *diskBackedRowContainer) ChangeOrdering(
+	ctx context.Context, ordering sqlbase.ColumnOrdering,
+) (sortableRowContainer, error) {
+	if newSrc, err := f.src.ChangeOrdering(ctx, ordering); err != nil {
+		return nil, err
+	} else {
+		f.src = newSrc
+		switch c := newSrc.(type) {
+		case *memRowContainer:
+			f.mrc = c
+		case *diskRowContainer:
+			f.drc = c
+		default:
+			return nil, errors.Errorf("unexpected row container type")
+		}
+	}
+	return f, nil
 }
 
 func (f *diskBackedRowContainer) InitTopK() {
@@ -387,7 +435,7 @@ func (f *diskBackedRowContainer) NewFinalIterator(ctx context.Context) rowIterat
 }
 
 // UnsafeReset resets the container for reuse. The diskBackedRowContainer will
-// reset to use memory if it is using disk.
+// reset to using memory if it is using disk.
 func (f *diskBackedRowContainer) UnsafeReset(ctx context.Context) error {
 	if f.drc != nil {
 		f.drc.Close(ctx)
@@ -402,7 +450,9 @@ func (f *diskBackedRowContainer) Close(ctx context.Context) {
 	if f.drc != nil {
 		f.drc.Close(ctx)
 	}
-	f.mrc.Close(ctx)
+	if f.mrc != nil {
+		f.mrc.Close(ctx)
+	}
 }
 
 // Spilled returns whether or not the diskBackedRowContainer spilled to disk
@@ -458,4 +508,195 @@ func (f *diskBackedRowContainer) spillToDisk(ctx context.Context) error {
 	f.drc = &drc
 	f.spilled = true
 	return nil
+}
+
+// diskBackedIndexedRowContainer is a wrapper around diskBackedRowContainer
+// that adds an index to each row added in the order of addition of those rows
+// by storing an extra int column at the end of each row.
+type diskBackedIndexedRowContainer struct {
+	*diskBackedRowContainer
+
+	ctx           context.Context
+	scratchEncRow sqlbase.EncDatumRow
+	storedTypes   []sqlbase.ColumnType
+	datumAlloc    sqlbase.DatumAlloc
+	rowAlloc      sqlbase.EncDatumRowAlloc
+	idx           uint64 // the index of the next row to be added into the container
+
+	// These fields are for optimizations when container spilled to disk.
+	diskRowIter rowIterator
+	idxRowIter  int
+	// nextPosToCache is the index of the row to be cached next. If it is greater
+	// than 0, the cache contains all rows with position in the range
+	// [max(0, cache.Len()-maxIndexedRowsCacheSize), nextPosToCache-1].
+	nextPosToCache   int
+	indexedRowsCache ring.Buffer // the cache of up to maxIndexedRowsCacheSize contiguous rows
+}
+
+func makeDiskBackedIndexedRowContainer(
+	ordering sqlbase.ColumnOrdering,
+	types []sqlbase.ColumnType,
+	evalCtx *tree.EvalContext,
+	engine diskmap.Factory,
+	memoryMonitor *mon.BytesMonitor,
+	diskMonitor *mon.BytesMonitor,
+	rowCapacity int,
+) *diskBackedIndexedRowContainer {
+	d := diskBackedIndexedRowContainer{}
+
+	// We will be storing an index of each row as the last INT column.
+	d.storedTypes = make([]sqlbase.ColumnType, len(types)+1)
+	copy(d.storedTypes, types)
+	d.storedTypes[len(d.storedTypes)-1] = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	d.scratchEncRow = make(sqlbase.EncDatumRow, len(d.storedTypes))
+	d.diskBackedRowContainer = &diskBackedRowContainer{}
+	d.diskBackedRowContainer.init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
+	return &d
+}
+
+// AddRow implements sortableRowContainer.
+func (f *diskBackedIndexedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	f.ctx = ctx
+	copy(f.scratchEncRow, row)
+	f.scratchEncRow[len(f.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
+		sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+		tree.NewDInt(tree.DInt(f.idx)),
+	)
+	f.idx++
+	return f.diskBackedRowContainer.AddRow(ctx, f.scratchEncRow)
+}
+
+// ChangeOrdering implements sortableRowContainer.
+func (f *diskBackedIndexedRowContainer) ChangeOrdering(
+	ctx context.Context, ordering sqlbase.ColumnOrdering,
+) (sortableRowContainer, error) {
+	if newSrc, err := f.diskBackedRowContainer.ChangeOrdering(ctx, ordering); err != nil {
+		return nil, err
+	} else {
+		f.diskBackedRowContainer = newSrc.(*diskBackedRowContainer)
+	}
+	f.resetCache()
+	f.resetIterator()
+	return f, nil
+}
+
+// resetCache resets cache-related fields allowing for reusing the underlying
+// already allocated memory.
+func (f *diskBackedIndexedRowContainer) resetCache() {
+	f.nextPosToCache = 0
+	f.indexedRowsCache.Reset()
+}
+
+func (f *diskBackedIndexedRowContainer) resetIterator() {
+	if f.diskRowIter != nil {
+		f.diskRowIter.Close()
+		f.diskRowIter = nil
+		f.idxRowIter = 0
+	}
+}
+
+// UnsafeReset resets the underlying container (if it is using disk, it will be
+// reset to using memory).
+func (f *diskBackedIndexedRowContainer) UnsafeReset(ctx context.Context) error {
+	f.resetCache()
+	f.resetIterator()
+	f.idx = 0
+	return f.diskBackedRowContainer.UnsafeReset(ctx)
+}
+
+// Close implements sortableRowContainer.
+func (f *diskBackedIndexedRowContainer) Close(ctx context.Context) {
+	if f.diskRowIter != nil {
+		f.diskRowIter.Close()
+	}
+	f.diskBackedRowContainer.Close(ctx)
+}
+
+const maxIndexedRowsCacheSize = 4096
+
+// GetRow implements IndexedRows.
+//
+// Getting a row by index is fast from an in-memory row container but is a lot
+// slower from a disk-backed one. In order to mitigate the impact we add
+// optimizations of maintaining a cache of tree.IndexedRow's and storing a disk
+// iterator along with the index of the row it currently points at.
+func (f *diskBackedIndexedRowContainer) GetRow(pos int) tree.IndexedRow {
+	var rowWithIdx sqlbase.EncDatumRow
+	var err error
+	if f.UsingDisk() {
+		// The cache contains all contiguous rows up to the biggest pos requested
+		// so far (even if the rows were not requested explicitly). For example,
+		// if the cache is empty and the request comes for a row at pos 3, the
+		// cache will contain 4 rows at positions 0, 1, 2, and 3.
+		if f.indexedRowsCache.Len() > 0 {
+			firstCachedPos, lastCachedPos := f.indexedRowsCache.Len()-maxIndexedRowsCacheSize, f.nextPosToCache-1
+			if firstCachedPos < 0 {
+				firstCachedPos = 0
+			}
+			if pos >= firstCachedPos && pos <= lastCachedPos {
+				requestedRowCachePos := pos - firstCachedPos
+				return f.indexedRowsCache.Get(requestedRowCachePos).(tree.IndexedRow)
+			}
+		}
+		if f.diskRowIter == nil {
+			f.diskRowIter = f.diskBackedRowContainer.drc.NewIterator(f.ctx)
+			f.diskRowIter.Rewind()
+		}
+		if f.idxRowIter > pos {
+			// The iterator has been advanced further than we need, so we need to
+			// start iterating from the beginning.
+			firstCachedPos, lastCachedPos := f.indexedRowsCache.Len()-maxIndexedRowsCacheSize, f.nextPosToCache-1
+			if firstCachedPos < 0 {
+				firstCachedPos = 0
+			}
+			log.Infof(f.ctx, "rewinding: cache contains indices [%d, %d] but index %d requested", firstCachedPos, lastCachedPos, pos)
+			f.idxRowIter = 0
+			f.diskRowIter.Rewind()
+			f.resetCache()
+			if pos-maxIndexedRowsCacheSize > f.nextPosToCache {
+				f.nextPosToCache = pos - maxIndexedRowsCacheSize
+			}
+		}
+		for ; ; f.diskRowIter.Next() {
+			if ok, err := f.diskRowIter.Valid(); err != nil {
+				panic(err)
+			} else if !ok {
+				panic(fmt.Sprintf("row at pos %d not found", pos))
+			}
+			if f.idxRowIter == f.nextPosToCache {
+				rowWithIdx, err = f.diskRowIter.Row()
+				if err != nil {
+					panic(err)
+				}
+				for i := range rowWithIdx {
+					// TODO(yuzefovich): account for the extra memory.
+					if err := rowWithIdx[i].EnsureDecoded(&f.storedTypes[i], &f.datumAlloc); err != nil {
+						panic(err)
+					}
+				}
+				if rowIdx, ok := rowWithIdx[len(rowWithIdx)-1].Datum.(*tree.DInt); ok {
+					// We actually need to copy the row into memory.
+					ir := indexedRow{int(*rowIdx), f.rowAlloc.CopyRow(rowWithIdx[:len(rowWithIdx)-1])}
+					if f.indexedRowsCache.Len() == maxIndexedRowsCacheSize {
+						// The cache size is capped at maxIndexedRowsCacheSize, so we first
+						// remove the row with the smallest pos.
+						f.indexedRowsCache.RemoveFirst()
+					}
+					f.indexedRowsCache.AddLast(ir)
+					f.nextPosToCache++
+				} else {
+					panic("unexpected last column: should be integer pos")
+				}
+				if f.idxRowIter == pos {
+					return f.indexedRowsCache.GetLast().(tree.IndexedRow)
+				}
+			}
+			f.idxRowIter++
+		}
+	}
+	rowWithIdx = f.diskBackedRowContainer.mrc.EncRow(pos)
+	if rowIdx, ok := rowWithIdx[len(rowWithIdx)-1].Datum.(*tree.DInt); ok {
+		return indexedRow{int(*rowIdx), rowWithIdx[:len(rowWithIdx)-1]}
+	}
+	panic("unexpected last column: should be integer pos")
 }

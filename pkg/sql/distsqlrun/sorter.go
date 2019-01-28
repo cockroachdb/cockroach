@@ -94,11 +94,12 @@ func (s *sorterBase) init(
 			flowCtx.TempStorage,
 			memMonitor,
 			s.diskMonitor,
+			0, /* rowCapacity */
 		)
 		s.rows = &rc
 	} else {
 		rc := memRowContainer{}
-		rc.initWithMon(ordering, input.OutputTypes(), s.evalCtx, memMonitor)
+		rc.initWithMon(ordering, input.OutputTypes(), s.evalCtx, memMonitor, 0 /* rowCapacity */)
 		s.rows = &rc
 	}
 

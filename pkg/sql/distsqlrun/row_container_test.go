@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // verifyRows verifies that the rows read with the given rowIterator match up
@@ -100,7 +102,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	var mc memRowContainer
 	mc.initWithMon(
 		sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}},
-		[]sqlbase.ColumnType{typeInt, typeStr}, evalCtx, &m,
+		[]sqlbase.ColumnType{typeInt, typeStr}, evalCtx, &m, 0, /* rowCapacity */
 	)
 	defer mc.Close(ctx)
 
@@ -227,6 +229,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		tempEngine,
 		&memoryMonitor,
 		&diskMonitor,
+		0, /* rowCapacity */
 	)
 	defer rc.Close(ctx)
 
@@ -332,6 +335,98 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		}
 		if memoryMonitor.AllocBytes() != 0 {
 			t.Fatal("memory monitor reports unexpected usage")
+		}
+	})
+}
+
+func TestDiskBackedIndexedRowContainer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	tempEngine, err := engine.NewTempEngine(base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	memoryMonitor := mon.MakeMonitor(
+		"test-mem",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+
+	const numRows = 10
+	const numCols = 2
+	rows := make([]sqlbase.EncDatumRow, numRows)
+	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
+
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer memoryMonitor.Stop(ctx)
+	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
+
+	// SpillingHalfway adds half of all rows into diskBackedIndexedRowContainer,
+	// forces it to spill to disk, adds the second half into the container, and
+	// verifies that the rows are read correctly (along with the corresponding
+	// index).
+	t.Run("SpillingHalfway", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			types := sqlbase.RandSortingColumnTypes(rng, numCols)
+			for i := 0; i < numRows; i++ {
+				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
+			}
+
+			func() {
+				d := makeDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
+				defer d.Close(ctx)
+				mid := numRows / 2
+				for i := 0; i < mid; i++ {
+					if err := d.AddRow(ctx, rows[i]); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if d.Spilled() {
+					t.Fatal("unexpectedly using disk")
+				}
+				if err := d.spillToDisk(ctx); err != nil {
+					t.Fatal(err)
+				}
+				if !d.Spilled() {
+					t.Fatal("unexpectedly using memory")
+				}
+				for i := mid; i < numRows; i++ {
+					if err := d.AddRow(ctx, rows[i]); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				// Check equality of the row we wrote and the row we read.
+				for i := 0; i < numRows; i++ {
+					readRow := d.GetRow(i)
+					writtenRow := rows[readRow.GetIdx()]
+					for col := range writtenRow {
+						if cmp := readRow.GetDatum(col).Compare(&evalCtx, writtenRow[col].Datum); cmp != 0 {
+							t.Fatalf("read row is not equal to written one")
+						}
+					}
+				}
+			}()
 		}
 	})
 }
