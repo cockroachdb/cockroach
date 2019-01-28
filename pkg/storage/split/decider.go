@@ -149,3 +149,11 @@ func (d *Decider) MaybeSplitKey(now time.Time) roachpb.Key {
 
 	return key
 }
+
+// Reset deactivates any current attempt at determining a split key.
+func (d *Decider) Reset() {
+	d.mu.Lock()
+	d.mu.splitFinder = nil
+	d.mu.count = 0
+	d.mu.Unlock()
+}

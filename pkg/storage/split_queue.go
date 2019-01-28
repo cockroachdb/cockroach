@@ -218,6 +218,8 @@ func (sq *splitQueue) processAttempt(
 		); pErr != nil {
 			return errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
 		}
+		// Reset the splitter now that the bounds of the range changed.
+		r.loadBasedSplitter.Reset()
 		return nil
 	}
 	return nil
