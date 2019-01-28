@@ -655,7 +655,9 @@ func (f *ExprFmtCtx) formatColList(
 		f.Buffer.Reset()
 		f.Buffer.WriteString(heading)
 		for _, col := range colList {
-			formatCol(f, "" /* label */, col, notNullCols, false /* omitType */)
+			if col != 0 {
+				formatCol(f, "" /* label */, col, notNullCols, false /* omitType */)
+			}
 		}
 		tp.Child(f.Buffer.String())
 	}

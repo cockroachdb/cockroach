@@ -89,7 +89,7 @@ func (b *Builder) buildDataSource(
 		ds, resName := b.resolveDataSource(tn, privilege.SELECT)
 		switch t := ds.(type) {
 		case cat.Table:
-			tabID := b.factory.Metadata().AddTableWithAlias(t, resName)
+			tabID := b.factory.Metadata().AddTableWithAlias(t, &resName)
 			return b.buildScan(tabID, nil /* ordinals */, indexFlags, excludeMutations, inScope)
 		case cat.View:
 			return b.buildView(t, inScope)

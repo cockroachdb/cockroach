@@ -40,6 +40,30 @@ func (c *CustomFuncs) NeededColsExplain(private *memo.ExplainPrivate) opt.ColSet
 	return private.Props.ColSet()
 }
 
+// NeededColsMutation returns the columns needed by a mutation operator.
+func (c *CustomFuncs) NeededColsMutation(private *memo.MutationPrivate) opt.ColSet {
+	var cols opt.ColSet
+	tabMeta := c.mem.Metadata().TableMeta(private.Table)
+
+	// If the operator returns results, then include all non-mutation columns in
+	// the table.
+	// TODO(andyk): The returned columns need to be pruned as well.
+	if private.NeedResults {
+		cols = tabMeta.Columns()
+	}
+
+	// Add in all strict key columns from all indexes, including mutation indexes,
+	// since it is necessary to delete rows even from indexes that are being
+	// added/dropped.
+	for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
+		cols.UnionWith(tabMeta.IndexKeyColumns(i))
+	}
+
+	// Map to mutation input columns.
+	cols = private.MapToInputCols(cols)
+	return cols
+}
+
 // CanPruneCols returns true if the target expression has extra columns that are
 // not needed at this level of the tree, and can be eliminated by one of the
 // PruneCols rules. CanPruneCols uses the PruneCols property to determine the
@@ -107,6 +131,40 @@ func (c *CustomFuncs) PruneAggCols(
 		}
 	}
 	return aggs
+}
+
+// PruneMutationCols rewrites the given mutation private to no longer reference
+// InsertCols, FetchCols, UpdateCols, or CheckCols that are not part of the
+// neededCols set. The caller must have already done the analysis to prove that
+// these columns are not needed.
+// TODO(andyk): Add support for pruning column lists other than FetchCols.
+func (c *CustomFuncs) PruneMutationCols(
+	private *memo.MutationPrivate, neededCols opt.ColSet,
+) *memo.MutationPrivate {
+	newPrivate := *private
+	newPrivate.FetchCols = filterMutationList(newPrivate.FetchCols, neededCols)
+	return &newPrivate
+}
+
+// filterMutationList filters the given mutation list by setting any columns
+// that are not in the neededCols set to zero. This indicates that those columns
+// are not present in the input.
+func filterMutationList(inList opt.ColList, neededCols opt.ColSet) opt.ColList {
+	var newList opt.ColList
+	for i, c := range inList {
+		if !neededCols.Contains(int(c)) {
+			// Copy-on-write the list for efficiency.
+			if newList == nil {
+				newList = make(opt.ColList, len(inList))
+				copy(newList, inList)
+			}
+			newList[i] = 0
+		}
+	}
+	if newList != nil {
+		return newList
+	}
+	return inList
 }
 
 // pruneScanCols constructs a new Scan operator based on the given existing Scan

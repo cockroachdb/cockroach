@@ -113,7 +113,7 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alia
 	mb.targetColList = make(opt.ColList, 0, tab.DeletableColumnCount())
 
 	// Add the table and its columns (including mutation columns) to metadata.
-	mb.tabID = mb.md.AddTableWithAlias(tab, alias)
+	mb.tabID = mb.md.AddTableWithAlias(tab, &mb.alias)
 }
 
 // buildInputForUpdateOrDelete constructs a Select expression from the fields in
@@ -135,7 +135,7 @@ func (mb *mutationBuilder) buildInputForUpdateOrDelete(
 	//
 	//   UPDATE abc SET a=b
 	//
-	inputTabID := mb.md.AddTableWithAlias(mb.tab, mb.alias)
+	inputTabID := mb.md.AddTableWithAlias(mb.tab, &mb.alias)
 
 	// FROM
 	mb.outScope = mb.b.buildScan(

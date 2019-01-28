@@ -65,7 +65,7 @@ func (ef *execFactory) ConstructValues(
 func (ef *execFactory) ConstructScan(
 	table cat.Table,
 	index cat.Index,
-	cols exec.ColumnOrdinalSet,
+	needed exec.ColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
 	reverse bool,
@@ -76,7 +76,7 @@ func (ef *execFactory) ConstructScan(
 	indexDesc := index.(*optIndex).desc
 	// Create a scanNode.
 	scan := ef.planner.Scan()
-	colCfg := makeScanColumnsConfig(table, cols)
+	colCfg := makeScanColumnsConfig(table, needed)
 
 	// initTable checks that the current user has the correct privilege to access
 	// the table. However, the privilege has already been checked in optbuilder,
@@ -100,7 +100,12 @@ func (ef *execFactory) ConstructScan(
 	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&ef.planner.extendedEvalCtx.Settings.SV)
 	var err error
 	scan.spans, err = spansFromConstraint(
-		tabDesc, indexDesc, indexConstraint, cols, scan.isDeleteSource)
+		tabDesc,
+		indexDesc,
+		indexConstraint,
+		needed,
+		false, /* forDelete */
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1246,6 +1251,32 @@ func (ef *execFactory) ConstructDelete(
 	// We could use serializeNode here, but using rowCountNode is an
 	// optimization that saves on calls to Next() by the caller.
 	return &rowCountNode{source: del}, nil
+}
+
+func (ef *execFactory) ConstructDeleteRange(
+	table cat.Table, needed exec.ColumnOrdinalSet, indexConstraint *constraint.Constraint,
+) (exec.Node, error) {
+	tabDesc := table.(*optTable).desc
+	indexDesc := &tabDesc.PrimaryIndex
+
+	// Setting the "forDelete" flag includes all column families in case where a
+	// single record is deleted.
+	spans, err := spansFromConstraint(
+		tabDesc,
+		indexDesc,
+		indexConstraint,
+		needed,
+		true, /* forDelete */
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &deleteRangeNode{
+		interleavedFastPath: false,
+		spans:               spans,
+		desc:                tabDesc,
+	}, nil
 }
 
 func (ef *execFactory) ConstructCreateTable(

@@ -63,6 +63,12 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		tab.IsVirtual = true
 	}
 
+	// TODO(andyk): For now, just remember that the table was interleaved. In the
+	// future, it may be necessary to extract additional metadata.
+	if stmt.Interleave != nil {
+		tab.interleaved = true
+	}
+
 	// Add non-mutation columns.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
@@ -152,6 +158,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	}
 
 	targetTable := tc.Table(&d.Table)
+	targetTable.referenced = true
 
 	toCols := make([]int, len(d.ToCols))
 	for i, c := range d.ToCols {

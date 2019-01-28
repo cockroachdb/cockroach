@@ -1501,7 +1501,7 @@ project
            ├── key: (10)
            ├── fd: (10)-->(6-9)
            ├── ordering: +8,+9
-           ├── prune: (6-10)
+           ├── prune: (6,7,9,10)
            └── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
 
 # Verify that provided orderings are derived correctly with equivalence FD.
@@ -1543,7 +1543,7 @@ sort
            │         ├── limit: 10
            │         ├── key: (10)
            │         ├── fd: (10)-->(6-9)
-           │         ├── prune: (6-10)
+           │         ├── prune: (6,7,10)
            │         └── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
            └── filters
                 └── b = c [type=bool, outer=(2,3), fd=(2)==(3), (3)==(2)]

@@ -116,20 +116,17 @@ count           ·         ·
 ·               spans     /1-
 ·               limit     1
 
-# TODO(andyk): Prune columns so that index-join is not necessary.
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
-count                 ·         ·
- └── delete           ·         ·
-      │               from      indexed
-      │               strategy  deleter
-      └── index-join  ·         ·
-           │          table     indexed@primary
-           └── scan   ·         ·
-·                     table     indexed@indexed_value_idx
-·                     spans     /5-/6
-·                     limit     10
+count           ·         ·
+ └── delete     ·         ·
+      │         from      indexed
+      │         strategy  deleter
+      └── scan  ·         ·
+·               table     indexed@indexed_value_idx
+·               spans     /5-/6
+·               limit     10
 
 query TTT
 EXPLAIN DELETE FROM indexed LIMIT 10
@@ -139,7 +136,7 @@ count           ·         ·
       │         from      indexed
       │         strategy  deleter
       └── scan  ·         ·
-·               table     indexed@primary
+·               table     indexed@indexed_value_idx
 ·               spans     ALL
 ·               limit     10
 

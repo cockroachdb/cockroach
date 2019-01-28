@@ -123,14 +123,8 @@ SET experimental_optimizer_mutations = false
 statement error pq: no data source matches prefix: t
 UPDATE t SET v=(SELECT v+1 FROM t AS t2 WHERE t2.k=t.k)
 
-statement error pq: no data source matches prefix: t
-DELETE FROM t WHERE EXISTS(SELECT * FROM t AS t2 WHERE t2.k=t.k)
-
 statement ok
 SET experimental_optimizer_mutations = true
 
 statement ok
 UPDATE t SET v=(SELECT v+1 FROM t AS t2 WHERE t2.k=t.k)
-
-statement ok
-DELETE FROM t WHERE EXISTS(SELECT * FROM t AS t2 WHERE t2.k=t.k)

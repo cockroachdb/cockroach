@@ -448,6 +448,14 @@ type Table struct {
 	deleteOnlyColCount int
 	writeOnlyIdxCount  int
 	deleteOnlyIdxCount int
+
+	// interleaved is true if the table's rows are interleaved with rows from
+	// other table(s).
+	interleaved bool
+
+	// referenced is set to true when another table has referenced this table
+	// via a foreign key.
+	referenced bool
 }
 
 var _ cat.Table = &Table{}
@@ -480,6 +488,16 @@ func (tt *Table) Name() *cat.DataSourceName {
 // IsVirtualTable is part of the cat.Table interface.
 func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
+}
+
+// IsInterleaved is part of the cat.Table interface.
+func (tt *Table) IsInterleaved() bool {
+	return false
+}
+
+// IsReferenced is part of the cat.Table interface.
+func (tt *Table) IsReferenced() bool {
+	return tt.referenced
 }
 
 // ColumnCount is part of the cat.Table interface.
