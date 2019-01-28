@@ -213,14 +213,22 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
+				// A previous command could have added a column which the new constraint uses,
+				// allocate IDs now.
+				if err != n.tableDesc.AllocateIDs() {
+					return err
+				}
+
 				ck, err := MakeCheckConstraint(params.ctx,
 					n.tableDesc, d, inuseNames, &params.p.semaCtx, n.n.Table)
 				if err != nil {
 					return err
 				}
-				ck.Validity = sqlbase.ConstraintValidity_Unvalidated
+				ck.Validity = sqlbase.ConstraintValidity_Validating
 				n.tableDesc.Checks = append(n.tableDesc.Checks, ck)
 				descriptorChanged = true
+
+				n.tableDesc.AddCheckValidationMutation(ck.Name)
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
@@ -402,7 +410,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			for _, check := range n.tableDesc.Checks {
 				if used, err := check.UsesColumn(n.tableDesc.TableDesc(), col.ID); err != nil {
 					return err
-				} else if !used {
+				} else if used {
+					if check.Validity == sqlbase.ConstraintValidity_Validating {
+						return fmt.Errorf("referencing constraint %q in the middle of being added, try again later", check.Name)
+					}
+				} else {
 					validChecks = append(validChecks, check)
 				}
 			}
@@ -452,6 +464,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX with CASCADE if you really want to drop it", t.Constraint)
 			case sqlbase.ConstraintTypeCheck:
 				for i := range n.tableDesc.Checks {
+					if n.tableDesc.Checks[i].Validity == sqlbase.ConstraintValidity_Validating {
+						return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
+					}
 					if n.tableDesc.Checks[i].Name == name {
 						n.tableDesc.Checks = append(n.tableDesc.Checks[:i], n.tableDesc.Checks[i+1:]...)
 						descriptorChanged = true
@@ -498,9 +513,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if !found {
 					panic("constraint returned by GetConstraintInfo not found")
 				}
+
+				if n.tableDesc.Checks[idx].Validity == sqlbase.ConstraintValidity_Validating {
+					return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
+				}
+
 				ck := n.tableDesc.Checks[idx]
 				if err := validateCheckExpr(
-					params.ctx, ck.Expr, &n.n.Table, n.tableDesc.TableDesc(), params.EvalContext(),
+					params.ctx, ck.Expr, n.tableDesc.TableDesc(), params.EvalContext().InternalExecutor, params.EvalContext().Txn,
 				); err != nil {
 					return err
 				}

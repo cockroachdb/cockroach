@@ -191,8 +191,14 @@ message ColumnType {
 }
 
 enum ConstraintValidity {
+  // The constraint is valid for all rows.
   Validated = 0;
+  // The constraint has not yet been validated for all rows (and will not be
+  // validated until VALIDATE CONSTRAINT is used).
   Unvalidated = 1;
+  // The constraint was just added, but the validation for existing rows is not
+  // yet complete. If validation fails, the constraint will be dropped.
+  Validating = 2;
 }
 
 message ForeignKeyReference {
@@ -487,6 +493,14 @@ message IndexDescriptor {
   optional Type type = 16 [(gogoproto.nullable)=false];
 }
 
+message ConstraintToValidate {
+  enum ConstraintType {
+    CHECK = 0;
+  }
+  required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
+  required string name = 2 [(gogoproto.nullable) = false];
+}
+
 // A DescriptorMutation represents a column or an index that
 // has either been added or dropped and hasn't yet transitioned
 // into a stable state: completely backfilled and visible, or
@@ -497,6 +511,7 @@ message DescriptorMutation {
   oneof descriptor {
     ColumnDescriptor column = 1;
     IndexDescriptor index = 2;
+    ConstraintToValidate constraint = 8;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to

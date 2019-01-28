@@ -301,6 +301,9 @@ CREATE TABLE crdb_internal.schema_changes (
 					mutType = "INDEX"
 					targetID = tree.NewDInt(tree.DInt(int64(d.Index.ID)))
 					targetName = tree.NewDString(d.Index.Name)
+				case *sqlbase.DescriptorMutation_Constraint:
+					mutType = "CONSTRAINT VALIDATION"
+					targetName = tree.NewDString(d.Constraint.Name)
 				}
 				if err := addRow(
 					tableID,
