@@ -63,6 +63,9 @@ type DiskRowContainer struct {
 	// MakeDiskRowContainer() for more encoding specifics.
 	valueIdxs []int
 
+	diskMonitor *mon.BytesMonitor
+	engine      diskmap.Factory
+
 	datumAlloc sqlbase.DatumAlloc
 }
 
@@ -88,6 +91,8 @@ func MakeDiskRowContainer(
 		types:         types,
 		ordering:      ordering,
 		scratchEncRow: make(sqlbase.EncDatumRow, len(types)),
+		diskMonitor:   diskMonitor,
+		engine:        e,
 	}
 	d.bufferedRows = d.diskMap.NewBatchWriter()
 
@@ -106,7 +111,7 @@ func MakeDiskRowContainer(
 	}
 	d.valueIdxs = make([]int, 0, len(d.types))
 	for i := range d.types {
-		// TODO(asubiotto): A datum of a type for with HasCompositeKeyEncoding
+		// TODO(asubiotto): A datum of a type for which HasCompositeKeyEncoding
 		// returns true may not necessarily need to be encoded in the value, so
 		// make this more fine-grained. See IsComposite() methods in
 		// pkg/sql/parser/datum.go.
@@ -168,6 +173,34 @@ func (d *DiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 // Sort is a noop because the use of a SortedDiskMap as the underlying store
 // keeps the rows in sorted order.
 func (d *DiskRowContainer) Sort(context.Context) {}
+
+// Reorder implements ReorderableRowContainer. It creates a new
+// DiskRowContainer with the requested ordering and adds a row one by one from
+// the current DiskRowContainer, the latter is closed at the end.
+func (d *DiskRowContainer) Reorder(ctx context.Context, ordering sqlbase.ColumnOrdering) error {
+	// We need to create a new DiskRowContainer since its ordering can only be
+	// changed at initialization.
+	newContainer := MakeDiskRowContainer(d.diskMonitor, d.types, ordering, d.engine)
+	i := d.NewFinalIterator(ctx)
+	defer i.Close()
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		row, err := i.Row()
+		if err != nil {
+			return err
+		}
+		if err := newContainer.AddRow(ctx, row); err != nil {
+			return err
+		}
+	}
+	d.Close(ctx)
+	*d = newContainer
+	return nil
+}
 
 // InitTopK limits iterators to read the first k rows.
 func (d *DiskRowContainer) InitTopK() {
