@@ -835,29 +835,29 @@ func (h *HashDiskBackedRowContainer) ReserveMarkMemoryMaybe(ctx context.Context)
 		// We're assuming that the disk space is infinite, so we only need to
 		// reserve the memory for marks if we're using in-memory container.
 		if err := h.hmrc.ReserveMarkMemoryMaybe(ctx); err != nil {
-			return h.spillToDisk(ctx)
+			return h.SpillToDisk(ctx)
 		}
 	}
 	return nil
 }
 
-// spillIfMemErr checks err and calls spillToDisk if the given err is an out of
+// spillIfMemErr checks err and calls SpillToDisk if the given err is an out of
 // memory error. Returns whether the HashDiskBackedRowContainer spilled to disk
 // and an error if one occurred while doing so.
 func (h *HashDiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
 	if !sqlbase.IsOutOfMemoryError(err) {
 		return false, nil
 	}
-	if spillErr := h.spillToDisk(ctx); spillErr != nil {
+	if spillErr := h.SpillToDisk(ctx); spillErr != nil {
 		return false, spillErr
 	}
 	log.VEventf(ctx, 2, "spilled to disk: %v", err)
 	return true, nil
 }
 
-// spillToDisk creates a disk backed row container, injects all the data from
+// SpillToDisk creates a disk backed row container, injects all the data from
 // the in-memory container into it, and clears the in-memory one afterwards.
-func (h *HashDiskBackedRowContainer) spillToDisk(ctx context.Context) error {
+func (h *HashDiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if h.UsingDisk() {
 		return errors.New("already using disk")
 	}
@@ -921,4 +921,15 @@ func (h *HashDiskBackedRowContainer) UnsafeReset(ctx context.Context) error {
 		return nil
 	}
 	return h.hmrc.UnsafeReset(ctx)
+}
+
+// Sort sorts the underlying row container based on stored equality columns
+// which forces all rows from the same hash bucket to be contiguous.
+func (h *HashDiskBackedRowContainer) Sort(ctx context.Context) {
+	if !h.UsingDisk() && len(h.storedEqCols) > 0 {
+		// We need to explicitly sort only if we're using in-memory container since
+		// if we're using disk, the underlying sortedDiskMap will be sorted
+		// already.
+		h.hmrc.Sort(ctx)
+	}
 }

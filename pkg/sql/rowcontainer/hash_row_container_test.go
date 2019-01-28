@@ -115,7 +115,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatalf("verifying memory rows failed with: %s", err)
 			}
 		}()
-		if err := rc.spillToDisk(ctx); err != nil {
+		if err := rc.SpillToDisk(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if !rc.UsingDisk() {
@@ -277,7 +277,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 				t.Fatalf("verifying memory rows failed with: %s", err)
 			}
 		}()
-		if err := rc.spillToDisk(ctx); err != nil {
+		if err := rc.SpillToDisk(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if !rc.UsingDisk() {
@@ -349,7 +349,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 				}
 			}
 		}()
-		if err := rc.spillToDisk(ctx); err != nil {
+		if err := rc.SpillToDisk(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if !rc.UsingDisk() {
