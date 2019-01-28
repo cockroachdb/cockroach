@@ -111,7 +111,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, er
 	// RangeMaxBytes). This captures the heuristic that at some point, it's more
 	// efficient to catch up via a snapshot than via applying a long tail of log
 	// entries.
-	targetSize := r.mu.state.Stats.Total()
+	targetSize := r.store.cfg.RaftLogTruncationThreshold
 	if targetSize > r.mu.maxBytes {
 		targetSize = r.mu.maxBytes
 	}
