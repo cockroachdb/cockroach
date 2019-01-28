@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -205,10 +204,10 @@ func newHashJoiner(
 	}
 
 	h.rows[leftSide].InitWithMon(
-		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, h.MemMonitor,
+		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, h.MemMonitor, 0, /* rowCapacity */
 	)
 	h.rows[rightSide].InitWithMon(
-		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, h.MemMonitor,
+		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, h.MemMonitor, 0, /* rowCapacity */
 	)
 
 	if h.joinType == sqlbase.IntersectAllJoin || h.joinType == sqlbase.ExceptAllJoin {
@@ -336,7 +335,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 		if err := h.rows[side].AddRow(h.Ctx, row); err != nil {
 			// If this error is a memory limit error, move to hjConsumingStoredSide.
 			h.storedSide = side
-			if pgErr, ok := pgerror.GetPGCause(err); ok && pgErr.Code == pgerror.CodeOutOfMemoryError {
+			if sqlbase.IsOutOfMemoryError(err) {
 				if !h.useTempStorage {
 					err = errors.Wrap(err, "error while attempting hashJoiner disk spill: temp storage disabled")
 				} else {

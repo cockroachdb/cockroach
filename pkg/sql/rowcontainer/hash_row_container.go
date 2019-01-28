@@ -19,7 +19,6 @@ import (
 	"context"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
@@ -780,7 +779,7 @@ func (h *HashDiskBackedRowContainer) Init(
 	}
 	if h.mrc == nil {
 		h.mrc = &MemRowContainer{}
-		h.mrc.InitWithMon(ordering, types, h.evalCtx, h.memoryMonitor)
+		h.mrc.InitWithMon(ordering, types, h.evalCtx, h.memoryMonitor, 0 /* rowCapacity */)
 	}
 	hmrc := MakeHashMemRowContainer(h.mrc)
 	h.hmrc = &hmrc
@@ -846,7 +845,7 @@ func (h *HashDiskBackedRowContainer) ReserveMarkMemoryMaybe(ctx context.Context)
 // memory error. Returns whether the HashDiskBackedRowContainer spilled to disk
 // and an error if one occurred while doing so.
 func (h *HashDiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
-	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+	if !sqlbase.IsOutOfMemoryError(err) {
 		return false, nil
 	}
 	if spillErr := h.spillToDisk(ctx); spillErr != nil {
