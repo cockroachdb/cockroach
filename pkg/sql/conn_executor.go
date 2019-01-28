@@ -1994,7 +1994,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 //
 // If an error is returned, it is to be considered a query execution error.
 func (ex *connExecutor) initStatementResult(
-	ctx context.Context, res RestrictedCommandResult, stmt Statement, cols sqlbase.ResultColumns,
+	ctx context.Context, res RestrictedCommandResult, stmt *Statement, cols sqlbase.ResultColumns,
 ) error {
 	for _, c := range cols {
 		if err := checkResultType(c.Typ); err != nil {

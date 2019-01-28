@@ -142,7 +142,7 @@ func (ex *connExecutor) prepare(
 		return prepared, nil
 	}
 	prepared.Statement = stmt.Statement
-	prepared.AnonymizedStr = anonymizeStmt(stmt)
+	prepared.AnonymizedStr = anonymizeStmt(&stmt)
 
 	// Point to the prepared state, which can be further populated during query
 	// preparation.
@@ -160,7 +160,8 @@ func (ex *connExecutor) prepare(
 
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTimestamp */)
-	flags, err := ex.populatePrepared(ctx, txn, stmt, placeholderHints, p)
+	p.stmt = &stmt
+	flags, err := ex.populatePrepared(ctx, txn, placeholderHints, p)
 	if err != nil {
 		txn.CleanupOnError(ctx, err)
 		return nil, err
@@ -180,12 +181,9 @@ func (ex *connExecutor) prepare(
 // populatePrepared analyzes and type-checks the query and populates
 // stmt.Prepared.
 func (ex *connExecutor) populatePrepared(
-	ctx context.Context,
-	txn *client.Txn,
-	stmt Statement,
-	placeholderHints tree.PlaceholderTypes,
-	p *planner,
+	ctx context.Context, txn *client.Txn, placeholderHints tree.PlaceholderTypes, p *planner,
 ) (planFlags, error) {
+	stmt := p.stmt
 	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
 		return 0, err
 	}
@@ -221,7 +219,7 @@ func (ex *connExecutor) populatePrepared(
 	if optMode := ex.sessionData.OptimizerMode; optMode != sessiondata.OptimizerOff {
 		log.VEvent(ctx, 2, "preparing using optimizer")
 		var err error
-		flags, isCorrelated, err = p.prepareUsingOptimizer(ctx, stmt)
+		flags, isCorrelated, err = p.prepareUsingOptimizer(ctx)
 		if err == nil {
 			log.VEvent(ctx, 2, "optimizer prepare succeeded")
 			// stmt.Prepared fields have been populated.
@@ -231,7 +229,7 @@ func (ex *connExecutor) populatePrepared(
 		if !canFallbackFromOpt(err, optMode, stmt) {
 			return 0, err
 		}
-		flags = planFlagOptFallback
+		flags.Set(planFlagOptFallback)
 		log.VEvent(ctx, 1, "prepare falls back on heuristic planner")
 	} else {
 		log.VEvent(ctx, 2, "optimizer disabled (prepare)")
@@ -247,7 +245,12 @@ func (ex *connExecutor) populatePrepared(
 
 	if p.curPlan.plan == nil {
 		// Statement with no result columns and no support for placeholders.
-		return flags, nil
+		//
+		// Note: we're combining `flags` which comes from
+		// `prepareUsingOptimizer`, with `p.curPlan.flags` which ensures
+		// the new flags combine with the existing flags (this is used
+		// e.g. to maintain the count of times the optimizer was used).
+		return flags | p.curPlan.flags, nil
 	}
 	defer p.curPlan.close(ctx)
 
@@ -262,7 +265,8 @@ func (ex *connExecutor) populatePrepared(
 		return 0, err
 	}
 	prepared.Types = p.semaCtx.Placeholders.Types
-	return flags, nil
+	// The flags are combined, see the comment above for why.
+	return flags | p.curPlan.flags, nil
 }
 
 func (ex *connExecutor) execBind(

@@ -53,7 +53,7 @@ type planMaker interface {
 	// iterating using curPlan.plan.Next() and curPlan.plan.Values() in
 	// order to retrieve matching rows. Finally, the plan must be closed
 	// with curPlan.close().
-	makePlan(ctx context.Context, stmt Statement) error
+	makePlan(ctx context.Context) error
 
 	// prepare does the same checks as makePlan but skips building some
 	// data structures necessary for execution, based on the assumption
@@ -142,6 +142,10 @@ type planNode interface {
 	// This method should be called if the node has been used in any way (any
 	// methods on it have been called) after it was constructed. Note that this
 	// doesn't imply that startPlan() has been necessarily called.
+	//
+	// This method must not be called during execution - the planNode
+	// tree must remain "live" and readable via walk() even after
+	// execution completes.
 	Close(ctx context.Context)
 }
 
@@ -287,6 +291,20 @@ type planTop struct {
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent
+
+	// flags is populated during planning and execution.
+	flags planFlags
+
+	// execErr retains the last execution error, if any.
+	execErr error
+
+	// maybeSavePlan, if defined, is called during close() to
+	// conditionally save the logical plan to savedPlanForStats.
+	maybeSavePlan func(context.Context) *roachpb.ExplainTreePlanNode
+
+	// savedPlanForStats is conditionally populated at the end of
+	// statement execution, for registration in statement statistics.
+	savedPlanForStats *roachpb.ExplainTreePlanNode
 }
 
 // makePlan implements the Planner interface. It populates the
@@ -297,8 +315,9 @@ type planTop struct {
 //
 // After makePlan(), the caller should be careful to also call
 // p.curPlan.Close().
-func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
+func (p *planner) makePlan(ctx context.Context) error {
 	// Reinitialize.
+	stmt := p.stmt
 	p.curPlan = planTop{AST: stmt.AST}
 
 	log.VEvent(ctx, 2, "heuristic planner starts")
@@ -389,6 +408,9 @@ func (p *planner) hideHiddenColumns(
 // close ensures that the plan's resources have been deallocated.
 func (p *planTop) close(ctx context.Context) {
 	if p.plan != nil {
+		if p.maybeSavePlan != nil && p.flags.IsSet(planFlagExecDone) {
+			p.savedPlanForStats = p.maybeSavePlan(ctx)
+		}
 		p.plan.Close(ctx)
 		p.plan = nil
 	}
@@ -918,6 +940,9 @@ const (
 	// planFlagDistSQLLocal is set if the plan is for the DistSQL engine,
 	// but in local mode.
 	planFlagDistSQLLocal
+
+	// planFlagExecDone marks that execution has been completed.
+	planFlagExecDone
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
