@@ -74,7 +74,7 @@ type AnalyzeExprFunction func(
 func NewEvalCheckHelper(
 	ctx context.Context, analyzeExpr AnalyzeExprFunction, tableDesc *ImmutableTableDescriptor,
 ) (*CheckHelper, error) {
-	if len(tableDesc.Checks) == 0 {
+	if len(tableDesc.AllChecks()) == 0 {
 		return nil, nil
 	}
 
@@ -85,9 +85,9 @@ func NewEvalCheckHelper(
 		ResultColumnsFromColDescs(tableDesc.Columns),
 	)
 
-	c.Exprs = make([]tree.TypedExpr, len(tableDesc.Checks))
-	exprStrings := make([]string, len(tableDesc.Checks))
-	for i, check := range tableDesc.Checks {
+	c.Exprs = make([]tree.TypedExpr, len(tableDesc.AllChecks()))
+	exprStrings := make([]string, len(tableDesc.AllChecks()))
+	for i, check := range tableDesc.AllChecks() {
 		exprStrings[i] = check.Expr
 	}
 	exprs, err := parser.ParseExprs(exprStrings)
@@ -213,7 +213,7 @@ func (c *CheckHelper) CheckInput(checkVals tree.Datums) error {
 			"mismatched check constraint columns: expected %d, got %d", c.checkSet.Len(), len(checkVals))
 	}
 
-	for i := range c.tableDesc.Checks {
+	for i, check := range c.tableDesc.AllChecks() {
 		if !c.checkSet.Contains(i) {
 			continue
 		}
@@ -223,7 +223,7 @@ func (c *CheckHelper) CheckInput(checkVals tree.Datums) error {
 		} else if !res && checkVals[i] != tree.DNull {
 			// Failed to satisfy CHECK constraint.
 			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
-				"failed to satisfy CHECK constraint (%s)", c.tableDesc.Checks[i].Expr)
+				"failed to satisfy CHECK constraint (%s)", check.Expr)
 		}
 	}
 	return nil

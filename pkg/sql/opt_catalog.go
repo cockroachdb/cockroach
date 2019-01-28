@@ -559,12 +559,12 @@ func (ot *optTable) ensureColMap() {
 
 // CheckCount is part of the cat.Table interface.
 func (ot *optTable) CheckCount() int {
-	return len(ot.desc.Checks)
+	return len(ot.desc.AllChecks())
 }
 
 // Check is part of the cat.Table interface.
 func (ot *optTable) Check(i int) cat.CheckConstraint {
-	check := ot.desc.Checks[i]
+	check := ot.desc.AllChecks()[i]
 	return cat.CheckConstraint(check.Expr)
 }
 

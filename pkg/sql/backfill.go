@@ -125,6 +125,8 @@ func (sc *SchemaChanger) runBackfill(
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexDescs []sqlbase.IndexDescriptor
 
+	var checksToValidate []sqlbase.ConstraintToValidate
+
 	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
@@ -156,6 +158,13 @@ func (sc *SchemaChanger) runBackfill(
 				}
 			case *sqlbase.DescriptorMutation_Index:
 				addedIndexDescs = append(addedIndexDescs, *t.Index)
+			case *sqlbase.DescriptorMutation_Constraint:
+				switch t.Constraint.ConstraintType {
+				case sqlbase.ConstraintToValidate_CHECK:
+					checksToValidate = append(checksToValidate, *t.Constraint)
+				default:
+					return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
+				}
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
 			}
@@ -168,6 +177,8 @@ func (sc *SchemaChanger) runBackfill(
 				if !sc.canClearRangeForDrop(t.Index) {
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				}
+			case *sqlbase.DescriptorMutation_Constraint:
+				// no-op
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
 			}
@@ -198,7 +209,93 @@ func (sc *SchemaChanger) runBackfill(
 		}
 	}
 
+	// Validate check constraints.
+	if len(checksToValidate) > 0 {
+		if err := sc.validateChecks(ctx, evalCtx, lease, checksToValidate); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (sc *SchemaChanger) validateChecks(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	checks []sqlbase.ConstraintToValidate,
+) error {
+	if testDisableTableLeases {
+		return nil
+	}
+	readAsOf := sc.clock.Now()
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		txn.SetFixedTimestamp(ctx, readAsOf)
+		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+
+		if err := sc.ExtendLease(ctx, lease); err != nil {
+			return err
+		}
+
+		grp := ctxgroup.WithContext(ctx)
+
+		// Notify when validation is finished (or has returned an error) for a check.
+		countDone := make(chan struct{}, len(checks))
+
+		for _, c := range checks {
+			grp.GoCtx(func(ctx context.Context) error {
+				defer func() { countDone <- struct{}{} }()
+
+				// Make the mutations public in a private copy of the descriptor
+				// and add it to the TableCollection, so that we can use SQL below to perform
+				// the validation. We wouldn't have needed to do this if we could have
+				// updated the descriptor and run validation in the same transaction. However,
+				// our current system is incapable of running long running schema changes
+				// (the validation can take many minutes). So we pretend that the schema
+				// has been updated and actually update it in a separate transaction that
+				// follows this one.
+				desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic()
+				if err != nil {
+					return err
+				}
+				// Create a new eval context only because the eval context cannot be shared across many
+				// goroutines.
+				newEvalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, evalCtx.Tracing, sc.ieFactory)
+				return validateCheckInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, &c.Name)
+			})
+		}
+
+		// Periodic schema change lease extension.
+		grp.GoCtx(func(ctx context.Context) error {
+			count := len(checks)
+			refreshTimer := timeutil.NewTimer()
+			defer refreshTimer.Stop()
+			refreshTimer.Reset(checkpointInterval)
+			for {
+				select {
+				case <-countDone:
+					count--
+					if count == 0 {
+						// Stop.
+						return nil
+					}
+
+				case <-refreshTimer.C:
+					refreshTimer.Read = true
+					refreshTimer.Reset(checkpointInterval)
+					if err := sc.ExtendLease(ctx, lease); err != nil {
+						return err
+					}
+
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		})
+		return grp.Wait()
+	})
 }
 
 func (sc *SchemaChanger) getTableVersion(
@@ -701,11 +798,14 @@ func runSchemaChangesInTxn(
 	// Only needed because columnBackfillInTxn() backfills
 	// all column mutations.
 	doneColumnBackfill := false
+	// Checks are validated after all other mutations have been applied.
+	var checksToValidate []sqlbase.ConstraintToValidate
+
 	for _, m := range tableDesc.Mutations {
 		immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc.TableDesc())
 		switch m.Direction {
 		case sqlbase.DescriptorMutation_ADD:
-			switch m.Descriptor_.(type) {
+			switch t := m.Descriptor_.(type) {
 			case *sqlbase.DescriptorMutation_Column:
 				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					break
@@ -718,6 +818,14 @@ func runSchemaChangesInTxn(
 			case *sqlbase.DescriptorMutation_Index:
 				if err := indexBackfillInTxn(ctx, txn, immutDesc, traceKV); err != nil {
 					return err
+				}
+
+			case *sqlbase.DescriptorMutation_Constraint:
+				switch t.Constraint.ConstraintType {
+				case sqlbase.ConstraintToValidate_CHECK:
+					checksToValidate = append(checksToValidate, *t.Constraint)
+				default:
+					return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
 				}
 
 			default:
@@ -741,6 +849,9 @@ func runSchemaChangesInTxn(
 					return err
 				}
 
+			case *sqlbase.DescriptorMutation_Constraint:
+				return errors.Errorf("constraint validation mutation cannot be in the DROP state within the same transaction: %+v", m)
+
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
 			}
@@ -752,7 +863,44 @@ func runSchemaChangesInTxn(
 	}
 	tableDesc.Mutations = nil
 
+	// Now that the table descriptor is in a valid state with all column and index
+	// mutations applied, it can be used for validating check constraints
+	for _, c := range checksToValidate {
+		if err := validateCheckInTxn(ctx, tc.leaseMgr, evalCtx, tableDesc, txn, &c.Name); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// validateCheckInTxn validates check constraints within the provided
+// transaction. The table descriptor that is passed in will be used for the
+// InternalExecutor that performs the validation query.
+func validateCheckInTxn(
+	ctx context.Context,
+	leaseMgr *LeaseManager,
+	evalCtx *tree.EvalContext,
+	tableDesc *MutableTableDescriptor,
+	txn *client.Txn,
+	checkName *string,
+) error {
+	newTc := &TableCollection{leaseMgr: leaseMgr}
+	// pretend that the schema has been modified.
+	if err := newTc.addUncommittedTable(*tableDesc); err != nil {
+		return err
+	}
+
+	ie := evalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
+	ie.impl.tcModifier = newTc
+	defer func() {
+		ie.impl.tcModifier = nil
+	}()
+
+	check, err := tableDesc.FindCheckByName(*checkName)
+	if err != nil {
+		return err
+	}
+	return validateCheckExpr(ctx, check.Expr, tableDesc.TableDesc(), ie, txn)
 }
 
 // columnBackfillInTxn backfills columns for all mutation columns in
