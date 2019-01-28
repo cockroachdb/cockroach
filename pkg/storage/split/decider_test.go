@@ -155,4 +155,22 @@ func TestDecider(t *testing.T) {
 	// the decision.
 	assert.True(t, d.mu.splitFinder.Ready(ms(tick)))
 	assert.Equal(t, roachpb.Key(nil), d.MaybeSplitKey(ms(tick)))
+
+	// Get the decider engaged again so that we can test Reset().
+	for i := 0; i < 1000; i++ {
+		o := op("z")
+		if i%2 != 0 {
+			o = op("a")
+		}
+		d.Record(ms(tick), 11, o)
+		tick += 500
+	}
+
+	// The finder wants to split, until Reset is called, at which point it starts
+	// back up at zero.
+	assert.True(t, d.mu.splitFinder.Ready(ms(tick)))
+	assert.Equal(t, roachpb.Key("z"), d.MaybeSplitKey(ms(tick)))
+	d.Reset()
+	assert.Nil(t, d.MaybeSplitKey(ms(tick)))
+	assert.Nil(t, d.mu.splitFinder)
 }
