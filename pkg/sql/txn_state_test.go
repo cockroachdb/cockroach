@@ -297,9 +297,10 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createNoTxnState()
 				return s, ts, nil
 			},
-			ev:        eventTxnStart{ImplicitTxn: True},
-			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(), tranCtx),
-			expState:  stateOpen{ImplicitTxn: True, RetryIntent: False},
+			ev: eventTxnStart{ImplicitTxn: True},
+			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
+				nil /* historicalTimestamp */, tranCtx),
+			expState: stateOpen{ImplicitTxn: True, RetryIntent: False},
 			expAdv: expAdvance{
 				// We expect to stayInPlace; upon starting a txn the statement is
 				// executed again, this time in state Open.
@@ -321,9 +322,10 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createNoTxnState()
 				return s, ts, nil
 			},
-			ev:        eventTxnStart{ImplicitTxn: False},
-			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(), tranCtx),
-			expState:  stateOpen{ImplicitTxn: False, RetryIntent: False},
+			ev: eventTxnStart{ImplicitTxn: False},
+			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
+				nil /* historicalTimestamp */, tranCtx),
+			expState: stateOpen{ImplicitTxn: False, RetryIntent: False},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   txnStart,
@@ -647,9 +649,10 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createAbortedState(retryIntentSet)
 				return s, ts, nil
 			},
-			ev:        eventTxnStart{ImplicitTxn: False},
-			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(), tranCtx),
-			expState:  stateOpen{ImplicitTxn: False, RetryIntent: True},
+			ev: eventTxnStart{ImplicitTxn: False},
+			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
+				nil /* historicalTimestamp */, tranCtx),
+			expState: stateOpen{ImplicitTxn: False, RetryIntent: True},
 			expAdv: expAdvance{
 				expCode: advanceOne,
 				expEv:   noEvent,

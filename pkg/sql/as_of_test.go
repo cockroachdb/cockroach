@@ -201,6 +201,24 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Lightly test AS OF SYSTEM TIME with SET TRANSACTION, more complete testing
+	// for this functionality lives in the logic_tests.
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(fmt.Sprintf("SET TRANSACTION AS OF SYSTEM TIME %s", tsVal1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow("SELECT a FROM d.t WHERE a > $1", 0).Scan(&i); err != nil {
+		t.Fatal(err)
+	} else if i != val1 {
+		t.Fatalf("expected %v, got %v", val1, i)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
 	// Verify that we can read columns in the past that are dropped in the future.
 	if _, err := db.Exec("ALTER TABLE d.t DROP COLUMN a"); err != nil {
 		t.Fatal(err)
