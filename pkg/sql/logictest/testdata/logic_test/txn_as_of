@@ -1,0 +1,129 @@
+# LogicTest: local local-opt
+
+statement ok
+CREATE TABLE t (i INT)
+
+statement ok
+INSERT INTO t VALUES (2)
+
+# Verify that transacations can be used for historical reads using BEGIN
+# or SET TRANSACTION
+
+statement error pq: relation "t" does not exist
+BEGIN AS OF SYSTEM TIME '-1h'; SELECT * FROM t
+
+statement ok
+COMMIT
+
+statement error pq: relation "t" does not exist
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1h'; SELECT * FROM t
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1ns'
+
+query I
+SELECT * FROM t
+----
+2
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1ns'
+
+query I
+SELECT * FROM t
+----
+2
+
+statement ok
+COMMIT
+
+# Subqueries are only allowed if the exact same timestamp is used
+# This first two fails because '-1h' is computed for each statement based on
+# statement time so the timestamps will not be identical. The following two 
+# tests which use a matching, fixed timestamp should be semantically valid
+# leading to a failure due to the relation not existing.
+
+statement error pq: inconsistent \"as of system time\" timestamp. Expected: [0-9]+\.[0-9]+,[0-9]+. Generally \"as of system time\" cannot be used inside a transaction.
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1h'; SELECT * FROM t AS OF SYSTEM TIME '-1h'
+
+statement ok
+COMMIT
+
+statement error pq: inconsistent \"as of system time\" timestamp. Expected: [0-9]+\.[0-9]+,[0-9]+. Generally \"as of system time\" cannot be used inside a transaction.
+BEGIN AS OF SYSTEM TIME '-1h'; SELECT * FROM t AS OF SYSTEM TIME '-1h'
+
+statement ok
+COMMIT
+
+statement error pq: relation "t" does not exist
+BEGIN AS OF SYSTEM TIME '2018-12-30'; SELECT * FROM t AS OF SYSTEM TIME '2018-12-30'
+
+statement ok
+COMMIT
+
+statement error pq: relation "t" does not exist
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '2018-12-30'; SELECT * FROM t AS OF SYSTEM TIME '2018-12-30'
+
+statement ok
+COMMIT
+
+# Verify transactions with a historical timestamps imply READ ONLY.
+
+statement ok
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1ns'
+
+statement error pq: cannot execute INSERT in a read-only transaction
+INSERT INTO t VALUES (3)
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1ns'
+
+statement error pq: cannot execute INSERT in a read-only transaction
+INSERT INTO t VALUES (3)
+
+statement ok
+COMMIT
+
+# Verify setting the timestamp after beginning with a timestamp overwrites
+# the previous value.
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION AS OF SYSTEM TIME '-1ns';
+
+query I
+SELECT * FROM t
+----
+2
+
+statement ok
+COMMIT
+
+# Verify that setting other parts of a transaction mode does not overwrite
+# the AOST from the BEGIN.
+
+statement ok
+BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION PRIORITY HIGH;
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t
+
+statement ok
+COMMIT
+
+# Verify that setting a TRANSACTION READ WRITE is an error if the transaction
+# has a historical timestamp.
+
+statement error pq: cannot set AS OF SYSTEM TIME transaction to READ WRITE
+BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION READ WRITE;
+
+statement ok
+COMMIT

@@ -376,8 +376,11 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		if ts != nil {
+			ex.state.isHistorical = true
 			p.semaCtx.AsOfTimestamp = ts
+			ex.state.mu.Lock()
 			ex.state.mu.txn.SetFixedTimestamp(ctx, *ts)
+			ex.state.mu.Unlock()
 		}
 	} else {
 		// If we're in an explicit txn, we allow AOST but only if it matches with
@@ -389,11 +392,14 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		if ts != nil {
+			ex.state.mu.RLock()
 			if *ts != ex.state.mu.txn.OrigTimestamp() {
+				ex.state.mu.RUnlock()
 				return makeErrEvent(errors.Errorf("inconsistent \"as of system time\" timestamp. Expected: %s. "+
 					"Generally \"as of system time\" cannot be used inside a transaction.",
 					ex.state.mu.txn.OrigTimestamp()))
 			}
+			ex.state.mu.RUnlock()
 			p.semaCtx.AsOfTimestamp = ts
 		}
 	}
@@ -1066,11 +1072,27 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			return ex.makeErrEvent(err, s)
 		}
 
+		// Deal with evaluating an AS OF SYSTEM TIME clause and setting the
+		// timesta and rwMode appropriately.
+		now := ex.server.cfg.Clock.Now()
+		txnSQLTimestamp := now.GoTime()
+		var historicalTimestamp *hlc.Timestamp
+		rwMode := s.Modes.ReadWriteMode
+		if s.Modes.AsOf.Expr != nil {
+			p := &ex.planner
+			ex.resetPlanner(ctx, p, nil /* txn */, txnSQLTimestamp)
+			ts, err := ex.planner.EvalAsOfTimestamp(s.Modes.AsOf, now)
+			if err != nil {
+				return ex.makeErrEvent(err, s)
+			}
+			rwMode = tree.ReadOnly
+			historicalTimestamp = &ts
+			txnSQLTimestamp = ts.GoTime()
+		}
 		return eventTxnStart{ImplicitTxn: fsm.False},
 			makeEventTxnStartPayload(
-				pri, ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode),
-				ex.server.cfg.Clock.PhysicalTime(),
-				ex.transitionCtx)
+				pri, ex.readWriteModeWithSessionDefault(rwMode),
+				txnSQLTimestamp, historicalTimestamp, ex.transitionCtx)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
 		return ex.makeErrEvent(errNoTransactionInProgress, stmt.AST)
@@ -1084,6 +1106,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				roachpb.NormalUserPriority,
 				mode,
 				ex.server.cfg.Clock.PhysicalTime(),
+				nil, /* historicalTimestamp */
 				ex.transitionCtx)
 	}
 }
@@ -1175,7 +1198,8 @@ func (ex *connExecutor) execStmtInAbortedState(
 			rwMode = tree.ReadOnly
 		}
 		payload := makeEventTxnStartPayload(
-			ex.state.priority, rwMode, ex.state.sqlTimestamp, ex.transitionCtx)
+			ex.state.priority, rwMode, ex.state.sqlTimestamp,
+			nil /* historicalTimestamp */, ex.transitionCtx)
 		return ev, payload
 	default:
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
