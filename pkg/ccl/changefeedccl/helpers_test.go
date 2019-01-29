@@ -560,7 +560,7 @@ func assertPayloads(t testing.TB, f testfeed, expected []string) {
 	for len(actual) < len(expected) {
 		topic, _, key, value, _, ok := f.Next(t)
 		if !ok {
-			break
+			t.Fatalf(`expected another row: %s`, f.Err())
 		} else if key != nil {
 			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic, key, value))
 		}
