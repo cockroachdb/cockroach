@@ -58,6 +58,7 @@ func TruncateLog(
 	}
 
 	// Have we already truncated this log? If so, just return without an error.
+	// TODO(tbg): remove this once followers can have divergent truncated states.
 	firstIndex, err := cArgs.EvalCtx.GetFirstIndex()
 	if err != nil {
 		return result.Result{}, err
