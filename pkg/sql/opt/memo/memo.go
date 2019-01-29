@@ -135,7 +135,7 @@ type Memo struct {
 	// The following are selected fields from SessionData which can affect
 	// planning. We need to cross-check these before reusing a cached memo.
 	dataConversion    sessiondata.DataConversionConfig
-	reorderJoins      bool
+	reorderJoinsLimit int
 	zigzagJoinEnabled bool
 
 	// curID is the highest currently in-use scalar expression ID.
@@ -157,7 +157,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.memEstimate = 0
 
 	m.dataConversion = evalCtx.SessionData.DataConversion
-	m.reorderJoins = evalCtx.SessionData.ReorderJoins
+	m.reorderJoinsLimit = evalCtx.SessionData.ReorderJoinsLimit
 	m.zigzagJoinEnabled = evalCtx.SessionData.ZigzagJoinEnabled
 }
 
@@ -253,7 +253,7 @@ func (m *Memo) IsStale(
 	// Memo is stale if fields from SessionData that can affect planning have
 	// changed.
 	if !m.dataConversion.Equals(&evalCtx.SessionData.DataConversion) ||
-		m.reorderJoins != evalCtx.SessionData.ReorderJoins ||
+		m.reorderJoinsLimit != evalCtx.SessionData.ReorderJoinsLimit ||
 		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled {
 		return true, nil
 	}

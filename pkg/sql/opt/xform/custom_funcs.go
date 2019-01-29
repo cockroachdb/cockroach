@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -1261,6 +1262,35 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// original select.
 		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
 	}
+}
+
+// deriveJoinSize returns the number of base relations (i.e., not joins)
+// being joined underneath the given relational expression.
+func (c *CustomFuncs) deriveJoinSize(e memo.RelExpr) int {
+	relProps := e.Relational()
+	if relProps.IsAvailable(props.JoinSize) {
+		return relProps.Rule.JoinSize
+	}
+	relProps.SetAvailable(props.JoinSize)
+
+	switch j := e.(type) {
+	case *memo.InnerJoinExpr:
+		relProps.Rule.JoinSize = c.deriveJoinSize(j.Left) + c.deriveJoinSize(j.Right)
+	default:
+		relProps.Rule.JoinSize = 1
+	}
+
+	return relProps.Rule.JoinSize
+}
+
+// ShouldReorderJoins returns whether the optimizer should attempt to find
+// a better ordering of inner joins.
+func (c *CustomFuncs) ShouldReorderJoins(left, right memo.RelExpr) bool {
+	// TODO(justin): referencing left and right here is a hack: ideally
+	// we'd want to be able to reference the logical properties of the
+	// expression being explored in this CustomFunc.
+	size := c.deriveJoinSize(left) + c.deriveJoinSize(right)
+	return size <= c.e.evalCtx.SessionData.ReorderJoinsLimit
 }
 
 // ----------------------------------------------------------------------

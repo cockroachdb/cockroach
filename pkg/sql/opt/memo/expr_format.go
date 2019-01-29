@@ -438,6 +438,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if len(r.InterestingOrderings) > 0 {
 			tp.Childf("interesting orderings: %s", r.InterestingOrderings.String())
 		}
+		if r.JoinSize > 1 {
+			tp.Childf("join-size: %d", r.JoinSize)
+		}
 	}
 
 	switch t := e.(type) {
