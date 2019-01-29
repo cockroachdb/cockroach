@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 func (p *planner) validateCheckExpr(
@@ -45,31 +44,23 @@ func (p *planner) validateCheckExpr(
 	// use the tableDesc we have, but this is a rare operation and be benefit
 	// would be marginal compared to the work of the actual query, so the added
 	// complexity seems unjustified.
-	rows, err := p.SelectClause(ctx, sel, nil, lim, nil, nil, publicColumns)
+	plan, err := p.SelectClause(ctx, sel, nil, lim, nil, nil, publicColumns)
 	if err != nil {
 		return err
 	}
-	rows, err = p.optimizePlan(ctx, rows, allColumns(rows))
+	plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
 	if err != nil {
 		return err
 	}
-	defer rows.Close(ctx)
+	defer plan.Close(ctx)
+	rows, err := p.runWithDistSQL(ctx, plan)
 
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &p.extendedEvalCtx,
-		p:               p,
-	}
-	if err := startPlan(params, rows); err != nil {
-		return err
-	}
-	next, err := rows.Next(params)
-	if err != nil {
-		return err
-	}
-	if next {
-		return errors.Errorf("validation of CHECK %q failed on row: %s",
-			expr.String(), labeledRowValues(tableDesc.Columns, rows.Values()))
+	if rows != nil && rows.Len() > 0 {
+		defer rows.Close(ctx)
+		values := rows.At(0)
+		return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+			"validation of CHECK %q failed on row: %s",
+			exprStr, labeledRowValues(tableDesc.Columns, values))
 	}
 	return nil
 }
@@ -126,32 +117,22 @@ func (p *planner) validateForeignKey(
 		query,
 	)
 
-	rows, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
+	plan, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
 	if err != nil {
 		return err
 	}
 
-	rows, err = p.optimizePlan(ctx, rows, allColumns(rows))
+	plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
 	if err != nil {
 		return err
 	}
-	defer rows.Close(ctx)
+	defer plan.Close(ctx)
 
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &p.extendedEvalCtx,
-		p:               p,
-	}
-	if err := startPlan(params, rows); err != nil {
-		return err
-	}
-	next, err := rows.Next(params)
-	if err != nil {
-		return err
-	}
+	rows, err := p.runWithDistSQL(ctx, plan)
 
-	if next {
-		values := rows.Values()
+	if rows != nil && rows.Len() > 0 {
+		defer rows.Close(ctx)
+		values := rows.At(0)
 		var pairs bytes.Buffer
 		for i := range values {
 			if i > 0 {

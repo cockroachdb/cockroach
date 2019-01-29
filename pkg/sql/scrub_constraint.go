@@ -48,7 +48,8 @@ type sqlCheckConstraintCheckOperation struct {
 // sqlCheckConstraintCheckOperation during local execution.
 type sqlCheckConstraintCheckRun struct {
 	started     bool
-	rows        planNode
+	rows        *sqlbase.RowContainer
+	rowIndex    int
 	hasRowsLeft bool
 }
 
@@ -90,18 +91,36 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	// use the tableDesc we have, but this is a rare operation and the benefit
 	// would be marginal compared to the work of the actual query, so the added
 	// complexity seems unjustified.
-	rows, err := params.p.SelectClause(ctx, sel, nil /* orderBy */, nil, /* limit */
+	plan, err := params.p.SelectClause(ctx, sel, nil /* orderBy */, nil, /* limit */
 		nil /* with */, nil /* desiredTypes */, publicColumns)
 	if err != nil {
 		return err
 	}
-	rows, err = params.p.optimizePlan(ctx, rows, allColumns(rows))
+	plan, err = params.p.optimizePlan(ctx, plan, allColumns(plan))
 	if err != nil {
 		return err
 	}
-	if err := startPlan(params, rows); err != nil {
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	physPlan, err := scrubPlanDistSQL(ctx, planCtx, plan)
+	if err != nil {
 		return err
 	}
+	columns := planColumns(plan)
+	columnTypes := make([]sqlbase.ColumnType, len(columns))
+	for i := range planColumns(plan) {
+		columnTypes[i], err = sqlbase.DatumTypeToColumnType(columns[i].Typ)
+		if err != nil {
+			return err
+		}
+	}
+	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, physPlan, columnTypes)
+	if err != nil {
+		rows.Close(ctx)
+		return err
+	}
+
+	o.run.started = true
+	o.run.rows = rows
 
 	// Collect all the columns.
 	for i := range o.tableDesc.Columns {
@@ -112,26 +131,15 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 		return err
 	}
 
-	o.run.started = true
-	o.run.rows = rows
-	// Begin the first unit of work. This prepares the hasRowsLeft flag
-	// for the first iteration.
-	o.run.hasRowsLeft, err = o.run.rows.Next(params)
 	return err
 }
 
 // Next implements the checkOperation interface.
 func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (tree.Datums, error) {
-	row := o.run.rows.Values()
+	row := o.run.rows.At(o.run.rowIndex)
+	o.run.rowIndex++
 	timestamp := tree.MakeDTimestamp(
 		params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond)
-
-	// Start the next unit of work. This is required so during the next
-	// call to Done() it is known whether there are any rows left.
-	var err error
-	if o.run.hasRowsLeft, err = o.run.rows.Next(params); err != nil {
-		return nil, err
-	}
 
 	var primaryKeyDatums tree.Datums
 	for _, rowIdx := range o.primaryColIdxs {
@@ -171,7 +179,7 @@ func (o *sqlCheckConstraintCheckOperation) Started() bool {
 
 // Done implements the checkOperation interface.
 func (o *sqlCheckConstraintCheckOperation) Done(ctx context.Context) bool {
-	return o.run.rows == nil || !o.run.hasRowsLeft
+	return o.run.rows == nil || o.run.rowIndex >= o.run.rows.Len()
 }
 
 // Close implements the checkOperation interface.

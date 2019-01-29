@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
@@ -530,6 +531,57 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 func (p *planner) prepareForDistSQLSupportCheck() {
 	// Trigger limit propagation.
 	p.setUnlimited(p.curPlan.plan)
+}
+
+// runWithDistSQL runs a planNode tree synchronously via DistSQL, returning the
+// results in a RowContainer. There's no streaming on this, so use sparingly.
+// In general, you should always prefer to use the internal executor if you can.
+// This method is provided for compatibility with clients that build planNode
+// trees by hand and expect to be able to use the old startPlan method.
+func (p *planner) runWithDistSQL(
+	ctx context.Context, plan planNode,
+) (*sqlbase.RowContainer, error) {
+	params := runParams{
+		ctx:             ctx,
+		extendedEvalCtx: &p.extendedEvalCtx,
+		p:               p,
+	}
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	log.VEvent(ctx, 1, "creating DistSQL plan")
+	physPlan, err := planCtx.ExtendedEvalCtx.DistSQLPlanner.createPlanForNode(planCtx, plan)
+	if err != nil {
+		return nil, err
+	}
+	planCtx.ExtendedEvalCtx.DistSQLPlanner.FinalizePlan(planCtx, &physPlan)
+	columns := planColumns(plan)
+	ci := sqlbase.ColTypeInfoFromResCols(columns)
+	rows := sqlbase.NewRowContainer(*p.extendedEvalCtx.ActiveMemAcc, ci, 0 /* rowCapacity */)
+	rowResultWriter := NewRowResultWriter(rows)
+	recv := MakeDistSQLReceiver(
+		ctx,
+		rowResultWriter,
+		tree.Rows,
+		p.ExecCfg().RangeDescriptorCache,
+		p.ExecCfg().LeaseHolderCache,
+		p.txn,
+		func(ts hlc.Timestamp) {
+			_ = p.ExecCfg().Clock.Update(ts)
+		},
+		p.extendedEvalCtx.Tracing,
+	)
+	defer recv.Release()
+
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := p.extendedEvalCtx
+	p.extendedEvalCtx.DistSQLPlanner.Run(
+		planCtx, p.txn, &physPlan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	if rowResultWriter.Err() != nil {
+		return rows, rowResultWriter.Err()
+	} else if rows.Len() == 0 {
+		rows.Close(ctx)
+		return nil, nil
+	}
+	return rows, nil
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current
