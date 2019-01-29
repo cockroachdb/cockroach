@@ -17,12 +17,14 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"golang.org/x/sys/unix"
@@ -45,7 +47,12 @@ func handleSignalDuringShutdown(sig os.Signal) {
 	// Reraise the signal. os.Signal is always sysutil.Signal.
 	if err := unix.Kill(unix.Getpid(), sig.(sysutil.Signal)); err != nil {
 		// Sending a valid signal to ourselves should never fail.
-		panic(err)
+		//
+		// Unfortunately it appears (#34354) that some users
+		// run CockroachDB in containers that only support
+		// a subset of all syscalls. If this ever happens, we
+		// still need to quit immediately.
+		log.Fatalf(context.Background(), "unable to forward signal %v: %v", sig, err)
 	}
 
 	// Block while we wait for the signal to be delivered.
