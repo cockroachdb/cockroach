@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // indexJoinNode implements joining of results from an index with the rows
@@ -240,64 +239,16 @@ type indexJoinRun struct {
 	colIDtoRowIndex map[sqlbase.ColumnID]int
 }
 
-const indexJoinBatchSize = 100
-
 func (n *indexJoinNode) startExec(params runParams) error {
-	return n.table.startExec(params)
+	panic("indexJoinNode cannot be run in local mode")
 }
 
 func (n *indexJoinNode) Next(params runParams) (bool, error) {
-	// Loop looking up the next row. We either are going to pull a row from the
-	// table or a batch of rows from the index. If we pull a batch of rows from
-	// the index we perform another iteration of the loop looking for rows in the
-	// table. This outer loop is necessary because a batch of rows from the index
-	// might all be filtered when the resulting rows are read from the table.
-	for tableLookup := (len(n.table.spans) > 0); true; tableLookup = true {
-		// First, try to pull a row from the table.
-		if tableLookup {
-			next, err := n.table.Next(params)
-			if err != nil {
-				return false, err
-			}
-			if next {
-				return true, nil
-			}
-		}
-
-		// The table is out of rows. Pull primary keys from the index.
-		n.table.run.scanInitialized = false
-		n.table.spans = n.table.spans[:0]
-
-		for len(n.table.spans) < indexJoinBatchSize {
-			if next, err := n.index.Next(params); !next {
-				// The index is out of rows or an error occurred.
-				if err != nil {
-					return false, err
-				}
-				if len(n.table.spans) == 0 {
-					// The index is out of rows.
-					return false, nil
-				}
-				break
-			}
-			vals := n.index.Values()
-			primaryIndexSpan, _, err := sqlbase.EncodeIndexSpan(
-				n.table.desc.TableDesc(), n.table.index, n.run.colIDtoRowIndex, vals, n.run.primaryKeyPrefix)
-			if err != nil {
-				return false, err
-			}
-			n.table.spans = append(n.table.spans, primaryIndexSpan)
-		}
-
-		if log.V(3) {
-			log.Infof(params.ctx, "table scan: %s", sqlbase.PrettySpans(n.table.index, n.table.spans, 0))
-		}
-	}
-	return false, nil
+	panic("indexJoinNode cannot be run in local mode")
 }
 
 func (n *indexJoinNode) Values() tree.Datums {
-	return n.table.Values()
+	panic("indexJoinNode cannot be run in local mode")
 }
 
 func (n *indexJoinNode) Close(ctx context.Context) {

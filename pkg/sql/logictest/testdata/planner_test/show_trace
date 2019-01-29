@@ -268,10 +268,10 @@ SET tracing = on,kv,results; DELETE FROM t.kv; SET tracing = off
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
-flow              Scan /Table/54/{1-2}
+table reader      Scan /Table/54/{1-2}
 dist sender send  querying next range at /Table/54/1
 dist sender send  r20: sending batch 1 Scan to (n1,s1):1
-flow              fetched: /kv/primary/1/v -> /2
+table reader      fetched: /kv/primary/1/v -> /2
 flow              Del /Table/54/2/2/0
 flow              Del /Table/54/1/1/0
 dist sender send  querying next range at /Table/54/1/1/0

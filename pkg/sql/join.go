@@ -17,15 +17,12 @@ package sql
 import (
 	"context"
 	"fmt"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // joinNode is a planNode whose rows are the result of an inner or
@@ -53,8 +50,6 @@ type joinNode struct {
 
 	// columns contains the metadata for the results of this node.
 	columns sqlbase.ResultColumns
-
-	run joinRun
 }
 
 // makeJoinPredicate builds a joinPredicate from a join condition. Also returns
@@ -131,22 +126,6 @@ func (p *planner) makeJoinNode(
 		joinType: pred.joinType,
 		pred:     pred,
 		columns:  pred.info.SourceColumns,
-	}
-
-	n.run.buffer = &RowBuffer{
-		RowContainer: rowcontainer.NewRowContainer(
-			p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
-		),
-	}
-
-	n.run.bucketsMemAcc = p.EvalContext().Mon.MakeBoundAccount()
-	n.run.buckets = buckets{
-		buckets: make(map[string]*bucket),
-		rowContainer: rowcontainer.NewRowContainer(
-			p.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(planColumns(n.right.plan)),
-			0,
-		),
 	}
 	return n
 }
@@ -371,385 +350,24 @@ func (p *planner) makeJoin(
 	return planDataSource{info: rInfo, plan: r}, nil
 }
 
-// joinRun contains the run-time state of joinNode during local execution.
-type joinRun struct {
-	// output contains the last generated row of results from this node.
-	output tree.Datums
-
-	// buffer is our intermediate row store where we effectively 'stash' a batch
-	// of results at once, this is then used for subsequent calls to Next() and
-	// Values().
-	buffer *RowBuffer
-
-	buckets       buckets
-	bucketsMemAcc mon.BoundAccount
-
-	// emptyRight contain tuples of NULL values to use on the right for left and
-	// full outer joins when the on condition fails.
-	// This is also used for semi and anti joins, in which case it is always nil.
-	emptyRight tree.Datums
-
-	// emptyLeft contains tuples of NULL values to use on the left for right and
-	// full outer joins when the on condition fails.
-	emptyLeft tree.Datums
-
-	// finishedOutput indicates that we've finished writing all of the rows for
-	// this join and that we can quit as soon as our buffer is empty.
-	finishedOutput bool
-}
-
 func (n *joinNode) startExec(params runParams) error {
-	if err := n.hashJoinStart(params); err != nil {
-		return err
-	}
-
-	// Pre-allocate the space for output rows.
-	n.run.output = make(tree.Datums, len(n.columns))
-
-	// If needed, pre-allocate left and right rows of NULL tuples for when the
-	// join predicate fails to match.
-	if n.joinType == sqlbase.LeftOuterJoin || n.joinType == sqlbase.FullOuterJoin {
-		n.run.emptyRight = make(tree.Datums, len(planColumns(n.right.plan)))
-		for i := range n.run.emptyRight {
-			n.run.emptyRight[i] = tree.DNull
-		}
-	}
-	if n.joinType == sqlbase.RightOuterJoin || n.joinType == sqlbase.FullOuterJoin {
-		n.run.emptyLeft = make(tree.Datums, len(planColumns(n.left.plan)))
-		for i := range n.run.emptyLeft {
-			n.run.emptyLeft[i] = tree.DNull
-		}
-	}
-
-	return nil
-}
-
-func (n *joinNode) hashJoinStart(params runParams) error {
-	var scratch []byte
-	// Load all the rows from the right side and build our hashmap.
-	ctx := params.ctx
-	for {
-		hasRow, err := n.right.plan.Next(params)
-		if err != nil {
-			return err
-		}
-		if !hasRow {
-			break
-		}
-		row := n.right.plan.Values()
-		encoding, _, err := n.pred.encode(scratch, row, n.pred.rightEqualityIndices)
-		if err != nil {
-			return err
-		}
-
-		if err := n.run.buckets.AddRow(ctx, &n.run.bucketsMemAcc, encoding, row); err != nil {
-			return err
-		}
-
-		scratch = encoding[:0]
-	}
-	if n.joinType == sqlbase.FullOuterJoin || n.joinType == sqlbase.RightOuterJoin {
-		return n.run.buckets.InitSeen(ctx, &n.run.bucketsMemAcc)
-	}
-	return nil
+	panic("joinNode cannot be run in local mode")
 }
 
 // Next implements the planNode interface.
 func (n *joinNode) Next(params runParams) (res bool, err error) {
-	// If results available from from previously computed results, we just
-	// return true.
-	if n.run.buffer.Next() {
-		return true, nil
-	}
-
-	// If the buffer is empty and we've finished outputting, we're done.
-	if n.run.finishedOutput {
-		return false, nil
-	}
-
-	wantUnmatchedLeft := n.joinType == sqlbase.LeftOuterJoin ||
-		n.joinType == sqlbase.FullOuterJoin ||
-		n.joinType == sqlbase.LeftAntiJoin
-	wantUnmatchedRight := n.joinType == sqlbase.RightOuterJoin || n.joinType == sqlbase.FullOuterJoin
-
-	if len(n.run.buckets.Buckets()) == 0 {
-		if !wantUnmatchedLeft {
-			// No rows on right; don't even try.
-			return false, nil
-		}
-	}
-
-	// Compute next batch of matching rows.
-	var scratch []byte
-	for {
-		if err := params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		leftHasRow, err := n.left.plan.Next(params)
-		if err != nil {
-			return false, err
-		}
-		if !leftHasRow {
-			break
-		}
-
-		lrow := n.left.plan.Values()
-		encoding, containsNull, err := n.pred.encode(scratch, lrow, n.pred.leftEqualityIndices)
-		if err != nil {
-			return false, err
-		}
-
-		// We make the explicit check for whether or not lrow contained a NULL value
-		// on an equality column. The reasoning here is because of the way we expect
-		// NULL equality checks to behave (i.e. NULL != NULL) and the fact that we
-		// use the encoding of any given row as key into our bucket. Thus if we
-		// encountered a NULL row when building the hashmap we have to store in
-		// order to use it for RIGHT OUTER joins but if we encounter another
-		// NULL row when going through the left stream (probing phase), matching
-		// this with the first NULL row would be incorrect.
-		//
-		// If we have have the following:
-		// CREATE TABLE t(x INT); INSERT INTO t(x) VALUES (NULL);
-		//    |  x   |
-		//     ------
-		//    | NULL |
-		//
-		// For the following query:
-		// SELECT * FROM t AS a FULL OUTER JOIN t AS b USING(x);
-		//
-		// We expect:
-		//    |  x   |
-		//     ------
-		//    | NULL |
-		//    | NULL |
-		//
-		// The following examples illustrates the behavior when joining on two
-		// or more columns, and only one of them contains NULL.
-		// If we have have the following:
-		// CREATE TABLE t(x INT, y INT);
-		// INSERT INTO t(x, y) VALUES (44,51), (NULL,52);
-		//    |  x   |  y   |
-		//     ------
-		//    |  44  |  51  |
-		//    | NULL |  52  |
-		//
-		// For the following query:
-		// SELECT * FROM t AS a FULL OUTER JOIN t AS b USING(x, y);
-		//
-		// We expect:
-		//    |  x   |  y   |
-		//     ------
-		//    |  44  |  51  |
-		//    | NULL |  52  |
-		//    | NULL |  52  |
-		if containsNull {
-			if !wantUnmatchedLeft {
-				scratch = encoding[:0]
-				// Failed to match -- no matching row, nothing to do.
-				continue
-			}
-			// We append an empty right row to the left row, adding the result
-			// to our buffer for the subsequent call to Next().
-			n.pred.prepareRow(n.run.output, lrow, n.run.emptyRight)
-			if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
-				return false, err
-			}
-			return n.run.buffer.Next(), nil
-		}
-
-		b, ok := n.run.buckets.Fetch(encoding)
-		if !ok {
-			if !wantUnmatchedLeft {
-				scratch = encoding[:0]
-				continue
-			}
-			// Left or full outer join: unmatched rows are padded with NULLs.
-			// Given that we did not find a matching right row we append an
-			// empty right row to the left row, adding the result to our buffer
-			// for the subsequent call to Next().
-			n.pred.prepareRow(n.run.output, lrow, n.run.emptyRight)
-			if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
-				return false, err
-			}
-			return n.run.buffer.Next(), nil
-		}
-
-		// We iterate through all the rows in the bucket attempting to match the
-		// on condition, if the on condition passes we add it to the buffer.
-		foundMatch := false
-		for idx, rrow := range b.Rows() {
-			passesOnCond, err := n.pred.eval(params.EvalContext(), lrow, rrow)
-			if err != nil {
-				return false, err
-			}
-
-			if !passesOnCond {
-				continue
-			}
-			foundMatch = true
-			if n.joinType == sqlbase.JoinType_LEFT_ANTI {
-				// For anti-join, we want to output the left rows that don't have a
-				// match. Since we found a match, we can skip this row.
-				break
-			}
-
-			if n.joinType == sqlbase.JoinType_LEFT_SEMI {
-				// Semi-joins only output the left row.
-				n.pred.prepareRow(n.run.output, lrow, nil)
-			} else {
-				n.pred.prepareRow(n.run.output, lrow, rrow)
-			}
-			if wantUnmatchedRight {
-				// Mark the row as seen if we need to retrieve the rows
-				// without matches for right or full joins later.
-				b.MarkSeen(idx)
-			}
-			if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
-				return false, err
-			}
-			if n.joinType == sqlbase.JoinType_LEFT_SEMI {
-				// For semi-joins, we only output the left row once, even if it matches
-				// multiple rows.
-				break
-			}
-		}
-		if !foundMatch && wantUnmatchedLeft {
-			// If none of the rows matched the on condition and we are computing a
-			// left outer, full outer, or anti join, we need to add a row with an
-			// empty right side.
-			n.pred.prepareRow(n.run.output, lrow, n.run.emptyRight)
-			if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
-				return false, err
-			}
-		}
-		if n.run.buffer.Next() {
-			return true, nil
-		}
-		scratch = encoding[:0]
-	}
-
-	// no more lrows, we go through the unmatched rows in the internal hashmap.
-	if !wantUnmatchedRight {
-		return false, nil
-	}
-
-	for _, b := range n.run.buckets.Buckets() {
-		for idx, rrow := range b.Rows() {
-			if err := params.p.cancelChecker.Check(); err != nil {
-				return false, err
-			}
-			if !b.Seen(idx) {
-				n.pred.prepareRow(n.run.output, n.run.emptyLeft, rrow)
-				if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
-					return false, err
-				}
-			}
-		}
-	}
-	n.run.finishedOutput = true
-
-	return n.run.buffer.Next(), nil
+	panic("joinNode cannot be run in local mode")
 }
 
 // Values implements the planNode interface.
 func (n *joinNode) Values() tree.Datums {
-	return n.run.buffer.Values()
+	panic("joinNode cannot be run in local mode")
 }
 
 // Close implements the planNode interface.
 func (n *joinNode) Close(ctx context.Context) {
-	n.run.buffer.Close(ctx)
-	n.run.buffer = nil
-	n.run.buckets.Close(ctx)
-	n.run.bucketsMemAcc.Close(ctx)
-
 	n.right.plan.Close(ctx)
 	n.left.plan.Close(ctx)
-}
-
-// bucket here is the set of rows for a given group key (comprised of
-// columns specified by the join constraints), 'seen' is used to determine if
-// there was a matching row in the opposite stream.
-type bucket struct {
-	rows []tree.Datums
-	seen []bool
-}
-
-func (b *bucket) Seen(i int) bool {
-	return b.seen[i]
-}
-
-func (b *bucket) Rows() []tree.Datums {
-	return b.rows
-}
-
-func (b *bucket) MarkSeen(i int) {
-	b.seen[i] = true
-}
-
-func (b *bucket) AddRow(row tree.Datums) {
-	b.rows = append(b.rows, row)
-}
-
-type buckets struct {
-	buckets      map[string]*bucket
-	rowContainer *rowcontainer.RowContainer
-}
-
-func (b *buckets) Buckets() map[string]*bucket {
-	return b.buckets
-}
-
-func (b *buckets) AddRow(
-	ctx context.Context, acc *mon.BoundAccount, encoding []byte, row tree.Datums,
-) error {
-	bk, ok := b.buckets[string(encoding)]
-	if !ok {
-		bk = &bucket{}
-	}
-
-	rowCopy, err := b.rowContainer.AddRow(ctx, row)
-	if err != nil {
-		return err
-	}
-	if err := acc.Grow(ctx, rowcontainer.SizeOfDatums); err != nil {
-		return err
-	}
-	bk.AddRow(rowCopy)
-
-	if !ok {
-		b.buckets[string(encoding)] = bk
-	}
-	return nil
-}
-
-const sizeOfBoolSlice = unsafe.Sizeof([]bool{})
-const sizeOfBool = unsafe.Sizeof(true)
-
-// InitSeen initializes the seen array for each of the buckets. It must be run
-// before the buckets' seen state is used.
-func (b *buckets) InitSeen(ctx context.Context, acc *mon.BoundAccount) error {
-	for _, bucket := range b.buckets {
-		if err := acc.Grow(
-			ctx, int64(sizeOfBoolSlice+uintptr(len(bucket.rows))*sizeOfBool),
-		); err != nil {
-			return err
-		}
-		bucket.seen = make([]bool, len(bucket.rows))
-	}
-	return nil
-}
-
-func (b *buckets) Close(ctx context.Context) {
-	b.rowContainer.Close(ctx)
-	b.rowContainer = nil
-	b.buckets = nil
-}
-
-func (b *buckets) Fetch(encoding []byte) (*bucket, bool) {
-	bk, ok := b.buckets[string(encoding)]
-	return bk, ok
 }
 
 // commonColumns returns the names of columns common on the

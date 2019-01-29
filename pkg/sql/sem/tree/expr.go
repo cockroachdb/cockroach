@@ -1272,18 +1272,6 @@ func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext, Datums) Aggre
 	}
 }
 
-// GetWindowConstructor returns a window function constructor if the
-// FuncExpr is a built-in window function.
-func (node *FuncExpr) GetWindowConstructor() func(*EvalContext) WindowFunc {
-	if node.fn == nil || node.fn.WindowFunc == nil {
-		return nil
-	}
-	return func(evalCtx *EvalContext) WindowFunc {
-		types := typesOfExprs(node.Exprs)
-		return node.fn.WindowFunc(types, evalCtx)
-	}
-}
-
 func typesOfExprs(exprs Exprs) []types.T {
 	types := make([]types.T, len(exprs))
 	for i, expr := range exprs {

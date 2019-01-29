@@ -17,17 +17,13 @@ package sql
 import (
 	"context"
 	"fmt"
-	"sort"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -162,8 +158,7 @@ type windowRun struct {
 	wrappedRenderVals *rowcontainer.RowContainer
 
 	// The populated values for this windowNode.
-	values    valuesNode
-	populated bool
+	values valuesNode
 
 	windowValues [][]tree.Datum
 	curRowIdx    int
@@ -173,48 +168,15 @@ type windowRun struct {
 }
 
 func (n *windowNode) startExec(params runParams) error {
-	n.run.windowsAcc = params.EvalContext().Mon.MakeBoundAccount()
-
-	return nil
+	panic("windowNode can't be run in local mode")
 }
 
 func (n *windowNode) Next(params runParams) (bool, error) {
-	for !n.run.populated {
-		if err := params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		next, err := n.plan.Next(params)
-		if err != nil {
-			return false, err
-		}
-		if !next {
-			n.run.populated = true
-			if err := n.computeWindows(params.ctx, params.EvalContext()); err != nil {
-				return false, err
-			}
-			n.run.values.rows = rowcontainer.NewRowContainer(
-				params.EvalContext().Mon.MakeBoundAccount(),
-				sqlbase.ColTypeInfoFromResCols(n.run.values.columns),
-				n.run.wrappedRenderVals.Len(),
-			)
-			if err := n.populateValues(params.ctx, params.EvalContext()); err != nil {
-				return false, err
-			}
-			break
-		}
-
-		values := n.plan.Values()
-		if _, err := n.run.wrappedRenderVals.AddRow(params.ctx, values); err != nil {
-			return false, err
-		}
-	}
-
-	return n.run.values.Next(params)
+	panic("windowNode can't be run in local mode")
 }
 
 func (n *windowNode) Values() tree.Datums {
-	return n.run.values.Values()
+	panic("windowNode can't be run in local mode")
 }
 
 func (n *windowNode) Close(ctx context.Context) {
@@ -592,366 +554,6 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 	}
 }
 
-type partitionSorter struct {
-	evalCtx       *tree.EvalContext
-	rows          indexedRows
-	windowDefVals *rowcontainer.RowContainer
-	ordering      sqlbase.ColumnOrdering
-}
-
-// partitionSorter implements the sort.Interface interface.
-func (n *partitionSorter) Len() int { return n.rows.Len() }
-func (n *partitionSorter) Swap(i, j int) {
-	n.rows.rows[i], n.rows.rows[j] = n.rows.rows[j], n.rows.rows[i]
-}
-func (n *partitionSorter) Less(i, j int) bool { return n.Compare(i, j) < 0 }
-
-// partitionSorter implements the PeerGroupChecker interface.
-func (n *partitionSorter) InSameGroup(i, j int) (bool, error) { return n.Compare(i, j) == 0, nil }
-
-func (n *partitionSorter) Compare(i, j int) int {
-	ra, rb := n.rows.rows[i], n.rows.rows[j]
-	defa, defb := n.windowDefVals.At(ra.idx), n.windowDefVals.At(rb.idx)
-	for _, o := range n.ordering {
-		da := defa[o.ColIdx]
-		db := defb[o.ColIdx]
-		if c := da.Compare(n.evalCtx, db); c != 0 {
-			if o.Direction != encoding.Ascending {
-				return -c
-			}
-			return c
-		}
-	}
-	return 0
-}
-
-type allPeers struct{}
-
-// allPeers implements the PeerGroupChecker interface.
-func (allPeers) InSameGroup(i, j int) (bool, error) { return true, nil }
-
-// computeWindows populates n.run.windowValues, adding a column of values to the
-// 2D-slice for each window function in n.funcs. This needs to be performed
-// all at once because in order to compute the result of a window function
-// for any single row, we need to have access to all rows at the same time.
-//
-// The state shared between rows while computing all window functions for a
-// single row is not easily extracted for two reasons:
-// 1. window functions can define different partitioning attributes
-// 2. window functions can define different column orderings within partitions
-//
-// The general structure is:
-//   for each window function
-//     compute partitions
-//     for each partition
-//       sort partition
-//       evaluate window frame over partition per cell, keeping track of peer groups
-func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalContext) error {
-	rowCount := n.run.wrappedRenderVals.Len()
-	if rowCount == 0 {
-		return nil
-	}
-
-	windowCount := len(n.funcs)
-
-	winValSz := uintptr(rowCount) * unsafe.Sizeof([]tree.Datum{})
-	winAllocSz := uintptr(rowCount*windowCount) * unsafe.Sizeof(tree.Datum(nil))
-	if err := n.run.windowsAcc.Grow(ctx, int64(winValSz+winAllocSz)); err != nil {
-		return err
-	}
-
-	n.run.windowValues = make([][]tree.Datum, rowCount)
-	windowAlloc := make([]tree.Datum, rowCount*windowCount)
-	for i := range n.run.windowValues {
-		n.run.windowValues[i] = windowAlloc[i*windowCount : (i+1)*windowCount]
-	}
-
-	var scratchBytes []byte
-	var scratchDatum []tree.Datum
-	for windowIdx, windowFn := range n.funcs {
-		frameRun := &tree.WindowFrameRun{
-			ArgIdxStart:  windowFn.argIdxStart,
-			ArgCount:     windowFn.argCount,
-			RowIdx:       0,
-			FilterColIdx: windowFn.filterColIdx,
-		}
-		if n.run.windowFrames[windowIdx] != nil {
-			frameRun.Frame = n.run.windowFrames[windowIdx]
-			// OffsetExpr's must be integer expressions not containing any variables, aggregate functions, or window functions,
-			// so we need to make sure these expressions are evaluated before using offsets.
-			bounds := frameRun.Frame.Bounds
-			if bounds.StartBound.HasOffset() {
-				typedStartOffset := bounds.StartBound.OffsetExpr.(tree.TypedExpr)
-				dStartOffset, err := typedStartOffset.Eval(evalCtx)
-				if err != nil {
-					return err
-				}
-				if dStartOffset == tree.DNull {
-					return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame starting offset must not be null")
-				}
-				if isNegative(evalCtx, dStartOffset) {
-					if frameRun.Frame.Mode == tree.RANGE {
-						return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
-					}
-					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
-				}
-				frameRun.StartBoundOffset = dStartOffset
-			}
-			if bounds.EndBound != nil && bounds.EndBound.HasOffset() {
-				typedEndOffset := bounds.EndBound.OffsetExpr.(tree.TypedExpr)
-				dEndOffset, err := typedEndOffset.Eval(evalCtx)
-				if err != nil {
-					return err
-				}
-				if dEndOffset == tree.DNull {
-					return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame ending offset must not be null")
-				}
-				if isNegative(evalCtx, dEndOffset) {
-					if frameRun.Frame.Mode == tree.RANGE {
-						return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
-					}
-					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
-				}
-				frameRun.EndBoundOffset = dEndOffset
-			}
-			if frameRun.RangeModeWithOffsets() {
-				frameRun.OrdColIdx = windowFn.columnOrdering[0].ColIdx
-				frameRun.OrdDirection = windowFn.columnOrdering[0].Direction
-
-				colTyp := windowFn.ordColTyp
-				// Type of offset depends on the ordering column's type.
-				offsetTyp := colTyp
-				if types.IsDateTimeType(colTyp) {
-					// For datetime related ordering columns, offset must be an Interval.
-					offsetTyp = types.Interval
-				}
-				plusOp, minusOp, found := tree.WindowFrameRangeOps{}.LookupImpl(colTyp, offsetTyp)
-				if !found {
-					return pgerror.NewErrorf(pgerror.CodeWindowingError, "given logical offset cannot be combined with ordering column")
-				}
-				frameRun.PlusOp, frameRun.MinusOp = plusOp, minusOp
-			}
-		}
-
-		partitions := make(map[string]indexedRows)
-
-		if len(windowFn.partitionIdxs) == 0 {
-			// If no partition indexes are included for the window function, all
-			// rows are added to the same partition, which need to be pre-allocated.
-			sz := int64(uintptr(rowCount)*unsafe.Sizeof(indexedRow{}) + unsafe.Sizeof(indexedRows{}))
-			if err := n.run.windowsAcc.Grow(ctx, sz); err != nil {
-				return err
-			}
-			partitions[""] = indexedRows{rows: make([]indexedRow, rowCount)}
-		}
-
-		if num := len(windowFn.partitionIdxs); num > cap(scratchDatum) {
-			sz := int64(uintptr(num) * unsafe.Sizeof(tree.Datum(nil)))
-			if err := n.run.windowsAcc.Grow(ctx, sz); err != nil {
-				return err
-			}
-			scratchDatum = make([]tree.Datum, num)
-		} else {
-			scratchDatum = scratchDatum[:num]
-		}
-
-		// Partition rows into separate partitions based on hash values of the
-		// window function's PARTITION BY attribute.
-		//
-		// TODO(nvanbenschoten): Window functions with the same window definition
-		// can share partition and sorting work.
-		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
-		for rowI := 0; rowI < rowCount; rowI++ {
-			row := n.run.wrappedRenderVals.At(rowI)
-			// We need the whole row and not just arguments to window functions since
-			// in RANGE mode we might need access to the column over which the rows
-			// are sorted, and all such columns come after all arguments to window
-			// functions.
-			entry := indexedRow{idx: rowI, row: row}
-			if len(windowFn.partitionIdxs) == 0 {
-				// If no partition indexes are included for the window function, all
-				// rows are added to the same partition.
-				partitions[""].rows[rowI] = entry
-			} else {
-				// If the window function has partition indexes, we hash the values of each
-				// of these indexes for each row, and partition based on this hashed value.
-				for i, idx := range windowFn.partitionIdxs {
-					scratchDatum[i] = row[idx]
-				}
-
-				encoded, err := sqlbase.EncodeDatumsKeyAscending(scratchBytes, scratchDatum)
-				if err != nil {
-					return err
-				}
-
-				sz := int64(uintptr(len(encoded)) + unsafe.Sizeof(entry))
-				if err := n.run.windowsAcc.Grow(ctx, sz); err != nil {
-					return err
-				}
-				partition := partitions[string(encoded)]
-				partition.rows = append(partition.rows, entry)
-				partitions[string(encoded)] = partition
-				scratchBytes = encoded[:0]
-			}
-		}
-
-		// For each partition, perform necessary sorting based on the window function's
-		// ORDER BY attribute. After this, perform the window function computation for
-		// each tuple and save the result in n.run.windowValues.
-		//
-		// TODO(nvanbenschoten)
-		// - Investigate inter- and intra-partition parallelism
-		// - Investigate more efficient aggregation techniques
-		//   * Removable Cumulative
-		//   * Segment Tree
-		// See Leis et al. [http://www.vldb.org/pvldb/vol8/p1058-leis.pdf]
-		for _, partition := range partitions {
-			builtin := windowFn.expr.GetWindowConstructor()(evalCtx)
-			defer builtin.Close(ctx, evalCtx)
-
-			var peerGrouper tree.PeerGroupChecker
-			if windowFn.columnOrdering != nil {
-				// If an ORDER BY clause is provided, order the partition and use the
-				// sorter as our PeerGroupChecker.
-				sorter := &partitionSorter{
-					evalCtx:       evalCtx,
-					rows:          partition,
-					windowDefVals: n.run.wrappedRenderVals,
-					ordering:      windowFn.columnOrdering,
-				}
-				// The sort needs to be deterministic because multiple window functions with
-				// syntactically equivalent ORDER BY clauses in their window definitions
-				// need to be guaranteed to be evaluated in the same order, even if the
-				// ORDER BY *does not* uniquely determine an ordering. In the future, this
-				// could be guaranteed by only performing a single pass over a sorted partition
-				// for functions with syntactically equivalent PARTITION BY and ORDER BY clauses.
-				sort.Sort(sorter)
-				peerGrouper = sorter
-			} else {
-				// If ORDER BY clause is not provided, all rows are peers.
-				peerGrouper = allPeers{}
-			}
-
-			frameRun.Rows = partition
-			frameRun.RowIdx = 0
-
-			if !frameRun.IsDefaultFrame() {
-				// We have a custom frame not equivalent to default one, so if we have
-				// an aggregate function, we want to reset it for each row.
-				// Not resetting is an optimization since we're not computing
-				// the result over the whole frame but only as a result of the current
-				// row and previous results of aggregation.
-				builtins.ShouldReset(builtin)
-			}
-
-			if err := frameRun.PeerHelper.Init(frameRun, peerGrouper); err != nil {
-				return err
-			}
-			frameRun.CurRowPeerGroupNum = 0
-
-			for frameRun.RowIdx < partition.Len() {
-				// Perform calculations on each row in the current peer group.
-				peerGroupEndIdx := frameRun.PeerHelper.GetFirstPeerIdx(frameRun.CurRowPeerGroupNum) + frameRun.PeerHelper.GetRowCount(frameRun.CurRowPeerGroupNum)
-				for ; frameRun.RowIdx < peerGroupEndIdx; frameRun.RowIdx++ {
-					res, err := builtin.Compute(ctx, evalCtx, frameRun)
-					if err != nil {
-						return err
-					}
-
-					// This may overestimate, because WindowFuncs may perform internal caching.
-					sz := res.Size()
-					if err := n.run.windowsAcc.Grow(ctx, int64(sz)); err != nil {
-						return err
-					}
-
-					// Save result into n.run.windowValues, indexed by original row index.
-					valRowIdx := partition.rows[frameRun.RowIdx].idx
-					n.run.windowValues[valRowIdx][windowIdx] = res
-				}
-				if err := frameRun.PeerHelper.Update(frameRun); err != nil {
-					return err
-				}
-				frameRun.CurRowPeerGroupNum++
-			}
-		}
-	}
-	return nil
-}
-
-// isNegative returns whether offset is negative.
-func isNegative(evalCtx *tree.EvalContext, offset tree.Datum) bool {
-	switch o := offset.(type) {
-	case *tree.DInt:
-		return *o < 0
-	case *tree.DDecimal:
-		return o.Negative
-	case *tree.DFloat:
-		return *o < 0
-	case *tree.DInterval:
-		return o.Compare(evalCtx, &tree.DInterval{Duration: duration.Duration{}}) < 0
-	default:
-		panic("unexpected offset type")
-	}
-}
-
-// populateValues populates n.run.values with final datum values after computing
-// window result values in n.run.windowValues.
-func (n *windowNode) populateValues(ctx context.Context, evalCtx *tree.EvalContext) error {
-	rowCount := n.run.wrappedRenderVals.Len()
-	row := make(tree.Datums, len(n.windowRender))
-	for i := 0; i < rowCount; i++ {
-		wrappedRow := n.run.wrappedRenderVals.At(i)
-
-		n.run.curRowIdx = i // Point all windowFuncHolders to the correct row values.
-		curColIdx := 0
-		curFnIdx := 0
-		for j := range row {
-			if curWindowRender := n.windowRender[j]; curWindowRender == nil {
-				// If the windowRender at this index is nil, propagate the datum
-				// directly from the wrapped planNode. It wasn't changed by windowNode.
-				row[j] = wrappedRow[curColIdx]
-				curColIdx++
-			} else {
-				// If the windowRender is not nil, ignore 0 or more columns from the wrapped
-				// planNode. These were used as arguments to window functions all beneath
-				// a single windowRender.
-				// SELECT rank() over () from t; -> ignore 0 from wrapped values
-				// SELECT (rank() over () + avg(b) over ()) from t; -> ignore 1 from wrapped values
-				// SELECT (avg(a) over () + avg(b) over ()) from t; -> ignore 2 from wrapped values
-				for ; curFnIdx < len(n.funcs); curFnIdx++ {
-					windowFn := n.funcs[curFnIdx]
-					if windowFn.argIdxStart != curColIdx {
-						break
-					}
-					curColIdx += windowFn.argCount
-				}
-				// Instead, we evaluate the current window render, which depends on at least
-				// one window function, at the given row.
-				evalCtx.PushIVarContainer(&n.colAndAggContainer)
-				res, err := curWindowRender.Eval(evalCtx)
-				evalCtx.PopIVarContainer()
-				if err != nil {
-					return err
-				}
-				row[j] = res
-			}
-		}
-
-		if _, err := n.run.values.rows.AddRow(ctx, row); err != nil {
-			return err
-		}
-	}
-
-	// Done using the output of computeWindows, release memory and clear
-	// accounts.
-	n.run.wrappedRenderVals.Close(ctx)
-	n.run.wrappedRenderVals = nil
-	n.run.windowValues = nil
-	n.run.windowsAcc.Close(ctx)
-
-	return nil
-}
-
 type extractWindowFuncsVisitor struct {
 	n *windowNode
 
@@ -1148,40 +750,4 @@ func (c *windowNodeColAndAggContainer) IndexedVarNodeFormatter(idx int) tree.Nod
 	}
 	// Avoid duplicating the type annotation by calling .Format directly.
 	return c.sourceInfo.NodeFormatter(idx)
-}
-
-// indexedRows are rows with the corresponding indices.
-type indexedRows struct {
-	rows []indexedRow
-}
-
-// Len implements tree.IndexedRows interface.
-func (ir indexedRows) Len() int {
-	return len(ir.rows)
-}
-
-// GetRow implements tree.IndexedRows interface.
-func (ir indexedRows) GetRow(_ context.Context, idx int) (tree.IndexedRow, error) {
-	return ir.rows[idx], nil
-}
-
-// indexedRow is a row with a corresponding index.
-type indexedRow struct {
-	idx int
-	row tree.Datums
-}
-
-// GetIdx implements tree.IndexedRow interface.
-func (ir indexedRow) GetIdx() int {
-	return ir.idx
-}
-
-// GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
-	return ir.row[colIdx], nil
-}
-
-// GetDatums implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (tree.Datums, error) {
-	return ir.row[firstColIdx:lastColIdx], nil
 }

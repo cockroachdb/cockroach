@@ -32,8 +32,6 @@ type limitNode struct {
 	evaluated  bool
 	count      int64
 	offset     int64
-
-	run limitRun
 }
 
 // limit constructs a limitNode based on the LIMIT and OFFSET clauses.
@@ -74,39 +72,17 @@ func (p *planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) 
 	return &res, nil
 }
 
-// limitRun contains the state of limitNode during local execution.
-type limitRun struct {
-	rowIndex int64
-}
-
 func (n *limitNode) startExec(params runParams) error {
-	return n.evalLimit(params.EvalContext())
+	panic("limitNode cannot be run in local mode")
 }
 
 func (n *limitNode) Next(params runParams) (bool, error) {
-	// n.rowIndex is the 0-based index of the next row.
-	// We don't do (n.rowIndex >= n.offset + n.count) to avoid overflow (count can be MaxInt64).
-	if n.run.rowIndex-n.offset >= n.count {
-		return false, nil
-	}
-
-	for {
-		if next, err := n.plan.Next(params); !next {
-			return false, err
-		}
-
-		n.run.rowIndex++
-		if n.run.rowIndex > n.offset {
-			// Row within limits, return it.
-			break
-		}
-
-		// Fetch the next row.
-	}
-	return true, nil
+	panic("limitNode cannot be run in local mode")
 }
 
-func (n *limitNode) Values() tree.Datums { return n.plan.Values() }
+func (n *limitNode) Values() tree.Datums {
+	panic("limitNode cannot be run in local mode")
+}
 
 func (n *limitNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)

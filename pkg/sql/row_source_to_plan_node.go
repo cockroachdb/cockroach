@@ -30,6 +30,8 @@ type rowSourceToPlanNode struct {
 	source    distsqlrun.RowSource
 	forwarder metadataForwarder
 
+	// originalPlanNode is the original planNode that the wrapped RowSource got
+	// planned for.
 	originalPlanNode planNode
 
 	planCols sqlbase.ResultColumns

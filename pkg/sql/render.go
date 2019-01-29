@@ -80,8 +80,6 @@ type renderNode struct {
 	// modified by index selection.
 	props physicalProps
 
-	run renderRun
-
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
@@ -344,7 +342,7 @@ func (p *planner) SelectClause(
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
 func (r *renderNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	return r.run.curSourceRow[idx].Eval(ctx)
+	panic("renderNode can't be run in local mode")
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
@@ -357,33 +355,18 @@ func (r *renderNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return r.sourceInfo[0].NodeFormatter(idx)
 }
 
-// renderRun contains the run-time state of renderNode during local execution.
-type renderRun struct {
-	// The current source row, with one value per source column.
-	// populated by Next(), used by renderRow().
-	curSourceRow tree.Datums
-
-	// The rendered row, with one value for each render expression.
-	// populated by Next().
-	row tree.Datums
-}
-
 func (r *renderNode) startExec(runParams) error {
-	return nil
+	panic("renderNode can't be run in local mode")
 }
 
 func (r *renderNode) Next(params runParams) (bool, error) {
-	if next, err := r.source.plan.Next(params); !next {
-		return false, err
-	}
-
-	r.run.curSourceRow = r.source.plan.Values()
-
-	err := r.renderRow(params.EvalContext())
-	return err == nil, err
+	panic("renderNode can't be run in local mode")
 }
 
-func (r *renderNode) Values() tree.Datums       { return r.run.row }
+func (r *renderNode) Values() tree.Datums {
+	panic("renderNode can't be run in local mode")
+}
+
 func (r *renderNode) Close(ctx context.Context) { r.source.plan.Close(ctx) }
 
 // initFrom initializes the table node, given the parsed select expression
@@ -564,22 +547,6 @@ func (r *renderNode) resetRenderColumns(exprs []tree.TypedExpr, cols sqlbase.Res
 	// when necessary.
 	r.renderStrings = make([]string, len(cols))
 	r.columns = cols
-}
-
-// renderRow renders the row by evaluating the render expressions.
-func (r *renderNode) renderRow(evalCtx *tree.EvalContext) error {
-	if r.run.row == nil {
-		r.run.row = make([]tree.Datum, len(r.render))
-	}
-	evalCtx.IVarContainer = r
-	for i, e := range r.render {
-		var err error
-		r.run.row[i], err = e.Eval(evalCtx)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // computePhysicalPropsForRender computes ordering information for the

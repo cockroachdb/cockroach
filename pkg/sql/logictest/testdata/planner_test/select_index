@@ -1085,14 +1085,13 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
 ]
 ----
-limit           ·         ·
- │              count     1000000
- └── sort       ·         ·
-      │         order     +c
-      │         strategy  top 1000000
-      └── scan  ·         ·
-·               table     noncover@primary
-·               spans     ALL
+limit           ·      ·
+ │              count  1000000
+ └── sort       ·      ·
+      │         order  +c
+      └── scan  ·      ·
+·               table  noncover@primary
+·               spans  ALL
 
 # ------------------------------------------------------------------------------
 # These tests verify that while we are joining an index with the table, we
