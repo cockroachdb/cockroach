@@ -150,7 +150,7 @@ var (
 			ppFunc: raftLogKeyPrint,
 			psFunc: raftLogKeyParse,
 		},
-		{name: "RaftTruncatedState", suffix: LocalRaftTruncatedStateSuffix},
+		{name: "LegacyRaftTruncatedState", suffix: LocalRaftTruncatedStateLegacySuffix},
 		{name: "RaftLastIndex", suffix: LocalRaftLastIndexSuffix},
 		{name: "RangeLastReplicaGCTimestamp", suffix: LocalRangeLastReplicaGCTimestampSuffix},
 		{name: "RangeLastVerificationTimestamp", suffix: LocalRangeLastVerificationTimestampSuffixDeprecated},
@@ -575,7 +575,7 @@ func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRaw
 //        /[rangeid]/RaftHardState                     "\x01s"+[rangeid]+"rfth"
 //        /[rangeid]/RaftAppliedIndex                  "\x01s"+[rangeid]+"rfta"
 //        /[rangeid]/RaftLog/logIndex:[logIndex]       "\x01s"+[rangeid]+"rftl"+[logIndex]
-//        /[rangeid]/RaftTruncatedState                "\x01s"+[rangeid]+"rftt"
+//        /[rangeid]/LegacyRaftTruncatedState          "\x01s"+[rangeid]+"rftt"
 //        /[rangeid]/RaftLastIndex                     "\x01s"+[rangeid]+"rfti"
 //        /[rangeid]/RangeLastReplicaGCTimestamp       "\x01s"+[rangeid]+"rlrt"
 //        /[rangeid]/RangeLastVerificationTimestamp    "\x01s"+[rangeid]+"rlvt"
