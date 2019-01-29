@@ -157,7 +157,7 @@ func TestValues(t *testing.T) {
 				t.Fatalf("%d: unexpected error in optimizePlan: %v", i, err)
 			}
 			params := runParams{ctx: ctx, p: p, extendedEvalCtx: &p.extendedEvalCtx}
-			if err := startPlan(params, plan); err != nil {
+			if err := startExec(params, plan); err != nil {
 				t.Fatalf("%d: unexpected error in Start: %v", i, err)
 			}
 			var rows []tree.Datums
