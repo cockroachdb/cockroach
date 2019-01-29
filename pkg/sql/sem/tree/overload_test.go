@@ -244,7 +244,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	}
 	for i, d := range testData {
 		t.Run(fmt.Sprintf("%v/%v", d.exprs, d.overloads), func(t *testing.T) {
-			ctx := MakeSemaContext(false)
+			ctx := MakeSemaContext()
 			if err := ctx.Placeholders.Init(2 /* numPlaceholders */, nil /* typeHints */); err != nil {
 				t.Fatal(err)
 			}

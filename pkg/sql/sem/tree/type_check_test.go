@@ -173,7 +173,7 @@ func TestTypeCheck(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
-			ctx := tree.MakeSemaContext(false)
+			ctx := tree.MakeSemaContext()
 			if err := ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
 				t.Fatal(err)
 			}

@@ -96,7 +96,7 @@ func makeSpans(
 	for _, c := range desc.Columns {
 		o.Memo().Metadata().AddColumn(c.Name, c.Type.ToDatumType())
 	}
-	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, o.Factory())
 	bld.AllowUnsupportedExpr = true

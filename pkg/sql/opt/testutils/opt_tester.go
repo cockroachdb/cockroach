@@ -129,7 +129,7 @@ func NewOptTester(catalog cat.Catalog, sql string) *OptTester {
 		catalog: catalog,
 		sql:     sql,
 		ctx:     context.Background(),
-		semaCtx: tree.MakeSemaContext(false /* privileged */),
+		semaCtx: tree.MakeSemaContext(),
 		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 

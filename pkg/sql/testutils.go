@@ -38,7 +38,7 @@ func CreateTestTableDescriptor(
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
-	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	desc, err := MakeTableDesc(
 		ctx,

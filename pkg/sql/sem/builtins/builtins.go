@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -2814,14 +2815,16 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.force_panic": makeBuiltin(
 		tree.FunctionProperties{
-			Category:   categorySystemInfo,
-			Impure:     true,
-			Privileged: true,
+			Category: categorySystemInfo,
+			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := checkPrivilegedUser(ctx); err != nil {
+					return nil, err
+				}
 				msg := string(*args[0].(*tree.DString))
 				panic(msg)
 			},
@@ -2831,14 +2834,16 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.force_log_fatal": makeBuiltin(
 		tree.FunctionProperties{
-			Category:   categorySystemInfo,
-			Impure:     true,
-			Privileged: true,
+			Category: categorySystemInfo,
+			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := checkPrivilegedUser(ctx); err != nil {
+					return nil, err
+				}
 				msg := string(*args[0].(*tree.DString))
 				log.Fatal(ctx.Ctx(), msg)
 				return nil, nil
@@ -2854,14 +2859,16 @@ may increase either contention or retry errors, or both.`,
 	// different than the current statement's transaction.
 	"crdb_internal.force_retry": makeBuiltin(
 		tree.FunctionProperties{
-			Category:   categorySystemInfo,
-			Impure:     true,
-			Privileged: true,
+			Category: categorySystemInfo,
+			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Interval}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := checkPrivilegedUser(ctx); err != nil {
+					return nil, err
+				}
 				minDuration := args[0].(*tree.DInterval).Duration
 				elapsed := duration.Duration{
 					Nanos: int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)),
@@ -2943,14 +2950,16 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.set_vmodule": makeBuiltin(
 		tree.FunctionProperties{
-			Category:   categorySystemInfo,
-			Impure:     true,
-			Privileged: true,
+			Category: categorySystemInfo,
+			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"vmodule_string", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := checkPrivilegedUser(ctx); err != nil {
+					return nil, err
+				}
 				return tree.DZero, log.SetVModule(string(*args[0].(*tree.DString)))
 			},
 			Info: "This function is used for internal debugging purposes. " +
@@ -4472,4 +4481,15 @@ func CleanEncodingName(s string) string {
 		}
 	}
 	return string(b)
+}
+
+var errInsufficientPriv = pgerror.NewError(
+	pgerror.CodeInsufficientPrivilegeError, "insufficient privilege",
+)
+
+func checkPrivilegedUser(ctx *tree.EvalContext) error {
+	if ctx.SessionData.User != security.RootUser {
+		return errInsufficientPriv
+	}
+	return nil
 }

@@ -471,7 +471,7 @@ func (h *harness) runUsingServer(tb testing.TB) {
 func (h *harness) prepareUsingAPI(tb testing.TB) {
 	// Clear any state from previous usage of this harness instance.
 	h.ctx = context.Background()
-	h.semaCtx = tree.MakeSemaContext(false /* privileged */)
+	h.semaCtx = tree.MakeSemaContext()
 	h.evalCtx = tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	h.prepMemo = nil
 	h.cat = nil
