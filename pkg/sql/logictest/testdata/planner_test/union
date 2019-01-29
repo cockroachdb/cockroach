@@ -22,7 +22,7 @@ union           ·      ·
 query TTT
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
-append          ·      ·
+union           ·      ·
  ├── render     ·      ·
  │    └── scan  ·      ·
  │              table  uniontest@primary

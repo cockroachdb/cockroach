@@ -31,7 +31,6 @@ limit                          ·          ·                (w)                
            │                   count      100              ·                            ·
            └── sort            ·          ·                (w)                          +w
                 │              order      +w               ·                            ·
-                │              strategy   top 100          ·                            ·
                 └── render     ·          ·                (w)                          ·
                      │         render 0   test.public.t.w  ·                            ·
                      └── scan  ·          ·                (k[omitted], v[omitted], w)  k!=NULL; key(k)
@@ -100,7 +99,6 @@ limit                ·            ·          (sum)      ·
  │                   count        10         ·          ·
  └── sort            ·            ·          (sum)      ·
       │              order        -v         ·          ·
-      │              strategy     top 10     ·          ·
       └── group      ·            ·          (sum, v)   weak-key(v)
            │         aggregate 0  sum(w)     ·          ·
            │         aggregate 1  v          ·          ·

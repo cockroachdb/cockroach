@@ -23,12 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -103,7 +101,11 @@ type scanNode struct {
 	// Should be set to true if sqlbase.ParallelScans is true.
 	parallelScansEnabled bool
 
-	run scanRun
+	isSecondaryIndex bool
+
+	// Indicates if this scanNode will do a physical data check. This is
+	// only true when running SCRUB commands.
+	isCheck bool
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -180,7 +182,7 @@ func (p *planner) Scan() *scanNode {
 var _ tree.IndexedVarContainer = &scanNode{}
 
 func (n *scanNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	return n.run.row[idx].Eval(ctx)
+	panic("scanNode can't be run in local mode")
 }
 
 func (n *scanNode) IndexedVarResolvedType(idx int) types.T {
@@ -191,36 +193,8 @@ func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return (*tree.Name)(&n.resultColumns[idx].Name)
 }
 
-// scanRun contains the run-time state of scanNode during local execution.
-type scanRun struct {
-	// Contains values for the current row. There is a 1-1 correspondence
-	// between resultColumns and values in row.
-	row tree.Datums
-
-	// the index of the current row.
-	rowIndex int64
-
-	scanInitialized  bool
-	isSecondaryIndex bool
-
-	// Indicates if this scanNode will do a physical data check. This is
-	// only true when running SCRUB commands.
-	isCheck bool
-
-	fetcher row.Fetcher
-}
-
 func (n *scanNode) startExec(params runParams) error {
-	tableArgs := row.FetcherTableArgs{
-		Desc:             n.desc,
-		Index:            n.index,
-		ColIdxMap:        n.colIdxMap,
-		IsSecondaryIndex: n.run.isSecondaryIndex,
-		Cols:             n.cols,
-		ValNeededForCol:  n.valNeededForCol.Copy(),
-	}
-	return n.run.fetcher.Init(n.reverse, false, /* returnRangeInfo */
-		false /* isCheck */, &params.p.alloc, tableArgs)
+	panic("scanNode can't be run in local mode")
 }
 
 func (n *scanNode) Close(context.Context) {
@@ -229,35 +203,11 @@ func (n *scanNode) Close(context.Context) {
 }
 
 func (n *scanNode) Next(params runParams) (bool, error) {
-	tracing.AnnotateTrace()
-	if !n.run.scanInitialized {
-		if err := n.initScan(params); err != nil {
-			return false, err
-		}
-	}
-
-	// We fetch one row at a time until we find one that passes the filter.
-	for n.hardLimit == 0 || n.run.rowIndex < n.hardLimit {
-		var err error
-		n.run.row, _, _, err = n.run.fetcher.NextRowDecoded(params.ctx)
-		if err != nil || n.run.row == nil {
-			return false, err
-		}
-		params.extendedEvalCtx.IVarContainer = n
-		passesFilter, err := sqlbase.RunFilter(n.filter, params.EvalContext())
-		if err != nil {
-			return false, err
-		}
-		if passesFilter {
-			n.run.rowIndex++
-			return true, nil
-		}
-	}
-	return false, nil
+	panic("scanNode can't be run in local mode")
 }
 
 func (n *scanNode) Values() tree.Datums {
-	return n.run.row
+	panic("scanNode can't be run in local mode")
 }
 
 // disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
@@ -280,27 +230,6 @@ func (n *scanNode) canParallelize() bool {
 		n.maxResults < distsqlrun.ParallelScanResultThreshold &&
 		n.limitHint() == 0 &&
 		n.parallelScansEnabled
-}
-
-// initScan sets up the rowFetcher and starts a scan.
-func (n *scanNode) initScan(params runParams) error {
-	limitHint := n.limitHint()
-	limitBatches := true
-	if n.canParallelize() || n.disableBatchLimits {
-		limitBatches = false
-	}
-	if err := n.run.fetcher.StartScan(
-		params.ctx,
-		params.p.txn,
-		n.spans,
-		limitBatches,
-		limitHint,
-		params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-	); err != nil {
-		return err
-	}
-	n.run.scanInitialized = true
-	return nil
 }
 
 func (n *scanNode) limitHint() int64 {
@@ -479,7 +408,6 @@ func (n *scanNode) initDescDefaults(planDeps planDependencies, colCfg scanColumn
 	if len(n.cols) > 0 {
 		n.valNeededForCol.AddRange(0, len(n.cols)-1)
 	}
-	n.run.row = make([]tree.Datum, len(n.cols))
 	n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
 	return nil
 }
