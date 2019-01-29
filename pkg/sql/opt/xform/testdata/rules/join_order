@@ -50,7 +50,7 @@ TABLE abc
  └── INDEX primary
       └── a int not null
 
-opt reorder-joins
+opt join-limit=3
 SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 inner-join (lookup bx)
@@ -74,7 +74,7 @@ inner-join (lookup bx)
  │    └── filters (true)
  └── filters (true)
 
-opt reorder-joins
+opt join-limit=3
 SELECT * FROM bx, abc, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 inner-join (lookup bx)
@@ -98,7 +98,7 @@ inner-join (lookup bx)
  │    └── filters (true)
  └── filters (true)
 
-opt reorder-joins
+opt join-limit=3
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 inner-join (lookup bx)
@@ -122,7 +122,7 @@ inner-join (lookup bx)
  │    └── filters (true)
  └── filters (true)
 
-memo reorder-joins
+memo join-limit=3
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 memo (optimized, ~17KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8])
@@ -179,7 +179,7 @@ memo (optimized, ~17KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8]
  ├── G21: (variable a)
  └── G22: (const 1)
 
-opt reorder-joins
+opt join-limit=4
 SELECT * FROM bx, cy, dz, abc WHERE a = 1
 ----
 inner-join
@@ -214,6 +214,73 @@ inner-join
  │    ├── columns: bx.b:1(int!null) x:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
+ └── filters (true)
+
+opt join-limit=3 format=show-all
+SELECT * FROM bx, cy, dz, abc WHERE a = 1
+----
+inner-join
+ ├── columns: b:1(int!null) x:2(int) c:3(int!null) y:4(int) d:5(int!null) z:6(int) a:7(int!null) b:8(int) c:9(int) d:10(int)
+ ├── stats: [rows=1e+09]
+ ├── cost: 10025691.2
+ ├── key: (1,3,5)
+ ├── fd: ()-->(7-10), (1)-->(2), (3)-->(4), (5)-->(6)
+ ├── prune: (1-6,8-10)
+ ├── interesting orderings: (+3) (+5) (+7) (+1)
+ ├── inner-join
+ │    ├── columns: t.public.cy.c:3(int!null) t.public.cy.y:4(int) t.public.dz.d:5(int!null) t.public.dz.z:6(int) t.public.abc.a:7(int!null) t.public.abc.b:8(int) t.public.abc.c:9(int) t.public.abc.d:10(int)
+ │    ├── stats: [rows=1000000]
+ │    ├── cost: 12133.6475
+ │    ├── key: (3,5)
+ │    ├── fd: ()-->(7-10), (3)-->(4), (5)-->(6)
+ │    ├── prune: (3-6,8-10)
+ │    ├── interesting orderings: (+3) (+5) (+7)
+ │    ├── join-size: 3
+ │    ├── scan t.public.cy
+ │    │    ├── columns: t.public.cy.c:3(int!null) t.public.cy.y:4(int)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── cost: 1040.01
+ │    │    ├── key: (3)
+ │    │    ├── fd: (3)-->(4)
+ │    │    ├── prune: (3,4)
+ │    │    └── interesting orderings: (+3)
+ │    ├── inner-join
+ │    │    ├── columns: t.public.dz.d:5(int!null) t.public.dz.z:6(int) t.public.abc.a:7(int!null) t.public.abc.b:8(int) t.public.abc.c:9(int) t.public.abc.d:10(int)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── cost: 1063.6275
+ │    │    ├── key: (5)
+ │    │    ├── fd: ()-->(7-10), (5)-->(6)
+ │    │    ├── prune: (5,6,8-10)
+ │    │    ├── interesting orderings: (+5) (+7)
+ │    │    ├── join-size: 2
+ │    │    ├── scan t.public.dz
+ │    │    │    ├── columns: t.public.dz.d:5(int!null) t.public.dz.z:6(int)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── cost: 1040.01
+ │    │    │    ├── key: (5)
+ │    │    │    ├── fd: (5)-->(6)
+ │    │    │    ├── prune: (5,6)
+ │    │    │    └── interesting orderings: (+5)
+ │    │    ├── scan t.public.abc
+ │    │    │    ├── columns: t.public.abc.a:7(int!null) t.public.abc.b:8(int) t.public.abc.c:9(int) t.public.abc.d:10(int)
+ │    │    │    ├── constraint: /7: [/1 - /1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+ │    │    │    ├── cost: 1.09
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(7-10)
+ │    │    │    ├── prune: (8-10)
+ │    │    │    └── interesting orderings: (+7)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ ├── scan t.public.bx
+ │    ├── columns: t.public.bx.b:1(int!null) t.public.bx.x:2(int)
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1040.01
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
  └── filters (true)
 
 # Note the difference in memo size for with and without reorder-joins, for only four tables.
@@ -261,7 +328,7 @@ memo (optimized, ~11KB, required=[presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,
  ├── G12: (variable a)
  └── G13: (const 1)
 
-memo reorder-joins
+memo join-limit=4
 SELECT * FROM bx, cy, dz, abc WHERE a = 1
 ----
 memo (optimized, ~25KB, required=[presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,c:9,d:10])
