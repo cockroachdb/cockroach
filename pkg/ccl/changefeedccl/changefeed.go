@@ -40,23 +40,9 @@ const (
 	jsonMetaSentinel = `__crdb__`
 )
 
-type emitRow struct {
-	// datums is the new value of a changed table row.
-	datums sqlbase.EncDatumRow
-	// timestamp is the mvcc timestamp corresponding to the latest update in
-	// `row`.
-	timestamp hlc.Timestamp
-	// deleted is true if row is a deletion. In this case, only the primary
-	// key columns are guaranteed to be set in `datums`.
-	deleted bool
-	// tableDesc is a TableDescriptor for the table containing `datums`.
-	// It's valid for interpreting the row at `timestamp`.
-	tableDesc *sqlbase.TableDescriptor
-}
-
 type emitEntry struct {
-	// row, if datums is non-nil, represents a changed row to be emitted.
-	row emitRow
+	// row, if not the zero value, represents a changed row to be emitted.
+	row encodeRow
 
 	// resolved, if non-nil, is a guarantee for the associated
 	// span that no previously unseen entries with a lower or equal updated
@@ -123,7 +109,7 @@ func kvsToRows(
 			// the value timestamp, if schema timestamp is set. However, doing so
 			// seems to break some of the assumptions of our existing tests in subtle
 			// ways, so this should be done as part of a dedicated PR.
-			r.row.timestamp = schemaTimestamp
+			r.row.updated = schemaTimestamp
 			output = append(output, r)
 		}
 		return output, nil
@@ -180,24 +166,18 @@ func emitEntries(
 	metrics *Metrics,
 ) func(context.Context) ([]jobspb.ResolvedSpan, error) {
 	var scratch bufalloc.ByteAllocator
-	emitRowFn := func(ctx context.Context, row emitRow) error {
+	emitRowFn := func(ctx context.Context, row encodeRow) error {
 		var keyCopy, valueCopy []byte
-
-		if envelopeType(details.Opts[optEnvelope]) != optEnvelopeValueOnly {
-			encodedKey, err := encoder.EncodeKey(row.tableDesc, row.datums)
-			if err != nil {
-				return err
-			}
-			scratch, keyCopy = scratch.Copy(encodedKey, 0 /* extraCap */)
+		encodedKey, err := encoder.EncodeKey(row)
+		if err != nil {
+			return err
 		}
-
-		if !row.deleted && envelopeType(details.Opts[optEnvelope]) != optEnvelopeKeyOnly {
-			encodedValue, err := encoder.EncodeValue(row.tableDesc, row.datums, row.timestamp)
-			if err != nil {
-				return err
-			}
-			scratch, valueCopy = scratch.Copy(encodedValue, 0 /* extraCap */)
+		scratch, keyCopy = scratch.Copy(encodedKey, 0 /* extraCap */)
+		encodedValue, err := encoder.EncodeValue(row)
+		if err != nil {
+			return err
 		}
+		scratch, valueCopy = scratch.Copy(encodedValue, 0 /* extraCap */)
 
 		if knobs.BeforeEmitRow != nil {
 			if err := knobs.BeforeEmitRow(); err != nil {
@@ -205,7 +185,7 @@ func emitEntries(
 			}
 		}
 		if err := sink.EmitRow(
-			ctx, row.tableDesc, keyCopy, valueCopy, row.timestamp,
+			ctx, row.tableDesc, keyCopy, valueCopy, row.updated,
 		); err != nil {
 			return err
 		}

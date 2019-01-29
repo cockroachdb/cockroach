@@ -66,10 +66,10 @@ func TestCloudStorageSink(t *testing.T) {
 	settings.ExternalIODir = dir
 	opts := map[string]string{
 		optFormat:   string(optFormatJSON),
-		optEnvelope: string(optEnvelopeValueOnly),
+		optEnvelope: string(optEnvelopeWrapped),
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
-	e := &jsonEncoder{}
+	e := makeJSONEncoder(opts)
 
 	t.Run(`single-node`, func(t *testing.T) {
 		t1 := &sqlbase.TableDescriptor{Name: `t1`}
@@ -263,7 +263,7 @@ func TestCloudStorageSink(t *testing.T) {
 		require.Equal(t, []string{
 			"v1\nv2\nv3\n",
 			"v4\nv5\n",
-			`{"__crdb__":{"resolved":"5.0000000000"}}`,
+			`{"resolved":"5.0000000000"}`,
 			"v6\nv7\nv8\n",
 		}, slurpDir(t, dir))
 
@@ -272,7 +272,7 @@ func TestCloudStorageSink(t *testing.T) {
 		require.Equal(t, []string{
 			"v1\nv2\nv3\n",
 			"v4\nv5\n",
-			`{"__crdb__":{"resolved":"5.0000000000"}}`,
+			`{"resolved":"5.0000000000"}`,
 			"v6\nv7\nv8\n",
 			"v9\n",
 		}, slurpDir(t, dir))
@@ -304,11 +304,11 @@ func TestCloudStorageSink(t *testing.T) {
 
 		require.Equal(t, []string{
 			"is1\nis2\n",
-			`{"__crdb__":{"resolved":"1.0000000000"}}`,
+			`{"resolved":"1.0000000000"}`,
 			"e2\ne3prev\ne3\n",
-			`{"__crdb__":{"resolved":"3.0000000000"}}`,
+			`{"resolved":"3.0000000000"}`,
 			"e3next\n",
-			`{"__crdb__":{"resolved":"4.0000000000"}}`,
+			`{"resolved":"4.0000000000"}`,
 		}, slurpDir(t, dir))
 	})
 }
@@ -348,13 +348,13 @@ func TestCloudStorage(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-	foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved, envelope=value_only`)
+	foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved`)
 
 	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'b')`)
 
 	assertPayloads(t, foo, []string{
-		`foo: ->{"a": 1}`,
-		`foo: ->{"a": 2, "b": "b"}`,
+		`foo: ->{"after": {"a": 1}}`,
+		`foo: ->{"after": {"a": 2, "b": "b"}}`,
 	})
 }
