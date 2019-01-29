@@ -57,24 +57,24 @@ func TestChangefeedBasics(t *testing.T) {
 		// 'initial' is skipped because only the latest value ('updated') is
 		// emitted by the initial scan.
 		assertPayloads(t, foo, []string{
-			`foo: [0]->{"a": 0, "b": "updated"}`,
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
 		})
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
 		assertPayloads(t, foo, []string{
-			`foo: [1]->{"a": 1, "b": "a"}`,
-			`foo: [2]->{"a": 2, "b": "b"}`,
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
 		})
 
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
 		assertPayloads(t, foo, []string{
-			`foo: [2]->{"a": 2, "b": "c"}`,
-			`foo: [3]->{"a": 3, "b": "d"}`,
+			`foo: [2]->{"after": {"a": 2, "b": "c"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "d"}}`,
 		})
 
 		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
 		assertPayloads(t, foo, []string{
-			`foo: [1]->`,
+			`foo: [1]->{"after": null}`,
 		})
 	}
 
@@ -96,15 +96,20 @@ func TestChangefeedEnvelope(t *testing.T) {
 			defer foo.Close(t)
 			assertPayloads(t, foo, []string{`foo: [1]->{"a": 1, "b": "a"}`})
 		})
+		t.Run(`envelope=deprecated_row`, func(t *testing.T) {
+			foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH envelope='deprecated_row'`)
+			defer foo.Close(t)
+			assertPayloads(t, foo, []string{`foo: [1]->{"a": 1, "b": "a"}`})
+		})
 		t.Run(`envelope=key_only`, func(t *testing.T) {
 			foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH envelope='key_only'`)
 			defer foo.Close(t)
 			assertPayloads(t, foo, []string{`foo: [1]->`})
 		})
-		t.Run(`envelope=value_only`, func(t *testing.T) {
-			foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH envelope='value_only'`)
+		t.Run(`envelope=wrapped`, func(t *testing.T) {
+			foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH envelope='wrapped'`)
 			defer foo.Close(t)
-			assertPayloads(t, foo, []string{`foo: ->{"a": 1, "b": "a"}`})
+			assertPayloads(t, foo, []string{`foo: [1]->{"after": {"a": 1, "b": "a"}}`})
 		})
 	}
 
@@ -127,8 +132,8 @@ func TestChangefeedMultiTable(t *testing.T) {
 		defer fooAndBar.Close(t)
 
 		assertPayloads(t, fooAndBar, []string{
-			`foo: [1]->{"a": 1, "b": "a"}`,
-			`bar: [2]->{"a": 2, "b": "b"}`,
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`bar: [2]->{"after": {"a": 2, "b": "b"}}`,
 		})
 	}
 
@@ -162,21 +167,21 @@ func TestChangefeedCursor(t *testing.T) {
 		fooLogical := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsLogical)
 		defer fooLogical.Close(t)
 		assertPayloads(t, fooLogical, []string{
-			`foo: [2]->{"a": 2, "b": "after"}`,
+			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
 		})
 
 		nanosStr := strconv.FormatInt(tsClock.UnixNano(), 10)
 		fooNanosStr := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, nanosStr)
 		defer fooNanosStr.Close(t)
 		assertPayloads(t, fooNanosStr, []string{
-			`foo: [2]->{"a": 2, "b": "after"}`,
+			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
 		})
 
 		timeStr := tsClock.Format(`2006-01-02 15:04:05.999999`)
 		fooString := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, timeStr)
 		defer fooString.Close(t)
 		assertPayloads(t, fooString, []string{
-			`foo: [2]->{"a": 2, "b": "after"}`,
+			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
 		})
 
 		// Check that the cursor is properly hooked up to the job statement
@@ -264,11 +269,11 @@ func TestChangefeedTimestamps(t *testing.T) {
 		if err := gojson.Unmarshal(v, &out); err != nil {
 			t.Fatal(err)
 		}
-		if a, e := out["a"].(float64), float64(0); a != e {
+		after := out["after"].(map[string]interface{})
+		if a, e := after["a"].(float64), float64(0); a != e {
 			t.Fatalf("column a got value %f, wanted %f", a, e)
 		}
-		tsStr := out["__crdb__"].(map[string]interface{})["updated"].(string)
-		tsApd, _, err := apd.NewFromString(tsStr)
+		tsApd, _, err := apd.NewFromString(out["updated"].(string))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -282,7 +287,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 		// Assert the remaining key using assertPayloads, since we know the exact
 		// timestamp expected.
 		assertPayloads(t, foo, []string{
-			`foo: [1]->{"__crdb__": {"updated": "` + ts1 + `"}, "a": 1}`,
+			`foo: [1]->{"after": {"a": 1}, "updated": "` + ts1 + `"}`,
 		})
 
 		// Check that we eventually get a resolved timestamp greater than ts1.
@@ -353,11 +358,11 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			historical := f.Feed(t, `CREATE CHANGEFEED FOR historical WITH cursor=$1`, start)
 			defer historical.Close(t)
 			assertPayloads(t, historical, []string{
-				`historical: [0]->{"a": 0, "b": "0"}`,
-				`historical: [1]->{"a": 1, "b": "before"}`,
-				`historical: [2]->{"a": 2, "b": "after"}`,
-				`historical: [3]->{"a": 3, "b": "after", "c": null}`,
-				`historical: [4]->{"a": 4, "b": "after", "c": 14}`,
+				`historical: [0]->{"after": {"a": 0, "b": "0"}}`,
+				`historical: [1]->{"after": {"a": 1, "b": "before"}}`,
+				`historical: [2]->{"after": {"a": 2, "b": "after"}}`,
+				`historical: [3]->{"after": {"a": 3, "b": "after", "c": null}}`,
+				`historical: [4]->{"after": {"a": 4, "b": "after", "c": 14}}`,
 			})
 		})
 
@@ -368,12 +373,12 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			addColumn := f.Feed(t, `CREATE CHANGEFEED FOR add_column`)
 			defer addColumn.Close(t)
 			assertPayloads(t, addColumn, []string{
-				`add_column: [1]->{"a": 1}`,
+				`add_column: [1]->{"after": {"a": 1}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_column ADD COLUMN b STRING`)
 			sqlDB.Exec(t, `INSERT INTO add_column VALUES (2, '2')`)
 			assertPayloads(t, addColumn, []string{
-				`add_column: [2]->{"a": 2, "b": "2"}`,
+				`add_column: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
 		})
 
@@ -383,12 +388,12 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			renameColumn := f.Feed(t, `CREATE CHANGEFEED FOR rename_column`)
 			defer renameColumn.Close(t)
 			assertPayloads(t, renameColumn, []string{
-				`rename_column: [1]->{"a": 1, "b": "1"}`,
+				`rename_column: [1]->{"after": {"a": 1, "b": "1"}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE rename_column RENAME COLUMN b TO c`)
 			sqlDB.Exec(t, `INSERT INTO rename_column VALUES (2, '2')`)
 			assertPayloads(t, renameColumn, []string{
-				`rename_column: [2]->{"a": 2, "c": "2"}`,
+				`rename_column: [2]->{"after": {"a": 2, "c": "2"}}`,
 			})
 		})
 
@@ -400,8 +405,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 'd'`)
 			sqlDB.Exec(t, `INSERT INTO add_default (a) VALUES (2)`)
 			assertPayloads(t, addDefault, []string{
-				`add_default: [1]->{"a": 1, "b": "1"}`,
-				`add_default: [2]->{"a": 2, "b": "d"}`,
+				`add_default: [1]->{"after": {"a": 1, "b": "1"}}`,
+				`add_default: [2]->{"after": {"a": 2, "b": "d"}}`,
 			})
 		})
 
@@ -413,8 +418,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `ALTER TABLE drop_default ALTER COLUMN b DROP DEFAULT`)
 			sqlDB.Exec(t, `INSERT INTO drop_default (a) VALUES (2)`)
 			assertPayloads(t, dropDefault, []string{
-				`drop_default: [1]->{"a": 1, "b": "d"}`,
-				`drop_default: [2]->{"a": 2, "b": null}`,
+				`drop_default: [1]->{"after": {"a": 1, "b": "d"}}`,
+				`drop_default: [2]->{"after": {"a": 2, "b": null}}`,
 			})
 		})
 
@@ -426,8 +431,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `ALTER TABLE drop_notnull ALTER b DROP NOT NULL`)
 			sqlDB.Exec(t, `INSERT INTO drop_notnull VALUES (2, NULL)`)
 			assertPayloads(t, dropNotNull, []string{
-				`drop_notnull: [1]->{"a": 1, "b": "1"}`,
-				`drop_notnull: [2]->{"a": 2, "b": null}`,
+				`drop_notnull: [1]->{"after": {"a": 1, "b": "1"}}`,
+				`drop_notnull: [2]->{"after": {"a": 2, "b": null}}`,
 			})
 		})
 
@@ -443,10 +448,10 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `ALTER TABLE checks DROP CONSTRAINT c`)
 			sqlDB.Exec(t, `INSERT INTO checks VALUES (6)`)
 			assertPayloads(t, checks, []string{
-				`checks: [1]->{"a": 1}`,
-				`checks: [2]->{"a": 2}`,
-				`checks: [3]->{"a": 3}`,
-				`checks: [6]->{"a": 6}`,
+				`checks: [1]->{"after": {"a": 1}}`,
+				`checks: [2]->{"after": {"a": 2}}`,
+				`checks: [3]->{"after": {"a": 3}}`,
+				`checks: [6]->{"after": {"a": 6}}`,
 			})
 		})
 
@@ -459,8 +464,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `SELECT * FROM add_index@b_idx`)
 			sqlDB.Exec(t, `INSERT INTO add_index VALUES (2, '2')`)
 			assertPayloads(t, addIndex, []string{
-				`add_index: [1]->{"a": 1, "b": "1"}`,
-				`add_index: [2]->{"a": 2, "b": "2"}`,
+				`add_index: [1]->{"after": {"a": 1, "b": "1"}}`,
+				`add_index: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
 		})
 
@@ -472,8 +477,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `ALTER TABLE "unique" ADD CONSTRAINT u UNIQUE (b)`)
 			sqlDB.Exec(t, `INSERT INTO "unique" VALUES (2, '2')`)
 			assertPayloads(t, unique, []string{
-				`unique: [1]->{"a": 1, "b": "1"}`,
-				`unique: [2]->{"a": 2, "b": "2"}`,
+				`unique: [1]->{"after": {"a": 1, "b": "1"}}`,
+				`unique: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
 		})
 
@@ -486,8 +491,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `ALTER TABLE alter_default ALTER COLUMN b SET DEFAULT 'after'`)
 			sqlDB.Exec(t, `INSERT INTO alter_default (a) VALUES (2)`)
 			assertPayloads(t, alterDefault, []string{
-				`alter_default: [1]->{"a": 1, "b": "before"}`,
-				`alter_default: [2]->{"a": 2, "b": "after"}`,
+				`alter_default: [1]->{"after": {"a": 1, "b": "before"}}`,
+				`alter_default: [2]->{"after": {"a": 2, "b": "after"}}`,
 			})
 		})
 	}
@@ -522,7 +527,7 @@ func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
 			addColumnDef := f.Feed(t, `CREATE CHANGEFEED FOR add_column_def`)
 			defer addColumnDef.Close(t)
 			assertPayloads(t, addColumnDef, []string{
-				`add_column_def: [1]->{"a": 1}`,
+				`add_column_def: [1]->{"after": {"a": 1}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
 			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (2, '2')`)
@@ -540,7 +545,7 @@ func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
 			addColComp := f.Feed(t, `CREATE CHANGEFEED FOR add_col_comp`)
 			defer addColComp.Close(t)
 			assertPayloads(t, addColComp, []string{
-				`add_col_comp: [1]->{"a": 1, "b": 6}`,
+				`add_col_comp: [1]->{"after": {"a": 1, "b": 6}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
 			sqlDB.Exec(t, `INSERT INTO add_col_comp (a) VALUES (2)`)
@@ -558,7 +563,7 @@ func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
 			dropColumn := f.Feed(t, `CREATE CHANGEFEED FOR drop_column`)
 			defer dropColumn.Close(t)
 			assertPayloads(t, dropColumn, []string{
-				`drop_column: [1]->{"a": 1, "b": "1"}`,
+				`drop_column: [1]->{"after": {"a": 1, "b": "1"}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2)`)
@@ -591,16 +596,16 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			addColumnDef := f.Feed(t, `CREATE CHANGEFEED FOR add_column_def`)
 			defer addColumnDef.Close(t)
 			assertPayloads(t, addColumnDef, []string{
-				`add_column_def: [1]->{"a": 1}`,
-				`add_column_def: [2]->{"a": 2}`,
+				`add_column_def: [1]->{"after": {"a": 1}}`,
+				`add_column_def: [2]->{"after": {"a": 2}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
 			assertPayloads(t, addColumnDef, []string{
 				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `add_column_def: [1]->{"a": 1}`,
-				// `add_column_def: [2]->{"a": 2}`,
-				`add_column_def: [1]->{"a": 1, "b": "d"}`,
-				`add_column_def: [2]->{"a": 2, "b": "d"}`,
+				// `add_column_def: [1]->{"after": {"a": 1}}`,
+				// `add_column_def: [2]->{"after": {"a": 2}}`,
+				`add_column_def: [1]->{"after": {"a": 1, "b": "d"}}`,
+				`add_column_def: [2]->{"after": {"a": 2, "b": "d"}}`,
 			})
 		})
 
@@ -611,16 +616,16 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			addColComp := f.Feed(t, `CREATE CHANGEFEED FOR add_col_comp`)
 			defer addColComp.Close(t)
 			assertPayloads(t, addColComp, []string{
-				`add_col_comp: [1]->{"a": 1, "b": 6}`,
-				`add_col_comp: [2]->{"a": 2, "b": 7}`,
+				`add_col_comp: [1]->{"after": {"a": 1, "b": 6}}`,
+				`add_col_comp: [2]->{"after": {"a": 2, "b": 7}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
 			assertPayloads(t, addColComp, []string{
 				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `add_col_comp: [1]->{"a": 1, "b": 6}`,
-				// `add_col_comp: [2]->{"a": 2, "b": 7}`,
-				`add_col_comp: [1]->{"a": 1, "b": 6, "c": 11}`,
-				`add_col_comp: [2]->{"a": 2, "b": 7, "c": 12}`,
+				// `add_col_comp: [1]->{"after": {"a": 1, "b": 6}}`,
+				// `add_col_comp: [2]->{"after": {"a": 2, "b": 7}}`,
+				`add_col_comp: [1]->{"after": {"a": 1, "b": 6, "c": 11}}`,
+				`add_col_comp: [2]->{"after": {"a": 2, "b": 7, "c": 12}}`,
 			})
 		})
 
@@ -631,19 +636,19 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			dropColumn := f.Feed(t, `CREATE CHANGEFEED FOR drop_column`)
 			defer dropColumn.Close(t)
 			assertPayloads(t, dropColumn, []string{
-				`drop_column: [1]->{"a": 1, "b": "1"}`,
-				`drop_column: [2]->{"a": 2, "b": "2"}`,
+				`drop_column: [1]->{"after": {"a": 1, "b": "1"}}`,
+				`drop_column: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (3)`)
 			// Dropped columns are immediately invisible.
 			assertPayloads(t, dropColumn, []string{
-				`drop_column: [1]->{"a": 1}`,
-				`drop_column: [2]->{"a": 2}`,
-				`drop_column: [3]->{"a": 3}`,
+				`drop_column: [1]->{"after": {"a": 1}}`,
+				`drop_column: [2]->{"after": {"a": 2}}`,
+				`drop_column: [3]->{"after": {"a": 3}}`,
 				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `drop_column: [1]->{"a": 1}`,
-				// `drop_column: [2]->{"a": 2}`,
+				// `drop_column: [1]->{"after": {"a": 1}}`,
+				// `drop_column: [2]->{"after": {"a": 2}}`,
 			})
 		})
 
@@ -666,8 +671,8 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			multipleAlters := f.Feed(t, `CREATE CHANGEFEED FOR multiple_alters`)
 			defer multipleAlters.Close(t)
 			assertPayloads(t, multipleAlters, []string{
-				`multiple_alters: [1]->{"a": 1, "b": "1"}`,
-				`multiple_alters: [2]->{"a": 2, "b": "2"}`,
+				`multiple_alters: [1]->{"after": {"a": 1, "b": "1"}}`,
+				`multiple_alters: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
 
 			// Wait on the next emit, queue up three ALTERs. The next poll process
@@ -680,26 +685,26 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 
 			assertPayloads(t, multipleAlters, []string{
 				// Backfill no-ops for DROP. Dropped columns are immediately invisible.
-				`multiple_alters: [1]->{"a": 1}`,
-				`multiple_alters: [2]->{"a": 2}`,
+				`multiple_alters: [1]->{"after": {"a": 1}}`,
+				`multiple_alters: [2]->{"after": {"a": 2}}`,
 				// Scan output for DROP
 				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `multiple_alters: [1]->{"a": 1}`,
-				// `multiple_alters: [2]->{"a": 2}`,
+				// `multiple_alters: [1]->{"after": {"a": 1}}`,
+				// `multiple_alters: [2]->{"after": {"a": 2}}`,
 				// Backfill no-ops for column C
 				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `multiple_alters: [1]->{"a": 1}`,
-				// `multiple_alters: [2]->{"a": 2}`,
+				// `multiple_alters: [1]->{"after": {"a": 1}}`,
+				// `multiple_alters: [2]->{"after": {"a": 2}}`,
 				// Scan output for column C
-				`multiple_alters: [1]->{"a": 1, "c": "cee"}`,
-				`multiple_alters: [2]->{"a": 2, "c": "cee"}`,
+				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
+				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
 				// Backfill no-ops for column D (C schema change is complete)
 				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `multiple_alters: [1]->{"a": 1, "c": "cee"}`,
-				// `multiple_alters: [2]->{"a": 2, "c": "cee"}`,
+				// `multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
+				// `multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
 				// Scan output for column C
-				`multiple_alters: [1]->{"a": 1, "c": "cee", "d": "dee"}`,
-				`multiple_alters: [2]->{"a": 2, "c": "cee", "d": "dee"}`,
+				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee", "d": "dee"}}`,
+				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee", "d": "dee"}}`,
 			})
 		})
 	}
@@ -722,8 +727,8 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 		afterBackfill := f.Feed(t, `CREATE CHANGEFEED FOR after_backfill`)
 		defer afterBackfill.Close(t)
 		assertPayloads(t, afterBackfill, []string{
-			`after_backfill: [0]->{"a": 0, "b": 1}`,
-			`after_backfill: [2]->{"a": 2, "b": 3}`,
+			`after_backfill: [0]->{"after": {"a": 0, "b": 1}}`,
+			`after_backfill: [2]->{"after": {"a": 2, "b": 3}}`,
 		})
 	}
 
@@ -743,7 +748,7 @@ func TestChangefeedInterleaved(t *testing.T) {
 		grandparent := f.Feed(t, `CREATE CHANGEFEED FOR grandparent`)
 		defer grandparent.Close(t)
 		assertPayloads(t, grandparent, []string{
-			`grandparent: [0]->{"a": 0, "b": "grandparent-0"}`,
+			`grandparent: [0]->{"after": {"a": 0, "b": "grandparent-0"}}`,
 		})
 
 		sqlDB.Exec(t,
@@ -754,10 +759,10 @@ func TestChangefeedInterleaved(t *testing.T) {
 		parent := f.Feed(t, `CREATE CHANGEFEED FOR parent`)
 		defer parent.Close(t)
 		assertPayloads(t, grandparent, []string{
-			`grandparent: [1]->{"a": 1, "b": "grandparent-1"}`,
+			`grandparent: [1]->{"after": {"a": 1, "b": "grandparent-1"}}`,
 		})
 		assertPayloads(t, parent, []string{
-			`parent: [1]->{"a": 1, "b": "parent-1"}`,
+			`parent: [1]->{"after": {"a": 1, "b": "parent-1"}}`,
 		})
 
 		sqlDB.Exec(t,
@@ -768,13 +773,13 @@ func TestChangefeedInterleaved(t *testing.T) {
 		child := f.Feed(t, `CREATE CHANGEFEED FOR child`)
 		defer child.Close(t)
 		assertPayloads(t, grandparent, []string{
-			`grandparent: [2]->{"a": 2, "b": "grandparent-2"}`,
+			`grandparent: [2]->{"after": {"a": 2, "b": "grandparent-2"}}`,
 		})
 		assertPayloads(t, parent, []string{
-			`parent: [2]->{"a": 2, "b": "parent-2"}`,
+			`parent: [2]->{"after": {"a": 2, "b": "parent-2"}}`,
 		})
 		assertPayloads(t, child, []string{
-			`child: [2]->{"a": 2, "b": "child-2"}`,
+			`child: [2]->{"after": {"a": 2, "b": "child-2"}}`,
 		})
 	}
 
@@ -802,7 +807,7 @@ func TestChangefeedColumnFamily(t *testing.T) {
 		bar := f.Feed(t, `CREATE CHANGEFEED FOR bar`)
 		defer bar.Close(t)
 		assertPayloads(t, bar, []string{
-			`bar: [0]->{"a": 0}`,
+			`bar: [0]->{"after": {"a": 0}}`,
 		})
 		sqlDB.Exec(t, `ALTER TABLE bar ADD COLUMN b STRING CREATE FAMILY f_b`)
 		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
@@ -832,12 +837,12 @@ func TestChangefeedComputedColumn(t *testing.T) {
 		defer cc.Close(t)
 
 		assertPayloads(t, cc, []string{
-			`cc: [2, 1]->{"a": 1, "b": 2, "c": 3}`,
+			`cc: [2, 1]->{"after": {"a": 1, "b": 2, "c": 3}}`,
 		})
 
 		sqlDB.Exec(t, `INSERT INTO cc (a) VALUES (10)`)
 		assertPayloads(t, cc, []string{
-			`cc: [11, 10]->{"a": 10, "b": 11, "c": 12}`,
+			`cc: [11, 10]->{"after": {"a": 10, "b": 11, "c": 12}}`,
 		})
 	}
 
@@ -859,18 +864,18 @@ func TestChangefeedUpdatePrimaryKey(t *testing.T) {
 		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
 		defer foo.Close(t)
 		assertPayloads(t, foo, []string{
-			`foo: [0]->{"a": 0, "b": "bar"}`,
+			`foo: [0]->{"after": {"a": 0, "b": "bar"}}`,
 		})
 
 		sqlDB.Exec(t, `UPDATE foo SET a = 1`)
 		assertPayloads(t, foo, []string{
-			`foo: [0]->`,
-			`foo: [1]->{"a": 1, "b": "bar"}`,
+			`foo: [0]->{"after": null}`,
+			`foo: [1]->{"after": {"a": 1, "b": "bar"}}`,
 		})
 
 		sqlDB.Exec(t, `DELETE FROM foo`)
 		assertPayloads(t, foo, []string{
-			`foo: [1]->`,
+			`foo: [1]->{"after": null}`,
 		})
 	}
 
@@ -890,7 +895,7 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO truncate VALUES (1)`)
 		truncate := f.Feed(t, `CREATE CHANGEFEED FOR truncate`)
 		defer truncate.Close(t)
-		assertPayloads(t, truncate, []string{`truncate: [1]->{"a": 1}`})
+		assertPayloads(t, truncate, []string{`truncate: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `TRUNCATE TABLE truncate`)
 		truncate.Next(t)
 		if err := truncate.Err(); !testutils.IsError(err, `"truncate" was dropped or truncated`) {
@@ -901,7 +906,7 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO rename VALUES (1)`)
 		rename := f.Feed(t, `CREATE CHANGEFEED FOR rename`)
 		defer rename.Close(t)
-		assertPayloads(t, rename, []string{`rename: [1]->{"a": 1}`})
+		assertPayloads(t, rename, []string{`rename: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `ALTER TABLE rename RENAME TO renamed`)
 		sqlDB.Exec(t, `INSERT INTO renamed VALUES (2)`)
 		rename.Next(t)
@@ -913,7 +918,7 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO drop VALUES (1)`)
 		drop := f.Feed(t, `CREATE CHANGEFEED FOR drop`)
 		defer drop.Close(t)
-		assertPayloads(t, drop, []string{`drop: [1]->{"a": 1}`})
+		assertPayloads(t, drop, []string{`drop: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `DROP TABLE drop`)
 		drop.Next(t)
 		if err := drop.Err(); !testutils.IsError(err, `"drop" was dropped or truncated`) {
@@ -972,8 +977,8 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c != 1 {
 				return errors.Errorf(`expected 1 got %d`, c)
 			}
-			if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 11 {
-				return errors.Errorf(`expected 11 got %d`, c)
+			if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 22 {
+				return errors.Errorf(`expected 22 got %d`, c)
 			}
 			if c := s.MustGetSQLCounter(`changefeed.emit_nanos`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
@@ -1024,8 +1029,8 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c != 4 {
 				return errors.Errorf(`expected 4 got %d`, c)
 			}
-			if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 44 {
-				return errors.Errorf(`expected 44 got %d`, c)
+			if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 88 {
+				return errors.Errorf(`expected 88 got %d`, c)
 			}
 			return nil
 		})
@@ -1317,10 +1322,6 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	sqlDB.ExpectErr(
-		t, `envelope=diff is not yet supported`,
-		`CREATE CHANGEFEED FOR foo WITH envelope=diff`,
-	)
-	sqlDB.ExpectErr(
 		t, `unknown envelope: nope`,
 		`CREATE CHANGEFEED FOR foo WITH envelope=nope`,
 	)
@@ -1513,11 +1514,11 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 		defer foo.Close(t)
 
 		assertPayloads(t, foo, []string{
-			`foo: [1]->{"a": 1, "b": "a"}`,
-			`foo: [2]->{"a": 2, "b": "b"}`,
-			`foo: [4]->{"a": 4, "b": "c"}`,
-			`foo: [7]->{"a": 7, "b": "d"}`,
-			`foo: [8]->{"a": 8, "b": "e"}`,
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+			`foo: [4]->{"after": {"a": 4, "b": "c"}}`,
+			`foo: [7]->{"after": {"a": 7, "b": "d"}}`,
+			`foo: [8]->{"after": {"a": 8, "b": "e"}}`,
 		})
 
 		// Wait for the high-water mark on the job to be updated after the initial
@@ -1531,7 +1532,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (16, 'f')`)
 		sqlDB.Exec(t, `RESUME JOB $1`, foo.jobID)
 		assertPayloads(t, foo, []string{
-			`foo: [16]->{"a": 16, "b": "f"}`,
+			`foo: [16]->{"after": {"a": 16, "b": "f"}}`,
 		})
 	}
 
@@ -1556,35 +1557,35 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 		defer foo3.Close(t)
 
 		// Make sure all the changefeeds are going.
-		assertPayloads(t, foo1, []string{`foo: [0]->{"a": 0, "b": "init"}`})
-		assertPayloads(t, foo2, []string{`foo: [0]->{"a": 0, "b": "init"}`})
-		assertPayloads(t, foo3, []string{`foo: [0]->{"a": 0, "b": "init"}`})
+		assertPayloads(t, foo1, []string{`foo: [0]->{"after": {"a": 0, "b": "init"}}`})
+		assertPayloads(t, foo2, []string{`foo: [0]->{"after": {"a": 0, "b": "init"}}`})
+		assertPayloads(t, foo3, []string{`foo: [0]->{"after": {"a": 0, "b": "init"}}`})
 
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'v0')`)
 		assertPayloads(t, foo1, []string{
-			`foo: [0]->{"a": 0, "b": "v0"}`,
+			`foo: [0]->{"after": {"a": 0, "b": "v0"}}`,
 		})
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'v1')`)
 		assertPayloads(t, foo1, []string{
-			`foo: [1]->{"a": 1, "b": "v1"}`,
+			`foo: [1]->{"after": {"a": 1, "b": "v1"}}`,
 		})
 		assertPayloads(t, foo2, []string{
-			`foo: [0]->{"a": 0, "b": "v0"}`,
-			`foo: [1]->{"a": 1, "b": "v1"}`,
+			`foo: [0]->{"after": {"a": 0, "b": "v0"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "v1"}}`,
 		})
 
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'v2')`)
 		assertPayloads(t, foo1, []string{
-			`foo: [0]->{"a": 0, "b": "v2"}`,
+			`foo: [0]->{"after": {"a": 0, "b": "v2"}}`,
 		})
 		assertPayloads(t, foo2, []string{
-			`foo: [0]->{"a": 0, "b": "v2"}`,
+			`foo: [0]->{"after": {"a": 0, "b": "v2"}}`,
 		})
 		assertPayloads(t, foo3, []string{
-			`foo: [0]->{"a": 0, "b": "v0"}`,
-			`foo: [0]->{"a": 0, "b": "v2"}`,
-			`foo: [1]->{"a": 1, "b": "v1"}`,
+			`foo: [0]->{"after": {"a": 0, "b": "v0"}}`,
+			`foo: [0]->{"after": {"a": 0, "b": "v2"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "v1"}}`,
 		})
 	}
 
@@ -1609,8 +1610,8 @@ func TestUnspecifiedPrimaryKey(t *testing.T) {
 		sqlDB.QueryRow(t, `INSERT INTO foo VALUES (1) RETURNING rowid`).Scan(&id1)
 
 		assertPayloads(t, foo, []string{
-			fmt.Sprintf(`foo: [%d]->{"a": 0, "rowid": %d}`, id0, id0),
-			fmt.Sprintf(`foo: [%d]->{"a": 1, "rowid": %d}`, id1, id1),
+			fmt.Sprintf(`foo: [%d]->{"after": {"a": 0, "rowid": %d}}`, id0, id0),
+			fmt.Sprintf(`foo: [%d]->{"after": {"a": 1, "rowid": %d}}`, id1, id1),
 		})
 	}
 
@@ -1665,8 +1666,8 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'second')`)
 	assertPayloads(t, foo, []string{
-		`foo: [0]->{"a": 0, "b": "initial"}`,
-		`foo: [1]->{"a": 1, "b": "second"}`,
+		`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+		`foo: [1]->{"after": {"a": 1, "b": "second"}}`,
 	})
 
 	// TODO(mrtracy): At this point we need to wait for a resolved timestamp,
@@ -1683,8 +1684,8 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (3, 'third')`)
 
 	assertPayloads(t, foo, []string{
-		`foo: [0]->{"a": 0, "b": "updated"}`,
-		`foo: [3]->{"a": 3, "b": "third"}`,
+		`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		`foo: [3]->{"after": {"a": 3, "b": "third"}}`,
 	})
 
 }

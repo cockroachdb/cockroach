@@ -48,10 +48,10 @@ const (
 	optResolvedTimestamps      = `resolved`
 	optUpdatedTimestamps       = `updated`
 
-	optEnvelopeDiff      envelopeType = `diff`
-	optEnvelopeKeyOnly   envelopeType = `key_only`
-	optEnvelopeRow       envelopeType = `row`
-	optEnvelopeValueOnly envelopeType = `value_only`
+	optEnvelopeKeyOnly       envelopeType = `key_only`
+	optEnvelopeRow           envelopeType = `row`
+	optEnvelopeDeprecatedRow envelopeType = `deprecated_row`
+	optEnvelopeWrapped       envelopeType = `wrapped`
 
 	optFormatJSON formatType = `json`
 	optFormatAvro formatType = `experimental_avro`
@@ -316,15 +316,12 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 	}
 
 	switch envelopeType(details.Opts[optEnvelope]) {
-	case ``, optEnvelopeRow:
+	case optEnvelopeRow, optEnvelopeDeprecatedRow:
 		details.Opts[optEnvelope] = string(optEnvelopeRow)
 	case optEnvelopeKeyOnly:
 		details.Opts[optEnvelope] = string(optEnvelopeKeyOnly)
-	case optEnvelopeValueOnly:
-		details.Opts[optEnvelope] = string(optEnvelopeValueOnly)
-	case optEnvelopeDiff:
-		return jobspb.ChangefeedDetails{}, errors.Errorf(
-			`%s=%s is not yet supported`, optEnvelope, optEnvelopeDiff)
+	case ``, optEnvelopeWrapped:
+		details.Opts[optEnvelope] = string(optEnvelopeWrapped)
 	default:
 		return jobspb.ChangefeedDetails{}, errors.Errorf(
 			`unknown %s: %s`, optEnvelope, details.Opts[optEnvelope])

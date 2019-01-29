@@ -792,29 +792,22 @@ func assertPayloads(t testing.TB, f testfeed, expected []string) {
 	}
 }
 
-func jsonKeyValueAvro(
-	t testing.TB, reg *testSchemaRegistry, keyBytes, valueBytes []byte,
-) ([]byte, []byte) {
-	keyNative, err := reg.encodedAvroToNative(keyBytes)
-	if err != nil {
-		t.Fatal(err)
+func avroToJSON(t testing.TB, reg *testSchemaRegistry, avroBytes []byte) []byte {
+	if len(avroBytes) == 0 {
+		return nil
 	}
-	valueNative, err := reg.encodedAvroToNative(valueBytes)
+	native, err := reg.encodedAvroToNative(avroBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The avro textual format is a more natural fit, but it's non-deterministic
 	// because of go's randomized map ordering. Instead, we use gojson.Marshal,
 	// which sorts its object keys and so is deterministic.
-	key, err := gojson.Marshal(keyNative)
+	json, err := gojson.Marshal(native)
 	if err != nil {
 		t.Fatal(err)
 	}
-	value, err := gojson.Marshal(valueNative)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return key, value
+	return json
 }
 
 func assertPayloadsAvro(t testing.TB, reg *testSchemaRegistry, f testfeed, expected []string) {
@@ -826,7 +819,7 @@ func assertPayloadsAvro(t testing.TB, reg *testSchemaRegistry, f testfeed, expec
 		if !ok {
 			break
 		} else if keyBytes != nil || valueBytes != nil {
-			key, value := jsonKeyValueAvro(t, reg, keyBytes, valueBytes)
+			key, value := avroToJSON(t, reg, keyBytes), avroToJSON(t, reg, valueBytes)
 			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic, key, value))
 		}
 	}
@@ -877,22 +870,20 @@ func expectResolvedTimestamp(t testing.TB, f testfeed) hlc.Timestamp {
 	}
 
 	var valueRaw struct {
-		CRDB struct {
-			Resolved string `json:"resolved"`
-		} `json:"__crdb__"`
+		Resolved string `json:"resolved"`
 	}
 	if err := gojson.Unmarshal(resolved, &valueRaw); err != nil {
 		t.Fatal(err)
 	}
 
-	return parseTimeToHLC(t, valueRaw.CRDB.Resolved)
+	return parseTimeToHLC(t, valueRaw.Resolved)
 }
 
 func expectResolvedTimestampAvro(t testing.TB, reg *testSchemaRegistry, f testfeed) hlc.Timestamp {
 	t.Helper()
 	topic, _, keyBytes, valueBytes, resolvedBytes, _ := f.Next(t)
 	if keyBytes != nil || valueBytes != nil {
-		key, value := jsonKeyValueAvro(t, reg, keyBytes, valueBytes)
+		key, value := avroToJSON(t, reg, keyBytes), avroToJSON(t, reg, valueBytes)
 		t.Fatalf(`unexpected row %s: %s -> %s`, topic, key, value)
 	}
 	if resolvedBytes == nil {

@@ -131,7 +131,7 @@ func makeCloudStorageSink(
 	}
 
 	switch envelopeType(opts[optEnvelope]) {
-	case optEnvelopeValueOnly:
+	case optEnvelopeWrapped:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			optEnvelope, opts[optEnvelope])

@@ -507,12 +507,16 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 		}
 	}
 	// WIP verify that meta is now empty
-	if row != nil {
-		afterNative, err := r.after.nativeFromRow(row)
-		if err != nil {
-			return nil, err
+	if r.opts.afterField {
+		if row == nil {
+			native[`after`] = nil
+		} else {
+			afterNative, err := r.after.nativeFromRow(row)
+			if err != nil {
+				return nil, err
+			}
+			native[`after`] = goavro.Union(avroUnionKey(&r.after.avroRecord), afterNative)
 		}
-		native[`after`] = goavro.Union(avroUnionKey(&r.after.avroRecord), afterNative)
 	}
 	return r.codec.BinaryFromNative(buf, native)
 }

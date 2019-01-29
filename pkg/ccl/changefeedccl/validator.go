@@ -217,7 +217,10 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 			lastUpdated = row.updated
 		}
 
-		value := make(map[string]interface{})
+		type wrapper struct {
+			After map[string]interface{} `json:"after"`
+		}
+		var value wrapper
 		if err := gojson.Unmarshal([]byte(row.value), &value); err != nil {
 			return err
 		}
@@ -225,10 +228,7 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		var stmtBuf bytes.Buffer
 		var args []interface{}
 		fmt.Fprintf(&stmtBuf, `UPSERT INTO %s (`, v.fprintTable)
-		for col, colValue := range value {
-			if col == `__crdb__` {
-				continue
-			}
+		for col, colValue := range value.After {
 			if len(args) != 0 {
 				stmtBuf.WriteString(`,`)
 			}
@@ -315,24 +315,22 @@ func (vs Validators) Failures() []string {
 // provided `format=json` value. Exported for acceptance testing.
 func ParseJSONValueTimestamps(v []byte) (updated, resolved hlc.Timestamp, err error) {
 	var valueRaw struct {
-		CRDB struct {
-			Resolved string `json:"resolved"`
-			Updated  string `json:"updated"`
-		} `json:"__crdb__"`
+		Resolved string `json:"resolved"`
+		Updated  string `json:"updated"`
 	}
 	if err := gojson.Unmarshal(v, &valueRaw); err != nil {
 		return hlc.Timestamp{}, hlc.Timestamp{}, err
 	}
-	if valueRaw.CRDB.Updated != `` {
+	if valueRaw.Updated != `` {
 		var err error
-		updated, err = sql.ParseHLC(valueRaw.CRDB.Updated)
+		updated, err = sql.ParseHLC(valueRaw.Updated)
 		if err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
 	}
-	if valueRaw.CRDB.Resolved != `` {
+	if valueRaw.Resolved != `` {
 		var err error
-		resolved, err = sql.ParseHLC(valueRaw.CRDB.Resolved)
+		resolved, err = sql.ParseHLC(valueRaw.Resolved)
 		if err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
