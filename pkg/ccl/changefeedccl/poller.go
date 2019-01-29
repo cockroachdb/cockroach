@@ -614,27 +614,32 @@ func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescripto
 		}
 		if lastVersion.HasColumnBackfillMutation() && !desc.HasColumnBackfillMutation() {
 			boundaryTime := desc.GetModificationTime()
-			if boundaryTime.Less(p.mu.highWater) {
-				return fmt.Errorf(
-					"error: detected table ID %d backfill completed at %s earlier than highwater timestamp %s",
-					desc.ID,
-					boundaryTime,
-					p.mu.highWater,
-				)
-			}
-			p.mu.scanBoundaries = append(p.mu.scanBoundaries, boundaryTime)
-			sort.Slice(p.mu.scanBoundaries, func(i, j int) bool {
-				return p.mu.scanBoundaries[i].Less(p.mu.scanBoundaries[j])
-			})
-			// To avoid race conditions with the lease manager, at this point we force
-			// the manager to acquire the freshest descriptor of this table from the
-			// store. In normal operation, the lease manager returns the newest
-			// descriptor it knows about for the timestamp, assuming it's still
-			// allowed; without this explicit load, the lease manager might therefore
-			// return the previous version of the table, which is still technically
-			// allowed by the schema change system.
-			if err := p.leaseMgr.AcquireFreshestFromStore(ctx, desc.ID); err != nil {
-				return err
+			// Only mutations that happened after the changefeed started are
+			// interesting here.
+			if p.details.StatementTime.Less(boundaryTime) {
+				if boundaryTime.Less(p.mu.highWater) {
+					return fmt.Errorf(
+						"error: detected table ID %d backfill completed at %s "+
+							"earlier than highwater timestamp %s",
+						desc.ID,
+						boundaryTime,
+						p.mu.highWater,
+					)
+				}
+				p.mu.scanBoundaries = append(p.mu.scanBoundaries, boundaryTime)
+				sort.Slice(p.mu.scanBoundaries, func(i, j int) bool {
+					return p.mu.scanBoundaries[i].Less(p.mu.scanBoundaries[j])
+				})
+				// To avoid race conditions with the lease manager, at this point we force
+				// the manager to acquire the freshest descriptor of this table from the
+				// store. In normal operation, the lease manager returns the newest
+				// descriptor it knows about for the timestamp, assuming it's still
+				// allowed; without this explicit load, the lease manager might therefore
+				// return the previous version of the table, which is still technically
+				// allowed by the schema change system.
+				if err := p.leaseMgr.AcquireFreshestFromStore(ctx, desc.ID); err != nil {
+					return err
+				}
 			}
 		}
 	}

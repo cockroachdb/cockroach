@@ -776,7 +776,7 @@ func assertPayloads(t testing.TB, f testfeed, expected []string) {
 			log.Infof(context.TODO(), `%v %s: %s->%s`, ok, topic, key, value)
 		}
 		if !ok {
-			break
+			t.Fatalf(`expected another row: %s`, f.Err())
 		} else if key != nil || value != nil {
 			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic, key, value))
 		}
