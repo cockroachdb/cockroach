@@ -941,12 +941,15 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 
 		l.putBuffer(buf)
 	}
+	l.mu.Unlock()
 	// Flush and exit on fatal logging.
 	if s == Severity_FATAL {
 		l.flushAndSync(true /*doSync*/)
 		close(fatalTrigger)
+		// Wait and prevent the function from returning - the goroutine
+		// above will ensure the process terminates.
+		select {}
 	}
-	l.mu.Unlock()
 }
 
 // printPanicToFile copies the panic details to the log file. This is
