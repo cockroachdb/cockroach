@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/pkg/errors"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -117,9 +118,9 @@ type OptTesterFlags struct {
 	// the coster will be in the range [c - 0.5 * c, c + 0.5 * c).
 	PerturbCost float64
 
-	// ReorderJoins indicates whether the optimizer should attempt to find a
-	// better join order than the one that was specified.
-	ReorderJoins bool
+	// ReorderJoinsLimit is the maximum number of joins in a query which the optimizer
+	// should attempt to reorder.
+	JoinLimit int
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -228,11 +229,11 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 	}
 
-	if ot.Flags.ReorderJoins {
-		defer func(oldValue bool) {
-			ot.evalCtx.SessionData.ReorderJoins = oldValue
-		}(ot.evalCtx.SessionData.ReorderJoins)
-		ot.evalCtx.SessionData.ReorderJoins = true
+	if ot.Flags.JoinLimit != 0 {
+		defer func(oldValue int) {
+			ot.evalCtx.SessionData.ReorderJoinsLimit = oldValue
+		}(ot.evalCtx.SessionData.ReorderJoinsLimit)
+		ot.evalCtx.SessionData.ReorderJoinsLimit = ot.Flags.JoinLimit
 	}
 
 	ot.Flags.Verbose = testing.Verbose()
@@ -434,8 +435,15 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 			f.DisableRules.Add(int(r))
 		}
 
-	case "reorder-joins":
-		f.ReorderJoins = true
+	case "join-limit":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("join-limit requires a single argument")
+		}
+		limit, err := strconv.ParseInt(arg.Vals[0], 10, 64)
+		if err != nil {
+			return errors.Wrap(err, "join-limit")
+		}
+		f.JoinLimit = int(limit)
 
 	case "rule":
 		if len(arg.Vals) != 1 {
