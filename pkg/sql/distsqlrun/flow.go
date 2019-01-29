@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -62,12 +61,8 @@ type FlowCtx struct {
 	// TODO(andrei): Get rid of this field and pass a non-shared EvalContext to
 	// cores of the processors that need it.
 	EvalCtx *tree.EvalContext
-	// rpcCtx and nodeDialer are used by the Outboxes that may be
-	// present in the flow for connecting to other nodes (rpcCtx for
-	// flows initiated by 2.0 nodes that specify addresses, and
-	// nodeDialer for 2.1 nodes that specify node IDs).
-	// TODO(bdarnell): remove rpcCtx after 2.1.
-	rpcCtx     *rpc.Context
+	// nodeDialer is used by the Outboxes that may be present in the
+	// flow for connecting to other nodes.
 	nodeDialer *nodedialer.Dialer
 	// Gossip is used by the sample aggregator to notify nodes of a new statistic.
 	Gossip *gossip.Gossip
@@ -222,9 +217,6 @@ func newFlow(
 func (f *Flow) setupInboundStream(
 	ctx context.Context, spec distsqlpb.StreamEndpointSpec, receiver RowReceiver,
 ) error {
-	if spec.DeprecatedTargetAddr != "" {
-		return errors.Errorf("inbound stream has target address set: %s", spec.DeprecatedTargetAddr)
-	}
 	sid := spec.StreamID
 	switch spec.Type {
 	case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
@@ -290,7 +282,7 @@ func (f *Flow) setupOutboundStream(spec distsqlpb.StreamEndpointSpec) (RowReceiv
 		}, nil
 
 	case distsqlpb.StreamEndpointSpec_REMOTE:
-		outbox := newOutbox(&f.FlowCtx, spec.TargetNodeID, spec.DeprecatedTargetAddr, f.id, sid)
+		outbox := newOutbox(&f.FlowCtx, spec.TargetNodeID, f.id, sid)
 		f.startables = append(f.startables, outbox)
 		return outbox, nil
 

@@ -68,7 +68,7 @@ func TestOutbox(t *testing.T) {
 	}
 	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	streamID := distsqlpb.StreamID(42)
-	outbox := newOutbox(&flowCtx, staticNodeID, "", flowID, streamID)
+	outbox := newOutbox(&flowCtx, staticNodeID, flowID, streamID)
 	outbox.init(oneIntCol)
 	var outboxWG sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -219,7 +219,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	}
 	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	streamID := distsqlpb.StreamID(42)
-	outbox := newOutbox(&flowCtx, staticNodeID, "", flowID, streamID)
+	outbox := newOutbox(&flowCtx, staticNodeID, flowID, streamID)
 
 	var outboxWG sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -295,7 +295,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.TODO())
 			defer cancel()
 			if tc.outboxIsClient {
-				outbox = newOutbox(&flowCtx, staticNodeID, "", flowID, streamID)
+				outbox = newOutbox(&flowCtx, staticNodeID, flowID, streamID)
 				outbox.init(oneIntCol)
 				outbox.start(ctx, &wg, cancel)
 
@@ -426,63 +426,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 		ctxCanceled = true
 	}
 
-	outbox = newOutbox(&flowCtx, staticNodeID, "", flowID, streamID)
-	outbox.init(oneIntCol)
-	outbox.start(ctx, &wg, mockCancel)
-
-	// Wait for the outbox to connect the stream.
-	streamNotification := <-mockServer.inboundStreams
-	if _, err := streamNotification.stream.Recv(); err != nil {
-		t.Fatal(err)
-	}
-
-	streamNotification.donec <- sqlbase.QueryCanceledError
-
-	wg.Wait()
-	if !ctxCanceled {
-		t.Fatal("flow ctx was not canceled")
-	}
-}
-
-// Test that the legacy interface (rpcCtx and addr instead of
-// nodeDialer and nodeID) still works. Copied from
-// TestOutboxCancelsFlowOnError simply because it was the shortest
-// test.
-// TODO(bdarnell): Remove after 2.1.
-func TestOutboxCancelsFlowOnErrorLegacyInterface(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	mockServer, addr, err := startMockDistSQLServer(stopper)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	defer evalCtx.Stop(context.Background())
-	flowCtx := FlowCtx{
-		Settings: st,
-		stopper:  stopper,
-		EvalCtx:  &evalCtx,
-		rpcCtx:   newInsecureRPCContext(stopper),
-	}
-	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
-	streamID := distsqlpb.StreamID(42)
-	var outbox *outbox
-	var wg sync.WaitGroup
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
-
-	// We could test this on ctx.cancel(), but this mock
-	// cancellation method is simpler.
-	ctxCanceled := false
-	mockCancel := func() {
-		ctxCanceled = true
-	}
-
-	outbox = newOutbox(&flowCtx, 0, addr.String(), flowID, streamID)
+	outbox = newOutbox(&flowCtx, staticNodeID, flowID, streamID)
 	outbox.init(oneIntCol)
 	outbox.start(ctx, &wg, mockCancel)
 
@@ -527,7 +471,7 @@ func BenchmarkOutbox(b *testing.B) {
 				EvalCtx:    &evalCtx,
 				nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 			}
-			outbox := newOutbox(&flowCtx, staticNodeID, "", flowID, streamID)
+			outbox := newOutbox(&flowCtx, staticNodeID, flowID, streamID)
 			outbox.init(makeIntCols(numCols))
 			var outboxWG sync.WaitGroup
 			ctx, cancel := context.WithCancel(context.TODO())

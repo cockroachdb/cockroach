@@ -105,9 +105,7 @@ message StreamEndpointSpec {
   optional int32 target_node_id = 4 [(gogoproto.nullable) = false,
                                      (gogoproto.customname) = "TargetNodeID",
                                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  // Serving address for the target host. Used by 2.0 nodes instead of target_node_id.
-  // TODO(bdarnell): Remove after 2.1
-  optional string deprecated_target_addr = 3 [(gogoproto.nullable) = false];
+  reserved 3;
 }
 
 // InputSyncSpec is the specification for an input synchronizer; it decides how

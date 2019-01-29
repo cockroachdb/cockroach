@@ -782,12 +782,7 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 			if !p.remotePlan {
 				p.remotePlan = true
 			}
-			var ok bool
 			endpoint.TargetNodeID = p2.Node
-			endpoint.DeprecatedTargetAddr, ok = nodeAddresses[p2.Node]
-			if !ok {
-				panic(fmt.Sprintf("node %d not in nodeAddresses map", p2.Node))
-			}
 		}
 
 		router := &p1.Spec.Output[0]
