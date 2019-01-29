@@ -135,6 +135,11 @@ func doExpandPlan(
 
 		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
+		if fastDelete, ok := maybeCreateDeleteFastNode(
+			ctx, n.source, n.run.td.tableDesc(), n.run.fastPathInterleaved, n.run.rowsNeeded); ok {
+			plan = fastDelete
+		}
+
 	case *rowCountNode:
 		var newPlan planNode
 		newPlan, err = doExpandPlan(ctx, p, noParams, n.source)
@@ -682,6 +687,8 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *deleteNode:
 		n.source = p.simplifyOrderings(n.source, nil)
+
+	case *deleteRangeNode:
 
 	case *rowCountNode:
 		n.source = p.simplifyOrderings(n.source, nil).(batchedPlanNode)

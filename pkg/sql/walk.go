@@ -503,14 +503,17 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *deleteNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "from", n.run.td.tableDesc().Name)
-			ext := ""
-			if _, fast := canDeleteFast(v.ctx, n.source, &n.run); fast {
-				ext = "fast "
-			}
-			v.observer.attr(name, "strategy", ext+n.run.td.desc())
+			v.observer.attr(name, "strategy", n.run.td.desc())
 		}
 		// A deleter has no sub-expressions, so nothing special to do here.
 		n.source = v.visit(n.source)
+
+	case *deleteRangeNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "from", n.desc.Name)
+			spans := sqlbase.PrettySpans(&n.desc.PrimaryIndex, n.spans, 2)
+			v.observer.attr(name, "spans", spans)
+		}
 
 	case *serializeNode:
 		v.visitConcrete(n.source)
@@ -704,6 +707,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&createViewNode{}):           "create view",
 	reflect.TypeOf(&delayedNode{}):              "virtual table",
 	reflect.TypeOf(&deleteNode{}):               "delete",
+	reflect.TypeOf(&deleteRangeNode{}):          "delete range",
 	reflect.TypeOf(&distinctNode{}):             "distinct",
 	reflect.TypeOf(&dropDatabaseNode{}):         "drop database",
 	reflect.TypeOf(&dropIndexNode{}):            "drop index",
