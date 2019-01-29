@@ -152,7 +152,7 @@ func TestRouters(t *testing.T) {
 
 			rows := make([]sqlbase.EncDatumRows, len(bufs))
 			for i, b := range bufs {
-				if !b.ProducerClosed {
+				if !b.ProducerClosed() {
 					t.Fatalf("bucket not closed: %d", i)
 				}
 				rows[i] = b.GetRowsNoMeta(t)

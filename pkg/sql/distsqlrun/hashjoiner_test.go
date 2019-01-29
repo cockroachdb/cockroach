@@ -115,7 +115,7 @@ func TestHashJoiner(t *testing.T) {
 				h.Run(context.Background())
 				side = otherSide(h.storedSide)
 
-				if !out.ProducerClosed {
+				if !out.ProducerClosed() {
 					return errors.New("output RowReceiver not closed")
 				}
 
@@ -212,7 +212,7 @@ func TestHashJoinerError(t *testing.T) {
 			setup(h)
 			h.Run(context.Background())
 
-			if !out.ProducerClosed {
+			if !out.ProducerClosed() {
 				return errors.New("output RowReceiver not closed")
 			}
 
@@ -348,7 +348,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	out.ConsumerDone()
 	h.Run(context.Background())
 
-	if !out.ProducerClosed {
+	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
 	}
 
@@ -472,7 +472,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 
 	h.Run(context.Background())
 
-	if !out.ProducerClosed {
+	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
 	}
 
