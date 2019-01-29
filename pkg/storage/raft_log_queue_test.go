@@ -106,6 +106,9 @@ func TestComputeTruncateDecision(t *testing.T) {
 
 	const targetSize = 1000
 
+	// NB: all tests here have a truncateDecions which starts with "should
+	// truncate: false", because these tests don't simulate enough data to be over
+	// the truncation threshold.
 	testCases := []struct {
 		progress        []uint64
 		raftLogSize     int64
@@ -117,85 +120,85 @@ func TestComputeTruncateDecision(t *testing.T) {
 		{
 			// Nothing to truncate.
 			[]uint64{1, 2}, 100, 1, 1, 0,
-			"truncate 0 entries to first index 1 (chosen via: quorum)"},
+			"should truncate: false [truncate 0 entries to first index 1 (chosen via: quorum)]"},
 		{
 			// Nothing to truncate on this replica, though a quorum elsewhere has more progress.
 			// NB this couldn't happen if we're truly the Raft leader, unless we appended to our
 			// own log asynchronously.
 			[]uint64{1, 5, 5}, 100, 1, 1, 0,
-			"truncate 0 entries to first index 1 (chosen via: followers)",
+			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers)]",
 		},
 		{
 			// We're not truncating anything, but one follower is already cut off. There's no pending
 			// snapshot so we shouldn't be causing any additional snapshots.
 			[]uint64{1, 5, 5}, 100, 2, 2, 0,
-			"truncate 0 entries to first index 2 (chosen via: first index)",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		},
 		{
 			// The happy case.
 			[]uint64{5, 5, 5}, 100, 2, 5, 0,
-			"truncate 3 entries to first index 5 (chosen via: quorum)",
+			"should truncate: false [truncate 3 entries to first index 5 (chosen via: quorum)]",
 		},
 		{
 			// No truncation, but the outstanding snapshot is made obsolete by the truncation. However
 			// it was already obsolete before. (This example is also not one you could manufacture in
 			// a real system).
 			[]uint64{5, 5, 5}, 100, 2, 2, 1,
-			"truncate 0 entries to first index 2 (chosen via: first index)",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		},
 		{
 			// Respecting the pending snapshot.
 			[]uint64{5, 5, 5}, 100, 2, 5, 3,
-			"truncate 1 entries to first index 3 (chosen via: pending snapshot)",
+			"should truncate: false [truncate 1 entries to first index 3 (chosen via: pending snapshot)]",
 		},
 		{
 			// Log is below target size, so respecting the slowest follower.
 			[]uint64{1, 2, 3, 4}, 100, 1, 5, 0,
-			"truncate 0 entries to first index 1 (chosen via: followers)",
+			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers)]",
 		},
 		{
 			// Truncating since local log starts at 2. One follower is already cut off without a pending
 			// snapshot.
 			[]uint64{1, 2, 3, 4}, 100, 2, 2, 0,
-			"truncate 0 entries to first index 2 (chosen via: first index)",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		},
 		// If over targetSize, should truncate to quorum committed index. Minority will need snapshots.
 		{
 			[]uint64{1, 3, 3, 4}, 2000, 1, 3, 0,
-			"truncate 2 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B); implies 1 Raft snapshot",
+			"should truncate: false [truncate 2 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B); implies 1 Raft snapshot]",
 		},
 		// Don't truncate away pending snapshot, even when log too large.
 		{
 			[]uint64{100, 100}, 2000, 1, 100, 50,
-			"truncate 49 entries to first index 50 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)",
+			"should truncate: false [truncate 49 entries to first index 50 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
 			[]uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
-			"truncate 1 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B)",
+			"should truncate: false [truncate 1 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
 			[]uint64{1, 3, 3, 4}, 2000, 3, 3, 0,
-			"truncate 0 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B)",
+			"should truncate: false [truncate 0 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B)]",
 		},
 		// The pending snapshot index affects the quorum commit index.
 		{
 			[]uint64{4}, 2000, 1, 7, 1,
-			"truncate 0 entries to first index 1 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)",
+			"should truncate: false [truncate 0 entries to first index 1 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
 		},
 		// Never truncate past the quorum commit index.
 		{
 			[]uint64{3, 3, 6}, 100, 2, 7, 0,
-			"truncate 1 entries to first index 3 (chosen via: quorum)",
+			"should truncate: false [truncate 1 entries to first index 3 (chosen via: quorum)]",
 		},
 		// Never truncate past the last index.
 		{
 			[]uint64{5}, 100, 1, 3, 0,
-			"truncate 2 entries to first index 3 (chosen via: last index)",
+			"should truncate: false [truncate 2 entries to first index 3 (chosen via: last index)]",
 		},
 		// Never truncate "before the first index".
 		{
 			[]uint64{5}, 100, 2, 3, 1,
-			"truncate 0 entries to first index 2 (chosen via: first index)",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		}}
 	for i, c := range testCases {
 		status := &raft.Status{
@@ -224,14 +227,17 @@ func TestComputeTruncateDecision(t *testing.T) {
 func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// NB: most tests here have a truncateDecions which starts with "should
+	// truncate: false", because these tests don't simulate enough data to be over
+	// the truncation threshold.
 	exp := map[bool]map[bool]string{ // (tooLarge, active)
 		false: {
-			true:  "truncate 0 entries to first index 10 (chosen via: probing follower)",
-			false: "truncate 90 entries to first index 100 (chosen via: followers)",
+			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower)]",
+			false: "should truncate: false [truncate 90 entries to first index 100 (chosen via: followers)]",
 		},
 		true: {
-			true:  "truncate 0 entries to first index 10 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)",
-			false: "truncate 290 entries to first index 300 (chosen via: quorum); log too large (2.0 KiB > 1.0 KiB); implies 2 Raft snapshots",
+			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)]",
+			false: "should truncate: true [truncate 290 entries to first index 300 (chosen via: quorum); log too large (2.0 KiB > 1.0 KiB); implies 2 Raft snapshots]",
 		},
 	}
 

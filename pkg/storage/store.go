@@ -4446,6 +4446,8 @@ func (s *Store) AllocatorDryRun(
 func (s *Store) ManuallyEnqueue(
 	ctx context.Context, queueName string, repl *Replica, skipShouldQueue bool,
 ) ([]tracing.RecordedSpan, string, error) {
+	ctx = repl.AnnotateCtx(ctx)
+
 	var queue queueImpl
 	var needsLease bool
 	for _, replicaQueue := range s.scanner.queues {
