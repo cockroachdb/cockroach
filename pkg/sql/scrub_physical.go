@@ -110,7 +110,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 		NoIndexJoin: true,
 	}
 	scan := params.p.Scan()
-	scan.run.isCheck = true
+	scan.isCheck = true
 	colCfg := scanColumnsConfig{wantedColumns: columnIDs, addUnwantedAsHidden: true}
 	if err := scan.initTable(ctx, params.p, o.tableDesc, indexFlags, colCfg); err != nil {
 		return err

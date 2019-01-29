@@ -73,14 +73,6 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.applyLimit(n.plan, getLimit(count, n.offset), false /* soft */)
 
 	case *sortNode:
-		if n.needSort && numRows != math.MaxInt64 {
-			v := p.newSortValues(n.ordering, planColumns(n.plan), int(numRows))
-			if soft {
-				n.run.sortStrategy = newIterativeSortStrategy(v)
-			} else {
-				n.run.sortStrategy = newSortTopKStrategy(v, numRows)
-			}
-		}
 		if n.needSort {
 			// We can't propagate the limit, because the sort
 			// potentially needs all rows.

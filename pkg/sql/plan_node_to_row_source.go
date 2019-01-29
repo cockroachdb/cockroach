@@ -135,14 +135,6 @@ func (p *planNodeToRowSource) InternalClose() {
 	}
 }
 
-func (p *planNodeToRowSource) startExec(_ runParams) error {
-	// If we're getting startExec'd, it means we're running in local mode - so we
-	// mark ourselves already started, since local mode will have taken care of
-	// starting the child nodes of this node.
-	p.started = true
-	return nil
-}
-
 func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerMetadata) {
 	if p.State == distsqlrun.StateRunning && p.fastPath {
 		var count int

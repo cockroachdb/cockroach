@@ -361,7 +361,6 @@ count                       ·         ·
            │                count     1
            └── sort         ·         ·
                 │           order     +column2
-                │           strategy  top 1
                 └── values  ·         ·
 ·                           size      2 columns, 2 rows
 
@@ -376,7 +375,6 @@ count                       ·         ·
            │                count     1
            └── sort         ·         ·
                 │           order     +column2
-                │           strategy  top 1
                 └── values  ·         ·
 ·                           size      2 columns, 2 rows
 
@@ -391,6 +389,5 @@ count                       ·         ·
            │                count     1
            └── sort         ·         ·
                 │           order     +column2
-                │           strategy  top 1
                 └── values  ·         ·
 ·                           size      2 columns, 2 rows

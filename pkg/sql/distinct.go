@@ -17,13 +17,10 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/pkg/errors"
 )
 
 // distinctNode de-duplicates rows returned by a wrapped planNode.
@@ -42,8 +39,6 @@ type distinctNode struct {
 	// Subset of distinctOnColIdxs on which the input guarantees an ordering.
 	// All rows that are equal on these columns appear contiguously in the input.
 	columnsInOrder util.FastIntSet
-
-	run *rowSourceToPlanNode
 }
 
 // distinct constructs a distinctNode.
@@ -190,65 +185,18 @@ func (p *planner) distinct(
 }
 
 func (n *distinctNode) startExec(params runParams) error {
-	flowCtx := &distsqlrun.FlowCtx{
-		EvalCtx: params.EvalContext(),
-	}
-
-	cols := make([]int, len(planColumns(n.plan)))
-	for i := range cols {
-		cols[i] = i
-	}
-
-	spec := createDistinctSpec(n, cols)
-
-	input, err := makePlanNodeToRowSource(n.plan, params, false)
-	if err != nil {
-		return err
-	}
-	if len(spec.DistinctColumns) == 0 {
-		return errors.New("cannot initialize a distinctNode with 0 columns")
-	}
-
-	// Normally, startExec isn't recursive, since it's invoked for all nodes using
-	// the planTree walker. And as normal, the walker will startExec the source
-	// of this distinct.
-	// But, we also need to startExec our planNodeToRowSource to properly
-	// initialize it. That won't get touched via the planNode walker, so we have
-	// to do it recursively here.
-	if err := input.startExec(params); err != nil {
-		return err
-	}
-	if err := input.InitWithOutput(&distsqlpb.PostProcessSpec{}, nil); err != nil {
-		return err
-	}
-
-	post := &distsqlpb.PostProcessSpec{} // post is not used as we only use the processor for the core distinct logic.
-	var output distsqlrun.RowReceiver    // output is never used as distinct is only run as a RowSource.
-
-	proc, err := distsqlrun.NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, output)
-	if err != nil {
-		return err
-	}
-
-	n.run = makeRowSourceToPlanNode(proc, nil /* forwarder */, planColumns(n), nil /* originalPlanNode */)
-
-	n.run.source.Start(params.ctx)
-
-	return nil
+	panic("distinctNode can't be called in local mode")
 }
 
 func (n *distinctNode) Next(params runParams) (bool, error) {
-	return n.run.Next(params)
+	panic("distinctNode can't be called in local mode")
 }
 
 func (n *distinctNode) Values() tree.Datums {
-	return n.run.Values()
+	panic("distinctNode can't be called in local mode")
 }
 
 func (n *distinctNode) Close(ctx context.Context) {
-	if n.run != nil {
-		n.run.Close(ctx)
-	}
 	n.plan.Close(ctx)
 }
 

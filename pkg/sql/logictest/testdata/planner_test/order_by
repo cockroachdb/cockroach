@@ -30,15 +30,14 @@ sort            ·      ·
 query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
-limit                ·         ·
- │                   count     2
- └── sort            ·         ·
-      │              order     +b
-      │              strategy  top 2
-      └── render     ·         ·
-           └── scan  ·         ·
-·                    table     t@primary
-·                    spans     ALL
+limit                ·      ·
+ │                   count  2
+ └── sort            ·      ·
+      │              order  +b
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  t@primary
+·                    spans  ALL
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT c FROM t ORDER BY b LIMIT 2
@@ -48,7 +47,6 @@ limit                     ·         ·                (c)                 weak-
  └── distinct             ·         ·                (c)                 weak-key(c)
       └── sort            ·         ·                (c)                 ·
            │              order     +b               ·                   ·
-           │              strategy  iterative        ·                   ·
            └── render     ·         ·                (c, b)              ·
                 │         render 0  test.public.t.c  ·                   ·
                 │         render 1  test.public.t.b  ·                   ·
