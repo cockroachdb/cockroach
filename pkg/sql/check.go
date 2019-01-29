@@ -74,6 +74,51 @@ func (p *planner) validateCheckExpr(
 	return nil
 }
 
+func matchFullUnacceptableKeyQuery(
+	prefix int, srcName *string, srcIdx *sqlbase.IndexDescriptor,
+) string {
+	srcCols, srcNullClause, srcNotNullClause := make([]string, prefix), make([]string, prefix), make([]string, prefix)
+	for i := 0; i < prefix; i++ {
+		srcCols[i] = tree.NameString(srcIdx.ColumnNames[i])
+		srcNullClause[i] = fmt.Sprintf("%s IS NULL", tree.NameString(srcIdx.ColumnNames[i]))
+		srcNotNullClause[i] = fmt.Sprintf("%s IS NOT NULL", tree.NameString(srcIdx.ColumnNames[i]))
+	}
+	return fmt.Sprintf(
+		`SELECT * FROM %s@%s WHERE NOT (%s OR %s) LIMIT 1`,
+		*srcName, tree.NameString(srcIdx.Name),
+		strings.Join(srcNullClause, " AND "),
+		strings.Join(srcNotNullClause, " AND "),
+	)
+}
+
+func nonMatchingRowQuery(
+	prefix int,
+	srcName *string,
+	srcIdx *sqlbase.IndexDescriptor,
+	targetName *string,
+	targetIdx *sqlbase.IndexDescriptor,
+) string {
+	srcCols, srcWhere, targetCols, on := make([]string, prefix), make([]string, prefix), make([]string, prefix), make([]string, prefix)
+
+	for i := 0; i < prefix; i++ {
+		srcCols[i] = fmt.Sprintf("s.%s", tree.NameString(srcIdx.ColumnNames[i]))
+		srcWhere[i] = fmt.Sprintf("%s IS NOT NULL", tree.NameString(srcIdx.ColumnNames[i]))
+		targetCols[i] = fmt.Sprintf("t.%s", tree.NameString(targetIdx.ColumnNames[i]))
+		on[i] = fmt.Sprintf("%s = %s", srcCols[i], targetCols[i])
+	}
+
+	return fmt.Sprintf(
+		`SELECT %s FROM (SELECT * FROM %s@%s WHERE %s) AS s LEFT OUTER JOIN %s@%s AS t ON %s WHERE %s IS NULL LIMIT 1`,
+		strings.Join(srcCols, ", "),
+		*srcName, tree.NameString(srcIdx.Name),
+		strings.Join(srcWhere, " AND "),
+		*targetName, tree.NameString(targetIdx.Name),
+		strings.Join(on, " AND "),
+		// Sufficient to check the first column to see whether there was no matching row
+		targetCols[0],
+	)
+}
+
 func (p *planner) validateForeignKey(
 	ctx context.Context, srcTable *sqlbase.TableDescriptor, srcIdx *sqlbase.IndexDescriptor,
 ) error {
@@ -101,28 +146,44 @@ func (p *planner) validateForeignKey(
 		prefix = p
 	}
 
-	srcCols, targetCols := make([]string, prefix), make([]string, prefix)
-	join, where := make([]string, prefix), make([]string, prefix)
+	if srcIdx.ForeignKey.Match == sqlbase.ForeignKeyReference_FULL {
+		query := matchFullUnacceptableKeyQuery(prefix, &srcName, srcIdx)
+		rows, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
+		if err != nil {
+			return err
+		}
 
-	for i := 0; i < prefix; i++ {
-		srcCols[i] = fmt.Sprintf("s.%s", tree.NameString(srcIdx.ColumnNames[i]))
-		targetCols[i] = fmt.Sprintf("t.%s", tree.NameString(targetIdx.ColumnNames[i]))
-		join[i] = fmt.Sprintf("(%s = %s OR (%s IS NULL AND %s IS NULL))",
-			srcCols[i], targetCols[i], srcCols[i], targetCols[i])
-		where[i] = fmt.Sprintf("(%s IS NOT NULL AND %s IS NULL)", srcCols[i], targetCols[i])
+		rows, err = p.optimizePlan(ctx, rows, allColumns(rows))
+		if err != nil {
+			return err
+		}
+		defer rows.Close(ctx)
+
+		params := runParams{
+			ctx:             ctx,
+			extendedEvalCtx: &p.extendedEvalCtx,
+			p:               p,
+		}
+		if err := startPlan(params, rows); err != nil {
+			return err
+		}
+		next, err := rows.Next(params)
+		if err != nil {
+			return err
+		}
+
+		if next {
+			return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+				"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
+				rows.Values(), srcIdx.ForeignKey.Name,
+			)
+		}
 	}
-
-	query := fmt.Sprintf(
-		`SELECT %s FROM %s@%s AS s LEFT OUTER JOIN %s@%s AS t ON %s WHERE %s LIMIT 1`,
-		strings.Join(srcCols, ", "),
-		srcName, tree.NameString(srcIdx.Name), targetName, tree.NameString(targetIdx.Name),
-		strings.Join(join, " AND "),
-		strings.Join(where, " OR "),
-	)
+	query := nonMatchingRowQuery(prefix, &srcName, srcIdx, &targetName, targetIdx)
 
 	log.Infof(ctx, "Validating FK %q (%q [%v] -> %q [%v]) with query %q",
 		srcIdx.ForeignKey.Name,
-		srcTable.Name, srcCols, targetTable.Name, targetCols,
+		srcTable.Name, srcIdx.ColumnNames, targetTable.Name, targetIdx.ColumnNames,
 		query,
 	)
 
