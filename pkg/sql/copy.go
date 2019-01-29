@@ -334,7 +334,7 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 		extendedEvalCtx: &c.p.extendedEvalCtx,
 		p:               &c.p,
 	}
-	if err := startPlan(params, insertNode); err != nil {
+	if err := startExec(params, insertNode); err != nil {
 		return err
 	}
 	rows, err := countRowsAffected(params, insertNode)
