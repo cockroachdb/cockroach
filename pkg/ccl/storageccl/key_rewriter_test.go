@@ -143,7 +143,7 @@ func TestKeyRewriter(t *testing.T) {
 			Key:    makeKeyRewriterPrefixIgnoringInterleaved(oldID, 1),
 			EndKey: makeKeyRewriterPrefixIgnoringInterleaved(oldID, 2),
 		}
-		newSpan, err := kr.RewriteSpan(span)
+		newSpan, err := kr.RewriteSpanForRouting(span)
 		if err != nil {
 			t.Fatal(err)
 		}

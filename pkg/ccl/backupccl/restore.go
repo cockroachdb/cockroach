@@ -782,7 +782,7 @@ func splitAndScatter(
 		for idx, importSpanChunk := range importSpanChunks {
 			// TODO(dan): The structure between this and the below are very
 			// similar. Dedup.
-			chunkSpan, err := kr.RewriteSpan(roachpb.Span{
+			chunkSpan, err := kr.RewriteSpanForRouting(roachpb.Span{
 				Key:    importSpanChunk[0].Key,
 				EndKey: importSpanChunk[len(importSpanChunk)-1].EndKey,
 			})
@@ -829,7 +829,7 @@ func splitAndScatter(
 				for _, importSpan := range importSpanChunk {
 					idx := atomic.AddUint64(&splitScatterStarted, 1)
 
-					newSpan, err := kr.RewriteSpan(importSpan.Span)
+					newSpan, err := kr.RewriteSpanForRouting(importSpan.Span)
 					if err != nil {
 						return err
 					}
@@ -1114,7 +1114,7 @@ func restore(
 	g.GoCtx(func(ctx context.Context) error {
 		log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
 		for readyForImportSpan := range readyForImportCh {
-			newSpan, err := kr.RewriteSpan(readyForImportSpan.Span)
+			newSpan, err := kr.RewriteSpanForRouting(readyForImportSpan.Span)
 			if err != nil {
 				return err
 			}
@@ -1147,7 +1147,8 @@ func restore(
 
 				importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
 				if pErr != nil {
-					return pErr.GoError()
+					return errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan)
+
 				}
 
 				mu.Lock()
