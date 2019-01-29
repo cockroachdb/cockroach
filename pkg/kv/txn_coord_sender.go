@@ -16,6 +16,8 @@ package kv
 
 import (
 	"context"
+	"fmt"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -749,10 +751,11 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	}
 
 	if tc.mu.txnState == txnFinalized {
-		return roachpb.NewErrorWithTxn(
-			roachpb.NewTransactionStatusError(
-				"client already committed or rolled back the transaction"),
-			&tc.mu.txn)
+		msg := fmt.Sprintf("client already committed or rolled back the transaction. "+
+			"Trying to execute: %s", ba)
+		stack := string(debug.Stack())
+		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(msg), &tc.mu.txn)
 	}
 	if tc.mu.txnState == txnError {
 		return roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{})
