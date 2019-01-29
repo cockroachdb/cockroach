@@ -55,9 +55,6 @@ type outbox struct {
 	flowCtx  *FlowCtx
 	streamID distsqlpb.StreamID
 	nodeID   roachpb.NodeID
-	// Target address, set by 2.0 nodes. Only use addr if nodeID is zero.
-	// TODO(bdarnell): remove addr after 2.1
-	addr string
 	// The rows received from the RowChannel will be forwarded on this stream once
 	// it is established.
 	stream flowStream
@@ -82,13 +79,9 @@ var _ RowReceiver = &outbox{}
 var _ startable = &outbox{}
 
 func newOutbox(
-	flowCtx *FlowCtx,
-	nodeID roachpb.NodeID,
-	addr string,
-	flowID distsqlpb.FlowID,
-	streamID distsqlpb.StreamID,
+	flowCtx *FlowCtx, nodeID roachpb.NodeID, flowID distsqlpb.FlowID, streamID distsqlpb.StreamID,
 ) *outbox {
-	m := &outbox{flowCtx: flowCtx, nodeID: nodeID, addr: addr}
+	m := &outbox{flowCtx: flowCtx, nodeID: nodeID}
 	m.encoder.setHeaderFields(flowID, streamID)
 	m.streamID = streamID
 	return m
@@ -218,16 +211,9 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	if m.stream == nil {
 		var conn *grpc.ClientConn
 		var err error
-		if m.nodeID != 0 {
-			conn, err = m.flowCtx.nodeDialer.Dial(ctx, m.nodeID)
-			if err != nil {
-				return err
-			}
-		} else {
-			conn, err = m.flowCtx.rpcCtx.GRPCDial(m.addr).Connect(ctx)
-			if err != nil {
-				return err
-			}
+		conn, err = m.flowCtx.nodeDialer.Dial(ctx, m.nodeID)
+		if err != nil {
+			return err
 		}
 		client := distsqlpb.NewDistSQLClient(conn)
 		if log.V(2) {

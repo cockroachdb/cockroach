@@ -437,7 +437,6 @@ func (ds *ServerImpl) setupFlow(
 		stopper:        ds.Stopper,
 		id:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
-		rpcCtx:         ds.RPCContext,
 		nodeDialer:     ds.NodeDialer,
 		Gossip:         ds.Gossip,
 		txn:            txn,
