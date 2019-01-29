@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/codahale/hdrhistogram"
 	"github.com/pkg/errors"
 )
@@ -146,6 +147,17 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	defer verifier.maybeLogLatencyHist()
 
 	m.Go(func(ctx context.Context) error {
+		// Some of the tests have a tight enough bound on targetSteadyLatency
+		// that the default for kv.closed_timestamp.target_duration means the
+		// changefeed is never considered sufficiently caught up. We could
+		// instead make targetSteadyLatency less aggressive, but it'd be nice to
+		// keep it where it is.
+		if _, err := db.Exec(
+			`SET CLUSTER SETTING kv.closed_timestamp.target_duration='10s'`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		var targets string
 		if args.workloadType == tpccWorkloadType {
 			targets = `tpcc.warehouse, tpcc.district, tpcc.customer, tpcc.history,
@@ -328,8 +340,15 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 }
 
 func registerCDC(r *registry) {
+	useRangeFeed := true
+	if r.buildVersion.Compare(version.MustParse(`v2.2.0-0`)) < 0 {
+		// RangeFeed is not production ready in 2.1, so run the tests with the
+		// poller.
+		useRangeFeed = false
+	}
+
 	r.Add(testSpec{
-		Name:       "cdc/tpcc-1000",
+		Name:       fmt.Sprintf("cdc/tpcc-1000/rangefeed=%t", useRangeFeed),
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -337,15 +356,14 @@ func registerCDC(r *registry) {
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       1000,
 				workloadDuration:         "120m",
-				initialScan:              false,
-				kafkaChaos:               false,
+				rangefeed:                useRangeFeed,
 				targetInitialScanLatency: 3 * time.Minute,
 				targetSteadyLatency:      10 * time.Minute,
 			})
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/initial-scan",
+		Name:       fmt.Sprintf("cdc/initial-scan/rangefeed=%t", useRangeFeed),
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -354,31 +372,32 @@ func registerCDC(r *registry) {
 				tpccWarehouseCount:       100,
 				workloadDuration:         "30m",
 				initialScan:              true,
-				kafkaChaos:               false,
+				rangefeed:                useRangeFeed,
 				targetInitialScanLatency: 30 * time.Minute,
 				targetSteadyLatency:      time.Minute,
 			})
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/rangefeed",
+		Name: "cdc/poller/rangefeed=false",
+		// When testing a 2.1 binary, we use the poller for all the other tests
+		// and this is close enough to cdc/tpcc-1000 test to be redundant, so
+		// skip it.
 		MinVersion: "v2.2.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       100,
+				tpccWarehouseCount:       1000,
 				workloadDuration:         "30m",
-				initialScan:              false,
-				rangefeed:                true,
-				kafkaChaos:               false,
+				rangefeed:                false,
 				targetInitialScanLatency: 30 * time.Minute,
 				targetSteadyLatency:      2 * time.Minute,
 			})
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/sink-chaos",
+		Name:       fmt.Sprintf("cdc/sink-chaos/rangefeed=%t", useRangeFeed),
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -386,7 +405,7 @@ func registerCDC(r *registry) {
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
 				workloadDuration:         "30m",
-				initialScan:              false,
+				rangefeed:                useRangeFeed,
 				kafkaChaos:               true,
 				targetInitialScanLatency: 3 * time.Minute,
 				targetSteadyLatency:      5 * time.Minute,
@@ -394,7 +413,7 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/crdb-chaos",
+		Name:       fmt.Sprintf("cdc/crdb-chaos/rangefeed=%t", useRangeFeed),
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -402,8 +421,7 @@ func registerCDC(r *registry) {
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
 				workloadDuration:         "30m",
-				initialScan:              false,
-				kafkaChaos:               false,
+				rangefeed:                useRangeFeed,
 				crdbChaos:                true,
 				targetInitialScanLatency: 3 * time.Minute,
 				targetSteadyLatency:      10 * time.Minute,
@@ -411,7 +429,7 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/ledger",
+		Name:       fmt.Sprintf("cdc/ledger/rangefeed=%t", useRangeFeed),
 		MinVersion: "v2.1.0",
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
@@ -422,7 +440,7 @@ func registerCDC(r *registry) {
 				workloadType:             ledgerWorkloadType,
 				workloadDuration:         "30m",
 				initialScan:              true,
-				kafkaChaos:               false,
+				rangefeed:                useRangeFeed,
 				targetInitialScanLatency: 10 * time.Minute,
 				targetSteadyLatency:      time.Minute,
 				targetTxnPerSecond:       575,
@@ -430,7 +448,7 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/cloud-sink",
+		Name:       "cdc/cloud-sink/rangefeed=true",
 		MinVersion: "v2.2.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -439,7 +457,7 @@ func registerCDC(r *registry) {
 				tpccWarehouseCount:       100,
 				workloadDuration:         "30m",
 				initialScan:              true,
-				kafkaChaos:               false,
+				rangefeed:                true,
 				cloudStorageSink:         true,
 				targetInitialScanLatency: 30 * time.Minute,
 				targetSteadyLatency:      time.Minute,
