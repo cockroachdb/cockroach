@@ -487,10 +487,6 @@ func (rsl StateLoader) SetTxnSpanGCThreshold(
 }
 
 // The rest is not technically part of ReplicaState.
-// TODO(tschottdorf): more consolidation of ad-hoc structures: last index and
-// hard state. These are closely coupled with ReplicaState (and in particular
-// with its TruncatedState) but are different in that they are not consistently
-// updated through Raft.
 
 // LoadLastIndex loads the last index.
 func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader engine.Reader) (uint64, error) {
