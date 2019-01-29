@@ -75,7 +75,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	}
 
 	streamID := distsqlpb.StreamID(1)
-	outbox := newOutbox(&flowCtx, staticNodeID, "", distsqlpb.FlowID{}, streamID)
+	outbox := newOutbox(&flowCtx, staticNodeID, distsqlpb.FlowID{}, streamID)
 	outbox.init(oneIntCol)
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no

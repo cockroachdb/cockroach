@@ -732,6 +732,8 @@ func (v Value) PrettyPrint() string {
 	return buf.String()
 }
 
+var _ log.SafeMessager = Transaction{}
+
 const (
 	// MinTxnPriority is the minimum allowed txn priority.
 	MinTxnPriority = 0
@@ -1042,6 +1044,8 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 }
 
 // String formats transaction into human readable string.
+//
+// NOTE: When updating String(), you probably want to also update SafeMessage().
 func (t Transaction) String() string {
 	var buf bytes.Buffer
 	// Compute priority as a floating point number from 0-100 for readability.
@@ -1052,6 +1056,27 @@ func (t Transaction) String() string {
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f stat=%s epo=%d "+
 		"ts=%s orig=%s max=%s wto=%t seq=%d",
 		t.Short(), Key(t.Key), t.Writing, floatPri, t.Status, t.Epoch, t.Timestamp,
+		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
+	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
+		fmt.Fprintf(&buf, " int=%d", ni)
+	}
+	return buf.String()
+}
+
+// SafeMessage implements the SafeMessager interface.
+//
+// This method should be kept largely synchronized with String(), except that it
+// can't include sensitive info (e.g. the transaction key).
+func (t Transaction) SafeMessage() string {
+	var buf bytes.Buffer
+	// Compute priority as a floating point number from 0-100 for readability.
+	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
+	if len(t.Name) > 0 {
+		fmt.Fprintf(&buf, "%q ", t.Name)
+	}
+	fmt.Fprintf(&buf, "id=%s rw=%t pri=%.8f stat=%s epo=%d "+
+		"ts=%s orig=%s max=%s wto=%t seq=%d",
+		t.Short(), t.Writing, floatPri, t.Status, t.Epoch, t.Timestamp,
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)

@@ -444,7 +444,9 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 	// status. That response is supposed to have closed the txnHeartbeat.
 	if h.mu.txn.Status != roachpb.PENDING {
 		if h.mu.txnEnd != nil {
-			log.Fatalf(ctx, "txn status: %s, but heartbeat loop hasn't been signaled to stop", h.mu.txn.Status)
+			log.Fatalf(ctx,
+				"txn committed or aborted but heartbeat loop hasn't been signaled to stop. txn: %s",
+				h.mu.txn)
 		}
 		return false
 	}
