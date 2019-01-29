@@ -49,7 +49,7 @@ func TestProcessExpression(t *testing.T) {
 	h := tree.MakeIndexedVarHelper(testVarContainer{}, 4)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
-	semaCtx := tree.MakeSemaContext(false)
+	semaCtx := tree.MakeSemaContext()
 	expr, err := processExpression(e, &evalCtx, &semaCtx, &h)
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestProcessExpressionConstantEval(t *testing.T) {
 	h := tree.MakeIndexedVarHelper(nil, 0)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
-	semaCtx := tree.MakeSemaContext(false)
+	semaCtx := tree.MakeSemaContext()
 	expr, err := processExpression(e, &evalCtx, &semaCtx, &h)
 	if err != nil {
 		t.Fatal(err)

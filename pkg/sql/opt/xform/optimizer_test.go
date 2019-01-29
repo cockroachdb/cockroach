@@ -45,7 +45,7 @@ func TestDetachMemo(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	semaCtx := tree.MakeSemaContext()
 	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
 		t.Fatal(err)
 	}

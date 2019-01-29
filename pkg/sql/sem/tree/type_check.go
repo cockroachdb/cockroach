@@ -48,12 +48,6 @@ type SemaContext struct {
 	// already.
 	SearchPath sessiondata.SearchPath
 
-	// privileged, if true, enables "unsafe" builtins, e.g. those
-	// from the crdb_internal namespace. Must be set only for
-	// the root user.
-	// TODO(knz): this attribute can be moved to EvalContext pending #15363.
-	privileged bool
-
 	// AsOfTimestamp denotes the explicit AS OF SYSTEM TIME timestamp for the
 	// query, if any. If the query is not an AS OF SYSTEM TIME query,
 	// AsOfTimestamp is nil.
@@ -189,10 +183,8 @@ func (sp *ScalarProperties) Clear() {
 // expressions.
 // Note: if queries with placeholders are going to be used,
 // SemaContext.Placeholders.Init must be called separately.
-func MakeSemaContext(privileged bool) SemaContext {
-	return SemaContext{
-		privileged: privileged,
-	}
+func MakeSemaContext() SemaContext {
+	return SemaContext{}
 }
 
 // isUnresolvedPlaceholder provides a nil-safe method to determine whether expr is an
@@ -664,7 +656,6 @@ var (
 	errInvalidMaxUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MAXVALUE can only appear within a range partition expression")
 	errInvalidMinUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MINVALUE can only appear within a range partition expression")
 	errPrivateFunction      = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "function reserved for internal use")
-	errInsufficientPriv     = pgerror.NewError(pgerror.CodeInsufficientPrivilegeError, "insufficient privilege")
 )
 
 // NewAggInAggError creates an error for the case when an aggregate function is
@@ -712,12 +703,6 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 	if def.Private {
 		return errors.Wrapf(errPrivateFunction, "%s()", def.Name)
 	}
-	// Check that the built-in is allowed for the current user.
-	// TODO(knz): this check can be moved to evaluation time pending #15363.
-	if def.Privileged && (sc == nil || !sc.privileged) {
-		return errors.Wrapf(errInsufficientPriv, "%s()", def.Name)
-	}
-
 	if sc == nil {
 		// We can't check anything further. Give up.
 		return nil

@@ -71,7 +71,7 @@ func TestIndexConstraints(t *testing.T) {
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		ctx := context.Background()
-		semaCtx := tree.MakeSemaContext(false /* privileged */)
+		semaCtx := tree.MakeSemaContext()
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
@@ -254,7 +254,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			semaCtx := tree.MakeSemaContext(false /* privileged */)
+			semaCtx := tree.MakeSemaContext()
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
 

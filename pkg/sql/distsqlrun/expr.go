@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -160,7 +159,7 @@ func (eh *exprHelper) init(
 		return nil
 	}
 	var err error
-	semaContext := tree.MakeSemaContext(evalCtx.SessionData.User == security.RootUser)
+	semaContext := tree.MakeSemaContext()
 	eh.expr, err = processExpression(expr, evalCtx, &semaContext, &eh.vars)
 	if err != nil {
 		return err
