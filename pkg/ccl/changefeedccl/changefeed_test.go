@@ -709,6 +709,29 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
 }
 
+// Regression test for #34314
+func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE after_backfill (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO after_backfill VALUES (0)`)
+		sqlDB.Exec(t, `ALTER TABLE after_backfill ADD COLUMN b INT DEFAULT 1`)
+		sqlDB.Exec(t, `INSERT INTO after_backfill VALUES (2, 3)`)
+		afterBackfill := f.Feed(t, `CREATE CHANGEFEED FOR after_backfill`)
+		defer afterBackfill.Close(t)
+		assertPayloads(t, afterBackfill, []string{
+			`after_backfill: [0]->{"a": 0, "b": 1}`,
+			`after_backfill: [2]->{"a": 2, "b": 3}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
+}
+
 func TestChangefeedInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
