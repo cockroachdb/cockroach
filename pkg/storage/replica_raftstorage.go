@@ -212,7 +212,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := rsl.LoadTruncatedState(ctx, e)
+	ts, err := rsl.LoadLegacyRaftTruncatedState(ctx, e)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +281,7 @@ func term(
 	// sideloaded entries. We only need the term, so this is what we do.
 	ents, err := entries(ctx, rsl, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, math.MaxUint64 /* maxBytes */)
 	if err == raft.ErrCompacted {
-		ts, err := rsl.LoadTruncatedState(ctx, eng)
+		ts, err := rsl.LoadLegacyRaftTruncatedState(ctx, eng)
 		if err != nil {
 			return 0, err
 		}
@@ -318,7 +318,7 @@ func (r *Replica) raftTruncatedStateLocked(
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
-	ts, err := r.mu.stateLoader.LoadTruncatedState(ctx, r.store.Engine())
+	ts, err := r.mu.stateLoader.LoadLegacyRaftTruncatedState(ctx, r.store.Engine())
 	if err != nil {
 		return ts, err
 	}
