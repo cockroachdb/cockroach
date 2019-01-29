@@ -178,9 +178,8 @@ type queueImpl interface {
 		context.Context, hlc.Timestamp, *Replica, *config.SystemConfig,
 	) (shouldQueue bool, priority float64)
 
-	// process accepts lease status, a replica, and the system config
-	// and executes queue-specific work on it. The Replica is guaranteed
-	// to be initialized.
+	// process accepts a replica, and the system config and executes
+	// queue-specific work on it. The Replica is guaranteed to be initialized.
 	process(context.Context, *Replica, *config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
@@ -638,17 +637,17 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 					annotatedCtx := repl.AnnotateCtx(ctx)
 					if stopper.RunAsyncTask(
 						annotatedCtx, fmt.Sprintf("storage.%s: processing replica", bq.name),
-						func(annotatedCtx context.Context) {
+						func(ctx context.Context) {
 							// Release semaphore when finished processing.
 							defer func() { <-bq.processSem }()
 
 							start := timeutil.Now()
-							err := bq.processReplica(annotatedCtx, repl)
+							err := bq.processReplica(ctx, repl)
 
 							duration := timeutil.Since(start)
-							bq.recordProcessDuration(annotatedCtx, duration)
+							bq.recordProcessDuration(ctx, duration)
 
-							bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
+							bq.finishProcessingReplica(ctx, stopper, repl, err)
 						}) != nil {
 						// Release semaphore on task failure.
 						<-bq.processSem
@@ -693,15 +692,15 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 // processReplica processes a single replica. This should not be
 // called externally to the queue. bq.mu.Lock must not be held
 // while calling this method.
-func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) error {
+//
+// ctx should already be annotated by repl.AnnotateCtx().
+func (bq *baseQueue) processReplica(ctx context.Context, repl *Replica) error {
 	// Load the system config if it's needed.
 	var cfg *config.SystemConfig
 	if bq.needsSystemConfig {
 		cfg = bq.gossip.GetSystemConfig()
 		if cfg == nil {
-			if log.V(1) {
-				log.Infof(queueCtx, "no system config available. skipping")
-			}
+			log.VEventf(ctx, 1, "no system config available. skipping")
 			return nil
 		}
 	}
@@ -709,23 +708,15 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 	if cfg != nil && bq.requiresSplit(cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
-		if log.V(3) {
-			log.Infof(queueCtx, "split needed; skipping")
-		}
+		log.VEventf(ctx, 3, "split needed; skipping")
 		return nil
 	}
 
-	// Putting a span in a context means that events will no longer go to the
-	// event log. Use queueCtx for events that are intended for the event log.
-	ctx, span := bq.AnnotateCtxWithSpan(queueCtx, bq.name)
+	ctx, span := bq.AnnotateCtxWithSpan(ctx, bq.name)
 	defer span.Finish()
-	// Also add the Replica annotations to ctx.
-	ctx = repl.AnnotateCtx(ctx)
 	ctx, cancel := context.WithTimeout(ctx, bq.processTimeout)
 	defer cancel()
-	if log.V(1) {
-		log.Infof(ctx, "processing replica")
-	}
+	log.VEventf(ctx, 1, "processing replica")
 
 	if !repl.IsInitialized() {
 		// We checked this when adding the replica, but we need to check it again
@@ -735,9 +726,7 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 
 	if reason, err := repl.IsDestroyed(); err != nil {
 		if !bq.queueConfig.processDestroyedReplicas || reason == destroyReasonRemoved {
-			if log.V(3) {
-				log.Infof(queueCtx, "replica destroyed (%s); skipping", err)
-			}
+			log.VEventf(ctx, 3, "replica destroyed (%s); skipping", err)
 			return nil
 		}
 	}
@@ -749,10 +738,7 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 		if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
 			switch v := pErr.GetDetail().(type) {
 			case *roachpb.NotLeaseHolderError, *roachpb.RangeNotFoundError:
-				if log.V(3) {
-					log.Infof(queueCtx, "%s; skipping", v)
-				}
-				log.Eventf(ctx, "%s; skipping", v)
+				log.VEventf(ctx, 3, "%s; skipping", v)
 				return nil
 			default:
 				log.VErrEventf(ctx, 2, "could not obtain lease: %s", pErr)
@@ -761,15 +747,11 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 		}
 	}
 
-	if log.V(3) {
-		log.Infof(queueCtx, "processing")
-	}
+	log.VEventf(ctx, 3, "processing...")
 	if err := bq.impl.process(ctx, repl, cfg); err != nil {
 		return err
 	}
-	if log.V(3) {
-		log.Infof(ctx, "done")
-	}
+	log.VEventf(ctx, 3, "processing... done")
 	bq.successes.Inc(1)
 	return nil
 }
@@ -915,9 +897,9 @@ func (bq *baseQueue) addToPurgatoryLocked(
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if stopper.RunTask(
 							annotatedCtx, fmt.Sprintf("storage.%s: purgatory processing replica", bq.name),
-							func(annotatedCtx context.Context) {
-								err := bq.processReplica(annotatedCtx, repl)
-								bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
+							func(ctx context.Context) {
+								err := bq.processReplica(ctx, repl)
+								bq.finishProcessingReplica(ctx, stopper, repl, err)
 							}) != nil {
 							return
 						}
