@@ -47,7 +47,7 @@ func (p *planner) prepareUsingOptimizer(
 	}
 
 	var opc optPlanningCtx
-	opc.init(p)
+	opc.init(p, stmt.AST)
 
 	if opc.useCache {
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, stmt.SQL)
@@ -127,7 +127,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) (_ *planTop, isCorrelat
 	}
 
 	var opc optPlanningCtx
-	opc.init(p)
+	opc.init(p, stmt.AST)
 
 	execMemo, isCorrelated, err := opc.buildExecMemo(ctx)
 	if err != nil {
@@ -186,20 +186,32 @@ type optPlanningCtx struct {
 	flags planFlags
 }
 
-func (opc *optPlanningCtx) init(p *planner) {
+func (opc *optPlanningCtx) init(p *planner, AST tree.Statement) {
 	opc.p = p
 	opc.catalog.init(p.execCfg.TableStatsCache, p)
 	p.optimizer.Init(p.EvalContext())
-
-	// If the current transaction has uncommitted DDL statements, we cannot rely
-	// on descriptor versions for detecting a "stale" memo. This is because
-	// descriptor versions are bumped at most once per transaction, even if there
-	// are multiple DDL operations; and transactions can be aborted leading to
-	// potential reuse of versions. To avoid these issues, we prevent saving a
-	// memo (for prepare) or reusing a saved memo (for execute).
-	opc.allowMemoReuse = !p.Tables().hasUncommittedTables()
-	opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 	opc.flags = planFlagOptUsed
+
+	// We only allow memo caching for SELECT/INSERT/UPDATE/DELETE. We could
+	// support it for all statements in principle, but it would increase the
+	// surface of potential issues (conditions we need to detect to invalidate a
+	// cached memo).
+	switch AST.(type) {
+	case *tree.ParenSelect, *tree.Select, *tree.SelectClause, *tree.UnionClause, *tree.ValuesClause,
+		*tree.Insert, *tree.Update, *tree.Delete:
+		// If the current transaction has uncommitted DDL statements, we cannot rely
+		// on descriptor versions for detecting a "stale" memo. This is because
+		// descriptor versions are bumped at most once per transaction, even if there
+		// are multiple DDL operations; and transactions can be aborted leading to
+		// potential reuse of versions. To avoid these issues, we prevent saving a
+		// memo (for prepare) or reusing a saved memo (for execute).
+		opc.allowMemoReuse = !p.Tables().hasUncommittedTables()
+		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
+
+	default:
+		opc.allowMemoReuse = false
+		opc.useCache = false
+	}
 }
 
 func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
