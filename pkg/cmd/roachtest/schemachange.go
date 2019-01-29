@@ -294,16 +294,30 @@ func findIndexProblem(
 }
 
 func registerSchemaChangeIndexTPCC1000(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2))
+	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2, false /* builkInsert */))
 }
 
 func registerSchemaChangeIndexTPCC100(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15))
+	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15, false /* builkInsert */))
 }
 
-func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
+func registerSchemaChangeBulkInsertIndexTPCC1000(r *registry) {
+	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2, true /* builkInsert */))
+}
+
+func registerSchemaChangeBulkInsertIndexTPCC100(r *registry) {
+	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15, true /* builkInsert */))
+}
+
+func makeIndexAddTpccTest(
+	numNodes, warehouses int, length time.Duration, bulkInsert bool,
+) testSpec {
+	name := fmt.Sprintf("schemachange/index/tpcc-%d", warehouses)
+	if bulkInsert {
+		name = fmt.Sprintf("schemachange/bulkindex/tpcc-%d", warehouses)
+	}
 	return testSpec{
-		Name:    fmt.Sprintf("schemachange/index/tpcc-%d", warehouses),
+		Name:    name,
 		Cluster: makeClusterSpec(numNodes),
 		Timeout: length * 2,
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -311,6 +325,15 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 				Warehouses: warehouses,
 				Extra:      "--wait=false --tolerate-errors",
 				During: func(ctx context.Context) error {
+					if bulkInsert {
+						db := c.Conn(ctx, 1)
+						if _, err := db.Exec(`
+SET CLUSTER SETTING schemachanger.bulk_index_backfill.enabled = true
+`); err != nil {
+							t.Fatal(err)
+						}
+						db.Close()
+					}
 					return runAndLogStmts(ctx, t, c, "addindex", []string{
 						`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
 						// TODO(vivek): Enable these once ADD INDEX performance has improved.
