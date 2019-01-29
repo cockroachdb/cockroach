@@ -528,7 +528,7 @@ func (s *Store) canApplySnapshotLocked(
 				// weren't so difficult).
 				//
 				// A consequence of letting this snapshot through is opening this
-				// replica up to the possiblity of erroneous replicaGC. This is
+				// replica up to the possibility of erroneous replicaGC. This is
 				// because it will retain the replicaID of the current replica,
 				// which is going to be initialized after the snapshot (and thus
 				// gc'able).

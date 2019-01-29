@@ -1029,7 +1029,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			if reason == reasonSnapshotApplied {
 				p.finishApplication(proposalResult{Err: roachpb.NewError(
 					roachpb.NewAmbiguousResultError(
-						fmt.Sprintf("unable to determin whether command was applied via snapshot")))})
+						fmt.Sprintf("unable to determine whether command was applied via snapshot")))})
 			} else {
 				p.finishApplication(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
 			}
