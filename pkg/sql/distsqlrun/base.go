@@ -507,14 +507,14 @@ type RowBuffer struct {
 	mu struct {
 		syncutil.Mutex
 
+		// producerClosed is used when the RowBuffer is used as a RowReceiver; it is
+		// set to true when the sender calls ProducerDone().
+		producerClosed bool
+
 		// records represent the data that has been buffered. Push appends a row
 		// to the back, Next removes a row from the front.
 		records []BufferedRecord
 	}
-
-	// ProducerClosed is used when the RowBuffer is used as a RowReceiver; it is
-	// set to true when the sender calls ProducerDone().
-	ProducerClosed bool
 
 	// Done is used when the RowBuffer is used as a RowSource; it is set to true
 	// when the receiver read all the rows.
@@ -548,6 +548,8 @@ type RowBufferArgs struct {
 	// If it returns an empty row and metadata, then RowBuffer.Next() is allowed
 	// to run normally. Otherwise, the values are returned from RowBuffer.Next().
 	OnNext func(*RowBuffer) (sqlbase.EncDatumRow, *ProducerMetadata)
+	// OnPush, if specified, is called as the first thing in the Push() method.
+	OnPush func(sqlbase.EncDatumRow, *ProducerMetadata)
 }
 
 // NewRowBuffer creates a RowBuffer with the given schema and initial rows.
@@ -568,15 +570,18 @@ func NewRowBuffer(
 
 // Push is part of the RowReceiver interface.
 func (rb *RowBuffer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
-	if rb.ProducerClosed {
+	if rb.args.OnPush != nil {
+		rb.args.OnPush(row, meta)
+	}
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if rb.mu.producerClosed {
 		panic("Push called after ProducerDone")
 	}
 	// We mimic the behavior of RowChannel.
 	storeRow := func() {
 		rowCopy := append(sqlbase.EncDatumRow(nil), row...)
-		rb.mu.Lock()
 		rb.mu.records = append(rb.mu.records, BufferedRecord{Row: rowCopy, Meta: meta})
-		rb.mu.Unlock()
 	}
 	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
 	if rb.args.AccumulateRowsWhileDraining {
@@ -595,12 +600,23 @@ func (rb *RowBuffer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Consu
 	return status
 }
 
+// ProducerClosed is a utility function used by tests to check whether the
+// RowBuffer has had ProducerDone() called on it.
+func (rb *RowBuffer) ProducerClosed() bool {
+	rb.mu.Lock()
+	c := rb.mu.producerClosed
+	rb.mu.Unlock()
+	return c
+}
+
 // ProducerDone is part of the RowSource interface.
 func (rb *RowBuffer) ProducerDone() {
-	if rb.ProducerClosed {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if rb.mu.producerClosed {
 		panic("RowBuffer already closed")
 	}
-	rb.ProducerClosed = true
+	rb.mu.producerClosed = true
 }
 
 // Types is part of the RowReceiver interface.

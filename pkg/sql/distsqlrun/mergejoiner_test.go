@@ -716,7 +716,7 @@ func TestMergeJoiner(t *testing.T) {
 
 			m.Run(context.Background())
 
-			if !out.ProducerClosed {
+			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
 
@@ -822,7 +822,7 @@ func TestConsumerClosed(t *testing.T) {
 
 			m.Run(context.Background())
 
-			if !out.ProducerClosed {
+			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
 		})
