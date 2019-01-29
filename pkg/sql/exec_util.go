@@ -1660,8 +1660,8 @@ func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 	m.data.ZigzagJoinEnabled = val
 }
 
-func (m *sessionDataMutator) SetReorderJoins(val bool) {
-	m.data.ReorderJoins = val
+func (m *sessionDataMutator) SetJoinLimit(val int) {
+	m.data.JoinLimit = val
 }
 
 func (m *sessionDataMutator) SetVectorize(val sessiondata.VectorizeExecMode) {

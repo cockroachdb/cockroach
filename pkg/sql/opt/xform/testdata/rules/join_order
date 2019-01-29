@@ -50,7 +50,7 @@ TABLE abc
  └── INDEX primary
       └── a int not null
 
-opt reorder-joins
+opt join-limit=3
 SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 inner-join (lookup bx)
@@ -74,7 +74,7 @@ inner-join (lookup bx)
  │    └── filters (true)
  └── filters (true)
 
-opt reorder-joins
+opt join-limit=3
 SELECT * FROM bx, abc, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 inner-join (lookup bx)
@@ -98,7 +98,7 @@ inner-join (lookup bx)
  │    └── filters (true)
  └── filters (true)
 
-opt reorder-joins
+opt join-limit=3
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 inner-join (lookup bx)
@@ -122,7 +122,7 @@ inner-join (lookup bx)
  │    └── filters (true)
  └── filters (true)
 
-memo reorder-joins
+memo join-limit=3
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
 memo (optimized, ~17KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8])
@@ -179,7 +179,7 @@ memo (optimized, ~17KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8]
  ├── G21: (variable a)
  └── G22: (const 1)
 
-opt reorder-joins
+opt join-limit=4
 SELECT * FROM bx, cy, dz, abc WHERE a = 1
 ----
 inner-join
@@ -261,7 +261,7 @@ memo (optimized, ~11KB, required=[presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,
  ├── G12: (variable a)
  └── G13: (const 1)
 
-memo reorder-joins
+memo join-limit=4
 SELECT * FROM bx, cy, dz, abc WHERE a = 1
 ----
 memo (optimized, ~25KB, required=[presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,c:9,d:10])

@@ -138,6 +138,10 @@ type Memo struct {
 
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
+
+	// numJoins is the number of joins in the memo, reachable from the current
+	// rootExpr.
+	numJoins int
 }
 
 // Init initializes a new empty memo instance, or resets existing state so it
@@ -189,6 +193,21 @@ func (m *Memo) RootProps() *physical.Required {
 	return m.rootProps
 }
 
+// countJoins returns the number of join operations in the memo starting
+// from the given expression.
+// TODO(justin): make this bail early if it goes over the limit: if
+// the join limit is 0, we shouldn't traverse the whole tree.
+func (m *Memo) countJoins(e opt.Expr) int {
+	count := 0
+	if opt.IsJoinOp(e) {
+		count++
+	}
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		count += m.countJoins(e.Child(i))
+	}
+	return count
+}
+
 // SetRoot stores the root memo expression when it is a relational expression,
 // and also stores the physical properties required of the root group.
 func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
@@ -196,6 +215,8 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 	if m.rootProps != phys {
 		m.rootProps = m.InternPhysicalProps(phys)
 	}
+
+	m.numJoins = m.countJoins(e)
 
 	// Once memo is optimized, release reference to the eval context and free up
 	// the memory used by the interner.
@@ -320,4 +341,9 @@ func (m *Memo) IsOptimized() bool {
 func (m *Memo) NextID() opt.ScalarID {
 	m.curID++
 	return m.curID
+}
+
+// NumJoins returns the number of joins in the memo at the current root expr.
+func (m *Memo) NumJoins() int {
+	return m.numJoins
 }
