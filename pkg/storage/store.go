@@ -885,7 +885,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		s.setReplicaGCQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableReplicateQueue {
-		s.setReplicateQueueActive(false)
+		s.SetReplicateQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableSplitQueue {
 		s.setSplitQueueActive(false)
@@ -4529,7 +4529,10 @@ func (s *Store) setRaftLogQueueActive(active bool) {
 func (s *Store) setReplicaGCQueueActive(active bool) {
 	s.replicaGCQueue.SetDisabled(!active)
 }
-func (s *Store) setReplicateQueueActive(active bool) {
+
+// SetReplicateQueueActive controls the replication queue. Only
+// intended for tests.
+func (s *Store) SetReplicateQueueActive(active bool) {
 	s.replicateQueue.SetDisabled(!active)
 }
 func (s *Store) setSplitQueueActive(active bool) {
