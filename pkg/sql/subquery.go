@@ -16,14 +16,11 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -54,147 +51,6 @@ func (p *planner) EvalSubquery(expr *tree.Subquery) (result tree.Datum, err erro
 		return nil, pgerror.NewAssertionErrorf("subquery %d (%q) not started prior to evaluation", expr.Idx, expr)
 	}
 	return s.result, nil
-}
-
-func (p *planTop) evalSubqueries(params runParams) error {
-	for i := range p.subqueryPlans {
-		sq := &p.subqueryPlans[i]
-		if sq.started {
-			// Already started. Nothing to do.
-			continue
-		}
-
-		if !sq.expanded {
-			return pgerror.NewAssertionErrorf("subquery %d (%q) was not expanded properly", i+1, sq.subquery)
-		}
-
-		if log.V(2) {
-			log.Infof(params.ctx, "starting subquery %d (%q)", i+1, sq.subquery)
-		}
-
-		if err := startPlan(params, sq.plan); err != nil {
-			return err
-		}
-		sq.started = true
-		res, err := sq.doEval(params)
-		if err != nil {
-			return err
-		}
-		sq.result = res
-	}
-	return nil
-}
-
-func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
-	switch s.execMode {
-	case distsqlrun.SubqueryExecModeExists:
-		// For EXISTS expressions, all we want to know is if there is at least one
-		// row.
-		hasRow, err := s.plan.Next(params)
-		if err != nil {
-			return nil, err
-		}
-		return tree.MakeDBool(tree.DBool(hasRow)), nil
-
-	case distsqlrun.SubqueryExecModeAllRows, distsqlrun.SubqueryExecModeAllRowsNormalized:
-		var rows tree.DTuple
-		next, err := s.plan.Next(params)
-		for ; next; next, err = s.plan.Next(params) {
-			values := s.plan.Values()
-			switch len(values) {
-			case 1:
-				// This seems hokey, but if we don't do this then the subquery expands
-				// to a tuple of tuples instead of a tuple of values and an expression
-				// like "k IN (SELECT foo FROM bar)" will fail because we're comparing
-				// a single value against a tuple.
-				rows.D = append(rows.D, values[0])
-			default:
-				// The result from plan.Values() is only valid until the next call to
-				// plan.Next(), so make a copy.
-				typ := s.subquery.ResolvedType().(types.TTuple)
-				valuesCopy := tree.NewDTupleWithLen(typ, len(values))
-				copy(valuesCopy.D, values)
-				rows.D = append(rows.D, valuesCopy)
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		if ok, dir := s.subqueryTupleOrdering(); ok {
-			if dir == encoding.Descending {
-				rows.D.Reverse()
-			}
-			rows.SetSorted()
-		}
-		if s.execMode == distsqlrun.SubqueryExecModeAllRowsNormalized {
-			rows.Normalize(params.EvalContext())
-		}
-		return &rows, nil
-
-	case distsqlrun.SubqueryExecModeOneRow:
-		hasRow, err := s.plan.Next(params)
-		if err != nil {
-			return nil, err
-		}
-		if !hasRow {
-			return tree.DNull, nil
-		}
-		values := s.plan.Values()
-		switch len(values) {
-		case 1:
-			result = values[0]
-		default:
-			// We can skip initializing the Types sub-field here: it will be
-			// populated upon first access to DTuple.ResolvedType(), as per
-			// contract of DTuple.typ.
-			typ := s.subquery.ResolvedType().(types.TTuple)
-			valuesCopy := tree.NewDTupleWithLen(typ, len(values))
-			copy(valuesCopy.D, values)
-			result = valuesCopy
-		}
-		return result, nil
-
-	default:
-		panic(fmt.Sprintf("unexpected subqueryExecMode: %d", s.execMode))
-	}
-}
-
-// subqueryTupleOrdering returns whether the rows of the subquery are ordered
-// such that the resulting subquery tuple can be considered fully sorted.
-// For this to happen, the columns in the subquery must be sorted in the same
-// direction and with the same order of precedence that the tuple will have. The
-// method will return a boolean specifying whether the result is in sorted order,
-// and if so, will specify which direction it is sorted in.
-//
-// TODO(knz): This will not work for subquery renders that are not row dependent
-// like
-//   SELECT 1 IN (SELECT 1 ORDER BY 1)
-// because even if they are included in an ORDER BY clause, they will not be part
-// of the plan.Ordering().
-func (s *subquery) subqueryTupleOrdering() (bool, encoding.Direction) {
-	// Columns must be sorted in the order that they appear in the render
-	// and which they will later appear in the resulting tuple.
-	desired := make(sqlbase.ColumnOrdering, len(planColumns(s.plan)))
-	for i := range desired {
-		desired[i] = sqlbase.ColumnOrderInfo{
-			ColIdx:    i,
-			Direction: encoding.Ascending,
-		}
-	}
-
-	// Check Ascending direction.
-	order := planPhysicalProps(s.plan)
-	match := order.computeMatch(desired)
-	if match == len(desired) {
-		return true, encoding.Ascending
-	}
-	// Check Descending direction.
-	match = order.reverse().computeMatch(desired)
-	if match == len(desired) {
-		return true, encoding.Descending
-	}
-	return false, 0
 }
 
 // analyzeSubqueries finds tree.Subquery syntax nodes; for each one, it builds

@@ -20,7 +20,7 @@ union      ·      ·
 query TTT
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
-append     ·      ·
+union      ·      ·
  ├── scan  ·      ·
  │         table  uniontest@primary
  │         spans  ALL

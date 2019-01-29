@@ -2429,12 +2429,6 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 				// Don't continue recursing into explain nodes - they need to be left
 				// alone since they handle their own planning later.
 				return false, nil
-			case *deleteNode:
-				// DeleteNode currently uses its scanNode directly, if it exists. This
-				// is a bit tough to fix, so for now, don't try to recurse through
-				// deleteNodes.
-				// TODO(jordan): fix deleteNode to stop doing that.
-				return false, nil
 			}
 			if !seenTop {
 				// We know we're wrapping the first node, so ignore it.

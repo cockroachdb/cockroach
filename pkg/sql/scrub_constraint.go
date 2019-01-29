@@ -47,10 +47,9 @@ type sqlCheckConstraintCheckOperation struct {
 // sqlCheckConstraintCheckRun contains the run-time state for
 // sqlCheckConstraintCheckOperation during local execution.
 type sqlCheckConstraintCheckRun struct {
-	started     bool
-	rows        *sqlbase.RowContainer
-	rowIndex    int
-	hasRowsLeft bool
+	started  bool
+	rows     *sqlbase.RowContainer
+	rowIndex int
 }
 
 func newSQLCheckConstraintCheckOperation(
@@ -127,10 +126,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 		o.columns = append(o.columns, &o.tableDesc.Columns[i])
 	}
 	// Find the row indexes for all of the primary index columns.
-	if o.primaryColIdxs, err = getPrimaryColIdxs(o.tableDesc, o.columns); err != nil {
-		return err
-	}
-
+	o.primaryColIdxs, err = getPrimaryColIdxs(o.tableDesc, o.columns)
 	return err
 }
 

@@ -54,6 +54,9 @@ func (p *planner) validateCheckExpr(
 	}
 	defer plan.Close(ctx)
 	rows, err := p.runWithDistSQL(ctx, plan)
+	if err != nil {
+		return err
+	}
 
 	if rows != nil && rows.Len() > 0 {
 		defer rows.Close(ctx)
@@ -129,6 +132,9 @@ func (p *planner) validateForeignKey(
 	defer plan.Close(ctx)
 
 	rows, err := p.runWithDistSQL(ctx, plan)
+	if err != nil {
+		return err
+	}
 
 	if rows != nil && rows.Len() > 0 {
 		defer rows.Close(ctx)

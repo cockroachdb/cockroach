@@ -70,15 +70,15 @@ render                   ·         ·  (a)  a=CONST
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 a FROM (SELECT 1 AS s UNION ALL SELECT 2 AS s)
 ----
-render                   ·         ·     (a)           a=CONST
- │                       render 0  1     ·             ·
- └── append              ·         ·     (s[omitted])  ·
-      ├── render         ·         ·     (s[omitted])  ·
-      │    │             render 0  NULL  ·             ·
-      │    └── emptyrow  ·         ·     ()            ·
-      └── render         ·         ·     (s[omitted])  ·
-           │             render 0  NULL  ·             ·
-           └── emptyrow  ·         ·     ()            ·
+render                   ·         ·  (a)  a=CONST
+ │                       render 0  1  ·    ·
+ └── union               ·         ·  (s)  ·
+      ├── render         ·         ·  (s)  s=CONST
+      │    │             render 0  2  ·    ·
+      │    └── emptyrow  ·         ·  ()   ·
+      └── render         ·         ·  (s)  s=CONST
+           │             render 0  1  ·    ·
+           └── emptyrow  ·         ·  ()   ·
 
 # Propagation through WITH ORDINALITY.
 query TTTTT
