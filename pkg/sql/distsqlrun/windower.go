@@ -786,6 +786,20 @@ func (ir indexedRow) GetDatums(startColIdx, endColIdx int) tree.Datums {
 	return datums
 }
 
+// CreateWindowerSpecFunc creates a WindowerSpec_Func based on the function
+// name or returns an error if unknown function name is provided.
+func CreateWindowerSpecFunc(funcStr string) (distsqlpb.WindowerSpec_Func, error) {
+	if aggBuiltin, ok := distsqlpb.AggregatorSpec_Func_value[funcStr]; ok {
+		aggSpec := distsqlpb.AggregatorSpec_Func(aggBuiltin)
+		return distsqlpb.WindowerSpec_Func{AggregateFunc: &aggSpec}, nil
+	} else if winBuiltin, ok := distsqlpb.WindowerSpec_WindowFunc_value[funcStr]; ok {
+		winSpec := distsqlpb.WindowerSpec_WindowFunc(winBuiltin)
+		return distsqlpb.WindowerSpec_Func{WindowFunc: &winSpec}, nil
+	} else {
+		return distsqlpb.WindowerSpec_Func{}, errors.Errorf("unknown aggregate/window function %s", funcStr)
+	}
+}
+
 var _ distsqlpb.DistSQLSpanStats = &WindowerStats{}
 
 const windowerTagPrefix = "windower."
