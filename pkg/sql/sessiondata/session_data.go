@@ -108,7 +108,7 @@ type DataConversionConfig struct {
 // GetFloatPrec computes a precision suitable for a call to
 // strconv.FormatFloat() or for use with '%.*g' in a printf-like
 // function.
-func (c DataConversionConfig) GetFloatPrec() int {
+func (c *DataConversionConfig) GetFloatPrec() int {
 	// The user-settable parameter ExtraFloatDigits indicates the number
 	// of digits to be used to format the float value. PostgreSQL
 	// combines this with %g.
@@ -137,6 +137,18 @@ func (c DataConversionConfig) GetFloatPrec() int {
 		nDigits = 1
 	}
 	return nDigits
+}
+
+// Equals returns true if the two DataConversionConfigs are identical.
+func (c *DataConversionConfig) Equals(other *DataConversionConfig) bool {
+	if c.BytesEncodeFormat != other.BytesEncodeFormat ||
+		c.ExtraFloatDigits != other.ExtraFloatDigits {
+		return false
+	}
+	if c.Location != other.Location && c.Location.String() != other.Location.String() {
+		return false
+	}
+	return true
 }
 
 // Copy performs a deep copy of SessionData.
