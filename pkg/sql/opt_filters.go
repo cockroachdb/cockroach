@@ -380,6 +380,7 @@ func (p *planner) propagateFilters(
 	case *createViewNode:
 	case *createSequenceNode:
 	case *createStatsNode:
+	case *deleteRangeNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:

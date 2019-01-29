@@ -57,14 +57,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 query TTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-tree            field     description
-count           ·         ·
- └── delete     ·         ·
-      │         from      unindexed
-      │         strategy  fast deleter
-      └── scan  ·         ·
-·               table     unindexed@primary
-·               spans     ALL
+tree          field  description
+delete range  ·      ·
+·             from   unindexed
+·             spans  -
 
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
@@ -94,6 +90,31 @@ count                ·         ·
 ·                    table     unindexed@primary
 ·                    spans     ALL
 ·                    filter    v = 5
+
+# Check fast DELETE.
+query TTT
+EXPLAIN DELETE FROM unindexed WHERE k > 0
+----
+delete range  ·      ·
+·             from   unindexed
+·             spans  /1-
+
+# Check fast DELETE with reverse scans (not supported by optimizer).
+query error DELETE statement requires LIMIT when ORDER BY is used
+EXPLAIN DELETE FROM unindexed WHERE true ORDER BY k DESC
+
+# Check that limits don't permit fast deletes.
+query TTT
+EXPLAIN DELETE FROM unindexed WHERE k > 0 LIMIT 1
+----
+count           ·         ·
+ └── delete     ·         ·
+      │         from      unindexed
+      │         strategy  deleter
+      └── scan  ·         ·
+·               table     unindexed@primary
+·               spans     /1-
+·               limit     1
 
 # TODO(andyk): Prune columns so that index-join is not necessary.
 query TTT

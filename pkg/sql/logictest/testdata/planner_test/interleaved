@@ -241,9 +241,6 @@ SET TRACING = on,kv,results; DELETE FROM a where a_id <= 7 and a_id >= 5; SET tr
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
-Scan /Table/61/1/{5-7/#}
-querying next range at /Table/61/1/5
-r20: sending batch 1 Scan to (n1,s1):1
 DelRange /Table/61/1/5 - /Table/61/1/7/NULL
 querying next range at /Table/61/1/5
 r20: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
@@ -286,9 +283,6 @@ SET TRACING = on,kv,results; DELETE FROM a; SET tracing = off
 query T
 select message FROM [SHOW KV TRACE FOR SESSION]
 ----
-Scan /Table/61/{1-2}
-querying next range at /Table/61/1
-r20: sending batch 1 Scan to (n1,s1):1
 DelRange /Table/61/1 - /Table/61/3
 querying next range at /Table/61/1
 r20: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1

@@ -85,9 +85,9 @@ func TestShowTraceReplica(t *testing.T) {
 			expected: [][]string{{`2`, `2`}},
 		},
 		{
-			// First a read to compute the deletions then a write to delete them.
+			// A write to delete the row.
 			query:    `DELETE FROM d.t2`,
-			expected: [][]string{{`2`, `2`}, {`2`, `2`}},
+			expected: [][]string{{`2`, `2`}},
 		},
 		{
 			// Admin command. We use distinct because the ALTER statement is

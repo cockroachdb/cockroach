@@ -108,6 +108,7 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *createTableNode:
 	case *createViewNode:
 	case *delayedNode:
+	case *deleteRangeNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropSequenceNode:

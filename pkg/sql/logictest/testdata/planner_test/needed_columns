@@ -182,15 +182,10 @@ count                         ·         ·         ()                        ·
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM kv WHERE k = 3
 ----
-count                ·         ·                 ()               ·
- └── delete          ·         ·                 ()               ·
-      │              from      kv                ·                ·
-      │              strategy  fast deleter      ·                ·
-      └── render     ·         ·                 (k)              k=CONST; key()
-           │         render 0  test.public.kv.k  ·                ·
-           └── scan  ·         ·                 (k, v[omitted])  k=CONST; key()
-·                    table     kv@primary        ·                ·
-·                    spans     /3-/3/#           ·                ·
+count              ·      ·        ()  ·
+ └── delete range  ·      ·        ()  ·
+·                  from   kv       ·   ·
+·                  spans  /3-/3/#  ·   ·
 
 # Ensure that propagations through a render node removes the renders
 # and properly propagates the remaining needed columns.
