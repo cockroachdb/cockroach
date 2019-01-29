@@ -92,6 +92,11 @@ func TruncateLog(
 		//
 		// Note that any sideloaded payloads that may be removed by this truncation
 		// don't matter; they're not tracked in the raft log delta.
+		//
+		// TODO(tbg): it's difficult to prove that this computation doesn't have
+		// bugs that let it diverge. It might be easier to compute the stats
+		// from scratch, stopping when 4mb (defaultRaftLogTruncationThreshold)
+		// is reached as at that point we'll truncate aggressively anyway.
 		iter := batch.NewIterator(engine.IterOptions{UpperBound: end.Key})
 		defer iter.Close()
 		// We can pass zero as nowNanos because we're only interested in SysBytes.
