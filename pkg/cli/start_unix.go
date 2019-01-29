@@ -17,6 +17,8 @@
 package cli
 
 import (
+	"context"
+	"log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -45,7 +47,12 @@ func handleSignalDuringShutdown(sig os.Signal) {
 	// Reraise the signal. os.Signal is always sysutil.Signal.
 	if err := unix.Kill(unix.Getpid(), sig.(sysutil.Signal)); err != nil {
 		// Sending a valid signal to ourselves should never fail.
-		panic(err)
+		//
+		// Unfortunately it appears (#34354) that some users
+		// run CockroachDB in containers that only support
+		// a subset of all syscalls. If this ever happens, we
+		// still need to quit immediately.
+		log.Fatalf(context.Background(), "unable to forward signal %v: %v", sig, err)
 	}
 
 	// Block while we wait for the signal to be delivered.
