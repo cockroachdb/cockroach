@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"math"
 	"runtime"
@@ -782,7 +783,7 @@ func splitAndScatter(
 		for idx, importSpanChunk := range importSpanChunks {
 			// TODO(dan): The structure between this and the below are very
 			// similar. Dedup.
-			chunkSpan, err := kr.RewriteSpan(roachpb.Span{
+			chunkSpan, err := rewriteSpan(kr, roachpb.Span{
 				Key:    importSpanChunk[0].Key,
 				EndKey: importSpanChunk[len(importSpanChunk)-1].EndKey,
 			})
@@ -829,7 +830,7 @@ func splitAndScatter(
 				for _, importSpan := range importSpanChunk {
 					idx := atomic.AddUint64(&splitScatterStarted, 1)
 
-					newSpan, err := kr.RewriteSpan(importSpan.Span)
+					newSpan, err := rewriteSpan(kr, importSpan.Span)
 					if err != nil {
 						return err
 					}
@@ -952,6 +953,41 @@ func restoreJobDescription(
 	}
 
 	return tree.AsStringWithFlags(r, tree.FmtAlwaysQualifyTableNames), nil
+}
+
+// rewriteSpan returns a span containing the rewritten start key of span.
+//
+// Start keys for the primary index of the top-level table are rewritten to the
+// just the overall start of the table. That is, /Table/51/1 becomes /Table/51.
+//
+// Any suffix of the key that does is not rewritten by kr's configured rewrites
+// is truncated. For instance if a passed span has key /Table/51/1/77#/53/2/1
+// but kr only configured with a rewrite for 51, it would return /Table/51/1/77.
+// Such span boundaries are usually due to a interleaved table which has since
+// been dropped -- any splits that happened to pick one of its rows live on, but
+// include an ID of a table that no longer exists. Since we're only going to be
+// restoring keys which match existing table, for which we do have rewrites,
+// truncating to the rewritten prefix of the key works out -- that still serves
+// to divide the keyspace of what we'll actually be restoring just fine.
+func rewriteSpan(kr *storageccl.KeyRewriter, span roachpb.Span) (roachpb.Span, error) {
+	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), span.Key...))
+	if err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite span start key: %s", span.Key)
+	}
+	if !rewritten && bytes.Equal(newKey, span.Key) {
+		// if nothing was changed, we didn't match the top-level key at all.
+		return roachpb.Span{}, errors.Errorf("no rewrite for span start key: %s", span.Key)
+	}
+	// Modify all spans that begin at the primary index to instead begin at the
+	// start of the table. That is, change a span start key from /Table/51/1 to
+	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
+	// will be created.
+	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite span start key: %s", span.Key)
+	} else if idx == 1 && len(b) == 0 {
+		newKey = keys.MakeTablePrefix(uint32(id))
+	}
+	return roachpb.Span{Key: newKey, EndKey: roachpb.Key(newKey).Next()}, nil
 }
 
 // restore imports a SQL table (or tables) from sets of non-overlapping sstable
@@ -1114,7 +1150,7 @@ func restore(
 	g.GoCtx(func(ctx context.Context) error {
 		log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
 		for readyForImportSpan := range readyForImportCh {
-			newSpan, err := kr.RewriteSpan(readyForImportSpan.Span)
+			newSpan, err := rewriteSpan(kr, readyForImportSpan.Span)
 			if err != nil {
 				return err
 			}
@@ -1147,7 +1183,8 @@ func restore(
 
 				importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
 				if pErr != nil {
-					return pErr.GoError()
+					return errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan)
+
 				}
 
 				mu.Lock()
