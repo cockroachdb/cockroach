@@ -184,6 +184,11 @@ func TestPrettyPrint(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(nil /* valDirs */, test.key), nil)
 			exp := MassagePrettyPrintedSpanForTest(test.exp, nil)
+			t.Logf(`---- test case #%d:
+input:  %q
+output: %s
+exp:    %s
+`, i+1, []byte(test.key), keyInfo, exp)
 			if exp != keyInfo {
 				t.Errorf("%d: expected %s, got %s", i, exp, keyInfo)
 			}
