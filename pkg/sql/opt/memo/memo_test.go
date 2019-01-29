@@ -115,9 +115,7 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	// Initialize context with starting values.
-	searchPath := []string{"path1", "path2"}
 	evalCtx.SessionData.Database = "t"
-	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath(searchPath)
 
 	stmt, err := parser.ParseOne("SELECT a, b+1 FROM abcview WHERE c='foo'")
 	if err != nil {
@@ -133,20 +131,43 @@ func TestMemoIsStale(t *testing.T) {
 	o.Memo().Metadata().AddSchemaDependency(catalog.Schema().Name(), catalog.Schema(), privilege.CREATE)
 	o.Memo().Metadata().AddSchema(catalog.Schema())
 
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if isStale {
-		t.Errorf("memo should not be stale")
+	stale := func() {
+		t.Helper()
+		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+			t.Fatal(err)
+		} else if !isStale {
+			t.Errorf("memo should be stale")
+		}
 	}
+
+	notStale := func() {
+		t.Helper()
+		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+			t.Fatal(err)
+		} else if isStale {
+			t.Errorf("memo should not be stale")
+		}
+	}
+
+	notStale()
 
 	// Stale location.
 	evalCtx.SessionData.DataConversion.Location = time.FixedZone("PST", -8*60*60)
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if !isStale {
-		t.Errorf("expected stale location")
-	}
+	stale()
 	evalCtx.SessionData.DataConversion.Location = time.UTC
+	notStale()
+
+	// Stale bytes encode format.
+	evalCtx.SessionData.DataConversion.BytesEncodeFormat = sessiondata.BytesEncodeBase64
+	stale()
+	evalCtx.SessionData.DataConversion.BytesEncodeFormat = sessiondata.BytesEncodeHex
+	notStale()
+
+	// Stale extra float digits.
+	evalCtx.SessionData.DataConversion.ExtraFloatDigits = 2
+	stale()
+	evalCtx.SessionData.DataConversion.ExtraFloatDigits = 0
+	notStale()
 
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
@@ -167,40 +188,25 @@ func TestMemoIsStale(t *testing.T) {
 		t.Fatalf("expected %q error, but got %+v", exp, err)
 	}
 	catalog.View(tree.NewTableName("t", "abcview")).Revoked = false
-
-	// Ensure that memo is not stale after restoring to original state.
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if isStale {
-		t.Errorf("memo should not be stale")
-	}
+	notStale()
 
 	// Table ID changes.
 	catalog.Table(tree.NewTableName("t", "abc")).TabID = 1
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if !isStale {
-		t.Errorf("expected table ID to be stale")
-	}
+	stale()
 	catalog.Table(tree.NewTableName("t", "abc")).TabID = 53
+	notStale()
 
 	// Table Version changes.
 	catalog.Table(tree.NewTableName("t", "abc")).TabVersion = 1
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if !isStale {
-		t.Errorf("expected table version to be stale")
-	}
+	stale()
 	catalog.Table(tree.NewTableName("t", "abc")).TabVersion = 0
+	notStale()
 
 	// Schema ID changes.
 	catalog.Schema().SchemaID = 2
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if !isStale {
-		t.Errorf("expected schema ID to be stale")
-	}
+	stale()
 	catalog.Schema().SchemaID = 1
+	notStale()
 
 	// User no longer has access to schema.
 	catalog.Schema().Revoked = true
@@ -208,13 +214,7 @@ func TestMemoIsStale(t *testing.T) {
 		t.Errorf("expected user not to have CREATE privilege on schema")
 	}
 	catalog.Schema().Revoked = false
-
-	// Ensure that memo is not stale after restoring to original state.
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
-		t.Fatal(err)
-	} else if isStale {
-		t.Errorf("memo should not be stale")
-	}
+	notStale()
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
