@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
@@ -530,6 +532,57 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 func (p *planner) prepareForDistSQLSupportCheck() {
 	// Trigger limit propagation.
 	p.setUnlimited(p.curPlan.plan)
+}
+
+// runWithDistSQL runs a planNode tree synchronously via DistSQL, returning the
+// results in a RowContainer. There's no streaming on this, so use sparingly.
+// In general, you should always prefer to use the internal executor if you can.
+func (p *planner) runWithDistSQL(
+	ctx context.Context, plan planNode,
+) (*rowcontainer.RowContainer, error) {
+	params := runParams{
+		ctx:             ctx,
+		extendedEvalCtx: &p.extendedEvalCtx,
+		p:               p,
+	}
+	// Create the DistSQL plan for the input.
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	log.VEvent(ctx, 1, "creating DistSQL plan")
+	physPlan, err := planCtx.ExtendedEvalCtx.DistSQLPlanner.createPlanForNode(planCtx, plan)
+	if err != nil {
+		return nil, err
+	}
+	planCtx.ExtendedEvalCtx.DistSQLPlanner.FinalizePlan(planCtx, &physPlan)
+	columns := planColumns(plan)
+
+	// Initialize a row container for the DistSQL execution engine to write into.
+	ci := sqlbase.ColTypeInfoFromResCols(columns)
+	rows := rowcontainer.NewRowContainer(*p.extendedEvalCtx.ActiveMemAcc, ci, 0 /* rowCapacity */)
+	rowResultWriter := NewRowResultWriter(rows)
+	recv := MakeDistSQLReceiver(
+		ctx,
+		rowResultWriter,
+		tree.Rows,
+		p.ExecCfg().RangeDescriptorCache,
+		p.ExecCfg().LeaseHolderCache,
+		p.txn,
+		func(ts hlc.Timestamp) {
+			_ = p.ExecCfg().Clock.Update(ts)
+		},
+		p.extendedEvalCtx.Tracing,
+	)
+	defer recv.Release()
+
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := p.extendedEvalCtx
+	// Run the plan, writing to the row container we initialized earlier.
+	p.extendedEvalCtx.DistSQLPlanner.Run(
+		planCtx, p.txn, &physPlan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	if rowResultWriter.Err() != nil {
+		rows.Close(ctx)
+		return nil, rowResultWriter.Err()
+	}
+	return rows, nil
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current

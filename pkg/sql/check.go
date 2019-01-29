@@ -47,7 +47,6 @@ func validateCheckExpr(
 	}
 	lim := &tree.Limit{Count: tree.NewDInt(1)}
 	stmt := &tree.Select{Select: sel, Limit: lim}
-
 	queryStr := tree.AsStringWithFlags(stmt, tree.FmtParsable)
 
 	rows, err := evalCtx.InternalExecutor.QueryRow(ctx, "validate check constraint", evalCtx.Txn, queryStr)
@@ -175,34 +174,27 @@ func (p *planner) validateForeignKey(
 			query,
 		)
 
-		rows, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
+		plan, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
 		if err != nil {
 			return err
 		}
 
-		rows, err = p.optimizePlan(ctx, rows, allColumns(rows))
+		plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
+		if err != nil {
+			return err
+		}
+		defer plan.Close(ctx)
+
+		rows, err := p.runWithDistSQL(ctx, plan)
 		if err != nil {
 			return err
 		}
 		defer rows.Close(ctx)
 
-		params := runParams{
-			ctx:             ctx,
-			extendedEvalCtx: &p.extendedEvalCtx,
-			p:               p,
-		}
-		if err := startPlan(params, rows); err != nil {
-			return err
-		}
-		next, err := rows.Next(params)
-		if err != nil {
-			return err
-		}
-
-		if next {
+		if rows.Len() > 0 {
 			return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 				"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
-				rows.Values(), srcIdx.ForeignKey.Name,
+				rows.At(0), srcIdx.ForeignKey.Name,
 			)
 		}
 	}
@@ -214,42 +206,36 @@ func (p *planner) validateForeignKey(
 		query,
 	)
 
-	rows, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
+	plan, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
 	if err != nil {
 		return err
 	}
 
-	rows, err = p.optimizePlan(ctx, rows, allColumns(rows))
+	plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
+	if err != nil {
+		return err
+	}
+	defer plan.Close(ctx)
+
+	rows, err := p.runWithDistSQL(ctx, plan)
 	if err != nil {
 		return err
 	}
 	defer rows.Close(ctx)
 
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &p.extendedEvalCtx,
-		p:               p,
-	}
-	if err := startPlan(params, rows); err != nil {
-		return err
-	}
-	next, err := rows.Next(params)
-	if err != nil {
-		return err
+	if rows.Len() == 0 {
+		return nil
 	}
 
-	if next {
-		values := rows.Values()
-		var pairs bytes.Buffer
-		for i := range values {
-			if i > 0 {
-				pairs.WriteString(", ")
-			}
-			pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], values[i]))
+	values := rows.At(0)
+	var pairs bytes.Buffer
+	for i := range values {
+		if i > 0 {
+			pairs.WriteString(", ")
 		}
-		return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
-			"foreign key violation: %q row %s has no match in %q",
-			srcTable.Name, pairs.String(), targetTable.Name)
+		pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], values[i]))
 	}
-	return nil
+	return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+		"foreign key violation: %q row %s has no match in %q",
+		srcTable.Name, pairs.String(), targetTable.Name)
 }
