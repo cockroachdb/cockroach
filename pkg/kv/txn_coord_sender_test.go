@@ -2414,7 +2414,25 @@ func TestCommitTurnedToRollback(t *testing.T) {
 // errors and feed them to the root txn.
 func TestLeafTxnClientRejectError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+
+	// We're going to inject an error so that a leaf txn is "poisoned". This can
+	// happen, for example, if the leaf is used concurrently by multiple requests,
+	// where the first one gets a TransactionAbortedError.
+	errKey := roachpb.Key("a")
+	knobs := &storage.StoreTestingKnobs{
+		TestingRequestFilter: func(ba roachpb.BatchRequest) *roachpb.Error {
+			if g, ok := ba.GetArg(roachpb.Get); ok && g.(*roachpb.GetRequest).Key.Equal(errKey) {
+				txn := ba.Txn.Clone()
+				txn.Status = roachpb.ABORTED
+				return roachpb.NewErrorWithTxn(
+					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_UNKNOWN),
+					&txn)
+			}
+			return nil
+		},
+	}
+
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), knobs)
 	defer s.Stop()
 
 	ctx := context.Background()
@@ -2424,12 +2442,9 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 	leafTxn := client.NewTxnWithCoordMeta(
 		ctx, s.DB, 0 /* gatewayNodeID */, client.LeafTxn, rootTxn.GetTxnCoordMeta(ctx))
 
-	// Poison the leaf. This can happen, for example, if the leaf is used
-	// concurrently by multiple requests, where the first one gets a
-	// TransactionAbortedError.
-	meta := rootTxn.GetTxnCoordMeta(ctx)
-	meta.Txn.Status = roachpb.ABORTED
-	leafTxn.AugmentTxnCoordMeta(ctx, meta)
+	if _, err := leafTxn.Get(ctx, errKey); !testutils.IsError(err, "TransactionAbortedError") {
+		t.Fatalf("expected injected err, got: %v", err)
+	}
 
 	// Now use the leaf and check the error. At the TxnCoordSender level, the
 	// pErr will be TransactionAbortedError. When pErr.GoError() is called, that's

@@ -487,9 +487,11 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 			return true
 		}
 
-		// TODO(nvanbenschoten): Figure out what to do here. The case we're
-		// handling is TransactionAbortedErrors without corresponding
-		// transaction protos attached. @andreimatei any suggestions?
+		// We need to be prepared here to handle the case of a
+		// TransactionAbortedError with no transaction proto in it.
+		//
+		// TODO(nvanbenschoten): Make this the only case where we get back an
+		// Aborted txn.
 		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 			h.mu.txn.Status = roachpb.ABORTED
 			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
