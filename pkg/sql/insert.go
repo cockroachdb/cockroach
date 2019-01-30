@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -365,7 +366,7 @@ type insertRun struct {
 	done bool
 
 	// rows contains the accumulated result rows if rowsNeeded is set.
-	rows *sqlbase.RowContainer
+	rows *rowcontainer.RowContainer
 
 	// resultRowBuffer is used to prepare a result row for accumulation
 	// into the row container above, when rowsNeeded is set.
@@ -401,7 +402,7 @@ func (n *insertNode) startExec(params runParams) error {
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
 	if n.run.rowsNeeded {
-		n.run.rows = sqlbase.NewRowContainer(
+		n.run.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(n.columns), 0)
 

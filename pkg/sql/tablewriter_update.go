@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -65,7 +66,7 @@ func (tu *tableUpdater) flushAndStartNewBatch(ctx context.Context) error {
 // finalize is part of the tableWriter interface.
 func (tu *tableUpdater) finalize(
 	ctx context.Context, autoCommit autoCommitOpt, _ bool,
-) (*sqlbase.RowContainer, error) {
+) (*rowcontainer.RowContainer, error) {
 	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
 }
 

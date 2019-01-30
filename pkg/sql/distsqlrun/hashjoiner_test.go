@@ -311,13 +311,13 @@ func TestHashJoinerDrain(t *testing.T) {
 		leftInputDrainNotification <- nil
 	}
 	leftInput := NewRowBuffer(
-		oneIntCol,
+		sqlbase.OneIntCol,
 		inputs[0],
 		RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
 	)
-	rightInput := NewRowBuffer(oneIntCol, inputs[1], RowBufferArgs{})
+	rightInput := NewRowBuffer(sqlbase.OneIntCol, inputs[1], RowBufferArgs{})
 	out := NewRowBuffer(
-		oneIntCol,
+		sqlbase.OneIntCol,
 		nil, /* rows */
 		RowBufferArgs{AccumulateRowsWhileDraining: true},
 	)
@@ -363,7 +363,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		t.Fatalf("left input not drained; still %d rows in it", len(leftInput.mu.records))
 	}
 
-	if err := checkExpectedRows(oneIntCol, expected, out); err != nil {
+	if err := checkExpectedRows(sqlbase.OneIntCol, expected, out); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -433,12 +433,12 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		return nil, nil
 	}
 	leftInput := NewRowBuffer(
-		oneIntCol,
+		sqlbase.OneIntCol,
 		inputs[0],
 		RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
 	)
 	rightInput := NewRowBuffer(
-		oneIntCol,
+		sqlbase.OneIntCol,
 		inputs[1],
 		RowBufferArgs{
 			OnConsumerDone: rightInputConsumerDone,
@@ -446,7 +446,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		},
 	)
 	out := NewRowBuffer(
-		oneIntCol,
+		sqlbase.OneIntCol,
 		nil, /* rows */
 		RowBufferArgs{},
 	)
@@ -550,9 +550,9 @@ func BenchmarkHashJoiner(b *testing.B) {
 					continue
 				}
 				b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-					rows := makeIntRows(numRows, numCols)
-					leftInput := NewRepeatableRowSource(oneIntCol, rows)
-					rightInput := NewRepeatableRowSource(oneIntCol, rows)
+					rows := sqlbase.MakeIntRows(numRows, numCols)
+					leftInput := NewRepeatableRowSource(sqlbase.OneIntCol, rows)
+					rightInput := NewRepeatableRowSource(sqlbase.OneIntCol, rows)
 					b.SetBytes(int64(8 * numRows * numCols * 2))
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {

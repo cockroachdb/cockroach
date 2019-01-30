@@ -43,7 +43,7 @@ func TestPostProcess(t *testing.T) {
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(i)))
 	}
 
 	// We run the same input rows through various PostProcessSpecs.
@@ -68,7 +68,7 @@ func TestPostProcess(t *testing.T) {
 	}{
 		{
 			post:          distsqlpb.PostProcessSpec{},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -78,7 +78,7 @@ func TestPostProcess(t *testing.T) {
 			post: distsqlpb.PostProcessSpec{
 				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
 			},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[1 2 3] [1 2 4] [1 3 4]]",
 		},
@@ -89,7 +89,7 @@ func TestPostProcess(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
-			outputTypes:   twoIntCols,
+			outputTypes:   sqlbase.TwoIntCols,
 			expNeededCols: []int{0, 2},
 			expected:      "[[0 2] [0 3] [0 4] [0 3] [0 4] [0 4] [1 3] [1 4] [1 4] [2 4]]",
 		},
@@ -101,7 +101,7 @@ func TestPostProcess(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
-			outputTypes:   twoIntCols,
+			outputTypes:   sqlbase.TwoIntCols,
 			expNeededCols: []int{0, 2},
 			expected:      "[[1 3] [1 4] [1 4]]",
 		},
@@ -113,7 +113,7 @@ func TestPostProcess(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
-			outputTypes:   twoIntCols,
+			outputTypes:   sqlbase.TwoIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 3] [0 4] [1 3] [1 4]]",
 		},
@@ -123,7 +123,7 @@ func TestPostProcess(t *testing.T) {
 			post: distsqlpb.PostProcessSpec{
 				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1},
 			expected:      "[[0 1 1] [0 1 1] [0 1 1] [0 2 2] [0 2 2] [0 3 3] [1 2 3] [1 2 3] [1 3 4] [2 3 5]]",
 		},
@@ -134,7 +134,7 @@ func TestPostProcess(t *testing.T) {
 				Filter:      distsqlpb.Expression{Expr: "@2 = 2"},
 				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1},
 			expected:      "[[0 2 2] [0 2 2] [1 2 3] [1 2 3]]",
 		},
@@ -145,7 +145,7 @@ func TestPostProcess(t *testing.T) {
 				Filter:      distsqlpb.Expression{Expr: "@3 = 4"},
 				RenderExprs: []distsqlpb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 1] [0 2 2] [0 3 3] [1 2 3] [1 3 4] [2 3 5]]",
 		},
@@ -162,7 +162,7 @@ func TestPostProcess(t *testing.T) {
 					{Expr: "@1 = @2 - 1 AND @1 = @3 - 2"},
 				},
 			},
-			outputTypes:   []sqlbase.ColumnType{intType, intType, boolType, boolType, boolType, boolType},
+			outputTypes:   []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.BoolType, sqlbase.BoolType, sqlbase.BoolType, sqlbase.BoolType},
 			expNeededCols: []int{0, 1, 2},
 			expected: "[" + strings.Join([]string{
 				/* 0 1 2 */ "[-1 2 false true true true]",
@@ -181,7 +181,7 @@ func TestPostProcess(t *testing.T) {
 		// Offset.
 		{
 			post:          distsqlpb.PostProcessSpec{Offset: 3},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -189,25 +189,25 @@ func TestPostProcess(t *testing.T) {
 		// Limit.
 		{
 			post:          distsqlpb.PostProcessSpec{Limit: 3},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4]]",
 		},
 		{
 			post:          distsqlpb.PostProcessSpec{Limit: 9},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
 			post:          distsqlpb.PostProcessSpec{Limit: 10},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
 			post:          distsqlpb.PostProcessSpec{Limit: 11},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -215,25 +215,25 @@ func TestPostProcess(t *testing.T) {
 		// Offset + limit.
 		{
 			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 2},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4]]",
 		},
 		{
 			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 6},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
 			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 7},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
 			post:          distsqlpb.PostProcessSpec{Offset: 3, Limit: 8},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -244,7 +244,7 @@ func TestPostProcess(t *testing.T) {
 				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
 				Offset: 1,
 			},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[1 2 4] [1 3 4]]",
 		},
@@ -255,7 +255,7 @@ func TestPostProcess(t *testing.T) {
 				Filter: distsqlpb.Expression{Expr: "@1 = 1"},
 				Limit:  2,
 			},
-			outputTypes:   threeIntCols,
+			outputTypes:   sqlbase.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[1 2 3] [1 2 4]]",
 		},
@@ -263,7 +263,7 @@ func TestPostProcess(t *testing.T) {
 
 	for tcIdx, tc := range testCases {
 		t.Run(strconv.Itoa(tcIdx), func(t *testing.T) {
-			inBuf := NewRowBuffer(threeIntCols, input, RowBufferArgs{})
+			inBuf := NewRowBuffer(sqlbase.ThreeIntCols, input, RowBufferArgs{})
 			outBuf := &RowBuffer{}
 
 			var out ProcOutputHelper
@@ -418,7 +418,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		}
 		defer flowCtx.EvalCtx.Stop(ctx)
 
-		input := NewRepeatableRowSource(oneIntCol, makeIntRows(10, 1))
+		input := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(10, 1))
 		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &distsqlpb.PostProcessSpec{}, &RowDisposer{})
 		if err != nil {
 			t.Fatal(err)

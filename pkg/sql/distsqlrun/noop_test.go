@@ -43,9 +43,9 @@ func BenchmarkNoop(b *testing.B) {
 		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
 			cols := make([]sqlbase.ColumnType, numCols)
 			for i := range cols {
-				cols[i] = intType
+				cols[i] = sqlbase.IntType
 			}
-			input := NewRepeatableRowSource(cols, makeIntRows(numRows, numCols))
+			input := NewRepeatableRowSource(cols, sqlbase.MakeIntRows(numRows, numCols))
 
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()

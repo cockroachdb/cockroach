@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -39,7 +40,7 @@ type tableUpserterBase struct {
 	collectRows bool
 
 	// Rows returned if collectRows is true.
-	rowsUpserted *sqlbase.RowContainer
+	rowsUpserted *rowcontainer.RowContainer
 
 	// A mapping of column IDs to the return index used to shape the resulting
 	// rows to those required by the returning clause. Only required if
@@ -55,11 +56,11 @@ type tableUpserterBase struct {
 	resultCount int
 
 	// Contains all the rows to be inserted.
-	insertRows sqlbase.RowContainer
+	insertRows rowcontainer.RowContainer
 
 	// existingRows is used to store rows in a batch when checking for conflicts
 	// with rows earlier in the batch. Is is reused per batch.
-	existingRows *sqlbase.RowContainer
+	existingRows *rowcontainer.RowContainer
 
 	// For allocation avoidance.
 	indexKeyPrefix []byte
@@ -75,7 +76,7 @@ func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) er
 
 	// collectRows, set upon initialization, indicates whether or not we want rows returned from the operation.
 	if tu.collectRows {
-		tu.rowsUpserted = sqlbase.NewRowContainer(
+		tu.rowsUpserted = rowcontainer.NewRowContainer(
 			evalCtx.Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
 			tu.insertRows.Len(),
@@ -162,7 +163,7 @@ func (tu *tableUpserterBase) close(ctx context.Context) {
 // finalize is part of the tableWriter interface.
 func (tu *tableUpserterBase) finalize(
 	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
-) (*sqlbase.RowContainer, error) {
+) (*rowcontainer.RowContainer, error) {
 	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
 }
 
@@ -343,7 +344,7 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 	if err != nil {
 		return err
 	}
-	tu.existingRows = sqlbase.NewRowContainer(
+	tu.existingRows = rowcontainer.NewRowContainer(
 		tu.evalCtx.Mon.MakeBoundAccount(), pkColTypeInfo, tu.insertRows.Len(),
 	)
 	return nil

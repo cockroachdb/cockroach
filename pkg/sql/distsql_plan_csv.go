@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -94,7 +95,7 @@ func PlanAndRunExport(
 
 // RowResultWriter is a thin wrapper around a RowContainer.
 type RowResultWriter struct {
-	rowContainer *sqlbase.RowContainer
+	rowContainer *rowcontainer.RowContainer
 	rowsAffected int
 	err          error
 }
@@ -102,7 +103,7 @@ type RowResultWriter struct {
 var _ rowResultWriter = &RowResultWriter{}
 
 // NewRowResultWriter creates a new RowResultWriter.
-func NewRowResultWriter(rowContainer *sqlbase.RowContainer) *RowResultWriter {
+func NewRowResultWriter(rowContainer *rowcontainer.RowContainer) *RowResultWriter {
 	return &RowResultWriter{rowContainer: rowContainer}
 }
 

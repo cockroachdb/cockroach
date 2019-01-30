@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 func TestClusterFlow(t *testing.T) {
@@ -188,7 +188,7 @@ func TestClusterFlow(t *testing.T) {
 							{Type: distsqlpb.StreamEndpointSpec_REMOTE, StreamID: 1},
 							{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 2},
 						},
-						ColumnTypes: twoIntCols,
+						ColumnTypes: sqlbase.TwoIntCols,
 					}},
 					Core: distsqlpb.ProcessorCoreUnion{JoinReader: &distsqlpb.JoinReaderSpec{Table: *desc}},
 					Post: distsqlpb.PostProcessSpec{
@@ -272,7 +272,7 @@ func TestClusterFlow(t *testing.T) {
 	}
 	expected := strings.Join(results, " ")
 	expected = "[" + expected + "]"
-	if rowStr := rows.String([]sqlbase.ColumnType{strType}); rowStr != expected {
+	if rowStr := rows.String([]sqlbase.ColumnType{sqlbase.StrType}); rowStr != expected {
 		t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
 	}
 }
@@ -601,13 +601,13 @@ func BenchmarkInfrastructure(b *testing.B) {
 					valSpecs := make([]distsqlpb.ValuesCoreSpec, numNodes)
 					for i := range valSpecs {
 						se := StreamEncoder{}
-						se.init(threeIntCols)
+						se.init(sqlbase.ThreeIntCols)
 						for j := 0; j < numRows; j++ {
 							row := make(sqlbase.EncDatumRow, 3)
 							lastVal += rng.Intn(10)
-							row[0] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(lastVal)))
-							row[1] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
-							row[2] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							row[0] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(lastVal)))
+							row[1] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							row[2] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
 							if err := se.AddRow(row); err != nil {
 								b.Fatal(err)
 							}
@@ -688,7 +688,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 							Ordering: distsqlpb.Ordering{Columns: []distsqlpb.Ordering_Column{
 								{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}}},
 							Streams:     inStreams,
-							ColumnTypes: threeIntCols,
+							ColumnTypes: sqlbase.ThreeIntCols,
 						}},
 						Core: distsqlpb.ProcessorCoreUnion{Noop: &distsqlpb.NoopCoreSpec{}},
 						Output: []distsqlpb.OutputRouterSpec{{
@@ -762,7 +762,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						}
 						var a sqlbase.DatumAlloc
 						for i := range rows {
-							if err := rows[i][0].EnsureDecoded(&intType, &a); err != nil {
+							if err := rows[i][0].EnsureDecoded(&sqlbase.IntType, &a); err != nil {
 								b.Fatal(err)
 							}
 							if i > 0 {

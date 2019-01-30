@@ -142,8 +142,8 @@ func BenchmarkValuesProcessor(b *testing.B) {
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		for _, rowsPerChunk := range []int{1, 4, 16} {
 			b.Run(fmt.Sprintf("rows=%d,chunkSize=%d", numRows, rowsPerChunk), func(b *testing.B) {
-				rows := makeIntRows(numRows, numCols)
-				spec, err := generateValuesSpec(twoIntCols, rows, rowsPerChunk)
+				rows := sqlbase.MakeIntRows(numRows, numCols)
+				spec, err := generateValuesSpec(sqlbase.TwoIntCols, rows, rowsPerChunk)
 				if err != nil {
 					b.Fatal(err)
 				}

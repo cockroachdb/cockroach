@@ -31,15 +31,15 @@ import (
 func runSampler(t *testing.T, numRows, numSamples int) []int {
 	rows := make([]sqlbase.EncDatumRow, numRows)
 	for i := range rows {
-		rows[i] = sqlbase.EncDatumRow{intEncDatum(i)}
+		rows[i] = sqlbase.EncDatumRow{sqlbase.IntEncDatum(i)}
 	}
-	in := NewRowBuffer(oneIntCol, rows, RowBufferArgs{})
+	in := NewRowBuffer(sqlbase.OneIntCol, rows, RowBufferArgs{})
 	outTypes := []sqlbase.ColumnType{
-		intType, // original column
-		intType, // rank
-		intType, // sketch index
-		intType, // num rows
-		intType, // null vals
+		sqlbase.IntType, // original column
+		sqlbase.IntType, // rank
+		sqlbase.IntType, // sketch index
+		sqlbase.IntType, // num rows
+		sqlbase.IntType, // null vals
 		{SemanticType: sqlbase.ColumnType_BYTES},
 	}
 
@@ -148,15 +148,15 @@ func TestSamplerSketch(t *testing.T) {
 	cardinalities := []int{2, 8}
 	numNulls := []int{2, 1}
 
-	rows := genEncDatumRowsInt(inputRows)
-	in := NewRowBuffer(twoIntCols, rows, RowBufferArgs{})
+	rows := sqlbase.GenEncDatumRowsInt(inputRows)
+	in := NewRowBuffer(sqlbase.TwoIntCols, rows, RowBufferArgs{})
 	outTypes := []sqlbase.ColumnType{
-		intType,                                  // original column
-		intType,                                  // original column
-		intType,                                  // rank
-		intType,                                  // sketch index
-		intType,                                  // num rows
-		intType,                                  // null vals
+		sqlbase.IntType,                          // original column
+		sqlbase.IntType,                          // original column
+		sqlbase.IntType,                          // rank
+		sqlbase.IntType,                          // sketch index
+		sqlbase.IntType,                          // num rows
+		sqlbase.IntType,                          // null vals
 		{SemanticType: sqlbase.ColumnType_BYTES}, // sketch data
 	}
 

@@ -25,10 +25,10 @@ import (
 )
 
 func BenchmarkColumnarize(b *testing.B) {
-	types := []sqlbase.ColumnType{intType, intType}
+	types := []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType}
 	nRows := 10000
 	nCols := 2
-	rows := makeIntRows(nRows, nCols)
+	rows := sqlbase.MakeIntRows(nRows, nCols)
 	input := NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()

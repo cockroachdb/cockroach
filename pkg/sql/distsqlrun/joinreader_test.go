@@ -113,8 +113,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:  []uint32{0, 1},
-			inputTypes:  twoIntCols,
-			outputTypes: threeIntCols,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.ThreeIntCols,
 			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
 		},
 		{
@@ -131,8 +131,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:  []uint32{0, 1},
-			inputTypes:  twoIntCols,
-			outputTypes: threeIntCols,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.ThreeIntCols,
 			expected:    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
 		},
 		{
@@ -149,8 +149,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:  []uint32{0, 1},
-			inputTypes:  twoIntCols,
-			outputTypes: threeIntCols,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.ThreeIntCols,
 			expected:    "[[0 2 2] [0 5 5] [0 2 2] [1 0 0] [1 5 5]]",
 		},
 		{
@@ -166,8 +166,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:  []uint32{0, 1},
-			inputTypes:  twoIntCols,
-			outputTypes: threeIntCols,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.ThreeIntCols,
 			onExpr:      "@2 < @5",
 			expected:    "[[1 0 1] [1 5 6]]",
 		},
@@ -183,8 +183,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:      []uint32{1},
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
-			inputTypes:      twoIntCols,
-			outputTypes:     []sqlbase.ColumnType{strType},
+			inputTypes:      sqlbase.TwoIntCols,
+			outputTypes:     []sqlbase.ColumnType{sqlbase.StrType},
 			expected:        "[['one-two']]",
 		},
 		{
@@ -199,8 +199,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:  []uint32{0, 1},
 			joinType:    sqlbase.LeftOuterJoin,
-			inputTypes:  twoIntCols,
-			outputTypes: threeIntCols,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.ThreeIntCols,
 			expected:    "[[10 0 NULL] [0 2 2]]",
 		},
 		{
@@ -217,8 +217,8 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:      []uint32{0},
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			joinType:        sqlbase.LeftOuterJoin,
-			inputTypes:      twoIntCols,
-			outputTypes:     []sqlbase.ColumnType{intType, strType},
+			inputTypes:      sqlbase.TwoIntCols,
+			outputTypes:     []sqlbase.ColumnType{sqlbase.IntType, sqlbase.StrType},
 			expected:        "[[10 NULL] [2 'one-two']]",
 		},
 		{
@@ -232,8 +232,8 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(0), tree.DNull},
 			},
 			lookupCols:  []uint32{0, 1},
-			inputTypes:  twoIntCols,
-			outputTypes: oneIntCol,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.OneIntCol,
 			expected:    "[]",
 		},
 		{
@@ -248,8 +248,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:  []uint32{0, 1},
 			joinType:    sqlbase.LeftOuterJoin,
-			inputTypes:  twoIntCols,
-			outputTypes: twoIntCols,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.TwoIntCols,
 			expected:    "[[0 NULL]]",
 		},
 		{
@@ -263,8 +263,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
 			},
 			lookupCols:  []uint32{1, 2, 0},
-			inputTypes:  []sqlbase.ColumnType{intType, intType, strType},
-			outputTypes: oneIntCol,
+			inputTypes:  []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.StrType},
+			outputTypes: sqlbase.OneIntCol,
 			expected:    "[['two']]",
 		},
 	}
@@ -375,12 +375,12 @@ func TestJoinReaderDrain(t *testing.T) {
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
-	encRow[0] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(1))
+	encRow[0] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(1))
 
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.
 	t.Run("ConsumerClosed", func(t *testing.T) {
-		in := NewRowBuffer(oneIntCol, sqlbase.EncDatumRows{encRow}, RowBufferArgs{})
+		in := NewRowBuffer(sqlbase.OneIntCol, sqlbase.EncDatumRows{encRow}, RowBufferArgs{})
 
 		out := &RowBuffer{}
 		out.ConsumerClosed()
@@ -398,7 +398,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	// called on the consumer.
 	t.Run("ConsumerDone", func(t *testing.T) {
 		expectedMetaErr := errors.New("dummy")
-		in := NewRowBuffer(oneIntCol, nil /* rows */, RowBufferArgs{})
+		in := NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, RowBufferArgs{})
 		if status := in.Push(encRow, &ProducerMetadata{Err: expectedMetaErr}); status != NeedMoreRows {
 			t.Fatalf("unexpected response: %d", status)
 		}
@@ -414,7 +414,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		jr.Run(ctx)
 		row, meta := out.Next()
 		if row != nil {
-			t.Fatalf("row was pushed unexpectedly: %s", row.String(oneIntCol))
+			t.Fatalf("row was pushed unexpectedly: %s", row.String(sqlbase.OneIntCol))
 		}
 		if meta.Err != expectedMetaErr {
 			t.Fatalf("unexpected error in metadata: %v", meta.Err)
@@ -425,7 +425,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		for {
 			row, meta = out.Next()
 			if row != nil {
-				t.Fatalf("row was pushed unexpectedly: %s", row.String(oneIntCol))
+				t.Fatalf("row was pushed unexpectedly: %s", row.String(sqlbase.OneIntCol))
 			}
 			if meta == nil {
 				break
@@ -476,7 +476,7 @@ func BenchmarkJoinReader(b *testing.B) {
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 
 		spec := distsqlpb.JoinReaderSpec{Table: *tableDesc}
-		input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numInputCols))
+		input := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numInputCols))
 		post := distsqlpb.PostProcessSpec{}
 		output := RowDisposer{}
 

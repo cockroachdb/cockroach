@@ -31,10 +31,10 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// TODO(jordan,asubiotto): add randomness to this test as more types are supported.
-	types := []sqlbase.ColumnType{intType, intType}
+	types := []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType}
 	nRows := 10000
 	nCols := 2
-	rows := makeIntRows(nRows, nCols)
+	rows := sqlbase.MakeIntRows(nRows, nCols)
 	input := NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()
@@ -144,10 +144,10 @@ func TestMaterializeTypes(t *testing.T) {
 }
 
 func BenchmarkColumnarizeMaterialize(b *testing.B) {
-	types := []sqlbase.ColumnType{intType, intType}
+	types := []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType}
 	nRows := 10000
 	nCols := 2
-	rows := makeIntRows(nRows, nCols)
+	rows := sqlbase.MakeIntRows(nRows, nCols)
 	input := NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()
