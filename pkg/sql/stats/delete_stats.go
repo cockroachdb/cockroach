@@ -53,7 +53,7 @@ func DeleteOldStatsForColumns(
 
 	// This will delete all old statistics for the given table and columns,
 	// including stats created manually (except for a few automatic statistics,
-	// which are identified by the name autoStatsName).
+	// which are identified by the name AutoStatsName).
 	_, err := executor.Exec(
 		ctx, "delete-statistics", txn,
 		`DELETE FROM system.table_statistics
@@ -68,7 +68,7 @@ func DeleteOldStatsForColumns(
                    LIMIT $4
                )`,
 		tableID,
-		autoStatsName,
+		AutoStatsName,
 		columnIDsVal,
 		keepCount,
 	)
