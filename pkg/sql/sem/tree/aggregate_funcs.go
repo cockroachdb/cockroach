@@ -30,6 +30,11 @@ type AggregateFunc interface {
 	// it will not be mutated by additional calls to Add.
 	Result() (Datum, error)
 
+	// Reset resets the aggregate function which allows for reusing the same
+	// instance for computation without the need to create a new instance.
+	// Any memory is kept, if possible.
+	Reset(context.Context)
+
 	// Close closes out the AggregateFunc and allows it to release any memory it
 	// requested during aggregation, and must be called upon completion of the
 	// aggregation.
