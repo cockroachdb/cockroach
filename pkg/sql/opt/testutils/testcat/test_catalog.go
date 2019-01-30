@@ -438,6 +438,7 @@ type Table struct {
 	Indexes    []*Index
 	Stats      TableStats
 	Checks     []cat.CheckConstraint
+	Families   []*Family
 	IsVirtual  bool
 	Catalog    cat.Catalog
 
@@ -560,6 +561,16 @@ func (tt *Table) Check(i int) cat.CheckConstraint {
 	return tt.Checks[i]
 }
 
+// FamilyCount is part of the cat.Table interface.
+func (tt *Table) FamilyCount() int {
+	return len(tt.Families)
+}
+
+// Family is part of the cat.Table interface.
+func (tt *Table) Family(i int) cat.Family {
+	return tt.Families[i]
+}
+
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {
@@ -574,7 +585,7 @@ func (tt *Table) FindOrdinal(name string) int {
 	))
 }
 
-// Index implements the v.Index interface for testing purposes.
+// Index implements the cat.Index interface for testing purposes.
 type Index struct {
 	IdxName string
 
@@ -825,4 +836,42 @@ func (ts *Sequence) String() string {
 	tp := treeprinter.New()
 	cat.FormatCatalogSequence(ts.Catalog, ts, tp)
 	return tp.String()
+}
+
+// Family implements the cat.Family interface for testing purposes.
+type Family struct {
+	FamName string
+
+	// Ordinal is the ordinal of this family in the table.
+	Ordinal int
+
+	Columns []cat.FamilyColumn
+
+	// table is a back reference to the table this index is on.
+	table *Table
+}
+
+// ID is part of the cat.Family interface.
+func (tf *Family) ID() cat.StableID {
+	return 1 + cat.StableID(tf.Ordinal)
+}
+
+// Name is part of the cat.Family interface.
+func (tf *Family) Name() tree.Name {
+	return tree.Name(tf.FamName)
+}
+
+// Table is part of the cat.Family interface.
+func (tf *Family) Table() cat.Table {
+	return tf.table
+}
+
+// ColumnCount is part of the cat.Family interface.
+func (tf *Family) ColumnCount() int {
+	return len(tf.Columns)
+}
+
+// Column is part of the cat.Family interface.
+func (tf *Family) Column(i int) cat.FamilyColumn {
+	return tf.Columns[i]
 }

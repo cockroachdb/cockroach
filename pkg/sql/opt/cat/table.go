@@ -122,6 +122,17 @@ type Table interface {
 
 	// Check returns the ith check constraint, where i < CheckCount.
 	Check(i int) CheckConstraint
+
+	// FamilyCount returns the number of column families present on the table.
+	// There is always at least one primary family (always family 0) where columns
+	// go if they are not explicitly assigned to another family. The primary
+	// family is the first family that was explicitly specified by the user, or
+	// is a synthesized family if no families were explicitly specified.
+	FamilyCount() int
+
+	// Family returns the interface for the ith column family, where
+	// i < FamilyCount.
+	Family(i int) Family
 }
 
 // CheckConstraint is the SQL text for a check constraint on a table. Check
@@ -218,6 +229,15 @@ func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	for i := 0; i < tab.CheckCount(); i++ {
 		child.Childf("CHECK (%s)", tab.Check(i))
 	}
+
+	// Don't print the primary family, since it's implied.
+	if tab.FamilyCount() > 1 || tab.Family(0).Name() != "primary" {
+		for i := 0; i < tab.FamilyCount(); i++ {
+			buf.Reset()
+			formatFamily(tab.Family(i), &buf)
+			child.Child(buf.String())
+		}
+	}
 }
 
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for
@@ -266,7 +286,7 @@ func formatColPrefix(idx Index, prefixLen int) string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		colName := idx.Column(i).Column.ColName()
+		colName := idx.Column(i).ColName()
 		buf.WriteString(colName.String())
 	}
 	buf.WriteByte(')')
@@ -311,4 +331,16 @@ func formatColumn(col Column, isMutationCol bool, buf *bytes.Buffer) {
 	if isMutationCol {
 		fmt.Fprintf(buf, " (mutation)")
 	}
+}
+
+func formatFamily(family Family, buf *bytes.Buffer) {
+	fmt.Fprintf(buf, "FAMILY %s (", family.Name())
+	for i, n := 0, family.ColumnCount(); i < n; i++ {
+		if i != 0 {
+			buf.WriteString(", ")
+		}
+		col := family.Column(i)
+		buf.WriteString(string(col.ColName()))
+	}
+	buf.WriteString(")")
 }

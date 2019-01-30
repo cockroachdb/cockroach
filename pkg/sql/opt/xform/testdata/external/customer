@@ -519,9 +519,11 @@ TABLE t_sync_data
  │    ├── user_id uuid not null
  │    ├── data_type string not null
  │    └── remote_id uuid not null
- └── INDEX index3
-      ├── last_sync_id int not null
-      └── remote_id uuid not null
+ ├── INDEX index3
+ │    ├── last_sync_id int not null
+ │    └── remote_id uuid not null
+ ├── FAMILY f_meta (remote_id, conflict_remote_id, user_id, last_sync_id, data_type, deleted, create_device_id, original_data_id, create_time, last_update_time)
+ └── FAMILY f_data (sync_data)
 
 opt
 SELECT *

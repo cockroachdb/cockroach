@@ -136,9 +136,12 @@ TABLE t
  │    ├── c int
  │    ├── a int not null
  │    └── b string not null
- └── INDEX a_desc
-      ├── a int not null desc
-      └── b string not null
+ ├── INDEX a_desc
+ │    ├── a int not null desc
+ │    └── b string not null
+ ├── FAMILY family1 (a, b)
+ ├── FAMILY family2 (c)
+ └── FAMILY family3 (d)
 
 # Test case where one of the explorations causes construction of a scan with a
 # contradiction.
