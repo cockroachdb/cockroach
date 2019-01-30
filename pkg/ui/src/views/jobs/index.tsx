@@ -63,6 +63,7 @@ const typeOptions = [
   { value: JobType.IMPORT.toString(), label: "Imports" },
   { value: JobType.SCHEMA_CHANGE.toString(), label: "Schema Changes" },
   { value: JobType.CHANGEFEED.toString(), label: "Changefeed"},
+  { value: JobType.CREATE_STATS.toString(), label: "Statistics Creation"},
 ];
 
 const typeSetting = new LocalSetting<AdminUIState, number>(

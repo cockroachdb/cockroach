@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/axiomhq/hyperloglog"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -57,6 +58,11 @@ type samplerProcessor struct {
 var _ Processor = &samplerProcessor{}
 
 const samplerProcName = "sampler"
+
+// SamplerProgressInterval corresponds to the number of input rows after which
+// point the sampler will report progress by pushing a metadata record.
+// It is mutable for testing.
+var SamplerProgressInterval = 10000
 
 var supportedSketchTypes = map[distsqlpb.SketchType]struct{}{
 	// The code currently hardcodes the use of this single type of sketch
@@ -155,10 +161,11 @@ func (s *samplerProcessor) Run(ctx context.Context) {
 	}
 }
 
-func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
+func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err error) {
 	rng, _ := randutil.NewPseudoRand()
 	var da sqlbase.DatumAlloc
 	var buf []byte
+	rowCount := 0
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
@@ -170,6 +177,25 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		}
 		if row == nil {
 			break
+		}
+
+		rowCount++
+		if rowCount%SamplerProgressInterval == 0 {
+			// Send a metadata record to check that the consumer is still alive.
+			// We perform this check periodically in case the CREATE STATISTICS job
+			// was paused or canceled.
+			// TODO(rytaft): We could have more intermediate measures of progress if
+			// we were to run this at the kv layer where we know how many spans have
+			// been processed out of the total. For now, report 0 progress until all
+			// rows have been processed.
+			meta := &ProducerMetadata{
+				Progress: &jobspb.Progress{Progress: &jobspb.Progress_FractionCompleted{
+					FractionCompleted: 0,
+				}},
+			}
+			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+				return true, nil
+			}
 		}
 
 		for i := range s.sketches {
@@ -184,7 +210,6 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 			// We need to use a KEY encoding because equal values should have the same
 			// encoding.
 			// TODO(radu): a fast path for simple columns (like integer)?
-			var err error
 			buf, err = row[col].Encode(&s.outTypes[col], &da, sqlbase.DatumEncoding_ASCENDING_KEY, buf[:0])
 			if err != nil {
 				return false, err
@@ -232,5 +257,16 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 			return true, nil
 		}
 	}
+
+	// Send one last progress update to the consumer.
+	meta := &ProducerMetadata{
+		Progress: &jobspb.Progress{Progress: &jobspb.Progress_FractionCompleted{
+			FractionCompleted: 1,
+		}},
+	}
+	if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+		return true, nil
+	}
+
 	return false, nil
 }
