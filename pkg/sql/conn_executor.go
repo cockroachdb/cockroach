@@ -452,6 +452,7 @@ func (sp sessionParams) initialSessionData(
 		DataConversion: sessiondata.DataConversionConfig{
 			Location: time.UTC,
 		},
+		ResultsBufferSize: sp.args.ConnResultsBufferSize,
 	}
 
 	return sd, true, sp.args.SessionDefaults

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -47,13 +48,13 @@ import (
 // open a new connection pool since the connections in the existing one are not
 // affected.
 //
-// TODO(andrei): This setting is under "sql.defaults", but there's no way to
-// control the setting on a per-connection basis. We should introduce a
-// corresponding session variable.
+// The "results_buffer_size" connection parameter can be used to override this
+// default for an individual connection.
 var connResultsBufferSize = settings.RegisterByteSizeSetting(
 	"sql.defaults.results_buffer.size",
-	"size of the buffer that accumulates results for a statement or a batch "+
-		"of statements before they are sent to the client. Note that auto-retries "+
+	"default size of the buffer that accumulates results for a statement or a batch "+
+		"of statements before they are sent to the client. This can be overridden on "+
+		"an individual connection with the 'results_buffer_size' parameter. Note that auto-retries "+
 		"generally only happen while no results have been delivered to the client, so "+
 		"reducing this size can increase the number of retriable errors a client "+
 		"receives. On the other hand, increasing the buffer size can increase the "+
@@ -487,6 +488,9 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		return sendErr(err)
 	}
 	sArgs.User = tree.Name(sArgs.User).Normalize()
+	if sArgs.ConnResultsBufferSize == connResultsBufferSizeUnsetSentinel {
+		sArgs.ConnResultsBufferSize = connResultsBufferSize.Get(&s.execCfg.Settings.SV)
+	}
 
 	// Reserve some memory for this connection using the server's monitor. This
 	// reduces pressure on the shared pool because the server monitor allocates in
@@ -504,13 +508,18 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 
 	return serveConn(
 		ctx, conn, sArgs,
-		connResultsBufferSize.Get(&s.execCfg.Settings.SV),
 		&s.metrics, reserved, s.SQLServer,
 		s.IsDraining, s.execCfg.InternalExecutor, s.stopper, s.cfg.Insecure, auth)
 }
 
+// -1 for the sentinel in case someone wants to set it to 0.
+const connResultsBufferSizeUnsetSentinel = -1
+
 func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
-	args := sql.SessionArgs{SessionDefaults: make(map[string]string)}
+	args := sql.SessionArgs{
+		SessionDefaults:       make(map[string]string),
+		ConnResultsBufferSize: connResultsBufferSizeUnsetSentinel,
+	}
 	buf := pgwirebase.ReadBuffer{Msg: data}
 	for {
 		key, err := buf.GetString()
@@ -530,6 +539,15 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 		switch key {
 		case "user":
 			args.User = value
+		case "results_buffer_size":
+			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
+				return sql.SessionArgs{}, pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
+					"error parsing results_buffer_size option value '%s' as bytes", value)
+			}
+			if args.ConnResultsBufferSize < 0 {
+				return sql.SessionArgs{}, pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
+					"results_buffer_size option value '%s' cannot be negative", value)
+			}
 		default:
 			exists, configurable := sql.IsSessionVariableConfigurable(key)
 			if exists && configurable {
