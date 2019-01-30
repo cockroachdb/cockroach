@@ -43,6 +43,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 
+	AutomaticStatisticsClusterMode.Override(&evalCtx.Settings.SV, false)
+
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
 		`CREATE DATABASE t;
@@ -61,14 +63,28 @@ func TestMaybeRefreshStats(t *testing.T) {
 
 	// There are no stats yet, so this must refresh the statistics on table t
 	// even though rowsAffected=0.
-	refresher.maybeRefreshStats(ctx, descA.ID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(
+		ctx,
+		descA.ID,
+		0,           /* rowsAffected */
+		0,           /* asOf */
+		false,       /* mustRefresh */
+		time.Time{}, /* lastRefresh */
+	)
 	if err := checkStatsCount(ctx, cache, descA.ID, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
 	// Try to refresh again. With rowsAffected=0, the probability of a refresh
 	// is 0, so refreshing will not succeed.
-	refresher.maybeRefreshStats(ctx, descA.ID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(
+		ctx,
+		descA.ID,
+		0,           /* rowsAffected */
+		0,           /* asOf */
+		false,       /* mustRefresh */
+		time.Time{}, /* lastRefresh */
+	)
 	if err := checkStatsCount(ctx, cache, descA.ID, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +92,14 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// With rowsAffected=10, refreshing should work. Since there are more rows
 	// updated than exist in the table, the probability of a refresh is 100%.
 	// Use a non-zero asOf time to test that the thread will sleep if necessary.
-	refresher.maybeRefreshStats(ctx, descA.ID, 10 /* rowsAffected */, time.Second /* asOf */)
+	refresher.maybeRefreshStats(
+		ctx,
+		descA.ID,
+		10,          /* rowsAffected */
+		time.Second, /* asOf */
+		false,       /* mustRefresh */
+		time.Time{}, /* lastRefresh */
+	)
 	if err := checkStatsCount(ctx, cache, descA.ID, 2 /* expected */); err != nil {
 		t.Fatal(err)
 	}
@@ -91,6 +114,8 @@ func TestAverageRefreshTime(t *testing.T) {
 
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
+
+	AutomaticStatisticsClusterMode.Override(&evalCtx.Settings.SV, false)
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
@@ -173,7 +198,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	}
 
 	// Add some stats on column k in table a with a name different from
-	// autoStatsName, separated by three hours each, starting 7 hours ago.
+	// AutoStatsName, separated by three hours each, starting 7 hours ago.
 	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for i := 0; i < 10; i++ {
 			columnIDsVal := tree.NewDArray(types.Int)
@@ -196,13 +221,13 @@ func TestAverageRefreshTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// None of the stats have the name autoStatsName, so avgRefreshTime
+	// None of the stats have the name AutoStatsName, so avgRefreshTime
 	// should still return the default value.
 	if err := checkAverageRefreshTime(defaultAverageTimeBetweenRefreshes); err != nil {
 		t.Fatal(err)
 	}
 
-	// Add some stats on column v in table a with name autoStatsName, separated
+	// Add some stats on column v in table a with name AutoStatsName, separated
 	// by three hours each, starting 6 hours ago.
 	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for i := 0; i < 10; i++ {
@@ -213,7 +238,7 @@ func TestAverageRefreshTime(t *testing.T) {
 			createdAt := tree.MakeDTimestamp(
 				timeutil.Now().Add(time.Duration(-1*(i*4+6))*time.Hour), time.Hour,
 			)
-			if err := insertStat(txn, autoStatsName, columnIDsVal, createdAt); err != nil {
+			if err := insertStat(txn, AutoStatsName, columnIDsVal, createdAt); err != nil {
 				return err
 			}
 		}
@@ -243,12 +268,19 @@ func TestAverageRefreshTime(t *testing.T) {
 	// average time between refreshes, so this call is not required to refresh
 	// the statistics on table t. With rowsAffected=0, the probability of refresh
 	// is 0.
-	refresher.maybeRefreshStats(ctx, tableID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(
+		ctx,
+		tableID,
+		0,           /* rowsAffected */
+		0,           /* asOf */
+		false,       /* mustRefresh */
+		time.Time{}, /* lastRefresh */
+	)
 	if err := checkStatsCount(ctx, cache, tableID, 20 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
-	// Add some stats on column k in table a with name autoStatsName, separated
+	// Add some stats on column k in table a with name AutoStatsName, separated
 	// by 1.5 hours each, starting 5 hours ago.
 	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for i := 0; i < 10; i++ {
@@ -259,7 +291,7 @@ func TestAverageRefreshTime(t *testing.T) {
 			createdAt := tree.MakeDTimestamp(
 				timeutil.Now().Add(time.Duration(-1*(i*90+300))*time.Minute), time.Minute,
 			)
-			if err := insertStat(txn, autoStatsName, columnIDsVal, createdAt); err != nil {
+			if err := insertStat(txn, AutoStatsName, columnIDsVal, createdAt); err != nil {
 				return err
 			}
 		}
@@ -288,7 +320,14 @@ func TestAverageRefreshTime(t *testing.T) {
 	// on table t even though rowsAffected=0. After refresh, only 15 stats should
 	// remain (5 from column k and 10 from column v), since the old stats on k
 	// were deleted.
-	refresher.maybeRefreshStats(ctx, tableID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(
+		ctx,
+		tableID,
+		0,           /* rowsAffected */
+		0,           /* asOf */
+		false,       /* mustRefresh */
+		time.Time{}, /* lastRefresh */
+	)
 	if err := checkStatsCount(ctx, cache, tableID, 15 /* expected */); err != nil {
 		t.Fatal(err)
 	}
@@ -328,6 +367,99 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE t.a]`,
 		[][]string{
 			{"__auto__", "{k}", "0"},
+		})
+}
+
+func TestFailedRefreshes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
+
+	AutomaticStatisticsClusterMode.Override(&evalCtx.Settings.SV, false)
+
+	allowProgress := make(chan struct{})
+	defer close(allowProgress)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (k INT PRIMARY KEY, v CHAR);
+		INSERT INTO t.a VALUES (1, 'a');`)
+
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	tableID := sqlbase.GetTableDescriptor(s.DB(), "t", "a").ID
+	cache := NewTableStatisticsCache(10 /* cacheSize */, s.Gossip(), kvDB, executor)
+	refresher := MakeRefresher(executor, cache, 0 /* asOfTime */)
+	refresher.notifyRefreshComplete = func() {
+		<-allowProgress
+	}
+	if err := refresher.Start(
+		ctx, &evalCtx.Settings.SV, s.Stopper(), 10*time.Millisecond, /* refreshInterval */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a statistic on table a so there is an entry in the cache.
+	sqlRun.Exec(t, `CREATE STATISTICS __auto__ FROM t.a`)
+
+	tableStats, err := cache.GetTableStats(ctx, tableID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tableStats) != 1 {
+		t.Fatal("tableStats should have 1 entry")
+	}
+	lastRefresh := tableStats[0].CreatedAt
+
+	// Insert another record.
+	sqlRun.Exec(t, `INSERT INTO t.a VALUES (2, 'b');`)
+
+	// Start the next refresh interval.
+	allowProgress <- struct{}{}
+
+	// Send a message to the refresher about a failed refresh. Since the latest
+	// entry in the cache is newer than the provided lastRefresh time, there
+	// should be no refresh.
+	refresher.failedRefreshes <- failedRefresh{
+		tableID: tableID, lastRefresh: lastRefresh.Add(-1 * time.Hour),
+	}
+
+	// Start the next refresh interval.
+	allowProgress <- struct{}{}
+
+	// There should be only one stat.
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE t.a]`,
+		[][]string{
+			{"__auto__", "{k}", "1"},
+		})
+
+	// Insert another record.
+	sqlRun.Exec(t, `INSERT INTO t.a VALUES (3, 'c');`)
+
+	// Start the next refresh interval.
+	allowProgress <- struct{}{}
+
+	// Send another message to the refresher about a failed refresh, but with
+	// lastRefresh equal to the time of the latest cache entry. This should
+	// trigger a refresh.
+	refresher.failedRefreshes <- failedRefresh{tableID: tableID, lastRefresh: lastRefresh}
+
+	// Start the next refresh interval.
+	allowProgress <- struct{}{}
+
+	// There should be two stats.
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE t.a]
+		ORDER BY created`,
+		[][]string{
+			{"__auto__", "{k}", "1"},
+			{"__auto__", "{k}", "3"},
 		})
 }
 
