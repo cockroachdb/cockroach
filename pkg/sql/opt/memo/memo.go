@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // Memo is a data structure for efficiently storing a forest of query plans.
@@ -131,10 +132,11 @@ type Memo struct {
 	// memEstimate is the approximate memory usage of the memo, in bytes.
 	memEstimate int64
 
-	// locName is the location which the memo is compiled against. This determines
-	// the timezone, which is used for time-related data type construction and
-	// comparisons. If the location changes, then this memo is invalidated.
-	locName string
+	// The following are selected fields from SessionData which can affect
+	// planning. We need to cross-check these before reusing a cached memo.
+	dataConversion    sessiondata.DataConversionConfig
+	reorderJoins      bool
+	zigzagJoinEnabled bool
 
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
@@ -153,7 +155,10 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.rootExpr = nil
 	m.rootProps = nil
 	m.memEstimate = 0
-	m.locName = evalCtx.GetLocation().String()
+
+	m.dataConversion = evalCtx.SessionData.DataConversion
+	m.reorderJoins = evalCtx.SessionData.ReorderJoins
+	m.zigzagJoinEnabled = evalCtx.SessionData.ZigzagJoinEnabled
 }
 
 // IsEmpty returns true if there are no expressions in the memo.
@@ -245,8 +250,11 @@ func (m *Memo) HasPlaceholders() bool {
 func (m *Memo) IsStale(
 	ctx context.Context, evalCtx *tree.EvalContext, catalog cat.Catalog,
 ) (bool, error) {
-	// Memo is stale if the location has changed.
-	if m.locName != evalCtx.GetLocation().String() {
+	// Memo is stale if fields from SessionData that can affect planning have
+	// changed.
+	if !m.dataConversion.Equals(&evalCtx.SessionData.DataConversion) ||
+		m.reorderJoins != evalCtx.SessionData.ReorderJoins ||
+		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled {
 		return true, nil
 	}
 
