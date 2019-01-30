@@ -601,6 +601,10 @@ func (h *hashJoiner) close() {
 		}
 		if h.storedRows != nil {
 			h.storedRows.Close(h.Ctx)
+		} else {
+			// h.storedRows has not been initialized, so we need to close the stored
+			// side container explicitly.
+			h.rows[h.storedSide].Close(h.Ctx)
 		}
 		if h.probingRowState.iter != nil {
 			h.probingRowState.iter.Close()
