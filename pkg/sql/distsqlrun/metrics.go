@@ -27,8 +27,7 @@ type DistSQLMetrics struct {
 	QueriesTotal  *metric.Counter
 	FlowsActive   *metric.Gauge
 	FlowsTotal    *metric.Counter
-	FlowsQueued   *metric.Gauge
-	QueueWaitHist *metric.Histogram
+	FlowsRejected *metric.Counter
 	MaxBytesHist  *metric.Histogram
 	CurBytesCount *metric.Gauge
 }
@@ -63,17 +62,11 @@ var (
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaFlowsQueued = metric.Metadata{
-		Name:        "sql.distsql.flows.queued",
-		Help:        "Number of distributed SQL flows currently queued",
+	metaFlowsRejected = metric.Metadata{
+		Name:        "sql.distsql.flows.rejected",
+		Help:        "Number of distributed SQL flows rejected due to too many active",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaQueueWaitHist = metric.Metadata{
-		Name:        "sql.distsql.flows.queue_wait",
-		Help:        "Duration of time flows spend waiting in the queue",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaMemMaxBytes = metric.Metadata{
 		Name:        "sql.mem.distsql.max",
@@ -100,8 +93,7 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		QueriesTotal:  metric.NewCounter(metaQueriesTotal),
 		FlowsActive:   metric.NewGauge(metaFlowsActive),
 		FlowsTotal:    metric.NewCounter(metaFlowsTotal),
-		FlowsQueued:   metric.NewGauge(metaFlowsQueued),
-		QueueWaitHist: metric.NewLatency(metaQueueWaitHist, histogramWindow),
+		FlowsRejected: metric.NewCounter(metaFlowsRejected),
 		MaxBytesHist:  metric.NewHistogram(metaMemMaxBytes, histogramWindow, log10int64times1000, 3),
 		CurBytesCount: metric.NewGauge(metaMemCurBytes),
 	}
