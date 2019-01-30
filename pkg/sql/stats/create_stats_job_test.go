@@ -318,6 +318,77 @@ func TestCreateStatsLivenessWithLeniency(t *testing.T) {
 	jobutils.WaitForJob(t, sqlDB, jobID)
 }
 
+func TestAtMostOneRunningCreateStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldAdoptInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldAdoptInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	var allowRequest chan struct{}
+
+	var serverArgs base.TestServerArgs
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingRequestFilter: createStatsRequestFilter(&allowRequest),
+	}
+
+	ctx := context.Background()
+	const nodes = 1
+	tc := testcluster.StartTestCluster(t, nodes, params)
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
+
+	// Start a CREATE STATISTICS run and wait until it's done one scan.
+	allowRequest = make(chan struct{})
+	errCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS s1 FROM d.t`)
+		errCh <- err
+	}()
+	select {
+	case allowRequest <- struct{}{}:
+	case err := <-errCh:
+		t.Fatal(err)
+	}
+
+	// Attempt to start an automatic stats run. It should fail.
+	_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
+	expected := "another CREATE STATISTICS job is already running"
+	if !testutils.IsError(err, expected) {
+		t.Fatalf("expected '%s' error, but got %v", expected, err)
+	}
+
+	// Attempt to start a regular stats run. It should succeed.
+	errCh2 := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS s2 FROM d.t`)
+		errCh2 <- err
+	}()
+	select {
+	case allowRequest <- struct{}{}:
+	case err := <-errCh:
+		t.Fatal(err)
+	case err := <-errCh2:
+		t.Fatal(err)
+	}
+	close(allowRequest)
+
+	// Verify that both jobs completed successfully.
+	if err := <-errCh; err != nil {
+		t.Fatalf("create stats job should have completed: %s", err)
+	}
+	if err := <-errCh2; err != nil {
+		t.Fatalf("create stats job should have completed: %s", err)
+	}
+}
+
 // Create a blocking request filter for the actions related
 // to CREATE STATISTICS, i.e. Scanning a user table. See discussion
 // on jobutils.RunJob for where this might be useful.

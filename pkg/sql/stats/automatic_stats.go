@@ -55,6 +55,11 @@ var DefaultAsOfTime = 30 * time.Second
 // Constants for automatic statistics collection.
 // TODO(rytaft): Should these constants be configurable?
 const (
+	// AutoStatsName is the name to use for statistics created automatically.
+	// The name is chosen to be something that users are unlikely to choose when
+	// running CREATE STATISTICS manually.
+	AutoStatsName = "__auto__"
+
 	// targetFractionOfRowsUpdatedBeforeRefresh indicates the target fraction
 	// of rows in a table that should be updated before statistics on that table
 	// are refreshed.
@@ -65,17 +70,17 @@ const (
 	// table.
 	defaultAverageTimeBetweenRefreshes = 12 * time.Hour
 
-	// autoStatsName is the name to use for statistics created automatically.
-	// The name is chosen to be something that users are unlikely to choose when
-	// running CREATE STATISTICS manually.
-	autoStatsName = "__auto__"
-
 	// refreshChanBufferLen is the length of the buffered channel used by the
 	// automatic statistics refresher. If the channel overflows, all SQL mutations
 	// will be ignored by the refresher until it processes some existing mutations
 	// in the buffer and makes space for new ones. SQL mutations will never block
 	// waiting on the refresher.
 	refreshChanBufferLen = 256
+
+	// failedRefreshChanBufferLen is the length of the channel used to notify
+	// the background refresher thread that a refresh has failed and needs
+	// to be rescheduled.
+	failedRefreshChanBufferLen = 16
 )
 
 // Refresher is responsible for automatically refreshing the table statistics
@@ -135,6 +140,10 @@ type Refresher struct {
 	// metadata about SQL mutations to the background Refresher thread.
 	mutations chan mutation
 
+	// failedRefreshes is the buffered channel used to pass messages containing
+	// metadata about failed refreshes to the background Refresher thread.
+	failedRefreshes chan failedRefresh
+
 	// asOfTime is a duration which is used to define the AS OF time for
 	// runs of CREATE STATISTICS by the Refresher.
 	asOfTime time.Duration
@@ -148,6 +157,18 @@ type Refresher struct {
 	// mutationCounts contains aggregated mutation counts for each table that
 	// have yet to be processed by the refresher.
 	mutationCounts map[sqlbase.ID]int64
+
+	// failedRefreshesLastRefreshTime is a map containing tables for which a
+	// stats refresh was recently triggered but did not complete successfully
+	// (probably due to another CREATE STATISTICS job that was already running).
+	// The key of the map is the table ID, and the value contains the time of the
+	// last known successful refresh for that table.
+	failedRefreshesLastRefreshTime map[sqlbase.ID]time.Time
+
+	// notifyRefreshComplete is a callback function which is called after
+	// maybeRefreshStats has completed for all tables. It is currently only used
+	// for testing.
+	notifyRefreshComplete func()
 }
 
 // mutation contains metadata about a SQL mutation and is the message passed to
@@ -157,6 +178,16 @@ type mutation struct {
 	rowsAffected int
 }
 
+// failedRefresh contains metadata about a statistics refresh that failed.
+// It is a message passed to the background refresher thread whenever a
+// statistics refresh is triggered but does not complete successfully.
+// lastRefresh is the time when the stats for this table were last refreshed
+// successfully.
+type failedRefresh struct {
+	tableID     sqlbase.ID
+	lastRefresh time.Time
+}
+
 // MakeRefresher creates a new Refresher.
 func MakeRefresher(
 	ex sqlutil.InternalExecutor, cache *TableStatisticsCache, asOfTime time.Duration,
@@ -164,13 +195,15 @@ func MakeRefresher(
 	randSource := rand.NewSource(rand.Int63())
 
 	return &Refresher{
-		ex:             ex,
-		cache:          cache,
-		randGen:        makeAutoStatsRand(randSource),
-		mutations:      make(chan mutation, refreshChanBufferLen),
-		asOfTime:       asOfTime,
-		extraTime:      time.Duration(rand.Int63n(int64(time.Hour))),
-		mutationCounts: make(map[sqlbase.ID]int64, 16),
+		ex:                             ex,
+		cache:                          cache,
+		randGen:                        makeAutoStatsRand(randSource),
+		mutations:                      make(chan mutation, refreshChanBufferLen),
+		failedRefreshes:                make(chan failedRefresh, failedRefreshChanBufferLen),
+		asOfTime:                       asOfTime,
+		extraTime:                      time.Duration(rand.Int63n(int64(time.Hour))),
+		mutationCounts:                 make(map[sqlbase.ID]int64, 16),
+		failedRefreshesLastRefreshTime: make(map[sqlbase.ID]time.Time, 16),
 	}
 }
 
@@ -187,19 +220,33 @@ func (r *Refresher) Start(
 			select {
 			case <-timer.C:
 				mutationCounts := r.mutationCounts
+				failedRefreshesLastRefreshTime := r.failedRefreshesLastRefreshTime
 				if err := stopper.RunAsyncTask(
 					ctx, "stats.Refresher: maybeRefreshStats", func(ctx context.Context) {
 						for tableID, rowsAffected := range mutationCounts {
-							r.maybeRefreshStats(ctx, tableID, rowsAffected, r.asOfTime)
+							lastRefresh, mustRefresh := failedRefreshesLastRefreshTime[tableID]
+							r.maybeRefreshStats(ctx, tableID, rowsAffected, r.asOfTime, mustRefresh, lastRefresh)
+						}
+						if r.notifyRefreshComplete != nil {
+							r.notifyRefreshComplete()
 						}
 						timer.Reset(refreshInterval)
 					}); err != nil {
 					log.Errorf(ctx, "failed to refresh stats: %v", err)
 				}
 				r.mutationCounts = make(map[sqlbase.ID]int64, len(r.mutationCounts))
+				r.failedRefreshesLastRefreshTime = make(
+					map[sqlbase.ID]time.Time, len(r.failedRefreshesLastRefreshTime),
+				)
 
 			case mut := <-r.mutations:
 				r.mutationCounts[mut.tableID] += int64(mut.rowsAffected)
+
+			case failed := <-r.failedRefreshes:
+				r.failedRefreshesLastRefreshTime[failed.tableID] = failed.lastRefresh
+
+				// Ensure that an entry exists in the r.mutationCounts map.
+				r.mutationCounts[failed.tableID] += 0
 
 			case <-stopper.ShouldStop():
 				return
@@ -246,7 +293,12 @@ func (r *Refresher) NotifyMutation(
 // maybeRefreshStats implements the core logic described in the comment for
 // Refresher. It is called by the background Refresher thread.
 func (r *Refresher) maybeRefreshStats(
-	ctx context.Context, tableID sqlbase.ID, rowsAffected int64, asOf time.Duration,
+	ctx context.Context,
+	tableID sqlbase.ID,
+	rowsAffected int64,
+	asOf time.Duration,
+	mustRefresh bool,
+	lastRefresh time.Time,
 ) {
 	tableStats, err := r.cache.GetTableStats(ctx, tableID)
 	if err != nil {
@@ -255,8 +307,14 @@ func (r *Refresher) maybeRefreshStats(
 	}
 
 	var rowCount float64
-	mustRefresh := false
 	if stat := mostRecentAutomaticStat(tableStats); stat != nil {
+		// If this is a failed refresh that has been rescheduled, check if another
+		// node has already performed the refresh.
+		if mustRefresh && stat.CreatedAt.After(lastRefresh) {
+			mustRefresh = false
+		}
+		lastRefresh = stat.CreatedAt
+
 		// Check if too much time has passed since the last refresh.
 		// This check is in place to corral statistical outliers and avoid a
 		// case where a significant portion of the data in a table has changed but
@@ -282,6 +340,7 @@ func (r *Refresher) maybeRefreshStats(
 		// If there are no statistics available on this table, we must perform a
 		// refresh.
 		mustRefresh = true
+		lastRefresh = time.Time{}
 	}
 
 	targetRows := int64(rowCount*targetFractionOfRowsUpdatedBeforeRefresh) + 1
@@ -299,8 +358,9 @@ func (r *Refresher) maybeRefreshStats(
 			err = r.refreshStats(ctx, tableID, asOf)
 		}
 		if err != nil {
-			log.Errorf(ctx, "failed to create statistics: %v", err)
-			return
+			// Notify the background refresher thread about the failed refresh so it
+			// will be rescheduled.
+			r.failedRefreshes <- failedRefresh{tableID: tableID, lastRefresh: lastRefresh}
 		}
 	}
 }
@@ -314,18 +374,18 @@ func (r *Refresher) refreshStats(
 		"create-stats",
 		nil, /* txn */
 		fmt.Sprintf("CREATE STATISTICS %s FROM [%d] AS OF SYSTEM TIME '-%s';",
-			autoStatsName, tableID, asOf.String(),
+			AutoStatsName, tableID, asOf.String(),
 		),
 	)
 	return err
 }
 
 // mostRecentAutomaticStat finds the most recent automatic statistic
-// (identified by the name autoStatsName).
+// (identified by the name AutoStatsName).
 func mostRecentAutomaticStat(tableStats []*TableStatistic) *TableStatistic {
 	// Stats are sorted with the most recent first.
 	for _, stat := range tableStats {
-		if stat.Name == autoStatsName {
+		if stat.Name == AutoStatsName {
 			return stat
 		}
 	}
@@ -335,7 +395,7 @@ func mostRecentAutomaticStat(tableStats []*TableStatistic) *TableStatistic {
 // avgRefreshTime returns the average time between automatic statistics
 // refreshes given a list of tableStats from one table. It does so by finding
 // the most recent automatically generated statistic (identified by the name
-// autoStatsName), and then finds all previously generated automatic stats on
+// AutoStatsName), and then finds all previously generated automatic stats on
 // those same columns. The average is calculated as the average time between
 // each consecutive stat.
 //
@@ -346,7 +406,7 @@ func avgRefreshTime(tableStats []*TableStatistic) time.Duration {
 	var sum time.Duration
 	var count int
 	for _, stat := range tableStats {
-		if stat.Name != autoStatsName {
+		if stat.Name != AutoStatsName {
 			continue
 		}
 		if reference == nil {
