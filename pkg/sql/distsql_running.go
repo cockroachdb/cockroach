@@ -793,41 +793,4 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	}
 	dsp.FinalizePlan(planCtx, &physPlan)
 	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
-	if recv.resultWriter.Err() == nil {
-		if err := dsp.logEvents(ctx, evalCtx, plan); err != nil {
-			recv.SetError(err)
-			return
-		}
-	}
-}
-
-// logEvents logs events in the system.eventlog table for successful completion
-// of some types of operations.
-func (dsp *DistSQLPlanner) logEvents(
-	ctx context.Context, evalCtx *extendedEvalContext, plan planNode,
-) error {
-	switch n := plan.(type) {
-	case *createStatsNode:
-		// Record this statistics creation in the event log.
-		// TODO(rytaft): This creates a new transaction for the CREATE STATISTICS
-		// event. It must be different from the CREATE STATISTICS transaction,
-		// because that transaction must be read-only. In the future we may want
-		// to use the transaction that inserted the new stats into the
-		// system.table_statistics table, but that would require calling
-		// MakeEventLogger from the distsqlrun package.
-		return evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			return MakeEventLogger(evalCtx.ExecCfg).InsertEventRecord(
-				ctx,
-				txn,
-				EventLogCreateStatistics,
-				int32(n.tableDesc.ID),
-				int32(evalCtx.NodeID),
-				struct {
-					StatisticName string
-					Statement     string
-				}{n.Name.String(), n.String()},
-			)
-		})
-	}
-	return nil
 }

@@ -28,6 +28,7 @@ var _ Details = BackupDetails{}
 var _ Details = RestoreDetails{}
 var _ Details = SchemaChangeDetails{}
 var _ Details = ChangefeedDetails{}
+var _ Details = CreateStatsDetails{}
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
@@ -36,6 +37,7 @@ var _ ProgressDetails = BackupProgress{}
 var _ ProgressDetails = RestoreProgress{}
 var _ ProgressDetails = SchemaChangeProgress{}
 var _ ProgressDetails = ChangefeedProgress{}
+var _ ProgressDetails = CreateStatsProgress{}
 
 // Type returns the payload's job type.
 func (p *Payload) Type() Type {
@@ -55,6 +57,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeImport
 	case *Payload_Changefeed:
 		return TypeChangefeed
+	case *Payload_CreateStats:
+		return TypeCreateStats
 	default:
 		panic(fmt.Sprintf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -79,6 +83,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_Import{Import: &d}
 	case ChangefeedProgress:
 		return &Progress_Changefeed{Changefeed: &d}
+	case CreateStatsProgress:
+		return &Progress_CreateStats{CreateStats: &d}
 	default:
 		panic(fmt.Sprintf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -98,6 +104,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.Import
 	case *Payload_Changefeed:
 		return *d.Changefeed
+	case *Payload_CreateStats:
+		return *d.CreateStats
 	default:
 		return nil
 	}
@@ -117,6 +125,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.Import
 	case *Progress_Changefeed:
 		return *d.Changefeed
+	case *Progress_CreateStats:
+		return *d.CreateStats
 	default:
 		return nil
 	}
@@ -149,6 +159,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_Import{Import: &d}
 	case ChangefeedDetails:
 		return &Payload_Changefeed{Changefeed: &d}
+	case CreateStatsDetails:
+		return &Payload_CreateStats{CreateStats: &d}
 	default:
 		panic(fmt.Sprintf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}

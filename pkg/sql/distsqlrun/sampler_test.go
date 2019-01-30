@@ -65,8 +65,13 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 	seen := make(map[tree.DInt]bool)
 	n := 0
 	for {
-		row := out.NextNoMeta(t)
-		if row == nil {
+		row, meta := out.Next()
+		if meta != nil {
+			if meta.Progress == nil {
+				t.Fatalf("unexpected metadata: %v", meta)
+			}
+			continue
+		} else if row == nil {
 			break
 		}
 		for i := 2; i < len(outTypes); i++ {
@@ -189,7 +194,21 @@ func TestSamplerSketch(t *testing.T) {
 	}
 	p.Run(context.Background())
 
-	rows = out.GetRowsNoMeta(t)
+	// Collect the rows, excluding metadata.
+	rows = rows[:0]
+	for {
+		row, meta := out.Next()
+		if meta != nil {
+			if meta.Progress == nil {
+				t.Fatalf("unexpected metadata: %v", meta)
+			}
+			continue
+		} else if row == nil {
+			break
+		}
+		rows = append(rows, row)
+	}
+
 	// We expect one sampled row and two sketch rows.
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %v\n", rows.String(outTypes))
