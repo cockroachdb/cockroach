@@ -242,7 +242,13 @@ func (w *aggregateWindowFunc) Compute(
 	return w.peerRes, nil
 }
 
-func (w *aggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.EvalContext) {
+// Reset implements tree.WindowFunc interface.
+func (w *aggregateWindowFunc) Reset(ctx context.Context) {
+	w.agg.Reset(ctx)
+	w.peerRes = nil
+}
+
+func (w *aggregateWindowFunc) Close(ctx context.Context, _ *tree.EvalContext) {
 	w.agg.Close(ctx)
 }
 
@@ -337,6 +343,11 @@ func (w *framableAggregateWindowFunc) Compute(
 	return w.agg.peerRes, nil
 }
 
+// Reset implements tree.WindowFunc interface.
+func (w *framableAggregateWindowFunc) Reset(ctx context.Context) {
+	w.agg.Reset(ctx)
+}
+
 func (w *framableAggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.EvalContext) {
 	w.agg.Close(ctx, evalCtx)
 }
@@ -354,6 +365,9 @@ func (rowNumberWindow) Compute(
 ) (tree.Datum, error) {
 	return tree.NewDInt(tree.DInt(wfr.RowIdx + 1 /* one-indexed */)), nil
 }
+
+// Reset implements tree.WindowFunc interface.
+func (rowNumberWindow) Reset(context.Context) {}
 
 func (rowNumberWindow) Close(context.Context, *tree.EvalContext) {}
 
@@ -373,6 +387,11 @@ func (w *rankWindow) Compute(
 		w.peerRes = tree.NewDInt(tree.DInt(wfr.Rank()))
 	}
 	return w.peerRes, nil
+}
+
+// Reset implements tree.WindowFunc interface.
+func (w *rankWindow) Reset(context.Context) {
+	w.peerRes = nil
 }
 
 func (w *rankWindow) Close(context.Context, *tree.EvalContext) {}
@@ -395,6 +414,12 @@ func (w *denseRankWindow) Compute(
 		w.peerRes = tree.NewDInt(tree.DInt(w.denseRank))
 	}
 	return w.peerRes, nil
+}
+
+// Reset implements tree.WindowFunc interface.
+func (w *denseRankWindow) Reset(context.Context) {
+	w.denseRank = 0
+	w.peerRes = nil
 }
 
 func (w *denseRankWindow) Close(context.Context, *tree.EvalContext) {}
@@ -426,6 +451,11 @@ func (w *percentRankWindow) Compute(
 	return w.peerRes, nil
 }
 
+// Reset implements tree.WindowFunc interface.
+func (w *percentRankWindow) Reset(context.Context) {
+	w.peerRes = nil
+}
+
 func (w *percentRankWindow) Close(context.Context, *tree.EvalContext) {}
 
 // cumulativeDistWindow computes the relative rank of the current row using:
@@ -446,6 +476,11 @@ func (w *cumulativeDistWindow) Compute(
 		w.peerRes = tree.NewDFloat(tree.DFloat(wfr.DefaultFrameSize()) / tree.DFloat(wfr.PartitionSize()))
 	}
 	return w.peerRes, nil
+}
+
+// Reset implements tree.WindowFunc interface.
+func (w *cumulativeDistWindow) Reset(context.Context) {
+	w.peerRes = nil
 }
 
 func (w *cumulativeDistWindow) Close(context.Context, *tree.EvalContext) {}
@@ -516,6 +551,14 @@ func (w *ntileWindow) Compute(
 	return w.ntile, nil
 }
 
+// Reset implements tree.WindowFunc interface.
+func (w *ntileWindow) Reset(context.Context) {
+	w.boundary = 0
+	w.curBucketCount = 0
+	w.ntile = nil
+	w.remainder = 0
+}
+
 func (w *ntileWindow) Close(context.Context, *tree.EvalContext) {}
 
 type leadLagWindow struct {
@@ -579,6 +622,9 @@ func (w *leadLagWindow) Compute(
 	return args[0], nil
 }
 
+// Reset implements tree.WindowFunc interface.
+func (w *leadLagWindow) Reset(context.Context) {}
+
 func (w *leadLagWindow) Close(context.Context, *tree.EvalContext) {}
 
 // firstValueWindow returns value evaluated at the row that is the first row of the window frame.
@@ -602,6 +648,9 @@ func (firstValueWindow) Compute(
 	return row.GetDatum(int(wfr.ArgsIdxs[0]))
 }
 
+// Reset implements tree.WindowFunc interface.
+func (firstValueWindow) Reset(context.Context) {}
+
 func (firstValueWindow) Close(context.Context, *tree.EvalContext) {}
 
 // lastValueWindow returns value evaluated at the row that is the last row of the window frame.
@@ -624,6 +673,9 @@ func (lastValueWindow) Compute(
 	}
 	return row.GetDatum(int(wfr.ArgsIdxs[0]))
 }
+
+// Reset implements tree.WindowFunc interface.
+func (lastValueWindow) Reset(context.Context) {}
 
 func (lastValueWindow) Close(context.Context, *tree.EvalContext) {}
 
@@ -673,5 +725,8 @@ func (nthValueWindow) Compute(
 	}
 	return row.GetDatum(int(wfr.ArgsIdxs[0]))
 }
+
+// Reset implements tree.WindowFunc interface.
+func (nthValueWindow) Reset(context.Context) {}
 
 func (nthValueWindow) Close(context.Context, *tree.EvalContext) {}

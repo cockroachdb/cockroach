@@ -519,6 +519,10 @@ type WindowFunc interface {
 	// not present any exploitable associativity/commutativity for optimization.
 	Compute(context.Context, *EvalContext, *WindowFrameRun) (Datum, error)
 
+	// Reset resets the window function which allows for reusing it when
+	// computing over different partitions.
+	Reset(context.Context)
+
 	// Close allows the window function to free any memory it requested during execution,
 	// such as during the execution of an aggregation like CONCAT_AGG or ARRAY_AGG.
 	Close(context.Context, *EvalContext)
