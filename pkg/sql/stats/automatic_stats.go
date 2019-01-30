@@ -17,6 +17,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"time"
 
@@ -55,6 +56,11 @@ var DefaultAsOfTime = 30 * time.Second
 // Constants for automatic statistics collection.
 // TODO(rytaft): Should these constants be configurable?
 const (
+	// AutoStatsName is the name to use for statistics created automatically.
+	// The name is chosen to be something that users are unlikely to choose when
+	// running CREATE STATISTICS manually.
+	AutoStatsName = "__auto__"
+
 	// targetFractionOfRowsUpdatedBeforeRefresh indicates the target fraction
 	// of rows in a table that should be updated before statistics on that table
 	// are refreshed.
@@ -64,11 +70,6 @@ const (
 	// "average" time between refreshes when there is no information for a given
 	// table.
 	defaultAverageTimeBetweenRefreshes = 12 * time.Hour
-
-	// autoStatsName is the name to use for statistics created automatically.
-	// The name is chosen to be something that users are unlikely to choose when
-	// running CREATE STATISTICS manually.
-	autoStatsName = "__auto__"
 
 	// refreshChanBufferLen is the length of the buffered channel used by the
 	// automatic statistics refresher. If the channel overflows, all SQL mutations
@@ -299,8 +300,12 @@ func (r *Refresher) maybeRefreshStats(
 			err = r.refreshStats(ctx, tableID, asOf)
 		}
 		if err != nil {
-			log.Errorf(ctx, "failed to create statistics: %v", err)
-			return
+			// Resend the mutation info so that stats are more likely to be refreshed
+			// for this table next time.
+			if rowsAffected > math.MaxInt32 {
+				rowsAffected = math.MaxInt32
+			}
+			r.mutations <- mutation{tableID: tableID, rowsAffected: int(rowsAffected)}
 		}
 	}
 }
@@ -314,18 +319,18 @@ func (r *Refresher) refreshStats(
 		"create-stats",
 		nil, /* txn */
 		fmt.Sprintf("CREATE STATISTICS %s FROM [%d] AS OF SYSTEM TIME '-%s';",
-			autoStatsName, tableID, asOf.String(),
+			AutoStatsName, tableID, asOf.String(),
 		),
 	)
 	return err
 }
 
 // mostRecentAutomaticStat finds the most recent automatic statistic
-// (identified by the name autoStatsName).
+// (identified by the name AutoStatsName).
 func mostRecentAutomaticStat(tableStats []*TableStatistic) *TableStatistic {
 	// Stats are sorted with the most recent first.
 	for _, stat := range tableStats {
-		if stat.Name == autoStatsName {
+		if stat.Name == AutoStatsName {
 			return stat
 		}
 	}
@@ -335,7 +340,7 @@ func mostRecentAutomaticStat(tableStats []*TableStatistic) *TableStatistic {
 // avgRefreshTime returns the average time between automatic statistics
 // refreshes given a list of tableStats from one table. It does so by finding
 // the most recent automatically generated statistic (identified by the name
-// autoStatsName), and then finds all previously generated automatic stats on
+// AutoStatsName), and then finds all previously generated automatic stats on
 // those same columns. The average is calculated as the average time between
 // each consecutive stat.
 //
@@ -346,7 +351,7 @@ func avgRefreshTime(tableStats []*TableStatistic) time.Duration {
 	var sum time.Duration
 	var count int
 	for _, stat := range tableStats {
-		if stat.Name != autoStatsName {
+		if stat.Name != AutoStatsName {
 			continue
 		}
 		if reference == nil {
