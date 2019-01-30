@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -120,7 +119,7 @@ func (oc *optCatalog) ResolveDataSource(
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
-	ds, err := oc.newDataSource(desc, &oc.tn)
+	ds, err := oc.newDataSource(ctx, desc, &oc.tn)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
@@ -147,7 +146,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	}
 
 	name := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
-	return oc.newDataSource(desc, &name)
+	return oc.newDataSource(ctx, desc, &name)
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
@@ -169,7 +168,7 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 // newDataSource returns a data source wrapper for the given table descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) newDataSource(
-	desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName,
+	ctx context.Context, desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName,
 ) (cat.DataSource, error) {
 	// Check to see if there's already a data source wrapper for this descriptor.
 	if oc.dataSources == nil {
@@ -184,6 +183,33 @@ func (oc *optCatalog) newDataSource(
 	var ds cat.DataSource
 	switch {
 	case desc.IsTable():
+		id := cat.StableID(desc.ID)
+		if desc.IsVirtualTable() {
+			// A virtual table can effectively have multiple instances, with different
+			// contents. For example `db1.pg_catalog.pg_sequence` contains info about
+			// sequences in db1, whereas `db2.pg_catalog.pg_sequence` contains info
+			// about sequences in db2.
+			//
+			// These instances should have different stable IDs. To achieve this, we
+			// prepend the database ID.
+			//
+			// Note that some virtual tables have a special instance with empty catalog,
+			// for example "".information_schema.tables contains info about tables in
+			// all databases. We treat the empty catalog as having database ID 0.
+			if name.Catalog() != "" {
+				// TODO(radu): it's unfortunate that we have to lookup the schema again.
+				found, dbDesc, err := oc.resolver.LookupSchema(ctx, name.Catalog(), name.Schema())
+				if err != nil {
+					return nil, err
+				}
+				if !found {
+					// The virtual table should be valid if we got this far.
+					return nil, pgerror.NewAssertionErrorf("schema for virtual table not found")
+				}
+				id |= cat.StableID(dbDesc.(*DatabaseDescriptor).ID) << 32
+			}
+		}
+
 		stats, err := oc.statsCache.GetTableStats(context.TODO(), desc.ID)
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
@@ -191,7 +217,7 @@ func (oc *optCatalog) newDataSource(
 			// TODO(radu): at least log the error.
 			stats = nil
 		}
-		ds = newOptTable(desc, name, stats)
+		ds = newOptTable(desc, id, name, stats)
 
 	case desc.IsView():
 		ds = newOptView(desc, name)
@@ -200,10 +226,14 @@ func (oc *optCatalog) newDataSource(
 		ds = newOptSequence(desc, name)
 
 	default:
-		panic(fmt.Sprintf("unexpected table descriptor: %+v", desc))
+		return nil, pgerror.NewAssertionErrorf("unexpected table descriptor: %+v", desc)
 	}
 
-	oc.dataSources[desc] = ds
+	if !desc.IsVirtualTable() {
+		// Virtual tables can have multiple effective instances that utilize the
+		// same descriptor (see above).
+		oc.dataSources[desc] = ds
+	}
 	return ds, nil
 }
 
@@ -315,6 +345,9 @@ func (os *optSequence) SequenceName() *tree.TableName {
 type optTable struct {
 	desc *sqlbase.ImmutableTableDescriptor
 
+	// This is the descriptor ID, except for virtual tables.
+	id cat.StableID
+
 	// name is the fully qualified, fully resolved, fully normalized name of the
 	// table.
 	name cat.DataSourceName
@@ -341,9 +374,12 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
-	desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName, stats []*stats.TableStatistic,
+	desc *sqlbase.ImmutableTableDescriptor,
+	id cat.StableID,
+	name *cat.DataSourceName,
+	stats []*stats.TableStatistic,
 ) *optTable {
-	ot := &optTable{desc: desc, name: *name}
+	ot := &optTable{desc: desc, id: id, name: *name}
 	if stats != nil {
 		ot.stats = make([]optTableStat, len(stats))
 		n := 0
@@ -389,7 +425,7 @@ func (ot *optTable) prepareMutationColumns(desc *sqlbase.ImmutableTableDescripto
 
 // ID is part of the cat.Object interface.
 func (ot *optTable) ID() cat.StableID {
-	return cat.StableID(ot.desc.ID)
+	return ot.id
 }
 
 // Equals is part of the cat.Object interface.
@@ -398,7 +434,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 	if !ok {
 		return false
 	}
-	if ot.desc.ID != otherTable.desc.ID || ot.desc.Version != otherTable.desc.Version {
+	if ot.id != otherTable.id || ot.desc.Version != otherTable.desc.Version {
 		return false
 	}
 	// Verify the stats are identical.
