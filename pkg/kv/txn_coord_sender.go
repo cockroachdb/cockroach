@@ -107,6 +107,9 @@ type TxnCoordSender struct {
 		syncutil.Mutex
 
 		txnState txnState
+		// storedErr is set when txnState == txnError. This storedErr is returned to
+		// clients on Send().
+		storedErr *roachpb.Error
 
 		// active is set whenever the transaction has sent any requests.
 		active bool
@@ -469,7 +472,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		}
 	}
 
-	tcs.augmentMetaLocked(meta)
+	tcs.augmentMetaLocked(context.TODO(), meta)
 	return tcs
 }
 
@@ -518,10 +521,15 @@ func (tc *TxnCoordSender) AugmentMeta(ctx context.Context, meta roachpb.TxnCoord
 	if tc.mu.txn.ID != meta.Txn.ID {
 		return
 	}
-	tc.augmentMetaLocked(meta)
+	tc.augmentMetaLocked(ctx, meta)
 }
 
-func (tc *TxnCoordSender) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
+func (tc *TxnCoordSender) augmentMetaLocked(ctx context.Context, meta roachpb.TxnCoordMeta) {
+	if meta.Txn.Status != roachpb.PENDING {
+		// Non-pending transactions should only come in errors, which are not
+		// handled by this method.
+		log.Fatalf(ctx, "unexpected non-pending txn in augmentMetaLocked: %s", meta.Txn)
+	}
 	tc.mu.txn.Update(&meta.Txn)
 	for _, reqInt := range tc.interceptorStack {
 		reqInt.augmentMetaLocked(meta)
@@ -670,28 +678,7 @@ func (tc *TxnCoordSender) Send(
 		}
 	}
 
-	// Move to the error state on non-retriable errors.
 	if pErr != nil {
-		log.VEventf(ctx, 2, "failed batch: %s", pErr)
-		var retriable bool
-		// Note that unhandled retryable txn errors are allowed from leaf
-		// transactions. We pass them up through distributed SQL flows to
-		// the root transactions, at the receiver.
-		if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-			retriable = true
-			if tc.typ == client.RootTxn {
-				log.Fatalf(ctx,
-					"unexpected retryable error at the client.Txn level: (%T) %s",
-					pErr.GetDetail(), pErr)
-			}
-		} else if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryWithProtoRefreshError); ok {
-			retriable = true
-		}
-
-		if !retriable {
-			tc.mu.txnState = txnError
-		}
-
 		return nil, pErr
 	}
 
@@ -758,7 +745,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(msg), &tc.mu.txn)
 	}
 	if tc.mu.txnState == txnError {
-		return roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{})
+		return tc.mu.storedErr
 	}
 	if tc.mu.txn.Status == roachpb.ABORTED {
 		abortedErr := roachpb.NewErrorWithTxn(
@@ -809,8 +796,16 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 ) *roachpb.Error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+	txnID := tc.mu.txn.ID
 	err := tc.handleRetryableErrLocked(ctx, pErr)
-	tc.mu.txn.Update(&err.Transaction)
+	// We'll update our txn, unless this was an abort error. If it was an abort
+	// error, the transaction has been rolled back and the state was updated in
+	// handleRetryableErrLocked().
+	if err.Transaction.ID == txnID {
+		// This is where we get a new epoch.
+		cp := err.Transaction.Clone()
+		tc.mu.txn.Update(&cp)
+	}
 	return roachpb.NewError(err)
 }
 
@@ -824,8 +819,6 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 ) *roachpb.TransactionRetryWithProtoRefreshError {
 	// If the error is a transaction retry error, update metrics to
 	// reflect the reason for the restart.
-	// TODO(spencer): this code path does not account for retry errors
-	//   experienced by dist sql (see internal/client/txn.go).
 	if tErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); ok {
 		switch tErr.Reason {
 		case roachpb.RETRY_WRITE_TOO_OLD:
@@ -884,47 +877,82 @@ func (tc *TxnCoordSender) updateStateLocked(
 	br *roachpb.BatchResponse,
 	pErr *roachpb.Error,
 ) *roachpb.Error {
-	txnID := ba.Txn.ID
-	var responseTxn *roachpb.Transaction
+
+	// We handle a couple of different cases:
+	// 1) A successful response. If that response carries a transaction proto,
+	// we'll use it to update our proto.
+	// 2) A non-retriable error. We move to the txnError state and we cleanup. If
+	// the error carries a transaction in it, we update our proto with it
+	// (although Andrei doesn't know if that serves any purpose).
+	// 3) A retriable error. We "handle" it, in the sense that we call
+	// handleRetryableErrLocked() to transform the error. If the error instructs
+	// the client to start a new transaction (i.e. TransactionAbortedError), then
+	// the current transaction is automatically rolled-back. Otherwise, we update
+	// our proto for a new epoch.
+	// NOTE: We'd love to move to state txnError in case of new error but alas
+	// with the current interface we can't: there's no way for the client to ack
+	// the receipt of the error and control the switching to the new epoch. This
+	// is a major problem of the current txn interface - it means that concurrent
+	// users of a txn might operate at the wrong epoch if they race with the
+	// receipt of such an error.
+
 	if pErr == nil {
-		responseTxn = br.Txn
-	} else {
-		// Only handle transaction retry errors if this is a root transaction.
-		if pErr.TransactionRestart != roachpb.TransactionRestart_NONE &&
-			tc.typ == client.RootTxn {
-
-			errTxnID := pErr.GetTxn().ID // The ID of the txn that needs to be restarted.
-			if errTxnID != txnID {
-				// KV should not return errors for transactions other than the one in
-				// the BatchRequest.
-				log.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
-					ba.Txn, pErr)
-			}
-
-			err := tc.handleRetryableErrLocked(ctx, pErr)
-			if err.Transaction.ID == ba.Txn.ID {
-				// We'll update our txn, unless this was an abort error.
-				cp := err.Transaction.Clone()
-				responseTxn = &cp
-			}
-			pErr = roachpb.NewError(err)
-		} else {
-			// We got a non-retryable error, or a retryable error at a leaf
-			// transaction, and need to pass responsibility for handling it
-			// up to the root transaction.
-
-			if errTxn := pErr.GetTxn(); errTxn != nil {
-				responseTxn = errTxn
-			}
+		if br.Txn != nil {
+			tc.mu.txn.Update(br.Txn)
 		}
+		return nil
 	}
 
-	// Update our record of this transaction, even on error.
-	// Note that multiple retriable errors for the same epoch might arrive; also
-	// we might get retriable errors for old epochs. We rely on the associativity
-	// of Transaction.Update to sort out this lack of ordering guarantee.
-	if responseTxn != nil {
-		tc.mu.txn.Update(responseTxn)
+	if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+		if tc.typ == client.LeafTxn {
+			// Leaves handle retriable errors differently than roots. The leaf
+			// transaction is not supposed to be used any more after a retriable
+			// error.
+			// Separately, the error needs to make its way back to the root.
+
+			// From now on, clients will get this error whenever they Send(). We want
+			// clients to get the same retriable error so we don't wrap it in
+			// TxnAlreadyEncounteredErrorError as we do elsewhere.
+			tc.mu.txnState = txnError
+			tc.mu.storedErr = pErr
+
+			// Cleanup.
+			cp := pErr.GetTxn().Clone()
+			tc.mu.txn.Update(&cp)
+			tc.cleanupTxnLocked(ctx)
+			return pErr
+		}
+
+		txnID := ba.Txn.ID
+		errTxnID := pErr.GetTxn().ID // The ID of the txn that needs to be restarted.
+		if errTxnID != txnID {
+			// KV should not return errors for transactions other than the one in
+			// the BatchRequest.
+			log.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
+				ba.Txn, pErr)
+		}
+		err := tc.handleRetryableErrLocked(ctx, pErr)
+		// We'll update our txn, unless this was an abort error. If it was an abort
+		// error, the transaction has been rolled back and the state was updated in
+		// handleRetryableErrLocked().
+		if err.Transaction.ID == ba.Txn.ID {
+			// This is where we get a new epoch.
+			cp := err.Transaction.Clone()
+			tc.mu.txn.Update(&cp)
+		}
+		return roachpb.NewError(err)
+	}
+
+	// This is the non-retriable error case.
+	if errTxn := pErr.GetTxn(); errTxn != nil {
+		tc.mu.txnState = txnError
+		tc.mu.storedErr = roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{
+			PrevError: pErr.String(),
+		})
+		// Cleanup.
+		cp := errTxn.Clone()
+		tc.mu.txn.Update(&cp)
+		tc.cleanupTxnLocked(ctx)
 	}
 	return pErr
 }
