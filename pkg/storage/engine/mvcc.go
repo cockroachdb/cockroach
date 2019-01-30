@@ -1422,6 +1422,7 @@ func mvccPutInternal(
 					if haveNextVersion {
 						prevValSize = int64(len(prevUnsafeVal))
 					}
+					iter = nil // prevent accidental use below
 				}
 
 				versionKey := metaKey
@@ -2210,17 +2211,26 @@ func mvccResolveWriteIntent(
 		return false, nil
 	}
 
-	// A commit in an older epoch or timestamp is prevented by the
-	// abort span under normal operation. Replays of EndTransaction
-	// commands which occur after the transaction record has been erased
-	// make this a possibility; we treat such intents as uncommitted.
+	// A commit with a newer epoch than the intent effectively means that we
+	// wrote this intent before an earlier retry, but didn't write it again
+	// after. We treat such intents as uncommitted.
 	//
-	// A commit with a newer epoch effectively means that we wrote this
-	// intent before an earlier retry, but didn't write it again
-	// after. A commit with an older timestamp than the intent should
-	// not happen even on replays because BeginTransaction has replay
-	// protection. The BeginTransaction replay protection guarantees a
-	// restart in EndTransaction, so the replay won't resolve intents.
+	// A commit with a newer timestamp than the intent means that our timestamp
+	// was pushed during the course of an epoch. We treat such intents as
+	// committed after moving their timestamp forward. This is possible if a
+	// transaction writes an intent and then successfully refreshes its
+	// timestamp to avoid a restart.
+	//
+	// A commit with an older epoch than the intent should never happen because
+	// epoch increments require client action. This means that they can't be
+	// caused by replays.
+	//
+	// A commit with an older timestamp than the intent should not happen under
+	// normal circumstances because a client should never bump its timestamp
+	// after issuing an EndTransaction request. Replays of intent writes that
+	// are pushed forward due to WriteTooOld errors without client action
+	// combined with replays of intent resolution make this configuration a
+	// possibility. We treat such intents as uncommitted.
 	epochsMatch := meta.Txn.Epoch == intent.Txn.Epoch
 	timestampsValid := !intent.Txn.Timestamp.Less(hlc.Timestamp(meta.Timestamp))
 	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid
@@ -2263,28 +2273,7 @@ func mvccResolveWriteIntent(
 		// Set the timestamp for upcoming write (or at least the stats update).
 		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.Timestamp)
 
-		// If the new intent/value is at a different timestamp than the old intent,
-		// and there is a value under both, then that value may need an adjustment
-		// of its GCBytesAge. This is because it became non-live at orig.Timestamp
-		// originally, and now only becomes non-live at newMeta.Timestamp. For that
-		// reason, we have to read that version's size.
-		//
-		// However, if we're not actually moving the intent, no stats adjustment is
-		// necessary and we avoid reading the old version in that case.
-		var prevValSize int64
-		if buf.newMeta.Timestamp != meta.Timestamp {
-			// Look for the first real versioned key, i.e. the key just below the (old) meta's
-			// timestamp.
-			latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
-			_, unsafeNextValue, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
-			if err != nil {
-				return false, err
-			}
-			if haveNextVersion {
-				prevValSize = int64(len(unsafeNextValue))
-			}
-		}
-
+		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
 		if pushed {
 			// Keep existing intent if we're pushing timestamp. We keep the
@@ -2301,26 +2290,45 @@ func mvccResolveWriteIntent(
 			return false, err
 		}
 
-		// Update stat counters related to resolving the intent.
-		if ms != nil {
-			ms.Add(updateStatsOnResolve(intent.Key, prevValSize, origMetaKeySize, origMetaValSize,
-				metaKeySize, metaValSize, *meta, buf.newMeta, commit))
-		}
+		// If we're moving the intent's timestamp, adjust stats and rewrite it.
+		var prevValSize int64
+		if buf.newMeta.Timestamp != meta.Timestamp {
+			// If there is a value under the intent as it moves timestamps, then
+			// that value may need an adjustment of its GCBytesAge. This is
+			// because it became non-live at orig.Timestamp originally, and now
+			// only becomes non-live at newMeta.Timestamp. For that reason, we
+			// have to read that version's size.
+			//
+			// Look for the first real versioned key, i.e. the key just below
+			// the (old) meta's timestamp.
+			latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
+			_, unsafeNextValue, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
+			if err != nil {
+				return false, err
+			}
+			if haveNextVersion {
+				prevValSize = int64(len(unsafeNextValue))
+			}
+			iter = nil // prevent accidental use below
 
-		// If timestamp of value changed, need to rewrite versioned value.
-		if hlc.Timestamp(meta.Timestamp) != intent.Txn.Timestamp {
-			origKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
+			// Rewrite the versioned value at the new timestamp.
 			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.Timestamp}
-			valBytes, err := engine.Get(origKey)
+			valBytes, err := engine.Get(latestKey)
 			if err != nil {
 				return false, err
 			}
 			if err = engine.Put(newKey, valBytes); err != nil {
 				return false, err
 			}
-			if err = engine.Clear(origKey); err != nil {
+			if err = engine.Clear(latestKey); err != nil {
 				return false, err
 			}
+		}
+
+		// Update stat counters related to resolving the intent.
+		if ms != nil {
+			ms.Add(updateStatsOnResolve(intent.Key, prevValSize, origMetaKeySize, origMetaValSize,
+				metaKeySize, metaValSize, *meta, buf.newMeta, commit))
 		}
 
 		// Log the logical MVCC operation.
