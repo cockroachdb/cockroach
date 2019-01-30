@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -796,10 +797,11 @@ func TestChangefeedColumnFamily(t *testing.T) {
 
 		// Table with 2 column families.
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY (a), FAMILY (b))`)
-		sqlDB.ExpectErr(
-			t, `exactly 1 column family`,
-			`CREATE CHANGEFEED FOR foo`,
-		)
+		if strings.Contains(t.Name(), `enterprise`) {
+			sqlDB.ExpectErr(t, `exactly 1 column family`, `CREATE CHANGEFEED FOR foo`)
+		} else {
+			sqlDB.ExpectErr(t, `exactly 1 column family`, `EXPERIMENTAL CHANGEFEED FOR foo`)
+		}
 
 		// Table with a second column family added after the changefeed starts.
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, FAMILY f_a (a))`)
@@ -1318,20 +1320,20 @@ func TestChangefeedErrors(t *testing.T) {
 
 	sqlDB.ExpectErr(
 		t, `unknown format: nope`,
-		`CREATE CHANGEFEED FOR foo WITH format=nope`,
+		`EXPERIMENTAL CHANGEFEED FOR foo WITH format=nope`,
 	)
 
 	sqlDB.ExpectErr(
 		t, `unknown envelope: nope`,
-		`CREATE CHANGEFEED FOR foo WITH envelope=nope`,
+		`EXPERIMENTAL CHANGEFEED FOR foo WITH envelope=nope`,
 	)
 	sqlDB.ExpectErr(
 		t, `negative durations are not accepted: resolved='-1s'`,
-		`CREATE CHANGEFEED FOR foo WITH resolved='-1s'`,
+		`EXPERIMENTAL CHANGEFEED FOR foo WITH resolved='-1s'`,
 	)
 	sqlDB.ExpectErr(
 		t, `cannot specify timestamp in the future`,
-		`CREATE CHANGEFEED FOR foo WITH cursor=$1`, timeutil.Now().Add(time.Hour),
+		`EXPERIMENTAL CHANGEFEED FOR foo WITH cursor=$1`, timeutil.Now().Add(time.Hour),
 	)
 
 	sqlDB.ExpectErr(
@@ -1354,26 +1356,26 @@ func TestChangefeedErrors(t *testing.T) {
 	// high-water mark is saved in it.
 	sqlDB.ExpectErr(
 		t, `not supported on system tables`,
-		`CREATE CHANGEFEED FOR system.jobs`,
+		`EXPERIMENTAL CHANGEFEED FOR system.jobs`,
 	)
 	sqlDB.ExpectErr(
 		t, `table "bar" does not exist`,
-		`CREATE CHANGEFEED FOR bar`,
+		`EXPERIMENTAL CHANGEFEED FOR bar`,
 	)
 	sqlDB.Exec(t, `CREATE SEQUENCE seq`)
 	sqlDB.ExpectErr(
 		t, `CHANGEFEED cannot target sequences: seq`,
-		`CREATE CHANGEFEED FOR seq`,
+		`EXPERIMENTAL CHANGEFEED FOR seq`,
 	)
 	sqlDB.Exec(t, `CREATE VIEW vw AS SELECT a, b FROM foo`)
 	sqlDB.ExpectErr(
 		t, `CHANGEFEED cannot target views: vw`,
-		`CREATE CHANGEFEED FOR vw`,
+		`EXPERIMENTAL CHANGEFEED FOR vw`,
 	)
 	// Backup has the same bad error message #28170.
 	sqlDB.ExpectErr(
 		t, `"information_schema.tables" does not exist`,
-		`CREATE CHANGEFEED FOR information_schema.tables`,
+		`EXPERIMENTAL CHANGEFEED FOR information_schema.tables`,
 	)
 
 	// TODO(dan): These two tests shouldn't need initial data in the table
@@ -1382,14 +1384,14 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO dec VALUES (1.0)`)
 	sqlDB.ExpectErr(
 		t, `pq: column a: decimal with no precision`,
-		`CREATE CHANGEFEED FOR dec WITH format=$1, confluent_schema_registry=$2`,
+		`EXPERIMENTAL CHANGEFEED FOR dec WITH format=$1, confluent_schema_registry=$2`,
 		optFormatAvro, `bar`,
 	)
 	sqlDB.Exec(t, `CREATE TABLE "uuid" (a UUID PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO "uuid" VALUES (gen_random_uuid())`)
 	sqlDB.ExpectErr(
 		t, `pq: column a: type UUID not yet supported with avro`,
-		`CREATE CHANGEFEED FOR "uuid" WITH format=$1, confluent_schema_registry=$2`,
+		`EXPERIMENTAL CHANGEFEED FOR "uuid" WITH format=$1, confluent_schema_registry=$2`,
 		optFormatAvro, `bar`,
 	)
 
@@ -1450,9 +1452,16 @@ func TestChangefeedPermissions(t *testing.T) {
 		}
 		defer testuser.Close()
 
-		if _, err := testuser.Exec(
-			`CREATE CHANGEFEED FOR foo`,
-		); !testutils.IsError(err, `only superusers`) {
+		// TODO(dan): If feedFactory.Feed returned errors instead of handing
+		// them to t.Fatal (which I've been meaning to do anyway), we could
+		// eliminate the special casing with something like
+		// _, err := f.Feed(`CREATE CHANGEFEED FOR FOO`)
+		// require.EqualError(t, err, `only superusers`)
+		stmt := `EXPERIMENTAL CHANGEFEED FOR foo`
+		if strings.Contains(t.Name(), `enterprise`) {
+			stmt = `CREATE CHANGEFEED FOR foo`
+		}
+		if _, err := testuser.Exec(stmt); !testutils.IsError(err, `only superusers`) {
 			t.Errorf(`expected 'only superusers' error got: %+v`, err)
 		}
 	}
