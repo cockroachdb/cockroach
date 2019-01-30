@@ -463,8 +463,8 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	require.Equal(t, testProcessorEventCCap+1, len(r1Stream.Events()))
 	require.Equal(t, newErrBufferCapacityExceeded().GoError(), (<-r1ErrC).GoError())
 	testutils.SucceedsSoon(t, func() error {
-		if p.Len() != 1 {
-			return fmt.Errorf("processor had %d regs, wanted %d", p.reg.Len(), 1)
+		if act, exp := p.Len(), 1; exp != act {
+			return fmt.Errorf("processor had %d regs, wanted %d", act, exp)
 		}
 		return nil
 	})
