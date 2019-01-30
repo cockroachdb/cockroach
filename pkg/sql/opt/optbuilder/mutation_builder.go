@@ -480,7 +480,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 func findNotNullIndexCol(index cat.Index) int {
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
 		indexCol := index.Column(i)
-		if !indexCol.Column.IsNullable() {
+		if !indexCol.IsNullable() {
 			return indexCol.Ordinal
 		}
 	}

@@ -609,10 +609,12 @@ TABLE abc
  │    ├── b int not null
  │    ├── c int not null
  │    └── a int not null (storing)
- └── INDEX ba
-      ├── b int not null
-      ├── a int not null
-      └── c int not null
+ ├── INDEX ba
+ │    ├── b int not null
+ │    ├── a int not null
+ │    └── c int not null
+ ├── FAMILY family1 (a, b, c)
+ └── FAMILY family2 (d)
 
 exec-ddl
 CREATE VIEW abcview AS SELECT * FROM abc

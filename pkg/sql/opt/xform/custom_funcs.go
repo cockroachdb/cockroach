@@ -313,7 +313,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 		col := index.Column(i)
 		colID := tabID.ColumnID(col.Ordinal)
 		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
-		if !col.Column.IsNullable() {
+		if !col.IsNullable() {
 			notNullCols.Add(int(colID))
 		}
 	}
@@ -876,7 +876,7 @@ func (c *CustomFuncs) fixedColsForZigzag(
 			break
 		}
 		vals = append(vals, c.e.f.ConstructConstVal(val))
-		types = append(types, index.Column(i).Column.DatumType())
+		types = append(types, index.Column(i).DatumType())
 		fixedCols = append(fixedCols, colID)
 	}
 	return fixedCols, vals, types

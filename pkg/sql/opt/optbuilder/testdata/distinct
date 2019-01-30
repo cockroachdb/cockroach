@@ -21,10 +21,13 @@ TABLE xyz
  ├── INDEX xy
  │    ├── x int not null
  │    └── y int
- └── INDEX zyx
-      ├── z float
-      ├── y int
-      └── x int not null
+ ├── INDEX zyx
+ │    ├── z float
+ │    ├── y int
+ │    └── x int not null
+ ├── FAMILY family1 (x)
+ ├── FAMILY family2 (y)
+ └── FAMILY family3 (z)
 
 build
 SELECT y, z FROM xyz
