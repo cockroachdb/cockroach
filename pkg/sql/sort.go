@@ -20,6 +20,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -710,7 +711,7 @@ type sortValues struct {
 	// ordering indicates the desired ordering of each column in the rows
 	ordering sqlbase.ColumnOrdering
 	// rows contains the columns during sorting.
-	rows *sqlbase.RowContainer
+	rows *rowcontainer.RowContainer
 
 	// evalCtx is needed because we use datum.Compare() which needs it,
 	// and the sort.Interface and heap.Interface do not allow
@@ -719,7 +720,7 @@ type sortValues struct {
 
 	// rowsPopped is used for heaps, it indicates the number of rows
 	// that were "popped". These rows are still part of the underlying
-	// sqlbase.RowContainer, in the range [rows.Len()-n.rowsPopped,
+	// rowcontainer.RowContainer, in the range [rows.Len()-n.rowsPopped,
 	// rows.Len).
 	rowsPopped int
 
@@ -736,7 +737,7 @@ func (p *planner) newSortValues(
 ) *sortValues {
 	return &sortValues{
 		ordering: ordering,
-		rows: sqlbase.NewRowContainer(
+		rows: rowcontainer.NewRowContainer(
 			p.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(columns),
 			capacity,

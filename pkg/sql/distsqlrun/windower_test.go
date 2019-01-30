@@ -124,9 +124,9 @@ func BenchmarkWindower(b *testing.B) {
 	}
 
 	rowsGenerators := []func(int, int) sqlbase.EncDatumRows{
-		makeIntRows,
+		sqlbase.MakeIntRows,
 		func(numRows, numCols int) sqlbase.EncDatumRows {
-			return makeRepeatedIntRows(numRows/100, numRows, numCols)
+			return sqlbase.MakeRepeatedIntRows(numRows/100, numRows, numCols)
 		},
 	}
 	skipRepeatedSpecs := map[int]bool{0: true, 1: true}
@@ -156,7 +156,7 @@ func BenchmarkWindower(b *testing.B) {
 			b.Run(runName, func(b *testing.B) {
 				post := &distsqlpb.PostProcessSpec{}
 				disposer := &RowDisposer{}
-				input := NewRepeatableRowSource(threeIntCols, rowsGenerator(numRows, numCols))
+				input := NewRepeatableRowSource(sqlbase.ThreeIntCols, rowsGenerator(numRows, numCols))
 
 				b.SetBytes(int64(8 * numRows * numCols))
 				b.ResetTimer()

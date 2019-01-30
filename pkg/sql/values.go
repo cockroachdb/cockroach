@@ -19,6 +19,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -134,7 +135,7 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 		columns: columns,
 		isConst: true,
 		valuesRun: valuesRun{
-			rows: sqlbase.NewRowContainer(
+			rows: rowcontainer.NewRowContainer(
 				p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
 			),
 		},
@@ -143,7 +144,7 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 
 // valuesRun is the run-time state of a valuesNode during local execution.
 type valuesRun struct {
-	rows    *sqlbase.RowContainer
+	rows    *rowcontainer.RowContainer
 	nextRow int // The index of the next row.
 }
 
@@ -159,7 +160,7 @@ func (n *valuesNode) startExec(params runParams) error {
 	// others that create a valuesNode internally for storing results
 	// from other planNodes), so its expressions need evaluating.
 	// This may run subqueries.
-	n.rows = sqlbase.NewRowContainer(
+	n.rows = rowcontainer.NewRowContainer(
 		params.extendedEvalCtx.Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(n.columns),
 		len(n.tuples),

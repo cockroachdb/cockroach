@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -28,7 +29,7 @@ func TestInputStatCollector(t *testing.T) {
 	const numRows = 100
 
 	isc := NewInputStatCollector(
-		NewRowBuffer(oneIntCol, makeIntRows(numRows, 1), RowBufferArgs{}),
+		NewRowBuffer(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, 1), RowBufferArgs{}),
 	)
 	for row, meta := isc.Next(); row != nil || meta != nil; row, meta = isc.Next() {
 	}

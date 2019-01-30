@@ -30,9 +30,9 @@ func TestProjectSet(t *testing.T) {
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = intEncDatum(i)
+		v[i] = sqlbase.IntEncDatum(i)
 	}
-	null := nullEncDatum()
+	null := sqlbase.NullEncDatum()
 
 	testCases := []struct {
 		description string
@@ -47,13 +47,13 @@ func TestProjectSet(t *testing.T) {
 				Exprs: []distsqlpb.Expression{
 					{Expr: "@1 + 1"},
 				},
-				GeneratedColumns: oneIntCol,
+				GeneratedColumns: sqlbase.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
 			input: sqlbase.EncDatumRows{
 				{v[2]},
 			},
-			inputTypes: oneIntCol,
+			inputTypes: sqlbase.OneIntCol,
 			expected: sqlbase.EncDatumRows{
 				{v[2], v[3]},
 			},
@@ -64,14 +64,14 @@ func TestProjectSet(t *testing.T) {
 				Exprs: []distsqlpb.Expression{
 					{Expr: "generate_series(@1, 2)"},
 				},
-				GeneratedColumns: oneIntCol,
+				GeneratedColumns: sqlbase.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
 			input: sqlbase.EncDatumRows{
 				{v[0]},
 				{v[1]},
 			},
-			inputTypes: oneIntCol,
+			inputTypes: sqlbase.OneIntCol,
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -95,7 +95,7 @@ func TestProjectSet(t *testing.T) {
 			input: sqlbase.EncDatumRows{
 				{v[0]},
 			},
-			inputTypes: oneIntCol,
+			inputTypes: sqlbase.OneIntCol,
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[0], v[0], v[0], v[0]},
 				{v[0], null, null, v[1], v[1]},
@@ -129,7 +129,7 @@ func BenchmarkProjectSet(b *testing.B) {
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = intEncDatum(i)
+		v[i] = sqlbase.IntEncDatum(i)
 	}
 
 	benchCases := []struct {
@@ -144,13 +144,13 @@ func BenchmarkProjectSet(b *testing.B) {
 				Exprs: []distsqlpb.Expression{
 					{Expr: "generate_series(1, 100000)"},
 				},
-				GeneratedColumns: oneIntCol,
+				GeneratedColumns: sqlbase.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
 			input: sqlbase.EncDatumRows{
 				{v[0]},
 			},
-			inputTypes: oneIntCol,
+			inputTypes: sqlbase.OneIntCol,
 		},
 	}
 

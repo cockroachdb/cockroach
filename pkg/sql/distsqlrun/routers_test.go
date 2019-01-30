@@ -725,12 +725,12 @@ func TestRouterDiskSpill(t *testing.T) {
 	spec.Streams = make([]distsqlpb.StreamEndpointSpec, 1)
 	// Initialize the RowChannel with the minimal buffer size so as to block
 	// writes to the channel (after the first one).
-	rowChan.initWithBufSizeAndNumSenders(oneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
+	rowChan.initWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	rb.setupStreams(&spec, []RowReceiver{&rowChan})
-	rb.init(ctx, &flowCtx, oneIntCol)
+	rb.init(ctx, &flowCtx, sqlbase.OneIntCol)
 	rb.start(ctx, &wg, nil /* ctxCancel */)
 
-	rows := makeIntRows(numRows, numCols)
+	rows := sqlbase.MakeIntRows(numRows, numCols)
 	// output is the sole router output in this test.
 	output := &rb.outputs[0]
 	errChan := make(chan error)
@@ -802,14 +802,14 @@ func TestRouterDiskSpill(t *testing.T) {
 		}
 		// Verify correct order (should be the order in which we added rows).
 		for j, c := range row {
-			if cmp, err := c.Compare(&intType, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
+			if cmp, err := c.Compare(&sqlbase.IntType, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Fatalf(
 					"order violated on row %d, expected %v got %v",
 					i,
-					rows[i].String(oneIntCol),
-					row.String(oneIntCol),
+					rows[i].String(sqlbase.OneIntCol),
+					row.String(sqlbase.OneIntCol),
 				)
 			}
 		}
@@ -886,13 +886,13 @@ func TestRangeRouterInit(t *testing.T) {
 func BenchmarkRouter(b *testing.B) {
 	numCols := 1
 	numRows := 1 << 16
-	colTypes := makeIntCols(numCols)
+	colTypes := sqlbase.MakeIntCols(numCols)
 
 	ctx := context.Background()
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
-	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+	input := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
 	for _, spec := range []distsqlpb.OutputRouterSpec{
 		{

@@ -151,8 +151,8 @@ func BenchmarkStreamEncoder(b *testing.B) {
 	for _, numCols := range []int{1, 4, 16, 64} {
 		b.Run(fmt.Sprintf("rows=%d,cols=%d", numRows, numCols), func(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
-			cols := makeIntCols(numCols)
-			input := NewRepeatableRowSource(cols, makeIntRows(numRows, numCols))
+			cols := sqlbase.MakeIntCols(numCols)
+			input := NewRepeatableRowSource(cols, sqlbase.MakeIntRows(numRows, numCols))
 
 			b.ResetTimer()
 			ctx := context.Background()
@@ -199,9 +199,9 @@ func BenchmarkStreamDecoder(b *testing.B) {
 		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
 			b.SetBytes(int64(outboxBufRows * numCols * 8))
 			var se StreamEncoder
-			colTypes := makeIntCols(numCols)
+			colTypes := sqlbase.MakeIntCols(numCols)
 			se.init(colTypes)
-			inRow := makeIntRows(1, numCols)[0]
+			inRow := sqlbase.MakeIntRows(1, numCols)[0]
 			for i := 0; i < outboxBufRows; i++ {
 				if err := se.AddRow(inRow); err != nil {
 					b.Fatal(err)

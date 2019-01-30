@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -690,7 +691,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// of the results stored in the container depends on the type of the subquery.
 	subqueryRecv := recv.clone()
 	var typ sqlbase.ColTypeInfo
-	var rows *sqlbase.RowContainer
+	var rows *rowcontainer.RowContainer
 	if subqueryPlan.execMode == distsqlrun.SubqueryExecModeExists {
 		subqueryRecv.noColsRequired = true
 		typ = sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{})
@@ -707,7 +708,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		}
 		typ = sqlbase.ColTypeInfoFromColTypes(colTypes)
 	}
-	rows = sqlbase.NewRowContainer(subqueryMemAccount, typ, 0)
+	rows = rowcontainer.NewRowContainer(subqueryMemAccount, typ, 0)
 	defer rows.Close(evalCtx.Ctx())
 
 	subqueryRowReceiver := NewRowResultWriter(rows)

@@ -112,7 +112,7 @@ func TestDistinct(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			ds := c.spec
 
-			in := NewRowBuffer(twoIntCols, c.input, RowBufferArgs{})
+			in := NewRowBuffer(sqlbase.TwoIntCols, c.input, RowBufferArgs{})
 			out := &RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
@@ -141,8 +141,8 @@ func TestDistinct(t *testing.T) {
 				res = append(res, row)
 			}
 
-			if result := res.String(twoIntCols); result != c.expected.String(twoIntCols) {
-				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(twoIntCols))
+			if result := res.String(sqlbase.TwoIntCols); result != c.expected.String(sqlbase.TwoIntCols) {
+				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(sqlbase.TwoIntCols))
 			}
 		})
 	}
@@ -168,7 +168,7 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 	post := &distsqlpb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			input := NewRepeatableRowSource(twoIntCols, makeIntRows(numRows, numCols))
+			input := NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeIntRows(numRows, numCols))
 
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()

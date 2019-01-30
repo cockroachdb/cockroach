@@ -62,7 +62,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			wg.Add(len(rc))
 
 			for i := range rc {
-				rc[i].InitWithNumSenders(oneIntCol, 1)
+				rc[i].InitWithNumSenders(sqlbase.OneIntCol, 1)
 
 				go func(i int) {
 					defer wg.Done()
@@ -101,7 +101,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 
 func BenchmarkMultiplexedRowChannel(b *testing.B) {
 	numRows := 1 << 16
-	row := sqlbase.EncDatumRow{intEncDatum(0)}
+	row := sqlbase.EncDatumRow{sqlbase.IntEncDatum(0)}
 	for _, senders := range []int{2, 4, 8} {
 		b.Run(fmt.Sprintf("senders=%d", senders), func(b *testing.B) {
 			b.SetBytes(int64(senders * numRows * 8))
@@ -109,7 +109,7 @@ func BenchmarkMultiplexedRowChannel(b *testing.B) {
 				var wg sync.WaitGroup
 				wg.Add(senders + 1)
 				mrc := &RowChannel{}
-				mrc.InitWithNumSenders(oneIntCol, senders)
+				mrc.InitWithNumSenders(sqlbase.OneIntCol, senders)
 				go func() {
 					for {
 						if r, _ := mrc.Next(); r == nil {
