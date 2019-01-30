@@ -2455,7 +2455,16 @@ func AsJSON(d Datum) (json.JSON, error) {
 			builder.Add(fmt.Sprintf("f%d", i+1), j)
 		}
 		return builder.Build(), nil
-	case *DTimestamp, *DTimestampTZ, *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DBitArray:
+	case *DTimestampTZ:
+		// Our normal timestamp-formatting code uses a variation on RFC 3339,
+		// without the T separator. This causes some compatibility problems
+		// with certain JSON consumers, so we'll use an alternate formatting
+		// path here to maintain consistency with PostgreSQL.
+		return json.FromString(t.Time.Format(time.RFC3339Nano)), nil
+	case *DTimestamp:
+		// This is RFC3339Nano, but without the TZ fields.
+		return json.FromString(t.UTC().Format("2006-01-02T15:04:05.999999999")), nil
+	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DBitArray:
 		return json.FromString(AsStringWithFlags(t, FmtBareStrings)), nil
 	default:
 		if d == DNull {
