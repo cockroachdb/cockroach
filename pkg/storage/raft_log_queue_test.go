@@ -201,7 +201,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		}}
 	for i, c := range testCases {
-		status := &raft.Status{
+		status := raft.Status{
 			Progress: make(map[uint64]raft.Progress),
 		}
 		for j, v := range c.progress {
@@ -243,7 +243,7 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "tooLarge", func(t *testing.T, tooLarge bool) {
 		testutils.RunTrueAndFalse(t, "active", func(t *testing.T, active bool) {
-			status := &raft.Status{
+			status := raft.Status{
 				Progress: make(map[uint64]raft.Progress),
 			}
 			for j, v := range []uint64{500, 400, 300, 200, 100} {
@@ -277,10 +277,20 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 	})
 }
 
+func TestTruncateDecisionZeroValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var decision truncateDecision
+	assert.False(t, decision.ShouldTruncate())
+	assert.Zero(t, decision.NumNewRaftSnapshots())
+	assert.Zero(t, decision.NumTruncatableIndexes())
+	assert.Equal(t, "should truncate: false [truncate 0 entries to first index 0 (chosen via: )]", decision.String())
+}
+
 func TestTruncateDecisionNumSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	status := &raft.Status{
+	status := raft.Status{
 		Progress: map[uint64]raft.Progress{
 			// Fully caught up.
 			5: {State: raft.ProgressStateReplicate, Match: 11, Next: 12},
