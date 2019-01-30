@@ -671,7 +671,7 @@ func (tc *TableCollection) copyModifiedSchema(to *TableCollection) {
 	// The "to" TableCollection can re-lease the same descriptors.
 }
 
-type TableCollectionModifier interface {
+type tableCollectionModifier interface {
 	copyModifiedSchema(to *TableCollection)
 }
 
