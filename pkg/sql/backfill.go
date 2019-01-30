@@ -16,7 +16,9 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -26,11 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -467,6 +471,152 @@ func (sc *SchemaChanger) distBackfill(
 	return nil
 }
 
+// validate the new indexes being added
+func (sc *SchemaChanger) validateIndexes(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+) error {
+	if testDisableTableLeases {
+		return nil
+	}
+	readAsOf := sc.clock.Now()
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		txn.SetFixedTimestamp(ctx, readAsOf)
+		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+
+		if err := sc.ExtendLease(ctx, lease); err != nil {
+			return err
+		}
+
+		type idxInfo struct {
+			name string
+			size int64
+			err  error
+		}
+		notify := make(chan idxInfo)
+		numIndexChecks := 0
+		// Compute the size of each index.
+		for _, m := range tableDesc.Mutations {
+			if sc.mutationID != m.MutationID {
+				break
+			}
+			idx := m.GetIndex()
+			// An inverted index doesn't matchup in length.
+			if idx == nil ||
+				idx.Type == sqlbase.IndexDescriptor_INVERTED ||
+				m.Direction == sqlbase.DescriptorMutation_DROP {
+				continue
+			}
+
+			numIndexChecks++
+			go func() {
+				var idxLen int64
+				err := func() error {
+					start := timeutil.Now()
+					// Make the mutations public in a private copy of the descriptor
+					// and add it to the TableCollection, so that we can use SQL below to perform
+					// the validation. We wouldn't have needed to do this if we could have
+					// updated the descriptor and run validation in the same transaction. However,
+					// our current system is incapable of running long running schema changes
+					// (the validation can take many minutes). So we pretend that the schema
+					// has been updated and actually update it in a separate transaction that
+					// follows this one.
+					ie := evalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
+					tc := &TableCollection{leaseMgr: sc.leaseMgr}
+					ie.impl.tcModifier = tc
+					desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic()
+					if err != nil {
+						return err
+					}
+					// pretend that the schema has been modified.
+					if err := tc.addUncommittedTable(*desc); err != nil {
+						return err
+					}
+
+					row, err := evalCtx.InternalExecutor.QueryRow(ctx, "verify-idx-count", txn,
+						fmt.Sprintf(`SELECT COUNT(*) FROM [%d AS t]@[%d]`, tableDesc.ID, idx.ID))
+					if err != nil {
+						return err
+					}
+					idxLen = int64(tree.MustBeDInt(row[0]))
+
+					log.Infof(ctx, "index %s/%s row count = %d, took %s",
+						tableDesc.Name, idx.Name, idxLen, timeutil.Since(start))
+					return nil
+				}()
+				if err != nil {
+					notify <- idxInfo{err: err}
+				} else {
+					notify <- idxInfo{name: idx.Name, size: idxLen}
+				}
+			}()
+		}
+
+		if numIndexChecks > 0 {
+			// Run a periodic schema lease renewal thread.
+			closer := make(chan struct{})
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				refreshTimer := timeutil.NewTimer()
+				defer refreshTimer.Stop()
+				defer wg.Done()
+				refreshTimer.Reset(checkpointInterval)
+				for {
+					select {
+					case <-closer:
+						return
+
+					case <-refreshTimer.C:
+						refreshTimer.Read = true
+						refreshTimer.Reset(checkpointInterval)
+						if err := sc.ExtendLease(ctx, lease); err != nil {
+							return
+						}
+					}
+				}
+			}()
+
+			var tableRowCount int64
+			var tableRowCountTime time.Duration
+			start := timeutil.Now()
+			// Count the number of rows in the table.
+			cnt, err := evalCtx.InternalExecutor.QueryRow(ctx, "VERIFY INDEX", txn,
+				fmt.Sprintf(`SELECT count(1) FROM [%d AS t]`, tableDesc.ID))
+			// Return err down below.
+			if err == nil {
+				tableRowCount = int64(tree.MustBeDInt(cnt[0]))
+				tableRowCountTime = timeutil.Since(start)
+				log.Infof(ctx, "table %s row count = %d, took %s",
+					tableDesc.Name, tableRowCount, tableRowCountTime)
+			}
+			for i := 0; i < numIndexChecks; i++ {
+				index := <-notify
+				if index.err != nil {
+					err = index.err
+				} else if index.size != tableRowCount {
+					// TODO(vivek): find the offending row and include it in the error.
+					err = pgerror.NewErrorf(
+						pgerror.CodeUniqueViolationError,
+						"index %q uniqueness violation: %d entries, expected %d",
+						index.name, index.size, tableRowCount,
+					)
+				}
+			}
+
+			close(closer)
+			// All goroutines have terminated.
+			wg.Wait()
+			return err
+		}
+		return nil
+	})
+}
+
 func (sc *SchemaChanger) backfillIndexes(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -483,9 +633,12 @@ func (sc *SchemaChanger) backfillIndexes(
 		chunkSize = indexBulkBackfillChunkSize.Get(&sc.settings.SV)
 	}
 
-	return sc.distBackfill(
+	if err := sc.distBackfill(
 		ctx, evalCtx, lease, version, indexBackfill, chunkSize,
-		backfill.IndexMutationFilter)
+		backfill.IndexMutationFilter); err != nil {
+		return err
+	}
+	return sc.validateIndexes(ctx, evalCtx, lease)
 }
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
