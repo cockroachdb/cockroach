@@ -495,6 +495,15 @@ var varGen = map[string]sessionVar{
 			return fmt.Sprintf("%d", evalCtx.NodeID)
 		},
 	},
+
+	// CockroachDB extension.
+	// TODO(dan): This should also work with SET.
+	`results_buffer_size`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return strconv.FormatInt(evalCtx.SessionData.ResultsBufferSize, 10)
+		},
+	},
+
 	// CockroachDB extension (inspired by MySQL).
 	// See https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_sql_safe_updates
 	`sql_safe_updates`: {

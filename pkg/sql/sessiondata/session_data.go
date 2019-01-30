@@ -87,6 +87,9 @@ type SessionData struct {
 	// DefaultIntSize specifies the size in bits or bytes (preferred)
 	// of how a "naked" INT type should be parsed.
 	DefaultIntSize int
+	// ResultsBufferSize specifies the size at which the pgwire results buffer
+	// will self-flush.
+	ResultsBufferSize int64
 }
 
 // DataConversionConfig contains the parameters that influence

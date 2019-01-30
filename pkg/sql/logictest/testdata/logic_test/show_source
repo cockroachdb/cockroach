@@ -47,6 +47,7 @@ integer_datetimes                  on
 intervalstyle                      postgres
 max_index_keys                     32
 node_id                            1
+results_buffer_size                16384
 search_path                        public
 server_encoding                    UTF8
 server_version                     9.5.0

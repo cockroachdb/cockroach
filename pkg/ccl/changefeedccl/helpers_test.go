@@ -284,6 +284,9 @@ func makeSinkless(s serverutils.TestServerInterface) *sinklessFeedFactory {
 func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interface{}) testfeed {
 	t.Helper()
 	url, cleanup := sqlutils.PGUrl(t, f.s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	q := url.Query()
+	q.Add(`results_buffer_size`, `1`)
+	url.RawQuery = q.Encode()
 	s := &sinklessFeed{cleanup: cleanup, seen: make(map[string]struct{})}
 	url.Path = `d`
 	// Use pgx directly instead of database/sql so we can close the conn
@@ -916,8 +919,6 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*tes
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
-		// TODO(dan): HACK until the changefeed can control pgwire flushing.
-		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 
 		f := makeSinkless(s)

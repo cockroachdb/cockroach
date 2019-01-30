@@ -803,7 +803,8 @@ type SessionArgs struct {
 	SessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
 	// client.
-	RemoteAddr net.Addr
+	RemoteAddr            net.Addr
+	ConnResultsBufferSize int64
 }
 
 // isDefined returns true iff the SessionArgs is well-defined.

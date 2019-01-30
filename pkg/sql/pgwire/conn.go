@@ -64,9 +64,8 @@ const (
 type conn struct {
 	conn net.Conn
 
-	sessionArgs        sql.SessionArgs
-	resultsBufferBytes int64
-	metrics            *ServerMetrics
+	sessionArgs sql.SessionArgs
+	metrics     *ServerMetrics
 
 	// rd is a buffered reader consuming conn. All reads from conn go through
 	// this.
@@ -140,7 +139,6 @@ func serveConn(
 	ctx context.Context,
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
-	resultsBufferBytes int64,
 	metrics *ServerMetrics,
 	reserved mon.BoundAccount,
 	sqlServer *sql.Server,
@@ -156,7 +154,7 @@ func serveConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
-	c := newConn(netConn, sArgs, metrics, resultsBufferBytes)
+	c := newConn(netConn, sArgs, metrics)
 
 	if err := c.handleAuthentication(ctx, insecure, ie, auth); err != nil {
 		_ = c.conn.Close()
@@ -169,15 +167,12 @@ func serveConn(
 	return readingErr
 }
 
-func newConn(
-	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, resultsBufferBytes int64,
-) *conn {
+func newConn(netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics) *conn {
 	c := &conn{
-		conn:               netConn,
-		sessionArgs:        sArgs,
-		resultsBufferBytes: resultsBufferBytes,
-		metrics:            metrics,
-		rd:                 *bufio.NewReader(netConn),
+		conn:        netConn,
+		sessionArgs: sArgs,
+		metrics:     metrics,
+		rd:          *bufio.NewReader(netConn),
 	}
 	c.stmtBuf.Init()
 	c.writerState.fi.buf = &c.writerState.buf
@@ -1119,9 +1114,9 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 }
 
 // maybeFlush flushes the buffer to the network connection if it exceeded
-// connResultsBufferSizeBytes.
+// sessionArgs.ConnResultsBufferSize.
 func (c *conn) maybeFlush(pos sql.CmdPos) (bool, error) {
-	if int64(c.writerState.buf.Len()) <= c.resultsBufferBytes {
+	if int64(c.writerState.buf.Len()) <= c.sessionArgs.ConnResultsBufferSize {
 		return false, nil
 	}
 	return true, c.Flush(pos)
