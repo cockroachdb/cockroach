@@ -77,7 +77,7 @@ func newSamplerProcessor(
 			return nil, errors.Errorf("unsupported sketch type %s", s.SketchType)
 		}
 		if len(s.Columns) != 1 {
-			return nil, errors.Errorf("multi-column sketches not supported yet")
+			return nil, errors.Errorf("Multi-column statistics are not supported yet.  See https://github.com/cockroachdb/cockroach/issues/34422.")
 		}
 	}
 
