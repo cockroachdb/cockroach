@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -331,7 +332,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	metrics := makeServerMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(conn, sql.SessionArgs{}, &metrics, 16<<10 /* resultsBufferBytes */)
+	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics)
 	return pgwireConn, nil
 }
 
@@ -767,10 +768,9 @@ func TestMaliciousInputs(t *testing.T) {
 			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
 
 			conn := newConn(
-				r, sql.SessionArgs{}, &metrics,
-				// resultsBufferBytes - really small so that it overflows when we
-				// produce a few results.
-				10,
+				// ConnResultsBufferBytes - really small so that it overflows
+				// when we produce a few results.
+				r, sql.SessionArgs{ConnResultsBufferSize: 10}, &metrics,
 			)
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.
@@ -853,4 +853,71 @@ func TestReadTimeoutConnExits(t *testing.T) {
 	if err := <-errChan; err != context.Canceled {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+func TestConnResultsBufferSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	// Check that SHOW results_buffer_size correctly exposes the value when it
+	// inherits the default.
+	{
+		var size string
+		require.NoError(t, db.QueryRow(`SHOW results_buffer_size`).Scan(&size))
+		require.Equal(t, `16384`, size)
+	}
+
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+	q := pgURL.Query()
+
+	q.Add(`results_buffer_size`, `foo`)
+	pgURL.RawQuery = q.Encode()
+	{
+		errDB, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		defer errDB.Close()
+		_, err = errDB.Exec(`SELECT 1`)
+		require.EqualError(t, err,
+			`pq: error parsing results_buffer_size option value 'foo' as bytes`)
+	}
+
+	q.Del(`results_buffer_size`)
+	q.Add(`results_buffer_size`, `-1`)
+	pgURL.RawQuery = q.Encode()
+	{
+		errDB, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		defer errDB.Close()
+		_, err = errDB.Exec(`SELECT 1`)
+		require.EqualError(t, err, `pq: results_buffer_size option value '-1' cannot be negative`)
+	}
+
+	// Set the results_buffer_size to a very small value, eliminating buffering.
+	q.Del(`results_buffer_size`)
+	q.Add(`results_buffer_size`, `2`)
+	pgURL.RawQuery = q.Encode()
+
+	noBufferDB, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer noBufferDB.Close()
+
+	var size string
+	require.NoError(t, noBufferDB.QueryRow(`SHOW results_buffer_size`).Scan(&size))
+	require.Equal(t, `2`, size)
+
+	// Run a query that immediately returns one result and then pauses for a
+	// long time while computing the second.
+	rows, err := noBufferDB.Query(
+		`SELECT a, if(a = 1, pg_sleep(99999), false) from (VALUES (0), (1)) AS foo (a)`)
+	require.NoError(t, err)
+
+	// Verify that the first result has been flushed.
+	require.True(t, rows.Next())
+	var a int
+	var b bool
+	require.NoError(t, rows.Scan(&a, &b))
+	require.Equal(t, 0, a)
+	require.False(t, b)
 }
