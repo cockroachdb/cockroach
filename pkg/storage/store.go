@@ -1784,6 +1784,13 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 	return s.cfg.Gossip.AddInfoProto(key, &deadReplicas, gossip.StoreTTL)
 }
 
+// VisitReplicas invokes the visitor on the Store's Replicas until the visitor returns false.
+// Replicas which are added to the Store after iteration begins may or may not be observed.
+func (s *Store) VisitReplicas(visitor func(*Replica) bool) {
+	v := newStoreReplicaVisitor(s)
+	v.Visit(visitor)
+}
+
 // Bootstrap writes a new store ident to the underlying engine. To
 // ensure that no crufty data already exists in the engine, it scans
 // the engine contents before writing the new store ident. The engine
