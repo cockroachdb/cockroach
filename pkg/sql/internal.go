@@ -91,7 +91,7 @@ type internalExecutorImpl struct {
 	// internal executor should see the modified schema. This interface allows
 	// the internal executor to modify its TableCollection to match the
 	// TableCollection of the parent executor.
-	tcModifier TableCollectionModifier
+	tcModifier tableCollectionModifier
 }
 
 // MakeInternalExecutor creates an InternalExecutor.

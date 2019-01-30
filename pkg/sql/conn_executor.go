@@ -607,7 +607,7 @@ func (s *Server) newConnExecutorWithTxn(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	txn *client.Txn,
-	tcModifier TableCollectionModifier,
+	tcModifier tableCollectionModifier,
 ) (*connExecutor, error) {
 	ex, err := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, memMetrics, srvMetrics)
 	if err != nil {

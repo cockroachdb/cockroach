@@ -958,6 +958,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.testingKnobs = cfg.SchemaChangerTestingKnobs
 		sc.distSQLPlanner = cfg.DistSQLPlanner
 		sc.settings = cfg.Settings
+		sc.ieFactory = ieFactory
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			evalCtx := createSchemaChangeEvalCtx(ctx, cfg.Clock.Now(), tracing, ieFactory)
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
