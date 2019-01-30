@@ -121,7 +121,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		}
 	}
 
-	// Search for index definitions.
+	// Search for index and family definitions.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.UniqueConstraintTableDef:
@@ -131,7 +131,28 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 		case *tree.IndexTableDef:
 			tab.addIndex(def, nonUniqueIndex)
+
+		case *tree.FamilyTableDef:
+			tab.addFamily(def)
 		}
+	}
+
+	// If there are columns missing from explicit family definitions, add them
+	// to family 0 (ensure that one exists).
+	if len(tab.Families) == 0 {
+		tab.Families = []*Family{{FamName: "primary", Ordinal: 0, table: tab}}
+	}
+OuterLoop:
+	for colOrd, col := range tab.Columns {
+		for _, fam := range tab.Families {
+			for _, famCol := range fam.Columns {
+				if col.Name == string(famCol.ColName()) {
+					continue OuterLoop
+				}
+			}
+		}
+		tab.Families[0].Columns = append(tab.Families[0].Columns,
+			cat.FamilyColumn{Column: col, Ordinal: colOrd})
 	}
 
 	// Search for foreign key constraints. We want to process them after first
@@ -335,13 +356,13 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		// Only add columns that aren't already part of index.
 		found := false
 		for _, colDef := range def.Columns {
-			if pkCol.Column.ColName() == colDef.Column {
+			if pkCol.ColName() == colDef.Column {
 				found = true
 			}
 		}
 
 		if !found {
-			name := string(pkCol.Column.ColName())
+			name := string(pkCol.ColName())
 
 			if typ == uniqueIndex {
 				// If unique index has no NULL columns, then the implicit columns
@@ -368,7 +389,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		// key columns.
 		found := false
 		for _, pkCol := range pkCols {
-			if name == pkCol.Column.ColName() {
+			if name == pkCol.ColName() {
 				found = true
 			}
 		}
@@ -393,6 +414,29 @@ func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {
 		}
 	}
 	return name
+}
+
+func (tt *Table) addFamily(def *tree.FamilyTableDef) {
+	// Synthesize name if one was not provided.
+	name := string(def.Name)
+	if name == "" {
+		name = fmt.Sprintf("family%d", len(tt.Families)+1)
+	}
+
+	family := &Family{
+		FamName: name,
+		Ordinal: tt.FamilyCount(),
+		table:   tt,
+	}
+
+	// Add columns to family.
+	for _, defCol := range def.Columns {
+		ord := tt.FindOrdinal(string(defCol))
+		col := tt.Column(ord)
+		family.Columns = append(family.Columns, cat.FamilyColumn{Column: col, Ordinal: ord})
+	}
+
+	tt.Families = append(tt.Families, family)
 }
 
 func (ti *Index) addColumn(

@@ -1383,10 +1383,13 @@ TABLE xyz
  ├── INDEX xy
  │    ├── x int not null
  │    └── y int
- └── INDEX zyx
-      ├── z float
-      ├── y int
-      └── x int not null
+ ├── INDEX zyx
+ │    ├── z float
+ │    ├── y int
+ │    └── x int not null
+ ├── FAMILY family1 (x)
+ ├── FAMILY family2 (y)
+ └── FAMILY family3 (z)
 
 build
 SELECT min(x) FROM xyz
@@ -1984,8 +1987,10 @@ CREATE TABLE ab (
 TABLE ab
  ├── a int not null
  ├── b int
- └── INDEX primary
-      └── a int not null
+ ├── INDEX primary
+ │    └── a int not null
+ ├── FAMILY family1 (a)
+ └── FAMILY family2 (b)
 
 exec-ddl
 CREATE TABLE xy(x STRING, y STRING);

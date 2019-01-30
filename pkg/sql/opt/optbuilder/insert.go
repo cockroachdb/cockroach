@@ -319,7 +319,7 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 	primary := mb.tab.Index(cat.PrimaryIndex)
 	for i, n := 0, primary.KeyColumnCount(); i < n; i++ {
 		col := primary.Column(i)
-		if col.Column.HasDefault() || col.Column.IsComputed() {
+		if col.HasDefault() || col.IsComputed() {
 			// The column has a default or computed value.
 			continue
 		}
@@ -331,7 +331,7 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 		}
 
 		panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
-			"missing %q primary key column", col.Column.ColName())})
+			"missing %q primary key column", col.ColName())})
 	}
 }
 
@@ -371,7 +371,7 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 		allMissing := true
 		for j := 0; j < int(fkey.PrefixLen); j++ {
 			indexCol := idx.Column(j)
-			if indexCol.Column.HasDefault() || indexCol.Column.IsComputed() {
+			if indexCol.HasDefault() || indexCol.IsComputed() {
 				// The column has a default value.
 				allMissing = false
 				continue
@@ -384,7 +384,7 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 				continue
 			}
 
-			missingCols = append(missingCols, string(indexCol.Column.ColName()))
+			missingCols = append(missingCols, string(indexCol.ColName()))
 		}
 		if allMissing {
 			continue
@@ -926,7 +926,7 @@ func (mb *mutationBuilder) ensureUniqueConflictCols(cols tree.NameList) cat.Inde
 
 		found := true
 		for col, colCount := 0, index.LaxKeyColumnCount(); col < colCount; col++ {
-			if cols[col] != index.Column(col).Column.ColName() {
+			if cols[col] != index.Column(col).ColName() {
 				found = false
 				break
 			}
@@ -946,7 +946,7 @@ func (mb *mutationBuilder) getPrimaryKeyColumnNames() tree.NameList {
 	pkIndex := mb.tab.Index(cat.PrimaryIndex)
 	names := make(tree.NameList, pkIndex.KeyColumnCount())
 	for i, n := 0, pkIndex.KeyColumnCount(); i < n; i++ {
-		names[i] = pkIndex.Column(i).Column.ColName()
+		names[i] = pkIndex.Column(i).ColName()
 	}
 	return names
 }
