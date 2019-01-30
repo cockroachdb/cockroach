@@ -35,9 +35,6 @@ const (
 // The heartbeat loop is started upon the first write. txnHeartbeat is also in
 // charge of prepending a BeginTransaction to the first write batch and possibly
 // eliding EndTransaction requests on read-only transactions.
-//
-// txnHeartbeat should only be used for root transactions; leafs don't perform
-// writes and don't need any of the functionality here.
 type txnHeartbeat struct {
 	log.AmbientContext
 
@@ -487,9 +484,8 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 			return true
 		}
 
-		// TODO(nvanbenschoten): Figure out what to do here. The case we're
-		// handling is TransactionAbortedErrors without corresponding
-		// transaction protos attached. @andreimatei any suggestions?
+		// We need to be prepared here to handle the case of a
+		// TransactionAbortedError with no transaction proto in it.
 		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 			h.mu.txn.Status = roachpb.ABORTED
 			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")

@@ -469,7 +469,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		}
 	}
 
-	tcs.augmentMetaLocked(meta)
+	tcs.augmentMetaLocked(context.TODO(), meta)
 	return tcs
 }
 
@@ -518,10 +518,15 @@ func (tc *TxnCoordSender) AugmentMeta(ctx context.Context, meta roachpb.TxnCoord
 	if tc.mu.txn.ID != meta.Txn.ID {
 		return
 	}
-	tc.augmentMetaLocked(meta)
+	tc.augmentMetaLocked(ctx, meta)
 }
 
-func (tc *TxnCoordSender) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
+func (tc *TxnCoordSender) augmentMetaLocked(ctx context.Context, meta roachpb.TxnCoordMeta) {
+	if meta.Txn.Status != roachpb.PENDING {
+		// Non-pending transactions should only come in errors, which are not
+		// handled by this method.
+		log.Fatalf(ctx, "unexpected non-pending txn in augmentMetaLocked: %s", meta.Txn)
+	}
 	tc.mu.txn.Update(&meta.Txn)
 	for _, reqInt := range tc.interceptorStack {
 		reqInt.augmentMetaLocked(meta)
@@ -670,6 +675,14 @@ func (tc *TxnCoordSender) Send(
 		}
 	}
 
+	assertConsistentState := func() {
+		if tc.mu.txn.Status != roachpb.PENDING && !tc.mu.closed {
+			log.Fatalf(ctx, "inconsistent TxnCoordSender state: closed: %t, txn: %s, "+
+				"ba: %s, br: %v, err: %v",
+				tc.mu.closed, tc.mu.txn, ba, br, pErr)
+		}
+	}
+
 	// Move to the error state on non-retriable errors.
 	if pErr != nil {
 		log.VEventf(ctx, 2, "failed batch: %s", pErr)
@@ -691,9 +704,19 @@ func (tc *TxnCoordSender) Send(
 		if !retriable {
 			tc.mu.txnState = txnError
 		}
+		if !retriable || tc.mu.txn.Status != roachpb.PENDING {
+			// We cleanup if the error is not retriable (Transactions can't be reused
+			// after an error) and also the status is no longer pending regardless of
+			// whether the error is retriable or not. Note that, in case of
+			// TransactionAbortedError, clients attempting to reuse this transaction
+			// will be rejected and instructed to use a new one.
+			tc.cleanupTxnLocked(ctx)
+		}
 
+		assertConsistentState()
 		return nil, pErr
 	}
+	assertConsistentState()
 
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(nil /* culprit */, br))
