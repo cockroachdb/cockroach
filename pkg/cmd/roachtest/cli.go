@@ -101,4 +101,19 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 		"false false",
 		"false false",
 	})
+
+	// Stop the cluster and restart only 2 of the nodes. Verify that three nodes
+	// show up in the node status output.
+	c.Stop(ctx, c.Range(1, 3))
+	c.Start(ctx, t, c.Range(1, 2))
+
+	// Wait for the cluster to come back up.
+	waitForFullReplication(t, db)
+
+	waitUntil([]string{
+		"is_available is_live",
+		"true true",
+		"true true",
+		"false false",
+	})
 }
