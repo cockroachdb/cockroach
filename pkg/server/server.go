@@ -1770,7 +1770,7 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) bootstrapVersion() roachpb.Version {
 	v := cluster.BinaryServerVersion
 	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
-		if ov := knobs.(*TestingKnobs).ServerVersionOverride; ov != (roachpb.Version{}) {
+		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
 			v = ov
 		}
 	}
@@ -2082,15 +2082,24 @@ func (w *gzipResponseWriter) Close() error {
 
 // TestingKnobs groups testing knobs for the Server.
 type TestingKnobs struct {
-	// !!!
-	// // BootstrapVersionOverride, if not empty, will be used for bootstrapping
-	// // clusters instead of cluster.BinaryMinimumSupportedVersion (if this server
-	// // is the one bootstrapping the cluster).
-	// BootstrapVersionOverride roachpb.Version
+	// BootstrapVersionOverride, if not empty, will be used for bootstrapping
+	// clusters instead of cluster.BinaryServerVersion (if this server
+	// is the one bootstrapping the cluster).
+	//
+	// This can be used by tests to essentially pretend that a new cluster is not
+	// starting from scratch, but instead is "created" by a node starting up with
+	// engines that had already been bootstrapped, at this
+	// BootstrapVersionOverride. For exemple, it allows convenient creation of a
+	// cluster from a 2.1 binary, but that's running at version 2.0.
+	//
+	// NOTE: When setting this, you probably also want to set
+	// DisableAutomaticVersionUpgrade.
+	BootstrapVersionOverride roachpb.Version
 
-	// ServerVersionOverride, if not empty, overrides cluster.BinaryServerVersion
-	// as the binary's (maximum) version.
-	ServerVersionOverride roachpb.Version
+	// !!!
+	// // ServerVersionOverride, if not empty, overrides cluster.BinaryServerVersion
+	// // as the binary's (maximum) version.
+	// ServerVersionOverride roachpb.Version
 
 	// DisableAutomaticVersionUpgrade, if set, temporarily disables the server's
 	// automatic version upgrade mechanism.

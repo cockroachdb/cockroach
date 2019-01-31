@@ -22,25 +22,29 @@ import (
 	"github.com/pkg/errors"
 )
 
-// CanBump computes whether an update from version v to version o is possible.
-// The main constraint is that either nothing changes; or the major version is
-// bumped by one (and the new minor is zero); or the major version remains
-// constant and the minor version is bumped by one. The unstable version may
-// change without restrictions.
-func (v Version) CanBump(o Version) bool {
-	if o.Less(v) {
-		return false
-	}
-	if o.Patch != 0 {
-		// Reminder that we don't use Patch versions at all. It's just a
-		// placeholder.
-		return false
-	}
-	if o.Major == v.Major {
-		return o.Minor <= v.Minor+1
-	}
-	return o.Major == v.Major+1 && o.Minor == 0
-}
+// !!! is this needed now that we validate that the version to bump to is within
+// the range supported by the server? One can't pass that filter it they're
+// skipping versions.
+// //
+// // CanBump computes whether an update from version v to version o is possible.
+// // The main constraint is that either nothing changes; or the major version is
+// // bumped by one (and the new minor is zero); or the major version remains
+// // constant and the minor version is bumped by one. The unstable version may
+// // change without restrictions.
+// func (v Version) CanBump(o Version) bool {
+//   if o.Less(v) {
+//     return false
+//   }
+//   if o.Patch != 0 {
+//     // Reminder that we don't use Patch versions at all. It's just a
+//     // placeholder.
+//     return false
+//   }
+//   if o.Major == v.Major {
+//     return o.Minor <= v.Minor+1
+//   }
+//   return o.Major == v.Major+1 && o.Minor == 0
+// }
 
 // Less compares two Versions.
 func (v Version) Less(otherV Version) bool {

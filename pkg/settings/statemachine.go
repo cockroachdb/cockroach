@@ -46,6 +46,10 @@ type StateMachineSettingImpl interface {
 	// supports the proposed version. This is called when the version is being
 	// communicated to us by a different node.
 	ValidateGossipUpdate(sv *Values, val []byte) error
+
+	// SettingsListDefault returns the value that should be presented by
+	// `./cockroach gen settings-list`
+	SettingsListDefault() string
 }
 
 // A StateMachineSetting is a setting that keeps a state machine driven by user
@@ -107,7 +111,7 @@ func (s *StateMachineSetting) Decode(val []byte) (interface{}, error) {
 func (s *StateMachineSetting) String(sv *Values) string {
 	encV := []byte(s.Get(sv))
 	if encV == nil {
-		// !!! panic here?
+		// !!! panic here? I think Get doesn't return nil any more.
 		return "not set"
 	}
 	str, err := s.impl.DecodeToString(encV)
@@ -143,6 +147,12 @@ func (s *StateMachineSetting) Get(sv *Values) string {
 		// return string(defV)
 	}
 	return string(encV.([]byte))
+}
+
+// SettingsListDefault returns the value that should be presented by
+// `./cockroach gen settings-list`
+func (s *StateMachineSetting) SettingsListDefault() string {
+	return s.impl.SettingsListDefault()
 }
 
 // Encoded is part of the Setting interface.

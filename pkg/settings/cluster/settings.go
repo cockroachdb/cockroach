@@ -16,7 +16,6 @@ package cluster
 
 import (
 	"context"
-	"runtime/debug"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -296,7 +295,7 @@ func MakeClusterSettings() *Settings {
 			s.Version.cb(clusterVersion)
 		}
 		log.Infof(context.TODO(), "!!! version.OnChange: %s", clusterVersion)
-		debug.PrintStack()
+		// !!! debug.PrintStack()
 		s.Version.baseVersion.Store(&clusterVersion)
 	})
 
@@ -412,11 +411,12 @@ func (cv clusterVersionSettingImpl) ValidateLogical(
 			newVersion, downgrade)
 	}
 
-	// Check that we're not skipping versions.
-	if !oldV.CanBump(newVersion) {
-		return nil, errors.Errorf(
-			"cannot upgrade directly from %s to %s", oldV.Version, newVersion)
-	}
+	// !!!
+	// // Check that we're not skipping versions.
+	// if !oldV.CanBump(newVersion) {
+	//   return nil, errors.Errorf(
+	//     "cannot upgrade directly from %s to %s", oldV.Version, newVersion)
+	// }
 
 	// Return the serialized form of the new version.
 	newV := ClusterVersion{Version: newVersion}
@@ -451,6 +451,11 @@ func (cv clusterVersionSettingImpl) validateSupportedVersionInner(
 			st.binaryMaxSupportedVersion, ver, st.binaryMinSupportedVersion)
 	}
 	return nil
+}
+
+// SettingsListDefault is part of the StateMachineSettingImpl interface.
+func (cv clusterVersionSettingImpl) SettingsListDefault() string {
+	return BinaryServerVersion.String()
 }
 
 // !!!
