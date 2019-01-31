@@ -15,148 +15,360 @@
 import { assert } from "chai";
 
 import { cockroach } from "src/js/protos";
-import { collapseRepeatedAttrs } from "src/views/statements/planView";
-import ExplainTreePlanNode_IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
+import { FlatPlanNode, flattenTree, planNodeHeaderProps } from "src/views/statements/planView";
+import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
+import IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;
 
-describe("collapseRepeatedAttrs", () => {
+const testAttrs1: IAttr[] = [
+  {
+    key: "key1",
+    value: "value1",
+  },
+  {
+    key: "key2",
+    value: "value2",
+  },
+];
 
-  describe("when attributes array is empty", () => {
-    it("returns an empty result array.", () => {
-      const result = collapseRepeatedAttrs(makeAttrs([
-      ]));
-      assert.deepEqual(result, [
-      ]);
+const testAttrs2: IAttr[] = [
+  {
+    key: "key3",
+    value: "value3",
+  },
+  {
+    key: "key4",
+    value: "value4",
+  },
+];
+
+const treePlanWithSingleChildPaths: IExplainTreePlanNode = {
+  name: "root",
+  attrs: null,
+  children: [
+    {
+      name: "single_grandparent",
+      attrs: testAttrs1,
+      children: [
+        {
+          name: "single_parent",
+          attrs: null,
+          children: [
+            {
+              name: "single_child",
+              attrs: testAttrs2,
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const expectedFlatPlanWithSingleChildPaths: FlatPlanNode[] = [
+  {
+    name: "root",
+    attrs: null,
+    children: [],
+  },
+  {
+    name: "single_grandparent",
+    attrs: testAttrs1,
+    children: [],
+  },
+  {
+    name: "single_parent",
+    attrs: null,
+    children: [],
+  },
+  {
+    name: "single_child",
+    attrs: testAttrs2,
+    children: [],
+  },
+];
+
+const treePlanWithChildren1: IExplainTreePlanNode = {
+  name: "root",
+  attrs: testAttrs1,
+  children: [
+    {
+      name: "single_grandparent",
+      attrs: testAttrs1,
+      children: [
+        {
+          name: "parent_1",
+          attrs: null,
+          children: [
+            {
+              name: "single_child",
+              attrs: testAttrs2,
+              children: [],
+            },
+          ],
+        },
+        {
+          name: "parent_2",
+          attrs: null,
+          children: [],
+        },
+      ],
+    },
+  ],
+};
+
+const expectedFlatPlanWithChildren1: FlatPlanNode[] = [
+  {
+    name: "root",
+    attrs: testAttrs1,
+    children: [],
+  },
+  {
+    name: "single_grandparent",
+    attrs: testAttrs1,
+    children: [
+      [
+        {
+          name: "parent_1",
+          attrs: null,
+          children: [],
+        },
+        {
+          name: "single_child",
+          attrs: testAttrs2,
+          children: [],
+        },
+      ],
+      [
+        {
+          name: "parent_2",
+          attrs: null,
+          children: [],
+        },
+      ],
+    ],
+  },
+];
+
+const treePlanWithChildren2: IExplainTreePlanNode = {
+  name: "root",
+  attrs: null,
+  children: [
+    {
+      name: "single_grandparent",
+      attrs: null,
+      children: [
+        {
+          name: "single_parent",
+          attrs: null,
+          children: [
+            {
+              name: "child_1",
+              attrs: testAttrs1,
+              children: [],
+            },
+            {
+              name: "child_2",
+              attrs: testAttrs2,
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const expectedFlatPlanWithChildren2: FlatPlanNode[] = [
+  {
+    name: "root",
+    attrs: null,
+    children: [],
+  },
+  {
+    name: "single_grandparent",
+    attrs: null,
+    children: [],
+  },
+  {
+    name: "single_parent",
+    attrs: null,
+    children: [
+      [
+        {
+          name: "child_1",
+          attrs: testAttrs1,
+          children: [],
+        },
+      ],
+      [
+        {
+          name: "child_2",
+          attrs: testAttrs2,
+          children: [],
+        },
+      ],
+    ],
+  },
+];
+
+const treePlanWithNoChildren: IExplainTreePlanNode = {
+  name: "root",
+  attrs: testAttrs1,
+  children: [],
+};
+
+const expectedFlatPlanWithNoChildren: FlatPlanNode[] = [
+  {
+    name: "root",
+    attrs: testAttrs1,
+    children: [],
+  },
+];
+
+describe("flattenTree", () => {
+  describe("when node has children", () => {
+    it("flattens single child paths.", () => {
+      assert.deepEqual(
+        flattenTree(treePlanWithSingleChildPaths),
+        expectedFlatPlanWithSingleChildPaths,
+      );
+    });
+    it("increases level if multiple children.", () => {
+      assert.deepEqual(
+        flattenTree(treePlanWithChildren1),
+        expectedFlatPlanWithChildren1,
+      );
+      assert.deepEqual(
+        flattenTree(treePlanWithChildren2),
+        expectedFlatPlanWithChildren2,
+      );
     });
   });
-
-  describe("when attributes contain null properties", () => {
-    it("ignores attributes with null properties.", () => {
-      const result = collapseRepeatedAttrs([
-        {
-          key: null,
-          value: null,
-        },
-        {
-          key: "key",
-          value: null,
-        },
-        {
-          key: "key",
-          value: "value",
-        },
-        {
-          key: null,
-          value: "value",
-        },
-      ]);
-      assert.deepEqual(result, [
-        {
-          key: "key",
-          value: ["value"],
-        },
-      ]);
-    });
-  });
-
-  describe("when attributes contains duplicate keys", () => {
-    it("groups values with same key.", () => {
-      const result = collapseRepeatedAttrs(makeAttrs([
-        "key1: value1",
-        "key2: value1",
-        "key1: value2",
-        "key2: value2",
-        "key1: value3",
-      ]));
-      assert.deepEqual(result, [
-        {
-          key: "key1",
-          value: ["value1", "value2", "value3"],
-        },
-        {
-          key: "key2",
-          value: ["value1", "value2"],
-        },
-      ]);
-    });
-  });
-
-  describe("when attribute keys are not alphabetized", () => {
-    describe("when no table key present", () => {
-      it("sorts attributes alphabetically by key.", () => {
-        const result = collapseRepeatedAttrs(makeAttrs([
-          "papaya: papaya",
-          "coconut: coconut",
-          "banana: banana",
-          "mango: mango",
-        ]));
-        assert.deepEqual(result, [
-          {
-            key: "banana",
-            value: ["banana"],
-          },
-          {
-            key: "coconut",
-            value: ["coconut"],
-          },
-          {
-            key: "mango",
-            value: ["mango"],
-          },
-          {
-            key: "papaya",
-            value: ["papaya"],
-          },
-        ]);
-      });
-    });
-    describe("when table key is present", () => {
-      it("sorts attribute with table key first.", () => {
-        const result = collapseRepeatedAttrs(makeAttrs([
-          "papaya: papaya",
-          "coconut: coconut",
-          "banana: banana",
-          "table: table",
-          "mango: mango",
-        ]));
-        assert.deepEqual(result, [
-          {
-            key: "table",
-            value: ["table"],
-          },
-          {
-            key: "banana",
-            value: ["banana"],
-          },
-          {
-            key: "coconut",
-            value: ["coconut"],
-          },
-          {
-            key: "mango",
-            value: ["mango"],
-          },
-          {
-            key: "papaya",
-            value: ["papaya"],
-          },
-        ]);
-      });
+  describe("when node has no children", () => {
+    it("returns valid flattened plan.", () => {
+      assert.deepEqual(
+        flattenTree(treePlanWithNoChildren),
+        expectedFlatPlanWithNoChildren,
+      );
     });
   });
 });
 
-function makeAttrs(attributes: string[]): ExplainTreePlanNode_IAttr[] {
-  return attributes.map((attribute) => {
-    return makeAttr(attribute.split(": "));
+describe("planNodeHeaderProps", () => {
+  describe("when node is join node", () => {
+    it("prepends join type to title.", () => {
+      const result = planNodeHeaderProps({
+        name: "join",
+        attrs: [
+          {
+            key: "foo",
+            value: "bar",
+          },
+          {
+            key: "type",
+            value: "inner",
+          },
+          {
+            key: "baz",
+            value: "foo-baz",
+          },
+        ],
+        children: [],
+      });
+      assert.deepEqual(
+        result,
+        {
+          title: "inner join",
+          subtitle: null,
+          warn: false,
+        },
+      );
+    });
   });
-}
+  describe("when node is scan node", () => {
+    describe("if not both `spans ALL` and `table` attribute", () => {
+      it("returns default header properties.", () => {
+        const result1 = planNodeHeaderProps({
+          name: "scan",
+          attrs: [
+            {
+              key: "spans",
+              value: "ALL",
+            },
+            {
+              key: "but-not-table-key",
+              value: "table-name@key-type",
+            },
+          ],
+          children: [],
+        });
+        const result2 = planNodeHeaderProps({
+          name: "scan",
+          attrs: [
+            {
+              key: "spans",
+              value: "but-not-ALL-value",
+            },
+            {
+              key: "table",
+              value: "table-name@key-type",
+            },
+          ],
+          children: [],
+        });
+        assert.deepEqual(
+          result1,
+          {
+            title: "scan",
+            subtitle: null,
+            warn: false,
+          },
+        );
+        assert.deepEqual(
+          result2,
+          {
+            title: "scan",
+            subtitle: null,
+            warn: false,
+          },
+        );
 
-function makeAttr(parts: string[]): ExplainTreePlanNode_IAttr {
-  if (parts.length < 2) {
-    return null;
-  }
-  return {
-    key: parts[0],
-    value: parts[1],
-  };
-}
+      });
+    });
+    describe("if both `spans ALL` and `table` attribute", () => {
+      it("warns user of table scan.", () => {
+        const result = planNodeHeaderProps({
+          name: "scan",
+          attrs: [
+            {
+              key: "foo",
+              value: "bar",
+            },
+            {
+              key: "spans",
+              value: "ALL",
+            },
+            {
+              key: "baz",
+              value: "foo-baz",
+            },
+            {
+              key: "table",
+              value: "table-name@key-type",
+            },
+          ],
+          children: [],
+        });
+        assert.deepEqual(
+          result,
+          {
+            title: "table scan",
+            subtitle: "table-name",
+            warn: true,
+          },
+        );
+      });
+    });
+  });
+});
