@@ -281,9 +281,10 @@ func WriteResumeSpan(
 				return SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
 			}
 		}
-		// Unable to find a span containing origSpan.
-		return errors.Errorf(
-			"span %+v not found among %+v", origSpan, resumeSpans,
-		)
+		// Unable to find a span containing origSpan. This can happen if the
+		// coordinator node looses its schema change lease and another node takes
+		// over and updates the checkpoint.
+		log.Warningf(ctx, "span %+v not found among %+v", origSpan, resumeSpans)
+		return nil
 	})
 }

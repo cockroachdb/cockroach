@@ -58,13 +58,13 @@ const (
 
 	// checkpointInterval is the interval after which a checkpoint of the
 	// schema change is posted.
-	checkpointInterval = 2 * time.Minute
+	checkpointInterval = 1 * time.Minute
 )
 
 var indexBulkBackfillChunkSize = settings.RegisterIntSetting(
 	"schemachanger.bulk_index_backfill.batch_size",
 	"number of rows to process at a time during bulk index backfill",
-	1000000,
+	5000000,
 )
 
 var _ sort.Interface = columnsByID{}
