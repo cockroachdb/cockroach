@@ -238,11 +238,7 @@ func TestDumpRandom(t *testing.T) {
 			d := timeutil.Unix(0, rnd.Int63()).Round(time.Hour * 24)
 			m := timeutil.Unix(0, rnd.Int63()).Round(time.Microsecond)
 			sign := 1 - rnd.Int63n(2)*2
-			dur := duration.Duration{
-				Months: sign * rnd.Int63n(1000),
-				Days:   sign * rnd.Int63n(1000),
-				Nanos:  sign * rnd.Int63(),
-			}
+			dur := duration.MakeDuration(sign*rnd.Int63(), sign*rnd.Int63n(1000), sign*rnd.Int63n(1000))
 			n := dur.String()
 			o := rnd.Intn(2) == 1
 			e := apd.New(rnd.Int63(), rnd.Int31n(20)-10).String()

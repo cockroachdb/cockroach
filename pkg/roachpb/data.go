@@ -721,7 +721,7 @@ func (v Value) PrettyPrint() string {
 	case ValueType_DURATION:
 		var d duration.Duration
 		d, err = v.GetDuration()
-		buf.WriteString(d.String())
+		buf.WriteString(d.StringNanos())
 	default:
 		err = errors.Errorf("unknown tag: %s", t)
 	}
