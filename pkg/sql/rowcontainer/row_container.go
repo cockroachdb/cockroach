@@ -118,7 +118,7 @@ var _ SortableRowContainer = &MemRowContainer{}
 func (mc *MemRowContainer) Init(
 	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) {
-	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon)
+	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon, 0 /* rowCapacity */)
 }
 
 // InitWithMon initializes the MemRowContainer with an explicit monitor. Only
@@ -128,9 +128,10 @@ func (mc *MemRowContainer) InitWithMon(
 	types []sqlbase.ColumnType,
 	evalCtx *tree.EvalContext,
 	mon *mon.BytesMonitor,
+	rowCapacity int,
 ) {
 	acc := mon.MakeBoundAccount()
-	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), 0)
+	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), rowCapacity)
 	mc.types = types
 	mc.ordering = ordering
 	mc.scratchRow = make(tree.Datums, len(types))
@@ -335,6 +336,8 @@ var _ SortableRowContainer = &DiskBackedRowContainer{}
 //    spill to disk.
 //  - diskMonitor is used to monitor the DiskBackedRowContainer's disk usage if
 //    and when it spills to disk.
+//  - rowCapacity (if not 0) indicates the number of rows that the underlying
+//    in-memory container should be preallocated for.
 func (f *DiskBackedRowContainer) Init(
 	ordering sqlbase.ColumnOrdering,
 	types []sqlbase.ColumnType,
@@ -342,9 +345,10 @@ func (f *DiskBackedRowContainer) Init(
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
+	rowCapacity int,
 ) {
 	mrc := MemRowContainer{}
-	mrc.InitWithMon(ordering, types, evalCtx, memoryMonitor)
+	mrc.InitWithMon(ordering, types, evalCtx, memoryMonitor, rowCapacity)
 	f.mrc = &mrc
 	f.src = &mrc
 	f.engine = engine
