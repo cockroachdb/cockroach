@@ -74,8 +74,10 @@ Warning: this reference is incomplete. Be prepared to refer to the CLI help text
 and the source code.
 
 ### Create a cluster
+Note: Use your own name in place of "marc" in this example. It will not work without a user name in front of the cluster name.
+
 ```
-$ roachprod create foo
+$ roachprod create marc-foo
 Creating cluster marc-foo with 3 nodes
 OK
 marc-foo: 23h59m42s remaining
