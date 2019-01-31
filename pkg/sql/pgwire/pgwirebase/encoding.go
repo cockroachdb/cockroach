@@ -510,11 +510,7 @@ func DecodeOidDatum(
 			days := int32(binary.BigEndian.Uint32(b[8:]))
 			months := int32(binary.BigEndian.Uint32(b[12:]))
 
-			duration := duration.Duration{
-				Nanos:  nanos,
-				Days:   int64(days),
-				Months: int64(months),
-			}
+			duration := duration.MakeDuration(nanos, int64(days), int64(months))
 			return &tree.DInterval{Duration: duration}, nil
 		case oid.T_uuid:
 			u, err := tree.ParseDUuidFromBytes(b)

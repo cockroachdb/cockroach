@@ -32,7 +32,7 @@ import (
 
 func TestPrettyPrint(t *testing.T) {
 	tm, _ := time.Parse(time.RFC3339Nano, "2016-03-30T13:40:35.053725008Z")
-	duration := duration.Duration{Months: 1, Days: 1, Nanos: 1 * time.Second.Nanoseconds()}
+	duration := duration.MakeDuration(1*time.Second.Nanoseconds(), 1, 1)
 	durationAsc, _ := encoding.EncodeDurationAscending(nil, duration)
 	durationDesc, _ := encoding.EncodeDurationDescending(nil, duration)
 	bitArray := bitarray.MakeBitArrayFromInt64(8, 58, 7)
@@ -166,7 +166,7 @@ func TestPrettyPrint(t *testing.T) {
 			"/Table/42/1 mon 1 day 00:00:01"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(durationDesc)),
-			"/Table/42/-2 mons -2 days +743:59:58.999999999"},
+			"/Table/42/-2 mons -2 days +743:59:58.999999+999ns"},
 
 		// sequence
 		{MakeSequenceKey(55), `/Table/55/1/0/0`},

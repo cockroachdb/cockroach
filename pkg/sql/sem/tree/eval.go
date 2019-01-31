@@ -138,7 +138,7 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				i := d.(*DInterval).Duration
-				i.Nanos = -i.Nanos
+				i.SetNanos(-i.Nanos())
 				i.Days = -i.Days
 				i.Months = -i.Months
 				return &DInterval{Duration: i}, nil
@@ -766,7 +766,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
 			},
 		},
 		&BinOp{
@@ -775,7 +775,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
-				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
 			},
 		},
 		&BinOp{
@@ -786,7 +786,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				// These two quantities aren't directly comparable. Convert the
 				// TimestampTZ to a timestamp first.
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestampTZ).stripTimeZone(ctx).Time).Nanoseconds()
-				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
 			},
 		},
 		&BinOp{
@@ -797,7 +797,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				// These two quantities aren't directly comparable. Convert the
 				// TimestampTZ to a timestamp first.
 				nanos := left.(*DTimestampTZ).stripTimeZone(ctx).Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
 			},
 		},
 		&BinOp{
@@ -3254,7 +3254,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DFloat:
 			return &DInterval{Duration: duration.FromFloat64(float64(*v))}, nil
 		case *DTime:
-			return &DInterval{Duration: duration.Duration{Nanos: int64(*v) * 1000}}, nil
+			return &DInterval{Duration: duration.MakeDuration(int64(*v)*1000, 0, 0)}, nil
 		case *DDecimal:
 			d := ctx.getTmpDec()
 			dnanos := v.Decimal

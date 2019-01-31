@@ -1543,7 +1543,7 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 		if err != nil {
 			return b, "", err
 		}
-		return b, d.String(), nil
+		return b, d.StringNanos(), nil
 	default:
 		if len(b) >= 1 {
 			switch b[0] {
@@ -1859,7 +1859,7 @@ func EncodeDurationValue(appendTo []byte, colID uint32, d duration.Duration) []b
 func EncodeUntaggedDurationValue(appendTo []byte, d duration.Duration) []byte {
 	appendTo = EncodeNonsortingStdlibVarint(appendTo, d.Months)
 	appendTo = EncodeNonsortingStdlibVarint(appendTo, d.Days)
-	return EncodeNonsortingStdlibVarint(appendTo, d.Nanos)
+	return EncodeNonsortingStdlibVarint(appendTo, d.Nanos())
 }
 
 // EncodeBitArrayValue encodes a bit array value with its value tag,
@@ -2113,7 +2113,7 @@ func DecodeUntaggedDurationValue(b []byte) (remaining []byte, d duration.Duratio
 	if err != nil {
 		return b, duration.Duration{}, err
 	}
-	return b, duration.Duration{Months: months, Days: days, Nanos: nanos}, nil
+	return b, duration.DecodeDuration(months, days, nanos), nil
 }
 
 // DecodeBitArrayValue decodes a value encoded by EncodeUntaggedBitArrayValue.
@@ -2358,7 +2358,7 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 		if err != nil {
 			return b, "", err
 		}
-		return b, d.String(), nil
+		return b, d.StringNanos(), nil
 	case BitArray:
 		var d bitarray.BitArray
 		b, d, err = DecodeBitArrayValue(b)

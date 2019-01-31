@@ -1400,7 +1400,7 @@ func TestValuePrettyPrint(t *testing.T) {
 	_ = decimalValue.SetDecimal(apd.New(628, -2))
 
 	var durationValue Value
-	_ = durationValue.SetDuration(duration.Duration{Months: 1, Days: 2, Nanos: 3})
+	_ = durationValue.SetDuration(duration.DecodeDuration(1, 2, 3))
 
 	var tupleValue Value
 	tupleBytes := encoding.EncodeBytesValue(encoding.EncodeIntValue(nil, 1, 8), 2, []byte("foo"))
@@ -1431,7 +1431,7 @@ func TestValuePrettyPrint(t *testing.T) {
 		{floatValue, "/FLOAT/6.28"},
 		{timeValue, "/TIME/2016-06-29T16:02:50.000000005Z"},
 		{decimalValue, "/DECIMAL/6.28"},
-		{durationValue, "/DURATION/1 mon 2 days 00:00:00.000000003"},
+		{durationValue, "/DURATION/1 mon 2 days 00:00:00+3ns"},
 		{MakeValueFromBytes([]byte{0x1, 0x2, 0xF, 0xFF}), "/BYTES/0x01020fff"},
 		{MakeValueFromString("foo"), "/BYTES/foo"},
 		{tupleValue, "/TUPLE/1:1:Int/8/2:3:Bytes/foo"},
