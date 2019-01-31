@@ -623,6 +623,7 @@ func (s *Server) newConnExecutorWithTxn(
 		ctx,
 		explicitTxn,
 		txn.OrigTimestamp().GoTime(),
+		/* historicalTimestamp */ nil,
 		txn.UserPriority(),
 		tree.ReadWrite,
 		txn,
@@ -1739,8 +1740,22 @@ func (ex *connExecutor) setTransactionModes(modes tree.TransactionModes) error {
 	if modes.Isolation != tree.UnspecifiedIsolation && modes.Isolation != tree.SerializableIsolation {
 		return errors.Errorf("unknown isolation level: %s", modes.Isolation)
 	}
-
-	return ex.state.setReadOnlyMode(modes.ReadWriteMode)
+	rwMode := modes.ReadWriteMode
+	if modes.AsOf.Expr != nil {
+		now := ex.server.cfg.Clock.Now()
+		ts, err := ex.planner.EvalAsOfTimestamp(modes.AsOf, now)
+		if err != nil {
+			ex.state.mu.Unlock()
+			return err
+		}
+		if rwMode == tree.UnspecifiedReadWriteMode {
+			rwMode = tree.ReadOnly
+		}
+		ex.state.setHistoricalTimestamp(ex.Ctx(), ts)
+		ex.planner.semaCtx.AsOfTimestamp = &ts
+		ex.state.sqlTimestamp = ts.GoTime()
+	}
+	return ex.state.setReadOnlyMode(rwMode)
 }
 
 func priorityToProto(mode tree.UserPriority) (roachpb.UserPriority, error) {
