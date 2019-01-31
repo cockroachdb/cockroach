@@ -899,6 +899,8 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		}
 		exitCalled := make(chan struct{})
 
+		// This defer prevents outputLogEntry() from returning until the
+		// exit function has been called.
 		defer func() {
 			<-exitCalled
 		}()
@@ -945,6 +947,15 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	if s == Severity_FATAL {
 		l.flushAndSync(true /*doSync*/)
 		close(fatalTrigger)
+		// Note: although it seems like the function is allowed to return
+		// below when s == Severity_FATAL, this is not so, because the
+		// anonymous function func() { <-exitCalled } is deferred
+		// above. That function ensures that outputLogEntry() will wait
+		// until the exit function has been called. If the exit function
+		// is os.Exit, it will never return, outputLogEntry()'s defer will
+		// never complete and all is well. If the exit function was
+		// overridden, then the client that has overridden the exit
+		// function is expecting log.Fatal to return and all is well too.
 	}
 	l.mu.Unlock()
 }
