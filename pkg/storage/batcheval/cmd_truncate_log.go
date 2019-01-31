@@ -16,17 +16,13 @@ package batcheval
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -84,30 +80,25 @@ func TruncateLog(
 	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, firstIndex))
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, args.Index))
 
-	var ms enginepb.MVCCStats
-	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
-		// Compute the stats delta that were to occur should the log entries be
-		// purged. We do this as a side effect of seeing a new TruncatedState,
-		// downstream of Raft.
-		//
-		// Note that any sideloaded payloads that may be removed by this truncation
-		// don't matter; they're not tracked in the raft log delta.
-		iter := batch.NewIterator(engine.IterOptions{UpperBound: end.Key})
-		defer iter.Close()
-		// We can pass zero as nowNanos because we're only interested in SysBytes.
-		var err error
-		ms, err = iter.ComputeStats(start, end, 0 /* nowNanos */)
-		if err != nil {
-			return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
-		}
-		ms.SysBytes = -ms.SysBytes // simulate the deletion
-
-	} else {
-		if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, &ms, start.Key, end.Key, math.MaxInt64, /* max */
-			hlc.Timestamp{}, nil /* txn */, false /* returnKeys */); err != nil {
-			return result.Result{}, err
-		}
+	// Compute the stats delta that were to occur should the log entries be
+	// purged. We do this as a side effect of seeing a new TruncatedState,
+	// downstream of Raft.
+	//
+	// Note that any sideloaded payloads that may be removed by this truncation
+	// don't matter; they're not tracked in the raft log delta.
+	//
+	// TODO(tbg): it's difficult to prove that this computation doesn't have
+	// bugs that let it diverge. It might be easier to compute the stats
+	// from scratch, stopping when 4mb (defaultRaftLogTruncationThreshold)
+	// is reached as at that point we'll truncate aggressively anyway.
+	iter := batch.NewIterator(engine.IterOptions{UpperBound: end.Key})
+	defer iter.Close()
+	// We can pass zero as nowNanos because we're only interested in SysBytes.
+	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
+	if err != nil {
+		return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 	}
+	ms.SysBytes = -ms.SysBytes // simulate the deletion
 
 	tState := &roachpb.RaftTruncatedState{
 		Index: args.Index - 1,
