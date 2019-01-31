@@ -34,7 +34,7 @@
   padding 12px 24px
   color $body-color
 
-.last-cleared-tooltip, .numeric-stats-table
+.last-cleared-tooltip, .numeric-stats-table, .plan-view-table
   &__tooltip
     width 36px  // Reserve space for 10px padding around centered 16px icon
     height 16px
@@ -169,7 +169,7 @@
       top 8px
       background-color $warning-color
 
-.plan-node
+.old-plan-node
   font-family monospace
 
   ul
@@ -185,9 +185,126 @@
   &__attr-value
     color green
 
-.plan-view
+.old-plan-view
   margin-top 10px
   padding-left 30px
   background-color white
   padding-top 5px
   padding-bottom 5px
+
+$plan-node-line-color = #DADADA    /* connecting line: light grey */
+$plan-node-warning-color = #D18737; /* dark orange */
+$plan-node-warning-background-color = rgba(209, 135, 55, 0.06);  /* light orange */
+$plan-node-warning-border-color = rgba(209, 135, 55, 0.3); /* dark orange */
+$plan-node-details-background-color = #F6F6F6; /* greyish-white */
+$plan-node-details-border-color = #ACB8CB; /* dark grey */
+
+.plan-view-table
+  @extend $table-base
+  &__row
+    &--body
+      border-top $table-cell-border
+      &:nth-child(odd)
+        background-color $stats-table-tr--bg
+
+.plan-view
+  color $body-color
+  position relative
+
+  .warn
+    position relative
+    color $plan-node-warning-color
+    background-color $plan-node-warning-background-color
+
+  .arrow
+    font-size smaller
+    display none
+
+  .arrow-expanded
+    font-size smaller
+    display inline
+
+  .nodeDetails
+    position relative
+    padding 6px 0
+    border 1px solid transparent
+    border-radius 3px
+
+    &.expanded
+      border 1px solid $plan-node-details-border-color
+
+    &.expanded
+    &:hover
+      background-color $plan-node-details-background-color
+
+    &:hover
+      cursor pointer
+
+      .arrow
+        display inline
+
+    &.warn
+      &.expanded
+      &:hover
+        position relative
+        background-color $plan-node-warning-background-color
+        border 1px solid $plan-node-warning-border-color
+
+  .nodeAttributes
+    color $body-color
+    padding 14px 16px
+    margin 6px 0 4px 0
+    border 1px solid $plan-node-line-color
+    background-color white
+    border-radius 2px
+
+  ul
+    padding 0
+    margin 0
+    li
+      padding 0
+      margin 0
+      position relative
+      list-style-type none
+
+      /* connector to previous node (above) */
+      &:not(:first-child):after
+        content ''
+        width 1px
+        height 19px
+        background-color $plan-node-line-color
+        position absolute
+        top -10px
+        left 5px
+
+      ul
+        padding-left 40px
+
+        li
+          /* first node: horizontal line to parent */
+          &:first-child:after
+            content ''
+            height 1px
+            width 34px
+            background-color $plan-node-line-color
+            position absolute
+            top 24px
+            left -34px
+
+          /* vertical line to parent */
+          &:before
+            content ''
+            width 1px
+            height 100%
+            background-color $plan-node-line-color
+            position absolute
+            top -10px
+            left -35px
+
+.test-data
+  &__active
+    background-color orange
+
+  &:hover
+    cursor pointer
+    background-color yellow
