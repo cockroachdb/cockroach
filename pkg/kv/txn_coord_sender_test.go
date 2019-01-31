@@ -1728,7 +1728,7 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 	})
 
 	v := cluster.VersionByKey(cluster.Version2_1)
-	st := cluster.MakeTestingClusterSettingsWithVersion(v, v)
+	st := cluster.MakeTestingClusterSettingsWithVersion(v)
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
@@ -1778,7 +1778,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 	})
 
 	v := cluster.VersionByKey(cluster.Version2_1)
-	st := cluster.MakeTestingClusterSettingsWithVersion(v, v)
+	st := cluster.MakeTestingClusterSettingsWithVersion(v)
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
