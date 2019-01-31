@@ -32,8 +32,8 @@ type VersionKey int
 //   - If the version is not the latest one, delete the constant and comment out
 //   its stanza and say "deleted" in the versionsSingleton.
 const (
-	VersionBase VersionKey = iota
-	VersionRaftLogTruncationBelowRaft
+	VersionBase                       VersionKey = iota
+	VersionRaftLogTruncationBelowRaft            // unused
 	VersionSplitHardStateBelowRaft
 	VersionStatsBasedRebalancing
 	Version1_1
