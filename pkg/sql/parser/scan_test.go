@@ -444,6 +444,10 @@ func TestLastLexicalToken(t *testing.T) {
 			s:   `SELECT 'unfinished`,
 			res: ERROR,
 		},
+		{
+			s:   `SELECT e'\xaa';`, // invalid token but last token is semicolon
+			res: ';',
+		},
 	}
 
 	for i, tc := range tests {

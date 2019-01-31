@@ -18,8 +18,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // Example_sql_lex tests the usage of the lexer in the sql subcommand.
@@ -122,4 +125,70 @@ select '''
 	// +---+
 	//   1
 	// (1 row)
+}
+
+func TestIsEndOfStatement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		in         string
+		isEnd      bool
+		isNotEmpty bool
+	}{
+		{
+			in:         ";",
+			isEnd:      true,
+			isNotEmpty: true,
+		},
+		{
+			in:         "; /* comment */",
+			isEnd:      true,
+			isNotEmpty: true,
+		},
+		{
+			in:         "; SELECT",
+			isNotEmpty: true,
+		},
+		{
+			in:         "SELECT",
+			isNotEmpty: true,
+		},
+		{
+			in:         "SET; SELECT 1;",
+			isEnd:      true,
+			isNotEmpty: true,
+		},
+		{
+			in:         "SELECT ''''; SET;",
+			isEnd:      true,
+			isNotEmpty: true,
+		},
+		{
+			in: "  -- hello",
+		},
+		{
+			in:         "select 'abc", // invalid token
+			isNotEmpty: true,
+		},
+		{
+			in:         "'abc", // invalid token
+			isNotEmpty: true,
+		},
+		{
+			in:         `SELECT e'\xaa';`, // invalid token but last token is semicolon
+			isEnd:      true,
+			isNotEmpty: true,
+		},
+	}
+
+	for _, test := range tests {
+		lastTok, isNotEmpty := parser.LastLexicalToken(test.in)
+		if isNotEmpty != test.isNotEmpty {
+			t.Errorf("%q: isNotEmpty expected %v, got %v", test.in, test.isNotEmpty, isNotEmpty)
+		}
+		isEnd := isEndOfStatement(lastTok)
+		if isEnd != test.isEnd {
+			t.Errorf("%q: isEnd expected %v, got %v", test.in, test.isEnd, isEnd)
+		}
+	}
 }
