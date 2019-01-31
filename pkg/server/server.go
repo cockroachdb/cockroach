@@ -770,6 +770,10 @@ type ListenError struct {
 	Addr string
 }
 
+// inspectEngines goes through engines and checks which ones are bootstrapped
+// and which ones are empty.
+// It also calls SynthesizeClusterVersionFromEngines to get the cluster version,
+// or to set it if no engines have a version in them already.
 func inspectEngines(
 	ctx context.Context,
 	engines []engine.Engine,
@@ -1410,7 +1414,7 @@ func (s *Server) Start(ctx context.Context) error {
 			s.cfg.ReadyFn(false /*waitForInit*/)
 		}
 
-		if err := s.bootstrapCluster(ctx); err != nil {
+		if err := s.bootstrapCluster(ctx, s.bootstrapVersion()); err != nil {
 			return err
 		}
 
@@ -1462,7 +1466,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 		doBootstrap = initRes == needBootstrap
 		if doBootstrap {
-			if err := s.bootstrapCluster(ctx); err != nil {
+			if err := s.bootstrapCluster(ctx, s.bootstrapVersion()); err != nil {
 				return err
 			}
 		}
@@ -1763,17 +1767,29 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) bootstrapCluster(ctx context.Context) error {
-	// !!! bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
-	// !!! this should come from a config.
-	bootstrapVersion := cluster.ClusterVersion{Version: cluster.BinaryServerVersion}
-	if s.cfg.TestingKnobs.Store != nil {
-		if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
-			bootstrapVersion = *storeKnobs.BootstrapVersion
+func (s *Server) bootstrapVersion() roachpb.Version {
+	v := cluster.BinaryServerVersion
+	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
+		if ov := knobs.(*TestingKnobs).ServerVersionOverride; ov != (roachpb.Version{}) {
+			v = ov
 		}
 	}
+	return v
+}
 
-	if err := s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
+func (s *Server) bootstrapCluster(
+	ctx context.Context, bootstrapVersion roachpb.Version,
+) error {
+	// !!!
+	// if s.cfg.TestingKnobs.Store != nil {
+	//   if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
+	//     bootstrapVersion = *storeKnobs.BootstrapVersion
+	//   }
+	// }
+
+	if err := s.node.bootstrap(
+		ctx, s.engines, cluster.ClusterVersion{Version: bootstrapVersion},
+	); err != nil {
 		return err
 	}
 	// Force all the system ranges through the replication queue so they
@@ -2063,6 +2079,26 @@ func (w *gzipResponseWriter) Close() error {
 	gzipResponseWriterPool.Put(w)
 	return err
 }
+
+// TestingKnobs groups testing knobs for the Server.
+type TestingKnobs struct {
+	// !!!
+	// // BootstrapVersionOverride, if not empty, will be used for bootstrapping
+	// // clusters instead of cluster.BinaryMinimumSupportedVersion (if this server
+	// // is the one bootstrapping the cluster).
+	// BootstrapVersionOverride roachpb.Version
+
+	// ServerVersionOverride, if not empty, overrides cluster.BinaryServerVersion
+	// as the binary's (maximum) version.
+	ServerVersionOverride roachpb.Version
+
+	// DisableAutomaticVersionUpgrade, if set, temporarily disables the server's
+	// automatic version upgrade mechanism.
+	DisableAutomaticVersionUpgrade int32 // accessed atomically
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*TestingKnobs) ModuleTestingKnobs() {}
 
 func init() {
 	tracing.RegisterTagRemapping("n", "node")

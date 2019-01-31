@@ -16,6 +16,7 @@ package cluster
 
 import (
 	"context"
+	"runtime/debug"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -135,6 +136,7 @@ func (s *Settings) InitializeVersion(
 	if err := updater.Set(KeyVersionSetting, string(b), version.Typ()); err != nil {
 		return err
 	}
+	log.Infof(context.TODO(), "!!! InitializeVersion: %s (%s -> %s)", cv, binaryMinSupportedVersion, binaryMaxSupportedVersion)
 	s.Version.baseVersion.Store(&cv)
 	return nil
 }
@@ -156,7 +158,11 @@ type ExposedClusterVersion struct {
 // IsInitialized returns true if the cluster version has been initialized and is
 // ready for use.
 func (ecv *ExposedClusterVersion) IsInitialized() bool {
-	return *ecv.baseVersion.Load().(*ClusterVersion) != ClusterVersion{}
+	bv := ecv.baseVersion.Load()
+	if bv == nil {
+		return false
+	}
+	return *bv.(*ClusterVersion) != ClusterVersion{}
 }
 
 // OnChange registers (a single) callback that will be invoked whenever the
@@ -225,6 +231,9 @@ func MakeTestingClusterSettings() *Settings {
 	return MakeTestingClusterSettingsWithVersion(BinaryServerVersion)
 }
 
+// !!! can I get rid of this function? testContexts can now be built using
+// StartWithStoreConfigAndVersion(), and that calls st.InitializeVersion.
+//
 // MakeTestingClusterSettingsWithVersion returns a Settings object that has had
 // its version initialized to the provided version configuration.
 func MakeTestingClusterSettingsWithVersion(serverVersion roachpb.Version) *Settings {
@@ -278,6 +287,8 @@ func MakeClusterSettings() *Settings {
 		if s.Version.cb != nil {
 			s.Version.cb(clusterVersion)
 		}
+		log.Infof(context.TODO(), "!!! version.OnChange: %s", clusterVersion)
+		debug.PrintStack()
 		s.Version.baseVersion.Store(&clusterVersion)
 	})
 

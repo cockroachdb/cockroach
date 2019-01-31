@@ -659,6 +659,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		if rResult.State.UsingAppliedStateKey {
 			r.mu.Lock()
 			r.mu.state.UsingAppliedStateKey = true
+			log.Infof(ctx, "!!! proposal true")
 			r.mu.Unlock()
 			rResult.State.UsingAppliedStateKey = false
 		}
@@ -907,7 +908,9 @@ func (r *Replica) evaluateProposal(
 			if res.Replicated.State == nil {
 				res.Replicated.State = &storagepb.ReplicaState{}
 			}
+			log.Infof(ctx, "!!! version: %s", r.ClusterSettings().Version)
 			res.Replicated.State.UsingAppliedStateKey = true
+			log.Infof(ctx, "!!! proposal evaluation true")
 		}
 	}
 

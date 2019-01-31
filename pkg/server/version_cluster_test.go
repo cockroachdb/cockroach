@@ -19,7 +19,6 @@ import (
 	gosql "database/sql"
 	"path/filepath"
 	"strconv"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,9 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
 )
 
 type testClusterWithHelpers struct {
@@ -89,6 +86,8 @@ func (th *testClusterWithHelpers) resetDowngrade(i int) error {
 	return err
 }
 
+// !!! this function no longer does anything with the versions
+//
 // Set up a mixed cluster with the given initial bootstrap version and
 // len(versions) servers that each run at MinSupportedVersion=v[0] and
 // ServerVersion=v[1] (i.e. they identify as a binary that can run with
@@ -102,8 +101,9 @@ func setupMixedCluster(
 		T: t,
 		args: func() map[int]base.TestServerArgs {
 			serverArgsPerNode := map[int]base.TestServerArgs{}
-			for i, v := range versions {
-				st := cluster.MakeClusterSettings(roachpb.MustParseVersion(v[0]), roachpb.MustParseVersion(v[1]))
+			for i /* !!!, v */ := range versions {
+				// !!! st := cluster.MakeClusterSettings(roachpb.MustParseVersion(v[0]), roachpb.MustParseVersion(v[1]))
+				st := cluster.MakeClusterSettings()
 				args := base.TestServerArgs{
 					Settings: st,
 					Knobs:    knobs,
@@ -144,6 +144,8 @@ func prev(version roachpb.Version) roachpb.Version {
 	}
 }
 
+// !!! This test doesn't seem to need any mucking with the versions. It seems to
+// simply be about starting a cluster. Simplify it and rename it.
 func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -157,12 +159,13 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	// new version (and not the old one).
 	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
 
-	bootstrapVersion := cluster.ClusterVersion{Version: newVersion}
+	// !!! bootstrapVersion := cluster.ClusterVersion{Version: newVersion}
 
 	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
+		// !!!
+		// Store: &storage.StoreTestingKnobs{
+		//   BootstrapVersion: &bootstrapVersion,
+		// },
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: 1,
 		},
@@ -175,303 +178,305 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	defer tc.TestCluster.Stopper().Stop(ctx)
 
 	for i := 0; i < len(tc.TestCluster.Servers); i++ {
-		testutils.SucceedsSoon(t, func() error {
-			for _, engine := range tc.TestCluster.Servers[i].Engines() {
-				cv, err := storage.ReadClusterVersion(ctx, engine)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if cv.Version != newVersion {
-					return errors.Errorf("n%d: expected version %v, got %v", i+1, newVersion, cv)
-				}
+		// !!! testutils.SucceedsSoon(t, func() error {
+		for _, engine := range tc.TestCluster.Servers[i].Engines() {
+			cv, err := storage.ReadClusterVersion(ctx, engine)
+			if err != nil {
+				t.Fatal(err)
 			}
-			return nil
-		})
+			if cv.Version != newVersion {
+				// !!! return errors.Errorf("n%d: expected version %v, got %v", i+1, newVersion, cv)
+				t.Fatalf("n%d: expected version %v, got %v", i+1, newVersion, cv)
+			}
+		}
+		// !!! return nil
+		// !!! })
 	}
 }
 
-func TestClusterVersionUpgrade(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	dir, finish := testutils.TempDir(t)
-	defer finish()
-
-	var newVersion = cluster.BinaryServerVersion
-	var oldVersion = prev(newVersion)
-
-	// Starts 3 nodes that have cluster versions set to be oldVersion and
-	// self-declared binary version set to be newVersion. Expect cluster
-	// version to upgrade automatically from oldVersion to newVersion.
-	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
-
-	bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
-
-	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
-		Server: &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: 1,
-		},
-	}
-	tc := setupMixedCluster(t, knobs, versions, dir)
-	defer tc.TestCluster.Stopper().Stop(ctx)
-
-	// Set CLUSTER SETTING cluster.preserve_downgrade_option to oldVersion to prevent upgrade.
-	if err := tc.setDowngrade(0, oldVersion.String()); err != nil {
-		t.Fatalf("error setting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
-	}
-	atomic.StoreInt32(&knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade, 0)
-
-	// Check the cluster version is still oldVersion.
-	curVersion := tc.getVersionFromSelect(0)
-	if curVersion != oldVersion.String() {
-		t.Fatalf("cluster version should still be %s, but get %s", oldVersion, curVersion)
-	}
-
-	// Reset cluster.preserve_downgrade_option to enable auto upgrade.
-	if err := tc.resetDowngrade(0); err != nil {
-		t.Fatalf("error resetting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
-	}
-
-	// Check the cluster version is bumped to newVersion.
-	testutils.SucceedsSoon(t, func() error {
-		if version := tc.getVersionFromSelect(0); version != newVersion.String() {
-			return errors.Errorf("cluster version is still %s, should be %s", oldVersion, newVersion)
-		}
-		return nil
-	})
-	curVersion = tc.getVersionFromSelect(0)
-	isNoopUpdate := curVersion == newVersion.String()
-
-	testutils.SucceedsSoon(t, func() error {
-		for i := 0; i < tc.NumServers(); i++ {
-			v := tc.getVersionFromSetting(i)
-			wantActive := isNoopUpdate
-			if isActive := v.Version().IsActiveVersion(newVersion); isActive != wantActive {
-				return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
-			}
-
-			if tableV, curV := tc.getVersionFromSelect(i), v.Version().Version.String(); tableV != curV {
-				return errors.Errorf("%d: read v%s from table, v%s from setting", i, tableV, curV)
-			}
-		}
-		return nil
-	})
-
-	exp := newVersion.String()
-
-	// Read the versions from the table from each node. Note that under the
-	// hood, everything goes to the lease holder and so it's pretty much
-	// guaranteed that they all read the same, but it doesn't hurt to check.
-	testutils.SucceedsSoon(t, func() error {
-		for i := 0; i < tc.NumServers(); i++ {
-			if version := tc.getVersionFromSelect(i); version != exp {
-				return errors.Errorf("%d: incorrect version %q (wanted %s)", i, version, exp)
-			}
-			if version := tc.getVersionFromShow(i); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-		}
-		return nil
-	})
-
-	// Now check the Settings.Version variable. That is the tricky one for which
-	// we "hold back" a gossip update until we've written to the engines. We may
-	// have to wait a bit until we see the new version here, even though it's
-	// already in the table.
-	testutils.SucceedsSoon(t, func() error {
-		for i := 0; i < tc.NumServers(); i++ {
-			vers := tc.getVersionFromSetting(i)
-			if v := vers.Version().Version.String(); v == curVersion {
-				if isNoopUpdate {
-					continue
-				}
-				return errors.Errorf("%d: still waiting for %s (now at %s)", i, exp, v)
-			} else if v != exp {
-				t.Fatalf("%d: should never see version %s (wanted %s)", i, v, exp)
-			}
-		}
-		return nil
-	})
-
-	// Since the wrapped version setting exposes the new versions, it must
-	// definitely be present on all stores on the first try.
-	if err := tc.Servers[1].GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
-		cv, err := storage.ReadVersionFromEngineOrDefault(ctx, s.Engine())
-		if err != nil {
-			return err
-		}
-		if act := cv.Version.String(); act != exp {
-			t.Fatalf("%s: %s persisted, but should be %s", s, act, exp)
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestClusterVersionBootstrapStrict(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	// Four nodes that are all strictly version X without accepting anything else.
-	for _, versions := range [][][2]string{
-		{{"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}},
-		{{"4.7", "4.7"}, {"4.7", "4.7"}, {"4.7", "4.7"}, {"4.7", "4.7"}},
-	} {
-		func() {
-			bootstrapVersion := cluster.ClusterVersion{
-				Version: roachpb.MustParseVersion(versions[0][0]),
-			}
-
-			knobs := base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
-					BootstrapVersion: &bootstrapVersion,
-				},
-			}
-			tc := setupMixedCluster(t, knobs, versions, "")
-			defer tc.Stopper().Stop(ctx)
-
-			exp := versions[0][0]
-
-			for i := 0; i < tc.NumServers(); i++ {
-				if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
-					t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
-				}
-				if version := tc.getVersionFromShow(i); version != exp {
-					t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
-				}
-
-				if version := tc.getVersionFromSelect(i); version != exp {
-					t.Fatalf("%d: incorrect version %q (wanted %s)", i, version, exp)
-				}
-			}
-		}()
-	}
-}
-
-func TestClusterVersionMixedVersionTooOld(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	// Prevent node crashes from generating several megabytes of stacks when
-	// GOTRACEBACK=all, as it is on CI.
-	defer log.DisableTracebacks()()
-
-	exits := make(chan int, 100)
-
-	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
-	defer log.ResetExitFunc()
-
-	// Three nodes at v1.1 and a fourth one at 1.0, but all operating at v1.0.
-	versions := [][2]string{{"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.0"}}
-
-	// Start by running 1.0.
-	bootstrapVersion := cluster.ClusterVersion{
-		Version: cluster.VersionByKey(cluster.VersionBase),
-	}
-
-	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
-	}
-	tc := setupMixedCluster(t, knobs, versions, "")
-	defer tc.Stopper().Stop(ctx)
-
-	exp := "1.1"
-
-	// The last node refuses to perform an upgrade that would risk its own life.
-	if err := tc.setVersion(len(versions)-1, exp); !testutils.IsError(err, "cannot upgrade to 1.1: node running 1.0") {
-		t.Fatal(err)
-	}
-
-	// The other nodes are less careful.
-	tc.mustSetVersion(0, exp)
-
-	<-exits // wait for fourth node to die
-
-	// Check that we can still talk to the first three nodes.
-	for i := 0; i < tc.NumServers()-1; i++ {
-		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-			if version := tc.getVersionFromShow(i); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-			return nil
-		})
-	}
-}
-
-func TestClusterVersionMixedVersionTooNew(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	// Prevent node crashes from generating several megabytes of stacks when
-	// GOTRACEBACK=all, as it is on CI.
-	defer log.DisableTracebacks()()
-
-	exits := make(chan int, 100)
-
-	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
-	defer log.ResetExitFunc()
-
-	// Three nodes at v1.1 and a fourth one (started later) at 1.1-2 (and
-	// incompatible with anything earlier).
-	versions := [][2]string{{"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}}
-
-	// Try running 1.1.
-	bootstrapVersion := cluster.ClusterVersion{
-		Version: roachpb.Version{Major: 1, Minor: 1},
-	}
-
-	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
-	}
-	tc := setupMixedCluster(t, knobs, versions, "")
-	defer tc.Stopper().Stop(ctx)
-
-	tc.AddServer(t, base.TestServerArgs{
-		Settings: cluster.MakeClusterSettings(
-			roachpb.Version{Major: 1, Minor: 1, Unstable: 2},
-			roachpb.Version{Major: 1, Minor: 1, Unstable: 2}),
-	})
-
-	// TODO(tschottdorf): the cluster remains running even though we're running
-	// an illegal combination of versions. The root cause is that nothing
-	// populates the version setting table entry, and so each node implicitly
-	// assumes its own version. We also use versions prior to 1.1-5 to avoid
-	// the version compatibility check in the RPC heartbeat.
-	//
-	// TODO(tschottdorf): validate something about the on-disk contents of the
-	// nodes at this point.
-	exp := "1.1"
-
-	// Write the de facto cluster version (v1.1) into the table. Note that we
-	// can do this from the node running 1.1-2 (it could be prevented, but doesn't
-	// seem too interesting).
-	if err := tc.setVersion(3, exp); err != nil {
-		t.Fatal(err)
-	}
-
-	<-exits // wait for fourth node to die
-
-	// Check that we can still talk to the first three nodes.
-	for i := 0; i < tc.NumServers()-1; i++ {
-		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-			if version := tc.getVersionFromShow(i); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-			return nil
-		})
-	}
-}
+// !!!
+// func TestClusterVersionUpgrade(t *testing.T) {
+//   defer leaktest.AfterTest(t)()
+//   ctx := context.Background()
+//
+//   dir, finish := testutils.TempDir(t)
+//   defer finish()
+//
+//   var newVersion = cluster.BinaryServerVersion
+//   var oldVersion = prev(newVersion)
+//
+//   // Starts 3 nodes that have cluster versions set to be oldVersion and
+//   // self-declared binary version set to be newVersion. Expect cluster
+//   // version to upgrade automatically from oldVersion to newVersion.
+//   versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
+//
+//   bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
+//
+//   knobs := base.TestingKnobs{
+//     Store: &storage.StoreTestingKnobs{
+//       BootstrapVersion: &bootstrapVersion,
+//     },
+//     Server: &server.TestingKnobs{
+//       DisableAutomaticVersionUpgrade: 1,
+//     },
+//   }
+//   tc := setupMixedCluster(t, knobs, versions, dir)
+//   defer tc.TestCluster.Stopper().Stop(ctx)
+//
+//   // Set CLUSTER SETTING cluster.preserve_downgrade_option to oldVersion to prevent upgrade.
+//   if err := tc.setDowngrade(0, oldVersion.String()); err != nil {
+//     t.Fatalf("error setting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
+//   }
+//   atomic.StoreInt32(&knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade, 0)
+//
+//   // Check the cluster version is still oldVersion.
+//   curVersion := tc.getVersionFromSelect(0)
+//   if curVersion != oldVersion.String() {
+//     t.Fatalf("cluster version should still be %s, but get %s", oldVersion, curVersion)
+//   }
+//
+//   // Reset cluster.preserve_downgrade_option to enable auto upgrade.
+//   if err := tc.resetDowngrade(0); err != nil {
+//     t.Fatalf("error resetting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
+//   }
+//
+//   // Check the cluster version is bumped to newVersion.
+//   testutils.SucceedsSoon(t, func() error {
+//     if version := tc.getVersionFromSelect(0); version != newVersion.String() {
+//       return errors.Errorf("cluster version is still %s, should be %s", oldVersion, newVersion)
+//     }
+//     return nil
+//   })
+//   curVersion = tc.getVersionFromSelect(0)
+//   isNoopUpdate := curVersion == newVersion.String()
+//
+//   testutils.SucceedsSoon(t, func() error {
+//     for i := 0; i < tc.NumServers(); i++ {
+//       v := tc.getVersionFromSetting(i)
+//       wantActive := isNoopUpdate
+//       if isActive := v.Version().IsActiveVersion(newVersion); isActive != wantActive {
+//         return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
+//       }
+//
+//       if tableV, curV := tc.getVersionFromSelect(i), v.Version().Version.String(); tableV != curV {
+//         return errors.Errorf("%d: read v%s from table, v%s from setting", i, tableV, curV)
+//       }
+//     }
+//     return nil
+//   })
+//
+//   exp := newVersion.String()
+//
+//   // Read the versions from the table from each node. Note that under the
+//   // hood, everything goes to the lease holder and so it's pretty much
+//   // guaranteed that they all read the same, but it doesn't hurt to check.
+//   testutils.SucceedsSoon(t, func() error {
+//     for i := 0; i < tc.NumServers(); i++ {
+//       if version := tc.getVersionFromSelect(i); version != exp {
+//         return errors.Errorf("%d: incorrect version %q (wanted %s)", i, version, exp)
+//       }
+//       if version := tc.getVersionFromShow(i); version != exp {
+//         return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+//       }
+//     }
+//     return nil
+//   })
+//
+//   // Now check the Settings.Version variable. That is the tricky one for which
+//   // we "hold back" a gossip update until we've written to the engines. We may
+//   // have to wait a bit until we see the new version here, even though it's
+//   // already in the table.
+//   testutils.SucceedsSoon(t, func() error {
+//     for i := 0; i < tc.NumServers(); i++ {
+//       vers := tc.getVersionFromSetting(i)
+//       if v := vers.Version().Version.String(); v == curVersion {
+//         if isNoopUpdate {
+//           continue
+//         }
+//         return errors.Errorf("%d: still waiting for %s (now at %s)", i, exp, v)
+//       } else if v != exp {
+//         t.Fatalf("%d: should never see version %s (wanted %s)", i, v, exp)
+//       }
+//     }
+//     return nil
+//   })
+//
+//   // Since the wrapped version setting exposes the new versions, it must
+//   // definitely be present on all stores on the first try.
+//   if err := tc.Servers[1].GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+//     cv, err := storage.ReadVersionFromEngineOrDefault(ctx, s.Engine())
+//     if err != nil {
+//       return err
+//     }
+//     if act := cv.Version.String(); act != exp {
+//       t.Fatalf("%s: %s persisted, but should be %s", s, act, exp)
+//     }
+//     return nil
+//   }); err != nil {
+//     t.Fatal(err)
+//   }
+// }
+//
+// func TestClusterVersionBootstrapStrict(t *testing.T) {
+//   defer leaktest.AfterTest(t)()
+//   ctx := context.Background()
+//
+//   // Four nodes that are all strictly version X without accepting anything else.
+//   for _, versions := range [][][2]string{
+//     {{"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}},
+//     {{"4.7", "4.7"}, {"4.7", "4.7"}, {"4.7", "4.7"}, {"4.7", "4.7"}},
+//   } {
+//     func() {
+//       bootstrapVersion := cluster.ClusterVersion{
+//         Version: roachpb.MustParseVersion(versions[0][0]),
+//       }
+//
+//       knobs := base.TestingKnobs{
+//         Store: &storage.StoreTestingKnobs{
+//           BootstrapVersion: &bootstrapVersion,
+//         },
+//       }
+//       tc := setupMixedCluster(t, knobs, versions, "")
+//       defer tc.Stopper().Stop(ctx)
+//
+//       exp := versions[0][0]
+//
+//       for i := 0; i < tc.NumServers(); i++ {
+//         if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
+//           t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
+//         }
+//         if version := tc.getVersionFromShow(i); version != exp {
+//           t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
+//         }
+//
+//         if version := tc.getVersionFromSelect(i); version != exp {
+//           t.Fatalf("%d: incorrect version %q (wanted %s)", i, version, exp)
+//         }
+//       }
+//     }()
+//   }
+// }
+//
+// func TestClusterVersionMixedVersionTooOld(t *testing.T) {
+//   defer leaktest.AfterTest(t)()
+//   ctx := context.Background()
+//
+//   // Prevent node crashes from generating several megabytes of stacks when
+//   // GOTRACEBACK=all, as it is on CI.
+//   defer log.DisableTracebacks()()
+//
+//   exits := make(chan int, 100)
+//
+//   log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
+//   defer log.ResetExitFunc()
+//
+//   // Three nodes at v1.1 and a fourth one at 1.0, but all operating at v1.0.
+//   versions := [][2]string{{"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.0"}}
+//
+//   // Start by running 1.0.
+//   bootstrapVersion := cluster.ClusterVersion{
+//     Version: cluster.VersionByKey(cluster.VersionBase),
+//   }
+//
+//   knobs := base.TestingKnobs{
+//     Store: &storage.StoreTestingKnobs{
+//       BootstrapVersion: &bootstrapVersion,
+//     },
+//   }
+//   tc := setupMixedCluster(t, knobs, versions, "")
+//   defer tc.Stopper().Stop(ctx)
+//
+//   exp := "1.1"
+//
+//   // The last node refuses to perform an upgrade that would risk its own life.
+//   if err := tc.setVersion(len(versions)-1, exp); !testutils.IsError(err, "cannot upgrade to 1.1: node running 1.0") {
+//     t.Fatal(err)
+//   }
+//
+//   // The other nodes are less careful.
+//   tc.mustSetVersion(0, exp)
+//
+//   <-exits // wait for fourth node to die
+//
+//   // Check that we can still talk to the first three nodes.
+//   for i := 0; i < tc.NumServers()-1; i++ {
+//     testutils.SucceedsSoon(tc, func() error {
+//       if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
+//         return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+//       }
+//       if version := tc.getVersionFromShow(i); version != exp {
+//         return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+//       }
+//       return nil
+//     })
+//   }
+// }
+//
+// func TestClusterVersionMixedVersionTooNew(t *testing.T) {
+//   defer leaktest.AfterTest(t)()
+//   ctx := context.Background()
+//
+//   // Prevent node crashes from generating several megabytes of stacks when
+//   // GOTRACEBACK=all, as it is on CI.
+//   defer log.DisableTracebacks()()
+//
+//   exits := make(chan int, 100)
+//
+//   log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
+//   defer log.ResetExitFunc()
+//
+//   // Three nodes at v1.1 and a fourth one (started later) at 1.1-2 (and
+//   // incompatible with anything earlier).
+//   versions := [][2]string{{"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}}
+//
+//   // Try running 1.1.
+//   bootstrapVersion := cluster.ClusterVersion{
+//     Version: roachpb.Version{Major: 1, Minor: 1},
+//   }
+//
+//   knobs := base.TestingKnobs{
+//     Store: &storage.StoreTestingKnobs{
+//       BootstrapVersion: &bootstrapVersion,
+//     },
+//   }
+//   tc := setupMixedCluster(t, knobs, versions, "")
+//   defer tc.Stopper().Stop(ctx)
+//
+//   tc.AddServer(t, base.TestServerArgs{
+//     Settings: cluster.MakeClusterSettings(
+//       roachpb.Version{Major: 1, Minor: 1, Unstable: 2},
+//       roachpb.Version{Major: 1, Minor: 1, Unstable: 2}),
+//   })
+//
+//   // TODO(tschottdorf): the cluster remains running even though we're running
+//   // an illegal combination of versions. The root cause is that nothing
+//   // populates the version setting table entry, and so each node implicitly
+//   // assumes its own version. We also use versions prior to 1.1-5 to avoid
+//   // the version compatibility check in the RPC heartbeat.
+//   //
+//   // TODO(tschottdorf): validate something about the on-disk contents of the
+//   // nodes at this point.
+//   exp := "1.1"
+//
+//   // Write the de facto cluster version (v1.1) into the table. Note that we
+//   // can do this from the node running 1.1-2 (it could be prevented, but doesn't
+//   // seem too interesting).
+//   if err := tc.setVersion(3, exp); err != nil {
+//     t.Fatal(err)
+//   }
+//
+//   <-exits // wait for fourth node to die
+//
+//   // Check that we can still talk to the first three nodes.
+//   for i := 0; i < tc.NumServers()-1; i++ {
+//     testutils.SucceedsSoon(tc, func() error {
+//       if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
+//         return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+//       }
+//       if version := tc.getVersionFromShow(i); version != exp {
+//         return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+//       }
+//       return nil
+//     })
+//   }
+// }

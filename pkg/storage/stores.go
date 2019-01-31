@@ -314,6 +314,13 @@ func WriteClusterVersionToEngines(
 }
 
 // SynthesizeClusterVersionFromEngines implements the core of (*Stores).SynthesizeClusterVersion.
+//
+// Args:
+// 	minSupportedVersion: The minimum versiun supported by this binary. An error
+// 	  is returned if any engine has a version lower that this. This version is
+// 	  written to the engines if no store has a version in it.
+// 	serverVersion: The maximum version supported by this binary. An error is
+// 	  returned if any engine has a higher version.
 func SynthesizeClusterVersionFromEngines(
 	ctx context.Context, engines []engine.Engine, minSupportedVersion, serverVersion roachpb.Version,
 ) (cluster.ClusterVersion, error) {

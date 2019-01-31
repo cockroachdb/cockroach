@@ -137,7 +137,10 @@ func createTestStoreWithOpts(
 		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(),
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
-	stores := storage.NewStores(ac, storeCfg.Clock, storeCfg.Settings.Version.MinSupportedVersion, storeCfg.Settings.Version.ServerVersion)
+	stores := storage.NewStores(
+		ac, storeCfg.Clock,
+		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+	// !!! storeCfg.Settings.Version.MinSupportedVersion, storeCfg.Settings.Version.ServerVersion)
 
 	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
@@ -171,7 +174,8 @@ func createTestStoreWithOpts(
 	if !opts.dontBootstrap {
 		if err := storage.Bootstrap(
 			ctx, eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
-			storeCfg.Settings.Version.BootstrapVersion(),
+			cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+			// !!! storeCfg.Settings.Version.BootstrapVersion(),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -191,7 +195,8 @@ func createTestStoreWithOpts(
 		err := store.WriteInitialData(
 			ctx,
 			kvs,
-			storeCfg.Settings.Version.BootstrapVersion().Version,
+			cluster.BinaryServerVersion,
+			// !!! storeCfg.Settings.Version.BootstrapVersion().Version,
 			1 /* numStores */, splits)
 		if err != nil {
 			t.Fatal(err)
@@ -824,7 +829,10 @@ func (m *multiTestContext) addStore(idx int) {
 		if err := storage.Bootstrap(ctx, eng, roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
-		}, cfg.Settings.Version.BootstrapVersion()); err != nil {
+		},
+			cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		// !!! cfg.Settings.Version.BootstrapVersion()
+		); err != nil {
 			m.t.Fatal(err)
 		}
 	}
@@ -843,7 +851,8 @@ func (m *multiTestContext) addStore(idx int) {
 		err := store.WriteInitialData(
 			ctx,
 			kvs,
-			cfg.Settings.Version.BootstrapVersion().Version,
+			cluster.BinaryServerVersion,
+			// !!! cfg.Settings.Version.BootstrapVersion().Version,
 			len(m.engines), splits)
 		if err != nil {
 			m.t.Fatal(err)
@@ -853,7 +862,10 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatal(err)
 	}
 
-	sender := storage.NewStores(ambient, clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	sender := storage.NewStores(ambient, clock,
+		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
+	// !!! cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion
+	)
 	sender.AddStore(store)
 	perReplicaServer := storage.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
 	storage.RegisterPerReplicaServer(grpcServer, perReplicaServer)
