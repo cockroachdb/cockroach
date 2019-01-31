@@ -541,13 +541,8 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
-	private := memo.MutationPrivate{
-		Table:       mb.tabID,
-		InsertCols:  mb.insertColList,
-		CheckCols:   mb.checkColList,
-		NeedResults: returning != nil,
-	}
-	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, &private)
+	private := mb.makeMutationPrivate(returning != nil)
+	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, private)
 
 	mb.buildReturning(returning)
 }
@@ -786,16 +781,8 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
-	private := memo.MutationPrivate{
-		Table:       mb.tabID,
-		InsertCols:  mb.insertColList,
-		FetchCols:   mb.fetchColList,
-		UpdateCols:  mb.updateColList,
-		CanaryCol:   mb.canaryColID,
-		CheckCols:   mb.checkColList,
-		NeedResults: returning != nil,
-	}
-	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, &private)
+	private := mb.makeMutationPrivate(returning != nil)
+	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, private)
 
 	mb.buildReturning(returning)
 }
@@ -831,19 +818,22 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 		return &projectionsScope.cols[len(projectionsScope.cols)-1]
 	}
 
-	// Pass through all fetch columns. This always includes the canary column.
-	fetchColSet := mb.fetchColList.ToSet()
+	// Pass through all fetch and insert columns. The fetch columns always include
+	// the canary column.
+	passthrough := mb.fetchColList.ToSet()
+	passthrough.UnionWith(mb.insertColList.ToSet())
 	for i := range mb.outScope.cols {
 		col := &mb.outScope.cols[i]
-		if fetchColSet.Contains(int(col.id)) {
-			// Don't copy the column's name, since fetch columns can no longer be
-			// referenced by expressions, such as any check constraints.
+		if passthrough.Contains(int(col.id)) {
+			// Don't copy the column's name, since fetch and insert columns can no
+			// longer be referenced by expressions, such as any check constraints.
 			addAnonymousColumn(col.id)
 		}
 	}
 
 	// Project a column for each target table column that needs to be either
 	// inserted or updated. This can include mutation columns.
+	mb.upsertColList = make(opt.ColList, mb.tab.DeletableColumnCount())
 	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
 		insertColID := mb.insertColList[i]
 		updateColID := mb.updateColList[i]
@@ -891,17 +881,14 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 		scopeCol.table = *mb.tab.Name()
 		scopeCol.name = mb.tab.Column(i).ColName()
 
-		// Update the ids for the insert and update columns that are involved in
-		// the Upsert. The new column ids will be used by the Upsert operator in
-		// place of the original column ids.
-		if mb.insertColList[i] != 0 {
-			mb.insertColList[i] = scopeCol.id
-		}
+		// Update the ids for the update columns that are involved in the Upsert.
+		// The new column ids will be used by the Upsert operator in place of the
+		// original column ids. Also set the upsertColList, as those columns can
+		// be used by RETURNING columns.
 		if mb.updateColList[i] != 0 {
 			mb.updateColList[i] = scopeCol.id
-		} else if mb.fetchColList[i] != 0 {
-			mb.fetchColList[i] = scopeCol.id
 		}
+		mb.upsertColList[i] = scopeCol.id
 	}
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)

@@ -335,14 +335,8 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.addCheckConstraintCols()
 
-	private := memo.MutationPrivate{
-		Table:       mb.tabID,
-		FetchCols:   mb.fetchColList,
-		UpdateCols:  mb.updateColList,
-		CheckCols:   mb.checkColList,
-		NeedResults: returning != nil,
-	}
-	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, &private)
+	private := mb.makeMutationPrivate(returning != nil)
+	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, private)
 
 	mb.buildReturning(returning)
 }

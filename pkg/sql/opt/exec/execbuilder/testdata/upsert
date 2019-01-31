@@ -16,9 +16,9 @@ count                                    ·         ·
       │                                  into      kv(k, v)
       │                                  strategy  opt upserter
       └── render                         ·         ·
-           │                             render 0  upsert_k
-           │                             render 1  upsert_v
-           │                             render 2  upsert_k
+           │                             render 0  k
+           │                             render 1  v
+           │                             render 2  k
            │                             render 3  v
            │                             render 4  upsert_v
            │                             render 5  k
@@ -27,6 +27,8 @@ count                                    ·         ·
                 │                        render 1  CASE WHEN k IS NULL THEN v ELSE v END
                 │                        render 2  k
                 │                        render 3  v
+                │                        render 4  k
+                │                        render 5  v
                 └── lookup-join          ·         ·
                      │                   table     kv@primary
                      │                   type      inner

@@ -1002,9 +1002,9 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 
 	private := mutation.Private().(*MutationPrivate)
 
-	// If no columns are output by the operator, then all other properties retain
+	// If no rows are output by the operator, then all other properties retain
 	// default values.
-	if !private.NeedResults {
+	if !private.NeedResults() {
 		return
 	}
 
@@ -1039,8 +1039,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 		}
 
 		// If the input column is not null, then the result will be not null.
-		inputColID := private.MapToInputID(tabColID)
-		if inputProps.NotNullCols.Contains(int(inputColID)) {
+		if inputProps.NotNullCols.Contains(int(private.ReturnCols[i])) {
 			rel.NotNullCols.Add(int(private.Table.ColumnID(i)))
 		}
 	}
