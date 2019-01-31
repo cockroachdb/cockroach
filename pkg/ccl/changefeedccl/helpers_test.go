@@ -553,7 +553,7 @@ func (c *tableFeed) Next(
 		// which seems limiting.
 		var err error
 		c.rows, err = c.db.Query(
-			`DELETE FROM sqlsink ORDER BY PRIMARY KEY sqlsink RETURNING *`)
+			`SELECT * FROM [DELETE FROM sqlsink RETURNING *] ORDER BY topic, partition, message_id`)
 		if err != nil {
 			t.Fatal(err)
 		}

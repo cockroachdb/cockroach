@@ -13,7 +13,7 @@ TABLE abcde
  ├── c int not null
  ├── d int
  ├── rowid int not null (hidden)
- ├── e int
+ ├── e int (mutation)
  └── INDEX primary
       └── rowid int not null (hidden)
 

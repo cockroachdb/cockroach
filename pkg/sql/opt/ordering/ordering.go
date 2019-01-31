@@ -181,6 +181,11 @@ func init() {
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
 		buildProvidedOrdering: mutationBuildProvided,
 	}
+	funcMap[opt.UpsertOp] = funcs{
+		canProvideOrdering:    mutationCanProvideOrdering,
+		buildChildReqOrdering: mutationBuildChildReqOrdering,
+		buildProvidedOrdering: mutationBuildProvided,
+	}
 	funcMap[opt.DeleteOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,

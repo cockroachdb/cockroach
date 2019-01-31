@@ -1008,7 +1008,7 @@ SELECT a FROM t.public.abcd ORDER BY INDEX t.public.abcd@bcd
 sort
  ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int) d:4(int)]
  ├── ordering: +2,-3,+4,+1
- └── scan abcd
+ └── scan t.public.abcd
       └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
 
 build
@@ -1017,7 +1017,7 @@ SELECT a FROM t.abcd ORDER BY INDEX t.abcd@bcd
 sort
  ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int) d:4(int)]
  ├── ordering: +2,-3,+4,+1
- └── scan abcd
+ └── scan t.public.abcd
       └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
 
 build
@@ -1026,7 +1026,7 @@ SELECT a FROM public.abcd ORDER BY INDEX public.abcd@bcd
 sort
  ├── columns: a:1(int!null)  [hidden: b:2(int) c:3(int) d:4(int)]
  ├── ordering: +2,-3,+4,+1
- └── scan abcd
+ └── scan public.abcd
       └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
 
 build

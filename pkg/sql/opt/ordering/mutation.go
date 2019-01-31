@@ -22,9 +22,7 @@ import (
 )
 
 func mutationCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
-	// The mutation operator can always pass through ordering to its input. Note
-	// that this is not possible for the Upsert operator, which is handled
-	// separately.
+	// The mutation operator can always pass through ordering to its input.
 	return true
 }
 

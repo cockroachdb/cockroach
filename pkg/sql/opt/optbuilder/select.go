@@ -89,7 +89,8 @@ func (b *Builder) buildDataSource(
 		ds, resName := b.resolveDataSource(tn, privilege.SELECT)
 		switch t := ds.(type) {
 		case cat.Table:
-			return b.buildScan(t, &resName, nil /* ordinals */, indexFlags, excludeMutations, inScope)
+			tabID := b.factory.Metadata().AddTableWithAlias(t, &resName)
+			return b.buildScan(tabID, nil /* ordinals */, indexFlags, excludeMutations, inScope)
 		case cat.View:
 			return b.buildView(t, inScope)
 		case cat.Sequence:
@@ -216,7 +217,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		scan, isScan := scope.expr.(*memo.ScanExpr)
 		if isScan {
 			tabMeta := b.factory.Metadata().TableMeta(scan.ScanPrivate.Table)
-			tabMeta.Alias = string(as.Alias)
+			tabMeta.Alias = tree.MakeUnqualifiedTableName(as.Alias)
 		}
 
 		if len(colAlias) > 0 {
@@ -285,7 +286,9 @@ func (b *Builder) buildScanFromTableRef(
 			ordinals[i] = ord
 		}
 	}
-	return b.buildScan(tab, tab.Name(), ordinals, indexFlags, excludeMutations, inScope)
+
+	tabID := b.factory.Metadata().AddTable(tab)
+	return b.buildScan(tabID, ordinals, indexFlags, excludeMutations, inScope)
 }
 
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
@@ -300,23 +303,25 @@ func (b *Builder) buildScanFromTableRef(
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) buildScan(
-	tab cat.Table,
-	tn *tree.TableName,
+	tabID opt.TableID,
 	ordinals []int,
 	indexFlags *tree.IndexFlags,
 	scanMutationCols bool,
 	inScope *scope,
 ) (outScope *scope) {
 	md := b.factory.Metadata()
-	tabID := md.AddTable(tab)
-	if tn.CatalogName == "" {
-		// This is an unqualified name, so must be an alias.
-		md.TableMeta(tabID).Alias = string(tn.TableName)
-	}
+	tabMeta := md.TableMeta(tabID)
+	tab := tabMeta.Table
 
 	colCount := len(ordinals)
 	if colCount == 0 {
-		colCount = tab.ColumnCount()
+		// If scanning mutation columns, then include writable and deletable
+		// columns in the output, in addition to public columns.
+		if scanMutationCols {
+			colCount = tab.DeletableColumnCount()
+		} else {
+			colCount = tab.ColumnCount()
+		}
 	}
 
 	var tabColIDs opt.ColSet
@@ -328,20 +333,15 @@ func (b *Builder) buildScan(
 			ord = ordinals[i]
 		}
 
-		// Exclude any mutation columns if they were not requested.
-		isMutation := cat.IsMutationColumn(tab, ord)
-		if !scanMutationCols && isMutation {
-			continue
-		}
-
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(int(colID))
 		name := col.ColName()
+		isMutation := cat.IsMutationColumn(tab, ord)
 		outScope.cols = append(outScope.cols, scopeColumn{
 			id:       colID,
 			name:     name,
-			table:    *tn,
+			table:    tabMeta.Alias,
 			typ:      col.DatumType(),
 			hidden:   col.IsHidden() || isMutation,
 			mutation: isMutation,

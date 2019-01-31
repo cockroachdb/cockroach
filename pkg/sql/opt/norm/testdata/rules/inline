@@ -464,11 +464,11 @@ project
       │    ├── side-effects
       │    ├── project
       │    │    ├── columns: c0:6(int) c1:7(int)
-      │    │    ├── scan zones
-      │    │    │    └── columns: zones.zone_id:1(int!null)
+      │    │    ├── scan crdb_internal.public.zones
+      │    │    │    └── columns: crdb_internal.public.zones.zone_id:1(int!null)
       │    │    └── projections
-      │    │         ├── zones.zone_id + 1 [type=int, outer=(1)]
-      │    │         └── zones.zone_id + 2 [type=int, outer=(1)]
+      │    │         ├── crdb_internal.public.zones.zone_id + 1 [type=int, outer=(1)]
+      │    │         └── crdb_internal.public.zones.zone_id + 2 [type=int, outer=(1)]
       │    └── filters
       │         └── le [type=bool, outer=(6,7), side-effects]
       │              ├── case [type=int]

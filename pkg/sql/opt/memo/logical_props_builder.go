@@ -19,7 +19,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1017,10 +1016,6 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// --------------
 	// Only non-mutation columns are output columns.
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		if cat.IsMutationColumn(tab, i) {
-			continue
-		}
-
 		colID := int(private.Table.ColumnID(i))
 		rel.OutputCols.Add(colID)
 	}
@@ -1215,7 +1210,7 @@ func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	// Make now and annotate the metadata table with it for next time.
 	var allCols opt.ColSet
 	tab := md.Table(tabID)
-	for i := 0; i < tab.ColumnCount(); i++ {
+	for i := 0; i < tab.DeletableColumnCount(); i++ {
 		allCols.Add(int(tabID.ColumnID(i)))
 	}
 
@@ -1223,6 +1218,7 @@ func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	for i := 0; i < tab.IndexCount(); i++ {
 		var keyCols opt.ColSet
 		index := tab.Index(i)
+
 		if index.IsInverted() {
 			// Skip inverted indexes for now.
 			continue
@@ -1400,7 +1396,7 @@ func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 	// columns can be null during backfill.
 	for i := 0; i < tab.ColumnCount(); i++ {
 		// Non-null mutation columns can be null during backfill.
-		if !tab.Column(i).IsNullable() && !cat.IsMutationColumn(tab, i) {
+		if !tab.Column(i).IsNullable() {
 			cs.Add(int(tabID.ColumnID(i)))
 		}
 	}
