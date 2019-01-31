@@ -205,10 +205,10 @@ func newHashJoiner(
 	}
 
 	h.rows[leftSide].InitWithMon(
-		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, h.MemMonitor,
+		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, h.MemMonitor, 0, /* rowCapacity */
 	)
 	h.rows[rightSide].InitWithMon(
-		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, h.MemMonitor,
+		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, h.MemMonitor, 0, /* rowCapacity */
 	)
 
 	if h.joinType == sqlbase.IntersectAllJoin || h.joinType == sqlbase.ExceptAllJoin {

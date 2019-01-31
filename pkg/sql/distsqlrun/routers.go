@@ -261,6 +261,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []sqlbas
 			flowCtx.TempStorage,
 			memoryMonitor,
 			diskMonitor,
+			0, /* rowCapacity */
 		)
 		rb.outputs[i].memoryMonitor = memoryMonitor
 		rb.outputs[i].diskMonitor = diskMonitor
