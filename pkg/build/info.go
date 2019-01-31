@@ -40,6 +40,7 @@ var (
 	Distribution = "OSS"
 	typ          string // Type of this build: <empty>, "development", or "release[-gnu|-musl]"
 	channel      = "unknown"
+	envChannel   = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
 )
 
 // IsRelease returns true if the binary was produced by a "release" build.
@@ -111,6 +112,7 @@ func GetInfo() Info {
 		Distribution:    Distribution,
 		Type:            typ,
 		Channel:         channel,
+		EnvChannel:      envChannel,
 	}
 }
 

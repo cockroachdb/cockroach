@@ -16,6 +16,7 @@ syntax = "proto3";
 package cockroach.server.diagnosticspb;
 option go_package = "diagnosticspb";
 
+import "build/info.proto";
 import "config/zone.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/app_stats.proto";
@@ -45,6 +46,9 @@ message NodeInfo {
 
   HardwareInfo hardware = 6 [(gogoproto.nullable) = false];
   OSInfo os = 7 [(gogoproto.nullable) = false];
+  build.Info build = 8 [(gogoproto.nullable) = false];
+  int64 uptime = 9;
+  string license_type = 10;
 }
 
 message StoreInfo {

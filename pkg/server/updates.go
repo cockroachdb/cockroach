@@ -74,8 +74,6 @@ func init() {
 	}
 }
 
-var envChannel = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
-
 const (
 	updateCheckFrequency = time.Hour * 24
 	// TODO(dt): switch to settings.
@@ -108,15 +106,14 @@ type versionInfo struct {
 func (s *Server) PeriodicallyCheckForUpdates(ctx context.Context) {
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer log.RecoverAndReportNonfatalPanic(ctx, &s.st.SV)
-		startup := timeutil.Now()
-		nextUpdateCheck := startup
-		nextDiagnosticReport := startup
+		nextUpdateCheck := s.startTime
+		nextDiagnosticReport := s.startTime
 
 		var timer timeutil.Timer
 		defer timer.Stop()
 		for {
 			now := timeutil.Now()
-			runningTime := now.Sub(startup)
+			runningTime := now.Sub(s.startTime)
 
 			nextUpdateCheck = s.maybeCheckForUpdates(ctx, now, nextUpdateCheck, runningTime)
 			nextDiagnosticReport = s.maybeReportDiagnostics(ctx, now, nextDiagnosticReport, runningTime)
@@ -169,56 +166,52 @@ func (s *Server) maybeCheckForUpdates(
 	return now.Add(updateCheckFrequency)
 }
 
-func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time.Duration) {
+func addInfoToURL(ctx context.Context, url *url.URL, s *Server, n diagnosticspb.NodeInfo) {
+	internal := strings.Contains(sql.ClusterOrganization.Get(&s.st.SV), "Cockroach Labs")
 	q := url.Query()
-	b := build.GetInfo()
+	b := n.Build
 	q.Set("version", b.Tag)
 	q.Set("platform", b.Platform)
 	q.Set("uuid", s.ClusterID().String())
-	q.Set("nodeid", s.NodeID().String())
-	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
+	q.Set("nodeid", strconv.Itoa(int(n.NodeID)))
+	q.Set("uptime", strconv.Itoa(int(n.Uptime)))
 	q.Set("insecure", strconv.FormatBool(s.cfg.Insecure))
-	q.Set("internal",
-		strconv.FormatBool(strings.Contains(sql.ClusterOrganization.Get(&s.st.SV), "Cockroach Labs")))
+	q.Set("internal", strconv.FormatBool(internal))
 	q.Set("buildchannel", b.Channel)
-	q.Set("envchannel", envChannel)
-	licenseType, err := base.LicenseType(s.st)
-	if err == nil {
-		q.Set("licensetype", licenseType)
-	} else {
-		log.Errorf(ctx, "error retrieving license type: %s", err)
-	}
+	q.Set("envchannel", b.EnvChannel)
+	q.Set("licensetype", n.LicenseType)
 	url.RawQuery = q.Encode()
 }
 
-func fillHardwareInfo(ctx context.Context, report *diagnosticspb.DiagnosticReport) {
+func fillHardwareInfo(ctx context.Context, n *diagnosticspb.NodeInfo) {
+	// Fill in hardware info (OS/CPU/Mem/etc).
 	if platform, family, version, err := host.PlatformInformation(); err == nil {
-		report.Node.Os.Family = family
-		report.Node.Os.Platform = platform
-		report.Node.Os.Version = version
+		n.Os.Family = family
+		n.Os.Platform = platform
+		n.Os.Version = version
 	}
 
 	if virt, role, err := host.Virtualization(); err == nil && role == "guest" {
-		report.Node.Hardware.Virtualization = virt
+		n.Hardware.Virtualization = virt
 	}
 
 	if m, err := mem.VirtualMemory(); err == nil {
-		report.Node.Hardware.Mem.Available = m.Available
-		report.Node.Hardware.Mem.Total = m.Total
+		n.Hardware.Mem.Available = m.Available
+		n.Hardware.Mem.Total = m.Total
 	}
 
-	report.Node.Hardware.Cpu.Numcpu = int32(runtime.NumCPU())
+	n.Hardware.Cpu.Numcpu = int32(runtime.NumCPU())
 	if cpus, err := cpu.InfoWithContext(ctx); err == nil && len(cpus) > 0 {
-		report.Node.Hardware.Cpu.Sockets = int32(len(cpus))
+		n.Hardware.Cpu.Sockets = int32(len(cpus))
 		c := cpus[0]
-		report.Node.Hardware.Cpu.Cores = c.Cores
-		report.Node.Hardware.Cpu.Model = c.ModelName
-		report.Node.Hardware.Cpu.Mhz = float32(c.Mhz)
-		report.Node.Hardware.Cpu.Features = c.Flags
+		n.Hardware.Cpu.Cores = c.Cores
+		n.Hardware.Cpu.Model = c.ModelName
+		n.Hardware.Cpu.Mhz = float32(c.Mhz)
+		n.Hardware.Cpu.Features = c.Flags
 	}
 
 	if l, err := load.AvgWithContext(ctx); err == nil {
-		report.Node.Hardware.Loadavg15 = float32(l.Load15)
+		n.Hardware.Loadavg15 = float32(l.Load15)
 	}
 }
 
@@ -233,7 +226,9 @@ func (s *Server) checkForUpdates(ctx context.Context, runningTime time.Duration)
 	ctx, span := s.AnnotateCtxWithSpan(ctx, "checkForUpdates")
 	defer span.Finish()
 
-	addInfoToURL(ctx, updatesURL, s, runningTime)
+	nodeInfo := s.collectNodeInfo(ctx)
+
+	addInfoToURL(ctx, updatesURL, s, nodeInfo)
 
 	res, err := http.Get(updatesURL.String())
 	if err != nil {
@@ -284,18 +279,35 @@ func (s *Server) maybeReportDiagnostics(
 	// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 	// stat reset periods for reporting.
 	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
-		s.reportDiagnostics(ctx, running)
+		s.reportDiagnostics(ctx)
 	}
 	s.pgServer.SQLServer.ResetStatementStats(ctx)
 
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
 
+func (s *Server) collectNodeInfo(ctx context.Context) diagnosticspb.NodeInfo {
+	n := diagnosticspb.NodeInfo{
+		NodeID: s.node.Descriptor.NodeID,
+		Build:  build.GetInfo(),
+		Uptime: int64(timeutil.Now().Sub(s.startTime).Seconds()),
+	}
+
+	licenseType, err := base.LicenseType(s.st)
+	if err == nil {
+		n.LicenseType = licenseType
+	} else {
+		log.Errorf(ctx, "error retrieving license type: %s", err)
+	}
+
+	fillHardwareInfo(ctx, &n)
+	return n
+}
+
 func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.DiagnosticReport {
 	info := diagnosticspb.DiagnosticReport{}
 	n := s.node.recorder.GenerateNodeStatus(ctx)
-	info.Node = diagnosticspb.NodeInfo{NodeID: s.node.Descriptor.NodeID}
-	fillHardwareInfo(ctx, &info)
+	info.Node = s.collectNodeInfo(ctx)
 
 	secret := sql.ClusterSecret.Get(&s.cfg.Settings.SV)
 	// Add in the localities.
@@ -424,20 +436,20 @@ func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret s
 	}
 }
 
-func (s *Server) reportDiagnostics(ctx context.Context, runningTime time.Duration) {
+func (s *Server) reportDiagnostics(ctx context.Context) {
 	if reportingURL == nil {
 		return
 	}
 	ctx, span := s.AnnotateCtxWithSpan(ctx, "usageReport")
 	defer span.Finish()
 
-	b, err := protoutil.Marshal(s.getReportingInfo(ctx))
+	report := s.getReportingInfo(ctx)
+	b, err := protoutil.Marshal(report)
 	if err != nil {
 		log.Warning(ctx, err)
 		return
 	}
-
-	addInfoToURL(ctx, reportingURL, s, runningTime)
+	addInfoToURL(ctx, reportingURL, s, report.Node)
 	res, err := http.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
 	if err != nil {
 		if log.V(2) {
