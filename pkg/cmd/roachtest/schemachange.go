@@ -313,8 +313,10 @@ func makeIndexAddTpccTest(
 	numNodes, warehouses int, length time.Duration, bulkInsert bool,
 ) testSpec {
 	name := fmt.Sprintf("schemachange/index/tpcc-%d", warehouses)
+	minVersion := ""
 	if bulkInsert {
 		name = fmt.Sprintf("schemachange/bulkindex/tpcc-%d", warehouses)
+		minVersion = "v2.2.0"
 	}
 	return testSpec{
 		Name:    name,
@@ -344,6 +346,7 @@ SET CLUSTER SETTING schemachanger.bulk_index_backfill.enabled = true
 				Duration: length,
 			})
 		},
+		MinVersion: minVersion,
 	}
 }
 
