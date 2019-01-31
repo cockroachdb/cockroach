@@ -109,6 +109,11 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
 
+	cfg.Settings.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	nodeID := roachpb.NodeID(1)
 	nodeDesc := &roachpb.NodeDescriptor{
 		NodeID:  nodeID,

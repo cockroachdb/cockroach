@@ -103,7 +103,7 @@ type testStoreOpts struct {
 	eng engine.Engine
 }
 
-// createTestStoreWithEngine creates a test store using the given engine and clock.
+// createTestStoreWithOpts creates a test store using the given engine and clock.
 // TestStoreConfig() can be used for creating a config suitable for most
 // tests.
 func createTestStoreWithOpts(
@@ -151,11 +151,17 @@ func createTestStoreWithOpts(
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
 		AmbientCtx: ac,
 		Clock:      storeCfg.Clock,
+		Settings:   storeCfg.Settings,
 		TestingKnobs: kv.ClientTestingKnobs{
 			TransportFactory: kv.SenderTransportFactory(tracer, stores),
 		},
 		RPCRetryOptions: &retryOpts,
 	}, storeCfg.Gossip)
+
+	storeCfg.Settings.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
 
 	tcsFactory := kv.NewTxnCoordSenderFactory(
 		kv.TxnCoordSenderFactoryConfig{
@@ -700,6 +706,12 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	cfg.TestingKnobs.DisableMergeQueue = true
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.ReplicateQueueAcceptsUnsplit = true
+
+	cfg.Settings.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
+
 	return cfg
 }
 
@@ -716,7 +728,7 @@ func (mrdb mtcRangeDescriptorDB) RangeLookup(
 	return (*mrdb.ds).RangeLookup(ctx, key, useReverseScan)
 }
 
-func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
+func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *stop.Stopper) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	ambient := m.storeConfig.AmbientCtx
@@ -727,6 +739,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 			multiTestContext: m,
 			ds:               &m.distSenders[idx],
 		},
+		Settings: st,
 		TestingKnobs: kv.ClientTestingKnobs{
 			TransportFactory: m.kvTransportFactory,
 		},
@@ -812,8 +825,9 @@ func (m *multiTestContext) addStore(idx int) {
 
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
+	log.Infof(context.TODO(), "!!! config created")
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
-	m.populateDB(idx, stopper)
+	m.populateDB(idx, cfg.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
 		ambient, m.clocks[idx], m.dbs[idx], m.engines, m.gossips[idx],
@@ -994,7 +1008,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	stopper := stop.NewStopper()
 	m.stoppers[i] = stopper
 	cfg := m.makeStoreConfig(i)
-	m.populateDB(i, stopper)
+	m.populateDB(i, m.storeConfig.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
 		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.engines,

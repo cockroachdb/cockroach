@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -131,7 +130,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			}
 		}
 
-		st := cluster.MakeTestingClusterSettings()
+		// !!! st := cluster.MakeTestingClusterSettings()
 
 		// This test constructs an overlapping batch (delete then put on the same
 		// key), which is only allowed in a transaction. The test wants to send the
@@ -144,7 +143,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		tcsf := kv.NewTxnCoordSenderFactory(
 			kv.TxnCoordSenderFactoryConfig{
 				AmbientCtx: actx,
-				Settings:   st,
+				Settings:   store.cfg.Settings,
 				Clock:      store.cfg.Clock,
 				Stopper:    stopper,
 				Metrics:    kv.MakeTxnMetrics(time.Second),

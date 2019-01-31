@@ -241,6 +241,10 @@ func createTestStoreWithoutStart(
 	); err != nil {
 		t.Fatal(err)
 	}
+	cfg.Settings.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
 	return store
 }
 

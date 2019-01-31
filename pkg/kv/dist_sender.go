@@ -219,6 +219,10 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
+		ds.st.InitializeVersion(
+			cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+			cluster.BinaryMinimumSupportedVersion,
+			cluster.BinaryServerVersion)
 	}
 
 	ds.AmbientContext = cfg.AmbientCtx
@@ -642,6 +646,7 @@ func splitBatchAndCheckForRefreshSpans(
 func (ds *DistSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	log.Infof(ctx, "!!! DistSender.Send: init: %t", ds.st.Version.IsInitialized())
 	ds.metrics.BatchCount.Inc(1)
 
 	tracing.AnnotateTrace()

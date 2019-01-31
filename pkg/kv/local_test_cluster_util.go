@@ -16,6 +16,7 @@ package kv
 
 import (
 	"context"
+	"runtime/debug"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -59,6 +60,8 @@ func InitFactoryForLocalTestCluster(
 	stopper *stop.Stopper,
 	gossip *gossip.Gossip,
 ) client.TxnSenderFactory {
+	log.Infof(context.TODO(), "!!! InitFactoryForLocalTestCluster. init: %t", st.Version.IsInitialized())
+	debug.PrintStack() // !!!
 	return NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: log.AmbientContext{Tracer: st.Tracer},

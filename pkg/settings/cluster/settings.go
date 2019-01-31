@@ -136,7 +136,7 @@ func (s *Settings) InitializeVersion(
 	if err := updater.Set(KeyVersionSetting, string(b), version.Typ()); err != nil {
 		return err
 	}
-	log.Infof(context.TODO(), "!!! InitializeVersion: %s (%s -> %s)", cv, binaryMinSupportedVersion, binaryMaxSupportedVersion)
+	log.Infof(context.TODO(), "!!! InitializeVersion: %s (%s -> %s) [%p]", cv, binaryMinSupportedVersion, binaryMaxSupportedVersion, &s.Version)
 	s.Version.baseVersion.Store(&cv)
 	return nil
 }
@@ -180,11 +180,17 @@ func (ecv *ExposedClusterVersion) OnChange(f func(cv ClusterVersion)) {
 // Version returns the minimum cluster version the caller may assume is in
 // effect. It must not be called until the setting has been initialized.
 func (ecv *ExposedClusterVersion) Version() ClusterVersion {
-	v := *ecv.baseVersion.Load().(*ClusterVersion)
-	if (v == ClusterVersion{}) {
+	v := ecv.baseVersion.Load()
+	if v == nil {
+		log.Infof(context.TODO(), "!!! crashing on: %p", ecv)
 		log.Fatal(context.Background(), "Version() was called before having been initialized")
 	}
-	return v
+	return *v.(*ClusterVersion)
+	// !!!
+	// if (v == ClusterVersion{}) {
+	//   log.Fatal(context.Background(), "Version() was called before having been initialized")
+	// }
+	// return v
 }
 
 // !!!
@@ -225,10 +231,12 @@ func (ecv *ExposedClusterVersion) CheckVersion(versionKey VersionKey, feature st
 	return nil
 }
 
+// !!! can I get rid of this function?
 // MakeTestingClusterSettings returns a Settings object that has had its version
 // initialized to BinaryServerVersion.
 func MakeTestingClusterSettings() *Settings {
-	return MakeTestingClusterSettingsWithVersion(BinaryServerVersion)
+	// !!! return MakeTestingClusterSettingsWithVersion(BinaryServerVersion)
+	return MakeClusterSettings()
 }
 
 // !!! can I get rid of this function? testContexts can now be built using
