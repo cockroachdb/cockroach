@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -172,7 +171,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		ca.pollerDoneCh = make(chan struct{})
 		defer close(ca.pollerDoneCh)
 		var err error
-		if storage.RangefeedEnabled.Get(&ca.flowCtx.Settings.SV) {
+		if PushEnabled.Get(&ca.flowCtx.Settings.SV) {
 			err = ca.poller.RunUsingRangefeeds(ctx)
 		} else {
 			err = ca.poller.Run(ctx)

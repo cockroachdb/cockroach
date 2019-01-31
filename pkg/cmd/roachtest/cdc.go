@@ -74,7 +74,11 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	); err != nil {
 		t.Fatal(err)
 	}
-
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING changefeed.push.enabled = $1`, args.rangefeed,
+	); err != nil {
+		t.Fatal(err)
+	}
 	kafka := kafkaManager{
 		c:     c,
 		nodes: kafkaNode,
