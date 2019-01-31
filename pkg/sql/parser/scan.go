@@ -879,9 +879,6 @@ func LastLexicalToken(sql string) (lastTok int, ok bool) {
 	for {
 		last := lval.id
 		s.scan(&lval)
-		if lval.id == ERROR {
-			return ERROR, true
-		}
 		if lval.id == 0 {
 			return int(last), last != 0
 		}
