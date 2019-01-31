@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/pkg/errors"
 )
 
 // A windowNode implements the planNode interface and handles windowing logic.
@@ -1157,8 +1158,11 @@ func (ir indexedRows) Len() int {
 }
 
 // GetRow implements tree.IndexedRows interface.
-func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
-	return ir.rows[idx]
+func (ir indexedRows) GetRow(idx int) (tree.IndexedRow, error) {
+	if idx < 0 || idx >= len(ir.rows) {
+		return nil, errors.Errorf("index out of bounds")
+	}
+	return ir.rows[idx], nil
 }
 
 // indexedRow is a row with a corresponding index.
@@ -1173,11 +1177,21 @@ func (ir indexedRow) GetIdx() int {
 }
 
 // GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
-	return ir.row[colIdx]
+func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
+	if colIdx < 0 || colIdx >= len(ir.row) {
+		return nil, errors.Errorf("index out of bounds")
+	}
+	return ir.row[colIdx], nil
 }
 
-// GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) tree.Datums {
-	return ir.row[firstColIdx:lastColIdx]
+// GetDatums implements tree.IndexedRow interface.
+func (ir indexedRow) GetDatums(startColIdx, endColIdx int) (tree.Datums, error) {
+	if startColIdx < 0 || endColIdx > len(ir.row) {
+		return nil, errors.Errorf("index out of bounds")
+	}
+	datums := make(tree.Datums, 0, endColIdx-startColIdx)
+	for idx := startColIdx; idx < endColIdx; idx++ {
+		datums = append(datums, ir.row[idx])
+	}
+	return datums, nil
 }

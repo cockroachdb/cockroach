@@ -635,7 +635,11 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 					if err != nil {
 						return err
 					}
-					w.windowValues[windowFnIdx][partitionIdx][frameRun.Rows.GetRow(frameRun.RowIdx).GetIdx()] = res
+					row, err := frameRun.Rows.GetRow(frameRun.RowIdx)
+					if err != nil {
+						return err
+					}
+					w.windowValues[windowFnIdx][partitionIdx][row.GetIdx()] = res
 				}
 				frameRun.PeerHelper.Update(frameRun)
 				frameRun.CurRowPeerGroupNum++
@@ -710,8 +714,14 @@ func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) ==
 func (n *partitionSorter) Compare(i, j int) int {
 	ra, rb := n.rows.rows[i], n.rows.rows[j]
 	for _, o := range n.ordering.Columns {
-		da := ra.GetDatum(int(o.ColIdx))
-		db := rb.GetDatum(int(o.ColIdx))
+		da, err := ra.GetDatum(int(o.ColIdx))
+		if err != nil {
+			panic(err)
+		}
+		db, err := rb.GetDatum(int(o.ColIdx))
+		if err != nil {
+			panic(err)
+		}
 		if c := da.Compare(n.evalCtx, db); c != 0 {
 			if o.Direction != distsqlpb.Ordering_Column_ASC {
 				return -c
@@ -751,8 +761,11 @@ func (ir indexedRows) Len() int {
 }
 
 // GetRow implements tree.IndexedRows interface.
-func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
-	return ir.rows[idx]
+func (ir indexedRows) GetRow(idx int) (tree.IndexedRow, error) {
+	if idx < 0 || idx >= len(ir.rows) {
+		return nil, errors.Errorf("index out of bounds")
+	}
+	return ir.rows[idx], nil
 }
 
 func (ir indexedRows) makeCopy() indexedRows {
@@ -773,17 +786,23 @@ func (ir indexedRow) GetIdx() int {
 }
 
 // GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
-	return ir.row[colIdx].Datum
+func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
+	if colIdx < 0 || colIdx >= len(ir.row) {
+		return nil, errors.Errorf("index out of bounds")
+	}
+	return ir.row[colIdx].Datum, nil
 }
 
 // GetDatums implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatums(startColIdx, endColIdx int) tree.Datums {
+func (ir indexedRow) GetDatums(startColIdx, endColIdx int) (tree.Datums, error) {
+	if startColIdx < 0 || endColIdx > len(ir.row) {
+		return nil, errors.Errorf("index out of bounds")
+	}
 	datums := make(tree.Datums, 0, endColIdx-startColIdx)
 	for idx := startColIdx; idx < endColIdx; idx++ {
 		datums = append(datums, ir.row[idx].Datum)
 	}
-	return datums
+	return datums, nil
 }
 
 // CreateWindowerSpecFunc creates a WindowerSpec_Func based on the function

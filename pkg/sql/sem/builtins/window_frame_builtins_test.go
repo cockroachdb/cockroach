@@ -23,39 +23,60 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/pkg/errors"
 )
 
 const maxCount = 1000
 const maxInt = 1000000
 const maxOffset = 100
 
+// indexedRows are rows with the corresponding indices.
 type indexedRows struct {
 	rows []indexedRow
 }
 
+// Len implements tree.IndexedRows interface.
 func (ir indexedRows) Len() int {
 	return len(ir.rows)
 }
 
-func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
-	return ir.rows[idx]
+// GetRow implements tree.IndexedRows interface.
+func (ir indexedRows) GetRow(idx int) (tree.IndexedRow, error) {
+	if idx < 0 || idx >= len(ir.rows) {
+		return nil, errors.Errorf("index out of bounds")
+	}
+	return ir.rows[idx], nil
 }
 
+// indexedRow is a row with a corresponding index.
 type indexedRow struct {
 	idx int
 	row tree.Datums
 }
 
+// GetIdx implements tree.IndexedRow interface.
 func (ir indexedRow) GetIdx() int {
 	return ir.idx
 }
 
-func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
-	return ir.row[colIdx]
+// GetDatum implements tree.IndexedRow interface.
+func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
+	if colIdx < 0 || colIdx >= len(ir.row) {
+		return nil, errors.Errorf("index out of bounds")
+	}
+	return ir.row[colIdx], nil
 }
 
-func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) tree.Datums {
-	return ir.row[firstColIdx:lastColIdx]
+// GetDatums implements tree.IndexedRow interface.
+func (ir indexedRow) GetDatums(startColIdx, endColIdx int) (tree.Datums, error) {
+	if startColIdx < 0 || endColIdx > len(ir.row) {
+		return nil, errors.Errorf("index out of bounds")
+	}
+	datums := make(tree.Datums, 0, endColIdx-startColIdx)
+	for idx := startColIdx; idx < endColIdx; idx++ {
+		datums = append(datums, ir.row[idx])
+	}
+	return datums, nil
 }
 
 func testSlidingWindow(t *testing.T, count int) {
@@ -93,7 +114,15 @@ func testMin(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) 
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				el, _ := tree.AsDInt(wfr.Rows.GetRow(idx).GetDatum(0))
+				row, err := wfr.Rows.GetRow(idx)
+				if err != nil {
+					panic(err)
+				}
+				datum, err := row.GetDatum(0)
+				if err != nil {
+					panic(err)
+				}
+				el, _ := tree.AsDInt(datum)
 				if el < naiveMin {
 					naiveMin = el
 				}
@@ -128,7 +157,15 @@ func testMax(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) 
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				el, _ := tree.AsDInt(wfr.Rows.GetRow(idx).GetDatum(0))
+				row, err := wfr.Rows.GetRow(idx)
+				if err != nil {
+					panic(err)
+				}
+				datum, err := row.GetDatum(0)
+				if err != nil {
+					panic(err)
+				}
+				el, _ := tree.AsDInt(datum)
 				if el > naiveMax {
 					naiveMax = el
 				}
@@ -166,7 +203,15 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				el, _ := tree.AsDInt(wfr.Rows.GetRow(idx).GetDatum(0))
+				row, err := wfr.Rows.GetRow(idx)
+				if err != nil {
+					panic(err)
+				}
+				datum, err := row.GetDatum(0)
+				if err != nil {
+					panic(err)
+				}
+				el, _ := tree.AsDInt(datum)
 				naiveSum += int64(el)
 			}
 			s, err := sumResult.Int64()
@@ -214,7 +259,11 @@ func partitionToString(partition tree.IndexedRows) string {
 	var buf bytes.Buffer
 	buf.WriteString("\n=====Partition=====\n")
 	for idx := 0; idx < partition.Len(); idx++ {
-		buf.WriteString(fmt.Sprintf("%v\n", partition.GetRow(idx)))
+		if row, err := partition.GetRow(idx); err != nil {
+			return err.Error()
+		} else {
+			buf.WriteString(fmt.Sprintf("%v\n", row))
+		}
 	}
 	buf.WriteString("====================\n")
 	return buf.String()
