@@ -17,41 +17,33 @@ package datadriven
 import (
 	"bytes"
 	"fmt"
-	"os"
+	"io"
 	"regexp"
 	"strings"
 	"testing"
 )
 
 type testDataReader struct {
-	path    string
-	file    *os.File
-	scanner *lineScanner
-	data    TestData
-	rewrite *bytes.Buffer
+	sourceName string
+	file       io.Reader
+	scanner    *lineScanner
+	data       TestData
+	rewrite    *bytes.Buffer
 }
 
-func newTestDataReader(t *testing.T, path string) *testDataReader {
+func newTestDataReader(t *testing.T, sourceName string, file io.Reader) *testDataReader {
 	t.Helper()
 
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
 	var rewrite *bytes.Buffer
 	if *rewriteTestFiles {
 		rewrite = &bytes.Buffer{}
 	}
 	return &testDataReader{
-		path:    path,
-		file:    file,
-		scanner: newLineScanner(file),
-		rewrite: rewrite,
+		sourceName: sourceName,
+		file:       file,
+		scanner:    newLineScanner(file),
+		rewrite:    rewrite,
 	}
-}
-
-func (r *testDataReader) Close() error {
-	return r.file.Close()
 }
 
 func (r *testDataReader) Next(t *testing.T) bool {
@@ -81,7 +73,7 @@ func (r *testDataReader) Next(t *testing.T) bool {
 			continue
 		}
 		cmd := fields[0]
-		r.data.Pos = fmt.Sprintf("%s:%d", r.path, r.scanner.line)
+		r.data.Pos = fmt.Sprintf("%s:%d", r.sourceName, r.scanner.line)
 		r.data.Cmd = cmd
 
 		for _, arg := range fields[1:] {

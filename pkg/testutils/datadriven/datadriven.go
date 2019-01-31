@@ -18,9 +18,11 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -65,7 +67,36 @@ var (
 // actual results of the case, which this function compares with the expected
 // results, and either succeeds or fails the test.
 func RunTest(t *testing.T, path string, f func(d *TestData) string) {
-	r := newTestDataReader(t, path)
+	t.Helper()
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	runTestInternal(t, path, file, f)
+}
+
+// RunTestFromString is a version of RunTest which takes the contents of a test
+// directly.
+func RunTestFromString(t *testing.T, input string, f func(d *TestData) string) {
+	t.Helper()
+	runTestInternal(t, "" /* optionalPath */, strings.NewReader(input), f)
+}
+
+func runTestInternal(
+	t *testing.T, optionalPath string, reader io.Reader, f func(d *TestData) string,
+) {
+	t.Helper()
+
+	sourceName := optionalPath
+	if optionalPath == "" {
+		sourceName = "<string>"
+	}
+
+	r := newTestDataReader(t, sourceName, reader)
 	for r.Next(t) {
 		d := &r.data
 		actual := func() string {
@@ -91,7 +122,12 @@ func RunTest(t *testing.T, path string, f func(d *TestData) string) {
 		} else if d.Expected != actual {
 			t.Fatalf("\n%s: %s\nexpected:\n%s\nfound:\n%s", d.Pos, d.Input, d.Expected, actual)
 		} else if testing.Verbose() {
-			fmt.Printf("\n%s:\n%s\n----\n%s", d.Pos, d.Input, actual)
+			input := d.Input
+			if input == "" {
+				input = "<no input to command>"
+			}
+			// TODO(tbg): it's awkward to reproduce the args, but it would be helpful.
+			fmt.Printf("\n%s:\n%s [%d args]\n%s\n----\n%s", d.Pos, d.Cmd, len(d.CmdArgs), input, actual)
 		}
 	}
 
@@ -100,9 +136,13 @@ func RunTest(t *testing.T, path string, f func(d *TestData) string) {
 		if l := len(data); l > 2 && data[l-1] == '\n' && data[l-2] == '\n' {
 			data = data[:l-1]
 		}
-		err := ioutil.WriteFile(path, data, 0644)
-		if err != nil {
-			t.Fatal(err)
+		if optionalPath != "" {
+			err := ioutil.WriteFile(optionalPath, data, 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			t.Logf("rewritten output is:\n%s", data)
 		}
 	}
 }
@@ -167,6 +207,66 @@ type TestData struct {
 	Expected string
 }
 
+// ScanArgs looks up the first CmdArg matching the given key and scans it into
+// the given destinations in order. If the arg does not exist, the number of
+// destinations does not match that of the arguments, or a destination can not
+// be populated from its matching value, a fatal error results.
+//
+// For example, for a TestData originating from
+//
+// cmd arg1=50 arg2=yoruba arg3=(50, 50, 50)
+//
+// the following would be valid:
+//
+// var i1, i2, i3, i4 int
+// var s string
+// td.ScanArgs(t, "arg1", &i1)
+// td.ScanArgs(t, "arg2", &s)
+// td.ScanArgs(t, "arg3", &i2, &i3, &i4)
+func (td *TestData) ScanArgs(t *testing.T, key string, dests ...interface{}) {
+	t.Helper()
+	var arg CmdArg
+	for i := range td.CmdArgs {
+		if td.CmdArgs[i].Key == key {
+			arg = td.CmdArgs[i]
+		}
+	}
+	if arg.Key == "" {
+		t.Fatalf("missing argument: %s", key)
+	}
+	if len(dests) != len(arg.Vals) {
+		t.Fatalf("%s: got %d destinations, but %d values", arg.Key, len(dests), len(arg.Vals))
+	}
+
+	for i := range dests {
+		val := arg.Vals[i]
+		switch dest := dests[i].(type) {
+		case *string:
+			*dest = val
+		case *int:
+			n, err := strconv.ParseInt(val, 10, 64)
+			if err != nil {
+				t.Fatal(err)
+			}
+			*dest = int(n) // assume 64bit ints
+		case *uint64:
+			n, err := strconv.ParseUint(val, 10, 64)
+			if err != nil {
+				t.Fatal(err)
+			}
+			*dest = n
+		case *bool:
+			b, err := strconv.ParseBool(val)
+			if err != nil {
+				t.Fatal(err)
+			}
+			*dest = b
+		default:
+			t.Fatalf("unsupported type %T for destination #%d (might be easy to add it)", dest, i+1)
+		}
+	}
+}
+
 // CmdArg contains information about an argument on the directive line. An
 // argument is specified in one of the following forms:
 //  - argument
@@ -177,7 +277,7 @@ type CmdArg struct {
 	Vals []string
 }
 
-func (arg *CmdArg) String() string {
+func (arg CmdArg) String() string {
 	switch len(arg.Vals) {
 	case 0:
 		return arg.Key
