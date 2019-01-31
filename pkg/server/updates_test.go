@@ -147,7 +147,7 @@ func TestUsageQuantization(t *testing.T) {
 	}
 
 	// Collect a round of statistics.
-	ts.reportDiagnostics(ctx, 0)
+	ts.reportDiagnostics(ctx)
 
 	// The stats "hide" the application name by hashing it. To find the
 	// test app name, we need to hash the ref string too prior to the
@@ -400,7 +400,7 @@ func TestReportUsage(t *testing.T) {
 		expectedUsageReports++
 
 		node := ts.node.recorder.GenerateNodeStatus(ctx)
-		ts.reportDiagnostics(ctx, 0)
+		ts.reportDiagnostics(ctx)
 
 		keyCounts := make(map[roachpb.StoreID]int64)
 		rangeCounts := make(map[roachpb.StoreID]int64)
