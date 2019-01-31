@@ -780,7 +780,7 @@ func (h *HashDiskBackedRowContainer) Init(
 	}
 	if h.mrc == nil {
 		h.mrc = &MemRowContainer{}
-		h.mrc.InitWithMon(ordering, types, h.evalCtx, h.memoryMonitor)
+		h.mrc.InitWithMon(ordering, types, h.evalCtx, h.memoryMonitor, 0 /* rowCapacity */)
 	}
 	hmrc := MakeHashMemRowContainer(h.mrc)
 	h.hmrc = &hmrc

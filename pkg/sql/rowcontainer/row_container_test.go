@@ -100,7 +100,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	var mc MemRowContainer
 	mc.InitWithMon(
 		sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}},
-		[]sqlbase.ColumnType{typeInt, typeStr}, evalCtx, &m,
+		[]sqlbase.ColumnType{typeInt, typeStr}, evalCtx, &m, 0, /* rowCapacity */
 	)
 	defer mc.Close(ctx)
 
@@ -227,6 +227,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		tempEngine,
 		&memoryMonitor,
 		&diskMonitor,
+		0, /* rowCapacity */
 	)
 	defer rc.Close(ctx)
 
