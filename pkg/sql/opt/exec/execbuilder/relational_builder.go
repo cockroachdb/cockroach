@@ -1164,7 +1164,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		tab,
 		insertOrds,
 		checkOrds,
-		ins.NeedResults,
+		ins.NeedResults(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1172,7 +1172,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 
 	// Construct the output column map.
 	ep := execPlan{root: node}
-	if ins.NeedResults {
+	if ins.NeedResults() {
 		ep.outputCols = mutationOutputColMap(ins)
 	}
 	return ep, nil
@@ -1218,7 +1218,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		fetchColOrds,
 		updateColOrds,
 		checkOrds,
-		upd.NeedResults,
+		upd.NeedResults(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1226,7 +1226,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 
 	// Construct the output column map.
 	ep := execPlan{root: node}
-	if upd.NeedResults {
+	if upd.NeedResults() {
 		ep.outputCols = mutationOutputColMap(upd)
 	}
 	return ep, nil
@@ -1280,7 +1280,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		fetchColOrds,
 		updateColOrds,
 		checkOrds,
-		ups.NeedResults,
+		ups.NeedResults(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1291,7 +1291,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	// value is taken from an insert, fetch, or update column, depending on the
 	// result of the UPSERT operation for that row.
 	ep := execPlan{root: node}
-	if ups.NeedResults {
+	if ups.NeedResults() {
 		ep.outputCols = mutationOutputColMap(ups)
 	}
 	return ep, nil
@@ -1324,14 +1324,14 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
-	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, del.NeedResults)
+	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, del.NeedResults())
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	// Construct the output column map.
 	ep := execPlan{root: node}
-	if del.NeedResults {
+	if del.NeedResults() {
 		ep.outputCols = mutationOutputColMap(del)
 	}
 	return ep, nil
@@ -1343,7 +1343,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 func (b *Builder) canUseDeleteRange(del *memo.DeleteExpr) bool {
 	// If rows need to be returned from the Delete operator (i.e. RETURNING
 	// clause), no fast path is possible, because row values must be fetched.
-	if del.NeedResults {
+	if del.NeedResults() {
 		return false
 	}
 

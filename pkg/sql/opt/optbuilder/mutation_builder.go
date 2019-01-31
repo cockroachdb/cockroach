@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -77,6 +78,18 @@ type mutationBuilder struct {
 	// updateColList is empty if this is an Insert operator with no ON CONFLICT
 	// clause.
 	updateColList opt.ColList
+
+	// upsertColList is an ordered list of IDs of input columns which choose
+	// between an insert or update column using a CASE expression:
+	//
+	//   CASE WHEN canary_col IS NULL THEN ins_col ELSE upd_col END
+	//
+	// These columns are used to compute constraints and to return result rows.
+	// The length of upsertColList is always equal to the number of columns in
+	// the target table, including mutation columns. Table columns which do not
+	// need to be updated are set to zero. upsertColList is empty if this is not
+	// an Upsert operator.
+	upsertColList opt.ColList
 
 	// checkColList is an ordered list of IDs of input columns which contain the
 	// boolean results of evaluating check constraint expressions defined on the
@@ -381,6 +394,45 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
 	}
+}
+
+// makeMutationPrivate builds a MutationPrivate struct containing the table and
+// column metadata needed for the mutation operator.
+func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationPrivate {
+	private := &memo.MutationPrivate{
+		Table:      mb.tabID,
+		InsertCols: mb.insertColList,
+		FetchCols:  mb.fetchColList,
+		UpdateCols: mb.updateColList,
+		CanaryCol:  mb.canaryColID,
+		CheckCols:  mb.checkColList,
+	}
+
+	if needResults {
+		// Only non-mutation columns are output columns.
+		private.ReturnCols = make(opt.ColList, mb.tab.DeletableColumnCount())
+		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+			// Map to columns in this order: upsert, update, fetch, insert.
+			switch {
+			case mb.upsertColList != nil && mb.upsertColList[i] != 0:
+				private.ReturnCols[i] = mb.upsertColList[i]
+
+			case mb.updateColList != nil && mb.updateColList[i] != 0:
+				private.ReturnCols[i] = mb.updateColList[i]
+
+			case mb.fetchColList != nil && mb.fetchColList[i] != 0:
+				private.ReturnCols[i] = mb.fetchColList[i]
+
+			case mb.insertColList != nil && mb.insertColList[i] != 0:
+				private.ReturnCols[i] = mb.insertColList[i]
+
+			default:
+				panic("could not find return column")
+			}
+		}
+	}
+
+	return private
 }
 
 // buildReturning wraps the input expression with a Project operator that

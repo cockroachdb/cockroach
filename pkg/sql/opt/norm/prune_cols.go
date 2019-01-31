@@ -45,22 +45,27 @@ func (c *CustomFuncs) NeededColsMutation(private *memo.MutationPrivate) opt.ColS
 	var cols opt.ColSet
 	tabMeta := c.mem.Metadata().TableMeta(private.Table)
 
-	// If the operator returns results, then include all non-mutation columns in
-	// the table.
-	// TODO(andyk): The returned columns need to be pruned as well.
-	if private.NeedResults {
-		cols = tabMeta.Columns()
+	// Add all columns needed by the RETURNING clause.
+	for _, id := range private.ReturnCols {
+		if id != 0 {
+			cols.Add(int(id))
+		}
 	}
 
-	// Add in all strict key columns from all indexes, including mutation indexes,
-	// since it is necessary to delete rows even from indexes that are being
-	// added/dropped.
-	for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
-		cols.UnionWith(tabMeta.IndexKeyColumns(i))
+	// Add in all strict key columns from all indexes, since these are needed
+	// to compose the keys of rows to delete. Include mutation indexes, since
+	// it is necessary to delete rows even from indexes that are being added
+	// or dropped.
+	for ii, in := 0, tabMeta.Table.DeletableIndexCount(); ii < in; ii++ {
+		index := tabMeta.Table.Index(ii)
+		for ci, cn := 0, index.KeyColumnCount(); ci < cn; ci++ {
+			ord := index.Column(ci).Ordinal
+			if private.FetchCols[ord] != 0 {
+				cols.Add(int(private.FetchCols[ord]))
+			}
+		}
 	}
 
-	// Map to mutation input columns.
-	cols = private.MapToInputCols(cols)
 	return cols
 }
 

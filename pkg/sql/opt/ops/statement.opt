@@ -112,12 +112,13 @@ define MutationPrivate {
     # row is inserted into the table. Otherwise, the existing row is updated.
     CanaryCol ColumnID
 
-    # NeedResults is true if the Insert operator returns output rows. One output
-    # row will be returned for each input row. The output row contains all
-    # columns in the table, including hidden columns, but not including any
-    # columns that are undergoing mutation (being added or dropped as part of
-    # online schema change).
-    NeedResults bool
+    # ReturnCols are the set of columns returned by the mutation operator when
+    # the RETURNING clause has been specified. By default, the return columns
+    # include all columns in the table, including hidden columns, but not
+    # including any columns that are undergoing mutation (being added or dropped
+    # as part of online schema change). If no RETURNING clause was specified,
+    # then ReturnCols is nil.
+    ReturnCols ColList
 }
 
 # Update evaluates a relational input expression that fetches existing rows from

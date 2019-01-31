@@ -277,45 +277,23 @@ func (sf *ScanFlags) Empty() bool {
 	return !sf.NoIndexJoin && !sf.ForceIndex
 }
 
-// MapToInputID maps from the ID of a target table column to the ID of the
-// corresponding input column that provides the value for it:
+// NeedResults returns true if the mutation operator can return the rows that
+// were mutated.
+func (m *MutationPrivate) NeedResults() bool {
+	return m.ReturnCols != nil
+}
+
+// MapToInputID maps from the ID of a returned column to the ID of the
+// corresponding input column that provides the value for it. If there is no
+// matching input column ID, MapToInputID returns 0.
 //
-//   Insert: InsertCols
-//   Update: UpdateCols/FetchCols
-//   Upsert: InsertCols/UpdateCols/FetchCols
-//   Delete: FetchCols
-//
-// When choosing from UpdateCols/FetchCols, use the corresponding UpdateCol if
-// it is non-zero (meaning that column will be updated), else use the FetchCol
-// (which holds the existing value of the column). And for the Upsert case, use
-// either the UpdateCols/FetchCols or the InsertCols value, as long as it is
-// non-zero. If both are non-zero, then they must be the same, since they are
-// set to the same CASE expression column.
-//
-// If there is no matching input column ID, MapToInputID returns 0.
+// NOTE: This can only be called if the mutation operator returns rows.
 func (m *MutationPrivate) MapToInputID(tabColID opt.ColumnID) opt.ColumnID {
+	if m.ReturnCols == nil {
+		panic(fmt.Sprintf("MapToInputID cannot be called if ReturnCols is not defined"))
+	}
 	ord := m.Table.ColumnOrdinal(tabColID)
-
-	var ins opt.ColumnID
-	if m.InsertCols != nil {
-		ins = m.InsertCols[ord]
-	}
-
-	var upd opt.ColumnID
-	if m.UpdateCols != nil {
-		upd = m.UpdateCols[ord]
-	}
-	if upd == 0 && m.FetchCols != nil {
-		upd = m.FetchCols[ord]
-	}
-
-	if ins != 0 {
-		if upd != 0 && ins != upd {
-			panic("insert and update columns should be the same")
-		}
-		return ins
-	}
-	return upd
+	return m.ReturnCols[ord]
 }
 
 // MapToInputCols maps the given set of table columns to a corresponding set of
