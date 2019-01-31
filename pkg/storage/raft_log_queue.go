@@ -90,9 +90,9 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 }
 
 // newTruncateDecision returns a truncateDecision for the given Replica if no
-// error occurs. If no truncation can be carried out, a zero decision is
-// returned.
-func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, error) {
+// error occurs. If input data to establish a truncateDecision is missing, a
+// zero decision is returned.
+func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, error) {
 	rangeID := r.RangeID
 	now := timeutil.Now()
 
@@ -123,20 +123,20 @@ func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, er
 	r.mu.Unlock()
 
 	if err != nil {
-		return nil, errors.Errorf("error retrieving first index for r%d: %s", rangeID, err)
+		return truncateDecision{}, errors.Errorf("error retrieving first index for r%d: %s", rangeID, err)
 	}
 
 	if raftStatus == nil {
 		if log.V(6) {
 			log.Infof(ctx, "the raft group doesn't exist for r%d", rangeID)
 		}
-		return &truncateDecision{}, nil
+		return truncateDecision{}, nil
 	}
 
 	// Is this the raft leader? We only perform log truncation on the raft leader
 	// which has the up to date info on followers.
 	if raftStatus.RaftState != raft.StateLeader {
-		return &truncateDecision{}, nil
+		return truncateDecision{}, nil
 	}
 
 	// For all our followers, overwrite the RecentActive field (which is always
@@ -155,7 +155,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, er
 	}
 
 	input := truncateDecisionInput{
-		RaftStatus:                     raftStatus,
+		RaftStatus:                     *raftStatus,
 		LogSize:                        raftLogSize,
 		MaxLogSize:                     targetSize,
 		FirstIndex:                     firstIndex,
@@ -164,7 +164,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (*truncateDecision, er
 	}
 
 	decision := computeTruncateDecision(input)
-	return &decision, nil
+	return decision, nil
 }
 
 func updateRaftProgressFromActivity(
@@ -203,7 +203,7 @@ const (
 )
 
 type truncateDecisionInput struct {
-	RaftStatus                     *raft.Status // never nil
+	RaftStatus                     raft.Status
 	LogSize, MaxLogSize            int64
 	FirstIndex, LastIndex          uint64
 	PendingPreemptiveSnapshotIndex uint64
@@ -256,6 +256,7 @@ func (td *truncateDecision) NumNewRaftSnapshots() int {
 
 func (td *truncateDecision) String() string {
 	var buf strings.Builder
+	_, _ = fmt.Fprintf(&buf, "should truncate: %t [", td.ShouldTruncate())
 	_, _ = fmt.Fprintf(
 		&buf,
 		"truncate %d entries to first index %d (chosen via: %s)",
@@ -272,6 +273,7 @@ func (td *truncateDecision) String() string {
 	if n := td.NumNewRaftSnapshots(); n > 0 {
 		_, _ = fmt.Fprintf(&buf, "; implies %d Raft snapshot%s", n, util.Pluralize(int64(n)))
 	}
+	buf.WriteRune(']')
 
 	return buf.String()
 }
@@ -313,7 +315,7 @@ func (td *truncateDecision) ShouldTruncate() bool {
 // snapshots. See #8629.
 func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision := truncateDecision{Input: input}
-	decision.QuorumIndex = getQuorumIndex(input.RaftStatus)
+	decision.QuorumIndex = getQuorumIndex(&input.RaftStatus)
 
 	decision.NewFirstIndex = decision.QuorumIndex
 	decision.ChosenVia = truncatableIndexChosenViaQuorumIndex
@@ -429,7 +431,7 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ config.Syste
 	// Can and should the raft logs be truncated?
 	if decision.ShouldTruncate() {
 		if n := decision.NumNewRaftSnapshots(); log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
-			log.Info(ctx, decision)
+			log.Info(ctx, decision.String())
 		} else {
 			log.VEvent(ctx, 1, decision.String())
 		}
@@ -443,6 +445,8 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ config.Syste
 			return err
 		}
 		r.store.metrics.RaftLogTruncated.Inc(int64(decision.NumTruncatableIndexes()))
+	} else {
+		log.VEventf(ctx, 3, decision.String())
 	}
 	return nil
 }
