@@ -92,7 +92,14 @@ func (r *Replica) updateTimestampCache(
 			case *roachpb.ConditionalPutRequest:
 				if pErr != nil {
 					// ConditionalPut still updates on ConditionFailedErrors.
-					// TODO(nvanbenschoten): do we need similar logic for InitPutRequest?
+					if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
+						continue
+					}
+				}
+				tc.Add(start, end, ts, txnID, true /* readCache */)
+			case *roachpb.InitPutRequest:
+				if pErr != nil {
+					// InitPut still updates on ConditionFailedErrors.
 					if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 						continue
 					}
