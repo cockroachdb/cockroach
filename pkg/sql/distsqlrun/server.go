@@ -446,7 +446,7 @@ func (ds *ServerImpl) setupFlow(
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		TempStorage:    ds.TempStorage,
-		BullkAdder:     ds.BulkAdder,
+		BulkAdder:      ds.BulkAdder,
 		diskMonitor:    ds.DiskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
 		traceKV:        req.TraceKV,
