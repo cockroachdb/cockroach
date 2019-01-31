@@ -57,6 +57,9 @@ var _ batchedPlanNode = &deleteRangeNode{}
 // canDeleteFast determines if the deletion of `rows` can be done
 // without actually scanning them.
 // This should be called after plan simplification for optimal results.
+//
+// This logic should be kept in sync with exec.Builder.canUseDeleteRange.
+// TODO(andyk): Remove when the heuristic planner code is removed.
 func maybeCreateDeleteFastNode(
 	ctx context.Context,
 	source planNode,

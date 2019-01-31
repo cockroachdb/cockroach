@@ -65,7 +65,7 @@ func (ef *execFactory) ConstructValues(
 func (ef *execFactory) ConstructScan(
 	table cat.Table,
 	index cat.Index,
-	cols exec.ColumnOrdinalSet,
+	needed exec.ColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
 	reverse bool,
@@ -76,7 +76,7 @@ func (ef *execFactory) ConstructScan(
 	indexDesc := index.(*optIndex).desc
 	// Create a scanNode.
 	scan := ef.planner.Scan()
-	colCfg := makeScanColumnsConfig(table, cols)
+	colCfg := makeScanColumnsConfig(table, needed)
 
 	// initTable checks that the current user has the correct privilege to access
 	// the table. However, the privilege has already been checked in optbuilder,
@@ -100,7 +100,12 @@ func (ef *execFactory) ConstructScan(
 	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&ef.planner.extendedEvalCtx.Settings.SV)
 	var err error
 	scan.spans, err = spansFromConstraint(
-		tabDesc, indexDesc, indexConstraint, cols, scan.isDeleteSource)
+		tabDesc,
+		indexDesc,
+		indexConstraint,
+		needed,
+		false, /* forDelete */
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1248,6 +1253,32 @@ func (ef *execFactory) ConstructDelete(
 	return &rowCountNode{source: del}, nil
 }
 
+func (ef *execFactory) ConstructDeleteRange(
+	table cat.Table, needed exec.ColumnOrdinalSet, indexConstraint *constraint.Constraint,
+) (exec.Node, error) {
+	tabDesc := table.(*optTable).desc
+	indexDesc := &tabDesc.PrimaryIndex
+
+	// Setting the "forDelete" flag includes all column families in case where a
+	// single record is deleted.
+	spans, err := spansFromConstraint(
+		tabDesc,
+		indexDesc,
+		indexConstraint,
+		needed,
+		true, /* forDelete */
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &deleteRangeNode{
+		interleavedFastPath: false,
+		spans:               spans,
+		desc:                tabDesc,
+	}, nil
+}
+
 func (ef *execFactory) ConstructCreateTable(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
@@ -1301,11 +1332,11 @@ func (rb *renderBuilder) addExpr(expr tree.TypedExpr, colName string) {
 // included if their ordinal position in the table schema is in the cols set.
 func makeColDescList(table cat.Table, cols exec.ColumnOrdinalSet) []sqlbase.ColumnDescriptor {
 	colDescs := make([]sqlbase.ColumnDescriptor, 0, cols.Len())
-	for i, n := 0, table.ColumnCount(); i < n; i++ {
+	for i, n := 0, table.DeletableColumnCount(); i < n; i++ {
 		if !cols.Contains(i) {
 			continue
 		}
-		colDescs = append(colDescs, *extractColumnDescriptor(table.Column(i)))
+		colDescs = append(colDescs, *table.Column(i).(*sqlbase.ColumnDescriptor))
 	}
 	return colDescs
 }
@@ -1324,18 +1355,8 @@ func makeScanColumnsConfig(table cat.Table, cols exec.ColumnOrdinalSet) scanColu
 		visibility:    publicAndNonPublicColumns,
 	}
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		desc := extractColumnDescriptor(table.Column(c))
+		desc := table.Column(c).(*sqlbase.ColumnDescriptor)
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
 	}
 	return colCfg
-}
-
-// extractColumnDescriptor extracts the underlying sqlbase.ColumnDescriptor from
-// the given cat.Column. If the column is a mutation column, this involves one
-// level of indirection.
-func extractColumnDescriptor(col cat.Column) *sqlbase.ColumnDescriptor {
-	if mut, ok := col.(*cat.MutationColumn); ok {
-		return mut.Column.(*sqlbase.ColumnDescriptor)
-	}
-	return col.(*sqlbase.ColumnDescriptor)
 }

@@ -41,6 +41,33 @@ TABLE abcde
       ├── c int
       └── a int not null (storing)
 
+exec-ddl
+CREATE TABLE mutation (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    "d:write-only" INT,
+    "e:delete-only" INT,
+    UNIQUE INDEX "idx1:write-only" (b, d),
+    INDEX "idx2:delete-only" (e)
+)
+----
+TABLE mutation
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int (mutation)
+ ├── e int (mutation)
+ ├── INDEX primary
+ │    └── a int not null
+ ├── INDEX idx1 (mutation)
+ │    ├── b int
+ │    ├── d int
+ │    └── a int not null (storing)
+ └── INDEX idx2 (mutation)
+      ├── e int
+      └── a int not null
+
 # --------------------------------------------------
 # PruneProjectCols
 # --------------------------------------------------
@@ -1604,3 +1631,108 @@ distinct-on
            │    └── variable: k [type=int]
            └── function: length [type=int, outer=(4)]
                 └── variable: s [type=string]
+
+# --------------------------------------------------
+# PruneMutationCols
+# --------------------------------------------------
+
+# Prune all but the key column.
+opt expect=PruneMutationCols
+DELETE FROM a
+----
+delete a
+ ├── columns: <none>
+ ├── fetch columns: k:5(int)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── scan a
+      ├── columns: k:5(int!null)
+      └── key: (5)
+
+# Prune when computed ordering column is present.
+opt expect=PruneMutationCols
+DELETE FROM a WHERE i > 0 ORDER BY i*2 LIMIT 10
+----
+delete a
+ ├── columns: <none>
+ ├── fetch columns: k:5(int)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── limit
+      ├── columns: k:5(int!null) column9:9(int)
+      ├── internal-ordering: +9
+      ├── cardinality: [0 - 10]
+      ├── key: (5)
+      ├── fd: (5)-->(9)
+      ├── sort
+      │    ├── columns: k:5(int!null) column9:9(int)
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(9)
+      │    ├── ordering: +9
+      │    └── project
+      │         ├── columns: column9:9(int) k:5(int!null)
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(9)
+      │         ├── select
+      │         │    ├── columns: k:5(int!null) i:6(int!null)
+      │         │    ├── key: (5)
+      │         │    ├── fd: (5)-->(6)
+      │         │    ├── scan a
+      │         │    │    ├── columns: k:5(int!null) i:6(int)
+      │         │    │    ├── key: (5)
+      │         │    │    └── fd: (5)-->(6)
+      │         │    └── filters
+      │         │         └── i > 0 [type=bool, outer=(6), constraints=(/6: [/1 - ]; tight)]
+      │         └── projections
+      │              └── i * 2 [type=int, outer=(6)]
+      └── const: 10 [type=int]
+
+# Prune when a secondary index is present on the table.
+opt expect=PruneMutationCols
+DELETE FROM abcde WHERE a > 0
+----
+delete abcde
+ ├── columns: <none>
+ ├── fetch columns: a:6(int) b:7(int) c:8(int)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── scan abcde
+      ├── columns: a:6(int!null) b:7(int) c:8(int)
+      ├── constraint: /6: [/1 - ]
+      ├── key: (6)
+      └── fd: (6)-->(7,8), (7,8)~~>(6)
+
+# Prune when mutation columns/indexes exist.
+opt expect=PruneMutationCols
+DELETE FROM mutation
+----
+delete mutation
+ ├── columns: <none>
+ ├── fetch columns: a:6(int) b:7(int) d:9(int) e:10(int)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── scan mutation
+      ├── columns: a:6(int!null) b:7(int) d:9(int) e:10(int)
+      ├── key: (6)
+      └── fd: (6)-->(7,9,10)
+
+# No pruning when RETURNING clause is present.
+# TODO(andyk): Need to prune output columns.
+opt expect-not=PruneMutationCols
+DELETE FROM a RETURNING k, s
+----
+project
+ ├── columns: k:1(int!null) s:4(string)
+ ├── side-effects, mutations
+ ├── key: (1)
+ ├── fd: (1)-->(4)
+ └── delete a
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+      ├── fetch columns: k:5(int) i:6(int) f:7(float) s:8(string)
+      ├── side-effects, mutations
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      └── scan a
+           ├── columns: k:5(int!null) i:6(int) f:7(float) s:8(string)
+           ├── key: (5)
+           └── fd: (5)-->(6-8)

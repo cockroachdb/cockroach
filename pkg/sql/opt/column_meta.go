@@ -17,6 +17,7 @@ package opt
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -80,12 +81,12 @@ func (cm *ColumnMeta) QualifiedAlias(fullyQualify bool) string {
 		// Column doesn't belong to a table, so no need to qualify it further.
 		return cm.Alias
 	}
-	tab := cm.TableMeta.Table
 	md := cm.md
 
-	// If a fully qualified name has not been requested, then only qualify it if
+	// If a fully qualified alias has not been requested, then only qualify it if
 	// it would otherwise be ambiguous.
-	var tabName string
+	var tabAlias tree.TableName
+	qualify := fullyQualify
 	if !fullyQualify {
 		for i := range md.cols {
 			if i == int(cm.MetaID-1) {
@@ -95,28 +96,32 @@ func (cm *ColumnMeta) QualifiedAlias(fullyQualify bool) string {
 			// If there are two columns with same alias, then column is ambiguous.
 			cm2 := &md.cols[i]
 			if cm2.Alias == cm.Alias {
-				tabName = cm.TableMeta.Name()
+				tabAlias = cm.TableMeta.Alias
 				if cm2.TableMeta == nil {
-					fullyQualify = true
+					qualify = true
 				} else {
 					// Only qualify if the qualified names are actually different.
-					tabName2 := cm2.TableMeta.Name()
-					if tabName != tabName2 {
-						fullyQualify = true
+					tabAlias2 := cm2.TableMeta.Alias
+					if tabAlias.String() != tabAlias2.String() {
+						qualify = true
 					}
 				}
 			}
 		}
-	} else {
-		tabName = tab.Name().FQString()
 	}
 
-	if !fullyQualify {
+	// If the column name should not even be partly qualified, then no more to do.
+	if !qualify {
 		return cm.Alias
 	}
 
 	var sb strings.Builder
-	sb.WriteString(tabName)
+	if fullyQualify {
+		s := cm.TableMeta.Table.Name().FQString()
+		sb.WriteString(s)
+	} else {
+		sb.WriteString(tabAlias.String())
+	}
 	sb.WriteRune('.')
 	sb.WriteString(cm.Alias)
 	return sb.String()

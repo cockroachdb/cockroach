@@ -44,8 +44,8 @@ type mutationBuilder struct {
 	tabID opt.TableID
 
 	// alias is the table alias specified in the mutation statement, or just the
-	// table name itself if no alias was specified.
-	alias *tree.TableName
+	// resolved table name if no alias was specified.
+	alias tree.TableName
 
 	// targetColList is an ordered list of IDs of the table columns into which
 	// values will be inserted, or which will be updated with new values. It is
@@ -104,25 +104,16 @@ type mutationBuilder struct {
 	outScope *scope
 }
 
-func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alias *tree.TableName) {
+func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alias tree.TableName) {
 	mb.b = b
 	mb.md = b.factory.Metadata()
 	mb.op = op
 	mb.tab = tab
-	mb.targetColList = make(opt.ColList, 0, tab.ColumnCount())
-
-	if alias != nil {
-		mb.alias = alias
-	} else {
-		mb.alias = tab.Name()
-	}
+	mb.alias = alias
+	mb.targetColList = make(opt.ColList, 0, tab.DeletableColumnCount())
 
 	// Add the table and its columns (including mutation columns) to metadata.
-	mb.tabID = mb.md.AddTable(tab)
-	if alias != nil {
-		// Set the table alias for pretty-printing and EXPLAIN.
-		mb.md.TableMeta(mb.tabID).Alias = string(alias.TableName)
-	}
+	mb.tabID = mb.md.AddTableWithAlias(tab, &mb.alias)
 }
 
 // buildInputForUpdateOrDelete constructs a Select expression from the fields in
@@ -139,10 +130,16 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alia
 func (mb *mutationBuilder) buildInputForUpdateOrDelete(
 	inScope *scope, where *tree.Where, limit *tree.Limit, orderBy tree.OrderBy,
 ) {
+	// Fetch columns from different instance of the table metadata, so that it's
+	// possible to remap columns, as in this example:
+	//
+	//   UPDATE abc SET a=b
+	//
+	inputTabID := mb.md.AddTableWithAlias(mb.tab, &mb.alias)
+
 	// FROM
 	mb.outScope = mb.b.buildScan(
-		mb.tab,
-		mb.alias,
+		inputTabID,
 		nil, /* ordinals */
 		nil, /* indexFlags */
 		includeMutations,
@@ -314,15 +311,11 @@ func (mb *mutationBuilder) addSynthesizedCols(
 ) {
 	var projectionsScope *scope
 
-	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+	// Skip delete-only mutation columns, since they are ignored by all mutation
+	// operators that synthesize columns.
+	for i, n := 0, mb.tab.WritableColumnCount(); i < n; i++ {
 		// Skip columns that are already specified.
 		if colList[i] != 0 {
-			continue
-		}
-
-		// Skip delete-only mutation columns, since they are ignored by all
-		// mutation operators that synthesize columns.
-		if mut, ok := mb.tab.Column(i).(*cat.MutationColumn); ok && mut.IsDeleteOnly {
 			continue
 		}
 
@@ -412,14 +405,10 @@ func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
 	inScope.expr = mb.outScope.expr
 	inScope.cols = make([]scopeColumn, 0, mb.tab.ColumnCount())
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-		if cat.IsMutationColumn(mb.tab, i) {
-			continue
-		}
-
 		tabCol := mb.tab.Column(i)
 		inScope.cols = append(inScope.cols, scopeColumn{
 			name:   tabCol.ColName(),
-			table:  *mb.alias,
+			table:  mb.alias,
 			typ:    tabCol.DatumType(),
 			id:     mb.tabID.ColumnID(i),
 			hidden: tabCol.IsHidden(),
@@ -456,7 +445,7 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 // reuse.
 func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.Expr {
 	if mb.parsedExprs == nil {
-		mb.parsedExprs = make([]tree.Expr, mb.tab.ColumnCount())
+		mb.parsedExprs = make([]tree.Expr, mb.tab.DeletableColumnCount())
 	}
 
 	// Return expression from cache, if it was already parsed previously.

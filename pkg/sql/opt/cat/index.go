@@ -133,3 +133,9 @@ type IndexColumn struct {
 	// this column, rather than least to greatest.
 	Descending bool
 }
+
+// IsMutationIndex is a convenience function that returns true if the index at
+// the given ordinal position is a mutation index.
+func IsMutationIndex(table Table, ord int) bool {
+	return ord >= table.IndexCount()
+}

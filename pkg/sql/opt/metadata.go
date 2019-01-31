@@ -254,19 +254,27 @@ func (md *Metadata) Schema(schID SchemaID) cat.Schema {
 	return md.schemas[schID-1]
 }
 
-// AddTable indexes a new reference to a table within the query. Separate
-// references to the same table are assigned different table ids (e.g. in a
-// self-join query). All columns are added to the metadata. If mutation columns
-// are present, they are added after active columns.
+// AddTable is a helper that calls AddTableWithAlias with tab.Name() as the
+// table's alias.
 func (md *Metadata) AddTable(tab cat.Table) TableID {
+	return md.AddTableWithAlias(tab, tab.Name())
+}
+
+// AddTableWithAlias indexes a new reference to a table within the query.
+// Separate references to the same table are assigned different table ids (e.g.
+// in a self-join query). All columns are added to the metadata. If mutation
+// columns are present, they are added after active columns. The table's alias
+// is passed separately so that its original formatting is preserved for error
+// messages, pretty-printing, etc.
+func (md *Metadata) AddTableWithAlias(tab cat.Table, alias *tree.TableName) TableID {
 	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {
 		md.tables = make([]TableMeta, 0, 4)
 	}
-	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab})
+	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab, Alias: *alias})
 	tabMeta := md.TableMeta(tabID)
 
-	colCount := tab.ColumnCount()
+	colCount := tab.DeletableColumnCount()
 	if md.cols == nil {
 		md.cols = make([]ColumnMeta, 0, colCount)
 	}

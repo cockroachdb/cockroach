@@ -319,6 +319,17 @@ type Factory interface {
 		input Node, table cat.Table, fetchCols ColumnOrdinalSet, rowsNeeded bool,
 	) (Node, error)
 
+	// ConstructDeleteRange creates a node that efficiently deletes contiguous
+	// rows stored in the given table's primary index. This fast path is only
+	// possible when certain conditions hold true (see canUseDeleteRange for more
+	// details). See the comment for ConstructScan for descriptions of the
+	// parameters, since FastDelete combines Delete + Scan into a single operator.
+	ConstructDeleteRange(
+		table cat.Table,
+		needed ColumnOrdinalSet,
+		indexConstraint *constraint.Constraint,
+	) (Node, error)
+
 	// ConstructCreateTable returns a node that implements a CREATE TABLE
 	// statement.
 	ConstructCreateTable(input Node, schema cat.Schema, ct *tree.CreateTable) (Node, error)

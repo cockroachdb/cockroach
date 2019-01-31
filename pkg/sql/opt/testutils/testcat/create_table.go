@@ -63,11 +63,19 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		tab.IsVirtual = true
 	}
 
-	// Add columns.
+	// TODO(andyk): For now, just remember that the table was interleaved. In the
+	// future, it may be necessary to extract additional metadata.
+	if stmt.Interleave != nil {
+		tab.interleaved = true
+	}
+
+	// Add non-mutation columns.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ColumnTableDef:
-			tab.addColumn(def)
+			if !isMutationColumn(def) {
+				tab.addColumn(def)
+			}
 		}
 	}
 
@@ -101,6 +109,16 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		}
 		tab.Columns = append(tab.Columns, rowid)
 		tab.addPrimaryColumnIndex(rowid.Name)
+	}
+
+	// Add any mutation columns (after any hidden rowid column).
+	for _, def := range stmt.Defs {
+		switch def := def.(type) {
+		case *tree.ColumnTableDef:
+			if isMutationColumn(def) {
+				tab.addColumn(def)
+			}
+		}
 	}
 
 	// Search for index definitions.
@@ -140,6 +158,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	}
 
 	targetTable := tc.Table(&d.Table)
+	targetTable.referenced = true
 
 	toCols := make([]int, len(d.ToCols))
 	for i, c := range d.ToCols {
@@ -239,13 +258,12 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	}
 
 	// Look for name suffixes indicating this is a mutation column.
-	var mutCol *cat.MutationColumn
-	if strings.HasSuffix(string(def.Name), ":write-only") {
-		col.Name = strings.TrimSuffix(col.Name, ":write-only")
-		mutCol = &cat.MutationColumn{Column: col, IsDeleteOnly: false}
-	} else if strings.HasSuffix(string(def.Name), ":delete-only") {
-		col.Name = strings.TrimSuffix(col.Name, ":delete-only")
-		mutCol = &cat.MutationColumn{Column: col, IsDeleteOnly: true}
+	if name, ok := extractWriteOnlyColumn(def); ok {
+		col.Name = name
+		tt.writeOnlyColCount++
+	} else if name, ok := extractDeleteOnlyColumn(def); ok {
+		col.Name = name
+		tt.deleteOnlyColCount++
 	}
 
 	if def.DefaultExpr.Expr != nil {
@@ -258,12 +276,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		col.ComputedExpr = &s
 	}
 
-	// Add mutation columns to the Mutations list.
-	if mutCol != nil {
-		tt.Mutations = append(tt.Mutations, *mutCol)
-	} else {
-		tt.Columns = append(tt.Columns, col)
-	}
+	tt.Columns = append(tt.Columns, col)
 }
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
@@ -272,6 +285,15 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		Unique:   typ != nonUniqueIndex,
 		Inverted: def.Inverted,
 		table:    tt,
+	}
+
+	// Look for name suffixes indicating this is a mutation index.
+	if name, ok := extractWriteOnlyIndex(def); ok {
+		idx.IdxName = name
+		tt.writeOnlyIdxCount++
+	} else if name, ok := extractDeleteOnlyIndex(def); ok {
+		idx.IdxName = name
+		tt.deleteOnlyIdxCount++
 	}
 
 	// Add explicit columns and mark primary key columns as not null.
@@ -402,9 +424,6 @@ func (ti *Index) addColumnByOrdinal(
 		ti.KeyCount++
 	}
 
-	if mut, ok := col.(*cat.MutationColumn); ok {
-		return mut.Column.(*Column)
-	}
 	return col.(*Column)
 }
 
@@ -413,4 +432,42 @@ func (tt *Table) addPrimaryColumnIndex(colName string) {
 		Columns: tree.IndexElemList{{Column: tree.Name(colName), Direction: tree.Ascending}},
 	}
 	tt.addIndex(&def, primaryIndex)
+}
+
+func extractWriteOnlyColumn(def *tree.ColumnTableDef) (name string, ok bool) {
+	if !strings.HasSuffix(string(def.Name), ":write-only") {
+		return "", false
+	}
+	return strings.TrimSuffix(string(def.Name), ":write-only"), true
+}
+
+func extractDeleteOnlyColumn(def *tree.ColumnTableDef) (name string, ok bool) {
+	if !strings.HasSuffix(string(def.Name), ":delete-only") {
+		return "", false
+	}
+	return strings.TrimSuffix(string(def.Name), ":delete-only"), true
+}
+
+func isMutationColumn(def *tree.ColumnTableDef) bool {
+	if _, ok := extractWriteOnlyColumn(def); ok {
+		return true
+	}
+	if _, ok := extractDeleteOnlyColumn(def); ok {
+		return true
+	}
+	return false
+}
+
+func extractWriteOnlyIndex(def *tree.IndexTableDef) (name string, ok bool) {
+	if !strings.HasSuffix(string(def.Name), ":write-only") {
+		return "", false
+	}
+	return strings.TrimSuffix(string(def.Name), ":write-only"), true
+}
+
+func extractDeleteOnlyIndex(def *tree.IndexTableDef) (name string, ok bool) {
+	if !strings.HasSuffix(string(def.Name), ":delete-only") {
+		return "", false
+	}
+	return strings.TrimSuffix(string(def.Name), ":delete-only"), true
 }

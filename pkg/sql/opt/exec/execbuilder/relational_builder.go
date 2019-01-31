@@ -301,7 +301,7 @@ func (b *Builder) getColumns(
 	needed := exec.ColumnOrdinalSet{}
 	output := opt.ColMap{}
 
-	columnCount := b.mem.Metadata().Table(tableID).ColumnCount()
+	columnCount := b.mem.Metadata().Table(tableID).DeletableColumnCount()
 	n := 0
 	for i := 0; i < columnCount; i++ {
 		colID := tableID.ColumnID(i)
@@ -1298,6 +1298,11 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
+	// Check for the fast-path delete case that can use a range delete.
+	if b.canUseDeleteRange(del) {
+		return b.buildDeleteRange(del)
+	}
+
 	// Build the input query and ensure that the fetch columns are projected.
 	input, err := b.buildRelational(del.Input)
 	if err != nil {
@@ -1308,7 +1313,9 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	input, err = b.ensureColumns(input, del.FetchCols, nil, del.ProvidedPhysical().Ordering)
+	colList := make(opt.ColList, 0, len(del.FetchCols))
+	colList = appendColsWhenPresent(colList, del.FetchCols)
+	input, err = b.ensureColumns(input, colList, nil, del.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1328,6 +1335,58 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 		ep.outputCols = mutationOutputColMap(del)
 	}
 	return ep, nil
+}
+
+// canUseDeleteRange checks whether a logical Delete operator can be implemented
+// by a fast delete range execution operator. This logic should be kept in sync
+// with canDeleteFast.
+func (b *Builder) canUseDeleteRange(del *memo.DeleteExpr) bool {
+	// If rows need to be returned from the Delete operator (i.e. RETURNING
+	// clause), no fast path is possible, because row values must be fetched.
+	if del.NeedResults {
+		return false
+	}
+
+	tab := b.mem.Metadata().Table(del.Table)
+	if tab.DeletableIndexCount() > 1 {
+		// Any secondary index prevents fast path, because separate delete batches
+		// must be formulated to delete rows from them.
+		return false
+	}
+	if tab.IsInterleaved() {
+		// There is a separate fast path for interleaved tables in sql/delete.go.
+		return false
+	}
+	if tab.IsReferenced() {
+		// If the table is referenced by other tables' foreign keys, no fast path
+		// is possible, because the integrity of those references must be checked.
+		return false
+	}
+
+	// Check for simple Scan input operator without a limit; anything else is not
+	// supported by a range delete.
+	if scan, ok := del.Input.(*memo.ScanExpr); !ok || scan.HardLimit != 0 {
+		return false
+	}
+
+	return true
+}
+
+// buildDeleteRange constructs a DeleteRange operator that deletes contiguous
+// rows in the primary index. canUseDeleteRange should have already been called.
+func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
+	// canUseDeleteRange has already validated that input is a Scan operator.
+	scan := del.Input.(*memo.ScanExpr)
+	tab := b.mem.Metadata().Table(scan.Table)
+	needed, output := b.getColumns(scan.Cols, scan.Table)
+	res := execPlan{outputCols: output}
+
+	root, err := b.factory.ConstructDeleteRange(tab, needed, scan.Constraint)
+	if err != nil {
+		return execPlan{}, err
+	}
+	res.root = root
+	return res, nil
 }
 
 func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
@@ -1385,9 +1444,11 @@ func (b *Builder) needProjection(
 			return nil, false
 		}
 	}
-	cols := make([]exec.ColumnOrdinal, len(colList))
-	for i, col := range colList {
-		cols[i] = input.getColumnOrdinal(col)
+	cols := make([]exec.ColumnOrdinal, 0, len(colList))
+	for _, col := range colList {
+		if col != 0 {
+			cols = append(cols, input.getColumnOrdinal(col))
+		}
 	}
 	return cols, true
 }
@@ -1539,7 +1600,7 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 
 	var colMap opt.ColMap
 	ord := 0
-	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+	for i, n := 0, tab.DeletableColumnCount(); i < n; i++ {
 		colID := int(private.Table.ColumnID(i))
 		if outCols.Contains(colID) {
 			colMap.Set(colID, ord)

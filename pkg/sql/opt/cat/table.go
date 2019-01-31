@@ -26,6 +26,21 @@ import (
 
 // Table is an interface to a database table, exposing only the information
 // needed by the query optimizer.
+//
+// Both columns and indexes are grouped into three sets: public, write-only, and
+// delete-only. When a column or index is added or dropped, it proceeds through
+// each of the three states as that schema change is incrementally rolled out to
+// the cluster without blocking ongoing queries. In the public state, reads,
+// writes, and deletes are allowed. In the write-only state, only writes and
+// deletes are allowed. Finally, in the delete-only state, only deletes are
+// allowed. Further details about "online schema change" can be found in:
+//
+//   docs/RFCS/20151014_online_schema_change.md
+//
+// Calling code must take care to use the right collection of columns or
+// indexes. Usually this should be the public collections, since most usages are
+// read-only, but mutation operators generally need to consider non-public
+// columns and indexes.
 type Table interface {
 	DataSource
 
@@ -34,8 +49,29 @@ type Table interface {
 	// information_schema tables.
 	IsVirtualTable() bool
 
-	// ColumnCount returns the number of columns in the table.
+	// IsInterleaved returns true if any of this table's indexes are interleaved
+	// with index(es) from other table(s).
+	IsInterleaved() bool
+
+	// IsReferenced returns true if this table is referenced by at least one
+	// foreign key defined on another table (or this one if self-referential).
+	IsReferenced() bool
+
+	// ColumnCount returns the number of public columns in the table. Public
+	// columns are not currently being added or dropped from the table. This
+	// method should be used when mutation columns can be ignored (the common
+	// case).
 	ColumnCount() int
+
+	// WritableColumnCount returns the number of public and write-only columns in
+	// the table. Although write-only columns are not visible, any inserts and
+	// updates must still set them. WritableColumnCount is always >= ColumnCount.
+	WritableColumnCount() int
+
+	// DeletableColumnCount returns the number of public, write-only, and
+	// delete- only columns in the table. DeletableColumnCount is always >=
+	// WritableColumnCount.
+	DeletableColumnCount() int
 
 	// Column returns a Column interface to the column at the ith ordinal
 	// position within the table, where i < ColumnCount. Note that the Columns
@@ -46,13 +82,27 @@ type Table interface {
 	//
 	//   cockroachdb/cockroach/docs/RFCS/20151014_online_schema_change.md
 	//
-	// To determine if the column is a mutation column, try to cast it to
-	// *MutationColumn.
+	// Writable columns are always situated after public columns, and are followed
+	// by deletable columns.
 	Column(i int) Column
 
-	// IndexCount returns the number of indexes defined on this table. This
-	// includes the primary index, so the count is always >= 1.
+	// IndexCount returns the number of public indexes defined on this table.
+	// Public indexes are not currently being added or dropped from the table.
+	// This method should be used when mutation columns can be ignored (the common
+	// case). The returned indexes include the primary index, so the count is
+	// always >= 1.
 	IndexCount() int
+
+	// WritableIndexCount returns the number of public and write-only indexes
+	// defined on this table. Although write-only indexes are not visible, any
+	// table mutation operations must still be applied to them. WritableIndexCount
+	// is always >= IndexCount.
+	WritableIndexCount() int
+
+	// DeletableIndexCount returns the number of public, write-only, and
+	// delete-onlyindexes defined on this table. DeletableIndexCount is always
+	// >= WritableIndexCount.
+	DeletableIndexCount() int
 
 	// Index returns the ith index, where i < IndexCount. The table's primary
 	// index is always the 0th index, and is always present (use cat.PrimaryIndex
@@ -130,8 +180,8 @@ type ForeignKeyReference struct {
 	Match tree.CompositeKeyMatchMethod
 }
 
-// FindTableColumnByName returns the ordinal of the column having the given
-// name, if one exists in the given table. Otherwise, it returns -1.
+// FindTableColumnByName returns the ordinal of the non-mutation column having
+// the given name, if one exists in the given table. Otherwise, it returns -1.
 func FindTableColumnByName(tab Table, name tree.Name) int {
 	for ord, n := 0, tab.ColumnCount(); ord < n; ord++ {
 		if tab.Column(ord).ColName() == name {
@@ -147,21 +197,21 @@ func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	child := tp.Childf("TABLE %s", tab.Name().TableName)
 
 	var buf bytes.Buffer
-	for i := 0; i < tab.ColumnCount(); i++ {
+	for i := 0; i < tab.DeletableColumnCount(); i++ {
 		buf.Reset()
-		formatColumn(tab.Column(i), &buf)
+		formatColumn(tab.Column(i), IsMutationColumn(tab, i), &buf)
 		child.Child(buf.String())
 	}
 
-	for i := 0; i < tab.IndexCount(); i++ {
-		formatCatalogIndex(tab.Index(i), i == PrimaryIndex, child)
+	for i := 0; i < tab.DeletableIndexCount(); i++ {
+		formatCatalogIndex(tab, i, child)
 	}
 
 	for i := 0; i < tab.IndexCount(); i++ {
 		fkRef, ok := tab.Index(i).ForeignKey()
 
 		if ok {
-			formatCatalogFKRef(cat, tab, tab.Index(i), fkRef, child)
+			formatCatalogFKRef(cat, tab.Index(i), fkRef, child)
 		}
 	}
 
@@ -172,16 +222,21 @@ func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for
 // debugging and testing.
-func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
+func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
+	idx := tab.Index(ord)
 	inverted := ""
 	if idx.IsInverted() {
 		inverted = "INVERTED "
 	}
-	child := tp.Childf("%sINDEX %s", inverted, idx.Name())
+	mutation := ""
+	if IsMutationIndex(tab, ord) {
+		mutation = " (mutation)"
+	}
+	child := tp.Childf("%sINDEX %s%s", inverted, idx.Name(), mutation)
 
 	var buf bytes.Buffer
 	colCount := idx.ColumnCount()
-	if isPrimary {
+	if ord == PrimaryIndex {
 		// Omit the "stored" columns from the primary index.
 		colCount = idx.KeyColumnCount()
 	}
@@ -190,7 +245,7 @@ func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
 		buf.Reset()
 
 		idxCol := idx.Column(i)
-		formatColumn(idxCol.Column, &buf)
+		formatColumn(idxCol.Column, false /* isMutationCol */, &buf)
 		if idxCol.Descending {
 			fmt.Fprintf(&buf, " desc")
 		}
@@ -221,9 +276,7 @@ func formatColPrefix(idx Index, prefixLen int) string {
 
 // formatCatalogFKRef nicely formats a catalog foreign key reference using a
 // treeprinter for debugging and testing.
-func formatCatalogFKRef(
-	cat Catalog, tab Table, idx Index, fkRef ForeignKeyReference, tp treeprinter.Node,
-) {
+func formatCatalogFKRef(cat Catalog, idx Index, fkRef ForeignKeyReference, tp treeprinter.Node) {
 	ds, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.TableID)
 	if err != nil {
 		panic(err)
@@ -247,12 +300,15 @@ func formatCatalogFKRef(
 	)
 }
 
-func formatColumn(col Column, buf *bytes.Buffer) {
+func formatColumn(col Column, isMutationCol bool, buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "%s %s", col.ColName(), col.DatumType())
 	if !col.IsNullable() {
 		fmt.Fprintf(buf, " not null")
 	}
 	if col.IsHidden() {
 		fmt.Fprintf(buf, " (hidden)")
+	}
+	if isMutationCol {
+		fmt.Fprintf(buf, " (mutation)")
 	}
 }

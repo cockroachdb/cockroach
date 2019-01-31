@@ -363,3 +363,18 @@
     $projections
     $passthrough
 )
+
+# PruneMutationCols discards mutation operator columns that are never used. This
+# includes input columns as well as corresponding InsertCols, FetchCols,
+# UpdateCols, and CheckCols in the mutation private.
+# TODO(andyk): Add support for other mutation operators.
+[PruneMutationCols, Normalize]
+(Delete
+    $input:*
+    $mutationPrivate:* & (CanPruneCols $input $needed:(NeededColsMutation $mutationPrivate))
+)
+=>
+(Delete
+    (PruneCols $input $needed)
+    (PruneMutationCols $mutationPrivate $needed)
+)

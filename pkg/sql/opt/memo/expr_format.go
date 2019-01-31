@@ -655,7 +655,9 @@ func (f *ExprFmtCtx) formatColList(
 		f.Buffer.Reset()
 		f.Buffer.WriteString(heading)
 		for _, col := range colList {
-			formatCol(f, "" /* label */, col, notNullCols, false /* omitType */)
+			if col != 0 {
+				formatCol(f, "" /* label */, col, notNullCols, false /* omitType */)
+			}
 		}
 		tp.Child(f.Buffer.String())
 	}
@@ -752,9 +754,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		// Don't output name of index if it's the primary index.
 		tab := f.Memo.metadata.Table(t.Table)
 		if t.Index == cat.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, " %s", tableName(f, t.Table))
+			fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
 		} else {
-			fmt.Fprintf(f.Buffer, " %s@%s", tableName(f, t.Table), tab.Index(t.Index).Name())
+			fmt.Fprintf(f.Buffer, " %s@%s", tableAlias(f, t.Table), tab.Index(t.Index).Name())
 		}
 		if ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering) {
 			f.Buffer.WriteString(",rev")
@@ -770,7 +772,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %s", seq.Name())
 
 	case *MutationPrivate:
-		fmt.Fprintf(f.Buffer, " %s", tableName(f, t.Table))
+		fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
 
 	case *RowNumberPrivate:
 		if !t.Ordering.Any() {
@@ -826,13 +828,13 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	}
 }
 
-// tableName returns the alias for a table to be used for pretty-printing.
-func tableName(f *ExprFmtCtx, tabID opt.TableID) string {
+// tableAlias returns the alias for a table to be used for pretty-printing.
+func tableAlias(f *ExprFmtCtx, tabID opt.TableID) string {
+	tabMeta := f.Memo.metadata.TableMeta(tabID)
 	if f.HasFlags(ExprFmtHideQualifications) {
-		tabMeta := f.Memo.metadata.TableMeta(tabID)
-		return tabMeta.Name()
+		return tabMeta.Alias.String()
 	}
-	return f.Memo.metadata.Table(tabID).Name().String()
+	return tabMeta.Table.Name().FQString()
 }
 
 // isSimpleColumnName returns true if the given label consists of only ASCII

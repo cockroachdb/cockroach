@@ -69,22 +69,8 @@ type Column interface {
 	ComputedExprStr() string
 }
 
-// MutationColumn describes a single column that is being added to a table or
-// dropped from a table. Mutation columns require special handling by mutation
-// operators like Insert, Update, and Delete.
-type MutationColumn struct {
-	// Column is the Table.Column that is being added or dropped.
-	Column
-
-	// IsDeleteOnly is true if the column only needs special handling by Delete
-	// operations; Update and Insert operations can ignore the column. See
-	// sqlbase.DescriptorMutation_DELETE_ONLY for more information.
-	IsDeleteOnly bool
-}
-
 // IsMutationColumn is a convenience function that returns true if the column at
 // the given ordinal position is a mutation column.
-func IsMutationColumn(table Table, i int) bool {
-	_, ok := table.Column(i).(*MutationColumn)
-	return ok
+func IsMutationColumn(table Table, ord int) bool {
+	return ord >= table.ColumnCount()
 }

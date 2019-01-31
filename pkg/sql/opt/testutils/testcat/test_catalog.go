@@ -440,10 +440,22 @@ type Table struct {
 	Checks     []cat.CheckConstraint
 	IsVirtual  bool
 	Catalog    cat.Catalog
-	Mutations  []cat.MutationColumn
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
+
+	writeOnlyColCount  int
+	deleteOnlyColCount int
+	writeOnlyIdxCount  int
+	deleteOnlyIdxCount int
+
+	// interleaved is true if the table's rows are interleaved with rows from
+	// other table(s).
+	interleaved bool
+
+	// referenced is set to true when another table has referenced this table
+	// via a foreign key.
+	referenced bool
 }
 
 var _ cat.Table = &Table{}
@@ -478,21 +490,48 @@ func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
 }
 
+// IsInterleaved is part of the cat.Table interface.
+func (tt *Table) IsInterleaved() bool {
+	return false
+}
+
+// IsReferenced is part of the cat.Table interface.
+func (tt *Table) IsReferenced() bool {
+	return tt.referenced
+}
+
 // ColumnCount is part of the cat.Table interface.
 func (tt *Table) ColumnCount() int {
-	return len(tt.Columns) + len(tt.Mutations)
+	return len(tt.Columns) - tt.writeOnlyColCount - tt.deleteOnlyColCount
+}
+
+// WritableColumnCount is part of the cat.Table interface.
+func (tt *Table) WritableColumnCount() int {
+	return len(tt.Columns) - tt.deleteOnlyColCount
+}
+
+// DeletableColumnCount is part of the cat.Table interface.
+func (tt *Table) DeletableColumnCount() int {
+	return len(tt.Columns)
 }
 
 // Column is part of the cat.Table interface.
 func (tt *Table) Column(i int) cat.Column {
-	if i < len(tt.Columns) {
-		return tt.Columns[i]
-	}
-	return &tt.Mutations[i-len(tt.Columns)]
+	return tt.Columns[i]
 }
 
 // IndexCount is part of the cat.Table interface.
 func (tt *Table) IndexCount() int {
+	return len(tt.Indexes) - tt.writeOnlyIdxCount - tt.deleteOnlyIdxCount
+}
+
+// WritableIndexCount is part of the cat.Table interface.
+func (tt *Table) WritableIndexCount() int {
+	return len(tt.Indexes) - tt.deleteOnlyIdxCount
+}
+
+// DeletableIndexCount is part of the cat.Table interface.
+func (tt *Table) DeletableIndexCount() int {
 	return len(tt.Indexes)
 }
 

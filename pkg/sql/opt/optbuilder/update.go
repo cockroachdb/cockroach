@@ -100,7 +100,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	b.checkPrivilege(tn, tab, privilege.SELECT)
 
 	var mb mutationBuilder
-	mb.init(b, opt.UpdateOp, tab, alias)
+	mb.init(b, opt.UpdateOp, tab, *alias)
 
 	// Build the input expression that selects the rows that will be updated:
 	//
@@ -302,7 +302,7 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 	// expressions will refer to the updated value rather than the old column
 	// containing the original value (or even the column containing a value to
 	// be inserted in case of upsert).
-	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
 		colName := mb.tab.Column(i).ColName()
 		colID := mb.fetchColList[i]
 		if mb.updateColList[i] != 0 {

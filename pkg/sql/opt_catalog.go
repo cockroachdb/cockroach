@@ -364,11 +364,6 @@ type optTable struct {
 	// wrappers is a cache of index wrappers that's used to satisfy repeated
 	// calls to the SecondaryIndex method for the same index.
 	wrappers map[*sqlbase.IndexDescriptor]*optIndex
-
-	// mutations is a list of mutation columns associated with this table. These
-	// are present when the table is undergoing an online schema change where one
-	// or more columns are being added or dropped.
-	mutations []cat.MutationColumn
 }
 
 var _ cat.Table = &optTable{}
@@ -392,8 +387,6 @@ func newOptTable(
 		ot.stats = ot.stats[:n]
 	}
 
-	ot.prepareMutationColumns(desc)
-
 	// The cat.Table interface requires that table names be fully qualified.
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
@@ -401,26 +394,6 @@ func newOptTable(
 	ot.primary.init(ot, &desc.PrimaryIndex)
 
 	return ot
-}
-
-func (ot *optTable) prepareMutationColumns(desc *sqlbase.ImmutableTableDescriptor) {
-	if len(desc.MutationColumns()) != 0 {
-		ot.mutations = make([]cat.MutationColumn, 0, len(ot.desc.MutationColumns()))
-		writeCols := ot.desc.WriteOnlyColumns()
-		delCols := ot.desc.DeleteOnlyColumns()
-		for i := range writeCols {
-			ot.mutations = append(ot.mutations, cat.MutationColumn{
-				Column:       &writeCols[i],
-				IsDeleteOnly: false,
-			})
-		}
-		for i := range delCols {
-			ot.mutations = append(ot.mutations, cat.MutationColumn{
-				Column:       &delCols[i],
-				IsDeleteOnly: true,
-			})
-		}
-	}
 }
 
 // ID is part of the cat.Object interface.
@@ -459,17 +432,39 @@ func (ot *optTable) IsVirtualTable() bool {
 	return ot.desc.IsVirtualTable()
 }
 
+// IsInterleaved is part of the cat.Table interface.
+func (ot *optTable) IsInterleaved() bool {
+	return ot.desc.IsInterleaved()
+}
+
+// IsReferenced is part of the cat.Table interface.
+func (ot *optTable) IsReferenced() bool {
+	for i, n := 0, ot.DeletableIndexCount(); i < n; i++ {
+		if len(ot.Index(i).(*optIndex).desc.ReferencedBy) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // ColumnCount is part of the cat.Table interface.
 func (ot *optTable) ColumnCount() int {
-	return len(ot.desc.Columns) + len(ot.mutations)
+	return len(ot.desc.Columns)
+}
+
+// WritableColumnCount is part of the cat.Table interface.
+func (ot *optTable) WritableColumnCount() int {
+	return len(ot.desc.WritableColumns())
+}
+
+// DeletableColumnCount is part of the cat.Table interface.
+func (ot *optTable) DeletableColumnCount() int {
+	return len(ot.desc.DeletableColumns())
 }
 
 // Column is part of the cat.Table interface.
 func (ot *optTable) Column(i int) cat.Column {
-	if i < len(ot.desc.Columns) {
-		return &ot.desc.Columns[i]
-	}
-	return &ot.mutations[i-len(ot.desc.Columns)]
+	return &ot.desc.DeletableColumns()[i]
 }
 
 // IndexCount is part of the cat.Table interface.
@@ -481,6 +476,24 @@ func (ot *optTable) IndexCount() int {
 	return 1 + len(ot.desc.Indexes)
 }
 
+// WritableIndexCount is part of the cat.Table interface.
+func (ot *optTable) WritableIndexCount() int {
+	if ot.desc.IsVirtualTable() {
+		return 0
+	}
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.WritableIndexes())
+}
+
+// DeletableIndexCount is part of the cat.Table interface.
+func (ot *optTable) DeletableIndexCount() int {
+	if ot.desc.IsVirtualTable() {
+		return 0
+	}
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.DeletableIndexes())
+}
+
 // Index is part of the cat.Table interface.
 func (ot *optTable) Index(i int) cat.Index {
 	// Primary index is always 0th index.
@@ -488,8 +501,8 @@ func (ot *optTable) Index(i int) cat.Index {
 		return &ot.primary
 	}
 
-	// Bias i to account for lack of primary index in Indexes slice.
-	desc := &ot.desc.Indexes[i-1]
+	// Bias i to account for lack of primary index in DeletableIndexes slice.
+	desc := &ot.desc.DeletableIndexes()[i-1]
 
 	// Check to see if there's already a wrapper for this index descriptor.
 	if ot.wrappers == nil {
@@ -515,8 +528,8 @@ func (ot *optTable) Statistic(i int) cat.TableStatistic {
 
 func (ot *optTable) ensureColMap() {
 	if ot.colMap == nil {
-		ot.colMap = make(map[sqlbase.ColumnID]int, ot.ColumnCount())
-		for i, n := 0, ot.ColumnCount(); i < n; i++ {
+		ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
+		for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
 			ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
 		}
 	}
@@ -580,18 +593,18 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
 		// primary key. Retrieve those columns from the table descriptor.
-		oi.storedCols = make([]sqlbase.ColumnID, 0, tab.ColumnCount()-len(desc.ColumnIDs))
+		oi.storedCols = make([]sqlbase.ColumnID, 0, tab.DeletableColumnCount()-len(desc.ColumnIDs))
 		var pkCols util.FastIntSet
 		for i := range desc.ColumnIDs {
 			pkCols.Add(int(desc.ColumnIDs[i]))
 		}
-		for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		for i, n := 0, tab.DeletableColumnCount(); i < n; i++ {
 			id := tab.Column(i).ColID()
 			if !pkCols.Contains(int(id)) {
 				oi.storedCols = append(oi.storedCols, sqlbase.ColumnID(id))
 			}
 		}
-		oi.numCols = tab.ColumnCount()
+		oi.numCols = tab.DeletableColumnCount()
 	} else {
 		oi.storedCols = desc.StoreColumnIDs
 		oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)
@@ -601,7 +614,7 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 		notNull := true
 		for _, id := range desc.ColumnIDs {
 			ord, _ := tab.lookupColumnOrdinal(id)
-			if tab.desc.Columns[ord].Nullable {
+			if tab.desc.DeletableColumns()[ord].Nullable {
 				notNull = false
 				break
 			}

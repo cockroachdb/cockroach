@@ -16,6 +16,7 @@ package opt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -117,21 +118,23 @@ type TableMeta struct {
 	// Table is a reference to the table in the catalog.
 	Table cat.Table
 
-	// Alias is an alternate name for the base table to be used for formatting,
-	// debugging, EXPLAIN output, etc. It is set to "" if no alias was specified.
-	Alias string
+	// Alias stores the identifier used in the query to identify the table. This
+	// might be explicitly qualified (e.g. <catalog>.<schema>.<table>), or not
+	// (e.g. <table>). Or, it may be an alias used in the query, in which case it
+	// is always an unqualified name.
+	Alias tree.TableName
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
 }
 
-// Name returns the table alias, if it was specified, or else the table's name
-// as a string.
-func (tm *TableMeta) Name() string {
-	if tm.Alias != "" {
-		return tm.Alias
+// Columns returns the metadata IDs for all non-mutation columns in the table.
+func (tm *TableMeta) Columns() ColSet {
+	var cols ColSet
+	for i, n := 0, tm.Table.ColumnCount(); i < n; i++ {
+		cols.Add(int(tm.MetaID.ColumnID(i)))
 	}
-	return string(tm.Table.Name().TableName)
+	return cols
 }
 
 // IndexColumns returns the metadata IDs for the set of columns in the given
@@ -141,7 +144,20 @@ func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 	index := tm.Table.Index(indexOrd)
 
 	var indexCols ColSet
-	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
+	for i, n := 0, index.ColumnCount(); i < n; i++ {
+		ord := index.Column(i).Ordinal
+		indexCols.Add(int(tm.MetaID.ColumnID(ord)))
+	}
+	return indexCols
+}
+
+// IndexKeyColumns returns the metadata IDs for the set of strict key columns in
+// the given index.
+func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
+	index := tm.Table.Index(indexOrd)
+
+	var indexCols ColSet
+	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
 		ord := index.Column(i).Ordinal
 		indexCols.Add(int(tm.MetaID.ColumnID(ord)))
 	}

@@ -49,16 +49,16 @@ CREATE TABLE mutation (
     m INT PRIMARY KEY,
     n INT,
     "o:write-only" INT DEFAULT(10),
-    "p:delete-only" INT,
-    "q:write-only" INT AS (o + n) STORED
+    "p:write-only" INT AS (o + n) STORED,
+    "q:delete-only" INT
 )
 ----
 TABLE mutation
  ├── m int not null
  ├── n int
- ├── o int
- ├── p int
- ├── q int
+ ├── o int (mutation)
+ ├── p int (mutation)
+ ├── q int (mutation)
  └── INDEX primary
       └── m int not null
 
@@ -1183,7 +1183,7 @@ insert mutation
  │    ├──  column1:6 => m:1
  │    ├──  column2:7 => n:2
  │    ├──  column8:8 => o:3
- │    └──  column9:9 => q:5
+ │    └──  column9:9 => p:4
  └── project
       ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
       ├── project
@@ -1210,7 +1210,7 @@ insert mutation
  │    ├──  column1:6 => m:1
  │    ├──  column2:7 => n:2
  │    ├──  column8:8 => o:3
- │    └──  column9:9 => q:5
+ │    └──  column9:9 => p:4
  └── project
       ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
       ├── project
@@ -1241,9 +1241,9 @@ error (42703): column "p" does not exist
 
 # Try to insert into mutation column.
 build
-INSERT INTO mutation (m, n, q) VALUES (1, 2, 3)
+INSERT INTO mutation (m, n, p) VALUES (1, 2, 3)
 ----
-error (42P10): column "q" is being backfilled
+error (42703): column "p" does not exist
 
 # ------------------------------------------------------------------------------
 # Test check constraints
