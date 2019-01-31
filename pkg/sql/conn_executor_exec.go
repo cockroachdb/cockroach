@@ -371,13 +371,14 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	if os.ImplicitTxn.Get() {
-		ts, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now())
+		asOfTs, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now())
 		if err != nil {
 			return makeErrEvent(err)
 		}
-		if ts != nil {
-			p.semaCtx.AsOfTimestamp = ts
-			ex.state.mu.txn.SetFixedTimestamp(ctx, *ts)
+		if asOfTs != nil {
+			p.semaCtx.AsOfTimestamp = asOfTs
+			p.extendedEvalCtx.SetTxnTimestamp(asOfTs.GoTime())
+			ex.state.setHistoricalTimestamp(ctx, *asOfTs)
 		}
 	} else {
 		// If we're in an explicit txn, we allow AOST but only if it matches with
@@ -389,10 +390,10 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		if ts != nil {
-			if *ts != ex.state.mu.txn.OrigTimestamp() {
-				return makeErrEvent(errors.Errorf("inconsistent \"as of system time\" timestamp. Expected: %s. "+
-					"Generally \"as of system time\" cannot be used inside a transaction.",
-					ex.state.mu.txn.OrigTimestamp()))
+			if origTs := ex.state.getOrigTimestamp(); *ts != origTs {
+				return makeErrEvent(errors.Errorf("inconsistent AS OF SYSTEM TIME timestamp. Expected: %s. "+
+					"Generally AS OF SYSTEM TIME cannot be used inside a transaction.",
+					origTs))
 			}
 			p.semaCtx.AsOfTimestamp = ts
 		}
@@ -1045,6 +1046,45 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	return recv.commErr
 }
 
+// beginTransactionTimestampsAndReadMode computes the timestamps and
+// ReadWriteMode to be used for the associated transaction state based on the
+// values of the statement's Modes. Note that this method may reset the
+// connExecutor's planner in order to compute the timestamp for the AsOf clause
+// if it exists. The timestamps correspond to the timestamps passed to
+// makeEventTxnStartPayload; txnSQLTimestamp propagates to become the
+// TxnTimestamp while historicalTimestamp populated with a non-nil value only
+// if the BeginTransaction statement has a non-nil AsOf clause expression. A
+// non-nil historicalTimestamp implies a ReadOnly rwMode.
+func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
+	ctx context.Context, s *tree.BeginTransaction,
+) (
+	rwMode tree.ReadWriteMode,
+	txnSQLTimestamp time.Time,
+	historicalTimestamp *hlc.Timestamp,
+	err error,
+) {
+	now := ex.server.cfg.Clock.Now()
+	if s.Modes.AsOf.Expr == nil {
+		rwMode = ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode)
+		return rwMode, now.GoTime(), nil, nil
+	}
+	p := &ex.planner
+	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime())
+	ts, err := p.EvalAsOfTimestamp(s.Modes.AsOf, now)
+	if err != nil {
+		return 0, time.Time{}, nil, err
+	}
+	// NB: This check should never return an error because the parser should
+	// disallow the creation of a TransactionModes struct which both has an
+	// AOST clause and is ReadWrite but performing a check decouples this code
+	// from that and hopefully adds clarity that the returning of ReadOnly with
+	// a historical timestamp is intended.
+	if s.Modes.ReadWriteMode == tree.ReadWrite {
+		return 0, time.Time{}, nil, tree.ErrAsOfSpecifiedWithReadWrite
+	}
+	return tree.ReadOnly, ts.GoTime(), &ts, nil
+}
+
 // execStmtInNoTxnState "executes" a statement when no transaction is in scope.
 // For anything but BEGIN, this method doesn't actually execute the statement;
 // it just returns an Event that will generate a transaction. The statement will
@@ -1064,11 +1104,14 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if err != nil {
 			return ex.makeErrEvent(err, s)
 		}
-
+		mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, s)
+		if err != nil {
+			return ex.makeErrEvent(err, s)
+		}
 		return eventTxnStart{ImplicitTxn: fsm.False},
 			makeEventTxnStartPayload(
-				pri, ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode),
-				ex.server.cfg.Clock.PhysicalTime(),
+				pri, mode, sqlTs,
+				historicalTs,
 				ex.transitionCtx)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
@@ -1078,11 +1121,15 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if ex.sessionData.DefaultReadOnly {
 			mode = tree.ReadOnly
 		}
+		// NB: Implicit transactions are created without a historical timestamp even
+		// though the statement might contain an AOST clause. In these cases the
+		// clause is evaluated and applied execStmtInOpenState.
 		return eventTxnStart{ImplicitTxn: fsm.True},
 			makeEventTxnStartPayload(
 				roachpb.NormalUserPriority,
 				mode,
 				ex.server.cfg.Clock.PhysicalTime(),
+				nil, /* historicalTimestamp */
 				ex.transitionCtx)
 	}
 }
@@ -1174,7 +1221,8 @@ func (ex *connExecutor) execStmtInAbortedState(
 			rwMode = tree.ReadOnly
 		}
 		payload := makeEventTxnStartPayload(
-			ex.state.priority, rwMode, ex.state.sqlTimestamp, ex.transitionCtx)
+			ex.state.priority, rwMode, ex.state.sqlTimestamp,
+			nil /* historicalTimestamp */, ex.transitionCtx)
 		return ev, payload
 	default:
 		ev := eventNonRetriableErr{IsCommit: fsm.False}

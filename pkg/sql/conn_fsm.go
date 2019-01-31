@@ -128,21 +128,24 @@ type eventTxnStartPayload struct {
 	// txnSQLTimestamp is the timestamp that statements executed in the
 	// transaction that is started by this event will report for now(),
 	// current_timestamp(), transaction_timestamp().
-	txnSQLTimestamp time.Time
-	readOnly        tree.ReadWriteMode
+	txnSQLTimestamp     time.Time
+	readOnly            tree.ReadWriteMode
+	historicalTimestamp *hlc.Timestamp
 }
 
 func makeEventTxnStartPayload(
 	pri roachpb.UserPriority,
 	readOnly tree.ReadWriteMode,
 	txnSQLTimestamp time.Time,
+	historicalTimestamp *hlc.Timestamp,
 	tranCtx transitionCtx,
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
-		pri:             pri,
-		readOnly:        readOnly,
-		txnSQLTimestamp: txnSQLTimestamp,
-		tranCtx:         tranCtx,
+		pri:                 pri,
+		readOnly:            readOnly,
+		txnSQLTimestamp:     txnSQLTimestamp,
+		historicalTimestamp: historicalTimestamp,
+		tranCtx:             tranCtx,
 	}
 }
 
@@ -442,7 +445,9 @@ var TxnStateTransitions = Compile(Pattern{
 				ts.resetForNewSQLTxn(
 					ts.connCtx,
 					explicitTxn,
-					payload.txnSQLTimestamp, payload.pri, payload.readOnly,
+					payload.txnSQLTimestamp,
+					payload.historicalTimestamp,
+					payload.pri, payload.readOnly,
 					nil, /* txn */
 					args.Payload.(eventTxnStartPayload).tranCtx,
 				)
@@ -540,6 +545,7 @@ func (ts *txnState) noTxnToOpen(
 		connCtx,
 		txnTyp,
 		payload.txnSQLTimestamp,
+		payload.historicalTimestamp,
 		payload.pri,
 		payload.readOnly,
 		nil, /* txn */
