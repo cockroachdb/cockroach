@@ -331,7 +331,7 @@ func TestSorter(t *testing.T) {
 							}
 						}
 						s.Run(context.Background(), nil /* wg */)
-						if !out.ProducerClosed {
+						if !out.ProducerClosed() {
 							t.Fatalf("output RowReceiver not closed")
 						}
 

@@ -80,7 +80,7 @@ func runTestFlow(
 	flow.Wait()
 	flow.Cleanup(ctx)
 
-	if !rowBuf.ProducerClosed {
+	if !rowBuf.ProducerClosed() {
 		t.Errorf("output not closed")
 	}
 
