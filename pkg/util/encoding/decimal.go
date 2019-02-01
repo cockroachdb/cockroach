@@ -355,17 +355,16 @@ func getDecimalLen(buf []byte) (int, error) {
 // makeDecimalFromMandE reconstructs the decimal from the mantissa M and
 // exponent E.
 func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) (apd.Decimal, error) {
+	if len(m) == 0 {
+		return apd.Decimal{}, errors.New("expected mantissa, got zero bytes")
+	}
 	// ±dddd.
 	b := tmp[:0]
 	if n := len(m)*2 + 1; cap(b) < n {
 		b = make([]byte, 0, n)
 	}
-	for i, v := range m {
-		t := int(v)
-		if i == len(m) {
-			t--
-		}
-		t /= 2
+	for _, v := range m {
+		t := int(v) / 2
 		if t < 0 || t > 99 {
 			return apd.Decimal{}, errors.Errorf("base-100 encoded digit %d out of range [0,99]", t)
 		}
