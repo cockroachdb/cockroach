@@ -854,7 +854,7 @@ func backupPlanHook(
 		endTime := p.ExecCfg().Clock.Now()
 		if backupStmt.AsOf.Expr != nil {
 			var err error
-			if endTime, err = p.EvalAsOfTimestamp(backupStmt.AsOf, endTime); err != nil {
+			if endTime, err = p.EvalAsOfTimestamp(backupStmt.AsOf); err != nil {
 				return err
 			}
 		}

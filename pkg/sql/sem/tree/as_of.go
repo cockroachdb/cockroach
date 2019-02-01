@@ -36,8 +36,8 @@ var errInvalidExprForAsOf = errors.Errorf("AS OF SYSTEM TIME: only constant expr
 
 // EvalAsOfTimestamp evaluates the timestamp argument to an AS OF SYSTEM TIME query.
 func EvalAsOfTimestamp(
-	asOf AsOfClause, max hlc.Timestamp, semaCtx *SemaContext, evalCtx *EvalContext,
-) (hlc.Timestamp, error) {
+	asOf AsOfClause, semaCtx *SemaContext, evalCtx *EvalContext,
+) (tsss hlc.Timestamp, err error) {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
 	// context.
@@ -80,7 +80,7 @@ func EvalAsOfTimestamp(
 
 	var ts hlc.Timestamp
 	var convErr error
-
+	stmtTimestamp := evalCtx.GetStmtTimestamp()
 	switch d := d.(type) {
 	case *DString:
 		s := string(*d)
@@ -97,7 +97,11 @@ func EvalAsOfTimestamp(
 		}
 		// Attempt to parse as an interval.
 		if iv, err := ParseDInterval(s); err == nil {
-			ts.WallTime = duration.Add(evalCtx, evalCtx.GetStmtTimestamp(), iv.Duration).UnixNano()
+			if (iv.Duration == duration.Duration{}) {
+				convErr = errors.Errorf("AS OF SYSTEM TIME: interval value %v too small, must be <= %v", te, -1*time.Microsecond)
+			} else {
+				ts.WallTime = duration.Add(evalCtx, stmtTimestamp, iv.Duration).UnixNano()
+			}
 			break
 		}
 		convErr = errors.Errorf("AS OF SYSTEM TIME: value is neither timestamp, decimal, nor interval")
@@ -108,7 +112,7 @@ func EvalAsOfTimestamp(
 	case *DDecimal:
 		ts, convErr = DecimalToHLC(&d.Decimal)
 	case *DInterval:
-		ts.WallTime = duration.Add(evalCtx, evalCtx.GetStmtTimestamp(), d.Duration).UnixNano()
+		ts.WallTime = duration.Add(evalCtx, stmtTimestamp, d.Duration).UnixNano()
 	default:
 		convErr = errors.Errorf("AS OF SYSTEM TIME: expected timestamp, decimal, or interval, got %s (%T)", d.ResolvedType(), d)
 	}
@@ -121,7 +125,7 @@ func EvalAsOfTimestamp(
 		return ts, errors.Errorf("AS OF SYSTEM TIME: zero timestamp is invalid")
 	} else if ts.Less(zero) {
 		return ts, errors.Errorf("AS OF SYSTEM TIME: timestamp before 1970-01-01T00:00:00Z is invalid")
-	} else if max.Less(ts) {
+	} else if stmtTimestamp.Before(ts.GoTime()) {
 		return ts, errors.Errorf("AS OF SYSTEM TIME: cannot specify timestamp in the future")
 	}
 	return ts, nil
