@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func mvccKey(k interface{}) MVCCKey {
@@ -870,6 +871,56 @@ func TestBatchBuilderStress(t *testing.T) {
 	}
 }
 
+func TestBatchDistinctApply(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(e)
+
+	if err := e.Put(mvccKey("enginekey"), []byte("e")); err != nil {
+		t.Fatal(err)
+	}
+
+	wb := func() []byte {
+		batch := e.NewBatch()
+		defer batch.Close()
+
+		if err := batch.Put(mvccKey("batchkey"), []byte("b")); err != nil {
+			t.Fatal(err)
+		}
+
+		return batch.Repr()
+	}()
+
+	batch := e.NewBatch()
+	defer batch.Close()
+
+	assert.NoError(t, batch.ApplyBatchRepr(wb, false /* sync */))
+
+	// TODO(tbg): entering this block makes the test pass (i.e. masks the bug).
+	if false {
+		// The original batch can see the earlier write to it.
+		if v, err := batch.Get(mvccKey("batchkey")); err != nil {
+			t.Fatal(err)
+		} else {
+			assert.Equal(t, []byte("b"), v)
+		}
+	}
+
+	distinct := batch.Distinct()
+	defer distinct.Close()
+
+	// The distinct batch can see the earlier write to the batch.
+	if v, err := distinct.Get(mvccKey("batchkey")); err != nil {
+		t.Fatal(err)
+	} else {
+		assert.Equal(t, []byte("b"), v)
+	}
+
+}
+
 func TestBatchDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -893,10 +944,12 @@ func TestBatchDistinct(t *testing.T) {
 	}
 
 	// The original batch can see the writes to the batch.
-	if v, err := batch.Get(mvccKey("a")); err != nil {
-		t.Fatal(err)
-	} else if string(v) != "a" {
-		t.Fatalf("expected a, but got %s", v)
+	if false { // NB: passes in both cases
+		if v, err := batch.Get(mvccKey("a")); err != nil {
+			t.Fatal(err)
+		} else if string(v) != "a" {
+			t.Fatalf("expected a, but got %s", v)
+		}
 	}
 
 	// The distinct batch will see previous writes to the batch.
