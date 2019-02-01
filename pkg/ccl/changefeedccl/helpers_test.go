@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -134,17 +136,22 @@ func createBenchmarkChangefeed(
 	encoder := makeJSONEncoder(details.Opts)
 	sink := makeBenchSink()
 
+	settings := s.ClusterSettings()
 	metrics := MakeMetrics(server.DefaultHistogramWindowInterval).(*Metrics)
 	buf := makeBuffer()
 	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
+	mm := mon.MakeUnlimitedMonitor(
+		context.Background(), "test", mon.MemoryResource,
+		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
+	)
 	poller := makePoller(
-		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(), spans, details, initialHighWater, buf,
-		leaseMgr, metrics,
+		settings, s.DB(), feedClock, s.Gossip(), spans, details, initialHighWater, buf,
+		leaseMgr, metrics, &mm,
 	)
 
 	th := makeTableHistory(func(context.Context, *sqlbase.TableDescriptor) error { return nil }, initialHighWater)
 	thUpdater := &tableHistoryUpdater{
-		settings: s.ClusterSettings(),
+		settings: settings,
 		db:       s.DB(),
 		targets:  details.Targets,
 		m:        th,
