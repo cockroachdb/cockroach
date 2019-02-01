@@ -191,26 +191,14 @@ func (p *sortedDistinct_TYPEOp) Next() ColBatch {
 		// Bounds check elimination.
 		sel = sel[startIdx:n]
 		for _, i := range sel {
-			v := col[i]
-			// Note that not inlining this unique var actually makes a non-trivial
-			// performance difference.
-			var unique bool
-			_ASSIGN_NE("unique", "v", "lastVal")
-			outputCol[i] = outputCol[i] || unique
-			lastVal = v
+			_INNER_LOOP(int(i), lastVal, col, outputCol)
 		}
 	} else {
 		// Bounds check elimination.
 		col = col[startIdx:n]
 		outputCol = outputCol[startIdx:n]
 		for i := range col {
-			v := col[i]
-			// Note that not inlining this unique var actually makes a non-trivial
-			// performance difference.
-			var unique bool
-			_ASSIGN_NE("unique", "v", "lastVal")
-			outputCol[i] = outputCol[i] || unique
-			lastVal = v
+			_INNER_LOOP(i, lastVal, col, outputCol)
 		}
 	}
 
@@ -242,3 +230,19 @@ func (p partitioner_TYPE) partition(colVec ColVec, outputCol []bool, n uint64) {
 }
 
 // {{end}}
+
+// {{/*
+func _INNER_LOOP(i int, lastVal _GOTYPE, col []interface{}, outputCol []bool) { // */}}
+
+	// {{define "innerLoop"}}
+	v := col[i]
+	// Note that not inlining this unique var actually makes a non-trivial
+	// performance difference.
+	var unique bool
+	_ASSIGN_NE("unique", "v", "lastVal")
+	outputCol[i] = outputCol[i] || unique
+	lastVal = v
+	// {{end}}
+
+	// {{/*
+} // */}}

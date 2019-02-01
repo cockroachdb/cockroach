@@ -136,41 +136,33 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
 				query = q
 				continue
 			}
-			query = "(" + query + ") JOIN (" + q + ") USING (id)"
+			query = "(" + query + ") LEFT JOIN (" + q + ") USING (id)"
 		}
 		return
 	}
 
 	maybeAddActiveNodesFilter := func(query string) string {
-		activeNodesFilter := "decommissioning = false OR split_part(expiration,',',1)::decimal > now()::decimal"
 		if !showDecommissioned {
-			query += " WHERE " + activeNodesFilter
+			query += " WHERE decommissioning = false OR split_part(expiration,',',1)::decimal > now()::decimal"
 		}
 		return query
 	}
 
-	baseQuery := joinUsingID(
-		[]string{`
-SELECT node_id AS id,
-       address,
-       build_tag AS build,
-       started_at,
-       updated_at
-FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_id)`,
-			maybeAddActiveNodesFilter(
-				`SELECT node_id AS id,
-                CASE WHEN split_part(expiration,',',1)::decimal > now()::decimal
-                     THEN true
-                     ELSE false
-                     END AS is_available
-         FROM crdb_internal.gossip_liveness`,
-			),
-			`SELECT node_id AS id, is_live
-         FROM crdb_internal.gossip_nodes`,
-		},
+	baseQuery := maybeAddActiveNodesFilter(
+		`SELECT node_id AS id,
+            address,
+            build_tag AS build,
+            started_at,
+            updated_at,
+            CASE WHEN split_part(expiration,',',1)::decimal > now()::decimal
+                 THEN true
+                 ELSE false
+                 END AS is_available,
+            ifnull(is_live, false)
+     FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`,
 	)
 
-	rangesQuery := `
+	const rangesQuery = `
 SELECT node_id AS id,
        sum((metrics->>'replicas.leaders')::DECIMAL)::INT AS replicas_leaders,
        sum((metrics->>'replicas.leaseholders')::DECIMAL)::INT AS replicas_leaseholders,
@@ -180,7 +172,7 @@ SELECT node_id AS id,
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
-	statsQuery := `
+	const statsQuery = `
 SELECT node_id AS id,
        sum((metrics->>'livebytes')::DECIMAL)::INT AS live_bytes,
        sum((metrics->>'keybytes')::DECIMAL)::INT AS key_bytes,
@@ -190,12 +182,12 @@ SELECT node_id AS id,
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
-	decommissionQuery := `
+	const decommissionQuery = `
 SELECT node_id AS id,
        ranges AS gossiped_replicas,
        decommissioning AS is_decommissioning,
        draining AS is_draining
-FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_id)`
+FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`
 
 	conn, err := getPasswordAndMakeSQLClient("cockroach node status")
 	if err != nil {
@@ -221,7 +213,7 @@ FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_i
 		}
 	}
 
-	queryString := "SELECT * FROM " + joinUsingID(queriesToJoin)
+	queryString := "SELECT * FROM (" + joinUsingID(queriesToJoin) + ")"
 
 	switch len(args) {
 	case 0:
