@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -52,6 +53,7 @@ type poller struct {
 	tableHist *tableHistory
 	leaseMgr  *sql.LeaseManager
 	metrics   *Metrics
+	mm        *mon.BytesMonitor
 
 	mu struct {
 		syncutil.Mutex
@@ -83,6 +85,7 @@ func makePoller(
 	buf *buffer,
 	leaseMgr *sql.LeaseManager,
 	metrics *Metrics,
+	mm *mon.BytesMonitor,
 ) *poller {
 	p := &poller{
 		settings: settings,
@@ -95,6 +98,7 @@ func makePoller(
 		buf:      buf,
 		leaseMgr: leaseMgr,
 		metrics:  metrics,
+		mm:       mm,
 	}
 	p.mu.previousTableVersion = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	// If no highWater is specified, set the highwater to the statement time
@@ -167,7 +171,7 @@ func (p *poller) Run(ctx context.Context) error {
 		p.mu.Unlock()
 
 		if !isFullScan {
-			log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
+			log.VEventf(ctx, 1, `changefeed poll (%s,%s]: %s`,
 				lastHighwater, nextHighWater, time.Duration(nextHighWater.WallTime-lastHighwater.WallTime))
 		} else {
 			log.VEventf(ctx, 1, `changefeed poll full scan @ %s`, nextHighWater)
@@ -243,6 +247,26 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
 		eventC := make(chan *roachpb.RangeFeedEvent, 128)
 
+		// To avoid blocking raft, RangeFeed puts all entries in a server side
+		// buffer. But to keep things simple, it's a small fixed-sized buffer. This
+		// means we need to ingest everything we get back as quickly as possible, so
+		// we throw it in a buffer here to pick up the slack between RangeFeed and
+		// the sink.
+		//
+		// TODO(dan): Right now, there are two buffers in the changefeed flow when
+		// using RangeFeeds, one here and the usual one between the poller and the
+		// rest of the changefeed (he latter of which is implemented with an
+		// unbuffered channel, and so doesn't actually buffer). Ideally, we'd have
+		// one, but the structure of the poller code right now makes this hard.
+		// Specifically, when a schema change happens, we need a barrier where we
+		// flush out every change before the schema change timestamp before we start
+		// emitting any changes from after the schema change. The poller's
+		// `tableHist` is responsible for detecting and enforcing these (they queue
+		// up in `p.scanBoundaries`), but the after-poller buffer doesn't have
+		// access to any of this state. A cleanup is in order.
+		memBuf := makeMemBuffer(p.mm.MakeBoundAccount())
+		defer memBuf.Close(ctx)
+
 		// Maintain a local spanfrontier to tell when all the component rangefeeds
 		// being watched have reached the Scan boundary.
 		// TODO(mrtracy): The alternative to this would be to maintain two
@@ -273,45 +297,13 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 				case e := <-eventC:
 					switch t := e.GetValue().(type) {
 					case *roachpb.RangeFeedValue:
-						// TODO(mrtracy): This appears to be backpressuring Raft. Find a way
-						// to resolve this (likely buffering per #28669).
-						if err := p.tableHist.WaitForTS(ctx, t.Value.Timestamp); err != nil {
-							return err
-						}
-						pastBoundary := false
-						p.mu.Lock()
-						if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].Less(t.Value.Timestamp) {
-							// Ignore feed results beyond the next boundary; they will be retrieved when
-							// the feeds are restarted after the scan.
-							pastBoundary = true
-						}
-						p.mu.Unlock()
-						if pastBoundary {
-							continue
-						}
 						kv := roachpb.KeyValue{Key: t.Key, Value: t.Value}
-						if err := p.buf.AddKV(ctx, kv, hlc.Timestamp{}); err != nil {
+						if err := memBuf.AddKV(ctx, kv, hlc.Timestamp{}); err != nil {
 							return err
 						}
 					case *roachpb.RangeFeedCheckpoint:
-						resolvedTS := t.ResolvedTS
-						boundaryBreak := false
-						p.mu.Lock()
-						if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].Less(resolvedTS) {
-							boundaryBreak = true
-							resolvedTS = p.mu.scanBoundaries[0]
-						}
-						p.mu.Unlock()
-						if err := p.buf.AddResolved(ctx, t.Span, resolvedTS); err != nil {
+						if err := memBuf.AddResolved(ctx, t.Span, t.ResolvedTS); err != nil {
 							return err
-						}
-						if boundaryBreak {
-							frontier.Forward(t.Span, resolvedTS)
-							if frontier.Frontier() == resolvedTS {
-								// All component rangefeeds are now at the boundary.
-								// Break out of the ctxgroup by returning a sentinel error.
-								return errBoundaryReached
-							}
 						}
 					default:
 						log.Fatalf(ctx, "unexpected RangeFeedEvent variant %v", t)
@@ -321,10 +313,57 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 				}
 			}
 		})
-		// TODO(mrtracy): We are currently tearing down the entire rangefeed set
-		// in order to perform a scan; however, with some sort of buffering present
-		// (#28669) its likely that we could do this without having to destroy
-		// and recreate the rangefeeds.
+		g.GoCtx(func(ctx context.Context) error {
+			for {
+				e, err := memBuf.Get(ctx)
+				if err != nil {
+					return err
+				}
+				if e.kv.Key != nil {
+					if err := p.tableHist.WaitForTS(ctx, e.kv.Value.Timestamp); err != nil {
+						return err
+					}
+					pastBoundary := false
+					p.mu.Lock()
+					if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].Less(e.kv.Value.Timestamp) {
+						// Ignore feed results beyond the next boundary; they will be retrieved when
+						// the feeds are restarted after the scan.
+						pastBoundary = true
+					}
+					p.mu.Unlock()
+					if pastBoundary {
+						continue
+					}
+					if err := p.buf.AddKV(ctx, e.kv, e.schemaTimestamp); err != nil {
+						return err
+					}
+				} else if e.resolved != nil {
+					resolvedTS := e.resolved.Timestamp
+					boundaryBreak := false
+					p.mu.Lock()
+					if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].Less(resolvedTS) {
+						boundaryBreak = true
+						resolvedTS = p.mu.scanBoundaries[0]
+					}
+					p.mu.Unlock()
+					if err := p.buf.AddResolved(ctx, e.resolved.Span, resolvedTS); err != nil {
+						return err
+					}
+					if boundaryBreak {
+						frontier.Forward(e.resolved.Span, resolvedTS)
+						if frontier.Frontier() == resolvedTS {
+							// All component rangefeeds are now at the boundary.
+							// Break out of the ctxgroup by returning a sentinel error.
+							return errBoundaryReached
+						}
+					}
+				}
+			}
+		})
+		// TODO(mrtracy): We are currently tearing down the entire rangefeed set in
+		// order to perform a scan; however, given that we have an intermediate
+		// buffer, its seems that we could do this without having to destroy and
+		// recreate the rangefeeds.
 		if err := g.Wait(); err != nil && err != errBoundaryReached {
 			return err
 		}
@@ -427,8 +466,7 @@ func (p *poller) exportSpan(
 ) error {
 	sender := p.db.NonTransactionalSender()
 	if log.V(2) {
-		log.Infof(ctx, `sending ExportRequest [%s,%s) over (%s,%s]`,
-			span.Key, span.EndKey, start, end)
+		log.Infof(ctx, `sending ExportRequest %s over (%s,%s]`, span, start, end)
 	}
 
 	header := roachpb.Header{Timestamp: end}
@@ -448,19 +486,17 @@ func (p *poller) exportSpan(
 	exported, pErr := client.SendWrappedWith(ctx, sender, header, req)
 	exportDuration := timeutil.Since(stopwatchStart)
 	if log.V(2) {
-		log.Infof(ctx, `finished ExportRequest [%s,%s) over (%s,%s] took %s`,
-			span.Key, span.EndKey, start, end, exportDuration)
+		log.Infof(ctx, `finished ExportRequest %s over (%s,%s] took %s`,
+			span, start, end, exportDuration)
 	}
 	slowExportThreshold := 10 * changefeedPollInterval.Get(&p.settings.SV)
 	if exportDuration > slowExportThreshold {
-		log.Infof(ctx, "finished ExportRequest [%s,%s) over (%s,%s] took %s behind by %s",
-			span.Key, span.EndKey, start, end, exportDuration, timeutil.Since(end.GoTime()))
+		log.Infof(ctx, "finished ExportRequest %s over (%s,%s] took %s behind by %s",
+			span, start, end, exportDuration, timeutil.Since(end.GoTime()))
 	}
 
 	if pErr != nil {
-		return errors.Wrapf(
-			pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey,
-		)
+		return errors.Wrapf(pErr.GoError(), `fetching changes for %s`, span)
 	}
 	p.metrics.PollRequestNanosHist.RecordValue(exportDuration.Nanoseconds())
 
@@ -481,8 +517,7 @@ func (p *poller) exportSpan(
 	}
 
 	if log.V(2) {
-		log.Infof(ctx, `finished buffering [%s,%s) took %s`,
-			span.Key, span.EndKey, timeutil.Since(stopwatchStart))
+		log.Infof(ctx, `finished buffering %s took %s`, span, timeutil.Since(stopwatchStart))
 	}
 	return nil
 }
