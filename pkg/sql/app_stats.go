@@ -291,9 +291,7 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	// Re-format to remove most names.
 	f := tree.NewFmtCtx(tree.FmtAnonymize)
 
-	var reformatFn func(ctx *tree.FmtCtx, tn *tree.TableName)
-
-	reformatFn = func(ctx *tree.FmtCtx, tn *tree.TableName) {
+	reformatFn := func(ctx *tree.FmtCtx, tn *tree.TableName) {
 		virtual, err := vt.getVirtualTableEntry(tn)
 		if err != nil || virtual.desc == nil {
 			ctx.WriteByte('_')
@@ -304,13 +302,13 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 		newTn := *tn
 		newTn.CatalogName = "_"
 
-		oldFlags := ctx.ChangeFlags(tree.FmtParsable)
-		ctx.WithReformatTableNames(nil)
-		ctx.FormatNode(&newTn)
-		ctx.WithReformatTableNames(reformatFn)
-		ctx.ChangeFlags(oldFlags)
+		ctx.WithFlags(tree.FmtParsable, func() {
+			ctx.WithReformatTableNames(nil, func() {
+				ctx.FormatNode(&newTn)
+			})
+		})
 	}
-	f.WithReformatTableNames(reformatFn)
+	f.SetReformatTableNames(reformatFn)
 	f.FormatNode(stmt.AST)
 	return f.CloseAndGetString(), true
 }
