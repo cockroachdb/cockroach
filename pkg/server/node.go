@@ -666,6 +666,8 @@ func (n *Node) bootstrapStores(
 	}
 
 	clusterVersion := n.storeCfg.Settings.Version.Version()
+	// Make sure we write the version to the stores if we got a gossip update at
+	// some point before our engines were bootstrapped.
 	n.onClusterVersionChange(clusterVersion)
 
 	// write a new status summary after all stores have been bootstrapped; this
