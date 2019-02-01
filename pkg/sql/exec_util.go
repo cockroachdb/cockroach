@@ -671,10 +671,8 @@ func checkResultType(typ types.T) error {
 
 // EvalAsOfTimestamp evaluates and returns the timestamp from an AS OF SYSTEM
 // TIME clause.
-func (p *planner) EvalAsOfTimestamp(
-	asOf tree.AsOfClause, max hlc.Timestamp,
-) (hlc.Timestamp, error) {
-	return tree.EvalAsOfTimestamp(asOf, max, &p.semaCtx, p.EvalContext())
+func (p *planner) EvalAsOfTimestamp(asOf tree.AsOfClause) (_ hlc.Timestamp, err error) {
+	return tree.EvalAsOfTimestamp(asOf, &p.semaCtx, p.EvalContext())
 }
 
 // ParseHLC parses a string representation of an `hlc.Timestamp`.
@@ -691,10 +689,7 @@ func ParseHLC(s string) (hlc.Timestamp, error) {
 // timestamp is not nil, it is the timestamp to which a transaction
 // should be set. The statements that will be checked are Select,
 // ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
-//
-// max is a lower bound on what the transaction's timestamp will be.
-// Used to check that the user didn't specify a timestamp in the future.
-func (p *planner) isAsOf(stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
+func (p *planner) isAsOf(stmt tree.Statement) (*hlc.Timestamp, error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:
@@ -720,7 +715,7 @@ func (p *planner) isAsOf(stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp
 		}
 		asOf = s.AsOf
 	case *tree.Export:
-		return p.isAsOf(s.Query, max)
+		return p.isAsOf(s.Query)
 	case *tree.CreateStats:
 		if s.AsOf.Expr == nil {
 			return nil, nil
@@ -729,7 +724,7 @@ func (p *planner) isAsOf(stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp
 	default:
 		return nil, nil
 	}
-	ts, err := p.EvalAsOfTimestamp(asOf, max)
+	ts, err := p.EvalAsOfTimestamp(asOf)
 	return &ts, err
 }
 
