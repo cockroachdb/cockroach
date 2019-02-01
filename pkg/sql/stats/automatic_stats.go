@@ -384,8 +384,8 @@ func (r *Refresher) refreshStats(
 		ctx,
 		"create-stats",
 		nil, /* txn */
-		fmt.Sprintf("CREATE STATISTICS %s FROM [%d] AS OF SYSTEM TIME '-%s';",
-			AutoStatsName, tableID, asOf.String(),
+		fmt.Sprintf("CREATE STATISTICS %s FROM [%d] AS OF SYSTEM TIME %d;",
+			AutoStatsName, tableID, -1*int64(asOf),
 		),
 	)
 	return err
