@@ -999,7 +999,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	return firstError
 }
 
-const panicLogOutputCutoffChars = 500
+const panicLogOutputCutoffChars = 10000
 
 func anonymizeStmtAndConstants(stmt tree.Statement) string {
 	return tree.AsStringWithFlags(stmt, tree.FmtAnonymize|tree.FmtHideConstants)
