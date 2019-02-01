@@ -19,6 +19,7 @@ import (
 	gosql "database/sql"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,11 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/pkg/errors"
 )
 
 type testClusterWithHelpers struct {
 	*testing.T
 	*testcluster.TestCluster
+	// !!! can this args go away?
 	args func() map[int]base.TestServerArgs
 }
 
@@ -172,6 +175,7 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	}
 
 	ctx := context.Background()
+	// !!! is this dir needed?
 	dir, finish := testutils.TempDir(t)
 	defer finish()
 	tc := setupMixedCluster(t, knobs, versions, dir)
@@ -194,129 +198,152 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	}
 }
 
-// !!!
-// func TestClusterVersionUpgrade(t *testing.T) {
-//   defer leaktest.AfterTest(t)()
-//   ctx := context.Background()
-//
-//   dir, finish := testutils.TempDir(t)
-//   defer finish()
-//
-//   var newVersion = cluster.BinaryServerVersion
-//   var oldVersion = prev(newVersion)
-//
-//   // Starts 3 nodes that have cluster versions set to be oldVersion and
-//   // self-declared binary version set to be newVersion. Expect cluster
-//   // version to upgrade automatically from oldVersion to newVersion.
-//   versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
-//
-//   bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
-//
-//   knobs := base.TestingKnobs{
-//     Store: &storage.StoreTestingKnobs{
-//       BootstrapVersion: &bootstrapVersion,
-//     },
-//     Server: &server.TestingKnobs{
-//       DisableAutomaticVersionUpgrade: 1,
-//     },
-//   }
-//   tc := setupMixedCluster(t, knobs, versions, dir)
-//   defer tc.TestCluster.Stopper().Stop(ctx)
-//
-//   // Set CLUSTER SETTING cluster.preserve_downgrade_option to oldVersion to prevent upgrade.
-//   if err := tc.setDowngrade(0, oldVersion.String()); err != nil {
-//     t.Fatalf("error setting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
-//   }
-//   atomic.StoreInt32(&knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade, 0)
-//
-//   // Check the cluster version is still oldVersion.
-//   curVersion := tc.getVersionFromSelect(0)
-//   if curVersion != oldVersion.String() {
-//     t.Fatalf("cluster version should still be %s, but get %s", oldVersion, curVersion)
-//   }
-//
-//   // Reset cluster.preserve_downgrade_option to enable auto upgrade.
-//   if err := tc.resetDowngrade(0); err != nil {
-//     t.Fatalf("error resetting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
-//   }
-//
-//   // Check the cluster version is bumped to newVersion.
-//   testutils.SucceedsSoon(t, func() error {
-//     if version := tc.getVersionFromSelect(0); version != newVersion.String() {
-//       return errors.Errorf("cluster version is still %s, should be %s", oldVersion, newVersion)
-//     }
-//     return nil
-//   })
-//   curVersion = tc.getVersionFromSelect(0)
-//   isNoopUpdate := curVersion == newVersion.String()
-//
-//   testutils.SucceedsSoon(t, func() error {
-//     for i := 0; i < tc.NumServers(); i++ {
-//       v := tc.getVersionFromSetting(i)
-//       wantActive := isNoopUpdate
-//       if isActive := v.Version().IsActiveVersion(newVersion); isActive != wantActive {
-//         return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
-//       }
-//
-//       if tableV, curV := tc.getVersionFromSelect(i), v.Version().Version.String(); tableV != curV {
-//         return errors.Errorf("%d: read v%s from table, v%s from setting", i, tableV, curV)
-//       }
-//     }
-//     return nil
-//   })
-//
-//   exp := newVersion.String()
-//
-//   // Read the versions from the table from each node. Note that under the
-//   // hood, everything goes to the lease holder and so it's pretty much
-//   // guaranteed that they all read the same, but it doesn't hurt to check.
-//   testutils.SucceedsSoon(t, func() error {
-//     for i := 0; i < tc.NumServers(); i++ {
-//       if version := tc.getVersionFromSelect(i); version != exp {
-//         return errors.Errorf("%d: incorrect version %q (wanted %s)", i, version, exp)
-//       }
-//       if version := tc.getVersionFromShow(i); version != exp {
-//         return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-//       }
-//     }
-//     return nil
-//   })
-//
-//   // Now check the Settings.Version variable. That is the tricky one for which
-//   // we "hold back" a gossip update until we've written to the engines. We may
-//   // have to wait a bit until we see the new version here, even though it's
-//   // already in the table.
-//   testutils.SucceedsSoon(t, func() error {
-//     for i := 0; i < tc.NumServers(); i++ {
-//       vers := tc.getVersionFromSetting(i)
-//       if v := vers.Version().Version.String(); v == curVersion {
-//         if isNoopUpdate {
-//           continue
-//         }
-//         return errors.Errorf("%d: still waiting for %s (now at %s)", i, exp, v)
-//       } else if v != exp {
-//         t.Fatalf("%d: should never see version %s (wanted %s)", i, v, exp)
-//       }
-//     }
-//     return nil
-//   })
-//
-//   // Since the wrapped version setting exposes the new versions, it must
-//   // definitely be present on all stores on the first try.
-//   if err := tc.Servers[1].GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
-//     cv, err := storage.ReadVersionFromEngineOrDefault(ctx, s.Engine())
-//     if err != nil {
-//       return err
-//     }
-//     if act := cv.Version.String(); act != exp {
-//       t.Fatalf("%s: %s persisted, but should be %s", s, act, exp)
-//     }
-//     return nil
-//   }); err != nil {
-//     t.Fatal(err)
-//   }
-// }
-//
+func TestClusterVersionUpgrade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// // !!! is this dir needed?
+	// dir, finish := testutils.TempDir(t)
+	// defer finish()
+
+	var newVersion = cluster.BinaryServerVersion
+	var oldVersion = prev(newVersion)
+
+	// !!!
+	// // Starts 3 nodes that have cluster versions set to be oldVersion and
+	// // self-declared binary version set to be newVersion. Expect cluster
+	// // version to upgrade automatically from oldVersion to newVersion.
+	// versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
+	//
+	// bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
+	//
+	// knobs := base.TestingKnobs{
+	//   Store: &storage.StoreTestingKnobs{
+	//     BootstrapVersion: &bootstrapVersion,
+	//   },
+	//   Server: &server.TestingKnobs{
+	//     DisableAutomaticVersionUpgrade: 1,
+	//   },
+	// }
+	// tc := setupMixedCluster(t, knobs, versions, dir)
+	// defer tc.TestCluster.Stopper().Stop(ctx)
+
+	knobs := base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			BootstrapVersionOverride:       oldVersion,
+			DisableAutomaticVersionUpgrade: 1,
+		},
+	}
+
+	rawTC := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		// !!! remove this replication mode?
+		ReplicationMode: base.ReplicationManual, // speeds up test
+		ServerArgs: base.TestServerArgs{
+			Knobs: knobs,
+		},
+		// !!! 	ServerArgsPerNode: twh.args(),
+	})
+	defer rawTC.Stopper().Stop(ctx)
+	tc := testClusterWithHelpers{
+		T:           t,
+		TestCluster: rawTC,
+	}
+
+	// Set CLUSTER SETTING cluster.preserve_downgrade_option to oldVersion to prevent upgrade.
+	if err := tc.setDowngrade(0, oldVersion.String()); err != nil {
+		t.Fatalf("error setting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
+	}
+	atomic.StoreInt32(&knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade, 0)
+
+	// Check the cluster version is still oldVersion.
+	curVersion := tc.getVersionFromSelect(0)
+	if curVersion != oldVersion.String() {
+		t.Fatalf("cluster version should still be %s, but get %s", oldVersion, curVersion)
+	}
+
+	// Reset cluster.preserve_downgrade_option to enable auto upgrade.
+	if err := tc.resetDowngrade(0); err != nil {
+		t.Fatalf("error resetting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
+	}
+
+	// Check the cluster version is bumped to newVersion.
+	testutils.SucceedsSoon(t, func() error {
+		if version := tc.getVersionFromSelect(0); version != newVersion.String() {
+			return errors.Errorf("cluster version is still %s, should be %s", oldVersion, newVersion)
+		}
+		return nil
+	})
+	curVersion = tc.getVersionFromSelect(0)
+	isNoopUpdate := curVersion == newVersion.String()
+
+	testutils.SucceedsSoon(t, func() error {
+		for i := 0; i < tc.NumServers(); i++ {
+			v := tc.getVersionFromSetting(i)
+			wantActive := isNoopUpdate
+			if isActive := v.Version().IsActiveVersion(newVersion); isActive != wantActive {
+				return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
+			}
+
+			if tableV, curV := tc.getVersionFromSelect(i), v.Version().Version.String(); tableV != curV {
+				return errors.Errorf("%d: read v%s from table, v%s from setting", i, tableV, curV)
+			}
+		}
+		return nil
+	})
+
+	exp := newVersion.String()
+
+	// Read the versions from the table from each node. Note that under the
+	// hood, everything goes to the lease holder and so it's pretty much
+	// guaranteed that they all read the same, but it doesn't hurt to check.
+	testutils.SucceedsSoon(t, func() error {
+		for i := 0; i < tc.NumServers(); i++ {
+			if version := tc.getVersionFromSelect(i); version != exp {
+				return errors.Errorf("%d: incorrect version %q (wanted %s)", i, version, exp)
+			}
+			if version := tc.getVersionFromShow(i); version != exp {
+				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+			}
+		}
+		return nil
+	})
+
+	// Now check the Settings.Version variable. That is the tricky one for which
+	// we "hold back" a gossip update until we've written to the engines. We may
+	// have to wait a bit until we see the new version here, even though it's
+	// already in the table.
+	testutils.SucceedsSoon(t, func() error {
+		for i := 0; i < tc.NumServers(); i++ {
+			vers := tc.getVersionFromSetting(i)
+			if v := vers.Version().Version.String(); v == curVersion {
+				if isNoopUpdate {
+					continue
+				}
+				return errors.Errorf("%d: still waiting for %s (now at %s)", i, exp, v)
+			} else if v != exp {
+				t.Fatalf("%d: should never see version %s (wanted %s)", i, v, exp)
+			}
+		}
+		return nil
+	})
+
+	// Since the wrapped version setting exposes the new versions, it must
+	// definitely be present on all stores on the first try.
+	if err := tc.Servers[1].GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+		cv, err := storage.ReadVersionFromEngineOrDefault(ctx, s.Engine())
+		if err != nil {
+			return err
+		}
+		if act := cv.Version.String(); act != exp {
+			t.Fatalf("%s: %s persisted, but should be %s", s, act, exp)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// !!! I don't understand what this is testing. I think it should go away.
 // func TestClusterVersionBootstrapStrict(t *testing.T) {
 //   defer leaktest.AfterTest(t)()
 //   ctx := context.Background()

@@ -315,6 +315,9 @@ func WriteClusterVersionToEngines(
 
 // SynthesizeClusterVersionFromEngines implements the core of (*Stores).SynthesizeClusterVersion.
 //
+// Returns the cluster version that was read from the engines or, if there's no
+// bootstrapped engines, returns minSupportedVersion.
+//
 // Args:
 // 	minSupportedVersion: The minimum versiun supported by this binary. An error
 // 	  is returned if any engine has a version lower that this. This version is
@@ -406,16 +409,14 @@ func SynthesizeClusterVersionFromEngines(
 // versions across the stores, returns a version that carries the smallest
 // Version.
 //
-// If there aren't any stores, returns a ClusterVersion with MinSupportedVersion
-// and UseVersion set to the minimum supported version and server version of the
-// build, respectively.
+// If there aren't any stores, returns MinSupportedVersion.
 func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (cluster.ClusterVersion, error) {
 	var engines []engine.Engine
 	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
 		engines = append(engines, (*Store)(v).engine)
 		return true // want more
 	})
-	cv, err := SynthesizeClusterVersionFromEngines(ctx, engines, ls.minSupportedVersion, ls.serverVersion)
+	cv, err := SynthesizeClusterVersionFromEngines(ctx, engines, ls.minSuportedVersion, ls.serverVersion)
 	if err != nil {
 		return cluster.ClusterVersion{}, err
 	}
