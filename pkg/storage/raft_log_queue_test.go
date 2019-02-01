@@ -205,7 +205,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 			Progress: make(map[uint64]raft.Progress),
 		}
 		for j, v := range c.progress {
-			status.Progress[uint64(j)] = raft.Progress{State: raft.ProgressStateReplicate, Match: v, Next: v + 1}
+			status.Progress[uint64(j)] = raft.Progress{RecentActive: true, State: raft.ProgressStateReplicate, Match: v, Next: v + 1}
 		}
 		decision := computeTruncateDecision(truncateDecisionInput{
 			RaftStatus:                     status,
@@ -237,7 +237,7 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 		},
 		true: {
 			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)]",
-			false: "should truncate: true [truncate 290 entries to first index 300 (chosen via: quorum); log too large (2.0 KiB > 1.0 KiB); implies 2 Raft snapshots]",
+			false: "should truncate: true [truncate 190 entries to first index 200 (chosen via: quorum); log too large (2.0 KiB > 1.0 KiB); implies 1 Raft snapshot]",
 		},
 	}
 
@@ -246,15 +246,25 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 			status := raft.Status{
 				Progress: make(map[uint64]raft.Progress),
 			}
-			for j, v := range []uint64{500, 400, 300, 200, 100} {
-				pr := raft.Progress{
-					Match:        v,
-					RecentActive: true,
-					State:        raft.ProgressStateReplicate,
-				}
+			for j, v := range []uint64{100, 200, 300, 400, 500} {
+				var pr raft.Progress
 				if v == 300 {
-					pr.RecentActive = active
-					pr.State = raft.ProgressStateProbe
+					// A probing follower is probed with some index (Next) but
+					// it has a zero Match (i.e. no idea how much of its log
+					// agrees with ours).
+					pr = raft.Progress{
+						RecentActive: active,
+						State:        raft.ProgressStateProbe,
+						Match:        0,
+						Next:         v,
+					}
+				} else { // everyone else
+					pr = raft.Progress{
+						Match:        v,
+						Next:         v + 1,
+						RecentActive: true,
+						State:        raft.ProgressStateReplicate,
+					}
 				}
 				status.Progress[uint64(j)] = pr
 			}
