@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -45,6 +46,7 @@ type changeAggregator struct {
 	poller *poller
 	// pollerDoneCh is closed when the poller exits.
 	pollerDoneCh chan struct{}
+	pollerMemMon *mon.BytesMonitor
 
 	// encoder is the Encoder to use for key and value serialization.
 	encoder Encoder
@@ -149,11 +151,19 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	metrics := ca.flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	ca.sink = makeMetricsSink(metrics, ca.sink)
 
+	// It seems like we should also be able to use `ca.ProcessorBase.MemMonitor`
+	// for the poller, but there is a race between the flow's MemoryMonitor
+	// getting Stopped and `changeAggregator.Close`, which causes panics. Not sure
+	// what to do about this yet.
+	pollerMemMon := mon.MakeMonitorInheritWithLimit("poller", math.MaxInt64, ca.ProcessorBase.MemMonitor)
+	pollerMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	ca.pollerMemMon = &pollerMemMon
+
 	buf := makeBuffer()
 	leaseMgr := ca.flowCtx.LeaseManager.(*sql.LeaseManager)
 	ca.poller = makePoller(
 		ca.flowCtx.Settings, ca.flowCtx.ClientDB, ca.flowCtx.ClientDB.Clock(), ca.flowCtx.Gossip,
-		spans, ca.spec.Feed, initialHighWater, buf, leaseMgr, metrics,
+		spans, ca.spec.Feed, initialHighWater, buf, leaseMgr, metrics, ca.pollerMemMon,
 	)
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
 
@@ -211,6 +221,9 @@ func (ca *changeAggregator) close() {
 			}
 		}
 		ca.memAcc.Close(ca.Ctx)
+		if ca.pollerMemMon != nil {
+			ca.pollerMemMon.Stop(ca.Ctx)
+		}
 		ca.MemMonitor.Stop(ca.Ctx)
 	}
 }
@@ -547,11 +560,9 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 			cf.lastSlowSpanLog = now
 			s := cf.sf.peekFrontierSpan()
 			if cf.spec.JobID != 0 {
-				log.Infof(cf.Ctx, "job %d span [%s,%s) is behind by %s",
-					cf.spec.JobID, s.Key, s.EndKey, resolvedBehind)
+				log.Infof(cf.Ctx, "job %d span %s is behind by %s", cf.spec.JobID, s, resolvedBehind)
 			} else {
-				log.Infof(cf.Ctx, "sinkless feed span [%s,%s) is behind by %s",
-					s.Key, s.EndKey, resolvedBehind)
+				log.Infof(cf.Ctx, "sinkless feed span %s is behind by %s", s, resolvedBehind)
 			}
 		}
 	}
