@@ -152,7 +152,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	// Evaluate the AS OF time, if any.
 	var asOf *hlc.Timestamp
 	if n.AsOf.Expr != nil {
-		asOfTs, err := n.p.EvalAsOfTimestamp(n.AsOf, n.p.ExecCfg().Clock.Now())
+		asOfTs, err := n.p.EvalAsOfTimestamp(n.AsOf)
 		if err != nil {
 			return err
 		}

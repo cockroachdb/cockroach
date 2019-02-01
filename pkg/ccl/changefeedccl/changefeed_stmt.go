@@ -146,12 +146,14 @@ func changefeedPlanHook(
 
 		jobDescription := changefeedJobDescription(changefeedStmt, sinkURI, opts)
 
-		statementTime := p.ExecCfg().Clock.Now()
+		statementTime := hlc.Timestamp{
+			WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
+		}
 		var initialHighWater hlc.Timestamp
 		if cursor, ok := opts[optCursor]; ok {
 			asOf := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
 			var err error
-			if initialHighWater, err = p.EvalAsOfTimestamp(asOf, statementTime); err != nil {
+			if initialHighWater, err = p.EvalAsOfTimestamp(asOf); err != nil {
 				return err
 			}
 			statementTime = initialHighWater

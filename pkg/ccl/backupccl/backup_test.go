@@ -2798,7 +2798,7 @@ func TestCreateStatsAfterRestore(t *testing.T) {
 		stats.DefaultAsOfTime = oldAsOf
 	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
 	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = 0
+	stats.DefaultAsOfTime = time.Microsecond
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
