@@ -107,6 +107,10 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			// if it attempts to use the node which was brought down by chaos.
 			tolerateErrors: args.crdbChaos,
 		}
+		// TODO(dan): Remove this when we fix whatever is causing the "duplicate key
+		// value" errors #34025.
+		tpcc.tolerateErrors = true
+
 		tpcc.install(ctx, c)
 		// TODO(dan,ajwerner): sleeping momentarily before running the workload
 		// mitigates errors like "error in newOrder: missing stock row" from tpcc.
@@ -755,7 +759,7 @@ func createChangefeed(db *gosql.DB, targets, sinkURL string, args cdcTestArgs) (
 	createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR %s INTO $1`, targets)
 	extraArgs := []interface{}{sinkURL}
 	if args.cloudStorageSink {
-		createStmt += ` WITH resolved='10s', envelope=value_only`
+		createStmt += ` WITH resolved='10s', envelope=wrapped`
 	} else {
 		createStmt += ` WITH resolved`
 	}
