@@ -75,7 +75,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	// discarded immediately after the traversal because it is not needed further.
 	{
 		f := tree.NewFmtCtx(tree.FmtParsable)
-		f.WithReformatTableNames(
+		f.SetReformatTableNames(
 			func(_ *tree.FmtCtx, tn *tree.TableName) {
 				// Persist the database prefix expansion.
 				if tn.SchemaName != "" {

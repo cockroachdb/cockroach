@@ -143,7 +143,7 @@ func TestFormatTableName(t *testing.T) {
 	}
 
 	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.TableName) {
+	f.SetReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.TableName) {
 		ctx.WriteString("xoxoxo")
 	})
 

@@ -201,19 +201,31 @@ func NewFmtCtx(f FmtFlags) *FmtCtx {
 	return ctx
 }
 
-// WithReformatTableNames modifies FmtCtx to instructs the pretty-printer
-// to substitute the printing of table names using the provided function.
-func (ctx *FmtCtx) WithReformatTableNames(fn func(*FmtCtx, *TableName)) *FmtCtx {
-	ctx.tableNameFormatter = fn
-	return ctx
+// SetReformatTableNames modifies FmtCtx to to substitute the printing of table
+// names using the provided function.
+func (ctx *FmtCtx) SetReformatTableNames(tableNameFmt func(*FmtCtx, *TableName)) {
+	ctx.tableNameFormatter = tableNameFmt
 }
 
-// ChangeFlags changes the flags in the FmtCtx. The old flags are returned so
-// they can be restored.
-func (ctx *FmtCtx) ChangeFlags(newFlags FmtFlags) (oldFlags FmtFlags) {
-	oldFlags = ctx.flags
-	ctx.flags = newFlags
-	return oldFlags
+// WithReformatTableNames modifies FmtCtx to to substitute the printing of table
+// names using the provided function, calls fn, then restores the original table
+// formatting.
+func (ctx *FmtCtx) WithReformatTableNames(tableNameFmt func(*FmtCtx, *TableName), fn func()) {
+	old := ctx.tableNameFormatter
+	ctx.tableNameFormatter = tableNameFmt
+	defer func() { ctx.tableNameFormatter = old }()
+
+	fn()
+}
+
+// WithFlags changes the flags in the FmtCtx, runs the given function, then
+// restores the old flags.
+func (ctx *FmtCtx) WithFlags(flags FmtFlags, fn func()) {
+	oldFlags := ctx.flags
+	ctx.flags = flags
+	defer func() { ctx.flags = oldFlags }()
+
+	fn()
 }
 
 // HasFlags returns true iff the given flags are set in the formatter context.
@@ -247,18 +259,25 @@ func FmtExpr(base FmtFlags, showTypes bool, symbolicVars bool, showTableAliases 
 	return base
 }
 
-// WithIndexedVarFormat modifies FmtCtx to customize the printing of
+// SetIndexedVarFormat modifies FmtCtx to customize the printing of
 // IndexedVars using the provided function.
-func (ctx *FmtCtx) WithIndexedVarFormat(fn func(ctx *FmtCtx, idx int)) *FmtCtx {
+func (ctx *FmtCtx) SetIndexedVarFormat(fn func(ctx *FmtCtx, idx int)) {
 	ctx.indexedVarFormat = fn
-	return ctx
 }
 
-// WithPlaceholderFormat modifies FmtCtx to customizes the printing of
+// SetPlaceholderFormat modifies FmtCtx to customize the printing of
 // StarDatums using the provided function.
-func (ctx *FmtCtx) WithPlaceholderFormat(placeholderFn func(_ *FmtCtx, _ *Placeholder)) *FmtCtx {
+func (ctx *FmtCtx) SetPlaceholderFormat(placeholderFn func(_ *FmtCtx, _ *Placeholder)) {
 	ctx.placeholderFormat = placeholderFn
-	return ctx
+}
+
+// WithPlaceholderFormat changes the placeholder formatting function, calls the
+// given function, then restores the placeholder function.
+func (ctx *FmtCtx) WithPlaceholderFormat(placeholderFn func(_ *FmtCtx, _ *Placeholder), fn func()) {
+	old := ctx.placeholderFormat
+	ctx.placeholderFormat = placeholderFn
+	defer func() { ctx.placeholderFormat = old }()
+	fn()
 }
 
 // NodeFormatter is implemented by nodes that can be pretty-printed.

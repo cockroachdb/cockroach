@@ -96,15 +96,13 @@ func MakeExpression(
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	fmtCtx := distsqlpb.ExprFmtCtxBase(evalCtx)
 	if indexVarMap != nil {
-		fmtCtx.WithIndexedVarFormat(
-			func(ctx *tree.FmtCtx, idx int) {
-				remappedIdx := indexVarMap[idx]
-				if remappedIdx < 0 {
-					panic(fmt.Sprintf("unmapped index %d", idx))
-				}
-				ctx.Printf("@%d", remappedIdx+1)
-			},
-		)
+		fmtCtx.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
+			remappedIdx := indexVarMap[idx]
+			if remappedIdx < 0 {
+				panic(fmt.Sprintf("unmapped index %d", idx))
+			}
+			ctx.Printf("@%d", remappedIdx+1)
+		})
 	}
 	fmtCtx.FormatNode(outExpr)
 	if log.V(1) {
