@@ -163,6 +163,9 @@ func (p *sortedDistinct_TYPEOp) Init() {
 
 func (p *sortedDistinct_TYPEOp) reset() {
 	p.foundFirstRow = false
+	if resetter, ok := p.input.(resetter); ok {
+		resetter.reset()
+	}
 }
 
 func (p *sortedDistinct_TYPEOp) Next() coldata.Batch {

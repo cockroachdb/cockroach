@@ -52,7 +52,7 @@ type hashAggregator struct {
 
 	// buildFinished represents whether the hashAggregator is in the building or
 	// aggregating phase.
-	isAggregating bool
+	buildFinished bool
 
 	ht      *hashTable
 	builder *hashJoinBuilder
@@ -166,7 +166,7 @@ func (ag *hashAggregator) Init() {
 }
 
 func (ag *hashAggregator) Next() coldata.Batch {
-	if !ag.isAggregating {
+	if !ag.buildFinished {
 		ag.build()
 	}
 
@@ -175,15 +175,15 @@ func (ag *hashAggregator) Next() coldata.Batch {
 
 // Reset resets the hashAggregator for another run. Primarily used for
 // benchmarks.
-func (ag *hashAggregator) Reset() {
+func (ag *hashAggregator) reset() {
 	ag.ht.size = 0
-	ag.isAggregating = false
-	ag.orderedAgg.Reset()
+	ag.buildFinished = false
+	ag.orderedAgg.reset()
 }
 
 func (ag *hashAggregator) build() {
 	ag.builder.exec()
-	ag.isAggregating = true
+	ag.buildFinished = true
 }
 
 var _ Operator = &hashAggregator{}
@@ -294,6 +294,10 @@ func (op *hashAggregatorBatchOp) Next() coldata.Batch {
 
 	op.batch.SetLength(nSelected)
 	return op.batch
+}
+
+func (op *hashAggregatorBatchOp) reset() {
+	op.batchStart = 0
 }
 
 var _ Operator = &hashAggregatorBatchOp{}
