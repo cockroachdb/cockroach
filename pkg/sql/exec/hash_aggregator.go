@@ -30,7 +30,7 @@ type hashAggregator struct {
 
 	// isAggregating represents whether the hashAggregator is in the building or
 	// aggregating phase.
-	isAggregating bool
+	buildFinished bool
 
 	ht      *hashTable
 	builder *hashJoinBuilder
@@ -146,7 +146,7 @@ func (ag *hashAggregator) Init() {
 }
 
 func (ag *hashAggregator) Next() ColBatch {
-	if !ag.isAggregating {
+	if !ag.buildFinished {
 		ag.build()
 	}
 
@@ -157,13 +157,13 @@ func (ag *hashAggregator) Next() ColBatch {
 // benchmarks.
 func (ag *hashAggregator) Reset() {
 	ag.ht.size = 0
-	ag.isAggregating = false
+	ag.buildFinished = false
 	ag.orderedAgg.Reset()
 }
 
 func (ag *hashAggregator) build() {
 	ag.builder.exec()
-	ag.isAggregating = true
+	ag.buildFinished = true
 }
 
 var _ Operator = &hashAggregator{}

@@ -345,11 +345,6 @@ func (s *repeatableBatchSource) Next() ColBatch {
 
 func (s *repeatableBatchSource) Init() {}
 
-func (s *repeatableBatchSource) resetBatchesToReturn(b int) {
-	s.batchesToReturn = b
-	s.batchesReturned = 0
-}
-
 // chunkingBatchSource is a batch source that takes unlimited-size columns and
 // chunks them into ColBatchSize-sized chunks when Nexted.
 type chunkingBatchSource struct {
