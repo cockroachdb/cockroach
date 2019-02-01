@@ -25,6 +25,7 @@ import (
 
 func registerClearRange(r *registry) {
 	for _, checks := range []bool{true, false} {
+		checks := checks
 		r.Add(testSpec{
 			Name:       fmt.Sprintf(`clearrange/checks=%t`, checks),
 			Timeout:    90 * time.Minute,
