@@ -1004,10 +1004,12 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 		return
 	}
 
-	// NB: use context.Background() here because we may be called when the
-	// caller's context has been canceled.
+	// NB: use a one-off context here because the caller's context may cancel
+	// very soon (if it isn't already).
+	cancelCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	if err := tc.stopper.RunAsyncTask(
-		tc.AnnotateCtx(context.Background()), "kv.TxnCoordSender: aborting txn", func(ctx context.Context) {
+		tc.AnnotateCtx(cancelCtx), "kv.TxnCoordSender: aborting txn", func(ctx context.Context) {
+			defer cancel()
 			// Use the wrapped sender since the normal Sender does not allow
 			// clients to specify intents.
 			resp, pErr := client.SendWrappedWith(
@@ -1037,6 +1039,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 			}
 		},
 	); err != nil {
+		cancel()
 		log.Warning(ctx, err)
 	}
 }
