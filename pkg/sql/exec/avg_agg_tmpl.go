@@ -94,6 +94,7 @@ func (a *avg_TYPEAgg) Reset() {
 	copy(a.scratch.groupCounts, zeroInt64Batch)
 	copy(a.scratch.vec, zero_TYPEBatch)
 	a.scratch.curIdx = -1
+	a.done = false
 }
 
 func (a *avg_TYPEAgg) CurrentOutputIndex() int {

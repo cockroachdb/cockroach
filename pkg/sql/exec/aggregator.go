@@ -281,9 +281,12 @@ func (a *orderedAggregator) Next() coldata.Batch {
 	return a.scratch
 }
 
-// Reset resets the orderedAggregator for another run. Primarily used for
+// reset resets the orderedAggregator for another run. Primarily used for
 // benchmarks.
-func (a *orderedAggregator) Reset() {
+func (a *orderedAggregator) reset() {
+	if resetter, ok := a.input.(resetter); ok {
+		resetter.reset()
+	}
 	a.done = false
 	a.scratch.resumeIdx = 0
 	for _, fn := range a.aggregateFuncs {

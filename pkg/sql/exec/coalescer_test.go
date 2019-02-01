@@ -85,8 +85,8 @@ func BenchmarkCoalescer(b *testing.B) {
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := uint16(0); i < coldata.BatchSize; i++ {
-			col[i] = int64(i)
+		for i := int64(0); i < coldata.BatchSize; i++ {
+			col[i] = i
 		}
 	}
 
