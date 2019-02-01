@@ -1119,12 +1119,24 @@ bin/.cpp_ccl_protobuf_sources: $(PROTOC) $(CPP_PROTOS_CCL)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS_CCL) $(CPP_SOURCES_CCL)
 	touch $@
 
-.SECONDARY: $(UI_JS_OSS) $(UI_JS_CCL)
-$(UI_JS_CCL): $(JS_PROTOS_CCL)
-$(UI_JS_OSS) $(UI_JS_CCL): $(GW_PROTOS) pkg/ui/yarn.installed | bin/.submodules-initialized
+# The next two rules must be kept exactly the same except the CCL one depends
+# on one additional proto. They generate the pbjs files from the protobuf
+# definitions, which then act is inputs to the pbts compiler, which creates
+# typescript definitions for the proto files afterwards.
+
+.SECONDARY: $(UI_JS_CCL)
+$(UI_JS_CCL): $(GW_PROTOS) $(GO_PROTOS) $(JS_PROTOS_CCL) pkg/ui/yarn.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$^) >> $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS) $(JS_PROTOS_CCL)) >> $@
+
+.SECONDARY: $(UI_JS_OSS)
+$(UI_JS_OSS): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/yarn.installed | bin/.submodules-initialized
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS)) >> $@
+
+# End of PBJS-generated files.
 
 .SECONDARY: $(UI_TS_OSS) $(UI_TS_CCL)
 protos%.d.ts: protos%.js pkg/ui/yarn.installed
@@ -1231,6 +1243,7 @@ ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
 	find pkg/ui/dist* -mindepth 1 -not -name dist*.go -delete
+	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)
 	rm -f pkg/ui/*manifest.json
 
 .PHONY: ui-maintainer-clean
