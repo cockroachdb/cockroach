@@ -321,6 +321,12 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision.ChosenVia = truncatableIndexChosenViaQuorumIndex
 
 	for _, progress := range input.RaftStatus.Progress {
+		if !progress.RecentActive {
+			// Make no exceptions for followers who haven't contacted
+			// us within a reasonable period of time.
+			continue
+		}
+
 		// Generally we truncate to the quorum commit index when the log becomes
 		// too large, but we make an exception for live followers which are
 		// being probed (i.e. the leader doesn't know how far they've caught
@@ -340,10 +346,11 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		// ranges will be split many times over, resulting in a flurry of
 		// snapshots with overlapping bounds that put significant stress on the
 		// Raft snapshot queue.
-		probing := (progress.RecentActive && progress.State == raft.ProgressStateProbe)
-		if probing && decision.NewFirstIndex > decision.Input.FirstIndex {
-			decision.NewFirstIndex = decision.Input.FirstIndex
-			decision.ChosenVia = truncatableIndexChosenViaProbingFollower
+		if progress.State == raft.ProgressStateProbe {
+			if decision.NewFirstIndex > decision.Input.FirstIndex {
+				decision.NewFirstIndex = decision.Input.FirstIndex
+				decision.ChosenVia = truncatableIndexChosenViaProbingFollower
+			}
 		} else if !input.LogTooLarge() && decision.NewFirstIndex > progress.Match {
 			decision.NewFirstIndex = progress.Match
 			decision.ChosenVia = truncatableIndexChosenViaFollowers
