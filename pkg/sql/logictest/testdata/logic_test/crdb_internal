@@ -366,3 +366,11 @@ query T
 select crdb_internal.node_executable_version()
 ----
 2.1-4
+
+user root
+
+# Regression test for #34441
+query T
+SELECT crdb_internal.pretty_key(e'\\xa82a00918ed9':::BYTES, (-5096189069466142898):::INT8);
+----
+/Table/32/???/9/6/81
