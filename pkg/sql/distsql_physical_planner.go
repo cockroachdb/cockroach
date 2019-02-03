@@ -686,6 +686,12 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	}
 	ctx := planCtx.ctx
 	partitions := make([]SpanPartition, 0, 1)
+	if planCtx.isLocal {
+		// If we're planning locally, map all spans to the local node.
+		partitions = append(partitions,
+			SpanPartition{dsp.nodeDesc.NodeID, spans})
+		return partitions, nil
+	}
 	// nodeMap maps a nodeID to an index inside the partitions array.
 	nodeMap := make(map[roachpb.NodeID]int)
 	// nodeVerCompatMap maintains info about which nodes advertise DistSQL
