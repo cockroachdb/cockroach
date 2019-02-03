@@ -181,6 +181,8 @@ func Install(c *SyncedCluster, args []string) error {
 			return fmt.Errorf("unknown tool %q", arg)
 		}
 
+		// Ensure that we early exit if any of the shell statements fail.
+		cmd = "set -exuo pipefail;" + cmd
 		if err := do(arg, cmd); err != nil {
 			return err
 		}
