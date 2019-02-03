@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -29,7 +30,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -40,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
 
@@ -98,6 +102,25 @@ func (db *verifyFormatDB) Incr(sql string) func() {
 	}
 }
 
+type crasher struct {
+	sql    string
+	err    error
+	detail string
+}
+
+func (c crasher) Error() string {
+	return fmt.Sprintf("server panic: %s", c.err)
+}
+
+type nonCrasher struct {
+	sql string
+	err error
+}
+
+func (c nonCrasher) Error() string {
+	return c.err.Error()
+}
+
 func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 	if err := verifyFormat(sql); err != nil {
 		db.verifyFormatErr = err
@@ -113,7 +136,20 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 	}()
 	select {
 	case err := <-funcdone:
-		return errors.Wrap(err, sql)
+		if err != nil {
+			if pqerr, ok := err.(*pq.Error); ok {
+				// Output Postgres error code if it's available.
+				if pqerr.Code == pgerror.CodeCrashShutdownError {
+					return crasher{
+						sql:    sql,
+						err:    err,
+						detail: pqerr.Detail,
+					}
+				}
+			}
+			return nonCrasher{sql: sql, err: err}
+		}
+		return nil
 	case <-time.After(*flagRSGExecTimeout):
 		db.mu.Lock()
 		defer db.mu.Unlock()
@@ -333,31 +369,122 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	})
 }
 
+var ignoredErrorPatterns = []string{
+	"unimplemented",
+	"unsupported binary operator",
+	"unsupported comparison operator",
+	"memory budget exceeded",
+	"generator functions are not allowed in",
+	"txn already encountered an error; cannot be used anymore",
+	// Numeric conditions
+	"exponent out of range",
+	"result out of range",
+	"argument out of range",
+	"integer out of range",
+	"invalid operation",
+	"invalid mask",
+	"cannot take square root of a negative number",
+	"out of int64 range",
+	"underflow, subnormal",
+	"overflow",
+	// Type checking
+	"value type .* doesn't match type .* of column",
+	"incompatible value type",
+	"incompatible COALESCE expressions",
+	"error type checking constant value",
+	"ambiguous binary operator",
+	"ambiguous call",
+	"cannot be matched",
+	"unknown signature",
+	"cannot determine type of empty array",
+	"conflicting ColumnTypes",
+	// Data dependencies
+	"violates not-null constraint",
+	"violates unique constraint",
+	// Context-specific string formats
+	"invalid regexp flag",
+	"unrecognized privilege",
+	"invalid escape string",
+	"error parsing regexp",
+	"could not parse .* as type bytes",
+	"UUID must be exactly 16 bytes long",
+	"unsupported timespan",
+	"does not exist",
+	"unterminated string",
+	"incorrect UUID length",
+	"the input string must not be empty",
+	// JSON builtins
+	"mismatched array dimensions",
+	"cannot get array length of a non-array",
+	"cannot be called on a non-array",
+	"cannot call json_object_keys on an array",
+	// Builtins that have funky preconditions
+	"cannot delete from scalar",
+	"lastval is not yet defined",
+	"negative substring length",
+	"non-positive substring length",
+	"bit strings of different sizes",
+	"inet addresses with different sizes",
+	"values of different sizes",
+	"must have even number of elements",
+	"cannot take logarithm of a negative number",
+	"input value must be",
+}
+
+var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
+
 func TestRandomSyntaxSQLSmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var smither *sqlsmith.Smither
 
+	tableStmts := make([]string, 10)
 	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		if err := db.exec(ctx, "USE defaultdb"); err != nil {
 			return err
 		}
 
 		// Create some random tables for the smither's column references and INSERT.
-		for i := 0; i < 10; i++ {
+		for i := 0; i < len(tableStmts); i++ {
 			create := sqlbase.RandCreateTable(r.Rnd, i)
 			stmt := create.String()
 			if err := db.exec(ctx, stmt); err != nil {
 				return err
 			}
+			tableStmts[i] = stmt
 		}
 		var err error
 		smither, err = sqlsmith.NewSmither(db.db, r.Rnd)
 		return err
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := smither.Generate()
-		return db.exec(ctx, s)
+		err := db.exec(ctx, s)
+		if c, ok := err.(crasher); ok {
+			if err := db.exec(ctx, "USE defaultdb"); err != nil {
+				t.Fatalf("couldn't reconnect to db after crasher: %v", c)
+			}
+			fmt.Printf("CRASHER:\n%s\ncaused by: %s\nserver stacktrace:\n%s\n\n", s, c.Error(), c.detail)
+			return c
+		}
+		if err == nil {
+			return nil
+		}
+		msg := err.Error()
+		shouldLogErr := true
+		if ignoredRegex.MatchString(msg) {
+			shouldLogErr = false
+		}
+		if shouldLogErr {
+			fmt.Printf("%s\ncaused by: %s\n\n", err, s)
+		}
+		return err
 	})
+
+	fmt.Printf("To reproduce, use schema:\n\n")
+	for _, stmt := range tableStmts {
+		fmt.Printf("%s;", stmt)
+	}
+	fmt.Printf("\n")
 }
 
 // testRandomSyntax performs all of the RSG setup and teardown for common
@@ -380,6 +507,10 @@ func testRandomSyntax(
 	params.UseDatabase = "ident"
 	// Use a low memory limit to quickly halt runaway functions.
 	params.SQLMemoryPoolSize = 3 * 1024 * 1024 // 3MB
+	// Catch panics and return them as errors.
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		CatchPanics: true,
+	}
 	s, rawDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
@@ -444,6 +575,10 @@ func testRandomSyntax(
 			countsMu.total++
 			if err == nil {
 				countsMu.success++
+			} else {
+				if c, ok := err.(crasher); ok {
+					t.Errorf("Crash detected: \n%s\n\nStack trace:\n%s", c.sql, c.detail)
+				}
 			}
 			countsMu.Unlock()
 		}
@@ -459,6 +594,6 @@ func testRandomSyntax(
 		t.Fatal("0 successful executions")
 	}
 	if db.verifyFormatErr != nil {
-		t.Fatal(db.verifyFormatErr)
+		t.Error(db.verifyFormatErr)
 	}
 }
