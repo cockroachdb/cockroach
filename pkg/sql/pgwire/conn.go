@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -311,11 +312,25 @@ func (c *conn) serveImpl(
 	if sqlServer != nil {
 		wg.Add(1)
 		go func() {
+			defer func() {
+				if sqlServer.GetExecutorConfig().TestingKnobs.CatchPanics {
+					if r := recover(); r != nil {
+						// Catch the panic and return it to the client as an error.
+						err := pgerror.NewErrorf(pgerror.CodeCrashShutdownError, "caught fatal error: %v", r)
+						err.Detail = string(debug.Stack())
+						_ = writeErr(err, &c.msgBuilder, &c.writerState.buf)
+						_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
+						c.stmtBuf.Close()
+						// Send a ready for query to make sure the client can react.
+						c.bufferReadyForQuery('I')
+					}
+				}
+				wg.Done()
+				cancelConn()
+			}()
 			writerErr = sqlServer.ServeConn(ctx, connHandler, reserved, cancelConn)
 			// TODO(andrei): Should we sometimes transmit the writerErr's to the
 			// client?
-			wg.Done()
-			cancelConn()
 		}()
 	}
 
