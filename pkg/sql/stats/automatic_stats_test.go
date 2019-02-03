@@ -294,6 +294,43 @@ func TestAverageRefreshTime(t *testing.T) {
 	}
 }
 
+func TestAutoStatsReadOnlyTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	AutomaticStatisticsClusterMode.Override(&st.SV, false)
+	evalCtx := tree.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (k INT PRIMARY KEY, v CHAR);`)
+
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	cache := NewTableStatisticsCache(10 /* cacheSize */, s.Gossip(), kvDB, executor)
+	refresher := MakeRefresher(executor, cache, 0 /* asOfTime */)
+
+	AutomaticStatisticsClusterMode.Override(&st.SV, true)
+
+	if err := refresher.Start(
+		ctx, &st.SV, s.Stopper(), time.Millisecond, /* refreshInterval */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// There should be one stat.
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE t.a]`,
+		[][]string{
+			{"__auto__", "{k}", "0"},
+		})
+}
+
 func TestMutationsChannel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
