@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -178,9 +179,13 @@ func MakeRefresher(
 // new SQL mutations and refreshes the table statistics with probability
 // proportional to the percentage of rows affected.
 func (r *Refresher) Start(
-	ctx context.Context, stopper *stop.Stopper, refreshInterval time.Duration,
+	ctx context.Context, st *settings.Values, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		// Ensure that read-only tables will have stats created at least once
+		// on startup.
+		r.ensureAllTables(ctx, st)
+
 		timer := time.NewTimer(refreshInterval)
 
 		for {
@@ -207,6 +212,33 @@ func (r *Refresher) Start(
 		}
 	})
 	return nil
+}
+
+// ensureAllTables ensures that an entry exists in r.mutationCounts for each
+// table in the database.
+func (r *Refresher) ensureAllTables(ctx context.Context, settings *settings.Values) {
+	if !AutomaticStatisticsClusterMode.Get(settings) {
+		// Automatic stats are disabled.
+		return
+	}
+
+	rows, _ /* columns */, err := r.ex.Query(
+		ctx,
+		"get-tables",
+		nil, /* txn */
+		`SELECT table_id FROM crdb_internal.tables;`,
+	)
+	if err != nil {
+		log.Errorf(ctx, "failed to get tables for automatic stats: %v", err)
+		return
+	}
+	for _, row := range rows {
+		tableID := sqlbase.ID(*row[0].(*tree.DInt))
+		// Don't create statistics for system tables or virtual tables.
+		if !sqlbase.IsReservedID(tableID) && tableID != keys.VirtualDescriptorID {
+			r.mutationCounts[tableID] += 0
+		}
+	}
 }
 
 // NotifyMutation is called by SQL mutation operations to signal to the
