@@ -63,14 +63,14 @@ func TestMaybeRefreshStats(t *testing.T) {
 
 	// There are no stats yet, so this must refresh the statistics on table t
 	// even though rowsAffected=0.
-	refresher.maybeRefreshStats(ctx, descA.ID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(ctx, s.Stopper(), descA.ID, 0 /* rowsAffected */, 0 /* asOf */)
 	if err := checkStatsCount(ctx, cache, descA.ID, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
 	// Try to refresh again. With rowsAffected=0, the probability of a refresh
 	// is 0, so refreshing will not succeed.
-	refresher.maybeRefreshStats(ctx, descA.ID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(ctx, s.Stopper(), descA.ID, 0 /* rowsAffected */, 0 /* asOf */)
 	if err := checkStatsCount(ctx, cache, descA.ID, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,9 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// With rowsAffected=10, refreshing should work. Since there are more rows
 	// updated than exist in the table, the probability of a refresh is 100%.
 	// Use a non-zero asOf time to test that the thread will sleep if necessary.
-	refresher.maybeRefreshStats(ctx, descA.ID, 10 /* rowsAffected */, time.Second /* asOf */)
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descA.ID, 10 /* rowsAffected */, time.Second, /* asOf */
+	)
 	if err := checkStatsCount(ctx, cache, descA.ID, 2 /* expected */); err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +249,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	// average time between refreshes, so this call is not required to refresh
 	// the statistics on table t. With rowsAffected=0, the probability of refresh
 	// is 0.
-	refresher.maybeRefreshStats(ctx, tableID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(ctx, s.Stopper(), tableID, 0 /* rowsAffected */, 0 /* asOf */)
 	if err := checkStatsCount(ctx, cache, tableID, 20 /* expected */); err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +294,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	// on table t even though rowsAffected=0. After refresh, only 15 stats should
 	// remain (5 from column k and 10 from column v), since the old stats on k
 	// were deleted.
-	refresher.maybeRefreshStats(ctx, tableID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(ctx, s.Stopper(), tableID, 0 /* rowsAffected */, 0 /* asOf */)
 	if err := checkStatsCount(ctx, cache, tableID, 15 /* expected */); err != nil {
 		t.Fatal(err)
 	}

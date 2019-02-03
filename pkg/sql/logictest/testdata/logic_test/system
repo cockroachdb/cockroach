@@ -442,6 +442,7 @@ query T
 SELECT name
 FROM system.settings
 WHERE name != 'sql.defaults.distsql'
+AND name != 'sql.stats.experimental_automatic_collection.enabled'
 ORDER BY name
 ----
 cluster.secret
@@ -456,7 +457,8 @@ INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
 query TT
 SELECT name, value
 FROM system.settings
-WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret')
+WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret',
+  'sql.stats.experimental_automatic_collection.enabled')
 ORDER BY name
 ----
 diagnostics.reporting.enabled  true
