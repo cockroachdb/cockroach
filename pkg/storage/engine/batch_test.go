@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func mvccKey(k interface{}) MVCCKey {
@@ -868,6 +869,41 @@ func TestBatchBuilderStress(t *testing.T) {
 			}
 		}()
 	}
+}
+
+func TestBatchDistinctAfterApplyBatchRepr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(e)
+
+	wb := func() []byte {
+		batch := e.NewBatch()
+		defer batch.Close()
+
+		if err := batch.Put(mvccKey("batchkey"), []byte("b")); err != nil {
+			t.Fatal(err)
+		}
+
+		return batch.Repr()
+	}()
+
+	batch := e.NewBatch()
+	defer batch.Close()
+
+	assert.NoError(t, batch.ApplyBatchRepr(wb, false /* sync */))
+
+	distinct := batch.Distinct()
+	defer distinct.Close()
+
+	// The distinct batch can see the earlier write to the batch.
+	v, err := distinct.Get(mvccKey("batchkey"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, []byte("b"), v)
 }
 
 func TestBatchDistinct(t *testing.T) {
