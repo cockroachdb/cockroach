@@ -658,6 +658,18 @@ func (c *conn) sendInitialConnData(
 		return sql.ConnectionHandler{}, err
 	}
 
+	// Send our cancel code and secret to the client, so they can cancel the
+	// connection. The cancel code and secret are both int32's. The cancel code
+	// is supposed to be the connection's PID, but since we don't have one of
+	// those, we'll just generate a random int64 and use it instead.
+	code, secret := connHandler.GetSessionID().GetPGWireCancelInfo()
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgBackendKeyData)
+	c.msgBuilder.putInt32(code)
+	c.msgBuilder.putInt32(secret)
+	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+		return sql.ConnectionHandler{}, err
+	}
+
 	// An initial readyForQuery message is part of the handshake.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 	c.msgBuilder.writeByte(byte(sql.IdleTxnBlock))

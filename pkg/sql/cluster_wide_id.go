@@ -53,3 +53,9 @@ func BytesToClusterWideID(b []byte) ClusterWideID {
 func (id ClusterWideID) GetNodeID() int32 {
 	return int32(0xFFFFFFFF & id.Lo)
 }
+
+// GetPGWireCancelInfo extracts the timestamp of the cluster wide ID as 2
+// int32s, for use by the pgwire cancellation protocol.
+func (id ClusterWideID) GetPGWireCancelInfo() (int32, int32) {
+	return int32(id.Hi >> 32), int32(0xFFFFFFFF & id.Hi)
+}

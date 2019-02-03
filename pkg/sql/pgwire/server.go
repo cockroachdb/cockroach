@@ -542,8 +542,15 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		// If the client is really issuing a cancel request, close the door
 		// in their face (we don't support it yet). Make a note of that use
 		// in telemetry.
-		telemetry.Inc(sqltelemetry.CancelRequestCounter)
-		_ = conn.Close()
+		code, err := buf.GetUint32()
+		if err != nil {
+			return err
+		}
+		secret, err := buf.GetUint32()
+		if err != nil {
+			return err
+		}
+		s.execCfg.SessionRegistry.CancelQueryByPGWire(code, secret)
 		return nil
 
 	case version30:

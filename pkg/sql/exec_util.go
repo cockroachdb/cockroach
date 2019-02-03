@@ -1098,34 +1098,50 @@ type SessionArgs struct {
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	syncutil.Mutex
-	sessions map[ClusterWideID]registrySession
+	sessions         map[ClusterWideID]registrySession
+	sessionsByPGWire map[uint64]registrySession
 }
 
 // NewSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
 func NewSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{sessions: make(map[ClusterWideID]registrySession)}
+	return &SessionRegistry{
+		sessions:         make(map[ClusterWideID]registrySession),
+		sessionsByPGWire: make(map[uint64]registrySession),
+	}
 }
 
 func (r *SessionRegistry) register(id ClusterWideID, s registrySession) {
 	r.Lock()
 	r.sessions[id] = s
+	r.sessionsByPGWire[id.Hi] = s
 	r.Unlock()
 }
 
 func (r *SessionRegistry) deregister(id ClusterWideID) {
 	r.Lock()
 	delete(r.sessions, id)
+	delete(r.sessionsByPGWire, id.Hi)
 	r.Unlock()
 }
 
 type registrySession interface {
 	user() string
 	cancelQuery(queryID ClusterWideID) bool
+	cancelCurrentQueries()
 	cancelSession()
 	// serialize serializes a Session into a serverpb.Session
 	// that can be served over RPC.
 	serialize() serverpb.Session
+}
+
+// CancelQueryByPGWire looks up the associated query in the session registry and cancels it.
+func (r *SessionRegistry) CancelQueryByPGWire(code, secret uint32) {
+	r.Lock()
+	defer r.Unlock()
+	if session, ok := r.sessionsByPGWire[(uint64(code)<<32)|uint64(secret)]; ok {
+		session.cancelCurrentQueries()
+	}
 }
 
 // CancelQuery looks up the associated query in the session registry and cancels it.
