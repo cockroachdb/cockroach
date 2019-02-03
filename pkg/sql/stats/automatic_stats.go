@@ -39,7 +39,7 @@ import (
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 	"sql.stats.experimental_automatic_collection.enabled",
 	"experimental automatic statistics collection mode",
-	false,
+	true,
 )
 
 // DefaultRefreshInterval is the frequency at which the Refresher will check if
@@ -188,6 +188,7 @@ func (r *Refresher) Start(
 		r.ensureAllTables(ctx, st)
 
 		timer := time.NewTimer(refreshInterval)
+		defer timer.Stop()
 
 		for {
 			select {
@@ -196,7 +197,7 @@ func (r *Refresher) Start(
 				if err := stopper.RunAsyncTask(
 					ctx, "stats.Refresher: maybeRefreshStats", func(ctx context.Context) {
 						for tableID, rowsAffected := range mutationCounts {
-							r.maybeRefreshStats(ctx, tableID, rowsAffected, r.asOfTime)
+							r.maybeRefreshStats(ctx, stopper, tableID, rowsAffected, r.asOfTime)
 						}
 						timer.Reset(refreshInterval)
 					}); err != nil {
@@ -279,7 +280,11 @@ func (r *Refresher) NotifyMutation(
 // maybeRefreshStats implements the core logic described in the comment for
 // Refresher. It is called by the background Refresher thread.
 func (r *Refresher) maybeRefreshStats(
-	ctx context.Context, tableID sqlbase.ID, rowsAffected int64, asOf time.Duration,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	tableID sqlbase.ID,
+	rowsAffected int64,
+	asOf time.Duration,
 ) {
 	tableStats, err := r.cache.GetTableStats(ctx, tableID)
 	if err != nil {
@@ -326,9 +331,16 @@ func (r *Refresher) maybeRefreshStats(
 	if err := r.refreshStats(ctx, tableID, asOf); err != nil {
 		pgerr, ok := errors.Cause(err).(*pgerror.Error)
 		if ok && pgerr.Code == pgerror.CodeUndefinedTableError {
-			// Sleep so that the latest changes will be reflected according to the
+			// Wait so that the latest changes will be reflected according to the
 			// AS OF time, then try again.
-			time.Sleep(asOf)
+			timer := time.NewTimer(asOf)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				break
+			case <-stopper.ShouldQuiesce():
+				return
+			}
 			err = r.refreshStats(ctx, tableID, asOf)
 		}
 		if err != nil {

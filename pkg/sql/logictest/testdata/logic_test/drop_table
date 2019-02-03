@@ -26,7 +26,7 @@ statement ok
 DROP TABLE a
 
 query TT
-SELECT status, running_status FROM [SHOW JOBS]
+SELECT status, running_status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'
 ----
 running  waiting for GC TTL
 

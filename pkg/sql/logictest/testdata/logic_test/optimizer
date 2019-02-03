@@ -90,10 +90,6 @@ SELECT * FROM tview
 3  30
 4  40
 
-query I rowsort
-SELECT job_id FROM crdb_internal.jobs
-----
-
 statement ok
 SET OPTIMIZER = ALWAYS
 
