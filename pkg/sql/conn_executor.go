@@ -412,6 +412,13 @@ func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) s
 	return defVal
 }
 
+// GetStatusParam retrieves the configured value of the session
+// variable identified by varName. This is used for the initial
+// message sent to a client during a session set-up.
+func (h ConnectionHandler) GetSessionID() ClusterWideID {
+	return h.ex.sessionID
+}
+
 // ServeConn serves a client connection by reading commands from
 // the stmtBuf embedded in the ConnHandler.
 func (s *Server) ServeConn(
@@ -574,6 +581,7 @@ func (s *Server) newConnExecutor(
 		dbCacheSubscriber: s.dbCache,
 	}
 	ex.extraTxnState.txnRewindPos = -1
+	ex.sessionID = ex.generateID()
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
@@ -1122,7 +1130,6 @@ func (ex *connExecutor) run(
 	ex.ctxHolder.connCtx = ctx
 	ex.onCancelSession = onCancel
 
-	ex.sessionID = ex.generateID()
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
 
@@ -2038,6 +2045,15 @@ func (ex *connExecutor) cancelQuery(queryID ClusterWideID) bool {
 		return true
 	}
 	return false
+}
+
+// cancelCurrentQueries is part of the registrySession interface.
+func (ex *connExecutor) cancelCurrentQueries() {
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
+	for _, queryMeta := range ex.mu.ActiveQueries {
+		queryMeta.cancel()
+	}
 }
 
 // cancelSession is part of the registrySession interface.

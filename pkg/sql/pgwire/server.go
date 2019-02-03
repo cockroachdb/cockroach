@@ -470,8 +470,15 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 
 	if version != version30 {
 		if version == versionCancel {
-			telemetry.Count("pgwire.unimplemented.cancel_request")
-			_ = conn.Close()
+			code, err := buf.GetUint32()
+			if err != nil {
+				return err
+			}
+			secret, err := buf.GetUint32()
+			if err != nil {
+				return err
+			}
+			s.execCfg.SessionRegistry.CancelQueryByPGWire(code, secret)
 			return nil
 		}
 		return sendErr(fmt.Errorf("unknown protocol version %d", version))
