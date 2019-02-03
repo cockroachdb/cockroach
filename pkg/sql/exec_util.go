@@ -427,6 +427,11 @@ type ExecutorTestingKnobs struct {
 	// optimization). This is only called when the Executor is the one doing the
 	// committing.
 	BeforeAutoCommit func(ctx context.Context, stmt string) error
+
+	// CatchPanics causes the connExecutor to recover from panics in its execution
+	// thread and return them as errors to the client, closing the connection
+	// afterward.
+	CatchPanics bool
 }
 
 // databaseCacheHolder is a thread-safe container for a *databaseCache.

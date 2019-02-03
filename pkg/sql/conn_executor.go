@@ -345,6 +345,11 @@ func (s *Server) GetStmtStatsLastReset() time.Time {
 	return s.sqlStats.getLastReset()
 }
 
+// GetExecutorConfig returns this server's executor config.
+func (s *Server) GetExecutorConfig() *ExecutorConfig {
+	return s.cfg
+}
+
 // SetupConn creates a connExecutor for the client connection.
 //
 // When this method returns there are no resources allocated yet that
