@@ -530,7 +530,7 @@ func (c *CustomFuncs) ExtractUnboundConditions(
 //
 // Project functions
 //   General custom match and replace functions used to test and construct
-//   Project and Projections operators in Project rules.
+//   Project and Projections operators.
 //
 // ----------------------------------------------------------------------
 

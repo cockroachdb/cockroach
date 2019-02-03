@@ -128,15 +128,6 @@ type TableMeta struct {
 	anns [maxTableAnnIDCount]interface{}
 }
 
-// Columns returns the metadata IDs for all non-mutation columns in the table.
-func (tm *TableMeta) Columns() ColSet {
-	var cols ColSet
-	for i, n := 0, tm.Table.ColumnCount(); i < n; i++ {
-		cols.Add(int(tm.MetaID.ColumnID(i)))
-	}
-	return cols
-}
-
 // IndexColumns returns the metadata IDs for the set of columns in the given
 // index.
 // TODO(justin): cache this value in the table metadata.

@@ -177,7 +177,7 @@ func (mb *mutationBuilder) buildInputForUpdateOrDelete(
 	mb.outScope = projectionsScope
 
 	// Set list of columns that will be fetched by the input expression.
-	mb.fetchColList = make(opt.ColList, cap(mb.targetColList))
+	mb.fetchColList = make(opt.ColList, mb.tab.DeletableColumnCount())
 	for i := range mb.outScope.cols {
 		mb.fetchColList[i] = mb.outScope.cols[i].id
 	}

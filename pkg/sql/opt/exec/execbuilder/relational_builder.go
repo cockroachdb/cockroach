@@ -1147,7 +1147,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 
 	// Construct list of columns that only contains columns that need to be
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
-	colList := make(opt.ColList, 0, len(ins.InsertCols))
+	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
 	input, err = b.ensureColumns(input, colList, nil, ins.ProvidedPhysical().Ordering)
@@ -1197,7 +1197,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols))
+	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols)+len(upd.CheckCols))
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
@@ -1251,13 +1251,21 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	// (because the constants are shared), and so must be mapped to separate
 	// output columns.
 	//
+	// If CanaryCol = 0, then this is the "blind upsert" case, which uses a KV
+	// "Put" to insert new rows or blindly overwrite existing rows. Existing rows
+	// do not need to be fetched or separately updated (i.e. ups.FetchCols and
+	// ups.UpdateCols are both empty).
+	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(ups.InsertCols)+len(ups.FetchCols)+len(ups.UpdateCols)+1)
+	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) + len(ups.CheckCols) + 1
+	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, ups.InsertCols)
 	colList = appendColsWhenPresent(colList, ups.FetchCols)
 	colList = appendColsWhenPresent(colList, ups.UpdateCols)
-	colList = append(colList, ups.CanaryCol)
+	if ups.CanaryCol != 0 {
+		colList = append(colList, ups.CanaryCol)
+	}
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
 	input, err = b.ensureColumns(input, colList, nil, ups.ProvidedPhysical().Ordering)
 	if err != nil {
@@ -1267,7 +1275,10 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	// Construct the Upsert node.
 	md := b.mem.Metadata()
 	tab := md.Table(ups.Table)
-	canaryCol := input.getColumnOrdinal(ups.CanaryCol)
+	canaryCol := exec.ColumnOrdinal(-1)
+	if ups.CanaryCol != 0 {
+		canaryCol = input.getColumnOrdinal(ups.CanaryCol)
+	}
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
 	fetchColOrds := ordinalSetFromColList(ups.FetchCols)
 	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
