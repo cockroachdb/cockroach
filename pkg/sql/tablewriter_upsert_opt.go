@@ -104,9 +104,14 @@ func (tu *optTableUpserter) row(ctx context.Context, row tree.Datums, traceKV bo
 
 	// Consult the canary column to determine whether to insert or update.
 	insertEnd := len(tu.ri.InsertCols)
+	if tu.canaryOrdinal == -1 {
+		// No canary column means that existing row should be overwritten (i.e.
+		// the insert and update columns are the same, so no need to choose).
+		return tu.insertNonConflictingRow(ctx, tu.b, row[:insertEnd], true /* overwrite */, traceKV)
+	}
 	if row[tu.canaryOrdinal] == tree.DNull {
 		// No conflict, so insert a new row.
-		return tu.insertNonConflictingRow(ctx, tu.b, row[:insertEnd], traceKV)
+		return tu.insertNonConflictingRow(ctx, tu.b, row[:insertEnd], false /* overwrite */, traceKV)
 	}
 
 	// If no columns need to be updated, then possibly collect the unchanged row.
@@ -141,11 +146,11 @@ func (tu *optTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error 
 // there was no conflict. If the RETURNING clause was specified, then the
 // inserted row is stored in the rowsUpserted collection.
 func (tu *optTableUpserter) insertNonConflictingRow(
-	ctx context.Context, b *client.Batch, insertRow tree.Datums, traceKV bool,
+	ctx context.Context, b *client.Batch, insertRow tree.Datums, overwrite, traceKV bool,
 ) error {
 	// Perform the insert proper.
 	if err := tu.ri.InsertRow(
-		ctx, b, insertRow, false /* overwrite */, row.CheckFKs, traceKV); err != nil {
+		ctx, b, insertRow, overwrite, row.CheckFKs, traceKV); err != nil {
 		return err
 	}
 

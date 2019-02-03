@@ -79,36 +79,33 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		}
 	}
 
-	// Add the primary index (if there is one defined).
-	for _, def := range stmt.Defs {
-		switch def := def.(type) {
-		case *tree.ColumnTableDef:
-			if def.PrimaryKey {
-				// Add the primary index over the single column.
-				tab.addPrimaryColumnIndex(string(def.Name))
-			}
-
-		case *tree.UniqueConstraintTableDef:
-			if def.PrimaryKey {
-				tab.addIndex(&def.IndexTableDef, primaryIndex)
-			}
-
-		case *tree.CheckConstraintTableDef:
-			tab.Checks = append(tab.Checks, cat.CheckConstraint(tree.Serialize(def.Expr)))
-		}
-	}
-
 	// If there is no primary index, add the hidden rowid column.
-	if len(tab.Indexes) == 0 && !tab.IsVirtual {
-		rowid := &Column{
-			Ordinal:     tab.ColumnCount(),
-			Name:        "rowid",
-			Type:        types.Int,
-			Hidden:      true,
-			DefaultExpr: &uniqueRowIDString,
+	hasPrimaryIndex := false
+	if !tab.IsVirtual {
+		for _, def := range stmt.Defs {
+			switch def := def.(type) {
+			case *tree.ColumnTableDef:
+				if def.PrimaryKey {
+					hasPrimaryIndex = true
+				}
+
+			case *tree.UniqueConstraintTableDef:
+				if def.PrimaryKey {
+					hasPrimaryIndex = true
+				}
+			}
 		}
-		tab.Columns = append(tab.Columns, rowid)
-		tab.addPrimaryColumnIndex(rowid.Name)
+
+		if !hasPrimaryIndex {
+			rowid := &Column{
+				Ordinal:     tab.ColumnCount(),
+				Name:        "rowid",
+				Type:        types.Int,
+				Hidden:      true,
+				DefaultExpr: &uniqueRowIDString,
+			}
+			tab.Columns = append(tab.Columns, rowid)
+		}
 	}
 
 	// Add any mutation columns (after any hidden rowid column).
@@ -119,6 +116,29 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 				tab.addColumn(def)
 			}
 		}
+	}
+
+	// Add the primary index and any check constraints.
+	if hasPrimaryIndex {
+		for _, def := range stmt.Defs {
+			switch def := def.(type) {
+			case *tree.ColumnTableDef:
+				if def.PrimaryKey {
+					// Add the primary index over the single column.
+					tab.addPrimaryColumnIndex(string(def.Name))
+				}
+
+			case *tree.UniqueConstraintTableDef:
+				if def.PrimaryKey {
+					tab.addIndex(&def.IndexTableDef, primaryIndex)
+				}
+
+			case *tree.CheckConstraintTableDef:
+				tab.Checks = append(tab.Checks, cat.CheckConstraint(tree.Serialize(def.Expr)))
+			}
+		}
+	} else if !tab.IsVirtual {
+		tab.addPrimaryColumnIndex("rowid")
 	}
 
 	// Search for index and family definitions.
@@ -337,7 +357,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 			pkOrdinals.Add(c.Ordinal)
 		}
 		// Add the rest of the columns in the table.
-		for i, n := 0, tt.ColumnCount(); i < n; i++ {
+		for i, n := 0, tt.DeletableColumnCount(); i < n; i++ {
 			if !pkOrdinals.Contains(i) {
 				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}

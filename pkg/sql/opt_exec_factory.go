@@ -894,15 +894,7 @@ func (ef *execFactory) ConstructInsert(
 	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
 
 	// Determine the foreign key tables involved in the update.
-	fkTables, err := row.MakeFkMetadata(
-		ef.planner.extendedEvalCtx.Context,
-		tabDesc,
-		row.CheckInserts,
-		ef.planner.LookupTableByID,
-		ef.planner.CheckPrivilege,
-		ef.planner.analyzeExpr,
-		checkHelper,
-	)
+	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckInserts, checkHelper)
 	if err != nil {
 		return nil, err
 	}
@@ -1008,6 +1000,10 @@ func (ef *execFactory) ConstructUpdate(
 		return nil, err
 	}
 
+	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
+	// computed a correct set that can sometimes be smaller.
+	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
+
 	// Determine the relational type of the generated update node.
 	// If rows are not needed, no columns are returned.
 	var returnCols sqlbase.ResultColumns
@@ -1055,6 +1051,23 @@ func (ef *execFactory) ConstructUpdate(
 	return &rowCountNode{source: upd}, nil
 }
 
+func (ef *execFactory) makeFkMetadata(
+	tabDesc *sqlbase.ImmutableTableDescriptor,
+	fkCheckType row.FKCheckType,
+	checkHelper *sqlbase.CheckHelper,
+) (row.FkTableMetadata, error) {
+	// Determine the foreign key tables involved in the upsert.
+	return row.MakeFkMetadata(
+		ef.planner.extendedEvalCtx.Context,
+		tabDesc,
+		fkCheckType,
+		ef.planner.LookupTableByID,
+		ef.planner.CheckPrivilege,
+		ef.planner.analyzeExpr,
+		checkHelper,
+	)
+}
+
 func (ef *execFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,
@@ -1071,27 +1084,11 @@ func (ef *execFactory) ConstructUpsert(
 	fetchColDescs := makeColDescList(table, fetchCols)
 	updateColDescs := makeColDescList(table, updateCols)
 
-	// Determine the foreign key tables involved in the upsert.
-	var fkCheckType row.FKCheckType
-	if len(updateColDescs) == 0 {
-		fkCheckType = row.CheckInserts
-	} else {
-		fkCheckType = row.CheckUpdates
-	}
-
 	// Construct the check helper if there are any check constraints.
 	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
 
 	// Determine the foreign key tables involved in the upsert.
-	fkTables, err := row.MakeFkMetadata(
-		ef.planner.extendedEvalCtx.Context,
-		tabDesc,
-		fkCheckType,
-		ef.planner.LookupTableByID,
-		ef.planner.CheckPrivilege,
-		ef.planner.analyzeExpr,
-		checkHelper,
-	)
+	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckUpdates, checkHelper)
 	if err != nil {
 		return nil, err
 	}
@@ -1122,6 +1119,10 @@ func (ef *execFactory) ConstructUpsert(
 		return nil, err
 	}
 
+	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
+	// computed a correct set that can sometimes be smaller.
+	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
+
 	// Determine the relational type of the generated upsert node.
 	// If rows are not needed, no columns are returned.
 	var returnCols sqlbase.ResultColumns
@@ -1145,7 +1146,7 @@ func (ef *execFactory) ConstructUpsert(
 		columns: returnCols,
 		run: upsertRun{
 			checkHelper: checkHelper,
-			insertCols:  insertColDescs,
+			insertCols:  ri.InsertCols,
 			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
 				Cols:    tabDesc.Columns,
 				Mapping: ri.InsertColIDtoRowIndex,
@@ -1185,15 +1186,7 @@ func (ef *execFactory) ConstructDelete(
 	fetchColDescs := makeColDescList(table, fetchCols)
 
 	// Determine the foreign key tables involved in the update.
-	fkTables, err := row.MakeFkMetadata(
-		ef.planner.extendedEvalCtx.Context,
-		tabDesc,
-		row.CheckDeletes,
-		ef.planner.LookupTableByID,
-		ef.planner.CheckPrivilege,
-		ef.planner.analyzeExpr,
-		nil, /* checkHelper */
-	)
+	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckDeletes, nil /* checkHelper */)
 	if err != nil {
 		return nil, err
 	}
@@ -1220,6 +1213,10 @@ func (ef *execFactory) ConstructDelete(
 	if err != nil {
 		return nil, err
 	}
+
+	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
+	// computed a correct set that can sometimes be smaller.
+	rd.FetchCols = rd.FetchCols[:len(fetchColDescs)]
 
 	// Determine the relational type of the generated delete node.
 	// If rows are not needed, no columns are returned.
