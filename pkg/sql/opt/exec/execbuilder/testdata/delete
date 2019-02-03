@@ -65,31 +65,33 @@ delete range  ·      ·
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
 ----
-count                ·         ·
- └── delete          ·         ·
-      │              from      unindexed
-      │              strategy  deleter
-      └── limit      ·         ·
-           │         count     10
-           └── scan  ·         ·
-·                    table     unindexed@primary
-·                    spans     ALL
-·                    filter    v = 7
+count                     ·         ·
+ └── delete               ·         ·
+      │                   from      unindexed
+      │                   strategy  deleter
+      └── render          ·         ·
+           └── limit      ·         ·
+                │         count     10
+                └── scan  ·         ·
+·                         table     unindexed@primary
+·                         spans     ALL
+·                         filter    v = 7
 
 # Check DELETE with LIMIT clause (MySQL extension)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-count                ·         ·
- └── delete          ·         ·
-      │              from      unindexed
-      │              strategy  deleter
-      └── limit      ·         ·
-           │         count     10
-           └── scan  ·         ·
-·                    table     unindexed@primary
-·                    spans     ALL
-·                    filter    v = 5
+count                     ·         ·
+ └── delete               ·         ·
+      │                   from      unindexed
+      │                   strategy  deleter
+      └── render          ·         ·
+           └── limit      ·         ·
+                │         count     10
+                └── scan  ·         ·
+·                         table     unindexed@primary
+·                         spans     ALL
+·                         filter    v = 5
 
 # Check fast DELETE.
 query TTT

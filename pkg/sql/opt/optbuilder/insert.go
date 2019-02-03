@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
 
@@ -173,7 +174,11 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	}
 
 	var mb mutationBuilder
-	mb.init(b, opt.InsertOp, tab, *alias)
+	if ins.OnConflict != nil && ins.OnConflict.IsUpsertAlias() {
+		mb.init(b, opt.UpsertOp, tab, *alias)
+	} else {
+		mb.init(b, opt.InsertOp, tab, *alias)
+	}
 
 	// Compute target columns in two cases:
 	//
@@ -254,17 +259,21 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 
 	// Case 3: UPSERT statement.
 	case ins.OnConflict.IsUpsertAlias():
-		// Left-join each input row to the target table, using conflict columns
-		// derived from the primary index as the join condition.
-		mb.buildInputForUpsert(inScope, mb.getPrimaryKeyColumnNames(), nil)
-
 		// Add columns which will be updated by the Upsert when a conflict occurs.
 		// These are derived from the insert columns.
 		mb.setUpsertCols(ins.Columns)
 
-		// Add additional columns for computed expressions that may depend on any
-		// updated columns.
-		mb.addComputedColsForUpdate()
+		// Check whether the existing rows need to be fetched in order to detect
+		// conflicts.
+		if mb.needExistingRows() {
+			// Left-join each input row to the target table, using conflict columns
+			// derived from the primary index as the join condition.
+			mb.buildInputForUpsert(inScope, mb.getPrimaryKeyColumnNames(), nil /* whereClause */)
+
+			// Add additional columns for computed expressions that may depend on any
+			// updated columns.
+			mb.addComputedColsForUpdate()
+		}
 
 		// Build the final upsert statement, including any returned expressions.
 		mb.buildUpsert(returning)
@@ -290,6 +299,49 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	}
 
 	return mb.outScope
+}
+
+// needExistingRows returns true if an Upsert statement needs to fetch existing
+// rows in order to detect conflicts. In some cases, it is not necessary to
+// fetch existing rows, and then the KV Put operation can be used to blindly
+// insert a new record or overwrite an existing record. This is possible when:
+//
+//   1. There are no secondary indexes. Existing values are needed to delete
+//      secondary index rows when the update causes them to move.
+//   2. All non-key columns (including mutation columns) have insert and update
+//      values specified for them.
+//   3. Each update value is the same as the corresponding insert value.
+//
+// TODO(andyk): The fast path is currently only enabled when the UPSERT alias
+// is explicitly selected by the user. It's possible to fast path some queries
+// of the form INSERT ... ON CONFLICT, but the utility is low and there are lots
+// of edge cases (that caused real correctness bugs #13437 #13962). As a result,
+// this support was removed and needs to re-enabled. See #14482.
+func (mb *mutationBuilder) needExistingRows() bool {
+	if mb.tab.DeletableIndexCount() > 1 {
+		return true
+	}
+
+	// Key columns are never updated and are assumed to be the same as the insert
+	// values.
+	// TODO(andyk): This is not true in the case of composite key encodings. See
+	// issue #34518.
+	primary := mb.tab.Index(cat.PrimaryIndex)
+	var keyOrds util.FastIntSet
+	for i, n := 0, primary.LaxKeyColumnCount(); i < n; i++ {
+		keyOrds.Add(primary.Column(i).Ordinal)
+	}
+
+	for i, colID := range mb.insertColList {
+		if keyOrds.Contains(i) {
+			// Don't consider key columns.
+			continue
+		}
+		if colID == 0 || colID != mb.updateColList[i] {
+			return true
+		}
+	}
+	return false
 }
 
 // addTargetNamedColsForInsert adds a list of user-specified column names to the
@@ -440,7 +492,7 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 // buildInputForInsert constructs the memo group for the input expression and
 // constructs a new output scope containing that expression's output columns.
 func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.Select) {
-	mb.insertColList = make(opt.ColList, cap(mb.targetColList))
+	mb.insertColList = make(opt.ColList, mb.tab.DeletableColumnCount())
 
 	// Handle DEFAULT VALUES case by creating a single empty row as input.
 	if inputRows == nil {
@@ -682,7 +734,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	mb.canaryColID = canaryScopeCol.id
 
 	// Set list of columns that will be fetched by the input expression.
-	mb.fetchColList = make(opt.ColList, cap(mb.targetColList))
+	mb.fetchColList = make(opt.ColList, mb.tab.DeletableColumnCount())
 	for i := range fetchScope.cols {
 		mb.fetchColList[i] = fetchScope.cols[i].id
 	}
@@ -748,9 +800,19 @@ func (mb *mutationBuilder) buildInputForUpsert(
 //   2. Target columns are implicitly derived:
 //        UPSERT INTO abc <input-expr>
 //
-// In case #1, only the columns that were specified by the user and that are not
-// primary key columns will be updated. In case #2, all columns in the table
-// that are not primary key columns will be updated.
+// In case #1, only the columns that were specified by the user will be updated.
+// In case #2, all non-mutation columns in the table will be updated.
+//
+// Note that primary key columns (i.e. the conflict detection columns) are never
+// updated. This can have an impact in unusual cases where equal SQL values have
+// different representations. For example:
+//
+//   CREATE TABLE abc (a DECIMAL PRIMARY KEY, b DECIMAL)
+//   INSERT INTO abc VALUES (1, 2.0)
+//   UPSERT INTO abc VALUES (1.0, 2)
+//
+// The UPSERT statement will update the value of column "b" from 2 => 2.0, but
+// will not modify column "a".
 func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 	mb.updateColList = make(opt.ColList, len(mb.insertColList))
 	if len(insertCols) != 0 {
@@ -764,8 +826,12 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 		copy(mb.updateColList, mb.insertColList)
 	}
 
-	// Don't need to update primary key columns because the update only happens
-	// when those columns are equal to the existing columns (i.e. they conflict).
+	// Never update mutation columns.
+	for i, n := mb.tab.ColumnCount(), mb.tab.DeletableColumnCount(); i < n; i++ {
+		mb.updateColList[i] = 0
+	}
+
+	// Never update primary key columns.
 	conflictIndex := mb.tab.Index(cat.PrimaryIndex)
 	for i, n := 0, conflictIndex.KeyColumnCount(); i < n; i++ {
 		mb.updateColList[conflictIndex.Column(i).Ordinal] = 0
@@ -837,7 +903,7 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
 		insertColID := mb.insertColList[i]
 		updateColID := mb.updateColList[i]
-		if updateColID == 0 {
+		if updateColID == 0 && mb.fetchColList != nil {
 			updateColID = mb.fetchColList[i]
 		}
 
@@ -853,6 +919,11 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 
 		case updateColID == 0:
 			// No update is required, so just pass through insert column.
+			scopeCol = addAnonymousColumn(insertColID)
+
+		case insertColID == updateColID:
+			// Same column is used for both insert and update, so just pass through
+			// one of the columns.
 			scopeCol = addAnonymousColumn(insertColID)
 
 		default:

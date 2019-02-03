@@ -272,7 +272,7 @@
             $input
             $needed:(UnionCols
                 (AggregationOuterCols $aggregations)
-                (NeededColsGrouping $groupingPrivate)
+                (NeededGroupingCols $groupingPrivate)
             )
         )
 )
@@ -310,7 +310,7 @@
         (CanPruneCols
             $input
             $needed:(UnionCols3
-                (NeededColsRowNumber $rowNumberPrivate)
+                (NeededRowNumberCols $rowNumberPrivate)
                 (ProjectionOuterCols $projections)
                 $passthrough
             )
@@ -331,7 +331,7 @@
 [PruneExplainCols, Normalize]
 (Explain
     $input:*
-    $explainPrivate:* & (CanPruneCols $input $needed:(NeededColsExplain $explainPrivate))
+    $explainPrivate:* & (CanPruneCols $input $needed:(NeededExplainCols $explainPrivate))
 )
 =>
 (Explain
@@ -364,17 +364,35 @@
     $passthrough
 )
 
-# PruneMutationCols discards mutation operator columns that are never used. This
-# includes input columns as well as corresponding InsertCols, FetchCols,
-# UpdateCols, and CheckCols in the mutation private.
-# TODO(andyk): Add support for other mutation operators.
-[PruneMutationCols, Normalize]
-(Delete
+# PruneMutationFetchCols removes columns from the mutation operator's FetchCols
+# set if they are never used. Removing FetchCols can in turn can trigger the
+# PruneMutationInputCols rule, which can prune any input columns which are now
+# unreferenced.
+[PruneMutationFetchCols, Normalize]
+(Update | Upsert | Delete
     $input:*
-    $mutationPrivate:* & (CanPruneCols $input $needed:(NeededColsMutation $mutationPrivate))
+    $mutationPrivate:* &
+        (CanPruneMutationFetchCols
+            $mutationPrivate
+            $needed:(NeededMutationFetchCols (OpName) $mutationPrivate)
+        )
 )
 =>
-(Delete
+((OpName)
+    $input
+    (PruneMutationFetchCols $mutationPrivate $needed)
+)
+
+# PruneMutationInputCols discards input columns that are never used by the
+# mutation operator.
+[PruneMutationInputCols, Normalize]
+(Insert | Update | Upsert | Delete
+    $input:*
+    $mutationPrivate:* &
+        (CanPruneCols $input $needed:(NeededMutationCols $mutationPrivate))
+)
+=>
+((OpName)
     (PruneCols $input $needed)
-    (PruneMutationCols $mutationPrivate $needed)
+    $mutationPrivate
 )

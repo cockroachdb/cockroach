@@ -376,10 +376,10 @@ build
 UPSERT INTO abc (a) VALUES (1), (2) RETURNING b+c
 ----
 project
- ├── columns: "?column?":18(int)
+ ├── columns: "?column?":17(int)
  ├── cardinality: [2 - ]
  ├── side-effects, mutations
- ├── prune: (18)
+ ├── prune: (17)
  ├── upsert abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
  │    ├── canary column: 12
@@ -390,21 +390,21 @@ project
  │    │    ├──  column8:8 => c:3
  │    │    └──  column7:7 => rowid:4
  │    ├── update-mapping:
- │    │    ├──  upsert_a:14 => a:1
- │    │    └──  upsert_c:16 => c:3
+ │    │    ├──  column1:5 => a:1
+ │    │    └──  upsert_c:15 => c:3
  │    ├── return-mapping:
- │    │    ├──  upsert_a:14 => a:1
- │    │    ├──  upsert_b:15 => b:2
- │    │    ├──  upsert_c:16 => c:3
- │    │    └──  upsert_rowid:17 => rowid:4
+ │    │    ├──  column1:5 => a:1
+ │    │    ├──  upsert_b:14 => b:2
+ │    │    ├──  upsert_c:15 => c:3
+ │    │    └──  upsert_rowid:16 => rowid:4
  │    ├── cardinality: [2 - ]
  │    ├── side-effects, mutations
  │    └── project
- │         ├── columns: upsert_a:14(int) upsert_b:15(int) upsert_c:16(int) upsert_rowid:17(int) column1:5(int) column6:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+ │         ├── columns: upsert_b:14(int) upsert_c:15(int) upsert_rowid:16(int) column1:5(int) column6:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
  │         ├── cardinality: [2 - ]
  │         ├── side-effects
- │         ├── fd: ()-->(6,8), (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12), (5,12)-->(14), (10,12)-->(15), (7,12)-->(17)
- │         ├── prune: (5-12,14-17)
+ │         ├── fd: ()-->(6,8), (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12), (10,12)-->(14), (7,12)-->(16)
+ │         ├── prune: (5-12,14-16)
  │         ├── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         ├── project
  │         │    ├── columns: column13:13(int) column1:5(int) column6:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
@@ -463,14 +463,6 @@ project
  │         │              ├── variable: b [type=int]
  │         │              └── const: 1 [type=int]
  │         └── projections
- │              ├── case [type=int, outer=(5,12)]
- │              │    ├── true [type=bool]
- │              │    ├── when [type=int]
- │              │    │    ├── is [type=bool]
- │              │    │    │    ├── variable: rowid [type=int]
- │              │    │    │    └── null [type=unknown]
- │              │    │    └── variable: column1 [type=int]
- │              │    └── variable: column1 [type=int]
  │              ├── case [type=int, outer=(6,10,12)]
  │              │    ├── true [type=bool]
  │              │    ├── when [type=int]

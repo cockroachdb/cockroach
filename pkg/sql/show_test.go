@@ -584,7 +584,6 @@ func TestShowQueries(t *testing.T) {
 					return
 				}
 			}
-			fmt.Println("tf", stmts)
 			if err := rows.Err(); err != nil {
 				failure = err
 				return

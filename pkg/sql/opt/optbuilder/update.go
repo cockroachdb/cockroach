@@ -194,7 +194,7 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 // input. A final Project operator is built if any single-column or tuple SET
 // expressions are present.
 func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
-	mb.updateColList = make(opt.ColList, cap(mb.targetColList))
+	mb.updateColList = make(opt.ColList, mb.tab.DeletableColumnCount())
 
 	// SET expressions should reject aggregates, generators, etc.
 	scalarProps := &mb.b.semaCtx.Properties

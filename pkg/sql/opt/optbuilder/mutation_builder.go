@@ -177,7 +177,7 @@ func (mb *mutationBuilder) buildInputForUpdateOrDelete(
 	mb.outScope = projectionsScope
 
 	// Set list of columns that will be fetched by the input expression.
-	mb.fetchColList = make(opt.ColList, cap(mb.targetColList))
+	mb.fetchColList = make(opt.ColList, mb.tab.DeletableColumnCount())
 	for i := range mb.outScope.cols {
 		mb.fetchColList[i] = mb.outScope.cols[i].id
 	}
@@ -409,7 +409,9 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	}
 
 	if needResults {
-		// Only non-mutation columns are output columns.
+		// Only non-mutation columns are output columns. ReturnCols needs to have
+		// DeletableColumnCount entries, but only the first ColumnCount entries
+		// can be non-zero.
 		private.ReturnCols = make(opt.ColList, mb.tab.DeletableColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			// Map to columns in this order: upsert, update, fetch, insert.
@@ -484,8 +486,12 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 			more, less = less, more
 		}
 
-		// TODO(andyk): Add UpsertOp case.
-		kw := "INSERT"
+		var kw string
+		if mb.op == opt.InsertOp {
+			kw = "INSERT"
+		} else {
+			kw = "UPSERT"
+		}
 		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"%s has more %s than %s, %d expressions for %d targets",
 			kw, more, less, actual, expected)})

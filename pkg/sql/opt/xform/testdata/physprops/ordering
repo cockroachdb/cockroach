@@ -1231,7 +1231,7 @@ insert xyz
       ├── columns: b:5(int) c:6(int) d:7(int)
       ├── limit: 2
       ├── ordering: +6
-      ├── prune: (5-7)
+      ├── prune: (5)
       └── interesting orderings: (+6,+7)
 
 # Verify that provided orderings are derived correctly with equivalence FD.
@@ -1264,7 +1264,7 @@ sort
       │    └── scan abcd@cd
       │         ├── columns: b:5(int) c:6(int) d:7(int)
       │         ├── limit: 2
-      │         ├── prune: (5-7)
+      │         ├── prune: (5)
       │         └── interesting orderings: (+6,+7)
       └── filters
            └── x = y [type=bool, outer=(1,2), fd=(1)==(2), (2)==(1)]
