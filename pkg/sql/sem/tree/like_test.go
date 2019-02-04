@@ -22,6 +22,45 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
+func TestLikeEscape(t *testing.T) {
+	testData := []struct {
+		expr      string
+		pattern   string
+		escape    string
+		matches   Datum
+		erroneous bool
+	}{
+		{``, `{`, string('\x7f'), DBoolFalse, false},
+		{``, `}`, `}`, DBoolFalse, false},
+		{``, `%%%%%`, ``, DBoolTrue, false},
+		{``, `%%%%%`, `\`, DBoolTrue, false},
+		{`a[b]`, `%[[_]`, `[`, DBoolTrue, false},
+		{`+`, `++`, `+`, DBoolTrue, false},
+		{`a`, `}`, `}`, DBoolFalse, true},
+		{`a{}%`, `%}}}%`, `}`, DBoolTrue, false},
+	}
+	ctx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	for _, d := range testData {
+		if matches, err := MatchLikeEscape(ctx, d.expr, d.pattern, d.escape, false); err != nil && !d.erroneous {
+			t.Error(err)
+		} else if err == nil && d.erroneous {
+			t.Errorf("%s matching the pattern %s with escape character %s: expected to return an error",
+				d.expr,
+				d.pattern,
+				d.escape,
+			)
+		} else if matches != d.matches {
+			t.Errorf("%s matching the pattern %s with escape character %s: expected %v but found %v",
+				d.expr,
+				d.pattern,
+				d.escape,
+				d.matches,
+				matches,
+			)
+		}
+	}
+}
+
 func TestSimilarEscape(t *testing.T) {
 	testData := []struct {
 		expr     string
