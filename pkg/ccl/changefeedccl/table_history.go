@@ -224,7 +224,7 @@ func fetchTableDescriptorVersions(
 	targets jobspb.ChangefeedTargets,
 ) ([]*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
-		log.Infof(ctx, `fetching table descs [%s,%s)`, startTS, endTS)
+		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
 	start := timeutil.Now()
 	span := roachpb.Span{Key: keys.MakeTablePrefix(keys.DescriptorTableID)}
@@ -239,11 +239,10 @@ func fetchTableDescriptorVersions(
 	}
 	res, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if log.V(2) {
-		log.Infof(ctx, `fetched table descs [%s,%s) took %s`, startTS, endTS, timeutil.Since(start))
+		log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS, endTS, timeutil.Since(start))
 	}
 	if pErr != nil {
-		return nil, errors.Wrapf(
-			pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey)
+		return nil, errors.Wrapf(pErr.GoError(), `fetching changes for %s`, span)
 	}
 
 	var tableDescs []*sqlbase.TableDescriptor
