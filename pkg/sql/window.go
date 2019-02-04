@@ -1157,8 +1157,8 @@ func (ir indexedRows) Len() int {
 }
 
 // GetRow implements tree.IndexedRows interface.
-func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
-	return ir.rows[idx]
+func (ir indexedRows) GetRow(idx int) (tree.IndexedRow, error) {
+	return ir.rows[idx], nil
 }
 
 // indexedRow is a row with a corresponding index.
@@ -1173,11 +1173,11 @@ func (ir indexedRow) GetIdx() int {
 }
 
 // GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
-	return ir.row[colIdx]
+func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
+	return ir.row[colIdx], nil
 }
 
-// GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) tree.Datums {
-	return ir.row[firstColIdx:lastColIdx]
+// GetDatums implements tree.IndexedRow interface.
+func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (tree.Datums, error) {
+	return ir.row[firstColIdx:lastColIdx], nil
 }
