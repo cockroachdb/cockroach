@@ -27,6 +27,8 @@ import (
 // queries we run against tpch data, represented by different tpchBench values.
 type tpchBench int
 
+//go:generate stringer -type=tpchBench
+
 const (
 	// SQL20 queries: https://github.com/cockroachdb/cockroach/blob/master/pkg/workload/querybench/2.1-sql-20
 	sql20 tpchBench = iota
@@ -152,9 +154,10 @@ func loadTPCHBench(
 func registerTPCHBenchSpec(r *registry, b tpchBenchSpec) {
 	nameParts := []string{
 		"tpchbench",
+		b.benchType.String(),
 		fmt.Sprintf("nodes=%d", b.Nodes),
 		fmt.Sprintf("cpu=%d", b.CPUs),
-		fmt.Sprintf("scale-factor=%d", b.ScaleFactor),
+		fmt.Sprintf("sf=%d", b.ScaleFactor),
 	}
 
 	// Add a load generator node.
