@@ -356,7 +356,7 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(int64(evalCtx.SessionData.ReorderJoinsLimit), 10)
 		},
 		GlobalDefault: func(_ *settings.Values) string {
-			return "0"
+			return "4"
 		},
 	},
 
