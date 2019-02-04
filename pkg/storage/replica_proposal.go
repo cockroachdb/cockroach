@@ -190,11 +190,22 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 	}
 }
 
-// leasePostApply is called when a RequestLease or TransferLease
-// request is executed for a range.
-func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
+// leasePostApply updates the Replica's internal state to reflect the
+// application of a new Range lease. The method is idempotent, so it can be
+// called repeatedly for the same lease safely. However, the method will panic
+// if passed a lease with a lower sequence number than the current lease. By
+// default, the method will also panic if passed a lease that indicates a
+// forward sequence number jump (i.e. a skipped lease). This behavior can
+// be disabled by passing permitJump as true.
+func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, permitJump bool) {
 	r.mu.Lock()
 	replicaID := r.mu.replicaID
+	// Pull out the last lease known to this Replica. It's possible that this is
+	// not actually the last lease in the Range's lease sequence because the
+	// Replica may have missed the application of a lease between prevLease and
+	// newLease. However, this should only be possible if a snapshot includes a
+	// lease update. All other forms of lease updates should be continuous
+	// without jumps (see permitJump).
 	prevLease := *r.mu.state.Lease
 	r.mu.Unlock()
 
@@ -267,9 +278,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 			}
 		case s2 == s1+1:
 			// Lease sequence incremented by 1. Expected case.
-		case s2 > s1+1:
-			// Snapshots will never call leasePostApply, so we always expect
-			// leases to increment one at a time here.
+		case s2 > s1+1 && !permitJump:
 			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s",
 				log.Safe(prevLease), log.Safe(newLease))
 		}
@@ -634,7 +643,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		}
 
 		if newLease := rResult.State.Lease; newLease != nil {
-			r.leasePostApply(ctx, *newLease)
+			r.leasePostApply(ctx, *newLease, false /* permitJump */)
 			rResult.State.Lease = nil
 		}
 

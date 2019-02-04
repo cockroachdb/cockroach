@@ -952,6 +952,12 @@ func (r *Replica) applySnapshot(
 	}
 	r.store.mu.Unlock()
 
+	// Invoke the leasePostApply method to ensure we properly initialize the
+	// replica according to whether it holds the lease. We allow jumps in the
+	// lease sequence because there may be multiple lease changes accounted for
+	// in the snapshot.
+	r.leasePostApply(ctx, *s.Lease, true /* permitJump */)
+
 	r.mu.Lock()
 	// We set the persisted last index to the last applied index. This is
 	// not a correctness issue, but means that we may have just transferred
@@ -967,7 +973,8 @@ func (r *Replica) applySnapshot(
 	r.store.metrics.subtractMVCCStats(*r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(*s.Stats)
 	// Update the rest of the Raft state. Changes to r.mu.state.Desc must be
-	// managed by r.setDesc, but we called that above, so now it's safe to
+	// managed by r.setDesc and changes to r.mu.state.Lease must be handled
+	// by r.leasePostApply, but we called those above, so now it's safe to
 	// wholesale replace r.mu.state.
 	r.mu.state = s
 	r.assertStateLocked(ctx, r.store.Engine())
