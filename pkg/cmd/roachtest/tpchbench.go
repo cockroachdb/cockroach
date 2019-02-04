@@ -81,7 +81,7 @@ func runSQL20Bench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 
 		// Run with only one worker to get best-case single-query performance.
 		cmd := fmt.Sprintf(
-			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s --duration=5m {pgurl%s} --histograms=logs/scalefactor=%d/stats.json",
+			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s --duration=5m {pgurl%s} --histograms=scalefactor=%d/stats.json",
 			filename,
 			roachNodes,
 			b.ScaleFactor,
