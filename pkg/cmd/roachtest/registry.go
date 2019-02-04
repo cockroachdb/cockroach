@@ -81,4 +81,5 @@ func registerBenchmarks(r *registry) {
 	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -v '^registerTests$' | grep '^\w*Bench$' | sort | awk '{printf "\t%s(r)\n", $0}'
 
 	registerTPCCBench(r)
+	registerSQL20Bench(r)
 }
