@@ -25,15 +25,15 @@ import (
 
 // IndexedRows are rows with the corresponding indices.
 type IndexedRows interface {
-	Len() int                  // returns number of rows
-	GetRow(idx int) IndexedRow // returns a row at the given index
+	Len() int                           // returns number of rows
+	GetRow(idx int) (IndexedRow, error) // returns a row at the given index or an error
 }
 
 // IndexedRow is a row with a corresponding index.
 type IndexedRow interface {
-	GetIdx() int                           // returns index of the row
-	GetDatum(idx int) Datum                // returns a datum at the given index
-	GetDatums(startIdx, endIdx int) Datums // returns datums at indices [startIdx, endIdx)
+	GetIdx() int                                    // returns index of the row
+	GetDatum(idx int) (Datum, error)                // returns a datum at the given index
+	GetDatums(startIdx, endIdx int) (Datums, error) // returns datums at indices [startIdx, endIdx)
 }
 
 // WindowFrameRun contains the runtime state of window frame during calculations.
@@ -362,23 +362,39 @@ func (wfr *WindowFrameRun) FirstInPeerGroup() bool {
 }
 
 // Args returns the current argument set in the window frame.
-func (wfr *WindowFrameRun) Args() Datums {
+func (wfr *WindowFrameRun) Args() (Datums, error) {
 	return wfr.ArgsWithRowOffset(0)
 }
 
 // ArgsWithRowOffset returns the argument set at the given offset in the window frame.
-func (wfr *WindowFrameRun) ArgsWithRowOffset(offset int) Datums {
-	return wfr.Rows.GetRow(wfr.RowIdx+offset).GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
+func (wfr *WindowFrameRun) ArgsWithRowOffset(offset int) (Datums, error) {
+	row, err := wfr.Rows.GetRow(wfr.RowIdx + offset)
+	if err != nil {
+		return nil, err
+	}
+	return row.GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
 }
 
 // ArgsByRowIdx returns the argument set of the row at idx.
-func (wfr *WindowFrameRun) ArgsByRowIdx(idx int) Datums {
-	return wfr.Rows.GetRow(idx).GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
+func (wfr *WindowFrameRun) ArgsByRowIdx(idx int) (Datums, error) {
+	row, err := wfr.Rows.GetRow(idx)
+	if err != nil {
+		return nil, err
+	}
+	return row.GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
 }
 
 // valueAt returns the first argument of the window function at the row idx.
 func (wfr *WindowFrameRun) valueAt(idx int) Datum {
-	return wfr.Rows.GetRow(idx).GetDatum(wfr.OrdColIdx)
+	row, err := wfr.Rows.GetRow(idx)
+	if err != nil {
+		panic(err)
+	}
+	value, err := row.GetDatum(wfr.OrdColIdx)
+	if err != nil {
+		panic(err)
+	}
+	return value
 }
 
 // RangeModeWithOffsets returns whether the frame is in RANGE mode with at least

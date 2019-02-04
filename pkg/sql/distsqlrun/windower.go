@@ -570,6 +570,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 			}
 			w.windowValues[windowFnIdx][partitionIdx] = make([]tree.Datum, partition.Len())
 
+			var sorter *partitionSorter
 			if len(windowFn.ordering.Columns) > 0 {
 				// If an ORDER BY clause is provided, order the partition and use the
 				// sorter as our peerGroupChecker.
@@ -582,12 +583,16 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 						ordering: windowFn.ordering,
 					}
 				} else {
-					sorter := &partitionSorter{
+					sorter = &partitionSorter{
 						evalCtx:  evalCtx,
 						rows:     partition,
 						ordering: windowFn.ordering,
 					}
 					sort.Sort(sorter)
+					if sorter.err != nil {
+						// An error occurred while sorting.
+						return sorter.err
+					}
 					peerGrouper = sorter
 					if shouldCacheSortedPartitions[windowFnIdx] {
 						// Later window functions will need rows in the same order,
@@ -626,6 +631,12 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 
 			frameRun.PeerHelper.Init(frameRun, peerGrouper)
 			frameRun.CurRowPeerGroupNum = 0
+			if sorter != nil {
+				if sorter.err != nil {
+					// An error occurred while initializing PeerHelper.
+					return sorter.err
+				}
+			}
 
 			for frameRun.RowIdx < partition.Len() {
 				// Perform calculations on each row in the current peer group.
@@ -635,10 +646,20 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 					if err != nil {
 						return err
 					}
-					w.windowValues[windowFnIdx][partitionIdx][frameRun.Rows.GetRow(frameRun.RowIdx).GetIdx()] = res
+					row, err := frameRun.Rows.GetRow(frameRun.RowIdx)
+					if err != nil {
+						return err
+					}
+					w.windowValues[windowFnIdx][partitionIdx][row.GetIdx()] = res
 				}
 				frameRun.PeerHelper.Update(frameRun)
 				frameRun.CurRowPeerGroupNum++
+				if sorter != nil {
+					if sorter.err != nil {
+						// An error occurred while updating PeerHelper.
+						return sorter.err
+					}
+				}
 			}
 		}
 	}
@@ -695,6 +716,7 @@ type partitionSorter struct {
 	evalCtx  *tree.EvalContext
 	rows     indexedRows
 	ordering distsqlpb.Ordering
+	err      error
 }
 
 // partitionSorter implements the sort.Interface interface.
@@ -710,8 +732,20 @@ func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) ==
 func (n *partitionSorter) Compare(i, j int) int {
 	ra, rb := n.rows.rows[i], n.rows.rows[j]
 	for _, o := range n.ordering.Columns {
-		da := ra.GetDatum(int(o.ColIdx))
-		db := rb.GetDatum(int(o.ColIdx))
+		da, err := ra.GetDatum(int(o.ColIdx))
+		if err != nil {
+			// We save an error and return an arbitrary value that the datums are
+			// equal.
+			n.err = err
+			return 0
+		}
+		db, err := rb.GetDatum(int(o.ColIdx))
+		if err != nil {
+			// We save an error and return an arbitrary value that the datums are
+			// equal.
+			n.err = err
+			return 0
+		}
 		if c := da.Compare(n.evalCtx, db); c != 0 {
 			if o.Direction != distsqlpb.Ordering_Column_ASC {
 				return -c
@@ -751,8 +785,8 @@ func (ir indexedRows) Len() int {
 }
 
 // GetRow implements tree.IndexedRows interface.
-func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
-	return ir.rows[idx]
+func (ir indexedRows) GetRow(idx int) (tree.IndexedRow, error) {
+	return ir.rows[idx], nil
 }
 
 func (ir indexedRows) makeCopy() indexedRows {
@@ -773,17 +807,17 @@ func (ir indexedRow) GetIdx() int {
 }
 
 // GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
-	return ir.row[colIdx].Datum
+func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
+	return ir.row[colIdx].Datum, nil
 }
 
 // GetDatums implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatums(startColIdx, endColIdx int) tree.Datums {
+func (ir indexedRow) GetDatums(startColIdx, endColIdx int) (tree.Datums, error) {
 	datums := make(tree.Datums, 0, endColIdx-startColIdx)
 	for idx := startColIdx; idx < endColIdx; idx++ {
 		datums = append(datums, ir.row[idx].Datum)
 	}
-	return datums
+	return datums, nil
 }
 
 // CreateWindowerSpecFunc creates a WindowerSpec_Func based on the function
