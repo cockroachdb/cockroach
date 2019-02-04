@@ -45,7 +45,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   1,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-1 * time.Hour),
 			RowCount:      1000,
@@ -55,7 +55,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   2,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-2 * time.Hour),
 			RowCount:      1000,
@@ -75,7 +75,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   4,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-4 * time.Hour),
 			RowCount:      1000,
@@ -85,7 +85,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   5,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-5 * time.Hour),
 			RowCount:      1000,
@@ -95,7 +95,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   6,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-6 * time.Hour),
 			RowCount:      1000,
@@ -105,7 +105,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   7,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-7 * time.Hour),
 			RowCount:      1000,
@@ -115,7 +115,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   8,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-8 * time.Hour),
 			RowCount:      1000,
@@ -135,7 +135,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   10,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-10 * time.Hour),
 			RowCount:      1000,
@@ -145,7 +145,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   11,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-11 * time.Hour),
 			RowCount:      1000,
@@ -155,7 +155,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   12,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-12 * time.Hour),
 			RowCount:      1000,
@@ -165,7 +165,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   13,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{2},
 			CreatedAt:     timeutil.Now().Add(-13 * time.Hour),
 			RowCount:      1000,
@@ -185,7 +185,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   15,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{3, 2},
 			CreatedAt:     timeutil.Now().Add(-15 * time.Hour),
 			RowCount:      1000,
@@ -205,7 +205,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(102),
 			StatisticID:   17,
-			Name:          autoStatsName,
+			Name:          AutoStatsName,
 			ColumnIDs:     []sqlbase.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-17 * time.Hour),
 			RowCount:      0,
@@ -304,7 +304,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 			if !reflect.DeepEqual(stat.ColumnIDs, columnIDs) {
 				continue
 			}
-			if stat.Name == autoStatsName && keptStats < keepCount {
+			if stat.Name == AutoStatsName && keptStats < keepCount {
 				keptStats++
 				continue
 			}

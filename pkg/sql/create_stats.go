@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
@@ -136,6 +137,16 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		createStatsColLists = []jobspb.CreateStatsDetails_ColList{{IDs: columnIDs}}
 	}
 
+	if n.Name == stats.AutoStatsName {
+		// Don't start the job if there is already a CREATE STATISTICS job running.
+		// (To handle race conditions we check this again after the job starts,
+		// but this check is used to prevent creating a large number of jobs that
+		// immediately fail).
+		if err := checkRunningJobs(ctx, nil /* job */, n.p); err != nil {
+			return err
+		}
+	}
+
 	// Create a job to run statistics creation.
 	_, errCh, err := n.p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 		Description: tree.AsStringWithFlags(n, tree.FmtAlwaysQualifyTableNames),
@@ -235,13 +246,15 @@ var _ jobs.Resumer = &createStatsResumer{}
 func (r *createStatsResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	// TODO(rytaft): If this job is for automatic stats creation, use the
-	// Job ID to lock automatic stats creation with a lock manager. If the
-	// lock succeeds, proceed to the next step (but first check the stats
-	// cache to make sure a new statistic was not just added for this table).
-	// If the lock fails, cancel this job and return an error.
-
 	p := phs.(*planner)
+	if job.Details().(jobspb.CreateStatsDetails).Name == stats.AutoStatsName {
+		// We want to make sure there is only one automatic CREATE STATISTICS job
+		// running at a time.
+		if err := checkRunningJobs(ctx, job, p); err != nil {
+			return err
+		}
+	}
+
 	r.evalCtx = p.ExtendedEvalContext()
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{})
@@ -253,7 +266,7 @@ func (r *createStatsResumer) Resume(
 	}()
 
 	dsp := p.DistSQLPlanner()
-	return r.evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if err := dsp.planAndRunCreateStats(
 			ctx, r.evalCtx, txn, job, NewRowResultWriter(rows),
 		); err != nil {
@@ -285,6 +298,44 @@ func (r *createStatsResumer) Resume(
 
 		return nil
 	})
+}
+
+// checkRunningJobs checks whether there are any other CreateStats jobs in the
+// pending or running status that started earlier than this one. If there are,
+// checkRunningJobs returns an error. If job is nil, checkRunningJobs just
+// checks if there are any pending or running CreateStats jobs.
+func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
+	var jobID int64
+	if job != nil {
+		jobID = *job.ID()
+	}
+	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2) ORDER BY created`
+
+	rows, _ /* cols */, err := p.ExecCfg().InternalExecutor.Query(
+		ctx, "get-jobs", nil /* txn */, stmt, jobs.StatusPending, jobs.StatusRunning,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, row := range rows {
+		payload, err := jobs.UnmarshalPayload(row[1])
+		if err != nil {
+			return err
+		}
+
+		if payload.Type() == jobspb.TypeCreateStats {
+			id := (*int64)(row[0].(*tree.DInt))
+			if *id == jobID {
+				break
+			}
+
+			// This is not the first CreateStats job running. This job should fail
+			// so that the earlier job can succeed.
+			return errors.New("another CREATE STATISTICS job is already running")
+		}
+	}
+	return nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

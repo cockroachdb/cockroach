@@ -43,6 +43,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 
+	AutomaticStatisticsClusterMode.Override(&evalCtx.Settings.SV, false)
+
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
 		`CREATE DATABASE t;
@@ -91,6 +93,8 @@ func TestAverageRefreshTime(t *testing.T) {
 
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
+
+	AutomaticStatisticsClusterMode.Override(&evalCtx.Settings.SV, false)
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
@@ -173,7 +177,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	}
 
 	// Add some stats on column k in table a with a name different from
-	// autoStatsName, separated by three hours each, starting 7 hours ago.
+	// AutoStatsName, separated by three hours each, starting 7 hours ago.
 	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for i := 0; i < 10; i++ {
 			columnIDsVal := tree.NewDArray(types.Int)
@@ -196,13 +200,13 @@ func TestAverageRefreshTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// None of the stats have the name autoStatsName, so avgRefreshTime
+	// None of the stats have the name AutoStatsName, so avgRefreshTime
 	// should still return the default value.
 	if err := checkAverageRefreshTime(defaultAverageTimeBetweenRefreshes); err != nil {
 		t.Fatal(err)
 	}
 
-	// Add some stats on column v in table a with name autoStatsName, separated
+	// Add some stats on column v in table a with name AutoStatsName, separated
 	// by three hours each, starting 6 hours ago.
 	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for i := 0; i < 10; i++ {
@@ -213,7 +217,7 @@ func TestAverageRefreshTime(t *testing.T) {
 			createdAt := tree.MakeDTimestamp(
 				timeutil.Now().Add(time.Duration(-1*(i*4+6))*time.Hour), time.Hour,
 			)
-			if err := insertStat(txn, autoStatsName, columnIDsVal, createdAt); err != nil {
+			if err := insertStat(txn, AutoStatsName, columnIDsVal, createdAt); err != nil {
 				return err
 			}
 		}
@@ -248,7 +252,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Add some stats on column k in table a with name autoStatsName, separated
+	// Add some stats on column k in table a with name AutoStatsName, separated
 	// by 1.5 hours each, starting 5 hours ago.
 	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for i := 0; i < 10; i++ {
@@ -259,7 +263,7 @@ func TestAverageRefreshTime(t *testing.T) {
 			createdAt := tree.MakeDTimestamp(
 				timeutil.Now().Add(time.Duration(-1*(i*90+300))*time.Minute), time.Minute,
 			)
-			if err := insertStat(txn, autoStatsName, columnIDsVal, createdAt); err != nil {
+			if err := insertStat(txn, AutoStatsName, columnIDsVal, createdAt); err != nil {
 				return err
 			}
 		}
