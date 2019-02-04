@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -110,6 +111,7 @@ func (ib *indexBackfiller) runChunk(
 		}
 	*/
 
+	start := timeutil.Now()
 	var entries []sqlbase.IndexEntry
 	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
@@ -121,14 +123,19 @@ func (ib *indexBackfiller) runChunk(
 	}); err != nil {
 		return nil, err
 	}
+	prepTime := timeutil.Now().Sub(start)
 
 	// TODO(dt): Skip bulk-adder if there are too few entries for SST overhead.
 	enabled := backfill.BulkWriteIndex.Get(&ib.flowCtx.Settings.SV)
 	if enabled {
+		start := timeutil.Now()
 		sort.Slice(entries, func(i, j int) bool {
 			return entries[i].Key.Compare(entries[j].Key) < 0
 		})
-		adder, err := ib.flowCtx.BullkAdder(ctx, ib.flowCtx.ClientDB, 32<<10, readAsOf)
+		sortTime := timeutil.Now().Sub(start)
+
+		start = timeutil.Now()
+		adder, err := ib.flowCtx.BulkAdder(ctx, ib.flowCtx.ClientDB, 32<<20, readAsOf)
 		if err != nil {
 			return nil, err
 		}
@@ -138,9 +145,15 @@ func (ib *indexBackfiller) runChunk(
 				return nil, err
 			}
 		}
+		addTime := timeutil.Now().Sub(start)
+
 		if err := adder.Flush(ctx); err != nil {
 			return nil, err
 		}
+
+		log.Infof(ctx, "index backfill stats: entries %d, prepare %+v, sort %+v, add-sst %+v",
+			len(entries), prepTime, sortTime, addTime)
+
 		return key, nil
 	}
 	retried := false
