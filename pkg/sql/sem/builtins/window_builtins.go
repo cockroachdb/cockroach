@@ -199,10 +199,23 @@ func (w *aggregateWindowFunc) Compute(
 	// Accumulate all values in the peer group at the same time, as these
 	// must return the same value.
 	for i := 0; i < wfr.PeerHelper.GetRowCount(wfr.CurRowPeerGroupNum); i++ {
-		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(wfr.RowIdx+i).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
-			continue
+		if wfr.FilterColIdx != noFilterIdx {
+			row, err := wfr.Rows.GetRow(wfr.RowIdx + i)
+			if err != nil {
+				return nil, err
+			}
+			datum, err := row.GetDatum(wfr.FilterColIdx)
+			if err != nil {
+				return nil, err
+			}
+			if datum != tree.DBoolTrue {
+				continue
+			}
 		}
-		args := wfr.ArgsWithRowOffset(i)
+		args, err := wfr.ArgsWithRowOffset(i)
+		if err != nil {
+			return nil, err
+		}
 		var value tree.Datum
 		var others tree.Datums
 		// COUNT_ROWS takes no arguments.
@@ -272,11 +285,32 @@ func (w *framableAggregateWindowFunc) Compute(
 	*w.agg = aggregateWindowFunc{w.aggConstructor(evalCtx, nil /* arguments */), tree.DNull}
 
 	// Accumulate all values in the window frame.
-	for i := wfr.FrameStartIdx(evalCtx); i < wfr.FrameEndIdx(evalCtx); i++ {
-		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(i).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
-			continue
+	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	for i := frameStartIdx; i < frameEndIdx; i++ {
+		if wfr.FilterColIdx != noFilterIdx {
+			row, err := wfr.Rows.GetRow(i)
+			if err != nil {
+				return nil, err
+			}
+			datum, err := row.GetDatum(wfr.FilterColIdx)
+			if err != nil {
+				return nil, err
+			}
+			if datum != tree.DBoolTrue {
+				continue
+			}
 		}
-		args := wfr.ArgsByRowIdx(i)
+		args, err := wfr.ArgsByRowIdx(i)
+		if err != nil {
+			return nil, err
+		}
 		var value tree.Datum
 		var others tree.Datums
 		// COUNT_ROWS takes no arguments.
@@ -434,7 +468,11 @@ func (w *ntileWindow) Compute(
 		// If this is the first call to ntileWindow.Compute, set up the buckets.
 		total := wfr.PartitionSize()
 
-		arg := wfr.Args()[0]
+		args, err := wfr.Args()
+		if err != nil {
+			return nil, err
+		}
+		arg := args[0]
 		if arg == tree.DNull {
 			// per spec: If argument is the null value, then the result is the null value.
 			return tree.DNull, nil
@@ -502,7 +540,11 @@ func (w *leadLagWindow) Compute(
 ) (tree.Datum, error) {
 	offset := 1
 	if w.withOffset {
-		offsetArg := wfr.Args()[1]
+		args, err := wfr.Args()
+		if err != nil {
+			return nil, err
+		}
+		offsetArg := args[1]
 		if offsetArg == tree.DNull {
 			return tree.DNull, nil
 		}
@@ -516,12 +558,20 @@ func (w *leadLagWindow) Compute(
 		// Target row is out of the partition; supply default value if provided,
 		// otherwise return NULL.
 		if w.withDefault {
-			return wfr.Args()[2], nil
+			args, err := wfr.Args()
+			if err != nil {
+				return nil, err
+			}
+			return args[2], nil
 		}
 		return tree.DNull, nil
 	}
 
-	return wfr.ArgsWithRowOffset(offset)[0], nil
+	args, err := wfr.ArgsWithRowOffset(offset)
+	if err != nil {
+		return nil, err
+	}
+	return args[0], nil
 }
 
 func (w *leadLagWindow) Close(context.Context, *tree.EvalContext) {}
@@ -536,7 +586,15 @@ func newFirstValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
 func (firstValueWindow) Compute(
 	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	return wfr.Rows.GetRow(wfr.FrameStartIdx(evalCtx)).GetDatum(wfr.ArgIdxStart), nil
+	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	row, err := wfr.Rows.GetRow(frameStartIdx)
+	if err != nil {
+		return nil, err
+	}
+	return row.GetDatum(wfr.ArgIdxStart)
 }
 
 func (firstValueWindow) Close(context.Context, *tree.EvalContext) {}
@@ -551,7 +609,15 @@ func newLastValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
 func (lastValueWindow) Compute(
 	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	return wfr.Rows.GetRow(wfr.FrameEndIdx(evalCtx) - 1).GetDatum(wfr.ArgIdxStart), nil
+	frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	row, err := wfr.Rows.GetRow(frameEndIdx - 1)
+	if err != nil {
+		return nil, err
+	}
+	return row.GetDatum(wfr.ArgIdxStart)
 }
 
 func (lastValueWindow) Close(context.Context, *tree.EvalContext) {}
@@ -570,7 +636,11 @@ var errInvalidArgumentForNthValue = pgerror.NewErrorf(
 func (nthValueWindow) Compute(
 	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	arg := wfr.Args()[1]
+	args, err := wfr.Args()
+	if err != nil {
+		return nil, err
+	}
+	arg := args[1]
 	if arg == tree.DNull {
 		return tree.DNull, nil
 	}
@@ -580,10 +650,23 @@ func (nthValueWindow) Compute(
 		return nil, errInvalidArgumentForNthValue
 	}
 
-	if nth > wfr.FrameSize(evalCtx) {
+	frameSize, err := wfr.FrameSize(evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	if nth > frameSize {
 		return tree.DNull, nil
 	}
-	return wfr.Rows.GetRow(wfr.FrameStartIdx(evalCtx) + nth - 1).GetDatum(wfr.ArgIdxStart), nil
+
+	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	row, err := wfr.Rows.GetRow(frameStartIdx + nth - 1)
+	if err != nil {
+		return nil, err
+	}
+	return row.GetDatum(wfr.ArgIdxStart)
 }
 
 func (nthValueWindow) Close(context.Context, *tree.EvalContext) {}

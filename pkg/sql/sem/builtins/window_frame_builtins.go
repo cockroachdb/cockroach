@@ -98,20 +98,41 @@ type slidingWindowFunc struct {
 func (w *slidingWindowFunc) Compute(
 	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	start, end := wfr.FrameStartIdx(evalCtx), wfr.FrameEndIdx(evalCtx)
+	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+	if err != nil {
+		return nil, err
+	}
 
 	// We need to discard all values that are no longer in the frame.
-	w.sw.removeAllBefore(start)
+	w.sw.removeAllBefore(frameStartIdx)
 
 	// We need to add all values that just entered the frame and have not been
 	// added yet.
-	for idx := max(w.prevEnd, start); idx < end; idx++ {
-		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
-			continue
+	for idx := max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
+		if wfr.FilterColIdx != noFilterIdx {
+			row, err := wfr.Rows.GetRow(idx)
+			if err != nil {
+				return nil, err
+			}
+			datum, err := row.GetDatum(wfr.FilterColIdx)
+			if err != nil {
+				return nil, err
+			}
+			if datum != tree.DBoolTrue {
+				continue
+			}
 		}
-		w.sw.add(&indexedValue{value: wfr.ArgsByRowIdx(idx)[0], idx: idx})
+		args, err := wfr.ArgsByRowIdx(idx)
+		if err != nil {
+			return nil, err
+		}
+		w.sw.add(&indexedValue{value: args[0], idx: idx})
 	}
-	w.prevEnd = end
+	w.prevEnd = frameEndIdx
 
 	if w.sw.values.Len() == 0 {
 		// Spec: the frame is empty, so we return NULL.
@@ -148,12 +169,29 @@ type slidingWindowSumFunc struct {
 func (w *slidingWindowSumFunc) removeAllBefore(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) error {
-	var err error
-	for idx := w.prevStart; idx < wfr.FrameStartIdx(evalCtx) && idx < w.prevEnd; idx++ {
-		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
-			continue
+	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	if err != nil {
+		return err
+	}
+	for idx := w.prevStart; idx < frameStartIdx && idx < w.prevEnd; idx++ {
+		if wfr.FilterColIdx != noFilterIdx {
+			row, err := wfr.Rows.GetRow(idx)
+			if err != nil {
+				return err
+			}
+			datum, err := row.GetDatum(wfr.FilterColIdx)
+			if err != nil {
+				return err
+			}
+			if datum != tree.DBoolTrue {
+				continue
+			}
 		}
-		value := wfr.ArgsByRowIdx(idx)[0]
+		args, err := wfr.ArgsByRowIdx(idx)
+		if err != nil {
+			return err
+		}
+		value := args[0]
 		switch v := value.(type) {
 		case *tree.DInt:
 			err = w.agg.Add(ctx, tree.NewDInt(-*v))
@@ -179,29 +217,49 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 func (w *slidingWindowSumFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	start, end := wfr.FrameStartIdx(evalCtx), wfr.FrameEndIdx(evalCtx)
+	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+	if err != nil {
+		return nil, err
+	}
 
 	// We need to discard all values that are no longer in the frame.
-	err := w.removeAllBefore(ctx, evalCtx, wfr)
-	if err != nil {
-		return tree.DNull, err
+	if err = w.removeAllBefore(ctx, evalCtx, wfr); err != nil {
+		return nil, err
 	}
 
 	// We need to sum all values that just entered the frame and have not been
 	// added yet.
-	for idx := max(w.prevEnd, start); idx < end; idx++ {
-		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
-			continue
+	for idx := max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
+		if wfr.FilterColIdx != noFilterIdx {
+			row, err := wfr.Rows.GetRow(idx)
+			if err != nil {
+				return nil, err
+			}
+			datum, err := row.GetDatum(wfr.FilterColIdx)
+			if err != nil {
+				return nil, err
+			}
+			if datum != tree.DBoolTrue {
+				continue
+			}
 		}
-		err = w.agg.Add(ctx, wfr.ArgsByRowIdx(idx)[0])
+		args, err := wfr.ArgsByRowIdx(idx)
 		if err != nil {
-			return tree.DNull, err
+			return nil, err
+		}
+		err = w.agg.Add(ctx, args[0])
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	w.prevStart = start
-	w.prevEnd = end
-	if start == end {
+	w.prevStart = frameStartIdx
+	w.prevEnd = frameEndIdx
+	if frameStartIdx == frameEndIdx {
 		// Spec: the frame is empty, so we return NULL.
 		return tree.DNull, nil
 	}
@@ -235,14 +293,32 @@ func (w *avgWindowFunc) Compute(
 
 	var frameSize int
 	if wfr.FilterColIdx != noFilterIdx {
-		for idx := wfr.FrameStartIdx(evalCtx); idx < wfr.FrameEndIdx(evalCtx); idx++ {
-			if wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
+		frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+		if err != nil {
+			return nil, err
+		}
+		frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+		if err != nil {
+			return nil, err
+		}
+		for idx := frameStartIdx; idx < frameEndIdx; idx++ {
+			row, err := wfr.Rows.GetRow(idx)
+			if err != nil {
+				return nil, err
+			}
+			datum, err := row.GetDatum(wfr.FilterColIdx)
+			if err != nil {
+				return nil, err
+			}
+			if datum != tree.DBoolTrue {
 				continue
 			}
 			frameSize++
 		}
 	} else {
-		frameSize = wfr.FrameSize(evalCtx)
+		if frameSize, err = wfr.FrameSize(evalCtx); err != nil {
+			return nil, err
+		}
 	}
 
 	switch t := sum.(type) {

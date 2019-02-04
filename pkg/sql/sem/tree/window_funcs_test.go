@@ -84,16 +84,23 @@ func testStartPreceding(
 		}
 		wfr.StartBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			frameStart := wfr.FrameStartIdx(evalCtx)
+			frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
 			value, err := wfr.getValueByOffset(evalCtx, typedOffset, true /* negative */)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 			for idx := 0; idx <= wfr.RowIdx; idx++ {
-				if value.Compare(evalCtx, wfr.valueAt(idx)) <= 0 {
-					if idx != frameStart {
-						t.Errorf("FrameStartIdx returned wrong result on Preceding: expected %+v, found %+v", idx, frameStart)
-						t.Errorf("Search for %+v when cur is %+v with wfr.RowIdx=%+v", value, wfr.valueAt(wfr.RowIdx), wfr.RowIdx)
+				valueAt, err := wfr.valueAt(idx)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if value.Compare(evalCtx, valueAt) <= 0 {
+					if idx != frameStartIdx {
+						t.Errorf("FrameStartIdx returned wrong result on Preceding: expected %+v, found %+v", idx, frameStartIdx)
+						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
 						t.Errorf(partitionToString(wfr.Rows))
 						panic("")
 					}
@@ -127,16 +134,32 @@ func testStartFollowing(
 		}
 		wfr.StartBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			frameStart := wfr.FrameStartIdx(evalCtx)
+			frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
 			value, err := wfr.getValueByOffset(evalCtx, typedOffset, false /* negative */)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 			for idx := wfr.RowIdx; idx <= wfr.PartitionSize(); idx++ {
-				if idx == wfr.PartitionSize() || value.Compare(evalCtx, wfr.valueAt(idx)) <= 0 {
-					if idx != frameStart {
-						t.Errorf("FrameStartIdx returned wrong result on Following: expected %+v, found %+v", idx, frameStart)
-						t.Errorf("Search for %+v when cur is %+v with wfr.RowIdx=%+v", value, wfr.valueAt(wfr.RowIdx), wfr.RowIdx)
+				if idx == wfr.PartitionSize() {
+					if idx != frameStartIdx {
+						t.Errorf("FrameStartIdx returned wrong result on Following: expected %+v, found %+v", idx, frameStartIdx)
+						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
+						t.Errorf(partitionToString(wfr.Rows))
+						panic("")
+					}
+					break
+				}
+				valueAt, err := wfr.valueAt(idx)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if value.Compare(evalCtx, valueAt) <= 0 {
+					if idx != frameStartIdx {
+						t.Errorf("FrameStartIdx returned wrong result on Following: expected %+v, found %+v", idx, frameStartIdx)
+						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
 						t.Errorf(partitionToString(wfr.Rows))
 						panic("")
 					}
@@ -168,16 +191,23 @@ func testEndPreceding(t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, o
 		}
 		wfr.EndBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			frameEnd := wfr.FrameEndIdx(evalCtx)
+			frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
 			value, err := wfr.getValueByOffset(evalCtx, typedOffset, true /* negative */)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 			for idx := wfr.RowIdx; idx >= 0; idx-- {
-				if value.Compare(evalCtx, wfr.valueAt(idx)) >= 0 {
-					if idx+1 != frameEnd {
-						t.Errorf("FrameEndIdx returned wrong result on Preceding: expected %+v, found %+v", idx+1, frameEnd)
-						t.Errorf("Search for %+v when cur is %+v with wfr.RowIdx=%+v", value, wfr.valueAt(wfr.RowIdx), wfr.RowIdx)
+				valueAt, err := wfr.valueAt(idx)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if value.Compare(evalCtx, valueAt) >= 0 {
+					if idx+1 != frameEndIdx {
+						t.Errorf("FrameEndIdx returned wrong result on Preceding: expected %+v, found %+v", idx+1, frameEndIdx)
+						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
 						t.Errorf(partitionToString(wfr.Rows))
 						panic("")
 					}
@@ -209,16 +239,23 @@ func testEndFollowing(t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, o
 		}
 		wfr.EndBoundOffset = typedOffset
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
-			frameEnd := wfr.FrameEndIdx(evalCtx)
+			frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
 			value, err := wfr.getValueByOffset(evalCtx, typedOffset, false /* negative */)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 			for idx := wfr.PartitionSize() - 1; idx >= wfr.RowIdx; idx-- {
-				if value.Compare(evalCtx, wfr.valueAt(idx)) >= 0 {
-					if idx+1 != frameEnd {
-						t.Errorf("FrameEndIdx returned wrong result on Following: expected %+v, found %+v", idx+1, frameEnd)
-						t.Errorf("Search for %+v when cur is %+v with wfr.RowIdx=%+v", value, wfr.valueAt(wfr.RowIdx), wfr.RowIdx)
+				valueAt, err := wfr.valueAt(idx)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if value.Compare(evalCtx, valueAt) >= 0 {
+					if idx+1 != frameEndIdx {
+						t.Errorf("FrameEndIdx returned wrong result on Following: expected %+v, found %+v", idx+1, frameEndIdx)
+						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
 						t.Errorf(partitionToString(wfr.Rows))
 						panic("")
 					}
@@ -287,9 +324,14 @@ func makeDecimalSortedPartition(count int) indexedRows {
 
 func partitionToString(partition IndexedRows) string {
 	var buffer bytes.Buffer
+	var err error
+	var row IndexedRow
 	buffer.WriteString("\n")
 	for idx := 0; idx < partition.Len(); idx++ {
-		buffer.WriteString(fmt.Sprintf("%+v\n", partition.GetRow(idx)))
+		if row, err = partition.GetRow(idx); err != nil {
+			return err.Error()
+		}
+		buffer.WriteString(fmt.Sprintf("%+v\n", row))
 	}
 	return buffer.String()
 }
@@ -312,8 +354,8 @@ func (ir indexedRows) Len() int {
 }
 
 // GetRow implements IndexedRows interface.
-func (ir indexedRows) GetRow(idx int) IndexedRow {
-	return ir.rows[idx]
+func (ir indexedRows) GetRow(idx int) (IndexedRow, error) {
+	return ir.rows[idx], nil
 }
 
 // indexedRow is a row with a corresponding index.
@@ -328,11 +370,11 @@ func (ir indexedRow) GetIdx() int {
 }
 
 // GetDatum implements IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) Datum {
-	return ir.row[colIdx]
+func (ir indexedRow) GetDatum(colIdx int) (Datum, error) {
+	return ir.row[colIdx], nil
 }
 
-// GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) Datums {
-	return ir.row[firstColIdx:lastColIdx]
+// GetDatums implements IndexedRow interface.
+func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (Datums, error) {
+	return ir.row[firstColIdx:lastColIdx], nil
 }

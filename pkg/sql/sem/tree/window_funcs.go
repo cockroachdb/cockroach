@@ -16,7 +16,6 @@ package tree
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -25,15 +24,15 @@ import (
 
 // IndexedRows are rows with the corresponding indices.
 type IndexedRows interface {
-	Len() int                  // returns number of rows
-	GetRow(idx int) IndexedRow // returns a row at the given index
+	Len() int                           // returns number of rows
+	GetRow(idx int) (IndexedRow, error) // returns a row at the given index or an error
 }
 
 // IndexedRow is a row with a corresponding index.
 type IndexedRow interface {
-	GetIdx() int                           // returns index of the row
-	GetDatum(idx int) Datum                // returns a datum at the given index
-	GetDatums(startIdx, endIdx int) Datums // returns datums at indices [startIdx, endIdx)
+	GetIdx() int                                    // returns index of the row
+	GetDatum(idx int) (Datum, error)                // returns a datum at the given index
+	GetDatums(startIdx, endIdx int) (Datums, error) // returns datums at indices [startIdx, endIdx)
 }
 
 // WindowFrameRun contains the runtime state of window frame during calculations.
@@ -50,6 +49,10 @@ type WindowFrameRun struct {
 	OrdDirection     encoding.Direction // Direction of the ordering over OrdColIdx.
 	PlusOp, MinusOp  *BinOp             // Binary operators for addition and subtraction required only in RANGE mode.
 	PeerHelper       PeerGroupsIndicesHelper
+
+	// Any error that occurred within methods that cannot return an error (like
+	// within a closure that is passed into sort.Search()).
+	err error
 
 	// changes for each peer group
 	CurRowPeerGroupNum int // the number of the current row's peer group
@@ -95,90 +98,134 @@ func (wfr *WindowFrameRun) getValueByOffset(
 	} else {
 		binOp = wfr.PlusOp
 	}
-	return binOp.Fn(evalCtx, wfr.valueAt(wfr.RowIdx), offset)
+	value, err := wfr.valueAt(wfr.RowIdx)
+	if err != nil {
+		return nil, err
+	}
+	return binOp.Fn(evalCtx, value, offset)
 }
 
 // FrameStartIdx returns the index of starting row in the frame (which is the first to be included).
-func (wfr *WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) int {
+func (wfr *WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) (int, error) {
 	if wfr.Frame == nil {
-		return 0
+		return 0, nil
 	}
 	switch wfr.Frame.Mode {
 	case RANGE:
 		switch wfr.Frame.Bounds.StartBound.BoundType {
 		case UnboundedPreceding:
-			return 0
+			return 0, nil
 		case OffsetPreceding:
 			value, err := wfr.getValueByOffset(evalCtx, wfr.StartBoundOffset, true /* negative */)
 			if err != nil {
-				panic(fmt.Sprintf("error received: %v", err))
+				return 0, err
 			}
 			if wfr.OrdDirection == encoding.Descending {
 				// We use binary search on [0, wfr.RowIdx) interval to find the first row
 				// whose value is smaller or equal to 'value'. If such row is not found,
 				// then Search will correctly return wfr.RowIdx.
-				return sort.Search(wfr.RowIdx, func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) <= 0 })
+				return sort.Search(wfr.RowIdx, func(i int) bool {
+					if wfr.err != nil {
+						return false
+					}
+					valueAt, err := wfr.valueAt(i)
+					if err != nil {
+						wfr.err = err
+						return false
+					}
+					return valueAt.Compare(evalCtx, value) <= 0
+				}), wfr.err
 			}
 			// We use binary search on [0, wfr.RowIdx) interval to find the first row
 			// whose value is greater or equal to 'value'. If such row is not found,
 			// then Search will correctly return wfr.RowIdx.
-			return sort.Search(wfr.RowIdx, func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) >= 0 })
+			return sort.Search(wfr.RowIdx, func(i int) bool {
+				if wfr.err != nil {
+					return false
+				}
+				valueAt, err := wfr.valueAt(i)
+				if err != nil {
+					wfr.err = err
+					return false
+				}
+				return valueAt.Compare(evalCtx, value) >= 0
+			}), wfr.err
 		case CurrentRow:
 			// Spec: in RANGE mode CURRENT ROW means that the frame starts with the current row's first peer.
-			return wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum)
+			return wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum), nil
 		case OffsetFollowing:
 			value, err := wfr.getValueByOffset(evalCtx, wfr.StartBoundOffset, false /* negative */)
 			if err != nil {
-				panic(fmt.Sprintf("error received: %v", err))
+				return 0, err
 			}
 			if wfr.OrdDirection == encoding.Descending {
 				// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval
 				// to find the first row whose value is smaller or equal to 'value'.
-				return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool { return wfr.valueAt(i+wfr.RowIdx).Compare(evalCtx, value) <= 0 })
+				return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool {
+					if wfr.err != nil {
+						return false
+					}
+					valueAt, err := wfr.valueAt(i + wfr.RowIdx)
+					if err != nil {
+						wfr.err = err
+						return false
+					}
+					return valueAt.Compare(evalCtx, value) <= 0
+				}), wfr.err
 			}
 			// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval
 			// to find the first row whose value is greater or equal to 'value'.
-			return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool { return wfr.valueAt(i+wfr.RowIdx).Compare(evalCtx, value) >= 0 })
+			return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool {
+				if wfr.err != nil {
+					return false
+				}
+				valueAt, err := wfr.valueAt(i + wfr.RowIdx)
+				if err != nil {
+					wfr.err = err
+					return false
+				}
+				return valueAt.Compare(evalCtx, value) >= 0
+			}), wfr.err
 		default:
 			panic("unexpected WindowFrameBoundType in RANGE mode")
 		}
 	case ROWS:
 		switch wfr.Frame.Bounds.StartBound.BoundType {
 		case UnboundedPreceding:
-			return 0
+			return 0, nil
 		case OffsetPreceding:
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			idx := wfr.RowIdx - int(offset)
 			if idx < 0 {
 				idx = 0
 			}
-			return idx
+			return idx, nil
 		case CurrentRow:
-			return wfr.RowIdx
+			return wfr.RowIdx, nil
 		case OffsetFollowing:
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			idx := wfr.RowIdx + int(offset)
 			if idx >= wfr.PartitionSize() {
 				idx = wfr.unboundedFollowing()
 			}
-			return idx
+			return idx, nil
 		default:
 			panic("unexpected WindowFrameBoundType in ROWS mode")
 		}
 	case GROUPS:
 		switch wfr.Frame.Bounds.StartBound.BoundType {
 		case UnboundedPreceding:
-			return 0
+			return 0, nil
 		case OffsetPreceding:
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum - int(offset)
 			if peerGroupNum < 0 {
 				peerGroupNum = 0
 			}
-			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum)
+			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum), nil
 		case CurrentRow:
 			// Spec: in GROUPS mode CURRENT ROW means that the frame starts with the current row's first peer.
-			return wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum)
+			return wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum), nil
 		case OffsetFollowing:
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum + int(offset)
@@ -186,9 +233,9 @@ func (wfr *WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) int {
 			if peerGroupNum > lastPeerGroupNum {
 				// peerGroupNum is out of bounds, so we return the index of the first
 				// row after the partition.
-				return wfr.unboundedFollowing()
+				return wfr.unboundedFollowing(), nil
 			}
-			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum)
+			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum), nil
 		default:
 			panic("unexpected WindowFrameBoundType in GROUPS mode")
 		}
@@ -210,58 +257,98 @@ func (wfr *WindowFrameRun) IsDefaultFrame() bool {
 }
 
 // FrameEndIdx returns the index of the first row after the frame.
-func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) int {
+func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) (int, error) {
 	if wfr.Frame == nil {
-		return wfr.DefaultFrameSize()
+		return wfr.DefaultFrameSize(), nil
 	}
 	switch wfr.Frame.Mode {
 	case RANGE:
 		if wfr.Frame.Bounds.EndBound == nil {
 			// We're using default value of CURRENT ROW when EndBound is omitted.
 			// Spec: in RANGE mode CURRENT ROW means that the frame ends with the current row's last peer.
-			return wfr.DefaultFrameSize()
+			return wfr.DefaultFrameSize(), nil
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
 		case OffsetPreceding:
 			value, err := wfr.getValueByOffset(evalCtx, wfr.EndBoundOffset, true /* negative */)
 			if err != nil {
-				panic(fmt.Sprintf("error received: %v", err))
+				return 0, err
 			}
 			if wfr.OrdDirection == encoding.Descending {
 				// We use binary search on [0, wfr.RowIdx] interval to find the first row
 				// whose value is smaller than 'value'. If such row is not found,
 				// then Search will correctly return wfr.RowIdx+1.
-				return sort.Search(wfr.RowIdx+1, func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) < 0 })
+				return sort.Search(wfr.RowIdx+1, func(i int) bool {
+					if wfr.err != nil {
+						return false
+					}
+					valueAt, err := wfr.valueAt(i)
+					if err != nil {
+						wfr.err = err
+						return false
+					}
+					return valueAt.Compare(evalCtx, value) < 0
+				}), wfr.err
 			}
 			// We use binary search on [0, wfr.RowIdx] interval to find the first row
 			// whose value is greater than 'value'. If such row is not found,
 			// then Search will correctly return wfr.RowIdx+1.
-			return sort.Search(wfr.RowIdx+1, func(i int) bool { return wfr.valueAt(i).Compare(evalCtx, value) > 0 })
+			return sort.Search(wfr.RowIdx+1, func(i int) bool {
+				if wfr.err != nil {
+					return false
+				}
+				valueAt, err := wfr.valueAt(i)
+				if err != nil {
+					wfr.err = err
+					return false
+				}
+				return valueAt.Compare(evalCtx, value) > 0
+			}), wfr.err
 		case CurrentRow:
 			// Spec: in RANGE mode CURRENT ROW means that the frame end with the current row's last peer.
-			return wfr.DefaultFrameSize()
+			return wfr.DefaultFrameSize(), nil
 		case OffsetFollowing:
 			value, err := wfr.getValueByOffset(evalCtx, wfr.EndBoundOffset, false /* negative */)
 			if err != nil {
-				panic(fmt.Sprintf("error received: %v", err))
+				return 0, err
 			}
 			if wfr.OrdDirection == encoding.Descending {
 				// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval
 				// to find the first row whose value is smaller than 'value'.
-				return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool { return wfr.valueAt(i+wfr.RowIdx).Compare(evalCtx, value) < 0 })
+				return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool {
+					if wfr.err != nil {
+						return false
+					}
+					valueAt, err := wfr.valueAt(i + wfr.RowIdx)
+					if err != nil {
+						wfr.err = err
+						return false
+					}
+					return valueAt.Compare(evalCtx, value) < 0
+				}), wfr.err
 			}
 			// We use binary search on [wfr.RowIdx, wfr.PartitionSize()) interval
 			// to find the first row whose value is greater than 'value'.
-			return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool { return wfr.valueAt(i+wfr.RowIdx).Compare(evalCtx, value) > 0 })
+			return wfr.RowIdx + sort.Search(wfr.PartitionSize()-wfr.RowIdx, func(i int) bool {
+				if wfr.err != nil {
+					return false
+				}
+				valueAt, err := wfr.valueAt(i + wfr.RowIdx)
+				if err != nil {
+					wfr.err = err
+					return false
+				}
+				return valueAt.Compare(evalCtx, value) > 0
+			}), wfr.err
 		case UnboundedFollowing:
-			return wfr.unboundedFollowing()
+			return wfr.unboundedFollowing(), nil
 		default:
 			panic("unexpected WindowFrameBoundType in RANGE mode")
 		}
 	case ROWS:
 		if wfr.Frame.Bounds.EndBound == nil {
 			// We're using default value of CURRENT ROW when EndBound is omitted.
-			return wfr.RowIdx + 1
+			return wfr.RowIdx + 1, nil
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
 		case OffsetPreceding:
@@ -270,18 +357,18 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) int {
 			if idx < 0 {
 				idx = 0
 			}
-			return idx
+			return idx, nil
 		case CurrentRow:
-			return wfr.RowIdx + 1
+			return wfr.RowIdx + 1, nil
 		case OffsetFollowing:
 			offset := MustBeDInt(wfr.EndBoundOffset)
 			idx := wfr.RowIdx + int(offset) + 1
 			if idx >= wfr.PartitionSize() {
 				idx = wfr.unboundedFollowing()
 			}
-			return idx
+			return idx, nil
 		case UnboundedFollowing:
-			return wfr.unboundedFollowing()
+			return wfr.unboundedFollowing(), nil
 		default:
 			panic("unexpected WindowFrameBoundType in ROWS mode")
 		}
@@ -289,7 +376,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) int {
 		if wfr.Frame.Bounds.EndBound == nil {
 			// We're using default value of CURRENT ROW when EndBound is omitted.
 			// Spec: in GROUPS mode CURRENT ROW means that the frame ends with the current row's last peer.
-			return wfr.DefaultFrameSize()
+			return wfr.DefaultFrameSize(), nil
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
 		case OffsetPreceding:
@@ -297,11 +384,11 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) int {
 			peerGroupNum := wfr.CurRowPeerGroupNum - int(offset)
 			if peerGroupNum < 0 {
 				// EndBound's peer group is "outside" of the partition.
-				return 0
+				return 0, nil
 			}
-			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum) + wfr.PeerHelper.GetRowCount(peerGroupNum)
+			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum) + wfr.PeerHelper.GetRowCount(peerGroupNum), nil
 		case CurrentRow:
-			return wfr.DefaultFrameSize()
+			return wfr.DefaultFrameSize(), nil
 		case OffsetFollowing:
 			offset := MustBeDInt(wfr.EndBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum + int(offset)
@@ -309,11 +396,11 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) int {
 			if peerGroupNum > lastPeerGroupNum {
 				// peerGroupNum is out of bounds, so we return the index of the first
 				// row after the partition.
-				return wfr.unboundedFollowing()
+				return wfr.unboundedFollowing(), nil
 			}
-			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum) + wfr.PeerHelper.GetRowCount(peerGroupNum)
+			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum) + wfr.PeerHelper.GetRowCount(peerGroupNum), nil
 		case UnboundedFollowing:
-			return wfr.unboundedFollowing()
+			return wfr.unboundedFollowing(), nil
 		default:
 			panic("unexpected WindowFrameBoundType in GROUPS mode")
 		}
@@ -323,15 +410,23 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) int {
 }
 
 // FrameSize returns the number of rows in the current frame.
-func (wfr *WindowFrameRun) FrameSize(evalCtx *EvalContext) int {
+func (wfr *WindowFrameRun) FrameSize(evalCtx *EvalContext) (int, error) {
 	if wfr.Frame == nil {
-		return wfr.DefaultFrameSize()
+		return wfr.DefaultFrameSize(), nil
 	}
-	size := wfr.FrameEndIdx(evalCtx) - wfr.FrameStartIdx(evalCtx)
+	frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+	if err != nil {
+		return 0, err
+	}
+	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	if err != nil {
+		return 0, err
+	}
+	size := frameEndIdx - frameStartIdx
 	if size <= 0 {
 		size = 0
 	}
-	return size
+	return size, nil
 }
 
 // Rank returns the rank of the current row.
@@ -362,23 +457,35 @@ func (wfr *WindowFrameRun) FirstInPeerGroup() bool {
 }
 
 // Args returns the current argument set in the window frame.
-func (wfr *WindowFrameRun) Args() Datums {
+func (wfr *WindowFrameRun) Args() (Datums, error) {
 	return wfr.ArgsWithRowOffset(0)
 }
 
 // ArgsWithRowOffset returns the argument set at the given offset in the window frame.
-func (wfr *WindowFrameRun) ArgsWithRowOffset(offset int) Datums {
-	return wfr.Rows.GetRow(wfr.RowIdx+offset).GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
+func (wfr *WindowFrameRun) ArgsWithRowOffset(offset int) (Datums, error) {
+	row, err := wfr.Rows.GetRow(wfr.RowIdx + offset)
+	if err != nil {
+		return nil, err
+	}
+	return row.GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
 }
 
 // ArgsByRowIdx returns the argument set of the row at idx.
-func (wfr *WindowFrameRun) ArgsByRowIdx(idx int) Datums {
-	return wfr.Rows.GetRow(idx).GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
+func (wfr *WindowFrameRun) ArgsByRowIdx(idx int) (Datums, error) {
+	row, err := wfr.Rows.GetRow(idx)
+	if err != nil {
+		return nil, err
+	}
+	return row.GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
 }
 
 // valueAt returns the first argument of the window function at the row idx.
-func (wfr *WindowFrameRun) valueAt(idx int) Datum {
-	return wfr.Rows.GetRow(idx).GetDatum(wfr.OrdColIdx)
+func (wfr *WindowFrameRun) valueAt(idx int) (Datum, error) {
+	row, err := wfr.Rows.GetRow(idx)
+	if err != nil {
+		return nil, err
+	}
+	return row.GetDatum(wfr.OrdColIdx)
 }
 
 // RangeModeWithOffsets returns whether the frame is in RANGE mode with at least
