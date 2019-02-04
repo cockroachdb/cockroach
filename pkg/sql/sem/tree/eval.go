@@ -2278,6 +2278,22 @@ func MatchLikeEscape(
 		}
 	}
 
+	if len(unescaped) == 0 {
+		// An empty string only matches with an empty pattern or a pattern
+		// consisting only of '%' (if this wildcard is not used as a custom escape
+		// character). To match PostgreSQL's behavior, we have a special handling
+		// of this case.
+		// As an example, the query like `SELECT '' LIKE '{' ESCAPE '{'` without
+		// this special handling would return an error that the patterns ends with
+		// an escape character.
+		for _, c := range pattern {
+			if c != '%' || (c == '%' && escape == `%`) {
+				return DBoolFalse, nil
+			}
+		}
+		return DBoolTrue, nil
+	}
+
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, escapeRune)
 	if err != nil {
 		return DBoolFalse, pgerror.NewErrorf(
@@ -4370,7 +4386,7 @@ OldLoop:
 // 1. we replace '@' with '\\' since it's unescaped;
 // 2. we escape single original backslash ('\' is not our escape character, so we want
 // the pattern to understand it) by putting an extra backslash in front of it. However,
-// we later will call unescapePattern, so we need to double our double backslahes.
+// we later will call unescapePattern, so we need to double our double backslashes.
 // Therefore, '\\' is converted into '\\\\'.
 // 3. '@@' is replaced by '@' because it is escaped escape character.
 // 4. '@' is replaced with '\\' since it's unescaped.
@@ -4421,21 +4437,60 @@ func replaceCustomEscape(s string, escape rune) (string, error) {
 				panic("unexpected: escape character is the last one in replaceCustomEscape.")
 			}
 		} else if s[sIndex] == '\\' {
-			// We encountered a backslash which after QuoteMeta should have been doubled.
-			if sIndex+1 == sLen || s[sIndex+1] != '\\' {
-				// This case should never be reached, and it should
+			// We encountered a backslash, so we need to look ahead to figure out how
+			// to process it.
+			if sIndex+1 == sLen {
+				// This case should never be reached since it should
 				// have been caught in calculateLengthAfterReplacingCustomEscape.
-				panic("unexpected: a backslash is not doubled in replaceCustomEscape.")
+				panic("unexpected: a single backslash encountered in replaceCustomEscape.")
+			} else if s[sIndex+1] == '\\' {
+				// We want to escape '\\' to `\\\\` for correct processing later by unescapePattern. See (3).
+				// Since we've added four characters to ret, we advance retIndex by 4.
+				// Since we've already processed two characters in s, we advance sIndex by 2.
+				ret[retIndex] = '\\'
+				ret[retIndex+1] = '\\'
+				ret[retIndex+2] = '\\'
+				ret[retIndex+3] = '\\'
+				retIndex += 4
+				sIndex += 2
+			} else {
+				// A metacharacter other than a backslash is escaped here.
+				if string(s[sIndex+1]) == string(escape) {
+					// The metacharacter is our custom escape character. We need to look
+					// ahead to process it.
+					if sIndex+2 == sLen {
+						// Escape character is the last character in s which is an error
+						// that must have been caught in calculateLengthAfterReplacingCustomEscape.
+						panic("unexpected: escape character is the last one in replaceCustomEscape.")
+					}
+					if sIndex+4 <= sLen {
+						if s[sIndex+2] == '\\' && string(s[sIndex+3]) == string(escape) {
+							// We have a sequence of `\`+escape+`\`+escape which is replaced
+							// by `\`+escape.
+							ret[retIndex] = '\\'
+							// Note: all metacharacters are encoded as a single byte, so it
+							// is safe to just convert it to string and take the first
+							// character.
+							ret[retIndex+1] = string(escape)[0]
+							retIndex += 2
+							sIndex += 4
+							continue
+						}
+					}
+					// The metacharacter is escaping something different than itself, so
+					// `\`+escape will be replaced by `\`.
+					ret[retIndex] = '\\'
+					retIndex++
+					sIndex += 2
+				} else {
+					// The metacharacter is not our custom escape character, so we're
+					// simply copying the backslash and the metacharacter.
+					ret[retIndex] = '\\'
+					ret[retIndex+1] = s[sIndex+1]
+					retIndex += 2
+					sIndex += 2
+				}
 			}
-			// We want to escape '\\' to `\\\\` for correct processing later by unescapePattern. See (3).
-			// Since we've added four characters to ret, we advance retIndex by 4.
-			// Since we've already processed two characters in s, we advance sIndex by 2.
-			ret[retIndex] = '\\'
-			ret[retIndex+1] = '\\'
-			ret[retIndex+2] = '\\'
-			ret[retIndex+3] = '\\'
-			retIndex += 4
-			sIndex += 2
 		} else {
 			// Regular character, so we simply copy it.
 			ret[retIndex] = s[sIndex]
@@ -4478,16 +4533,49 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 				return false, 0, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
 			}
 		} else if s[i] == '\\' {
-			// We encountered a backslash which after QuoteMeta should have been doubled.
-			if i+1 == sLen || s[i+1] != '\\' {
-				// This case should never be reached.
+			// We encountered a backslash, so we need to look ahead to figure out how
+			// to process it.
+			if i+1 == sLen {
+				// This case should never be reached because the backslash should be
+				// escaping one of regexp metacharacters.
 				return false, 0, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "Unexpected behavior during processing custom escape character.")
+			} else if s[i+1] == '\\' {
+				// We'll want to escape '\\' to `\\\\` for correct processing later by
+				// unescapePattern. See (3) in the comment above replaceCustomEscape.
+				changed = true
+				retLen += 4
+				i += 2
+			} else {
+				// A metacharacter other than a backslash is escaped here.
+				if string(s[i+1]) == string(escape) {
+					// The metacharacter is our custom escape character. We need to look
+					// ahead to process it.
+					if i+2 == sLen {
+						// Escape character is the last character in s, so we need to return an error.
+						return false, 0, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+					}
+					if i+4 <= sLen {
+						if s[i+2] == '\\' && string(s[i+3]) == string(escape) {
+							// We have a sequence of `\`+escape+`\`+escape which will be
+							// replaced by `\`+escape.
+							changed = true
+							retLen += 2
+							i += 4
+							continue
+						}
+					}
+					// The metacharacter is escaping something different than itself, so
+					// `\`+escape will be replaced by `\`.
+					changed = true
+					retLen++
+					i += 2
+				} else {
+					// The metacharacter is not our custom escape character, so we're
+					// simply copying the backslash and the metacharacter.
+					retLen += 2
+					i += 2
+				}
 			}
-			// We'll want to escape '\\' to `\\\\` for correct processing later by unescapePattern.
-			// See (3) in the comment above replaceCustomEscape.
-			changed = true
-			retLen += 4
-			i += 2
 		} else {
 			// Regular character, so we'll simply copy it.
 			retLen++
@@ -4502,7 +4590,7 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 // is to convert all unescaped escape character into '\'.
 // k.escape can either be empty or a single character.
 func (k likeKey) Pattern() (string, error) {
-	// QuoteMeta escapes `\` to `\\`.
+	// QuoteMeta escapes all regexp metacharacters (`\.+*?()|[]{}^$`) with a `\`.
 	pattern := regexp.QuoteMeta(k.s)
 	var err error
 	if k.escape == 0 {
@@ -4521,18 +4609,18 @@ func (k likeKey) Pattern() (string, error) {
 		// If `%` is escape character, then it's not a wildcard.
 		if k.escape != '%' {
 			// Replace LIKE/ILIKE specific wildcards '%' only if it's unescaped.
-			pattern = replaceUnescaped(pattern, `%`, `.*`, string(k.escape))
+			pattern = replaceUnescaped(pattern, `%`, `.*`, regexp.QuoteMeta(string(k.escape)))
 		}
 		// If `_` is escape character, then it's not a wildcard.
 		if k.escape != '_' {
 			// Replace LIKE/ILIKE specific wildcards '_' only if it's unescaped.
-			pattern = replaceUnescaped(pattern, `_`, `.`, string(k.escape))
+			pattern = replaceUnescaped(pattern, `_`, `.`, regexp.QuoteMeta(string(k.escape)))
 		}
 
 		// If a sequence of symbols ` escape+`\\` ` is unescaped, then that escape
 		// character escapes backslash in the original pattern (we need to use double
 		// backslash because of QuoteMeta behavior), so we want to "consume" the escape character.
-		pattern = replaceUnescaped(pattern, string(k.escape)+`\\`, `\\`, string(k.escape))
+		pattern = replaceUnescaped(pattern, string(k.escape)+`\\`, `\\`, regexp.QuoteMeta(string(k.escape)))
 
 		// We want to replace all escape characters with `\\` only
 		// when they are unescaped. When an escape character is escaped,
