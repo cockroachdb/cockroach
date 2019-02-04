@@ -1057,6 +1057,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 
 func TestChangefeedRetryableSinkError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip(`#34533`)
 	defer utilccl.TestingEnableEnterprise()()
 
 	var failSink int64
