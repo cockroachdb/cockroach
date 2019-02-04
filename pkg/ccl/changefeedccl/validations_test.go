@@ -12,7 +12,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"math/rand"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -36,7 +35,7 @@ func TestValidations(t *testing.T) {
 		// also a short lead time for rangefeed-based feeds before the
 		// first checkpoint. This means that a much larger number of transfers
 		// happens, and the validator gets overwhelmed by fingerprints.
-		slowWrite := strings.Contains(t.Name(), `rangefeed`)
+		slowWrite := PushEnabled.Get(&f.Server().ClusterSettings().SV)
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		t.Run("bank", func(t *testing.T) {
@@ -116,7 +115,7 @@ func TestValidations(t *testing.T) {
 	}
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
+	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestCatchupScanOrdering(t *testing.T) {
@@ -189,7 +188,7 @@ func TestCatchupScanOrdering(t *testing.T) {
 	}
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`rangefeed`, rangefeedTest(sinklessTest, testFn))
+	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 // TODO(dan): This bit is copied from the bank workload. It's

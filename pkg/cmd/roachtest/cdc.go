@@ -74,7 +74,11 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	); err != nil {
 		t.Fatal(err)
 	}
-
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING changefeed.push.enabled = $1`, args.rangefeed,
+	); err != nil {
+		t.Fatal(err)
+	}
 	kafka := kafkaManager{
 		c:     c,
 		nodes: kafkaNode,
@@ -246,7 +250,12 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 	defer stopFeeds(db)
 
 	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`,
 	); err != nil {
 		t.Fatal(err)
 	}

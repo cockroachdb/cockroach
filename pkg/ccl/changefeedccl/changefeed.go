@@ -36,6 +36,16 @@ func init() {
 	changefeedPollInterval.Hide()
 }
 
+// PushEnabled is a cluster setting that triggers all subsequently
+// created/unpaused changefeeds to receive kv changes via RangeFeed push
+// (instead of ExportRequest polling).
+var PushEnabled = settings.RegisterBoolSetting(
+	"changefeed.push.enabled",
+	"if set, changed are pushed instead of pulled. This requires the "+
+		"kv.rangefeed.enabled setting.",
+	true,
+)
+
 const (
 	jsonMetaSentinel = `__crdb__`
 )
