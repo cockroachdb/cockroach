@@ -287,9 +287,14 @@ func makeDecimalSortedPartition(count int) indexedRows {
 
 func partitionToString(partition IndexedRows) string {
 	var buffer bytes.Buffer
+	var err error
+	var row IndexedRow
 	buffer.WriteString("\n")
 	for idx := 0; idx < partition.Len(); idx++ {
-		buffer.WriteString(fmt.Sprintf("%+v\n", partition.GetRow(idx)))
+		if row, err = partition.GetRow(idx); err != nil {
+			return err.Error()
+		}
+		buffer.WriteString(fmt.Sprintf("%+v\n", row))
 	}
 	return buffer.String()
 }
@@ -312,8 +317,8 @@ func (ir indexedRows) Len() int {
 }
 
 // GetRow implements IndexedRows interface.
-func (ir indexedRows) GetRow(idx int) IndexedRow {
-	return ir.rows[idx]
+func (ir indexedRows) GetRow(idx int) (IndexedRow, error) {
+	return ir.rows[idx], nil
 }
 
 // indexedRow is a row with a corresponding index.
@@ -328,11 +333,11 @@ func (ir indexedRow) GetIdx() int {
 }
 
 // GetDatum implements IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) Datum {
-	return ir.row[colIdx]
+func (ir indexedRow) GetDatum(colIdx int) (Datum, error) {
+	return ir.row[colIdx], nil
 }
 
-// GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) Datums {
-	return ir.row[firstColIdx:lastColIdx]
+// GetDatums implements IndexedRow interface.
+func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (Datums, error) {
+	return ir.row[firstColIdx:lastColIdx], nil
 }

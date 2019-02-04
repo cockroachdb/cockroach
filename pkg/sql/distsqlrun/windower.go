@@ -570,25 +570,29 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 			}
 			w.windowValues[windowFnIdx][partitionIdx] = make([]tree.Datum, partition.Len())
 
+			var sorter *partitionSorter
 			if len(windowFn.ordering.Columns) > 0 {
 				// If an ORDER BY clause is provided, order the partition and use the
 				// sorter as our peerGroupChecker.
 				if funcIdx := partitionPreviouslySortedFuncIdx[windowFnIdx]; funcIdx != -1 {
 					// We have cached sorted partitions - no need to resort them.
 					partition = sortedPartitionsCache[funcIdx][partitionIdx]
-					peerGrouper = &partitionSorter{
+					sorter = &partitionSorter{
 						evalCtx:  evalCtx,
 						rows:     partition,
 						ordering: windowFn.ordering,
 					}
 				} else {
-					sorter := &partitionSorter{
+					sorter = &partitionSorter{
 						evalCtx:  evalCtx,
 						rows:     partition,
 						ordering: windowFn.ordering,
 					}
 					sort.Sort(sorter)
-					peerGrouper = sorter
+					if sorter.err != nil {
+						// An error occurred while sorting.
+						return sorter.err
+					}
 					if shouldCacheSortedPartitions[windowFnIdx] {
 						// Later window functions will need rows in the same order,
 						// so we cache copies of all sorted partitions.
@@ -607,6 +611,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 						sortedPartitionsCache[windowFnIdx][partitionIdx] = partition.makeCopy()
 					}
 				}
+				peerGrouper = sorter
 			} else {
 				// If ORDER BY clause is not provided, all rows are peers.
 				peerGrouper = allPeers{}
@@ -624,7 +629,9 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 				builtins.ShouldReset(builtin)
 			}
 
-			frameRun.PeerHelper.Init(frameRun, peerGrouper)
+			if err := frameRun.PeerHelper.Init(frameRun, peerGrouper); err != nil {
+				return err
+			}
 			frameRun.CurRowPeerGroupNum = 0
 
 			for frameRun.RowIdx < partition.Len() {
@@ -635,9 +642,15 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 					if err != nil {
 						return err
 					}
-					w.windowValues[windowFnIdx][partitionIdx][frameRun.Rows.GetRow(frameRun.RowIdx).GetIdx()] = res
+					row, err := frameRun.Rows.GetRow(frameRun.RowIdx)
+					if err != nil {
+						return err
+					}
+					w.windowValues[windowFnIdx][partitionIdx][row.GetIdx()] = res
 				}
-				frameRun.PeerHelper.Update(frameRun)
+				if err := frameRun.PeerHelper.Update(frameRun); err != nil {
+					return err
+				}
 				frameRun.CurRowPeerGroupNum++
 			}
 		}
@@ -695,6 +708,7 @@ type partitionSorter struct {
 	evalCtx  *tree.EvalContext
 	rows     indexedRows
 	ordering distsqlpb.Ordering
+	err      error
 }
 
 // partitionSorter implements the sort.Interface interface.
@@ -702,30 +716,51 @@ func (n *partitionSorter) Len() int { return n.rows.Len() }
 func (n *partitionSorter) Swap(i, j int) {
 	n.rows.rows[i], n.rows.rows[j] = n.rows.rows[j], n.rows.rows[i]
 }
-func (n *partitionSorter) Less(i, j int) bool { return n.Compare(i, j) < 0 }
+func (n *partitionSorter) Less(i, j int) bool {
+	if n.err != nil {
+		// An error occurred in previous calls to Less(). We want to be done with
+		// sorting and to propagate that error to the caller of Sort().
+		return false
+	}
+	cmp, err := n.Compare(i, j)
+	if err != nil {
+		n.err = err
+		return false
+	}
+	return cmp < 0
+}
 
 // partitionSorter implements the tree.PeerGroupChecker interface.
-func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) == 0 }
+func (n *partitionSorter) InSameGroup(i, j int) (bool, error) {
+	cmp, err := n.Compare(i, j)
+	return cmp == 0, err
+}
 
-func (n *partitionSorter) Compare(i, j int) int {
+func (n *partitionSorter) Compare(i, j int) (int, error) {
 	ra, rb := n.rows.rows[i], n.rows.rows[j]
 	for _, o := range n.ordering.Columns {
-		da := ra.GetDatum(int(o.ColIdx))
-		db := rb.GetDatum(int(o.ColIdx))
+		da, err := ra.GetDatum(int(o.ColIdx))
+		if err != nil {
+			return 0, err
+		}
+		db, err := rb.GetDatum(int(o.ColIdx))
+		if err != nil {
+			return 0, err
+		}
 		if c := da.Compare(n.evalCtx, db); c != 0 {
 			if o.Direction != distsqlpb.Ordering_Column_ASC {
-				return -c
+				return -c, nil
 			}
-			return c
+			return c, nil
 		}
 	}
-	return 0
+	return 0, nil
 }
 
 type allPeers struct{}
 
-// allPeers implements the peerGroupChecker interface.
-func (allPeers) InSameGroup(i, j int) bool { return true }
+// allPeers implements the PeerGroupChecker interface.
+func (allPeers) InSameGroup(i, j int) (bool, error) { return true, nil }
 
 const sizeOfIndexedRowsStruct = int64(unsafe.Sizeof(indexedRows{}))
 const indexedRowsStructSliceOverhead = int64(unsafe.Sizeof([]indexedRows{}))
@@ -751,8 +786,8 @@ func (ir indexedRows) Len() int {
 }
 
 // GetRow implements tree.IndexedRows interface.
-func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
-	return ir.rows[idx]
+func (ir indexedRows) GetRow(idx int) (tree.IndexedRow, error) {
+	return ir.rows[idx], nil
 }
 
 func (ir indexedRows) makeCopy() indexedRows {
@@ -773,17 +808,17 @@ func (ir indexedRow) GetIdx() int {
 }
 
 // GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
-	return ir.row[colIdx].Datum
+func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
+	return ir.row[colIdx].Datum, nil
 }
 
 // GetDatums implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatums(startColIdx, endColIdx int) tree.Datums {
+func (ir indexedRow) GetDatums(startColIdx, endColIdx int) (tree.Datums, error) {
 	datums := make(tree.Datums, 0, endColIdx-startColIdx)
 	for idx := startColIdx; idx < endColIdx; idx++ {
 		datums = append(datums, ir.row[idx].Datum)
 	}
-	return datums
+	return datums, nil
 }
 
 // CreateWindowerSpecFunc creates a WindowerSpec_Func based on the function

@@ -607,7 +607,7 @@ func (n *partitionSorter) Swap(i, j int) {
 func (n *partitionSorter) Less(i, j int) bool { return n.Compare(i, j) < 0 }
 
 // partitionSorter implements the PeerGroupChecker interface.
-func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) == 0 }
+func (n *partitionSorter) InSameGroup(i, j int) (bool, error) { return n.Compare(i, j) == 0, nil }
 
 func (n *partitionSorter) Compare(i, j int) int {
 	ra, rb := n.rows.rows[i], n.rows.rows[j]
@@ -628,7 +628,7 @@ func (n *partitionSorter) Compare(i, j int) int {
 type allPeers struct{}
 
 // allPeers implements the PeerGroupChecker interface.
-func (allPeers) InSameGroup(i, j int) bool { return true }
+func (allPeers) InSameGroup(i, j int) (bool, error) { return true, nil }
 
 // computeWindows populates n.run.windowValues, adding a column of values to the
 // 2D-slice for each window function in n.funcs. This needs to be performed
@@ -844,7 +844,9 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				builtins.ShouldReset(builtin)
 			}
 
-			frameRun.PeerHelper.Init(frameRun, peerGrouper)
+			if err := frameRun.PeerHelper.Init(frameRun, peerGrouper); err != nil {
+				return err
+			}
 			frameRun.CurRowPeerGroupNum = 0
 
 			for frameRun.RowIdx < partition.Len() {
@@ -866,7 +868,9 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					valRowIdx := partition.rows[frameRun.RowIdx].idx
 					n.run.windowValues[valRowIdx][windowIdx] = res
 				}
-				frameRun.PeerHelper.Update(frameRun)
+				if err := frameRun.PeerHelper.Update(frameRun); err != nil {
+					return err
+				}
 				frameRun.CurRowPeerGroupNum++
 			}
 		}
@@ -1157,8 +1161,8 @@ func (ir indexedRows) Len() int {
 }
 
 // GetRow implements tree.IndexedRows interface.
-func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
-	return ir.rows[idx]
+func (ir indexedRows) GetRow(idx int) (tree.IndexedRow, error) {
+	return ir.rows[idx], nil
 }
 
 // indexedRow is a row with a corresponding index.
@@ -1173,11 +1177,11 @@ func (ir indexedRow) GetIdx() int {
 }
 
 // GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
-	return ir.row[colIdx]
+func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
+	return ir.row[colIdx], nil
 }
 
-// GetDatum implements tree.IndexedRow interface.
-func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) tree.Datums {
-	return ir.row[firstColIdx:lastColIdx]
+// GetDatums implements tree.IndexedRow interface.
+func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (tree.Datums, error) {
+	return ir.row[firstColIdx:lastColIdx], nil
 }
