@@ -155,6 +155,7 @@ type Server struct {
 	st         *cluster.Settings
 	mux        safeServeMux
 	clock      *hlc.Clock
+	startTime  time.Time
 	rpcContext *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
 	grpc             *grpcServer
@@ -1078,7 +1079,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	ctx = s.AnnotateCtx(ctx)
 
-	startTime := timeutil.Now()
+	s.startTime = timeutil.Now()
 	s.startMonitoringForwardClockJumps(ctx)
 
 	uiTLSConfig, err := s.cfg.GetUIServerTLSConfig()
@@ -1388,7 +1389,7 @@ func (s *Server) Start(ctx context.Context) error {
 		ensureClockMonotonicity(
 			ctx,
 			s.clock,
-			startTime,
+			s.startTime,
 			hlcUpperBound,
 			timeutil.SleepUntil,
 		)
