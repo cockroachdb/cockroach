@@ -103,12 +103,12 @@
 #   A JOIN (B JOIN C ON B.x = C.x) ON A.y = B.y
 [AssociateJoin, Explore]
 (InnerJoin
-    (InnerJoin
-        $innerLeft:* & (ShouldReorderJoins)
+    $left:(InnerJoin
+        $innerLeft:*
         $innerRight:*
         $innerOn:*
     )
-    $right:*
+    $right:* & (ShouldReorderJoins $left $right)
     $on:*
 )
 =>

@@ -15,6 +15,7 @@
 package bench
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"flag"
@@ -174,6 +175,14 @@ var schemas = [...]string{
 		foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)
 	)
 	`,
+	`
+	CREATE TABLE j
+	(
+	  a INT PRIMARY KEY,
+	  b INT,
+	  INDEX (b)
+	)
+  `,
 }
 
 var queries = [...]benchQuery{
@@ -579,5 +588,57 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared b
 	execFactory := stubFactory{}
 	if _, err = execbuilder.New(&execFactory, execMemo, root, &h.evalCtx).Build(); err != nil {
 		tb.Fatalf("%v", err)
+	}
+}
+
+func makeChain(size int) benchQuery {
+	var buf bytes.Buffer
+	buf.WriteString(`SELECT * FROM `)
+	comma := ""
+	for i := 0; i < size; i++ {
+		buf.WriteString(comma)
+		fmt.Fprintf(&buf, "j AS tab%d", i+1)
+		comma = ", "
+	}
+
+	if size > 1 {
+		buf.WriteString(" WHERE ")
+	}
+
+	comma = ""
+	for i := 0; i < size-1; i++ {
+		buf.WriteString(comma)
+		fmt.Fprintf(&buf, "tab%d.a = tab%d.b", i+1, i+2)
+		comma = " AND "
+	}
+
+	return benchQuery{
+		name:  fmt.Sprintf("chain-%d", size),
+		query: buf.String(),
+	}
+}
+
+// BenchmarkChain benchmarks the planning of a "chain" query, where
+// some number of tables are joined together, with there being a
+// predicate joining the first and second, second and third, third
+// and fourth, etc.
+//
+// For example, a 5-chain looks like:
+//
+//   SELECT * FROM a, b, c, d, e
+//   WHERE a.x = b.y
+//     AND b.x = c.y
+//     AND c.x = d.y
+//     AND d.x = e.y
+//
+func BenchmarkChain(b *testing.B) {
+	h := newHarness()
+	defer h.close()
+
+	for i := 1; i < 20; i++ {
+		q := makeChain(i)
+		for i := 0; i < b.N; i++ {
+			h.runForBenchmark(b, Explore, q)
+		}
 	}
 }

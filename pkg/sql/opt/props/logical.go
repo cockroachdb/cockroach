@@ -44,6 +44,9 @@ const (
 	// HasHoistableSubquery is set when the Scalar.Rule.HasHoistableSubquery
 	// is populated.
 	HasHoistableSubquery
+
+	// JoinSize is set when the Scalar.Rule.JoinSize field is populated.
+	JoinSize
 )
 
 // Shared are properties that are shared by both relational and scalar
@@ -315,6 +318,11 @@ type Relational struct {
 		// and SimplifyRightJoinWithFilters rules. It is only valid once the
 		// Rule.Available.UnfilteredCols bit has been set.
 		UnfilteredCols opt.ColSet
+
+		// JoinSize is the number of relations being *inner* joined underneath
+		// this node. It is used to only reorder joins via AssociateJoin up to
+		// a certain limit.
+		JoinSize int
 	}
 }
 

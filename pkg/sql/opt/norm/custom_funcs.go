@@ -1486,9 +1486,3 @@ func (c *CustomFuncs) SortFilters(f memo.FiltersExpr) memo.FiltersExpr {
 	})
 	return result
 }
-
-// ShouldReorderJoins returns whether the optimizer should attempt to find
-// a better ordering of inner joins.
-func (c *CustomFuncs) ShouldReorderJoins() bool {
-	return c.f.evalCtx.SessionData.ReorderJoins
-}
