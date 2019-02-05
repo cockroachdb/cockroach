@@ -38,6 +38,8 @@ type queryCacheTestHelper struct {
 
 	conns   []*gosql.Conn
 	runners []*sqlutils.SQLRunner
+
+	hitsDelta, missesDelta int
 }
 
 func makeQueryCacheTestHelper(tb testing.TB, numConns int) *queryCacheTestHelper {
@@ -64,6 +66,7 @@ func makeQueryCacheTestHelper(tb testing.TB, numConns int) *queryCacheTestHelper
 		r.Exec(tb, "SET DATABASE = db1")
 	}
 	r0.Exec(tb, "SET CLUSTER SETTING sql.query_cache.enabled = true")
+	h.ResetStats()
 	return h
 }
 
@@ -72,8 +75,14 @@ func (h *queryCacheTestHelper) Stop() {
 }
 
 func (h *queryCacheTestHelper) GetStats() (numHits, numMisses int) {
-	return int(h.srv.MustGetSQLCounter(MetaSQLOptPlanCacheHits.Name)),
-		int(h.srv.MustGetSQLCounter(MetaSQLOptPlanCacheMisses.Name))
+	return int(h.srv.MustGetSQLCounter(MetaSQLOptPlanCacheHits.Name)) - h.hitsDelta,
+		int(h.srv.MustGetSQLCounter(MetaSQLOptPlanCacheMisses.Name)) - h.missesDelta
+}
+
+func (h *queryCacheTestHelper) ResetStats() {
+	hits, misses := h.GetStats()
+	h.hitsDelta += hits
+	h.missesDelta += misses
 }
 
 func (h *queryCacheTestHelper) AssertStats(tb *testing.T, expHits, expMisses int) {

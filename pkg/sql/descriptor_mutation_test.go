@@ -86,6 +86,7 @@ func (mt mutationTest) makeMutationsActive() {
 		}
 	}
 	mt.tableDesc.Mutations = nil
+	mt.tableDesc.Version++
 	if err := mt.tableDesc.ValidateTable(cluster.MakeTestingClusterSettings()); err != nil {
 		mt.Fatal(err)
 	}
@@ -141,6 +142,7 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 		}
 	}
 	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
+	mt.tableDesc.Version++
 	if err := mt.tableDesc.ValidateTable(cluster.MakeTestingClusterSettings()); err != nil {
 		mt.Fatal(err)
 	}

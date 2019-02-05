@@ -137,6 +137,7 @@ type Memo struct {
 	dataConversion    sessiondata.DataConversionConfig
 	reorderJoinsLimit int
 	zigzagJoinEnabled bool
+	safeUpdates       bool
 
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
@@ -254,7 +255,8 @@ func (m *Memo) IsStale(
 	// changed.
 	if !m.dataConversion.Equals(&evalCtx.SessionData.DataConversion) ||
 		m.reorderJoinsLimit != evalCtx.SessionData.ReorderJoinsLimit ||
-		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled {
+		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled ||
+		m.safeUpdates != evalCtx.SessionData.SafeUpdates {
 		return true, nil
 	}
 
