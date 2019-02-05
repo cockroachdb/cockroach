@@ -37,8 +37,8 @@ func (ir indexedRows) Len() int {
 	return len(ir.rows)
 }
 
-func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
-	return ir.rows[idx]
+func (ir indexedRows) GetRow(idx int) (tree.IndexedRow, error) {
+	return ir.rows[idx], nil
 }
 
 type indexedRow struct {
@@ -50,12 +50,12 @@ func (ir indexedRow) GetIdx() int {
 	return ir.idx
 }
 
-func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
-	return ir.row[colIdx]
+func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
+	return ir.row[colIdx], nil
 }
 
-func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) tree.Datums {
-	return ir.row[firstColIdx:lastColIdx]
+func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (tree.Datums, error) {
+	return ir.row[firstColIdx:lastColIdx], nil
 }
 
 func testSlidingWindow(t *testing.T, count int) {
@@ -93,7 +93,15 @@ func testMin(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) 
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				el, _ := tree.AsDInt(wfr.Rows.GetRow(idx).GetDatum(0))
+				row, err := wfr.Rows.GetRow(idx)
+				if err != nil {
+					panic(err)
+				}
+				datum, err := row.GetDatum(0)
+				if err != nil {
+					panic(err)
+				}
+				el, _ := tree.AsDInt(datum)
 				if el < naiveMin {
 					naiveMin = el
 				}
@@ -128,7 +136,15 @@ func testMax(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) 
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				el, _ := tree.AsDInt(wfr.Rows.GetRow(idx).GetDatum(0))
+				row, err := wfr.Rows.GetRow(idx)
+				if err != nil {
+					panic(err)
+				}
+				datum, err := row.GetDatum(0)
+				if err != nil {
+					panic(err)
+				}
+				el, _ := tree.AsDInt(datum)
 				if el > naiveMax {
 					naiveMax = el
 				}
@@ -166,7 +182,15 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				el, _ := tree.AsDInt(wfr.Rows.GetRow(idx).GetDatum(0))
+				row, err := wfr.Rows.GetRow(idx)
+				if err != nil {
+					panic(err)
+				}
+				datum, err := row.GetDatum(0)
+				if err != nil {
+					panic(err)
+				}
+				el, _ := tree.AsDInt(datum)
 				naiveSum += int64(el)
 			}
 			s, err := sumResult.Int64()
@@ -183,8 +207,12 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 			if err != nil {
 				t.Errorf("Unexpected error received when converting avg from DDecimal to float64: %+v", err)
 			}
-			if a != float64(naiveSum)/float64(wfr.FrameSize(evalCtx)) {
-				t.Errorf("Sum sliding window returned wrong result: expected %+v, found %+v", float64(naiveSum)/float64(wfr.FrameSize(evalCtx)), a)
+			frameSize, err := wfr.FrameSize(evalCtx)
+			if err != nil {
+				t.Errorf("Unexpected error when getting FrameSize: %+v", err)
+			}
+			if a != float64(naiveSum)/float64(frameSize) {
+				t.Errorf("Sum sliding window returned wrong result: expected %+v, found %+v", float64(naiveSum)/float64(frameSize), a)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
 				t.Errorf(partitionToString(wfr.Rows))
 				panic("")
@@ -212,9 +240,14 @@ func makeTestPartition(count int) tree.IndexedRows {
 
 func partitionToString(partition tree.IndexedRows) string {
 	var buf bytes.Buffer
+	var err error
+	var row tree.IndexedRow
 	buf.WriteString("\n=====Partition=====\n")
 	for idx := 0; idx < partition.Len(); idx++ {
-		buf.WriteString(fmt.Sprintf("%v\n", partition.GetRow(idx)))
+		if row, err = partition.GetRow(idx); err != nil {
+			return err.Error()
+		}
+		buf.WriteString(fmt.Sprintf("%v\n", row))
 	}
 	buf.WriteString("====================\n")
 	return buf.String()
