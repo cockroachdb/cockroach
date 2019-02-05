@@ -18,9 +18,20 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	ctstorage "github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
+
+// FollowerReadsEnabled controls whether replicas attempt to serve follower
+// reads. The closed timestamp machinery is unaffected by this, i.e. the same
+// information is collected and passed around, regardless of the value of this
+// setting.
+var FollowerReadsEnabled = settings.RegisterBoolSetting(
+	"kv.closed_timestamp.follower_reads_enabled",
+	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
+	false,
 )
 
 // canServeFollowerRead tests, when a range lease could not be

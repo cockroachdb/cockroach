@@ -103,16 +103,6 @@ var MaxCommandSize = settings.RegisterValidatedByteSizeSetting(
 	},
 )
 
-// FollowerReadsEnabled controls whether replicas attempt to serve follower
-// reads. The closed timestamp machinery is unaffected by this, i.e. the same
-// information is collected and passed around, regardless of the value of this
-// setting.
-var FollowerReadsEnabled = settings.RegisterBoolSetting(
-	"kv.closed_timestamp.follower_reads_enabled",
-	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
-	false,
-)
-
 type proposalReevaluationReason int
 
 const (
