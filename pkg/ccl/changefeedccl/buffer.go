@@ -38,8 +38,6 @@ type bufferEntry struct {
 
 // buffer mediates between the changed data poller and the rest of the
 // changefeed pipeline (which is backpressured all the way to the sink).
-//
-// TODO(dan): Monitor memory usage and spill to disk when necessary.
 type buffer struct {
 	entriesCh chan bufferEntry
 }
@@ -48,13 +46,12 @@ func makeBuffer() *buffer {
 	return &buffer{entriesCh: make(chan bufferEntry)}
 }
 
-// AddKV inserts a changed kv into the buffer.
-//
-// TODO(dan): AddKV currently requires that each key is added in increasing mvcc
-// timestamp order. This will have to change when we add support for RangeFeed,
-// which starts out in a catchup state without this guarantee.
-func (b *buffer) AddKV(ctx context.Context, kv roachpb.KeyValue, minTimestamp hlc.Timestamp) error {
-	return b.addEntry(ctx, bufferEntry{kv: kv, schemaTimestamp: minTimestamp})
+// AddKV inserts a changed kv into the buffer. Individual keys must be added in
+// increasing mvcc order.
+func (b *buffer) AddKV(
+	ctx context.Context, kv roachpb.KeyValue, schemaTimestamp hlc.Timestamp,
+) error {
+	return b.addEntry(ctx, bufferEntry{kv: kv, schemaTimestamp: schemaTimestamp})
 }
 
 // AddResolved inserts a resolved timestamp notification in the buffer.
@@ -63,7 +60,6 @@ func (b *buffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Time
 }
 
 func (b *buffer) addEntry(ctx context.Context, e bufferEntry) error {
-	// TODO(dan): Spill to a temp rocksdb if entriesCh would block.
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -132,7 +128,8 @@ func (b *memBuffer) Close(ctx context.Context) {
 	b.mu.Unlock()
 }
 
-// AddKV inserts a changed kv into the buffer.
+// AddKV inserts a changed kv into the buffer. Individual keys must be added in
+// increasing mvcc order.
 func (b *memBuffer) AddKV(
 	ctx context.Context, kv roachpb.KeyValue, schemaTimestamp hlc.Timestamp,
 ) error {

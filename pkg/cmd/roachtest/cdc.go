@@ -493,10 +493,6 @@ func registerCDC(r *registry) {
 	// TODO(dan): This currently gets its own cluster during the nightly
 	// acceptance tests. Decide whether it's safe to share with the one made for
 	// "acceptance/*".
-	//
-	// TODO(dan): Ideally, these would run on every PR, but because of
-	// enterprise license checks, there currently isn't a good way to do that
-	// without potentially leaking secrets.
 	r.Add(testSpec{
 		Name:       "cdc/bank",
 		Skip:       `#35614`,

@@ -842,15 +842,24 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
-		// TODO(dan): TRUNCATE cascades, test for this too.
 		sqlDB.Exec(t, `CREATE TABLE truncate (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO truncate VALUES (1)`)
+		sqlDB.Exec(t, `CREATE TABLE truncate_cascade (b INT PRIMARY KEY REFERENCES truncate (a))`)
+		sqlDB.Exec(t,
+			`BEGIN; INSERT INTO truncate VALUES (1); INSERT INTO truncate_cascade VALUES (1); COMMIT`)
 		truncate := feed(t, f, `CREATE CHANGEFEED FOR truncate`)
 		defer closeFeed(t, truncate)
+		truncateCascade := feed(t, f, `CREATE CHANGEFEED FOR truncate_cascade`)
+		defer closeFeed(t, truncateCascade)
 		assertPayloads(t, truncate, []string{`truncate: [1]->{"after": {"a": 1}}`})
-		sqlDB.Exec(t, `TRUNCATE TABLE truncate`)
+		assertPayloads(t, truncateCascade, []string{`truncate_cascade: [1]->{"after": {"b": 1}}`})
+		sqlDB.Exec(t, `TRUNCATE TABLE truncate CASCADE`)
 		if _, err := truncate.Next(); !testutils.IsError(err, `"truncate" was dropped or truncated`) {
 			t.Errorf(`expected ""truncate" was dropped or truncated" error got: %+v`, err)
+		}
+		if _, err := truncateCascade.Next(); !testutils.IsError(
+			err, `"truncate_cascade" was dropped or truncated`,
+		) {
+			t.Errorf(`expected ""truncate_cascade" was dropped or truncated" error got: %+v`, err)
 		}
 
 		sqlDB.Exec(t, `CREATE TABLE rename (a INT PRIMARY KEY)`)

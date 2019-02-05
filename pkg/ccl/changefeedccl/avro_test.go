@@ -499,7 +499,6 @@ func TestAvroMigration(t *testing.T) {
 			readerSchema:   `(a INT PRIMARY KEY, b INT)`,
 			expectedValues: `(1, NULL)`,
 		},
-		// TODO(dan): add a column with a default value
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
