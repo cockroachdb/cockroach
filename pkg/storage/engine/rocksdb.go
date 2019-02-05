@@ -2266,8 +2266,8 @@ func (r *rocksDBIterator) MVCCGet(
 
 	r.clearState()
 	state := C.MVCCGet(
-		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
-		goToCTxn(opts.Txn), C.bool(opts.Inconsistent), C.bool(opts.Tombstones),
+		r.iter, goToCSlice(key), goToCTimestamp(timestamp), goToCTxn(opts.Txn),
+		C.bool(opts.Inconsistent), C.bool(opts.Tombstones), C.bool(opts.IgnoreSequence),
 	)
 
 	if err := statusToError(state.status); err != nil {
@@ -2334,7 +2334,9 @@ func (r *rocksDBIterator) MVCCScan(
 	state := C.MVCCScan(
 		r.iter, goToCSlice(start), goToCSlice(end),
 		goToCTimestamp(timestamp), C.int64_t(max),
-		goToCTxn(opts.Txn), C.bool(opts.Inconsistent), C.bool(opts.Reverse), C.bool(opts.Tombstones),
+		goToCTxn(opts.Txn), C.bool(opts.Inconsistent),
+		C.bool(opts.Reverse), C.bool(opts.Tombstones),
+		C.bool(opts.IgnoreSequence),
 	)
 
 	if err := statusToError(state.status); err != nil {
@@ -2512,6 +2514,7 @@ func goToCTxn(txn *roachpb.Transaction) C.DBTxn {
 	if txn != nil {
 		r.id = goToCSlice(txn.ID.GetBytes())
 		r.epoch = C.uint32_t(txn.Epoch)
+		r.sequence = C.int32_t(txn.Sequence)
 		r.max_timestamp = goToCTimestamp(txn.MaxTimestamp)
 	}
 	return r

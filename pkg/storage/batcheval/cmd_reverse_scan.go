@@ -49,9 +49,10 @@ func ReverseScan(
 		kvData, numKvs, resumeSpan, intents, err = engine.MVCCScanToBytes(
 			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp,
 			engine.MVCCScanOptions{
-				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-				Txn:          h.Txn,
-				Reverse:      true,
+				Inconsistent:   h.ReadConsistency != roachpb.CONSISTENT,
+				IgnoreSequence: shouldIgnoreSequenceNums(cArgs.EvalCtx),
+				Txn:            h.Txn,
+				Reverse:        true,
 			})
 		if err != nil {
 			return result.Result{}, err
@@ -62,9 +63,10 @@ func ReverseScan(
 		var rows []roachpb.KeyValue
 		rows, resumeSpan, intents, err = engine.MVCCScan(
 			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, engine.MVCCScanOptions{
-				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-				Txn:          h.Txn,
-				Reverse:      true,
+				Inconsistent:   h.ReadConsistency != roachpb.CONSISTENT,
+				IgnoreSequence: shouldIgnoreSequenceNums(cArgs.EvalCtx),
+				Txn:            h.Txn,
+				Reverse:        true,
 			})
 		if err != nil {
 			return result.Result{}, err

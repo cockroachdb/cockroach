@@ -671,7 +671,10 @@ type MVCCGetOptions struct {
 	// See the documentation for MVCCGet for information on these parameters.
 	Inconsistent bool
 	Tombstones   bool
-	Txn          *roachpb.Transaction
+	// TODO(nathanvanbenschoten): Remove all references of IgnoreSequence
+	// in 2.3.
+	IgnoreSequence bool
+	Txn            *roachpb.Transaction
 }
 
 // MVCCGet returns the most recent value for the specified key whose timestamp
@@ -1827,8 +1830,18 @@ func MVCCDeleteRange(
 	// In order to detect the potential write intent by another concurrent
 	// transaction with a newer timestamp, we need to use the max timestamp for
 	// scan.
+	scanTs := hlc.MaxTimestamp
+	// In order for this operation to be idempotent when run transactionally, we
+	// need to perform the initial scan at the previous sequence number so that
+	// we don't see the result from equal or later sequences.
+	var scanTxn *roachpb.Transaction
+	if txn != nil {
+		prevSeqTxn := txn.Clone()
+		prevSeqTxn.Sequence--
+		scanTxn = &prevSeqTxn
+	}
 	kvs, resumeSpan, _, err := MVCCScan(
-		ctx, engine, key, endKey, max, hlc.MaxTimestamp, MVCCScanOptions{Txn: txn})
+		ctx, engine, key, endKey, max, scanTs, MVCCScanOptions{Txn: scanTxn})
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -1930,8 +1943,11 @@ type MVCCScanOptions struct {
 	// See the documentation for MVCCScan for information on these parameters.
 	Inconsistent bool
 	Tombstones   bool
-	Reverse      bool
-	Txn          *roachpb.Transaction
+	// TODO(nathanvanbenschoten): Remove all references of IgnoreSequence
+	// in 2.3.
+	IgnoreSequence bool
+	Reverse        bool
+	Txn            *roachpb.Transaction
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided engine up to some
