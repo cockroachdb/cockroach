@@ -248,7 +248,9 @@ func DefaultStressFailureTitle(packageName, testName string) string {
 }
 
 func (p *poster) post(
-	ctx context.Context, title, packageName, testName, message, authorEmail string,
+	ctx context.Context,
+	title, packageName, testName, message, authorEmail string,
+	extraLabels []string,
 ) error {
 	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
 
@@ -283,10 +285,11 @@ Failed test: %[3]s`
 	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
 		b := body(packageName, testName, message)
 
+		labels := append(issueLabels, extraLabels...)
 		return &github.IssueRequest{
 			Title:     &title,
 			Body:      &b,
-			Labels:    &issueLabels,
+			Labels:    &labels,
 			Assignee:  &assignee,
 			Milestone: p.milestone,
 		}
@@ -300,8 +303,8 @@ Failed test: %[3]s`
 	assignee, err := getAssignee(ctx, authorEmail, p.listCommits)
 	if err != nil {
 		// if we *can't* assign anyone, sigh, feel free to hard-code me.
-		// -- tschottdorf, 11/3/2017
-		assignee = "tschottdorf"
+		// -- tbg, 11/3/2017
+		assignee = "tbg"
 		message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
 	}
 
@@ -399,16 +402,20 @@ var defaultP struct {
 
 // Post either creates a new issue for a failed test, or posts a comment to an
 // existing open issue.
-func Post(ctx context.Context, title, packageName, testName, message, authorEmail string) error {
+func Post(
+	ctx context.Context,
+	title, packageName, testName, message, authorEmail string,
+	extraLabels []string,
+) error {
 	defaultP.Do(func() {
 		defaultP.poster = newPoster()
 		defaultP.init()
 	})
-	err := defaultP.post(ctx, title, packageName, testName, message, authorEmail)
+	err := defaultP.post(ctx, title, packageName, testName, message, authorEmail, extraLabels)
 	if !isInvalidAssignee(err) {
 		return err
 	}
-	return defaultP.post(ctx, title, packageName, testName, message, "tobias.schottdorf@gmail.com")
+	return defaultP.post(ctx, title, packageName, testName, message, "tobias.schottdorf@gmail.com", extraLabels)
 }
 
 // CanPost returns true if the github API token environment variable is set.
