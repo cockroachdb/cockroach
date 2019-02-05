@@ -156,7 +156,7 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 		key := gossip.MakeNodeLivenessKey(kvLiveness.NodeID)
 		// Look up liveness from gossip; skip gossiping anew if unchanged.
 		if err := r.store.Gossip().GetInfoProto(key, &gossipLiveness); err == nil {
-			if gossipLiveness == kvLiveness {
+			if gossipLiveness == kvLiveness && r.store.Gossip().InfoOriginatedHere(key) {
 				continue
 			}
 		}
