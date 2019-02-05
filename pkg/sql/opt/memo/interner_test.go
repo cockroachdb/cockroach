@@ -42,11 +42,16 @@ func TestInterner(t *testing.T) {
 	tupTyp2 := types.TTuple{Types: []types.T{types.Int, types.String}, Labels: []string{"a", "b"}}
 	tupTyp3 := types.TTuple{Types: []types.T{types.Int, types.String}}
 	tupTyp4 := types.TTuple{Types: []types.T{types.Int, types.String, types.Bool}}
+	tupTyp5 := types.TTuple{Types: []types.T{types.Int, types.String}, Labels: []string{"c", "d"}}
+	tupTyp6 := types.TTuple{Types: []types.T{types.String, types.Int}, Labels: []string{"c", "d"}}
 
 	tup1 := tree.NewDTuple(tupTyp1, tree.NewDInt(100), tree.NewDString("foo"))
 	tup2 := tree.NewDTuple(tupTyp2, tree.NewDInt(100), tree.NewDString("foo"))
 	tup3 := tree.NewDTuple(tupTyp3, tree.NewDInt(100), tree.NewDString("foo"))
 	tup4 := tree.NewDTuple(tupTyp4, tree.NewDInt(100), tree.NewDString("foo"), tree.DBoolTrue)
+	tup5 := tree.NewDTuple(tupTyp5, tree.NewDInt(100), tree.NewDString("foo"))
+	tup6 := tree.NewDTuple(tupTyp5, tree.DNull, tree.DNull)
+	tup7 := tree.NewDTuple(tupTyp6, tree.DNull, tree.DNull)
 
 	arr1 := tree.NewDArray(tupTyp1)
 	arr1.Array = tree.Datums{tup1, tup2}
@@ -54,6 +59,14 @@ func TestInterner(t *testing.T) {
 	arr2.Array = tree.Datums{tup2, tup1}
 	arr3 := tree.NewDArray(tupTyp3)
 	arr3.Array = tree.Datums{tup2, tup3}
+	arr4 := tree.NewDArray(types.Int)
+	arr4.Array = tree.Datums{tree.DNull}
+	arr5 := tree.NewDArray(types.String)
+	arr5.Array = tree.Datums{tree.DNull}
+	arr6 := tree.NewDArray(types.Int)
+	arr6.Array = tree.Datums{}
+	arr7 := tree.NewDArray(types.String)
+	arr7.Array = tree.Datums{}
 
 	dec1, _ := tree.ParseDDecimal("1.0")
 	dec2, _ := tree.ParseDDecimal("1.0")
@@ -187,9 +200,14 @@ func TestInterner(t *testing.T) {
 			{val1: tup1, val2: tup2, equal: true},
 			{val1: tup2, val2: tup3, equal: false},
 			{val1: tup3, val2: tup4, equal: false},
+			{val1: tup1, val2: tup5, equal: false},
+			{val1: tup6, val2: tup7, equal: false},
 
 			{val1: arr1, val2: arr2, equal: true},
 			{val1: arr2, val2: arr3, equal: false},
+			{val1: arr4, val2: arr5, equal: false},
+			{val1: arr4, val2: arr6, equal: false},
+			{val1: arr6, val2: arr7, equal: false},
 
 			{val1: dec1, val2: dec2, equal: true},
 			{val1: dec2, val2: dec3, equal: false},
