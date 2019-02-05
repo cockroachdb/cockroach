@@ -148,6 +148,16 @@ func (r *Replica) RangeFeed(
 		return roachpb.NewError(err)
 	}
 
+	// Make sure there's a leaseholder, otherwise nothing will close timestamps
+	// for this range, which means we won't make checkpoints.
+	if _, err := r.redirectOnOrAcquireLease(ctx); err != nil {
+		// We don't care if this replica is the leaseholder, only that someone is,
+		// so ignore NotLeaseHolderError.
+		if _, ok := err.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+			return err
+		}
+	}
+
 	checkTS := args.Timestamp
 	if checkTS.IsEmpty() {
 		checkTS = r.Clock().Now()
