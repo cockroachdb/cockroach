@@ -200,26 +200,24 @@ ALTER TABLE authors INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-tree                      field        description                          columns                                   ordering
-distinct                  ·            ·                                    (name)                                    weak-key(name)
- │                        distinct on  name                                 ·                                         ·
- └── render               ·            ·                                    (name)                                    ·
-      │                   render 0     name                                 ·                                         ·
-      └── join            ·            ·                                    (title, shelf, name, book, title, shelf)  ·
-           │              type         inner                                ·                                         ·
-           │              equality     (title) = (title)                    ·                                         ·
-           │              pred         (book = title) AND (shelf != shelf)  ·                                         ·
-           ├── join       ·            ·                                    (title, shelf, name, book)                ·
-           │    │         type         cross                                ·                                         ·
-           │    ├── scan  ·            ·                                    (title, shelf)                            ·
-           │    │         table        books2@primary                       ·                                         ·
-           │    │         spans        ALL                                  ·                                         ·
-           │    └── scan  ·            ·                                    (name, book)                              ·
-           │              table        authors@primary                      ·                                         ·
-           │              spans        ALL                                  ·                                         ·
-           └── scan       ·            ·                                    (title, shelf)                            ·
-·                         table        books@primary                        ·                                         ·
-·                         spans        ALL                                  ·                                         ·
+tree                        field        description       columns                                   ordering
+distinct                    ·            ·                 (name)                                    weak-key(name)
+ │                          distinct on  name              ·                                         ·
+ └── render                 ·            ·                 (name)                                    ·
+      │                     render 0     name              ·                                         ·
+      └── join              ·            ·                 (title, shelf, title, shelf, name, book)  ·
+           │                type         inner             ·                                         ·
+           │                equality     (title) = (book)  ·                                         ·
+           ├── lookup-join  ·            ·                 (title, shelf, title, shelf)              ·
+           │    │           table        books2@primary    ·                                         ·
+           │    │           type         inner             ·                                         ·
+           │    │           pred         @2 != @4          ·                                         ·
+           │    └── scan    ·            ·                 (title, shelf)                            ·
+           │                table        books@primary     ·                                         ·
+           │                spans        ALL               ·                                         ·
+           └── scan         ·            ·                 (name, book)                              ·
+·                           table        authors@primary   ·                                         ·
+·                           spans        ALL               ·                                         ·
 
 # Verify data placement.
 query TTTI colnames
@@ -233,7 +231,7 @@ NULL       NULL     {5}       5
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk09r3DAQxe_9FOqcdkHBlv8FDAsq5ND04JS0t7IHxZruijqSkWRoCfvdi23oxu5aqffSmy3Nb-a9N-gFtJFYiWd0UH4DBhRy2FNoranROWP747HoXv6EMqagdNv5_nhPoTYWoXwBr3yDUEJlbkwbFUBBoheqGcpOFEznz5Dz4oBQ3p7oq8Ys3PireGrwEYVEG8WT9tBa9SzsL_5kzA-XAIUvrdCuJDdA4aHzJeGM8hSWZLBrZbDLMkTnj31sl3UkizqSRR3n8Z02VqJFOQ_47ZILZj4Kd_xklEYbJVMvZ7mUp5Rni6LTa8NLAztcvcLsf0aXTZ00-N1vONvurDoch6_eQ0U2PCM7wvMt-VDdkQ0vyPsd4cn2j8Nle_makO-U80rXPsqnujhb7F9M-r_xwh_RtUY7_KcnHvfZoTzguAtnOlvjZ2vqYcz4-zBww4FE58fb2_HnXo9XvcDXMAvC6QRmczhZASdzOA3CeXhytgL-a3IehItwYEUQjmfw_vTudwAAAP__beT76A==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyck89q3DAQh-99CndOCSjYku0cDAEdemhK2ZS0t7IHxZruqnE0RpKhJey7F9mlWZu10s1Rf76Zb362nsGSxo16Qg_Nd-DAoIYtg95Ri96Ti9vTpVv9C5qCgbH9EOL2lkFLDqF5hmBCh9DAhq6oz2tgoDEo043XDgxoCC-QD2qH0Fwf2FFhni78TT10eI9Ko8uLWXnonXlS7rd8IHr0wOBrr6xvsitgcDeEJpOcyRLWLPg5Fp_I2L8SPCEhgMFnosehz36SsRnZaBF9NpkU2fubTNbHdoLJksl61VG8NSlxWlINYR-_7OmsxKpHuerx0n6w5DQ61Mt_4PUrJ4b5qPw-ho4uL-ezdPgjXEh-eePMbh8upLj8N8N6kNU5QX4wPhjbhryad5Z8tX49q__KW7lH35P1-F-PpYjpoN7hlLanwbX4xVE7tpmWdyM3bmj0YTq9nha3djqKgscwT8IiDYskXM1gvoTLM2CxhKskXKe16yRcLODt4d2fAAAA__8CwK1z
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
