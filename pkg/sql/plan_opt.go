@@ -110,13 +110,17 @@ func (p *planner) prepareUsingOptimizer(
 	if opc.allowMemoReuse {
 		stmt.Prepared.Memo = memo
 		if opc.useCache {
+			// execPrepare sets the PrepareMetadata.InferredTypes field after this
+			// point. However, once the PrepareMetadata goes into the cache, it
+			// can't be modified without causing race conditions. So make a copy of
+			// it now.
+			// TODO(radu): Determine if the extra object allocation is really
+			// necessary.
+			pm := stmt.Prepared.PrepareMetadata
 			cachedData := querycache.CachedData{
-				SQL:  stmt.SQL,
-				Memo: memo,
-				// We rely on stmt.Prepared.PrepareMetadata not being subsequently modified.
-				// TODO(radu): this also holds on to the memory referenced by other
-				// PreparedStatement fields.
-				PrepareMetadata: &stmt.Prepared.PrepareMetadata,
+				SQL:             stmt.SQL,
+				Memo:            memo,
+				PrepareMetadata: &pm,
 			}
 			p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 		}
