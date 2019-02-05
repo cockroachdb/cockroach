@@ -28,48 +28,35 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (p *planner) validateCheckExpr(
-	ctx context.Context, exprStr string, tableName tree.TableExpr, tableDesc *sqlbase.TableDescriptor,
+func validateCheckExpr(
+	ctx context.Context,
+	exprStr string,
+	tableName tree.TableExpr,
+	tableDesc *sqlbase.TableDescriptor,
+	evalCtx *tree.EvalContext,
 ) error {
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
 		return err
 	}
+	// Construct AST and then convert to a string, to avoid problems with escaping the check expression
 	sel := &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns, false /* forUpdateOrDelete */),
 		From:  &tree.From{Tables: tree.TableExprs{tableName}},
-		Where: &tree.Where{Expr: &tree.NotExpr{Expr: expr}},
+		Where: &tree.Where{Type: tree.AstWhere, Expr: &tree.NotExpr{Expr: expr}},
 	}
 	lim := &tree.Limit{Count: tree.NewDInt(1)}
-	// This could potentially use a variant of planner.SelectClause that could
-	// use the tableDesc we have, but this is a rare operation and be benefit
-	// would be marginal compared to the work of the actual query, so the added
-	// complexity seems unjustified.
-	rows, err := p.SelectClause(ctx, sel, nil, lim, nil, nil, publicColumns)
-	if err != nil {
-		return err
-	}
-	rows, err = p.optimizePlan(ctx, rows, allColumns(rows))
-	if err != nil {
-		return err
-	}
-	defer rows.Close(ctx)
+	stmt := &tree.Select{Select: sel, Limit: lim}
 
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &p.extendedEvalCtx,
-		p:               p,
-	}
-	if err := startPlan(params, rows); err != nil {
-		return err
-	}
-	next, err := rows.Next(params)
+	queryStr := tree.AsStringWithFlags(stmt, tree.FmtParsable)
+
+	rows, err := evalCtx.InternalExecutor.QueryRow(ctx, "validate check constraint", evalCtx.Txn, queryStr)
 	if err != nil {
 		return err
 	}
-	if next {
+	if rows.Len() > 0 {
 		return errors.Errorf("validation of CHECK %q failed on row: %s",
-			expr.String(), labeledRowValues(tableDesc.Columns, rows.Values()))
+			expr.String(), labeledRowValues(tableDesc.Columns, rows))
 	}
 	return nil
 }

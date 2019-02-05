@@ -499,8 +499,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					panic("constraint returned by GetConstraintInfo not found")
 				}
 				ck := n.tableDesc.Checks[idx]
-				if err := params.p.validateCheckExpr(
-					params.ctx, ck.Expr, &n.n.Table, n.tableDesc.TableDesc(),
+				if err := validateCheckExpr(
+					params.ctx, ck.Expr, &n.n.Table, n.tableDesc.TableDesc(), params.EvalContext(),
 				); err != nil {
 					return err
 				}
