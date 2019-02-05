@@ -556,6 +556,9 @@ func (j *Job) updateRow(
 		if err != nil {
 			return err
 		}
+		if row == nil {
+			return errors.Errorf("no such job %d found", *j.id)
+		}
 		statusString, ok := row[0].(*tree.DString)
 		if !ok {
 			return errors.Errorf("Job: expected string status on job %d, but got %T", *j.id, statusString)
