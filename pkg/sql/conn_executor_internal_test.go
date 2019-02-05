@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -283,6 +284,7 @@ func startConnExecutor(
 			dummyLivenessProvider{}, /* liveness */
 			nil,                     /* nodeDialer */
 		),
+		QueryCache:   querycache.New(0),
 		TestingKnobs: &ExecutorTestingKnobs{},
 	}
 	pool := mon.MakeUnlimitedMonitor(
