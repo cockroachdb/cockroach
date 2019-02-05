@@ -968,6 +968,7 @@ func (r *registry) runAsync(
 						context.Background(),
 						fmt.Sprintf("roachtest: %s failed", t.Name()),
 						"roachtest", t.Name(), "The test failed on "+branch+":\n"+string(output), authorEmail,
+						[]string{"O-roachtest"},
 					); err != nil {
 						fmt.Fprintf(r.out, "failed to post issue: %s\n", err)
 					}
