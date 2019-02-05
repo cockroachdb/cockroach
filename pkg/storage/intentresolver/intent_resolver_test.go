@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -180,27 +181,29 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		ir := newIntentResolverWithSendFuncs(stopper, clock, &c.sendFuncs)
-		var didPush, didSucceed bool
-		done := make(chan struct{})
-		onComplete := func(pushed, succeeded bool) {
-			didPush, didSucceed = pushed, succeeded
-			close(done)
-		}
-		err := ir.CleanupTxnIntentsOnGCAsync(ctx, 1, c.txn, c.intents, clock.Now(), onComplete)
-		if err != nil {
-			t.Fatalf("unexpected error sending async transaction")
-		}
-		<-done
-		if len(c.sendFuncs) != 0 {
-			t.Errorf("Not all send funcs called")
-		}
-		if didSucceed != c.expectSucceed {
-			t.Fatalf("unexpected success value: got %v, expected %v", didSucceed, c.expectSucceed)
-		}
-		if didPush != c.expectPushed {
-			t.Fatalf("unexpected pushed value: got %v, expected %v", didPush, c.expectPushed)
-		}
+		t.Run("", func(t *testing.T) {
+			ir := newIntentResolverWithSendFuncs(stopper, clock, &c.sendFuncs)
+			var didPush, didSucceed bool
+			done := make(chan struct{})
+			onComplete := func(pushed, succeeded bool) {
+				didPush, didSucceed = pushed, succeeded
+				close(done)
+			}
+			err := ir.CleanupTxnIntentsOnGCAsync(ctx, 1, c.txn, c.intents, clock.Now(), onComplete)
+			if err != nil {
+				t.Fatalf("unexpected error sending async transaction")
+			}
+			<-done
+			if len(c.sendFuncs) != 0 {
+				t.Errorf("Not all send funcs called")
+			}
+			if didSucceed != c.expectSucceed {
+				t.Fatalf("unexpected success value: got %v, expected %v", didSucceed, c.expectSucceed)
+			}
+			if didPush != c.expectPushed {
+				t.Fatalf("unexpected pushed value: got %v, expected %v", didPush, c.expectPushed)
+			}
+		})
 	}
 }
 
@@ -530,6 +533,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 			},
 		},
 	}
+
 	cases := []testCase{
 		{
 			intents:   testEndTxnIntents,
@@ -552,16 +556,38 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			sendFuncs := c.sendFuncs
+			var sendFuncCalled int64
+			numSendFuncs := int64(len(c.sendFuncs))
+			sendFuncs := counterSendFuncs(&sendFuncCalled, c.sendFuncs)
 			ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
 			if c.before != nil {
 				defer c.before(&c, ir)()
 			}
 			err := ir.CleanupTxnIntentsAsync(context.Background(), 1, c.intents, false)
+			testutils.SucceedsSoon(t, func() error {
+				if called := atomic.LoadInt64(&sendFuncCalled); called < numSendFuncs {
+					return fmt.Errorf("still waiting for %d calls", numSendFuncs-called)
+				}
+				return nil
+			})
 			stopper.Stop(context.Background())
 			assert.Nil(t, err)
 			assert.Len(t, sendFuncs, 0)
 		})
+	}
+}
+
+func counterSendFuncs(counter *int64, funcs []sendFunc) []sendFunc {
+	for i, f := range funcs {
+		funcs[i] = counterSendFunc(counter, f)
+	}
+	return funcs
+}
+
+func counterSendFunc(counter *int64, f sendFunc) sendFunc {
+	return func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		defer atomic.AddInt64(counter, 1)
+		return f(ba)
 	}
 }
 
@@ -693,9 +719,10 @@ func newIntentResolverWithSendFuncs(
 		Tracer: tracing.NewTracer(),
 	}, txnSenderFactory, clock)
 	return New(Config{
-		Stopper: stopper,
-		DB:      db,
-		Clock:   clock,
+		Stopper:        stopper,
+		DB:             db,
+		Clock:          clock,
+		MaxGCBatchWait: time.Nanosecond,
 	})
 }
 
