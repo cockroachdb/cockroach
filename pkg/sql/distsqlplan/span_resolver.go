@@ -16,17 +16,16 @@ package distsqlplan
 
 import (
 	"context"
-	"math"
-	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // SpanResolver resolves key spans to their respective ranges and lease holders.
@@ -67,7 +66,7 @@ import (
 //
 type SpanResolver interface {
 	// NewSpanResolverIterator creates a new SpanResolverIterator.
-	// The txn is only used by the "fake" implementation (used for testing).
+	// Txn is used for testing and for determining if follower reads are possible.
 	NewSpanResolverIterator(txn *client.Txn) SpanResolverIterator
 }
 
@@ -119,75 +118,38 @@ type SpanResolverIterator interface {
 	ReplicaInfo(ctx context.Context) (kv.ReplicaInfo, error)
 }
 
-// When choosing lease holders, we try to choose the same node for all the
-// ranges applicable, until we hit this limit. The rationale is that maybe a
-// bunch of those ranges don't have an active lease, so our choice is going to
-// be self-fulfilling. If so, we want to collocate the lease holders. But above
-// some limit, we prefer to take the parallelism and distribute to multiple
-// nodes. The actual number used is based on nothing.
-const maxPreferredRangesPerLeaseHolder = 10
-
 // spanResolver implements SpanResolver.
 type spanResolver struct {
-	gossip     *gossip.Gossip
-	distSender *kv.DistSender
-	oracle     leaseHolderOracle
-
-	// nodeDesc is the descriptor of the current node. It might be used to give
-	// preference to the current node and others "close" to it when choosing lease
-	// holders.
-	nodeDesc roachpb.NodeDescriptor
+	st            *cluster.Settings
+	gossip        *gossip.Gossip
+	distSender    *kv.DistSender
+	nodeDesc      roachpb.NodeDescriptor
+	oracleFactory replicaoracle.OracleFactory
 }
 
 var _ SpanResolver = &spanResolver{}
 
-// LeaseHolderChoosingPolicy enumerates the implementors of leaseHolderOracle.
-type LeaseHolderChoosingPolicy byte
-
-const (
-	// RandomLeaseHolderChoice chooses lease holders randomly.
-	RandomLeaseHolderChoice LeaseHolderChoosingPolicy = iota
-	// BinPackingLeaseHolderChoice bin-packs the choices.
-	BinPackingLeaseHolderChoice
-)
-
 // NewSpanResolver creates a new spanResolver.
 func NewSpanResolver(
+	st *cluster.Settings,
 	distSender *kv.DistSender,
 	gossip *gossip.Gossip,
 	nodeDesc roachpb.NodeDescriptor,
-	choosingPolicy LeaseHolderChoosingPolicy,
+	rpcCtx *rpc.Context,
+	policy replicaoracle.Policy,
 ) SpanResolver {
-	var oracle leaseHolderOracle
-	switch choosingPolicy {
-	case RandomLeaseHolderChoice:
-		oracle = &randomOracle{gossip: gossip}
-	case BinPackingLeaseHolderChoice:
-		oracle = &binPackingOracle{
-			maxPreferredRangesPerLeaseHolder: maxPreferredRangesPerLeaseHolder,
-			gossip:                           gossip,
-			nodeDesc:                         nodeDesc,
-		}
-	}
 	return &spanResolver{
+		st:       st,
+		nodeDesc: nodeDesc,
+		oracleFactory: replicaoracle.NewOracleFactory(policy, replicaoracle.Config{
+			Settings:         st,
+			Gossip:           gossip,
+			NodeDesc:         nodeDesc,
+			RPCContext:       rpcCtx,
+			LeaseHolderCache: distSender.LeaseHolderCache(),
+		}),
 		distSender: distSender,
-		oracle:     oracle,
 		gossip:     gossip,
-		nodeDesc:   nodeDesc,
-	}
-}
-
-// oracleQueryState encapsulates the history of assignments of ranges to nodes
-// done by an oracle on behalf of one particular query.
-type oracleQueryState struct {
-	rangesPerNode  map[roachpb.NodeID]int
-	assignedRanges map[roachpb.RangeID]kv.ReplicaInfo
-}
-
-func makeOracleQueryState() oracleQueryState {
-	return oracleQueryState{
-		rangesPerNode:  make(map[roachpb.NodeID]int),
-		assignedRanges: make(map[roachpb.RangeID]kv.ReplicaInfo),
 	}
 }
 
@@ -200,13 +162,13 @@ type spanResolverIterator struct {
 	gossip *gossip.Gossip
 	// oracle is used to choose a lease holders for ranges when one isn't present
 	// in the cache.
-	oracle leaseHolderOracle
+	oracle replicaoracle.Oracle
 
 	curSpan roachpb.RSpan
 	// dir is the direction set by the last Seek()
 	dir kv.ScanDirection
-	// queryState accumulates information about the assigned lease holders.
-	queryState oracleQueryState
+
+	queryState replicaoracle.QueryState
 
 	err error
 }
@@ -214,12 +176,12 @@ type spanResolverIterator struct {
 var _ SpanResolverIterator = &spanResolverIterator{}
 
 // NewSpanResolverIterator creates a new SpanResolverIterator.
-func (sr *spanResolver) NewSpanResolverIterator(_ *client.Txn) SpanResolverIterator {
+func (sr *spanResolver) NewSpanResolverIterator(txn *client.Txn) SpanResolverIterator {
 	return &spanResolverIterator{
 		gossip:     sr.gossip,
 		it:         kv.NewRangeIterator(sr.distSender),
-		oracle:     sr.oracle,
-		queryState: makeOracleQueryState(),
+		oracle:     sr.oracleFactory.Oracle(txn),
+		queryState: replicaoracle.MakeQueryState(),
 	}
 }
 
@@ -309,144 +271,12 @@ func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kv.ReplicaInfo
 		panic(it.Error())
 	}
 
-	resolvedLH := false
-	var repl kv.ReplicaInfo
-	if storeID, ok := it.it.LeaseHolderStoreID(ctx); ok {
-		repl.ReplicaDescriptor = roachpb.ReplicaDescriptor{StoreID: storeID}
-		// Fill in the node descriptor.
-		nodeID, err := it.gossip.GetNodeIDForStoreID(storeID)
-		if err != nil {
-			log.VEventf(ctx, 2, "failed to lookup store %d: %s", storeID, err)
-		} else {
-			nd, err := it.gossip.GetNodeDescriptor(nodeID)
-			if err != nil {
-				// Ignore the error; ask the oracle to pick another replica below.
-				log.VEventf(ctx, 2, "failed to resolve node %d: %s", nodeID, err)
-			} else {
-				repl.ReplicaDescriptor.NodeID = nodeID
-				repl.NodeDesc = nd
-				resolvedLH = true
-			}
-		}
-
+	repl, err := it.oracle.ChoosePreferredReplica(
+		ctx, *it.it.Desc(), it.queryState)
+	if err != nil {
+		return kv.ReplicaInfo{}, err
 	}
-	if !resolvedLH {
-		leaseHolder, err := it.oracle.ChoosePreferredLeaseHolder(
-			*it.it.Desc(), it.queryState)
-		if err != nil {
-			return kv.ReplicaInfo{}, err
-		}
-		repl = leaseHolder
-	}
-	it.queryState.rangesPerNode[repl.NodeID]++
-	it.queryState.assignedRanges[it.it.Desc().RangeID] = repl
+	it.queryState.RangesPerNode[repl.NodeID]++
+	it.queryState.AssignedRanges[it.it.Desc().RangeID] = repl
 	return repl, nil
-}
-
-// leaseHolderOracle is used to choose the lease holder for ranges. This
-// interface was extracted so we can experiment with different choosing
-// policies.
-// Note that choices that start out random can act as self-fulfilling prophecies
-// - if there's no active lease, the node that will be asked to execute part of
-// the query (the chosen node) will acquire a new lease.
-type leaseHolderOracle interface {
-	// ChoosePreferredLeaseHolder returns a choice for one range. Implementors are free to
-	// use the queryState param, which has info about the number of
-	// ranges already handled by each node for the current SQL query. The state is
-	// not updated with the result of this method; the caller is in charge of
-	// that.
-	//
-	// A RangeUnavailableError can be returned if there's no information in gossip
-	// about any of the nodes that might be tried.
-	ChoosePreferredLeaseHolder(
-		desc roachpb.RangeDescriptor, queryState oracleQueryState,
-	) (kv.ReplicaInfo, error)
-}
-
-// randomOracle is a leaseHolderOracle that chooses the lease holder randomly
-// among the replicas in a range descriptor.
-// TODO(andrei): consider implementing also an oracle that prefers the "closest"
-// replica.
-type randomOracle struct {
-	gossip *gossip.Gossip
-}
-
-var _ leaseHolderOracle = &randomOracle{}
-
-func (o *randomOracle) ChoosePreferredLeaseHolder(
-	desc roachpb.RangeDescriptor, _ oracleQueryState,
-) (kv.ReplicaInfo, error) {
-	replicas, err := replicaSliceOrErr(desc, o.gossip)
-	if err != nil {
-		return kv.ReplicaInfo{}, err
-	}
-	return replicas[rand.Intn(len(replicas))], nil
-}
-
-// binPackingOracle coalesces choices together, so it gives preference to
-// replicas on nodes that are already assumed to be lease holders for some other
-// ranges that are going to be part of a single query.
-// Secondarily, it gives preference to replicas that are "close" to the current
-// node.
-// Finally, it tries not to overload any node.
-type binPackingOracle struct {
-	maxPreferredRangesPerLeaseHolder int
-	gossip                           *gossip.Gossip
-	// nodeDesc is the descriptor of the current node. It will be used to give
-	// preference to the current node and others "close" to it.
-	nodeDesc roachpb.NodeDescriptor
-}
-
-var _ leaseHolderOracle = &binPackingOracle{}
-
-func (o *binPackingOracle) ChoosePreferredLeaseHolder(
-	desc roachpb.RangeDescriptor, queryState oracleQueryState,
-) (kv.ReplicaInfo, error) {
-	// If we've assigned the range before, return that assignment.
-	if repl, ok := queryState.assignedRanges[desc.RangeID]; ok {
-		return repl, nil
-	}
-
-	replicas, err := replicaSliceOrErr(desc, o.gossip)
-	if err != nil {
-		return kv.ReplicaInfo{}, err
-	}
-
-	replicas.OptimizeReplicaOrder(&o.nodeDesc, nil /* TODO(andrei): plumb rpc context and remote clocks for latency */)
-
-	// Look for a replica that has been assigned some ranges, but it's not yet full.
-	minLoad := int(math.MaxInt32)
-	var leastLoadedIdx int
-	for i, repl := range replicas {
-		assignedRanges := queryState.rangesPerNode[repl.NodeID]
-		if assignedRanges != 0 && assignedRanges < o.maxPreferredRangesPerLeaseHolder {
-			return repl, nil
-		}
-		if assignedRanges < minLoad {
-			leastLoadedIdx = i
-			minLoad = assignedRanges
-		}
-	}
-	// Either no replica was assigned any previous ranges, or all replicas are
-	// full. Use the least-loaded one (if all the load is 0, then the closest
-	// replica is returned).
-	return replicas[leastLoadedIdx], nil
-}
-
-// replicaSliceOrErr returns a ReplicaSlice for the given range descriptor.
-// ReplicaSlices are restricted to replicas on nodes for which a NodeDescriptor
-// is available in gossip. If no nodes are available, a RangeUnavailableError is
-// returned.
-func replicaSliceOrErr(desc roachpb.RangeDescriptor, gsp *gossip.Gossip) (kv.ReplicaSlice, error) {
-	replicas := kv.NewReplicaSlice(gsp, &desc)
-	if len(replicas) == 0 {
-		// We couldn't get node descriptors for any replicas.
-		var nodeIDs []roachpb.NodeID
-		for _, r := range desc.Replicas {
-			nodeIDs = append(nodeIDs, r.NodeID)
-		}
-		return kv.ReplicaSlice{}, sqlbase.NewRangeUnavailableError(
-			desc.RangeID, errors.Errorf("node info not available in gossip"), nodeIDs...)
-	}
-	return replicas, nil
 }

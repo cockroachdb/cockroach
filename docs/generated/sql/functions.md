@@ -314,6 +314,15 @@ significant than <code>element</code> to zero (or one, for day and month)</p>
 <p>Compatible elements: year, quarter, month, week, hour, minute, second,
 millisecond, microsecond.</p>
 </span></td></tr>
+<tr><td><code>experimental_follower_read_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns a timestamp which is very likely to be safe to perform
+against a follower replica.</p>
+<p>This function is intended to be used with an AS OF SYSTEM TIME clause to perform
+historical reads against a time which is recent but sufficiently old for reads
+to be performed against the closest replica as opposed to the currently
+leaseholder for a given range.</p>
+<p>Note that this function requires an enterprise license on a CCL distribution to
+return without an error.</p>
+</span></td></tr>
 <tr><td><code>experimental_strftime(input: <a href="date.html">date</a>, extract_format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>From <code>input</code>, extracts and formats the time as identified in <code>extract_format</code> using standard <code>strftime</code> notation (though not all formatting is supported).</p>
 </span></td></tr>
 <tr><td><code>experimental_strftime(input: <a href="timestamp.html">timestamp</a>, extract_format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>From <code>input</code>, extracts and formats the time as identified in <code>extract_format</code> using standard <code>strftime</code> notation (though not all formatting is supported).</p>

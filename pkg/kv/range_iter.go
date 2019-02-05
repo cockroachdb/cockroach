@@ -72,21 +72,6 @@ func (ri *RangeIterator) Desc() *roachpb.RangeDescriptor {
 	return ri.desc
 }
 
-// LeaseHolderStoreID returns the lease holder's StoreID of the iterator's current range, if that
-// information is present in the DistSender's LeaseHolderCache. The second
-// return val is true if the descriptor has been found.
-// The iterator must be valid.
-func (ri *RangeIterator) LeaseHolderStoreID(ctx context.Context) (roachpb.StoreID, bool) {
-	if !ri.Valid() {
-		panic(ri.Error())
-	}
-	// TODO(andrei): The leaseHolderCache might have a replica that's not part of
-	// the RangeDescriptor that the iterator is currently positioned on. IOW, the
-	// leaseHolderCache can be inconsistent with the RangeDescriptorCache, and
-	// with reality. We should attempt to fix-up caches when this is encountered.
-	return ri.ds.leaseHolderCache.Lookup(ctx, ri.Desc().RangeID)
-}
-
 // Token returns the eviction token corresponding to the range
 // descriptor for the current iteration. The iterator must be valid.
 func (ri *RangeIterator) Token() *EvictionToken {

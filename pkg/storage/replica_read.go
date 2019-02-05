@@ -41,6 +41,7 @@ func (r *Replica) executeReadOnlyBatch(
 			if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
 				return nil, nErr
 			}
+			r.store.metrics.FollowerReadsCount.Inc(1)
 		}
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
