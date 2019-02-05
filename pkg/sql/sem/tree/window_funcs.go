@@ -24,8 +24,8 @@ import (
 
 // IndexedRows are rows with the corresponding indices.
 type IndexedRows interface {
-	Len() int                           // returns number of rows
-	GetRow(idx int) (IndexedRow, error) // returns a row at the given index or an error
+	Len() int                                                // returns number of rows
+	GetRow(ctx context.Context, idx int) (IndexedRow, error) // returns a row at the given index or an error
 }
 
 // IndexedRow is a row with a corresponding index.
@@ -85,7 +85,7 @@ func (o WindowFrameRangeOps) LookupImpl(left, right types.T) (*BinOp, *BinOp, bo
 // in the column over which rows are ordered plus/minus logic offset, and an
 // error if encountered. It should be used only in RANGE mode.
 func (wfr *WindowFrameRun) getValueByOffset(
-	evalCtx *EvalContext, offset Datum, negative bool,
+	ctx context.Context, evalCtx *EvalContext, offset Datum, negative bool,
 ) (Datum, error) {
 	if wfr.OrdDirection == encoding.Descending {
 		// If rows are in descending order, we want to perform the "opposite"
@@ -98,7 +98,7 @@ func (wfr *WindowFrameRun) getValueByOffset(
 	} else {
 		binOp = wfr.PlusOp
 	}
-	value, err := wfr.valueAt(wfr.RowIdx)
+	value, err := wfr.valueAt(ctx, wfr.RowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (wfr *WindowFrameRun) getValueByOffset(
 }
 
 // FrameStartIdx returns the index of starting row in the frame (which is the first to be included).
-func (wfr *WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) (int, error) {
+func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalContext) (int, error) {
 	if wfr.Frame == nil {
 		return 0, nil
 	}
@@ -116,7 +116,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) (int, error) {
 		case UnboundedPreceding:
 			return 0, nil
 		case OffsetPreceding:
-			value, err := wfr.getValueByOffset(evalCtx, wfr.StartBoundOffset, true /* negative */)
+			value, err := wfr.getValueByOffset(ctx, evalCtx, wfr.StartBoundOffset, true /* negative */)
 			if err != nil {
 				return 0, err
 			}
@@ -128,7 +128,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) (int, error) {
 					if wfr.err != nil {
 						return false
 					}
-					valueAt, err := wfr.valueAt(i)
+					valueAt, err := wfr.valueAt(ctx, i)
 					if err != nil {
 						wfr.err = err
 						return false
@@ -143,7 +143,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) (int, error) {
 				if wfr.err != nil {
 					return false
 				}
-				valueAt, err := wfr.valueAt(i)
+				valueAt, err := wfr.valueAt(ctx, i)
 				if err != nil {
 					wfr.err = err
 					return false
@@ -154,7 +154,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) (int, error) {
 			// Spec: in RANGE mode CURRENT ROW means that the frame starts with the current row's first peer.
 			return wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum), nil
 		case OffsetFollowing:
-			value, err := wfr.getValueByOffset(evalCtx, wfr.StartBoundOffset, false /* negative */)
+			value, err := wfr.getValueByOffset(ctx, evalCtx, wfr.StartBoundOffset, false /* negative */)
 			if err != nil {
 				return 0, err
 			}
@@ -165,7 +165,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) (int, error) {
 					if wfr.err != nil {
 						return false
 					}
-					valueAt, err := wfr.valueAt(i + wfr.RowIdx)
+					valueAt, err := wfr.valueAt(ctx, i+wfr.RowIdx)
 					if err != nil {
 						wfr.err = err
 						return false
@@ -179,7 +179,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(evalCtx *EvalContext) (int, error) {
 				if wfr.err != nil {
 					return false
 				}
-				valueAt, err := wfr.valueAt(i + wfr.RowIdx)
+				valueAt, err := wfr.valueAt(ctx, i+wfr.RowIdx)
 				if err != nil {
 					wfr.err = err
 					return false
@@ -257,7 +257,7 @@ func (wfr *WindowFrameRun) IsDefaultFrame() bool {
 }
 
 // FrameEndIdx returns the index of the first row after the frame.
-func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) (int, error) {
+func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext) (int, error) {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize(), nil
 	}
@@ -270,7 +270,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) (int, error) {
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
 		case OffsetPreceding:
-			value, err := wfr.getValueByOffset(evalCtx, wfr.EndBoundOffset, true /* negative */)
+			value, err := wfr.getValueByOffset(ctx, evalCtx, wfr.EndBoundOffset, true /* negative */)
 			if err != nil {
 				return 0, err
 			}
@@ -282,7 +282,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) (int, error) {
 					if wfr.err != nil {
 						return false
 					}
-					valueAt, err := wfr.valueAt(i)
+					valueAt, err := wfr.valueAt(ctx, i)
 					if err != nil {
 						wfr.err = err
 						return false
@@ -297,7 +297,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) (int, error) {
 				if wfr.err != nil {
 					return false
 				}
-				valueAt, err := wfr.valueAt(i)
+				valueAt, err := wfr.valueAt(ctx, i)
 				if err != nil {
 					wfr.err = err
 					return false
@@ -308,7 +308,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) (int, error) {
 			// Spec: in RANGE mode CURRENT ROW means that the frame end with the current row's last peer.
 			return wfr.DefaultFrameSize(), nil
 		case OffsetFollowing:
-			value, err := wfr.getValueByOffset(evalCtx, wfr.EndBoundOffset, false /* negative */)
+			value, err := wfr.getValueByOffset(ctx, evalCtx, wfr.EndBoundOffset, false /* negative */)
 			if err != nil {
 				return 0, err
 			}
@@ -319,7 +319,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) (int, error) {
 					if wfr.err != nil {
 						return false
 					}
-					valueAt, err := wfr.valueAt(i + wfr.RowIdx)
+					valueAt, err := wfr.valueAt(ctx, i+wfr.RowIdx)
 					if err != nil {
 						wfr.err = err
 						return false
@@ -333,7 +333,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) (int, error) {
 				if wfr.err != nil {
 					return false
 				}
-				valueAt, err := wfr.valueAt(i + wfr.RowIdx)
+				valueAt, err := wfr.valueAt(ctx, i+wfr.RowIdx)
 				if err != nil {
 					wfr.err = err
 					return false
@@ -410,15 +410,15 @@ func (wfr *WindowFrameRun) FrameEndIdx(evalCtx *EvalContext) (int, error) {
 }
 
 // FrameSize returns the number of rows in the current frame.
-func (wfr *WindowFrameRun) FrameSize(evalCtx *EvalContext) (int, error) {
+func (wfr *WindowFrameRun) FrameSize(ctx context.Context, evalCtx *EvalContext) (int, error) {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize(), nil
 	}
-	frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+	frameEndIdx, err := wfr.FrameEndIdx(ctx, evalCtx)
 	if err != nil {
 		return 0, err
 	}
-	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
 		return 0, err
 	}
@@ -457,13 +457,13 @@ func (wfr *WindowFrameRun) FirstInPeerGroup() bool {
 }
 
 // Args returns the current argument set in the window frame.
-func (wfr *WindowFrameRun) Args() (Datums, error) {
-	return wfr.ArgsWithRowOffset(0)
+func (wfr *WindowFrameRun) Args(ctx context.Context) (Datums, error) {
+	return wfr.ArgsWithRowOffset(ctx, 0)
 }
 
 // ArgsWithRowOffset returns the argument set at the given offset in the window frame.
-func (wfr *WindowFrameRun) ArgsWithRowOffset(offset int) (Datums, error) {
-	row, err := wfr.Rows.GetRow(wfr.RowIdx + offset)
+func (wfr *WindowFrameRun) ArgsWithRowOffset(ctx context.Context, offset int) (Datums, error) {
+	row, err := wfr.Rows.GetRow(ctx, wfr.RowIdx+offset)
 	if err != nil {
 		return nil, err
 	}
@@ -471,8 +471,8 @@ func (wfr *WindowFrameRun) ArgsWithRowOffset(offset int) (Datums, error) {
 }
 
 // ArgsByRowIdx returns the argument set of the row at idx.
-func (wfr *WindowFrameRun) ArgsByRowIdx(idx int) (Datums, error) {
-	row, err := wfr.Rows.GetRow(idx)
+func (wfr *WindowFrameRun) ArgsByRowIdx(ctx context.Context, idx int) (Datums, error) {
+	row, err := wfr.Rows.GetRow(ctx, idx)
 	if err != nil {
 		return nil, err
 	}
@@ -480,8 +480,8 @@ func (wfr *WindowFrameRun) ArgsByRowIdx(idx int) (Datums, error) {
 }
 
 // valueAt returns the first argument of the window function at the row idx.
-func (wfr *WindowFrameRun) valueAt(idx int) (Datum, error) {
-	row, err := wfr.Rows.GetRow(idx)
+func (wfr *WindowFrameRun) valueAt(ctx context.Context, idx int) (Datum, error) {
+	row, err := wfr.Rows.GetRow(ctx, idx)
 	if err != nil {
 		return nil, err
 	}

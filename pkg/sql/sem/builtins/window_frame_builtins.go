@@ -96,13 +96,13 @@ type slidingWindowFunc struct {
 
 // Compute implements WindowFunc interface.
 func (w *slidingWindowFunc) Compute(
-	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
+	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
 		return nil, err
 	}
-	frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+	frameEndIdx, err := wfr.FrameEndIdx(ctx, evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (w *slidingWindowFunc) Compute(
 	// added yet.
 	for idx := max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
 		if wfr.FilterColIdx != noFilterIdx {
-			row, err := wfr.Rows.GetRow(idx)
+			row, err := wfr.Rows.GetRow(ctx, idx)
 			if err != nil {
 				return nil, err
 			}
@@ -126,7 +126,7 @@ func (w *slidingWindowFunc) Compute(
 				continue
 			}
 		}
-		args, err := wfr.ArgsByRowIdx(idx)
+		args, err := wfr.ArgsByRowIdx(ctx, idx)
 		if err != nil {
 			return nil, err
 		}
@@ -169,13 +169,13 @@ type slidingWindowSumFunc struct {
 func (w *slidingWindowSumFunc) removeAllBefore(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) error {
-	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
 		return err
 	}
 	for idx := w.prevStart; idx < frameStartIdx && idx < w.prevEnd; idx++ {
 		if wfr.FilterColIdx != noFilterIdx {
-			row, err := wfr.Rows.GetRow(idx)
+			row, err := wfr.Rows.GetRow(ctx, idx)
 			if err != nil {
 				return err
 			}
@@ -187,7 +187,7 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 				continue
 			}
 		}
-		args, err := wfr.ArgsByRowIdx(idx)
+		args, err := wfr.ArgsByRowIdx(ctx, idx)
 		if err != nil {
 			return err
 		}
@@ -217,11 +217,11 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 func (w *slidingWindowSumFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
 		return nil, err
 	}
-	frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+	frameEndIdx, err := wfr.FrameEndIdx(ctx, evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func (w *slidingWindowSumFunc) Compute(
 	// added yet.
 	for idx := max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
 		if wfr.FilterColIdx != noFilterIdx {
-			row, err := wfr.Rows.GetRow(idx)
+			row, err := wfr.Rows.GetRow(ctx, idx)
 			if err != nil {
 				return nil, err
 			}
@@ -247,7 +247,7 @@ func (w *slidingWindowSumFunc) Compute(
 				continue
 			}
 		}
-		args, err := wfr.ArgsByRowIdx(idx)
+		args, err := wfr.ArgsByRowIdx(ctx, idx)
 		if err != nil {
 			return nil, err
 		}
@@ -293,16 +293,16 @@ func (w *avgWindowFunc) Compute(
 
 	var frameSize int
 	if wfr.FilterColIdx != noFilterIdx {
-		frameStartIdx, err := wfr.FrameStartIdx(evalCtx)
+		frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 		if err != nil {
 			return nil, err
 		}
-		frameEndIdx, err := wfr.FrameEndIdx(evalCtx)
+		frameEndIdx, err := wfr.FrameEndIdx(ctx, evalCtx)
 		if err != nil {
 			return nil, err
 		}
 		for idx := frameStartIdx; idx < frameEndIdx; idx++ {
-			row, err := wfr.Rows.GetRow(idx)
+			row, err := wfr.Rows.GetRow(ctx, idx)
 			if err != nil {
 				return nil, err
 			}
@@ -316,7 +316,7 @@ func (w *avgWindowFunc) Compute(
 			frameSize++
 		}
 	} else {
-		if frameSize, err = wfr.FrameSize(evalCtx); err != nil {
+		if frameSize, err = wfr.FrameSize(ctx, evalCtx); err != nil {
 			return nil, err
 		}
 	}
