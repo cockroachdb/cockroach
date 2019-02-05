@@ -883,6 +883,9 @@ func TestImportCSVStmt(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
+	// Turn off automatic stats so they don't show up in the jobs table.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = false`)
+
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
 
 	tablePath := filepath.Join(dir, "table")
