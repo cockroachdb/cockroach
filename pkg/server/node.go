@@ -268,8 +268,9 @@ func NewNode(
 		metrics:  makeNodeMetrics(reg, cfg.HistogramWindowInterval),
 		stores: storage.NewStores(
 			cfg.AmbientCtx, cfg.Clock,
-			// !!! these should come from a config
-			cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion),
+		// !!! these should come from a config
+		// cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion
+		),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
@@ -463,7 +464,9 @@ func (n *Node) start(
 	// Read persisted ClusterVersion from each configured store to
 	// verify there are no stores with data too old or too new for this
 	// binary.
-	if _, err := n.stores.SynthesizeClusterVersion(ctx); err != nil {
+	if _, err := n.stores.SynthesizeClusterVersion(
+		ctx, cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
+	); err != nil {
 		return err
 	}
 
@@ -578,14 +581,15 @@ func (n *Node) bootstrapStores(
 
 	// There's a bit of an awkward dance around cluster versions here. If this node
 	// is joining an existing cluster for the first time, it doesn't have any engines
-	// set up yet, and cv below will be the MinSupportedVersion. At the same time,
-	// the Gossip update which notifies us about the real cluster version won't
-	// persist it to any engines (because we haven't installed the gossip update
-	// handler yet and also because none of the stores are bootstrapped). So we
-	// just accept that we won't use the correct version here, but
-	// post-bootstrapping will invoke the callback manually, which will
+	// set up yet, and cv below will be the cluster.BinaryMinimumSupportedVersion.
+	// At the same time, the Gossip update which notifies us about the real
+	// cluster version won't persist it to any engines (because we haven't
+	// installed the gossip update handler yet and also because none of the stores
+	// are bootstrapped). So we just accept that we won't use the correct version
+	// here, but post-bootstrapping will invoke the callback manually, which will
 	// disseminate the correct version to all engines.
-	cv, err := n.stores.SynthesizeClusterVersion(ctx)
+	cv, err := n.stores.SynthesizeClusterVersion(
+		ctx, cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 	if err != nil {
 		return errors.Errorf("error retrieving cluster version for bootstrap: %s", err)
 	}

@@ -39,12 +39,13 @@ type Stores struct {
 	log.AmbientContext
 	clock    *hlc.Clock
 	storeMap syncutil.IntMap // map[roachpb.StoreID]*Store
-	// These two versions are usually cluster.BinaryMinimumSupportedVersion and
-	// cluster.BinaryServerVersion, respectively. They are changed in some
-	// tests.
-	minSupportedVersion roachpb.Version
-	serverVersion       roachpb.Version
-	mu                  struct {
+	// // !!!
+	// // These two versions are usually cluster.BinaryMinimumSupportedVersion and
+	// // cluster.BinaryServerVersion, respectively. They are changed in some
+	// // tests.
+	// minSupportedVersion roachpb.Version
+	// serverVersion       roachpb.Version
+	mu struct {
 		syncutil.Mutex
 		biLatestTS hlc.Timestamp         // Timestamp of gossip bootstrap info
 		latestBI   *gossip.BootstrapInfo // Latest cached bootstrap info
@@ -56,14 +57,13 @@ var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interfa
 
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
-func NewStores(
-	ambient log.AmbientContext, clock *hlc.Clock, minVersion, serverVersion roachpb.Version,
-) *Stores {
+func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
 	return &Stores{
-		AmbientContext:      ambient,
-		clock:               clock,
-		minSupportedVersion: minVersion,
-		serverVersion:       serverVersion,
+		AmbientContext: ambient,
+		clock:          clock,
+		// !!!
+		// minSupportedVersion: minVersion,
+		// serverVersion:       serverVersion,
 	}
 }
 
@@ -406,14 +406,24 @@ func SynthesizeClusterVersionFromEngines(
 // versions across the stores, returns a version that carries the smallest
 // Version.
 //
-// If there aren't any stores, returns the minimum supported version of the binary.
-func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (cluster.ClusterVersion, error) {
+// If there aren't any stores, returns minSupportedVersion.
+//
+// Args:
+// 	minSupportedVersion: The minimum versiun supported by this binary. An error
+// 	  is returned if any engine has a version lower that this. This version is
+// 	  written to the engines if no store has a version in it.
+// 	serverVersion: The maximum version supported by this binary. An error is
+// 	  returned if any engine has a higher version.
+func (ls *Stores) SynthesizeClusterVersion(
+	ctx context.Context, minSupportedVersion, serverVersion roachpb.Version,
+) (cluster.ClusterVersion, error) {
 	var engines []engine.Engine
 	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
 		engines = append(engines, (*Store)(v).engine)
 		return true // want more
 	})
-	cv, err := SynthesizeClusterVersionFromEngines(ctx, engines, ls.minSupportedVersion, ls.serverVersion)
+	cv, err := SynthesizeClusterVersionFromEngines(
+		ctx, engines, minSupportedVersion, serverVersion)
 	if err != nil {
 		return cluster.ClusterVersion{}, err
 	}

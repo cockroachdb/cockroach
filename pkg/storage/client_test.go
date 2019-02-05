@@ -138,9 +138,8 @@ func createTestStoreWithOpts(
 		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(), storeCfg.DefaultZoneConfig,
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
-	stores := storage.NewStores(
-		ac, storeCfg.Clock,
-		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+	stores := storage.NewStores(ac, storeCfg.Clock)
+	// !!! cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 	// !!! storeCfg.Settings.Version.MinSupportedVersion, storeCfg.Settings.Version.ServerVersion)
 
 	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
@@ -897,10 +896,10 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatal(err)
 	}
 
-	sender := storage.NewStores(ambient, clock,
-		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
+	sender := storage.NewStores(ambient, clock)
+	// !!! cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
 	// !!! cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion
-	)
+
 	sender.AddStore(store)
 	perReplicaServer := storage.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
 	storage.RegisterPerReplicaServer(grpcServer, perReplicaServer)
