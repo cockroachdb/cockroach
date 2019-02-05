@@ -26,6 +26,9 @@ CREATE TABLE abc (
   d INT
 )
 
+statement ok
+SET experimental_reorder_joins_limit = 0
+
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
