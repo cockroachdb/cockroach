@@ -82,8 +82,8 @@ func registerCancel(r *registry) {
 				// a bit before attempting to cancel it.
 				time.Sleep(100 * time.Millisecond)
 
-				const cancelQuery = `CANCEL QUERY (
-	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%')`
+				const cancelQuery = `CANCEL QUERIES
+	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%'`
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "`+cancelQuery+`"`)
 				cancelStartTime := timeutil.Now()
 
