@@ -1161,7 +1161,7 @@ func (ir indexedRows) Len() int {
 }
 
 // GetRow implements tree.IndexedRows interface.
-func (ir indexedRows) GetRow(idx int) (tree.IndexedRow, error) {
+func (ir indexedRows) GetRow(_ context.Context, idx int) (tree.IndexedRow, error) {
 	return ir.rows[idx], nil
 }
 
