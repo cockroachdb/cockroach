@@ -474,9 +474,9 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErrRight, roachpb.RangeFeedRetryError_REASON_RANGE_MERGED)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT.String(), func(t *testing.T) {
-		const partitionStore = 2
 		mtc, rangeID := setup(t)
 		defer mtc.Stop()
+		partitionStore := mtc.Store(2)
 
 		mtc.stores[0].SetReplicaGCQueueActive(false)
 		mtc.stores[1].SetReplicaGCQueueActive(false)
@@ -493,7 +493,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(partitionStore).RangeFeed(ctx, &req, stream)
+			pErr := partitionStore.RangeFeed(ctx, &req, stream)
 			streamErrC <- pErr
 		}()
 
@@ -501,7 +501,10 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		waitForInitialCheckpoint(t, stream, streamErrC)
 
 		// Partition the replica from the rest of its range.
-		mtc.transport.GetCircuitBreaker(mtc.idents[partitionStore].NodeID).Break()
+		mtc.transport.Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
+			rangeID:            rangeID,
+			RaftMessageHandler: partitionStore,
+		})
 
 		// Perform a write on the range.
 		pArgs := putArgs(roachpb.Key("c"), []byte("val2"))
@@ -529,7 +532,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}
 
 		// Remove the partition. Snapshot should follow.
-		mtc.transport.GetCircuitBreaker(mtc.idents[partitionStore].NodeID).Reset()
+		mtc.transport.Listen(partitionStore.Ident.StoreID, partitionStore)
 
 		// Check the error.
 		pErr := <-streamErrC
