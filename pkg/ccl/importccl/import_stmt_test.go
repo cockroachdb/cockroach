@@ -867,13 +867,18 @@ func TestImportCSVStmt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short")
 	}
-	t.Skip(`#34568`)
 
-	const (
-		nodes       = 3
-		numFiles    = nodes + 2
-		rowsPerFile = 1000
-	)
+	const nodes = 3
+
+	numFiles := nodes + 2
+	rowsPerFile := 1000
+	if util.RaceEnabled {
+		// This test takes a while with the race detector, so reduce the number of
+		// files and rows per file in an attempt to speed it up.
+		numFiles = nodes
+		rowsPerFile = 16
+	}
+
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -896,9 +901,6 @@ func TestImportCSVStmt(t *testing.T) {
 	`), 0666); err != nil {
 		t.Fatal(err)
 	}
-
-	// Get the number of existing jobs.
-	baseNumJobs := jobutils.GetSystemJobsCount(t, sqlDB)
 
 	if err := ioutil.WriteFile(filepath.Join(dir, "empty.csv"), nil, 0666); err != nil {
 		t.Fatal(err)
@@ -1174,7 +1176,7 @@ func TestImportCSVStmt(t *testing.T) {
 			}
 			jobPrefix += `t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`
 
-			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", ")),
 			}); err != nil {
@@ -1188,7 +1190,6 @@ func TestImportCSVStmt(t *testing.T) {
 					t, "does not exist",
 					`SELECT count(*) FROM t`,
 				)
-				testNum++
 				sqlDB.QueryRow(
 					t, `RESTORE csv.* FROM $1 WITH into_db = $2`, backupPath, intodb,
 				).Scan(
