@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,8 +37,9 @@ func Get(
 	reply := resp.(*roachpb.GetResponse)
 
 	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp, engine.MVCCGetOptions{
-		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:          h.Txn,
+		Inconsistent:   h.ReadConsistency != roachpb.CONSISTENT,
+		IgnoreSequence: shouldIgnoreSequenceNums(cArgs.EvalCtx),
+		Txn:            h.Txn,
 	})
 	if err != nil {
 		return result.Result{}, err
@@ -62,4 +64,20 @@ func Get(
 		}
 	}
 	return result.FromIntents(intents, args), err
+}
+
+func shouldIgnoreSequenceNums(rec EvalContext) bool {
+	// Versions 2.1 and below did not properly propagate sequence numbers to leaf
+	// TxnCoordSenders. This means that we can't rely on sequence numbers being
+	// properly assigned by those nodes. Gate the use of sequence numbers while
+	// scanning on a cluster setting.
+	// NOTE: because we check this during batcheval instead of when sending a
+	// get/scan request with an associated flag on the request itself, 2.2 clients
+	// can't use a similar IsActive check to determine when they can start relying
+	// on the correct sequence number behavior. Instead, they must wait until a
+	// new cluster version introduced in 2.3. Alternatively, we can add a flag to
+	// batch headers that can be set on a client (who would perform the IsActive
+	// check itself) and would override this decision. We haven't added that yet
+	// because it's not clear that it will be needed.
+	return !rec.ClusterSettings().Version.IsActive(cluster.VersionSequencedReads)
 }

@@ -70,6 +70,7 @@ const (
 	VersionLoadSplits
 	VersionExportStorageWorkload
 	VersionLazyTxnRecord
+	VersionSequencedReads
 
 	// Add new versions here (step one of two).
 
@@ -308,6 +309,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionLazyTxnRecord is https://github.com/cockroachdb/cockroach/pull/33566.
 		Key:     VersionLazyTxnRecord,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 4},
+	},
+	{
+		// VersionExportStorageWorkload is https://github.com/cockroachdb/cockroach/pull/33244.
+		Key:     VersionSequencedReads,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 5},
 	},
 
 	// Add new versions here (step two of two).

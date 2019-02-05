@@ -3360,9 +3360,10 @@ func TestMVCCReadWithOldEpoch(t *testing.T) {
 	}
 }
 
-// TestMVCCWriteWithSequence verifies that no retry errors
-// are thrown in the event that earlier sequence numbers are
-// encountered.
+// TestMVCCWriteWithSequence verifies that writes at sequence numbers equal to
+// or below the sequence of an active intent verify that they agree with the
+// intent's sequence history. If so, they become no-ops because writes are meant
+// to be idempotent. If not, they throw errors.
 func TestMVCCWriteWithSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -3371,32 +3372,128 @@ func TestMVCCWriteWithSequence(t *testing.T) {
 	defer engine.Close()
 
 	testCases := []struct {
-		sequence    int32
-		expectedErr string
+		name     string
+		sequence int32
+		value    roachpb.Value
+		expWrite bool
+		expErr   string
 	}{
-		{1, "missing an intent"}, // old sequence
-		{2, ""},                  // same sequence
-		{3, ""},                  // new sequence
+		{"old seq", 1, value1, false, "missing an intent"},
+		{"same seq as overwritten intent", 2, value1, false, ""},
+		{"same seq as overwritten intent, wrong value", 2, value2, false, "has a different value"},
+		{"same seq as active intent", 3, value2, false, ""},
+		{"same seq as active intent, wrong value", 3, value3, false, "has a different value"},
+		{"new seq", 4, value4, true, ""},
 	}
 
-	for i, tc := range testCases {
-		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		// Start with sequence 2.
-		txn := *txn1
-		txn.Sequence = 2
-		if err := MVCCPut(ctx, engine, nil, key, txn.OrigTimestamp, value1, &txn); err != nil {
-			t.Fatal(err)
-		}
-
-		txn.Sequence = tc.sequence
-		err := MVCCPut(ctx, engine, nil, key, txn.OrigTimestamp, value1, &txn)
-		if tc.expectedErr != "" && err != nil {
-			if !testutils.IsError(err, tc.expectedErr) {
-				t.Fatalf("%d: unexpected error: %s", i, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			key := roachpb.Key(fmt.Sprintf("key-%d", tc.sequence))
+			txn := *txn1
+			txn.Sequence = 2
+			if err := MVCCPut(ctx, engine, nil, key, txn.Timestamp, value1, &txn); err != nil {
+				t.Fatal(err)
 			}
-		} else if err != nil {
-			t.Fatalf("%d: unexpected error: %s", i, err)
-		}
+			txn.Sequence = 3
+			if err := MVCCPut(ctx, engine, nil, key, txn.Timestamp, value2, &txn); err != nil {
+				t.Fatal(err)
+			}
+
+			batch := engine.NewBatch()
+			defer batch.Close()
+
+			txn.Sequence = tc.sequence
+			err := MVCCPut(ctx, batch, nil, key, txn.Timestamp, tc.value, &txn)
+			if tc.expErr != "" && err != nil {
+				if !testutils.IsError(err, tc.expErr) {
+					t.Fatalf("unexpected error: %s", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			write := !batch.Empty()
+			if tc.expWrite {
+				if !write {
+					t.Fatalf("expected write to batch")
+				}
+			} else {
+				if write {
+					t.Fatalf("unexpected write to batch")
+				}
+			}
+		})
+	}
+}
+
+// TestMVCCWriteWithSequence verifies that delete range operations at sequence
+// numbers equal to or below the sequence of a previous delete range operation
+// verify that they agree with the sequence history of each intent left by the
+// delete range. If so, they become no-ops because writes are meant to be
+// idempotent. If not, they throw errors.
+func TestMVCCDeleteRangeWithSequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	testCases := []struct {
+		name     string
+		sequence int32
+		expErr   string
+	}{
+		{"old seq", 5, "missing an intent"},
+		{"same seq", 6, ""},
+		{"new seq", 7, ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			prefix := roachpb.Key(fmt.Sprintf("key-%d", tc.sequence))
+			txn := *txn1
+			for i := int32(0); i < 3; i++ {
+				key := append(prefix, []byte(strconv.Itoa(int(i)))...)
+				txn.Sequence = 2 + i
+				if err := MVCCPut(ctx, engine, nil, key, txn.Timestamp, value1, &txn); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Perform the initial DeleteRange.
+			const origSeq = 6
+			txn.Sequence = origSeq
+			origDeleted, _, origNum, err := MVCCDeleteRange(
+				ctx, engine, nil, prefix, prefix.PrefixEnd(), math.MaxInt64, txn.Timestamp, &txn, true,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			txn.Sequence = tc.sequence
+			deleted, _, num, err := MVCCDeleteRange(
+				ctx, engine, nil, prefix, prefix.PrefixEnd(), math.MaxInt64, txn.Timestamp, &txn, true,
+			)
+			if tc.expErr != "" && err != nil {
+				if !testutils.IsError(err, tc.expErr) {
+					t.Fatalf("unexpected error: %s", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			// If at the same sequence as the initial DeleteRange.
+			if tc.sequence == origSeq {
+				if !reflect.DeepEqual(origDeleted, deleted) {
+					t.Fatalf("deleted keys did not match original execution: %+v vs. %+v",
+						origDeleted, deleted)
+				}
+				if origNum != num {
+					t.Fatalf("number of keys deleted did not match original execution: %d vs. %d",
+						origNum, num)
+				}
+			}
+		})
 	}
 }
 
@@ -4606,8 +4703,8 @@ func TestMVCCIdempotentTransactions(t *testing.T) {
 	}
 }
 
-// TestMVCCIntentHistory verifies that trying to write to a key that already was written
-// to, results in the history being recorded in the MVCCMetadata.
+// TestMVCCIntentHistory verifies that trying to write to a key that already was
+// written to, results in the history being recorded in the MVCCMetadata.
 func TestMVCCIntentHistory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -4615,17 +4712,47 @@ func TestMVCCIntentHistory(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	ts1 := hlc.Timestamp{WallTime: 1E9}
-	ts2 := hlc.Timestamp{WallTime: 2 * 1E9}
+	ts0 := hlc.Timestamp{WallTime: 1E9}
+	ts1 := hlc.Timestamp{WallTime: 2 * 1E9}
+	ts2 := hlc.Timestamp{WallTime: 3 * 1E9}
 
 	key := roachpb.Key("a")
+	defaultValue := roachpb.MakeValueFromString("default")
 	value := roachpb.MakeValueFromString("first value")
 	newValue := roachpb.MakeValueFromString("second value")
 	txn := &roachpb.Transaction{
-		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-		OrigTimestamp: ts1,
+		TxnMeta: enginepb.TxnMeta{
+			ID:        uuid.MakeV4(),
+			Timestamp: ts0,
+			Sequence:  1,
+		},
+		OrigTimestamp: ts0,
+		Status:        roachpb.PENDING,
 	}
-	txn.Status = roachpb.PENDING
+
+	// Lay down a default value on the key.
+	if err := MVCCPut(ctx, engine, nil, key, ts0, defaultValue, txn); err != nil {
+		t.Fatal(err)
+	}
+	// Resolve the intent so we can use another transaction on this key.
+	if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+		Span:   roachpb.Span{Key: key},
+		Status: roachpb.COMMITTED,
+		Txn:    txn.TxnMeta,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Start a new transaction for the test.
+	txn = &roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{
+			ID:        uuid.MakeV4(),
+			Timestamp: ts1,
+			Sequence:  1,
+		},
+		OrigTimestamp: ts1,
+		Status:        roachpb.PENDING,
+	}
 
 	// Lay down an intent.
 	if err := MVCCPut(ctx, engine, nil, key, txn.OrigTimestamp, value, txn); err != nil {
@@ -4653,7 +4780,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	}
 
 	// Lay down an overriding intent with a higher sequence.
-	txn.Sequence++
+	txn.Sequence = 2
 	txn.Timestamp = ts2
 	if err := MVCCPut(ctx, engine, nil, key, txn.OrigTimestamp, newValue, txn); err != nil {
 		t.Fatal(err)
@@ -4666,7 +4793,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 		KeyBytes:  mvccVersionTimestampSize,
 		ValBytes:  int64(len(newValue.RawBytes)),
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
-			{Sequence: 0, Value: value.RawBytes},
+			{Sequence: 1, Value: value.RawBytes},
 		},
 	}
 	ok, _, _, err = engine.GetProto(metaKey, meta)
@@ -4681,7 +4808,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	}
 
 	// Lay down a deletion intent with a higher sequence.
-	txn.Sequence++
+	txn.Sequence = 4
 	if err := MVCCDelete(ctx, engine, nil, key, txn.OrigTimestamp, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -4694,8 +4821,8 @@ func TestMVCCIntentHistory(t *testing.T) {
 		ValBytes:  0,
 		Deleted:   true,
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
-			{Sequence: 0, Value: value.RawBytes},
-			{Sequence: 1, Value: newValue.RawBytes},
+			{Sequence: 1, Value: value.RawBytes},
+			{Sequence: 2, Value: newValue.RawBytes},
 		},
 	}
 	ok, _, _, err = engine.GetProto(metaKey, meta)
@@ -4710,7 +4837,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	}
 
 	// Lay down another intent with a higher sequence to see if history accurately captures deletes.
-	txn.Sequence++
+	txn.Sequence = 6
 	if err := MVCCPut(ctx, engine, nil, key, txn.OrigTimestamp, value, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -4722,9 +4849,9 @@ func TestMVCCIntentHistory(t *testing.T) {
 		KeyBytes:  mvccVersionTimestampSize,
 		ValBytes:  int64(len(value.RawBytes)),
 		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
-			{Sequence: 0, Value: value.RawBytes},
-			{Sequence: 1, Value: newValue.RawBytes},
-			{Sequence: 2, Value: noValue.RawBytes},
+			{Sequence: 1, Value: value.RawBytes},
+			{Sequence: 2, Value: newValue.RawBytes},
+			{Sequence: 4, Value: noValue.RawBytes},
 		},
 	}
 	ok, _, _, err = engine.GetProto(metaKey, meta)
@@ -4736,6 +4863,87 @@ func TestMVCCIntentHistory(t *testing.T) {
 	}
 	if !meta.Equal(aggMeta) {
 		t.Errorf("expected metadata:\n%+v;\n got: \n%+v", aggMeta, meta)
+	}
+
+	// Assert that the latest read should find the latest write.
+	foundVal, _, err := MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
+	if err != nil {
+		t.Fatalf("MVCCGet failed with error: %v", err)
+	}
+	if !bytes.Equal(foundVal.RawBytes, value.RawBytes) {
+		t.Fatalf("MVCCGet failed: expected %v but got %v", value.RawBytes, foundVal.RawBytes)
+	}
+
+	// Assert than an older read sequence gets an older versioned intent.
+	txn.Sequence = 3
+	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
+	if err != nil {
+		t.Fatalf("MVCCGet failed with error: %v", err)
+	}
+	if !bytes.Equal(foundVal.RawBytes, newValue.RawBytes) {
+		t.Fatalf("MVCCGet failed: expected %v but got %v", newValue.RawBytes, foundVal.RawBytes)
+	}
+
+	// Assert than an older scan sequence gets an older versioned intent.
+	kvs, _, _, err := MVCCScan(ctx, engine, key, key.Next(), math.MaxInt64, ts2, MVCCScanOptions{Txn: txn})
+	if err != nil {
+		t.Fatalf("MVCCScan failed with error: %v", err)
+	}
+	if len(kvs) != 1 {
+		t.Fatalf("MVCCScan did not find exactly 1 key: %+v", kvs)
+	}
+	if !bytes.Equal(kvs[0].Value.RawBytes, newValue.RawBytes) {
+		t.Fatalf("MVCCScan failed: expected %v but got %v", newValue.RawBytes, foundVal.RawBytes)
+	}
+
+	// Assert than an older read sequence gets no value if the value was deleted.
+	txn.Sequence = 4
+	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
+	if err != nil {
+		t.Fatalf("MVCCGet failed with error: %v", err)
+	}
+	if foundVal != nil {
+		t.Fatalf("MVCCGet at sequence %d found unexpected value", txn.Sequence)
+	}
+
+	// Assert than an older scan sequence gets no value if the value was deleted.
+	kvs, _, _, err = MVCCScan(ctx, engine, key, key.Next(), math.MaxInt64, ts2, MVCCScanOptions{Txn: txn})
+	if err != nil {
+		t.Fatalf("MVCCScan failed with error: %v", err)
+	}
+	if len(kvs) != 0 {
+		t.Fatalf("MVCCScan at sequence %d found unexpected values: %+v", txn.Sequence, kvs)
+	}
+
+	// Assert than an older read sequence gets a value if the value was deleted
+	// but we're including tombstones in our search.
+	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn, Tombstones: true})
+	if err != nil {
+		t.Fatalf("MVCCGet failed with error: %v", err)
+	}
+	if foundVal == nil || foundVal.IsPresent() {
+		t.Fatalf("MVCCGet at sequence %d did not find tombstone", txn.Sequence)
+	}
+
+	// Assert than an older scan sequence gets a value if the value was deleted
+	// but we're including tombstones in our search.
+	kvs, _, _, err = MVCCScan(ctx, engine, key, key.Next(), math.MaxInt64, ts2, MVCCScanOptions{Txn: txn, Tombstones: true})
+	if err != nil {
+		t.Fatalf("MVCCScan failed with error: %v", err)
+	}
+	if len(kvs) != 1 || kvs[0].Value.IsPresent() {
+		t.Fatalf("MVCCScan at sequence %d did not find tombstone: %+v", txn.Sequence, kvs)
+	}
+
+	// Assert that the last committed value is found if the sequence is lower than any
+	// write from the current transaction.
+	txn.Sequence = 0
+	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
+	if err != nil {
+		t.Fatalf("MVCCGet failed with error: %v", err)
+	}
+	if !bytes.Equal(foundVal.RawBytes, defaultValue.RawBytes) {
+		t.Fatalf("MVCCGet failed: expected %v but got %v", defaultValue.RawBytes, foundVal.RawBytes)
 	}
 
 	// Resolve the intent.
