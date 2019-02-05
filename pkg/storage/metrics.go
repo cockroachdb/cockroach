@@ -279,6 +279,14 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Metric for tracking follower reads.
+	metaFollowerReadsCount = metric.Metadata{
+		Name:        "follower_reads.success_count",
+		Help:        "Number of reads successfully processed by any replica",
+		Measurement: "Read Ops",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// RocksDB metrics.
 	metaRdbBlockCacheHits = metric.Metadata{
 		Name:        "rocksdb.block.cache.hits",
@@ -966,6 +974,9 @@ type StoreMetrics struct {
 	AverageQueriesPerSecond *metric.GaugeFloat64
 	AverageWritesPerSecond  *metric.GaugeFloat64
 
+	// Follower read metrics.
+	FollowerReadsCount *metric.Counter
+
 	// RocksDB metrics.
 	RdbBlockCacheHits           *metric.Gauge
 	RdbBlockCacheMisses         *metric.Gauge
@@ -1162,6 +1173,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Rebalancing metrics.
 		AverageQueriesPerSecond: metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
 		AverageWritesPerSecond:  metric.NewGaugeFloat64(metaAverageWritesPerSecond),
+
+		// Follower reads metrics.
+		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
 
 		// RocksDB metrics.
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),
