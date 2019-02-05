@@ -53,13 +53,18 @@ func Refresh(
 	if err != nil {
 		return result.Result{}, err
 	} else if val != nil {
+		// TODO(nvanbenschoten): This is pessimistic. We only need to check
+		//   !ts.Less(h.Txn.PrevRefreshTimestamp)
+		// This could avoid failed refreshes due to requests performed after
+		// earlier refreshes (which read at the refresh ts) that already
+		// observed writes between the orig ts and the refresh ts.
 		if ts := val.Timestamp; !ts.Less(h.Txn.OrigTimestamp) {
 			return result.Result{}, errors.Errorf("encountered recently written key %s @%s", args.Key, ts)
 		}
 	}
 
-	// Now, check if the intent was written earlier than the command's timestamp
-	// and was not owned by this transaction.
+	// Check if an intent which is not owned by this transaction was written
+	// at or beneath the refresh timestamp.
 	if intent != nil && intent.Txn.ID != h.Txn.ID {
 		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
 			intent.Span.Key, intent.Txn.Timestamp)
