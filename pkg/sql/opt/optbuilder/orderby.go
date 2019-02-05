@@ -138,7 +138,7 @@ func (b *Builder) analyzeOrderByIndex(
 			desc = !desc
 		}
 
-		colItem := tree.NewColumnItem(tab.Name(), col.Column.ColName())
+		colItem := tree.NewColumnItem(tab.Name(), col.ColName())
 		expr := inScope.resolveType(colItem, types.Any)
 		outCol := b.addColumn(orderByScope, "" /* alias */, expr)
 		outCol.descending = desc

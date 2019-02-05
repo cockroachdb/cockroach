@@ -334,10 +334,15 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
-			tp.Childf("canary column: %d", t.CanaryCol)
-			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
-			f.formatMutation(e, tp, "insert-mapping:", t.InsertCols, t.Table)
-			f.formatMutation(e, tp, "update-mapping:", t.UpdateCols, t.Table)
+			if t.CanaryCol != 0 {
+				tp.Childf("canary column: %d", t.CanaryCol)
+				f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+				f.formatMutation(e, tp, "insert-mapping:", t.InsertCols, t.Table)
+				f.formatMutation(e, tp, "update-mapping:", t.UpdateCols, t.Table)
+				f.formatMutation(e, tp, "return-mapping:", t.ReturnCols, t.Table)
+			} else {
+				f.formatMutation(e, tp, "upsert-mapping:", t.InsertCols, t.Table)
+			}
 			f.formatColList(e, tp, "check columns:", t.CheckCols)
 		}
 

@@ -6,9 +6,76 @@ CREATE TABLE kv (
   v INT
 )
 
+# Use implicit target columns (which can use blind KV Put).
 query TTT
 SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC LIMIT 2
+]
+----
+count                          ·         ·
+ └── upsert                    ·         ·
+      │                        into      kv(k, v)
+      │                        strategy  opt upserter
+      └── render               ·         ·
+           │                   render 0  k
+           │                   render 1  v
+           │                   render 2  v
+           └── limit           ·         ·
+                │              count     2
+                └── sort       ·         ·
+                     │         order     -v
+                     └── scan  ·         ·
+·                              table     kv@primary
+·                              spans     ALL
+
+# Use explicit target columns (which can use blind KV Put).
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2
+]
+----
+count                          ·         ·
+ └── upsert                    ·         ·
+      │                        into      kv(k, v)
+      │                        strategy  opt upserter
+      └── render               ·         ·
+           │                   render 0  k
+           │                   render 1  v
+           │                   render 2  v
+           └── limit           ·         ·
+                │              count     2
+                └── sort       ·         ·
+                     │         order     -v
+                     └── scan  ·         ·
+·                              table     kv@primary
+·                              spans     ALL
+
+# Add RETURNING clause (should still use blind KV Put).
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2 RETURNING *
+]
+----
+run                            ·         ·
+ └── upsert                    ·         ·
+      │                        into      kv(k, v)
+      │                        strategy  opt upserter
+      └── render               ·         ·
+           │                   render 0  k
+           │                   render 1  v
+           │                   render 2  v
+           └── limit           ·         ·
+                │              count     2
+                └── sort       ·         ·
+                     │         order     -v
+                     └── scan  ·         ·
+·                              table     kv@primary
+·                              spans     ALL
+
+# Use subset of explicit target columns (which cannot use blind KV Put).
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO kv (k) SELECT k FROM kv ORDER BY v DESC LIMIT 2
 ]
 ----
 count                                    ·         ·
@@ -16,20 +83,15 @@ count                                    ·         ·
       │                                  into      kv(k, v)
       │                                  strategy  opt upserter
       └── render                         ·         ·
-           │                             render 0  upsert_k
-           │                             render 1  upsert_v
-           │                             render 2  upsert_k
-           │                             render 3  v
-           │                             render 4  upsert_v
-           │                             render 5  k
-           └── render                    ·         ·
-                │                        render 0  CASE WHEN k IS NULL THEN k ELSE k END
-                │                        render 1  CASE WHEN k IS NULL THEN v ELSE v END
-                │                        render 2  k
-                │                        render 3  v
-                └── lookup-join          ·         ·
-                     │                   table     kv@primary
-                     │                   type      inner
+           │                             render 0  k
+           │                             render 1  column5
+           │                             render 2  k
+           └── lookup-join               ·         ·
+                │                        table     kv@primary
+                │                        type      inner
+                └── render               ·         ·
+                     │                   render 0  CAST(NULL AS INT8)
+                     │                   render 1  k
                      └── limit           ·         ·
                           │              count     2
                           └── sort       ·         ·
@@ -38,6 +100,94 @@ count                                    ·         ·
 ·                                        table     kv@primary
 ·                                        spans     ALL
 
+# Use Upsert with indexed table, default columns, computed columns, and check
+# columns.
+statement ok
+CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT DEFAULT(10),
+  d INT AS (a + c) STORED,
+  UNIQUE INDEX secondary (d, b),
+  CHECK (c > 0)
+)
+
+# Should fetch existing values since there is a secondary index.
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1)
+]
+----
+count                            ·              ·
+ └── upsert                      ·              ·
+      │                          into           indexed(a, b, c, d)
+      │                          strategy       opt upserter
+      └── render                 ·              ·
+           │                     render 0       column1
+           │                     render 1       column6
+           │                     render 2       column7
+           │                     render 3       column8
+           │                     render 4       a
+           │                     render 5       b
+           │                     render 6       c
+           │                     render 7       d
+           │                     render 8       column6
+           │                     render 9       column7
+           │                     render 10      column8
+           │                     render 11      a
+           │                     render 12      check1
+           └── render            ·              ·
+                │                render 0       column7 > 0
+                │                render 1       column1
+                │                render 2       column6
+                │                render 3       column7
+                │                render 4       column8
+                │                render 5       a
+                │                render 6       b
+                │                render 7       c
+                │                render 8       d
+                └── join         ·              ·
+                     │           type           left outer
+                     ├── values  ·              ·
+                     │           size           4 columns, 1 row
+                     │           row 0, expr 0  1
+                     │           row 0, expr 1  CAST(NULL AS INT8)
+                     │           row 0, expr 2  10
+                     │           row 0, expr 3  11
+                     └── scan    ·              ·
+·                                table          indexed@primary
+·                                spans          /1-/1/#
+
+# Drop index and verify that existing values no longer need to be fetched.
+statement ok
+DROP INDEX indexed@secondary CASCADE
+
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1) RETURNING *
+]
+----
+run                    ·              ·
+ └── upsert            ·              ·
+      │                into           indexed(a, b, c, d)
+      │                strategy       opt upserter
+      └── render       ·              ·
+           │           render 0       column1
+           │           render 1       column6
+           │           render 2       column7
+           │           render 3       column8
+           │           render 4       column6
+           │           render 5       column7
+           │           render 6       column8
+           │           render 7       check1
+           └── values  ·              ·
+·                      size           5 columns, 1 row
+·                      row 0, expr 0  1
+·                      row 0, expr 1  CAST(NULL AS INT8)
+·                      row 0, expr 2  10
+·                      row 0, expr 3  11
+·                      row 0, expr 4  true
+
 # Regression test for #25726.
 # UPSERT over tables with column families, on the fast path, use the
 # INSERT logic. This has special casing for column families of 1
@@ -45,8 +195,6 @@ count                                    ·         ·
 # columns. The special casing is only for families that do not include
 # the primary key. So we need a table with 3 families: 1 for the PK, 1
 # with just 1 col, and 1 with 2+ cols.
-#
-# TODO(andyk): Need to implement CBO fast path using PUT.
 statement ok
 CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
   INSERT INTO tu VALUES (1, 2, 3, 4)
@@ -57,16 +205,11 @@ SET tracing = on,kv,results; UPSERT INTO tu VALUES (1, NULL, NULL, NULL); SET tr
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
-Scan /Table/54/1/1{-/#}
-querying next range at /Table/54/1/1
-r20: sending batch 1 Scan to (n1,s1):1
-fetched: /tu/primary/1 -> NULL
-fetched: /tu/primary/1/b -> 2
-fetched: /tu/primary/1/c/d -> /3/4
-Del /Table/54/1/1/1/1
-Del /Table/54/1/1/2/1
-querying next range at /Table/54/1/1/1/1
-r20: sending batch 2 Del, 1 EndTxn to (n1,s1):1
+Put /Table/55/1/1/0 -> /TUPLE/
+Del /Table/55/1/1/1/1
+Del /Table/55/1/1/2/1
+querying next range at /Table/55/1/1/0
+r20: sending batch 1 Put, 2 Del, 1 EndTxn to (n1,s1):1
 fast path completed
 rows affected: 1
 
@@ -83,12 +226,12 @@ SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
-table reader      Scan /Table/56/1/2{-/#}
-dist sender send  querying next range at /Table/56/1/2
+table reader      Scan /Table/57/1/2{-/#}
+dist sender send  querying next range at /Table/57/1/2
 dist sender send  r20: sending batch 1 Scan to (n1,s1):1
-flow              CPut /Table/56/1/2/0 -> /TUPLE/2:2:Int/3
-flow              InitPut /Table/56/2/3/0 -> /BYTES/0x8a
-dist sender send  querying next range at /Table/56/1/2/0
+flow              CPut /Table/57/1/2/0 -> /TUPLE/2:2:Int/3
+flow              InitPut /Table/57/2/3/0 -> /BYTES/0x8a
+dist sender send  querying next range at /Table/57/1/2/0
 dist sender send  r20: sending batch 1 CPut, 1 EndTxn, 1 InitPut to (n1,s1):1
 flow              fast path completed
 sql txn           rows affected: 1
@@ -99,12 +242,12 @@ SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
-table reader      Scan /Table/56/1/1{-/#}
-dist sender send  querying next range at /Table/56/1/1
+table reader      Scan /Table/57/1/1{-/#}
+dist sender send  querying next range at /Table/57/1/1
 dist sender send  r20: sending batch 1 Scan to (n1,s1):1
-flow              CPut /Table/56/1/1/0 -> /TUPLE/2:2:Int/2
-flow              InitPut /Table/56/2/2/0 -> /BYTES/0x89
-dist sender send  querying next range at /Table/56/1/1/0
+flow              CPut /Table/57/1/1/0 -> /TUPLE/2:2:Int/2
+flow              InitPut /Table/57/2/2/0 -> /BYTES/0x89
+dist sender send  querying next range at /Table/57/1/1/0
 dist sender send  r20: sending batch 1 CPut, 1 EndTxn, 1 InitPut to (n1,s1):1
 flow              fast path completed
 sql txn           rows affected: 1
@@ -116,17 +259,17 @@ query TT
 set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
-table reader      Scan /Table/56/1/2{-/#}
-dist sender send  querying next range at /Table/56/1/2
+table reader      Scan /Table/57/1/2{-/#}
+dist sender send  querying next range at /Table/57/1/2
 dist sender send  r20: sending batch 1 Scan to (n1,s1):1
 table reader      fetched: /kv/primary/2/v -> /3
-flow              Put /Table/56/1/2/0 -> /TUPLE/2:2:Int/2
-flow              Del /Table/56/2/3/0
-flow              CPut /Table/56/2/2/0 -> /BYTES/0x8a
-dist sender send  querying next range at /Table/56/1/2/0
+flow              Put /Table/57/1/2/0 -> /TUPLE/2:2:Int/2
+flow              Del /Table/57/2/3/0
+flow              CPut /Table/57/2/2/0 -> /BYTES/0x8a
+dist sender send  querying next range at /Table/57/1/2/0
 dist sender send  r20: sending batch 1 Put, 1 CPut, 1 Del, 1 EndTxn to (n1,s1):1
 sql txn           execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
-dist sender send  querying next range at /Table/56/1/2/0
+dist sender send  querying next range at /Table/57/1/2/0
 dist sender send  r20: sending batch 1 EndTxn to (n1,s1):1
 
 

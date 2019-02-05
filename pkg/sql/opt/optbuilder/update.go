@@ -67,10 +67,6 @@ import (
 // mutations are applied, or the order of any returned rows (i.e. it won't
 // become a physical property required of the Update operator).
 func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope) {
-	if !b.evalCtx.SessionData.OptimizerMutations {
-		panic(unimplementedf("cost-based optimizer is not planning UPDATE statements"))
-	}
-
 	if upd.OrderBy != nil && upd.Limit == nil {
 		panic(builderError{errors.New("UPDATE statement requires LIMIT when ORDER BY is used")})
 	}
@@ -194,7 +190,7 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 // input. A final Project operator is built if any single-column or tuple SET
 // expressions are present.
 func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
-	mb.updateColList = make(opt.ColList, cap(mb.targetColList))
+	mb.updateColList = make(opt.ColList, mb.tab.DeletableColumnCount())
 
 	// SET expressions should reject aggregates, generators, etc.
 	scalarProps := &mb.b.semaCtx.Properties
@@ -335,14 +331,8 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.addCheckConstraintCols()
 
-	private := memo.MutationPrivate{
-		Table:       mb.tabID,
-		FetchCols:   mb.fetchColList,
-		UpdateCols:  mb.updateColList,
-		CheckCols:   mb.checkColList,
-		NeedResults: returning != nil,
-	}
-	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, &private)
+	private := mb.makeMutationPrivate(returning != nil)
+	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, private)
 
 	mb.buildReturning(returning)
 }

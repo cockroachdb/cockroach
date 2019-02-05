@@ -123,15 +123,18 @@ upsert xy
  ├── canary column: 5
  ├── fetch columns: x:5(int) y:6(int)
  ├── insert-mapping:
+ │    ├──  column1:3 => x:1
+ │    └──  column2:4 => y:2
+ ├── update-mapping:
  │    ├──  upsert_x:9 => x:1
  │    └──  upsert_y:10 => y:2
- ├── update-mapping:
+ ├── return-mapping:
  │    ├──  upsert_x:9 => x:1
  │    └──  upsert_y:10 => y:2
  ├── cardinality: [2 - ]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_x:9(int) upsert_y:10(int) x:5(int) y:6(int)
+      ├── columns: upsert_x:9(int) upsert_y:10(int) column1:3(int) column2:4(int) x:5(int) y:6(int)
       ├── cardinality: [2 - ]
       ├── fd: (5)-->(6)
       ├── left-join (lookup uv)

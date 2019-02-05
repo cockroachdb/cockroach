@@ -389,6 +389,8 @@ type testClusterConfig struct {
 	overrideDistSQLMode string
 	// if non-empty, overrides the default experimental_vectorize mode.
 	overrideExpVectorize string
+	// if non-empty, overrides the default automatic statistics mode.
+	overrideAutoStats string
 	// if set, queries using distSQL processors that can fall back to disk do
 	// so immediately, using only their disk-based implementation.
 	distSQLUseDisk bool
@@ -427,18 +429,18 @@ var logicTestConfigs = []testClusterConfig{
 		serverVersion:  roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: true,
 	},
-	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "on"},
+	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "on", overrideAutoStats: "false"},
 	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
 	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "off", overrideExpVectorize: "on"},
 	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
-	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on"},
+	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
 	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
 		distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
 		distSQLUseDisk: true, skipShort: true},
 	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
 	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
-	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on"},
+	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
 	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "on", distSQLMetadataTestEnabled: true,
 		skipShort: true, overrideOptimizerMode: "off"},
 	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "on", distSQLUseDisk: true, skipShort: true,
@@ -933,13 +935,6 @@ func (t *logicTest) setUser(user string) func() {
 		if _, err := db.Exec(fmt.Sprintf("SET OPTIMIZER = %s;", optMode)); err != nil {
 			t.Fatal(err)
 		}
-
-		// Use the cost-based-optimizer for planning mutation statements.
-		if optMode == "on" {
-			if _, err := db.Exec("SET experimental_optimizer_mutations = true"); err != nil {
-				t.Fatal(err)
-			}
-		}
 	}
 	// The default value for extra_float_digits assumed by tests is
 	// 0. However, lib/pq by default configures this to 2 during
@@ -1071,6 +1066,13 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	if cfg.overrideExpVectorize != "" {
 		if _, err := t.cluster.ServerConn(0).Exec(
 			"SET CLUSTER SETTING sql.defaults.experimental_vectorize = $1::string", cfg.overrideExpVectorize,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if cfg.overrideAutoStats != "" {
+		if _, err := t.cluster.ServerConn(0).Exec(
+			"SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
 		); err != nil {
 			t.Fatal(err)
 		}

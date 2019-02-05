@@ -1231,7 +1231,7 @@ insert xyz
       ├── columns: b:5(int) c:6(int) d:7(int)
       ├── limit: 2
       ├── ordering: +6
-      ├── prune: (5-7)
+      ├── prune: (5)
       └── interesting orderings: (+6,+7)
 
 # Verify that provided orderings are derived correctly with equivalence FD.
@@ -1264,7 +1264,7 @@ sort
       │    └── scan abcd@cd
       │         ├── columns: b:5(int) c:6(int) d:7(int)
       │         ├── limit: 2
-      │         ├── prune: (5-7)
+      │         ├── prune: (5)
       │         └── interesting orderings: (+6,+7)
       └── filters
            └── x = y [type=bool, outer=(1,2), fd=(1)==(2), (2)==(1)]
@@ -1429,15 +1429,19 @@ sort
  └── upsert abc
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       ├── canary column: 7
-      ├── fetch columns: a:7(int) upsert_b:12(int) upsert_c:13(int)
+      ├── fetch columns: a:7(int) b:8(int) c:9(int)
       ├── insert-mapping:
+      │    ├──  x:4 => a:1
+      │    ├──  y:5 => b:2
+      │    └──  z:6 => c:3
+      ├── update-mapping:
+      │    └──  upsert_a:11 => a:1
+      ├── return-mapping:
       │    ├──  upsert_a:11 => a:1
       │    ├──  upsert_b:12 => b:2
       │    └──  upsert_c:13 => c:3
-      ├── update-mapping:
-      │    └──  upsert_a:11 => a:1
       └── project
-           ├── columns: upsert_a:11(int) upsert_b:12(int) upsert_c:13(int) a:7(int) b:8(int) c:9(int)
+           ├── columns: upsert_a:11(int) upsert_b:12(int) upsert_c:13(int) x:4(int!null) y:5(int!null) z:6(int!null) a:7(int) b:8(int) c:9(int)
            ├── left-join (lookup abc)
            │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null) a:7(int) b:8(int) c:9(int)
            │    ├── key columns: [4 5 6] = [7 8 9]

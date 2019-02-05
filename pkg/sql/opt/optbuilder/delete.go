@@ -16,7 +16,6 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -87,12 +86,8 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 // buildDelete constructs a Delete operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildDelete(returning tree.ReturningExprs) {
-	private := memo.MutationPrivate{
-		Table:       mb.tabID,
-		FetchCols:   mb.fetchColList,
-		NeedResults: returning != nil,
-	}
-	mb.outScope.expr = mb.b.factory.ConstructDelete(mb.outScope.expr, &private)
+	private := mb.makeMutationPrivate(returning != nil)
+	mb.outScope.expr = mb.b.factory.ConstructDelete(mb.outScope.expr, private)
 
 	mb.buildReturning(returning)
 }
