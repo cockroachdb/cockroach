@@ -145,7 +145,8 @@ func verifySystemJob(
 	// the job ID.
 	db.QueryRow(t, `
 		SELECT job_type, description, user_name, descriptor_ids, status, running_status
-		FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`,
+		FROM crdb_internal.jobs WHERE job_type = $1 ORDER BY created LIMIT 1 OFFSET $2`,
+		expectedType.String(),
 		offset,
 	).Scan(
 		&actualType, &actual.Description, &actual.Username, &rawDescriptorIDs,
