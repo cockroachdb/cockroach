@@ -363,16 +363,32 @@ func (h *hasher) HashDatum(val tree.Datum) {
 	case *tree.DJSON:
 		h.HashString(t.String())
 	case *tree.DTuple:
-		for _, d := range t.D {
-			h.HashDatum(d)
-		}
-		h.HashDatumType(t.ResolvedType())
+		// If labels are present, then hash of tuple's static type is needed to
+		// disambiguate when everything is the same except labels.
+		alwaysHashType := len(t.ResolvedType().(types.TTuple).Labels) != 0
+		h.hashDatumsWithType(t.D, t.ResolvedType(), alwaysHashType)
 	case *tree.DArray:
-		for _, d := range t.Array {
-			h.HashDatum(d)
-		}
+		// If the array is empty, then hash of tuple's static type is needed to
+		// disambiguate.
+		alwaysHashType := len(t.Array) == 0
+		h.hashDatumsWithType(t.Array, t.ResolvedType(), alwaysHashType)
 	default:
-		h.HashBytes(encodeDatum(h.bytes[:0], val))
+		h.bytes = encodeDatum(h.bytes[:0], val)
+		h.HashBytes(h.bytes)
+	}
+}
+
+func (h *hasher) hashDatumsWithType(datums tree.Datums, typ types.T, alwaysHashType bool) {
+	for _, d := range datums {
+		if d == tree.DNull {
+			// At least one NULL exists, so need to compare static types (e.g. a
+			// NULL::int is indistinguishable from NULL::string).
+			alwaysHashType = true
+		}
+		h.HashDatum(d)
+	}
+	if alwaysHashType {
+		h.HashDatumType(typ)
 	}
 }
 
@@ -381,9 +397,10 @@ func (h *hasher) HashDatumType(val types.T) {
 }
 
 func (h *hasher) HashColType(val coltypes.T) {
-	buf := bytes.NewBuffer(h.bytes)
+	buf := bytes.NewBuffer(h.bytes[:0])
 	val.Format(buf, lex.EncNoFlags)
-	h.HashBytes(buf.Bytes())
+	h.bytes = buf.Bytes()
+	h.HashBytes(h.bytes)
 }
 
 func (h *hasher) HashTypedExpr(val tree.TypedExpr) {
@@ -579,11 +596,13 @@ func (h *hasher) IsDatumTypeEqual(l, r types.T) bool {
 }
 
 func (h *hasher) IsColTypeEqual(l, r coltypes.T) bool {
-	lbuf := bytes.NewBuffer(h.bytes)
+	lbuf := bytes.NewBuffer(h.bytes[:0])
 	l.Format(lbuf, lex.EncNoFlags)
-	rbuf := bytes.NewBuffer(h.bytes2)
+	rbuf := bytes.NewBuffer(h.bytes2[:0])
 	r.Format(rbuf, lex.EncNoFlags)
-	return bytes.Equal(lbuf.Bytes(), rbuf.Bytes())
+	h.bytes = lbuf.Bytes()
+	h.bytes2 = rbuf.Bytes()
+	return bytes.Equal(h.bytes, h.bytes2)
 }
 
 func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
@@ -622,35 +641,54 @@ func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
 		}
 	case *tree.DTuple:
 		if rt, ok := r.(*tree.DTuple); ok {
-			if len(lt.D) != len(rt.D) {
+			// Compare datums and then compare static types if nulls or labels
+			// are present.
+			ltyp := lt.ResolvedType().(types.TTuple)
+			rtyp := rt.ResolvedType().(types.TTuple)
+			if !h.areDatumsWithTypeEqual(lt.D, rt.D, ltyp, rtyp) {
 				return false
 			}
-			for i := range lt.D {
-				if !h.IsDatumEqual(lt.D[i], rt.D[i]) {
-					return false
-				}
-			}
-			return h.IsDatumTypeEqual(l.ResolvedType(), r.ResolvedType())
+			return len(ltyp.Labels) == 0 || h.IsDatumTypeEqual(ltyp, rtyp)
 		}
 	case *tree.DArray:
 		if rt, ok := r.(*tree.DArray); ok {
-			if len(lt.Array) != len(rt.Array) {
+			// Compare datums and then compare static types if nulls are present
+			// or if arrays are empty.
+			ltyp := lt.ResolvedType()
+			rtyp := rt.ResolvedType()
+			if !h.areDatumsWithTypeEqual(lt.Array, rt.Array, ltyp, rtyp) {
 				return false
 			}
-			for i := range lt.Array {
-				if !h.IsDatumEqual(lt.Array[i], rt.Array[i]) {
-					return false
-				}
-			}
-			return true
+			return len(lt.Array) != 0 || h.IsDatumTypeEqual(ltyp, rtyp)
 		}
 	default:
-		lb := encodeDatum(h.bytes[:0], l)
-		rb := encodeDatum(h.bytes2[:0], r)
-		return bytes.Equal(lb, rb)
+		h.bytes = encodeDatum(h.bytes[:0], l)
+		h.bytes2 = encodeDatum(h.bytes2[:0], r)
+		return bytes.Equal(h.bytes, h.bytes2)
 	}
 
 	return false
+}
+
+func (h *hasher) areDatumsWithTypeEqual(ldatums, rdatums tree.Datums, ltyp, rtyp types.T) bool {
+	if len(ldatums) != len(rdatums) {
+		return false
+	}
+	foundNull := false
+	for i := range ldatums {
+		if !h.IsDatumEqual(ldatums[i], rdatums[i]) {
+			return false
+		}
+		if ldatums[i] == tree.DNull {
+			// At least one NULL exists, so need to compare static types (e.g. a
+			// NULL::int is indistinguishable from NULL::string).
+			foundNull = true
+		}
+	}
+	if foundNull {
+		return h.IsDatumTypeEqual(ltyp, rtyp)
+	}
+	return true
 }
 
 func (h *hasher) IsTypedExprEqual(l, r tree.TypedExpr) bool {
