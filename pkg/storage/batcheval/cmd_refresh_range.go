@@ -52,6 +52,10 @@ func RefreshRange(
 		Inconsistent: true,
 		Tombstones:   true,
 	}, func(kv roachpb.KeyValue) (bool, error) {
+		// TODO(nvanbenschoten): This is pessimistic. We only need to check
+		//   !ts.Less(h.Txn.PrevRefreshTimestamp)
+		// This could avoid failed refreshes due to requests performed after
+		// earlier refreshes.
 		if ts := kv.Value.Timestamp; !ts.Less(h.Txn.OrigTimestamp) {
 			return true, errors.Errorf("encountered recently written key %s @%s", kv.Key, ts)
 		}
@@ -61,8 +65,8 @@ func RefreshRange(
 		return result.Result{}, err
 	}
 
-	// Now, check intents slice for any which were written earlier than
-	// the command's timestamp, not owned by this transaction.
+	// Check if any intents which are not owned by this transaction were written
+	// at or beneath the refresh timestamp.
 	for _, i := range intents {
 		// Ignore our own intents.
 		if i.Txn.ID == h.Txn.ID {
