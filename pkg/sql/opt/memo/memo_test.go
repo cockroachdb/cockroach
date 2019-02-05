@@ -169,6 +169,24 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData.DataConversion.ExtraFloatDigits = 0
 	notStale()
 
+	// Stale reorder joins limit.
+	evalCtx.SessionData.ReorderJoinsLimit = 4
+	stale()
+	evalCtx.SessionData.ReorderJoinsLimit = 0
+	notStale()
+
+	// Stale zig zag join enable.
+	evalCtx.SessionData.ZigzagJoinEnabled = true
+	stale()
+	evalCtx.SessionData.ZigzagJoinEnabled = false
+	notStale()
+
+	// Stale safe updates.
+	evalCtx.SessionData.SafeUpdates = true
+	stale()
+	evalCtx.SessionData.SafeUpdates = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()
