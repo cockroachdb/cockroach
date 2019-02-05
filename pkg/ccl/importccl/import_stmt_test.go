@@ -867,6 +867,7 @@ func TestImportCSVStmt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short")
 	}
+	t.Skip(`#34568`)
 
 	const (
 		nodes       = 3
