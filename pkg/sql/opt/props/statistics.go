@@ -144,8 +144,13 @@ type ColumnStatistic struct {
 	NullCount float64
 }
 
-// ApplySelectivity updates the distinct count according to a given selectivity.
+// ApplySelectivity updates the distinct count and null count according to a
+// given selectivity.
 func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
+	// Since the null count is a simple count of all null rows, we can
+	// just multiply the selectivity with it.
+	c.NullCount *= selectivity
+
 	if selectivity == 1 || c.DistinctCount == 0 {
 		return
 	}
@@ -165,10 +170,6 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
 	// This formula returns d * selectivity when d=n but is closer to d
 	// when d << n.
 	c.DistinctCount = d - d*math.Pow(1-selectivity, n/d)
-
-	// Since the null count is a simple count of all null rows, we can
-	// just multiply the selectivity with it.
-	c.NullCount *= selectivity
 }
 
 // ColumnStatistics is a slice of pointers to ColumnStatistic values.
