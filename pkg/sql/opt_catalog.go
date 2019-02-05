@@ -352,18 +352,27 @@ type optTable struct {
 	// table.
 	name cat.DataSourceName
 
-	// primary is the inlined wrapper for the table's primary index.
-	primary optIndex
+	// primaryIndex is the inlined wrapper for the table's primary index.
+	primaryIndex optIndex
+
+	// indexes is a cache of index wrappers that's used to satisfy repeated
+	// calls to the Index method for the same index.
+	indexes map[*sqlbase.IndexDescriptor]*optIndex
 
 	stats []optTableStat
+
+	// family is the inlined wrapper for the table's primary family. The primary
+	// family is the first family explicitly specified by the user. If no families
+	// were explicitly specified, then the primary family is synthesized.
+	primaryFamily optFamily
+
+	// families is a cache of family wrappers (all except primary family) that's
+	// used to satisfy repeated calls to the Family method for the same family.
+	families map[*sqlbase.ColumnFamilyDescriptor]*optFamily
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
 	colMap map[sqlbase.ColumnID]int
-
-	// wrappers is a cache of index wrappers that's used to satisfy repeated
-	// calls to the SecondaryIndex method for the same index.
-	wrappers map[*sqlbase.IndexDescriptor]*optIndex
 }
 
 var _ cat.Table = &optTable{}
@@ -391,7 +400,20 @@ func newOptTable(
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
 
-	ot.primary.init(ot, &desc.PrimaryIndex)
+	ot.primaryIndex.init(ot, &desc.PrimaryIndex)
+
+	if len(desc.Families) == 0 {
+		// This must be a virtual table, so synthesize a primary family. Only
+		// column ids are needed by the family wrapper.
+		family := &sqlbase.ColumnFamilyDescriptor{Name: "primary", ID: 0}
+		family.ColumnIDs = make([]sqlbase.ColumnID, len(desc.Columns))
+		for i := range family.ColumnIDs {
+			family.ColumnIDs[i] = desc.Columns[i].ID
+		}
+		ot.primaryFamily.init(ot, family)
+	} else {
+		ot.primaryFamily.init(ot, &desc.Families[0])
+	}
 
 	return ot
 }
@@ -498,20 +520,20 @@ func (ot *optTable) DeletableIndexCount() int {
 func (ot *optTable) Index(i int) cat.Index {
 	// Primary index is always 0th index.
 	if i == cat.PrimaryIndex {
-		return &ot.primary
+		return &ot.primaryIndex
 	}
 
 	// Bias i to account for lack of primary index in DeletableIndexes slice.
 	desc := &ot.desc.DeletableIndexes()[i-1]
 
 	// Check to see if there's already a wrapper for this index descriptor.
-	if ot.wrappers == nil {
-		ot.wrappers = make(map[*sqlbase.IndexDescriptor]*optIndex, len(ot.desc.Indexes))
+	if ot.indexes == nil {
+		ot.indexes = make(map[*sqlbase.IndexDescriptor]*optIndex, len(ot.desc.Indexes))
 	}
-	wrapper, ok := ot.wrappers[desc]
+	wrapper, ok := ot.indexes[desc]
 	if !ok {
 		wrapper = newOptIndex(ot, desc)
-		ot.wrappers[desc] = wrapper
+		ot.indexes[desc] = wrapper
 	}
 	return wrapper
 }
@@ -544,6 +566,32 @@ func (ot *optTable) CheckCount() int {
 func (ot *optTable) Check(i int) cat.CheckConstraint {
 	check := ot.desc.Checks[i]
 	return cat.CheckConstraint(check.Expr)
+}
+
+// FamilyCount is part of the cat.Table interface.
+func (ot *optTable) FamilyCount() int {
+	return len(ot.desc.Families)
+}
+
+// Family is part of the cat.Table interface.
+func (ot *optTable) Family(i int) cat.Family {
+	// The default family is always 0th index.
+	if i == 0 {
+		return &ot.primaryFamily
+	}
+	desc := &ot.desc.Families[i]
+
+	// Check to see if there's already a wrapper for this family descriptor, and
+	// if not, create one.
+	if ot.families == nil {
+		ot.families = make(map[*sqlbase.ColumnFamilyDescriptor]*optFamily, len(ot.desc.Families))
+	}
+	wrapper, ok := ot.families[desc]
+	if !ok {
+		wrapper = newOptFamily(ot, desc)
+		ot.families[desc] = wrapper
+	}
+	return wrapper
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
@@ -794,4 +842,52 @@ func (os *optTableStat) DistinctCount() uint64 {
 // NullCount is part of the cat.TableStatistic interface.
 func (os *optTableStat) NullCount() uint64 {
 	return os.nullCount
+}
+
+// optFamily is a wrapper around sqlbase.ColumnFamilyDescriptor that keeps a
+// reference to the table wrapper.
+type optFamily struct {
+	tab  *optTable
+	desc *sqlbase.ColumnFamilyDescriptor
+}
+
+var _ cat.Family = &optFamily{}
+
+func newOptFamily(tab *optTable, desc *sqlbase.ColumnFamilyDescriptor) *optFamily {
+	oi := &optFamily{}
+	oi.init(tab, desc)
+	return oi
+}
+
+// init can be used instead of newOptFamily when we have a pre-allocated
+// instance (e.g. as part of a bigger struct).
+func (oi *optFamily) init(tab *optTable, desc *sqlbase.ColumnFamilyDescriptor) {
+	oi.tab = tab
+	oi.desc = desc
+}
+
+// ID is part of the cat.Family interface.
+func (oi *optFamily) ID() cat.StableID {
+	return cat.StableID(oi.desc.ID)
+}
+
+// Name is part of the cat.Family interface.
+func (oi *optFamily) Name() tree.Name {
+	return tree.Name(oi.desc.Name)
+}
+
+// ColumnCount is part of the cat.Family interface.
+func (oi *optFamily) ColumnCount() int {
+	return len(oi.desc.ColumnIDs)
+}
+
+// Column is part of the cat.Family interface.
+func (oi *optFamily) Column(i int) cat.FamilyColumn {
+	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+	return cat.FamilyColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+}
+
+// Table is part of the cat.Family interface.
+func (oi *optFamily) Table() cat.Table {
+	return oi.tab
 }

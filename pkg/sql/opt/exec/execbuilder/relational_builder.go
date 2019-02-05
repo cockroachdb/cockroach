@@ -1147,7 +1147,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 
 	// Construct list of columns that only contains columns that need to be
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
-	colList := make(opt.ColList, 0, len(ins.InsertCols))
+	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
 	input, err = b.ensureColumns(input, colList, nil, ins.ProvidedPhysical().Ordering)
@@ -1164,7 +1164,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		tab,
 		insertOrds,
 		checkOrds,
-		ins.NeedResults,
+		ins.NeedResults(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1172,7 +1172,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 
 	// Construct the output column map.
 	ep := execPlan{root: node}
-	if ins.NeedResults {
+	if ins.NeedResults() {
 		ep.outputCols = mutationOutputColMap(ins)
 	}
 	return ep, nil
@@ -1197,7 +1197,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols))
+	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols)+len(upd.CheckCols))
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
@@ -1218,7 +1218,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		fetchColOrds,
 		updateColOrds,
 		checkOrds,
-		upd.NeedResults,
+		upd.NeedResults(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1226,7 +1226,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 
 	// Construct the output column map.
 	ep := execPlan{root: node}
-	if upd.NeedResults {
+	if upd.NeedResults() {
 		ep.outputCols = mutationOutputColMap(upd)
 	}
 	return ep, nil
@@ -1251,13 +1251,21 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	// (because the constants are shared), and so must be mapped to separate
 	// output columns.
 	//
+	// If CanaryCol = 0, then this is the "blind upsert" case, which uses a KV
+	// "Put" to insert new rows or blindly overwrite existing rows. Existing rows
+	// do not need to be fetched or separately updated (i.e. ups.FetchCols and
+	// ups.UpdateCols are both empty).
+	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(ups.InsertCols)+len(ups.FetchCols)+len(ups.UpdateCols)+1)
+	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) + len(ups.CheckCols) + 1
+	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, ups.InsertCols)
 	colList = appendColsWhenPresent(colList, ups.FetchCols)
 	colList = appendColsWhenPresent(colList, ups.UpdateCols)
-	colList = append(colList, ups.CanaryCol)
+	if ups.CanaryCol != 0 {
+		colList = append(colList, ups.CanaryCol)
+	}
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
 	input, err = b.ensureColumns(input, colList, nil, ups.ProvidedPhysical().Ordering)
 	if err != nil {
@@ -1267,7 +1275,10 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	// Construct the Upsert node.
 	md := b.mem.Metadata()
 	tab := md.Table(ups.Table)
-	canaryCol := input.getColumnOrdinal(ups.CanaryCol)
+	canaryCol := exec.ColumnOrdinal(-1)
+	if ups.CanaryCol != 0 {
+		canaryCol = input.getColumnOrdinal(ups.CanaryCol)
+	}
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
 	fetchColOrds := ordinalSetFromColList(ups.FetchCols)
 	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
@@ -1280,7 +1291,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		fetchColOrds,
 		updateColOrds,
 		checkOrds,
-		ups.NeedResults,
+		ups.NeedResults(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1291,7 +1302,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	// value is taken from an insert, fetch, or update column, depending on the
 	// result of the UPSERT operation for that row.
 	ep := execPlan{root: node}
-	if ups.NeedResults {
+	if ups.NeedResults() {
 		ep.outputCols = mutationOutputColMap(ups)
 	}
 	return ep, nil
@@ -1324,14 +1335,14 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
-	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, del.NeedResults)
+	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, del.NeedResults())
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	// Construct the output column map.
 	ep := execPlan{root: node}
-	if del.NeedResults {
+	if del.NeedResults() {
 		ep.outputCols = mutationOutputColMap(del)
 	}
 	return ep, nil
@@ -1343,7 +1354,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 func (b *Builder) canUseDeleteRange(del *memo.DeleteExpr) bool {
 	// If rows need to be returned from the Delete operator (i.e. RETURNING
 	// clause), no fast path is possible, because row values must be fetched.
-	if del.NeedResults {
+	if del.NeedResults() {
 		return false
 	}
 

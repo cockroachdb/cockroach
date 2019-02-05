@@ -16,51 +16,142 @@ package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// NeededColsGrouping returns the columns needed by a grouping operator's
+// NeededGroupingCols returns the columns needed by a grouping operator's
 // grouping columns or requested ordering.
-func (c *CustomFuncs) NeededColsGrouping(private *memo.GroupingPrivate) opt.ColSet {
+func (c *CustomFuncs) NeededGroupingCols(private *memo.GroupingPrivate) opt.ColSet {
 	return private.GroupingCols.Union(private.Ordering.ColSet())
 }
 
-// NeededColsRowNumber returns the columns needed by a RowNumber operator's
+// NeededRowNumberCols returns the columns needed by a RowNumber operator's
 // requested ordering.
-func (c *CustomFuncs) NeededColsRowNumber(private *memo.RowNumberPrivate) opt.ColSet {
+func (c *CustomFuncs) NeededRowNumberCols(private *memo.RowNumberPrivate) opt.ColSet {
 	return private.Ordering.ColSet()
 }
 
-// NeededColsExplain returns the columns needed by Explain's required physical
+// NeededExplainCols returns the columns needed by Explain's required physical
 // properties.
-func (c *CustomFuncs) NeededColsExplain(private *memo.ExplainPrivate) opt.ColSet {
+func (c *CustomFuncs) NeededExplainCols(private *memo.ExplainPrivate) opt.ColSet {
 	return private.Props.ColSet()
 }
 
-// NeededColsMutation returns the columns needed by a mutation operator.
-func (c *CustomFuncs) NeededColsMutation(private *memo.MutationPrivate) opt.ColSet {
+// NeededMutationCols returns the columns needed by a mutation operator. Note
+// that this function makes no attempt to determine the minimal set of columns
+// needed by the mutation private; it simply returns the input columns that are
+// referenced by it. Other rules filter the FetchCols, CheckCols, etc. and can
+// in turn trigger the PruneMutationInputCols rule.
+func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColSet {
+	var cols opt.ColSet
+
+	// Add all input columns referenced by the mutation private.
+	addCols := func(list opt.ColList) {
+		for _, id := range list {
+			if id != 0 {
+				cols.Add(int(id))
+			}
+		}
+	}
+
+	addCols(private.InsertCols)
+	addCols(private.FetchCols)
+	addCols(private.UpdateCols)
+	addCols(private.CheckCols)
+	addCols(private.ReturnCols)
+	if private.CanaryCol != 0 {
+		cols.Add(int(private.CanaryCol))
+	}
+
+	return cols
+}
+
+// NeededMutationFetchCols returns the set of FetchCols needed by the given
+// mutation operator. FetchCols are existing values that are fetched from the
+// store and are then used to construct keys and values for update or delete KV
+// operations.
+func (c *CustomFuncs) NeededMutationFetchCols(
+	op opt.Operator, private *memo.MutationPrivate,
+) opt.ColSet {
 	var cols opt.ColSet
 	tabMeta := c.mem.Metadata().TableMeta(private.Table)
 
-	// If the operator returns results, then include all non-mutation columns in
-	// the table.
-	// TODO(andyk): The returned columns need to be pruned as well.
-	if private.NeedResults {
-		cols = tabMeta.Columns()
+	// familyCols returns the columns in the given family.
+	familyCols := func(fam cat.Family) opt.ColSet {
+		var colSet opt.ColSet
+		for i, n := 0, fam.ColumnCount(); i < n; i++ {
+			id := tabMeta.MetaID.ColumnID(fam.Column(i).Ordinal)
+			colSet.Add(int(id))
+		}
+		return colSet
 	}
 
-	// Add in all strict key columns from all indexes, including mutation indexes,
-	// since it is necessary to delete rows even from indexes that are being
-	// added/dropped.
-	for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
-		cols.UnionWith(tabMeta.IndexKeyColumns(i))
+	// addFamilyCols adds all columns in each family containing at least one
+	// column that is being updated.
+	addFamilyCols := func(updateCols opt.ColSet) {
+		for i, n := 0, tabMeta.Table.FamilyCount(); i < n; i++ {
+			famCols := familyCols(tabMeta.Table.Family(i))
+			if famCols.Intersects(updateCols) {
+				cols.UnionWith(famCols)
+			}
+		}
 	}
 
-	// Map to mutation input columns.
-	cols = private.MapToInputCols(cols)
+	switch op {
+	case opt.UpdateOp, opt.UpsertOp:
+		// Determine set of target table columns that need to be updated.
+		var updateCols opt.ColSet
+		for ord, col := range private.UpdateCols {
+			if col != 0 {
+				updateCols.Add(int(tabMeta.MetaID.ColumnID(ord)))
+			}
+		}
+
+		// Make sure to consider indexes that are being added or dropped.
+		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
+			indexCols := tabMeta.IndexColumns(i)
+			if !indexCols.Intersects(updateCols) {
+				// This index is not being updated.
+				continue
+			}
+
+			// Always add index strict key columns, since these are needed to fetch
+			// existing rows from the store.
+			keyCols := tabMeta.IndexKeyColumns(i)
+			cols.UnionWith(keyCols)
+
+			// Add all columns in any family that includes an update column.
+			// It is possible to update a subset of families only for the primary
+			// index, and only when key columns are not being updated. Otherwise,
+			// all columns in the index must be fetched.
+			if i == cat.PrimaryIndex && !keyCols.Intersects(updateCols) {
+				addFamilyCols(updateCols)
+			} else {
+				cols.UnionWith(indexCols)
+			}
+		}
+
+	case opt.DeleteOp:
+		// Retain any FetchCols that are needed for ReturnCols.
+		for ord, col := range private.ReturnCols {
+			if col != 0 && len(private.FetchCols) != 0 && col == private.FetchCols[ord] {
+				cols.Add(int(tabMeta.MetaID.ColumnID(ord)))
+			}
+		}
+
+		// Add in all strict key columns from all indexes, since these are needed
+		// to compose the keys of rows to delete. Include mutation indexes, since
+		// it is necessary to delete rows even from indexes that are being added
+		// or dropped.
+		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
+			cols.UnionWith(tabMeta.IndexKeyColumns(i))
+		}
+	}
+
 	return cols
 }
 
@@ -78,6 +169,20 @@ func (c *CustomFuncs) CanPruneCols(target memo.RelExpr, neededCols opt.ColSet) b
 // referenced and can be eliminated.
 func (c *CustomFuncs) CanPruneAggCols(target memo.AggregationsExpr, neededCols opt.ColSet) bool {
 	return !target.OutputCols().SubsetOf(neededCols)
+}
+
+// CanPruneMutationFetchCols returns true if there are any FetchCols that are
+// not in the set of needed columns. Those extra FetchCols can be pruned.
+func (c *CustomFuncs) CanPruneMutationFetchCols(
+	private *memo.MutationPrivate, neededCols opt.ColSet,
+) bool {
+	tabMeta := c.mem.Metadata().TableMeta(private.Table)
+	for ord, col := range private.FetchCols {
+		if col != 0 && !neededCols.Contains(int(tabMeta.MetaID.ColumnID(ord))) {
+			return true
+		}
+	}
+	return false
 }
 
 // PruneCols creates an expression that discards any outputs columns of the
@@ -133,38 +238,34 @@ func (c *CustomFuncs) PruneAggCols(
 	return aggs
 }
 
-// PruneMutationCols rewrites the given mutation private to no longer reference
-// InsertCols, FetchCols, UpdateCols, or CheckCols that are not part of the
-// neededCols set. The caller must have already done the analysis to prove that
-// these columns are not needed.
-// TODO(andyk): Add support for pruning column lists other than FetchCols.
-func (c *CustomFuncs) PruneMutationCols(
+// PruneMutationFetchCols rewrites the given mutation private to no longer
+// reference FetchCols that are not part of the neededCols set. The caller must
+// have already done the analysis to prove that these columns are not needed, by
+// calling CanPruneMutationFetchCols.
+func (c *CustomFuncs) PruneMutationFetchCols(
 	private *memo.MutationPrivate, neededCols opt.ColSet,
 ) *memo.MutationPrivate {
+	tabID := c.mem.Metadata().TableMeta(private.Table).MetaID
 	newPrivate := *private
-	newPrivate.FetchCols = filterMutationList(newPrivate.FetchCols, neededCols)
+	newPrivate.FetchCols = c.filterMutationList(tabID, newPrivate.FetchCols, neededCols)
 	return &newPrivate
 }
 
 // filterMutationList filters the given mutation list by setting any columns
-// that are not in the neededCols set to zero. This indicates that those columns
-// are not present in the input.
-func filterMutationList(inList opt.ColList, neededCols opt.ColSet) opt.ColList {
-	var newList opt.ColList
+// that are not in the neededCols set to zero. This indicates that those input
+// columns are not needed by this mutation list.
+func (c *CustomFuncs) filterMutationList(
+	tabID opt.TableID, inList opt.ColList, neededCols opt.ColSet,
+) opt.ColList {
+	newList := make(opt.ColList, len(inList))
 	for i, c := range inList {
-		if !neededCols.Contains(int(c)) {
-			// Copy-on-write the list for efficiency.
-			if newList == nil {
-				newList = make(opt.ColList, len(inList))
-				copy(newList, inList)
-			}
+		if !neededCols.Contains(int(tabID.ColumnID(i))) {
 			newList[i] = 0
+		} else {
+			newList[i] = c
 		}
 	}
-	if newList != nil {
-		return newList
-	}
-	return inList
+	return newList
 }
 
 // pruneScanCols constructs a new Scan operator based on the given existing Scan

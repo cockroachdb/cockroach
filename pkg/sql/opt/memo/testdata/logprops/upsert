@@ -61,23 +61,29 @@ project
  └── upsert abc
       ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
       ├── canary column: 13
-      ├── fetch columns: a:10(int) b:11(int) c:12(int) upsert_rowid:20(int)
+      ├── fetch columns: a:10(int) b:11(int) c:12(int) rowid:13(int)
       ├── insert-mapping:
-      │    ├──  upsert_a:17 => a:1
-      │    ├──  upsert_b:18 => b:2
-      │    ├──  upsert_c:19 => c:3
-      │    └──  upsert_rowid:20 => rowid:4
+      │    ├──  x:5 => a:1
+      │    ├──  y:6 => b:2
+      │    ├──  column9:9 => c:3
+      │    └──  column8:8 => rowid:4
       ├── update-mapping:
       │    ├──  upsert_a:17 => a:1
       │    ├──  upsert_b:18 => b:2
       │    └──  upsert_c:19 => c:3
+      ├── return-mapping:
+      │    ├──  upsert_a:17 => a:1
+      │    ├──  upsert_b:18 => b:2
+      │    ├──  upsert_c:19 => c:3
+      │    └──  upsert_rowid:20 => rowid:4
       ├── side-effects, mutations
       └── project
-           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
+           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
            ├── side-effects
-           ├── fd: (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
-           ├── prune: (10-13,17-20)
-           ├── interesting orderings: (+13) (+10) (+11,+12,+13)
+           ├── key: (5,13)
+           ├── fd: ()-->(6,9), (5)-->(8), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (5,13)-->(17-19), (8,13)-->(20)
+           ├── prune: (5,6,8-13,17-20)
+           ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
            ├── project
            │    ├── columns: column16:16(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int)
            │    ├── side-effects
@@ -370,30 +376,35 @@ build
 UPSERT INTO abc (a) VALUES (1), (2) RETURNING b+c
 ----
 project
- ├── columns: "?column?":18(int)
+ ├── columns: "?column?":17(int)
  ├── cardinality: [2 - ]
  ├── side-effects, mutations
- ├── prune: (18)
+ ├── prune: (17)
  ├── upsert abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
  │    ├── canary column: 12
- │    ├── fetch columns: a:9(int) upsert_b:15(int) c:11(int) upsert_rowid:17(int)
+ │    ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
  │    ├── insert-mapping:
- │    │    ├──  upsert_a:14 => a:1
- │    │    ├──  upsert_b:15 => b:2
- │    │    ├──  upsert_c:16 => c:3
- │    │    └──  upsert_rowid:17 => rowid:4
+ │    │    ├──  column1:5 => a:1
+ │    │    ├──  column6:6 => b:2
+ │    │    ├──  column8:8 => c:3
+ │    │    └──  column7:7 => rowid:4
  │    ├── update-mapping:
- │    │    ├──  upsert_a:14 => a:1
- │    │    └──  upsert_c:16 => c:3
+ │    │    ├──  column1:5 => a:1
+ │    │    └──  upsert_c:15 => c:3
+ │    ├── return-mapping:
+ │    │    ├──  column1:5 => a:1
+ │    │    ├──  upsert_b:14 => b:2
+ │    │    ├──  upsert_c:15 => c:3
+ │    │    └──  upsert_rowid:16 => rowid:4
  │    ├── cardinality: [2 - ]
  │    ├── side-effects, mutations
  │    └── project
- │         ├── columns: upsert_a:14(int) upsert_b:15(int) upsert_c:16(int) upsert_rowid:17(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+ │         ├── columns: upsert_b:14(int) upsert_c:15(int) upsert_rowid:16(int) column1:5(int) column6:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
  │         ├── cardinality: [2 - ]
  │         ├── side-effects
- │         ├── fd: (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12), (10,12)-->(15)
- │         ├── prune: (9-12,14-17)
+ │         ├── fd: ()-->(6,8), (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12), (10,12)-->(14), (7,12)-->(16)
+ │         ├── prune: (5-12,14-16)
  │         ├── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         ├── project
  │         │    ├── columns: column13:13(int) column1:5(int) column6:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
@@ -452,14 +463,6 @@ project
  │         │              ├── variable: b [type=int]
  │         │              └── const: 1 [type=int]
  │         └── projections
- │              ├── case [type=int, outer=(5,12)]
- │              │    ├── true [type=bool]
- │              │    ├── when [type=int]
- │              │    │    ├── is [type=bool]
- │              │    │    │    ├── variable: rowid [type=int]
- │              │    │    │    └── null [type=unknown]
- │              │    │    └── variable: column1 [type=int]
- │              │    └── variable: column1 [type=int]
  │              ├── case [type=int, outer=(6,10,12)]
  │              │    ├── true [type=bool]
  │              │    ├── when [type=int]

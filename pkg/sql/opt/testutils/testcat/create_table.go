@@ -79,36 +79,33 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		}
 	}
 
-	// Add the primary index (if there is one defined).
-	for _, def := range stmt.Defs {
-		switch def := def.(type) {
-		case *tree.ColumnTableDef:
-			if def.PrimaryKey {
-				// Add the primary index over the single column.
-				tab.addPrimaryColumnIndex(string(def.Name))
-			}
-
-		case *tree.UniqueConstraintTableDef:
-			if def.PrimaryKey {
-				tab.addIndex(&def.IndexTableDef, primaryIndex)
-			}
-
-		case *tree.CheckConstraintTableDef:
-			tab.Checks = append(tab.Checks, cat.CheckConstraint(tree.Serialize(def.Expr)))
-		}
-	}
-
 	// If there is no primary index, add the hidden rowid column.
-	if len(tab.Indexes) == 0 && !tab.IsVirtual {
-		rowid := &Column{
-			Ordinal:     tab.ColumnCount(),
-			Name:        "rowid",
-			Type:        types.Int,
-			Hidden:      true,
-			DefaultExpr: &uniqueRowIDString,
+	hasPrimaryIndex := false
+	if !tab.IsVirtual {
+		for _, def := range stmt.Defs {
+			switch def := def.(type) {
+			case *tree.ColumnTableDef:
+				if def.PrimaryKey {
+					hasPrimaryIndex = true
+				}
+
+			case *tree.UniqueConstraintTableDef:
+				if def.PrimaryKey {
+					hasPrimaryIndex = true
+				}
+			}
 		}
-		tab.Columns = append(tab.Columns, rowid)
-		tab.addPrimaryColumnIndex(rowid.Name)
+
+		if !hasPrimaryIndex {
+			rowid := &Column{
+				Ordinal:     tab.ColumnCount(),
+				Name:        "rowid",
+				Type:        types.Int,
+				Hidden:      true,
+				DefaultExpr: &uniqueRowIDString,
+			}
+			tab.Columns = append(tab.Columns, rowid)
+		}
 	}
 
 	// Add any mutation columns (after any hidden rowid column).
@@ -121,7 +118,30 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		}
 	}
 
-	// Search for index definitions.
+	// Add the primary index and any check constraints.
+	if hasPrimaryIndex {
+		for _, def := range stmt.Defs {
+			switch def := def.(type) {
+			case *tree.ColumnTableDef:
+				if def.PrimaryKey {
+					// Add the primary index over the single column.
+					tab.addPrimaryColumnIndex(string(def.Name))
+				}
+
+			case *tree.UniqueConstraintTableDef:
+				if def.PrimaryKey {
+					tab.addIndex(&def.IndexTableDef, primaryIndex)
+				}
+
+			case *tree.CheckConstraintTableDef:
+				tab.Checks = append(tab.Checks, cat.CheckConstraint(tree.Serialize(def.Expr)))
+			}
+		}
+	} else if !tab.IsVirtual {
+		tab.addPrimaryColumnIndex("rowid")
+	}
+
+	// Search for index and family definitions.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.UniqueConstraintTableDef:
@@ -131,7 +151,28 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 		case *tree.IndexTableDef:
 			tab.addIndex(def, nonUniqueIndex)
+
+		case *tree.FamilyTableDef:
+			tab.addFamily(def)
 		}
+	}
+
+	// If there are columns missing from explicit family definitions, add them
+	// to family 0 (ensure that one exists).
+	if len(tab.Families) == 0 {
+		tab.Families = []*Family{{FamName: "primary", Ordinal: 0, table: tab}}
+	}
+OuterLoop:
+	for colOrd, col := range tab.Columns {
+		for _, fam := range tab.Families {
+			for _, famCol := range fam.Columns {
+				if col.Name == string(famCol.ColName()) {
+					continue OuterLoop
+				}
+			}
+		}
+		tab.Families[0].Columns = append(tab.Families[0].Columns,
+			cat.FamilyColumn{Column: col, Ordinal: colOrd})
 	}
 
 	// Search for foreign key constraints. We want to process them after first
@@ -316,7 +357,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 			pkOrdinals.Add(c.Ordinal)
 		}
 		// Add the rest of the columns in the table.
-		for i, n := 0, tt.ColumnCount(); i < n; i++ {
+		for i, n := 0, tt.DeletableColumnCount(); i < n; i++ {
 			if !pkOrdinals.Contains(i) {
 				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}
@@ -335,13 +376,13 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		// Only add columns that aren't already part of index.
 		found := false
 		for _, colDef := range def.Columns {
-			if pkCol.Column.ColName() == colDef.Column {
+			if pkCol.ColName() == colDef.Column {
 				found = true
 			}
 		}
 
 		if !found {
-			name := string(pkCol.Column.ColName())
+			name := string(pkCol.ColName())
 
 			if typ == uniqueIndex {
 				// If unique index has no NULL columns, then the implicit columns
@@ -368,7 +409,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		// key columns.
 		found := false
 		for _, pkCol := range pkCols {
-			if name == pkCol.Column.ColName() {
+			if name == pkCol.ColName() {
 				found = true
 			}
 		}
@@ -393,6 +434,29 @@ func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {
 		}
 	}
 	return name
+}
+
+func (tt *Table) addFamily(def *tree.FamilyTableDef) {
+	// Synthesize name if one was not provided.
+	name := string(def.Name)
+	if name == "" {
+		name = fmt.Sprintf("family%d", len(tt.Families)+1)
+	}
+
+	family := &Family{
+		FamName: name,
+		Ordinal: tt.FamilyCount(),
+		table:   tt,
+	}
+
+	// Add columns to family.
+	for _, defCol := range def.Columns {
+		ord := tt.FindOrdinal(string(defCol))
+		col := tt.Column(ord)
+		family.Columns = append(family.Columns, cat.FamilyColumn{Column: col, Ordinal: ord})
+	}
+
+	tt.Families = append(tt.Families, family)
 }
 
 func (ti *Index) addColumn(

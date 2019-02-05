@@ -123,7 +123,7 @@ type Index interface {
 type IndexColumn struct {
 	// Column is a reference to the column returned by Table.Column, given the
 	// column ordinal.
-	Column Column
+	Column
 
 	// Ordinal is the ordinal position of the indexed column in the table being
 	// indexed. It is always >= 0 and < Table.ColumnCount.

@@ -342,6 +342,7 @@ SELECT "targetID", "reportingID", "info"
 FROM system.eventlog
 WHERE "eventType" = 'set_cluster_setting'
 AND info NOT LIKE '%version%' AND info NOT LIKE '%sql.defaults.distsql%' AND info NOT LIKE '%cluster.secret%'
+AND info NOT LIKE '%sql.stats.experimental_automatic_collection.enabled%'
 ORDER BY "timestamp"
 ----
 0  1  {"SettingName":"diagnostics.reporting.enabled","Value":"true","User":"root"}

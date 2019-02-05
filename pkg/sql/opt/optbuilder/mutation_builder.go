@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -77,6 +78,18 @@ type mutationBuilder struct {
 	// updateColList is empty if this is an Insert operator with no ON CONFLICT
 	// clause.
 	updateColList opt.ColList
+
+	// upsertColList is an ordered list of IDs of input columns which choose
+	// between an insert or update column using a CASE expression:
+	//
+	//   CASE WHEN canary_col IS NULL THEN ins_col ELSE upd_col END
+	//
+	// These columns are used to compute constraints and to return result rows.
+	// The length of upsertColList is always equal to the number of columns in
+	// the target table, including mutation columns. Table columns which do not
+	// need to be updated are set to zero. upsertColList is empty if this is not
+	// an Upsert operator.
+	upsertColList opt.ColList
 
 	// checkColList is an ordered list of IDs of input columns which contain the
 	// boolean results of evaluating check constraint expressions defined on the
@@ -164,7 +177,7 @@ func (mb *mutationBuilder) buildInputForUpdateOrDelete(
 	mb.outScope = projectionsScope
 
 	// Set list of columns that will be fetched by the input expression.
-	mb.fetchColList = make(opt.ColList, cap(mb.targetColList))
+	mb.fetchColList = make(opt.ColList, mb.tab.DeletableColumnCount())
 	for i := range mb.outScope.cols {
 		mb.fetchColList[i] = mb.outScope.cols[i].id
 	}
@@ -383,6 +396,47 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 	}
 }
 
+// makeMutationPrivate builds a MutationPrivate struct containing the table and
+// column metadata needed for the mutation operator.
+func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationPrivate {
+	private := &memo.MutationPrivate{
+		Table:      mb.tabID,
+		InsertCols: mb.insertColList,
+		FetchCols:  mb.fetchColList,
+		UpdateCols: mb.updateColList,
+		CanaryCol:  mb.canaryColID,
+		CheckCols:  mb.checkColList,
+	}
+
+	if needResults {
+		// Only non-mutation columns are output columns. ReturnCols needs to have
+		// DeletableColumnCount entries, but only the first ColumnCount entries
+		// can be non-zero.
+		private.ReturnCols = make(opt.ColList, mb.tab.DeletableColumnCount())
+		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+			// Map to columns in this order: upsert, update, fetch, insert.
+			switch {
+			case mb.upsertColList != nil && mb.upsertColList[i] != 0:
+				private.ReturnCols[i] = mb.upsertColList[i]
+
+			case mb.updateColList != nil && mb.updateColList[i] != 0:
+				private.ReturnCols[i] = mb.updateColList[i]
+
+			case mb.fetchColList != nil && mb.fetchColList[i] != 0:
+				private.ReturnCols[i] = mb.fetchColList[i]
+
+			case mb.insertColList != nil && mb.insertColList[i] != 0:
+				private.ReturnCols[i] = mb.insertColList[i]
+
+			default:
+				panic("could not find return column")
+			}
+		}
+	}
+
+	return private
+}
+
 // buildReturning wraps the input expression with a Project operator that
 // projects the given RETURNING expressions.
 func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
@@ -432,8 +486,12 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 			more, less = less, more
 		}
 
-		// TODO(andyk): Add UpsertOp case.
-		kw := "INSERT"
+		var kw string
+		if mb.op == opt.InsertOp {
+			kw = "INSERT"
+		} else {
+			kw = "UPSERT"
+		}
 		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"%s has more %s than %s, %d expressions for %d targets",
 			kw, more, less, actual, expected)})
@@ -480,7 +538,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 func findNotNullIndexCol(index cat.Index) int {
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
 		indexCol := index.Column(i)
-		if !indexCol.Column.IsNullable() {
+		if !indexCol.IsNullable() {
 			return indexCol.Ordinal
 		}
 	}

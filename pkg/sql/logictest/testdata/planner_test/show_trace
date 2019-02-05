@@ -1,5 +1,9 @@
 # LogicTest: local
 
+# Disable automatic stats.
+statement ok
+SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = false
+
 # Check SHOW KV TRACE FOR SESSION.
 
 statement ok

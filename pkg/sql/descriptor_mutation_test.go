@@ -334,10 +334,9 @@ CREATE INDEX allidx ON t.test (k, v);
 						// The default value of "i" for column "i" is written.
 						afterInsert = [][]string{{"a", "z", "q"}, {"c", "x", "i"}}
 						if useUpsert {
-							// Update is not a noop for column "i". Column "i" gets updated
-							// with its default value (#9474).
-							afterUpdate = [][]string{{"a", "u", "i"}, {"c", "x", "i"}}
-							afterPKUpdate = [][]string{{"a", "u", "i"}, {"d", "x", "i"}}
+							// Update is not a noop for column "i".
+							afterUpdate = [][]string{{"a", "u", "q"}, {"c", "x", "i"}}
+							afterPKUpdate = [][]string{{"a", "u", "q"}, {"d", "x", "i"}}
 						} else {
 							// Update is a noop for column "i".
 							afterUpdate = [][]string{{"a", "u", "q"}, {"c", "x", "i"}}

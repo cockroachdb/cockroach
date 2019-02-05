@@ -19,11 +19,8 @@ statement count 0
 INSERT INTO ex(foo,bar,baz) VALUES (2,1,1) ON CONFLICT DO NOTHING
 
 # Do not insert conflicting first and last rows.
-# TODO(knz): Enable the 1st statement and remove the 2nd once #33313 is fixed.
-#statement count 2
-#INSERT INTO ex(foo,bar,baz) VALUES (1,2,1), (3,2,2), (6,6,2), (2,1,1) ON CONFLICT DO NOTHING
 statement count 2
-INSERT INTO ex(foo,bar,baz) VALUES (3,2,2), (6,6,2), (2,1,1) ON CONFLICT DO NOTHING
+INSERT INTO ex(foo,bar,baz) VALUES (1,2,1), (3,2,2), (6,6,2), (2,1,1) ON CONFLICT DO NOTHING
 
 query III colnames
 SELECT * from ex ORDER BY foo
@@ -753,3 +750,104 @@ SELECT * FROM ex33313 ORDER BY foo
 foo  bar  baz
 1    1    1
 3    2    2
+
+# Use Upsert with indexed table, default columns, computed columns, and check
+# columns.
+statement ok
+CREATE TABLE indexed (
+  a DECIMAL PRIMARY KEY,
+  b DECIMAL,
+  c DECIMAL DEFAULT(10.0),
+  d DECIMAL AS (a + c) STORED,
+  UNIQUE INDEX secondary (d, b),
+  CHECK (c > 0)
+)
+
+statement ok
+INSERT INTO indexed VALUES (1, 1, 1); INSERT INTO indexed VALUES (2, 2, 2)
+
+# Use implicit target columns (should set default and computed values).
+statement ok
+UPSERT INTO indexed VALUES (1.0)
+
+query TTTT colnames
+SELECT * FROM indexed@secondary ORDER BY d, b
+----
+a  b     c     d
+2  2     2     4
+1  NULL  10.0  11.0
+
+# Explicitly specify all target columns. Ensure that primary key is not updated,
+# even though an alternate but equal decimal form is in use (1.0 vs. 1).
+statement ok
+UPSERT INTO indexed (a, b, c) VALUES (1.0, 1.0, 1.0)
+
+query TTTT colnames
+SELECT * FROM indexed@secondary ORDER BY d, b
+----
+a  b    c    d
+1  1.0  1.0  2.0
+2  2    2    4
+
+# Ensure that explicit target column does not disturb existing "b" value, but
+# does update the computed column.
+statement ok
+UPSERT INTO indexed (c, a) VALUES (2, 1)
+
+query TTTT colnames
+SELECT * FROM indexed@secondary ORDER BY d, b
+----
+a  b    c  d
+1  1.0  2  3
+2  2    2  4
+
+# Final check to ensure that primary index is correct.
+query TTTT colnames
+SELECT * FROM indexed@primary ORDER BY a
+----
+a  b    c  d
+1  1.0  2  3
+2  2    2  4
+
+# Drop the secondary index, allowing the "blind upsert" path to run.
+statement ok
+DROP INDEX indexed@secondary CASCADE
+
+# Use implicit target columns (should set default and computed values).
+statement ok
+UPSERT INTO indexed VALUES (1, 1)
+
+query TTTT colnames,rowsort
+SELECT * FROM indexed
+----
+a  b     c     d
+1  1  10.0  11.0
+2  2     2     4
+
+# Explicitly specify all target columns.
+statement ok
+UPSERT INTO indexed (a, b, c) SELECT 1, 2, 3
+
+query TTTT colnames,rowsort
+SELECT * FROM indexed
+----
+a  b  c  d
+2  2  2  4
+1  2  3  4
+
+# Ensure that explicit target column does not disturb existing "b" value, but
+# does update the computed column.
+query TTTT
+UPSERT INTO indexed (c, a) VALUES (2.0, 1.0) RETURNING *
+----
+1  2  2.0  3.0
+
+query TTTT colnames,rowsort
+SELECT * FROM indexed
+----
+a  b  c    d
+1  2  2.0  3.0
+2  2  2    4
+
+statement ok
+DROP TABLE indexed

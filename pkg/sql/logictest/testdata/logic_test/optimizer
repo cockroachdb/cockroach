@@ -90,10 +90,6 @@ SELECT * FROM tview
 3  30
 4  40
 
-query I rowsort
-SELECT job_id FROM crdb_internal.jobs
-----
-
 statement ok
 SET OPTIMIZER = ALWAYS
 
@@ -115,16 +111,3 @@ SELECT * FROM test.t
 2  20
 3  30
 4  40
-
-# Test the experimental_optimizer_mutations flag.
-statement ok
-SET experimental_optimizer_mutations = false
-
-statement error pq: no data source matches prefix: t
-UPDATE t SET v=(SELECT v+1 FROM t AS t2 WHERE t2.k=t.k)
-
-statement ok
-SET experimental_optimizer_mutations = true
-
-statement ok
-UPDATE t SET v=(SELECT v+1 FROM t AS t2 WHERE t2.k=t.k)
