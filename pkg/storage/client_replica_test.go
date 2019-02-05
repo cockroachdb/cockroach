@@ -1841,6 +1841,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
+	store2 := mtc.Store(2)
 
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
@@ -1905,7 +1906,11 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	// another write and truncate the Raft log on the two connected nodes. This
 	// ensures that that when node 2 comes back up it will require a snapshot
 	// from Raft.
-	mtc.transport.GetCircuitBreaker(mtc.idents[2].NodeID).Break()
+	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            rangeID,
+		RaftMessageHandler: store2,
+	})
+
 	if _, pErr := client.SendWrapped(ctx, mtc.stores[0].TestSender(), incC); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1927,14 +1932,14 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	// Finally, transfer the lease to node 2 while it is still unavailable and
 	// behind. We try to avoid this case when picking new leaseholders in practice,
 	// but we're never 100% successful.
-	if err := repl0.AdminTransferLease(ctx, mtc.idents[2].StoreID); err != nil {
+	if err := repl0.AdminTransferLease(ctx, store2.Ident.StoreID); err != nil {
 		t.Fatal(err)
 	}
 
 	// Remove the partition. A snapshot to node 2 should follow. This snapshot
 	// will inform node 2 that it is the new leaseholder for the range. Node 2
 	// should act accordingly and update its internal state to reflect this.
-	mtc.transport.GetCircuitBreaker(mtc.idents[2].NodeID).Reset()
+	mtc.transport.Listen(store2.Ident.StoreID, store2)
 	mtc.waitForValues(keyC, []int64{4, 4, 4})
 
 	// Perform a write on the new leaseholder underneath the previously served
