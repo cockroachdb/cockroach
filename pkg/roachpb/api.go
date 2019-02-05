@@ -1076,11 +1076,20 @@ func (*ImportRequest) flags() int           { return isAdmin | isAlone }
 func (*AdminScatterRequest) flags() int     { return isAdmin | isAlone | isRange }
 func (*AddSSTableRequest) flags() int       { return isWrite | isAlone | isRange | isUnsplittable }
 
-// RefreshRequest and RefreshRangeRequest both list
-// updates(Read)TSCache, though they actually update the read or write
-// timestamp cache depending on the write parameter in the request.
-func (*RefreshRequest) flags() int      { return isRead | isTxn | updatesReadTSCache }
-func (*RefreshRangeRequest) flags() int { return isRead | isTxn | isRange | updatesReadTSCache }
+// RefreshRequest and RefreshRangeRequest both determine which timestamp cache
+// they update based on their Write parameter.
+func (r *RefreshRequest) flags() int {
+	if r.Write {
+		return isRead | isTxn | updatesWriteTSCache
+	}
+	return isRead | isTxn | updatesReadTSCache
+}
+func (r *RefreshRangeRequest) flags() int {
+	if r.Write {
+		return isRead | isTxn | isRange | updatesWriteTSCache
+	}
+	return isRead | isTxn | isRange | updatesReadTSCache
+}
 
 func (*SubsumeRequest) flags() int { return isRead | isAlone | updatesReadTSCache }
 
