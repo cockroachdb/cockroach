@@ -84,10 +84,24 @@ func (r *Replica) updateTimestampCache(
 				// ensures that we can safely update the timestamp cache based
 				// on this value. The pushee's timestamp is not reflected in
 				// the batch request's or response's timestamp.
+				// TODO(nvanbenschoten): there are some concerns that this is
+				// incorrect because this pushee.Timestamp was not accounted
+				// for in the local clock before this request's lease check.
+				// Do something about it.
 				r.store.Clock().Update(pushee.Timestamp)
 
+				var readCache bool
+				switch pushee.Status {
+				case roachpb.PENDING:
+					readCache = true
+				case roachpb.ABORTED:
+					readCache = false
+				case roachpb.COMMITTED:
+					// No need to update the timestamp cache. It was already
+					// updated by the corresponding EndTransaction request.
+					continue
+				}
 				key := keys.TransactionKey(start, pushee.ID)
-				readCache := pushee.Status != roachpb.ABORTED
 				tc.Add(key, nil, pushee.Timestamp, t.PusherTxn.ID, readCache)
 			case *roachpb.ConditionalPutRequest:
 				if pErr != nil {
