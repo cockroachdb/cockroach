@@ -118,25 +118,17 @@ func BulkOpResponseFilter(allowProgressIota *chan struct{}) storagebase.ReplicaR
 	}
 }
 
-// GetSystemJobsCount queries the number of entries in the jobs table.
-func GetSystemJobsCount(t testing.TB, db *sqlutils.SQLRunner) int {
-	var jobCount int
-	db.QueryRow(t, `SELECT count(*) FROM crdb_internal.jobs`).Scan(&jobCount)
-	return jobCount
-}
-
 func verifySystemJob(
 	t testing.TB,
 	db *sqlutils.SQLRunner,
 	offset int,
-	expectedType jobspb.Type,
+	filterType jobspb.Type,
 	expectedStatus string,
 	expectedRunningStatus string,
 	expected jobs.Record,
 ) error {
 	var actual jobs.Record
 	var rawDescriptorIDs pq.Int64Array
-	var actualType string
 	var statusString string
 	var runningStatus gosql.NullString
 	var runningStatusString string
@@ -144,11 +136,12 @@ func verifySystemJob(
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
 	// the job ID.
 	db.QueryRow(t, `
-		SELECT job_type, description, user_name, descriptor_ids, status, running_status
-		FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`,
+		SELECT description, user_name, descriptor_ids, status, running_status
+		FROM crdb_internal.jobs WHERE job_type = $1 ORDER BY created LIMIT 1 OFFSET $2`,
+		filterType.String(),
 		offset,
 	).Scan(
-		&actualType, &actual.Description, &actual.Username, &rawDescriptorIDs,
+		&actual.Description, &actual.Username, &rawDescriptorIDs,
 		&statusString, &runningStatus,
 	)
 	if runningStatus.Valid {
@@ -173,9 +166,6 @@ func verifySystemJob(
 		return errors.Errorf("job %d: expected running status %v, got %v",
 			offset, expectedRunningStatus, runningStatusString)
 	}
-	if e, a := expectedType.String(), actualType; e != a {
-		return errors.Errorf("job %d: expected type %v, got type %v", offset, e, a)
-	}
 
 	return nil
 }
@@ -186,11 +176,11 @@ func VerifyRunningSystemJob(
 	t testing.TB,
 	db *sqlutils.SQLRunner,
 	offset int,
-	expectedType jobspb.Type,
+	filterType jobspb.Type,
 	expectedRunningStatus jobs.RunningStatus,
 	expected jobs.Record,
 ) error {
-	return verifySystemJob(t, db, offset, expectedType, "running", string(expectedRunningStatus), expected)
+	return verifySystemJob(t, db, offset, filterType, "running", string(expectedRunningStatus), expected)
 }
 
 // VerifySystemJob checks that job records are created as expected.
@@ -198,11 +188,11 @@ func VerifySystemJob(
 	t testing.TB,
 	db *sqlutils.SQLRunner,
 	offset int,
-	expectedType jobspb.Type,
+	filterType jobspb.Type,
 	expectedStatus jobs.Status,
 	expected jobs.Record,
 ) error {
-	return verifySystemJob(t, db, offset, expectedType, string(expectedStatus), "", expected)
+	return verifySystemJob(t, db, offset, filterType, string(expectedStatus), "", expected)
 }
 
 // GetJobID gets a particular job's ID.
