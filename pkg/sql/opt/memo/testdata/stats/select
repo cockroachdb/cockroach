@@ -1266,3 +1266,47 @@ select
  │              └── id = customer_id [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  └── filters
       └── (id = 1) AND (name = 'andy') [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight), fd=()-->(1,2)]
+
+exec-ddl
+CREATE TABLE nulls (x INT, y INT);
+----
+TABLE nulls
+ ├── x int
+ ├── y int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+ALTER TABLE nulls INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 0,
+    "null_count": 1000
+  }
+]'
+----
+
+# Regression test for #34440. Ensure the null count for x is less than or equal
+# to the row count.
+build colstat=1
+SELECT * FROM nulls WHERE y = 3
+----
+project
+ ├── columns: x:1(int) y:2(int!null)
+ ├── stats: [rows=9.9, distinct(1)=0, null(1)=9.9]
+ ├── fd: ()-->(2)
+ └── select
+      ├── columns: x:1(int) y:2(int!null) rowid:3(int!null)
+      ├── stats: [rows=9.9, distinct(1)=0, null(1)=9.9, distinct(2)=1, null(2)=0, distinct(3)=9.9, null(3)=0]
+      ├── key: (3)
+      ├── fd: ()-->(2), (3)-->(1)
+      ├── scan nulls
+      │    ├── columns: x:1(int) y:2(int) rowid:3(int!null)
+      │    ├── stats: [rows=1000, distinct(1)=0, null(1)=1000, distinct(2)=100, null(2)=10, distinct(3)=1000, null(3)=0]
+      │    ├── key: (3)
+      │    └── fd: (3)-->(1,2)
+      └── filters
+           └── y = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]

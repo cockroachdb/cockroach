@@ -253,7 +253,7 @@ Failed test: %s`,
 				ctx := context.Background()
 				if err := p.post(
 					ctx, DefaultStressFailureTitle(c.packageName, c.testName),
-					c.packageName, c.testName, c.message, c.author,
+					c.packageName, c.testName, c.message, c.author, nil,
 				); err != nil {
 					t.Fatal(err)
 				}
