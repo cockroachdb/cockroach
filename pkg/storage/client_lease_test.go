@@ -17,6 +17,7 @@ package storage_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestStoreRangeLease verifies that regular ranges (not some special ones at
@@ -253,6 +255,53 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 		}
 		if !mtc.stores[newStoreIdx].Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
 			return errors.New("system config not most recently gossiped by new leaseholder")
+		}
+		return nil
+	})
+}
+
+func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	const numStores = 3
+	mtc.Start(t, numStores)
+
+	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey(keys.NodeLivenessSpan.Key)).RangeID
+	mtc.replicateRange(rangeID, 1, 2)
+
+	// Turn off liveness heartbeats on all nodes to ensure that updates to node
+	// liveness are not triggering gossiping.
+	for i := range mtc.nodeLivenesses {
+		mtc.nodeLivenesses[i].PauseHeartbeat(true)
+	}
+
+	nodeLivenessKey := gossip.MakeNodeLivenessKey(1)
+
+	initialStoreIdx := -1
+	for i := range mtc.stores {
+		if mtc.stores[i].Gossip().InfoOriginatedHere(nodeLivenessKey) {
+			initialStoreIdx = i
+		}
+	}
+	if initialStoreIdx == -1 {
+		t.Fatalf("no store has gossiped %s; gossip contents: %+v",
+			nodeLivenessKey, mtc.stores[0].Gossip().GetInfoStatus())
+	}
+	log.Infof(context.Background(), "%s gossiped from n%d",
+		nodeLivenessKey, mtc.stores[initialStoreIdx].Ident.NodeID)
+
+	newStoreIdx := (initialStoreIdx + 1) % numStores
+	mtc.transferLease(context.Background(), rangeID, initialStoreIdx, newStoreIdx)
+
+	testutils.SucceedsSoon(t, func() error {
+		if mtc.stores[initialStoreIdx].Gossip().InfoOriginatedHere(nodeLivenessKey) {
+			return fmt.Errorf("%s still most recently gossiped by original leaseholder", nodeLivenessKey)
+		}
+		if !mtc.stores[newStoreIdx].Gossip().InfoOriginatedHere(nodeLivenessKey) {
+			return fmt.Errorf("%s not most recently gossiped by new leaseholder", nodeLivenessKey)
 		}
 		return nil
 	})
