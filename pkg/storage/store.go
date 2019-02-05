@@ -2312,7 +2312,7 @@ func splitPostApply(
 	// Invoke the leasePostApply method to ensure we properly initialize
 	// the replica according to whether it holds the lease. This enables
 	// the txnWaitQueue.
-	rightRng.leasePostApply(ctx, rightLease)
+	rightRng.leasePostApply(ctx, rightLease, false /* permitJump */)
 
 	// Add the RHS replica to the store. This step atomically updates
 	// the EndKey of the LHS replica and also adds the RHS replica

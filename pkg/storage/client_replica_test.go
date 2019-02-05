@@ -1822,3 +1822,137 @@ func TestClearRange(t *testing.T) {
 	verifyKeysWithPrefix(keys.LocalStoreSuggestedCompactionsMin,
 		[]roachpb.Key{keys.StoreSuggestedCompactionKey(lg1, lg3)})
 }
+
+// TestLeaseTransferInSnapshotUpdatesTimestampCache prevents a regression of
+// #34025. A Replica is targeted for a lease transfer target when it needs a
+// Raft snapshot to catch up. Normally we try to prevent this case, but it is
+// possible and hard to prevent entirely. The Replica will only learn that it is
+// the new leaseholder when it applies the snapshot. When doing so, it should
+// make sure to apply the lease-related side-effects to its in-memory state.
+func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	sc := storage.TestStoreConfig(nil)
+	// We'll control replication by hand.
+	sc.TestingKnobs.DisableReplicateQueue = true
+	// Avoid fighting with the merge queue while trying to reproduce this race.
+	sc.TestingKnobs.DisableMergeQueue = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+	store2 := mtc.Store(2)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+
+	// First, do a couple of writes; we'll use these to determine when
+	// the dust has settled.
+	incA := incrementArgs(keyA, 1)
+	if _, pErr := client.SendWrapped(ctx, mtc.stores[0].TestSender(), incA); pErr != nil {
+		t.Fatal(pErr)
+	}
+	incC := incrementArgs(keyC, 2)
+	if _, pErr := client.SendWrapped(ctx, mtc.stores[0].TestSender(), incC); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Split the system range from the rest of the keyspace.
+	splitArgs := adminSplitArgs(keys.SystemMax)
+	if _, pErr := client.SendWrapped(ctx, mtc.stores[0].TestSender(), splitArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Get the range's ID.
+	repl0 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
+	rangeID := repl0.RangeID
+
+	// Replicate the range onto nodes 1 and 2.
+	// Wait for all replicas to be caught up.
+	mtc.replicateRange(rangeID, 1, 2)
+	mtc.waitForValues(keyA, []int64{1, 1, 1})
+	mtc.waitForValues(keyC, []int64{2, 2, 2})
+
+	// Create a transaction that will try to write "under" a served read.
+	// The read will have been served by the original leaseholder (node 0)
+	// and the write will be attempted on the new leaseholder (node 2).
+	// It should not succeed because it should run into the timestamp cache.
+	db := mtc.dbs[0]
+	txnOld := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+
+	// Perform a write with txnOld so that its timestamp gets set and so
+	// that it writes its transaction record.
+	if err := txnOld.EagerRecord(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txnOld.Inc(ctx, keyB, 3); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read keyC with txnOld, which is updated below. This prevents the
+	// transaction from refreshing when it hits the serializable error.
+	if _, err := txnOld.Get(ctx, keyC); err != nil {
+		t.Fatal(err)
+	}
+
+	// Another client comes along at a higher timestamp and reads. We should
+	// never be able to write under this time or we would be rewriting history.
+	if _, err := db.Get(ctx, keyA); err != nil {
+		t.Fatal(err)
+	}
+
+	// Partition node 2 from the rest of its range. Once partitioned, perform
+	// another write and truncate the Raft log on the two connected nodes. This
+	// ensures that that when node 2 comes back up it will require a snapshot
+	// from Raft.
+	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            rangeID,
+		RaftMessageHandler: store2,
+	})
+
+	if _, pErr := client.SendWrapped(ctx, mtc.stores[0].TestSender(), incC); pErr != nil {
+		t.Fatal(pErr)
+	}
+	mtc.waitForValues(keyC, []int64{4, 4, 2})
+
+	// Truncate the log at index+1 (log entries < N are removed, so this
+	// includes the increment). This necessitates a snapshot when the
+	// partitioned replica rejoins the rest of the range.
+	index, err := repl0.GetLastIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	truncArgs := truncateLogArgs(index+1, rangeID)
+	truncArgs.Key = keyA
+	if _, err := client.SendWrapped(ctx, mtc.stores[0].TestSender(), truncArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Finally, transfer the lease to node 2 while it is still unavailable and
+	// behind. We try to avoid this case when picking new leaseholders in practice,
+	// but we're never 100% successful.
+	if err := repl0.AdminTransferLease(ctx, store2.Ident.StoreID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove the partition. A snapshot to node 2 should follow. This snapshot
+	// will inform node 2 that it is the new leaseholder for the range. Node 2
+	// should act accordingly and update its internal state to reflect this.
+	mtc.transport.Listen(store2.Ident.StoreID, store2)
+	mtc.waitForValues(keyC, []int64{4, 4, 4})
+
+	// Perform a write on the new leaseholder underneath the previously served
+	// read. This write should hit the timestamp cache and flag the txn for a
+	// restart when we try to commit it below. With the bug in #34025, the new
+	// leaseholder who heard about the lease transfer from a snapshot had an
+	// empty timestamp cache and would simply let us write under the previous
+	// read.
+	if _, err := txnOld.Inc(ctx, keyA, 4); err != nil {
+		t.Fatal(err)
+	}
+	const exp = `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE\)`
+	if err := txnOld.Commit(ctx); !testutils.IsError(err, exp) {
+		t.Fatalf("expected retry error, got: %v; did we write under a read?", err)
+	}
+}
