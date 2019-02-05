@@ -153,10 +153,6 @@ func (r *Replica) updateTimestampCache(
 						tc.Add(start, end, t.Txn.Timestamp, uuid.UUID{}, true /* readCache */)
 					}
 				}
-			case *roachpb.RefreshRequest:
-				tc.Add(start, end, ts, txnID, !t.Write /* readCache */)
-			case *roachpb.RefreshRangeRequest:
-				tc.Add(start, end, ts, txnID, !t.Write /* readCache */)
 			default:
 				tc.Add(start, end, ts, txnID, !roachpb.UpdatesWriteTimestampCache(args))
 			}
