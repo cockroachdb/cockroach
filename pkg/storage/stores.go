@@ -399,9 +399,8 @@ func SynthesizeClusterVersionFromEngines(
 // versions across the stores, returns a version that carries the smallest
 // Version.
 //
-// If there aren't any stores, returns a ClusterVersion with MinSupportedVersion
-// and UseVersion set to the minimum supported version and server version of the
-// build, respectively.
+// If there aren't any stores, returns a ClusterVersion set to the minimum
+// supported version of the binary.
 func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (cluster.ClusterVersion, error) {
 	var engines []engine.Engine
 	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
@@ -447,9 +446,21 @@ func (ls *Stores) OnClusterVersionChange(ctx context.Context, cv cluster.Cluster
 	// this method that result in clobbering of an update.
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	synthCV, err := ls.SynthesizeClusterVersion(ctx)
+
+	// We're going to read the cluster version from any engine - all the engines
+	// are always kept in sync so it doesn't matter which one we read from.
+	var someEngine engine.Engine
+	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
+		someEngine = (*Store)(v).engine
+		return false // don't iterate any more
+	})
+	if someEngine == nil {
+		// If we haven't bootstrapped any engines yet, there's nothing for us to do.
+		return nil
+	}
+	synthCV, err := ReadClusterVersion(ctx, someEngine)
 	if err != nil {
-		return errors.Wrap(err, "reading persisted cluster version")
+		return errors.Wrap(err, "error reading persisted cluster version")
 	}
 	// If the update downgrades the version, ignore it. Must be a
 	// reordering (this method is called from multiple goroutines via

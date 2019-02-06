@@ -4499,6 +4499,12 @@ func (s *Store) ManuallyEnqueue(
 	return collect(), "", nil
 }
 
+// GetClusterVersion reads the the cluster version from the store-local version
+// key. Returns an empty version if the key is not found.
+func (s *Store) GetClusterVersion(ctx context.Context) (cluster.ClusterVersion, error) {
+	return ReadClusterVersion(ctx, s.engine)
+}
+
 // WriteClusterVersion writes the given cluster version to the store-local cluster version key.
 func WriteClusterVersion(
 	ctx context.Context, writer engine.ReadWriter, cv cluster.ClusterVersion,
