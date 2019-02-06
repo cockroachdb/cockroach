@@ -381,7 +381,6 @@ func (n *Node) start(
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	n.storeCfg.Settings.Version.OnChange(n.onClusterVersionChange)
 	if err := n.storeCfg.Settings.InitializeVersion(cv); err != nil {
 		return errors.Wrap(err, "while initializing cluster version")
 	}
@@ -522,6 +521,15 @@ func (n *Node) start(
 	}
 
 	n.startComputePeriodicMetrics(n.stopper, DefaultMetricsSampleInterval)
+
+	// Now that we've created all our stores, install the gossip version update
+	// handler to write version updates to them.
+	n.storeCfg.Settings.Version.OnChange(n.onClusterVersionChange)
+	// Invoke the callback manually once so that we persist the updated value that
+	// gossip might have already received.
+	clusterVersion := n.storeCfg.Settings.Version.Version()
+	n.onClusterVersionChange(clusterVersion)
+
 	// Be careful about moving this line above `startStores`; store migrations rely
 	// on the fact that the cluster version has not been updated via Gossip (we
 	// have migrations that want to run only if the server starts with a given
@@ -584,6 +592,15 @@ func (n *Node) initStores(
 }
 
 func (n *Node) addStore(store *storage.Store) {
+	cv, err := store.GetClusterVersion(context.TODO())
+	if err != nil {
+		log.Fatal(context.TODO(), err)
+	}
+	if cv == (cluster.ClusterVersion{}) {
+		// The store should have had a version written to it during the store
+		// bootstrap process.
+		log.Fatal(context.TODO(), "attempting to add a store without a version")
+	}
 	n.stores.AddStore(store)
 	n.recorder.AddStore(store)
 }
@@ -603,7 +620,7 @@ func (n *Node) validateStores(ctx context.Context) error {
 // bootstrapStores bootstraps uninitialized stores once the cluster
 // and node IDs have been established for this node. Store IDs are
 // allocated via a sequence id generator stored at a system key per
-// node.
+// node. The new stores are added to n.stores.
 func (n *Node) bootstrapStores(
 	ctx context.Context, emptyEngines []engine.Engine, stopper *stop.Stopper,
 ) error {
@@ -615,12 +632,11 @@ func (n *Node) bootstrapStores(
 	// is joining an existing cluster for the first time, it doesn't have any engines
 	// set up yet, and cv below will be the MinSupportedVersion. At the same time,
 	// the Gossip update which notifies us about the real cluster version won't
-	// persist it to any engines (because none of them are bootstrapped). The correct
-	// version is likely in Settings.Version.Version(), but what if the callback fires
-	// too late? In that case that too is the MinSupportedVersion. So we just accept
-	// that we won't use the correct version here, but post-bootstrapping will invoke
-	// the callback manually, which will disseminate the correct version to all engines
-	// that still need it.
+	// persist it to any engines (because we haven't installed the gossip update
+	// handler yet and also because none of the stores are bootstrapped). So we
+	// just accept that we won't use the correct version here, but
+	// post-bootstrapping will invoke the callback manually, which will
+	// disseminate the correct version to all engines.
 	cv, err := n.stores.SynthesizeClusterVersion(ctx)
 	if err != nil {
 		return errors.Errorf("error retrieving cluster version for bootstrap: %s", err)
@@ -628,7 +644,8 @@ func (n *Node) bootstrapStores(
 
 	{
 		// Bootstrap all waiting stores by allocating a new store id for
-		// each and invoking store.Bootstrap() to persist.
+		// each and invoking storage.Bootstrap() to persist it and the cluster
+		// version.
 		inc := int64(len(emptyEngines))
 		firstID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, inc, n.storeCfg.DB)
 		if err != nil {
@@ -664,9 +681,6 @@ func (n *Node) bootstrapStores(
 			log.Warningf(ctx, "error doing initial gossiping: %s", err)
 		}
 	}
-
-	clusterVersion := n.storeCfg.Settings.Version.Version()
-	n.onClusterVersionChange(clusterVersion)
 
 	// write a new status summary after all stores have been bootstrapped; this
 	// helps the UI remain responsive when new nodes are added.
