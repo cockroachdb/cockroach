@@ -107,7 +107,7 @@ func ifLocal(trueVal, falseVal string) string {
 func filepathAbs(path string) (string, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
-		return "", errors.Wrap(err, "")
+		return "", errors.WithStack(err)
 	}
 	return path, nil
 }
@@ -127,7 +127,7 @@ func findBinary(binary, defValue string) (string, error) {
 	path, err := exec.LookPath(binary)
 	if err != nil {
 		if strings.HasPrefix(binary, "/") {
-			return "", errors.Wrap(err, "")
+			return "", errors.WithStack(err)
 		}
 		// We're unable to find the binary in PATH and "binary" is a relative path:
 		// look in the cockroach repo.
@@ -153,7 +153,7 @@ func findBinary(binary, defValue string) (string, error) {
 				return filepathAbs(path)
 			}
 		}
-		return "", errors.Wrap(err, "")
+		return "", errors.WithStack(err)
 	}
 	return filepathAbs(path)
 }
