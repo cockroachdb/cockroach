@@ -37,11 +37,11 @@ func (node *SetVar) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.Values)
 		ctx.WriteString(")")
 	} else {
-		oldFlags := ctx.ChangeFlags(ctx.flags & ^FmtAnonymize)
-		// Session var names never contain PII and should be distinguished
-		// for feature tracking purposes.
-		ctx.FormatNameP(&node.Name)
-		ctx.ChangeFlags(oldFlags)
+		ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+			// Session var names never contain PII and should be distinguished
+			// for feature tracking purposes.
+			ctx.FormatNameP(&node.Name)
+		})
 
 		ctx.WriteString(" = ")
 		ctx.FormatNode(&node.Values)
@@ -59,9 +59,9 @@ func (node *SetClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET CLUSTER SETTING ")
 	// Cluster setting names never contain PII and should be distinguished
 	// for feature tracking purposes.
-	oldFlags := ctx.ChangeFlags(ctx.flags & ^FmtAnonymize)
-	ctx.FormatNameP(&node.Name)
-	ctx.ChangeFlags(oldFlags)
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+		ctx.FormatNameP(&node.Name)
+	})
 
 	ctx.WriteString(" = ")
 	ctx.FormatNode(node.Value)

@@ -110,9 +110,9 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 			// We also avoid calling ctx.FormatNode because when
 			// types are visible, this would cause the type information
 			// to be printed twice.
-			ctx.WithPlaceholderFormat(nil)
-			placeholder.Format(ctx)
-			ctx.WithPlaceholderFormat(e.showPlaceholderValues)
+			ctx.WithPlaceholderFormat(nil, func() {
+				placeholder.Format(ctx)
+			})
 			return
 		}
 		ctx.FormatNode(d)
@@ -389,7 +389,7 @@ func (e *explainer) expr(v observeVerbosity, nodeName, fieldName string, n int, 
 		}
 
 		f := tree.NewFmtCtx(e.fmtFlags)
-		f.WithPlaceholderFormat(e.showPlaceholderValues)
+		f.SetPlaceholderFormat(e.showPlaceholderValues)
 		f.FormatNode(expr)
 		e.attr(nodeName, fieldName, f.CloseAndGetString())
 	}

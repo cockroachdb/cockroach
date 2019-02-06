@@ -77,11 +77,9 @@ func TestIndexedVars(t *testing.T) {
 
 	// Test formatting using the indexed var format interceptor.
 	f := NewFmtCtx(FmtSimple)
-	f.WithIndexedVarFormat(
-		func(ctx *FmtCtx, idx int) {
-			ctx.Printf("customVar%d", idx)
-		},
-	)
+	f.SetIndexedVarFormat(func(ctx *FmtCtx, idx int) {
+		ctx.Printf("customVar%d", idx)
+	})
 	f.FormatNode(typedExpr)
 	str = f.CloseAndGetString()
 
