@@ -511,6 +511,10 @@ func TestWorkloadStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	settings := cluster.MakeTestingClusterSettings()
+	settings.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
 
 	rows, payloadBytes, ranges := 4, 12, 1
 	gen := bank.FromConfig(rows, payloadBytes, ranges)
@@ -581,7 +585,7 @@ func TestWorkloadStorage(t *testing.T) {
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
 
 	tooOldSettings := cluster.MakeTestingClusterSettingsWithVersion(
-		cluster.VersionByKey(cluster.Version2_1), cluster.VersionByKey(cluster.Version2_1))
+		cluster.VersionByKey(cluster.Version2_1))
 	_, err = ExportStorageFromURI(ctx, bankURL().String(), tooOldSettings)
 	require.EqualError(t, err,
 		`cluster version does not support experimental-workload (>= 2.1-3 required)`)
