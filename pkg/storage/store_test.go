@@ -412,6 +412,10 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 	// We need a fixed clock to avoid LastUpdateNanos drifting on us.
 	cfg := TestStoreConfig(hlc.NewClock(func() int64 { return 123 }, time.Nanosecond))
+	cfg.Settings.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
 	stopper := stop.NewStopper()
 	ctx := context.TODO()
 	defer stopper.Stop(ctx)

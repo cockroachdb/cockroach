@@ -61,9 +61,11 @@ func checkVersion(
 ) error {
 	if !clusterVersion.IsInitialized() {
 		// Cluster version has not yet been determined.
+		log.Infof(context.TODO(), "!!! checkVersion uninitialized")
 		return nil
 	}
 	activeVersion := clusterVersion.Version().Version
+	log.Infof(context.TODO(), "!!! checkVersion: active: %s. peer: %s", activeVersion, peerVersion)
 	if peerVersion == (roachpb.Version{}) {
 		return errors.Errorf(
 			"cluster requires at least version %s, but peer did not provide a version", activeVersion)
@@ -109,6 +111,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	}
 
 	// Check version compatibility.
+	log.Infof(ctx, "!!! server about to check versions")
 	if err := checkVersion(hs.version, args.ServerVersion); err != nil {
 		return nil, errors.Wrap(err, "version compatibility check failed on ping request")
 	}
@@ -132,10 +135,9 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	serverOffset.Offset = -serverOffset.Offset
 	hs.remoteClockMonitor.UpdateOffset(ctx, args.Addr, serverOffset, 0 /* roundTripLatency */)
 	return &PingResponse{
-		Pong:       args.Ping,
-		ServerTime: hs.clock.PhysicalNow(),
-		// !!! this needs to come from a server, not directly from the global
-		ServerVersion: cluster.BinaryServerVersion,
-		// ServerVersion: hs.version.ServerVersion,
+		Pong:          args.Ping,
+		ServerTime:    hs.clock.PhysicalNow(),
+		ServerVersion: hs.version.Version().Version,
+		// !!!  ServerVersion: hs.version.ServerVersion,
 	}, nil
 }

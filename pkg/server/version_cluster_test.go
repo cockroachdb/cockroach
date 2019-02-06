@@ -613,6 +613,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	// The other nodes are less careful.
 	tc.mustSetVersion(0, exp)
 
+// // !!!
 	<-exits // wait for fourth node to die
 
 	// Check that we can still talk to the first three nodes.

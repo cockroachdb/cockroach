@@ -1790,7 +1790,6 @@ func (s *Server) bootstrapVersion() roachpb.Version {
 func (s *Server) bootstrapCluster(
 	ctx context.Context, bootstrapVersion roachpb.Version,
 ) error {
-
 	if err := s.node.bootstrapCluster(
 		ctx, s.engines, cluster.ClusterVersion{Version: bootstrapVersion},
 		&s.cfg.DefaultZoneConfig, &s.cfg.DefaultSystemZoneConfig,

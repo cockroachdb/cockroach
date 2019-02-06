@@ -344,6 +344,7 @@ func (n *Node) start(
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
+	log.Infof(ctx, "!!! Node.start: %s", cv)
 	if err := n.storeCfg.Settings.InitializeVersion(
 		cv,
 		// !!! These should come from a config

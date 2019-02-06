@@ -1081,7 +1081,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 
 	// Perform an initial request-response round trip.
 	log.Infof(ctx, "first ping")
-	request := PingRequest{ServerVersion: clientCtx.version.ServerVersion}
+	request := PingRequest{ServerVersion: cluster.BinaryServerVersion}
 	if err := heartbeatClient.Send(&request); err != nil {
 		return err
 	}
@@ -1262,9 +1262,9 @@ func TestNodeIDMismatch(t *testing.T) {
 }
 
 func setVersion(c *Context, v roachpb.Version) error {
-	settings := cluster.MakeClusterSettings(v, v)
+	settings := cluster.MakeClusterSettings()
 	cv := cluster.ClusterVersion{Version: v}
-	if err := settings.InitializeVersion(cv); err != nil {
+	if err := settings.InitializeVersion(cv, v, v); err != nil {
 		return err
 	}
 	c.version = &settings.Version
@@ -1307,6 +1307,8 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				t.Fatal(err)
 			}
 			s := newTestServer(t, serverCtx)
+			log.Infof(context.TODO(), "!!! creating server with version: active: %s",
+				serverCtx.version.Version())
 			RegisterHeartbeatServer(s, &HeartbeatService{
 				clock:              clock,
 				remoteClockMonitor: serverCtx.RemoteClocks,

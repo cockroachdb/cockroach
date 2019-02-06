@@ -663,7 +663,6 @@ func splitBatchAndCheckForRefreshSpans(
 func (ds *DistSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	log.Infof(ctx, "!!! DistSender.Send: init: %t", ds.st.Version.IsInitialized())
 	ds.metrics.BatchCount.Inc(1)
 
 	tracing.AnnotateTrace()

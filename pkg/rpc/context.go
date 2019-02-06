@@ -898,8 +898,7 @@ func (ctx *Context) runHeartbeat(
 				MaxOffsetNanos: maxOffsetNanos,
 				ClusterID:      &clusterID,
 				NodeID:         conn.remoteNodeID,
-				// !!! this needs to come from a server, not directly from the global
-				ServerVersion: cluster.BinaryServerVersion,
+				ServerVersion:  ctx.version.Version().Version,
 				// !!! ServerVersion:  ctx.version.ServerVersion,
 			}
 
@@ -918,6 +917,7 @@ func (ctx *Context) runHeartbeat(
 				err = ping(goCtx)
 			}
 			if err == nil {
+				log.Infof(context.TODO(), "!!! client about to check versions")
 				err = errors.Wrap(
 					checkVersion(ctx.version, response.ServerVersion),
 					"version compatibility check failed on ping response")

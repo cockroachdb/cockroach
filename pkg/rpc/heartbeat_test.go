@@ -44,7 +44,7 @@ func TestHeartbeatReply(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	version := &cluster.MakeTestingClusterSettings().Version
+	version := &cluster.MakeTestingClusterSettingsWithVersion(cluster.BinaryServerVersion).Version
 	heartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
@@ -54,7 +54,7 @@ func TestHeartbeatReply(t *testing.T) {
 
 	request := &PingRequest{
 		Ping:          "testPing",
-		ServerVersion: version.ServerVersion,
+		ServerVersion: cluster.BinaryServerVersion,
 	}
 	response, err := heartbeat.Ping(context.Background(), request)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestManualHeartbeat(t *testing.T) {
 
 	request := &PingRequest{
 		Ping:          "testManual",
-		ServerVersion: version.ServerVersion,
+		ServerVersion: cluster.BinaryServerVersion,
 	}
 	manualHeartbeat.ready <- nil
 	ctx := context.Background()
@@ -174,7 +174,7 @@ func TestClockOffsetMismatch(t *testing.T) {
 		Ping:           "testManual",
 		Addr:           "test",
 		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
-		ServerVersion:  hs.version.Version().Version,
+		ServerVersion:  cluster.BinaryServerVersion,
 	}
 	response, err := hs.Ping(context.Background(), request)
 	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
@@ -212,7 +212,7 @@ func TestClusterIDCompare(t *testing.T) {
 			request := &PingRequest{
 				Ping:          "testPing",
 				ClusterID:     &td.clientClusterID,
-				ServerVersion: version.ServerVersion,
+				ServerVersion: cluster.BinaryServerVersion,
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {
@@ -257,7 +257,7 @@ func TestNodeIDCompare(t *testing.T) {
 			request := &PingRequest{
 				Ping:          "testPing",
 				NodeID:        td.clientNodeID,
-				ServerVersion: version.ServerVersion,
+				ServerVersion: cluster.BinaryServerVersion,
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {
