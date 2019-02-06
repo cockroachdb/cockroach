@@ -1806,3 +1806,235 @@ inner-join (lookup t5)
  │    └── filters (true)
  └── filters
       └── b @> '{"a": [{"b": "c", "d": 3}, 5]}' [type=bool, outer=(2)]
+
+# Regression test for issue where zero-column expressions could exist multiple
+# times in the tree, causing collisions.
+opt
+SELECT 1 FROM (VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true
+UNION ALL
+SELECT 1 FROM (VALUES (1), (1), (1)) JOIN (VALUES (1), (1)) ON true
+----
+union-all
+ ├── columns: "?column?":7(int!null)
+ ├── left columns: "?column?":3(int)
+ ├── right columns: "?column?":6(int)
+ ├── cardinality: [12 - 12]
+ ├── project
+ │    ├── columns: "?column?":3(int!null)
+ │    ├── cardinality: [6 - 6]
+ │    ├── fd: ()-->(3)
+ │    ├── inner-join
+ │    │    ├── cardinality: [6 - 6]
+ │    │    ├── values
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    └── tuple [type=tuple{}]
+ │    │    ├── values
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    └── tuple [type=tuple{}]
+ │    │    └── filters (true)
+ │    └── projections
+ │         └── const: 1 [type=int]
+ └── project
+      ├── columns: "?column?":6(int!null)
+      ├── cardinality: [6 - 6]
+      ├── fd: ()-->(6)
+      ├── inner-join
+      │    ├── cardinality: [6 - 6]
+      │    ├── values
+      │    │    ├── cardinality: [3 - 3]
+      │    │    ├── tuple [type=tuple{}]
+      │    │    ├── tuple [type=tuple{}]
+      │    │    └── tuple [type=tuple{}]
+      │    ├── values
+      │    │    ├── cardinality: [2 - 2]
+      │    │    ├── tuple [type=tuple{}]
+      │    │    └── tuple [type=tuple{}]
+      │    └── filters (true)
+      └── projections
+           └── const: 1 [type=int]
+
+opt join-limit=3
+SELECT
+    false
+FROM
+    abc AS x JOIN [INSERT INTO abc (a) SELECT 1 FROM abc RETURNING 1] JOIN abc AS y ON true ON false
+----
+project
+ ├── columns: bool:21(bool!null)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ ├── fd: ()-->(21)
+ ├── inner-join
+ │    ├── cardinality: [0 - 0]
+ │    ├── side-effects, mutations
+ │    ├── values
+ │    │    ├── cardinality: [0 - 0]
+ │    │    └── key: ()
+ │    ├── inner-join
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── side-effects, mutations
+ │    │    ├── project
+ │    │    │    ├── cardinality: [0 - 0]
+ │    │    │    ├── side-effects, mutations
+ │    │    │    └── select
+ │    │    │         ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
+ │    │    │         ├── cardinality: [0 - 0]
+ │    │    │         ├── side-effects, mutations
+ │    │    │         ├── fd: ()-->(5-7)
+ │    │    │         ├── insert abc
+ │    │    │         │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
+ │    │    │         │    ├── insert-mapping:
+ │    │    │         │    │    ├──  "?column?":13 => abc.a:5
+ │    │    │         │    │    ├──  column14:14 => abc.b:6
+ │    │    │         │    │    ├──  column14:14 => abc.c:7
+ │    │    │         │    │    └──  column15:15 => abc.rowid:8
+ │    │    │         │    ├── side-effects, mutations
+ │    │    │         │    ├── fd: ()-->(5-7)
+ │    │    │         │    └── project
+ │    │    │         │         ├── columns: column14:14(int) column15:15(int) "?column?":13(int!null)
+ │    │    │         │         ├── side-effects
+ │    │    │         │         ├── fd: ()-->(13,14)
+ │    │    │         │         ├── scan abc
+ │    │    │         │         └── projections
+ │    │    │         │              ├── null [type=int]
+ │    │    │         │              ├── unique_rowid() [type=int, side-effects]
+ │    │    │         │              └── const: 1 [type=int]
+ │    │    │         └── filters
+ │    │    │              └── false [type=bool]
+ │    │    ├── values
+ │    │    │    ├── cardinality: [0 - 0]
+ │    │    │    └── key: ()
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── projections
+      └── false [type=bool]
+
+opt join-limit=3
+SELECT 1 FROM ((VALUES (1), (1)) JOIN ((VALUES (1), (1), (1)) JOIN (VALUES (1), (1), (1), (1)) ON true) ON true)
+UNION ALL
+SELECT 1 FROM ((VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true) JOIN (VALUES (1), (1), (1), (1)) ON true
+----
+union-all
+ ├── columns: "?column?":9(int!null)
+ ├── left columns: "?column?":4(int)
+ ├── right columns: "?column?":8(int)
+ ├── cardinality: [48 - 48]
+ ├── project
+ │    ├── columns: "?column?":4(int!null)
+ │    ├── cardinality: [24 - 24]
+ │    ├── fd: ()-->(4)
+ │    ├── inner-join
+ │    │    ├── cardinality: [24 - 24]
+ │    │    ├── values
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    └── tuple [type=tuple{}]
+ │    │    ├── inner-join
+ │    │    │    ├── cardinality: [12 - 12]
+ │    │    │    ├── values
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    │    └── tuple [type=tuple{}]
+ │    │    │    ├── values
+ │    │    │    │    ├── cardinality: [4 - 4]
+ │    │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    │    └── tuple [type=tuple{}]
+ │    │    │    └── filters (true)
+ │    │    └── filters (true)
+ │    └── projections
+ │         └── const: 1 [type=int]
+ └── project
+      ├── columns: "?column?":8(int!null)
+      ├── cardinality: [24 - 24]
+      ├── fd: ()-->(8)
+      ├── inner-join
+      │    ├── cardinality: [24 - 24]
+      │    ├── inner-join
+      │    │    ├── cardinality: [6 - 6]
+      │    │    ├── values
+      │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    ├── tuple [type=tuple{}]
+      │    │    │    └── tuple [type=tuple{}]
+      │    │    ├── values
+      │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    ├── tuple [type=tuple{}]
+      │    │    │    ├── tuple [type=tuple{}]
+      │    │    │    └── tuple [type=tuple{}]
+      │    │    └── filters (true)
+      │    ├── values
+      │    │    ├── cardinality: [4 - 4]
+      │    │    ├── tuple [type=tuple{}]
+      │    │    ├── tuple [type=tuple{}]
+      │    │    ├── tuple [type=tuple{}]
+      │    │    └── tuple [type=tuple{}]
+      │    └── filters (true)
+      └── projections
+           └── const: 1 [type=int]
+
+opt
+SELECT 1 FROM (VALUES (1), (1)) LEFT JOIN (VALUES (1), (1), (1)) ON random() = 0
+UNION ALL
+SELECT 1 FROM (VALUES (1), (1), (1)) RIGHT JOIN (VALUES (1), (1)) ON random() = 0
+----
+union-all
+ ├── columns: "?column?":7(int!null)
+ ├── left columns: "?column?":3(int)
+ ├── right columns: "?column?":6(int)
+ ├── cardinality: [4 - 12]
+ ├── side-effects
+ ├── project
+ │    ├── columns: "?column?":3(int!null)
+ │    ├── cardinality: [2 - 6]
+ │    ├── side-effects
+ │    ├── fd: ()-->(3)
+ │    ├── left-join
+ │    │    ├── cardinality: [2 - 6]
+ │    │    ├── side-effects
+ │    │    ├── values
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    └── tuple [type=tuple{}]
+ │    │    ├── select
+ │    │    │    ├── cardinality: [0 - 3]
+ │    │    │    ├── side-effects
+ │    │    │    ├── values
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    │    └── tuple [type=tuple{}]
+ │    │    │    └── filters
+ │    │    │         └── random() = 0.0 [type=bool, side-effects]
+ │    │    └── filters (true)
+ │    └── projections
+ │         └── const: 1 [type=int]
+ └── project
+      ├── columns: "?column?":6(int!null)
+      ├── cardinality: [2 - 6]
+      ├── side-effects
+      ├── fd: ()-->(6)
+      ├── right-join
+      │    ├── cardinality: [2 - 6]
+      │    ├── side-effects
+      │    ├── select
+      │    │    ├── cardinality: [0 - 3]
+      │    │    ├── side-effects
+      │    │    ├── values
+      │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    ├── tuple [type=tuple{}]
+      │    │    │    ├── tuple [type=tuple{}]
+      │    │    │    └── tuple [type=tuple{}]
+      │    │    └── filters
+      │    │         └── random() = 0.0 [type=bool, side-effects]
+      │    ├── values
+      │    │    ├── cardinality: [2 - 2]
+      │    │    ├── tuple [type=tuple{}]
+      │    │    └── tuple [type=tuple{}]
+      │    └── filters (true)
+      └── projections
+           └── const: 1 [type=int]
