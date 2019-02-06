@@ -243,6 +243,15 @@ select
       ├── f = 3.5 [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight), fd=()-->(3)]
       └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
+# Empty tuples.
+opt expect=NormalizeTupleEquality
+SELECT * FROM a WHERE () = ()
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ ├── key: (1)
+ └── fd: (1)-->(2-6)
+
 # --------------------------------------------------
 # NormalizeTupleEquality, NormalizeNestedAnds
 # --------------------------------------------------

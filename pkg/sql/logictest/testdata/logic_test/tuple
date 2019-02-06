@@ -894,3 +894,10 @@ query B
 SELECT (1, 2, 3) IS NULL AS r
 ----
 false
+
+subtest regression_for_34262
+
+query B
+SELECT () = ()
+----
+true
