@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -102,11 +103,11 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 		Name: AvroNameToSQLName(s.Name),
 	}
 	for _, f := range s.Fields {
-		// s.Fields[idx] has `Name` and `SchemaType` set but nonething else.
+		// s.Fields[idx] has `Name` and `SchemaType` set but nothing else.
 		// They're needed for serialization/deserialization, so fake out a
 		// column descriptor so that we can reuse columnDescToAvroSchema to get
 		// all the various fields of avroSchemaField populated for free.
-		colDesc, err := avroSchemaToColDesc(AvroNameToSQLName(f.Name), f.SchemaType)
+		colDesc, err := avroFieldMetadataToColDesc(f.Metadata)
 		if err != nil {
 			return nil, err
 		}
@@ -115,56 +116,14 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 	return tableToAvroSchema(tableDesc)
 }
 
-func avroSchemaToColDesc(
-	name string, schemaType avroSchemaType,
-) (*sqlbase.ColumnDescriptor, error) {
-	colDesc := &sqlbase.ColumnDescriptor{Name: name}
-
-	union, ok := schemaType.([]interface{})
-	if ok {
-		if len(union) == 2 && union[0] == avroSchemaNull {
-			colDesc.Nullable = true
-			schemaType = union[1]
-		} else {
-			return nil, errors.Errorf(`unsupported union: %v`, union)
-		}
+func avroFieldMetadataToColDesc(metadata string) (*sqlbase.ColumnDescriptor, error) {
+	parsed, err := parser.ParseOne(`ALTER TABLE FOO ADD COLUMN ` + metadata)
+	if err != nil {
+		return nil, err
 	}
-
-	switch t := schemaType.(type) {
-	case string:
-		switch t {
-		case avroSchemaLong:
-			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
-		case avroSchemaString:
-			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
-		case avroSchemaBoolean:
-			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
-		case avroSchemaBytes:
-			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
-		case avroSchemaDouble:
-			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}
-		default:
-			return nil, errors.Errorf(`unknown schema type: %s`, t)
-		}
-	case map[string]interface{}:
-		switch t[`logicalType`] {
-		case `timestamp-micros`:
-			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMP}
-		case `decimal`:
-			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}
-			if p, ok := t[`precision`]; ok {
-				colDesc.Type.Precision = int32(p.(float64))
-			}
-			if s, ok := t[`scale`]; ok {
-				colDesc.Type.Width = int32(s.(float64))
-			}
-		default:
-			return nil, errors.Errorf(`unknown logical type: %v`, t[`logicalType`])
-		}
-	default:
-		return nil, errors.Errorf(`unknown schema type: %T %s`, schemaType, schemaType)
-	}
-	return colDesc, nil
+	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
+	col, _, _, err := sqlbase.MakeColumnDefDescs(def, &tree.SemaContext{})
+	return col, err
 }
 
 func TestAvroSchema(t *testing.T) {
@@ -197,13 +156,13 @@ func TestAvroSchema(t *testing.T) {
 	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
 		typ := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_SemanticType(semTypeID)}
 		switch typ.SemanticType {
-		case sqlbase.ColumnType_DATE, sqlbase.ColumnType_INTERVAL, sqlbase.ColumnType_TIMESTAMPTZ,
-			sqlbase.ColumnType_COLLATEDSTRING, sqlbase.ColumnType_NAME, sqlbase.ColumnType_OID,
-			sqlbase.ColumnType_UUID, sqlbase.ColumnType_ARRAY, sqlbase.ColumnType_INET,
-			sqlbase.ColumnType_TIME, sqlbase.ColumnType_JSONB, sqlbase.ColumnType_BIT,
-			sqlbase.ColumnType_TUPLE:
+		case sqlbase.ColumnType_NAME, sqlbase.ColumnType_OID, sqlbase.ColumnType_TUPLE:
+			// These aren't expected to be needed for changefeeds.
 			continue
-			// TODO(dan): Implement these.
+		case sqlbase.ColumnType_INTERVAL, sqlbase.ColumnType_ARRAY, sqlbase.ColumnType_BIT,
+			sqlbase.ColumnType_COLLATEDSTRING:
+			// Implement these as customer demand dictates.
+			continue
 		}
 		datum := sqlbase.RandDatum(rng, typ, false /* nullOk */)
 		if datum == tree.DNull {
@@ -237,8 +196,8 @@ func TestAvroSchema(t *testing.T) {
 		escapedDatum := strings.Replace(serializedDatum, `%`, `%%`, -1)
 		randTypeTest := test{
 			name:   semTypeName,
-			schema: fmt.Sprintf(`(a %s PRIMARY KEY)`, typ.SQLString()),
-			values: fmt.Sprintf(`(%s)`, escapedDatum),
+			schema: fmt.Sprintf(`(a INT PRIMARY KEY, b %s)`, typ.SQLString()),
+			values: fmt.Sprintf(`(1, %s)`, escapedDatum),
 		}
 		tests = append(tests, randTypeTest)
 	}
@@ -261,17 +220,20 @@ func TestAvroSchema(t *testing.T) {
 			require.NoError(t, err)
 
 			for _, row := range rows {
+				evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
 				serialized, err := origSchema.textualFromRow(row)
 				require.NoError(t, err)
 				roundtripped, err := roundtrippedSchema.rowFromTextual(serialized)
 				require.NoError(t, err)
-				require.Equal(t, row, roundtripped)
+				require.Equal(t, 0, row[1].Datum.Compare(evalCtx, roundtripped[1].Datum),
+					`%s != %s`, row[1].Datum, roundtripped[1].Datum)
 
 				serialized, err = origSchema.BinaryFromRow(nil, row)
 				require.NoError(t, err)
 				roundtripped, err = roundtrippedSchema.RowFromBinary(serialized)
 				require.NoError(t, err)
-				require.Equal(t, row, roundtripped)
+				require.Equal(t, 0, row[1].Datum.Compare(evalCtx, roundtripped[1].Datum),
+					`%s != %s`, row[1].Datum, roundtripped[1].Datum)
 			}
 		})
 	}
@@ -293,6 +255,169 @@ func TestAvroSchema(t *testing.T) {
 				`{"type":["null","long"],"name":"_u0001f366_","default":null,`+
 				`"__crdb__":"🍦 INT8 NOT NULL"}]}`,
 			indexSchema.codec.Schema())
+	})
+
+	// This test shows what avro schema each sql column maps to, for easy
+	// reference.
+	t.Run("type_goldens", func(t *testing.T) {
+		goldens := map[string]string{
+			`BOOL`:         `["null","boolean"]`,
+			`BYTES`:        `["null","bytes"]`,
+			`DATE`:         `["null",{"type":"int","logicalType":"date"}]`,
+			`FLOAT8`:       `["null","double"]`,
+			`INET`:         `["null","string"]`,
+			`INT`:          `["null","long"]`,
+			`JSONB`:        `["null","string"]`,
+			`STRING`:       `["null","string"]`,
+			`TIME`:         `["null",{"type":"long","logicalType":"time-micros"}]`,
+			`TIMESTAMP`:    `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`TIMESTAMPTZ`:  `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`UUID`:         `["null","string"]`,
+			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
+		}
+
+		for semTypeID := range sqlbase.ColumnType_SemanticType_name {
+			typ := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_SemanticType(semTypeID)}
+			switch typ.SemanticType {
+			case sqlbase.ColumnType_INTERVAL, sqlbase.ColumnType_NAME, sqlbase.ColumnType_OID,
+				sqlbase.ColumnType_ARRAY, sqlbase.ColumnType_BIT, sqlbase.ColumnType_TUPLE,
+				sqlbase.ColumnType_COLLATEDSTRING, sqlbase.ColumnType_INT2VECTOR,
+				sqlbase.ColumnType_OIDVECTOR, sqlbase.ColumnType_NULL:
+				continue
+			case sqlbase.ColumnType_DECIMAL:
+				typ.Precision = 3
+				typ.Width = 2
+			}
+
+			colType := typ.SQLString()
+			tableDesc, err := parseTableDesc(`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + colType + `)`)
+			require.NoError(t, err)
+			field, err := columnDescToAvroSchema(&tableDesc.Columns[1])
+			require.NoError(t, err)
+			schema, err := json.Marshal(field.SchemaType)
+			require.NoError(t, err)
+			require.Equal(t, goldens[colType], string(schema), `SQL type %s`, colType)
+
+			// Delete from goldens for the following assertion that we don't have any
+			// unexpectedly unused goldens.
+			delete(goldens, colType)
+		}
+		if len(goldens) > 0 {
+			t.Fatalf("expected all goldens to be consumed: %v", goldens)
+		}
+	})
+
+	// This test shows what avro value some sql datums map to, for easy reference.
+	// The avro golden strings are in the textual format defined in the spec.
+	t.Run("value_goldens", func(t *testing.T) {
+		goldens := []struct {
+			sqlType string
+			sql     string
+			avro    string
+		}{
+			{sqlType: `INT`, sql: `NULL`, avro: `null`},
+			{sqlType: `INT`,
+				sql:  `1`,
+				avro: `{"long":1}`},
+
+			{sqlType: `BOOL`, sql: `NULL`, avro: `null`},
+			{sqlType: `BOOL`,
+				sql:  `true`,
+				avro: `{"boolean":true}`},
+
+			{sqlType: `FLOAT`, sql: `NULL`, avro: `null`},
+			{sqlType: `FLOAT`,
+				sql:  `1.2`,
+				avro: `{"double":1.2}`},
+
+			{sqlType: `STRING`, sql: `NULL`, avro: `null`},
+			{sqlType: `STRING`,
+				sql:  `'foo'`,
+				avro: `{"string":"foo"}`},
+
+			{sqlType: `BYTES`, sql: `NULL`, avro: `null`},
+			{sqlType: `BYTES`,
+				sql:  `'foo'`,
+				avro: `{"bytes":"foo"}`},
+
+			{sqlType: `DATE`, sql: `NULL`, avro: `null`},
+			{sqlType: `DATE`,
+				sql:  `'2019-01-02'`,
+				avro: `{"int.date":17898}`},
+
+			{sqlType: `TIME`, sql: `NULL`, avro: `null`},
+			{sqlType: `TIME`,
+				sql:  `'03:04:05'`,
+				avro: `{"long.time-micros":11045000000}`},
+
+			{sqlType: `TIMESTAMP`, sql: `NULL`, avro: `null`},
+			{sqlType: `TIMESTAMP`,
+				sql:  `'2019-01-02 03:04:05'`,
+				avro: `{"long.timestamp-micros":1546398245000000}`},
+
+			{sqlType: `TIMESTAMPTZ`, sql: `NULL`, avro: `null`},
+			{sqlType: `TIMESTAMPTZ`,
+				sql:  `'2019-01-02 03:04:05'`,
+				avro: `{"long.timestamp-micros":1546398245000000}`},
+
+			{sqlType: `DECIMAL(4,1)`, sql: `NULL`, avro: `null`},
+			{sqlType: `DECIMAL(4,1)`,
+				sql:  `1.2`,
+				avro: `{"bytes.decimal":"\f"}`},
+
+			{sqlType: `UUID`, sql: `NULL`, avro: `null`},
+			{sqlType: `UUID`,
+				sql:  `'27f4f4c9-e35a-45dd-9b79-5ff0f9b5fbb0'`,
+				avro: `{"string":"27f4f4c9-e35a-45dd-9b79-5ff0f9b5fbb0"}`},
+
+			{sqlType: `INET`, sql: `NULL`, avro: `null`},
+			{sqlType: `INET`,
+				sql:  `'190.0.0.0'`,
+				avro: `{"string":"190.0.0.0"}`},
+			{sqlType: `INET`,
+				sql:  `'190.0.0.0/24'`,
+				avro: `{"string":"190.0.0.0\/24"}`},
+			{sqlType: `INET`,
+				sql:  `'2001:4f8:3:ba:2e0:81ff:fe22:d1f1'`,
+				avro: `{"string":"2001:4f8:3:ba:2e0:81ff:fe22:d1f1"}`},
+			{sqlType: `INET`,
+				sql:  `'2001:4f8:3:ba:2e0:81ff:fe22:d1f1/120'`,
+				avro: `{"string":"2001:4f8:3:ba:2e0:81ff:fe22:d1f1\/120"}`},
+			{sqlType: `INET`,
+				sql:  `'::ffff:192.168.0.1/24'`,
+				avro: `{"string":"::ffff:192.168.0.1\/24"}`},
+
+			{sqlType: `JSONB`, sql: `NULL`, avro: `null`},
+			{sqlType: `JSONB`,
+				sql:  `'null'`,
+				avro: `{"string":"null"}`},
+			{sqlType: `JSONB`,
+				sql:  `'{"b": 1}'`,
+				avro: `{"string":"{\"b\": 1}"}`},
+		}
+
+		for _, test := range goldens {
+			tableDesc, err := parseTableDesc(
+				`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + test.sqlType + `)`)
+			require.NoError(t, err)
+			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
+			require.NoError(t, err)
+
+			schema, err := tableToAvroSchema(tableDesc)
+			require.NoError(t, err)
+			textual, err := schema.textualFromRow(rows[0])
+			require.NoError(t, err)
+			// Trim the outermost {}.
+			value := string(textual[1 : len(textual)-1])
+			// Strip out the pk field.
+			value = strings.Replace(value, `"pk":{"long":1}`, ``, -1)
+			// Trim the `,`, which could be on either side because of the avro library
+			// doesn't deterministically order the fields.
+			value = strings.Trim(value, `,`)
+			// Strip out the field name.
+			value = strings.Replace(value, `"a":`, ``, -1)
+			require.Equal(t, test.avro, value)
+		}
 	})
 }
 

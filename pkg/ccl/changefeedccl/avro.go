@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 )
@@ -58,6 +60,7 @@ const (
 	avroSchemaBoolean = `boolean`
 	avroSchemaBytes   = `bytes`
 	avroSchemaDouble  = `double`
+	avroSchemaInt     = `int`
 	avroSchemaLong    = `long`
 	avroSchemaNull    = `null`
 	avroSchemaString  = `string`
@@ -186,6 +189,37 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.NewDBytes(tree.DBytes(x.([]byte))), nil
 		}
+	case sqlbase.ColumnType_DATE:
+		avroType = avroLogicalType{
+			SchemaType:  avroSchemaInt,
+			LogicalType: `date`,
+		}
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			days := time.Duration(*d.(*tree.DDate)) * 24 * time.Hour
+			// The avro library requires us to return this as a time.Time.
+			t := timeutil.Unix(0, days.Nanoseconds()).UTC()
+			return t, nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			// The avro library hands this back as a time.Time.
+			numDays := x.(time.Time).UnixNano() / int64(24*time.Hour)
+			return tree.NewDDate(tree.DDate(numDays)), nil
+		}
+	case sqlbase.ColumnType_TIME:
+		avroType = avroLogicalType{
+			SchemaType:  avroSchemaLong,
+			LogicalType: `time-micros`,
+		}
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			// The avro library requires us to return this as a time.Duration.
+			duration := time.Duration(*d.(*tree.DTime)) * time.Microsecond
+			return duration, nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			// The avro library hands this back as a time.Duration.
+			micros := x.(time.Duration) / time.Microsecond
+			return tree.MakeDTime(timeofday.TimeOfDay(micros)), nil
+		}
 	case sqlbase.ColumnType_TIMESTAMP:
 		avroType = avroLogicalType{
 			SchemaType:  avroSchemaLong,
@@ -213,13 +247,12 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			return nil, errors.Errorf(
 				`column %s: decimal with no precision not yet supported with avro`, colDesc.Name)
 		}
-		decimalType := avroLogicalType{
+		avroType = avroLogicalType{
 			SchemaType:  avroSchemaBytes,
 			LogicalType: `decimal`,
 			Precision:   int(colDesc.Type.Precision),
 			Scale:       int(colDesc.Type.Width),
 		}
-		avroType = decimalType
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			dec := d.(*tree.DDecimal).Decimal
 			// TODO(dan): For the cases that the avro defined decimal format
@@ -236,8 +269,33 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return &tree.DDecimal{Decimal: ratToDecimal(*x.(*big.Rat), colDesc.Type.Width)}, nil
 		}
+	case sqlbase.ColumnType_UUID:
+		// Should be logical type of "uuid", but the avro library doesn't support
+		// that yet.
+		avroType = avroSchemaString
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return d.(*tree.DUuid).UUID.String(), nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.ParseDUuidFromString(x.(string))
+		}
+	case sqlbase.ColumnType_INET:
+		avroType = avroSchemaString
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return d.(*tree.DIPAddr).IPAddr.String(), nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.ParseDIPAddrFromINetString(x.(string))
+		}
+	case sqlbase.ColumnType_JSONB:
+		avroType = avroSchemaString
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return d.(*tree.DJSON).JSON.String(), nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.ParseDJSON(x.(string))
+		}
 	default:
-		// TODO(dan): Support the other column types.
 		return nil, errors.Errorf(`column %s: type %s not yet supported with avro`,
 			colDesc.Name, colDesc.Type.SemanticType)
 	}
