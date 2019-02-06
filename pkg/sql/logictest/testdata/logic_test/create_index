@@ -36,7 +36,7 @@ t           foo         true        2             a            ASC        false 
 statement ok
 INSERT INTO t VALUES (2,1)
 
-statement error duplicate key value \(b\)=\(1\) violates unique constraint "bar"
+statement error pgcode 23505 violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON t (b)
 
 query TTBITTBB colnames

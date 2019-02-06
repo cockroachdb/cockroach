@@ -79,7 +79,7 @@ SELECT * FROM i WHERE f = 0
 -0
 0
 
-statement error duplicate key value
+statement error violates unique constraint
 CREATE UNIQUE INDEX ON i (f)
 
 subtest extra_float_digits

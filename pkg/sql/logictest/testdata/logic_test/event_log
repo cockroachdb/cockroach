@@ -104,7 +104,7 @@ WHERE "eventType" = 'alter_table'
 statement ok
 INSERT INTO a VALUES (1, 1), (2, 1)
 
-statement error pq: duplicate key value \(val\)=\(1\) violates unique constraint \"foo\"
+statement error pgcode 23505 violates unique constraint \"foo\"
 ALTER TABLE a ADD CONSTRAINT foo UNIQUE(val)
 
 query IIT rowsort
