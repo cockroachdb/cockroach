@@ -836,6 +836,12 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 // encodeTuple produces the value encoding for a tuple.
 func encodeTuple(t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte) ([]byte, error) {
 	appendTo = encoding.EncodeValueTag(appendTo, colID, encoding.Tuple)
+
+	return encodeUntaggedTuple(t, appendTo, colID, scratch)
+}
+
+// encodeUntaggedTuple produces the value encoding for a tuple without a value tag.
+func encodeUntaggedTuple(t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte) ([]byte, error) {
 	appendTo = encoding.EncodeNonsortingUvarint(appendTo, uint64(len(t.D)))
 
 	var err error
@@ -1078,6 +1084,9 @@ func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
 		if t.FamilyEqual(types.FamCollatedString) {
 			return encoding.Bytes, nil
 		}
+		if t.FamilyEqual(types.FamTuple) {
+			return encoding.Tuple, nil
+		}
 		return 0, errors.Errorf("Don't know encoding type for %s", t)
 	}
 }
@@ -1140,6 +1149,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
 	case *tree.DCollatedString:
 		return encoding.EncodeUntaggedBytesValue(b, []byte(t.Contents)), nil
+	case *tree.DTuple:
+		return encodeUntaggedTuple(t, b, encoding.NoColumnID, nil)
 	}
 	return nil, errors.Errorf("don't know how to encode %s", d)
 }
