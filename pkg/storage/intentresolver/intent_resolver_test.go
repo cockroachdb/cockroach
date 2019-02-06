@@ -64,7 +64,7 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.COMMITTED}},
 	}
 	for _, intents := range testCases {
-		if _, pErr := ir.MaybePushIntents(
+		if _, pErr := ir.maybePushIntents(
 			context.Background(), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true,
 		); !testutils.IsPError(pErr, "unexpected (ABORTED|COMMITTED) intent") {
 			t.Errorf("expected error on aborted/resolved intent, but got %s", pErr)
@@ -140,7 +140,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 				},
 			},
 			sendFuncs: []sendFunc{
-				pushTxnSendFunc,
+				singlePushTxnSendFunc,
 				resolveIntentsSendFunc,
 				failSendFunc,
 			},
@@ -161,7 +161,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 				{Span: roachpb.Span{Key: key, EndKey: roachpb.Key("b")}, Txn: txn1.TxnMeta},
 			},
 			sendFuncs: []sendFunc{
-				pushTxnSendFunc,
+				singlePushTxnSendFunc,
 				resolveIntentsSendFunc,
 				resolveIntentsSendFunc,
 				gcSendFunc,
@@ -428,9 +428,10 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	sendFuncs := []sendFunc{
-		pushTxnSendFunc,
+		singlePushTxnSendFunc,
 		resolveIntentsSendFunc,
 	}
+	txn := beginTransaction(t, clock, 1, roachpb.Key("a"), true /* putKey */)
 	ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
 	// Run defaultTaskLimit tasks which will block until blocker is closed.
 	blocker := make(chan struct{})
@@ -448,7 +449,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 	wg.Wait()
 	testIntentsWithArg := []result.IntentsWithArg{
 		{Intents: []roachpb.Intent{
-			{Span: roachpb.Span{Key: roachpb.Key("a")}},
+			{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
 		}},
 	}
 	// Running with allowSyncProcessing = false should result in an error and no
@@ -471,23 +472,25 @@ func TestCleanupIntentsAsync(t *testing.T) {
 		intents   []result.IntentsWithArg
 		sendFuncs []sendFunc
 	}
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	txn := beginTransaction(t, clock, 1, roachpb.Key("a"), true /* putKey */)
 	testIntentsWithArg := []result.IntentsWithArg{
 		{Intents: []roachpb.Intent{
-			{Span: roachpb.Span{Key: roachpb.Key("a")}},
+			{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
 		}},
 	}
 	cases := []testCase{
 		{
 			intents: testIntentsWithArg,
 			sendFuncs: []sendFunc{
-				pushTxnSendFunc,
+				singlePushTxnSendFunc,
 				resolveIntentsSendFunc,
 			},
 		},
 		{
 			intents: testIntentsWithArg,
 			sendFuncs: []sendFunc{
-				pushTxnSendFunc,
+				singlePushTxnSendFunc,
 				failSendFunc,
 			},
 		},
@@ -500,7 +503,6 @@ func TestCleanupIntentsAsync(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run("", func(t *testing.T) {
-			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			stopper := stop.NewStopper()
 			sendFuncs := c.sendFuncs
 			ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
@@ -595,20 +597,25 @@ func counterSendFunc(counter *int64, f sendFunc) sendFunc {
 // and returns the appropriate errors.
 func TestCleanupIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	txn := beginTransaction(t, clock, roachpb.MinUserPriority, roachpb.Key("a"), true)
+	// Set txn.ID to a very small value so it's sorted deterministically first.
+	txn.ID = uuid.UUID{15: 0x01}
+	testIntents := []roachpb.Intent{
+		{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
+	}
 	type testCase struct {
 		intents     []roachpb.Intent
 		sendFuncs   []sendFunc
 		expectedErr bool
 		expectedNum int
 	}
-	testIntents := []roachpb.Intent{
-		{Span: roachpb.Span{Key: roachpb.Key("a")}},
-	}
+
 	cases := []testCase{
 		{
 			intents: testIntents,
 			sendFuncs: []sendFunc{
-				pushTxnSendFunc,
+				singlePushTxnSendFunc,
 				resolveIntentsSendFunc,
 			},
 			expectedNum: 1,
@@ -620,12 +627,29 @@ func TestCleanupIntents(t *testing.T) {
 			},
 			expectedErr: true,
 		},
+		{
+			intents: append(makeTxnIntents(t, clock, 3*intentResolverBatchSize),
+				// Three intents with the same transaction will only attempt to push the
+				// txn 1 time. Hence 3 full batches plus 1 extra.
+				testIntents[0], testIntents[0], testIntents[0]),
+			sendFuncs: []sendFunc{
+				pushTxnSendFunc(intentResolverBatchSize),
+				resolveIntentsSendFunc,
+				resolveIntentsSendFunc,
+				pushTxnSendFunc(intentResolverBatchSize),
+				resolveIntentsSendFunc,
+				pushTxnSendFunc(intentResolverBatchSize),
+				resolveIntentsSendFunc,
+				pushTxnSendFunc(1),
+				resolveIntentsSendFunc,
+			},
+			expectedNum: 3*intentResolverBatchSize + 3,
+		},
 	}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	for _, c := range cases {
 		t.Run("", func(t *testing.T) {
-			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			sendFuncs := c.sendFuncs
 			ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
 			num, err := ir.CleanupIntents(context.Background(), c.intents, clock.Now(), roachpb.PUSH_ABORT)
@@ -697,6 +721,17 @@ func assignSeqNumsForReqs(txn *roachpb.Transaction, reqs ...roachpb.Request) {
 	}
 }
 
+// makeTxnIntents creates a slice of Intent which each have a unique txn.
+func makeTxnIntents(t *testing.T, clock *hlc.Clock, numIntents int) []roachpb.Intent {
+	ret := make([]roachpb.Intent, 0, numIntents)
+	for i := 0; i < numIntents; i++ {
+		txn := beginTransaction(t, clock, 1, roachpb.Key("a"), true /* putKey */)
+		ret = append(ret,
+			roachpb.Intent{Span: roachpb.Span{Key: txn.Key}, Txn: txn.TxnMeta})
+	}
+	return ret
+}
+
 // sendFunc is a function used to control behavior for a specific request that
 // the IntentResolver tries to send. They are used in conjunction with the below
 // function to create an IntentResolver with a slice of sendFuncs.
@@ -727,22 +762,28 @@ func newIntentResolverWithSendFuncs(
 }
 
 var (
-	pushTxnSendFunc sendFunc = func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if !ba.IsSinglePushTxnRequest() {
-			panic(fmt.Errorf("Expected SinglePushTxnRequest, got %v", ba))
+	pushTxnSendFunc = func(numPushes int) sendFunc {
+		return func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			if len(ba.Requests) != numPushes {
+				panic(fmt.Errorf("expected %d PushTxnRequests in batch, got %d",
+					numPushes, len(ba.Requests)))
+			}
+			resp := &roachpb.BatchResponse{}
+			for _, r := range ba.Requests {
+				req := r.GetInner().(*roachpb.PushTxnRequest)
+				txn := req.PusheeTxn
+				resp.Add(&roachpb.PushTxnResponse{
+					PusheeTxn: roachpb.Transaction{
+						Status:  roachpb.ABORTED,
+						TxnMeta: txn,
+					},
+				})
+			}
+			return resp, nil
 		}
-		// TODO(ajwerner): assert more things
-		req := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-		txn := req.PusheeTxn
-		resp := &roachpb.BatchResponse{}
-		resp.Add(&roachpb.PushTxnResponse{
-			PusheeTxn: roachpb.Transaction{
-				Status:  roachpb.ABORTED,
-				TxnMeta: txn,
-			},
-		})
-		return resp, nil
 	}
+
+	singlePushTxnSendFunc           = pushTxnSendFunc(1)
 	resolveIntentsSendFunc sendFunc = func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		resp := &roachpb.BatchResponse{}
 		for _, r := range ba.Requests {
