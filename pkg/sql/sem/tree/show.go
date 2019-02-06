@@ -35,9 +35,9 @@ func (node *ShowVar) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	// Session var names never contain PII and should be distinguished
 	// for feature tracking purposes.
-	oldFlags := ctx.ChangeFlags(ctx.flags & ^FmtAnonymize)
-	ctx.FormatNameP(&node.Name)
-	ctx.ChangeFlags(oldFlags)
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+		ctx.FormatNameP(&node.Name)
+	})
 }
 
 // ShowClusterSetting represents a SHOW CLUSTER SETTING statement.
@@ -50,9 +50,9 @@ func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CLUSTER SETTING ")
 	// Cluster setting names never contain PII and should be distinguished
 	// for feature tracking purposes.
-	oldFlags := ctx.ChangeFlags(ctx.flags & ^FmtAnonymize)
-	ctx.FormatNameP(&node.Name)
-	ctx.ChangeFlags(oldFlags)
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+		ctx.FormatNameP(&node.Name)
+	})
 }
 
 // BackupDetails represents the type of details to display for a SHOW BACKUP

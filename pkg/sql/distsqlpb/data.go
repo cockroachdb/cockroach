@@ -76,7 +76,7 @@ func ConvertToMappedSpecOrdering(
 // with their values.
 func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
 	fmtCtx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
-	fmtCtx.WithPlaceholderFormat(
+	fmtCtx.SetPlaceholderFormat(
 		func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
 			d, err := p.Eval(evalCtx)
 			if err != nil {
