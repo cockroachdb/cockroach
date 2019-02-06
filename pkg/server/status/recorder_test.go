@@ -148,6 +148,10 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	manual := hlc.NewManualClock(100)
 	st := cluster.MakeTestingClusterSettings()
+	st.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
 	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond), nil, nil, nil, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)

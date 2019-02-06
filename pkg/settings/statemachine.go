@@ -129,8 +129,8 @@ func (*StateMachineSetting) Typ() string {
 	return "m"
 }
 
-// !!! comment
-// Get retrieves the (encoded) value in the setting (or the encoded default).
+// !!! comment about what happens if it hasn't been set.
+// Get retrieves the (encoded) value in the setting.
 func (s *StateMachineSetting) Get(sv *Values) string {
 	encV := sv.getGeneric(s.slotIdx)
 	if encV == nil {

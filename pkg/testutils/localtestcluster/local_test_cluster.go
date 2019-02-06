@@ -125,7 +125,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ltc.Stopper.AddCloser(ltc.Eng)
 
 	// !!! ltc.Stores = storage.NewStores(ambient, ltc.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
-	ltc.Stores = storage.NewStores(ambient, ltc.Clock, cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+	ltc.Stores = storage.NewStores(ambient, ltc.Clock)
 
 	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper, ltc.Gossip)
 	if ltc.DBContext == nil {

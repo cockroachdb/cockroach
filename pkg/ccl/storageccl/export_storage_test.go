@@ -523,6 +523,10 @@ func TestWorkloadStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	settings := cluster.MakeTestingClusterSettings()
+	settings.InitializeVersion(
+		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion)
 
 	rows, payloadBytes, ranges := 4, 12, 1
 	gen := bank.FromConfig(rows, payloadBytes, ranges)
