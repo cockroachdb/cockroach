@@ -1927,7 +1927,7 @@ func (r *Replica) processRaftCommand(
 				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", proposal)
 			}
 			response.Intents = proposal.Local.DetachIntents()
-			response.EndTxns = proposal.Local.DetachEndTxns(response.Err != nil)
+			response.EndTxns = proposal.Local.DetachEndTxns(pErr != nil)
 			if pErr == nil {
 				lResult = proposal.Local
 			}

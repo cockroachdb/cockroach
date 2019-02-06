@@ -17,6 +17,7 @@ package server_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
@@ -312,44 +313,38 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	}
 }
 
-func TestClusterVersionBootstrapStrict(t *testing.T) {
+// Test that, after cluster bootstrap, the different ways of getting the cluster
+// version all agree.
+func TestAllVersionsAgree(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	// Four nodes that are all strictly version X without accepting anything else.
-	for _, versions := range [][][2]string{
-		{{"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}},
-		{{"4.7", "4.7"}, {"4.7", "4.7"}, {"4.7", "4.7"}, {"4.7", "4.7"}},
-	} {
-		func() {
-			bootstrapVersion := cluster.ClusterVersion{
-				Version: roachpb.MustParseVersion(versions[0][0]),
-			}
-
-			knobs := base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
-					BootstrapVersion: &bootstrapVersion,
-				},
-			}
-			tc := setupMixedCluster(t, knobs, versions, "")
-			defer tc.Stopper().Stop(ctx)
-
-			exp := versions[0][0]
-
-			for i := 0; i < tc.NumServers(); i++ {
-				if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
-					t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
-				}
-				if version := tc.getVersionFromShow(i); version != exp {
-					t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
-				}
-
-				if version := tc.getVersionFromSelect(i); version != exp {
-					t.Fatalf("%d: incorrect version %q (wanted %s)", i, version, exp)
-				}
-			}
-		}()
+	tcRaw := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tcRaw.Stopper().Stop(ctx)
+	tc := testClusterWithHelpers{
+		T:           t,
+		TestCluster: tcRaw,
 	}
+
+	exp := cluster.BinaryServerVersion.String()
+
+	// The node bootstrapping the cluster starts at BinaryServerVersion, the
+	// others start at MinimumSupportedVersion and it takes them a gossip update
+	// to get to BinaryServerVersion. Hence, we loop until that gossip comes.
+	testutils.SucceedsSoon(tc, func() error {
+		for i := 0; i < tc.NumServers(); i++ {
+			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
+				return fmt.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+			}
+			if version := tc.getVersionFromShow(i); version != exp {
+				return fmt.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+			}
+			if version := tc.getVersionFromSelect(i); version != exp {
+				return fmt.Errorf("%d: incorrect version %q (wanted %s)", i, version, exp)
+			}
+		}
+		return nil
+	})
 }
 
 func TestClusterVersionMixedVersionTooOld(t *testing.T) {
