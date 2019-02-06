@@ -66,9 +66,10 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	if aggressiveChecks {
 		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
 		// This slows down merges, so it might hide some races.
+		//
+		// NB: the below invocation was found to actually make it to the server at the time of writing.
 		c.Start(ctx, t, startArgs(
-			"--env=COCKROACH_CONSISTENCY_AGGRESSIVE=true",
-			"--env=COCKROACH_FATAL_ON_STATS_MISMATCH=true",
+			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true COCKROACH_FATAL_ON_STATS_MISMATCH=true",
 		))
 	} else {
 		c.Start(ctx, t)
@@ -80,8 +81,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	t.Status(`restoring tiny table`)
 	defer t.WorkerStatus()
 
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "DROP DATABASE IF EXISTS tinybank"`)
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE tinybank"`)
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "DROP DATABASE IF EXISTS bank"`)
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
 		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1")
 
