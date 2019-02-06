@@ -232,11 +232,11 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 	exp := map[bool]map[bool]string{ // (tooLarge, active)
 		false: {
 			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower)]",
-			false: "should truncate: false [truncate 90 entries to first index 100 (chosen via: followers)]",
+			false: "should truncate: true [truncate 190 entries to first index 200 (chosen via: followers)]",
 		},
 		true: {
 			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)]",
-			false: "should truncate: true [truncate 190 entries to first index 200 (chosen via: quorum); log too large (2.0 KiB > 1.0 KiB); implies 1 Raft snapshot]",
+			false: "should truncate: true [truncate 290 entries to first index 300 (chosen via: quorum); log too large (2.0 KiB > 1.0 KiB); implies 1 Raft snapshot]",
 		},
 	}
 
@@ -247,7 +247,7 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 			}
 			for j, v := range []uint64{100, 200, 300, 400, 500} {
 				var pr raft.Progress
-				if v == 300 {
+				if v == 100 {
 					// A probing follower is probed with some index (Next) but
 					// it has a zero Match (i.e. no idea how much of its log
 					// agrees with ours).
