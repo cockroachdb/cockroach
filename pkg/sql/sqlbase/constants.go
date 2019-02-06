@@ -27,3 +27,113 @@ var AdminRole = "admin"
 // dropped, assigned to another role, and is generally not listed.
 // It can be granted privileges, implicitly granting them to all users (current and future).
 var PublicRole = "public"
+
+// Postgres 32bit oid metadata
+// First 1bit  used for type: default, column
+// Next  31bit used for default id
+const (
+	DefaultOidPrefix = 0 << 31
+	ColumnOidPrefix  = 1 << 31
+
+	BitCountID      = 31
+	MaxDefaultID ID = (1 << BitCountID) - 1
+)
+
+// Oid for virtual database and table.
+const (
+	CrdbInternalID = MaxDefaultID - iota
+	CrdbInternalBackwardDependenciesTableID
+	CrdbInternalBuildInfoTableID
+	CrdbInternalBuiltinFunctionsTableID
+	CrdbInternalClusterQueriesTableID
+	CrdbInternalClusterSessionsTableID
+	CrdbInternalClusterSettingsTableID
+	CrdbInternalCreateStmtsTableID
+	CrdbInternalFeatureUsageID
+	CrdbInternalForwardDependenciesTableID
+	CrdbInternalGossipNodesTableID
+	CrdbInternalGossipAlertsTableID
+	CrdbInternalGossipLivenessTableID
+	CrdbInternalGossipNetworkTableID
+	CrdbInternalIndexColumnsTableID
+	CrdbInternalJobsTableID
+	CrdbInternalKVNodeStatusTableID
+	CrdbInternalKVStoreStatusTableID
+	CrdbInternalLeasesTableID
+	CrdbInternalLocalQueriesTableID
+	CrdbInternalLocalSessionsTableID
+	CrdbInternalLocalMetricsTableID
+	CrdbInternalPartitionsTableID
+	CrdbInternalRangesNoLeasesTableID
+	CrdbInternalRangesViewID
+	CrdbInternalRuntimeInfoTableID
+	CrdbInternalSchemaChangesTableID
+	CrdbInternalSessionTraceTableID
+	CrdbInternalSessionVariablesTableID
+	CrdbInternalStmtStatsTableID
+	CrdbInternalTableColumnsTableID
+	CrdbInternalTableIndexesTableID
+	CrdbInternalTablesTableID
+	CrdbInternalZonesTableID
+	InformationSchemaID
+	InformationSchemaAdministrableRoleAuthorizationsID
+	InformationSchemaApplicableRolesID
+	InformationSchemaColumnPrivilegesID
+	InformationSchemaColumnsTableID
+	InformationSchemaConstraintColumnUsageTableID
+	InformationSchemaEnabledRolesID
+	InformationSchemaKeyColumnUsageTableID
+	InformationSchemaParametersTableID
+	InformationSchemaReferentialConstraintsTableID
+	InformationSchemaRoleTableGrantsID
+	InformationSchemaRoutineTableID
+	InformationSchemaSchemataTableID
+	InformationSchemaSchemataTablePrivilegesID
+	InformationSchemaSequencesID
+	InformationSchemaStatisticsTableID
+	InformationSchemaTableConstraintTableID
+	InformationSchemaTablePrivilegesID
+	InformationSchemaTablesTableID
+	InformationSchemaViewsTableID
+	InformationSchemaUserPrivilegesID
+	PgCatalogID
+	PgCatalogAmTableID
+	PgCatalogAttrDefTableID
+	PgCatalogAttributeTableID
+	PgCatalogAuthMembersTableID
+	PgCatalogClassTableID
+	PgCatalogCollationTableID
+	PgCatalogConstraintTableID
+	PgCatalogDatabaseTableID
+	PgCatalogDependTableID
+	PgCatalogDescriptionTableID
+	PgCatalogSharedDescriptionTableID
+	PgCatalogEnumTableID
+	PgCatalogExtensionTableID
+	PgCatalogForeignDataWrapperTableID
+	PgCatalogForeignServerTableID
+	PgCatalogForeignTableTableID
+	PgCatalogIndexTableID
+	PgCatalogIndexesTableID
+	PgCatalogInheritsTableID
+	PgCatalogLanguageTableID
+	PgCatalogNamespaceTableID
+	PgCatalogOperatorTableID
+	PgCatalogProcTableID
+	PgCatalogRangeTableID
+	PgCatalogRewriteTableID
+	PgCatalogRolesTableID
+	PgCatalogSequencesTableID
+	PgCatalogSettingsTableID
+	PgCatalogUserTableID
+	PgCatalogUserMappingTableID
+	PgCatalogTablesTableID
+	PgCatalogTablespaceTableID
+	PgCatalogTriggerTableID
+	PgCatalogTypeTableID
+	PgCatalogViewsTableID
+	PgCatalogStatActivityTableID
+	PgCatalogSecurityLabelTableID
+	PgCatalogSharedSecurityLabelTableID
+	MinVirtualID = PgCatalogSharedSecurityLabelTableID
+)

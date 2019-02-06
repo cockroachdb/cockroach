@@ -21,7 +21,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -237,7 +236,7 @@ func (r *Refresher) ensureAllTables(ctx context.Context, settings *settings.Valu
 	for _, row := range rows {
 		tableID := sqlbase.ID(*row[0].(*tree.DInt))
 		// Don't create statistics for system tables or virtual tables.
-		if !sqlbase.IsReservedID(tableID) && tableID != keys.VirtualDescriptorID {
+		if !sqlbase.IsReservedID(tableID) && !sqlbase.IsVirtualTable(tableID) {
 			r.mutationCounts[tableID] += 0
 		}
 	}
@@ -260,7 +259,7 @@ func (r *Refresher) NotifyMutation(
 		// for table_statistics itself).
 		return
 	}
-	if tableID == keys.VirtualDescriptorID {
+	if sqlbase.IsVirtualTable(tableID) {
 		// Don't try to create statistics for virtual tables.
 		return
 	}

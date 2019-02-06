@@ -321,8 +321,8 @@ ALTER TABLE delivery VALIDATE CONSTRAINT fk_item_ref_products
 query TTTTB
 SHOW CONSTRAINTS FROM delivery
 ----
-delivery  fk_item_ref_products  FOREIGN KEY  FOREIGN KEY (item) REFERENCES products (upc)                     false
-delivery  fk_order_ref_orders   FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment) true
+delivery  fk_item_ref_products  FOREIGN KEY  FOREIGN KEY (item) REFERENCES products (upc)                      false
+delivery  fk_order_ref_orders   FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment)  true
 
 statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
