@@ -2,14 +2,32 @@
 # join.opt contains exploration rules for the Join operator.
 # =============================================================================
 
+# We don't allow any of the logical join -> logical join rules (CommuteJoin,
+# CommuteLeftJoin, CommuteRightJoin, AssociateJoin) to operate on inputs with
+# no columns. This is because zero-column groups can occur multiple times in
+# the same normalized tree, and exploration can cause group collisions:
+#
+# Let A be the 0-column values node with two rows `VALUES (), ()`,
+# and B be the 0-column values node with three rows `VALUES (), (), ()`.
+#
+# Then consider the following query:
+#
+# (A JOIN B) UNION (B JOIN A)
+#
+# During build, we add `A JOIN B` and `B JOIN A` to *separate memo groups*.
+# Then, during exploration, we apply the `CommuteJoin` rule to transform `A
+# JOIN B` to `B JOIN A`. This attempts to get interned into the same group, but
+# the interner finds that `B JOIN A` already exists in a different group, and
+# panics.
+# TODO(justin): find a more long-term solution to this problem.
 
 # CommuteJoin creates a Join with the left and right inputs swapped. This is
 # useful for other rules that convert joins to other operators (like merge
 # join).
 [CommuteJoin, Explore]
 (InnerJoin | FullJoin
-  $left:*
-  $right:*
+  $left:* & ^(HasNoCols $left)
+  $right:* & ^(HasNoCols $right)
   $on:*
 )
 =>
@@ -18,8 +36,8 @@
 # CommuteLeftJoin creates a Join with the left and right inputs swapped.
 [CommuteLeftJoin, Explore]
 (LeftJoin
-  $left:*
-  $right:*
+  $left:* & ^(HasNoCols $left)
+  $right:* & ^(HasNoCols $left)
   $on:*
 )
 =>
@@ -28,8 +46,8 @@
 # CommuteRightJoin creates a Join with the left and right inputs swapped.
 [CommuteRightJoin, Explore]
 (RightJoin
-  $left:*
-  $right:*
+  $left:* & ^(HasNoCols $left)
+  $right:* & ^(HasNoCols $left)
   $on:*
 )
 =>
@@ -104,11 +122,11 @@
 [AssociateJoin, Explore]
 (InnerJoin
     $left:(InnerJoin
-        $innerLeft:*
-        $innerRight:*
+        $innerLeft:* & ^(HasNoCols $innerLeft)
+        $innerRight:* & ^(HasNoCols $innerRight)
         $innerOn:*
     )
-    $right:* & (ShouldReorderJoins $left $right)
+    $right:* & (ShouldReorderJoins $left $right) & ^(HasNoCols $right)
     $on:*
 )
 =>
