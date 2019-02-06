@@ -1025,6 +1025,10 @@ func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ScalarListExpr) op
 	if len(left) != len(right) {
 		panic("tuple length mismatch")
 	}
+	if len(left) == 0 {
+		// () = (), which is always true.
+		return memo.TrueSingleton
+	}
 
 	var result opt.ScalarExpr
 	for i := range left {
