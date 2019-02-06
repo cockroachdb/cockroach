@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // verifyRows verifies that the rows read with the given RowIterator match up
@@ -334,5 +338,516 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		if memoryMonitor.AllocBytes() != 0 {
 			t.Fatal("memory monitor reports unexpected usage")
 		}
+	})
+}
+
+// verifyOrdering checks whether the rows in src are ordered according to
+// ordering.
+func verifyOrdering(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	src SortableRowContainer,
+	types []sqlbase.ColumnType,
+	ordering sqlbase.ColumnOrdering,
+) error {
+	var datumAlloc sqlbase.DatumAlloc
+	var rowAlloc sqlbase.EncDatumRowAlloc
+	var prevRow sqlbase.EncDatumRow
+	i := src.NewIterator(ctx)
+	defer i.Close()
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		row, err := i.Row()
+		if err != nil {
+			return err
+		}
+		if prevRow != nil {
+			if cmp, err := prevRow.Compare(types, &datumAlloc, ordering, evalCtx, row); err != nil {
+				return err
+			} else if cmp > 0 {
+				return errors.Errorf("rows are not ordered as expected: %s was before %s", prevRow.String(types), row.String(types))
+			}
+		}
+		prevRow = rowAlloc.CopyRow(row)
+	}
+	return nil
+}
+
+func TestDiskBackedIndexedRowContainer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	tempEngine, err := engine.NewTempEngine(base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	memoryMonitor := mon.MakeMonitor(
+		"test-mem",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+
+	const numTestRuns = 10
+	const numRows = 10
+	const numCols = 2
+	rows := make([]sqlbase.EncDatumRow, numRows)
+	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
+	newOrdering := sqlbase.ColumnOrdering{{ColIdx: 1, Direction: encoding.Ascending}}
+
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer memoryMonitor.Stop(ctx)
+	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
+
+	// SpillingHalfway adds half of all rows into DiskBackedIndexedRowContainer,
+	// forces it to spill to disk, adds the second half into the container, and
+	// verifies that the rows are read correctly (along with the corresponding
+	// index).
+	t.Run("SpillingHalfway", func(t *testing.T) {
+		for i := 0; i < numTestRuns; i++ {
+			types := sqlbase.RandSortingColumnTypes(rng, numCols)
+			for i := 0; i < numRows; i++ {
+				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
+			}
+
+			func() {
+				rc := MakeDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
+				defer rc.Close(ctx)
+				mid := numRows / 2
+				for i := 0; i < mid; i++ {
+					if err := rc.AddRow(ctx, rows[i]); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if rc.Spilled() {
+					t.Fatal("unexpectedly using disk")
+				}
+				if err := rc.spillToDisk(ctx); err != nil {
+					t.Fatal(err)
+				}
+				if !rc.Spilled() {
+					t.Fatal("unexpectedly using memory")
+				}
+				for i := mid; i < numRows; i++ {
+					if err := rc.AddRow(ctx, rows[i]); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				// Check equality of the row we wrote and the row we read.
+				for i := 0; i < numRows; i++ {
+					readRow, err := rc.GetRow(ctx, i)
+					if err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					writtenRow := rows[readRow.GetIdx()]
+					for col := range writtenRow {
+						datum, err := readRow.GetDatum(col)
+						if err != nil {
+							t.Fatalf("unexpected error: %v", err)
+						}
+						if cmp := datum.Compare(&evalCtx, writtenRow[col].Datum); cmp != 0 {
+							t.Fatalf("read row is not equal to written one")
+						}
+					}
+				}
+			}()
+		}
+	})
+
+	// TestGetRow adds all rows into DiskBackedIndexedRowContainer, sorts them,
+	// and checks that both the index and the row are what we expect by GetRow()
+	// to be returned. Then, it spills to disk and does the same check again.
+	t.Run("TestGetRow", func(t *testing.T) {
+		for i := 0; i < numTestRuns; i++ {
+			sortedRows := indexedRows{rows: make([]IndexedRow, numRows)}
+			types := sqlbase.RandSortingColumnTypes(rng, numCols)
+			for i := 0; i < numRows; i++ {
+				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
+				sortedRows.rows[i] = IndexedRow{Idx: i, Row: rows[i]}
+			}
+
+			sorter := sorter{evalCtx: &evalCtx, rows: sortedRows, ordering: ordering}
+			sort.Sort(&sorter)
+			if sorter.err != nil {
+				t.Fatal(sorter.err)
+			}
+
+			func() {
+				rc := MakeDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
+				defer rc.Close(ctx)
+				for _, row := range rows {
+					if err := rc.AddRow(ctx, row); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if rc.Spilled() {
+					t.Fatal("unexpectedly using disk")
+				}
+				rc.Sort(ctx)
+
+				// Check that GetRow returns the row we expect at each position.
+				for i := 0; i < numRows; i++ {
+					readRow, err := rc.GetRow(ctx, i)
+					if err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					expectedRow := sortedRows.rows[i]
+					if readRow.GetIdx() != expectedRow.GetIdx() {
+						t.Fatalf("read row has different idx that what we expect")
+					}
+					for col, expectedDatum := range expectedRow.Row {
+						readDatum, err := readRow.GetDatum(col)
+						if err != nil {
+							t.Fatalf("unexpected error: %v", err)
+						}
+						if cmp := readDatum.Compare(&evalCtx, expectedDatum.Datum); cmp != 0 {
+							t.Fatalf("read row is not equal to expected one")
+						}
+					}
+				}
+				if err := rc.spillToDisk(ctx); err != nil {
+					t.Fatal(err)
+				}
+				if !rc.Spilled() {
+					t.Fatal("unexpectedly using memory")
+				}
+
+				// Check that GetRow returns the row we expect at each position.
+				for i := 0; i < numRows; i++ {
+					readRow, err := rc.GetRow(ctx, i)
+					if err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					expectedRow := sortedRows.rows[i]
+					if readRow.GetIdx() != expectedRow.GetIdx() {
+						t.Fatalf("read row has different idx that what we expect")
+					}
+					for col, expectedDatum := range expectedRow.Row {
+						readDatum, err := readRow.GetDatum(col)
+						if err != nil {
+							t.Fatalf("unexpected error: %v", err)
+						}
+						if cmp := readDatum.Compare(&evalCtx, expectedDatum.Datum); cmp != 0 {
+							t.Fatalf("read row is not equal to expected one")
+						}
+					}
+				}
+			}()
+		}
+	})
+
+	// ReorderingInMemory initializes a DiskBackedIndexedRowContainer with one
+	// ordering, adds all rows to it, sorts it and makes sure that the rows are
+	// sorted as expected. Then, it reorders the container to a different
+	// ordering, sorts it and verifies that the rows are in the order we expect.
+	// Only in-memory containers should be used.
+	t.Run("ReorderingInMemory", func(t *testing.T) {
+		for i := 0; i < numTestRuns; i++ {
+			types := sqlbase.RandSortingColumnTypes(rng, numCols)
+			for i := 0; i < numRows; i++ {
+				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
+			}
+			storedTypes := make([]sqlbase.ColumnType, len(types)+1)
+			copy(storedTypes, types)
+			// The container will add an extra int column for indices.
+			storedTypes[len(types)] = sqlbase.OneIntCol[0]
+
+			func() {
+				rc := MakeDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
+				defer rc.Close(ctx)
+				for i := 0; i < numRows; i++ {
+					if err := rc.AddRow(ctx, rows[i]); err != nil {
+						t.Fatal(err)
+					}
+				}
+				rc.Sort(ctx)
+				if err := verifyOrdering(ctx, &evalCtx, rc, storedTypes, ordering); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := rc.Reorder(ctx, newOrdering); err != nil {
+					t.Fatal(err)
+				}
+				rc.Sort(ctx)
+				if err := verifyOrdering(ctx, &evalCtx, rc, storedTypes, newOrdering); err != nil {
+					t.Fatal(err)
+				}
+				if rc.Spilled() {
+					t.Fatal("unexpectedly using disk")
+				}
+			}()
+		}
+	})
+
+	// ReorderingOnDisk is the same as ReorderingInMemory except here the
+	// container is forced to spill to disk right after initialization.
+	t.Run("ReorderingOnDisk", func(t *testing.T) {
+		for i := 0; i < numTestRuns; i++ {
+			types := sqlbase.RandSortingColumnTypes(rng, numCols)
+			for i := 0; i < numRows; i++ {
+				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
+			}
+			storedTypes := make([]sqlbase.ColumnType, len(types)+1)
+			copy(storedTypes, types)
+			// The container will add an extra int column for indices.
+			storedTypes[len(types)] = sqlbase.OneIntCol[0]
+
+			func() {
+				d := MakeDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
+				defer d.Close(ctx)
+				if err := d.spillToDisk(ctx); err != nil {
+					t.Fatal(err)
+				}
+				for i := 0; i < numRows; i++ {
+					if err := d.AddRow(ctx, rows[i]); err != nil {
+						t.Fatal(err)
+					}
+				}
+				d.Sort(ctx)
+				if err := verifyOrdering(ctx, &evalCtx, d, storedTypes, ordering); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := d.Reorder(ctx, newOrdering); err != nil {
+					t.Fatal(err)
+				}
+				d.Sort(ctx)
+				if err := verifyOrdering(ctx, &evalCtx, d, storedTypes, newOrdering); err != nil {
+					t.Fatal(err)
+				}
+				if !d.UsingDisk() {
+					t.Fatal("unexpectedly using memory")
+				}
+			}()
+		}
+	})
+}
+
+// indexedRows are rows with the corresponding indices.
+type indexedRows struct {
+	rows []IndexedRow
+}
+
+// Len implements tree.IndexedRows interface.
+func (ir indexedRows) Len() int {
+	return len(ir.rows)
+}
+
+// TODO(yuzefovich): this is a duplicate of partitionSorter from windower.go.
+// There are possibly couple of other duplicates as well in other files, so we
+// should refactor it and probably extract the code into a new package.
+type sorter struct {
+	evalCtx  *tree.EvalContext
+	rows     indexedRows
+	ordering sqlbase.ColumnOrdering
+	err      error
+}
+
+func (n *sorter) Len() int { return n.rows.Len() }
+
+func (n *sorter) Swap(i, j int) {
+	n.rows.rows[i], n.rows.rows[j] = n.rows.rows[j], n.rows.rows[i]
+}
+func (n *sorter) Less(i, j int) bool {
+	if n.err != nil {
+		// An error occurred in previous calls to Less(). We want to be done with
+		// sorting and to propagate that error to the caller of Sort().
+		return false
+	}
+	cmp, err := n.Compare(i, j)
+	if err != nil {
+		n.err = err
+		return false
+	}
+	return cmp < 0
+}
+
+// sorter implements the tree.PeerGroupChecker interface.
+func (n *sorter) InSameGroup(i, j int) (bool, error) {
+	cmp, err := n.Compare(i, j)
+	return cmp == 0, err
+}
+
+func (n *sorter) Compare(i, j int) (int, error) {
+	ra, rb := n.rows.rows[i], n.rows.rows[j]
+	for _, o := range n.ordering {
+		da, err := ra.GetDatum(o.ColIdx)
+		if err != nil {
+			return 0, err
+		}
+		db, err := rb.GetDatum(o.ColIdx)
+		if err != nil {
+			return 0, err
+		}
+		if c := da.Compare(n.evalCtx, db); c != 0 {
+			if o.Direction != encoding.Ascending {
+				return -c, nil
+			}
+			return c, nil
+		}
+	}
+	return 0, nil
+}
+
+// generateAccessPattern populates int slices with position of rows to be
+// accessed by GetRow(). The goal is to simulate an access pattern that would
+// resemble a real one that might occur while window functions are computed.
+func generateAccessPattern(numRows int) []int {
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	const avgPeerGroupSize = 100
+	accessPattern := make([]int, 0, 2*numRows)
+	nextPeerGroupStart := 0
+	for {
+		peerGroupSize := int(rng.NormFloat64()*avgPeerGroupSize) + avgPeerGroupSize
+		if peerGroupSize < 1 {
+			peerGroupSize = 1
+		}
+		if nextPeerGroupStart+peerGroupSize > numRows {
+			peerGroupSize = numRows - nextPeerGroupStart
+		}
+		accessPattern = append(accessPattern, nextPeerGroupStart)
+		for j := 1; j < peerGroupSize; j++ {
+			accessPattern = append(accessPattern, accessPattern[len(accessPattern)-1]+1)
+		}
+		for j := 0; j < peerGroupSize; j++ {
+			accessPattern = append(accessPattern, accessPattern[len(accessPattern)-peerGroupSize])
+		}
+		nextPeerGroupStart += peerGroupSize
+		if nextPeerGroupStart == numRows {
+			return accessPattern
+		}
+	}
+}
+
+func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
+	const numCols = 1
+	const numRows = 100000
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	tempEngine, err := engine.NewTempEngine(base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	memoryMonitor := mon.MakeMonitor(
+		"test-mem",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	rows := sqlbase.MakeIntRows(numRows, numCols)
+	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer memoryMonitor.Stop(ctx)
+	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
+
+	accessPattern := generateAccessPattern(numRows)
+
+	b.Run("InMemory", func(b *testing.B) {
+		rc := MakeDiskBackedIndexedRowContainer(nil, sqlbase.OneIntCol, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
+		defer rc.Close(ctx)
+		for i := 0; i < len(rows); i++ {
+			if err := rc.AddRow(ctx, rows[i]); err != nil {
+				b.Fatal(err)
+			}
+		}
+		if rc.Spilled() {
+			b.Fatal("unexpectedly using disk")
+		}
+		b.SetBytes(int64(8 * numCols))
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			pos := accessPattern[i%len(accessPattern)]
+			if _, err := rc.GetRow(ctx, pos); err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
+
+	b.Run("OnDiskWithCache", func(b *testing.B) {
+		rc := MakeDiskBackedIndexedRowContainer(nil, sqlbase.OneIntCol, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
+		defer rc.Close(ctx)
+		if err := rc.spillToDisk(ctx); err != nil {
+			b.Fatal(err)
+		}
+		for i := 0; i < len(rows); i++ {
+			if err := rc.AddRow(ctx, rows[i]); err != nil {
+				b.Fatal(err)
+			}
+		}
+		if !rc.Spilled() {
+			b.Fatal("unexpectedly using memory")
+		}
+		b.SetBytes(int64(8 * numCols))
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			pos := accessPattern[i%len(accessPattern)]
+			if _, err := rc.GetRow(ctx, pos); err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
+
+	b.Run("OnDiskWithoutCache", func(b *testing.B) {
+		rc := MakeDiskBackedIndexedRowContainer(nil, sqlbase.OneIntCol, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
+		defer rc.Close(ctx)
+		if err := rc.spillToDisk(ctx); err != nil {
+			b.Fatal(err)
+		}
+		for i := 0; i < len(rows); i++ {
+			if err := rc.AddRow(ctx, rows[i]); err != nil {
+				b.Fatal(err)
+			}
+		}
+		if !rc.Spilled() {
+			b.Fatal("unexpectedly using memory")
+		}
+		b.SetBytes(int64(8 * numCols))
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			pos := accessPattern[i%len(accessPattern)]
+			_ = rc.getRowWithoutCache(ctx, pos)
+		}
+		b.StopTimer()
 	})
 }
