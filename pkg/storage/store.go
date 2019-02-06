@@ -104,6 +104,10 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
 
+var logSSTInfoTicks = envutil.EnvOrDefaultInt(
+	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60,
+)
+
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	"kv.bulk_io_write.max_rate",
@@ -4351,7 +4355,7 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		readAmp := sstables.ReadAmplification()
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 		// Log this metric infrequently.
-		if tick%60 == 0 /* every 10m */ {
+		if tick%logSSTInfoTicks == 0 /* every 10m */ {
 			log.Infof(ctx, "sstables (read amplification = %d):\n%s", readAmp, sstables)
 			log.Infof(ctx, "%sestimated_pending_compaction_bytes: %s",
 				rocksdb.GetCompactionStats(), humanizeutil.IBytes(stats.PendingCompactionBytesEstimate))

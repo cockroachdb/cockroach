@@ -11,7 +11,6 @@ package storageccl
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -122,13 +121,15 @@ func makeKeyRewriterPrefixIgnoringInterleaved(tableID sqlbase.ID, indexID sqlbas
 	return key
 }
 
-// RewriteKey modifies key (possibly in place), changing all table IDs to
-// their new value, including any interleaved table children and prefix
-// ends. This function works by inspecting the key for table and index IDs,
-// then uses the corresponding table and index descriptors to determine if
-// interleaved data is present and if it is, to find the next prefix of an
-// interleaved child, then calls itself recursively until all interleaved
-// children have been rekeyed.
+// RewriteKey modifies key (possibly in place), changing all table IDs to their
+// new value, including any interleaved table children and prefix ends. This
+// function works by inspecting the key for table and index IDs, then uses the
+// corresponding table and index descriptors to determine if interleaved data is
+// present and if it is, to find the next prefix of an interleaved child, then
+// calls itself recursively until all interleaved children have been rekeyed. If
+// it encounters a table ID for which it does not have a configured rewrite, it
+// returns the prefix of the key that was rewritten key. The returned boolean
+// is true if and only if all of the table IDs found in the key were rewritten.
 func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
@@ -137,7 +138,7 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	// Rewrite the first table ID.
 	key, ok := kr.prefixes.rewriteKey(key)
 	if !ok {
-		return key, false, nil
+		return nil, false, nil
 	}
 	desc := kr.descs[sqlbase.ID(tableID)]
 	if desc == nil {
@@ -188,39 +189,8 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	}
 	if !ok {
 		// The interleaved child was not rewritten, skip this row.
-		return key, false, nil
+		return prefix, false, nil
 	}
 	key = append(prefix, k...)
 	return key, true, nil
-}
-
-// RewriteSpan returns a new span with both Key and EndKey rewritten using
-// RewriteKey. Span start keys for the primary index will be rewritten to
-// contain just the table ID. That is, /Table/51/1 -> /Table/51. An error
-// is returned if either was not matched for rewrite.
-func (kr *KeyRewriter) RewriteSpan(span roachpb.Span) (roachpb.Span, error) {
-	newKey, ok, err := kr.RewriteKey(append([]byte(nil), span.Key...))
-	if err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
-	}
-	if !ok {
-		return roachpb.Span{}, errors.Errorf("could not rewrite key: %s", span.Key)
-	}
-	// Modify all spans that begin at the primary index to instead begin at the
-	// start of the table. That is, change a span start key from /Table/51/1 to
-	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
-	// will be created.
-	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
-	} else if idx == 1 && len(b) == 0 {
-		newKey = keys.MakeTablePrefix(uint32(id))
-	}
-	newEndKey, ok, err := kr.RewriteKey(append([]byte(nil), span.EndKey...))
-	if err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.EndKey)
-	}
-	if !ok {
-		return roachpb.Span{}, errors.Errorf("could not rewrite key: %s", span.EndKey)
-	}
-	return roachpb.Span{Key: newKey, EndKey: newEndKey}, nil
 }
