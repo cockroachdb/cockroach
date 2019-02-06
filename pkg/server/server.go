@@ -1783,6 +1783,7 @@ func (s *Server) bootstrapVersion() roachpb.Version {
 func (s *Server) bootstrapCluster(
 	ctx context.Context, bootstrapVersion roachpb.Version,
 ) error {
+	log.Infof(ctx, "!!! bootstrapCluster: %s", bootstrapVersion)
 	// !!!
 	// if s.cfg.TestingKnobs.Store != nil {
 	//   if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {

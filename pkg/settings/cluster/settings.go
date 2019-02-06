@@ -16,6 +16,7 @@ package cluster
 
 import (
 	"context"
+	"runtime/debug"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -295,7 +296,7 @@ func MakeClusterSettings() *Settings {
 			s.Version.cb(clusterVersion)
 		}
 		log.Infof(context.TODO(), "!!! version.OnChange: %s", clusterVersion)
-		// !!! debug.PrintStack()
+		debug.PrintStack()
 		s.Version.baseVersion.Store(&clusterVersion)
 	})
 

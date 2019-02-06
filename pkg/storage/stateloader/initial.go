@@ -76,10 +76,8 @@ func WriteInitialReplicaState(
 	// the AppliedStateKey then we can just straight to using it without ever
 	// writing the legacy stats and index keys.
 	if !activeVersion.Less(cluster.VersionByKey(cluster.VersionRangeAppliedStateKey)) {
-		log.Infof(ctx, "!!! initial true")
 		s.UsingAppliedStateKey = true
 	} else {
-		log.Infof(ctx, "!!! initial false")
 		if err := engine.AccountForLegacyMVCCStats(s.Stats, desc.RangeID); err != nil {
 			return enginepb.MVCCStats{}, err
 		}

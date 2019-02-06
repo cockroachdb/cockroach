@@ -343,7 +343,8 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	}
 }
 
-// !!! I don't understand what this is testing. I think it should go away.
+// // !!! I don't understand what this is testing. I think it should go away.
+// I've sent a different PR simplifying it.
 // func TestClusterVersionBootstrapStrict(t *testing.T) {
 //   defer leaktest.AfterTest(t)()
 //   ctx := context.Background()
@@ -383,7 +384,8 @@ func TestClusterVersionUpgrade(t *testing.T) {
 //     }()
 //   }
 // }
-//
+
+// // !!!
 // func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 //   defer leaktest.AfterTest(t)()
 //   ctx := context.Background()
@@ -438,7 +440,8 @@ func TestClusterVersionUpgrade(t *testing.T) {
 //     })
 //   }
 // }
-//
+
+// !!!
 // func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 //   defer leaktest.AfterTest(t)()
 //   ctx := context.Background()
