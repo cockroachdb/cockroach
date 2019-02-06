@@ -17,12 +17,14 @@ package distsqlrun
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -125,7 +127,6 @@ func (ib *indexBackfiller) runChunk(
 	}
 	prepTime := timeutil.Now().Sub(start)
 
-	// TODO(dt): Skip bulk-adder if there are too few entries for SST overhead.
 	enabled := backfill.BulkWriteIndex.Get(&ib.flowCtx.Settings.SV)
 	if enabled {
 		start := timeutil.Now()
@@ -135,13 +136,36 @@ func (ib *indexBackfiller) runChunk(
 		sortTime := timeutil.Now().Sub(start)
 
 		start = timeutil.Now()
-		adder, err := ib.flowCtx.BulkAdder(ctx, ib.flowCtx.ClientDB, 32<<20, readAsOf)
+		const maxFlushBytes = 32 << 20
+		flushBytes := int64(len(entries)) * 1000
+		if flushBytes > maxFlushBytes {
+			flushBytes = maxFlushBytes
+		}
+		adder, err := ib.flowCtx.BulkAdder(ctx, ib.flowCtx.ClientDB, flushBytes, readAsOf)
 		if err != nil {
 			return nil, err
 		}
 		defer adder.Close()
+		containsInvertedIndex := ib.ContainsInvertedIndex()
 		for i := range entries {
 			if err := adder.Add(ctx, entries[i].Key, entries[i].Value.RawBytes); err != nil {
+				// Detect a duplicate within the SST being constructed. This is an
+				// insufficient method for unique constraint enforcement and the index
+				// has to be validated after construction.
+				if strings.Contains(err.Error(), "Keys must be added in order") {
+					if containsInvertedIndex {
+						// Depend on post index backfill validation to catch any errors.
+						continue
+					}
+					desc, err := ib.desc.MakeFirstMutationPublic()
+					immutable := sqlbase.NewImmutableTableDescriptor(*desc.TableDesc())
+					if err != nil {
+						return nil, err
+					}
+					entry := entries[i]
+					return nil, row.NewUniquenessConstraintViolationError(
+						ctx, immutable, entry.Key, &entry.Value)
+				}
 				return nil, err
 			}
 		}
@@ -151,9 +175,11 @@ func (ib *indexBackfiller) runChunk(
 			return nil, err
 		}
 
-		log.Infof(ctx, "index backfill stats: entries %d, prepare %+v, sort %+v, add-sst %+v",
-			len(entries), prepTime, sortTime, addTime)
-
+		// Don't log perf stats in tests with small indexes.
+		if len(entries) > 1000 {
+			log.Infof(ctx, "index backfill stats: entries %d, prepare %+v, sort %+v, add-sst %+v",
+				len(entries), prepTime, sortTime, addTime)
+		}
 		return key, nil
 	}
 	retried := false
