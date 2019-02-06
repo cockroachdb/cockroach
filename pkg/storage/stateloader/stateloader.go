@@ -105,7 +105,7 @@ func (rsl StateLoader) Load(
 
 	// The truncated state should not be optional (i.e. the pointer is
 	// pointless), but it is and the migration is not worth it.
-	truncState, err := rsl.LoadLegacyRaftTruncatedState(ctx, reader)
+	truncState, _, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return storagepb.ReplicaState{}, err
 	}
@@ -126,7 +126,10 @@ func (rsl StateLoader) Load(
 // missing whenever save is called. Optional values should be reserved
 // strictly for use in Result. Do before merge.
 func (rsl StateLoader) Save(
-	ctx context.Context, eng engine.ReadWriter, state storagepb.ReplicaState,
+	ctx context.Context,
+	eng engine.ReadWriter,
+	state storagepb.ReplicaState,
+	useLegacyTruncatedState bool, // see VersionUnreplicatedRaftTruncatedState
 ) (enginepb.MVCCStats, error) {
 	ms := state.Stats
 	if err := rsl.SetLease(ctx, eng, ms, *state.Lease); err != nil {
@@ -138,8 +141,14 @@ func (rsl StateLoader) Save(
 	if err := rsl.SetTxnSpanGCThreshold(ctx, eng, ms, state.TxnSpanGCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := rsl.SetLegacyRaftTruncatedState(ctx, eng, ms, state.TruncatedState); err != nil {
-		return enginepb.MVCCStats{}, err
+	if useLegacyTruncatedState {
+		if err := rsl.SetLegacyRaftTruncatedState(ctx, eng, ms, state.TruncatedState); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+	} else {
+		if err := rsl.SetRaftTruncatedState(ctx, eng, state.TruncatedState); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
 	}
 	if state.UsingAppliedStateKey {
 		rai, lai := state.RaftAppliedIndex, state.LeaseAppliedIndex
@@ -416,19 +425,6 @@ func (rsl StateLoader) SetMVCCStats(
 	return rsl.writeLegacyMVCCStatsInternal(ctx, eng, newMS)
 }
 
-// LoadLegacyRaftTruncatedState loads the truncated state.
-func (rsl StateLoader) LoadLegacyRaftTruncatedState(
-	ctx context.Context, reader engine.Reader,
-) (roachpb.RaftTruncatedState, error) {
-	var truncState roachpb.RaftTruncatedState
-	if _, err := engine.MVCCGetProto(
-		ctx, reader, rsl.RaftTruncatedStateLegacyKey(), hlc.Timestamp{}, &truncState, engine.MVCCGetOptions{},
-	); err != nil {
-		return roachpb.RaftTruncatedState{}, err
-	}
-	return truncState, nil
-}
-
 // SetLegacyRaftTruncatedState overwrites the truncated state.
 func (rsl StateLoader) SetLegacyRaftTruncatedState(
 	ctx context.Context,
@@ -508,13 +504,55 @@ func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader engine.Reader) 
 	if lastIndex == 0 {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away.
-		lastEnt, err := rsl.LoadLegacyRaftTruncatedState(ctx, reader)
+		lastEnt, _, err := rsl.LoadRaftTruncatedState(ctx, reader)
 		if err != nil {
 			return 0, err
 		}
 		lastIndex = lastEnt.Index
 	}
 	return lastIndex, nil
+}
+
+// LoadRaftTruncatedState loads the truncated state. The returned boolean returns
+// whether the result was read from the TruncatedStateLegacyKey. If both keys
+// are missing, it is false which is used to migrate into the unreplicated key.
+//
+// See VersionUnreplicatedRaftTruncatedState.
+func (rsl StateLoader) LoadRaftTruncatedState(
+	ctx context.Context, reader engine.Reader,
+) (_ roachpb.RaftTruncatedState, isLegacy bool, _ error) {
+	var truncState roachpb.RaftTruncatedState
+	if found, err := engine.MVCCGetProto(
+		ctx, reader, rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState, engine.MVCCGetOptions{},
+	); err != nil {
+		return roachpb.RaftTruncatedState{}, false, err
+	} else if found {
+		return truncState, false, nil
+	}
+
+	// If the "new" truncated state isn't there (yet), fall back to the legacy
+	// truncated state. The next log truncation will atomically rewrite them
+	// assuming the cluster version has advanced sufficiently.
+	//
+	// See VersionUnreplicatedRaftTruncatedState.
+	legacyFound, err := engine.MVCCGetProto(
+		ctx, reader, rsl.RaftTruncatedStateLegacyKey(), hlc.Timestamp{}, &truncState, engine.MVCCGetOptions{},
+	)
+	if err != nil {
+		return roachpb.RaftTruncatedState{}, false, err
+	}
+	return truncState, legacyFound, nil
+}
+
+// SetRaftTruncatedState overwrites the truncated state.
+func (rsl StateLoader) SetRaftTruncatedState(
+	ctx context.Context, eng engine.ReadWriter, truncState *roachpb.RaftTruncatedState,
+) error {
+	if (*truncState == roachpb.RaftTruncatedState{}) {
+		return errors.New("cannot persist empty RaftTruncatedState")
+	}
+	return engine.MVCCPutProto(ctx, eng, nil, /* ms */
+		rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, nil, truncState)
 }
 
 // LoadReplicaDestroyedError loads the replica destroyed error for the specified
@@ -575,7 +613,7 @@ func (rsl StateLoader) SynthesizeRaftState(ctx context.Context, eng engine.ReadW
 	if err != nil {
 		return err
 	}
-	truncState, err := rsl.LoadLegacyRaftTruncatedState(ctx, eng)
+	truncState, _, err := rsl.LoadRaftTruncatedState(ctx, eng)
 	if err != nil {
 		return err
 	}

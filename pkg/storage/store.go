@@ -2175,7 +2175,15 @@ func (s *Store) WriteInitialData(
 			ctx, batch,
 			enginepb.MVCCStats{},
 			*desc,
-			lease, hlc.Timestamp{}, hlc.Timestamp{}, bootstrapVersion)
+			lease,
+			hlc.Timestamp{},
+			hlc.Timestamp{},
+			bootstrapVersion,
+			// See the cluster version for more details. We're basically saying that if the cluster
+			// is bootstrapped at a version that uses the unreplicated truncated state, initialize
+			// it with such a truncated state.
+			bootstrapVersion.Less(cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState)),
+		)
 		if err != nil {
 			return err
 		}

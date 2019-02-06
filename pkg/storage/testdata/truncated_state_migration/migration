@@ -1,0 +1,25 @@
+# Migrating after VersionUnreplicatedRaftTruncatedState was enabled. During the
+# migration, no TruncatedState is on disk, but we write the new, unreplicated,
+# one (note the /u/ in the key)
+
+prev index=100 term=9
+----
+
+handle index=150 term=9
+----
+apply: true
+/Local/RangeID/12/u/RaftTruncatedState -> index=150 term=9
+
+# Simulate another truncation that moves forward.
+
+handle index=170 term=9
+----
+apply: true
+/Local/RangeID/12/u/RaftTruncatedState -> index=170 term=9
+
+# ... and one that moves backwards and should not take effect.
+
+handle index=150 term=9
+----
+apply: false
+/Local/RangeID/12/u/RaftTruncatedState -> index=170 term=9

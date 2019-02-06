@@ -23,16 +23,20 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 type testClusterWithHelpers struct {
@@ -186,6 +190,146 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 				}
 			}
 			return nil
+		})
+	}
+}
+
+func TestClusterVersionUnreplicatedRaftTruncatedState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	dir, finish := testutils.TempDir(t)
+	defer finish()
+
+	oldVersion := cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState - 1)
+	oldVersionS := oldVersion.String()
+	newVersionS := cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState).String()
+	_ = newVersionS
+
+	// Four node cluster in which two nodes support newVersion (i.e. would in
+	// principle upgrade to it) but one doesn't, so the cluster stays at oldVersion.
+	versions := [][2]string{
+		{oldVersionS, newVersionS},
+		{oldVersionS, newVersionS},
+		{oldVersionS, newVersionS},
+
+		{oldVersionS, newVersionS},
+	}
+
+	bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
+
+	knobs := base.TestingKnobs{
+		Store: &storage.StoreTestingKnobs{
+			BootstrapVersion: &bootstrapVersion,
+		},
+		Server: &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: 1,
+		},
+	}
+
+	tc := setupMixedCluster(t, knobs, versions, dir)
+	defer tc.TestCluster.Stopper().Stop(ctx)
+
+	if _, err := tc.ServerConn(0).Exec(`
+CREATE TABLE kv (id INT PRIMARY KEY, v INT);
+ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	scatter := func() {
+		return // HACK
+		t.Helper()
+		if _, err := tc.ServerConn(0).Exec(
+			`ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i%$1+1], i FROM generate_series(0, 9) AS g(i)`, len(versions),
+		); err != nil {
+			t.Log(err)
+		}
+	}
+
+	var n int
+	insert := func() {
+		t.Helper()
+		n++
+		// Write only to a subset of our ranges to guarantee log truncations there.
+		_, err := tc.ServerConn(0).Exec(`UPSERT INTO kv VALUES($1, $2)`, n%2, n)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for i := 0; i < 500; i++ {
+		insert()
+	}
+	scatter()
+
+	for _, server := range tc.Servers {
+		assert.NoError(t, server.GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+			s.VisitReplicas(func(r *storage.Replica) bool {
+				key := keys.RaftTruncatedStateKey(r.RangeID)
+				var truncState roachpb.RaftTruncatedState
+				found, err := engine.MVCCGetProto(
+					context.Background(), s.Engine(), key,
+					hlc.Timestamp{}, &truncState, engine.MVCCGetOptions{},
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if found {
+					t.Errorf("unexpectedly found unreplicated TruncatedState at %s", key)
+				}
+				return true // want more
+			})
+			return nil
+		}))
+	}
+
+	if v := tc.getVersionFromSelect(0); v != oldVersionS {
+		t.Fatalf("running %s, wanted %s", v, oldVersionS)
+	}
+
+	assert.NoError(t, tc.setVersion(0, newVersionS))
+	for i := 0; i < 500; i++ {
+		insert()
+	}
+	scatter()
+
+	for _, server := range tc.Servers {
+		testutils.SucceedsSoon(t, func() error {
+			err := server.GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+				var err error
+				s.VisitReplicas(func(r *storage.Replica) bool {
+					snap := s.Engine().NewSnapshot()
+					defer snap.Close()
+
+					keyLegacy := keys.RaftTruncatedStateLegacyKey(r.RangeID)
+					keyUnreplicated := keys.RaftTruncatedStateKey(r.RangeID)
+
+					if found, err := engine.MVCCGetProto(
+						context.Background(), snap, keyLegacy,
+						hlc.Timestamp{}, nil, engine.MVCCGetOptions{},
+					); err != nil {
+						t.Fatal(err)
+					} else if found {
+						err = errors.Errorf("%s: unexpectedly found legacy TruncatedState at %s", r, keyLegacy)
+						return false // done
+					}
+
+					if found, err := engine.MVCCGetProto(
+						context.Background(), snap, keyUnreplicated,
+						hlc.Timestamp{}, nil, engine.MVCCGetOptions{},
+					); err != nil {
+						t.Fatal(err)
+					} else if !found {
+						// We can't have neither of the keys present.
+						t.Fatalf("%s: unexpectedly did not find unreplicated TruncatedState at %s", r, keyUnreplicated)
+					}
+
+					return true // want more
+				})
+				return err
+			})
+			return err
 		})
 	}
 }
