@@ -428,7 +428,7 @@ BEGIN
 statement count 3
 CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 10)
 
-statement error pgcode 23505 duplicate key value \(quantity\)=\(10\) violates unique constraint "bar"
+statement error pgcode 23505 violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON shopping (quantity)
 
 statement ok
@@ -707,7 +707,7 @@ CREATE UNIQUE INDEX i_idx ON customers (i)
 statement ok
 CREATE UNIQUE INDEX n_idx ON customers (n)
 
-statement error pq: duplicate key value \(i\)=\(5\) violates unique constraint "i_idx"
+statement error violates unique constraint "i_idx"
 COMMIT
 
 query TTBTTTB

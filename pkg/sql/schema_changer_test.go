@@ -914,7 +914,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	if _, err := sqlDB.Exec(`
 CREATE UNIQUE INDEX vidx ON t.test (v);
-`); !testutils.IsError(err, `duplicate key value \(v\)=\(1\) violates unique constraint "vidx"`) {
+`); !testutils.IsError(err, `violates unique constraint "vidx"`) {
 		t.Fatalf("got err=%s", err)
 	}
 
@@ -1365,6 +1365,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	var upTableVersion func()
+	const maxValue = 2000
 	currChunk := 0
 	var numBackfills uint32
 	seenSpan := roachpb.Span{}
@@ -1378,6 +1379,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 			// synchronous path to run schema changes.
 			AsyncExecNotification:   asyncSchemaChangerDisabled,
 			WriteCheckpointInterval: time.Nanosecond,
+			BackfillChunkSize:       maxValue / 10,
 		},
 		DistSQL: &distsqlrun.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -1437,7 +1439,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Bulk insert.
-	maxValue := 2000
 	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
@@ -1520,9 +1521,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	// Add a row with a duplicate value for v
+	// Add a row with a duplicate value=0 which is the same
+	// value as for the key maxValue.
 	if _, err := sqlDB.Exec(
-		`INSERT INTO t.test VALUES ($1, $2)`, maxValue+1, maxValue,
+		`INSERT INTO t.test VALUES ($1, $2)`, maxValue+1, 0,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1530,7 +1532,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// A schema change that violates integrity constraints.
 	if _, err := sqlDB.Exec(
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
-	); !testutils.IsError(err, "violates unique constraint") {
+	); !testutils.IsError(err, `violates unique constraint "foo"`) {
 		t.Fatal(err)
 	}
 
@@ -1567,8 +1569,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// There is still some garbage index data that needs to be purged. All the
-	// rows from k = 0 to k = maxValue have index values. The k = maxValue + 1
-	// row with the conflict doesn't contain an index value.
+	// rows from k = 0 to k = chunkSize - 1 have index values.
 	numGarbageValues := chunkSize
 
 	ctx := context.TODO()
@@ -3987,6 +3988,9 @@ func TestIndexBackfillValidation(t *testing.T) {
 	var db *client.DB
 	var tableDesc *sqlbase.TableDescriptor
 	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: maxValue / 5,
+		},
 		DistSQL: &distsqlrun.TestingKnobs{
 			RunAfterBackfillChunk: func() {
 				count := atomic.AddInt64(&backfillCount, 1)
@@ -4033,7 +4037,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Start schema change that eventually runs a backfill.
 	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); !testutils.IsError(
-		err, fmt.Sprintf("uniqueness violation: %d entries, expected %d", maxValue, maxValue+1),
+		err, fmt.Sprintf("%d entries, expected %d violates unique constraint", maxValue, maxValue+1),
 	) {
 		t.Fatal(err)
 	}
