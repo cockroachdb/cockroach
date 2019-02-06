@@ -1158,7 +1158,10 @@ func TestInitialPartitioning(t *testing.T) {
 	// This test configures many sub-tests and is too slow to run under nightly
 	// race stress.
 	if testutils.NightlyStress() && util.RaceEnabled {
-		t.Skip()
+		t.Skip("too big for nightly stress race")
+	}
+	if testing.Short() {
+		t.Skip("short")
 	}
 
 	rng, _ := randutil.NewPseudoRand()
