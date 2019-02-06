@@ -50,14 +50,21 @@ func registerYCSB(r *registry) {
 			// See TODOs in workload/ycsb/ycsb.go.
 			continue
 		}
-
-		wl := wl
-		r.Add(testSpec{
-			Name:    fmt.Sprintf("ycsb/%s/nodes=3", wl),
-			Cluster: makeClusterSpec(4, cpu(8)),
-			Run: func(ctx context.Context, t *test, c *cluster) {
-				runYCSB(ctx, t, c, wl)
-			},
-		})
+		for _, cpus := range []int{8, 32} {
+			wl := wl
+			var name string
+			if cpus == 8 { // support legacy test name which didn't include cpu
+				name = fmt.Sprintf("ycsb/%s/nodes=3", wl)
+			} else {
+				name = fmt.Sprintf("ycsb/%s/nodes=3/cpu=%d", wl, cpus)
+			}
+			r.Add(testSpec{
+				Name:    name,
+				Cluster: makeClusterSpec(4, cpu(cpus)),
+				Run: func(ctx context.Context, t *test, c *cluster) {
+					runYCSB(ctx, t, c, wl)
+				},
+			})
+		}
 	}
 }
