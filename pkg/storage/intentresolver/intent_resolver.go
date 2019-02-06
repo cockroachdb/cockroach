@@ -16,6 +16,7 @@
 package intentresolver
 
 import (
+	"bytes"
 	"context"
 	"sort"
 	"time"
@@ -462,38 +463,65 @@ func (ir *IntentResolver) CleanupIntents(
 	ctx context.Context, intents []roachpb.Intent, now hlc.Timestamp, pushType roachpb.PushTxnType,
 ) (int, error) {
 	h := roachpb.Header{Timestamp: now}
-	resolveIntents, pushErr := ir.MaybePushIntents(
-		ctx, intents, h, pushType, true, /* skipIfInFlight */
-	)
-	if pushErr != nil {
-		return 0, errors.Wrapf(pushErr.GoError(), "failed to push during intent resolution")
-	}
 
-	// resolveIntents with poison=true because we're resolving
-	// intents outside of the context of an EndTransaction.
-	//
-	// Naively, it doesn't seem like we need to poison the abort
-	// cache since we're pushing with PUSH_TOUCH - meaning that
-	// the primary way our Push leads to aborting intents is that
-	// of the transaction having timed out (and thus presumably no
-	// client being around any more, though at the time of writing
-	// we don't guarantee that). But there are other paths in which
-	// the Push comes back successful while the coordinating client
-	// may still be active. Examples of this are when:
-	//
-	// - the transaction was aborted by someone else, but the
-	//   coordinating client may still be running.
-	// - the transaction entry wasn't written yet, which at the
-	//   time of writing has our push abort it, leading to the
-	//   same situation as above.
-	//
-	// Thus, we must poison.
-	if err := ir.ResolveIntents(
-		ctx, resolveIntents, ResolveOptions{Wait: true, Poison: true},
-	); err != nil {
-		return 0, errors.Wrapf(err, "failed to resolve intents")
+	// All transactions in MaybePushTxns (called by MaybePushIntents) will be sent
+	// in a single batch. In order to ensure that progress is made, we want to
+	// ensure that this batch	does not become too big as to time out due to a
+	// deadline set above this call. If the attempt to push intents times out
+	// before any intents have been resolved, no progress is made. The assumption
+	// taken here is that a batch of size intentResolverBatchSize is very unlikely
+	// to take as long as the	deadline and thus even if the processing all of the
+	// intents leads to the deadline passing, some incremental progress resolving
+	// intents will have been made. See #34227.
+	sort.Sort(intentsByTxn(intents))
+	resolved := 0
+	for unpushed := intents; len(unpushed) > 0; {
+		var prevTxnID uuid.UUID
+		var txns int
+		var i int
+		for i = 0; i < len(unpushed); i++ {
+			if curTxnID := unpushed[i].Txn.ID; curTxnID != prevTxnID {
+				prevTxnID = curTxnID
+				if txns == intentResolverBatchSize {
+					break
+				}
+				txns++
+			}
+		}
+		resolveIntents, pushErr := ir.MaybePushIntents(
+			ctx, unpushed[:i], h, pushType, true, /* skipIfInFlight */
+		)
+		if pushErr != nil {
+			return 0, errors.Wrapf(pushErr.GoError(), "failed to push during intent resolution")
+		}
+		// resolveIntents with poison=true because we're resolving
+		// intents outside of the context of an EndTransaction.
+		//
+		// Naively, it doesn't seem like we need to poison the abort
+		// cache since we're pushing with PUSH_TOUCH - meaning that
+		// the primary way our Push leads to aborting intents is that
+		// of the transaction having timed out (and thus presumably no
+		// client being around any more, though at the time of writing
+		// we don't guarantee that). But there are other paths in which
+		// the Push comes back successful while the coordinating client
+		// may still be active. Examples of this are when:
+		//
+		// - the transaction was aborted by someone else, but the
+		//   coordinating client may still be running.
+		// - the transaction entry wasn't written yet, which at the
+		//   time of writing has our push abort it, leading to the
+		//   same situation as above.
+		//
+		// Thus, we must poison.
+		if err := ir.ResolveIntents(
+			ctx, resolveIntents, ResolveOptions{Wait: true, Poison: true},
+		); err != nil {
+			return 0, errors.Wrapf(err, "failed to resolve intents")
+		}
+		resolved += len(resolveIntents)
+		unpushed = unpushed[i:]
 	}
-	return len(resolveIntents), nil
+	return resolved, nil
 }
 
 // CleanupTxnIntentsAsync asynchronously cleans up intents owned by
@@ -841,4 +869,15 @@ func (ir *IntentResolver) ResolveIntents(
 	}
 
 	return nil
+}
+
+// intentsByTxn implements sort.Interface to sort intents based on txnID.
+type intentsByTxn []roachpb.Intent
+
+var _ sort.Interface = intentsByTxn(nil)
+
+func (s intentsByTxn) Len() int      { return len(s) }
+func (s intentsByTxn) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s intentsByTxn) Less(i, j int) bool {
+	return bytes.Compare(s[i].Txn.ID[:], s[j].Txn.ID[:]) < 0
 }
