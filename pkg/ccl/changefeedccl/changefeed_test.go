@@ -1353,13 +1353,6 @@ func TestChangefeedErrors(t *testing.T) {
 		`EXPERIMENTAL CHANGEFEED FOR dec WITH format=$1, confluent_schema_registry=$2`,
 		optFormatAvro, `bar`,
 	)
-	sqlDB.Exec(t, `CREATE TABLE "uuid" (a UUID PRIMARY KEY)`)
-	sqlDB.Exec(t, `INSERT INTO "uuid" VALUES (gen_random_uuid())`)
-	sqlDB.ExpectErr(
-		t, `pq: column a: type UUID not yet supported with avro`,
-		`EXPERIMENTAL CHANGEFEED FOR "uuid" WITH format=$1, confluent_schema_registry=$2`,
-		optFormatAvro, `bar`,
-	)
 
 	// Check that confluent_schema_registry is only accepted if format is avro.
 	sqlDB.ExpectErr(
