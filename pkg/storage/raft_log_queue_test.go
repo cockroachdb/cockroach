@@ -92,13 +92,24 @@ func TestGetQuorumIndex(t *testing.T) {
 			Progress: make(map[uint64]raft.Progress),
 		}
 		for j, v := range c.progress {
-			status.Progress[uint64(j)] = raft.Progress{Match: v}
+			status.Progress[uint64(j)] = raft.Progress{State: raft.ProgressStateReplicate, Match: v}
 		}
 		quorumMatchedIndex := getQuorumIndex(status)
 		if c.expected != quorumMatchedIndex {
 			t.Fatalf("%d: expected %d, but got %d", i, c.expected, quorumMatchedIndex)
 		}
 	}
+
+	// Verify that only replicating followers are taken into account (i.e. others
+	// are treated as Match == 0).
+	status := &raft.Status{
+		Progress: map[uint64]raft.Progress{
+			1: {State: raft.ProgressStateReplicate, Match: 100},
+			2: {State: raft.ProgressStateSnapshot, Match: 100},
+			3: {State: raft.ProgressStateReplicate, Match: 90},
+		},
+	}
+	assert.Equal(t, uint64(90), getQuorumIndex(status))
 }
 
 func TestComputeTruncateDecision(t *testing.T) {

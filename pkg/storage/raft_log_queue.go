@@ -406,7 +406,11 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 func getQuorumIndex(raftStatus *raft.Status) uint64 {
 	match := make([]uint64, 0, len(raftStatus.Progress))
 	for _, progress := range raftStatus.Progress {
-		match = append(match, progress.Match)
+		if progress.State == raft.ProgressStateReplicate {
+			match = append(match, progress.Match)
+		} else {
+			match = append(match, 0)
+		}
 	}
 	sort.Sort(uint64Slice(match))
 	quorum := computeQuorum(len(match))
