@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"math"
 	"runtime"
@@ -780,10 +781,7 @@ func splitAndScatter(
 		for idx, importSpanChunk := range importSpanChunks {
 			// TODO(dan): The structure between this and the below are very
 			// similar. Dedup.
-			chunkSpan, err := kr.RewriteSpan(roachpb.Span{
-				Key:    importSpanChunk[0].Key,
-				EndKey: importSpanChunk[len(importSpanChunk)-1].EndKey,
-			})
+			chunkKey, err := rewriteBackupSpanKey(kr, importSpanChunk[0].Key)
 			if err != nil {
 				return err
 			}
@@ -791,13 +789,13 @@ func splitAndScatter(
 			// TODO(dan): Really, this should be splitting the Key of the first
 			// entry in the _next_ chunk.
 			log.VEventf(restoreCtx, 1, "presplitting chunk %d of %d", idx, len(importSpanChunks))
-			if err := db.AdminSplit(ctx, chunkSpan.Key, chunkSpan.Key); err != nil {
+			if err := db.AdminSplit(ctx, chunkKey, chunkKey); err != nil {
 				return err
 			}
 
 			log.VEventf(restoreCtx, 1, "scattering chunk %d of %d", idx, len(importSpanChunks))
 			scatterReq := &roachpb.AdminScatterRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(chunkSpan),
+				RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{Key: chunkKey, EndKey: chunkKey.Next()}),
 			}
 			if _, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
 				// TODO(dan): Unfortunately, Scatter is still too unreliable to
@@ -827,7 +825,7 @@ func splitAndScatter(
 				for _, importSpan := range importSpanChunk {
 					idx := atomic.AddUint64(&splitScatterStarted, 1)
 
-					newSpan, err := kr.RewriteSpan(importSpan.Span)
+					newSpanKey, err := rewriteBackupSpanKey(kr, importSpan.Span.Key)
 					if err != nil {
 						return err
 					}
@@ -835,13 +833,13 @@ func splitAndScatter(
 					// TODO(dan): Really, this should be splitting the Key of
 					// the _next_ entry.
 					log.VEventf(restoreCtx, 1, "presplitting %d of %d", idx, len(importSpans))
-					if err := db.AdminSplit(ctx, newSpan.Key, newSpan.Key); err != nil {
+					if err := db.AdminSplit(ctx, newSpanKey, newSpanKey); err != nil {
 						return err
 					}
 
 					log.VEventf(restoreCtx, 1, "scattering %d of %d", idx, len(importSpans))
 					scatterReq := &roachpb.AdminScatterRequest{
-						RequestHeader: roachpb.RequestHeaderFromSpan(newSpan),
+						RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{Key: newSpanKey, EndKey: newSpanKey.Next()}),
 					}
 					if _, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
 						// TODO(dan): Unfortunately, Scatter is still too unreliable to
@@ -950,6 +948,46 @@ func restoreJobDescription(
 	}
 
 	return tree.AsStringWithFlags(r, tree.FmtAlwaysQualifyTableNames), nil
+}
+
+// rewriteBackupSpanKey rewrites a backup span start key for the purposes of
+// splitting up the target key-space to send out the actual work of restoring.
+//
+// Keys for the primary index of the top-level table are rewritten to the just
+// the overall start of the table. That is, /Table/51/1 becomes /Table/51.
+//
+// Any suffix of the key that does is not rewritten by kr's configured rewrites
+// is truncated. For instance if a passed span has key /Table/51/1/77#/53/2/1
+// but kr only configured with a rewrite for 51, it would return /Table/51/1/77.
+// Such span boundaries are usually due to a interleaved table which has since
+// been dropped -- any splits that happened to pick one of its rows live on, but
+// include an ID of a table that no longer exists.
+//
+// Note that the actual restore process (i.e. inside ImportRequest) does not use
+// these keys -- they are only used to split the key space and distribute those
+// requests, thus truncation is fine. In the rare case where multiple backup
+// spans are truncated to the same prefix (i.e. entire spans resided under the
+// same interleave parent row) we'll generate some no-op splits and route the
+// work to the same range, but the actual imported data is unaffected.
+func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.Key, error) {
+	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...))
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not rewrite span start key: %s", key)
+	}
+	if !rewritten && bytes.Equal(newKey, key) {
+		// if nothing was changed, we didn't match the top-level key at all.
+		return nil, errors.Errorf("no rewrite for span start key: %s", key)
+	}
+	// Modify all spans that begin at the primary index to instead begin at the
+	// start of the table. That is, change a span start key from /Table/51/1 to
+	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
+	// will be created.
+	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
+		return nil, errors.Wrapf(err, "could not rewrite span start key: %s", key)
+	} else if idx == 1 && len(b) == 0 {
+		newKey = keys.MakeTablePrefix(uint32(id))
+	}
+	return newKey, nil
 }
 
 // restore imports a SQL table (or tables) from sets of non-overlapping sstable
@@ -1112,7 +1150,7 @@ func restore(
 	g.GoCtx(func(ctx context.Context) error {
 		log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
 		for readyForImportSpan := range readyForImportCh {
-			newSpan, err := kr.RewriteSpan(readyForImportSpan.Span)
+			newSpanKey, err := rewriteBackupSpanKey(kr, readyForImportSpan.Span.Key)
 			if err != nil {
 				return err
 			}
@@ -1122,7 +1160,7 @@ func restore(
 				// Import is a point request because we don't want DistSender to split
 				// it. Assume (but don't require) the entire post-rewrite span is on the
 				// same range.
-				RequestHeader: roachpb.RequestHeader{Key: newSpan.Key},
+				RequestHeader: roachpb.RequestHeader{Key: newSpanKey},
 				DataSpan:      readyForImportSpan.Span,
 				Files:         readyForImportSpan.files,
 				EndTime:       endTime,
@@ -1145,7 +1183,8 @@ func restore(
 
 				importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
 				if pErr != nil {
-					return pErr.GoError()
+					return errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan)
+
 				}
 
 				mu.Lock()
@@ -1156,7 +1195,7 @@ func restore(
 					mu.Unlock()
 					return errors.Errorf(
 						"request %d for span %v (to %v) does not match import span for same idx: %v",
-						idx, importRequest.DataSpan, newSpan, importSpans[idx],
+						idx, importRequest.DataSpan, newSpanKey, importSpans[idx],
 					)
 				}
 				mu.requestsCompleted[idx] = true
