@@ -205,10 +205,10 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 		t.Fatalf("fewer than 2 follower reads occurred: saw %v before and %v after",
 			followerReadsBefore, followerReadsAfter)
 	}
-	// Run reads for 60s which given the metrics window of 10s should guarantee
+	// Run reads for 3m which given the metrics window of 10s should guarantee
 	// that the most recent SQL latency time series data should relate to at least
 	// some of these reads.
-	timeoutCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	g, gCtx = errgroup.WithContext(timeoutCtx)
 	for i := 0; i < concurrency; i++ {
@@ -245,8 +245,8 @@ func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Durati
 }
 
 // verifySQLLatency verifies that the client-facing SQL latencies in the 90th
-// percentile remain below target latency between start and end ignoring the
-// first 20s.
+// percentile remain below target latency 80% of the time between start and end
+// ignoring the first 20s.
 func verifySQLLatency(
 	ctx context.Context,
 	c *cluster,
@@ -279,11 +279,15 @@ func verifySQLLatency(
 		t.Fatalf("not enough ts data to verify latency")
 	}
 	perTenSeconds = perTenSeconds[2:]
+	var above []time.Duration
 	for _, dp := range perTenSeconds {
-		if time.Duration(dp.Value) > targetLatency {
-			t.Fatalf("latency value %v for ts data point %v is above target latency %v",
-				time.Duration(dp.Value), dp, targetLatency)
+		if val := time.Duration(dp.Value); val > targetLatency {
+			above = append(above, val)
 		}
+	}
+	if permitted := int(.2 * float64(len(perTenSeconds))); len(above) > permitted {
+		t.Fatalf("%d latency values (%v) are above target latency %v, %d permitted",
+			len(above), above, targetLatency, permitted)
 	}
 }
 
