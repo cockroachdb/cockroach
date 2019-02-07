@@ -79,8 +79,15 @@ func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 			r.maybeCampaignOnWakeLocked(ctx)
 		}
 		now := timeutil.Now()
+		status := *r.raftStatusRLocked() // we know it's not nil because raftGroup isn't
 		for _, desc := range r.mu.state.Desc.Replicas {
-			r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
+			// Only bump lastUpdateTimes for followers that were happily replicating
+			// when quiescence was initiated. Otherwise, we're artificially keeping
+			// down followers alive forever if the range quiesces and unquiesces
+			// at least every couple of seconds, which can throw off log truncation.
+			if status.Progress[uint64(desc.ReplicaID)].State == raft.ProgressStateReplicate {
+				r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
+			}
 		}
 	}
 }
