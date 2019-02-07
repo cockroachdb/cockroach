@@ -116,7 +116,7 @@ func (s *sorterBase) init(
 func (s *sorterBase) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for s.State == StateRunning {
 		if ok, err := s.i.Valid(); err != nil || !ok {
-			s.MoveToDraining(nil /* err */)
+			s.MoveToDraining(err)
 			break
 		}
 
