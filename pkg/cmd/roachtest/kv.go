@@ -54,20 +54,28 @@ func registerKV(r *registry) {
 	for _, p := range []int{0, 95} {
 		p := p
 		for _, n := range []int{1, 3} {
-			for _, e := range []bool{false, true} {
-				e := e
-				minVersion := "v2.0.0"
-				if e {
-					minVersion = "v2.1.0"
+			for _, cpus := range []int{8, 32} {
+				for _, e := range []bool{false, true} {
+					e := e
+					minVersion := "v2.0.0"
+					if e {
+						minVersion = "v2.1.0"
+					}
+					var name string
+					if cpus == 8 { // support legacy test name which didn't include cpu
+						name = fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n)
+					} else {
+						name = fmt.Sprintf("kv%d/encrypt=%t/nodes=%d/cpu=%d", p, e, n, cpus)
+					}
+					r.Add(testSpec{
+						Name:       name,
+						MinVersion: minVersion,
+						Cluster:    makeClusterSpec(n+1, cpu(cpus)),
+						Run: func(ctx context.Context, t *test, c *cluster) {
+							runKV(ctx, t, c, p, startArgs(fmt.Sprintf("--encrypt=%t", e)))
+						},
+					})
 				}
-				r.Add(testSpec{
-					Name:       fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
-					MinVersion: minVersion,
-					Cluster:    makeClusterSpec(n+1, cpu(8)),
-					Run: func(ctx context.Context, t *test, c *cluster) {
-						runKV(ctx, t, c, p, startArgs(fmt.Sprintf("--encrypt=%t", e)))
-					},
-				})
 			}
 		}
 	}
