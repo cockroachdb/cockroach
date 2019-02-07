@@ -1,0 +1,10 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (i INT)
+
+statement ok
+INSERT INTO t VALUES (2)
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t AS OF SYSTEM TIME experimental_follower_read_timestamp()
