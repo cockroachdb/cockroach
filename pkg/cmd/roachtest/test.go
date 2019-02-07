@@ -94,6 +94,9 @@ func newFilter(filter []string) *testFilter {
 
 type testSpec struct {
 	Skip string // if non-empty, test will be skipped
+	// When Skip is set, this can contain more text to be printed in the logs
+	// after the "--- SKIP" line.
+	SkipDetails string
 	// For subtests, Name is supposed to originally be assigned to the name of the
 	// subtest when constructing the spec and then, once added to the registry, it
 	// will automatically be expanded to contain all the parents' names. At that
@@ -739,6 +742,14 @@ func (t *test) WorkerProgress(frac float64) {
 	t.progress(goid.Get(), frac)
 }
 
+// Skip records msg into t.spec.Skip and calls runtime.Goexit() - thus
+// interrupting the running of the test.
+func (t *test) Skip(msg string, details string) {
+	t.spec.Skip = msg
+	t.spec.SkipDetails = details
+	runtime.Goexit()
+}
+
 func (t *test) Fatal(args ...interface{}) {
 	t.printAndFail(args...)
 	runtime.Goexit()
@@ -983,6 +994,9 @@ func (r *registry) runAsync(
 						t.Name(), teamCityEscape(t.spec.Skip))
 				}
 				fmt.Fprintf(r.out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.Skip)
+				if t.spec.SkipDetails != "" {
+					fmt.Fprintf(r.out, "Details: %s\n", t.spec.SkipDetails)
+				}
 			}
 
 			if teamCity {
@@ -1043,7 +1057,9 @@ func (r *registry) runAsync(
 				}
 				var err error
 				c, err = newCluster(ctx, t.l, cfg)
-				FatalIfErr(t, err)
+				if err != nil {
+					t.Skip("failed to created cluster", err.Error())
+				}
 			} else {
 				opt := attachOpt{
 					skipValidation: r.config.skipClusterValidationOnAttach,
