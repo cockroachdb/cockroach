@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -111,7 +112,11 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	}
 
 	if tableDesc.IsVirtualTable() {
-		return errors.Errorf("cannot create statistics on virtual tables")
+		return pgerror.NewError(pgerror.CodeWrongObjectTypeError, "cannot create statistics on virtual tables")
+	}
+
+	if tableDesc.IsView() {
+		return pgerror.NewError(pgerror.CodeWrongObjectTypeError, "cannot create statistics on views")
 	}
 
 	if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
