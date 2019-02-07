@@ -67,16 +67,18 @@ CREATE TABLE checks (
     a INT PRIMARY KEY CHECK (a > 0),
     b INT,
     c INT,
-    CHECK (checks.b < c)
+    d INT AS (c + 1) STORED,
+    CHECK (checks.b < d)
 )
 ----
 TABLE checks
  ├── a int not null
  ├── b int
  ├── c int
+ ├── d int
  ├── INDEX primary
  │    └── a int not null
- ├── CHECK (checks.b < c)
+ ├── CHECK (checks.b < d)
  └── CHECK (a > 0)
 
 # Unknown target table.
@@ -1256,22 +1258,29 @@ INSERT INTO checks (a, b, c) VALUES (1, 2, 3)
 insert checks
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  column1:4 => a:1
- │    ├──  column2:5 => b:2
- │    └──  column3:6 => c:3
- ├── check columns: check1:7(bool) check2:8(bool)
+ │    ├──  column1:5 => a:1
+ │    ├──  column2:6 => b:2
+ │    ├──  column3:7 => c:3
+ │    └──  column8:8 => d:4
+ ├── check columns: check1:9(bool) check2:10(bool)
  └── project
-      ├── columns: check1:7(bool) check2:8(bool) column1:4(int) column2:5(int) column3:6(int)
-      ├── values
-      │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
-      │    └── tuple [type=tuple{int, int, int}]
-      │         ├── const: 1 [type=int]
-      │         ├── const: 2 [type=int]
-      │         └── const: 3 [type=int]
+      ├── columns: check1:9(bool) check2:10(bool) column1:5(int) column2:6(int) column3:7(int) column8:8(int)
+      ├── project
+      │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column3:7(int)
+      │    ├── values
+      │    │    ├── columns: column1:5(int) column2:6(int) column3:7(int)
+      │    │    └── tuple [type=tuple{int, int, int}]
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 2 [type=int]
+      │    │         └── const: 3 [type=int]
+      │    └── projections
+      │         └── plus [type=int]
+      │              ├── variable: column3 [type=int]
+      │              └── const: 1 [type=int]
       └── projections
            ├── lt [type=bool]
            │    ├── variable: column2 [type=int]
-           │    └── variable: column3 [type=int]
+           │    └── variable: column8 [type=int]
            └── gt [type=bool]
                 ├── variable: column1 [type=int]
                 └── const: 0 [type=int]
@@ -1283,20 +1292,27 @@ INSERT INTO checks SELECT a, b, c FROM abcde
 insert checks
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  abcde.a:4 => checks.a:1
- │    ├──  abcde.b:5 => checks.b:2
- │    └──  abcde.c:6 => checks.c:3
- ├── check columns: check1:10(bool) check2:11(bool)
+ │    ├──  abcde.a:5 => checks.a:1
+ │    ├──  abcde.b:6 => checks.b:2
+ │    ├──  abcde.c:7 => checks.c:3
+ │    └──  column11:11 => checks.d:4
+ ├── check columns: check1:12(bool) check2:13(bool)
  └── project
-      ├── columns: check1:10(bool) check2:11(bool) abcde.a:4(int!null) abcde.b:5(int) abcde.c:6(int)
+      ├── columns: check1:12(bool) check2:13(bool) abcde.a:5(int!null) abcde.b:6(int) abcde.c:7(int) column11:11(int)
       ├── project
-      │    ├── columns: abcde.a:4(int!null) abcde.b:5(int) abcde.c:6(int)
-      │    └── scan abcde
-      │         └── columns: abcde.a:4(int!null) abcde.b:5(int) abcde.c:6(int) d:7(int) e:8(int) rowid:9(int!null)
+      │    ├── columns: column11:11(int) abcde.a:5(int!null) abcde.b:6(int) abcde.c:7(int)
+      │    ├── project
+      │    │    ├── columns: abcde.a:5(int!null) abcde.b:6(int) abcde.c:7(int)
+      │    │    └── scan abcde
+      │    │         └── columns: abcde.a:5(int!null) abcde.b:6(int) abcde.c:7(int) abcde.d:8(int) e:9(int) rowid:10(int!null)
+      │    └── projections
+      │         └── plus [type=int]
+      │              ├── variable: abcde.c [type=int]
+      │              └── const: 1 [type=int]
       └── projections
            ├── lt [type=bool]
            │    ├── variable: abcde.b [type=int]
-           │    └── variable: abcde.c [type=int]
+           │    └── variable: column11 [type=int]
            └── gt [type=bool]
                 ├── variable: abcde.a [type=int]
                 └── const: 0 [type=int]

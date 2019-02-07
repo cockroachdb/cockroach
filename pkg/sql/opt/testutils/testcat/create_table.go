@@ -132,13 +132,18 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 				if def.PrimaryKey {
 					tab.addIndex(&def.IndexTableDef, primaryIndex)
 				}
-
-			case *tree.CheckConstraintTableDef:
-				tab.Checks = append(tab.Checks, cat.CheckConstraint(tree.Serialize(def.Expr)))
 			}
 		}
 	} else if !tab.IsVirtual {
 		tab.addPrimaryColumnIndex("rowid")
+	}
+
+	// Add check constraints.
+	for _, def := range stmt.Defs {
+		switch def := def.(type) {
+		case *tree.CheckConstraintTableDef:
+			tab.Checks = append(tab.Checks, cat.CheckConstraint(tree.Serialize(def.Expr)))
+		}
 	}
 
 	// Search for index and family definitions.
