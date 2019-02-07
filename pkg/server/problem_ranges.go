@@ -18,7 +18,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -49,9 +48,6 @@ func (s *statusServer) ProblemRanges(
 		}
 	}
 
-	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
-	defer cancel()
-
 	type nodeResponse struct {
 		nodeID roachpb.NodeID
 		resp   *serverpb.RangesResponse
@@ -63,7 +59,7 @@ func (s *statusServer) ProblemRanges(
 	for nodeID := range isLiveMap {
 		nodeID := nodeID
 		if err := s.stopper.RunAsyncTask(
-			nodeCtx, "server.statusServer: requesting remote ranges",
+			ctx, "server.statusServer: requesting remote ranges",
 			func(ctx context.Context) {
 				status, err := s.dialNode(ctx, nodeID)
 				var rangesResponse *serverpb.RangesResponse
