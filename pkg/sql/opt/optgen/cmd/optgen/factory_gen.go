@@ -304,7 +304,7 @@ func (g *factoryGen) genAssignPlaceholders() {
 			g.w.nestIndent("if err != nil {\n")
 			g.w.writeIndent("panic(placeholderError{err})\n")
 			g.w.unnest("}\n")
-			g.w.writeIndent("return f.ConstructConstVal(d)\n")
+			g.w.writeIndent("return f.ConstructConstVal(d, t.DataType())\n")
 			g.w.unnest("\n")
 			continue
 		}
