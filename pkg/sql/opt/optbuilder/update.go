@@ -294,31 +294,9 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 		mb.outScope.cols[i].mutation = false
 	}
 
-	// Disambiguate any existing columns of the same name so that computed
-	// expressions will refer to the updated value rather than the old column
-	// containing the original value (or even the column containing a value to
-	// be inserted in case of upsert).
-	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
-		colName := mb.tab.Column(i).ColName()
-		colID := mb.fetchColList[i]
-		if mb.updateColList[i] != 0 {
-			colID = mb.updateColList[i]
-		}
-
-		for i := range mb.outScope.cols {
-			col := &mb.outScope.cols[i]
-			if col.name == colName {
-				if col.id == colID {
-					// Use table name, not alias name, since computed column
-					// expressions will not reference aliases.
-					col.table = *mb.tab.Name()
-				} else {
-					// Clear name so that it will never match.
-					col.clearName()
-				}
-			}
-		}
-	}
+	// Disambiguate names so that references in the computed expression refer to
+	// the correct columns.
+	mb.disambiguateColumns()
 
 	mb.addSynthesizedCols(
 		mb.updateColList,
