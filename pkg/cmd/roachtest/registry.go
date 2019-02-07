@@ -74,6 +74,7 @@ func registerTests(r *registry) {
 	registerUpgrade(r)
 	registerVersion(r)
 	registerYCSB(r)
+	registerSQL20Bench(r)
 }
 
 func registerBenchmarks(r *registry) {
