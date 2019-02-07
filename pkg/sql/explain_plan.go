@@ -278,7 +278,7 @@ func (p *planner) populateExplain(
 func (e *explainer) populateEntries(ctx context.Context, plan planNode, subqueryPlans []subquery) {
 	e.entries = nil
 	observer := e.observer()
-	_ = populateEntriesForObserver(ctx, plan, subqueryPlans, observer, false /* returnError */)
+	_ = populateEntriesForObserver(ctx, plan, subqueryPlans, observer, false /* returnError */, tree.FmtSimple)
 }
 
 func populateEntriesForObserver(
@@ -287,6 +287,7 @@ func populateEntriesForObserver(
 	subqueryPlans []subquery,
 	observer planObserver,
 	returnError bool,
+	subqueryFmtFlags tree.FmtFlags,
 ) error {
 	// If there are any subqueries in the plan, we enclose both the main
 	// plan and the sub-queries as children of a virtual "root"
@@ -311,7 +312,8 @@ func populateEntriesForObserver(
 		observer.attr("subquery", "id", fmt.Sprintf("@S%d", i+1))
 		// This field contains the original subquery (which could have been modified
 		// by optimizer transformations).
-		observer.attr("subquery", "original sql", subqueryPlans[i].subquery.String())
+		observer.attr("subquery", "original sql",
+			tree.AsStringWithFlags(subqueryPlans[i].subquery, subqueryFmtFlags))
 		observer.attr("subquery", "exec mode", distsqlrun.SubqueryExecModeNames[subqueryPlans[i].execMode])
 		if subqueryPlans[i].plan != nil {
 			if err := walkPlan(ctx, subqueryPlans[i].plan, observer); err != nil && returnError {
