@@ -228,7 +228,8 @@ func LoadCSV(
 					JobID: *job.ID(),
 					Slot:  int32(i),
 				},
-				Uri: make(map[int32]string),
+				WalltimeNanos: walltime,
+				Uri:           make(map[int32]string),
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
