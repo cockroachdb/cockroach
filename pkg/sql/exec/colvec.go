@@ -61,16 +61,29 @@ type ColVec interface {
 	// elements of this ColVec, assuming that both ColVecs are of type colType.
 	Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16)
 
+	// AppendSlice appends vec[srcStartIdx:srceEndIdx] elements to
+	// this ColVec starting at destStartIdx.
+	AppendSlice(vec ColVec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16)
+
 	// AppendWithSel appends into itself another column vector from a ColBatch with
 	// maximum size of ColBatchSize, filtered by the given selection vector.
 	AppendWithSel(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
 
+	// AppendSlice appends srcEndIdx - srcStartIdx elements to this ColVec starting
+	// at destStartIdx. These elements come from vec, filtered by the selection
+	// vector sel.
+	AppendSliceWithSel(vec ColVec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16, sel []uint16)
+
 	// Copy copies src[srcStartIdx:srcEndIdx] into this ColVec.
 	Copy(src ColVec, srcStartIdx, srcEndIdx uint64, typ types.T)
+
+	// CopyAt copies src[srcStartIdx:srcEndIdx] into this ColVec starting at destStartIdx.
+	CopyAt(src ColVec, destStartIdx, srcStartIdx, srcEndIdx uint64, typ types.T)
 
 	// CopyWithSelInt64 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
 	CopyWithSelInt64(vec ColVec, sel []uint64, nSel uint16, colType types.T)
+
 	// CopyWithSelInt16 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
 	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
@@ -78,6 +91,10 @@ type ColVec interface {
 	// CopyWithSelAndNilsInt64 copies vec, filtered by sel, unless nils is set,
 	// into ColVec. It replaces the contents of this ColVec.
 	CopyWithSelAndNilsInt64(vec ColVec, sel []uint64, nSel uint16, nils []bool, colType types.T)
+
+	// CopyAt copies src[srcStartIdx:srcEndIdx] into this ColVec starting at destStartIdx,
+	// filtered by sel.
+	CopyAtWithSelInt16(src ColVec, sel []uint16, destStartIdx, srcStartIdx, srcEndIdx uint64, typ types.T)
 
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this ColVec.
 	// It uses the reflect package and is not suitable for calling in hot paths.

@@ -64,6 +64,40 @@ func (m *memColumn) Append(vec ColVec, colType types.T, toLength uint64, fromLen
 	}
 }
 
+func (m *memColumn) AppendSlice(
+	vec ColVec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16,
+) {
+	batchSize := srcEndIdx - srcStartIdx
+	outputLen := destStartIdx + uint64(batchSize)
+
+	switch colType {
+	// {{range .}}
+	case _TYPES_T:
+		if outputLen > uint64(len(m._TemplateType())) {
+			m.col = append(m._TemplateType()[:destStartIdx], vec._TemplateType()[srcStartIdx:srcEndIdx]...)
+		} else {
+			copy(m._TemplateType()[destStartIdx:], vec._TemplateType()[srcStartIdx:srcEndIdx])
+		}
+
+		// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+
+	if batchSize > 0 {
+		if uint64(cap(m.nulls)) < outputLen/64 {
+			m.nulls = append(m.nulls, make([]int64, 16)...) // 16 = 1024/64
+		}
+		if vec.HasNulls() {
+			for i := uint16(0); i < batchSize; i++ {
+				if vec.NullAt(srcStartIdx + i) {
+					m.SetNull64(destStartIdx + uint64(i))
+				}
+			}
+		}
+	}
+}
+
 func (m *memColumn) AppendWithSel(
 	vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64,
 ) {
@@ -93,11 +127,73 @@ func (m *memColumn) AppendWithSel(
 	}
 }
 
+func (m *memColumn) AppendSliceWithSel(
+	vec ColVec,
+	colType types.T,
+	destStartIdx uint64,
+	srcStartIdx uint16,
+	srcEndIdx uint16,
+	sel []uint16,
+) {
+	batchSize := srcEndIdx - srcStartIdx
+	outputLen := destStartIdx + uint64(batchSize)
+	switch colType {
+	// {{range .}}
+	case _TYPES_T:
+		toCol := append(m._TemplateType()[:destStartIdx], make([]_GOTYPE, batchSize)...)
+		fromCol := vec._TemplateType()
+
+		for i := 0; i < int(batchSize); i++ {
+			toCol[uint64(i)+destStartIdx] = fromCol[sel[i+int(srcStartIdx)]]
+		}
+
+		m.col = toCol
+		// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+
+	if batchSize > 0 {
+		if uint64(cap(m.nulls)) < outputLen/64 {
+			m.nulls = append(m.nulls, make([]int64, 16)...) // 16 = 1024/64
+		}
+
+		for i := srcStartIdx; i < srcEndIdx; i++ {
+			if vec.NullAt(sel[i]) {
+				m.SetNull64(destStartIdx + uint64(i))
+			}
+		}
+	}
+}
+
 func (m *memColumn) Copy(src ColVec, srcStartIdx, srcEndIdx uint64, typ types.T) {
+	m.CopyAt(src, 0, srcStartIdx, srcEndIdx, typ)
+}
+
+func (m *memColumn) CopyAt(src ColVec, destStartIdx, srcStartIdx, srcEndIdx uint64, typ types.T) {
 	switch typ {
 	// {{range .}}
 	case _TYPES_T:
-		copy(m._TemplateType(), src._TemplateType()[srcStartIdx:srcEndIdx])
+		copy(m._TemplateType()[destStartIdx:], src._TemplateType()[srcStartIdx:srcEndIdx])
+		// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", typ))
+	}
+}
+
+func (m *memColumn) CopyAtWithSelInt16(
+	src ColVec, sel []uint16, destStartIdx, srcStartIdx, srcEndIdx uint64, typ types.T,
+) {
+	switch typ {
+	// {{range .}}
+	case _TYPES_T:
+		srcCol := src._TemplateType()
+		destCol := m._TemplateType()
+
+		batchSize := srcEndIdx - srcStartIdx
+		for i := uint16(0); i < uint16(batchSize); i++ {
+			destCol[uint64(i)+destStartIdx] = srcCol[sel[uint64(i)+srcStartIdx]]
+		}
 		// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", typ))
