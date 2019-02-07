@@ -66,7 +66,13 @@ type raftLogQueue struct {
 	logSnapshots util.EveryN
 }
 
-// newRaftLogQueue returns a new instance of raftLogQueue.
+// newRaftLogQueue returns a new instance of raftLogQueue. Replicas are passed
+// to the queue both proactively (triggered by write load) and periodically
+// (via the scanner). When processing a replica, the queue decides whether the
+// Raft log can be truncated, which is a tradeoff between wanting to keep the
+// log short overall and allowing slower followers to catch up before they get
+// cut off by a truncation and need a snapshot. See newTruncateDecision for
+// details on this decision making process.
 func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLogQueue {
 	rlq := &raftLogQueue{
 		db:           db,
@@ -92,6 +98,56 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 // newTruncateDecision returns a truncateDecision for the given Replica if no
 // error occurs. If input data to establish a truncateDecision is missing, a
 // zero decision is returned.
+//
+// At a high level, a truncate decision operates based on the Raft log size, the
+// number of entries in the log, and the Raft status of the followers. In an
+// ideal world and most of the time, followers are reasonably up to date, and a
+// decision to truncate to the index acked on all replicas will be made whenever
+// there is at least a little bit of log to truncate (think a hundred records or
+// ~100kb of data). If followers fall behind, are offline, or are waiting for a
+// snapshot, a second strategy is needed to make sure that the Raft log is
+// eventually truncated: when the raft log size exceeds a limit (4mb at time of
+// writing), truncations become willing and able to cut off followers as long as
+// a quorum has acked the truncation index (the quota pool ensures that the
+// uncommitted part of the log doesn't grow disproportionally).
+//
+// Exceptions are made for replicas for which information is missing ("probing
+// state") as long as they are known to have been online recently, and for
+// in-flight snapshots (in particular preemptive snapshots) which are not
+// adequately reflected in the Raft status and would otherwise be cut off with
+// regularity. Probing live followers should only remain in this state for a
+// short moment and so we deny a log truncation outright (as there's no safe
+// index to truncate to); for snapshots, we can still truncate, but not past
+// the snapshot's index.
+//
+// A challenge for log truncation is to deal with sideloaded log entries, that
+// is, entries which contain SSTables for direct ingestion into the storage
+// engine. Such log entries are very large, and failing to account for them in
+// the heuristics can trigger overly aggressive truncations.
+//
+// The raft log size used in the decision making process is principally updated
+// in the main Raft command apply loop, and adds a Replica to this queue
+// whenever the log size has increased by a non-negligible amount that would be
+// worth truncating (~100kb).
+//
+// Unfortunately, the size tracking is not very robust as it suffers from two
+// limitations at the time of writing:
+// 1. it may undercount as it is in-memory and incremented only as proposals
+//    are handled; that is, a freshly started node will believe its Raft log to be
+//    zero-sized independent of its actual size, and
+// 2. the addition and corresponding subtraction happen in very different places
+//    and are difficult to keep bug-free, meaning that there is low confidence that
+//    we maintain the delta in a completely accurate manner over time. One example
+//    of potential errors are sideloaded proposals, for which the subtraction needs
+//    to load the size of the file on-disk (i.e. supplied by the fs), whereas
+//    the addition uses the in-memory representation of the file.
+//
+// Ideally, a Raft log that grows large for whichever reason (for instance the
+// queue being stuck on another replica) wouldn't be more than a nuisance on
+// nodes with sufficient disk space. Unfortunately, at the time of writing, the
+// Raft log is included in Raft snapshots. On the other hand, IMPORT/RESTORE's
+// split/scatter phase interacts poorly with overly aggressive truncations and
+// can DDOS the Raft snapshot queue.
 func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, error) {
 	rangeID := r.RangeID
 	now := timeutil.Now()
