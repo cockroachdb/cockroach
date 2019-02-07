@@ -198,9 +198,12 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// For all our followers, overwrite the RecentActive field (which is always
 	// true since we don't use CheckQuorum) with our own activity check.
 	r.mu.RLock()
+	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
+	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
 	updateRaftProgressFromActivity(
 		ctx, raftStatus.Progress, r.descRLocked().Replicas, r.mu.lastUpdateTimes, now,
 	)
+	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
 	r.mu.RUnlock()
 
 	if pr, ok := raftStatus.Progress[raftStatus.Lead]; ok {
