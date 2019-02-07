@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -115,6 +116,7 @@ type SchemaChanger struct {
 	clock                *hlc.Clock
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
+	ieFactory            sqlutil.SessionBoundInternalExecutorFactory
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -1641,6 +1643,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					rangeDescriptorCache: s.execCfg.RangeDescriptorCache,
 					clock:                s.execCfg.Clock,
 					settings:             s.execCfg.Settings,
+					ieFactory:            s.ieFactory,
 				}
 
 				execAfter := timeutil.Now().Add(delay)
@@ -1810,6 +1813,7 @@ func createSchemaChangeEvalCtx(
 		DataConversion: sessiondata.DataConversionConfig{
 			Location: dummyLocation,
 		},
+		User: security.NodeUser,
 	}
 
 	evalCtx := extendedEvalContext{

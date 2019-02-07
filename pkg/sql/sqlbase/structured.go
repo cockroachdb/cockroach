@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -2215,6 +2216,29 @@ func (desc *MutableTableDescriptor) addMutation(m DescriptorMutation) {
 	m.MutationID = desc.ClusterVersion.NextMutationID
 	desc.NextMutationID = desc.ClusterVersion.NextMutationID + 1
 	desc.Mutations = append(desc.Mutations, m)
+}
+
+// MakeFirstMutationPublic creates a MutableTableDescriptor from the
+// ImmutableTableDescriptor by making the first mutation public.
+// This is super valuable when trying to run SQL over data associated
+// with a schema mutation that is still not yet public: Data validation,
+// error reporting.
+func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic() (*MutableTableDescriptor, error) {
+	// Clone the ImmutableTable descriptor because we want to create an Immutable one.
+	table := NewMutableExistingTableDescriptor(*protoutil.Clone(desc.TableDesc()).(*TableDescriptor))
+	mutationID := desc.Mutations[0].MutationID
+	for _, mutation := range desc.Mutations {
+		if mutation.MutationID != mutationID {
+			// Mutations are applied in a FIFO order. Only apply the first set
+			// of mutations if they have the mutation ID we're looking for.
+			break
+		}
+		if err := table.MakeMutationComplete(mutation); err != nil {
+			return nil, err
+		}
+	}
+	table.Version++
+	return table, nil
 }
 
 // ColumnNeedsBackfill returns true if adding the given column requires a
