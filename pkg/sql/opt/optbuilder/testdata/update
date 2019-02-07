@@ -65,16 +65,18 @@ CREATE TABLE checks (
 	a INT PRIMARY KEY CHECK (a > 0),
 	b INT,
 	c INT,
-	CHECK (checks.b < c)
+    d INT AS (c + 1) STORED,
+    CHECK (checks.b < d)
 )
 ----
 TABLE checks
  ├── a int not null
  ├── b int
  ├── c int
+ ├── d int
  ├── INDEX primary
  │    └── a int not null
- ├── CHECK (checks.b < c)
+ ├── CHECK (checks.b < d)
  └── CHECK (a > 0)
 
 # ------------------------------------------------------------------------------
@@ -1363,28 +1365,35 @@ UPDATE checks SET a=1, b=2, c=3
 ----
 update checks
  ├── columns: <none>
- ├── fetch columns: a:4(int) b:5(int) c:6(int)
+ ├── fetch columns: a:5(int) b:6(int) c:7(int) d:8(int)
  ├── update-mapping:
- │    ├──  column7:7 => a:1
- │    ├──  column8:8 => b:2
- │    └──  column9:9 => c:3
- ├── check columns: check1:10(bool) check2:11(bool)
+ │    ├──  column9:9 => a:1
+ │    ├──  column10:10 => b:2
+ │    ├──  column11:11 => c:3
+ │    └──  column12:12 => d:4
+ ├── check columns: check1:13(bool) check2:14(bool)
  └── project
-      ├── columns: check1:10(bool) check2:11(bool) a:4(int!null) b:5(int) c:6(int) column7:7(int!null) column8:8(int!null) column9:9(int!null)
+      ├── columns: check1:13(bool) check2:14(bool) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int!null) column11:11(int!null) column12:12(int)
       ├── project
-      │    ├── columns: column7:7(int!null) column8:8(int!null) column9:9(int!null) a:4(int!null) b:5(int) c:6(int)
-      │    ├── scan checks
-      │    │    └── columns: a:4(int!null) b:5(int) c:6(int)
+      │    ├── columns: column12:12(int) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int!null) column11:11(int!null)
+      │    ├── project
+      │    │    ├── columns: column9:9(int!null) column10:10(int!null) column11:11(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    ├── scan checks
+      │    │    │    └── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    └── projections
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 2 [type=int]
+      │    │         └── const: 3 [type=int]
       │    └── projections
-      │         ├── const: 1 [type=int]
-      │         ├── const: 2 [type=int]
-      │         └── const: 3 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: column11 [type=int]
+      │              └── const: 1 [type=int]
       └── projections
            ├── lt [type=bool]
-           │    ├── variable: column8 [type=int]
-           │    └── variable: column9 [type=int]
+           │    ├── variable: column10 [type=int]
+           │    └── variable: column12 [type=int]
            └── gt [type=bool]
-                ├── variable: column7 [type=int]
+                ├── variable: column9 [type=int]
                 └── const: 0 [type=int]
 
 # Do not update columns for one of the constraints.
@@ -1393,24 +1402,31 @@ UPDATE checks SET a=1
 ----
 update checks
  ├── columns: <none>
- ├── fetch columns: a:4(int) b:5(int) c:6(int)
+ ├── fetch columns: a:5(int) b:6(int) c:7(int) d:8(int)
  ├── update-mapping:
- │    └──  column7:7 => a:1
- ├── check columns: check1:8(bool) check2:9(bool)
+ │    ├──  column9:9 => a:1
+ │    └──  column10:10 => d:4
+ ├── check columns: check1:11(bool) check2:12(bool)
  └── project
-      ├── columns: check1:8(bool) check2:9(bool) a:4(int!null) b:5(int) c:6(int) column7:7(int!null)
+      ├── columns: check1:11(bool) check2:12(bool) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int)
       ├── project
-      │    ├── columns: column7:7(int!null) a:4(int!null) b:5(int) c:6(int)
-      │    ├── scan checks
-      │    │    └── columns: a:4(int!null) b:5(int) c:6(int)
+      │    ├── columns: column10:10(int) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null)
+      │    ├── project
+      │    │    ├── columns: column9:9(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    ├── scan checks
+      │    │    │    └── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    └── projections
+      │    │         └── const: 1 [type=int]
       │    └── projections
-      │         └── const: 1 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: c [type=int]
+      │              └── const: 1 [type=int]
       └── projections
            ├── lt [type=bool]
            │    ├── variable: b [type=int]
-           │    └── variable: c [type=int]
+           │    └── variable: column10 [type=int]
            └── gt [type=bool]
-                ├── variable: column7 [type=int]
+                ├── variable: column9 [type=int]
                 └── const: 0 [type=int]
 
 # Update one column in constraint, but not the other.
@@ -1419,22 +1435,29 @@ UPDATE checks SET b=2
 ----
 update checks
  ├── columns: <none>
- ├── fetch columns: a:4(int) b:5(int) c:6(int)
+ ├── fetch columns: a:5(int) b:6(int) c:7(int) d:8(int)
  ├── update-mapping:
- │    └──  column7:7 => b:2
- ├── check columns: check1:8(bool) check2:9(bool)
+ │    ├──  column9:9 => b:2
+ │    └──  column10:10 => d:4
+ ├── check columns: check1:11(bool) check2:12(bool)
  └── project
-      ├── columns: check1:8(bool) check2:9(bool) a:4(int!null) b:5(int) c:6(int) column7:7(int!null)
+      ├── columns: check1:11(bool) check2:12(bool) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int)
       ├── project
-      │    ├── columns: column7:7(int!null) a:4(int!null) b:5(int) c:6(int)
-      │    ├── scan checks
-      │    │    └── columns: a:4(int!null) b:5(int) c:6(int)
+      │    ├── columns: column10:10(int) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null)
+      │    ├── project
+      │    │    ├── columns: column9:9(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    ├── scan checks
+      │    │    │    └── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    └── projections
+      │    │         └── const: 2 [type=int]
       │    └── projections
-      │         └── const: 2 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: c [type=int]
+      │              └── const: 1 [type=int]
       └── projections
            ├── lt [type=bool]
-           │    ├── variable: column7 [type=int]
-           │    └── variable: c [type=int]
+           │    ├── variable: column9 [type=int]
+           │    └── variable: column10 [type=int]
            └── gt [type=bool]
                 ├── variable: a [type=int]
                 └── const: 0 [type=int]
@@ -1445,34 +1468,41 @@ UPDATE checks SET (a, b)=(SELECT a, b FROM abcde WHERE abcde.a=checks.a)
 ----
 update checks
  ├── columns: <none>
- ├── fetch columns: checks.a:4(int) checks.b:5(int) checks.c:6(int)
+ ├── fetch columns: checks.a:5(int) checks.b:6(int) checks.c:7(int) checks.d:8(int)
  ├── update-mapping:
- │    ├──  abcde.a:7 => checks.a:1
- │    └──  abcde.b:8 => checks.b:2
- ├── check columns: check1:13(bool) check2:14(bool)
+ │    ├──  abcde.a:9 => checks.a:1
+ │    ├──  abcde.b:10 => checks.b:2
+ │    └──  column15:15 => checks.d:4
+ ├── check columns: check1:16(bool) check2:17(bool)
  └── project
-      ├── columns: check1:13(bool) check2:14(bool) checks.a:4(int!null) checks.b:5(int) checks.c:6(int) abcde.a:7(int) abcde.b:8(int)
-      ├── left-join-apply
-      │    ├── columns: checks.a:4(int!null) checks.b:5(int) checks.c:6(int) abcde.a:7(int) abcde.b:8(int)
-      │    ├── scan checks
-      │    │    └── columns: checks.a:4(int!null) checks.b:5(int) checks.c:6(int)
-      │    ├── max1-row
-      │    │    ├── columns: abcde.a:7(int!null) abcde.b:8(int)
-      │    │    └── project
-      │    │         ├── columns: abcde.a:7(int!null) abcde.b:8(int)
-      │    │         └── select
-      │    │              ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      │    │              ├── scan abcde
-      │    │              │    └── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-      │    │              └── filters
-      │    │                   └── eq [type=bool]
-      │    │                        ├── variable: abcde.a [type=int]
-      │    │                        └── variable: checks.a [type=int]
-      │    └── filters (true)
+      ├── columns: check1:16(bool) check2:17(bool) checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int) abcde.a:9(int) abcde.b:10(int) column15:15(int)
+      ├── project
+      │    ├── columns: column15:15(int) checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int) abcde.a:9(int) abcde.b:10(int)
+      │    ├── left-join-apply
+      │    │    ├── columns: checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int) abcde.a:9(int) abcde.b:10(int)
+      │    │    ├── scan checks
+      │    │    │    └── columns: checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int)
+      │    │    ├── max1-row
+      │    │    │    ├── columns: abcde.a:9(int!null) abcde.b:10(int)
+      │    │    │    └── project
+      │    │    │         ├── columns: abcde.a:9(int!null) abcde.b:10(int)
+      │    │    │         └── select
+      │    │    │              ├── columns: abcde.a:9(int!null) abcde.b:10(int) abcde.c:11(int) abcde.d:12(int) e:13(int) rowid:14(int!null)
+      │    │    │              ├── scan abcde
+      │    │    │              │    └── columns: abcde.a:9(int!null) abcde.b:10(int) abcde.c:11(int) abcde.d:12(int) e:13(int) rowid:14(int!null)
+      │    │    │              └── filters
+      │    │    │                   └── eq [type=bool]
+      │    │    │                        ├── variable: abcde.a [type=int]
+      │    │    │                        └── variable: checks.a [type=int]
+      │    │    └── filters (true)
+      │    └── projections
+      │         └── plus [type=int]
+      │              ├── variable: checks.c [type=int]
+      │              └── const: 1 [type=int]
       └── projections
            ├── lt [type=bool]
            │    ├── variable: abcde.b [type=int]
-           │    └── variable: checks.c [type=int]
+           │    └── variable: column15 [type=int]
            └── gt [type=bool]
                 ├── variable: abcde.a [type=int]
                 └── const: 0 [type=int]
