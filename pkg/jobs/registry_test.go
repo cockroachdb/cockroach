@@ -17,16 +17,23 @@ package jobs
 import (
 	"context"
 	"math"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func FakePHS(opName, user string) (interface{}, func()) {
@@ -173,4 +180,62 @@ func TestRegistryCancelation(t *testing.T) {
 		register()
 		expectCancel(true)
 	})
+}
+
+func TestRegistryGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	ts := timeutil.Now()
+	earlier := ts.Add(-1 * time.Hour)
+	muchEarlier := ts.Add(-2 * time.Hour)
+
+	writeJob := func(created, finished time.Time, status Status) string {
+		ft := timeutil.ToUnixMicros(finished)
+		payload, err := protoutil.Marshal(&jobspb.Payload{
+			Lease:          &jobspb.Lease{NodeID: 1, Epoch: 1},
+			Details:        jobspb.WrapPayloadDetails(jobspb.BackupDetails{}),
+			FinishedMicros: ft,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		progress, err := protoutil.Marshal(&jobspb.Progress{
+			Details: jobspb.WrapProgressDetails(jobspb.BackupProgress{}),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var id int64
+		db.QueryRow(t,
+			`INSERT INTO system.jobs (status, payload, progress, created) VALUES ($1, $2, $3, $4) RETURNING id`,
+			status, payload, progress, created).Scan(&id)
+		return strconv.Itoa(int(id))
+	}
+
+	j1 := writeJob(muchEarlier, time.Time{}, StatusRunning)
+	j2 := writeJob(muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded)
+
+	j3 := writeJob(earlier, time.Time{}, StatusRunning)
+	j4 := writeJob(earlier, earlier.Add(time.Minute), StatusSucceeded)
+
+	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{{j1}, {j2}, {j3}, {j4}})
+	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
+		t.Fatal(err)
+	}
+	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{{j1}, {j3}, {j4}})
+	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
+		t.Fatal(err)
+	}
+	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{{j1}, {j3}, {j4}})
+	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
+		t.Fatal(err)
+	}
+	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{{j1}, {j3}})
 }
