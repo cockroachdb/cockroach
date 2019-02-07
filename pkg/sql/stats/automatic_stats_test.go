@@ -49,7 +49,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	sqlRun.Exec(t,
 		`CREATE DATABASE t;
 		CREATE TABLE t.a (k INT PRIMARY KEY, v CHAR);
-		INSERT INTO t.a VALUES (1, 'a');`)
+		INSERT INTO t.a VALUES (1, 'a');
+		CREATE VIEW t.vw AS SELECT k, v FROM t.a;`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	descA := sqlbase.GetTableDescriptor(s.DB(), "t", "a")
@@ -83,6 +84,17 @@ func TestMaybeRefreshStats(t *testing.T) {
 	)
 	if err := checkStatsCount(ctx, cache, descA.ID, 2 /* expected */); err != nil {
 		t.Fatal(err)
+	}
+
+	// Ensure that attempt to refresh stats on view does not result in re-
+	// enqueuing the attempt.
+	// TODO(rytaft): Should not enqueue views to begin with.
+	descVW := sqlbase.GetTableDescriptor(s.DB(), "t", "vw")
+	refresher.maybeRefreshStats(ctx, s.Stopper(), descVW.ID, 0 /* rowsAffected */, 0 /* asOf */)
+	select {
+	case <-refresher.mutations:
+		t.Fatal("refresher should not re-enqueue attempt to create stats over view")
+	default:
 	}
 }
 

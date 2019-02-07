@@ -330,18 +330,27 @@ func (r *Refresher) maybeRefreshStats(
 
 	if err := r.refreshStats(ctx, tableID, asOf); err != nil {
 		pgerr, ok := errors.Cause(err).(*pgerror.Error)
-		if ok && pgerr.Code == pgerror.CodeUndefinedTableError {
-			// Wait so that the latest changes will be reflected according to the
-			// AS OF time, then try again.
-			timer := time.NewTimer(asOf)
-			defer timer.Stop()
-			select {
-			case <-timer.C:
-				break
-			case <-stopper.ShouldQuiesce():
+		if ok {
+			switch pgerr.Code {
+			case pgerror.CodeUndefinedTableError:
+				// Wait so that the latest changes will be reflected according to the
+				// AS OF time, then try again.
+				timer := time.NewTimer(asOf)
+				defer timer.Stop()
+				select {
+				case <-timer.C:
+					break
+				case <-stopper.ShouldQuiesce():
+					return
+				}
+				err = r.refreshStats(ctx, tableID, asOf)
+
+			case pgerror.CodeWrongObjectTypeError:
+				// Don't reschedule the refresh for this error, as it gets produced
+				// if we're trying to run auto statistics on a view.
+				// TODO(rytaft): Change code to not enqueue views to begin with.
 				return
 			}
-			err = r.refreshStats(ctx, tableID, asOf)
 		}
 		if err != nil {
 			// It's likely that another stats job was already running. Attempt
