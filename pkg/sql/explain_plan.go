@@ -25,6 +25,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
+const (
+	// explainSubqueryFmtFlags is the format for subqueries within `EXPLAIN SQL` statements.
+	// Since these are individually run, we don't need to scrub any data from subqueries.
+	explainSubqueryFmtFlags = tree.FmtSimple
+
+	// sampledLogicalPlanFmtFlags is the format for sampled logical plans. Because these exposed
+	// in the Admin UI, sampled plans should be scrubbed of sensitive information.
+	sampledLogicalPlanFmtFlags = tree.FmtHideConstants
+)
+
 // explainPlanNode wraps the logic for EXPLAIN as a planNode.
 type explainPlanNode struct {
 	explainer explainer
@@ -225,7 +235,7 @@ var emptyString = tree.NewDString("")
 func (p *planner) populateExplain(
 	ctx context.Context, e *explainer, v *valuesNode, plan planNode, subqueryPlans []subquery,
 ) error {
-	e.populateEntries(ctx, plan, subqueryPlans)
+	e.populateEntries(ctx, plan, subqueryPlans, explainSubqueryFmtFlags)
 
 	tp := treeprinter.New()
 	// n keeps track of the current node on each level.
@@ -275,10 +285,12 @@ func (p *planner) populateExplain(
 	return nil
 }
 
-func (e *explainer) populateEntries(ctx context.Context, plan planNode, subqueryPlans []subquery) {
+func (e *explainer) populateEntries(
+	ctx context.Context, plan planNode, subqueryPlans []subquery, subqueryFmtFlags tree.FmtFlags,
+) {
 	e.entries = nil
 	observer := e.observer()
-	_ = populateEntriesForObserver(ctx, plan, subqueryPlans, observer, false /* returnError */)
+	_ = populateEntriesForObserver(ctx, plan, subqueryPlans, observer, false /* returnError */, subqueryFmtFlags)
 }
 
 func populateEntriesForObserver(
@@ -287,6 +299,7 @@ func populateEntriesForObserver(
 	subqueryPlans []subquery,
 	observer planObserver,
 	returnError bool,
+	subqueryFmtFlags tree.FmtFlags,
 ) error {
 	// If there are any subqueries in the plan, we enclose both the main
 	// plan and the sub-queries as children of a virtual "root"
@@ -311,7 +324,11 @@ func populateEntriesForObserver(
 		observer.attr("subquery", "id", fmt.Sprintf("@S%d", i+1))
 		// This field contains the original subquery (which could have been modified
 		// by optimizer transformations).
-		observer.attr("subquery", "original sql", subqueryPlans[i].subquery.String())
+		observer.attr(
+			"subquery",
+			"original sql",
+			tree.AsStringWithFlags(subqueryPlans[i].subquery, subqueryFmtFlags),
+		)
 		observer.attr("subquery", "exec mode", distsqlrun.SubqueryExecModeNames[subqueryPlans[i].execMode])
 		if subqueryPlans[i].plan != nil {
 			if err := walkPlan(ctx, subqueryPlans[i].plan, observer); err != nil && returnError {
@@ -343,7 +360,7 @@ func planToString(ctx context.Context, plan planNode, subqueryPlans []subquery) 
 		},
 		fmtFlags: tree.FmtExpr(tree.FmtSymbolicSubqueries, true, true, true),
 	}
-	e.populateEntries(ctx, plan, subqueryPlans)
+	e.populateEntries(ctx, plan, subqueryPlans, explainSubqueryFmtFlags)
 	var buf bytes.Buffer
 	for _, e := range e.entries {
 		field := e.field
