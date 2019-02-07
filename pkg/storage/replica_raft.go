@@ -1668,15 +1668,40 @@ func (m lastUpdateTimesMap) isFollowerActive(
 	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
 }
 
-// processRaftCommand processes a raft command by unpacking the
-// command struct to get args and reply and then applying the command
-// to the state machine via applyRaftCommand(). The result is sent on
-// the command's done channel, if available. As a special case, the
-// zero idKey signifies an empty Raft command, which will apply as a
-// no-op (without accessing raftCmd), updating only the applied index.
+// processRaftCommand handles the complexities involved in moving the Raft
+// state of a Replica forward. At a high level, it receives a proposal, which
+// contains the evaluation of a batch (at its heart a WriteBatch, to be applied
+// to the underlying storage engine), which it applies and for which it signals
+// the client waiting for it (if it's waiting on this Replica).
 //
-// This method returns true if the command successfully applied a
-// replica change.
+// The proposal also contains auxiliary data which needs to be verified in order
+// to decide whether the proposal should be applied: the command's MaxLeaseIndex
+// must move the state machine's LeaseAppliedIndex forward, and the proposer's
+// lease (or rather its sequence number) must match that of the state machine.
+// Furthermore, the GCThreshold is validated and it is checked whether the
+// request's key span is contained in the Replica's (it is unclear whether all
+// of these checks are necessary). If any of the checks fail, the proposal's
+// content is wiped and we apply an empty log entry instead, returning an error
+// to the caller to handle. The two typical cases are the lease mismatch (in
+// which case the caller tries to send the command to the actual leaseholder)
+// and violations of the LeaseAppliedIndex (in which the caller tries again).
+//
+// Assuming all checks were passed, the command should be applied to the engine,
+// which is done by the aptly named applyRaftCommand.
+//
+// For simple proposals this is the whole story, but some commands trigger
+// additional code in this method. The standard way in which this is triggered
+// is via a side effect communicated in the proposal's ReplicatedEvalResult and,
+// for local proposals, the LocalEvalResult. These might, for example, trigger
+// an update of the Replica's in-memory state to match updates to the on-disk
+// state, or pass intents to the intent resolver. Some commands don't fit this
+// simple schema and need to hook deeper into the code. Notably splits and merges
+// need to acquire locks on their right-hand side Replicas and may need to add
+// data to the WriteBatch before it is applied; similarly, changes to the disk
+// layout of internal state typically require a migration which shows up here.
+//
+// This method returns true if the command successfully applied a replica
+// change.
 func (r *Replica) processRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
