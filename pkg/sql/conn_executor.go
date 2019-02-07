@@ -607,6 +607,7 @@ func (s *Server) newConnExecutorWithTxn(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	txn *client.Txn,
+	tcModifier tableCollectionModifier,
 ) (*connExecutor, error) {
 	ex, err := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, memMetrics, srvMetrics)
 	if err != nil {
@@ -633,6 +634,13 @@ func (s *Server) newConnExecutorWithTxn(
 		tree.ReadWrite,
 		txn,
 		ex.transitionCtx)
+
+	// Modify the TableCollection to match the parent executor's TableCollection.
+	// This allows the InternalExecutor to see schema changes made by the
+	// parent executor.
+	if tcModifier != nil {
+		tcModifier.copyModifiedSchema(&ex.extraTxnState.tables)
+	}
 	return ex, nil
 }
 

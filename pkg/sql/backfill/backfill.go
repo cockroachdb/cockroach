@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -279,17 +278,9 @@ func ConvertBackfillError(
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
 	// are "live" in the tableDesc.
-	desc := sqlbase.NewMutableExistingTableDescriptor(*protoutil.Clone(tableDesc.TableDesc()).(*sqlbase.TableDescriptor))
-	mutationID := desc.Mutations[0].MutationID
-	for _, mutation := range desc.Mutations {
-		if mutation.MutationID != mutationID {
-			// Mutations are applied in a FIFO order. Only apply the first set
-			// of mutations if they have the mutation ID we're looking for.
-			break
-		}
-		if err := desc.MakeMutationComplete(mutation); err != nil {
-			return errors.Wrap(err, "backfill error")
-		}
+	desc, err := tableDesc.MakeFirstMutationPublic()
+	if err != nil {
+		return err
 	}
 	return row.ConvertBatchError(ctx, sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()), b)
 }

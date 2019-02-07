@@ -83,6 +83,15 @@ type internalExecutorImpl struct {
 	// parent session state if need be, but then we'd need to share a
 	// sessionDataMutator.
 	sessionData *sessiondata.SessionData
+
+	// The internal executor uses its own TableCollection. A TableCollection
+	// is a schema cache for each transaction and contains data like the schema
+	// modified by a transaction. Occasionally an internal executor is called
+	// within the context of a transaction that has modified the schema, the
+	// internal executor should see the modified schema. This interface allows
+	// the internal executor to modify its TableCollection to match the
+	// TableCollection of the parent executor.
+	tcModifier tableCollectionModifier
 }
 
 // MakeInternalExecutor creates an InternalExecutor.
@@ -192,7 +201,8 @@ func (ie *internalExecutorImpl) initConnEx(
 			ie.mon,
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
-			txn)
+			txn,
+			ie.tcModifier)
 	}
 	if err != nil {
 		return nil, nil, err

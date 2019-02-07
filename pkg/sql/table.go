@@ -658,6 +658,23 @@ func (tc *TableCollection) releaseAllDescriptors() {
 	tc.allDescriptors = nil
 }
 
+// Copy the modified schema to the table collection. Used when initializing
+// an InternalExecutor.
+func (tc *TableCollection) copyModifiedSchema(to *TableCollection) {
+	if tc == nil {
+		return
+	}
+	to.uncommittedTables = tc.uncommittedTables
+	to.uncommittedDatabases = tc.uncommittedDatabases
+	// Do not copy the leased descriptors because we do not want
+	// the leased descriptors to be released by the "to" TableCollection.
+	// The "to" TableCollection can re-lease the same descriptors.
+}
+
+type tableCollectionModifier interface {
+	copyModifiedSchema(to *TableCollection)
+}
+
 // createOrUpdateSchemaChangeJob finalizes the current mutations in the table
 // descriptor. If a schema change job in the system.jobs table has not been
 // created for mutations in the current transaction, one is created. The
