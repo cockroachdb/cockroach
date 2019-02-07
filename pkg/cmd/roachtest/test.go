@@ -751,47 +751,59 @@ func (t *test) Skip(msg string, details string) {
 }
 
 func (t *test) Fatal(args ...interface{}) {
-	t.printAndFail(args...)
-	runtime.Goexit()
+	t.fatalfInner("" /* format */, args...)
 }
 
 func (t *test) Fatalf(format string, args ...interface{}) {
-	t.printfAndFail(format, args...)
+	t.fatalfInner(format, args...)
+}
+
+func (t *test) fatalfInner(format string, args ...interface{}) {
+	// Skip two frames: our own and the caller.
+	if format != "" {
+		t.printfAndFail(2 /* skip */, format, args...)
+	} else {
+		t.printAndFail(2 /* skip */, args...)
+	}
 	runtime.Goexit()
 }
 
 // FatalIfErr calls t.Fatal() if err != nil.
 func FatalIfErr(t *test, err error) {
 	if err != nil {
-		t.Fatal(err)
+		t.fatalfInner("" /* format */, err)
 	}
 }
 
-func (t *test) printAndFail(args ...interface{}) {
+func (t *test) printAndFail(skip int, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprint(args...))...)
+	t.mu.output = append(t.mu.output, t.decorate(skip+1, fmt.Sprint(args...))...)
 	t.mu.failed = true
 	if t.mu.cancel != nil {
 		t.mu.cancel()
 	}
 }
 
-func (t *test) printfAndFail(format string, args ...interface{}) {
+func (t *test) printfAndFail(skip int, format string, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprintf(format, args...))...)
+	t.mu.output = append(t.mu.output, t.decorate(skip+1, fmt.Sprintf(format, args...))...)
 	t.mu.failed = true
 	if t.mu.cancel != nil {
 		t.mu.cancel()
 	}
 }
 
-func (t *test) decorate(s string) string {
-	// Skip two extra frames to account for this function
-	// and runtime.Callers itself.
+// Args:
+// skip: The number of stack frames to exclude from the result. 0 means that
+//   the caller will be the first frame identified. 1 means the caller's caller
+//   will be the first, etc.
+func (t *test) decorate(skip int, s string) string {
+	// Skip two extra frames to account for this function and runtime.Callers
+	// itself.
 	var pc [50]uintptr
-	n := runtime.Callers(3, pc[:])
+	n := runtime.Callers(2+skip, pc[:])
 	if n == 0 {
 		panic("zero callers found")
 	}
@@ -799,15 +811,28 @@ func (t *test) decorate(s string) string {
 	buf := new(bytes.Buffer)
 	frames := runtime.CallersFrames(pc[:n])
 	sep := "\t"
+	runnerFound := false
 	for {
+		if runnerFound {
+			break
+		}
+
 		frame, more := frames.Next()
 		if !more {
 			break
 		}
 		if frame.Function == t.runner {
-			break
+			runnerFound = true
+
+			// Handle the special case of the runner function being the caller of
+			// t.Fatal(). In that case, that's the line to be used for issue creation.
+			if t.mu.failLoc.file == "" {
+				fmt.Printf("!!! remembering*: %s:%d (%s)\n", frame.File, frame.Line, frame.Function)
+				t.mu.failLoc.file = frame.File
+				t.mu.failLoc.line = frame.Line
+			}
 		}
-		if !t.mu.failed {
+		if !t.mu.failed && !runnerFound {
 			// Keep track of the highest stack frame that is lower than the t.runner
 			// stack frame. This is used to determine the author of that line of code
 			// and issue assignment.
@@ -945,7 +970,7 @@ func (r *registry) runAsync(
 			if err := recover(); err != nil {
 				t.mu.Lock()
 				t.mu.failed = true
-				t.mu.output = append(t.mu.output, t.decorate(fmt.Sprint(err))...)
+				t.mu.output = append(t.mu.output, t.decorate(0 /* skip */, fmt.Sprint(err))...)
 				t.mu.Unlock()
 			}
 
@@ -1166,7 +1191,7 @@ func (r *registry) runAsync(
 
 			select {
 			case <-time.After(timeout):
-				t.printfAndFail("test timed out (%s)\n", timeout)
+				t.printfAndFail(0 /* skip */, "test timed out (%s)\n", timeout)
 				if err := c.FetchDebugZip(ctx); err != nil {
 					c.l.Printf("failed to download logs: %s", err)
 				}
