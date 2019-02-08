@@ -644,24 +644,33 @@ COPY t (a, b, c) FROM stdin;
 	sqlDB.Exec(t, `CREATE TABLE blah (i int8)`)
 	sqlDB.Exec(t, `DROP TABLE blah`)
 
-	for i, tc := range tests {
-		t.Run(fmt.Sprintf("%s: %s", tc.typ, tc.name), func(t *testing.T) {
-			dbName := fmt.Sprintf("d%d", i)
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
-			defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
-			var q string
-			if tc.create != "" {
-				q = fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
-			} else {
-				q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
+	for _, direct := range []bool{false, true} {
+		for i, tc := range tests {
+			if direct {
+				if tc.with == "" {
+					tc.with = "WITH experimental_direct_ingestion"
+				} else {
+					tc.with += ", experimental_direct_ingestion"
+				}
 			}
-			t.Log(q)
-			dataString = tc.data
-			sqlDB.ExpectErr(t, tc.err, q, srv.URL)
-			for query, res := range tc.query {
-				sqlDB.CheckQueryResults(t, query, res)
-			}
-		})
+			t.Run(fmt.Sprintf("%s: %s direct=%v", tc.typ, tc.name, direct), func(t *testing.T) {
+				dbName := fmt.Sprintf("d%d", i)
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
+				defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
+				var q string
+				if tc.create != "" {
+					q = fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
+				} else {
+					q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
+				}
+				t.Log(q)
+				dataString = tc.data
+				sqlDB.ExpectErr(t, tc.err, q, srv.URL)
+				for query, res := range tc.query {
+					sqlDB.CheckQueryResults(t, query, res)
+				}
+			})
+		}
 	}
 
 	t.Run("mysqlout multiple", func(t *testing.T) {

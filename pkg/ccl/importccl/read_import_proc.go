@@ -9,12 +9,14 @@
 package importccl
 
 import (
+	"bytes"
 	"compress/bzip2"
 	"compress/gzip"
 	"context"
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -31,8 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -209,7 +214,7 @@ type rowConverter struct {
 	computedIVarContainer sqlbase.RowIndexedVarContainer
 }
 
-const kvBatchSize = 1000
+const kvBatchSize = 5000
 
 func newRowConverter(
 	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- kvBatch,
@@ -405,7 +410,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 // wrapper, doing the correct DrainAndClose error handling logic.
 func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	group := ctxgroup.WithContext(ctx)
-	kvCh := make(chan kvBatch)
+	kvCh := make(chan kvBatch, 10)
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
 	var singleTable *sqlbase.TableDescriptor
@@ -414,6 +419,8 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			singleTable = table
 		}
 	}
+
+	typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 
 	if format := cp.spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
 		return errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
@@ -467,72 +474,110 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		return readInputFiles(ctx, cp.spec.Uri, cp.spec.Format, conv.readFile, progFn, cp.flowCtx.Settings)
 	})
 
-	// Sample KVs
-	group.GoCtx(func(ctx context.Context) error {
-		ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
-		defer tracing.FinishSpan(span)
+	if cp.spec.IngestDirectly {
+		// IngestDirectly means this reader will just ingest the KVs that the
+		// producer emitted to the chan, and the only result we push into distsql at
+		// the end is one row containing an encoded BulkOpSummary.
+		group.GoCtx(func(ctx context.Context) error {
+			ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
+			defer tracing.FinishSpan(span)
 
-		var fn sampleFunc
-		var sampleAll bool
-		if cp.spec.SampleSize == 0 {
-			sampleAll = true
-		} else {
-			sr := sampleRate{
-				rnd:        rand.New(rand.NewSource(rand.Int63())),
-				sampleSize: float64(cp.spec.SampleSize),
+			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
+			adder, err := cp.flowCtx.BulkAdder(ctx, cp.flowCtx.ClientDB, 32<<20 /* flush at 32mb */, writeTS)
+			if err != nil {
+				return err
 			}
-			fn = sr.sample
-		}
+			defer adder.Close()
 
-		// Populate the split-point spans which have already been imported.
-		var completedSpans roachpb.SpanGroup
-		job, err := cp.flowCtx.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
-		if err != nil {
-			return err
-		}
-		progress := job.Progress()
-		if details, ok := progress.Details.(*jobspb.Progress_Import); ok {
-			completedSpans.Add(details.Import.SpanProgress...)
-		} else {
-			return errors.Errorf("unexpected progress type %T", progress)
-		}
+			// Drain the kvCh using the BulkAdder until it closes.
+			if err := ingestKvs(ctx, adder, kvCh); err != nil {
+				return err
+			}
 
-		typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
-		for kvBatch := range kvCh {
-			for _, kv := range kvBatch {
-				// Allow KV pairs to be dropped if they belong to a completed span.
-				if completedSpans.Contains(kv.Key) {
-					continue
+			added := adder.GetSummary()
+			countsBytes, err := protoutil.Marshal(&added)
+			if err != nil {
+				return err
+			}
+			cs, err := cp.out.EmitRow(ctx, sqlbase.EncDatumRow{
+				sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+			})
+			if err != nil {
+				return err
+			}
+			if cs != distsqlrun.NeedMoreRows {
+				return errors.New("unexpected closure of consumer")
+			}
+			return nil
+		})
+	} else {
+		// Sample KVs
+		group.GoCtx(func(ctx context.Context) error {
+
+			ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
+			defer tracing.FinishSpan(span)
+
+			var fn sampleFunc
+			var sampleAll bool
+			if cp.spec.SampleSize == 0 {
+				sampleAll = true
+			} else {
+				sr := sampleRate{
+					rnd:        rand.New(rand.NewSource(rand.Int63())),
+					sampleSize: float64(cp.spec.SampleSize),
 				}
+				fn = sr.sample
+			}
 
-				rowRequired := sampleAll || keys.IsDescriptorKey(kv.Key)
-				if rowRequired || fn(kv) {
-					var row sqlbase.EncDatumRow
-					if rowRequired {
-						row = sqlbase.EncDatumRow{
-							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
-						}
-					} else {
-						// Don't send the value for rows returned for sampling
-						row = sqlbase.EncDatumRow{
-							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-							sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-						}
+			// Populate the split-point spans which have already been imported.
+			var completedSpans roachpb.SpanGroup
+			job, err := cp.flowCtx.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
+			if err != nil {
+				return err
+			}
+			progress := job.Progress()
+			if details, ok := progress.Details.(*jobspb.Progress_Import); ok {
+				completedSpans.Add(details.Import.SpanProgress...)
+			} else {
+				return errors.Errorf("unexpected progress type %T", progress)
+			}
+
+			for kvBatch := range kvCh {
+				for _, kv := range kvBatch {
+					// Allow KV pairs to be dropped if they belong to a completed span.
+					if completedSpans.Contains(kv.Key) {
+						continue
 					}
 
-					cs, err := cp.out.EmitRow(ctx, row)
-					if err != nil {
-						return err
-					}
-					if cs != distsqlrun.NeedMoreRows {
-						return errors.New("unexpected closure of consumer")
+					rowRequired := sampleAll || keys.IsDescriptorKey(kv.Key)
+					if rowRequired || fn(kv) {
+						var row sqlbase.EncDatumRow
+						if rowRequired {
+							row = sqlbase.EncDatumRow{
+								sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+								sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
+							}
+						} else {
+							// Don't send the value for rows returned for sampling
+							row = sqlbase.EncDatumRow{
+								sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+								sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+							}
+						}
+
+						cs, err := cp.out.EmitRow(ctx, row)
+						if err != nil {
+							return err
+						}
+						if cs != distsqlrun.NeedMoreRows {
+							return errors.New("unexpected closure of consumer")
+						}
 					}
 				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
+	}
 
 	return group.Wait()
 }
@@ -554,6 +599,54 @@ func (s sampleRate) sample(kv roachpb.KeyValue) bool {
 
 func makeRowErr(file string, row int64, format string, args ...interface{}) error {
 	return errors.Errorf("%q: row %d: "+format, append([]interface{}{file, row}, args...)...)
+}
+
+// ingestKvs drains kvs from the channel until it closes, ingesting them using
+// the BulkAdder. It handles the required buffering/sorting/etc.
+func ingestKvs(ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan kvBatch) error {
+	// TODO(dt): allow configuring these.
+	const sortBatchSize = 1000000
+	// TODO(dt): track byte size as well as key count to trigger flushes.
+
+	// TODO(dt): buffer to disk instead of all in-mem.
+
+	buf := make(roachpb.KeyValueByKey, 0, sortBatchSize)
+
+	flushBuf := func(ctx context.Context) error {
+		if len(buf) == 0 {
+			return nil
+		}
+		sort.Sort(buf)
+		for i := range buf {
+			if err := adder.Add(ctx, buf[i].Key, buf[i].Value.RawBytes); err != nil {
+				if i > 0 && bytes.Equal(buf[i].Key, buf[i-1].Key) {
+					return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, buf[i].Key)
+				}
+				return err
+			}
+		}
+		if err := adder.Flush(ctx); err != nil {
+			return err
+		}
+		buf = buf[:0]
+		return nil
+	}
+
+	for kvBatch := range kvCh {
+		// TODO(dt): consider checking if we want to flush an almost-full buffer
+		// to make room for a large batch.
+		buf = append(buf, kvBatch...)
+
+		if len(buf) > sortBatchSize {
+			if err := flushBuf(ctx); err != nil {
+				return err
+			}
+			if err := adder.Reset(); err != nil {
+				return err
+			}
+		}
+	}
+	return flushBuf(ctx)
 }
 
 func init() {
