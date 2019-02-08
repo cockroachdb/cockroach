@@ -78,10 +78,10 @@ func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 		if campaignOnWake {
 			r.maybeCampaignOnWakeLocked(ctx)
 		}
-		now := timeutil.Now()
-		for _, desc := range r.mu.state.Desc.Replicas {
-			r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
-		}
+		// NB: we know there's a non-nil RaftStatus because internalRaftGroup isn't nil.
+		r.mu.lastUpdateTimes.updateOnUnquiesce(
+			r.mu.state.Desc.Replicas, r.raftStatusRLocked().Progress, timeutil.Now(),
+		)
 	}
 }
 

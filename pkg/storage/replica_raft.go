@@ -1653,6 +1653,36 @@ func (m lastUpdateTimesMap) update(replicaID roachpb.ReplicaID, now time.Time) {
 	m[replicaID] = now
 }
 
+// updateOnUnquiesce is called when the leader unquiesces. In that case, we
+// don't want live followers to appear as dead before their next message reaches
+// us; to achieve that, we optimistically mark all followers that are in
+// ProgressStateReplicate (or rather, were in that state when the group
+// quiesced) as live as of `now`. We don't want to mark other followers as
+// live as they may be down and could artificially seem alive forever assuming
+// a suitable pattern of quiesce and unquiesce operations (and this in turn
+// can interfere with Raft log truncations).
+func (m lastUpdateTimesMap) updateOnUnquiesce(
+	descs []roachpb.ReplicaDescriptor, prs map[uint64]raft.Progress, now time.Time,
+) {
+	for _, desc := range descs {
+		if prs[uint64(desc.ReplicaID)].State == raft.ProgressStateReplicate {
+			m.update(desc.ReplicaID, now)
+		}
+	}
+}
+
+// updateOnBecomeLeader is similar to updateOnUnquiesce, but is called when the
+// replica becomes the Raft leader. It updates all followers irrespective of
+// their Raft state, for the Raft state is not yet populated by the time this
+// callback is invoked. Raft leadership is usually stable, so there is no danger
+// of artificially keeping down followers alive, though if it started
+// flip-flopping at a <10s cadence there would be a risk of that happening.
+func (m lastUpdateTimesMap) updateOnBecomeLeader(descs []roachpb.ReplicaDescriptor, now time.Time) {
+	for _, desc := range descs {
+		m.update(desc.ReplicaID, now)
+	}
+}
+
 // isFollowerActive returns whether the specified follower has made
 // communication with the leader in the last MaxQuotaReplicaLivenessDuration.
 func (m lastUpdateTimesMap) isFollowerActive(
