@@ -193,6 +193,7 @@ $plan-node-details-border-color = #ACB8CB                       // dark gray
 .plan-view
   color $body-color
   position relative
+  padding-left 6px
 
   .arrow-icon
     margin-left 8px
@@ -230,9 +231,17 @@ $plan-node-details-border-color = #ACB8CB                       // dark gray
     font-size smaller
     display inline
 
+  .hasAttributes
+    &:hover
+      cursor pointer
+
+      .arrow
+        display inline
+
   .nodeDetails
     position relative
     padding 6px 0
+    margin 2px 0
     border 1px solid transparent
     border-radius 3px
 
@@ -242,12 +251,6 @@ $plan-node-details-border-color = #ACB8CB                       // dark gray
     &.expanded
     &:hover
       background-color $plan-node-details-background-color
-
-    &:hover
-      cursor pointer
-
-      .arrow
-        display inline
 
     &.warn
       &.expanded
@@ -259,7 +262,7 @@ $plan-node-details-border-color = #ACB8CB                       // dark gray
   .nodeAttributes
     color $body-color
     padding 14px 16px
-    margin 6px 0 4px 0
+    margin 6px 10px 4px 15px
     border 1px solid $plan-node-line-color
     background-color white
     border-radius 2px
