@@ -109,27 +109,27 @@ var informationSchema = virtualSchema{
 		"view_table_usage",
 		"views",
 	),
-	tableDefs: []virtualSchemaDef{
-		informationSchemaAdministrableRoleAuthorizations,
-		informationSchemaApplicableRoles,
-		informationSchemaColumnPrivileges,
-		informationSchemaColumnsTable,
-		informationSchemaConstraintColumnUsageTable,
-		informationSchemaEnabledRoles,
-		informationSchemaKeyColumnUsageTable,
-		informationSchemaParametersTable,
-		informationSchemaReferentialConstraintsTable,
-		informationSchemaRoleTableGrants,
-		informationSchemaRoutineTable,
-		informationSchemaSchemataTable,
-		informationSchemaSchemataTablePrivileges,
-		informationSchemaSequences,
-		informationSchemaStatisticsTable,
-		informationSchemaTableConstraintTable,
-		informationSchemaTablePrivileges,
-		informationSchemaTablesTable,
-		informationSchemaViewsTable,
-		informationSchemaUserPrivileges,
+	tableDefs: map[sqlbase.ID]virtualSchemaDef{
+		sqlbase.InformationSchemaAdministrableRoleAuthorizationsID: informationSchemaAdministrableRoleAuthorizations,
+		sqlbase.InformationSchemaApplicableRolesID:                 informationSchemaApplicableRoles,
+		sqlbase.InformationSchemaColumnPrivilegesID:                informationSchemaColumnPrivileges,
+		sqlbase.InformationSchemaColumnsTableID:                    informationSchemaColumnsTable,
+		sqlbase.InformationSchemaConstraintColumnUsageTableID:      informationSchemaConstraintColumnUsageTable,
+		sqlbase.InformationSchemaEnabledRolesID:                    informationSchemaEnabledRoles,
+		sqlbase.InformationSchemaKeyColumnUsageTableID:             informationSchemaKeyColumnUsageTable,
+		sqlbase.InformationSchemaParametersTableID:                 informationSchemaParametersTable,
+		sqlbase.InformationSchemaReferentialConstraintsTableID:     informationSchemaReferentialConstraintsTable,
+		sqlbase.InformationSchemaRoleTableGrantsID:                 informationSchemaRoleTableGrants,
+		sqlbase.InformationSchemaRoutineTableID:                    informationSchemaRoutineTable,
+		sqlbase.InformationSchemaSchemataTableID:                   informationSchemaSchemataTable,
+		sqlbase.InformationSchemaSchemataTablePrivilegesID:         informationSchemaSchemataTablePrivileges,
+		sqlbase.InformationSchemaSequencesID:                       informationSchemaSequences,
+		sqlbase.InformationSchemaStatisticsTableID:                 informationSchemaStatisticsTable,
+		sqlbase.InformationSchemaTableConstraintTableID:            informationSchemaTableConstraintTable,
+		sqlbase.InformationSchemaTablePrivilegesID:                 informationSchemaTablePrivileges,
+		sqlbase.InformationSchemaTablesTableID:                     informationSchemaTablesTable,
+		sqlbase.InformationSchemaViewsTableID:                      informationSchemaViewsTable,
+		sqlbase.InformationSchemaUserPrivilegesID:                  informationSchemaUserPrivileges,
 	},
 	tableValidator:             validateInformationSchemaTable,
 	validWithNoDatabaseContext: true,
@@ -1115,7 +1115,7 @@ var informationSchemaTablesTable = virtualSchemaTable{
 				}
 				tableType := tableTypeBaseTable
 				insertable := yesString
-				if isVirtualDescriptor(table) {
+				if table.IsVirtualTable() {
 					tableType = tableTypeSystemView
 					insertable = noString
 				} else if table.IsView() {

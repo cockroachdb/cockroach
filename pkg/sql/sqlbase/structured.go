@@ -512,7 +512,14 @@ func (desc *TableDescriptor) IsSequence() bool {
 // virtual Table (like the information_schema tables) and thus doesn't
 // need to be physically stored.
 func (desc *TableDescriptor) IsVirtualTable() bool {
-	return desc.ID == keys.VirtualDescriptorID
+	return IsVirtualTable(desc.ID)
+}
+
+// IsVirtualTable returns true if the TableDescriptor describes a
+// virtual Table (like the informationgi_schema tables) and thus doesn't
+// need to be physically stored.
+func IsVirtualTable(id ID) bool {
+	return MinVirtualID <= id
 }
 
 // IsPhysicalTable returns true if the TableDescriptor actually describes a

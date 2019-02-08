@@ -193,10 +193,10 @@ query OTOT colnames
 SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner  nspacl
-2810313165  crdb_internal       NULL      NULL
-2902531810  information_schema  NULL      NULL
-1462631877  pg_catalog          NULL      NULL
-2397796629  public              NULL      NULL
+3604332469  crdb_internal       NULL      NULL
+3672231114  information_schema  NULL      NULL
+2508829085  pg_catalog          NULL      NULL
+3426283741  public              NULL      NULL
 
 ## pg_catalog.pg_database
 
@@ -205,24 +205,24 @@ SELECT oid, datname, datdba, encoding, datcollate, datctype, datistemplate, data
 FROM pg_catalog.pg_database
 ORDER BY oid
 ----
-oid         datname        datdba  encoding  datcollate  datctype    datistemplate  datallowconn
-381876367   system         NULL    6         en_US.utf8  en_US.utf8  false          true
-2069902775  constraint_db  NULL    6         en_US.utf8  en_US.utf8  false          true
-2326011399  postgres       NULL    6         en_US.utf8  en_US.utf8  false          true
-2754439556  defaultdb      NULL    6         en_US.utf8  en_US.utf8  false          true
-3819194709  test           NULL    6         en_US.utf8  en_US.utf8  false          true
+oid  datname        datdba  encoding  datcollate  datctype    datistemplate  datallowconn
+1    system         NULL    6         en_US.utf8  en_US.utf8  false          true
+50   defaultdb      NULL    6         en_US.utf8  en_US.utf8  false          true
+51   postgres       NULL    6         en_US.utf8  en_US.utf8  false          true
+52   test           NULL    6         en_US.utf8  en_US.utf8  false          true
+54   constraint_db  NULL    6         en_US.utf8  en_US.utf8  false          true
 
 query OTIOIIOT colnames
 SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, dattablespace, datacl
 FROM pg_catalog.pg_database
 ORDER BY oid
 ----
-oid         datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-381876367   system         -1            NULL           NULL          NULL        0              NULL
-2069902775  constraint_db  -1            NULL           NULL          NULL        0              NULL
-2326011399  postgres       -1            NULL           NULL          NULL        0              NULL
-2754439556  defaultdb      -1            NULL           NULL          NULL        0              NULL
-3819194709  test           -1            NULL           NULL          NULL        0              NULL
+oid  datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
+1    system         -1            NULL           NULL          NULL        0              NULL
+50   defaultdb      -1            NULL           NULL          NULL        0              NULL
+51   postgres       -1            NULL           NULL          NULL        0              NULL
+52   test           -1            NULL           NULL          NULL        0              NULL
+54   constraint_db  -1            NULL           NULL          NULL        0              NULL
 
 ## pg_catalog.pg_tables
 
@@ -271,17 +271,17 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 oid         relname       relnamespace  reltype  relowner  relam  relfilenode  reltablespace
-4183203597  t1            393119649     0        NULL      NULL   0            0
-586319997   primary       393119649     0        NULL      NULL   0            0
-586319998   t1_a_key      393119649     0        NULL      NULL   0            0
-586319999   index_key     393119649     0        NULL      NULL   0            0
-192646233   t2            393119649     0        NULL      NULL   0            0
-2761941313  primary       393119649     0        NULL      NULL   0            0
-2761941314  t2_t1_id_idx  393119649     0        NULL      NULL   0            0
-226054345   t3            393119649     0        NULL      NULL   0            0
-4084598993  primary       393119649     0        NULL      NULL   0            0
-4084598994  t3_a_b_idx    393119649     0        NULL      NULL   0            0
-4252432642  v1            393119649     0        NULL      NULL   0            0
+55          t1            2332901747    0        NULL      NULL   0            0
+450499963   primary       2332901747    0        NULL      NULL   0            0
+450499960   t1_a_key      2332901747    0        NULL      NULL   0            0
+450499961   index_key     2332901747    0        NULL      NULL   0            0
+56          t2            2332901747    0        NULL      NULL   0            0
+2315049508  primary       2332901747    0        NULL      NULL   0            0
+2315049511  t2_t1_id_idx  2332901747    0        NULL      NULL   0            0
+57          t3            2332901747    0        NULL      NULL   0            0
+969972501   primary       2332901747    0        NULL      NULL   0            0
+969972502   t3_a_b_idx    2332901747    0        NULL      NULL   0            0
+58          v1            2332901747    0        NULL      NULL   0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -350,29 +350,29 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 attrelid    relname       attname  atttypid  attstattarget  attlen  attnum  attndims  attcacheoff
-4183203597  t1            p        701       0              8       1       0         -1
-4183203597  t1            a        20        0              8       2       0         -1
-4183203597  t1            b        20        0              8       3       0         -1
-4183203597  t1            c        20        0              8       4       0         -1
-586319997   primary       p        701       0              8       1       0         -1
-586319998   t1_a_key      a        20        0              8       2       0         -1
-586319999   index_key     b        20        0              8       3       0         -1
-586319999   index_key     c        20        0              8       4       0         -1
-192646233   t2            t1_id    20        0              8       1       0         -1
-192646233   t2            rowid    20        0              8       2       0         -1
-2761941313  primary       rowid    20        0              8       2       0         -1
-2761941314  t2_t1_id_idx  t1_id    20        0              8       1       0         -1
-226054345   t3            a        20        0              8       1       0         -1
-226054345   t3            b        20        0              8       2       0         -1
-226054345   t3            c        25        0              -1      3       0         -1
-226054345   t3            rowid    20        0              8       4       0         -1
-4084598993  primary       rowid    20        0              8       4       0         -1
-4084598994  t3_a_b_idx    a        20        0              8       1       0         -1
-4084598994  t3_a_b_idx    b        20        0              8       2       0         -1
-4252432642  v1            p        701       0              8       1       0         -1
-4252432642  v1            a        20        0              8       2       0         -1
-4252432642  v1            b        20        0              8       3       0         -1
-4252432642  v1            c        20        0              8       4       0         -1
+55          t1            p        701       0              8       1       0         -1
+55          t1            a        20        0              8       2       0         -1
+55          t1            b        20        0              8       3       0         -1
+55          t1            c        20        0              8       4       0         -1
+450499963   primary       p        701       0              8       1       0         -1
+450499960   t1_a_key      a        20        0              8       2       0         -1
+450499961   index_key     b        20        0              8       3       0         -1
+450499961   index_key     c        20        0              8       4       0         -1
+56          t2            t1_id    20        0              8       1       0         -1
+56          t2            rowid    20        0              8       2       0         -1
+2315049508  primary       rowid    20        0              8       2       0         -1
+2315049511  t2_t1_id_idx  t1_id    20        0              8       1       0         -1
+57          t3            a        20        0              8       1       0         -1
+57          t3            b        20        0              8       2       0         -1
+57          t3            c        25        0              -1      3       0         -1
+57          t3            rowid    20        0              8       4       0         -1
+969972501   primary       rowid    20        0              8       4       0         -1
+969972502   t3_a_b_idx    a        20        0              8       1       0         -1
+969972502   t3_a_b_idx    b        20        0              8       2       0         -1
+58          v1            p        701       0              8       1       0         -1
+58          v1            a        20        0              8       2       0         -1
+58          v1            b        20        0              8       3       0         -1
+58          v1            c        20        0              8       4       0         -1
 
 query TTIBTTBB colnames
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef
@@ -487,7 +487,7 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 relname  attname  typname  attcollation  collname
-t3       c        text     1661428263    en-US
+t3       c        text     3903121477    en-US
 
 
 ## pg_catalog.pg_am
@@ -508,11 +508,11 @@ JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-oid         relname  adrelid     adnum  adbin           adsrc
-1371742922  t1       4183203597  4      12:::INT8       12:::INT8
-3294137148  t2       192646233   2      unique_rowid()  unique_rowid()
-1821466931  t3       226054345   3      'FOO':::STRING  'FOO':::STRING
-437430594   t3       226054345   4      unique_rowid()  unique_rowid()
+oid         relname  adrelid  adnum  adbin           adsrc
+1666782879  t1       55       4      12:::INT8       12:::INT8
+841178406   t2       56       2      unique_rowid()  unique_rowid()
+2186255414  t3       57       3      'FOO':::STRING  'FOO':::STRING
+2186255409  t3       57       4      unique_rowid()  unique_rowid()
 
 ## pg_catalog.pg_indexes
 
@@ -522,13 +522,13 @@ FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
 ----
 crdb_oid    schemaname  tablename  indexname     tablespace
-586319997   public      t1         primary       NULL
-586319998   public      t1         t1_a_key      NULL
-586319999   public      t1         index_key     NULL
-2761941313  public      t2         primary       NULL
-2761941314  public      t2         t2_t1_id_idx  NULL
-4084598993  public      t3         primary       NULL
-4084598994  public      t3         t3_a_b_idx    NULL
+450499963   public      t1         primary       NULL
+450499960   public      t1         t1_a_key      NULL
+450499961   public      t1         index_key     NULL
+2315049508  public      t2         primary       NULL
+2315049511  public      t2         t2_t1_id_idx  NULL
+969972501   public      t3         primary       NULL
+969972502   public      t3         t3_a_b_idx    NULL
 
 query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
@@ -536,13 +536,13 @@ FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
 ----
 crdb_oid    tablename  indexname     indexdef
-586319997   t1         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t1 (p ASC)
-586319998   t1         t1_a_key      CREATE UNIQUE INDEX t1_a_key ON constraint_db.public.t1 (a ASC)
-586319999   t1         index_key     CREATE UNIQUE INDEX index_key ON constraint_db.public.t1 (b ASC, c ASC)
-2761941313  t2         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t2 (rowid ASC)
-2761941314  t2         t2_t1_id_idx  CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 (t1_id ASC)
-4084598993  t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t3 (rowid ASC)
-4084598994  t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 (a ASC, b DESC) STORING (c)
+450499963   t1         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t1 (p ASC)
+450499960   t1         t1_a_key      CREATE UNIQUE INDEX t1_a_key ON constraint_db.public.t1 (a ASC)
+450499961   t1         index_key     CREATE UNIQUE INDEX index_key ON constraint_db.public.t1 (b ASC, c ASC)
+2315049508  t2         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t2 (rowid ASC)
+2315049511  t2         t2_t1_id_idx  CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 (t1_id ASC)
+969972501   t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t3 (rowid ASC)
+969972502   t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 (a ASC, b DESC) STORING (c)
 
 ## pg_catalog.pg_index
 
@@ -551,9 +551,9 @@ SELECT indexrelid, indrelid, indnatts, indisunique, indisprimary, indisexclusion
 FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
-indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
-586319999   4183203597  2         true         false         false
-4084598994  226054345   2         false        false         false
+indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion
+450499961   55        2         true         false         false
+969972502   57        2         false        false         false
 
 query OBBBBB colnames
 SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
@@ -561,17 +561,17 @@ FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
 indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
-586319999   true          false           true        false         false
-4084598994  false         false           true        false         false
+450499961   true          false           true        false         false
+969972502   false         false           true        false         false
 
 query OOBBTTTTTT colnames
 SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
 FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
-indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
-586319999   4183203597  true       false           3 4     0 0           0 0       0 0        NULL      NULL
-4084598994  226054345   true       false           1 2     0 0           0 0       0 0        NULL      NULL
+indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
+450499961   55        true       false           3 4     0 0           0 0       0 0        NULL      NULL
+969972502   57        true       false           1 2     0 0           0 0       0 0        NULL      NULL
 
 statement ok
 SET DATABASE = system
@@ -581,27 +581,27 @@ SELECT *
 FROM pg_catalog.pg_index
 ORDER BY indexrelid
 ----
-indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation           indclass  indoption  indexprs  indpred
-27122201    2904033927  2         true         true          false           true          false           true        false         false       true       false           1 6      0 0                    0 0       0 0        NULL      NULL
-235043584   971623778   2         true         true          false           true          false           true        false         false       true       false           1 2      1661428263 1661428263  0 0       0 0        NULL      NULL
-235043586   971623778   1         false        false         false           false         false           true        false         false       true       false           2        1661428263             0         0          NULL      NULL
-235043587   971623778   1         false        false         false           false         false           true        false         false       true       false           1        1661428263             0         0          NULL      NULL
-553144061   2568924675  2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                    0 0       0 0        NULL      NULL
-633004884   1455563232  1         false        false         false           false         false           true        false         false       true       false           4        0                      0         0          NULL      NULL
-633004885   1455563232  1         false        false         false           false         false           true        false         false       true       false           5        0                      0         0          NULL      NULL
-633004886   1455563232  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
-961325075   2492394317  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
-1112802205  3710069875  3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                  0 0 0     0 0 0      NULL      NULL
-1168848597  1038690067  2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                    0 0       0 0        NULL      NULL
-1849259112  3649853378  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
-1849259115  3649853378  2         false        false         false           false         false           true        false         false       true       false           2 3      1661428263 0           0 0       0 0        NULL      NULL
-2151986803  504491171   1         true         true          false           true          false           true        false         false       true       false           1        1661428263             0         0          NULL      NULL
-2490277766  936526412   1         true         true          false           true          false           true        false         false       true       false           1        1661428263             0         0          NULL      NULL
-2516644345  13912245    1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
-2795406519  4084372773  1         true         true          false           true          false           true        false         false       true       false           1        1661428263             0         0          NULL      NULL
-2916809960  3412769920  2         true         true          false           true          false           true        false         false       true       false           1 2      0 1661428263           0 0       0 0        NULL      NULL
-3042779560  1692823172  2         true         true          false           true          false           true        false         false       true       false           1 2      1661428263 1661428263  0 0       0 0        NULL      NULL
-4083294912  4199044472  4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                0 0 0 0   0 0 0 0    NULL      NULL
+indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation           indclass  indoption  indexprs  indpred
+543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3903121477             0         0          NULL      NULL
+543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3903121477             0         0          NULL      NULL
+543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477  0 0       0 0        NULL      NULL
+1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6      0 0                    0 0       0 0        NULL      NULL
+1582236367  3         1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
+1628632028  19        1         false        false         false           false         false           true        false         false       true       false           5        0                      0         0          NULL      NULL
+1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4        0                      0         0          NULL      NULL
+1628632031  19        1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
+1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1        3903121477             0         0          NULL      NULL
+2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
+2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477  0 0       0 0        NULL      NULL
+2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                  0 0 0     0 0 0      NULL      NULL
+2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3903121477 0           0 0       0 0        NULL      NULL
+2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
+2927313374  2         2         true         true          false           true          false           true        false         false       true       false           1 2      0 3903121477           0 0       0 0        NULL      NULL
+3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1        3903121477             0         0          NULL      NULL
+3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                    0 0       0 0        NULL      NULL
+3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                0 0 0 0   0 0 0 0    NULL      NULL
+3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3903121477             0         0          NULL      NULL
+4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                    0 0       0 0        NULL      NULL
 
 # From #26504
 query OOI colnames
@@ -612,38 +612,38 @@ FROM pg_index
 ORDER BY indexrelid, operator_argument_position
 ----
 indexrelid  operator_argument_type_oid  operator_argument_position
-27122201    0                           1
-27122201    0                           2
-235043584   0                           1
-235043584   0                           2
-235043586   0                           1
-235043587   0                           1
-553144061   0                           1
-553144061   0                           2
-633004884   0                           1
-633004885   0                           1
-633004886   0                           1
-961325075   0                           1
-1112802205  0                           1
-1112802205  0                           2
-1112802205  0                           3
-1168848597  0                           1
-1168848597  0                           2
-1849259112  0                           1
-1849259115  0                           1
-1849259115  0                           2
-2151986803  0                           1
-2490277766  0                           1
-2516644345  0                           1
-2795406519  0                           1
-2916809960  0                           1
-2916809960  0                           2
-3042779560  0                           1
-3042779560  0                           2
-4083294912  0                           1
-4083294912  0                           2
-4083294912  0                           3
-4083294912  0                           4
+543291288   0                           1
+543291289   0                           1
+543291291   0                           1
+543291291   0                           2
+1276104432  0                           1
+1276104432  0                           2
+1582236367  0                           1
+1628632028  0                           1
+1628632029  0                           1
+1628632031  0                           1
+1841972634  0                           1
+2101708905  0                           1
+2148104569  0                           1
+2148104569  0                           2
+2407840836  0                           1
+2407840836  0                           2
+2407840836  0                           3
+2621181440  0                           1
+2621181440  0                           2
+2621181443  0                           1
+2927313374  0                           1
+2927313374  0                           2
+3446785912  0                           1
+3493181576  0                           1
+3493181576  0                           2
+3706522183  0                           1
+3706522183  0                           2
+3706522183  0                           3
+3706522183  0                           4
+3966258450  0                           1
+4225994721  0                           1
+4225994721  0                           2
 
 ## pg_catalog.pg_collation
 
@@ -655,7 +655,7 @@ SELECT * FROM pg_collation
 WHERE collname='en-US'
 ----
 oid         collname  collnamespace  collowner  collencoding  collcollate  collctype
-1661428263  en-US     393119649      NULL       6             NULL         NULL
+3903121477  en-US     2332901747     NULL       6             NULL         NULL
 
 ## pg_catalog.pg_constraint
 ##
@@ -670,12 +670,12 @@ WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
 oid         conname    connamespace  contype
-706565544   index_key  393119649     u
-706565545   t1_a_key   393119649     u
-1705475931  check_b    393119649     c
-1968296057  fk         393119649     f
-2304211364  fk         393119649     f
-2922443201  primary    393119649     p
+178791267   fk         2332901747    f
+3236224800  check_b    2332901747    c
+3318155331  fk         2332901747    f
+3572320190  primary    2332901747    p
+4243354484  t1_a_key   2332901747    u
+4243354485  index_key  2332901747    u
 
 query TTBBBOOO colnames
 SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid
@@ -684,13 +684,13 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
-conname    contype  condeferrable  condeferred  convalidated  conrelid    contypid  conindid
-index_key  u        false          false        true          4183203597  0         586319999
-t1_a_key   u        false          false        true          4183203597  0         586319998
-check_b    c        false          false        true          226054345   0         0
-fk         f        false          false        true          192646233   0         586319998
-fk         f        false          false        true          226054345   0         586319999
-primary    p        false          false        true          4183203597  0         586319997
+conname    contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
+fk         f        false          false        true          57        0         450499961
+check_b    c        false          false        true          57        0         0
+fk         f        false          false        true          56        0         450499960
+primary    p        false          false        true          55        0         450499963
+t1_a_key   u        false          false        true          55        0         450499960
+index_key  u        false          false        true          55        0         450499961
 
 query T
 SELECT conname
@@ -708,10 +708,10 @@ WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
 conname    confrelid  confupdtype  confdeltype  confmatchtype
-index_key  0          NULL         NULL         NULL
-t1_a_key   0          NULL         NULL         NULL
 check_b    0          NULL         NULL         NULL
 primary    0          NULL         NULL         NULL
+t1_a_key   0          NULL         NULL         NULL
+index_key  0          NULL         NULL         NULL
 
 query TOTTT colnames
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
@@ -720,9 +720,9 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype = 'f'
 ORDER BY con.oid
 ----
-conname  confrelid   confupdtype  confdeltype  confmatchtype
-fk       4183203597  a            a            s
-fk       4183203597  a            a            s
+conname  confrelid  confupdtype  confdeltype  confmatchtype
+fk       55         a            a            s
+fk       55         a            a            s
 
 query TBIBT colnames
 SELECT conname, conislocal, coninhcount, connoinherit, conkey
@@ -732,12 +732,12 @@ WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
 conname    conislocal  coninhcount  connoinherit  conkey
-index_key  true        0            true          {3,4}
-t1_a_key   true        0            true          {2}
+fk         true        0            true          {1,2}
 check_b    true        0            true          {2}
 fk         true        0            true          {1}
-fk         true        0            true          {1,2}
 primary    true        0            true          {1}
+t1_a_key   true        0            true          {2}
+index_key  true        0            true          {3,4}
 
 query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
@@ -747,10 +747,10 @@ WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
 conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
-index_key  NULL     NULL       NULL       NULL       NULL       NULL    NULL
-t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL    NULL
 check_b    NULL     NULL       NULL       NULL       NULL       b > 11  b > 11
 primary    NULL     NULL       NULL       NULL       NULL       NULL    NULL
+t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL    NULL
+index_key  NULL     NULL       NULL       NULL       NULL       NULL    NULL
 
 query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
@@ -760,8 +760,8 @@ WHERE n.nspname = 'public' AND contype = 'f'
 ORDER BY con.oid
 ----
 conname  confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
-fk       {2}      NULL       NULL       NULL       NULL       NULL    NULL
 fk       {3,4}    NULL       NULL       NULL       NULL       NULL    NULL
+fk       {2}      NULL       NULL       NULL       NULL       NULL    NULL
 
 ## pg_catalog.pg_depend
 
@@ -771,8 +771,8 @@ FROM pg_catalog.pg_depend
 ORDER BY objid
 ----
 classid     objid       objsubid  refclassid  refobjid   refobjsubid  deptype
-2416812286  1968296057  0         2990889189  586319998  0            n
-2416812286  2304211364  0         2990889189  586319999  0            n
+4294967233  178791267   0         4294967235  450499961  0            n
+4294967233  3318155331  0         4294967235  450499960  0            n
 
 # All entries in pg_depend are dependency links from the pg_constraint system
 # table to the pg_class system table.
@@ -784,7 +784,7 @@ JOIN pg_class cla ON classid=cla.oid
 JOIN pg_class refcla ON refclassid=refcla.oid
 ----
 classid     refclassid  tablename      reftablename
-2416812286  2990889189  pg_constraint  pg_class
+4294967233  4294967235  pg_constraint  pg_class
 
 # All entries in pg_depend are foreign key constraints that reference an index
 # in pg_class.
@@ -819,63 +819,63 @@ FROM pg_catalog.pg_type
 ORDER BY oid
 ----
 oid   typname       typnamespace  typowner  typlen  typbyval  typtype
-16    bool          2980797153    NULL      1       true      b
-17    bytea         2980797153    NULL      -1      false     b
-18    char          2980797153    NULL      -1      false     b
-19    name          2980797153    NULL      -1      false     b
-20    int8          2980797153    NULL      8       true      b
-21    int2          2980797153    NULL      8       true      b
-22    int2vector    2980797153    NULL      -1      false     b
-23    int4          2980797153    NULL      8       true      b
-24    regproc       2980797153    NULL      8       true      b
-25    text          2980797153    NULL      -1      false     b
-26    oid           2980797153    NULL      8       true      b
-30    oidvector     2980797153    NULL      -1      false     b
-700   float4        2980797153    NULL      8       true      b
-701   float8        2980797153    NULL      8       true      b
-869   inet          2980797153    NULL      24      true      b
-1000  _bool         2980797153    NULL      -1      false     b
-1001  _bytea        2980797153    NULL      -1      false     b
-1002  _char         2980797153    NULL      -1      false     b
-1003  _name         2980797153    NULL      -1      false     b
-1005  _int2         2980797153    NULL      -1      false     b
-1007  _int4         2980797153    NULL      -1      false     b
-1009  _text         2980797153    NULL      -1      false     b
-1014  _bpchar       2980797153    NULL      -1      false     b
-1015  _varchar      2980797153    NULL      -1      false     b
-1016  _int8         2980797153    NULL      -1      false     b
-1021  _float4       2980797153    NULL      -1      false     b
-1022  _float8       2980797153    NULL      -1      false     b
-1028  _oid          2980797153    NULL      -1      false     b
-1041  _inet         2980797153    NULL      -1      false     b
-1042  bpchar        2980797153    NULL      -1      false     b
-1043  varchar       2980797153    NULL      -1      false     b
-1082  date          2980797153    NULL      8       true      b
-1083  time          2980797153    NULL      8       true      b
-1114  timestamp     2980797153    NULL      24      true      b
-1115  _timestamp    2980797153    NULL      -1      false     b
-1182  _date         2980797153    NULL      -1      false     b
-1183  _time         2980797153    NULL      -1      false     b
-1184  timestamptz   2980797153    NULL      24      true      b
-1185  _timestamptz  2980797153    NULL      -1      false     b
-1186  interval      2980797153    NULL      24      true      b
-1187  _interval     2980797153    NULL      -1      false     b
-1231  _numeric      2980797153    NULL      -1      false     b
-1560  bit           2980797153    NULL      -1      false     b
-1561  _bit          2980797153    NULL      -1      false     b
-1562  varbit        2980797153    NULL      -1      false     b
-1563  _varbit       2980797153    NULL      -1      false     b
-1700  numeric       2980797153    NULL      -1      false     b
-2202  regprocedure  2980797153    NULL      8       true      b
-2205  regclass      2980797153    NULL      8       true      b
-2206  regtype       2980797153    NULL      8       true      b
-2249  record        2980797153    NULL      0       true      p
-2277  anyarray      2980797153    NULL      -1      false     p
-2283  anyelement    2980797153    NULL      -1      false     p
-2950  uuid          2980797153    NULL      16      true      b
-2951  _uuid         2980797153    NULL      -1      false     b
-3802  jsonb         2980797153    NULL      -1      false     b
-4089  regnamespace  2980797153    NULL      8       true      b
+16    bool          1307062959    NULL      1       true      b
+17    bytea         1307062959    NULL      -1      false     b
+18    char          1307062959    NULL      -1      false     b
+19    name          1307062959    NULL      -1      false     b
+20    int8          1307062959    NULL      8       true      b
+21    int2          1307062959    NULL      8       true      b
+22    int2vector    1307062959    NULL      -1      false     b
+23    int4          1307062959    NULL      8       true      b
+24    regproc       1307062959    NULL      8       true      b
+25    text          1307062959    NULL      -1      false     b
+26    oid           1307062959    NULL      8       true      b
+30    oidvector     1307062959    NULL      -1      false     b
+700   float4        1307062959    NULL      8       true      b
+701   float8        1307062959    NULL      8       true      b
+869   inet          1307062959    NULL      24      true      b
+1000  _bool         1307062959    NULL      -1      false     b
+1001  _bytea        1307062959    NULL      -1      false     b
+1002  _char         1307062959    NULL      -1      false     b
+1003  _name         1307062959    NULL      -1      false     b
+1005  _int2         1307062959    NULL      -1      false     b
+1007  _int4         1307062959    NULL      -1      false     b
+1009  _text         1307062959    NULL      -1      false     b
+1014  _bpchar       1307062959    NULL      -1      false     b
+1015  _varchar      1307062959    NULL      -1      false     b
+1016  _int8         1307062959    NULL      -1      false     b
+1021  _float4       1307062959    NULL      -1      false     b
+1022  _float8       1307062959    NULL      -1      false     b
+1028  _oid          1307062959    NULL      -1      false     b
+1041  _inet         1307062959    NULL      -1      false     b
+1042  bpchar        1307062959    NULL      -1      false     b
+1043  varchar       1307062959    NULL      -1      false     b
+1082  date          1307062959    NULL      8       true      b
+1083  time          1307062959    NULL      8       true      b
+1114  timestamp     1307062959    NULL      24      true      b
+1115  _timestamp    1307062959    NULL      -1      false     b
+1182  _date         1307062959    NULL      -1      false     b
+1183  _time         1307062959    NULL      -1      false     b
+1184  timestamptz   1307062959    NULL      24      true      b
+1185  _timestamptz  1307062959    NULL      -1      false     b
+1186  interval      1307062959    NULL      24      true      b
+1187  _interval     1307062959    NULL      -1      false     b
+1231  _numeric      1307062959    NULL      -1      false     b
+1560  bit           1307062959    NULL      -1      false     b
+1561  _bit          1307062959    NULL      -1      false     b
+1562  varbit        1307062959    NULL      -1      false     b
+1563  _varbit       1307062959    NULL      -1      false     b
+1700  numeric       1307062959    NULL      -1      false     b
+2202  regprocedure  1307062959    NULL      8       true      b
+2205  regclass      1307062959    NULL      8       true      b
+2206  regtype       1307062959    NULL      8       true      b
+2249  record        1307062959    NULL      0       true      p
+2277  anyarray      1307062959    NULL      -1      false     p
+2283  anyelement    1307062959    NULL      -1      false     p
+2950  uuid          1307062959    NULL      16      true      b
+2951  _uuid         1307062959    NULL      -1      false     b
+3802  jsonb         1307062959    NULL      -1      false     b
+4089  regnamespace  1307062959    NULL      8       true      b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -1077,14 +1077,14 @@ ORDER BY oid
 oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 16    bool          0         0             NULL           NULL        NULL
 17    bytea         0         0             NULL           NULL        NULL
-18    char          0         1661428263    NULL           NULL        NULL
-19    name          0         1661428263    NULL           NULL        NULL
+18    char          0         3903121477    NULL           NULL        NULL
+19    name          0         3903121477    NULL           NULL        NULL
 20    int8          0         0             NULL           NULL        NULL
 21    int2          0         0             NULL           NULL        NULL
 22    int2vector    0         0             NULL           NULL        NULL
 23    int4          0         0             NULL           NULL        NULL
 24    regproc       0         0             NULL           NULL        NULL
-25    text          0         1661428263    NULL           NULL        NULL
+25    text          0         3903121477    NULL           NULL        NULL
 26    oid           0         0             NULL           NULL        NULL
 30    oidvector     0         0             NULL           NULL        NULL
 700   float4        0         0             NULL           NULL        NULL
@@ -1092,20 +1092,20 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 869   inet          0         0             NULL           NULL        NULL
 1000  _bool         0         0             NULL           NULL        NULL
 1001  _bytea        0         0             NULL           NULL        NULL
-1002  _char         0         1661428263    NULL           NULL        NULL
-1003  _name         0         1661428263    NULL           NULL        NULL
+1002  _char         0         3903121477    NULL           NULL        NULL
+1003  _name         0         3903121477    NULL           NULL        NULL
 1005  _int2         0         0             NULL           NULL        NULL
 1007  _int4         0         0             NULL           NULL        NULL
-1009  _text         0         1661428263    NULL           NULL        NULL
-1014  _bpchar       0         1661428263    NULL           NULL        NULL
-1015  _varchar      0         1661428263    NULL           NULL        NULL
+1009  _text         0         3903121477    NULL           NULL        NULL
+1014  _bpchar       0         3903121477    NULL           NULL        NULL
+1015  _varchar      0         3903121477    NULL           NULL        NULL
 1016  _int8         0         0             NULL           NULL        NULL
 1021  _float4       0         0             NULL           NULL        NULL
 1022  _float8       0         0             NULL           NULL        NULL
 1028  _oid          0         0             NULL           NULL        NULL
 1041  _inet         0         0             NULL           NULL        NULL
-1042  bpchar        0         1661428263    NULL           NULL        NULL
-1043  varchar       0         1661428263    NULL           NULL        NULL
+1042  bpchar        0         3903121477    NULL           NULL        NULL
+1043  varchar       0         3903121477    NULL           NULL        NULL
 1082  date          0         0             NULL           NULL        NULL
 1083  time          0         0             NULL           NULL        NULL
 1114  timestamp     0         0             NULL           NULL        NULL
@@ -1126,7 +1126,7 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 2205  regclass      0         0             NULL           NULL        NULL
 2206  regtype       0         0             NULL           NULL        NULL
 2249  record        0         0             NULL           NULL        NULL
-2277  anyarray      0         1661428263    NULL           NULL        NULL
+2277  anyarray      0         3903121477    NULL           NULL        NULL
 2283  anyelement    0         0             NULL           NULL        NULL
 2950  uuid          0         0             NULL           NULL        NULL
 2951  _uuid         0         0             NULL           NULL        NULL
@@ -1141,10 +1141,10 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    pronamespace  proowner  prolang  procost  prorows  provariadic
-substring  2980797153    NULL      0        NULL     NULL     0
-substring  2980797153    NULL      0        NULL     NULL     0
-substring  2980797153    NULL      0        NULL     NULL     0
-substring  2980797153    NULL      0        NULL     NULL     0
+substring  1307062959    NULL      0        NULL     NULL     0
+substring  1307062959    NULL      0        NULL     NULL     0
+substring  1307062959    NULL      0        NULL     NULL     0
+substring  1307062959    NULL      0        NULL     NULL     0
 
 query TTBBBB colnames
 SELECT proname, protransform, proisagg, proiswindow, prosecdef, proleakproof
@@ -1220,9 +1220,9 @@ FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
 oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolreplication
-823966177   admin     true      true        true           true         false         false        false
-2901009604  root      true      false       true           true         false         true         false
-2499926009  testuser  false     false       false          false        false         true         false
+2310524507  admin     true      true        true           true         false         false        false
+1546506610  root      true      false       true           true         false         true         false
+2264919399  testuser  false     false       false          false        false         true         false
 
 query OTITTBT colnames
 SELECT oid, rolname, rolconnlimit, rolpassword, rolvaliduntil, rolbypassrls, rolconfig
@@ -1230,9 +1230,9 @@ FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
 oid         rolname   rolconnlimit  rolpassword  rolvaliduntil  rolbypassrls  rolconfig
-823966177   admin     -1            ********     NULL           false         NULL
-2901009604  root      -1            ********     NULL           false         NULL
-2499926009  testuser  -1            ********     NULL           false         NULL
+2310524507  admin     -1            ********     NULL           false         NULL
+1546506610  root      -1            ********     NULL           false         NULL
+2264919399  testuser  -1            ********     NULL           false         NULL
 
 ## pg_catalog.pg_auth_members
 
@@ -1240,8 +1240,8 @@ query OOOB colnames
 SELECT roleid, member, grantor, admin_option
 FROM pg_catalog.pg_auth_members
 ----
-roleid     member      grantor  admin_option
-823966177  2901009604  NULL     true
+roleid      member      grantor  admin_option
+2310524507  1546506610  NULL     true
 
 ## pg_catalog.pg_user
 
@@ -1251,8 +1251,8 @@ FROM pg_catalog.pg_user
 ORDER BY usename
 ----
 usename   usesysid    usecreatedb  usesuper  userepl  usebypassrls  passwd    valuntil  useconfig
-root      2901009604  true         true      false    false         ********  NULL      NULL
-testuser  2499926009  false        false     false    false         ********  NULL      NULL
+root      1546506610  true         true      false    false         ********  NULL      NULL
+testuser  2264919399  false        false     false    false         ********  NULL      NULL
 
 ## pg_catalog.pg_description
 
@@ -1473,9 +1473,9 @@ CREATE SEQUENCE bar MAXVALUE 10 MINVALUE 5 START 6 INCREMENT 2
 query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
-seqrelid    seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-1978455413  20        1         1             9223372036854775807  1       1         false
-3953462681  20        6         2             10                   5       1         false
+seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
+64        20        1         1             9223372036854775807  1       1         false
+65        20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
@@ -1493,8 +1493,8 @@ SELECT * FROM pg_catalog.pg_sequence
 query OTOOTBBOOOOOOOO colnames
 SELECT * FROM pg_catalog.pg_operator where oprname='+' and oprleft='float8'::regtype
 ----
-oid         oprname  oprnamespace  oprowner  oprkind  oprcanmerge  oprcanhash  oprleft  oprright  oprresult  oprcom  oprnegate  oprcode  oprrest  oprjoin
-3695865198  +        2980797153    NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
+oid       oprname  oprnamespace  oprowner  oprkind  oprcanmerge  oprcanhash  oprleft  oprright  oprresult  oprcom  oprnegate  oprcode  oprrest  oprjoin
+74817020  +        1307062959    NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
 
 # Verify proper functionality of system information functions.
 
@@ -1518,10 +1518,10 @@ JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-1371742922  t1  12:::INT8
-3294137148  t2  unique_rowid()
-1821466931  t3  'FOO':::STRING
-437430594   t3  unique_rowid()
+1666782879  t1  12:::INT8
+841178406   t2  unique_rowid()
+2186255414  t3  'FOO':::STRING
+2186255409  t3  unique_rowid()
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.
@@ -1584,7 +1584,7 @@ FROM pg_proc p
 JOIN pg_type t ON t.typinput = p.oid
 WHERE t.typname = '_int4'
 ----
-639449980  array_in  array_in
+780513238  array_in  array_in
 
 ## #16285
 ## int2vectors should be 0-indexed

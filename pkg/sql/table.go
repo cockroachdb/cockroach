@@ -875,7 +875,7 @@ func (p *planner) writeTableDescToBatch(
 	mutationID sqlbase.MutationID,
 	b *client.Batch,
 ) error {
-	if isVirtualDescriptor(tableDesc) {
+	if tableDesc.IsVirtualTable() {
 		return pgerror.NewAssertionErrorf("virtual descriptors cannot be stored, found: %v", tableDesc)
 	}
 
