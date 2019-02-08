@@ -377,6 +377,13 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision.ChosenVia = truncatableIndexChosenViaQuorumIndex
 
 	for _, progress := range input.RaftStatus.Progress {
+		if !progress.RecentActive {
+			// If a follower isn't recently active, don't lower the truncation
+			// index for it as the follower is likely not online at all and would
+			// block log truncation forever.
+			continue
+		}
+
 		// Generally we truncate to the quorum commit index when the log becomes
 		// too large, but we make an exception for live followers which are
 		// being probed (i.e. the leader doesn't know how far they've caught
@@ -396,10 +403,11 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		// ranges will be split many times over, resulting in a flurry of
 		// snapshots with overlapping bounds that put significant stress on the
 		// Raft snapshot queue.
-		probing := (progress.RecentActive && progress.State == raft.ProgressStateProbe)
-		if probing && decision.NewFirstIndex > decision.Input.FirstIndex {
-			decision.NewFirstIndex = decision.Input.FirstIndex
-			decision.ChosenVia = truncatableIndexChosenViaProbingFollower
+		if progress.State == raft.ProgressStateProbe {
+			if decision.NewFirstIndex > decision.Input.FirstIndex {
+				decision.NewFirstIndex = decision.Input.FirstIndex
+				decision.ChosenVia = truncatableIndexChosenViaProbingFollower
+			}
 		} else if !input.LogTooLarge() && decision.NewFirstIndex > progress.Match {
 			decision.NewFirstIndex = progress.Match
 			decision.ChosenVia = truncatableIndexChosenViaFollowers
@@ -454,7 +462,11 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 func getQuorumIndex(raftStatus *raft.Status) uint64 {
 	match := make([]uint64, 0, len(raftStatus.Progress))
 	for _, progress := range raftStatus.Progress {
-		match = append(match, progress.Match)
+		if progress.State == raft.ProgressStateReplicate {
+			match = append(match, progress.Match)
+		} else {
+			match = append(match, 0)
+		}
 	}
 	sort.Sort(uint64Slice(match))
 	quorum := computeQuorum(len(match))
