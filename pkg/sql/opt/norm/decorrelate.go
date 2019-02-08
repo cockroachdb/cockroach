@@ -796,7 +796,7 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 		return r.f.ConstructVariable(opt.ColumnID(colID))
 	}
 
-	return r.f.Reconstruct(scalar, func(nd opt.Expr) opt.Expr {
+	return r.f.Replace(scalar, func(nd opt.Expr) opt.Expr {
 		// Recursively hoist subqueries in each scalar child that contains them.
 		// Skip relational children, since only subquery scalar operators have a
 		// relational child, and either:
