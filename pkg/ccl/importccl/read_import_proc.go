@@ -9,12 +9,14 @@
 package importccl
 
 import (
+	"bytes"
 	"compress/bzip2"
 	"compress/gzip"
 	"context"
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -32,7 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -209,7 +213,7 @@ type rowConverter struct {
 	computedIVarContainer sqlbase.RowIndexedVarContainer
 }
 
-const kvBatchSize = 1000
+const kvBatchSize = 5000
 
 func newRowConverter(
 	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- kvBatch,
@@ -405,7 +409,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 // wrapper, doing the correct DrainAndClose error handling logic.
 func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	group := ctxgroup.WithContext(ctx)
-	kvCh := make(chan kvBatch)
+	kvCh := make(chan kvBatch, 10)
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
 	var singleTable *sqlbase.TableDescriptor
@@ -469,8 +473,86 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 	// Sample KVs
 	group.GoCtx(func(ctx context.Context) error {
+		typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
+
 		ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
 		defer tracing.FinishSpan(span)
+
+		if cp.spec.IngestDirectly {
+			// TODO(dt): allow configuring these.
+			const sortBatchSize = 1000000
+			// TODO(dt): track byte size as well as key count to trigger flushes.
+
+			// TODO(dt): buffer to disk instead of all in-mem.
+
+			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
+			adder, err := cp.flowCtx.BulkAdder(ctx, cp.flowCtx.ClientDB, 32<<20, writeTS)
+			if err != nil {
+				return err
+			}
+			defer adder.Close()
+
+			buf := make(roachpb.KeyValueByKey, 0, sortBatchSize)
+
+			for kvBatch := range kvCh {
+
+				// TODO(dt): consider checking if we want to flush an almost-full buffer
+				// to make room for a large batch.
+				buf = append(buf, kvBatch...)
+
+				if len(buf) > sortBatchSize {
+					sort.Sort(buf)
+					for i := range buf {
+						if err := adder.Add(ctx, buf[i].Key, buf[i].Value.RawBytes); err != nil {
+							if i > 0 && bytes.Equal(buf[i].Key, buf[i-1].Key) {
+								return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, buf[i].Key)
+							}
+							return err
+						}
+					}
+					if err := adder.Flush(ctx); err != nil {
+						return err
+					}
+					buf = buf[:0]
+					if err := adder.Reset(); err != nil {
+						return err
+					}
+				}
+			}
+
+			if len(buf) > 0 {
+				sort.Sort(buf)
+				for i := range buf {
+					if err := adder.Add(ctx, buf[i].Key, buf[i].Value.RawBytes); err != nil {
+						if i > 0 && bytes.Equal(buf[i].Key, buf[i-1].Key) {
+							return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, buf[i].Key)
+						}
+					}
+				}
+				if err := adder.Flush(ctx); err != nil {
+					return err
+				}
+			}
+
+			added := adder.GetSummary()
+
+			countsBytes, err := protoutil.Marshal(&added)
+			if err != nil {
+				return err
+			}
+
+			cs, err := cp.out.EmitRow(ctx, sqlbase.EncDatumRow{
+				sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+				sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+			})
+			if err != nil {
+				return err
+			}
+			if cs != distsqlrun.NeedMoreRows {
+				return errors.New("unexpected closure of consumer")
+			}
+			return nil
+		}
 
 		var fn sampleFunc
 		var sampleAll bool
@@ -497,7 +579,6 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			return errors.Errorf("unexpected progress type %T", progress)
 		}
 
-		typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch {
 				// Allow KV pairs to be dropped if they belong to a completed span.

@@ -897,6 +897,8 @@ func doDistributedCSVTransform(
 		}
 	}()
 
+	var res roachpb.BulkOpSummary
+
 	if err := sql.LoadCSV(
 		ctx,
 		p,
@@ -909,10 +911,8 @@ func doDistributedCSVTransform(
 		walltime,
 		sstSize,
 		oversample,
-		func(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (sql.KeyRewriter, error) {
-			return storageccl.MakeKeyRewriter(descs)
-		},
 		ingestDirectly,
+		&res,
 	); err != nil {
 
 		// Check if this was a context canceled error and restart if it was.
@@ -936,6 +936,10 @@ func doDistributedCSVTransform(
 			return roachpb.BulkOpSummary{}, err
 		}
 		return roachpb.BulkOpSummary{}, err
+	}
+
+	if ingestDirectly {
+		return res, nil
 	}
 
 	backupDesc := backupccl.BackupDescriptor{

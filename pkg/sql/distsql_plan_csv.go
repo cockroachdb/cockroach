@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -183,6 +184,7 @@ func LoadCSV(
 	splitSize int64,
 	oversample int64,
 	ingestDirectly bool,
+	result *roachpb.BulkOpSummary,
 ) error {
 	ctx = logtags.AddTag(ctx, "import-distsql", nil)
 
@@ -254,6 +256,14 @@ func LoadCSV(
 	db := phs.ExecCfg().DB
 	thisNode := phs.ExecCfg().NodeID.Get()
 
+	if ingestDirectly {
+		res, err := dsp.runDistrbutedImport(ctx, planCtx, evalCtx, db, job, thisNode, nodes, inputSpecs)
+		if err != nil {
+			return err
+		}
+		*result = res
+		return nil
+	}
 	// Determine if we need to run the sampling plan or not.
 
 	details := job.Details().(jobspb.ImportDetails)
@@ -635,4 +645,93 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(samples), job.Payload().Description)
 
 	return samples, nil
+}
+
+func (dsp *DistSQLPlanner) runDistrbutedImport(
+	ctx context.Context,
+	planCtx *PlanningCtx,
+	evalCtx *extendedEvalContext,
+	db *client.DB,
+	job *jobs.Job,
+	thisNode roachpb.NodeID,
+	nodes []roachpb.NodeID,
+	inputSpecs []*distsqlpb.ReadImportDataSpec,
+) (roachpb.BulkOpSummary, error) {
+	var p PhysicalPlan
+	stageID := p.NewStageID()
+
+	for i := range inputSpecs {
+		inputSpecs[i].IngestDirectly = true
+	}
+
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(inputSpecs))
+	for i, rcs := range inputSpecs {
+		proc := distsqlplan.Processor{
+			Node: nodes[i],
+			Spec: distsqlpb.ProcessorSpec{
+				Core:    distsqlpb.ProcessorCoreUnion{ReadImport: rcs},
+				Output:  []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
+				StageID: stageID,
+			},
+		}
+		pIdx := p.AddProcessor(proc)
+		p.ResultRouters[i] = pIdx
+	}
+
+	// This keeps the same column count/types as sampling/reading but now we only
+	// expect one row from each, with an encoded bulkopsummary in the first col
+	// and the second column empty.
+	p.PlanToStreamColMap = []int{0, 1}
+	p.ResultTypes = []sqlbase.ColumnType{
+		colTypeBytes,
+		colTypeBytes,
+	}
+
+	var res roachpb.BulkOpSummary
+
+	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		var counts roachpb.BulkOpSummary
+		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
+			return err
+		}
+		res.Add(counts)
+		return nil
+	})
+
+	dsp.FinalizePlan(planCtx, &p)
+
+	// Update job details with the sampled keys, as well as any parsed tables,
+	// clear SamplingProgress and prep second stage job details for progress
+	// tracking.
+	if err := job.FractionDetailProgressed(ctx,
+		func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32 {
+			prog := progress.(*jobspb.Progress_Import).Import
+			prog.SamplingProgress = nil
+			prog.ReadProgress = make([]float32, len(inputSpecs))
+			prog.WriteProgress = make([]float32, len(p.ResultRouters))
+			return prog.Completed()
+		},
+	); err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
+
+	recv := MakeDistSQLReceiver(
+		ctx,
+		rowResultWriter,
+		tree.Rows,
+		nil, /* rangeCache */
+		nil, /* leaseCache */
+		nil, /* txn - the flow does not read or write the database */
+		func(ts hlc.Timestamp) {},
+		evalCtx.Tracing,
+	)
+	defer recv.Release()
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := *evalCtx
+	dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	if err := rowResultWriter.Err(); err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
+
+	return res, nil
 }

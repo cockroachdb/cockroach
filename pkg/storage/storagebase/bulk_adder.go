@@ -37,4 +37,6 @@ type BulkAdder interface {
 	GetSummary() roachpb.BulkOpSummary
 	// Close closes the underlying buffers/writers.
 	Close()
+	// Reset resets the bulk-adder, returning it to its initial state.
+	Reset() error
 }
