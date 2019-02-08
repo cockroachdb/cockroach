@@ -39,6 +39,18 @@ const (
 	TimeseriesZoneName = "timeseries"
 )
 
+// Several constraints are given special meaning.
+const (
+	// CoordinatorConstraint is the name of the predefined "coordinator"
+	// constaint. By default, coordinator nodes will not accept any replicas,
+	// allowing them to act as SQL gateway-only nodes that can be run without
+	// any storage requirements. A common usage of this pattern is to run a
+	// coordinator node on the same machine as a client application, allowing it
+	// to act as a router directly to the KV storage layer (obviating the need
+	// for a load-balancer layer).
+	CoordinatorConstraint = "coordinator"
+)
+
 // NamedZones maps named zones to their pseudo-table ID that can be used to
 // install an entry into the system.zones table.
 var NamedZones = map[string]uint32{
@@ -284,6 +296,11 @@ var defaultZoneConfig = &ZoneConfig{
 		// understand how to change these settings if needed.
 		TTLSeconds: 25 * 60 * 60,
 	},
+	Constraints: []Constraints{
+		{Constraints: []Constraint{
+			{Value: CoordinatorConstraint, Type: Constraint_PROHIBITED}},
+		},
+	},
 }
 
 // defaultSystemZoneConfig is the default zone configuration used when no custom
@@ -302,6 +319,11 @@ var defaultSystemZoneConfig = &ZoneConfig{
 		// hour, and larger clusters will have more experienced operators and will
 		// understand how to change these settings if needed.
 		TTLSeconds: 25 * 60 * 60,
+	},
+	Constraints: []Constraints{
+		{Constraints: []Constraint{
+			{Value: CoordinatorConstraint, Type: Constraint_PROHIBITED}},
+		},
 	},
 }
 
