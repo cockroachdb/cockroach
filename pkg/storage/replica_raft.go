@@ -2370,3 +2370,48 @@ func (r *Replica) applyRaftCommand(
 	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
 	return deltaStats, nil
 }
+
+// computeRaftLogSizeDelta computes a delta between r.mu.raftLogSize and the
+// real size of the log. This is useful for reconciling the in-memory state with
+// on-disk reality.
+// This returns a delta (in bytes) and not the absolute value of the log because
+// log appending is not suspended during the computation. No replica locks
+// should be held when calling this, and it will not hold any locks while
+// reading the log. The in-memory stats are not corrected with the returned
+// delta; that's the caller's responsibility. Assuming the maintenance of the
+// stats is accurate after this is called, and that no truncation occurs, the
+// delta can be applied at any time in order to bring the stats up to date.
+//
+// Since the size of sideloaded data is not included in r.mu.raftLogSize, this
+// method is not concerned with sideloads either.
+func (r *Replica) computeRaftLogSizeDelta(ctx context.Context) (int64, error) {
+	// We're going to atomically take an engine snapshot and save the current
+	// value of the in-memory stats about the log size. We're then going to
+	// compute the real size of the log included in the snapshot and see if it's
+	// different from the in-memory state.
+	startKey := keys.MakeRangeIDPrefixBuf(r.RangeID).RaftLogPrefix()
+	endKey := startKey.PrefixEnd()
+	r.raftMu.Lock()
+	iter := r.Engine().NewSnapshot().NewIterator(
+		engine.IterOptions{LowerBound: startKey, UpperBound: endKey})
+	defer iter.Close()
+	r.mu.RLock()
+	inMemRaftLogSize := r.mu.raftLogSize
+	r.mu.RUnlock()
+	r.raftMu.Unlock()
+
+	// We can pass zero as nowNanos because we're only interested in SysBytes.
+	ms, err := iter.ComputeStats(
+		engine.MakeMVCCMetadataKey(startKey),
+		engine.MakeMVCCMetadataKey(endKey),
+		0 /* nowNanos */)
+	if err != nil {
+		return 0, errors.Wrap(err, "falied to compute Raft log size")
+	}
+	raftLogSize := ms.SysBytes
+	delta := raftLogSize - inMemRaftLogSize
+	if delta != 0 {
+		log.VEventf(ctx, 2, "found Raft log stats discrepancy of %d bytes", delta)
+	}
+	return delta, nil
+}
