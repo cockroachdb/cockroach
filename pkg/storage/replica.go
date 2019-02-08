@@ -315,6 +315,11 @@ type Replica struct {
 		// is always true unless CheckQuorum is active, which at the time of writing in
 		// CockroachDB is not the case.
 		//
+		// The lastUpdateTimes map is also updated when a leaseholder steps up
+		// (making the assumption that all followers are live at that point),
+		// and when the range unquiesces (marking all replicating followers as
+		// live).
+		//
 		// TODO(tschottdorf): keeping a map on each replica seems to be
 		// overdoing it. We should map the replicaID to a NodeID and then use
 		// node liveness (or any sensible measure of the peer being around).
