@@ -128,10 +128,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// hands.
 			r.mu.proposalQuota = newQuotaPool(r.store.cfg.RaftProposalQuota)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
-			now := timeutil.Now()
-			for _, desc := range r.mu.state.Desc.Replicas {
-				r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
-			}
+			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas, timeutil.Now())
 			r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
