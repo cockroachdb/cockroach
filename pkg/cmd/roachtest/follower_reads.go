@@ -78,6 +78,18 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 	if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = 'true'"); err != nil {
 		t.Fatalf("failed to enable follower reads: %v", err)
 	}
+	// Disable load based splitting and range merging because splits and merges
+	// interfere with follower reads. Rhis test's workload regularly triggers load
+	// based splitting in the first phase creating small ranges which later
+	// in the test are merged. The merging tends to coincide with the final phase
+	// of the test which attempts to observe low latency reads leading to
+	// flakiness.
+	if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'"); err != nil {
+		t.Fatalf("failed to disable load based splitting: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_merge.queue_enabled = 'false'"); err != nil {
+		t.Fatalf("failed to disable range merging: %v", err)
+	}
 	if r, err := db.ExecContext(ctx, "CREATE DATABASE test;"); err != nil {
 		t.Fatalf("failed to create database: %v %v", err, r)
 	}
