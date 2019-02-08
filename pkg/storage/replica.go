@@ -27,13 +27,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/google/btree"
-	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -67,6 +60,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/google/btree"
+	"github.com/kr/pretty"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 const (
@@ -272,6 +271,36 @@ func (m lastUpdateTimesMap) isFollowerActive(
 	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
 }
 
+// updateOnUnquiesce is called when the leader unquiesces. In that case, we
+// don't want live followers to appear as dead before their next message reaches
+// us; to achieve that, we optimistically mark all followers that are in
+// ProgressStateReplicate (or rather, were in that state when the group
+// quiesced) as live as of `now`. We don't want to mark other followers as
+// live as they may be down and could artificially seem alive forever assuming
+// a suitable pattern of quiesce and unquiesce operations (and this in turn
+// can interfere with Raft log truncations).
+func (m lastUpdateTimesMap) updateOnUnquiesce(
+	descs []roachpb.ReplicaDescriptor, prs map[uint64]raft.Progress, now time.Time,
+) {
+	for _, desc := range descs {
+		if prs[uint64(desc.ReplicaID)].State == raft.ProgressStateReplicate {
+			m.update(desc.ReplicaID, now)
+		}
+	}
+}
+
+// updateOnBecomeLeader is similar to updateOnUnquiesce, but is called when the
+// replica becomes the Raft leader. It updates all followers irrespective of
+// their Raft state, for the Raft state is not yet populated by the time this
+// callback is invoked. Raft leadership is usually stable, so there is no danger
+// of artificially keeping down followers alive, though if it started
+// flip-flopping at a <10s cadence there would be a risk of that happening.
+func (m lastUpdateTimesMap) updateOnBecomeLeader(descs []roachpb.ReplicaDescriptor, now time.Time) {
+	for _, desc := range descs {
+		m.update(desc.ReplicaID, now)
+	}
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -446,6 +475,11 @@ type Replica struct {
 		// Progress of a RaftStatus, which has a RecentActive field. However, that field
 		// is always true unless CheckQuorum is active, which at the time of writing in
 		// CockroachDB is not the case.
+		//
+		// The lastUpdateTimes map is also updated when a leaseholder steps up
+		// (making the assumption that all followers are live at that point),
+		// and when the range unquiesces (marking all replicating followers as
+		// live).
 		//
 		// TODO(tschottdorf): keeping a map on each replica seems to be
 		// overdoing it. We should map the replicaID to a NodeID and then use
@@ -1164,10 +1198,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// hands.
 			r.mu.proposalQuota = newQuotaPool(r.store.cfg.RaftProposalQuota)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
-			now := timeutil.Now()
-			for _, desc := range r.mu.state.Desc.Replicas {
-				r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
-			}
+			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas, timeutil.Now())
 			r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
@@ -3959,10 +3990,10 @@ func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 		if campaignOnWake {
 			r.maybeCampaignOnWakeLocked(ctx)
 		}
-		now := timeutil.Now()
-		for _, desc := range r.mu.state.Desc.Replicas {
-			r.mu.lastUpdateTimes.update(desc.ReplicaID, now)
-		}
+		// NB: we know there's a non-nil RaftStatus because internalRaftGroup isn't nil.
+		r.mu.lastUpdateTimes.updateOnUnquiesce(
+			r.mu.state.Desc.Replicas, r.raftStatusRLocked().Progress, timeutil.Now(),
+		)
 	}
 }
 
