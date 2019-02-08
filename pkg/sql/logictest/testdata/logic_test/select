@@ -245,6 +245,12 @@ SELECT * FROM xyzw LIMIT -100
 query error negative value for OFFSET
 SELECT * FROM xyzw OFFSET -100
 
+query error numeric constant out of int64 range
+SELECT * FROM xyzw LIMIT 9223372036854775808
+
+query error numeric constant out of int64 range
+SELECT * FROM xyzw OFFSET 9223372036854775808
+
 query IIII
 SELECT * FROM xyzw ORDER BY x OFFSET 1 + 0.0
 ----

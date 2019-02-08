@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -370,6 +371,36 @@ func TestSorter(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSortInvalidLimit verifies that a top-k sorter will never be created with
+// an invalid k-parameter.
+func TestSortInvalidLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	spec := distsqlpb.SorterSpec{}
+
+	t.Run("KTooLarge", func(t *testing.T) {
+		post := distsqlpb.PostProcessSpec{}
+		post.Limit = math.MaxInt64
+		post.Offset = math.MaxInt64 + 1
+		// All arguments apart from spec and post are not necessary.
+		if _, err := newSorter(
+			context.Background(), nil, 0, &spec, nil, &post, nil,
+		); !testutils.IsError(err, "too large") {
+			t.Fatalf("unexpected error %v, expected k too large", err)
+		}
+	})
+
+	t.Run("KZero", func(t *testing.T) {
+		var k uint64
+		// All arguments apart from spec and post are not necessary.
+		if _, err := newSortTopKProcessor(
+			nil, 0, &spec, nil, nil, nil, k,
+		); !testutils.IsError(err, errSortTopKZeroK.Error()) {
+			t.Fatalf("unexpected error %v, expected %v", err, errSortTopKZeroK)
+		}
+	})
 }
 
 var twoColOrdering = distsqlpb.ConvertToSpecOrdering(sqlbase.ColumnOrdering{
