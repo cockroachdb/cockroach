@@ -66,6 +66,8 @@ const (
 	importOptionOversample = "oversample"
 	importOptionSkipFKs    = "skip_foreign_keys"
 
+	importOptionDirectIngest = "experimental_direct_ingestion"
+
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
 
@@ -89,6 +91,8 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	importOptionOversample: sql.KVStringOptRequireValue,
 
 	importOptionSkipFKs: sql.KVStringOptRequireNoValue,
+
+	importOptionDirectIngest: sql.KVStringOptRequireNoValue,
 
 	pgMaxRowSize: sql.KVStringOptRequireValue,
 }
@@ -692,6 +696,14 @@ func importPlanHook(
 			}
 		}
 
+		var ingestDirectly bool
+		if _, ok := opts[importOptionDirectIngest]; ok {
+			ingestDirectly = true
+		}
+		if transform != "" && ingestDirectly {
+			return errors.Errorf("cannot use %q and %q options together", importOptionDirectIngest, importOptionTransform)
+		}
+
 		var tableDescs []*sqlbase.TableDescriptor
 		var jobDesc string
 		var names []string
@@ -836,15 +848,16 @@ func importPlanHook(
 			Description: jobDesc,
 			Username:    p.User(),
 			Details: jobspb.ImportDetails{
-				URIs:       files,
-				Format:     format,
-				ParentID:   parentID,
-				Tables:     tableDetails,
-				BackupPath: transform,
-				SSTSize:    sstSize,
-				Oversample: oversample,
-				Walltime:   walltime,
-				SkipFKs:    skipFKs,
+				URIs:           files,
+				Format:         format,
+				ParentID:       parentID,
+				Tables:         tableDetails,
+				BackupPath:     transform,
+				SSTSize:        sstSize,
+				Oversample:     oversample,
+				Walltime:       walltime,
+				SkipFKs:        skipFKs,
+				IngestDirectly: ingestDirectly,
 			},
 			Progress: jobspb.ImportProgress{},
 		})
@@ -868,7 +881,13 @@ func doDistributedCSVTransform(
 	walltime int64,
 	sstSize int64,
 	oversample int64,
+	ingestDirectly bool,
 ) (roachpb.BulkOpSummary, error) {
+	if ingestDirectly {
+		return sql.DistIngest(ctx, p, job, tables, files, format, walltime)
+		// TODO(dt): check for errors in job records as is done below.
+	}
+
 	evalCtx := p.ExtendedEvalContext()
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
@@ -1015,6 +1034,7 @@ func (r *importResumer) Resume(
 	sstSize := details.SSTSize
 	format := details.Format
 	oversample := details.Oversample
+	ingestDirectly := details.IngestDirectly
 
 	if sstSize == 0 {
 		// The distributed importer will correctly chunk up large ranges into
@@ -1054,7 +1074,7 @@ func (r *importResumer) Resume(
 	}
 
 	res, err := doDistributedCSVTransform(
-		ctx, job, files, p, parentID, tables, transform, format, walltime, sstSize, oversample,
+		ctx, job, files, p, parentID, tables, transform, format, walltime, sstSize, oversample, ingestDirectly,
 	)
 	if err != nil {
 		return err
