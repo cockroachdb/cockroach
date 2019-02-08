@@ -665,5 +665,11 @@ SELECT '{"b": [], "c": {"a": "b"}}'::JSONB - array['a'];
 ----
 {"b": [], "c": {"a": "b"}}
 
+# Regression test for #34756.
+query T
+SELECT '{"b": [], "c": {"a": "b"}}'::JSONB - array['foo', NULL]
+----
+{"b": [], "c": {"a": "b"}}
+
 statement error pgcode 22P02 a path element is not an integer: foo
 SELECT '{"a": {"b": ["foo"]}}'::JSONB #- ARRAY['a', 'b', 'foo']
