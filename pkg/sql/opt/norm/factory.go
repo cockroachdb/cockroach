@@ -19,14 +19,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// ReconstructFunc is the callback function passed to the Factory.Reconstruct
-// method. It is called with each child of the expression passed to Reconstruct.
-// See the Reconstruct method for more details.
-type ReconstructFunc func(e opt.Expr) opt.Expr
+// ReplaceFunc is the callback function passed to the Factory.Replace method.
+// It is called with each child of the expression passed to Replace. See the
+// Replace method for more details.
+type ReplaceFunc func(e opt.Expr) opt.Expr
 
 // MatchedRuleFunc defines the callback function for the NotifyOnMatchedRule
 // event supported by the optimizer and factory. It is invoked each time an
@@ -155,6 +156,50 @@ func (f *Factory) CustomFuncs() *CustomFuncs {
 	return &f.funcs
 }
 
+// CopyAndReplace builds this factory's memo by constructing a copy of a subtree
+// that is part of another memo. That memo's metadata is copied to this
+// factory's memo so that tables and columns referenced by the copied memo can
+// keep the same ids. The copied subtree becomes the root of the destination
+// memo, having the given physical properties.
+//
+// The "replace" callback function allows the caller to override the default
+// traversal and cloning behavior with custom logic. It is called for each node
+// in the "from" subtree, and has the choice of constructing an arbitrary
+// replacement node, or else delegating to the default behavior by returning the
+// unchanged "e" expression. The default behavior simply constructs a copy of
+// the source operator using children returned by recursive calls to the replace
+// callback. Here is example usage:
+//
+//   f.CopyAndReplace(from, fromProps, func(e opt.Expr) opt.Expr {
+//     if e.Op() == opt.PlaceholderOp {
+//       return f.ConstructConst(evalPlaceholder(e))
+//     }
+//
+//     // Return unchanged "e" expression to get default behavior.
+//     return e
+//   })
+//
+// NOTE: Callers must take care to always create brand new copies of non-
+// singleton source nodes rather than referencing existing nodes. The source
+// memo should always be treated as immutable, and the destination memo must be
+// completely independent of it once CopyAndReplace has completed.
+func (f *Factory) CopyAndReplace(
+	from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
+) {
+	if !f.mem.IsEmpty() {
+		panic("destination memo must be empty")
+	}
+
+	// Copy all metadata to the target memo so that referenced tables and columns
+	// can keep the same ids they had in the "from" memo.
+	f.mem.Metadata().CopyFrom(from.Memo().Metadata())
+
+	// Perform copy and replacement, and store result as the root of this
+	// factory's memo.
+	to := f.invokeReplace(from, replace).(memo.RelExpr)
+	f.Memo().SetRoot(to, fromProps)
+}
+
 // AssignPlaceholders is used just before execution of a prepared Memo. It makes
 // a copy of the given memo, but with any placeholder values replaced by their
 // assigned values. This can trigger additional normalization rules that can
@@ -175,22 +220,18 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 		}
 	}()
 
-	if !f.mem.IsEmpty() {
-		panic("memo must be empty")
-	}
-
-	src, _ := from.RootExpr().(memo.RelExpr)
-	if src == nil {
-		panic("memo root must be defined and relational")
-	}
-
-	// Copy all metadata so that referenced tables and columns can keep the same
-	// ids they had in the "from" memo.
-	f.mem.Metadata().CopyFrom(from.Metadata())
-
-	// Replace all placeholders with their assigned values.
-	dst := f.assignPlaceholders(src)
-	f.Memo().SetRoot(dst.(memo.RelExpr), from.RootProps())
+	// Copy the "from" memo to this memo, replacing any Placeholder operators as
+	// the copy proceeds.
+	f.CopyAndReplace(from.RootExpr().(memo.RelExpr), from.RootProps(), func(e opt.Expr) opt.Expr {
+		if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
+			d, err := e.(*memo.PlaceholderExpr).Value.Eval(f.evalCtx)
+			if err != nil {
+				panic(placeholderError{err})
+			}
+			return f.ConstructConstVal(d, placeholder.DataType())
+		}
+		return e
+	})
 
 	return nil
 }

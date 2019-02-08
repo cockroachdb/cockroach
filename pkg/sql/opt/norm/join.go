@@ -200,7 +200,7 @@ func (c *CustomFuncs) Map(
 
 	// Recursively walk the scalar sub-tree looking for references to columns
 	// that need to be replaced.
-	var replace ReconstructFunc
+	var replace ReplaceFunc
 	replace = func(nd opt.Expr) opt.Expr {
 		switch t := nd.(type) {
 		case *memo.VariableExpr:
@@ -216,7 +216,7 @@ func (c *CustomFuncs) Map(
 			return nd
 		}
 
-		return c.f.Reconstruct(nd, replace)
+		return c.f.Replace(nd, replace)
 	}
 
 	return replace(src.Condition).(opt.ScalarExpr)
