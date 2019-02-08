@@ -138,31 +138,32 @@ func (_f *Factory) ConstructInnerJoinApply(
 	return _f.onConstructRelational(e)
 }
 
-// Reconstruct enables an expression subtree to be rewritten under the control
-// of the caller. It passes each child of the given expression to the replace
+// Replace enables an expression subtree to be rewritten under the control of
+// the caller. It passes each child of the given expression to the replace
 // callback. The caller can continue traversing the expression tree within the
-// callback by recursively calling Reconstruct. It can also return a replacement
-// expression; if it does, then Reconstruct will rebuild the operator via a call
-// to the corresponding factory Construct method. Here is example usage:
+// callback by recursively calling Replace. It can also return a replacement
+// expression; if it does, then Replace will rebuild the operator and its
+// ancestors via a calls to the corresponding factory Construct methods. Here
+// is example usage:
 //
-//   var replace func(e opt.Expr, replace ReconstructFunc) opt.Expr
-//   replace = func(e opt.Expr, replace ReconstructFunc) opt.Expr {
+//   var replace func(e opt.Expr, replace ReplaceFunc) opt.Expr
+//   replace = func(e opt.Expr, replace ReplaceFunc) opt.Expr {
 //     if e.Op() == opt.VariableOp {
-//       return ReplaceVar(e)
+//       return getReplaceVar(e)
 //     }
-//     return e.Reconstruct(e, replace)
+//     return e.Replace(e, replace)
 //   }
 //   replace(root, replace)
 //
 // Here, all variables in the tree are being replaced by some other expression
 // in a pre-order traversal of the tree. Post-order traversal is trivially
-// achieved by moving the e.Reconstruct call to the top of the replace function
+// achieved by moving the e.Replace call to the top of the replace function
 // rather than bottom.
-func (f *Factory) Reconstruct(e opt.Expr, replace ReconstructFunc) opt.Expr {
+func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
 	switch t := e.(type) {
 	case *memo.SelectExpr:
 		input := replace(t.Input).(memo.RelExpr)
-		filters, filtersChanged := f.reconstructFiltersExpr(t.Filters, replace)
+		filters, filtersChanged := f.replaceFiltersExpr(t.Filters, replace)
 		if input != t.Input || filtersChanged {
 			return f.ConstructSelect(input, filters)
 		}
@@ -171,7 +172,7 @@ func (f *Factory) Reconstruct(e opt.Expr, replace ReconstructFunc) opt.Expr {
 	case *memo.InnerJoinExpr:
 		left := replace(t.Left).(memo.RelExpr)
 		right := replace(t.Right).(memo.RelExpr)
-		on, onChanged := f.reconstructFiltersExpr(t.On, replace)
+		on, onChanged := f.replaceFiltersExpr(t.On, replace)
 		if left != t.Left || right != t.Right || onChanged {
 			return f.ConstructInnerJoin(left, right, on)
 		}
@@ -180,14 +181,14 @@ func (f *Factory) Reconstruct(e opt.Expr, replace ReconstructFunc) opt.Expr {
 	case *memo.InnerJoinApplyExpr:
 		left := replace(t.Left).(memo.RelExpr)
 		right := replace(t.Right).(memo.RelExpr)
-		on, onChanged := f.reconstructFiltersExpr(t.On, replace)
+		on, onChanged := f.replaceFiltersExpr(t.On, replace)
 		if left != t.Left || right != t.Right || onChanged {
 			return f.ConstructInnerJoinApply(left, right, on)
 		}
 		return t
 
 	case *memo.FiltersExpr:
-		if after, changed := f.reconstructFiltersExpr(*t, replace); changed {
+		if after, changed := f.replaceFiltersExpr(*t, replace); changed {
 			return &after
 		}
 		return t
@@ -196,7 +197,7 @@ func (f *Factory) Reconstruct(e opt.Expr, replace ReconstructFunc) opt.Expr {
 	panic(fmt.Sprintf("unhandled op %s", e.Op()))
 }
 
-func (f *Factory) reconstructFiltersExpr(list memo.FiltersExpr, replace ReconstructFunc) (_ memo.FiltersExpr, changed bool) {
+func (f *Factory) replaceFiltersExpr(list memo.FiltersExpr, replace ReplaceFunc) (_ memo.FiltersExpr, changed bool) {
 	var newList []memo.FiltersItem
 	for i := range list {
 		before := list[i].Condition
@@ -217,36 +218,52 @@ func (f *Factory) reconstructFiltersExpr(list memo.FiltersExpr, replace Reconstr
 	return newList, true
 }
 
-func (f *Factory) assignPlaceholders(src opt.Expr) (dst opt.Expr) {
+// copyAndReplaceDefault performs the default traversal and cloning behavior
+// for the CopyAndReplace method. It constructs a copy of the given source
+// operator using children copied (and potentially remapped) by the given replace
+// function. See comments for CopyAndReplace for more details.
+func (f *Factory) copyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr) {
 	switch t := src.(type) {
 	case *memo.SelectExpr:
 		return f.ConstructSelect(
-			f.assignPlaceholders(t.Input).(memo.RelExpr),
-			f.assignFiltersExprPlaceholders(t.Filters),
+			f.invokeReplace(t.Input, replace).(memo.RelExpr),
+			f.copyAndReplaceDefaultFiltersExpr(t.Filters, replace),
 		)
 
 	case *memo.InnerJoinExpr:
 		return f.ConstructInnerJoin(
-			f.assignPlaceholders(t.Left).(memo.RelExpr),
-			f.assignPlaceholders(t.Right).(memo.RelExpr),
-			f.assignFiltersExprPlaceholders(t.On),
+			f.invokeReplace(t.Left, replace).(memo.RelExpr),
+			f.invokeReplace(t.Right, replace).(memo.RelExpr),
+			f.copyAndReplaceDefaultFiltersExpr(t.On, replace),
 		)
 
 	case *memo.InnerJoinApplyExpr:
 		return f.ConstructInnerJoinApply(
-			f.assignPlaceholders(t.Left).(memo.RelExpr),
-			f.assignPlaceholders(t.Right).(memo.RelExpr),
-			f.assignFiltersExprPlaceholders(t.On),
+			f.invokeReplace(t.Left, replace).(memo.RelExpr),
+			f.invokeReplace(t.Right, replace).(memo.RelExpr),
+			f.copyAndReplaceDefaultFiltersExpr(t.On, replace),
 		)
 
 	}
 	panic(fmt.Sprintf("unhandled op %s", src.Op()))
 }
 
-func (f *Factory) assignFiltersExprPlaceholders(src memo.FiltersExpr) (dst memo.FiltersExpr) {
+func (f *Factory) copyAndReplaceDefaultFiltersExpr(src memo.FiltersExpr, replace ReplaceFunc) (dst memo.FiltersExpr) {
 	dst = make(memo.FiltersExpr, len(src))
 	for i := range src {
-		dst[i].Condition = f.assignPlaceholders(src[i].Condition).(opt.ScalarExpr)
+		dst[i].Condition = f.invokeReplace(src[i].Condition, replace).(opt.ScalarExpr)
+	}
+	return dst
+}
+
+// invokeReplace wraps the user-provided replace function. If replace returns
+// its input unchanged, then invokeReplace automatically calls
+// copyAndReplaceDefault to get default replace behavior. See comments for
+// CopyAndReplace for more details.
+func (f *Factory) invokeReplace(src opt.Expr, replace ReplaceFunc) (dst opt.Expr) {
+	dst = replace(src)
+	if src == dst {
+		return f.copyAndReplaceDefault(src, replace)
 	}
 	return dst
 }

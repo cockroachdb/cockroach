@@ -49,8 +49,8 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.unnest(")\n\n")
 
 	g.genConstructFuncs()
-	g.genReconstruct()
-	g.genAssignPlaceholders()
+	g.genReplace()
+	g.genCopyAndReplaceDefault()
 	g.genDynamicConstruct()
 }
 
@@ -128,30 +128,31 @@ func (g *factoryGen) genConstructFuncs() {
 	}
 }
 
-// genReconstruct generates a method on the factory that offers a convenient way
-// to rebuild an expression tree.
-func (g *factoryGen) genReconstruct() {
-	g.w.writeIndent("// Reconstruct enables an expression subtree to be rewritten under the control\n")
-	g.w.writeIndent("// of the caller. It passes each child of the given expression to the replace\n")
+// genReplace generates a method on the factory that offers a convenient way
+// to replace all or part of an expression tree.
+func (g *factoryGen) genReplace() {
+	g.w.writeIndent("// Replace enables an expression subtree to be rewritten under the control of\n")
+	g.w.writeIndent("// the caller. It passes each child of the given expression to the replace\n")
 	g.w.writeIndent("// callback. The caller can continue traversing the expression tree within the\n")
-	g.w.writeIndent("// callback by recursively calling Reconstruct. It can also return a replacement\n")
-	g.w.writeIndent("// expression; if it does, then Reconstruct will rebuild the operator via a call\n")
-	g.w.writeIndent("// to the corresponding factory Construct method. Here is example usage:\n")
+	g.w.writeIndent("// callback by recursively calling Replace. It can also return a replacement\n")
+	g.w.writeIndent("// expression; if it does, then Replace will rebuild the operator and its\n")
+	g.w.writeIndent("// ancestors via a calls to the corresponding factory Construct methods. Here\n")
+	g.w.writeIndent("// is example usage:\n")
 	g.w.writeIndent("//\n")
-	g.w.writeIndent("//   var replace func(e opt.Expr, replace ReconstructFunc) opt.Expr\n")
-	g.w.writeIndent("//   replace = func(e opt.Expr, replace ReconstructFunc) opt.Expr {\n")
+	g.w.writeIndent("//   var replace func(e opt.Expr, replace ReplaceFunc) opt.Expr\n")
+	g.w.writeIndent("//   replace = func(e opt.Expr, replace ReplaceFunc) opt.Expr {\n")
 	g.w.writeIndent("//     if e.Op() == opt.VariableOp {\n")
-	g.w.writeIndent("//       return ReplaceVar(e)\n")
+	g.w.writeIndent("//       return getReplaceVar(e)\n")
 	g.w.writeIndent("//     }\n")
-	g.w.writeIndent("//     return e.Reconstruct(e, replace)\n")
+	g.w.writeIndent("//     return e.Replace(e, replace)\n")
 	g.w.writeIndent("//   }\n")
 	g.w.writeIndent("//   replace(root, replace)\n")
 	g.w.writeIndent("//\n")
 	g.w.writeIndent("// Here, all variables in the tree are being replaced by some other expression\n")
 	g.w.writeIndent("// in a pre-order traversal of the tree. Post-order traversal is trivially\n")
-	g.w.writeIndent("// achieved by moving the e.Reconstruct call to the top of the replace function\n")
+	g.w.writeIndent("// achieved by moving the e.Replace call to the top of the replace function\n")
 	g.w.writeIndent("// rather than bottom.\n")
-	g.w.nestIndent("func (f *Factory) Reconstruct(e opt.Expr, replace ReconstructFunc) opt.Expr {\n")
+	g.w.nestIndent("func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {\n")
 	g.w.writeIndent("switch t := e.(type) {\n")
 
 	defines := g.compiled.Defines.WithoutTag("Enforcer").WithoutTag("ListItem").WithoutTag("Private")
@@ -168,7 +169,7 @@ func (g *factoryGen) genReconstruct() {
 				childTyp := g.md.typeOf(child)
 
 				if childTyp.isListType() {
-					g.w.writeIndent("%s, %sChanged := f.reconstruct%s(t.%s, replace)\n",
+					g.w.writeIndent("%s, %sChanged := f.replace%s(t.%s, replace)\n",
 						unTitle(childName), unTitle(childName), childTyp.friendlyName, childName)
 				} else {
 					g.w.writeIndent("%s := replace(t.%s).(%s)\n",
@@ -216,7 +217,7 @@ func (g *factoryGen) genReconstruct() {
 		} else {
 			// If this is a list type, then call a list-specific reconstruct method.
 			if opTyp.isListType() {
-				g.w.nestIndent("if after, changed := f.reconstruct%s(*t, replace); changed {\n",
+				g.w.nestIndent("if after, changed := f.replace%s(*t, replace); changed {\n",
 					opTyp.friendlyName)
 				g.w.writeIndent("return &after\n")
 				g.w.unnest("}\n")
@@ -236,7 +237,7 @@ func (g *factoryGen) genReconstruct() {
 		itemTyp := opTyp.listItemType
 		itemDefine := g.compiled.LookupDefine(itemTyp.friendlyName)
 
-		g.w.nestIndent("func (f *Factory) reconstruct%s(list %s, replace ReconstructFunc) (_ %s, changed bool) {\n",
+		g.w.nestIndent("func (f *Factory) replace%s(list %s, replace ReplaceFunc) (_ %s, changed bool) {\n",
 			opTyp.friendlyName, opTyp.name, opTyp.name)
 
 		// This is a list-typed child.
@@ -279,11 +280,16 @@ func (g *factoryGen) genReconstruct() {
 	}
 }
 
-// genAssignPlaceholders generates a method to copy an expression tree, but with
-// any placeholders replaced by their assigned values.
-func (g *factoryGen) genAssignPlaceholders() {
-	g.w.nestIndent("func (f *Factory) assignPlaceholders(src opt.Expr) (dst opt.Expr)")
-	g.w.nest(" {\n")
+// genCopyAndReplaceDefault generates a method on the factory that performs the
+// default traversal and cloning behavior for the factory's CopyAndReplace
+// method.
+func (g *factoryGen) genCopyAndReplaceDefault() {
+	g.w.writeIndent("// copyAndReplaceDefault performs the default traversal and cloning behavior\n")
+	g.w.writeIndent("// for the CopyAndReplace method. It constructs a copy of the given source\n")
+	g.w.writeIndent("// operator using children copied (and potentially remapped) by the given replace\n")
+	g.w.writeIndent("// function. See comments for CopyAndReplace for more details.\n")
+	g.w.nestIndent("func (f *Factory) copyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr)")
+	g.w.nest("{\n")
 	g.w.writeIndent("switch t := src.(type) {\n")
 
 	defines := g.compiled.Defines.
@@ -298,18 +304,9 @@ func (g *factoryGen) genAssignPlaceholders() {
 		privateField := g.md.privateField(define)
 
 		g.w.nestIndent("case *%s:\n", opTyp.name)
-
-		if define.Name == "Placeholder" {
-			g.w.writeIndent("d, err := t.Value.Eval(f.evalCtx)\n")
-			g.w.nestIndent("if err != nil {\n")
-			g.w.writeIndent("panic(placeholderError{err})\n")
-			g.w.unnest("}\n")
-			g.w.writeIndent("return f.ConstructConstVal(d, t.DataType())\n")
-			g.w.unnest("\n")
-			continue
-		}
-
 		if define.Tags.Contains("Relational") || len(childFields) != 0 {
+			// If the operator has no children, then call Memoize directly, since
+			// all normalizations were already applied on the source operator.
 			if len(childFields) != 0 {
 				g.w.nestIndent("return f.Construct%s(\n", define.Name)
 				for _, child := range childFields {
@@ -317,11 +314,10 @@ func (g *factoryGen) genAssignPlaceholders() {
 					childName := g.md.fieldName(child)
 
 					if childTyp.isListType() {
-						g.w.writeIndent("f.assign%sPlaceholders(t.%s),\n",
+						g.w.writeIndent("f.copyAndReplaceDefault%s(t.%s, replace),\n",
 							childTyp.friendlyName, childName)
 					} else {
-						g.w.writeIndent("f.assignPlaceholders(t.%s).(%s),\n",
-							childName, childTyp.name)
+						g.w.writeIndent("f.invokeReplace(t.%s, replace).(%s),\n", childName, childTyp.name)
 					}
 				}
 				if privateField != nil {
@@ -352,7 +348,7 @@ func (g *factoryGen) genAssignPlaceholders() {
 		itemType := opTyp.listItemType
 		itemDefine := g.compiled.LookupDefine(itemType.friendlyName)
 
-		g.w.nestIndent("func (f *Factory) assign%sPlaceholders(src %s) (dst %s) {\n",
+		g.w.nestIndent("func (f *Factory) copyAndReplaceDefault%s(src %s, replace ReplaceFunc) (dst %s) {\n",
 			opTyp.friendlyName, opTyp.name, opTyp.name)
 
 		g.w.writeIndent("dst = make(%s, len(src))\n", opTyp.name)
@@ -362,7 +358,7 @@ func (g *factoryGen) genAssignPlaceholders() {
 			// field (always the first field). Any other fields must be privates.
 			// And placeholders only need to be assigned for input fields.
 			firstFieldName := g.md.fieldName(itemDefine.Fields[0])
-			g.w.writeIndent("dst[i].%s = f.assignPlaceholders(src[i].%s).(opt.ScalarExpr)\n",
+			g.w.writeIndent("dst[i].%s = f.invokeReplace(src[i].%s, replace).(opt.ScalarExpr)\n",
 				firstFieldName, firstFieldName)
 
 			// Now copy additional exported private fields.
@@ -373,12 +369,25 @@ func (g *factoryGen) genAssignPlaceholders() {
 				}
 			}
 		} else {
-			g.w.writeIndent("dst[i] = f.assignPlaceholders(src[i]).(opt.ScalarExpr)\n")
+			g.w.writeIndent("dst[i] = f.invokeReplace(src[i], replace).(opt.ScalarExpr)\n")
 		}
 		g.w.unnest("}\n")
 		g.w.writeIndent("return dst\n")
 		g.w.unnest("}\n\n")
 	}
+
+	g.w.writeIndent("// invokeReplace wraps the user-provided replace function. If replace returns\n")
+	g.w.writeIndent("// its input unchanged, then invokeReplace automatically calls\n")
+	g.w.writeIndent("// copyAndReplaceDefault to get default replace behavior. See comments for\n")
+	g.w.writeIndent("// CopyAndReplace for more details.\n")
+	g.w.nestIndent("func (f *Factory) invokeReplace(src opt.Expr, replace ReplaceFunc) (dst opt.Expr)")
+	g.w.nest("{\n")
+	g.w.writeIndent("dst = replace(src)\n")
+	g.w.nest("if src == dst {\n")
+	g.w.writeIndent("return f.copyAndReplaceDefault(src, replace)\n")
+	g.w.unnest("}\n")
+	g.w.writeIndent("return dst\n")
+	g.w.unnest("}\n\n")
 }
 
 // genDynamicConstruct generates the factory's DynamicConstruct method, which
