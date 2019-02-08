@@ -21,7 +21,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -178,7 +177,7 @@ func (sc *TableStatisticsCache) GetTableStats(
 		// for table_statistics itself).
 		return nil, nil
 	}
-	if tableID == keys.VirtualDescriptorID {
+	if sqlbase.IsVirtualTable(tableID) {
 		// Don't try to get statistics for virtual tables.
 		return nil, nil
 	}
