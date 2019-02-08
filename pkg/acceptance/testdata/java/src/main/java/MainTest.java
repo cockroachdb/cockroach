@@ -240,4 +240,18 @@ public class MainTest extends CockroachDBTest {
         rs.next();
         Assert.assertEquals(rs.getInt(1), 21);
     }
+
+    // Regression for 34429: empty string decimals shouldn't crash the server.
+    @Test
+    public void testEmptyStringDec() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("create table product_temp_tb (product_master_id int primary key,  weight DECIMAL(10,2) NOT NULL DEFAULT 0)");
+        stmt.execute();
+        stmt = conn.prepareStatement("INSERT INTO product_temp_tb values(0,0)");
+        stmt.execute();
+        stmt = conn.prepareStatement("UPDATE product_temp_tb SET weight = ? WHERE product_master_id = ?");
+        stmt.setObject(1, "");
+        stmt.setInt(2, 1);
+        exception.expectMessage("ERROR: could not parse \"\" as type decimal");
+        stmt.execute();
+    }
 }
