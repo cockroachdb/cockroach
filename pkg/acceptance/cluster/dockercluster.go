@@ -15,6 +15,7 @@
 package cluster
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	gosql "database/sql"
@@ -235,6 +236,31 @@ func (l *DockerCluster) OneShot(
 	if err != nil {
 		return err
 	}
+	// Attempt to copy the keytab file from the acceptance image to the common
+	// volumesDir directory for use by the cockroach binary. This is a fairly
+	// hacky solution since it's not needed for all tests, but doing anything
+	// more fine grained would require some needless refactoring.
+	if rc, _, err := l.client.CopyFromContainer(ctx, c.id, "/etc/keytab"); err == nil {
+		defer rc.Close()
+		t := tar.NewReader(rc)
+		for {
+			header, err := t.Next()
+			if err != nil {
+				return err
+			}
+			if header.Name != "keytab" {
+				continue
+			}
+			b, err := ioutil.ReadAll(t)
+			if err != nil {
+				return err
+			}
+			if err := ioutil.WriteFile(filepath.Join(l.volumesDir, "krb5", "keytab"), b, 0666); err != nil {
+				return err
+			}
+			break
+		}
+	}
 	l.oneshot = c
 	defer func() {
 		if err := l.oneshot.Remove(ctx); err != nil {
@@ -331,12 +357,14 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 		filepath.Join(pwd, certsDir) + ":/certs",
 		filepath.Join(pwd, "..") + ":/go/src/github.com/cockroachdb/cockroach",
 		filepath.Join(l.volumesDir, "logs") + ":/logs",
+		filepath.Join(pwd, "testdata", "krb5.conf") + "/etc/krb5.conf",
 	}
 
 	if *cockroachImage == defaultImage {
 		path, err := filepath.Abs(*CockroachBinary)
 		maybePanic(err)
 		binds = append(binds, path+":"+CockroachBinaryInContainer)
+		binds = append(binds, filepath.Join(l.volumesDir, "krb5")+":/krb5")
 	}
 
 	l.Nodes = []*testNode{}
@@ -370,6 +398,7 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 		container.Config{
 			Image:      *cockroachImage,
 			Entrypoint: []string{"/bin/true"},
+			Env:        []string{"KRB5_KTNAME=/krb5/keytab"},
 		}, container.HostConfig{
 			Binds:           binds,
 			PublishAllPorts: true,
