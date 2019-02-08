@@ -61,7 +61,7 @@ pg_constraint  pg_constraint
 query OO
 SELECT 'pg_constraint '::REGCLASS, '"pg_constraint"'::REGCLASS::OID
 ----
-pg_constraint  139623798
+pg_constraint  4294967233
 
 query O
 SELECT 4061301040::REGCLASS
@@ -73,12 +73,12 @@ SELECT oid, oid::regclass, oid::regclass::int, oid::regclass::int::regclass, oid
 FROM pg_class
 WHERE relname = 'pg_constraint'
 ----
-139623798  pg_constraint  139623798  pg_constraint  pg_constraint
+4294967233  pg_constraint  4294967233  pg_constraint  pg_constraint
 
 query OOOO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'pg_catalog.upper'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
-upper  upper  upper  2896429946
+upper  upper  upper  3615042040
 
 query error invalid function name
 SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
@@ -86,7 +86,7 @@ SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
 query OOO
 SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE, 'upper(int)'::REGPROC::OID
 ----
-upper  upper  2896429946
+upper  upper  3615042040
 
 query error unknown function: blah\(\)
 SELECT 'blah(ignored, ignored)'::REGPROC, 'blah(ignored, ignored)'::REGPROCEDURE
@@ -119,7 +119,7 @@ array_in  array_in  array_in  array_in
 query OO
 SELECT 'public'::REGNAMESPACE, 'public'::REGNAMESPACE::OID
 ----
-public  2397796629
+public  3426283741
 
 query OO
 SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID
@@ -160,7 +160,7 @@ pg_constraint
 query OO
 SELECT ('pg_constraint')::REGCLASS, ('pg_constraint')::REGCLASS::OID
 ----
-pg_constraint  139623798
+pg_constraint  4294967233
 
 ## Test visibility of pg_* via oid casts.
 
