@@ -1792,12 +1792,16 @@ func (r *Replica) processRaftCommand(
 	var writeBatch *storagepb.WriteBatch
 	{
 		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; forcedErr == nil && filter != nil {
-			forcedErr = filter(storagebase.ApplyFilterArgs{
+			var newPropRetry int
+			newPropRetry, forcedErr = filter(storagebase.ApplyFilterArgs{
 				CmdID:                idKey,
 				ReplicatedEvalResult: raftCmd.ReplicatedEvalResult,
 				StoreID:              r.store.StoreID(),
 				RangeID:              r.RangeID,
 			})
+			if proposalRetry == 0 {
+				proposalRetry = proposalReevaluationReason(newPropRetry)
+			}
 		}
 
 		if forcedErr != nil {
@@ -1913,12 +1917,17 @@ func (r *Replica) processRaftCommand(
 		}
 
 		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
-			pErr = filter(storagebase.ApplyFilterArgs{
+			var newPropRetry int
+			newPropRetry, pErr = filter(storagebase.ApplyFilterArgs{
 				CmdID:                idKey,
 				ReplicatedEvalResult: raftCmd.ReplicatedEvalResult,
 				StoreID:              r.store.StoreID(),
 				RangeID:              r.RangeID,
 			})
+			if proposalRetry == 0 {
+				proposalRetry = proposalReevaluationReason(newPropRetry)
+			}
+
 		}
 
 		// calling maybeSetCorrupt here is mostly for tests and looks. The

@@ -126,13 +126,13 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 	// Arrange to count the number of times each checksum command applies to each
 	// store.
-	storeCfg.TestingKnobs.TestingApplyFilter = func(args storagebase.ApplyFilterArgs) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingApplyFilter = func(args storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
 		state.Lock()
 		defer state.Unlock()
 		if ccr := args.ComputeChecksum; ccr != nil {
 			state.applies[applyKey{ccr.ChecksumID, args.StoreID}]++
 		}
-		return nil
+		return 0, nil
 	}
 
 	// Arrange to trigger a retry when a ComputeChecksum request arrives.
