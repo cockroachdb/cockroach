@@ -327,9 +327,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				colNum := 0
 				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
-					colNum++
 					if column.DefaultExpr == nil {
 						// pg_attrdef only expects rows for columns with default values.
 						return nil
@@ -338,7 +336,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 					return addRow(
 						h.ColumnOid(db, scName, table, column), // oid
 						h.TableOid(db, scName, table),          // adrelid
-						tree.NewDInt(tree.DInt(colNum)),        // adnum
+						tree.NewDInt(tree.DInt(column.ID)),     // adnum
 						defSrc, // adbin
 						defSrc, // adsrc
 					)
@@ -378,15 +376,15 @@ CREATE TABLE pg_catalog.pg_attribute (
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 			// addColumn adds adds either a table or a index column to the pg_attribute table.
-			addColumn := func(column *sqlbase.ColumnDescriptor, attRelID tree.Datum, colNum int) error {
+			addColumn := func(column *sqlbase.ColumnDescriptor, attRelID tree.Datum) error {
 				colTyp := column.Type.ToDatumType()
 				return addRow(
-					attRelID,                        // attrelid
-					tree.NewDName(column.Name),      // attname
-					typOid(colTyp),                  // atttypid
-					zeroVal,                         // attstattarget
-					typLen(colTyp),                  // attlen
-					tree.NewDInt(tree.DInt(colNum)), // attnum
+					attRelID,                           // attrelid
+					tree.NewDName(column.Name),         // attname
+					typOid(colTyp),                     // atttypid
+					zeroVal,                            // attstattarget
+					typLen(colTyp),                     // attlen
+					tree.NewDInt(tree.DInt(column.ID)), // attnum
 					zeroVal,    // attndims
 					negOneVal,  // attcacheoff
 					negOneVal,  // atttypmod
@@ -406,23 +404,19 @@ CREATE TABLE pg_catalog.pg_attribute (
 			}
 
 			// Columns for table.
-			colNum := 0
 			if err := forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
-				colNum++
 				tableID := h.TableOid(db, scName, table)
-				return addColumn(column, tableID, colNum)
+				return addColumn(column, tableID)
 			}); err != nil {
 				return err
 			}
 
 			// Columns for each index.
 			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
-				colNum := 0
 				return forEachColumnInIndex(table, index,
 					func(column *sqlbase.ColumnDescriptor) error {
-						colNum++
 						idxID := h.IndexOid(db, scName, table, index)
-						return addColumn(column, idxID, colNum)
+						return addColumn(column, idxID)
 					},
 				)
 			})
