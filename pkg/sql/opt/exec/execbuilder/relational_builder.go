@@ -483,6 +483,8 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	rightExpr := join.Child(1).(memo.RelExpr)
 	filters := join.Child(2).(*memo.FiltersExpr)
 
+	leftExpr.Relational().OutputCols
+
 	left, err := b.buildRelational(leftExpr)
 	if err != nil {
 		return execPlan{}, nil
