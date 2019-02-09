@@ -18,8 +18,10 @@ import (
 	"context"
 	"errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -94,6 +96,22 @@ func (a *applyJoinNode) startExec(params runParams) error {
 		}
 	}
 	return nil
+}
+
+func (applyJoinNode) replaceVars(
+	f *norm.Factory, applyInput memo.RelExpr, vars map[opt.ColumnID]tree.Datum,
+) {
+	var replace func(e opt.Expr) opt.Expr
+	replace = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			if d, ok := vars[t.Col]; ok {
+				return f.ConstructConstVal(d)
+			}
+		}
+		return f.CopyAndReplaceDefault(e, replace)
+	}
+	f.CopyAndReplace(applyInput, applyInput.RequiredPhysical(), replace)
 }
 
 func (a *applyJoinNode) Next(params runParams) (bool, error) {
@@ -186,7 +204,11 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		// params, and before invoking it, we'll add the current left-side row to
 		// the mapping.
 
+		a.optimizer.Init(params.p.EvalContext())
 		f := a.optimizer.Factory()
+
+		a.replaceVars(f, a.right, vars)
+
 		a.optimizer.Optimize()
 		memo := f.Memo()
 
