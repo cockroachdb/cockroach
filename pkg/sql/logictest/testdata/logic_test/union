@@ -246,6 +246,11 @@ query I
 SELECT a FROM a WHERE a > 2 UNION ALL (SELECT a FROM c WHERE b > 2) LIMIT 1;
 ----
 
+query III
+select *,1 from (values(1,2) union all select 2,2 from c);
+----
+1 2 1
+
 statement ok
 INSERT INTO a VALUES (1)
 

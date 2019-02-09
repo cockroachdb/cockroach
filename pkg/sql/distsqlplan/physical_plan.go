@@ -283,12 +283,19 @@ func (p *PhysicalPlan) CheckLastStagePost() error {
 	// verify this assumption.
 	for i := 1; i < len(p.ResultRouters); i++ {
 		pi := &p.Processors[p.ResultRouters[i]].Spec.Post
-		if pi.Filter != post.Filter || pi.Projection != post.Projection ||
-			len(pi.OutputColumns) != len(post.OutputColumns) {
+		if pi.Filter != post.Filter ||
+			pi.Projection != post.Projection ||
+			len(pi.OutputColumns) != len(post.OutputColumns) ||
+			len(pi.RenderExprs) != len(post.RenderExprs) {
 			return errors.Errorf("inconsistent post-processing: %v vs %v", post, pi)
 		}
 		for j, col := range pi.OutputColumns {
 			if col != post.OutputColumns[j] {
+				return errors.Errorf("inconsistent post-processing: %v vs %v", post, pi)
+			}
+		}
+		for j, col := range pi.RenderExprs {
+			if col != post.RenderExprs[j] {
 				return errors.Errorf("inconsistent post-processing: %v vs %v", post, pi)
 			}
 		}

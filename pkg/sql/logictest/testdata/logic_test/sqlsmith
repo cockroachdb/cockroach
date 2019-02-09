@@ -16,3 +16,16 @@ CREATE TABLE a (a INT PRIMARY KEY);
 
 statement ok
 SELECT true FROM (SELECT ref_1.a AS c0 FROM crdb_internal.cluster_queries AS ref_0 JOIN a AS ref_1 ON (ref_0.node_id = ref_1.a) WHERE (SELECT a from a limit 1 offset 1) is null);
+
+# Regression: #34437 (union all could produce panic in distsql planning)
+
+statement ok
+CREATE TABLE table8 (col1 TIME, col2 BYTES, col4 OID, col6 NAME, col9 TIMESTAMP, PRIMARY KEY (col1));
+
+statement ok
+CREATE TABLE table5 (col0 TIME NULL, col1 OID, col3 INET, PRIMARY KEY (col1 ASC));
+
+statement ok
+INSERT INTO table8 (col1, col2, col4, col6)
+VALUES ('19:06:18.321589', NULL, NULL, NULL)
+UNION ALL (SELECT NULL, NULL, NULL, NULL FROM table5 AS tab_8);
