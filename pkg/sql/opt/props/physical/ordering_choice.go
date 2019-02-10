@@ -184,6 +184,20 @@ func ParseOrderingChoice(s string) OrderingChoice {
 	return ordering
 }
 
+// ParseOrdering parses a simple opt.Ordering.
+func ParseOrdering(str string) opt.Ordering {
+	prov := ParseOrderingChoice(str)
+	if !prov.Optional.Empty() {
+		panic(fmt.Sprintf("invalid ordering %s", str))
+	}
+	for i := range prov.Columns {
+		if prov.Columns[i].Group.Len() != 1 {
+			panic(fmt.Sprintf("invalid ordering %s", str))
+		}
+	}
+	return prov.ToOrdering()
+}
+
 // Any is true if this instance allows any ordering (any length, any columns).
 func (oc *OrderingChoice) Any() bool {
 	return len(oc.Columns) == 0

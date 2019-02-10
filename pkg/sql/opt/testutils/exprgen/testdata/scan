@@ -1,0 +1,46 @@
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
+----
+TABLE abc
+ ├── a int
+ ├── b int
+ ├── c int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX ab
+      ├── a int
+      ├── b int
+      └── rowid int not null (hidden)
+
+expr
+(Scan [ (Table "abc") (Cols "a") ])
+----
+scan t.public.abc
+ ├── columns: t.public.abc.a:1(int)
+ └── stats: [rows=1000]
+
+expr
+(Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
+----
+scan t.public.abc@ab
+ ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+ └── stats: [rows=1000]
+
+expr
+(Select
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  [ (Eq (Var "a") (Const 1)) ]
+)
+----
+select
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ ├── stats: [rows=9.9, distinct(1)=1, null(1)=0]
+ ├── fd: ()-->(1)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ └── filters
+      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           ├── variable: t.public.abc.a [type=int]
+           └── const: 1 [type=int]

@@ -69,10 +69,12 @@ type Metadata struct {
 	// schemas stores each schema used in the query, indexed by SchemaID.
 	schemas []cat.Schema
 
-	// cols stores information about each metadata column, indexed by ColumnID.
+	// cols stores information about each metadata column, indexed by
+	// ColumnID.index().
 	cols []ColumnMeta
 
-	// tables stores information about each metadata table, indexed by TableID.
+	// tables stores information about each metadata table, indexed by
+	// TableID.index().
 	tables []TableMeta
 
 	// sequences stores information about each metadata sequence, indexed by SequenceID.
@@ -299,6 +301,12 @@ func (md *Metadata) TableMeta(tabID TableID) *TableMeta {
 // same table can be associated with multiple metadata ids.
 func (md *Metadata) Table(tabID TableID) cat.Table {
 	return md.TableMeta(tabID).Table
+}
+
+// AllTables returns the metadata for all tables. The result must not be
+// modified.
+func (md *Metadata) AllTables() []TableMeta {
+	return md.tables
 }
 
 // TableByStableID looks up the catalog table associated with the given
