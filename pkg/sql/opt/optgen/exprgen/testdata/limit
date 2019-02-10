@@ -1,0 +1,32 @@
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
+----
+TABLE abc
+ ├── a int
+ ├── b int
+ ├── c int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX ab
+      ├── a int
+      ├── b int
+      └── rowid int not null (hidden)
+
+# TODO(radu): fill in physical properties (the scan node should have an ordering).
+expr
+(Limit
+  (Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
+  (Const 10)
+  (OrderingChoice "+a")
+)
+----
+limit
+ ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── scan t.public.abc@ab
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+ │    └── stats: [rows=1000]
+ └── const: 10 [type=int]

@@ -82,7 +82,7 @@ func TestRowNumberProvided(t *testing.T) {
 			input := &testexpr.Instance{
 				Rel: &props.Relational{OutputCols: util.MakeFastIntSet(1, 2, 3, 4, 5)},
 				Provided: &physical.Provided{
-					Ordering: parseOrdering(tc.input),
+					Ordering: physical.ParseOrdering(tc.input),
 				},
 			}
 			r := f.Memo().MemoizeRowNumber(input, &memo.RowNumberPrivate{ColID: 10})
