@@ -55,6 +55,7 @@ type virtualSchemaDef interface {
 	initVirtualTableDesc(
 		ctx context.Context, st *cluster.Settings, id sqlbase.ID,
 	) (sqlbase.TableDescriptor, error)
+	getComment() string
 }
 
 // virtualSchemaTable represents a table within a virtualSchema.
@@ -62,6 +63,9 @@ type virtualSchemaTable struct {
 	// Exactly one of the populate and generator fields should be defined for
 	// each virtualSchemaTable.
 	schema string
+
+	// comment represents comment of virtual schema table.
+	comment string
 
 	// populate, if non-nil, is a function that is used when creating a
 	// valuesNode. This function eagerly loads every row of the virtual table
@@ -126,6 +130,11 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	return mutDesc.TableDescriptor, err
 }
 
+// getComment is part of the virtualSchemaDef interface.
+func (t virtualSchemaTable) getComment() string {
+	return t.comment
+}
+
 // getSchema is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) getSchema() string {
 	return v.schema
@@ -153,6 +162,11 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		nil, // evalCtx
 	)
 	return mutDesc.TableDescriptor, err
+}
+
+// getComment is part of the virtualSchemaDef interface.
+func (v virtualSchemaView) getComment() string {
+	return ""
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -190,6 +204,7 @@ type virtualSchemaEntry struct {
 type virtualDefEntry struct {
 	virtualDef                 virtualSchemaDef
 	desc                       *sqlbase.TableDescriptor
+	comment                    string
 	validWithNoDatabaseContext bool
 }
 
@@ -319,6 +334,7 @@ func NewVirtualSchemaHolder(
 				virtualDef:                 def,
 				desc:                       &tableDesc,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
+				comment:                    def.getComment(),
 			}
 			orderedDefNames = append(orderedDefNames, tableDesc.Name)
 		}

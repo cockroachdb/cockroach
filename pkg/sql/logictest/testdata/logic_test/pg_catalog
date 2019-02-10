@@ -1259,7 +1259,32 @@ testuser  2264919399  false        false     false    false         ********  NU
 query OOIT colnames
 SELECT objoid, classoid, objsubid, description FROM pg_catalog.pg_description
 ----
-objoid  classoid  objsubid  description
+objoid      classoid  objsubid  description
+4294967294  0         0         backward inter-descriptor dependencies.
+4294967292  0         0         built-in function metadata.
+4294967291  0         0         list of running queries on the entire cluster. The result is dependent on the current user.
+4294967290  0         0         list of running sessions on the entire cluster. The result is dependent on the current user.
+4294967289  0         0         list of current cluster settings.
+4294967288  0         0         exposes the CREATE TABLE/CREATE VIEW statements.
+4294967287  0         0         telemetry counters.
+4294967286  0         0         forward inter-descriptor dependencies.
+4294967284  0         0         current health alerts in the cluster.
+4294967283  0         0         local information about the nodes liveness.
+4294967282  0         0         local view of the gossip network (i.e., the gossip client connections from source_id node to target_id node).
+4294967285  0         0         local information about the cluster nodes.
+4294967281  0         0         index columns.
+4294967279  0         0         information from the status server about the cluster nodes.
+4294967278  0         0         information about the cluster stores.
+4294967274  0         0         snapshot of the metrics on the current node.
+4294967276  0         0         the list of running queries on the current node. The results are dependent on the current user.
+4294967275  0         0         list of running sessions on the current node. The results are dependent on the current user.
+4294967273  0         0         the partitions of each table.
+4294967272  0         0         system ranges without the `lease_holder` information.
+4294967268  0         0         latest trace collected on this session (via SET TRACING={ON/OFF}).
+4294967267  0         0         session variables.
+4294967265  0         0         column descriptors.
+4294967264  0         0         index descriptors.
+4294967262  0         0         decodes and exposes the zone configs in the system.zones table.
 
 ## pg_catalog.pg_shdescription
 

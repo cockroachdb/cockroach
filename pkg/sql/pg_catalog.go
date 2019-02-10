@@ -991,6 +991,28 @@ CREATE TABLE pg_catalog.pg_description (
 		p *planner,
 		dbContext *DatabaseDescriptor,
 		addRow func(...tree.Datum) error) error {
+		// Virtual descriptors first.
+		vt := p.getVirtualTabler()
+		vEntries := vt.getEntries()
+		vSchemaNames := vt.getSchemaNames()
+		for _, virtSchemaName := range vSchemaNames {
+			e := vEntries[virtSchemaName]
+			for _, tName := range e.orderedDefNames {
+				vTableEntry := e.defs[tName]
+				table := vTableEntry.desc
+				if vTableEntry.comment != "" {
+					if err := addRow(
+						defaultOid(table.ID),
+						oidZero,
+						zeroVal,
+						tree.NewDString(vTableEntry.comment)); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		// Physical descriptors next.
 		comments, _, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
 			ctx,
 			"select-comments",

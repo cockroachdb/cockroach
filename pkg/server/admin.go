@@ -1489,6 +1489,10 @@ func (s *adminServer) DataDistribution(
 		tableID := uint64(tree.MustBeDInt(row[1]))
 		dbName := (*string)(row[2].(*tree.DString))
 
+		if sqlbase.IsVirtualTable(sqlbase.ID(tableID)) {
+			continue
+		}
+
 		// Look at whether it was dropped.
 		var droppedAtTime *time.Time
 		droppedAtDatum, ok := row[3].(*tree.DTimestamp)
