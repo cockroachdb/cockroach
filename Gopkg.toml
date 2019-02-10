@@ -134,3 +134,11 @@ ignored = [
   [[prune.project]]
     name = "github.com/knz/go-libedit"
     unused-packages = false
+
+[[constraint]]
+  name = "github.com/google/flatbuffers"
+  version = "1.10.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/apache/arrow"
