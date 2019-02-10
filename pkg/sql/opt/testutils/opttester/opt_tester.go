@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -185,6 +186,10 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //    Performs the optimization and outputs statistics about applied rules.
 //
+//  - expr
+//
+//    Builds an expression directly from an opt-gen-like string; see
+//    exprgen.Build.
 //
 // Supported flags:
 //
@@ -309,6 +314,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%v", err)
 		}
 		return result
+
+	case "expr":
+		e, err := ot.Expr()
+		if err != nil {
+			d.Fatalf(tb, "%v", err)
+		}
+		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
@@ -545,6 +557,15 @@ func (ot *OptTester) Memo() (string, error) {
 		return "", err
 	}
 	return o.FormatMemo(ot.Flags.MemoFormat), nil
+}
+
+// Expr parses the input directly into an expression; see exprgen.Build.
+func (ot *OptTester) Expr() (opt.Expr, error) {
+	var f norm.Factory
+	f.Init(&ot.evalCtx)
+	f.DisableOptimizations()
+
+	return exprgen.Build(ot.catalog, &f, ot.sql)
 }
 
 // RuleStats performs the optimization and returns statistics about how many

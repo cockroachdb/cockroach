@@ -870,6 +870,10 @@ func TestLint(t *testing.T) {
 				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go", Checks: []string{"U1000"}},
 				// Generated file containing many unused postgres error codes.
 				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go", Checks: []string{"U1000"}},
+
+				// The methods in exprgen.customFuncs are used via reflection.
+				// sql/opt/testutils/exprgen/custom_funcs.go:xx:yy: func (*customFuncs).zz is unused (U1000)
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen/custom_funcs.go", Checks: []string{"U1000"}},
 			},
 		}
 		for _, p := range linter.Lint(lprog, &conf) {
