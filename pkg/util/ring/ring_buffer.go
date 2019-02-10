@@ -151,3 +151,20 @@ func (r *Buffer) Reset() {
 	r.tail = 0
 	r.nonEmpty = false
 }
+
+// MoveHeadToTail moves the head of the deque to the tail. This behavior is
+// useful, for example, when we want to reuse the underlying memory of the head
+// element and make it the tail.
+func (r *Buffer) MoveHeadToTail() {
+	if !r.nonEmpty {
+		return
+	}
+	if r.Len() != cap(r.buffer) {
+		// Since the buffer contains less elements than its capacity, we need to
+		// explicitly copy the head element to the tail. Tail and head pointers are
+		// adjusted below.
+		r.buffer[r.tail] = r.buffer[r.head]
+	}
+	r.head = (r.head + 1) % cap(r.buffer)
+	r.tail = (r.tail + 1) % cap(r.buffer)
+}

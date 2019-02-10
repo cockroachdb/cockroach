@@ -32,21 +32,26 @@ func testRingBuffer(t *testing.T, count int) {
 		}
 
 		op := rand.Float64()
-		if op < 0.35 {
+		if op < 0.3 {
 			buffer.AddFirst(elementIdx)
 			naiveBuffer = append([]interface{}{elementIdx}, naiveBuffer...)
-		} else if op < 0.70 {
+		} else if op < 0.6 {
 			buffer.AddLast(elementIdx)
 			naiveBuffer = append(naiveBuffer, elementIdx)
-		} else if op < 0.85 {
+		} else if op < 0.75 {
 			if len(naiveBuffer) > 0 {
 				buffer.RemoveFirst()
 				naiveBuffer = naiveBuffer[1:]
 			}
-		} else {
+		} else if op < 0.9 {
 			if len(naiveBuffer) > 0 {
 				buffer.RemoveLast()
 				naiveBuffer = naiveBuffer[:len(naiveBuffer)-1]
+			}
+		} else {
+			buffer.MoveHeadToTail()
+			if len(naiveBuffer) > 0 {
+				naiveBuffer = append(naiveBuffer[1:], naiveBuffer[0])
 			}
 		}
 
