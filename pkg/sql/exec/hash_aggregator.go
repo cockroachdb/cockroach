@@ -155,10 +155,10 @@ func (ag *hashAggregator) Next() ColBatch {
 
 // Reset resets the hashAggregator for another run. Primarily used for
 // benchmarks.
-func (ag *hashAggregator) Reset() {
+func (ag *hashAggregator) reset() {
 	ag.ht.size = 0
 	ag.buildFinished = false
-	ag.orderedAgg.Reset()
+	ag.orderedAgg.reset()
 }
 
 func (ag *hashAggregator) build() {
@@ -274,6 +274,10 @@ func (op *hashAggregatorBatchOp) Next() ColBatch {
 
 	op.batch.SetLength(nSelected)
 	return op.batch
+}
+
+func (op *hashAggregatorBatchOp) reset() {
+	op.batchStart = 0
 }
 
 var _ Operator = &hashAggregatorBatchOp{}

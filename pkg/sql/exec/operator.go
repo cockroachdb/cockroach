@@ -28,6 +28,10 @@ type Operator interface {
 	Next() ColBatch
 }
 
+type resetter interface {
+	reset()
+}
+
 type noopOperator struct {
 	input Operator
 }

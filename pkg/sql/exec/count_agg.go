@@ -34,6 +34,7 @@ func (a *countAgg) Init(groups []bool, vec ColVec) {
 
 func (a *countAgg) Reset() {
 	a.curIdx = -1
+	a.done = false
 	copy(a.vec, zeroInt64Batch)
 }
 
