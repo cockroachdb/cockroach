@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -594,15 +595,16 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	Settings     *cluster.Settings
-	Clock        *hlc.Clock
-	DB           *client.DB
-	Gossip       *gossip.Gossip
-	NodeLiveness *NodeLiveness
-	StorePool    *StorePool
-	Transport    *RaftTransport
-	NodeDialer   *nodedialer.Dialer
-	RPCContext   *rpc.Context
+	Settings             *cluster.Settings
+	Clock                *hlc.Clock
+	DB                   *client.DB
+	Gossip               *gossip.Gossip
+	NodeLiveness         *NodeLiveness
+	StorePool            *StorePool
+	Transport            *RaftTransport
+	NodeDialer           *nodedialer.Dialer
+	RPCContext           *rpc.Context
+	RangeDescriptorCache kvbase.RangeDescriptorCache
 
 	ClosedTimestamp *container.Container
 
@@ -1262,12 +1264,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// create the intent resolver
 	s.intentResolver = intentresolver.New(intentresolver.Config{
-		Clock:        s.cfg.Clock,
-		DB:           s.db,
-		Stopper:      stopper,
-		TaskLimit:    s.cfg.IntentResolverTaskLimit,
-		AmbientCtx:   s.cfg.AmbientCtx,
-		TestingKnobs: s.cfg.TestingKnobs.IntentResolverKnobs,
+		Clock:                s.cfg.Clock,
+		DB:                   s.db,
+		Stopper:              stopper,
+		TaskLimit:            s.cfg.IntentResolverTaskLimit,
+		AmbientCtx:           s.cfg.AmbientCtx,
+		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
+		RangeDescriptorCache: s.cfg.RangeDescriptorCache,
 	})
 
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
