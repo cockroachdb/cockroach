@@ -63,7 +63,7 @@ func processInboundStreamHelper(
 
 	sendErrToConsumer := func(err error) {
 		if err != nil {
-			dst.Push(nil, &ProducerMetadata{Err: err})
+			dst.Push(ctx, nil, &ProducerMetadata{Err: err})
 		}
 		dst.ProducerDone()
 	}
@@ -121,7 +121,7 @@ func processInboundStreamHelper(
 	// Check for context cancellation while reading from the stream on another
 	// goroutine.
 	select {
-	case <-f.ctxDone:
+	case <-f.ctxForCancel.Done():
 		return sqlbase.QueryCanceledError
 	case err := <-errChan:
 		return err
@@ -179,7 +179,7 @@ func processProducerMessage(
 			// Don't forward data rows when we're draining.
 			continue
 		}
-		switch dst.Push(row, meta) {
+		switch dst.Push(ctx, row, meta) {
 		case NeedMoreRows:
 			continue
 		case DrainRequested:

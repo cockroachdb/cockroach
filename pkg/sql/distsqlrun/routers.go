@@ -302,7 +302,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					ro.mu.Unlock()
 
 					rb.semaphore <- struct{}{}
-					status := ro.stream.Push(nil /*row*/, m)
+					status := ro.stream.Push(ctx, nil, m)
 					<-rb.semaphore
 
 					rb.updateStreamState(&streamStatus, status)
@@ -323,7 +323,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 						ro.mu.Unlock()
 						rb.semaphore <- struct{}{}
 						for _, row := range rows {
-							status := ro.stream.Push(row, nil)
+							status := ro.stream.Push(ctx, row, nil)
 							rb.updateStreamState(&streamStatus, status)
 						}
 						<-rb.semaphore
@@ -345,7 +345,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 						tracing.FinishSpan(span)
 						if trace := getTraceData(ctx); trace != nil {
 							rb.semaphore <- struct{}{}
-							status := ro.stream.Push(nil, &ProducerMetadata{TraceData: trace})
+							status := ro.stream.Push(ctx, nil, &ProducerMetadata{TraceData: trace})
 							rb.updateStreamState(&streamStatus, status)
 							<-rb.semaphore
 						}
@@ -487,7 +487,9 @@ func makeMirrorRouter(rb routerBase) (router, error) {
 }
 
 // Push is part of the RowReceiver interface.
-func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+func (mr *mirrorRouter) Push(
+	ctx context.Context, row sqlbase.EncDatumRow, meta *ProducerMetadata,
+) ConsumerStatus {
 	aggStatus := mr.aggStatus()
 	if meta != nil {
 		mr.fwdMetadata(meta)
@@ -505,7 +507,7 @@ func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Co
 	for i := range mr.outputs {
 		ro := &mr.outputs[i]
 		ro.mu.Lock()
-		err := ro.addRowLocked(context.TODO(), row)
+		err := ro.addRowLocked(ctx, row)
 		ro.mu.Unlock()
 		if err != nil {
 			if useSema {
@@ -539,7 +541,9 @@ func makeHashRouter(rb routerBase, hashCols []uint32) (router, error) {
 //
 // If, according to the hash, the row needs to go to a consumer that's draining
 // or closed, the row is silently dropped.
-func (hr *hashRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+func (hr *hashRouter) Push(
+	ctx context.Context, row sqlbase.EncDatumRow, meta *ProducerMetadata,
+) ConsumerStatus {
 	aggStatus := hr.aggStatus()
 	if meta != nil {
 		hr.fwdMetadata(meta)
@@ -559,7 +563,7 @@ func (hr *hashRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Cons
 	if err == nil {
 		ro := &hr.outputs[streamIdx]
 		ro.mu.Lock()
-		err = ro.addRowLocked(context.TODO(), row)
+		err = ro.addRowLocked(ctx, row)
 		ro.mu.Unlock()
 		ro.mu.cond.Signal()
 	}
@@ -627,7 +631,9 @@ func makeRangeRouter(
 	}, nil
 }
 
-func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+func (rr *rangeRouter) Push(
+	ctx context.Context, row sqlbase.EncDatumRow, meta *ProducerMetadata,
+) ConsumerStatus {
 	aggStatus := rr.aggStatus()
 	if meta != nil {
 		rr.fwdMetadata(meta)
@@ -644,7 +650,7 @@ func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Con
 	if err == nil {
 		ro := &rr.outputs[streamIdx]
 		ro.mu.Lock()
-		err = ro.addRowLocked(context.TODO(), row)
+		err = ro.addRowLocked(ctx, row)
 		ro.mu.Unlock()
 		ro.mu.cond.Signal()
 	}

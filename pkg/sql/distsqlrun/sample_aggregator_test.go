@@ -116,6 +116,7 @@ func TestSampleAggregator(t *testing.T) {
 	}
 	// Randomly interleave the output rows from the samplers into a single buffer.
 	samplerResults := NewRowBuffer(samplerOutTypes, nil /* rows */, RowBufferArgs{})
+	ctx := context.Background()
 	for len(outputs) > 0 {
 		i := rng.Intn(len(outputs))
 		row, meta := outputs[i].Next()
@@ -126,7 +127,7 @@ func TestSampleAggregator(t *testing.T) {
 		} else if row == nil {
 			outputs = append(outputs[:i], outputs[i+1:]...)
 		} else {
-			samplerResults.Push(row, nil /* meta */)
+			samplerResults.Push(ctx, row, nil)
 		}
 	}
 

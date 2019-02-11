@@ -237,9 +237,7 @@ func (fr *flowRegistry) RegisterFlow(
 				)
 			}
 			for _, r := range timedOutReceivers {
-				r.Push(
-					nil, /* row */
-					&ProducerMetadata{Err: errNoInboundStreamConnection})
+				r.Push(ctx, nil, &ProducerMetadata{Err: errNoInboundStreamConnection})
 				r.ProducerDone()
 			}
 		})

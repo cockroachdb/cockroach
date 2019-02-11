@@ -97,7 +97,9 @@ type RowDisposer struct{}
 var _ RowReceiver = &RowDisposer{}
 
 // Push is part of the RowReceiver interface.
-func (r *RowDisposer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+func (r *RowDisposer) Push(
+	ctx context.Context, row sqlbase.EncDatumRow, meta *ProducerMetadata,
+) ConsumerStatus {
 	return NeedMoreRows
 }
 

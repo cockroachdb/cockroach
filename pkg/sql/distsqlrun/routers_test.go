@@ -143,7 +143,7 @@ func TestRouters(t *testing.T) {
 				for j := 0; j < numCols; j++ {
 					row[j] = vals[j][rng.Intn(len(vals[j]))]
 				}
-				if status := r.Push(row, nil /* meta */); status != NeedMoreRows {
+				if status := r.Push(ctx, row, nil); status != NeedMoreRows {
 					t.Fatalf("unexpected status: %d", status)
 				}
 			}
@@ -344,7 +344,7 @@ func TestConsumerStatus(t *testing.T) {
 			}
 
 			// Push a row and expect NeedMoreRows.
-			consumerStatus := router.Push(row0, nil /* meta */)
+			consumerStatus := router.Push(ctx, row0, nil)
 			if consumerStatus != NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 			}
@@ -352,22 +352,22 @@ func TestConsumerStatus(t *testing.T) {
 			// Start draining stream 0. Keep expecting NeedMoreRows, regardless on
 			// which stream we send.
 			bufs[0].ConsumerDone()
-			consumerStatus = router.Push(row0, nil /* meta */)
+			consumerStatus = router.Push(ctx, row0, nil)
 			if consumerStatus != NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 			}
-			consumerStatus = router.Push(row1, nil /* meta */)
+			consumerStatus = router.Push(ctx, row1, nil)
 			if consumerStatus != NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 			}
 
 			// Close stream 0. Continue to expect NeedMoreRows.
 			bufs[0].ConsumerClosed()
-			consumerStatus = router.Push(row0, nil /* meta */)
+			consumerStatus = router.Push(ctx, row0, nil)
 			if consumerStatus != NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 			}
-			consumerStatus = router.Push(row1, nil /* meta */)
+			consumerStatus = router.Push(ctx, row1, nil)
 			if consumerStatus != NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 			}
@@ -376,7 +376,7 @@ func TestConsumerStatus(t *testing.T) {
 			// DrainRequested.
 			bufs[1].ConsumerDone()
 			testutils.SucceedsSoon(t, func() error {
-				status := router.Push(row1, nil /* meta */)
+				status := router.Push(ctx, row1, nil)
 				if status != DrainRequested {
 					return fmt.Errorf("expected status %d, got: %d", DrainRequested, consumerStatus)
 				}
@@ -387,7 +387,7 @@ func TestConsumerStatus(t *testing.T) {
 			// only detect this when trying to send metadata - so we still expect
 			// DrainRequested.
 			bufs[1].ConsumerClosed()
-			consumerStatus = router.Push(row1, nil /* meta */)
+			consumerStatus = router.Push(ctx, row1, nil)
 			if consumerStatus != DrainRequested {
 				t.Fatalf("expected status %d, got: %d", DrainRequested, consumerStatus)
 			}
@@ -395,9 +395,7 @@ func TestConsumerStatus(t *testing.T) {
 			// Attempt to send some metadata. This will cause the router to observe
 			// that everything's closed now.
 			testutils.SucceedsSoon(t, func() error {
-				consumerStatus := router.Push(
-					nil /* row */, &ProducerMetadata{Err: errors.Errorf("test error")},
-				)
+				consumerStatus := router.Push(ctx, nil, &ProducerMetadata{Err: errors.Errorf("test error")})
 				if consumerStatus != ConsumerClosed {
 					return fmt.Errorf("expected status %d, got: %d", ConsumerClosed, consumerStatus)
 				}
@@ -473,7 +471,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 
 			// Push metadata; it should go to stream 0.
 			for i := 0; i < 10; i++ {
-				consumerStatus := router.Push(nil /* row */, &ProducerMetadata{Err: err1})
+				consumerStatus := router.Push(ctx, nil, &ProducerMetadata{Err: err1})
 				if consumerStatus != NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 				}
@@ -486,7 +484,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 			chans[0].ConsumerDone()
 			// Push metadata; it should still go to stream 0.
 			for i := 0; i < 10; i++ {
-				consumerStatus := router.Push(nil /* row */, &ProducerMetadata{Err: err2})
+				consumerStatus := router.Push(ctx, nil, &ProducerMetadata{Err: err2})
 				if consumerStatus != NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 				}
@@ -501,7 +499,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 			// Metadata should switch to going to stream 1 once the new status is
 			// observed.
 			testutils.SucceedsSoon(t, func() error {
-				consumerStatus := router.Push(nil /* row */, &ProducerMetadata{Err: err3})
+				consumerStatus := router.Push(ctx, nil, &ProducerMetadata{Err: err3})
 				if consumerStatus != NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 				}
@@ -526,7 +524,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 			}
 
 			testutils.SucceedsSoon(t, func() error {
-				consumerStatus := router.Push(nil /* row */, &ProducerMetadata{Err: err4})
+				consumerStatus := router.Push(ctx, nil, &ProducerMetadata{Err: err4})
 				if consumerStatus != ConsumerClosed {
 					return fmt.Errorf("expected status %d, got: %d", ConsumerClosed, consumerStatus)
 				}
@@ -609,7 +607,7 @@ func TestRouterBlocks(t *testing.T) {
 						break Loop
 					default:
 						row := sqlbase.RandEncDatumRowOfTypes(rng, colTypes)
-						status := router.Push(row, nil /* meta */)
+						status := router.Push(ctx, row, nil)
 						if status != NeedMoreRows {
 							break Loop
 						}

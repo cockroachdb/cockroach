@@ -254,7 +254,7 @@ func emitHelper(
 			panic("both row data and metadata in the same emitHelper call")
 		}
 		// Bypass EmitRow() and send directly to output.output.
-		consumerStatus = output.output.Push(nil /* row */, meta)
+		consumerStatus = output.output.Push(ctx, nil, meta)
 		if meta.Err != nil {
 			consumerStatus = ConsumerClosed
 		}
@@ -262,7 +262,7 @@ func emitHelper(
 		var err error
 		consumerStatus, err = output.EmitRow(ctx, row)
 		if err != nil {
-			output.output.Push(nil /* row */, &ProducerMetadata{Err: err})
+			output.output.Push(ctx, nil, &ProducerMetadata{Err: err})
 			consumerStatus = ConsumerClosed
 		}
 	}
@@ -317,7 +317,7 @@ func (h *ProcOutputHelper) EmitRow(
 	if log.V(3) {
 		log.InfofDepth(ctx, 1, "pushing row %s", outRow)
 	}
-	if r := h.output.Push(outRow, nil); r != NeedMoreRows {
+	if r := h.output.Push(ctx, outRow, nil); r != NeedMoreRows {
 		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
 			r == DrainRequested)
 		return r, nil

@@ -147,13 +147,14 @@ func TestUnorderedSync(t *testing.T) {
 	mrc := &RowChannel{}
 	mrc.InitWithNumSenders([]sqlbase.ColumnType{columnTypeInt}, 5)
 	producerErr := make(chan error, 100)
+	ctx := context.Background()
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
 				a := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 				b := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				if status := mrc.Push(row, nil /* meta */); status != NeedMoreRows {
+				if status := mrc.Push(ctx, row, nil); status != NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
 				}
 			}
@@ -201,13 +202,13 @@ func TestUnorderedSync(t *testing.T) {
 				a := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 				b := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				if status := mrc.Push(row, nil /* meta */); status != NeedMoreRows {
+				if status := mrc.Push(ctx, row, nil); status != NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
 				}
 			}
 			if i == 3 {
 				err := fmt.Errorf("Test error")
-				mrc.Push(nil /* row */, &ProducerMetadata{Err: err})
+				mrc.Push(ctx, nil, &ProducerMetadata{Err: err})
 			}
 			mrc.ProducerDone()
 		}(i)

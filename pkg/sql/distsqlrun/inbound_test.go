@@ -111,7 +111,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	// the write to the row channel is asynchronous wrt the outbox sending the
 	// row and getting back the updated consumer status.
 	testutils.SucceedsSoon(t, func() error {
-		if cs := outbox.Push(row, nil /* meta */); cs != DrainRequested {
+		if cs := outbox.Push(ctx, row, nil); cs != DrainRequested {
 			return errors.Errorf("unexpected consumer status %s", cs)
 		}
 		return nil

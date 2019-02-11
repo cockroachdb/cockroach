@@ -35,8 +35,8 @@ func TestRunDrain(t *testing.T) {
 	// A source with no rows and 2 ProducerMetadata messages.
 	src := &RowChannel{}
 	src.initWithBufSizeAndNumSenders(nil, 10, 1)
-	src.Push(nil /* row */, &ProducerMetadata{Err: fmt.Errorf("test")})
-	src.Push(nil /* row */, nil /* meta */)
+	src.Push(ctx, nil, &ProducerMetadata{Err: fmt.Errorf("test")})
+	src.Push(ctx, nil, nil)
 	src.Start(ctx)
 
 	// A receiver that is marked as done consuming rows so that Run will
@@ -54,6 +54,8 @@ func TestRunDrain(t *testing.T) {
 // Benchmark a pipeline of RowChannels.
 func BenchmarkRowChannelPipeline(b *testing.B) {
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+
+	ctx := context.TODO()
 
 	for _, length := range []int{1, 2, 3, 4} {
 		b.Run(fmt.Sprintf("length=%d", length), func(b *testing.B) {
@@ -80,7 +82,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 							break
 						}
 						if next != nil {
-							_ = next.Push(row, meta)
+							_ = next.Push(row, ctx, meta)
 						}
 					}
 				}(i)
@@ -91,7 +93,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			}
 			b.SetBytes(int64(8 * 1 * 1))
 			for i := 0; i < b.N; i++ {
-				_ = rc[0].Push(row, nil /* meta */)
+				_ = rc[0].Push(ctx, row, nil)
 			}
 			rc[0].ProducerDone()
 			wg.Wait()
@@ -121,7 +123,7 @@ func BenchmarkMultiplexedRowChannel(b *testing.B) {
 				for j := 0; j < senders; j++ {
 					go func() {
 						for k := 0; k < numRows; k++ {
-							mrc.Push(row, nil /* meta */)
+							mrc.Push(row, ctx, nil)
 						}
 						mrc.ProducerDone()
 						wg.Done()

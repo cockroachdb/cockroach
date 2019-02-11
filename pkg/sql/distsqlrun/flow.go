@@ -190,7 +190,8 @@ type Flow struct {
 	// Cancel function for ctx. Call this to cancel the flow (safe to be called
 	// multiple times).
 	ctxCancel context.CancelFunc
-	ctxDone   <-chan struct{}
+	// ctxForCancel is the context that will be cancelled when ctxCancel is called.
+	ctxForCancel context.Context
 
 	// spec is the request that produced this flow. Only used for debugging.
 	spec *distsqlpb.FlowSpec
@@ -260,10 +261,10 @@ type accountClearingRowReceiver struct {
 }
 
 func (r *accountClearingRowReceiver) Push(
-	row sqlbase.EncDatumRow, meta *ProducerMetadata,
+	ctx context.Context, row sqlbase.EncDatumRow, meta *ProducerMetadata,
 ) ConsumerStatus {
 	r.acc.Clear(r.ctx)
-	return r.RowReceiver.Push(row, meta)
+	return r.RowReceiver.Push(ctx, row, meta)
 }
 
 // setupOutboundStream sets up an output stream; if the stream is local, the
@@ -557,7 +558,7 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	)
 
 	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
-	f.ctxDone = ctx.Done()
+	f.ctxForCancel = ctx
 
 	// Only register the flow if there will be inbound stream connections that
 	// need to look up this flow in the flow registry.
@@ -611,7 +612,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	if err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &ProducerMetadata{Err: err})
+			f.syncFlowConsumer.Push(ctx, nil, &ProducerMetadata{Err: err})
 			f.syncFlowConsumer.ProducerDone()
 			return nil
 		}
@@ -639,7 +640,7 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	if err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &ProducerMetadata{Err: err})
+			f.syncFlowConsumer.Push(ctx, nil, &ProducerMetadata{Err: err})
 			f.syncFlowConsumer.ProducerDone()
 			return nil
 		}
@@ -665,8 +666,8 @@ func (f *Flow) Wait() {
 	}()
 
 	select {
-	case <-f.ctxDone:
-		f.cancel()
+	case <-f.ctxForCancel.Done():
+		f.cancel(f.ctxForCancel)
 		<-waitChan
 	case <-waitChan:
 		// Exit normally
@@ -716,7 +717,7 @@ func (f *Flow) Cleanup(ctx context.Context) {
 //
 // For a detailed description of the distsql query cancellation mechanism,
 // read docs/RFCS/query_cancellation.md.
-func (f *Flow) cancel() {
+func (f *Flow) cancel(ctx context.Context) {
 	// If the flow is local, there are no inbound streams to cancel.
 	if f.isLocal() {
 		return
@@ -733,9 +734,7 @@ func (f *Flow) cancel() {
 			is.canceled = true
 			// Stream has yet to be started; send an error to its
 			// receiver and prevent it from being connected.
-			is.receiver.Push(
-				nil, /* row */
-				&ProducerMetadata{Err: sqlbase.QueryCanceledError})
+			is.receiver.Push(ctx, nil, &ProducerMetadata{Err: sqlbase.QueryCanceledError})
 			is.receiver.ProducerDone()
 			f.flowRegistry.finishInboundStreamLocked(f.id, streamID)
 		}

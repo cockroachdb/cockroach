@@ -232,8 +232,10 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 		{RangeID: 3, StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z")},
 	}
 
+	ctx := context.Background()
+
 	// Push some metadata and check that the caches are updated with it.
-	status := r.Push(nil /* row */, &distsqlrun.ProducerMetadata{
+	status := r.Push(ctx, nil, &distsqlrun.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[0],
@@ -249,7 +251,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	if status != distsqlrun.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
-	status = r.Push(nil /* row */, &distsqlrun.ProducerMetadata{
+	status = r.Push(ctx, nil, &distsqlrun.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[2],

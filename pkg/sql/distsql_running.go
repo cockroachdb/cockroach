@@ -454,7 +454,7 @@ func (r *DistSQLReceiver) SetError(err error) {
 
 // Push is part of the RowReceiver interface.
 func (r *DistSQLReceiver) Push(
-	row sqlbase.EncDatumRow, meta *distsqlrun.ProducerMetadata,
+	ctx context.Context, row sqlbase.EncDatumRow, meta *distsqlrun.ProducerMetadata,
 ) distsqlrun.ConsumerStatus {
 	if meta != nil {
 		if meta.TxnCoordMeta != nil {

@@ -111,7 +111,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 		batch := store.NewBatchWriter()
 		var key, val []byte
 		for {
-			row, err := input.NextRow()
+			row, err := input.NextRow(ctx)
 			if err != nil {
 				return err
 			}
