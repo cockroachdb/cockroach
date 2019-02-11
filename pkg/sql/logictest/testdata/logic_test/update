@@ -510,3 +510,20 @@ UPDATE t32477 SET x = rank(x) OVER ()
 
 statement error generator functions are not allowed in UPDATE SET
 UPDATE t32477 SET x = generate_series(1,2)
+
+#regression test for #32054
+subtest empty_update_subquery
+
+statement ok
+CREATE TABLE t32054(x,y) AS SELECT 1,2
+
+statement ok
+CREATE TABLE t32054_empty(x INT, y INT)
+
+statement ok
+UPDATE t32054 SET (x,y) = (SELECT x,y FROM t32054_empty)
+
+query II
+SELECT * FROM t32054
+----
+NULL  NULL
