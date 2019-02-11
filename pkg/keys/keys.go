@@ -252,9 +252,10 @@ func LeaseAppliedIndexLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).LeaseAppliedIndexLegacyKey()
 }
 
-// RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
-func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RaftTruncatedStateKey()
+// RaftTruncatedStateLegacyKey returns a system-local key for a RaftTruncatedState.
+// See VersionUnreplicatedRaftTruncatedState.
+func RaftTruncatedStateLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RaftTruncatedStateLegacyKey()
 }
 
 // RangeFrozenStatusKey returns a system-local key for the frozen status.
@@ -312,6 +313,11 @@ func makeRangeIDUnreplicatedKey(
 // RaftTombstoneKey returns a system-local key for a raft tombstone.
 func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftTombstoneKey()
+}
+
+// RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
+func RaftTruncatedStateKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RaftTruncatedStateKey()
 }
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.
@@ -897,9 +903,9 @@ func (b RangeIDPrefixBuf) LeaseAppliedIndexLegacyKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalLeaseAppliedIndexLegacySuffix...)
 }
 
-// RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
-func (b RangeIDPrefixBuf) RaftTruncatedStateKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRaftTruncatedStateSuffix...)
+// RaftTruncatedStateLegacyKey returns a system-local key for a RaftTruncatedState.
+func (b RangeIDPrefixBuf) RaftTruncatedStateLegacyKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRaftTruncatedStateLegacySuffix...)
 }
 
 // RangeFrozenStatusKey returns a system-local key for the frozen status.
@@ -933,6 +939,11 @@ func (b RangeIDPrefixBuf) RangeTxnSpanGCThresholdKey() roachpb.Key {
 // RaftTombstoneKey returns a system-local key for a raft tombstone.
 func (b RangeIDPrefixBuf) RaftTombstoneKey() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRaftTombstoneSuffix...)
+}
+
+// RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
+func (b RangeIDPrefixBuf) RaftTruncatedStateKey() roachpb.Key {
+	return append(b.unreplicatedPrefix(), LocalRaftTruncatedStateLegacySuffix...)
 }
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.

@@ -1784,6 +1784,13 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 	return s.cfg.Gossip.AddInfoProto(key, &deadReplicas, gossip.StoreTTL)
 }
 
+// VisitReplicas invokes the visitor on the Store's Replicas until the visitor returns false.
+// Replicas which are added to the Store after iteration begins may or may not be observed.
+func (s *Store) VisitReplicas(visitor func(*Replica) bool) {
+	v := newStoreReplicaVisitor(s)
+	v.Visit(visitor)
+}
+
 // Bootstrap writes a new store ident to the underlying engine. To
 // ensure that no crufty data already exists in the engine, it scans
 // the engine contents before writing the new store ident. The engine
@@ -2163,12 +2170,25 @@ func (s *Store) WriteInitialData(
 			}
 		}
 
+		// See the cluster version for more details. We're basically saying that if the cluster
+		// is bootstrapped at a version that uses the unreplicated truncated state, initialize
+		// it with such a truncated state.
+		truncStateType := stateloader.TruncatedStateUnreplicated
+		if bootstrapVersion.Less(cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState)) {
+			truncStateType = stateloader.TruncatedStateLegacyReplicated
+		}
+
 		lease := roachpb.BootstrapLease()
 		_, err := stateloader.WriteInitialState(
 			ctx, batch,
 			enginepb.MVCCStats{},
 			*desc,
-			lease, hlc.Timestamp{}, hlc.Timestamp{}, bootstrapVersion)
+			lease,
+			hlc.Timestamp{},
+			hlc.Timestamp{},
+			bootstrapVersion,
+			truncStateType,
+		)
 		if err != nil {
 			return err
 		}

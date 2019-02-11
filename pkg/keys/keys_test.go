@@ -146,7 +146,7 @@ func TestKeyAddressError(t *testing.T) {
 			AbortSpanKey(0, uuid.MakeV4()),
 			RaftTombstoneKey(0),
 			RaftAppliedIndexLegacyKey(0),
-			RaftTruncatedStateKey(0),
+			RaftTruncatedStateLegacyKey(0),
 			RangeLeaseKey(0),
 			RangeStatsLegacyKey(0),
 			RaftHardStateKey(0),

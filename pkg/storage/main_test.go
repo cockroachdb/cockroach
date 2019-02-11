@@ -68,7 +68,7 @@ func TestMain(m *testing.M) {
 				delete(notBelowRaftProtos, typ)
 			} else {
 				failed = true
-				fmt.Printf("%s: missing fixture!\n", typ)
+				fmt.Printf("%s: missing fixture! Please adjust belowRaftGoldenProtos if necessary\n", typ)
 			}
 		}
 

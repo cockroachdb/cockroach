@@ -352,11 +352,19 @@ type Batch interface {
 	// Distinct returns a view of the existing batch which only sees writes that
 	// were performed before the Distinct batch was created. That is, the
 	// returned batch will not read its own writes, but it will read writes to
-	// the parent batch performed before the call to Distinct(). The returned
+	// the parent batch performed before the call to Distinct(), except if the
+	// parent batch is a WriteOnlyBatch, in which case the Distinct() batch will
+	// read from the underlying engine.
+	//
+	// The returned
 	// batch needs to be closed before using the parent batch again. This is used
 	// as an optimization to avoid flushing mutations buffered by the batch in
 	// situations where we know all of the batched operations are for distinct
 	// keys.
+	//
+	// TODO(tbg): it seems insane that you cannot read from a WriteOnlyBatch but
+	// you can read from a Distinct on top of a WriteOnlyBatch but randomly don't
+	// see the batch at all. I was personally just bitten by this.
 	Distinct() ReadWriter
 	// Empty returns whether the batch has been written to or not.
 	Empty() bool

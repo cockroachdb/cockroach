@@ -534,8 +534,13 @@ type DiskBackedIndexedRowContainer struct {
 	// [firstCachedRowPos, nextPosToCache).
 	firstCachedRowPos int
 	nextPosToCache    int
-	indexedRowsCache  ring.Buffer // the cache of up to maxIndexedRowsCacheSize contiguous rows
-	cacheMemAcc       mon.BoundAccount
+	// indexedRowsCache is the cache of up to maxCacheSize contiguous rows.
+	indexedRowsCache ring.Buffer
+	// maxCacheSize indicates the maximum number of rows to be cached. It is
+	// initialized to maxIndexedRowsCacheSize and dynamically adjusted if OOM
+	// error is encountered.
+	maxCacheSize int
+	cacheMemAcc  mon.BoundAccount
 }
 
 // MakeDiskBackedIndexedRowContainer creates a DiskBackedIndexedRowContainer
@@ -570,6 +575,7 @@ func MakeDiskBackedIndexedRowContainer(
 	d.scratchEncRow = make(sqlbase.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
 	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
+	d.maxCacheSize = maxIndexedRowsCacheSize
 	d.cacheMemAcc = memoryMonitor.MakeBoundAccount()
 	return &d
 }
@@ -692,28 +698,38 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 				}
 				row, rowIdx := rowWithIdx[:len(rowWithIdx)-1], rowWithIdx[len(rowWithIdx)-1].Datum
 				if idx, ok := rowIdx.(*tree.DInt); ok {
-					if f.indexedRowsCache.Len() == maxIndexedRowsCacheSize {
-						// The cache size is capped at maxIndexedRowsCacheSize, so we first
-						// remove the row with the smallest pos and advance
+					if f.indexedRowsCache.Len() == f.maxCacheSize {
+						// The cache size is capped at f.maxCacheSize, so we reuse the row
+						// with the smallest pos, put it as the last row, and advance
 						// f.firstCachedRowPos.
-						usage := sizeOfInt + int64(f.indexedRowsCache.GetFirst().(IndexedRow).Row.Size())
-						// TODO(yuzefovich): extend ring.Buffer to allow for reusing the
-						// allocated memory instead of allocating new one for every row.
-						f.indexedRowsCache.RemoveFirst()
-						// TODO(yuzefovich): investigate whether the pattern of growing and
-						// shrinking the memory account can be optimized.
-						f.cacheMemAcc.Shrink(ctx, usage)
-						f.firstCachedRowPos++
+						if err := f.reuseFirstRowInCache(ctx, int(*idx), row); err != nil {
+							return nil, err
+						}
+					} else {
+						// We choose to ignore minor details like IndexedRow overhead and
+						// the cache overhead.
+						usage := sizeOfInt + int64(row.Size())
+						if err := f.cacheMemAcc.Grow(ctx, usage); err != nil {
+							if sqlbase.IsOutOfMemoryError(err) {
+								// We hit the memory limit, so we need to cap the cache size
+								// and reuse the memory underlying first row in the cache.
+								if f.indexedRowsCache.Len() == 0 {
+									// The cache is empty, so there is no memory to be reused.
+									return nil, err
+								}
+								f.maxCacheSize = f.indexedRowsCache.Len()
+								if err := f.reuseFirstRowInCache(ctx, int(*idx), row); err != nil {
+									return nil, err
+								}
+							} else {
+								return nil, err
+							}
+						} else {
+							// We actually need to copy the row into memory.
+							ir := IndexedRow{int(*idx), f.rowAlloc.CopyRow(row)}
+							f.indexedRowsCache.AddLast(ir)
+						}
 					}
-					// We choose to ignore minor details like IndexedRow overhead and
-					// the cache overhead.
-					usage := sizeOfInt + int64(row.Size())
-					if err := f.cacheMemAcc.Grow(ctx, usage); err != nil {
-						return nil, err
-					}
-					// We actually need to copy the row into memory.
-					ir := IndexedRow{int(*idx), f.rowAlloc.CopyRow(row)}
-					f.indexedRowsCache.AddLast(ir)
 					f.nextPosToCache++
 				} else {
 					return nil, errors.Errorf("unexpected last column type: should be DInt but found %T", idx)
@@ -731,6 +747,50 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 		return IndexedRow{int(*idx), row}, nil
 	}
 	return nil, errors.Errorf("unexpected last column type: should be DInt but found %T", rowIdx)
+}
+
+// reuseFirstRowInCache reuses the underlying memory of the first row in the
+// cache to store 'row' and puts it as the last one in the cache. It adjusts
+// the memory account accordingly and, if necessary, removes some first rows.
+func (f *DiskBackedIndexedRowContainer) reuseFirstRowInCache(
+	ctx context.Context, idx int, row sqlbase.EncDatumRow,
+) error {
+	newRowSize := row.Size()
+	for {
+		if f.indexedRowsCache.Len() == 0 {
+			return errors.Errorf("unexpectedly the cache of DiskBackedIndexedRowContainer contains zero rows")
+		}
+		indexedRowToReuse := f.indexedRowsCache.GetFirst().(IndexedRow)
+		oldRowSize := indexedRowToReuse.Row.Size()
+		delta := int64(newRowSize - oldRowSize)
+		if delta > 0 {
+			// New row takes up more memory than the old one.
+			if err := f.cacheMemAcc.Grow(ctx, delta); err != nil {
+				if sqlbase.IsOutOfMemoryError(err) {
+					// We need to actually reduce the cache size, so we remove the first
+					// row and adjust the memory account, maxCacheSize, and
+					// f.firstCachedRowPos accordingly.
+					f.indexedRowsCache.RemoveFirst()
+					f.cacheMemAcc.Shrink(ctx, int64(oldRowSize))
+					f.maxCacheSize--
+					f.firstCachedRowPos++
+					if f.indexedRowsCache.Len() == 0 {
+						return err
+					}
+					continue
+				}
+				return err
+			}
+		} else if delta < 0 {
+			f.cacheMemAcc.Shrink(ctx, -delta)
+		}
+		indexedRowToReuse.Idx = idx
+		copy(indexedRowToReuse.Row, row)
+		f.indexedRowsCache.RemoveFirst()
+		f.indexedRowsCache.AddLast(indexedRowToReuse)
+		f.firstCachedRowPos++
+		return nil
+	}
 }
 
 // getRowWithoutCache returns the row at requested position without using the
