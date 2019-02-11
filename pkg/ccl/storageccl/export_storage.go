@@ -154,11 +154,13 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		conf.Provider = roachpb.ExportStorageProvider_Http
 		conf.HttpPath.BaseUri = path
 	case "nodelocal":
-		if uri.Host != "" {
-			return conf, errors.Errorf("nodelocal does not support hosts: %s", path)
+		nodeID, err := strconv.Atoi(uri.Host)
+		if err != nil && uri.Host != "" {
+			return conf, errors.Errorf("host component of nodelocal URI must be a node ID: %s", path)
 		}
 		conf.Provider = roachpb.ExportStorageProvider_LocalFile
 		conf.LocalFile.Path = uri.Path
+		conf.LocalFile.NodeID = roachpb.NodeID(nodeID)
 	case "experimental-workload":
 		conf.Provider = roachpb.ExportStorageProvider_Workload
 		if conf.WorkloadConfig, err = parseWorkloadConfig(uri); err != nil {
@@ -201,7 +203,7 @@ func MakeExportStorage(
 	switch dest.Provider {
 	case roachpb.ExportStorageProvider_LocalFile:
 		telemetry.Count("external-io.nodelocal")
-		return makeLocalStorage(dest.LocalFile.Path, settings)
+		return makeLocalStorage(dest.LocalFile, settings)
 	case roachpb.ExportStorageProvider_Http:
 		telemetry.Count("external-io.http")
 		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
@@ -275,8 +277,8 @@ var (
 )
 
 type localFileStorage struct {
-	rawBase string // un-prefixed base -- DO NOT use for I/O ops.
-	base    string // the prefixed base, for I/O ops on this node.
+	cfg  roachpb.ExportStorage_LocalFilePath // constains un-prefixed base -- DO NOT use for I/O ops.
+	base string                              // the prefixed base, for I/O ops on this node.
 }
 
 var _ ExportStorage = &localFileStorage{}
@@ -291,12 +293,15 @@ func MakeLocalStorageURI(path string) (string, error) {
 	return fmt.Sprintf("nodelocal://%s", path), nil
 }
 
-func makeLocalStorage(base string, settings *cluster.Settings) (ExportStorage, error) {
-	if base == "" {
+func makeLocalStorage(
+	cfg roachpb.ExportStorage_LocalFilePath, settings *cluster.Settings,
+) (ExportStorage, error) {
+	if cfg.Path == "" {
 		return nil, errors.Errorf("Local storage requested but path not provided")
 	}
+	// TODO(dt): check that this node is cfg.NodeID if non-zero.
 
-	localBase := base
+	localBase := cfg.Path
 	// In non-server execution we have no settings and no restriction on local IO.
 	if settings != nil {
 		if settings.ExternalIODir == "" {
@@ -309,15 +314,13 @@ func makeLocalStorage(base string, settings *cluster.Settings) (ExportStorage, e
 			return nil, errors.Errorf("local file access to paths outside of external-io-dir is not allowed")
 		}
 	}
-	return &localFileStorage{base: localBase, rawBase: base}, nil
+	return &localFileStorage{base: localBase, cfg: cfg}, nil
 }
 
 func (l *localFileStorage) Conf() roachpb.ExportStorage {
 	return roachpb.ExportStorage{
-		Provider: roachpb.ExportStorageProvider_LocalFile,
-		LocalFile: roachpb.ExportStorage_LocalFilePath{
-			Path: l.rawBase,
-		},
+		Provider:  roachpb.ExportStorageProvider_LocalFile,
+		LocalFile: l.cfg,
 	}
 }
 
