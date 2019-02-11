@@ -94,8 +94,11 @@ type ReplicaCommandFilter func(args FilterArgs) *roachpb.Error
 type ReplicaProposalFilter func(args ProposalFilterArgs) *roachpb.Error
 
 // A ReplicaApplyFilter can be used in testing to influence the error returned
-// from proposals after they apply.
-type ReplicaApplyFilter func(args ApplyFilterArgs) *roachpb.Error
+// from proposals after they apply. The returned int is treated as a
+// storage.proposalReevaluationReason and will only take an effect when it is
+// nonzero and the existing reason is zero. Similarly, the error is only applied
+// if there's no error so far.
+type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *roachpb.Error)
 
 // ReplicaResponseFilter is used in unittests to modify the outbound
 // response returned to a waiting client after a replica command has

@@ -8689,11 +8689,11 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	storeKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+	storeKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
 		if atomic.LoadInt32(&filterActive) == 1 {
-			return roachpb.NewErrorf("boom")
+			return 0, roachpb.NewErrorf("boom")
 		}
-		return nil
+		return 0, nil
 	}
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &storeKnobs}})
@@ -8769,11 +8769,11 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 	var filterActive int32
 	blockRaftApplication := make(chan struct{})
 	tsc.TestingKnobs.TestingApplyFilter =
-		func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
 			if atomic.LoadInt32(&filterActive) == 1 {
 				<-blockRaftApplication
 			}
-			return nil
+			return 0, nil
 		}
 
 	stopper := stop.NewStopper()
@@ -8830,7 +8830,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	blockRaftApplication := make(chan struct{})
 	blockingRaftApplication := make(chan struct{}, 1)
 	tsc.TestingKnobs.TestingApplyFilter =
-		func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+		func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
 			if atomic.LoadInt32(&filterActive) == 1 {
 				select {
 				case blockingRaftApplication <- struct{}{}:
@@ -8838,7 +8838,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 				}
 				<-blockRaftApplication
 			}
-			return nil
+			return 0, nil
 		}
 
 	stopper := stop.NewStopper()

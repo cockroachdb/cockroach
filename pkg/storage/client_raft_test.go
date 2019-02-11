@@ -1463,15 +1463,15 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	// TODO(bdarnell): I think this should be a TestingApplyFilter
 	// instead of a TestingPostApplyFilter, but making that change
 	// causes this test to fail.
-	sc.TestingKnobs.TestingPostApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+	sc.TestingKnobs.TestingPostApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
 		corrupt.Lock()
 		defer corrupt.Unlock()
 
 		if corrupt.store == nil || filterArgs.StoreID != corrupt.store.StoreID() {
-			return nil
+			return 0, nil
 		}
 
-		return roachpb.NewError(
+		return 0, roachpb.NewError(
 			roachpb.NewReplicaCorruptionError(errors.New("boom")),
 		)
 	}
@@ -4113,11 +4113,11 @@ func TestFailedConfChange(t *testing.T) {
 	// followers.
 	var filterActive int32
 	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+	sc.TestingKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
 		if atomic.LoadInt32(&filterActive) == 1 && filterArgs.ChangeReplicas != nil {
-			return roachpb.NewErrorf("boom")
+			return 0, roachpb.NewErrorf("boom")
 		}
-		return nil
+		return 0, nil
 	}
 	mtc := &multiTestContext{
 		storeConfig: &sc,
