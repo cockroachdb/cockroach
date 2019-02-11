@@ -697,9 +697,36 @@ DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move
   ingest_options.allow_global_seqno = allow_file_modifications;
   // If there are mutations in the memtable for the keyrange covered by the file
   // being ingested, this option is checked. If true, the memtable is flushed
-  // and the ingest run. If false, an error is returned.
-  ingest_options.allow_blocking_flush = true;
+  // using a blocking, write-stalling flush and the ingest run. If false, an
+  // error is returned.
+  // We want to ingest, but we do not want a write-stall, so we initially set it
+  // to false -- if our ingest fails, we'll do a manual, no-stall flush and wait
+  // for it to finish before trying the ingest again.
+  ingest_options.allow_blocking_flush = false;
+
   rocksdb::Status status = db->rep->IngestExternalFile(paths_vec, ingest_options);
+  if (status.IsInvalidArgument()) {
+    // TODO(dt): inspect status to see if it has the message `External file requires flush`
+    //           since the move_file and other errors also use kInvalidArgument.
+
+    // It is possible we failed because the memtable wanted to flush but we did
+    // not allow a blocking flush on the first try. Do a manual, non-blocking
+    // flush and wait for it, then try again.
+    rocksdb::FlushOptions flush_options;
+    flush_options.allow_write_stall = false;
+    flush_options.wait = true;
+
+    rocksdb::Status flush_status = db->rep->Flush(flush_options);
+    // While this is best-effort and the following ingest is will allow a stall
+    // and just do whatever it needs to do to ingest, we do not expect a flush
+    // to fail so if it did, we'll return it.
+    if (!flush_status.ok()) {
+      return ToDBStatus(flush_status);
+    }
+    ingest_options.allow_blocking_flush = true;
+    status = db->rep->IngestExternalFile(paths_vec, ingest_options);
+  }
+
   if (!status.ok()) {
     return ToDBStatus(status);
   }
