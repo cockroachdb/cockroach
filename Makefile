@@ -862,7 +862,7 @@ check test testshort testrace bench benchshort:
 stress: ## Run tests under stress.
 stressrace: ## Run tests under stress with the race detector enabled.
 stress stressrace:
-	$(xgo) test $(GOFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
+	$(xgo) test $(GOFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(filter-out -v,$(TESTFLAGS)) -v
 
 .PHONY: roachprod-stress roachprod-stressrace
 roachprod-stress roachprod-stressrace: bin/roachprod-stress
