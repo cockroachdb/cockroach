@@ -44,20 +44,22 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	if err := c.RunE(ctx, c.Node(1), "test -d /mnt/data1/.zfs/snapshot/pristine"); err != nil {
 		// Use ZFS so the data directories can instantly be rolled back to
 		// their pristine state. Useful for iterating quickly on the test.
-		c.Reformat(ctx, c.All(), "zfs")
+		if !local {
+			c.Reformat(ctx, c.All(), "zfs")
+		}
 
 		t.Status("restoring fixture")
 		c.Start(ctx, t)
 
 		// NB: on a 10 node cluster, this should take well below 3h.
 		c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
-			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4")
-		// Work around a limitation in `cockroach fixtures import` that can't rename the database.
-		c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "ALTER DATABASE bank RENAME TO bigbank"`)
+			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
 		c.Stop(ctx)
 		t.Status()
 
-		c.Run(ctx, c.All(), "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
+		if !local {
+			c.Run(ctx, c.All(), "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
+		}
 	} else {
 		t.Status(`restoring store directories from zfs snapshot`)
 		c.Run(ctx, c.All(), "sudo zfs rollback data1@pristine")
@@ -81,8 +83,8 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	t.Status(`restoring tiny table`)
 	defer t.WorkerStatus()
 
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "DROP DATABASE IF EXISTS bank"`)
-	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "DROP DATABASE IF EXISTS tinybank"`)
+	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank", "--db=tinybank",
 		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1")
 
 	t.Status()
@@ -171,7 +173,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 				return err
 			}
 			// If we can't aggregate over 80kb in 5s, the database is far from usable.
-			if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM bank.bank`).Scan(&count); err != nil {
+			if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM tinybank.bank`).Scan(&count); err != nil {
 				return err
 			}
 
