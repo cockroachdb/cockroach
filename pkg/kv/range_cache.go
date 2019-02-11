@@ -217,7 +217,7 @@ func (et *EvictionToken) EvictAndReplace(
 	return err
 }
 
-// LookupRangeDescriptor attempts to locate a descriptor for the range
+// LookupRangeDescriptorWithEvictionToken attempts to locate a descriptor for the range
 // containing the given Key. This is done by first trying the cache, and then
 // querying the two-level lookup table of range descriptors which cockroach
 // maintains. The function should be provided with an EvictionToken if one was
@@ -234,10 +234,17 @@ func (et *EvictionToken) EvictAndReplace(
 // This method returns the RangeDescriptor for the range containing
 // the key's data and a token to manage evicting the RangeDescriptor
 // if it is found to be stale, or an error if any occurred.
-func (rdc *RangeDescriptorCache) LookupRangeDescriptor(
+func (rdc *RangeDescriptorCache) LookupRangeDescriptorWithEvictionToken(
 	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *EvictionToken, error) {
 	return rdc.lookupRangeDescriptorInternal(ctx, key, evictToken, useReverseScan, nil)
+}
+
+func (rdc *RangeDescriptorCache) LookupRangeDescriptor(
+	ctx context.Context, key roachpb.RKey,
+) (*roachpb.RangeDescriptor, error) {
+	rd, _, err := rdc.lookupRangeDescriptorInternal(ctx, key, nil, false, nil)
+	return rd, err
 }
 
 // lookupRangeDescriptorInternal is called from LookupRangeDescriptor or from tests.
