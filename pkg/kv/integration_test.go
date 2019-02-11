@@ -194,7 +194,19 @@ func TestDelayedBeginRetryable(t *testing.T) {
 // Test that waiters on transactions whose commit command is rejected see the
 // transaction as Aborted. This test is a regression test for #30792 which was
 // causing pushers in the txn wait queue to consider such a transaction
-// committed.
+// committed. It is also a regression test for a similar bug [1] in which
+// it was not the notification to the txn wait queue that was leaked, but the
+// intents.
+//
+// The test sets up two ranges and lets a transaction (anchored on the left)
+// write to both of them. It then starts readers for both keys written by the
+// txn and waits for them to enter the txn wait queue. Next, it lets the txn
+// attempt to commit but injects a forced error below Raft. The bugs would
+// formerly notify the txn wait queue that the transaction had committed (not
+// true) and that its external intent (i.e. the one on the right range) could
+// be resolved (not true). Verify that neither occurs.
+//
+// [1]: https://github.com/cockroachdb/cockroach/issues/34025#issuecomment-460934278
 func TestWaiterOnRejectedCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -203,16 +215,19 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 	var txnID atomic.Value
 	// The EndTransaction proposal that we want to reject. A string.
 	var commitCmdID atomic.Value
-	readerBlocked := make(chan struct{})
+	readerBlocked := make(chan struct{}, 2)
 	// txnUpdate is signaled once the txn wait queue is updated for our
 	// transaction. Normally it only needs a buffer length of 1, but bugs that
 	// cause it to be pinged several times (e.g. #30792) might need a bigger
 	// buffer to avoid the test timing out.
-	txnUpdate := make(chan roachpb.TransactionStatus, 10)
+	txnUpdate := make(chan roachpb.TransactionStatus, 20)
 
+	illegalLeaseIndex := true
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
+				DisableMergeQueue: true,
+				DisableSplitQueue: true,
 				TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
 					// We'll recognize the attempt to commit our transaction and store the
 					// respective command id.
@@ -234,18 +249,24 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 					commitCmdID.Store(args.CmdID)
 					return nil
 				},
-				TestingApplyFilter: func(args storagebase.ApplyFilterArgs) *roachpb.Error {
+				TestingApplyFilter: func(args storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
 					// We'll trap the processing of the commit command and return an error
 					// for it.
 					v := commitCmdID.Load()
 					if v == nil {
-						return nil
+						return 0, nil
 					}
 					cmdID := v.(storagebase.CmdIDKey)
 					if args.CmdID == cmdID {
-						return roachpb.NewErrorf("test injected err")
+						if illegalLeaseIndex {
+							illegalLeaseIndex = false
+							// NB: 1 is proposalIllegalLeaseIndex.
+							return 1, roachpb.NewErrorf("test injected err (illegal lease index)")
+						}
+						// NB: 0 is proposalNoReevaluation.
+						return 0, roachpb.NewErrorf("test injected err")
 					}
-					return nil
+					return 0, nil
 				},
 				TxnWait: txnwait.TestingKnobs{
 					OnPusherBlocked: func(ctx context.Context, push *roachpb.PushTxnRequest) {
@@ -255,7 +276,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 							return
 						}
 						if push.PusheeTxn.ID.Equal(v.(uuid.UUID)) {
-							close(readerBlocked)
+							readerBlocked <- struct{}{}
 						}
 					},
 					OnTxnUpdate: func(ctx context.Context, txn *roachpb.Transaction) {
@@ -274,35 +295,45 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	// We'll start a transaction, write an intent, then separately do a read on a
-	// different goroutine and wait for that read to block on the intent, then
-	// we'll attempt to commit the transaction but we'll intercept the processing
-	// of the commit command and reject it.
-	// Then we'll assert that the txn wait queue is told that the transaction
+	if _, _, err := s.SplitRange(roachpb.Key("b")); err != nil {
+		t.Fatal(err)
+	}
+
+	// We'll start a transaction, write an intent on both sides of the split,
+	// then separately do a read on a different goroutine and wait for that read
+	// to block on the intent, then we'll attempt to commit the transaction but
+	// we'll intercept the processing of the commit command and reject it. Then
+	// we'll assert that the txn wait queue is told that the transaction
 	// aborted, and we also check that the reader got a nil value.
 
 	txn := client.NewTxn(ctx, db, s.NodeID(), client.RootTxn)
-	key := "key"
-	if err := txn.Put(ctx, key, "val"); err != nil {
-		t.Fatal(err)
+	keyLeft, keyRight := "a", "c"
+	for _, key := range []string{keyLeft, keyRight} {
+		if err := txn.Put(ctx, key, "val"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	txnID.Store(txn.ID())
 
-	readerDone := make(chan error, 1)
+	readerDone := make(chan error, 2)
 
-	go func() {
-		val, err := db.Get(ctx, key)
-		if err != nil {
-			readerDone <- err
-		}
-		if val.Exists() {
-			readerDone <- fmt.Errorf("expected value to not exist, got: %s", val)
-		}
-		close(readerDone)
-	}()
+	for _, key := range []string{keyLeft, keyRight} {
+		go func(key string) {
+			val, err := db.Get(ctx, key)
+			if err != nil {
+				readerDone <- err
+			} else if val.Exists() {
+				readerDone <- fmt.Errorf("%s: expected value to not exist, got: %s", key, val)
+			} else {
+				readerDone <- nil
+			}
+		}(key)
+	}
 
-	// Wait for the reader to enter the txn wait queue.
+	// Wait for both readers to enter the txn wait queue.
 	<-readerBlocked
+	<-readerBlocked
+
 	if err := txn.CommitOrCleanup(ctx); !testutils.IsError(err, "test injected err") {
 		t.Fatalf("expected injected err, got: %v", err)
 	}
@@ -310,7 +341,9 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 	if status := <-txnUpdate; status != roachpb.ABORTED {
 		t.Fatalf("expected the wait queue to be updated with an Aborted txn, instead got: %s", status)
 	}
-	if err := <-readerDone; err != nil {
-		t.Fatal(err)
+	for i := 0; i < 2; i++ {
+		if err := <-readerDone; err != nil {
+			t.Fatal(err)
+		}
 	}
 }

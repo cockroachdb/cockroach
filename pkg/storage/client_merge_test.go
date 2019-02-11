@@ -2992,7 +2992,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 		rhsDesc        *roachpb.RangeDescriptor
 		stop, stopping bool
 	}
-	storeCfg.TestingKnobs.TestingPostApplyFilter = func(args storagebase.ApplyFilterArgs) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingPostApplyFilter = func(args storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
 		state.Lock()
 		if state.stop && !state.stopping && args.RangeID == state.rhsDesc.RangeID && args.IsLeaseRequest {
 			// Shut down the store. The lease acquisition will notice that a merge is
@@ -3010,7 +3010,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 		} else {
 			state.Unlock()
 		}
-		return nil
+		return 0, nil
 	}
 
 	mtc = &multiTestContext{
