@@ -2728,8 +2728,9 @@ select
       └── exists [type=bool]
            └── scan xy
                 ├── columns: x:6(int!null) y:7(int)
-                ├── key: (6)
-                └── fd: (6)-->(7)
+                ├── limit: 1
+                ├── key: ()
+                └── fd: ()-->(6,7)
 
 # Hoist nested EXISTS.
 opt expect=HoistSelectExists
@@ -2868,8 +2869,9 @@ select
            └── exists [type=bool]
                 └── scan xy
                      ├── columns: x:6(int!null) y:7(int)
-                     ├── key: (6)
-                     └── fd: (6)-->(7)
+                     ├── limit: 1
+                     ├── key: ()
+                     └── fd: ()-->(6,7)
 
 # --------------------------------------------------
 # HoistSelectExists + HoistSelectNotExists
@@ -3383,8 +3385,9 @@ project
                 ├── exists [type=bool]
                 │    └── scan xy
                 │         ├── columns: x:6(int!null) y:7(int)
-                │         ├── key: (6)
-                │         └── fd: (6)-->(7)
+                │         ├── limit: 1
+                │         ├── key: ()
+                │         └── fd: ()-->(6,7)
                 └── true_agg IS NOT NULL [type=bool]
 
 # --------------------------------------------------
@@ -3470,8 +3473,9 @@ project
       ├── exists [type=bool]
       │    └── scan xy
       │         ├── columns: xy.x:12(int!null) xy.y:13(int)
-      │         ├── key: (12)
-      │         └── fd: (12)-->(13)
+      │         ├── limit: 1
+      │         ├── key: ()
+      │         └── fd: ()-->(12,13)
       └── variable: count_rows [type=int, outer=(16)]
 
 # Subquery in GroupBy aggregate (optbuilder creates correlated Project).
@@ -3595,24 +3599,30 @@ values
  ├── fd: ()-->(13)
  └── tuple [type=tuple{bool}]
       └── exists [type=bool]
-           └── left-join
+           └── limit
                 ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
-                ├── fd: (12)-->(2), ()~~>(9)
-                ├── row-number
-                │    ├── columns: i:2(int) rownum:12(int!null)
-                │    ├── key: (12)
-                │    ├── fd: (12)-->(2)
-                │    └── scan a
-                │         └── columns: i:2(int)
-                ├── project
-                │    ├── columns: true:9(bool!null) y:7(int)
-                │    ├── fd: ()-->(9)
-                │    ├── scan xy
-                │    │    └── columns: y:7(int)
-                │    └── projections
-                │         └── true [type=bool]
-                └── filters
-                     └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(2,7,9,12)
+                ├── left-join
+                │    ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
+                │    ├── fd: (12)-->(2), ()~~>(9)
+                │    ├── row-number
+                │    │    ├── columns: i:2(int) rownum:12(int!null)
+                │    │    ├── key: (12)
+                │    │    ├── fd: (12)-->(2)
+                │    │    └── scan a
+                │    │         └── columns: i:2(int)
+                │    ├── project
+                │    │    ├── columns: true:9(bool!null) y:7(int)
+                │    │    ├── fd: ()-->(9)
+                │    │    ├── scan xy
+                │    │    │    └── columns: y:7(int)
+                │    │    └── projections
+                │    │         └── true [type=bool]
+                │    └── filters
+                │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+                └── const: 1 [type=int]
 
 # Don't hoist uncorrelated subquery.
 opt
@@ -4520,13 +4530,19 @@ select
  │    └── fd: (1)-->(2-5)
  └── filters
       └── exists [type=bool]
-           └── select
+           └── limit
                 ├── columns: y:7(int!null)
+                ├── cardinality: [0 - 1]
+                ├── key: ()
                 ├── fd: ()-->(7)
-                ├── scan xy
-                │    └── columns: y:7(int)
-                └── filters
-                     └── y = 5 [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
+                ├── select
+                │    ├── columns: y:7(int!null)
+                │    ├── fd: ()-->(7)
+                │    ├── scan xy
+                │    │    └── columns: y:7(int)
+                │    └── filters
+                │         └── y = 5 [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
+                └── const: 1 [type=int]
 
 # ANY in Join On condition.
 opt expect=NormalizeJoinAnyFilter
@@ -4637,12 +4653,18 @@ select
  └── filters
       └── not [type=bool]
            └── exists [type=bool]
-                └── select
+                └── limit
                      ├── columns: y:7(int)
-                     ├── scan xy
-                     │    └── columns: y:7(int)
-                     └── filters
-                          └── (y = 5) IS NOT false [type=bool, outer=(7)]
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(7)
+                     ├── select
+                     │    ├── columns: y:7(int)
+                     │    ├── scan xy
+                     │    │    └── columns: y:7(int)
+                     │    └── filters
+                     │         └── (y = 5) IS NOT false [type=bool, outer=(7)]
+                     └── const: 1 [type=int]
 
 # NOT ANY in Join On condition.
 opt expect=NormalizeJoinNotAnyFilter

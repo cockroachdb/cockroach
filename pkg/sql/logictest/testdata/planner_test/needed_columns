@@ -129,9 +129,9 @@ root                                    ·             ·                       
       │                                 id            @S1                                   ·             ·
       │                                 original sql  (SELECT 2 AS x FROM (SELECT 3 AS s))  ·             ·
       │                                 exec mode     one row                               ·             ·
-      └── limit                         ·             ·                                     (x)           x=CONST
-           │                            count         2                                     ·             ·
-           └── max1row                  ·             ·                                     (x)           x=CONST
+      └── max1row                       ·             ·                                     (x)           x=CONST
+           └── limit                    ·             ·                                     (x)           x=CONST
+                │                       count         2                                     ·             ·
                 └── render              ·             ·                                     (x)           x=CONST
                      │                  render 0      2                                     ·             ·
                      └── render         ·             ·                                     (s[omitted])  ·

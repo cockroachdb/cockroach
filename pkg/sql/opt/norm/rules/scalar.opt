@@ -167,6 +167,31 @@
 [EliminateExistsGroupBy, Normalize]
 (Exists (GroupBy | DistinctOn $input:*) $subqueryPrivate:*) => (Exists $input $subqueryPrivate)
 
+# ExistsLimit inserts a LIMIT 1 "under" Exists so as to save resources
+# to make the EXISTS determination.
+#
+# This rule uses and sets a boolean "WasLimited" on the Exists
+# node to ensure the rule is only applied once. This is because the
+# rule expands to an Exists pattern that's also a valid input pattern
+# and it would recurse otherwise.
+#
+# We avoid this rule if the query is decorrelated because the
+# decorrelation rules get confused by the presence of a limit.
+# (It will be worth re-considering this when a general-purpose apply
+# operator is supported - in that case it can be definitely worthwhile
+# pushing down a LIMIT 1 to limit the amount of work done on every row.)
+[IntroduceExistsLimit, Normalize]
+(Exists
+    $input:^(Project | GroupBy | DistinctOn) & ^(HasOuterCols $input) & ^(HasZeroOrOneRow $input)
+    $subqueryPrivate:* & ^(IsLimited $subqueryPrivate)
+)
+=>
+(Exists
+    (Limit $input (Const 1) (EmptyOrdering))
+    (MakeLimited $subqueryPrivate)
+)
+
+
 # NormalizeJSONFieldAccess transforms field access into a containment with a
 # simpler LHS. This allows inverted index constraints to be generated in some
 # cases.

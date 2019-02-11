@@ -275,10 +275,14 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 			return false, expr
 		}
 		if t.Exists {
+			result.plan = &limitNode{plan: result.plan, countExpr: tree.NewDInt(1)}
 			result.execMode = distsqlrun.SubqueryExecModeExists
 			t.SetType(types.Bool)
 		} else {
-			result.plan = &max1RowNode{plan: result.plan}
+			result.plan = &max1RowNode{
+				plan: &limitNode{
+					plan:      result.plan,
+					countExpr: tree.NewDInt(2)}}
 			result.execMode = distsqlrun.SubqueryExecModeOneRow
 		}
 

@@ -375,8 +375,9 @@ select
       └── exists [type=bool]
            └── scan a
                 ├── columns: k:7(int!null) i:8(int)
-                ├── key: (7)
-                └── fd: (7)-->(8)
+                ├── limit: 1
+                ├── key: ()
+                └── fd: ()-->(7,8)
 
 # --------------------------------------------------
 # EliminateExistsGroupBy
@@ -424,7 +425,10 @@ select
  └── filters
       └── exists [type=bool]
            └── scan a
-                └── columns: s:10(string)
+                ├── columns: s:10(string)
+                ├── limit: 1
+                ├── key: ()
+                └── fd: ()-->(10)
 
 opt expect=EliminateExistsGroupBy
 SELECT * FROM a WHERE EXISTS(SELECT DISTINCT ON (i) s FROM a)
@@ -440,7 +444,10 @@ select
  └── filters
       └── exists [type=bool]
            └── scan a
-                └── columns: i:8(int) s:10(string)
+                ├── columns: i:8(int) s:10(string)
+                ├── limit: 1
+                ├── key: ()
+                └── fd: ()-->(8,10)
 
 # --------------------------------------------------
 # EliminateExistsGroupBy + EliminateExistsProject
@@ -459,7 +466,10 @@ select
  └── filters
       └── exists [type=bool]
            └── scan a
-                └── columns: i:8(int) s:10(string)
+                ├── columns: i:8(int) s:10(string)
+                ├── limit: 1
+                ├── key: ()
+                └── fd: ()-->(8,10)
 
 # --------------------------------------------------
 # NormalizeJSONFieldAccess

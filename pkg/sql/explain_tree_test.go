@@ -378,9 +378,9 @@ create table t.actors (
 1 .id @S1 (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
 1 .original sql (SELECT name FROM t.public.actors WHERE name = 'Foo') (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
 1 .exec mode one row (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
-2 limit  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
-2 .count (2)[int] (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
-3 max1row  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+2 max1row  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+3 limit  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+3 .count (2)[int] (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
 4 render  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
 4 .render 0 (@2)[string] (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
 5 scan  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
@@ -442,16 +442,16 @@ create table t.actors (
 				},
 				Children: []*roachpb.ExplainTreePlanNode{
 					{
-						Name: "limit",
-						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
-							{
-								Key:   "count",
-								Value: "_",
-							},
-						},
+						Name: "max1row",
 						Children: []*roachpb.ExplainTreePlanNode{
 							{
-								Name: "max1row",
+								Name: "limit",
+								Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+									{
+										Key:   "count",
+										Value: "_",
+									},
+								},
 								Children: []*roachpb.ExplainTreePlanNode{
 									{
 										Name: "render",
