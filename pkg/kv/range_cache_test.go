@@ -139,7 +139,7 @@ func (db *testDescriptorDB) simulateLookupScan(
 ) error {
 	metaKey := keys.RangeMetaKey(key)
 	for {
-		desc, _, err := db.cache.LookupRangeDescriptor(ctx, metaKey, nil, useReverseScan)
+		desc, _, err := db.cache.LookupRangeDescriptorWithEvictionToken(ctx, metaKey, nil, useReverseScan)
 		if err != nil {
 			return err
 		}
