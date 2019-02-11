@@ -697,9 +697,44 @@ DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move
   ingest_options.allow_global_seqno = allow_file_modifications;
   // If there are mutations in the memtable for the keyrange covered by the file
   // being ingested, this option is checked. If true, the memtable is flushed
-  // and the ingest run. If false, an error is returned.
-  ingest_options.allow_blocking_flush = true;
+  // using a blocking, write-stalling flush and the ingest run. If false, an
+  // error is returned.
+  //
+  // We want to ingest, but we do not want a write-stall, so we initially set it
+  // to false -- if our ingest fails, we'll do a manual, no-stall flush and wait
+  // for it to finish before trying the ingest again.
+  ingest_options.allow_blocking_flush = false;
+
   rocksdb::Status status = db->rep->IngestExternalFile(paths_vec, ingest_options);
+  if (status.IsInvalidArgument()) {
+    // TODO(dt): inspect status to see if it has the message
+    //          `External file requires flush`
+    //           since the move_file and other errors also use kInvalidArgument.
+
+    // It is possible we failed because the memtable required a flush but in the
+    // options above, we set "allow_blocking_flush = false" preventing ingest
+    // from running flush with allow_write_stall = true and halting foreground
+    // traffic. Now that we know we need to flush, let's do one ourselves, with
+    // allow_write_stall = false and wait for it. After it finishes we can retry
+    // the ingest.
+    rocksdb::FlushOptions flush_options;
+    flush_options.allow_write_stall = false;
+    flush_options.wait = true;
+
+    rocksdb::Status flush_status = db->rep->Flush(flush_options);
+    if (!flush_status.ok()) {
+      return ToDBStatus(flush_status);
+    }
+
+    // Hopefully on this second attempt we will not need to flush at all, but
+    // just in case we do, we'll allow the write stall this time -- that way we
+    // can ensure we actually get the ingestion done and move on. A stalling
+    // flush is be less than ideal, but since we just flushed, a) this shouldn't
+    // happen often and b) if it does, it should be small and quick.
+    ingest_options.allow_blocking_flush = true;
+    status = db->rep->IngestExternalFile(paths_vec, ingest_options);
+  }
+
   if (!status.ok()) {
     return ToDBStatus(status);
   }
