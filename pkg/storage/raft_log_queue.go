@@ -108,8 +108,11 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 // snapshot, a second strategy is needed to make sure that the Raft log is
 // eventually truncated: when the raft log size exceeds a limit (4mb at time of
 // writing), truncations become willing and able to cut off followers as long as
-// a quorum has acked the truncation index (the quota pool ensures that the
-// uncommitted part of the log doesn't grow disproportionally).
+// a quorum has acked the truncation index. The quota pool ensures that the delta
+// between "acked by quorum" and "acked by all" is bounded, while Raft limits the
+// size of the uncommitted, i.e. not "acked by quorum", part of the log; thus
+// the "quorum" truncation strategy bounds the absolute size of the log on all
+// followers.
 //
 // Exceptions are made for replicas for which information is missing ("probing
 // state") as long as they are known to have been online recently, and for
