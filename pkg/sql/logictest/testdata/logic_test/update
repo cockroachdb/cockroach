@@ -550,3 +550,20 @@ UPDATE t32477 SET (y,z) = (rank() OVER (), rank() OVER ())
 
 statement error value type setof tuple{int} doesn't match type INT of column "x"
 UPDATE t32477 SET x = generate_series(1, 2)
+
+#regression test for #32054
+subtest empty_update_subquery
+
+statement ok
+CREATE TABLE t32054(x,y) AS SELECT 1,2
+
+statement ok
+CREATE TABLE t32054_empty(x INT, y INT)
+
+statement ok
+UPDATE t32054 SET (x,y) = (SELECT x,y FROM t32054_empty)
+
+query II
+SELECT * FROM t32054
+----
+NULL  NULL

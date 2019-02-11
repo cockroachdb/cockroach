@@ -246,10 +246,15 @@ func (p *planner) Update(
 
 				colIdx := render.addOrReuseRender(col, expr, false)
 
-				sourceSlots = append(sourceSlots, tupleSlot{
+				tSlot := tupleSlot{
 					columns:     updateCols[currentUpdateIdx : currentUpdateIdx+len(setExpr.Names)],
+					emptySlot:   make(tree.Datums, len(setExpr.Names)),
 					sourceIndex: colIdx,
-				})
+				}
+				for i := range tSlot.emptySlot {
+					tSlot.emptySlot[i] = tree.DNull
+				}
+				sourceSlots = append(sourceSlots, tSlot)
 				currentUpdateIdx += len(setExpr.Names)
 			default:
 				panic(fmt.Sprintf("assigning to tuple with expression that is neither a tuple nor a subquery: %s", setExpr.Expr))
@@ -526,9 +531,15 @@ type sourceSlot interface {
 type tupleSlot struct {
 	columns     []sqlbase.ColumnDescriptor
 	sourceIndex int
+	// emptySlot is to be returned when the source subquery
+	// returns no rows.
+	emptySlot tree.Datums
 }
 
 func (ts tupleSlot) extractValues(row tree.Datums) tree.Datums {
+	if row[ts.sourceIndex] == tree.DNull {
+		return ts.emptySlot
+	}
 	return row[ts.sourceIndex].(*tree.DTuple).D
 }
 
