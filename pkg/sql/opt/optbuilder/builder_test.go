@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -64,7 +65,7 @@ func TestBuilder(t *testing.T) {
 			var iVarHelper tree.IndexedVarHelper
 			var err error
 
-			tester := testutils.NewOptTester(catalog, d.Input)
+			tester := opttester.New(catalog, d.Input)
 			tester.Flags.ExprFormat = memo.ExprFmtHideMiscProps |
 				memo.ExprFmtHideConstraints |
 				memo.ExprFmtHideFuncDeps |
