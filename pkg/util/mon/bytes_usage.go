@@ -597,14 +597,16 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	}
 
 	// Report "large" queries to the log for further investigation.
-	if mm.mu.curAllocated > mm.noteworthyUsageBytes {
-		// We only report changes in binary magnitude of the size. This is to
-		// limit the amount of log messages when a size blowup is caused by
-		// many small allocations.
-		if bits.Len64(uint64(mm.mu.curAllocated)) != bits.Len64(uint64(mm.mu.curAllocated-x)) {
-			log.Infof(ctx, "%s: bytes usage increases to %s (+%d)",
-				mm.name,
-				humanizeutil.IBytes(mm.mu.curAllocated), x)
+	if log.V(1) {
+		if mm.mu.curAllocated > mm.noteworthyUsageBytes {
+			// We only report changes in binary magnitude of the size. This is to
+			// limit the amount of log messages when a size blowup is caused by
+			// many small allocations.
+			if bits.Len64(uint64(mm.mu.curAllocated)) != bits.Len64(uint64(mm.mu.curAllocated-x)) {
+				log.Infof(ctx, "%s: bytes usage increases to %s (+%d)",
+					mm.name,
+					humanizeutil.IBytes(mm.mu.curAllocated), x)
+			}
 		}
 	}
 
