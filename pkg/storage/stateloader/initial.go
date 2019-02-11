@@ -55,8 +55,14 @@ func WriteInitialReplicaState(
 	gcThreshold hlc.Timestamp,
 	txnSpanGCThreshold hlc.Timestamp,
 	activeVersion roachpb.Version,
+	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
+	// NB: be careful using activeVersion here. One caller of this code is the
+	// split trigger, and the version with which the split trigger is called can
+	// vary across followers. Thus, actions which require coordination cannot
+	// use the version as a trigger (this is why this method takes a
+	// truncStateType argument).
 
 	var s storagepb.ReplicaState
 	s.TruncatedState = &roachpb.RaftTruncatedState{
@@ -101,7 +107,7 @@ func WriteInitialReplicaState(
 		log.Fatalf(ctx, "expected trivial TxnSpanGCThreshold, but found %+v", existingTxnSpanGCThreshold)
 	}
 
-	newMS, err := rsl.Save(ctx, eng, s)
+	newMS, err := rsl.Save(ctx, eng, s, truncStateType)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -125,9 +131,10 @@ func WriteInitialState(
 	gcThreshold hlc.Timestamp,
 	txnSpanGCThreshold hlc.Timestamp,
 	bootstrapVersion roachpb.Version,
+	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
 	newMS, err := WriteInitialReplicaState(
-		ctx, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold, bootstrapVersion)
+		ctx, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold, bootstrapVersion, truncStateType)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}

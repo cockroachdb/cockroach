@@ -911,6 +911,29 @@ func splitTrigger(
 			log.VEventf(ctx, 1, "LHS's TxnSpanGCThreshold of split is not set")
 		}
 
+		// We're about to write the initial state for the replica. We migrated
+		// the formerly replicated truncated state into unreplicated keyspace
+		// in 2.2., but this range may still be using the replicated version
+		// and we need to make a decision about what to use for the RHS that
+		// is consistent across the followers: do for the RHS what the LHS
+		// does: if the LHS has the legacy key, initialize the RHS with a
+		// legacy key as well.
+		//
+		// See VersionUnreplicatedRaftTruncatedState.
+		truncStateType := stateloader.TruncatedStateUnreplicated
+		if found, err := engine.MVCCGetProto(
+			ctx,
+			batch,
+			keys.RaftTruncatedStateLegacyKey(rec.GetRangeID()),
+			hlc.Timestamp{},
+			nil,
+			engine.MVCCGetOptions{},
+		); err != nil {
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load legacy truncated state")
+		} else if found {
+			truncStateType = stateloader.TruncatedStateLegacyReplicated
+		}
+
 		// Writing the initial state is subtle since this also seeds the Raft
 		// group. It becomes more subtle due to proposer-evaluated Raft.
 		//
@@ -944,6 +967,7 @@ func splitTrigger(
 			ctx, batch, rightMS, split.RightDesc,
 			rightLease, *gcThreshold, *txnSpanGCThreshold,
 			rec.ClusterSettings().Version.Version().Version,
+			truncStateType,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")

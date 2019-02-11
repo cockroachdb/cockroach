@@ -150,7 +150,7 @@ var (
 			ppFunc: raftLogKeyPrint,
 			psFunc: raftLogKeyParse,
 		},
-		{name: "LegacyRaftTruncatedState", suffix: LocalRaftTruncatedStateLegacySuffix},
+		{name: "RaftTruncatedState", suffix: LocalRaftTruncatedStateLegacySuffix},
 		{name: "RaftLastIndex", suffix: LocalRaftLastIndexSuffix},
 		{name: "RangeLastReplicaGCTimestamp", suffix: LocalRangeLastReplicaGCTimestampSuffix},
 		{name: "RangeLastVerificationTimestamp", suffix: LocalRangeLastVerificationTimestampSuffixDeprecated},
