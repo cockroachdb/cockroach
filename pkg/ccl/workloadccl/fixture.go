@@ -410,7 +410,8 @@ func MakeFixture(
 				paths = append(paths, tableCSVPath)
 			}
 			output := config.objectPathToURI(filepath.Join(fixtureFolder, table.Name))
-			err := importFixtureTable(ctx, sqlDB, gen.Meta().Name, table, paths, output)
+			const directIngestion = false
+			err := importFixtureTable(ctx, sqlDB, gen.Meta().Name, table, paths, directIngestion, output)
 			return errors.Wrapf(err, `creating backup for table %s`, table.Name)
 		})
 	}
@@ -425,7 +426,7 @@ func MakeFixture(
 // ImportFixture works like MakeFixture, but instead of stopping halfway or
 // writing a backup to cloud storage, it finishes ingesting the data.
 func ImportFixture(
-	ctx context.Context, sqlDB *gosql.DB, gen workload.Generator, dbName string,
+	ctx context.Context, sqlDB *gosql.DB, gen workload.Generator, dbName string, directIngestion bool,
 ) error {
 	var numNodes int
 	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
@@ -437,7 +438,7 @@ func ImportFixture(
 		table := t
 		paths := csvServerPaths(`experimental-workload://`, gen, table, numNodes)
 		g.GoCtx(func(ctx context.Context) error {
-			err := importFixtureTable(ctx, sqlDB, dbName, table, paths, `` /* output */)
+			err := importFixtureTable(ctx, sqlDB, dbName, table, paths, directIngestion, `` /* output */)
 			return errors.Wrapf(err, `importing table %s`, table.Name)
 		})
 	}
@@ -450,6 +451,7 @@ func importFixtureTable(
 	dbName string,
 	table workload.Table,
 	paths []string,
+	directIngestion bool,
 	output string,
 ) error {
 	var buf bytes.Buffer
@@ -467,6 +469,9 @@ func importFixtureTable(
 	if len(output) > 0 {
 		params = append(params, output)
 		fmt.Fprintf(&buf, `, transform=$%d`, len(params))
+	}
+	if directIngestion {
+		buf.WriteString(`, experimental_direct_ingestion`)
 	}
 	_, err := sqlDB.Exec(buf.String(), params...)
 	return err
