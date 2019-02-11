@@ -86,6 +86,7 @@ func (a *sum_TYPEAgg) Init(groups []bool, v ColVec) {
 func (a *sum_TYPEAgg) Reset() {
 	copy(a.scratch.vec, zero_TYPEBatch)
 	a.scratch.curIdx = -1
+	a.done = false
 }
 
 func (a *sum_TYPEAgg) CurrentOutputIndex() int {

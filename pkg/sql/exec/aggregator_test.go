@@ -515,52 +515,74 @@ func BenchmarkAggregator(b *testing.B) {
 	} {
 		fName := distsqlpb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {
-			for _, groupSize := range []int{1, 2, ColBatchSize / 2, ColBatchSize} {
-				for _, numInputBatches := range []int{1, 2, 64} {
-					colTypes := []types.T{types.Int64, types.Decimal}
-					batch := NewMemBatch(colTypes)
-					groups, decimals := batch.ColVec(0).Int64(), batch.ColVec(1).Decimal()
-					curGroup := 0
-					for i := 0; i < ColBatchSize; i++ {
-						decimals[i].SetInt64(rng.Int63())
-						groups[i] = int64(curGroup)
-						if groupSize == 1 || i%groupSize == 0 {
-							curGroup++
+			for _, agg := range aggTypes {
+				for _, typ := range []types.T{types.Int64, types.Decimal} {
+					if aggFn == distsqlpb.AggregatorSpec_AVG && typ == types.Decimal {
+						continue
+					}
+					for _, groupSize := range []int{1, 2, ColBatchSize / 2, ColBatchSize} {
+						for _, numInputBatches := range []int{64} {
+							b.Run(fmt.Sprintf("%s/%s/groupSize=%d/numInputBatches=%d", agg.name, typ.String(), groupSize, numInputBatches),
+								func(b *testing.B) {
+									colTypes := []types.T{types.Int64, typ}
+									nTuples := numInputBatches * ColBatchSize
+									cols := []ColVec{newMemColumn(types.Int64, nTuples), newMemColumn(typ, nTuples)}
+									groups := cols[0].Int64()
+									curGroup := -1
+									for i := 0; i < nTuples; i++ {
+										if groupSize == 1 || i%groupSize == 0 {
+											curGroup++
+										}
+										groups[i] = int64(curGroup)
+									}
+									switch typ {
+									case types.Int64:
+										vals := cols[1].Int64()
+										for i := range vals {
+											vals[i] = rng.Int63()
+										}
+									case types.Decimal:
+										vals := cols[1].Decimal()
+										for i := range vals {
+											vals[i].SetInt64(rng.Int63())
+										}
+									}
+									source := newChunkingBatchSource(colTypes, cols, uint64(nTuples))
+
+									nCols := 1
+									if aggFn == distsqlpb.AggregatorSpec_COUNT_ROWS {
+										nCols = 0
+									}
+									a, err := agg.new(
+										source,
+										colTypes,
+										[]distsqlpb.AggregatorSpec_Func{aggFn},
+										[]uint32{0},
+										[][]uint32{[]uint32{1}[:nCols]},
+									)
+									if err != nil {
+										b.Skip()
+									}
+									a.Init()
+
+									// Only count the int64 column.
+									b.SetBytes(int64(8 * nTuples))
+									for i := 0; i < b.N; i++ {
+										a.(resetter).reset()
+										source.reset()
+										// Exhaust aggregator until all batches have been read.
+										foundTuples := 0
+										for b := a.Next(); b.Length() != 0; b = a.Next() {
+											foundTuples += int(b.Length())
+										}
+										if foundTuples != nTuples/groupSize {
+											b.Fatalf("Found %d tuples, expected %d", foundTuples, nTuples/groupSize)
+										}
+									}
+								},
+							)
 						}
 					}
-					batch.SetLength(ColBatchSize)
-					source := newRepeatableBatchSource(batch)
-
-					nCols := 1
-					if aggFn == distsqlpb.AggregatorSpec_COUNT_ROWS {
-						nCols = 0
-					}
-					a, err := NewOrderedAggregator(
-						source,
-						colTypes,
-						[]distsqlpb.AggregatorSpec_Func{aggFn},
-						[]uint32{0},
-						[][]uint32{[]uint32{1}[:nCols]},
-					)
-					if err != nil {
-						b.Fatal(err)
-					}
-					a.Init()
-
-					b.Run(
-						fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
-						func(b *testing.B) {
-							// Only count the int64 column.
-							b.SetBytes(int64(8 * ColBatchSize * numInputBatches))
-							for i := 0; i < b.N; i++ {
-								a.(*orderedAggregator).Reset()
-								source.resetBatchesToReturn(numInputBatches)
-								// Exhaust aggregator until all batches have been read.
-								for b := a.Next(); b.Length() != 0; b = a.Next() {
-								}
-							}
-						},
-					)
 				}
 			}
 		})
@@ -678,7 +700,7 @@ func TestHashAggregator(t *testing.T) {
 		if err := tc.init(); err != nil {
 			t.Fatal(err)
 		}
-		runTests(t, []tuples{tc.input}, []types.T{types.Bool}, func(t *testing.T, sources []Operator) {
+		runTests(t, []tuples{tc.input}, func(t *testing.T, sources []Operator) {
 			ag, err := NewHashAggregator(sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
 
 			if err != nil {
@@ -693,56 +715,8 @@ func TestHashAggregator(t *testing.T) {
 
 			out := newOpTestOutput(ag, cols, tc.expected)
 
-			if err := out.Verify(); err != nil {
+			if err := out.VerifyAnyOrder(); err != nil {
 				t.Fatal(err)
-			}
-		})
-	}
-}
-
-func BenchmarkHashAggregator(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
-
-	nCols := 2
-	sourceTypes := []types.T{types.Int64, types.Decimal}
-
-	batch := NewMemBatch(sourceTypes)
-	groups, decimals := batch.ColVec(0).Int64(), batch.ColVec(1).Decimal()
-	for i := 0; i < ColBatchSize; i++ {
-		decimals[i].SetInt64(rng.Int63())
-		groups[i] = int64(i)
-	}
-
-	batch.SetLength(ColBatchSize)
-	source := newRepeatableBatchSource(batch)
-
-	for _, aggFn := range []distsqlpb.AggregatorSpec_Func{
-		distsqlpb.AggregatorSpec_ANY_NOT_NULL,
-		distsqlpb.AggregatorSpec_AVG,
-		distsqlpb.AggregatorSpec_COUNT_ROWS,
-		distsqlpb.AggregatorSpec_SUM,
-	} {
-		fName := distsqlpb.AggregatorSpec_Func_name[int32(aggFn)]
-		b.Run(fName, func(b *testing.B) {
-			for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8} {
-				b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
-					b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols))
-					b.ResetTimer()
-
-					agg, err := NewHashAggregator(source, sourceTypes, []distsqlpb.AggregatorSpec_Func{aggFn}, []uint32{0}, [][]uint32{{1}})
-					if err != nil {
-						b.Fatal(err)
-					}
-					agg.Init()
-
-					for i := 0; i < b.N; i++ {
-						agg.(*hashAggregator).Reset()
-						source.resetBatchesToReturn(nBatches)
-
-						for b := agg.Next(); b.Length() != 0; b = agg.Next() {
-						}
-					}
-				})
 			}
 		})
 	}

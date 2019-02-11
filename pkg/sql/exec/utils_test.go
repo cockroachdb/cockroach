@@ -422,6 +422,10 @@ func (c *chunkingBatchSource) Next() ColBatch {
 	return &c.batch
 }
 
+func (c *chunkingBatchSource) reset() {
+	c.curIdx = 0
+}
+
 // finiteBatchSource is an Operator that returns the same batch a specified
 // number of times.
 type finiteBatchSource struct {

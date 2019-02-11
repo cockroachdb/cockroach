@@ -208,6 +208,13 @@ func (p *sortedDistinct_TYPEOp) Next() ColBatch {
 	return batch
 }
 
+func (p *sortedDistinct_TYPEOp) reset() {
+	p.foundFirstRow = false
+	if resetter, ok := p.input.(resetter); ok {
+		resetter.reset()
+	}
+}
+
 // partitioner_TYPE partitions an arbitrary-length colVec by running a distinct
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
