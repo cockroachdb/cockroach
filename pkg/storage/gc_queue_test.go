@@ -674,7 +674,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	}
 
 	var resolved syncmap.Map
-
+	tsc.TestingKnobs.IntentResolverKnobs.MaxIntentResolutionBatchSize = 1
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
