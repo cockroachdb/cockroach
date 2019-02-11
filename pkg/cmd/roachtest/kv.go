@@ -349,8 +349,9 @@ func registerKVSplits(r *registry) {
 				c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 				c.Start(ctx, t, c.Range(1, nodes),
 					startArgs(
-						"--env=COCKROACH_MEMPROF_INTERVAL=1m",
-						"--env=COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce),
+						// NB: this works. Don't change it or only one of the two vars may actually
+						// make it to the server.
+						"--env", "COCKROACH_MEMPROF_INTERVAL=1m COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce),
 						"--args=--cache=256MiB",
 					))
 

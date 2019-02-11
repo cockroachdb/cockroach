@@ -25,10 +25,11 @@ import (
 
 func registerClearRange(r *registry) {
 	for _, checks := range []bool{true, false} {
+		checks := checks
 		r.Add(testSpec{
 			Name:       fmt.Sprintf(`clearrange/checks=%t`, checks),
-			Timeout:    90 * time.Minute,
-			MinVersion: `v2.1.0`,
+			Timeout:    3*time.Hour + 90*time.Minute, // 3h for import, 90 for the test
+			MinVersion: `v2.2.0`,
 			Cluster:    makeClusterSpec(10),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClearRange(ctx, t, c, checks)
@@ -38,35 +39,39 @@ func registerClearRange(r *registry) {
 }
 
 func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bool) {
-	// Created via:
-	// roachtest --cockroach cockroach-v2.0-8 store-gen --stores=10 bank \
-	//           --payload-bytes=10240 --ranges=0 --rows=65104166
+	c.Put(ctx, cockroach, "./cockroach")
+
 	if err := c.RunE(ctx, c.Node(1), "test -d /mnt/data1/.zfs/snapshot/pristine"); err != nil {
-		// Use ZFS so the initial store dumps can be instantly rolled back to
+		// Use ZFS so the data directories can instantly be rolled back to
 		// their pristine state. Useful for iterating quickly on the test.
-		c.Reformat(ctx, c.All(), "zfs")
-
-		t.Status(`downloading store dumps`)
-		fixtureURL := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=4`
-		location := storeDirURL(fixtureURL, c.nodes, "2.0-8")
-
-		// Download this store dump, which measures around 2TB (across all nodes).
-		if err := downloadStoreDumps(ctx, c, location, c.nodes); err != nil {
-			t.Fatal(err)
+		if !local {
+			c.Reformat(ctx, c.All(), "zfs")
 		}
-		c.Run(ctx, c.All(), "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
+
+		t.Status("restoring fixture")
+		c.Start(ctx, t)
+
+		// NB: on a 10 node cluster, this should take well below 3h.
+		c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
+			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
+		c.Stop(ctx)
+		t.Status()
+
+		if !local {
+			c.Run(ctx, c.All(), "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
+		}
 	} else {
-		t.Status(`restoring store dumps`)
+		t.Status(`restoring store directories from zfs snapshot`)
 		c.Run(ctx, c.All(), "sudo zfs rollback data1@pristine")
 	}
 
-	c.Put(ctx, cockroach, "./cockroach")
 	if aggressiveChecks {
 		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
 		// This slows down merges, so it might hide some races.
+		//
+		// NB: the below invocation was found to actually make it to the server at the time of writing.
 		c.Start(ctx, t, startArgs(
-			"--env=COCKROACH_CONSISTENCY_AGGRESSIVE=true",
-			"--env=COCKROACH_FATAL_ON_STATS_MISMATCH=true",
+			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true COCKROACH_FATAL_ON_STATS_MISMATCH=true",
 		))
 	} else {
 		c.Start(ctx, t)
@@ -78,16 +83,14 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	t.Status(`restoring tiny table`)
 	defer t.WorkerStatus()
 
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE tinybank"`)
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE csv.bank FROM
-        'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=800,seed=1/bank'
-				WITH into_db = 'tinybank'"`)
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "DROP DATABASE IF EXISTS tinybank"`)
+	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank", "--db=tinybank",
+		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1")
 
 	t.Status()
 
 	// Set up a convenience function that we can call to learn the number of
-	// ranges for the bank.bank table (even after it's been dropped).
+	// ranges for the bigbank.bank table (even after it's been dropped).
 	numBankRanges := func() func() int {
 		conn := c.Conn(ctx, 1)
 		defer conn.Close()
@@ -99,7 +102,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 		// it'll still slow you down every time the method returned below is called.
 		if true {
 			if err := conn.QueryRow(
-				`SELECT to_hex(start_key) FROM crdb_internal.ranges WHERE database_name = 'bank' AND table_name = 'bank' ORDER BY start_key ASC LIMIT 1`,
+				`SELECT to_hex(start_key) FROM crdb_internal.ranges WHERE database_name = 'bigbank' AND table_name = 'bank' ORDER BY start_key ASC LIMIT 1`,
 			).Scan(&startHex); err != nil {
 				t.Fatal(err)
 			}
@@ -138,7 +141,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 
 		// Set a low TTL so that the ClearRange-based cleanup mechanism can kick in earlier.
 		// This could also be done after dropping the table.
-		if _, err := conn.ExecContext(ctx, `ALTER TABLE bank.bank CONFIGURE ZONE USING gc.ttlseconds = 30`); err != nil {
+		if _, err := conn.ExecContext(ctx, `ALTER TABLE bigbank.bank CONFIGURE ZONE USING gc.ttlseconds = 30`); err != nil {
 			return err
 		}
 
@@ -146,7 +149,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 		initialBankRanges := numBankRanges()
 
 		t.WorkerStatus("dropping bank table")
-		if _, err := conn.ExecContext(ctx, `DROP TABLE bank.bank`); err != nil {
+		if _, err := conn.ExecContext(ctx, `DROP TABLE bigbank.bank`); err != nil {
 			return err
 		}
 
