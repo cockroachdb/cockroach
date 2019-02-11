@@ -676,6 +676,8 @@ message GCRequest {
   util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
   // TxnSpanGCThreshold is the timestamp below which inactive transactions were
   // considered for GC (and thus might have been removed).
+  // TODO(nvanbenschoten): Remove this in 2.3, at which point we won't need to
+  // update it because no nodes in the cluster will ever consult it.
   util.hlc.Timestamp txn_span_gc_threshold = 5 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "TxnSpanGCThreshold"];
 }

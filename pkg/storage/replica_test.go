@@ -3282,10 +3282,10 @@ func TestSerializableDeadline(t *testing.T) {
 	}
 }
 
-// TestTxnRecordUnderTxnSpanGCThreshold verifies that aborting transactions does
-// not lead to anomalies even after the aborted transaction record is cleaned up.
-// Precisely, verify that if the GC queue could potentially have removed a txn
-// record created through a successful push (by a concurrent actor), the
+// TestCreateTxnRecordAfterPushAndGC verifies that aborting transactions does
+// not lead to anomalies even after the aborted transaction record is cleaned
+// up. Precisely, verify that if the GC queue could potentially have removed a
+// txn record created through a successful push (by a concurrent actor), the
 // original transaction's subsequent attempt to create its initial record fails.
 //
 // See #9265 for context.
@@ -3367,52 +3367,6 @@ func TestTxnRecordUnderTxnSpanGCThreshold(t *testing.T) {
 
 		// EndTransaction.
 		et, etH := endTxnArgs(pushee, true)
-		resp, pErr = tc.SendWrappedWith(etH, &et)
-		if pErr == nil {
-			t.Fatalf("unexpected success: %+v", resp)
-		} else if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
-			t.Fatalf("expected %s, got %v and response %+v", expErr, pErr, resp)
-		}
-	}
-
-	// A second transaction which begins at the same timestamp should also be
-	// rejected. This time it wasn't explicit aborted, so it won't run into the
-	// write timestamp cache. Instead, it should not succeed because all request
-	// types that can create txn records check the transaction's original
-	// timestamp against the persisted TxnSpanGCThreshold.
-	//
-	// TODO(nvanbenschoten): This changes to this test demonstrate that checking
-	// the TxnSpanGCThreshold isn't necessary anymore because for the GC to remove
-	// a transaction record, it must first abort it, which is recorded in the
-	// write timestamp cache. Should we remove this logic or do we still like it?
-	// Removing it would allow new transactions beneath the GC threshold, but
-	// would not allow transactions to be revived. See the corresponding TODO in
-	// Replica.CanCreateTxnRecord.
-	{
-		expErr := "TransactionAbortedError(ABORT_REASON_NEW_TXN_RECORD_TOO_OLD)"
-		oldTxn := newTransaction("old", key, 1, tc.Clock())
-		oldTxn.OrigTimestamp = pushee.OrigTimestamp
-
-		// BeginTransaction.
-		bt, btH := beginTxnArgs(key, oldTxn)
-		resp, pErr := tc.SendWrappedWith(btH, &bt)
-		if pErr == nil {
-			t.Fatalf("unexpected success: %+v", resp)
-		} else if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
-			t.Fatalf("expected %s, got %v and response %+v", expErr, pErr, resp)
-		}
-
-		// HeartbeatTxn.
-		hb, hbH := heartbeatArgs(oldTxn, tc.Clock().Now())
-		resp, pErr = tc.SendWrappedWith(hbH, &hb)
-		if pErr == nil {
-			t.Fatalf("unexpected success: %+v", resp)
-		} else if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
-			t.Fatalf("expected %s, got %v and response %+v", expErr, pErr, resp)
-		}
-
-		// EndTransaction.
-		et, etH := endTxnArgs(oldTxn, true)
 		resp, pErr = tc.SendWrappedWith(etH, &et)
 		if pErr == nil {
 			t.Fatalf("unexpected success: %+v", resp)
@@ -10641,54 +10595,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn:   noTxnRecord,
 		},
 		{
-			name: "begin transaction after gc",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				gc := gcArgs([]byte("a"), []byte("z"))
-				gc.TxnSpanGCThreshold = now
-				return sendWrappedWithErr(roachpb.Header{}, &gc)
-			},
-			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				bt, btH := beginTxnArgs(txn.Key, txn)
-				return sendWrappedWithErr(btH, &bt)
-			},
-			expError: "TransactionAbortedError(ABORT_REASON_NEW_TXN_RECORD_TOO_OLD)",
-			expTxn:   noTxnRecord,
-		},
-		{
-			name: "heartbeat transaction after gc",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				gc := gcArgs([]byte("a"), []byte("z"))
-				gc.TxnSpanGCThreshold = now
-				return sendWrappedWithErr(roachpb.Header{}, &gc)
-			},
-			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
-			},
-			expError: "TransactionAbortedError(ABORT_REASON_NEW_TXN_RECORD_TOO_OLD)",
-			expTxn:   noTxnRecord,
-		},
-		{
-			name: "heartbeat transaction after gc and restart",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				gc := gcArgs([]byte("a"), []byte("z"))
-				gc.TxnSpanGCThreshold = now
-				return sendWrappedWithErr(roachpb.Header{}, &gc)
-			},
-			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				// Restart the transaction at a higher timestamp. This will
-				// increment its OrigTimestamp as well. We used to check the GC
-				// threshold against this timestamp instead of its epoch zero
-				// timestamp.
-				clone := txn.Clone()
-				clone.Restart(-1, 0, now.Add(0, 1))
-				hb, hbH := heartbeatArgs(&clone, now)
-				return sendWrappedWithErr(hbH, &hb)
-			},
-			expError: "TransactionAbortedError(ABORT_REASON_NEW_TXN_RECORD_TOO_OLD)",
-			expTxn:   noTxnRecord,
-		},
-		{
 			name: "end transaction (abort) after gc",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				gc := gcArgs([]byte("a"), []byte("z"))
@@ -10700,20 +10606,6 @@ func TestCreateTxnRecord(t *testing.T) {
 				return sendWrappedWithErr(etH, &et)
 			},
 			expTxn: noTxnRecord,
-		},
-		{
-			name: "end transaction (commit) after gc",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				gc := gcArgs([]byte("a"), []byte("z"))
-				gc.TxnSpanGCThreshold = now
-				return sendWrappedWithErr(roachpb.Header{}, &gc)
-			},
-			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, true /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			expError: "TransactionAbortedError(ABORT_REASON_NEW_TXN_RECORD_TOO_OLD)",
-			expTxn:   noTxnRecord,
 		},
 	}
 	for _, c := range testCases {

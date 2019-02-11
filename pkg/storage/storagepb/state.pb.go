@@ -64,6 +64,8 @@ type ReplicaState struct {
 	// records may have been garbage collected (as measured by txn.LastActive()).
 	// Transactions at lower timestamps must not be allowed to write their initial
 	// transaction entry.
+	// TODO(nvanbenschoten): Remove this in 2.3, at which point we won't need to
+	// maintain it because no nodes in the cluster will ever consult it.
 	TxnSpanGCThreshold *hlc.Timestamp `protobuf:"bytes,9,opt,name=txn_span_gc_threshold,json=txnSpanGcThreshold,proto3" json:"txn_span_gc_threshold,omitempty" cockroachdb:"randnullable"`
 	// using_applied_state_key specifies whether the Range has been upgraded
 	// to begin using the RangeAppliedState key. This key holds a combination
@@ -82,7 +84,7 @@ func (m *ReplicaState) Reset()         { *m = ReplicaState{} }
 func (m *ReplicaState) String() string { return proto.CompactTextString(m) }
 func (*ReplicaState) ProtoMessage()    {}
 func (*ReplicaState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_4f04d354e3a91f1b, []int{0}
+	return fileDescriptor_state_f6cb1cac1eee55bd, []int{0}
 }
 func (m *ReplicaState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -130,7 +132,7 @@ func (m *RangeInfo) Reset()         { *m = RangeInfo{} }
 func (m *RangeInfo) String() string { return proto.CompactTextString(m) }
 func (*RangeInfo) ProtoMessage()    {}
 func (*RangeInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_4f04d354e3a91f1b, []int{1}
+	return fileDescriptor_state_f6cb1cac1eee55bd, []int{1}
 }
 func (m *RangeInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -168,7 +170,7 @@ func (m *LatchManagerInfo) Reset()         { *m = LatchManagerInfo{} }
 func (m *LatchManagerInfo) String() string { return proto.CompactTextString(m) }
 func (*LatchManagerInfo) ProtoMessage()    {}
 func (*LatchManagerInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_4f04d354e3a91f1b, []int{2}
+	return fileDescriptor_state_f6cb1cac1eee55bd, []int{2}
 }
 func (m *LatchManagerInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1272,10 +1274,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/storagepb/state.proto", fileDescriptor_state_4f04d354e3a91f1b)
+	proto.RegisterFile("storage/storagepb/state.proto", fileDescriptor_state_f6cb1cac1eee55bd)
 }
 
-var fileDescriptor_state_4f04d354e3a91f1b = []byte{
+var fileDescriptor_state_f6cb1cac1eee55bd = []byte{
 	// 756 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x54, 0xcf, 0x6e, 0xdb, 0x36,
 	0x1c, 0x8e, 0x62, 0x39, 0xb3, 0xa9, 0x64, 0xf1, 0xb8, 0x6c, 0x13, 0x1c, 0xd8, 0x0e, 0x34, 0x6c,
