@@ -17,12 +17,12 @@ package intentresolver
 
 import (
 	"context"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -76,11 +76,12 @@ const (
 
 // Config contains the dependencies to construct an IntentResolver.
 type Config struct {
-	Clock        *hlc.Clock
-	DB           *client.DB
-	Stopper      *stop.Stopper
-	AmbientCtx   log.AmbientContext
-	TestingKnobs storagebase.IntentResolverTestingKnobs
+	Clock                *hlc.Clock
+	DB                   *client.DB
+	Stopper              *stop.Stopper
+	AmbientCtx           log.AmbientContext
+	TestingKnobs         storagebase.IntentResolverTestingKnobs
+	RangeDescriptorCache kvbase.RangeDescriptorCache
 
 	TaskLimit      int
 	MaxGCBatchWait time.Duration
@@ -100,7 +101,10 @@ type IntentResolver struct {
 	sem          chan struct{}    // Semaphore to limit async goroutines.
 	contentionQ  *contentionQueue // manages contention on individual keys
 
-	batcher *requestbatcher.RequestBatcher
+	rdc kvbase.RangeDescriptorCache
+
+	gcBatcher *requestbatcher.RequestBatcher
+	irBatcher *requestbatcher.RequestBatcher
 
 	mu struct {
 		syncutil.Mutex
@@ -127,6 +131,21 @@ func setConfigDefaults(c *Config) {
 	if c.MaxGCBatchWait == 0 {
 		c.MaxGCBatchWait = defaultGCBatchWait
 	}
+	if c.RangeDescriptorCache == nil {
+		c.RangeDescriptorCache = nopRangeDescriptorCache{}
+	}
+}
+
+type nopRangeDescriptorCache struct{}
+
+var zeroRangeDescriptor = &roachpb.RangeDescriptor{
+	RangeID: 1,
+}
+
+func (nrdc nopRangeDescriptorCache) LookupRangeDescriptor(
+	ctx context.Context, key roachpb.RKey,
+) (*roachpb.RangeDescriptor, error) {
+	return zeroRangeDescriptor, nil
 }
 
 // New creates an new IntentResolver.
@@ -140,19 +159,28 @@ func New(c Config) *IntentResolver {
 		contentionQ:  newContentionQueue(c.Clock, c.DB),
 		every:        log.Every(time.Minute),
 		Metrics:      makeMetrics(),
+		rdc:          c.RangeDescriptorCache,
 		testingKnobs: c.TestingKnobs,
 	}
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
-	ir.batcher = requestbatcher.New(requestbatcher.Config{
-		Name:            "intent_resolver_batcher",
+	ir.gcBatcher = requestbatcher.New(requestbatcher.Config{
+		Name:            "intent_resolver_gc_batcher",
 		MaxMsgsPerBatch: 1024,
 		MaxWait:         c.MaxGCBatchWait,
 		MaxIdle:         c.MaxGCBatchIdle,
 		Stopper:         c.Stopper,
 		Sender:          c.DB.NonTransactionalSender(),
 	})
-
+	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
+		Name:            "intent_resolver_ir_batcher",
+		MaxMsgsPerBatch: intentResolverBatchSize,
+		// TODO(ajwerner): Justify these settings.
+		MaxWait: 10 * time.Millisecond,
+		MaxIdle: 5 * time.Millisecond,
+		Stopper: c.Stopper,
+		Sender:  c.DB.NonTransactionalSender(),
+	})
 	return ir
 }
 
@@ -672,7 +700,7 @@ func (ir *IntentResolver) gcTxnRecord(
 	gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{
 		Key: txnKey,
 	})
-	_, err := ir.batcher.Send(ctx, rangeID, &gcArgs)
+	_, err := ir.gcBatcher.Send(ctx, rangeID, &gcArgs)
 	if err != nil {
 		return errors.Wrapf(err, "could not GC completed transaction anchored at %s",
 			roachpb.Key(txn.Key))
@@ -756,17 +784,38 @@ func (ir *IntentResolver) ResolveIntents(
 		return errors.Wrap(err, "aborted resolving intents")
 	}
 	log.Eventf(ctx, "resolving intents [wait=%t]", opts.Wait)
-
-	var resolveReqs []roachpb.Request
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	type resolveReq struct {
+		rangeID roachpb.RangeID
+		req     roachpb.Request
+	}
+	var resolveReqs []resolveReq
 	var resolveRangeReqs []roachpb.Request
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
 		if len(intent.EndKey) == 0 {
-			resolveReqs = append(resolveReqs, &roachpb.ResolveIntentRequest{
+			req := &roachpb.ResolveIntentRequest{
 				RequestHeader: roachpb.RequestHeaderFromSpan(intent.Span),
 				IntentTxn:     intent.Txn,
 				Status:        intent.Status,
 				Poison:        opts.Poison,
+			}
+			rKey, err := keys.Addr(req.Key)
+			if err != nil {
+				errors.Wrapf(err, "failed to resolve addr for key %q", req.Key)
+			}
+			rDesc, err := ir.rdc.LookupRangeDescriptor(ctx, rKey)
+			if err != nil {
+				// TODO(ajwerner): should this be an error?
+				// Is it okay to pile this request on to a single range like -1?
+				// Are there different classes of error here that require different
+				// treatment?
+				errors.Wrapf(err, "failed to look up range descriptor for key %q", req.Key)
+			}
+			resolveReqs = append(resolveReqs, resolveReq{
+				req:     req,
+				rangeID: rDesc.RangeID,
 			})
 		} else {
 			resolveRangeReqs = append(resolveRangeReqs, &roachpb.ResolveIntentRangeRequest{
@@ -779,38 +828,20 @@ func (ir *IntentResolver) ResolveIntents(
 		}
 	}
 
-	// Sort the intents to maximize batching by range.
-	sort.Slice(resolveReqs, func(i, j int) bool {
-		return resolveReqs[i].Header().Key.Compare(resolveReqs[j].Header().Key) < 0
-	})
-
-	// Resolve all of the intents in batches of size intentResolverBatchSize.
-	// The maximum timeout is intentResolverTimeout, and this is applied to
-	// each batch to ensure forward progress is made. A large set of intents
-	// might require more time than a single timeout allows.
-	for len(resolveReqs) > 0 {
-		b := &client.Batch{}
-		if len(resolveReqs) > intentResolverBatchSize {
-			b.AddRawRequest(resolveReqs[:intentResolverBatchSize]...)
-			resolveReqs = resolveReqs[intentResolverBatchSize:]
-		} else {
-			b.AddRawRequest(resolveReqs...)
-			resolveReqs = nil
-		}
-		// Everything here is best effort; so give the context a timeout
-		// to avoid waiting too long. This may be a larger timeout than
-		// the context already has, in which case we'll respect the
-		// existing timeout. A single txn can have more intents than we
-		// can handle in the normal timeout, which would prevent us from
-		// ever cleaning up all of its intents in time to then delete the
-		// txn record, causing an infinite loop on that txn record, where
-		// the same initial set of intents is endlessly re-resolved.
-		ctxWithTimeout, cancel := context.WithTimeout(ctx, intentResolverTimeout)
-		err := ir.db.Run(ctxWithTimeout, b)
-		cancel()
-		if err != nil {
-			// Bail out on the first error.
+	respChan := make(chan requestbatcher.Response, len(resolveReqs))
+	for _, req := range resolveReqs {
+		if err := ir.irBatcher.SendWithChan(ctx, respChan, req.rangeID, req.req); err != nil {
 			return err
+		}
+	}
+	for seen := 0; seen < len(resolveReqs); seen++ {
+		select {
+		case resp := <-respChan:
+			if resp.Err != nil {
+				return resp.Err
+			}
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 

@@ -446,6 +446,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		StorePool:               s.storePool,
 		SQLExecutor:             internalExecutor,
 		LogRangeEvents:          s.cfg.EventLogEnabled,
+		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:     s.tsDB,
 
 		// Initialize the closed timestamp subsystem. Note that it won't
