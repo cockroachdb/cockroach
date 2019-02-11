@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -221,8 +222,18 @@ func (r *Replica) tryExecuteWriteBatch(
 			return propResult.Reply, propResult.Err, propResult.ProposalRetry
 		case <-slowTimer.C:
 			slowTimer.Read = true
-			log.Warningf(ctx, "have been waiting %s for proposing command %s",
-				base.SlowRequestThreshold, ba)
+			log.Warningf(ctx, `have been waiting %.2fs for proposing command %s.
+This range is likely unavailable.
+Please submit this message along with
+
+	https://yourhost:8080/#/reports/range/%d
+
+and the following Raft status: %+v`,
+				timeutil.Since(tBegin).Seconds(),
+				ba,
+				r.RangeID,
+				r.RaftStatus(),
+			)
 			r.store.metrics.SlowRaftRequests.Inc(1)
 			defer func() {
 				r.store.metrics.SlowRaftRequests.Dec(1)
@@ -230,7 +241,8 @@ func (r *Replica) tryExecuteWriteBatch(
 				if err := ctx.Err(); err != nil {
 					contextStr = " with context cancellation"
 				}
-				log.Infof(ctx, "slow command %s finished after %s%s", ba, timeutil.Since(tBegin), contextStr)
+				f, l, _ := caller.Lookup(1)
+				log.Infof(ctx, "slow command %s finished after %.2fs%s (%s:%d)", ba, timeutil.Since(tBegin).Seconds(), contextStr, f, l)
 			}()
 
 		case <-ctxDone:
