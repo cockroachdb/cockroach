@@ -157,25 +157,39 @@ func validateConfig(cfg *Config) {
 	}
 }
 
+// SendWithChan sends a request with a client provided response channel. The
+// client is responsible for ensuring that the passed respChan has a buffer at
+// least as large as the number of responses it expects to receive. Using an
+// insufficiently buffered channel can lead to deadlocks and unintended delays
+// processing requests inside the RequestBatcher.
+func (b *RequestBatcher) SendWithChan(
+	ctx context.Context, respChan chan<- Response, rangeID roachpb.RangeID, req roachpb.Request,
+) error {
+	select {
+	case b.requestChan <- b.pool.newRequest(ctx, rangeID, req, respChan):
+		return nil
+	case <-b.cfg.Stopper.ShouldQuiesce():
+		return stop.ErrUnavailable
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // Send sends req as a part of a batch. An error is returned if the context
 // is canceled before the sending of the request completes.
 func (b *RequestBatcher) Send(
 	ctx context.Context, rangeID roachpb.RangeID, req roachpb.Request,
 ) (roachpb.Response, error) {
 	responseChan := b.pool.getResponseChan()
-	select {
-	case b.requestChan <- b.pool.newRequest(ctx, rangeID, req, responseChan):
-	case <-b.cfg.Stopper.ShouldQuiesce():
-		return nil, stop.ErrUnavailable
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	if err := b.SendWithChan(ctx, responseChan, rangeID, req); err != nil {
+		return nil, err
 	}
 	select {
 	case resp := <-responseChan:
 		// It's only safe to put responseChan back in the pool if it has been
 		// received from.
 		b.pool.putResponseChan(responseChan)
-		return resp.resp, resp.err
+		return resp.Resp, resp.Err
 	case <-b.cfg.Stopper.ShouldQuiesce():
 		return nil, stop.ErrUnavailable
 	case <-ctx.Done():
@@ -187,19 +201,19 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
 		resp, pErr := b.cfg.Sender.Send(ctx, ba.batchRequest())
 		for i, r := range ba.reqs {
-			res := response{}
+			res := Response{}
 			if resp != nil && i < len(resp.Responses) {
-				res.resp = resp.Responses[i].GetInner()
+				res.Resp = resp.Responses[i].GetInner()
 			}
 			if pErr != nil {
-				res.err = pErr.GoError()
+				res.Err = pErr.GoError()
 			}
 			b.sendResponse(r, res)
 		}
 	})
 }
 
-func (b *RequestBatcher) sendResponse(req *request, resp response) {
+func (b *RequestBatcher) sendResponse(req *request, resp Response) {
 	// This send should never block because responseChan is buffered.
 	req.responseChan <- resp
 	b.pool.putRequest(req)
@@ -225,7 +239,7 @@ func addRequestToBatch(cfg *Config, now time.Time, ba *batch, r *request) (shoul
 func (b *RequestBatcher) cleanup(err error) {
 	for ba := b.batches.popFront(); ba != nil; ba = b.batches.popFront() {
 		for _, r := range ba.reqs {
-			b.sendResponse(r, response{err: err})
+			b.sendResponse(r, Response{Err: err})
 		}
 	}
 }
@@ -280,12 +294,12 @@ type request struct {
 	ctx          context.Context
 	req          roachpb.Request
 	rangeID      roachpb.RangeID
-	responseChan chan<- response
+	responseChan chan<- Response
 }
 
-type response struct {
-	resp roachpb.Response
-	err  error
+type Response struct {
+	Resp roachpb.Response
+	Err  error
 }
 
 type batch struct {
@@ -329,7 +343,7 @@ type pool struct {
 func makePool() pool {
 	return pool{
 		responseChanPool: sync.Pool{
-			New: func() interface{} { return make(chan response, 1) },
+			New: func() interface{} { return make(chan Response, 1) },
 		},
 		batchPool: sync.Pool{
 			New: func() interface{} { return &batch{} },
@@ -340,16 +354,16 @@ func makePool() pool {
 	}
 }
 
-func (p *pool) getResponseChan() chan response {
-	return p.responseChanPool.Get().(chan response)
+func (p *pool) getResponseChan() chan Response {
+	return p.responseChanPool.Get().(chan Response)
 }
 
-func (p *pool) putResponseChan(r chan response) {
+func (p *pool) putResponseChan(r chan Response) {
 	p.responseChanPool.Put(r)
 }
 
 func (p *pool) newRequest(
-	ctx context.Context, rangeID roachpb.RangeID, req roachpb.Request, responseChan chan<- response,
+	ctx context.Context, rangeID roachpb.RangeID, req roachpb.Request, responseChan chan<- Response,
 ) *request {
 	r := p.requestPool.Get().(*request)
 	*r = request{
