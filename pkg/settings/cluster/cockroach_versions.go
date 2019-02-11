@@ -30,7 +30,7 @@ type VersionKey int
 // To delete a version.
 //   - Remove its associated runtime checks.
 //   - If the version is not the latest one, delete the constant and comment out
-//   its stanza and say "deleted" in the versionsSingleton.
+//   its stanza and say "Deleted." above the versionsSingleton.
 const (
 	VersionBase                       VersionKey = iota
 	VersionRaftLogTruncationBelowRaft            // unused
@@ -46,8 +46,8 @@ const (
 	VersionLeaseSequence            // unused
 	VersionUnreplicatedTombstoneKey // unused
 	VersionRecomputeStats
-	VersionNoRaftProposalKeys // unused
-	VersionTxnSpanRefresh
+	VersionNoRaftProposalKeys          // unused
+	VersionTxnSpanRefresh              // unused
 	VersionReadUncommittedRangeLookups // unused
 	VersionPerReplicaZoneConstraints
 	VersionLeasePreferences
@@ -187,11 +187,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionNoRaftProposalKeys,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 11},
 	},
-	{
-		// VersionTxnSpanRefresh is https://github.com/cockroachdb/cockroach/pull/21140.
-		Key:     VersionTxnSpanRefresh,
-		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 12},
-	},
+	// {
+	// 	// VersionTxnSpanRefresh is https://github.com/cockroachdb/cockroach/pull/21140.
+	// 	Key:     VersionTxnSpanRefresh,
+	// 	Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 12},
+	// },
 	{
 		// VersionReadUncommittedRangeLookups is https://github.com/cockroachdb/cockroach/pull/21276.
 		Key:     VersionReadUncommittedRangeLookups,
@@ -269,7 +269,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionCreateChangefeed,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 11},
 	},
-	// deleted
+	// Removed.
 	// {
 	//   // VersionRangeMerges is https://github.com/cockroachdb/cockroach/pull/28865.
 	//   Key:     VersionRangeMerges,

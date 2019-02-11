@@ -188,7 +188,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 
 	// Check for an error which can be retried after updating spans.
 	canRetryTxn, retryTxn := roachpb.CanTransactionRetryAtRefreshedTimestamp(ctx, pErr)
-	if !canRetryTxn || !sr.canAutoRetry || !sr.st.Version.IsActive(cluster.VersionTxnSpanRefresh) {
+	if !canRetryTxn || !sr.canAutoRetry {
 		return nil, pErr, hlc.Timestamp{}
 	}
 
