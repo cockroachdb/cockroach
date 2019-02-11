@@ -665,7 +665,7 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 					return false, err
 				}
 				getReplicaInfo(rangeID).committedIndex = hs.Commit
-			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
+			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateLegacySuffix):
 				var trunc roachpb.RaftTruncatedState
 				if err := kv.Value.GetProto(&trunc); err != nil {
 					return false, err
