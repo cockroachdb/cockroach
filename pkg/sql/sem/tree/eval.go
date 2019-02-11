@@ -880,6 +880,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				arr := *MustBeDArray(right)
 
 				for _, str := range arr.Array {
+					if str == DNull {
+						continue
+					}
 					var err error
 					j, _, err = j.RemoveString(string(MustBeDString(str)))
 					if err != nil {
