@@ -47,6 +47,8 @@ define SubqueryPrivate {
 
 	# Cmp is only used for AnyOp.
 	Cmp Operator
+
+    SubqueryLimited bool
 }
 
 # Any is a SQL operator that applies a comparison to every row of an input

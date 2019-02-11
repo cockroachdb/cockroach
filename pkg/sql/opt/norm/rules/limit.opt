@@ -2,6 +2,25 @@
 # limit.opt contains normalization rules for the Limit and Offset operators.
 # =============================================================================
 
+# Max1RowLimit inserts a LIMIT 2 "under" Max1Row so as to save resources
+# to make the Max1Row determination.
+#
+# This rule is defined here instead of max1row.opt so that it runs
+# before the limit elimination rules below.
+#
+# We avoid this rule if the query is decorrelated because the
+# decorrelation rules get confused by the presence of a limit.
+# (It will be worth re-considering this when a general-purpose apply
+# operator is supported - in that case it can be definitely worthwhile
+# pushing down a LIMIT 2 to limit the amount of work done on every row.)
+[Max1RowLimitScan, Normalize]
+(Max1Row
+    $input:* & ^(HasZeroOrOneRow $input) & ^(HasOuterCols $input)
+    $subqueryPrivate:* & ^(IsSubqueryLimited $subqueryPrivate))
+=>
+((OpName)
+    (Limit $input (Const 2) (EmptyOrdering))
+    (SetSubqueryLimited $subqueryPrivate))
 
 # EliminateLimit discards a Limit operator if its constant limit is greater than
 # or equal to the maximum number of rows that can be returned by the input. In

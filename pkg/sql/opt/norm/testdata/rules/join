@@ -1091,7 +1091,8 @@ project
  │         │    │    │    │    │    │              │         ├── key: ()
  │         │    │    │    │    │    │              │         ├── fd: ()-->(19)
  │         │    │    │    │    │    │              │         └── scan a
- │         │    │    │    │    │    │              │              └── columns: s:19(string)
+ │         │    │    │    │    │    │              │              ├── columns: s:19(string)
+ │         │    │    │    │    │    │              │              └── limit: 2
  │         │    │    │    │    │    │              └── const: 'foo' [type=string]
  │         │    │    │    │    │    ├── select
  │         │    │    │    │    │    │    ├── columns: u:8(int!null)
@@ -1108,7 +1109,8 @@ project
  │         │    │    │    │    │    │              │         ├── key: ()
  │         │    │    │    │    │    │              │         ├── fd: ()-->(19)
  │         │    │    │    │    │    │              │         └── scan a
- │         │    │    │    │    │    │              │              └── columns: s:19(string)
+ │         │    │    │    │    │    │              │              ├── columns: s:19(string)
+ │         │    │    │    │    │    │              │              └── limit: 2
  │         │    │    │    │    │    │              └── const: 'foo' [type=string]
  │         │    │    │    │    │    └── filters (true)
  │         │    │    │    │    ├── limit

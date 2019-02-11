@@ -699,6 +699,8 @@ define Offset {
 [Relational]
 define Max1Row {
     Input RelExpr
+
+    _ SubqueryPrivate
 }
 
 # Explain returns information about the execution plan of the "input"

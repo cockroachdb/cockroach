@@ -259,7 +259,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 				mb.outScope.appendColumnsFromScope(subqueryScope)
 				mb.outScope.expr = mb.b.factory.ConstructLeftJoinApply(
 					mb.outScope.expr,
-					mb.b.factory.ConstructMax1Row(subqueryScope.expr),
+					mb.b.factory.ConstructMax1Row(subqueryScope.expr, &memo.SubqueryPrivate{}),
 					memo.TrueFilter,
 				)
 

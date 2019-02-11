@@ -12,9 +12,9 @@ root                               ·             ·
       │                            id            @S1
       │                            original sql  (SELECT 1)
       │                            exec mode     one row
-      └── limit                    ·             ·
-           │                       count         2
-           └── max1row             ·             ·
+      └── max1row                  ·             ·
+           └── limit               ·             ·
+                │                  count         2
                 └── render         ·             ·
                      └── emptyrow  ·             ·
 
@@ -36,9 +36,9 @@ root                               ·             ·
       │                            id            @S1
       │                            original sql  (SELECT 42)
       │                            exec mode     one row
-      └── limit                    ·             ·
-           │                       count         2
-           └── max1row             ·             ·
+      └── max1row                  ·             ·
+           └── limit               ·             ·
+                │                  count         2
                 └── render         ·             ·
                      └── emptyrow  ·             ·
 
@@ -73,13 +73,14 @@ root                           ·             ·
       │                        id            @S1
       │                        original sql  (SELECT a FROM abc)
       │                        exec mode     one row
-      └── limit                ·             ·
-           │                   count         2
-           └── max1row         ·             ·
+      └── max1row              ·             ·
+           └── limit           ·             ·
+                │              count         2
                 └── render     ·             ·
                      └── scan  ·             ·
 ·                              table         abc@primary
 ·                              spans         ALL
+·                              limit         2
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
@@ -103,9 +104,9 @@ root                                   ·             ·                        
       │                                id            @S2                                                                          ·                            ·
       │                                original sql  (SELECT max(a) FROM abc WHERE EXISTS (SELECT * FROM abc WHERE c = (a + 3)))  ·                            ·
       │                                exec mode     one row                                                                      ·                            ·
-      └── limit                        ·             ·                                                                            (max)                        ·
-           │                           count         2                                                                            ·                            ·
-           └── max1row                 ·             ·                                                                            (max)                        ·
+      └── max1row                      ·             ·                                                                            (max)                        ·
+           └── limit                   ·             ·                                                                            (max)                        ·
+                │                      count         2                                                                            ·                            ·
                 └── group              ·             ·                                                                            (max)                        ·
                      │                 aggregate 0   max(a)                                                                       ·                            ·
                      │                 scalar        ·                                                                            ·                            ·
@@ -156,9 +157,9 @@ root                               ·             ·
       │                            id            @S1
       │                            original sql  (SELECT 2)
       │                            exec mode     one row
-      └── limit                    ·             ·
-           │                       count         2
-           └── max1row             ·             ·
+      └── max1row                  ·             ·
+           └── limit               ·             ·
+                │                  count         2
                 └── render         ·             ·
                      └── emptyrow  ·             ·
 

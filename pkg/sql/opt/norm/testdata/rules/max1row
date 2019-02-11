@@ -97,5 +97,6 @@ values
            │         ├── key: ()
            │         ├── fd: ()-->(2)
            │         └── scan a
-           │              └── columns: i:2(int)
+           │              ├── columns: i:2(int)
+           │              └── limit: 2
            └── const: 5 [type=int]
