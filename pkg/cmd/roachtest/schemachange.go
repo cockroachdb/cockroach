@@ -336,11 +336,15 @@ SET CLUSTER SETTING schemachanger.bulk_index_backfill.enabled = true
 						}
 						db.Close()
 					}
+					if bulkInsert {
+						return runAndLogStmts(ctx, t, c, "addindex", []string{
+							`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
+							`CREATE INDEX ON tpcc.order (o_carrier_id);`,
+							`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
+						})
+					}
 					return runAndLogStmts(ctx, t, c, "addindex", []string{
 						`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
-						// TODO(vivek): Enable these once ADD INDEX performance has improved.
-						//	`CREATE INDEX ON tpcc.order (o_carrier_id);`,
-						//	`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
 					})
 				},
 				Duration: length,
@@ -463,6 +467,8 @@ func runAndLogStmts(ctx context.Context, t *test, c *cluster, prefix string, stm
 	c.l.Printf("%s: running %d statements\n", prefix, len(stmts))
 	start := timeutil.Now()
 	for i, stmt := range stmts {
+		// Let some traffic run before the schema change.
+		time.Sleep(time.Minute)
 		c.l.Printf("%s: running statement %d...\n", prefix, i+1)
 		before := timeutil.Now()
 		if _, err := db.Exec(stmt); err != nil {
