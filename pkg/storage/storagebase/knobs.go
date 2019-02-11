@@ -48,4 +48,8 @@ type IntentResolverTestingKnobs struct {
 	// performed synchronously. It is equivalent to setting IntentResolverTaskLimit
 	// to -1.
 	ForceSyncIntentResolution bool
+
+	// MaxIntentResolutionBatchSize overrides the maximum number of intent
+	// resolution requests which can be sent in a single batch.
+	MaxIntentResolutionBatchSize int
 }

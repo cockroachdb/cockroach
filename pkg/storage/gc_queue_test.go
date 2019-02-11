@@ -674,7 +674,11 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	}
 
 	var resolved syncmap.Map
-
+	// Set the MaxIntentResolutionBatchSize to 1 so that the injected error for
+	// resolution of "g" does not lead to the failure of resolution of "f".
+	// The need to set this highlights the "fate sharing" aspect of batching
+	// intent resolution.
+	tsc.TestingKnobs.IntentResolverKnobs.MaxIntentResolutionBatchSize = 1
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
