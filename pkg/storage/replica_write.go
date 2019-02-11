@@ -221,16 +221,33 @@ func (r *Replica) tryExecuteWriteBatch(
 			return propResult.Reply, propResult.Err, propResult.ProposalRetry
 		case <-slowTimer.C:
 			slowTimer.Read = true
-			log.Warningf(ctx, "have been waiting %s for proposing command %s",
-				base.SlowRequestThreshold, ba)
+			log.Warningf(ctx, `have been waiting %.2fs for proposing command %s.
+This range is likely unavailable.
+Please submit this message at
+
+  https://github.com/cockroachdb/cockroach/issues/new/choose
+
+along with
+
+	https://yourhost:8080/#/reports/range/%d
+
+and the following Raft status: %+v`,
+				timeutil.Since(tBegin).Seconds(),
+				ba,
+				r.RangeID,
+				r.RaftStatus(),
+			)
 			r.store.metrics.SlowRaftRequests.Inc(1)
 			defer func() {
 				r.store.metrics.SlowRaftRequests.Dec(1)
-				contextStr := ""
-				if err := ctx.Err(); err != nil {
-					contextStr = " with context cancellation"
-				}
-				log.Infof(ctx, "slow command %s finished after %s%s", ba, timeutil.Since(tBegin), contextStr)
+				log.Infof(
+					ctx,
+					"slow command %s finished after %.2fs with error %v, retry %d",
+					ba,
+					timeutil.Since(tBegin).Seconds(),
+					pErr,
+					retry,
+				)
 			}()
 
 		case <-ctxDone:
