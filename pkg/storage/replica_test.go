@@ -257,6 +257,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 				hlc.Timestamp{},
 				hlc.Timestamp{},
 				bootstrapVersion.Version,
+				stateloader.TruncatedStateUnreplicated,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -9829,7 +9830,10 @@ func TestReplicaBootstrapRangeAppliedStateKey(t *testing.T) {
 			// Save the ReplicaState and perform persistent assertions again.
 			repl.raftMu.Lock()
 			repl.mu.Lock()
-			if _, err := repl.mu.stateLoader.Save(ctx, tc.engine, repl.mu.state); err != nil {
+			if _, err := repl.mu.stateLoader.Save(
+				ctx, tc.engine, repl.mu.state,
+				stateloader.TruncatedStateUnreplicated,
+			); err != nil {
 				t.Fatalf("could not save ReplicaState: %v", err)
 			}
 			repl.mu.Unlock()
