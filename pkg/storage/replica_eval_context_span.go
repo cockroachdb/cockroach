@@ -152,9 +152,6 @@ func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.TransactionKey(txnKey, txnID)},
 	)
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
-		roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(rec.GetRangeID())},
-	)
 	return rec.i.CanCreateTxnRecord(txnID, txnKey, txnMinTSUpperBound)
 }
 

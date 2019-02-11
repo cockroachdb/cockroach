@@ -73,9 +73,6 @@ type EvalContext interface {
 	// CanCreateTxnRecord determines whether a transaction record can be created
 	// for the provided transaction information. See Replica.CanCreateTxnRecord
 	// for details about its arguments, return values, and preconditions.
-	//
-	// NOTE: To call this method, a command must declare (at least) a read on
-	// both the transaction's key and on the txn span GC threshold key.
 	CanCreateTxnRecord(
 		txnID uuid.UUID, txnKey []byte, txnMinTSUpperBound hlc.Timestamp,
 	) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason)
@@ -94,6 +91,8 @@ type EvalContext interface {
 	GetSplitQPS() float64
 
 	GetGCThreshold() hlc.Timestamp
+	// TODO(nvanbenschoten): Remove this in 2.3, at which point no request type
+	// will ever need to consult the threshold.
 	GetTxnSpanGCThreshold() hlc.Timestamp
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
