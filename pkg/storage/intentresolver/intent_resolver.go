@@ -294,8 +294,21 @@ func (ir *IntentResolver) maybePushIntents(
 	if pErr != nil {
 		return nil, pErr
 	}
+	return updateIntentTxnStatus(ctx, pushedTxns, intents, skipIfInFlight, nil), nil
+}
 
-	var resolveIntents []roachpb.Intent
+// updateIntentTxnStatus takes a slice of intents and a set of pushed
+// transactions (like returned from MaybePushTransactions) and updates
+// each intent with its corresponding TxnMeta and Status.
+// resultSlice is an optional value to allow the caller to preallocate
+// the returned intent slice.
+func updateIntentTxnStatus(
+	ctx context.Context,
+	pushedTxns map[uuid.UUID]roachpb.Transaction,
+	intents []roachpb.Intent,
+	skipIfInFlight bool,
+	results []roachpb.Intent,
+) []roachpb.Intent {
 	for _, intent := range intents {
 		pushee, ok := pushedTxns[intent.Txn.ID]
 		if !ok {
@@ -308,9 +321,9 @@ func (ir *IntentResolver) maybePushIntents(
 		}
 		intent.Txn = pushee.TxnMeta
 		intent.Status = pushee.Status
-		resolveIntents = append(resolveIntents, intent)
+		results = append(results, intent)
 	}
-	return resolveIntents, nil
+	return results
 }
 
 // MaybePushTransactions is like maybePushIntents except it takes a set of
@@ -480,25 +493,30 @@ func (ir *IntentResolver) CleanupIntents(
 	// to ensure progress even when a timeout is eventually hit.
 	sort.Sort(intentsByTxn(intents))
 	resolved := 0
+	const skipIfInFlight = true
+	pushTxns := make(map[uuid.UUID]enginepb.TxnMeta)
 	for unpushed := intents; len(unpushed) > 0; {
+		for k := range pushTxns { // clear the pushTxns map
+			delete(pushTxns, k)
+		}
 		var prevTxnID uuid.UUID
-		var txns int
 		var i int
 		for i = 0; i < len(unpushed); i++ {
-			if curTxnID := unpushed[i].Txn.ID; curTxnID != prevTxnID {
-				prevTxnID = curTxnID
-				if txns == cleanupIntentsTxnsPerBatch {
+			if curTxn := unpushed[i].Txn; curTxn.ID != prevTxnID {
+				if len(pushTxns) == cleanupIntentsTxnsPerBatch {
 					break
 				}
-				txns++
+				prevTxnID = curTxn.ID
+				pushTxns[curTxn.ID] = curTxn
 			}
 		}
-		resolveIntents, pushErr := ir.maybePushIntents(
-			ctx, unpushed[:i], h, pushType, true, /* skipIfInFlight */
-		)
-		if pushErr != nil {
-			return 0, errors.Wrapf(pushErr.GoError(), "failed to push during intent resolution")
+
+		pushedTxns, pErr := ir.MaybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
+		if pErr != nil {
+			return 0, errors.Wrapf(pErr.GoError(), "failed to push during intent resolution")
 		}
+		resolveIntents := updateIntentTxnStatus(ctx, pushedTxns, unpushed[:i],
+			skipIfInFlight, unpushed[:0])
 		// resolveIntents with poison=true because we're resolving
 		// intents outside of the context of an EndTransaction.
 		//

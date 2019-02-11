@@ -453,7 +453,7 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 func (ds *DistSender) getDescriptor(
 	ctx context.Context, descKey roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *EvictionToken, error) {
-	desc, returnToken, err := ds.rangeCache.LookupRangeDescriptor(
+	desc, returnToken, err := ds.rangeCache.LookupRangeDescriptorWithEvictionToken(
 		ctx, descKey, evictToken, useReverseScan,
 	)
 	if err != nil {

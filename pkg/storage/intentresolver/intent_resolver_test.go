@@ -431,6 +431,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 		singlePushTxnSendFunc,
 		resolveIntentsSendFunc,
 	}
+	txn := beginTransaction(t, clock, 1, roachpb.Key("a"), true /* putKey */)
 	ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
 	// Run defaultTaskLimit tasks which will block until blocker is closed.
 	blocker := make(chan struct{})
@@ -448,7 +449,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 	wg.Wait()
 	testIntentsWithArg := []result.IntentsWithArg{
 		{Intents: []roachpb.Intent{
-			{Span: roachpb.Span{Key: roachpb.Key("a")}},
+			{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
 		}},
 	}
 	// Running with allowSyncProcessing = false should result in an error and no
@@ -471,9 +472,11 @@ func TestCleanupIntentsAsync(t *testing.T) {
 		intents   []result.IntentsWithArg
 		sendFuncs []sendFunc
 	}
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	txn := beginTransaction(t, clock, 1, roachpb.Key("a"), true /* putKey */)
 	testIntentsWithArg := []result.IntentsWithArg{
 		{Intents: []roachpb.Intent{
-			{Span: roachpb.Span{Key: roachpb.Key("a")}},
+			{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
 		}},
 	}
 	cases := []testCase{
@@ -500,7 +503,6 @@ func TestCleanupIntentsAsync(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run("", func(t *testing.T) {
-			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			stopper := stop.NewStopper()
 			sendFuncs := c.sendFuncs
 			ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
