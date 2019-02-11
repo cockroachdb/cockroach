@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package testutils
+package opttester
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ type RuleSet = util.FastIntSet
 //
 // The OptTester is used by tests in various sub-packages of the opt package.
 type OptTester struct {
-	Flags OptTesterFlags
+	Flags Flags
 
 	catalog   cat.Catalog
 	sql       string
@@ -68,9 +68,9 @@ type OptTester struct {
 	builder strings.Builder
 }
 
-// OptTesterFlags are control knobs for tests. Note that specific testcases can
+// Flags are control knobs for tests. Note that specific testcases can
 // override these defaults.
-type OptTesterFlags struct {
+type Flags struct {
 	// ExprFormat controls the output detail of build / opt/ optsteps command
 	// directives.
 	ExprFormat memo.ExprFmtFlags
@@ -123,9 +123,9 @@ type OptTesterFlags struct {
 	JoinLimit int
 }
 
-// NewOptTester constructs a new instance of the OptTester for the given SQL
-// statement. Metadata used by the SQL query is accessed via the catalog.
-func NewOptTester(catalog cat.Catalog, sql string) *OptTester {
+// New constructs a new instance of the OptTester for the given SQL statement.
+// Metadata used by the SQL query is accessed via the catalog.
+func New(catalog cat.Catalog, sql string) *OptTester {
 	ot := &OptTester{
 		catalog: catalog,
 		sql:     sql,
@@ -382,7 +382,7 @@ func ruleNamesToRuleSet(args []string) (RuleSet, error) {
 
 // Set parses an argument that refers to a flag.
 // See OptTester.RunCommand for supported flags.
-func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
+func (f *Flags) Set(arg datadriven.CmdArg) error {
 	switch arg.Key {
 	case "format":
 		f.ExprFormat = 0
