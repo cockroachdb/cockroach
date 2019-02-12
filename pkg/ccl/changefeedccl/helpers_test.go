@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -694,62 +695,57 @@ func (c *cloudFeed) Next(
 		if err := c.fetchJobError(); err != nil {
 			return ``, ``, nil, nil, nil, false
 		}
-
-		{
-			d, err := os.Open(c.dir)
-			if err != nil {
-				t.Fatal(err)
-			}
-			files, err := d.Readdirnames(-1)
-			if err != nil {
-				t.Fatal(err)
-			}
-			sort.Strings(files)
-			var newResolved string
-			var idx int
-			for ; idx < len(files); idx++ {
-				if f := files[len(files)-idx-1]; strings.HasSuffix(f, `RESOLVED`) {
-					newResolved = f
-					break
-				}
-			}
-			files = files[:len(files)-idx]
-			for _, file := range files {
-				if strings.Compare(c.resolved, file) >= 0 {
-					continue
-				}
-				if strings.HasSuffix(file, `RESOLVED`) {
-					// TODO(dan): Implement this when a test needs it.
-					continue
-				}
-
-				var topic string
-				if subs := cloudFeedFileRE.FindStringSubmatch(file); subs == nil {
-					t.Fatalf(`unexpected file: %s`, file)
-				} else {
-					topic = subs[1]
-				}
-
-				f, err := os.Open(filepath.Join(c.dir, file))
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer f.Close()
-				// NB: This is the logic for JSON. Avro will involve parsing an
-				// "Object Container File".
-				s := bufio.NewScanner(f)
-				for s.Scan() {
-					c.rows = append(c.rows, cloudFeedEntry{
-						topic: topic,
-						value: s.Bytes(),
-					})
-				}
-			}
-			if newResolved != `` {
-				c.resolved = newResolved
-			}
+		if err := filepath.Walk(c.dir, c.walkDir); err != nil {
+			t.Fatal(err)
 		}
 	}
+}
+
+func (c *cloudFeed) walkDir(path string, info os.FileInfo, _ error) error {
+	if info.IsDir() {
+		// Nothing to do for directories.
+		return nil
+	}
+
+	var rows []cloudFeedEntry
+	if strings.Compare(c.resolved, path) >= 0 {
+		// Already output this in a previous walkDir.
+		return nil
+	}
+	if strings.HasSuffix(path, `RESOLVED`) {
+		c.rows = append(c.rows, rows...)
+		resolvedPayload, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		resolvedEntry := cloudFeedEntry{payload: resolvedPayload}
+		c.rows = append(c.rows, resolvedEntry)
+		c.resolved = path
+		return nil
+	}
+
+	var topic string
+	subs := cloudFeedFileRE.FindStringSubmatch(filepath.Base(path))
+	if subs == nil {
+		return errors.Errorf(`unexpected file: %s`, path)
+	}
+	topic = subs[1]
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	// NB: This is the logic for JSON. Avro will involve parsing an
+	// "Object Container File".
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		c.rows = append(c.rows, cloudFeedEntry{
+			topic: topic,
+			value: s.Bytes(),
+		})
+	}
+	return nil
 }
 
 func (c *cloudFeed) Err() error {
