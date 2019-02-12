@@ -654,6 +654,12 @@ type test struct {
 	runnerID int64
 	start    time.Time
 	end      time.Time
+
+	// debugEnabled is a test scoped value which enables automated tests to
+	// enable debugging without enabling debugging for all tests.
+	// It is a bit of a hack added to help debug #34458.
+	debugEnabled bool
+
 	// artifactsDir is the path to the directory holding all the artifacts for
 	// this test. It will contain a test.log file, cluster logs, and
 	// subdirectories for subtests.
@@ -1097,7 +1103,7 @@ func (r *registry) runAsync(
 			}
 			if c != nil {
 				defer func() {
-					if !debugEnabled || !t.Failed() {
+					if (!debugEnabled && !t.debugEnabled) || !t.Failed() {
 						c.Destroy(ctx)
 					} else {
 						c.l.Printf("not destroying cluster to allow debugging\n")
