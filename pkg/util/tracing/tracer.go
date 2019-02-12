@@ -349,6 +349,13 @@ const (
 	NonRecordableSpan RecordableOpt = false
 )
 
+// AlwaysTrace returns true if operations should be traced regardless of the
+// context.
+func (t *Tracer) AlwaysTrace() bool {
+	shadowTracer := t.getShadowTracer()
+	return t.useNetTrace() || shadowTracer != nil || t.forceRealSpans
+}
+
 // StartRootSpan creates a root span. This is functionally equivalent to:
 // parentSpan.Tracer().(*Tracer).StartSpan(opName, LogTags(...), [Recordable])
 // Compared to that, it's more efficient, particularly in terms of memory
@@ -358,11 +365,8 @@ const (
 func (t *Tracer) StartRootSpan(
 	opName string, logTags *logtags.Buffer, recordable RecordableOpt,
 ) opentracing.Span {
-	shadowTracer := t.getShadowTracer()
-
 	// In the usual case, we return noopSpan.
-	if !t.useNetTrace() && shadowTracer == nil &&
-		!t.forceRealSpans && recordable == NonRecordableSpan {
+	if !t.AlwaysTrace() && recordable == NonRecordableSpan {
 		return &t.noopSpan
 	}
 
@@ -377,6 +381,7 @@ func (t *Tracer) StartRootSpan(
 	}
 	s.mu.duration = -1
 
+	shadowTracer := t.getShadowTracer()
 	if shadowTracer != nil {
 		linkShadowSpan(
 			s, shadowTracer, nil, /* parentShadowCtx */

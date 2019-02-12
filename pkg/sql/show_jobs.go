@@ -31,7 +31,8 @@ func (p *planner) ShowJobs(ctx context.Context, n *tree.ShowJobs) (planNode, err
 	return p.delegateQuery(ctx, "SHOW JOBS",
 		`SELECT job_id, job_type, description, user_name, status, running_status, created,
             started, finished, modified, fraction_completed, error, coordinator_id
-       FROM crdb_internal.jobs
-   ORDER BY COALESCE(finished, now()) DESC, started DESC`,
+		FROM crdb_internal.jobs
+		WHERE finished IS NULL OR finished > now() - '12h':::interval
+		ORDER BY COALESCE(finished, now()) DESC, started DESC`,
 		nil, nil)
 }
