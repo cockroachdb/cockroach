@@ -134,6 +134,9 @@ func (d *DiskRowContainer) Len() int {
 }
 
 // AddRow is part of the SortableRowContainer interface.
+//
+// Note: if key calculation changes, computeKey() of hashMemRowIterator should
+// be changed accordingly.
 func (d *DiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	if len(row) != len(d.types) {
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(d.types))
@@ -273,7 +276,7 @@ type diskRowIterator struct {
 	diskmap.SortedDiskMapIterator
 }
 
-var _ RowIterator = diskRowIterator{}
+var _ RowIterator = &diskRowIterator{}
 
 func (d *DiskRowContainer) newIterator(ctx context.Context) diskRowIterator {
 	if err := d.bufferedRows.Flush(); err != nil {
@@ -286,14 +289,14 @@ func (d *DiskRowContainer) newIterator(ctx context.Context) diskRowIterator {
 func (d *DiskRowContainer) NewIterator(ctx context.Context) RowIterator {
 	i := d.newIterator(ctx)
 	if d.topK > 0 {
-		return &diskRowTopKIterator{RowIterator: i, k: d.topK}
+		return &diskRowTopKIterator{RowIterator: &i, k: d.topK}
 	}
-	return i
+	return &i
 }
 
 // Row returns the current row. The returned sqlbase.EncDatumRow is only valid
 // until the next call to Row().
-func (r diskRowIterator) Row() (sqlbase.EncDatumRow, error) {
+func (r *diskRowIterator) Row() (sqlbase.EncDatumRow, error) {
 	if ok, err := r.Valid(); err != nil {
 		return nil, errors.Wrap(err, "unable to check row validity")
 	} else if !ok {
@@ -303,7 +306,7 @@ func (r diskRowIterator) Row() (sqlbase.EncDatumRow, error) {
 	return r.rowContainer.keyValToRow(r.Key(), r.Value())
 }
 
-func (r diskRowIterator) Close() {
+func (r *diskRowIterator) Close() {
 	if r.SortedDiskMapIterator != nil {
 		r.SortedDiskMapIterator.Close()
 	}
@@ -313,7 +316,7 @@ type diskRowFinalIterator struct {
 	diskRowIterator
 }
 
-var _ RowIterator = diskRowFinalIterator{}
+var _ RowIterator = &diskRowFinalIterator{}
 
 // NewFinalIterator returns an iterator that reads rows exactly once throughout
 // the lifetime of a DiskRowContainer. Rows are not actually discarded from the
@@ -325,19 +328,19 @@ var _ RowIterator = diskRowFinalIterator{}
 func (d *DiskRowContainer) NewFinalIterator(ctx context.Context) RowIterator {
 	i := diskRowFinalIterator{diskRowIterator: d.newIterator(ctx)}
 	if d.topK > 0 {
-		return &diskRowTopKIterator{RowIterator: i, k: d.topK}
+		return &diskRowTopKIterator{RowIterator: &i, k: d.topK}
 	}
-	return i
+	return &i
 }
 
-func (r diskRowFinalIterator) Rewind() {
+func (r *diskRowFinalIterator) Rewind() {
 	r.Seek(r.diskRowIterator.rowContainer.lastReadKey)
 	if r.diskRowIterator.rowContainer.lastReadKey != nil {
 		r.Next()
 	}
 }
 
-func (r diskRowFinalIterator) Row() (sqlbase.EncDatumRow, error) {
+func (r *diskRowFinalIterator) Row() (sqlbase.EncDatumRow, error) {
 	row, err := r.diskRowIterator.Row()
 	if err != nil {
 		return nil, err
