@@ -414,6 +414,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, drainSignals...)
 
+	// Set up a cancellable context for the entire start command.
+	// The context will be canceled at the end.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Set up a tracing span for the start process.  We want any logging
 	// happening beyond this point to be accounted to this start
 	// context, including logging related to the initialization of
@@ -423,7 +428,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// TODO(andrei): we don't close the span on the early returns below.
 	tracer := serverCfg.Settings.Tracer
 	sp := tracer.StartRootSpan("server start", nil /* logTags */, tracing.NonRecordableSpan)
-	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	// Set up the logging and profiling output.
 	//
@@ -1027,7 +1032,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 
 		// Start the log file GC daemon to remove files that make the log
 		// directory too large.
-		log.StartGCDaemon()
+		log.StartGCDaemon(ctx)
 	}
 
 	outputDirectory := "."
