@@ -34,11 +34,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/lib/pq/oid"
 )
 
 type encodingTest struct {
 	SQL          string
 	Datum        tree.Datum
+	Oid          oid.Oid
 	Text         string
 	TextAsBinary []byte
 	Binary       []byte
@@ -102,6 +104,7 @@ func TestEncodings(t *testing.T) {
 	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
 
 	verifyLen := func(t *testing.T) []byte {
+		t.Helper()
 		b := buf.wrapped.Bytes()
 		if len(b) < 4 {
 			t.Fatal("short buffer")
@@ -140,7 +143,7 @@ func TestEncodings(t *testing.T) {
 				})
 				t.Run(pgwirebase.FormatBinary.String(), func(t *testing.T) {
 					buf.reset()
-					buf.writeBinaryDatum(ctx, d, time.UTC)
+					buf.writeBinaryDatum(ctx, d, time.UTC, tc.Oid)
 					if buf.err != nil {
 						t.Fatal(buf.err)
 					}
@@ -159,14 +162,13 @@ func TestEncodings(t *testing.T) {
 					// Unsupported.
 					t.Skip()
 				}
-				id := tc.Datum.ResolvedType().Oid()
 				for code, value := range map[pgwirebase.FormatCode][]byte{
 					pgwirebase.FormatText:   tc.TextAsBinary,
 					pgwirebase.FormatBinary: tc.Binary,
 				} {
 					t.Run(code.String(), func(t *testing.T) {
-						t.Logf("code: %s\nvalue: %q (%[2]s)\noid: %v", code, value, id)
-						d, err := pgwirebase.DecodeOidDatum(nil, id, code, value)
+						t.Logf("code: %s\nvalue: %q (%[2]s)\noid: %v", code, value, tc.Oid)
+						d, err := pgwirebase.DecodeOidDatum(nil, tc.Oid, code, value)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -219,7 +221,7 @@ func BenchmarkEncodings(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					buf.reset()
 					b.StartTimer()
-					buf.writeBinaryDatum(ctx, d, time.UTC)
+					buf.writeBinaryDatum(ctx, d, time.UTC, tc.Oid)
 					b.StopTimer()
 				}
 			})
@@ -232,7 +234,7 @@ func TestEncodingErrorCounts(t *testing.T) {
 
 	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
 	d, _ := tree.ParseDDecimal("Inf")
-	buf.writeBinaryDatum(context.Background(), d, nil)
+	buf.writeBinaryDatum(context.Background(), d, nil, d.ResolvedType().Oid())
 	if count := telemetry.GetFeatureCounts()["pgwire.#32489.binary_decimal_infinity"]; count != 1 {
 		t.Fatalf("expected 1 encoding error, got %d", count)
 	}
