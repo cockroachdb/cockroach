@@ -123,6 +123,8 @@ type Stopper struct {
 		idAlloc   int
 		qCancels  map[int]func()
 		sCancels  map[int]func()
+
+		stopCalled bool // turns all but first call to Stop into noop
 	}
 }
 
@@ -448,6 +450,15 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 // Stop signals all live workers to stop and then waits for each to
 // confirm it has stopped.
 func (s *Stopper) Stop(ctx context.Context) {
+	s.mu.Lock()
+	stopCalled := s.mu.stopCalled
+	s.mu.stopCalled = true
+	s.mu.Unlock()
+
+	if stopCalled {
+		return
+	}
+
 	defer s.Recover(ctx)
 	defer unregister(s)
 
