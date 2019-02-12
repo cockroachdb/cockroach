@@ -36,13 +36,14 @@ import (
 )
 
 type mockEvalCtx struct {
-	clusterSettings *cluster.Settings
-	desc            *roachpb.RangeDescriptor
-	clock           *hlc.Clock
-	stats           enginepb.MVCCStats
-	qps             float64
-	abortSpan       *abortspan.AbortSpan
-	gcThreshold     hlc.Timestamp
+	clusterSettings  *cluster.Settings
+	desc             *roachpb.RangeDescriptor
+	clock            *hlc.Clock
+	stats            enginepb.MVCCStats
+	qps              float64
+	abortSpan        *abortspan.AbortSpan
+	gcThreshold      hlc.Timestamp
+	term, firstIndex uint64
 }
 
 func (m *mockEvalCtx) String() string {
@@ -85,10 +86,10 @@ func (m *mockEvalCtx) IsFirstRange() bool {
 	panic("unimplemented")
 }
 func (m *mockEvalCtx) GetFirstIndex() (uint64, error) {
-	panic("unimplemented")
+	return m.firstIndex, nil
 }
 func (m *mockEvalCtx) GetTerm(uint64) (uint64, error) {
-	panic("unimplemented")
+	return m.term, nil
 }
 func (m *mockEvalCtx) GetLeaseAppliedIndex() uint64 {
 	panic("unimplemented")

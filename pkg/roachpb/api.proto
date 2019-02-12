@@ -1046,6 +1046,7 @@ message ExportStorage {
     option (gogoproto.equal) = true;
 
     string path = 1;
+    uint32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   }
   message Http {
     option (gogoproto.equal) = true;

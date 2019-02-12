@@ -212,7 +212,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := rsl.LoadTruncatedState(ctx, e)
+	ts, _, err := rsl.LoadRaftTruncatedState(ctx, e)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +281,7 @@ func term(
 	// sideloaded entries. We only need the term, so this is what we do.
 	ents, err := entries(ctx, rsl, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, math.MaxUint64 /* maxBytes */)
 	if err == raft.ErrCompacted {
-		ts, err := rsl.LoadTruncatedState(ctx, eng)
+		ts, _, err := rsl.LoadRaftTruncatedState(ctx, eng)
 		if err != nil {
 			return 0, err
 		}
@@ -318,7 +318,7 @@ func (r *Replica) raftTruncatedStateLocked(
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
-	ts, err := r.mu.stateLoader.LoadTruncatedState(ctx, r.store.Engine())
+	ts, _, err := r.mu.stateLoader.LoadRaftTruncatedState(ctx, r.store.Engine())
 	if err != nil {
 		return ts, err
 	}
@@ -488,8 +488,17 @@ type IncomingSnapshot struct {
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
-	State    *storagepb.ReplicaState
-	snapType string
+	State *storagepb.ReplicaState
+	//
+	// When true, this snapshot contains an unreplicated TruncatedState. When
+	// false, the TruncatedState is replicated (see the reference below) and the
+	// recipient must avoid also writing the unreplicated TruncatedState. The
+	// migration to an unreplicated TruncatedState will be carried out during
+	// the next log truncation (assuming cluster version is bumped at that
+	// point).
+	// See the comment on VersionUnreplicatedRaftTruncatedState for details.
+	UsesUnreplicatedTruncatedState bool
+	snapType                       string
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the
@@ -860,6 +869,19 @@ func (r *Replica) applySnapshot(
 	// distinct batch.
 	distinctBatch := batch.Distinct()
 	stats.batch = timeutil.Now()
+
+	if inSnap.UsesUnreplicatedTruncatedState {
+		// We're using the unreplicated truncated state, which we need to
+		// manually persist to disk. If we're not taking this branch, the
+		// snapshot contains a legacy TruncatedState and we don't need to do
+		// anything (in fact, must not -- the invariant is that exactly one of
+		// them exists at any given point in the state machine).
+		if err := stateloader.Make(s.Desc.RangeID).SetRaftTruncatedState(
+			ctx, distinctBatch, s.TruncatedState,
+		); err != nil {
+			return err
+		}
+	}
 
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
 	for i, bytes := range inSnap.LogEntries {

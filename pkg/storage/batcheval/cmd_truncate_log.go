@@ -19,10 +19,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -34,7 +36,7 @@ func init() {
 func declareKeysTruncateLog(
 	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateKey(header.RangeID)})
+	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(header.RangeID)})
 	prefix := keys.RaftLogPrefix(header.RangeID)
 	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 }
@@ -57,12 +59,33 @@ func TruncateLog(
 		return result.Result{}, nil
 	}
 
-	// Have we already truncated this log? If so, just return without an error.
-	firstIndex, err := cArgs.EvalCtx.GetFirstIndex()
+	var legacyTruncatedState roachpb.RaftTruncatedState
+	legacyKeyFound, err := engine.MVCCGetProto(
+		ctx, batch, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
+		hlc.Timestamp{}, &legacyTruncatedState, engine.MVCCGetOptions{},
+	)
 	if err != nil {
 		return result.Result{}, err
 	}
 
+	// See the comment on the cluster version for all the moving parts involved
+	// in migrating into this cluster version. Note that if the legacy key is
+	// missing, the cluster version has been bumped (though we may not know it
+	// yet) and we keep using the unreplicated key.
+	useNewUnreplicatedTruncatedStateKey := cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionUnreplicatedRaftTruncatedState) || !legacyKeyFound
+
+	firstIndex, err := cArgs.EvalCtx.GetFirstIndex()
+	if err != nil {
+		return result.Result{}, errors.Wrap(err, "getting first index")
+	}
+	// Have we already truncated this log? If so, just return without an error.
+	// Note that there may in principle be followers whose Raft log is longer
+	// than this node's, but to issue a truncation we also need the *term* for
+	// the new truncated state, which we can't obtain if we don't have the log
+	// entry ourselves.
+	//
+	// TODO(tbg): think about synthesizing a valid term. Can we use the next
+	// existing entry's term?
 	if firstIndex >= args.Index {
 		if log.V(3) {
 			log.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
@@ -74,9 +97,16 @@ func TruncateLog(
 	// args.Index is the first index to keep.
 	term, err := cArgs.EvalCtx.GetTerm(args.Index - 1)
 	if err != nil {
-		return result.Result{}, err
+		return result.Result{}, errors.Wrap(err, "getting term")
 	}
 
+	// Compute the number of bytes freed by this truncation. Note that this will
+	// only make sense for the leaseholder as we base this off its own first
+	// index (other replicas may have other first indexes assuming we're not
+	// still using the legacy truncated state key). In principle, this could be
+	// off either way, though in practice we don't expect followers to have
+	// a first index smaller than the leaseholder's (see #34287), and most of
+	// the time everyone's first index should be the same.
 	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, firstIndex))
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, args.Index))
 
@@ -109,7 +139,23 @@ func TruncateLog(
 	pd.Replicated.State = &storagepb.ReplicaState{
 		TruncatedState: tState,
 	}
+
 	pd.Replicated.RaftLogDelta = ms.SysBytes
 
-	return pd, MakeStateLoader(cArgs.EvalCtx).SetTruncatedState(ctx, batch, cArgs.Stats, tState)
+	if !useNewUnreplicatedTruncatedStateKey {
+		return pd, MakeStateLoader(cArgs.EvalCtx).SetLegacyRaftTruncatedState(ctx, batch, cArgs.Stats, tState)
+	}
+	if legacyKeyFound {
+		// Time to migrate by deleting the legacy key. The downstream-of-Raft
+		// code will atomically rewrite the truncated state (supplied via the
+		// side effect) into the new unreplicated key.
+		if err := engine.MVCCDelete(
+			ctx, batch, cArgs.Stats, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
+			hlc.Timestamp{}, nil, /* txn */
+		); err != nil {
+			return result.Result{}, err
+		}
+	}
+
+	return pd, nil
 }

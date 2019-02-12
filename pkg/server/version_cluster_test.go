@@ -24,16 +24,20 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 type testClusterWithHelpers struct {
@@ -187,6 +191,174 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 				}
 			}
 			return nil
+		})
+	}
+}
+
+// TestClusterVersionUnreplicatedRaftTruncatedState exercises the
+// VersionUnreplicatedRaftTruncatedState migration in as much detail as possible
+// in a unit test.
+//
+// It starts a four node cluster with a pre-migration version and upgrades into
+// the new version while traffic and scattering are active, verifying that the
+// truncated states are rewritten.
+func TestClusterVersionUnreplicatedRaftTruncatedState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	dir, finish := testutils.TempDir(t)
+	defer finish()
+
+	oldVersion := cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState - 1)
+	oldVersionS := oldVersion.String()
+	newVersionS := cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState).String()
+
+	// Four node cluster in which all versions support newVersion (i.e. would in
+	// principle upgrade to it) but are bootstrapped at oldVersion.
+	versions := [][2]string{
+		{oldVersionS, newVersionS},
+		{oldVersionS, newVersionS},
+		{oldVersionS, newVersionS},
+		{oldVersionS, newVersionS},
+	}
+
+	bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
+
+	knobs := base.TestingKnobs{
+		Store: &storage.StoreTestingKnobs{
+			BootstrapVersion: &bootstrapVersion,
+		},
+		Server: &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: 1,
+		},
+	}
+
+	tc := setupMixedCluster(t, knobs, versions, dir)
+	defer tc.TestCluster.Stopper().Stop(ctx)
+
+	if _, err := tc.ServerConn(0).Exec(`
+CREATE TABLE kv (id INT PRIMARY KEY, v INT);
+ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	scatter := func() {
+		t.Helper()
+		if _, err := tc.ServerConn(0).Exec(
+			`ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i%$1+1], i FROM generate_series(0, 9) AS g(i)`, len(versions),
+		); err != nil {
+			t.Log(err)
+		}
+	}
+
+	var n int
+	insert := func() {
+		t.Helper()
+		n++
+		// Write only to a subset of our ranges to guarantee log truncations there.
+		_, err := tc.ServerConn(0).Exec(`UPSERT INTO kv VALUES($1, $2)`, n%2, n)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for i := 0; i < 500; i++ {
+		insert()
+	}
+	scatter()
+
+	for _, server := range tc.Servers {
+		assert.NoError(t, server.GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+			s.VisitReplicas(func(r *storage.Replica) bool {
+				key := keys.RaftTruncatedStateKey(r.RangeID)
+				var truncState roachpb.RaftTruncatedState
+				found, err := engine.MVCCGetProto(
+					context.Background(), s.Engine(), key,
+					hlc.Timestamp{}, &truncState, engine.MVCCGetOptions{},
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if found {
+					t.Errorf("unexpectedly found unreplicated TruncatedState at %s", key)
+				}
+				return true // want more
+			})
+			return nil
+		}))
+	}
+
+	if v := tc.getVersionFromSelect(0); v != oldVersionS {
+		t.Fatalf("running %s, wanted %s", v, oldVersionS)
+	}
+
+	assert.NoError(t, tc.setVersion(0, newVersionS))
+	for i := 0; i < 500; i++ {
+		insert()
+	}
+	scatter()
+
+	for _, server := range tc.Servers {
+		testutils.SucceedsSoon(t, func() error {
+			err := server.GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+				// We scattered and so old copies of replicas may be laying around.
+				// If we're not proactive about removing them, the test gets pretty
+				// slow because those replicas aren't caught up any more.
+				s.MustForceReplicaGCScanAndProcess()
+				var err error
+				s.VisitReplicas(func(r *storage.Replica) bool {
+					snap := s.Engine().NewSnapshot()
+					defer snap.Close()
+
+					keyLegacy := keys.RaftTruncatedStateLegacyKey(r.RangeID)
+					keyUnreplicated := keys.RaftTruncatedStateKey(r.RangeID)
+
+					if found, innerErr := engine.MVCCGetProto(
+						context.Background(), snap, keyLegacy,
+						hlc.Timestamp{}, nil, engine.MVCCGetOptions{},
+					); innerErr != nil {
+						t.Fatal(innerErr)
+					} else if found {
+						if err == nil {
+							err = errors.New("found legacy TruncatedState")
+						}
+						err = errors.Wrap(err, r.String())
+
+						// Force a log truncation to prove that this rectifies
+						// the situation.
+						status := r.RaftStatus()
+						if status != nil {
+							desc := r.Desc()
+							truncate := &roachpb.TruncateLogRequest{}
+							truncate.Key = desc.StartKey.AsRawKey()
+							truncate.RangeID = desc.RangeID
+							truncate.Index = status.HardState.Commit
+							var ba roachpb.BatchRequest
+							ba.RangeID = r.RangeID
+							ba.Add(truncate)
+							if _, err := s.DB().NonTransactionalSender().Send(ctx, ba); err != nil {
+								t.Fatal(err)
+							}
+						}
+						return true // want more
+					}
+
+					if found, err := engine.MVCCGetProto(
+						context.Background(), snap, keyUnreplicated,
+						hlc.Timestamp{}, nil, engine.MVCCGetOptions{},
+					); err != nil {
+						t.Fatal(err)
+					} else if !found {
+						// We can't have neither of the keys present.
+						t.Fatalf("%s: unexpectedly did not find unreplicated TruncatedState at %s", r, keyUnreplicated)
+					}
+
+					return true // want more
+				})
+				return err
+			})
+			return err
 		})
 	}
 }

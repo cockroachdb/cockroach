@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -898,8 +899,29 @@ func (r *Replica) sendSnapshot(
 		return &benignError{errors.New("raft status not initialized")}
 	}
 
+	// TODO(tbg): send snapshots without the past raft log. This means replacing
+	// the state's truncated state with one whose index and term equal that of
+	// the RaftAppliedIndex of the snapshot. It looks like the code sending out
+	// the actual entries will do the right thing from then on (see anchor
+	// below).
+	_ = (*kvBatchSnapshotStrategy)(nil).Send
+	usesReplicatedTruncatedState, err := engine.MVCCGetProto(
+		ctx, snap.EngineSnap, keys.RaftTruncatedStateLegacyKey(r.RangeID), hlc.Timestamp{}, nil, engine.MVCCGetOptions{},
+	)
+	if err != nil {
+		return errors.Wrap(err, "loading legacy truncated state")
+	}
+
 	req := SnapshotRequest_Header{
 		State: snap.State,
+		// Tell the recipient whether it needs to synthesize the new
+		// unreplicated TruncatedState. It could tell by itself by peeking into
+		// the data, but it uses a write only batch for performance which
+		// doesn't support that; this is easier. Notably, this is true if the
+		// snap index itself is the one at which the migration happens.
+		//
+		// See VersionUnreplicatedRaftTruncatedState.
+		UnreplicatedTruncatedState: !usesReplicatedTruncatedState,
 		RaftMessageRequest: RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: fromRepDesc,

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ReconstructFunc is the callback function passed to the Factory.Reconstruct
@@ -274,9 +275,11 @@ func (f *Factory) ConstructJoin(
 // ConstructConstVal constructs one of the constant value operators from the
 // given datum value. While most constants are represented with Const, there are
 // special-case operators for True, False, and Null, to make matching easier.
-func (f *Factory) ConstructConstVal(d tree.Datum) opt.ScalarExpr {
+// Null operators require the static type to be specified, so that rewrites do
+// not change it.
+func (f *Factory) ConstructConstVal(d tree.Datum, t types.T) opt.ScalarExpr {
 	if d == tree.DNull {
-		return memo.NullSingleton
+		return f.ConstructNull(t)
 	}
 	if boolVal, ok := d.(*tree.DBool); ok {
 		// Map True/False datums to True/False operator.

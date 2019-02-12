@@ -668,6 +668,35 @@ func TestHashJoinerInt64(t *testing.T) {
 				{decs[0]},
 			},
 		},
+		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			joinType: sqlbase.JoinType_LEFT_SEMI,
+
+			leftTuples: tuples{
+				{0},
+				{0},
+				{1},
+				{2},
+			},
+			rightTuples: tuples{
+				{0},
+				{0},
+				{1},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{},
+
+			expectedTuples: tuples{
+				{0},
+				{0},
+				{1},
+			},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -683,29 +712,15 @@ func TestHashJoinerInt64(t *testing.T) {
 				runTests(t, inputs, []types.T{types.Bool}, func(t *testing.T, sources []Operator) {
 					leftSource, rightSource := sources[0], sources[1]
 
-					spec := hashJoinerSpec{
-						left: hashJoinerSourceSpec{
-							eqCols:      tc.leftEqCols,
-							outCols:     tc.leftOutCols,
-							sourceTypes: tc.leftTypes,
-							source:      leftSource,
-							outer:       tc.joinType == sqlbase.JoinType_LEFT_OUTER || tc.joinType == sqlbase.JoinType_FULL_OUTER,
-						},
-
-						right: hashJoinerSourceSpec{
-							eqCols:      tc.rightEqCols,
-							outCols:     tc.rightOutCols,
-							sourceTypes: tc.rightTypes,
-							source:      rightSource,
-							outer:       tc.joinType == sqlbase.JoinType_RIGHT_OUTER || tc.joinType == sqlbase.JoinType_FULL_OUTER,
-						},
-
-						buildRightSide: tc.buildRightSide,
-						buildDistinct:  tc.buildDistinct,
-					}
-
-					hj := &hashJoinEqOp{
-						spec: spec,
+					hj, err := NewEqHashJoinerOp(
+						leftSource, rightSource,
+						tc.leftEqCols, tc.rightEqCols,
+						tc.leftOutCols, tc.rightOutCols,
+						tc.leftTypes, tc.rightTypes,
+						tc.buildRightSide, tc.buildDistinct,
+						tc.joinType)
+					if err != nil {
+						t.Fatal(err)
 					}
 
 					nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
