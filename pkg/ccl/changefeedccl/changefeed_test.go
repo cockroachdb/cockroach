@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -46,7 +47,7 @@ import (
 func TestChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
@@ -87,7 +88,7 @@ func TestChangefeedBasics(t *testing.T) {
 func TestChangefeedEnvelope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
@@ -122,7 +123,7 @@ func TestChangefeedEnvelope(t *testing.T) {
 func TestChangefeedMultiTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
@@ -146,7 +147,7 @@ func TestChangefeedMultiTable(t *testing.T) {
 func TestChangefeedCursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
@@ -188,9 +189,9 @@ func TestChangefeedCursor(t *testing.T) {
 		// Check that the cursor is properly hooked up to the job statement
 		// time. The sinkless tests currently don't have a way to get the
 		// statement timestamp, so only verify this for enterprise.
-		if e, ok := fooLogical.(*tableFeed); ok {
+		if e, ok := fooLogical.(*cdctest.TableFeed); ok {
 			var bytes []byte
-			sqlDB.QueryRow(t, `SELECT payload FROM system.jobs WHERE id=$1`, e.jobID).Scan(&bytes)
+			sqlDB.QueryRow(t, `SELECT payload FROM system.jobs WHERE id=$1`, e.JobID).Scan(&bytes)
 			var payload jobspb.Payload
 			require.NoError(t, protoutil.Unmarshal(bytes, &payload))
 			require.Equal(t, parseTimeToHLC(t, tsLogical), payload.GetChangefeed().StatementTime)
@@ -205,7 +206,7 @@ func TestChangefeedCursor(t *testing.T) {
 func TestChangefeedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		beforeEmitRowCh := make(chan struct{})
 		beforeEmitRowHook := func() error {
 			<-beforeEmitRowCh
@@ -308,7 +309,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 func TestChangefeedResolvedFrequency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 
@@ -341,7 +342,7 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		// Schema changes that predate the changefeed.
@@ -507,7 +508,7 @@ func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skip("TODO(mrtracy): Re-enable when allow-backfill option is added.")
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		t.Run(`add column not null`, func(t *testing.T) {
@@ -587,7 +588,7 @@ func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
 func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		t.Run(`add column with default`, func(t *testing.T) {
@@ -719,7 +720,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE after_backfill (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO after_backfill VALUES (0)`)
@@ -741,7 +742,7 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 func TestChangefeedInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		sqlDB.Exec(t, `CREATE TABLE grandparent (a INT PRIMARY KEY, b STRING)`)
@@ -792,7 +793,7 @@ func TestChangefeedInterleaved(t *testing.T) {
 func TestChangefeedColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		// Table with 2 column families.
@@ -827,7 +828,7 @@ func TestChangefeedColumnFamily(t *testing.T) {
 func TestChangefeedComputedColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		// TODO(dan): Also test a non-STORED computed column once we support them.
 		sqlDB.Exec(t, `CREATE TABLE cc (
@@ -856,7 +857,7 @@ func TestChangefeedComputedColumn(t *testing.T) {
 func TestChangefeedUpdatePrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		// This NOT NULL column checks a regression when used with UPDATE-ing a
 		// primary key column or with DELETE.
@@ -889,7 +890,7 @@ func TestChangefeedUpdatePrimaryKey(t *testing.T) {
 func TestChangefeedTruncateRenameDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		// TODO(dan): TRUNCATE cascades, test for this too.
@@ -936,7 +937,7 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 func TestChangefeedMonitoring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		beforeEmitRowCh := make(chan struct{}, 2)
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
 			DistSQL.(*distsqlrun.TestingKnobs).
@@ -1059,7 +1060,7 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		origAfterSinkFlushHook := f.Server().(*server.TestServer).Cfg.TestingKnobs.
 			DistSQL.(*distsqlrun.TestingKnobs).
 			Changefeed.(*TestingKnobs).AfterSinkFlush
@@ -1122,7 +1123,7 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 func TestChangefeedDataTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		if PushEnabled.Get(&f.Server().ClusterSettings().SV) {
 			t.Skip(`#34456`)
 		}
@@ -1202,7 +1203,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 func TestChangefeedSchemaTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		// Set a very simple channel-based, wait-and-resume function as the
 		// BeforeEmitRow hook.
 		var shouldWait int32
@@ -1413,7 +1414,7 @@ func TestChangefeedErrors(t *testing.T) {
 func TestChangefeedPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE USER testuser`)
@@ -1451,12 +1452,12 @@ func TestChangefeedPermissions(t *testing.T) {
 func TestChangefeedDescription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-		// Intentionally don't use the testfeedFactory because we want to
+		// Intentionally don't use the TestFeedFactory because we want to
 		// control the placeholders.
 		s := f.Server()
 		sink, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
@@ -1491,12 +1492,12 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
 	jobs.DefaultAdoptInterval = 10 * time.Millisecond
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (4, 'c'), (7, 'd'), (8, 'e')`)
 
-		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved`).(*tableFeed)
+		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved`).(*cdctest.TableFeed)
 		defer foo.Close(t)
 
 		assertPayloads(t, foo, []string{
@@ -1514,9 +1515,9 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 			t.Fatalf(`expected a resolved timestamp got %s: %s->%s`, topic, key, value)
 		}
 
-		sqlDB.Exec(t, `PAUSE JOB $1`, foo.jobID)
+		sqlDB.Exec(t, `PAUSE JOB $1`, foo.JobID)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (16, 'f')`)
-		sqlDB.Exec(t, `RESUME JOB $1`, foo.jobID)
+		sqlDB.Exec(t, `RESUME JOB $1`, foo.JobID)
 		assertPayloads(t, foo, []string{
 			`foo: [16]->{"after": {"a": 16, "b": "f"}}`,
 		})
@@ -1530,7 +1531,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 func TestManyChangefeedsOneTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'init')`)
@@ -1583,7 +1584,7 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 func TestUnspecifiedPrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
 		var id0 int
@@ -1646,7 +1647,7 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 
 	// Create a factory which uses server 1 as the output of the Sink, but
 	// executes the CREATE CHANGEFEED statement on server 0.
-	f := makeTable(tc.Server(1), tc.ServerConn(0), flushCh)
+	f := cdctest.MakeTableFeedFactory(tc.Server(1), tc.ServerConn(0), flushCh)
 	foo := f.Feed(t, "CREATE CHANGEFEED FOR foo")
 	defer foo.Close(t)
 

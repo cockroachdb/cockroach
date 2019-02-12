@@ -12,7 +12,6 @@ import (
 	"bufio"
 	"context"
 	gosql "database/sql"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -32,17 +31,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx"
+	"github.com/pkg/errors"
 )
 
-type testfeedFactory interface {
-	Feed(t testing.TB, create string, args ...interface{}) testfeed
+// TestFeedFactory is an interface to create changefeeds.
+type TestFeedFactory interface {
+	// Feed creates a new TestFeed.
+	Feed(t testing.TB, create string, args ...interface{}) TestFeed
+	// Server returns the raw underlying TestServer, if applicable.
 	Server() serverutils.TestServerInterface
 }
 
-type testfeed interface {
+// TestFeed abstracts over reading from the various types of changefeed sinks.
+type TestFeed interface {
+	// Partitions returns the domain of values that may be returned as a partition
+	// by Next.
 	Partitions() []string
+	// Next returns the next message. Within a given topic+partition, the order is
+	// preserved, but not otherwise. Either len(key) and len(value) will be
+	// greater than zero (a row updated) or len(payload) will be (a resolved
+	// timestamp). If there are no more messages, Next will return false and Err
+	// should be checked.
 	Next(t testing.TB) (topic, partition string, key, value, payload []byte, ok bool)
+	// If Next returns false, Err will return the relevant error, if any.
 	Err() error
+	// Close shuts down the changefeed and releases resources.
 	Close(t testing.TB)
 }
 
@@ -50,11 +63,14 @@ type sinklessFeedFactory struct {
 	s serverutils.TestServerInterface
 }
 
-func makeSinkless(s serverutils.TestServerInterface) *sinklessFeedFactory {
+// MakeSinklessFeedFactory returns a TestFeedFactory implementation for
+// "sinkless" (results returned over pgwire) feeds.
+func MakeSinklessFeedFactory(s serverutils.TestServerInterface) TestFeedFactory {
 	return &sinklessFeedFactory{s: s}
 }
 
-func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interface{}) testfeed {
+// Feed implements the TestFeedFactory interface
+func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interface{}) TestFeed {
 	t.Helper()
 	url, cleanup := sqlutils.PGUrl(t, f.s.ServingAddr(), t.Name(), url.User(security.RootUser))
 	q := url.Query()
@@ -87,11 +103,12 @@ func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interfac
 	return s
 }
 
+// Server implements the TestFeedFactory interface.
 func (f *sinklessFeedFactory) Server() serverutils.TestServerInterface {
 	return f.s
 }
 
-// sinklessFeed is an implementation of the `testfeed` interface for a
+// sinklessFeed is an implementation of the `TestFeed` interface for a
 // "sinkless" (results returned over pgwire) feed.
 type sinklessFeed struct {
 	conn    *pgx.Conn
@@ -100,8 +117,10 @@ type sinklessFeed struct {
 	seen    map[string]struct{}
 }
 
+// Partitions implements the TestFeed interface.
 func (c *sinklessFeed) Partitions() []string { return []string{`sinkless`} }
 
+// Next implements the TestFeed interface.
 func (c *sinklessFeed) Next(
 	t testing.TB,
 ) (topic, partition string, key, value, resolved []byte, ok bool) {
@@ -134,6 +153,7 @@ func (c *sinklessFeed) Next(
 	}
 }
 
+// Err implements the TestFeed interface.
 func (c *sinklessFeed) Err() error {
 	if c.rows != nil {
 		return c.rows.Err()
@@ -141,6 +161,7 @@ func (c *sinklessFeed) Err() error {
 	return nil
 }
 
+// Close implements the TestFeed interface.
 func (c *sinklessFeed) Close(t testing.TB) {
 	t.Helper()
 	if err := c.conn.Close(); err != nil {
@@ -153,7 +174,7 @@ type jobFeed struct {
 	db      *gosql.DB
 	flushCh chan struct{}
 
-	jobID  int64
+	JobID  int64
 	jobErr error
 }
 
@@ -186,7 +207,7 @@ func (f *jobFeed) fetchJobError() error {
 	// above.
 	var errorStr gosql.NullString
 	if err := f.db.QueryRow(
-		`SELECT error FROM [SHOW JOBS] WHERE job_id=$1`, f.jobID,
+		`SELECT error FROM [SHOW JOBS] WHERE job_id=$1`, f.JobID,
 	).Scan(&errorStr); err != nil {
 		return err
 	}
@@ -202,13 +223,16 @@ type tableFeedFactory struct {
 	flushCh chan struct{}
 }
 
-func makeTable(
+// MakeTableFeedFactory returns a TestFeedFactory implementation using the
+// `experimental-sql` sink.
+func MakeTableFeedFactory(
 	s serverutils.TestServerInterface, db *gosql.DB, flushCh chan struct{},
-) *tableFeedFactory {
+) TestFeedFactory {
 	return &tableFeedFactory{s: s, db: db, flushCh: flushCh}
 }
 
-func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}) testfeed {
+// Feed implements the TestFeedFactory interface
+func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}) TestFeed {
 	t.Helper()
 
 	sink, cleanup := sqlutils.PGUrl(t, f.s.ServingAddr(), t.Name(), url.User(security.RootUser))
@@ -219,8 +243,8 @@ func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 		t.Fatal(err)
 	}
 
-	sink.Scheme = sinkSchemeExperimentalSQL
-	c := &tableFeed{
+	sink.Scheme = `experimental-sql`
+	c := &TableFeed{
 		jobFeed: jobFeed{
 			db:      db,
 			flushCh: f.flushCh,
@@ -243,17 +267,19 @@ func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 	}
 	createStmt.SinkURI = tree.NewStrVal(c.sinkURI)
 
-	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.jobID); err != nil {
+	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.JobID); err != nil {
 		t.Fatal(err)
 	}
 	return c
 }
 
+// Server implements the TestFeedFactory interface.
 func (f *tableFeedFactory) Server() serverutils.TestServerInterface {
 	return f.s
 }
 
-type tableFeed struct {
+// TableFeed is a TestFeed implementation using the `experimental-sql` sink.
+type TableFeed struct {
 	jobFeed
 	sinkURI    string
 	urlCleanup func()
@@ -262,19 +288,21 @@ type tableFeed struct {
 	seen map[string]struct{}
 }
 
-func (c *tableFeed) Partitions() []string {
+// Partitions implements the TestFeed interface.
+func (c *TableFeed) Partitions() []string {
 	// The sqlSink hardcodes these.
 	return []string{`0`, `1`, `2`}
 }
 
-func (c *tableFeed) Next(
+// Next implements the TestFeed interface.
+func (c *TableFeed) Next(
 	t testing.TB,
 ) (topic, partition string, key, value, payload []byte, ok bool) {
 	// sinkSink writes all changes to a table with primary key of topic,
 	// partition, message_id. To simulate the semantics of kafka, message_ids
 	// are only comparable within a given (topic, partition). Internally the
 	// message ids are generated as a 64 bit int with a timestamp in bits 1-49
-	// and a hash of the partition in 50-64. This tableFeed.Next function works
+	// and a hash of the partition in 50-64. This TableFeed.Next function works
 	// by repeatedly fetching and deleting all rows in the table. Then it pages
 	// through the results until they are empty and repeats.
 	for {
@@ -333,18 +361,20 @@ func (c *tableFeed) Next(
 	}
 }
 
-func (c *tableFeed) Err() error {
+// Err implements the TestFeed interface.
+func (c *TableFeed) Err() error {
 	return c.jobErr
 }
 
-func (c *tableFeed) Close(t testing.TB) {
+// Close implements the TestFeed interface.
+func (c *TableFeed) Close(t testing.TB) {
 	if c.rows != nil {
 		if err := c.rows.Close(); err != nil {
 			t.Errorf(`could not close rows: %v`, err)
 		}
 	}
-	if _, err := c.db.Exec(`CANCEL JOB $1`, c.jobID); err != nil {
-		log.Infof(context.Background(), `could not cancel feed %d: %v`, c.jobID, err)
+	if _, err := c.db.Exec(`CANCEL JOB $1`, c.JobID); err != nil {
+		log.Infof(context.Background(), `could not cancel feed %d: %v`, c.JobID, err)
 	}
 	if err := c.db.Close(); err != nil {
 		t.Error(err)
@@ -363,13 +393,16 @@ type cloudFeedFactory struct {
 	feedIdx int
 }
 
-func makeCloud(
+// MakeCloudFeedFactory returns a TestFeedFactory implementation using the cloud
+// storage sink.
+func MakeCloudFeedFactory(
 	s serverutils.TestServerInterface, db *gosql.DB, dir string, flushCh chan struct{},
-) *cloudFeedFactory {
+) TestFeedFactory {
 	return &cloudFeedFactory{s: s, db: db, dir: dir, flushCh: flushCh}
 }
 
-func (f *cloudFeedFactory) Feed(t testing.TB, create string, args ...interface{}) testfeed {
+// Feed implements the TestFeedFactory interface
+func (f *cloudFeedFactory) Feed(t testing.TB, create string, args ...interface{}) TestFeed {
 	t.Helper()
 
 	parsed, err := parser.ParseOne(create)
@@ -403,12 +436,13 @@ func (f *cloudFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 		dir:  feedDir,
 		seen: make(map[string]struct{}),
 	}
-	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.jobID); err != nil {
+	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.JobID); err != nil {
 		t.Fatal(err)
 	}
 	return c
 }
 
+// Server implements the TestFeedFactory interface.
 func (f *cloudFeedFactory) Server() serverutils.TestServerInterface {
 	return f.s
 }
@@ -430,11 +464,13 @@ type cloudFeed struct {
 
 const cloudFeedPartition = ``
 
+// Partitions implements the TestFeed interface.
 func (c *cloudFeed) Partitions() []string {
 	// TODO(dan): Try to plumb these through somehow?
 	return []string{cloudFeedPartition}
 }
 
+// Next implements the TestFeed interface.
 func (c *cloudFeed) Next(
 	t testing.TB,
 ) (topic, partition string, key, value, payload []byte, ok bool) {
@@ -513,13 +549,15 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, _ error) error {
 	return nil
 }
 
+// Err implements the TestFeed interface.
 func (c *cloudFeed) Err() error {
 	return c.jobErr
 }
 
+// Close implements the TestFeed interface.
 func (c *cloudFeed) Close(t testing.TB) {
-	if _, err := c.db.Exec(`CANCEL JOB $1`, c.jobID); err != nil {
-		log.Infof(context.Background(), `could not cancel feed %d: %v`, c.jobID, err)
+	if _, err := c.db.Exec(`CANCEL JOB $1`, c.JobID); err != nil {
+		log.Infof(context.Background(), `could not cancel feed %d: %v`, c.JobID, err)
 	}
 	if err := c.db.Close(); err != nil {
 		t.Error(err)
