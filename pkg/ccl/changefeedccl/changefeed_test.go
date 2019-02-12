@@ -1057,102 +1057,64 @@ func TestChangefeedMonitoring(t *testing.T) {
 
 func TestChangefeedRetryableSinkError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip(`#34533`)
 	defer utilccl.TestingEnableEnterprise()()
 
-	var failSink int64
-	failSinkHook := func() error {
-		if atomic.LoadInt64(&failSink) != 0 {
-			return &retryableSinkError{cause: fmt.Errorf("synthetic retryable error")}
-		}
-		return nil
-	}
-	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// This test causes a lot of pgwire connection attempts which, in secure
-		// mode, results in many rounds of bcrypt hashing. This is excruciatingly
-		// slow with the race detector on. Just use insecure mode, which avoids
-		// bcrypt.
-		Insecure: true,
-		Knobs: base.TestingKnobs{
-			DistSQL: &distsqlrun.TestingKnobs{
-				Changefeed: &TestingKnobs{
-					AfterSinkFlush: failSinkHook,
-				},
-			},
-		},
-		UseDatabase: "d",
-	})
-	defer s.Stopper().Stop(context.Background())
-	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
-
-	// Create original data table.
-	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-	sqlDB.Exec(t, `CREATE USER sinkuser`)
-	sqlDB.Exec(t, `GRANT ALL ON DATABASE d TO sinkuser`)
-
-	// Create changefeed into SQL Sink.
-	row := sqlDB.QueryRow(t, fmt.Sprintf(`CREATE CHANGEFEED FOR foo INTO 'experimental-sql://sinkuser@%s/d?sslmode=disable'`, s.ServingAddr()))
-	var jobID string
-	row.Scan(&jobID)
-
-	// Insert initial rows into bank table.
-	for i := 0; i < 50; i++ {
-		sqlDB.Exec(t, `INSERT INTO foo VALUES($1, $2)`, i, fmt.Sprintf("value %d", i))
-	}
-	// Set SQL Sink to return a retryable error.
-	atomic.StoreInt64(&failSink, 1)
-
-	// Insert set of rows while sink if failing.
-	for i := 50; i < 100; i++ {
-		sqlDB.Exec(t, `INSERT INTO foo VALUES($1, $2)`, i, fmt.Sprintf("value %d", i))
-	}
-
-	// Verify that sink is failing requests.
-	registry := s.JobRegistry().(*jobs.Registry)
-	retryCounter := registry.MetricsStruct().Changefeed.(*Metrics).SinkErrorRetries
-	testutils.SucceedsSoon(t, func() error {
-		if retryCounter.Counter.Count() < 3 {
-			return fmt.Errorf("insufficient sink error retries detected")
-		}
-		return nil
-	})
-	atomic.StoreInt64(&failSink, 0)
-	for i := 100; i < 150; i++ {
-		sqlDB.Exec(t, `INSERT INTO foo VALUES($1, $2)`, i, fmt.Sprintf("value %d", i))
-	}
-
-	validator := Validators{
-		NewOrderValidator(`foo`),
-		NewFingerprintValidator(sqlDBRaw, `foo`, `fprint`, []string{`pgwire`}),
-	}
-	rows := sqlDB.Query(t, "SELECT topic, key, value FROM d.sqlsink")
-	for rows.Next() {
-		var topic gosql.NullString
-		var key, value []byte
-		if err := rows.Scan(&topic, &key, &value); err != nil {
-			t.Fatal(err)
-		}
-
-		updated, resolved, err := ParseJSONValueTimestamps(value)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if topic.Valid {
-			validator.NoteRow(`pgwire`, string(key), string(value), updated)
-		} else {
-			if err := validator.NoteResolved(`pgwire`, resolved); err != nil {
-				t.Fatal(err)
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		origAfterSinkFlushHook := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*distsqlrun.TestingKnobs).
+			Changefeed.(*TestingKnobs).AfterSinkFlush
+		var failSink int64
+		failSinkHook := func() error {
+			if atomic.LoadInt64(&failSink) != 0 {
+				return &retryableSinkError{cause: fmt.Errorf("synthetic retryable error")}
 			}
+			return origAfterSinkFlushHook()
 		}
+		f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*distsqlrun.TestingKnobs).
+			Changefeed.(*TestingKnobs).AfterSinkFlush = failSinkHook
 
-		for _, f := range validator.Failures() {
-			t.Error(f)
-		}
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo.Close(t)
+
+		// Verify that the sink is started up.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+
+		// Set SQL Sink to return a retryable error.
+		atomic.StoreInt64(&failSink, 1)
+
+		// Insert 1 row while the sink is failing.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+
+		// Verify that sink is failing requests.
+		registry := f.Server().JobRegistry().(*jobs.Registry)
+		retryCounter := registry.MetricsStruct().Changefeed.(*Metrics).SinkErrorRetries
+		testutils.SucceedsSoon(t, func() error {
+			if retryCounter.Counter.Count() < 3 {
+				return fmt.Errorf("insufficient sink error retries detected")
+			}
+			return nil
+		})
+
+		// Fix the sink and insert another row.
+		atomic.StoreInt64(&failSink, 0)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
+
+		// Check that nothing funky happened.
+		assertPayloads(t, foo, []string{
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+		})
 	}
 
-	sqlDB.Exec(t, `CANCEL JOB $1`, jobID)
+	// Only the enterprise version uses jobs.
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`poller`, pollerTest(enterpriseTest, testFn))
 }
 
 // TestChangefeedDataTTL ensures that changefeeds fail with an error in the case
