@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -304,9 +304,9 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 			requestedResolved = 10
 		}
 		var numResolved, rowsSinceResolved int
-		v := changefeedccl.Validators{
-			changefeedccl.NewOrderValidator(`bank`),
-			changefeedccl.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions),
+		v := cdctest.Validators{
+			cdctest.NewOrderValidator(`bank`),
+			cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions),
 		}
 		if _, err := db.Exec(
 			`CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`,
@@ -319,7 +319,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 			if m == nil {
 				return fmt.Errorf("unexpected end of changefeed")
 			}
-			updated, resolved, err := changefeedccl.ParseJSONValueTimestamps(m.Value)
+			updated, resolved, err := cdctest.ParseJSONValueTimestamps(m.Value)
 			if err != nil {
 				return err
 			}

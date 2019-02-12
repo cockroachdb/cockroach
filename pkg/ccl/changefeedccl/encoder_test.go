@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -270,7 +271,7 @@ func (r *testSchemaRegistry) encodedAvroToNative(b []byte) (interface{}, error) 
 func TestAvroEncoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
 		reg := makeTestSchemaRegistry()
 		defer reg.Close()
@@ -325,7 +326,7 @@ func TestAvroEncoder(t *testing.T) {
 func TestAvroSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		reg := makeTestSchemaRegistry()
 		defer reg.Close()
 
@@ -359,7 +360,7 @@ func TestAvroSchemaChange(t *testing.T) {
 func TestAvroLedger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		reg := makeTestSchemaRegistry()
 		defer reg.Close()
 

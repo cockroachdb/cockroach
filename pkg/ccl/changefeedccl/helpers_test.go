@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,7 +52,7 @@ func waitForSchemaChange(
 	})
 }
 
-func assertPayloads(t testing.TB, f testfeed, expected []string) {
+func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
 
 	var actual []string
@@ -95,7 +96,9 @@ func avroToJSON(t testing.TB, reg *testSchemaRegistry, avroBytes []byte) []byte 
 	return json
 }
 
-func assertPayloadsAvro(t testing.TB, reg *testSchemaRegistry, f testfeed, expected []string) {
+func assertPayloadsAvro(
+	t testing.TB, reg *testSchemaRegistry, f cdctest.TestFeed, expected []string,
+) {
 	t.Helper()
 
 	var actual []string
@@ -119,7 +122,7 @@ func assertPayloadsAvro(t testing.TB, reg *testSchemaRegistry, f testfeed, expec
 	}
 }
 
-func skipResolvedTimestamps(t *testing.T, f testfeed) {
+func skipResolvedTimestamps(t *testing.T, f cdctest.TestFeed) {
 	for {
 		table, _, key, value, _, ok := f.Next(t)
 		if !ok {
@@ -144,7 +147,7 @@ func parseTimeToHLC(t testing.TB, s string) hlc.Timestamp {
 	return ts
 }
 
-func expectResolvedTimestamp(t testing.TB, f testfeed) hlc.Timestamp {
+func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
 	t.Helper()
 	topic, _, key, value, resolved, _ := f.Next(t)
 	if key != nil || value != nil {
@@ -164,7 +167,9 @@ func expectResolvedTimestamp(t testing.TB, f testfeed) hlc.Timestamp {
 	return parseTimeToHLC(t, valueRaw.Resolved)
 }
 
-func expectResolvedTimestampAvro(t testing.TB, reg *testSchemaRegistry, f testfeed) hlc.Timestamp {
+func expectResolvedTimestampAvro(
+	t testing.TB, reg *testSchemaRegistry, f cdctest.TestFeed,
+) hlc.Timestamp {
 	t.Helper()
 	topic, _, keyBytes, valueBytes, resolvedBytes, _ := f.Next(t)
 	if keyBytes != nil || valueBytes != nil {
@@ -182,7 +187,7 @@ func expectResolvedTimestampAvro(t testing.TB, reg *testSchemaRegistry, f testfe
 	return parseTimeToHLC(t, resolved.(map[string]interface{})[`string`].(string))
 }
 
-func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*testing.T) {
+func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
 	return func(t *testing.T) {
 		ctx := context.Background()
 		knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{}}}
@@ -205,12 +210,12 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*tes
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 
-		f := makeSinkless(s)
+		f := cdctest.MakeSinklessFeedFactory(s)
 		testFn(t, db, f)
 	}
 }
 
-func enterpriseTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*testing.T) {
+func enterpriseTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
 	return func(t *testing.T) {
 		ctx := context.Background()
 
@@ -238,18 +243,18 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*t
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.push.enabled = false`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
-		f := makeTable(s, db, flushCh)
+		f := cdctest.MakeTableFeedFactory(s, db, flushCh)
 
 		testFn(t, db, f)
 	}
 }
 
 func pollerTest(
-	metaTestFn func(func(*testing.T, *gosql.DB, testfeedFactory)) func(*testing.T),
-	testFn func(*testing.T, *gosql.DB, testfeedFactory),
+	metaTestFn func(func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T),
+	testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory),
 ) func(*testing.T) {
 	return func(t *testing.T) {
-		metaTestFn(func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		metaTestFn(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.push.enabled = false`)
 			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
