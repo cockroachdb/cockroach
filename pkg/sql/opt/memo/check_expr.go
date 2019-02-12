@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -191,6 +192,11 @@ func (m *Memo) checkExpr(e opt.Expr) {
 	case *AggDistinctExpr:
 		if t.Input.Op() == opt.AggFilterOp {
 			panic("AggFilter should always be on top of AggDistinct")
+		}
+
+	case *ConstExpr:
+		if t.Value == tree.DNull {
+			panic("NULL values should always use NullExpr, not ConstExpr")
 		}
 
 	default:
