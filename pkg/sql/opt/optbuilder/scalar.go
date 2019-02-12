@@ -308,7 +308,7 @@ func (b *Builder) buildScalar(
 			if err != nil {
 				panic(builderError{err})
 			}
-			out = b.factory.ConstructConstVal(d)
+			out = b.factory.ConstructConstVal(d, t.ResolvedType())
 		} else {
 			out = b.factory.ConstructPlaceholder(t)
 		}
@@ -376,7 +376,7 @@ func (b *Builder) buildScalar(
 	// tree.Datum case needs to occur after *tree.Placeholder which implements
 	// Datum.
 	case tree.Datum:
-		out = b.factory.ConstructConstVal(t)
+		out = b.factory.ConstructConstVal(t, t.ResolvedType())
 
 	default:
 		if b.AllowUnsupportedExpr {

@@ -140,11 +140,12 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			inSnap := IncomingSnapshot{
-				SnapUUID:   snapUUID,
-				Batches:    batches,
-				LogEntries: logEntries,
-				State:      &header.State,
-				snapType:   snapTypeRaft,
+				UsesUnreplicatedTruncatedState: header.UnreplicatedTruncatedState,
+				SnapUUID:                       snapUUID,
+				Batches:                        batches,
+				LogEntries:                     logEntries,
+				State:                          &header.State,
+				snapType:                       snapTypeRaft,
 			}
 			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
 				inSnap.snapType = snapTypePreemptive

@@ -225,15 +225,15 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps, PlanNodeDetai
 
   renderClassName(warn: boolean) {
     const node = this.props.node;
-    if (node.attrs && node.attrs.length > 0 && this.state.expanded) {
-      if (warn) {
-        return "nodeDetails warn expanded";
-      }
-      return "nodeDetails expanded";
-    } else if (warn) {
-      return "nodeDetails warn";
+    const hasAttributes = node.attrs && node.attrs.length > 0;
+    const warnClassName = (warn && " warn" || "");
+    if (!hasAttributes) {
+      return "nodeDetails" + warnClassName;
     }
-    return "nodeDetails";
+    if (this.state.expanded) {
+      return "nodeDetails hasAttributes expanded" + warnClassName;
+    }
+    return "nodeDetails hasAttributes" + warnClassName;
   }
 
   render() {

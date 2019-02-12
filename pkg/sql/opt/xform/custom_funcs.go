@@ -876,8 +876,9 @@ func (c *CustomFuncs) fixedColsForZigzag(
 		if !ok {
 			break
 		}
-		vals = append(vals, c.e.f.ConstructConstVal(val))
-		types = append(types, index.Column(i).DatumType())
+		dt := index.Column(i).DatumType()
+		vals = append(vals, c.e.f.ConstructConstVal(val, dt))
+		types = append(types, dt)
 		fixedCols = append(fixedCols, colID)
 	}
 	return fixedCols, vals, types
@@ -1171,9 +1172,9 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			leftVal := constraint.Spans.Get(0).StartKey().Value(i)
 			rightVal := constraint2.Spans.Get(0).StartKey().Value(i)
 
-			leftVals[i] = c.e.f.ConstructConstVal(leftVal)
+			leftVals[i] = c.e.f.ConstructConstVal(leftVal, leftVal.ResolvedType())
 			leftTypes[i] = leftVal.ResolvedType()
-			rightVals[i] = c.e.f.ConstructConstVal(rightVal)
+			rightVals[i] = c.e.f.ConstructConstVal(rightVal, rightVal.ResolvedType())
 			rightTypes[i] = rightVal.ResolvedType()
 			zigzagJoin.LeftFixedCols[i] = constraint.Columns.Get(i).ID()
 			zigzagJoin.RightFixedCols[i] = constraint.Columns.Get(i).ID()

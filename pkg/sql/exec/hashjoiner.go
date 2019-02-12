@@ -928,6 +928,19 @@ func NewEqHashJoinerOp(
 	case sqlbase.JoinType_FULL_OUTER:
 		rightOuter = true
 		leftOuter = true
+	case sqlbase.JoinType_LEFT_SEMI:
+		// In a semi-join, we don't need to store anything but a single row per
+		// build row, since all we care about is whether a row on the left matches
+		// any row on the right.
+		// Note that this is *not* the case if we have an ON condition, since we'll
+		// also need to make sure that a row on the left passes the ON condition
+		// with the row on the right to emit it. However, we don't support ON
+		// conditions just yet. When we do, we'll have a separate case for that.
+		buildRightSide = true
+		buildDistinct = true
+		if len(rightOutCols) != 0 {
+			return nil, errors.Errorf("semi-join can't have right-side output columns")
+		}
 	default:
 		return nil, errors.Errorf("hash join of type %s not supported", joinType)
 	}

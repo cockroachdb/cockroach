@@ -316,6 +316,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
+		defer diskMonitor.Stop(ctx)
 
 		defer func() {
 			if err := rc.UnsafeReset(ctx); err != nil {
@@ -411,7 +412,6 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	const numTestRuns = 10
 	const numRows = 10
 	const numCols = 2
-	rows := make([]sqlbase.EncDatumRow, numRows)
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 	newOrdering := sqlbase.ColumnOrdering{{ColIdx: 1, Direction: encoding.Ascending}}
 
@@ -427,6 +427,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	// index).
 	t.Run("SpillingHalfway", func(t *testing.T) {
 		for i := 0; i < numTestRuns; i++ {
+			rows := make([]sqlbase.EncDatumRow, numRows)
 			types := sqlbase.RandSortingColumnTypes(rng, numCols)
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
@@ -482,6 +483,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	// to be returned. Then, it spills to disk and does the same check again.
 	t.Run("TestGetRow", func(t *testing.T) {
 		for i := 0; i < numTestRuns; i++ {
+			rows := make([]sqlbase.EncDatumRow, numRows)
 			sortedRows := indexedRows{rows: make([]IndexedRow, numRows)}
 			types := sqlbase.RandSortingColumnTypes(rng, numCols)
 			for i := 0; i < numRows; i++ {
@@ -489,7 +491,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 				sortedRows.rows[i] = IndexedRow{Idx: i, Row: rows[i]}
 			}
 
-			sorter := sorter{evalCtx: &evalCtx, rows: sortedRows, ordering: ordering}
+			sorter := rowsSorter{evalCtx: &evalCtx, rows: sortedRows, ordering: ordering}
 			sort.Sort(&sorter)
 			if sorter.err != nil {
 				t.Fatal(sorter.err)
@@ -559,6 +561,86 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 		}
 	})
 
+	// TestGetRowFromDiskWithLimitedMemory forces the container to spill to disk,
+	// adds all rows to it, sorts them, and checks that both the index and the
+	// row are what we expect by GetRow() to be returned. The goal is to test the
+	// behavior of capping the cache size and reusing the memory of the first
+	// rows in the cache, so we use the memory budget that accommodates only
+	// about half of all rows in the cache.
+	t.Run("TestGetRowWithLimitedMemory", func(t *testing.T) {
+		for i := 0; i < numTestRuns; i++ {
+			budget := int64(10240)
+			memoryUsage := int64(0)
+			rows := make([]sqlbase.EncDatumRow, 0, numRows)
+			sortedRows := indexedRows{rows: make([]IndexedRow, 0, numRows)}
+			types := sqlbase.RandSortingColumnTypes(rng, numCols)
+			for memoryUsage < 2*budget {
+				row := sqlbase.RandEncDatumRowOfTypes(rng, types)
+				memoryUsage += int64(row.Size())
+				rows = append(rows, row)
+				sortedRows.rows = append(sortedRows.rows, IndexedRow{Idx: len(sortedRows.rows), Row: row})
+			}
+
+			memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(budget))
+			defer memoryMonitor.Stop(ctx)
+			diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+			defer diskMonitor.Stop(ctx)
+
+			sorter := rowsSorter{evalCtx: &evalCtx, rows: sortedRows, ordering: ordering}
+			sort.Sort(&sorter)
+			if sorter.err != nil {
+				t.Fatal(sorter.err)
+			}
+
+			func() {
+				rc := MakeDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, &memoryMonitor, &diskMonitor, 0 /* rowCapacity */)
+				defer rc.Close(ctx)
+				if err := rc.spillToDisk(ctx); err != nil {
+					t.Fatal(err)
+				}
+				for _, row := range rows {
+					if err := rc.AddRow(ctx, row); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if !rc.Spilled() {
+					t.Fatal("unexpectedly using memory")
+				}
+				rc.Sort(ctx)
+
+				// Check that GetRow returns the row we expect at each position.
+				for i := 0; i < len(rows); i++ {
+					readRow, err := rc.GetRow(ctx, i)
+					if err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					expectedRow := sortedRows.rows[i]
+					readOrderingDatum, err := readRow.GetDatum(ordering[0].ColIdx)
+					if err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					if readOrderingDatum.Compare(&evalCtx, expectedRow.Row[ordering[0].ColIdx].Datum) != 0 {
+						// We're skipping comparison if both rows are equal on the ordering
+						// column since in this case the order of indexed rows after
+						// sorting is nondeterministic.
+						if readRow.GetIdx() != expectedRow.GetIdx() {
+							t.Fatalf("read row has different idx that what we expect")
+						}
+						for col, expectedDatum := range expectedRow.Row {
+							readDatum, err := readRow.GetDatum(col)
+							if err != nil {
+								t.Fatalf("unexpected error: %v", err)
+							}
+							if cmp := readDatum.Compare(&evalCtx, expectedDatum.Datum); cmp != 0 {
+								t.Fatalf("read row is not equal to expected one")
+							}
+						}
+					}
+				}
+			}()
+		}
+	})
+
 	// ReorderingInMemory initializes a DiskBackedIndexedRowContainer with one
 	// ordering, adds all rows to it, sorts it and makes sure that the rows are
 	// sorted as expected. Then, it reorders the container to a different
@@ -566,6 +648,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	// Only in-memory containers should be used.
 	t.Run("ReorderingInMemory", func(t *testing.T) {
 		for i := 0; i < numTestRuns; i++ {
+			rows := make([]sqlbase.EncDatumRow, numRows)
 			types := sqlbase.RandSortingColumnTypes(rng, numCols)
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
@@ -606,6 +689,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	// container is forced to spill to disk right after initialization.
 	t.Run("ReorderingOnDisk", func(t *testing.T) {
 		for i := 0; i < numTestRuns; i++ {
+			rows := make([]sqlbase.EncDatumRow, numRows)
 			types := sqlbase.RandSortingColumnTypes(rng, numCols)
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
@@ -659,19 +743,19 @@ func (ir indexedRows) Len() int {
 // TODO(yuzefovich): this is a duplicate of partitionSorter from windower.go.
 // There are possibly couple of other duplicates as well in other files, so we
 // should refactor it and probably extract the code into a new package.
-type sorter struct {
+type rowsSorter struct {
 	evalCtx  *tree.EvalContext
 	rows     indexedRows
 	ordering sqlbase.ColumnOrdering
 	err      error
 }
 
-func (n *sorter) Len() int { return n.rows.Len() }
+func (n *rowsSorter) Len() int { return n.rows.Len() }
 
-func (n *sorter) Swap(i, j int) {
+func (n *rowsSorter) Swap(i, j int) {
 	n.rows.rows[i], n.rows.rows[j] = n.rows.rows[j], n.rows.rows[i]
 }
-func (n *sorter) Less(i, j int) bool {
+func (n *rowsSorter) Less(i, j int) bool {
 	if n.err != nil {
 		// An error occurred in previous calls to Less(). We want to be done with
 		// sorting and to propagate that error to the caller of Sort().
@@ -685,13 +769,7 @@ func (n *sorter) Less(i, j int) bool {
 	return cmp < 0
 }
 
-// sorter implements the tree.PeerGroupChecker interface.
-func (n *sorter) InSameGroup(i, j int) (bool, error) {
-	cmp, err := n.Compare(i, j)
-	return cmp == 0, err
-}
-
-func (n *sorter) Compare(i, j int) (int, error) {
+func (n *rowsSorter) Compare(i, j int) (int, error) {
 	ra, rb := n.rows.rows[i], n.rows.rows[j]
 	for _, o := range n.ordering {
 		da, err := ra.GetDatum(o.ColIdx)

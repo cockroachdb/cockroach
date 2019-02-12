@@ -2250,7 +2250,16 @@ func (r *Replica) applyRaftCommand(
 			oldRaftAppliedIndex, raftAppliedIndex)
 	}
 
-	batch := r.store.Engine().NewWriteOnlyBatch()
+	haveTruncatedState := rResult.State != nil && rResult.State.TruncatedState != nil
+	var batch engine.Batch
+	if !haveTruncatedState {
+		batch = r.store.Engine().NewWriteOnlyBatch()
+	} else {
+		// When we update the truncated state, we may need to read the batch
+		// and can't use a WriteOnlyBatch. This is fine since log truncations
+		// are tiny batches.
+		batch = r.store.Engine().NewBatch()
+	}
 	defer batch.Close()
 
 	if writeBatch != nil {
@@ -2260,8 +2269,7 @@ func (r *Replica) applyRaftCommand(
 	}
 
 	// The only remaining use of the batch is for range-local keys which we know
-	// have not been previously written within this batch. Currently the only
-	// remaining writes are the raft applied index and the updated MVCC stats.
+	// have not been previously written within this batch.
 	writer := batch.Distinct()
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats delta
@@ -2313,30 +2321,27 @@ func (r *Replica) applyRaftCommand(
 		}
 	}
 
-	if rResult.State != nil && rResult.State.TruncatedState != nil {
-		newTruncatedState := rResult.State.TruncatedState
-
-		// Truncate the Raft log from the entry after the previous
-		// truncation index to the new truncation index. This is performed
-		// atomically with the raft command application so that the
-		// TruncatedState index is always consistent with the state of the
-		// Raft log itself. We can use the distinct writer because we know
-		// all writes will be to distinct keys.
-		//
-		// Intentionally don't use range deletion tombstones (ClearRange())
-		// due to performance concerns connected to having many range
-		// deletion tombstones. There is a chance that ClearRange will
-		// perform well here because the tombstones could be "collapsed",
-		// but it is hardly worth the risk at this point.
-		prefixBuf := &r.raftMu.stateLoader.RangeIDPrefixBuf
-		for idx := oldTruncatedState.Index + 1; idx <= newTruncatedState.Index; idx++ {
-			// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
-			// avoid allocating when constructing Raft log keys (16 bytes).
-			unsafeKey := prefixBuf.RaftLogKey(idx)
-			if err := writer.Clear(engine.MakeMVCCMetadataKey(unsafeKey)); err != nil {
-				err = errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
-				return enginepb.MVCCStats{}, err
-			}
+	if haveTruncatedState {
+		apply, err := handleTruncatedStateBelowRaft(ctx, oldTruncatedState, rResult.State.TruncatedState, r.raftMu.stateLoader, writer)
+		if err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		if !apply {
+			// TODO(tbg): As written, there is low confidence that nil'ing out
+			// the truncated state has the desired effect as our caller actually
+			// applies the side effects. It may have taken a copy and won't
+			// observe what we did.
+			//
+			// It's very difficult to test this functionality because of how
+			// difficult it is to test (*Replica).processRaftCommand (and this
+			// method). Instead of adding yet another terrible that that bends
+			// reality to its will in some clunky way, assert that we're never
+			// hitting this branch, which is supposed to be true until we stop
+			// sending the raft log in snapshots (#34287).
+			// Morally we would want to drop the command in checkForcedErrLocked,
+			// but that may be difficult to achieve.
+			log.Fatal(ctx, log.Safe(fmt.Sprintf("TruncatedState regressed:\nold: %+v\nnew: %+v", oldTruncatedState, rResult.State.TruncatedState)))
+			rResult.State.TruncatedState = nil
 		}
 	}
 
@@ -2378,4 +2383,80 @@ func (r *Replica) applyRaftCommand(
 	elapsed := timeutil.Since(start)
 	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
 	return deltaStats, nil
+}
+
+func handleTruncatedStateBelowRaft(
+	ctx context.Context,
+	oldTruncatedState, newTruncatedState *roachpb.RaftTruncatedState,
+	loader stateloader.StateLoader,
+	distinctEng engine.ReadWriter,
+) (_apply bool, _ error) {
+	// If this is a log truncation, load the resulting unreplicated or legacy
+	// replicated truncated state (in that order). If the migration is happening
+	// in this command, the result will be an empty message. In steady state
+	// after the migration, it's the unreplicated truncated state not taking
+	// into account the current truncation (since the key is unreplicated).
+	// Either way, we'll update it below.
+	//
+	// See VersionUnreplicatedRaftTruncatedState for details.
+	truncStatePostApply, truncStateIsLegacy, err := loader.LoadRaftTruncatedState(ctx, distinctEng)
+	if err != nil {
+		return false, errors.Wrap(err, "loading truncated state")
+	}
+
+	// Truncate the Raft log from the entry after the previous
+	// truncation index to the new truncation index. This is performed
+	// atomically with the raft command application so that the
+	// TruncatedState index is always consistent with the state of the
+	// Raft log itself. We can use the distinct writer because we know
+	// all writes will be to distinct keys.
+	//
+	// Intentionally don't use range deletion tombstones (ClearRange())
+	// due to performance concerns connected to having many range
+	// deletion tombstones. There is a chance that ClearRange will
+	// perform well here because the tombstones could be "collapsed",
+	// but it is hardly worth the risk at this point.
+	prefixBuf := &loader.RangeIDPrefixBuf
+	for idx := oldTruncatedState.Index + 1; idx <= newTruncatedState.Index; idx++ {
+		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
+		// avoid allocating when constructing Raft log keys (16 bytes).
+		unsafeKey := prefixBuf.RaftLogKey(idx)
+		if err := distinctEng.Clear(engine.MakeMVCCMetadataKey(unsafeKey)); err != nil {
+			return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
+		}
+	}
+
+	if !truncStateIsLegacy {
+		if truncStatePostApply.Index < newTruncatedState.Index {
+			// There are two cases here (though handled just the same). In the
+			// first case, the Raft command has just deleted the legacy
+			// replicated truncated state key as part of the migration (so
+			// truncStateIsLegacy is now false for the first time and
+			// truncStatePostApply is zero) and we need to atomically write the
+			// new, unreplicated, key. Or we've already migrated earlier, in
+			// which case truncStatePostApply equals the current value of the
+			// new key (which wasn't touched by the batch), and we need to
+			// overwrite it if this truncation "moves it forward".
+
+			// NB: before the first log truncation evaluated under the
+			// cluster version which activates this code (see anchor below) this
+			// block is never reached as truncStatePostApply will equal newTruncatedState.
+			_ = cluster.VersionUnreplicatedRaftTruncatedState
+
+			if err := engine.MVCCPutProto(
+				ctx, distinctEng, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
+				hlc.Timestamp{}, nil /* txn */, newTruncatedState,
+			); err != nil {
+				return false, errors.Wrap(err, "unable to migrate RaftTruncatedState")
+			}
+			// Have migrated and this new truncated state is moving us forward.
+			// Tell caller that we applied it and that so should they.
+			return true, nil
+		}
+		// Have migrated, but this truncated state moves the existing one
+		// backwards, so instruct caller to not update in-memory state.
+		return false, nil
+	}
+	// Haven't migrated yet, don't ever discard the update.
+	return true, nil
 }

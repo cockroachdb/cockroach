@@ -118,6 +118,17 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:     892800390935990883,
 		populatedSum: 16231745342114354146,
 	},
+	// This is used downstream of Raft only to write it into unreplicated keyspace
+	// as part of VersionUnreplicatedRaftTruncatedState.
+	// However, it has been sent through Raft for a long time, as part of
+	// ReplicatedEvalResult.
+	reflect.TypeOf(&roachpb.RaftTruncatedState{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return roachpb.NewPopulatedRaftTruncatedState(r, false)
+		},
+		emptySum:     5531676819244041709,
+		populatedSum: 14781226418259198098,
+	},
 }
 
 func TestBelowRaftProtos(t *testing.T) {
