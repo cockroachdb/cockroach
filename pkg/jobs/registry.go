@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -49,6 +51,10 @@ var (
 		"jobs.registry.leniency",
 		"the amount of time to defer any attempts to reschedule a job",
 		defaultLeniencySetting)
+	gcSetting = settings.RegisterDurationSetting(
+		"jobs.retention_time",
+		"the amount of time to retain records for completed jobs before",
+		time.Hour*24*14)
 )
 
 // NodeLiveness is the subset of storage.NodeLiveness's interface needed
@@ -271,6 +277,10 @@ var DefaultCancelInterval = base.DefaultHeartbeatInterval
 // Registry.Start has been called will not have any effect.
 var DefaultAdoptInterval = 30 * time.Second
 
+// gcInterval is how often we check for and delete job records older than the
+// retention limit.
+const gcInterval = 1 * time.Hour
+
 // Start polls the current node for liveness failures and cancels all registered
 // jobs if it observes a failure.
 func (r *Registry) Start(
@@ -288,6 +298,20 @@ func (r *Registry) Start(
 			select {
 			case <-time.After(cancelInterval):
 				r.maybeCancelJobs(ctx, nl)
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
+
+	stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		for {
+			select {
+			case <-time.After(gcInterval):
+				old := timeutil.Now().Add(-1 * gcSetting.Get(&r.settings.SV))
+				if err := r.cleanupOldJobs(ctx, old); err != nil {
+					log.Warningf(ctx, "error cleaning up old job records: %v", err)
+				}
 			case <-stopper.ShouldStop():
 				return
 			}
@@ -338,6 +362,40 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl NodeLiveness) {
 		r.cancelAll(ctx)
 	default:
 	}
+}
+
+func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) error {
+	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2, $3) AND created < $4 ORDER BY created LIMIT 1000`
+	rows, _ /* cols */, err := r.ex.Query(
+		ctx, "gc-jobs", nil /* txn */, stmt, StatusFailed, StatusSucceeded, StatusCanceled, olderThan,
+	)
+	if err != nil {
+		return err
+	}
+
+	toDelete := tree.NewDArray(types.Int)
+	toDelete.Array = make(tree.Datums, 0, len(rows))
+	oldMicros := timeutil.ToUnixMicros(olderThan)
+	for _, row := range rows {
+		payload, err := UnmarshalPayload(row[1])
+		if err != nil {
+			return err
+		}
+		if payload.FinishedMicros < oldMicros {
+			toDelete.Array = append(toDelete.Array, row[0])
+		}
+	}
+	if len(toDelete.Array) > 0 {
+
+		log.Infof(ctx, "cleaning up %d expired job records", len(toDelete.Array))
+		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
+		if _ /* cols */, err := r.ex.Exec(
+			ctx, "gc-jobs", nil /* txn */, stmt, toDelete,
+		); err != nil {
+			return errors.Wrap(err, "deleting old jobs")
+		}
+	}
+	return nil
 }
 
 // getJobFn attempts to get a resumer from the given job id. If the job id
