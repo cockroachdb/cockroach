@@ -53,8 +53,6 @@ func interestingGoroutines() map[int64]string {
 		}
 
 		if stack == "" ||
-			strings.Contains(stack, "github.com/cockroachdb/cockroach/pkg/util/log.init") ||
-			strings.Contains(stack, "github.com/cockroachdb/cockroach/pkg/util/log.NewSecondaryLogger") ||
 			// Ignore HTTP keep alives
 			strings.Contains(stack, ").readLoop(") ||
 			strings.Contains(stack, ").writeLoop(") ||

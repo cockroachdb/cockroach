@@ -20,20 +20,26 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 func TestSecondaryLog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(&logging.logDir, "woo", false, false)
+	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false)
 
 	// Interleave some messages.
 	Infof(context.Background(), "test1")
-	ctx := logtags.AddTag(context.Background(), "hello", "world")
+	ctx = logtags.AddTag(ctx, "hello", "world")
 	l.Logf(ctx, "story time")
 	Infof(context.Background(), "test2")
 
