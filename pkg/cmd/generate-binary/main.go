@@ -91,8 +91,14 @@ func main() {
 		if err != nil {
 			log.Fatalf("binary: %s: %v", sql, err)
 		}
+		sql = fmt.Sprintf("SELECT pg_typeof(%s)::int", expr)
+		id, err := pgconnect.Connect(ctx, sql, *postgresAddr, *postgresUser, pgwirebase.FormatText)
+		if err != nil {
+			log.Fatalf("oid: %s: %v", sql, err)
+		}
 		data = append(data, entry{
 			SQL:    expr,
+			Oid:    string(id),
 			Text:   text,
 			Binary: binary,
 		})
@@ -109,6 +115,7 @@ func main() {
 
 type entry struct {
 	SQL    string
+	Oid    string
 	Text   []byte
 	Binary []byte
 }
@@ -131,6 +138,7 @@ const outputJSON = `[
 	{{- if gt $idx 0 }},{{end}}
 	{
 		"SQL": {{.SQL | json}},
+		"Oid": {{.Oid}},
 		"Text": {{printf "%q" .Text}},
 		"TextAsBinary": {{.Text | binary}},
 		"Binary": {{.Binary | binary}}
@@ -214,6 +222,55 @@ var inputs = map[string][]string{
 		fmt.Sprint(math.SmallestNonzeroFloat32),
 		fmt.Sprint(math.MaxFloat64),
 		fmt.Sprint(math.SmallestNonzeroFloat64),
+	},
+
+	"'%s'::float4": {
+		// The Go binary encoding of NaN differs from Postgres by a 1 at the
+		// end. Go also uses Inf instead of Infinity (used by Postgres) for text
+		// float encodings. These deviations are still correct, and it's not worth
+		// special casing them into the code, so they are commented out here.
+		//"NaN",
+		//"Inf",
+		//"-Inf",
+		"-000.000",
+		"-0000021234.2",
+		"-1.2",
+		".0",
+		".1",
+		".1234",
+		".12345",
+		"3.40282e+38",
+		"1.4013e-45",
+	},
+
+	"'%s'::int2": {
+		"0",
+		"1",
+		"-1",
+		"-32768",
+		"32767",
+	},
+
+	"'%s'::int4": {
+		"0",
+		"1",
+		"-1",
+		"-32768",
+		"32767",
+		"-2147483648",
+		"2147483647",
+	},
+
+	"'%s'::int8": {
+		"0",
+		"1",
+		"-1",
+		"-32768",
+		"32767",
+		"-2147483648",
+		"2147483647",
+		"-9223372036854775808",
+		"9223372036854775807",
 	},
 
 	"'%s'::timestamp": {
