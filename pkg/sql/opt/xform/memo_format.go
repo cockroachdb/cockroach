@@ -247,7 +247,7 @@ func (mf *memoFormatter) formatBest(best memo.RelExpr, required *physical.Requir
 		fmt.Fprintf(mf.buf, " G%d", mf.group(best.Child(i))+1)
 
 		// Print properties required of the child if they are interesting.
-		childReq := mf.o.buildChildPhysicalProps(best, i, required)
+		childReq := BuildChildPhysicalProps(mf.o.mem, best, i, required)
 		if childReq.Defined() {
 			fmt.Fprintf(mf.buf, "=\"%s\"", childReq)
 		}
