@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
+	"github.com/cockroachdb/cockroach/pkg/storage/copysets"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
@@ -160,6 +161,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
 		ClosedTimestamp:             container.NoopContainer(),
+		CopysetsMaintainer:          &copysets.Maintainer{},
 	}
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
@@ -595,15 +597,16 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	Settings     *cluster.Settings
-	Clock        *hlc.Clock
-	DB           *client.DB
-	Gossip       *gossip.Gossip
-	NodeLiveness *NodeLiveness
-	StorePool    *StorePool
-	Transport    *RaftTransport
-	NodeDialer   *nodedialer.Dialer
-	RPCContext   *rpc.Context
+	Settings           *cluster.Settings
+	Clock              *hlc.Clock
+	DB                 *client.DB
+	Gossip             *gossip.Gossip
+	NodeLiveness       *NodeLiveness
+	StorePool          *StorePool
+	Transport          *RaftTransport
+	NodeDialer         *nodedialer.Dialer
+	RPCContext         *rpc.Context
+	CopysetsMaintainer *copysets.Maintainer
 
 	ClosedTimestamp *container.Container
 
@@ -771,11 +774,19 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
 	}
 	if cfg.RPCContext != nil {
-		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
+		s.allocator = MakeAllocator(
+			cfg.StorePool,
+			cfg.RPCContext.RemoteClocks.Latency,
+			cfg.CopysetsMaintainer,
+		)
 	} else {
-		s.allocator = MakeAllocator(cfg.StorePool, func(string) (time.Duration, bool) {
-			return 0, false
-		})
+		s.allocator = MakeAllocator(
+			cfg.StorePool,
+			func(string) (time.Duration, bool) {
+				return 0, false
+			},
+			cfg.CopysetsMaintainer,
+		)
 	}
 	s.replRankings = newReplicaRankings()
 

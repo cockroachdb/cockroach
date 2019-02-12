@@ -19,16 +19,30 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"reflect"
 	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/copysets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
-	"github.com/kr/pretty"
+	"github.com/stretchr/testify/assert"
 )
+
+const (
+	// testCopysetsIdleScoreDifferenceThreshold is the
+	// copysetsIdleScoreDifferenceThreshold used in tests.
+	testCopysetsIdleScoreDifferenceThreshold = 0.15
+)
+
+func slToMap(storeList []roachpb.StoreID) map[roachpb.StoreID]bool {
+	stores := make(map[roachpb.StoreID]bool)
+	for _, storeID := range storeList {
+		stores[storeID] = true
+	}
+	return stores
+}
 
 type storeScore struct {
 	storeID roachpb.StoreID
@@ -108,6 +122,7 @@ func TestCandidateSelection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type scoreTuple struct {
+		copyset    int
 		diversity  int
 		rangeCount int
 	}
@@ -118,6 +133,7 @@ func TestCandidateSelection(t *testing.T) {
 				store: roachpb.StoreDescriptor{
 					StoreID: roachpb.StoreID(i + idShift),
 				},
+				copysetScore:   float64(score.copyset),
 				diversityScore: float64(score.diversity),
 				rangeCount:     score.rangeCount,
 				valid:          true,
@@ -133,7 +149,14 @@ func TestCandidateSelection(t *testing.T) {
 			if i != 0 {
 				buffer.WriteRune(',')
 			}
-			buffer.WriteString(fmt.Sprintf("%d:%d", int(c.diversityScore), c.rangeCount))
+			buffer.WriteString(
+				fmt.Sprintf(
+					"%d-%d-%d",
+					int(c.copysetScore),
+					int(c.diversityScore),
+					c.rangeCount,
+				),
+			)
 		}
 		return buffer.String()
 	}
@@ -146,53 +169,74 @@ func TestCandidateSelection(t *testing.T) {
 		bad        scoreTuple
 	}{
 		{
-			candidates: []scoreTuple{{0, 0}},
-			best:       []scoreTuple{{0, 0}},
-			worst:      []scoreTuple{{0, 0}},
-			good:       scoreTuple{0, 0},
-			bad:        scoreTuple{0, 0},
+			candidates: []scoreTuple{{0, 0, 0}},
+			best:       []scoreTuple{{0, 0, 0}},
+			worst:      []scoreTuple{{0, 0, 0}},
+			good:       scoreTuple{0, 0, 0},
+			bad:        scoreTuple{0, 0, 0},
 		},
 		{
-			candidates: []scoreTuple{{0, 0}, {0, 1}},
-			best:       []scoreTuple{{0, 0}, {0, 1}},
-			worst:      []scoreTuple{{0, 0}, {0, 1}},
-			good:       scoreTuple{0, 0},
-			bad:        scoreTuple{0, 1},
+			candidates: []scoreTuple{{0, 0, 0}, {0, 0, 1}},
+			best:       []scoreTuple{{0, 0, 0}, {0, 0, 1}},
+			worst:      []scoreTuple{{0, 0, 0}, {0, 0, 1}},
+			good:       scoreTuple{0, 0, 0},
+			bad:        scoreTuple{0, 0, 1},
 		},
 		{
-			candidates: []scoreTuple{{0, 0}, {0, 1}, {0, 2}},
-			best:       []scoreTuple{{0, 0}, {0, 1}, {0, 2}},
-			worst:      []scoreTuple{{0, 0}, {0, 1}, {0, 2}},
-			good:       scoreTuple{0, 1},
-			bad:        scoreTuple{0, 2},
+			candidates: []scoreTuple{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}},
+			best:       []scoreTuple{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}},
+			worst:      []scoreTuple{{0, 0, 0}, {0, 0, 1}, {0, 0, 2}},
+			good:       scoreTuple{0, 0, 1},
+			bad:        scoreTuple{0, 0, 2},
 		},
 		{
-			candidates: []scoreTuple{{1, 0}, {0, 1}},
-			best:       []scoreTuple{{1, 0}},
-			worst:      []scoreTuple{{0, 1}},
-			good:       scoreTuple{1, 0},
-			bad:        scoreTuple{0, 1},
+			candidates: []scoreTuple{{0, 1, 0}, {0, 0, 1}},
+			best:       []scoreTuple{{0, 1, 0}},
+			worst:      []scoreTuple{{0, 0, 1}},
+			good:       scoreTuple{0, 1, 0},
+			bad:        scoreTuple{0, 0, 1},
 		},
 		{
-			candidates: []scoreTuple{{1, 0}, {0, 1}, {0, 2}},
-			best:       []scoreTuple{{1, 0}},
-			worst:      []scoreTuple{{0, 1}, {0, 2}},
-			good:       scoreTuple{1, 0},
-			bad:        scoreTuple{0, 2},
+			candidates: []scoreTuple{{0, 1, 0}, {0, 0, 1}, {0, 0, 2}},
+			best:       []scoreTuple{{0, 1, 0}},
+			worst:      []scoreTuple{{0, 0, 1}, {0, 0, 2}},
+			good:       scoreTuple{0, 1, 0},
+			bad:        scoreTuple{0, 0, 2},
 		},
 		{
-			candidates: []scoreTuple{{1, 0}, {1, 1}, {0, 2}},
-			best:       []scoreTuple{{1, 0}, {1, 1}},
-			worst:      []scoreTuple{{0, 2}},
-			good:       scoreTuple{1, 0},
-			bad:        scoreTuple{0, 2},
+			candidates: []scoreTuple{{0, 1, 0}, {0, 1, 1}, {0, 0, 2}},
+			best:       []scoreTuple{{0, 1, 0}, {0, 1, 1}},
+			worst:      []scoreTuple{{0, 0, 2}},
+			good:       scoreTuple{0, 1, 0},
+			bad:        scoreTuple{0, 0, 2},
 		},
 		{
-			candidates: []scoreTuple{{1, 0}, {1, 1}, {0, 2}, {0, 3}},
-			best:       []scoreTuple{{1, 0}, {1, 1}},
-			worst:      []scoreTuple{{0, 2}, {0, 3}},
-			good:       scoreTuple{1, 0},
-			bad:        scoreTuple{0, 3},
+			candidates: []scoreTuple{{0, 1, 0}, {0, 1, 1}, {0, 0, 2}, {0, 0, 3}},
+			best:       []scoreTuple{{0, 1, 0}, {0, 1, 1}},
+			worst:      []scoreTuple{{0, 0, 2}, {0, 0, 3}},
+			good:       scoreTuple{0, 1, 0},
+			bad:        scoreTuple{0, 0, 3},
+		},
+		{
+			candidates: []scoreTuple{{1, 0, 0}, {0, 0, 0}, {0, 0, 1}},
+			best:       []scoreTuple{{1, 0, 0}},
+			worst:      []scoreTuple{{0, 0, 0}, {0, 0, 1}},
+			good:       scoreTuple{1, 0, 0},
+			bad:        scoreTuple{0, 0, 1},
+		},
+		{
+			candidates: []scoreTuple{{1, 0, 0}, {1, 0, 1}, {0, 0, 1}},
+			best:       []scoreTuple{{1, 0, 0}, {1, 0, 1}},
+			worst:      []scoreTuple{{0, 0, 1}},
+			good:       scoreTuple{1, 0, 0},
+			bad:        scoreTuple{0, 0, 1},
+		},
+		{
+			candidates: []scoreTuple{{1, 1, 0}, {1, 0, 1}, {0, 0, 1}},
+			best:       []scoreTuple{{1, 1, 0}},
+			worst:      []scoreTuple{{0, 0, 1}},
+			good:       scoreTuple{1, 1, 0},
+			bad:        scoreTuple{0, 0, 1},
 		},
 	}
 
@@ -200,37 +244,39 @@ func TestCandidateSelection(t *testing.T) {
 	for _, tc := range testCases {
 		cl := genCandidates(tc.candidates, 1)
 		t.Run(fmt.Sprintf("best-%s", formatter(cl)), func(t *testing.T) {
-			if a, e := cl.best(), genCandidates(tc.best, 1); !reflect.DeepEqual(a, e) {
-				t.Errorf("expected:%s actual:%s diff:%v", formatter(e), formatter(a), pretty.Diff(e, a))
-			}
+			a := assert.New(t)
+			a.Equal(genCandidates(tc.best, 1), cl.best())
+
 		})
 		t.Run(fmt.Sprintf("worst-%s", formatter(cl)), func(t *testing.T) {
 			// Shifting the ids is required to match the end of the list.
-			if a, e := cl.worst(), genCandidates(
+			a := assert.New(t)
+			a.Equal(genCandidates(
 				tc.worst,
 				len(tc.candidates)-len(tc.worst)+1,
-			); !reflect.DeepEqual(a, e) {
-				t.Errorf("expected:%s actual:%s diff:%v", formatter(e), formatter(a), pretty.Diff(e, a))
-			}
+			), cl.worst())
+
 		})
 		t.Run(fmt.Sprintf("good-%s", formatter(cl)), func(t *testing.T) {
+			a := assert.New(t)
 			good := cl.selectGood(allocRand)
-			if good == nil {
-				t.Fatalf("no good candidate found")
-			}
-			actual := scoreTuple{int(good.diversityScore), good.rangeCount}
-			if actual != tc.good {
-				t.Errorf("expected:%v actual:%v", tc.good, actual)
+			if a.NotNil(good) {
+				actual := scoreTuple{
+					int(good.copysetScore), int(good.diversityScore), good.rangeCount,
+				}
+				a.Equal(tc.good, actual)
+
 			}
 		})
 		t.Run(fmt.Sprintf("bad-%s", formatter(cl)), func(t *testing.T) {
+			a := assert.New(t)
 			bad := cl.selectBad(allocRand)
-			if bad == nil {
-				t.Fatalf("no bad candidate found")
-			}
-			actual := scoreTuple{int(bad.diversityScore), bad.rangeCount}
-			if actual != tc.bad {
-				t.Errorf("expected:%v actual:%v", tc.bad, actual)
+			if a.NotNil(bad) {
+				actual := scoreTuple{
+					int(bad.copysetScore), int(bad.diversityScore), bad.rangeCount,
+				}
+				a.Equal(tc.bad, actual)
+
 			}
 		})
 	}
@@ -242,6 +288,18 @@ func TestBetterThan(t *testing.T) {
 	testCandidateList := candidateList{
 		{
 			valid:          true,
+			copysetScore:   1,
+			diversityScore: 1,
+			rangeCount:     0,
+		},
+		{
+			valid:          true,
+			copysetScore:   1,
+			diversityScore: 0,
+			rangeCount:     0,
+		},
+		{
+			valid:          true,
 			diversityScore: 1,
 			rangeCount:     0,
 		},
@@ -279,6 +337,12 @@ func TestBetterThan(t *testing.T) {
 			valid:          true,
 			diversityScore: 0,
 			rangeCount:     1,
+		},
+		{
+			valid:          false,
+			copysetScore:   1,
+			diversityScore: 1,
+			rangeCount:     0,
 		},
 		{
 			valid:          false,
@@ -297,7 +361,7 @@ func TestBetterThan(t *testing.T) {
 		},
 	}
 
-	expectedResults := []int{0, 0, 2, 2, 4, 4, 6, 6, 8, 8, 8}
+	expectedResults := []int{0, 1, 2, 2, 4, 4, 6, 6, 8, 8, 10, 10, 10, 10}
 
 	for i := 0; i < len(testCandidateList); i++ {
 		betterThan := testCandidateList.betterThan(testCandidateList[i])
@@ -1204,7 +1268,8 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 				locality := localityForNodeID(tc.sl, nodeID)
 				return locality.String()
 			},
-			options)
+			options,
+			nil)
 		actual := len(targets) > 0
 		if actual != tc.expected {
 			t.Errorf("%d: shouldRebalance on s%d with replicas on %v got %t, expected %t",
@@ -1558,5 +1623,923 @@ func TestMaxCapacity(t *testing.T) {
 		if e, a := expectedCheck[s.StoreID], maxCapacityCheck(s); e != a {
 			t.Errorf("store %d expected max capacity check: %t, actual %t", s.StoreID, e, a)
 		}
+	}
+}
+
+func storeWithSpace(id, availableCapacity int64, locality string) roachpb.StoreDescriptor {
+	return roachpb.StoreDescriptor{
+		StoreID: roachpb.StoreID(id),
+		Node: roachpb.NodeDescriptor{
+			NodeID: roachpb.NodeID(id),
+			Locality: roachpb.Locality{
+				Tiers: testStoreTierSetup(locality, "", "", ""),
+			},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Available: availableCapacity,
+			Capacity:  100,
+		},
+	}
+}
+
+const (
+	locUS = "US"
+	locEU = "EU"
+	locIN = "IN"
+)
+
+var (
+	testCopysetStoreList = StoreList{
+		stores: []roachpb.StoreDescriptor{
+			storeWithSpace(1, 40, locUS), storeWithSpace(2, 30, locUS), storeWithSpace(3, 35, locUS),
+			storeWithSpace(4, 40, locUS), storeWithSpace(5, 42, locUS), storeWithSpace(6, 45, locUS),
+			storeWithSpace(7, 14, locUS), storeWithSpace(8, 30, locUS), storeWithSpace(9, 25, locUS),
+			storeWithSpace(10, 44, locUS), storeWithSpace(11, 30, locUS), storeWithSpace(12, 35, locUS),
+			storeWithSpace(13, 41, locUS), storeWithSpace(14, 41, locUS), storeWithSpace(15, 29, locUS),
+		},
+	}
+
+	testCopysetStores = testCopysetStoreList.toMap()
+
+	testCopysetsScorerRF3 = newCopysetsScorer(
+		&copysets.Copysets{
+			Sets: map[copysets.CopysetID]copysets.Copyset{
+				1: {Ids: slToMap([]roachpb.StoreID{1, 2, 3})},
+				2: {Ids: slToMap([]roachpb.StoreID{4, 5, 6})},
+				3: {Ids: slToMap([]roachpb.StoreID{7, 8, 9})},
+				4: {Ids: slToMap([]roachpb.StoreID{10, 11, 12})},
+			},
+		},
+		testCopysetStores,
+	)
+
+	testCopysetDiverseStoreList = StoreList{
+		stores: []roachpb.StoreDescriptor{
+			storeWithSpace(1, 40, locUS), storeWithSpace(2, 30, locUS), storeWithSpace(3, 35, locUS),
+			storeWithSpace(4, 40, locUS), storeWithSpace(5, 42, locUS), storeWithSpace(6, 45, locUS),
+			storeWithSpace(7, 14, locUS), storeWithSpace(8, 30, locUS), storeWithSpace(9, 25, locUS),
+			storeWithSpace(10, 44, locUS), storeWithSpace(11, 30, locUS), storeWithSpace(12, 35, locEU),
+			storeWithSpace(13, 41, locIN), storeWithSpace(14, 41, locUS), storeWithSpace(15, 29, locUS),
+		},
+	}
+	testCopysetsScorerRF3Imbalanced = newCopysetsScorer(
+		&copysets.Copysets{
+			Sets: map[copysets.CopysetID]copysets.Copyset{
+				1: {Ids: slToMap([]roachpb.StoreID{1, 2, 3})},
+				2: {Ids: slToMap([]roachpb.StoreID{4, 5, 6, 7, 8})},
+				3: {Ids: slToMap([]roachpb.StoreID{9, 10, 11, 12, 13})},
+			},
+		},
+		testCopysetDiverseStoreList.toMap(),
+	)
+
+	testCopysetsScorerRF5 = newCopysetsScorer(
+		&copysets.Copysets{
+			Sets: map[copysets.CopysetID]copysets.Copyset{
+				1: {Ids: slToMap([]roachpb.StoreID{1, 2, 3, 4, 5})},
+				2: {Ids: slToMap([]roachpb.StoreID{6, 7, 8, 9, 10})},
+				3: {Ids: slToMap([]roachpb.StoreID{11, 12, 13, 14, 15})},
+			},
+		},
+		testCopysetStores,
+	)
+
+	testCopysetsScatterScorer = newCopysetsScorer(
+		&copysets.Copysets{
+			Sets: map[copysets.CopysetID]copysets.Copyset{
+				1:  {Ids: slToMap([]roachpb.StoreID{1, 2, 3})},
+				2:  {Ids: slToMap([]roachpb.StoreID{4, 5, 6})},
+				3:  {Ids: slToMap([]roachpb.StoreID{7, 8, 9})},
+				4:  {Ids: slToMap([]roachpb.StoreID{10, 11, 12})},
+				5:  {Ids: slToMap([]roachpb.StoreID{1, 4, 7})},
+				6:  {Ids: slToMap([]roachpb.StoreID{10, 2, 5})},
+				7:  {Ids: slToMap([]roachpb.StoreID{8, 11, 3})},
+				8:  {Ids: slToMap([]roachpb.StoreID{1, 2, 5})},
+				9:  {Ids: slToMap([]roachpb.StoreID{1, 8, 9})},
+				11: {Ids: slToMap([]roachpb.StoreID{1, 10, 9})},
+			},
+		},
+		testCopysetStores,
+	)
+)
+
+func TestCopysetRemovalScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name            string
+		copysetsEnabled bool
+		stores          []roachpb.StoreID
+		scorer          *copysetsScorer
+		// The last element of expectedOrder is preferred while removing a replica.
+		expectedOrder []roachpb.StoreID
+	}{
+		{
+			name:            "range within copyset",
+			copysetsEnabled: true,
+			scorer:          testCopysetsScorerRF3,
+			stores:          []roachpb.StoreID{1, 2, 3},
+			expectedOrder:   []roachpb.StoreID{1, 2, 3},
+		},
+		{
+			name:            "remove non copyset",
+			copysetsEnabled: true,
+			scorer:          testCopysetsScorerRF3,
+			stores:          []roachpb.StoreID{10, 12, 11, 1},
+			expectedOrder:   []roachpb.StoreID{10, 11, 12, 1},
+		},
+		{
+			name:            "remove non copyset with disabled",
+			copysetsEnabled: false,
+			scorer:          testCopysetsScorerRF3,
+			stores:          []roachpb.StoreID{10, 12, 11, 1},
+			expectedOrder:   []roachpb.StoreID{1, 10, 11, 12},
+		},
+		{
+			name:            "range not in copyset 4",
+			copysetsEnabled: true,
+			scorer:          testCopysetsScorerRF3,
+			stores:          []roachpb.StoreID{10, 11, 3},
+			expectedOrder:   []roachpb.StoreID{10, 11, 3},
+		},
+		{
+			name:            "range not in copyset 4 with disabled",
+			copysetsEnabled: false,
+			scorer:          testCopysetsScorerRF3,
+			stores:          []roachpb.StoreID{10, 11, 3},
+			expectedOrder:   []roachpb.StoreID{3, 10, 11},
+		},
+		{
+			name:            "retain high idle score",
+			copysetsEnabled: true,
+			scorer:          testCopysetsScorerRF3,
+			stores:          []roachpb.StoreID{8, 7, 10},
+			expectedOrder:   []roachpb.StoreID{10, 7, 8},
+		},
+		{
+			name:            "retain high idle score disabled",
+			copysetsEnabled: false,
+			scorer:          testCopysetsScorerRF3,
+			stores:          []roachpb.StoreID{8, 7, 10},
+			expectedOrder:   []roachpb.StoreID{7, 8, 10},
+		},
+		{
+			name:            "range not in copyset 2",
+			copysetsEnabled: true,
+			scorer:          testCopysetsScorerRF3,
+			stores:          []roachpb.StoreID{6, 5, 1},
+			expectedOrder:   []roachpb.StoreID{5, 6, 1},
+		},
+		{
+			name:            "range not in copyset 2 disabled",
+			copysetsEnabled: false,
+			scorer:          testCopysetsScorerRF3,
+			stores:          []roachpb.StoreID{6, 5, 1},
+			expectedOrder:   []roachpb.StoreID{1, 5, 6},
+		},
+		{
+			name:            "scatter range within copyset 1",
+			copysetsEnabled: true,
+			scorer:          testCopysetsScatterScorer,
+			stores:          []roachpb.StoreID{1, 2, 3},
+			expectedOrder:   []roachpb.StoreID{1, 2, 3},
+		},
+		{
+			name:            "scatter remove non copyset",
+			copysetsEnabled: true,
+			scorer:          testCopysetsScatterScorer,
+			stores:          []roachpb.StoreID{10, 2, 5, 6},
+			expectedOrder:   []roachpb.StoreID{5, 2, 10, 6},
+		},
+		{
+			name:            "scatter remove non copyset 2",
+			copysetsEnabled: true,
+			scorer:          testCopysetsScatterScorer,
+			stores:          []roachpb.StoreID{1, 10, 12, 9},
+			expectedOrder:   []roachpb.StoreID{1, 10, 9, 12},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			options := scorerOptions{
+				copysetsEnabled:                      tc.copysetsEnabled,
+				copysetsIdleScoreDifferenceThreshold: testCopysetsIdleScoreDifferenceThreshold,
+			}
+
+			var scores storeScores
+			rangeInfo := RangeInfo{
+				Desc: &roachpb.RangeDescriptor{},
+			}
+			for _, storeID := range tc.stores {
+				rangeInfo.Desc.Replicas = append(rangeInfo.Desc.Replicas, roachpb.ReplicaDescriptor{
+					NodeID:  roachpb.NodeID(storeID),
+					StoreID: storeID,
+				})
+			}
+			for _, storeID := range tc.stores {
+				s := testCopysetStores[storeID]
+				var score storeScore
+				score.score = copysetRemovalScore(ctx, tc.scorer, rangeInfo, testCopysetStores[storeID], options)
+				score.storeID = s.StoreID
+				scores = append(scores, score)
+			}
+			sort.Sort(sort.Reverse(scores))
+			for i := 0; i < len(scores); {
+				if scores[i].storeID != tc.expectedOrder[i] {
+					t.Fatalf("expected the result store order to be %v, but got %v", tc.expectedOrder, scores)
+				}
+				i++
+			}
+		})
+	}
+}
+
+func TestShouldRebalanceCopysets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// In this test StoreID is same as NodeID for a node.
+	// Given existingNodeIDs, a replacement is found for s where s belongs to
+	// existingNodeIDs.
+	// If s is not given, then a replacement is found for any of the
+	// existingNodeIDs.
+	testCases := []struct {
+		name            string
+		s               roachpb.StoreDescriptor
+		sl              StoreList
+		copysetsEnabled bool
+		existingNodeIDs []roachpb.NodeID
+		scorer          *copysetsScorer
+		expected        bool
+		target          roachpb.StoreID
+	}{
+		{
+			name:            "range within copyset",
+			s:               testCopysetStores[1],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{1, 2, 3},
+			expected:        false,
+		},
+		{
+			name:            "balance copyset",
+			s:               testCopysetStores[1],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{1, 4, 5},
+			expected:        true,
+			target:          6,
+		},
+		{
+			name:            "copyset disabled",
+			s:               testCopysetStores[1],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: false,
+			existingNodeIDs: []roachpb.NodeID{1, 4, 5},
+			expected:        false,
+		},
+		// A range will migrate from copy set 3 to copy set 2 since 2 has
+		// a significantly higher idle score.
+		{
+			name:            "migrate copyset idle score",
+			s:               testCopysetStores[7],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{7, 8, 9},
+			expected:        true,
+			target:          4,
+		},
+		{
+			name:            "migrate copyset idle score step 2",
+			s:               testCopysetStores[8],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{4, 8, 9},
+			expected:        true,
+			target:          5,
+		},
+		{
+			name:            "migrate copyset idle score step 3",
+			s:               testCopysetStores[9],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{4, 5, 9},
+			expected:        true,
+			target:          6,
+		},
+		{
+			name:            "migrate copyset idle score complete",
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{4, 5, 6},
+			expected:        false,
+		},
+		// A range will migrate from 9, 10, 11 to 9, 12, 13 because
+		// 9, 10, 11, 12, 13 all belong to the same copyset and 9, 10, 11
+		// have the same locality.
+		// This test verifies locality fault tolerance within a copyset.
+		{
+			name:            "migrate copyset to increase diversity",
+			s:               testCopysetStores[10],
+			sl:              testCopysetDiverseStoreList,
+			scorer:          testCopysetsScorerRF3Imbalanced,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{9, 10, 11},
+			expected:        true,
+			target:          12,
+		},
+		{
+			name:            "migrate copyset to increase diversity step 2",
+			s:               testCopysetStores[11],
+			sl:              testCopysetDiverseStoreList,
+			scorer:          testCopysetsScorerRF3Imbalanced,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{9, 12, 11},
+			expected:        true,
+			target:          13,
+		},
+		{
+			name:            "migrate copyset to increase diversity stabilize",
+			sl:              testCopysetDiverseStoreList,
+			scorer:          testCopysetsScorerRF3Imbalanced,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{9, 12, 13},
+			expected:        false,
+		},
+		// A range will migrate from copy set 2 to copy set 1 of replication factor
+		// 5 since 1 has a significantly higher idle score.
+		{
+			name:            "migrate rf5 copyset idle score",
+			s:               testCopysetStores[7],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF5,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{6, 7, 8, 9, 10},
+			expected:        true,
+			target:          1,
+		},
+		{
+			name:            "migrate rf5 copyset idle score step 2",
+			s:               testCopysetStores[6],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF5,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{6, 1, 8, 9, 10},
+			expected:        true,
+			target:          2,
+		},
+		{
+			name:            "migrate rf5 copyset idle score step 3",
+			s:               testCopysetStores[9],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF5,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{2, 1, 8, 9, 10},
+			expected:        true,
+			target:          3,
+		},
+		{
+			name:            "migrate rf5 copyset idle score step 4",
+			s:               testCopysetStores[8],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF5,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{2, 1, 8, 3, 10},
+			expected:        true,
+			target:          4,
+		},
+		{
+			name:            "migrate rf5 copyset idle score step 5",
+			s:               testCopysetStores[10],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF5,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{2, 1, 4, 3, 10},
+			expected:        true,
+			target:          5,
+		},
+		{
+			name:            "migrate rf5 copyset idle score complete",
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScorerRF5,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{2, 1, 4, 3, 5},
+			expected:        false,
+		},
+		{
+			name:            "scatter range within copyset",
+			s:               testCopysetStores[1],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScatterScorer,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{1, 8, 9},
+			expected:        false,
+		},
+		{
+			name:            "scatter range within copyset 2",
+			s:               testCopysetStores[1],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScatterScorer,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{1, 2, 3},
+			expected:        false,
+		},
+		// A range will migrate from copy set 3 to copy set 9 since copy set 9
+		// has a significantly higher idle score.
+		{
+			name:            "scatter migrate copyset idle score",
+			s:               testCopysetStores[7],
+			sl:              testCopysetStoreList,
+			scorer:          testCopysetsScatterScorer,
+			copysetsEnabled: true,
+			existingNodeIDs: []roachpb.NodeID{7, 8, 9},
+			expected:        true,
+			target:          1,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := assert.New(t)
+			removeStore := func(sl StoreList, nodeID roachpb.NodeID) StoreList {
+				for i, s := range sl.stores {
+					if s.Node.NodeID == nodeID {
+						return makeStoreList(append(sl.stores[:i], sl.stores[i+1:]...))
+					}
+				}
+				return sl
+			}
+			filteredSL := tc.sl
+			filteredSL.stores = append([]roachpb.StoreDescriptor(nil), filteredSL.stores...)
+			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+			rangeInfo := RangeInfo{
+				Desc: &roachpb.RangeDescriptor{},
+			}
+			storeMap := tc.sl.toMap()
+			for _, nodeID := range tc.existingNodeIDs {
+				storeID := roachpb.StoreID(nodeID)
+				rangeInfo.Desc.Replicas = append(rangeInfo.Desc.Replicas, roachpb.ReplicaDescriptor{
+					NodeID:  nodeID,
+					StoreID: storeID,
+				})
+				existingNodeLocalities[nodeID] = storeMap[storeID].Node.Locality
+				// For the sake of testing, remove all other existing stores from the
+				// store list to only test whether we want to remove the replica on tc.s.
+				if tc.s.StoreID != 0 {
+					if nodeID != tc.s.Node.NodeID {
+						filteredSL = removeStore(filteredSL, nodeID)
+					}
+				}
+			}
+
+			options := scorerOptions{
+				copysetsEnabled:                      tc.copysetsEnabled,
+				copysetsIdleScoreDifferenceThreshold: testCopysetsIdleScoreDifferenceThreshold,
+			}
+			targets := rebalanceCandidates(
+				context.Background(),
+				filteredSL,
+				analyzedConstraints{},
+				rangeInfo,
+				existingNodeLocalities,
+				func(nodeID roachpb.NodeID) string {
+					return ""
+				},
+				options,
+				tc.scorer,
+			)
+			if a.Equal(tc.expected, len(targets) > 0) {
+				if tc.expected {
+					a.Equal(tc.target, targets[0].candidates[0].store.StoreID)
+				}
+			}
+		})
+	}
+}
+
+func TestFractionDiskFree(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		store                    roachpb.StoreDescriptor
+		expectedFractionDiskFree float64
+	}{
+		{
+			store: roachpb.StoreDescriptor{
+				Capacity: roachpb.StoreCapacity{
+					Available: 31,
+					Capacity:  100,
+				},
+			},
+			expectedFractionDiskFree: 0.31,
+		},
+		{
+			store: roachpb.StoreDescriptor{
+				Capacity: roachpb.StoreCapacity{
+					Available: 40,
+					Capacity:  80,
+				},
+			},
+			expectedFractionDiskFree: 0.5,
+		},
+		{
+			store: roachpb.StoreDescriptor{
+				Capacity: roachpb.StoreCapacity{
+					Available: 0,
+					Capacity:  0,
+				},
+			},
+			expectedFractionDiskFree: 0,
+		},
+	}
+
+	a := assert.New(t)
+	for _, tc := range testCases {
+		a.InDelta(tc.expectedFractionDiskFree, fractionDiskFree(tc.store), 0.001*tc.expectedFractionDiskFree)
+	}
+}
+
+func TestCopysetScoreEquivalence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name            string
+		stores          []roachpb.StoreID
+		addedStore      roachpb.StoreID
+		removedStore    roachpb.StoreID
+		scorer          *copysetsScorer
+		copysetsEnabled bool
+		expected        float64
+	}{
+		{
+			name:            "nil stores",
+			stores:          nil,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: false,
+			expected:        0.0,
+		},
+		{
+			name:            "no stores",
+			stores:          []roachpb.StoreID{},
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: false,
+			expected:        0.0,
+		},
+		{
+			name:            "unknown store",
+			stores:          []roachpb.StoreID{1, 2, 100},
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: false,
+			expected:        0.0,
+		},
+		{
+			name:            "copy sets disabled",
+			stores:          []roachpb.StoreID{1, 2, 3},
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: false,
+			expected:        0.0,
+		},
+		{
+			name:            "copy set 1 add store",
+			stores:          []roachpb.StoreID{1, 2},
+			addedStore:      3,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			expected:        0.3488,
+		},
+		{
+			name:            "copy set 1 add poor store",
+			stores:          []roachpb.StoreID{1, 2},
+			addedStore:      4,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			expected:        0.3333,
+		},
+		{
+			name:            "copy set 1",
+			stores:          []roachpb.StoreID{1, 2, 3},
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			expected:        0.3488,
+		},
+		{
+			name:            "copy set 1 remove store",
+			stores:          []roachpb.StoreID{1, 2, 3, 8},
+			removedStore:    8,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			expected:        0.3488,
+		},
+		{
+			name:            "copy set 3",
+			stores:          []roachpb.StoreID{7, 8, 9},
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			expected:        0.2,
+		},
+		{
+			name:            "copy set migration",
+			stores:          []roachpb.StoreID{7, 8, 9},
+			addedStore:      2,
+			removedStore:    7,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			expected:        0.2031,
+		},
+		{
+			// Copy set 1 has a high idle score and copy set 3 has a low idle score
+			name:            "copy set migrated",
+			stores:          []roachpb.StoreID{2, 8, 9},
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			expected:        0.2031,
+		},
+		{
+			name:            "copy set migration 2",
+			stores:          []roachpb.StoreID{7, 8, 9},
+			addedStore:      4,
+			removedStore:    7,
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			expected:        0.2341,
+		},
+		{
+			// Copy set 2 has a high idle score and copy set 3 has a low idle score
+			name:            "copy set migrated 2",
+			stores:          []roachpb.StoreID{4, 8, 9},
+			scorer:          testCopysetsScorerRF3,
+			copysetsEnabled: true,
+			expected:        0.2341,
+		},
+		{
+			name:            "scatter copy set 1 add store",
+			stores:          []roachpb.StoreID{1, 2},
+			addedStore:      3,
+			scorer:          testCopysetsScatterScorer,
+			copysetsEnabled: true,
+			expected:        0.3488,
+		},
+		{
+			name:            "scatter copy set migration",
+			stores:          []roachpb.StoreID{7, 8, 9},
+			scorer:          testCopysetsScatterScorer,
+			copysetsEnabled: true,
+			expected:        0.2837,
+		},
+		{
+			name:            "scatter copy set migration 2",
+			stores:          []roachpb.StoreID{7, 8, 9},
+			scorer:          testCopysetsScatterScorer,
+			removedStore:    7,
+			addedStore:      1,
+			copysetsEnabled: true,
+			expected:        0.3333,
+		},
+		{
+			name:            "scatter copy set migrated",
+			stores:          []roachpb.StoreID{1, 8, 9},
+			scorer:          testCopysetsScatterScorer,
+			copysetsEnabled: true,
+			expected:        0.3333,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := assert.New(t)
+			ctx := context.Background()
+			options := scorerOptions{
+				copysetsEnabled:                      tc.copysetsEnabled,
+				copysetsIdleScoreDifferenceThreshold: testCopysetsIdleScoreDifferenceThreshold,
+			}
+			rangeInfo := RangeInfo{
+				Desc: &roachpb.RangeDescriptor{},
+			}
+			for _, storeID := range tc.stores {
+				rangeInfo.Desc.Replicas = append(rangeInfo.Desc.Replicas, roachpb.ReplicaDescriptor{
+					NodeID:  roachpb.NodeID(storeID),
+					StoreID: storeID,
+				})
+			}
+			var addedStore, removedStore *roachpb.StoreDescriptor
+			if tc.addedStore != 0 {
+				store := testCopysetStores[tc.addedStore]
+				addedStore = &store
+			}
+			if tc.removedStore != 0 {
+				store := testCopysetStores[tc.removedStore]
+				removedStore = &store
+			}
+			rangeScore := copysetRebalanceScore(ctx, tc.scorer, rangeInfo, addedStore, removedStore, options)
+			a.InDelta(tc.expected, rangeScore, tc.expected*0.001)
+		})
+	}
+}
+
+func TestCopysetScorerHomogeneityScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name                     string
+		stores                   []roachpb.StoreID
+		scorer                   *copysetsScorer
+		expectedHomogeneityScore float64
+	}{
+		{
+			name:                     "empty store list",
+			stores:                   []roachpb.StoreID{},
+			scorer:                   testCopysetsScorerRF3,
+			expectedHomogeneityScore: 0,
+		},
+		{
+			name:                     "store list with one store only",
+			stores:                   []roachpb.StoreID{1},
+			scorer:                   testCopysetsScorerRF3,
+			expectedHomogeneityScore: 1,
+		},
+		{
+			name:                     "same copyset 1",
+			stores:                   []roachpb.StoreID{1, 2, 3},
+			scorer:                   testCopysetsScorerRF3,
+			expectedHomogeneityScore: 1,
+		},
+		{
+			name:                     "same copyset 2",
+			stores:                   []roachpb.StoreID{4, 5, 6},
+			scorer:                   testCopysetsScorerRF3,
+			expectedHomogeneityScore: 1,
+		},
+		{
+			name:                     "different copysets",
+			stores:                   []roachpb.StoreID{2, 10, 5},
+			scorer:                   testCopysetsScorerRF3,
+			expectedHomogeneityScore: 0,
+		},
+		{
+			name:                     "single different copyset",
+			stores:                   []roachpb.StoreID{1, 2, 9},
+			scorer:                   testCopysetsScorerRF3,
+			expectedHomogeneityScore: 0.33,
+		},
+		{
+			name:                     "single different large copyset",
+			stores:                   []roachpb.StoreID{1, 2, 3, 9},
+			scorer:                   testCopysetsScorerRF3,
+			expectedHomogeneityScore: 0.5,
+		},
+		{
+			name:                     "unknown store",
+			stores:                   []roachpb.StoreID{1, 2, 100},
+			scorer:                   testCopysetsScorerRF3,
+			expectedHomogeneityScore: 0,
+		},
+		{
+			name:                     "scatter same copyset",
+			stores:                   []roachpb.StoreID{2, 10, 5},
+			scorer:                   testCopysetsScatterScorer,
+			expectedHomogeneityScore: 1,
+		},
+		{
+			name:                     "scatter two copysets",
+			stores:                   []roachpb.StoreID{2, 3, 5, 6},
+			scorer:                   testCopysetsScatterScorer,
+			expectedHomogeneityScore: 0.33,
+		},
+		{
+			name:                     "scatter two copysets 2",
+			stores:                   []roachpb.StoreID{1, 10, 9, 5},
+			scorer:                   testCopysetsScatterScorer,
+			expectedHomogeneityScore: 0.5,
+		},
+		{
+			name:                     "scatter unknown store",
+			stores:                   []roachpb.StoreID{1, 2, 100},
+			scorer:                   testCopysetsScatterScorer,
+			expectedHomogeneityScore: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := assert.New(t)
+			ctx := context.Background()
+			a.InDelta(tc.expectedHomogeneityScore, tc.scorer.homogeneityScore(ctx, tc.stores), 0.05*tc.expectedHomogeneityScore)
+		})
+	}
+}
+
+func TestCopysetScorerIdleScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name              string
+		store             roachpb.StoreID
+		scorer            *copysetsScorer
+		expectedIdleScore float64
+	}{
+		{
+			name:              "store 1",
+			store:             1,
+			scorer:            testCopysetsScorerRF3,
+			expectedIdleScore: 0.3,
+		},
+		{
+			name:              "store 2",
+			store:             2,
+			scorer:            testCopysetsScorerRF3,
+			expectedIdleScore: 0.3,
+		},
+		{
+			name:              "store 3",
+			store:             3,
+			scorer:            testCopysetsScorerRF3,
+			expectedIdleScore: 0.3,
+		},
+		{
+			name:              "store 6",
+			store:             6,
+			scorer:            testCopysetsScorerRF3,
+			expectedIdleScore: 0.4,
+		},
+		{
+			name:              "store 8",
+			store:             8,
+			scorer:            testCopysetsScorerRF3,
+			expectedIdleScore: 0.14,
+		},
+		{
+			name:              "unknown store",
+			store:             100,
+			scorer:            testCopysetsScorerRF3,
+			expectedIdleScore: 0,
+		},
+		// With scatter idle score is the idle score of the best copyset a store
+		// belongs to
+		{
+			name:              "scatter store 1",
+			store:             1,
+			scorer:            testCopysetsScatterScorer,
+			expectedIdleScore: 0.3,
+		},
+		{
+			name:              "scatter store 8",
+			store:             8,
+			scorer:            testCopysetsScatterScorer,
+			expectedIdleScore: 0.3,
+		},
+		{
+			name:              "scatter unknown store",
+			store:             100,
+			scorer:            testCopysetsScatterScorer,
+			expectedIdleScore: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := assert.New(t)
+			ctx := context.Background()
+			a.InDelta(tc.expectedIdleScore, tc.scorer.idleScore(ctx, tc.store), 0.05*tc.expectedIdleScore)
+		})
+	}
+}
+
+func TestCopysetScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	a := assert.New(t)
+
+	testCases := []struct {
+		homogeneityScore float64
+		idleScore        float64
+		expectedScore    float64
+	}{
+		{0, 0, 0},
+		{0.33, 0.4, 0.395},
+		{0.33, 0.57, 0.553},
+		{1, 0.57, 0.6},
+		{1, 1, 1},
+	}
+	options := scorerOptions{
+		copysetsEnabled:                      true,
+		copysetsIdleScoreDifferenceThreshold: testCopysetsIdleScoreDifferenceThreshold,
+	}
+
+	for _, tc := range testCases {
+		a.InDelta(
+			tc.expectedScore,
+			copysetScore(
+				options,
+				tc.homogeneityScore,
+				tc.idleScore,
+			),
+			tc.expectedScore*0.001,
+		)
 	}
 }

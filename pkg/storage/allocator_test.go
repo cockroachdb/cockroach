@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/copysets"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -42,11 +43,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"go.etcd.io/etcd/raft"
 )
 
@@ -293,6 +296,69 @@ var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 	},
 }
 
+// testCopysetsReader generates simple copysets which are used for testing
+// replica re-balancing.
+// testCopysetsReader is not thread safe.
+type testCopysetsReader struct {
+	sp      *StorePool
+	enabled bool
+	// cache caches copysets for a replication factor.
+	cache map[int32]*copysets.Copysets
+}
+
+// testCopysetsReader implements copysetsReader.
+var _ copysets.Reader = &testCopysetsReader{}
+
+// forRF assigns copysets to stores based on StoreID.
+// The CopysetID assigned is StoreID / replication factor + 1.
+// The last copyset may have extra elements as copysets of size
+// < replication factor is not allowed.
+func (r *testCopysetsReader) ForRF(
+	ctx context.Context, replicationFactor *int32,
+) (*copysets.Copysets, error) {
+	if replicationFactor == nil || *replicationFactor == 0 || !r.enabled {
+		return nil, nil
+	}
+	if _, ok := r.cache[*replicationFactor]; !ok {
+		sl, _, _ := r.sp.getStoreList(firstRange, storeFilterNone)
+		numCopysets := int32(len(sl.stores)) / *replicationFactor
+		cs := &copysets.Copysets{
+			Sets:              make(map[copysets.CopysetID]copysets.Copyset),
+			ReplicationFactor: *replicationFactor,
+		}
+
+		sort.Slice(sl.stores, func(i, j int) bool {
+			return sl.stores[i].StoreID < sl.stores[j].StoreID
+		})
+
+		for i, store := range sl.stores {
+			copysetID := copysets.CopysetID(int32(i)/(*replicationFactor) + 1)
+			if int32(copysetID) >= numCopysets {
+				copysetID = copysets.CopysetID(numCopysets)
+			}
+			var copyset copysets.Copyset
+			var ok bool
+			if copyset, ok = cs.Sets[copysetID]; !ok {
+				copyset = copysets.Copyset{
+					Ids: make(map[roachpb.StoreID]bool),
+				}
+			}
+			copyset.Ids[store.StoreID] = true
+			cs.Sets[copysetID] = copyset
+		}
+		r.cache[*replicationFactor] = cs
+	}
+	return r.cache[*replicationFactor], nil
+}
+
+func newTestCopysetsReader(sp *StorePool, enabled bool) copysets.Reader {
+	return &testCopysetsReader{
+		sp:      sp,
+		enabled: enabled,
+		cache:   make(map[int32]*copysets.Copysets),
+	}
+}
+
 func testRangeInfo(replicas []roachpb.ReplicaDescriptor, rangeID roachpb.RangeID) RangeInfo {
 	return RangeInfo{
 		Desc: &roachpb.RangeDescriptor{
@@ -314,6 +380,24 @@ func replicas(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
 
 // createTestAllocator creates a stopper, gossip, store pool and allocator for
 // use in tests. Stopper must be stopped by the caller.
+// Copysets are disabled for rebalancing.
+func createTestAllocatorWithoutCopysets(
+	numNodes int, deterministic bool,
+) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
+	stopper, g, manual, storePool, _ := createTestStorePool(
+		TestTimeUntilStoreDeadOff,
+		deterministic,
+		func() int { return numNodes },
+		storagepb.NodeLivenessStatus_LIVE,
+	)
+	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
+		return 0, true
+	}, newTestCopysetsReader(storePool, false /* enabled */))
+	return stopper, g, storePool, a, manual
+}
+
+// createTestAllocator creates a stopper, gossip, store pool and allocator for
+// use in tests. Stopper must be stopped by the caller.
 func createTestAllocator(
 	numNodes int, deterministic bool,
 ) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
@@ -321,9 +405,15 @@ func createTestAllocator(
 		TestTimeUntilStoreDeadOff, deterministic,
 		func() int { return numNodes },
 		storagepb.NodeLivenessStatus_LIVE)
+	copysets.Enabled.Override(&storePool.st.SV, true)
+	copysetsIdleScoreDifferenceThreshold.Override(
+		&storePool.st.SV,
+		testCopysetsIdleScoreDifferenceThreshold,
+	)
+
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
-	})
+	}, newTestCopysetsReader(storePool, true /* enabled */))
 	return stopper, g, storePool, a, manual
 }
 
@@ -1282,7 +1372,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		storagepb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
-	})
+	}, newTestCopysetsReader(storePool, false /* enabled */))
 	defer stopper.Stop(context.Background())
 
 	// 3 stores where the lease count for each store is equal to 100x the store
@@ -1676,7 +1766,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 		storagepb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
-	})
+	}, newTestCopysetsReader(storePool, false /* enabled */))
 	defer stopper.Stop(context.Background())
 
 	// 4 stores where the lease count for each store is equal to 10x the store
@@ -2576,6 +2666,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 	}
 
 	for testIdx, tc := range testCases {
+		ctx := context.Background()
 		existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
 		for i, storeID := range tc.existing {
 			existingRepls[i] = roachpb.ReplicaDescriptor{
@@ -2588,12 +2679,14 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 		analyzed := analyzeConstraints(
 			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
 		candidates := allocateCandidates(
+			ctx,
 			sl,
 			analyzed,
 			existingRepls,
 			rangeInfo,
 			a.storePool.getLocalities(existingRepls),
 			a.scorerOptions(),
+			nil, /* copysetsScorer */
 		)
 		best := candidates.best()
 		match := true
@@ -2800,6 +2893,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 	}
 
 	for testIdx, tc := range testCases {
+		ctx := context.Background()
 		sl, _, _ := a.storePool.getStoreListFromIDs(tc.existing, roachpb.RangeID(0), storeFilterNone)
 		existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
 		for i, storeID := range tc.existing {
@@ -2811,13 +2905,15 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 		rangeInfo := testRangeInfo(existingRepls, firstRange)
 		zone := &config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: tc.constraints}
 		analyzed := analyzeConstraints(
-			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
+			ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
 		candidates := removeCandidates(
+			ctx,
 			sl,
 			analyzed,
 			rangeInfo,
 			a.storePool.getLocalities(existingRepls),
 			a.scorerOptions(),
+			nil, /* copysetsScorer */
 		)
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
 			t.Errorf("%d: expected removeCandidates(%v) = %v, but got %v",
@@ -2844,7 +2940,7 @@ func expectedStoreIDsMatch(expected []roachpb.StoreID, results candidateList) bo
 func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+	stopper, g, _, a, _ := createTestAllocatorWithoutCopysets(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(multiDiversityDCStores, t)
@@ -3615,6 +3711,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			a.storePool.getLocalities(existingRepls),
 			a.storePool.getNodeLocalityString,
 			a.scorerOptions(),
+			nil, /* copysetsScorer */
 		)
 		match := true
 		if len(tc.expected) != len(results) {
@@ -3809,7 +3906,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			a := MakeAllocator(storePool, func(addr string) (time.Duration, bool) {
 				return c.latency[addr], true
-			})
+			}, newTestCopysetsReader(storePool, false /* enabled */))
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				config.EmptyCompleteZoneConfig(),
@@ -4956,7 +5053,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		storagepb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(sp, func(string) (time.Duration, bool) {
 		return 0, true
-	})
+	}, newTestCopysetsReader(sp, false /* enabled */))
 
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
@@ -5059,7 +5156,7 @@ func makeDescriptor(storeList []roachpb.StoreID) roachpb.RangeDescriptor {
 func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
+	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */, nil /* copysetsReader */)
 	action, priority := a.ComputeAction(context.Background(), &config.ZoneConfig{NumReplicas: proto.Int32(0)}, RangeInfo{})
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -5580,7 +5677,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	)
 	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
 		return 0, false
-	})
+	}, newTestCopysetsReader(sp, false /* enabled */))
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
@@ -5720,7 +5817,7 @@ func Example_rebalancing() {
 	)
 	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
 		return 0, false
-	})
+	}, newTestCopysetsReader(sp, false /* enabled */))
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
@@ -5861,4 +5958,973 @@ func Example_rebalancing() {
 	// |  98 |  88   4% |  87   5% |  86   4% |  87   4% |  87   5% |  87   5% |  86   5% |  87   4% |  87   5% |  87   4% |  87   4% |  87   5% |  87   5% |  86   4% |  86   5% |  86   4% |  87   4% |  87   4% |  86   5% |  87   5% |
 	// +-----+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+----------+
 	// Total bytes=913070194, ranges=1755
+}
+
+// TestAllocatorAllocateTargetCopysets verifies that new replica allocations
+// respect copysets.
+func TestAllocatorAllocateTargetCopysets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(multiDiversityDCStores, t)
+
+	// Stores 1,2,3 belong to copyset 1
+	// Stores 4,5,6,7,8 belong to copyset 2
+	testCases := []struct {
+		existing []roachpb.StoreID
+		expected []roachpb.StoreID
+	}{
+		{
+			[]roachpb.StoreID{1, 2},
+			[]roachpb.StoreID{3},
+		},
+		{
+			[]roachpb.StoreID{1, 3},
+			[]roachpb.StoreID{2},
+		},
+		{
+			[]roachpb.StoreID{2, 3},
+			[]roachpb.StoreID{1},
+		},
+		{
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{4, 5, 6, 7, 8},
+		},
+		{
+			[]roachpb.StoreID{4, 5},
+			[]roachpb.StoreID{6, 7, 8},
+		},
+	}
+
+	for _, c := range testCases {
+		existingRepls := make([]roachpb.ReplicaDescriptor, len(c.existing))
+		for i, storeID := range c.existing {
+			existingRepls[i] = roachpb.ReplicaDescriptor{
+				NodeID:  roachpb.NodeID(storeID),
+				StoreID: storeID,
+			}
+		}
+		numReplicas := int32(3)
+		targetStore, details, err := a.AllocateTarget(
+			context.Background(),
+			&config.ZoneConfig{
+				NumReplicas: &numReplicas,
+			},
+			existingRepls,
+			testRangeInfo(existingRepls, firstRange),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var found bool
+		for _, storeID := range c.expected {
+			if targetStore.StoreID == storeID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected AllocateTarget(%v) in %v, but got %d; details: %s", c.existing, c.expected, targetStore.StoreID, details)
+		}
+	}
+}
+
+// TestAllocatorRebalanceTargetCopysets verifies that given a set of stores,
+// the re-balance target for a range respects copyset properties.
+func TestAllocatorRebalanceTargetCopysets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, allocator, _ := createTestAllocator(6, false /* deterministic */)
+	defer stopper.Stop(context.Background())
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     multiDiversityDCStores[0].Node,
+			Capacity: roachpb.StoreCapacity{Available: 30, Capacity: 100},
+		},
+		{
+			StoreID:  2,
+			Node:     multiDiversityDCStores[1].Node,
+			Capacity: roachpb.StoreCapacity{Available: 35, Capacity: 100},
+		},
+		{
+			StoreID:  3,
+			Node:     multiDiversityDCStores[2].Node,
+			Capacity: roachpb.StoreCapacity{Available: 40, Capacity: 100},
+		},
+		{
+			StoreID:  4,
+			Node:     multiDiversityDCStores[3].Node,
+			Capacity: roachpb.StoreCapacity{Available: 10, Capacity: 100},
+		},
+		{
+			StoreID:  5,
+			Node:     multiDiversityDCStores[4].Node,
+			Capacity: roachpb.StoreCapacity{Available: 12, Capacity: 100},
+		},
+		{
+			StoreID:  6,
+			Node:     multiDiversityDCStores[5].Node,
+			Capacity: roachpb.StoreCapacity{Available: 13, Capacity: 100},
+		},
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	testCases := []struct {
+		name     string
+		existing []roachpb.StoreID
+		expected []roachpb.StoreID
+	}{
+		{
+			name:     "within copyset 1",
+			existing: []roachpb.StoreID{1, 2, 3},
+			expected: []roachpb.StoreID{},
+		},
+		{
+			name:     "balance copyset 1 a",
+			existing: []roachpb.StoreID{1, 2, 4},
+			expected: []roachpb.StoreID{3},
+		},
+		{
+			name:     "balance copyset 1 b",
+			existing: []roachpb.StoreID{1, 3, 4},
+			expected: []roachpb.StoreID{2},
+		},
+		{
+			name:     "balance copyset 1 c",
+			existing: []roachpb.StoreID{3, 5, 2},
+			expected: []roachpb.StoreID{1},
+		},
+		{
+			name:     "migrate to idle copyset 1",
+			existing: []roachpb.StoreID{4, 5, 6},
+			expected: []roachpb.StoreID{1, 2, 3},
+		},
+		{
+			name:     "continue migration to idle copyset 1",
+			existing: []roachpb.StoreID{4, 6, 1},
+			expected: []roachpb.StoreID{2, 3},
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := assert.New(t)
+			existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
+			for i, storeID := range tc.existing {
+				existingRepls[i] = roachpb.ReplicaDescriptor{
+					NodeID:  roachpb.NodeID(storeID),
+					StoreID: storeID,
+				}
+			}
+			numReplicas := int32(3)
+			targetStore, details := allocator.RebalanceTarget(
+				context.Background(),
+				&config.ZoneConfig{
+					NumReplicas: &numReplicas,
+				},
+				nil,
+				testRangeInfo(existingRepls, firstRange),
+				storeFilterThrottled,
+			)
+			if len(tc.expected) == 0 {
+				a.Nil(targetStore, details)
+			} else {
+				if a.NotNil(targetStore, details) {
+					var found bool
+					for _, storeID := range tc.expected {
+						if targetStore.StoreID == storeID {
+							found = true
+							break
+						}
+					}
+					a.True(found, "%d: expected RebalanceTarget(%v) in %v, but got %d; details: %s",
+						i, tc.existing, tc.expected, targetStore.StoreID, details)
+				}
+			}
+		})
+	}
+}
+
+// TestAllocatorCopysetsRebalancing sets up a random scenario and verifies
+// convergence of ranges into copysets.
+func TestAllocatorCopysetsRebalancing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type startMode int64
+	const (
+		// random mode assigns replicas of ranges randomly across 80% of available
+		// stores.
+		random startMode = iota
+		// fullCopysets mode assigns replicas of ranges to copysets. This allocation
+		// fills a copyset before assigning ranges to the next copyset.
+		// All replicas of ranges are first allocated to stores in copyset 1 till it
+		// runs out of space. Then remaining ranges are allocated to copyset 2 and
+		// so on.
+		fullCopysets
+	)
+	testCases := []struct {
+		name      string
+		startMode startMode
+	}{
+		{
+			name:      "full copysets",
+			startMode: fullCopysets,
+		},
+		{
+			name:      "random allocation",
+			startMode: random,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rf := int32(3)
+			const numStores = 18
+			const numRanges = 100
+			// rangeSize is the % disk space taken by a replica of a range.
+			const rangeSize = 2
+
+			ctx := context.Background()
+			a := assert.New(t)
+
+			removeStore := func(stores []roachpb.StoreID, storeID roachpb.StoreID) []roachpb.StoreID {
+				var newStores []roachpb.StoreID
+				for _, store := range stores {
+					if store != storeID {
+						newStores = append(newStores, store)
+					}
+				}
+				return newStores
+			}
+
+			stopper, g, _, allocator, _ := createTestAllocator(numStores, false /* deterministic */)
+			defer stopper.Stop(ctx)
+
+			// updateCapacity changes the given store's capacity by delta.
+			updateCapacity := func(storeID roachpb.StoreID, delta int64) {
+				allocator.storePool.detailsMu.Lock()
+				defer allocator.storePool.detailsMu.Unlock()
+				allocator.storePool.detailsMu.storeDetails[storeID].desc.Capacity.Available += delta
+				a.True(allocator.storePool.detailsMu.storeDetails[storeID].desc.Capacity.Available >= 0)
+			}
+
+			storeDescriptor := func(storeID roachpb.StoreID) *roachpb.StoreDescriptor {
+				allocator.storePool.detailsMu.Lock()
+				defer allocator.storePool.detailsMu.Unlock()
+				return allocator.storePool.detailsMu.storeDetails[storeID].desc
+			}
+
+			r, seed := randutil.NewPseudoRand()
+			log.Infof(ctx, "copysets rebalancing seed: %v", seed)
+
+			zc := &config.ZoneConfig{
+				NumReplicas: &rf,
+			}
+
+			// Generate stores.
+			var stores []*roachpb.StoreDescriptor
+			for i := 1; i <= numStores; i++ {
+				stores = append(stores, &roachpb.StoreDescriptor{
+					StoreID: roachpb.StoreID(i),
+					Node: roachpb.NodeDescriptor{
+						NodeID: roachpb.NodeID(i),
+					},
+
+					Capacity: roachpb.StoreCapacity{
+						Available: 100,
+						Capacity:  100,
+					},
+				})
+			}
+
+			sg := gossiputil.NewStoreGossiper(g)
+			sg.GossipStores(stores, t)
+
+			minMaxDiskFree := func() (minDiskFree, maxDiskFree float64) {
+				maxDiskFree = float64(0)
+				minDiskFree = float64(1)
+				for i := 1; i <= numStores; i++ {
+					storeID := roachpb.StoreID(i)
+					store := storeDescriptor(storeID)
+					diskFree := fractionDiskFree(*store)
+					if diskFree > maxDiskFree {
+						maxDiskFree = diskFree
+					}
+					if diskFree < minDiskFree {
+						minDiskFree = diskFree
+					}
+				}
+				return
+			}
+
+			// Generate copysets.
+			cs, err := allocator.copysetsReader.ForRF(ctx, &rf)
+			a.NoError(err)
+			storeCopysets := make(map[roachpb.StoreID]copysets.CopysetID)
+			for copysetID, copyset := range cs.Sets {
+				for storeID := range copyset.Ids {
+					storeCopysets[storeID] = copysetID
+				}
+			}
+
+			// Generate ranges.
+			ranges := map[roachpb.RangeID][]roachpb.StoreID{}
+			distinctCopysets := func(rangeID roachpb.RangeID) map[copysets.CopysetID]bool {
+				stores := ranges[rangeID]
+				distinctCopysets := make(map[copysets.CopysetID]bool)
+				for _, store := range stores {
+					distinctCopysets[storeCopysets[store]] = true
+				}
+
+				return distinctCopysets
+			}
+			switch tc.startMode {
+			case random:
+				for i := 1; i <= numRanges; i++ {
+					rangeID := roachpb.RangeID(i)
+					var rangeStores []roachpb.StoreID
+					for len(rangeStores) < int(rf) {
+						// Leave 20% of the stores empty.
+						// This is done so that % disk free based rebalancing has more work to do.
+						newRangeStore := roachpb.StoreID(r.Int63n((numStores*4)/5) + 1)
+						if !containsStore(rangeStores, newRangeStore) {
+							desc := storeDescriptor(newRangeStore)
+							if desc.Capacity.Available > rangeSize {
+								rangeStores = append(rangeStores, newRangeStore)
+								updateCapacity(newRangeStore, -rangeSize)
+							}
+						}
+					}
+					ranges[rangeID] = rangeStores
+				}
+			case fullCopysets:
+				copysetIdx := copysets.CopysetID(1)
+				for i := 1; i <= numRanges; i++ {
+					rangeID := roachpb.RangeID(i)
+					var rangeStores []roachpb.StoreID
+					copysetStores := cs.Sets[copysetIdx]
+					for storeID := range copysetStores.Ids {
+						rangeStores = append(rangeStores, storeID)
+						updateCapacity(storeID, -rangeSize)
+						if len(rangeStores) == int(rf) {
+							break
+						}
+					}
+					availableSpace := storeDescriptor(rangeStores[0]).Capacity.Available
+					if availableSpace < rangeSize {
+						copysetIdx++
+					}
+					ranges[rangeID] = rangeStores
+				}
+
+				// Verify replica allocation sanity.
+				// First store should be full.
+				a.Equal(int64(0), storeDescriptor(roachpb.StoreID(1)).Capacity.Available)
+				// Last store should be empty.
+				a.Equal(int64(100), storeDescriptor(roachpb.StoreID(numStores)).Capacity.Available)
+				// Copysets should be satisfied.
+				// Verify that all ranges reside in a single copyset.
+				for rangeID, stores := range ranges {
+					a.Equal(int(rf), len(stores))
+					cs := distinctCopysets(rangeID)
+					a.Equal(1, len(cs), fmt.Sprintf("%v: %v", rangeID, cs))
+				}
+			default:
+				t.Fatalf("unknown start mode %v", tc.startMode)
+			}
+
+			// itersSinceLastRebal is the number of iterations since the last
+			// rebalance action.
+			itersSinceLastRebal := 0
+			// Stop once one full cycle completes without any rebalances.
+			// This implies ranges are in a stable configuration.
+			for rangeIdx := roachpb.RangeID(r.Int63n(numRanges) + 1); itersSinceLastRebal < numRanges; rangeIdx = rangeIdx%numRanges + 1 {
+				existingRepls := make([]roachpb.ReplicaDescriptor, rf)
+				for i, storeID := range ranges[rangeIdx] {
+					existingRepls[i] = roachpb.ReplicaDescriptor{
+						NodeID:  roachpb.NodeID(storeID),
+						StoreID: storeID,
+					}
+				}
+
+				targetStore, _ := allocator.RebalanceTarget(ctx, zc, nil, testRangeInfo(existingRepls, rangeIdx), storeFilterNone)
+
+				if targetStore != nil {
+					// Remove a replica so that RF of the range is maintained.
+					existingRepls = append(existingRepls, roachpb.ReplicaDescriptor{
+						NodeID:  roachpb.NodeID(targetStore.StoreID),
+						StoreID: targetStore.StoreID,
+					})
+					storeToRemove, _, err := allocator.RemoveTarget(ctx, zc, existingRepls, testRangeInfo(existingRepls, rangeIdx))
+					a.NoError(err)
+					if a.NotNil(storeToRemove) && storeToRemove.StoreID != targetStore.StoreID {
+						// Add target store to range.
+						updateCapacity(targetStore.StoreID, -rangeSize)
+						ranges[rangeIdx] = append(ranges[rangeIdx], targetStore.StoreID)
+
+						// Remove storeToRemove from range
+						updateCapacity(storeToRemove.StoreID, rangeSize)
+						ranges[rangeIdx] = removeStore(ranges[rangeIdx], storeToRemove.StoreID)
+					}
+					itersSinceLastRebal = 0
+				} else {
+					itersSinceLastRebal++
+				}
+
+				// Maintain RF invariant.
+				a.Equal(int(rf), len(ranges[rangeIdx]))
+			}
+
+			// Verify that all ranges reside in a single copyset if the copyset.
+			for rangeID, stores := range ranges {
+				a.Equal(int(rf), len(stores))
+				cs := distinctCopysets(rangeID)
+				a.Equal(1, len(cs), fmt.Sprintf("%v: %v %v", rangeID, cs, stores))
+			}
+
+			// Verify that the disk usage difference amongst stores is not high.
+			// This is verified with zero dead stores as some copysets would be
+			// incomplete with dead stores causing some disk imbalance and hence
+			// flakiness in this test.
+			minDiskFree, maxDiskFree := minMaxDiskFree()
+			log.Infof(ctx, "minDiskFree: %v\tmaxDiskFree: %v", minDiskFree, maxDiskFree)
+			a.True(maxDiskFree < 0.8)
+			a.True(minDiskFree > 0.3)
+			a.InDelta(0, maxDiskFree-minDiskFree, 0.20)
+		})
+	}
+}
+
+// TestAllocatorRemoveTargetWithCopyset verifies that the replica chosen by
+// RemoveTarget is the one with the lowest capacity.
+func TestAllocatorRemoveTargetWithCopyset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, allocator, _ := createTestAllocator(6, false /* deterministic */)
+	defer stopper.Stop(context.Background())
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     multiDiversityDCStores[0].Node,
+			Capacity: roachpb.StoreCapacity{Available: 30, Capacity: 100},
+		},
+		{
+			StoreID:  2,
+			Node:     multiDiversityDCStores[1].Node,
+			Capacity: roachpb.StoreCapacity{Available: 35, Capacity: 100},
+		},
+		{
+			StoreID:  3,
+			Node:     multiDiversityDCStores[2].Node,
+			Capacity: roachpb.StoreCapacity{Available: 40, Capacity: 100},
+		},
+		{
+			StoreID:  4,
+			Node:     multiDiversityDCStores[3].Node,
+			Capacity: roachpb.StoreCapacity{Available: 10, Capacity: 100},
+		},
+		{
+			StoreID:  5,
+			Node:     multiDiversityDCStores[4].Node,
+			Capacity: roachpb.StoreCapacity{Available: 12, Capacity: 100},
+		},
+		{
+			StoreID:  6,
+			Node:     multiDiversityDCStores[5].Node,
+			Capacity: roachpb.StoreCapacity{Available: 13, Capacity: 100},
+		},
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	testCases := []struct {
+		name     string
+		existing []roachpb.StoreID
+		expected []roachpb.StoreID
+	}{
+		{
+			name:     "balance copyset 1 a",
+			existing: []roachpb.StoreID{1, 2, 3, 4},
+			expected: []roachpb.StoreID{4},
+		},
+		{
+			name:     "balance copyset 1 b",
+			existing: []roachpb.StoreID{1, 2, 3, 6},
+			expected: []roachpb.StoreID{6},
+		},
+		{
+			name:     "migrate to idle copyset 1",
+			existing: []roachpb.StoreID{4, 5, 1},
+			expected: []roachpb.StoreID{4, 5},
+		},
+		{
+			name:     "continue migration to copyset 1",
+			existing: []roachpb.StoreID{4, 3, 1},
+			expected: []roachpb.StoreID{4},
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := assert.New(t)
+			existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
+			for i, storeID := range tc.existing {
+				existingRepls[i] = roachpb.ReplicaDescriptor{
+					NodeID:  roachpb.NodeID(storeID),
+					StoreID: storeID,
+				}
+			}
+			numReplicas := int32(3)
+			targetStore, details, err := allocator.RemoveTarget(
+				context.Background(),
+				&config.ZoneConfig{
+					NumReplicas: &numReplicas,
+				},
+				existingRepls,
+				testRangeInfo(existingRepls, firstRange),
+			)
+			if a.NoError(err) {
+				if len(tc.expected) == 0 {
+					a.Nil(targetStore, details)
+				} else {
+					if a.NotNil(targetStore, details) {
+						var found bool
+						for _, storeID := range tc.expected {
+							if targetStore.StoreID == storeID {
+								found = true
+								break
+							}
+						}
+						a.True(found, "%d: expected RebalanceTarget(%v) in %v, but got %d; details: %s",
+							i, tc.existing, tc.expected, targetStore.StoreID, details)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestCandidateCopysets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	storesWithCopysetsEnabled := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node:    roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1500,
+				Capacity:         100,
+				Available:        25,
+			},
+		},
+		{
+			StoreID: 2,
+			Node:    roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1100,
+				Capacity:         100,
+				Available:        26,
+			},
+		},
+		{
+			StoreID: 3,
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1000,
+				Capacity:         100,
+				Available:        50,
+			},
+		},
+		{
+			StoreID: 4,
+			Node:    roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 600,
+				Capacity:         100,
+				Available:        20,
+			},
+		},
+		{
+			StoreID: 5,
+			Node:    roachpb.NodeDescriptor{NodeID: 5},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 550,
+				Capacity:         100,
+				Available:        30,
+			},
+		},
+		{
+			StoreID: 6,
+			Node:    roachpb.NodeDescriptor{NodeID: 6},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 400,
+				Capacity:         100,
+				Available:        30,
+			},
+		},
+		{
+			StoreID: 7,
+			Node:    roachpb.NodeDescriptor{NodeID: 7},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 500,
+				Capacity:         100,
+				Available:        40,
+			},
+		},
+		{
+			StoreID: 8,
+			Node:    roachpb.NodeDescriptor{NodeID: 8},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 500,
+				Capacity:         100,
+				Available:        40,
+			},
+		},
+		{
+			StoreID: 9,
+			Node:    roachpb.NodeDescriptor{NodeID: 9},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1000,
+				Capacity:         100,
+				Available:        40,
+			},
+		},
+		{
+			StoreID: 10,
+			Node:    roachpb.NodeDescriptor{NodeID: 10},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 500,
+				Capacity:         100,
+				Available:        50,
+			},
+		},
+		{
+			StoreID: 11,
+			Node:    roachpb.NodeDescriptor{NodeID: 11},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 450,
+				Capacity:         100,
+				Available:        45,
+			},
+		},
+		{
+			StoreID: 12,
+			Node:    roachpb.NodeDescriptor{NodeID: 12},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 90,
+				Capacity:         100,
+				Available:        40,
+			},
+		},
+	}
+
+	const (
+		testCopysetsIdleScoreDifferenceThreshold = 0.03
+		testQPSRebalanceThreshold                = 0.5
+	)
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	stopper, g, _, a, _ := createTestAllocator(len(storesWithCopysetsEnabled), true /* deterministic */)
+	defer stopper.Stop(context.Background())
+	gossiputil.NewStoreGossiper(g).GossipStores(storesWithCopysetsEnabled, t)
+	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
+
+	localDesc := *storesWithCopysetsEnabled[0]
+	cfg := TestStoreConfig(nil)
+
+	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
+	rq := newReplicateQueue(s, g, a)
+	rr := newReplicaRankings()
+
+	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+	copysets.Enabled.Override(&sr.st.SV, true)
+	copysetsIdleScoreDifferenceThreshold.Override(
+		&sr.rq.allocator.storePool.st.SV,
+		testCopysetsIdleScoreDifferenceThreshold,
+	)
+	qpsRebalanceThreshold.Override(
+		&sr.rq.allocator.storePool.st.SV,
+		testQPSRebalanceThreshold,
+	)
+
+	// Rather than trying to populate every Replica with a real raft group in
+	// order to pass replicaIsBehind checks, fake out the function for getting
+	// raft status with one that always returns all replicas as up to date.
+	sr.getRaftStatusFn = func(r *Replica) *raft.Status {
+		status := &raft.Status{
+			Progress: make(map[uint64]raft.Progress),
+		}
+		status.Lead = uint64(r.ReplicaID())
+		status.Commit = 1
+		for _, replica := range r.Desc().Replicas {
+			status.Progress[uint64(replica.ReplicaID)] = raft.Progress{
+				Match: 1,
+				State: raft.ProgressStateReplicate,
+			}
+		}
+		return status
+	}
+
+	testCases := []struct {
+		testNo           string
+		storeIDs         []roachpb.StoreID
+		qps              float64
+		existingCSScore  float64
+		expectedCopysets []*CandidateCopyset
+	}{
+		{
+			testNo:          "Replication Factor 1",
+			storeIDs:        []roachpb.StoreID{1},
+			qps:             100,
+			existingCSScore: 0.26108374384236455,
+			expectedCopysets: []*CandidateCopyset{
+				// Better copyset score than the existing copyset.
+				{
+					csID:             10,
+					csScore:          0.3694581280788178,
+					convergenceScore: 0,
+					maxQPS:           500,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[9],
+					},
+					maxQPSStoreID: 10,
+				},
+				// Better copyset score than the existing copyset.
+				{
+					csID:             3,
+					csScore:          0.3694581280788178,
+					convergenceScore: -1,
+					maxQPS:           1000,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[2],
+					},
+					maxQPSStoreID: 3,
+				},
+				// Better copyset score than the existing copyset.
+				{
+					csID:             11,
+					csScore:          0.3448275862068966,
+					convergenceScore: 0,
+					maxQPS:           450,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[10],
+					},
+					maxQPSStoreID: 11,
+				},
+				// Better copyset score than the existing copyset.
+				{
+					csID:             12,
+					csScore:          0.3201970443349754,
+					convergenceScore: 1,
+					maxQPS:           90,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[11],
+					},
+					maxQPSStoreID: 12,
+				},
+				// Better copyset score than the existing copyset.
+				{
+					csID:             7,
+					csScore:          0.3201970443349754,
+					convergenceScore: 0,
+					maxQPS:           500,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[6],
+					},
+					maxQPSStoreID: 7,
+				},
+				// Better copyset score than the existing copyset. Equal copyset and
+				// QPS score with the previous test case but has higher copyset ID.
+				{
+					csID:             8,
+					csScore:          0.3201970443349754,
+					convergenceScore: 0,
+					maxQPS:           500,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[7],
+					},
+					maxQPSStoreID: 8,
+				},
+				// Better copyset score than the existing copyset. Equal copyset score
+				// with the previous test case but has higher QPS.
+				{
+					csID:             9,
+					csScore:          0.3201970443349754,
+					convergenceScore: -1,
+					maxQPS:           1000,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[8],
+					},
+					maxQPSStoreID: 9,
+				},
+				// Better copyset score than the existing copyset. Copyset score is worse
+				// all above test cases.
+				{
+					csID:             6,
+					csScore:          0.27093596059113306,
+					convergenceScore: 0,
+					maxQPS:           400,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[5],
+					},
+					maxQPSStoreID: 6,
+				},
+				// Better copyset score than the existing copyset. Copyset score is equal
+				// to the previous test case but has worse QPS.
+				{
+					csID:             5,
+					csScore:          0.27093596059113306,
+					convergenceScore: 0,
+					maxQPS:           550,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[4],
+					},
+					maxQPSStoreID: 5,
+				},
+				// Slightly worse copyset score than the existing copyset. But within
+				// the range:
+				// options.copysetRebalanceScoreFractionThreshold *
+				// options.copysetsIdleScoreDifferenceThreshold
+				{
+					csID:             2,
+					csScore:          0.2512315270935961,
+					convergenceScore: -2,
+					maxQPS:           1100,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[1],
+					},
+					maxQPSStoreID: 2,
+				},
+			},
+		},
+		{
+			testNo:          "Replication Factor 3",
+			storeIDs:        []roachpb.StoreID{1, 2, 3},
+			qps:             500,
+			existingCSScore: 0.26108374384236455,
+			expectedCopysets: []*CandidateCopyset{
+				{
+					csID:             4,
+					csScore:          0.29064039408867,
+					convergenceScore: 0,
+					maxQPS:           500,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[9],
+						*storesWithCopysetsEnabled[10],
+						*storesWithCopysetsEnabled[11],
+					},
+					maxQPSStoreID: 10,
+				},
+				{
+					csID:             3,
+					csScore:          0.29064039408867,
+					convergenceScore: -1,
+					maxQPS:           1000,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[6],
+						*storesWithCopysetsEnabled[7],
+						*storesWithCopysetsEnabled[8],
+					},
+					maxQPSStoreID: 9,
+				},
+			},
+		},
+		{
+			testNo:          "Replication Factor 4",
+			storeIDs:        []roachpb.StoreID{1, 2, 3, 4},
+			qps:             1000,
+			existingCSScore: 0.21182266009852221,
+			expectedCopysets: []*CandidateCopyset{
+				{
+					csID:             3,
+					csScore:          0.24532019704433505,
+					convergenceScore: -1,
+					maxQPS:           1000,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[8],
+						*storesWithCopysetsEnabled[9],
+						*storesWithCopysetsEnabled[10],
+						*storesWithCopysetsEnabled[11],
+					},
+					maxQPSStoreID: 9,
+				},
+				{
+					csID:             2,
+					csScore:          0.22561576354679808,
+					convergenceScore: 0,
+					maxQPS:           550,
+					stores: []roachpb.StoreDescriptor{
+						*storesWithCopysetsEnabled[4],
+						*storesWithCopysetsEnabled[5],
+						*storesWithCopysetsEnabled[6],
+						*storesWithCopysetsEnabled[7],
+					},
+					maxQPSStoreID: 5,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testNo, func(t *testing.T) {
+			zone := config.DefaultZoneConfig()
+			numReplicas := int32(len(tc.storeIDs))
+			zone.NumReplicas = &numReplicas
+			defer config.TestingSetDefaultZoneConfig(zone)()
+
+			loadRanges(rr, s, []testRange{{storeIDs: tc.storeIDs, qps: tc.qps}})
+
+			options := sr.rq.allocator.scorerOptions()
+			options.qpsRebalanceThreshold = qpsRebalanceThreshold.Get(&sr.rq.allocator.storePool.st.SV)
+
+			existingRepls := make([]roachpb.ReplicaDescriptor, 0)
+			for _, storeID := range tc.storeIDs {
+				store := storesWithCopysetsEnabled[int(storeID)-1]
+				existingRepls = append(existingRepls, roachpb.ReplicaDescriptor{
+					NodeID:  store.Node.NodeID,
+					StoreID: store.StoreID,
+				})
+			}
+			copysets, err := a.candidateCopysets(
+				ctx,
+				storeList,
+				&zone,
+				existingRepls,
+				testRangeInfo(existingRepls, firstRange),
+				options,
+			)
+
+			csScorer := a.newCopysetScorer(ctx, &zone)
+			existingCopysetsCSScore := copysetRebalanceScore(
+				ctx,
+				csScorer,
+				testRangeInfo(existingRepls, firstRange),
+				nil, // added store
+				nil, // removed store
+				options,
+			)
+
+			for _, copyset := range copysets {
+				stores := copyset.stores
+				sort.Slice(stores, func(i, j int) bool {
+					return stores[i].StoreID < stores[j].StoreID
+				})
+			}
+			assert := assert.New(t)
+			assert.NoError(err)
+			assert.Equal(tc.existingCSScore, existingCopysetsCSScore)
+			assert.Equal(tc.expectedCopysets, copysets)
+		})
+	}
 }

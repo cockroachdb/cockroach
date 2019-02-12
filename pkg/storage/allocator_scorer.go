@@ -19,12 +19,14 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/copysets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -63,10 +65,46 @@ var rangeRebalanceThreshold = settings.RegisterNonNegativeFloatSetting(
 	0.05,
 )
 
+// copysetsIdleScoreDifferenceThreshold is the the maximum difference of idle
+// score to try maintain between copysets.
+// If idle scores of two copy sets differ by more than this value, ranges will
+// start migrating to the copy set which has a higher idle score.
+// For example, Say a range is in copy set cs1 and cs1 has an idle score of
+// 0.3. If there exists a copy set cs2 with an idle score >= 0.45, then this
+// range will migrate one replica at a time to cs2.
+// So if the replication factor for this range is 3, the 3 replicas will
+// move from: (cs1 cs1 cs1) -> (cs1 cs1 cs2) -> (cs1 cs2 cs2) -> (cs2 cs2 cs2)
+// Even though this threshold is used to compare candidate stores, it has
+// the higher order effect shown above.
+var copysetsIdleScoreDifferenceThreshold = settings.RegisterNonNegativeFloatSetting(
+	"kv.allocator.copysets_idle_score_diff_threshold",
+	"the maximum difference of idle score to try maintain between copysets. Used if "+
+		"kv.allocator.enable_copysets is true",
+	0.15,
+)
+
+// copysetRebalanceScoreFractionThreshold is the fraction of
+// copysets_idle_score_diff_threshold by which a candidate copyset score can
+// be lower than the source copyset score to avoid thrashing.
+// It should set to a value between 0 and 1.
+// The motivation here is to discard the candidate if existing copyset is
+// significantly better than the candidate as this can cause the range to
+// thrash between the two copysets.
+var copysetRebalanceScoreFractionThreshold = settings.RegisterNonNegativeFloatSetting(
+	"kv.allocator.copyset_rebalance_score_threshold",
+	"fraction of copysets_idle_score_diff_threshold by which a candidate copyset score can "+
+		"be lower than the source copyset score to avoid thrashing. Used if "+
+		"kv.allocator.enable_copysets is true",
+	0.5,
+)
+
 type scorerOptions struct {
-	deterministic           bool
-	rangeRebalanceThreshold float64
-	qpsRebalanceThreshold   float64 // only considered if non-zero
+	copysetsEnabled                        bool
+	copysetsIdleScoreDifferenceThreshold   float64
+	copysetRebalanceScoreFractionThreshold float64
+	deterministic                          bool
+	rangeRebalanceThreshold                float64
+	qpsRebalanceThreshold                  float64 // only considered if non-zero
 }
 
 type balanceDimensions struct {
@@ -85,6 +123,16 @@ func (bd balanceDimensions) compactString(options scorerOptions) string {
 	return fmt.Sprintf("%d", bd.ranges)
 }
 
+// idleDimensions is used to compute idle score (a value between 0 and 1)
+// which denotes how idle a store is.
+type idleDimensions struct {
+	diskFree float64
+}
+
+func (id *idleDimensions) totalScore() float64 {
+	return id.diskFree
+}
+
 // candidate store for allocation.
 type candidate struct {
 	store          roachpb.StoreDescriptor
@@ -94,15 +142,16 @@ type candidate struct {
 	diversityScore float64
 	convergesScore int
 	balanceScore   balanceDimensions
+	copysetScore   float64
 	rangeCount     int
 	details        string
 }
 
 func (c candidate) String() string {
 	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, converges:%d, "+
-		"balance:%s, rangeCount:%d, queriesPerSecond:%.2f",
+		"balance:%s, rangeCount:%d, queriesPerSecond:%.2f,  copyset: %.2f",
 		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.diversityScore, c.convergesScore,
-		c.balanceScore, c.rangeCount, c.store.Capacity.QueriesPerSecond)
+		c.balanceScore, c.rangeCount, c.store.Capacity.QueriesPerSecond, c.copysetScore)
 	if c.details != "" {
 		return fmt.Sprintf("%s, details:(%s)", str, c.details)
 	}
@@ -124,6 +173,9 @@ func (c candidate) compactString(options scorerOptions) string {
 	if c.diversityScore != 0 {
 		fmt.Fprintf(&buf, ", diversity:%.2f", c.diversityScore)
 	}
+	if c.copysetScore != 0 {
+		fmt.Fprintf(&buf, ", copyset:%.2f", c.copysetScore)
+	}
 	fmt.Fprintf(&buf, ", converges:%d, balance:%s, rangeCount:%d",
 		c.convergesScore, c.balanceScore.compactString(options), c.rangeCount)
 	if c.details != "" {
@@ -144,22 +196,28 @@ func (c candidate) less(o candidate) bool {
 // candidate is.
 func (c candidate) compare(o candidate) float64 {
 	if !o.valid {
-		return 6
+		return 7
 	}
 	if !c.valid {
-		return -6
+		return -7
 	}
 	if o.fullDisk {
-		return 5
+		return 6
 	}
 	if c.fullDisk {
-		return -5
+		return -6
 	}
 	if c.necessary != o.necessary {
 		if c.necessary {
-			return 4
+			return 5
 		}
-		return -4
+		return -5
+	}
+	if c.copysetScore != o.copysetScore {
+		if c.copysetScore > o.copysetScore {
+			return 4 + (c.copysetScore-o.copysetScore)/10
+		}
+		return -(4 + (o.copysetScore-c.copysetScore)/10)
 	}
 	if c.diversityScore != o.diversityScore {
 		if c.diversityScore > o.diversityScore {
@@ -240,6 +298,7 @@ func (c byScoreAndID) Less(i, j int) bool {
 	if c[i].diversityScore == c[j].diversityScore &&
 		c[i].convergesScore == c[j].convergesScore &&
 		c[i].balanceScore.totalScore() == c[j].balanceScore.totalScore() &&
+		c[i].copysetScore == c[j].copysetScore &&
 		c[i].rangeCount == c[j].rangeCount &&
 		c[i].necessary == c[j].necessary &&
 		c[i].fullDisk == c[j].fullDisk &&
@@ -271,7 +330,8 @@ func (cl candidateList) best() candidateList {
 	for i := 1; i < len(cl); i++ {
 		if cl[i].necessary == cl[0].necessary &&
 			cl[i].diversityScore == cl[0].diversityScore &&
-			cl[i].convergesScore == cl[0].convergesScore {
+			cl[i].convergesScore == cl[0].convergesScore &&
+			cl[i].copysetScore == cl[0].copysetScore {
 			continue
 		}
 		return cl[:i]
@@ -305,7 +365,8 @@ func (cl candidateList) worst() candidateList {
 	for i := len(cl) - 2; i >= 0; i-- {
 		if cl[i].necessary == cl[len(cl)-1].necessary &&
 			cl[i].diversityScore == cl[len(cl)-1].diversityScore &&
-			cl[i].convergesScore == cl[len(cl)-1].convergesScore {
+			cl[i].convergesScore == cl[len(cl)-1].convergesScore &&
+			cl[i].copysetScore == cl[len(cl)-1].copysetScore {
 			continue
 		}
 		return cl[i+1:]
@@ -383,12 +444,14 @@ func (cl candidateList) removeCandidate(c candidate) candidateList {
 // for allocating a new replica ordered from the best to the worst. Only
 // stores that meet the criteria are included in the list.
 func allocateCandidates(
+	ctx context.Context,
 	sl StoreList,
 	constraints analyzedConstraints,
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 	options scorerOptions,
+	copysetsScorer *copysetsScorer,
 ) candidateList {
 	var candidates candidateList
 	for _, s := range sl.stores {
@@ -404,6 +467,7 @@ func allocateCandidates(
 		}
 		diversityScore := diversityAllocateScore(s, existingNodeLocalities)
 		balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
+		copysetScore := copysetRebalanceScore(ctx, copysetsScorer, rangeInfo, &s, nil /* removedStore */, options)
 		var convergesScore int
 		if options.qpsRebalanceThreshold > 0 {
 			if s.Capacity.QueriesPerSecond < underfullThreshold(sl.candidateQueriesPerSecond.mean, options.qpsRebalanceThreshold) {
@@ -422,6 +486,7 @@ func allocateCandidates(
 			necessary:      necessary,
 			diversityScore: diversityScore,
 			convergesScore: convergesScore,
+			copysetScore:   copysetScore,
 			balanceScore:   balanceScore,
 			rangeCount:     int(s.Capacity.RangeCount),
 		})
@@ -438,11 +503,13 @@ func allocateCandidates(
 // ordered from least qualified for removal to most qualified. Stores that are
 // marked as not valid, are in violation of a required criteria.
 func removeCandidates(
+	ctx context.Context,
 	sl StoreList,
 	constraints analyzedConstraints,
 	rangeInfo RangeInfo,
 	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 	options scorerOptions,
+	copysetsScorer *copysetsScorer,
 ) candidateList {
 	var candidates candidateList
 	for _, s := range sl.stores {
@@ -459,6 +526,7 @@ func removeCandidates(
 		diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
 		balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
 		var convergesScore int
+		copysetScore := copysetRemovalScore(ctx, copysetsScorer, rangeInfo, s, options)
 		if !rebalanceFromConvergesOnMean(sl, s.Capacity) {
 			// If removing this candidate replica does not converge the store
 			// stats to their means, we make it less attractive for removal by
@@ -474,6 +542,7 @@ func removeCandidates(
 			fullDisk:       !maxCapacityCheck(s),
 			diversityScore: diversityScore,
 			convergesScore: convergesScore,
+			copysetScore:   copysetScore,
 			balanceScore:   balanceScore,
 			rangeCount:     int(s.Capacity.RangeCount),
 		})
@@ -491,6 +560,373 @@ type rebalanceOptions struct {
 	candidates         candidateList
 }
 
+// fractionDiskFree returns the given store's Available / Capacity.
+func fractionDiskFree(store roachpb.StoreDescriptor) float64 {
+	if store.Capacity.Capacity == 0 {
+		return 0
+	}
+
+	return float64(store.Capacity.Available) / float64(store.Capacity.Capacity)
+}
+
+// copysetsScorer pre-computes and caches information in a format efficient
+// for computing copyset scores.
+type copysetsScorer struct {
+	// Stores a mapping from CopysetID to idleDimensions. The idleDimension of
+	// a copyset is the idleDimension with the lowest score among the stores in
+	// the copyset.
+	idleDims map[copysets.CopysetID]idleDimensions
+	// copysets is a map from StoreID to a list of copysets it belongs to.
+	copysets          map[roachpb.StoreID][]copysets.CopysetID
+	replicationFactor int32
+}
+
+// homogeneity score returns the homogeneity score for the given set of stores
+// based on the copysets they belong to. It is proportional to the number of
+// stores belonging to the same copyset. A higher score is better and a score
+// of 1 implies that all stores belong to the same copyset.
+//
+// Each store can belong to multiple copysets all of which are valid.
+// This function looks at all the copyset-store assignments and returns
+// the highest possible homogeneity score as that represents the best copyset
+// homogeneity property satisfied by the given stores.
+// For example if the store - copyset possibilities are
+// S1: 1 4
+// S2: 2 4
+// S3: 3 4
+// Then considering (4 4 4) a homogeneity score of 1 is returned. These 3 stores
+// do belong to the same copyset.
+func (css *copysetsScorer) homogeneityScore(ctx context.Context, stores []roachpb.StoreID) float64 {
+	// indices is used to index into a particular copyset for each store
+	// used in computing homogeneity score.
+
+	if len(stores) == 0 {
+		return 0
+	}
+
+	if len(stores) == 1 {
+		return 1
+	}
+
+	indices := make(map[roachpb.StoreID]int)
+
+	// Initialize indices.
+	for _, store := range stores {
+		_, ok := css.copysets[store]
+		if !ok {
+			log.Errorf(
+				ctx, "Copy set not found for store %v replication factor %v", store, css.replicationFactor)
+			return 0
+		}
+		indices[store] = 0
+	}
+
+	// n choose 2 samples where n is the number of stores.
+	numSamples := float64(len(stores)*(len(stores)-1)) / 2
+
+	// bestHomogeneityScore keeps track of the score of the best store-copyset
+	// assignments.
+	var bestHomogeneityScore, homogeneityScore float64
+	var minCopysetIDStore roachpb.StoreID
+	var minCopysetID copysets.CopysetID
+	// All copyset-store assignments need to be reviewed in order to compute the
+	// highest homogeneity score.
+	// Copysets for each store are in sorted order.
+	// Compare copysets of each store based on indices and increment the index
+	// of the lowest copysetID.
+	// For example, if the store-copyset possibilities are
+	// S1: 1  5 11
+	// S2: 3 11 12
+	// S3: 11
+	// The comparisons would be in the order:
+	// (1 3 11) -> (5 3 11) -> (5 11 11) -> (11 11 11) -> (early exit)
+	// For each comparison, the homogeneity score is given as
+	// number of pairwise same copyset / total number of pair-wise copysets.
+	// Where the total number of pair-wise copysets is n choose 2 where n is the
+	// number of stores.
+	for {
+		homogeneityScore = 0
+		minCopysetIDStore = -1
+		minCopysetID = -1
+
+		// Compute homogeneity score based on the store-copyset assignment using
+		// indices.
+		for _, s1 := range stores {
+			cs1 := css.copysets[s1][indices[s1]]
+			for _, s2 := range stores {
+				// Only compare pairs of replicas where s2 > s1 to avoid
+				// computing the copy set score between each pair of stores twice.
+				if s1 <= s2 {
+					continue
+				}
+
+				if cs1 == css.copysets[s2][indices[s2]] {
+					homogeneityScore++
+				}
+			}
+
+			// Decide which store's index to increment next
+			// It should have the minimum copyset ID and have more copysets assignable
+			if (minCopysetID == -1 || cs1 < minCopysetID) && indices[s1] < len(css.copysets[s1])-1 {
+				minCopysetID = cs1
+				minCopysetIDStore = s1
+			}
+		}
+
+		if homogeneityScore > bestHomogeneityScore {
+			bestHomogeneityScore = homogeneityScore
+			if bestHomogeneityScore == numSamples {
+				// Early exit. This is the maximum possible homogeneity score.
+				return 1
+			}
+		}
+
+		// No more combinations remain to be checked.
+		if minCopysetIDStore < 0 {
+			break
+		}
+
+		indices[minCopysetIDStore]++
+	}
+
+	return bestHomogeneityScore / numSamples
+}
+
+// idleScore returns the idle score of the copyset which this store belongs to.
+// A higher idle score is better as it denotes the copyset is idle and can take
+// on more load.
+// Since the copyset idle score is same for all the stores in a copyset (copyset
+// idle score is the lowest store idle score among the stores in the copyset),
+// thrashing within a copy set is avoided.
+// If a store belongs to multiple copysets, the highest idle score among those
+// copysets is returned since we want a range to migrate to that copyset.
+// In other words, returning the highest idle score of a copyset the store
+// belongs to will migrate the range to the more idle copyset among the copysets
+// the store belongs to.
+func (css *copysetsScorer) idleScore(ctx context.Context, store roachpb.StoreID) float64 {
+	copysetIDs, ok := css.copysets[store]
+	if !ok {
+		log.Errorf(
+			ctx, "Copy set not found for store %v replication factor %v", store, css.replicationFactor)
+		return 0
+	}
+
+	var bestIdleScore *idleDimensions
+	for _, copysetID := range copysetIDs {
+		copysetIdleScore, ok := css.idleDims[copysetID]
+		if !ok {
+			log.Errorf(ctx, "Idle score not found for copy set %v", copysetID)
+			continue
+		}
+
+		if bestIdleScore == nil || bestIdleScore.totalScore() < copysetIdleScore.totalScore() {
+			bestIdleScore = &copysetIdleScore
+		}
+	}
+
+	if bestIdleScore == nil {
+		log.Errorf(ctx, "Idle score not found for store %v", store)
+		return 0
+	}
+
+	return bestIdleScore.totalScore()
+}
+
+func newCopysetsScorer(
+	cs *copysets.Copysets, stores map[roachpb.StoreID]roachpb.StoreDescriptor,
+) *copysetsScorer {
+	if cs == nil {
+		return nil
+	}
+
+	css := &copysetsScorer{
+		copysets:          make(map[roachpb.StoreID][]copysets.CopysetID),
+		idleDims:          make(map[copysets.CopysetID]idleDimensions),
+		replicationFactor: cs.ReplicationFactor,
+	}
+
+	var sortedCopysetIDs []copysets.CopysetID
+	for copysetID := range cs.Sets {
+		sortedCopysetIDs = append(sortedCopysetIDs, copysetID)
+	}
+
+	sort.Slice(sortedCopysetIDs, func(i, j int) bool {
+		return sortedCopysetIDs[i] < sortedCopysetIDs[j]
+	})
+
+	// Populate StoreID -> []Copyset map
+	for _, copysetID := range sortedCopysetIDs {
+		for storeID := range cs.Sets[copysetID].Ids {
+			if _, ok := css.copysets[storeID]; !ok {
+				css.copysets[storeID] = []copysets.CopysetID{}
+			}
+
+			css.copysets[storeID] = append(css.copysets[storeID], copysetID)
+		}
+	}
+
+	// Populate CopysetID -> idleDimensions map.
+	for storeID, desc := range stores {
+		copysetIDs, ok := css.copysets[storeID]
+		if !ok {
+			continue
+		}
+		for _, copysetID := range copysetIDs {
+			idleDim := idleDimensions{
+				diskFree: fractionDiskFree(desc),
+			}
+
+			// Idle score of a copy set is equal to the lowest idle score of a store
+			// in the copy set.
+			copysetIdleDim, ok := css.idleDims[copysetID]
+			// Update the map if copy set does not exist in the map or the current
+			// idle score is worse than the existing idle score.
+			if !ok || copysetIdleDim.totalScore() > idleDim.totalScore() {
+				css.idleDims[copysetID] = idleDim
+			}
+		}
+	}
+
+	return css
+}
+
+// copysetScore computes the copyset score given the homogeneity score and idle
+// score.
+// A higher value implies copyset properties are better satisfied.
+// Homogeneity score: This value is proportional to the number of replicas
+// of a range in the same copy set.
+// Idle score: This value is the weighted average idle scores of the copy
+// sets present in the range.
+// The idle score of a copy set is the lowest idle score of the stores present
+// in it.
+// The idle score of a store is proportional to how idle the store is
+// (like fraction disk free)
+// It computes a score between 0 and 1.
+func copysetScore(options scorerOptions, homogeneityScore, idleScore float64) float64 {
+	// homogeneityScore and idle score are combined such that higher
+	// homogeneity score is preferred.
+	// But a range will migrate to another copy set if the idle score of the
+	// target copy set is higher by copysetsIdleScoreDifferenceThreshold.
+	//
+	// Given two copy sets, we want a range to migrate to another copy set if the
+	// idle score of the target copy set is higher by
+	// copysetsIdleScoreDifferenceThreshold (let's call this d).
+	// Let's say we scale the homogeneityScore by k when computing totalScore
+	// Assuming a replication factor of r (=3), we want
+	// totalScore(cs1 cs1 cs1) < totalScore(cs1 cs1 cs2) in the above case
+	// and totalScore = k * homogeneityScore + idleScore
+	// Let's say the idle score of cs1 is a and of cs2 is a + d.
+	// We want
+	// k * homogeneityScore(cs1 cs1 cs1) + idleScore(cs1 cs1 cs1) <
+	//         k * homogeneityScore(cs1 cs1 cs2) + idleScore(cs1 cs1 cs2)
+	// where (r = 3 below)
+	//     homogeneityScore(cs1 cs1 cs1) = 1
+	//     idleScore(cs1 cs1 cs1) = ra/r = a
+	//     homogeneityScore(cs1 cs1 cs2) = (r-1 choose 2) / (r choose 2)
+	//         since 1 copyset is different.
+	//     idleScore(cs1 cs1 cs2) = ((r-1) * a + a + d)/r = (ra + d) / r
+	// So we get
+	// k * 1 + a <= k * (r-1 choose 2) / (r choose 2) + (ra + d) / r
+	// => k <= d / 2
+	// For example, for r = 3, d = 0.15, and idle score of cs1 being 0.2 and idle
+	// score of cs2 being 0.36
+	// totalScore(cs1 cs1 cs1) = 0.075 * 1 + 0.2 = 0.275
+	// totalScore(cs1 cs1 cs2) = 0.075 * 0.33 + (0.2 + 0.2 + 0.36)/3 = 0.278
+	// So a range will migrate from
+	// (cs1 cs1 cs1) -> (cs1 cs1 cs2) -> (cs1 cs2 cs2) -> (cs2 cs2 cs2)
+	// The first step (cs1 cs1 cs1) -> (cs1 cs1 cs2) is the hardest as homogeneity
+	// is breaking. The proof for this is given above.
+	// For (cs1 cs1 cs2) -> (cs1 cs2 cs2) step, the homogeneity score remains the
+	// same,and idle score improves (since cs2 has a better idle score).
+	// For (cs1 cs2 cs2) -> (cs2 cs2 cs2) step, both the homogeneity score and
+	// idle score improve.
+	// When a range actually migrates from (cs1 cs1 cs1) to (cs1 cs1 cs2), it goes
+	// through an intermediate step (cs1 cs1 cs1 cs2) after which one cs1 is
+	// removed. Similar math applies.
+	// Total score is later normalized to lie between 0 and 1.
+	k := options.copysetsIdleScoreDifferenceThreshold / 2
+	return (k*homogeneityScore + idleScore) / (k + 1)
+}
+
+// copysetRebalanceScore returns a score between 0 and 1 based on how desirable
+// it would be for a range to be in its
+// current stores - removedStore + addedStore.
+// A higher score indicates that the above stores are a good fit for this range
+// in terms of copy sets properties.
+func copysetRebalanceScore(
+	ctx context.Context,
+	copysetsScorer *copysetsScorer,
+	rangeInfo RangeInfo,
+	addedStore *roachpb.StoreDescriptor,
+	removedStore *roachpb.StoreDescriptor,
+	options scorerOptions,
+) float64 {
+	if copysetsScorer == nil || !options.copysetsEnabled {
+		return 0
+	}
+
+	var sumIdleScore float64
+	var numSamplesIdleScore int
+	var storesUsed []roachpb.StoreID
+	// Identify the stores used to compute copy sets score.
+	for _, r := range rangeInfo.Desc.Replicas {
+		// Skip the removed store.
+		if removedStore != nil && removedStore.StoreID == r.StoreID {
+			continue
+		}
+
+		storesUsed = append(storesUsed, r.StoreID)
+		sumIdleScore += copysetsScorer.idleScore(ctx, r.StoreID)
+		numSamplesIdleScore++
+	}
+
+	if addedStore != nil {
+		storesUsed = append(storesUsed, addedStore.StoreID)
+		sumIdleScore += copysetsScorer.idleScore(ctx, addedStore.StoreID)
+		numSamplesIdleScore++
+	}
+
+	if len(storesUsed) == 0 {
+		return 0
+	}
+
+	return copysetScore(
+		options,
+		copysetsScorer.homogeneityScore(ctx, storesUsed),
+		sumIdleScore/float64(numSamplesIdleScore),
+	)
+}
+
+// copysetRemovalScore returns a score between 0 and 1 based on how desirable
+// it would be to remove a node's replica of a range. A higher score indicates
+// that the node is a better fit (i.e. keeping it around is good in terms of
+// copy sets properties) and preferably not be removed.
+func copysetRemovalScore(
+	ctx context.Context,
+	copysetsScorer *copysetsScorer,
+	rangeInfo RangeInfo,
+	potentialStoreToRemove roachpb.StoreDescriptor,
+	options scorerOptions,
+) float64 {
+	if copysetsScorer == nil || !options.copysetsEnabled {
+		return 0
+	}
+
+	// If removing this node results in a high rebalance score, it is a good
+	// candidate for removal and vice versa.
+	// Hence removal score is the inverse of rebalance score after removing
+	// potentialStoreToRemove.
+	// copysetRebalanceScore returns a score between 0 and 1.
+	return 1 - copysetRebalanceScore(
+		ctx,
+		copysetsScorer,
+		rangeInfo,
+		nil, /* addedStore */
+		&potentialStoreToRemove,
+		options,
+	)
+}
+
 // rebalanceCandidates creates two candidate lists. The first contains all
 // existing replica's stores, ordered from least qualified for rebalancing to
 // most qualified. The second list is of all potential stores that could be
@@ -503,6 +939,7 @@ func rebalanceCandidates(
 	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 	localityLookupFn func(roachpb.NodeID) string,
 	options scorerOptions,
+	copysetsScorer *copysetsScorer,
 ) []rebalanceOptions {
 	// 1. Determine whether existing replicas are valid and/or necessary.
 	type existingStore struct {
@@ -512,6 +949,14 @@ func rebalanceCandidates(
 	existingStores := make(map[roachpb.StoreID]existingStore)
 	var needRebalanceFrom bool
 	curDiversityScore := rangeDiversityScore(existingNodeLocalities)
+	currCopysetScore := copysetRebalanceScore(
+		ctx,
+		copysetsScorer,
+		rangeInfo,
+		nil, // added store
+		nil, // removed store
+		options,
+	)
 	for _, store := range allStores.stores {
 		for _, repl := range rangeInfo.Desc.Replicas {
 			if store.StoreID != repl.StoreID {
@@ -540,6 +985,7 @@ func rebalanceCandidates(
 					necessary:      necessary,
 					fullDisk:       fullDisk,
 					diversityScore: curDiversityScore,
+					copysetScore:   currCopysetScore,
 				},
 				localityStr: localityLookupFn(store.Node.NodeID),
 			}
@@ -577,7 +1023,7 @@ func rebalanceCandidates(
 		// include Node/Store Attributes because they affect constraints.
 		var matchedOtherExisting bool
 		for i, stores := range comparableStores {
-			if sameLocalityAndAttrs(stores.existing[0], existing.cand.store) {
+			if sameLocalityAndAttrsAndCopyset(stores.existing[0], existing.cand.store, copysetsScorer) {
 				comparableStores[i].existing = append(comparableStores[i].existing, existing.cand.store)
 				matchedOtherExisting = true
 				break
@@ -602,20 +1048,26 @@ func rebalanceCandidates(
 			maxCapacityOK := maxCapacityCheck(store)
 			diversityScore := diversityRebalanceFromScore(
 				store, existing.cand.store.Node.NodeID, existingNodeLocalities)
+			copysetScore := copysetRebalanceScore(ctx, copysetsScorer, rangeInfo, &store, &existing.cand.store, options)
 			cand := candidate{
 				store:          store,
 				valid:          constraintsOK,
 				necessary:      necessary,
 				fullDisk:       !maxCapacityOK,
 				diversityScore: diversityScore,
+				copysetScore:   copysetScore,
 			}
 			if !cand.less(existing.cand) {
 				comparableCands = append(comparableCands, cand)
 				if !needRebalanceFrom && !needRebalanceTo && existing.cand.less(cand) {
 					needRebalanceTo = true
-					log.VEventf(ctx, 2, "s%d: should-rebalance(necessary/diversity=s%d): oldNecessary:%t, newNecessary:%t, oldDiversity:%f, newDiversity:%f, locality:%q",
+					log.VEventf(ctx, 2, "s%d: should-rebalance(necessary/diversity=s%d): "+
+						"oldNecessary:%t, newNecessary:%t, oldDiversity:%f, newDiversity:%f, "+
+						"oldCopyset: %f, newCopyset: %f, locality:%q",
 						existing.cand.store.StoreID, store.StoreID, existing.cand.necessary, cand.necessary,
-						existing.cand.diversityScore, cand.diversityScore, store.Node.Locality)
+						existing.cand.diversityScore, cand.diversityScore,
+						existing.cand.copysetScore, cand.copysetScore,
+						store.Node.Locality)
 				}
 			}
 		}
@@ -870,7 +1322,9 @@ func storeHasReplica(storeID roachpb.StoreID, existing []roachpb.ReplicaDescript
 	return false
 }
 
-func sameLocalityAndAttrs(s1, s2 roachpb.StoreDescriptor) bool {
+func sameLocalityAndAttrsAndCopyset(
+	s1, s2 roachpb.StoreDescriptor, copysetsScorer *copysetsScorer,
+) bool {
 	if !s1.Node.Locality.Equals(s2.Node.Locality) {
 		return false
 	}
@@ -879,6 +1333,19 @@ func sameLocalityAndAttrs(s1, s2 roachpb.StoreDescriptor) bool {
 	}
 	if !s1.Attrs.Equals(s2.Attrs) {
 		return false
+	}
+
+	if copysetsScorer != nil {
+		cs1, ok1 := copysetsScorer.copysets[s1.StoreID]
+		cs2, ok2 := copysetsScorer.copysets[s2.StoreID]
+		if ok1 != ok2 {
+			return false
+		}
+		if ok1 && ok2 {
+			if !reflect.DeepEqual(cs1, cs2) {
+				return false
+			}
+		}
 	}
 	return true
 }
