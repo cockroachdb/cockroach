@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -473,8 +474,9 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 	return res, nil
 }
 func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
+	fmt.Println("Planning aj")
 	switch join.Op() {
-	case opt.InnerJoinApplyOp, opt.LeftJoinApplyOp:
+	case opt.InnerJoinApplyOp, opt.LeftJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 	default:
 		return execPlan{}, fmt.Errorf("couldn't execute correlated subquery with op %s", join.Op())
 	}
@@ -483,16 +485,55 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	rightExpr := join.Child(1).(memo.RelExpr)
 	filters := join.Child(2).(*memo.FiltersExpr)
 
-	leftExpr.Relational().OutputCols
+	var f norm.Factory
+	f.Init(b.evalCtx)
+	fakeBindings := make(map[opt.ColumnID]tree.Datum)
+	rightExpr.Relational().OuterCols.ForEach(func(k int) {
+		fakeBindings[opt.ColumnID(k)] = tree.DNull
+	})
+	var replace func(e opt.Expr) opt.Expr
+	replace = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			if d, ok := fakeBindings[t.Col]; ok {
+				return f.ConstructConstVal(d)
+			}
+		}
+		return f.CopyAndReplaceDefault(e, replace)
+	}
+	f.CopyAndReplace(rightExpr, rightExpr.RequiredPhysical(), replace)
+
+	b.hackMissingVarExprs = true
+	fakeRight, err := b.buildRelational(rightExpr)
+	b.hackMissingVarExprs = false
+	if err != nil {
+		return execPlan{}, nil
+	}
 
 	left, err := b.buildRelational(leftExpr)
 	if err != nil {
 		return execPlan{}, nil
 	}
 
-	// TODO(jordan): how to get outputCols from non-built right side memo.RelExpr?
-	var rightOutputCols opt.ColMap
-	allCols := joinOutputMap(left.outputCols, rightOutputCols)
+	// leftBoundCols is the set of columns that this apply join binds.
+	leftBoundCols := leftExpr.Relational().OutputCols.Intersection(rightExpr.Relational().OutputCols)
+	// leftBoundColMap is a map from opt.ColumnID to opt.ColumnOrdinal that maps
+	// a column bound by the left side of this apply join to the column ordinal
+	// in the left side that contains the binding.
+	var leftBoundColMap opt.ColMap
+	var bindErr error
+	leftBoundCols.ForEach(func(k int) {
+		v, ok := left.outputCols.Get(k)
+		if !ok {
+			bindErr = fmt.Errorf("couldn't find binding column %d in output columns", k)
+		}
+		leftBoundColMap.Set(k, v)
+	})
+	if bindErr != nil {
+		return execPlan{}, bindErr
+	}
+
+	allCols := joinOutputMap(left.outputCols, fakeRight.outputCols)
 
 	ctx := buildScalarCtx{
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
@@ -520,7 +561,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	ep.root, err = b.factory.ConstructApplyJoin(
 		joinType,
 		left.root,
+		leftBoundColMap,
 		b.mem,
+		fakeRight,
 		rightExpr,
 		onExpr,
 	)

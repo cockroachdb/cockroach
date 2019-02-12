@@ -45,6 +45,10 @@ type applyJoinNode struct {
 	// The data source with no outer columns.
 	input planDataSource
 
+	// leftBoundColMap maps an outer opt column id, bound by this apply join, to
+	// the position in the left plan's row that contains the binding.
+	leftBoundColMap opt.ColMap
+
 	// pred represents the join predicate.
 	pred *joinPredicate
 
@@ -66,6 +70,7 @@ type applyJoinNode struct {
 func newApplyJoinNode(
 	joinType sqlbase.JoinType,
 	left planDataSource,
+	leftBoundColMap opt.ColMap,
 	right memo.RelExpr,
 	pred *joinPredicate,
 	memo *memo.Memo,
@@ -77,12 +82,13 @@ func newApplyJoinNode(
 		return nil, errors.New("unsupported apply set op")
 	}
 	return &applyJoinNode{
-		joinType:  joinType,
-		input:     left,
-		pred:      pred,
-		rightMemo: memo,
-		right:     right,
-		columns:   pred.info.SourceColumns,
+		joinType:        joinType,
+		input:           left,
+		leftBoundColMap: leftBoundColMap,
+		pred:            pred,
+		rightMemo:       memo,
+		right:           right,
+		columns:         pred.info.SourceColumns,
 	}, nil
 }
 
@@ -188,15 +194,11 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		row := a.input.plan.Values()
 		a.run.leftRow = row
 
-		// Replace the outer VariableExprs that this applyJoin node is responsible
-		// for with the constant values in the latest left row.
-		//
-		// TODO(jordan,andyk): write the function that does this. It needs to have
-		// a mapping from optimizer outer VariableExpr (or col id?) to left-side
-		// datum, and replace each VariableExpr with the corresponding left-side
-		// datum. The walker should stop replacing if it hits the right side of
-		// another, nested apply join.
-		//
+		bindings := make(map[opt.ColumnID]tree.Datum, a.leftBoundColMap.Len())
+		a.leftBoundColMap.ForEach(func(k, v int) {
+			bindings[opt.ColumnID(k)] = row[v]
+		})
+
 		// The missing piece is how to propagate outer columns from apply joins
 		// *above* this one. It seems like we need to keep a map inside of the
 		// exec params that contains the mapping I mentioned above. Then, the
@@ -207,24 +209,19 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		a.optimizer.Init(params.p.EvalContext())
 		f := a.optimizer.Factory()
 
-		a.replaceVars(f, a.right, vars)
+		// Replace the outer VariableExprs that this applyJoin node is responsible
+		// for with the constant values in the latest left row.
+		a.replaceVars(f, a.right, bindings)
 
 		a.optimizer.Optimize()
-		memo := f.Memo()
 
 		execFactory := makeExecFactory(params.p)
-		p, err := execbuilder.New(&execFactory, memo, a.right, params.EvalContext()).Build()
+		p, err := execbuilder.New(&execFactory, f.Memo(), a.right, params.EvalContext()).Build()
 		if err != nil {
 			return false, err
 		}
 		plan := p.(*planTop)
 
-		// TODO(jordan): I believe this is unnecessary: all subtree will have
-		// already been extracted and run at the beginning of the top level plan's
-		// execution phase.
-		if err := plan.evalSubqueries(params); err != nil {
-			return false, err
-		}
 		if err := startExec(params, plan.plan); err != nil {
 			return false, err
 		}

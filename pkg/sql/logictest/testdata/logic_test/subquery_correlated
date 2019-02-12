@@ -246,7 +246,7 @@ WHERE
 1  CA
 
 # For now, we can't decorrelate semi-join-apply cases.
-statement error could not decorrelate subquery
+query IT rowsort
 SELECT *
 FROM c
 WHERE (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);

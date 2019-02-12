@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -295,7 +296,9 @@ func (ef *execFactory) ConstructHashJoin(
 func (ef *execFactory) ConstructApplyJoin(
 	joinType sqlbase.JoinType,
 	left exec.Node,
+	leftBoundColMap opt.ColMap,
 	memo *memo.Memo,
+	fakeRight exec.Node,
 	right memo.RelExpr,
 	onCond tree.TypedExpr,
 ) (exec.Node, error) {
@@ -309,7 +312,7 @@ func (ef *execFactory) ConstructApplyJoin(
 	if err != nil {
 		return nil, err
 	}
-	return newApplyJoinNode(joinType, asDataSource(left), right, pred, memo)
+	return newApplyJoinNode(joinType, asDataSource(left), leftBoundColMap, right, pred, memo)
 }
 
 // ConstructMergeJoin is part of the exec.Factory interface.
