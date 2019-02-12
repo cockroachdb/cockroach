@@ -40,7 +40,8 @@ func registerFollowerReads(r *registry) {
 			CPUs:      2,
 			Geo:       true,
 		},
-		Run: runFollowerReadsTest,
+		MinVersion: "v2.2.0",
+		Run:        runFollowerReadsTest,
 	})
 }
 
