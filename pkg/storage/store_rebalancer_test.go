@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/copysets"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -117,7 +118,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+	stopper, g, _, a, _ := createTestAllocatorWithoutCopysets(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
 	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
@@ -200,7 +201,7 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+	stopper, g, _, a, _ := createTestAllocatorWithoutCopysets(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
 	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
@@ -378,5 +379,363 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	if !reflect.DeepEqual(targets, expectTargets) {
 		t.Errorf("got targets %v for range with RaftStatus %v; want %v",
 			targets, sr.getRaftStatusFn(repl), expectTargets)
+	}
+}
+
+func TestChooseReplicaToRebalanceWithCopysets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const minQPS = 800
+	const maxQPS = 1200
+	storesWithCopysetsEnabled := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node:    roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1500,
+			},
+		},
+		{
+			StoreID: 2,
+			Node:    roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1100,
+			},
+		},
+		{
+			StoreID: 3,
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1000,
+			},
+		},
+		{
+			StoreID: 4,
+			Node:    roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 600,
+			},
+		},
+		{
+			StoreID: 5,
+			Node:    roachpb.NodeDescriptor{NodeID: 5},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 550,
+			},
+		},
+		{
+			StoreID: 6,
+			Node:    roachpb.NodeDescriptor{NodeID: 6},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 400,
+			},
+		},
+		{
+			StoreID: 7,
+			Node:    roachpb.NodeDescriptor{NodeID: 7},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 500,
+			},
+		},
+	}
+	storesWithCopysetsEnabledAndHighQPS := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node:    roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1500,
+			},
+		},
+		{
+			StoreID: 2,
+			Node:    roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1150,
+			},
+		},
+		{
+			StoreID: 3,
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1150,
+			},
+		},
+		{
+			StoreID: 4,
+			Node:    roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 900,
+			},
+		},
+		{
+			StoreID: 5,
+			Node:    roachpb.NodeDescriptor{NodeID: 5},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 900,
+			},
+		},
+		{
+			StoreID: 6,
+			Node:    roachpb.NodeDescriptor{NodeID: 6},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 900,
+			},
+		},
+	}
+
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name            string
+		stores          []*roachpb.StoreDescriptor
+		replicaStoreIDs []roachpb.StoreID
+		qps             float64
+		leaseHolder     roachpb.StoreID
+		// the first listed store is expected to be the leaseholder
+		expectTargets []roachpb.StoreID
+	}{
+		{
+			// rebalance stores is successful (RF is 1)
+			name:            "success (RF 1)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1},
+			qps:             100,
+			expectTargets:   []roachpb.StoreID{6},
+		},
+		{
+			// rebalance stores is successful (RF is 1)
+			name:            "success (RF 1)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1},
+			qps:             500,
+			expectTargets:   []roachpb.StoreID{6},
+		},
+		{
+			// rebalance stores is successful (RF is 1)
+			name:            "success (RF 1)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1},
+			qps:             700,
+			expectTargets:   []roachpb.StoreID{6},
+		},
+		{
+			// rebalance fails as it would bring the current store's QPS below the
+			// min threshold (RF is 1)
+			name:            "fails due to store's low QPS (RF 1)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1},
+			qps:             800,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance stores is successful (RF is 1)
+			name:            "success (RF 1)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1},
+			qps:             1.5,
+			expectTargets:   []roachpb.StoreID{6},
+		},
+		{
+			// rebalance fails as the range's QPS is below some small fraction of the
+			// current store's QPS (RF is 1)
+			name:            "fails due to small QPS value (RF 1)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1},
+			qps:             1.49,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance stores is successful (RF is 2)
+			name:            "success (RF 2)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1, 2},
+			qps:             100,
+			expectTargets:   []roachpb.StoreID{6, 7},
+		},
+		{
+			// rebalance fails as the current stores do not belong to a single
+			// copyset (RF is 2)
+			name:            "fails as stores are not from a single copyset (RF 2)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1, 3},
+			qps:             100,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance fails as the current stores don't own the lease of the
+			// range (RF is 2)
+			name:            "fails due to no lease owner (RF 2)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{3, 4},
+			qps:             100,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance fails as it would bring the current store's QPS below the
+			// min threshold (RF is 2)
+			name:            "fails due to store's low QPS (RF 2)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1, 2},
+			qps:             800,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance fails as the range's QPS is below some small fraction of the
+			// current store's QPS (RF is 2)
+			name:            "fails due to small QPS value (RF 2)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1, 2},
+			qps:             1.49,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance stores is successful (RF is 3)
+			name:            "success (RF 3)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1, 2, 3},
+			qps:             500,
+			expectTargets:   []roachpb.StoreID{6, 7, 5},
+		},
+		{
+			// rebalance fails as the current stores do not belong to a single
+			// copyset (RF is 3)
+			name:            "fails as stores are not from a single copyset (RF 3)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{3, 4, 5},
+			qps:             100,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance stores is successful (RF is 3)
+			name:            "success (RF 3)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1, 2, 3},
+			qps:             100,
+			expectTargets:   []roachpb.StoreID{6, 7, 5},
+		},
+		{
+			// rebalance fails as the current stores don't own the lease of the
+			// range (RF is 3)
+			name:            "fails due to no lease owner (RF 3)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{5, 6, 7},
+			qps:             500,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance fails as it would bring the current store's QPS below the
+			// min threshold (RF is 3)
+			name:            "fails due to store's low QPS (RF 3)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{4, 5, 6},
+			qps:             100,
+			leaseHolder:     3,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance fails as the range's QPS is below some small fraction of the
+			// current store's QPS (RF is 3)
+			name:            "fails due to small QPS value (RF 3)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1, 2, 3},
+			qps:             1.49,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance fails as the target copyset's stores' QPS will be above the
+			// max QPS after rebalancing (RF is 3)
+			name:            "fails due to target copyset's QPS will be high (RF 3)",
+			stores:          storesWithCopysetsEnabledAndHighQPS,
+			replicaStoreIDs: []roachpb.StoreID{1, 2, 3},
+			qps:             300,
+			expectTargets:   nil,
+		},
+		{
+			// rebalance fails as the candidate stores belong to the same copyset as
+			// the current stores (RF is 4)
+			name:            "fails as current and target copyset is same (RF 4)",
+			stores:          storesWithCopysetsEnabled,
+			replicaStoreIDs: []roachpb.StoreID{1, 3, 4, 5},
+			qps:             100,
+			expectTargets:   nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			stopper, g, _, a, _ := createTestAllocator(len(storesWithCopysetsEnabled), true /* deterministic */)
+			defer stopper.Stop(context.Background())
+			gossiputil.NewStoreGossiper(g).GossipStores(tc.stores, t)
+			storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
+			storeMap := storeListToMap(storeList)
+
+			localDesc := *tc.stores[tc.leaseHolder]
+			cfg := TestStoreConfig(nil)
+
+			s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
+			rq := newReplicateQueue(s, g, a)
+			rr := newReplicaRankings()
+
+			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+			copysets.Enabled.Override(&sr.st.SV, true)
+
+			// Rather than trying to populate every Replica with a real raft group in
+			// order to pass replicaIsBehind checks, fake out the function for getting
+			// raft status with one that always returns all replicas as up to date.
+			sr.getRaftStatusFn = func(r *Replica) *raft.Status {
+				status := &raft.Status{
+					Progress: make(map[uint64]raft.Progress),
+				}
+				status.Lead = uint64(r.ReplicaID())
+				status.Commit = 1
+				for _, replica := range r.Desc().Replicas {
+					status.Progress[uint64(replica.ReplicaID)] = raft.Progress{
+						Match: 1,
+						State: raft.ProgressStateReplicate,
+					}
+				}
+				return status
+			}
+
+			zone := config.DefaultZoneConfig()
+			numReplicas := int32(len(tc.replicaStoreIDs))
+			zone.NumReplicas = &numReplicas
+			defer config.TestingSetDefaultZoneConfig(zone)()
+
+			loadRanges(rr, s, []testRange{{storeIDs: tc.replicaStoreIDs, qps: tc.qps}})
+			hottestRanges := rr.topQPS()
+
+			_, targets := sr.chooseReplicaToRebalance(
+				ctx, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
+
+			if len(targets) != len(tc.expectTargets) {
+				t.Fatalf("chooseReplicaToRebalance(existing=%v, qps=%f) got %v; want %v",
+					tc.replicaStoreIDs, tc.qps, targets, tc.expectTargets)
+			}
+			if len(targets) == 0 {
+				return
+			}
+
+			if targets[0].StoreID != tc.expectTargets[0] {
+				t.Errorf("chooseReplicaToRebalance(existing=%v, qps=%f) chose s%d as leaseholder; want s%v",
+					tc.replicaStoreIDs, tc.qps, targets[0], tc.expectTargets[0])
+			}
+
+			targetStores := make([]roachpb.StoreID, len(targets))
+			for i, target := range targets {
+				targetStores[i] = target.StoreID
+			}
+			sort.Sort(roachpb.StoreIDSlice(targetStores))
+			sort.Sort(roachpb.StoreIDSlice(tc.expectTargets))
+			if !reflect.DeepEqual(targetStores, tc.expectTargets) {
+				t.Errorf("chooseReplicaToRebalance(existing=%v, qps=%f) chose targets %v; want %v",
+					tc.replicaStoreIDs, tc.qps, targetStores, tc.expectTargets)
+			}
+		})
 	}
 }

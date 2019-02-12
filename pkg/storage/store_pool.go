@@ -566,6 +566,14 @@ func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 	return sl
 }
 
+func (sl StoreList) toMap() map[roachpb.StoreID]roachpb.StoreDescriptor {
+	m := make(map[roachpb.StoreID]roachpb.StoreDescriptor)
+	for _, store := range sl.stores {
+		m[store.StoreID] = store
+	}
+	return m
+}
+
 func (sl StoreList) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf,

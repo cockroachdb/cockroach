@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/copysets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
@@ -226,14 +228,17 @@ func rangeInfoForRepl(repl *Replica, desc *roachpb.RangeDescriptor) RangeInfo {
 // Allocator tries to spread replicas as evenly as possible across the stores
 // in the cluster.
 type Allocator struct {
-	storePool     *StorePool
-	nodeLatencyFn func(addr string) (time.Duration, bool)
-	randGen       allocatorRand
+	storePool      *StorePool
+	nodeLatencyFn  func(addr string) (time.Duration, bool)
+	randGen        allocatorRand
+	copysetsReader copysets.Reader
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
 func MakeAllocator(
-	storePool *StorePool, nodeLatencyFn func(addr string) (time.Duration, bool),
+	storePool *StorePool,
+	nodeLatencyFn func(addr string) (time.Duration, bool),
+	copysetsReader copysets.Reader,
 ) Allocator {
 	var randSource rand.Source
 	// There are number of test cases that make a test store but don't add
@@ -245,9 +250,10 @@ func MakeAllocator(
 		randSource = rand.NewSource(rand.Int63())
 	}
 	return Allocator{
-		storePool:     storePool,
-		nodeLatencyFn: nodeLatencyFn,
-		randGen:       makeAllocatorRand(randSource),
+		storePool:      storePool,
+		nodeLatencyFn:  nodeLatencyFn,
+		randGen:        makeAllocatorRand(randSource),
+		copysetsReader: copysetsReader,
 	}
 }
 
@@ -389,6 +395,17 @@ type decisionDetails struct {
 	Existing string `json:",omitempty"`
 }
 
+func (a *Allocator) newCopysetScorer(ctx context.Context, zone *config.ZoneConfig) *copysetsScorer {
+	copysets, err := a.copysetsReader.ForRF(ctx, zone.NumReplicas)
+	if err != nil {
+		log.Errorf(ctx, "Error retrieving copysets for replication factor %d: %v", zone.NumReplicas, err)
+		return nil
+	}
+
+	sl, _, _ := a.storePool.getStoreList(roachpb.RangeID(0), storeFilterNone)
+	return newCopysetsScorer(copysets, sl.toMap())
+}
+
 // AllocateTarget returns a suitable store for a new allocation with the
 // required attributes. Nodes already accommodating existing replicas are ruled
 // out as targets. The range ID of the replica being allocated for is also
@@ -433,7 +450,14 @@ func (a *Allocator) allocateTargetFromList(
 	analyzedConstraints := analyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, existing, zone)
 	candidates := allocateCandidates(
-		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
+		ctx,
+		sl,
+		analyzedConstraints,
+		existing,
+		rangeInfo,
+		a.storePool.getLocalities(existing),
+		options,
+		a.newCopysetScorer(ctx, zone),
 	)
 	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -495,11 +519,13 @@ func (a Allocator) RemoveTarget(
 		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
 	options := a.scorerOptions()
 	rankedCandidates := removeCandidates(
+		ctx,
 		sl,
 		analyzedConstraints,
 		rangeInfo,
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
 		options,
+		a.newCopysetScorer(ctx, zone),
 	)
 	log.VEventf(ctx, 3, "remove candidates: %s", rankedCandidates)
 	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
@@ -585,6 +611,7 @@ func (a Allocator) RebalanceTarget(
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
 		a.storePool.getNodeLocalityString,
 		options,
+		a.newCopysetScorer(ctx, zone),
 	)
 
 	if len(results) == 0 {
@@ -662,8 +689,11 @@ func (a Allocator) RebalanceTarget(
 
 func (a *Allocator) scorerOptions() scorerOptions {
 	return scorerOptions{
-		deterministic:           a.storePool.deterministic,
-		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
+		deterministic:                          a.storePool.deterministic,
+		rangeRebalanceThreshold:                rangeRebalanceThreshold.Get(&a.storePool.st.SV),
+		copysetsEnabled:                        copysets.Enabled.Get(&a.storePool.st.SV),
+		copysetsIdleScoreDifferenceThreshold:   copysetsIdleScoreDifferenceThreshold.Get(&a.storePool.st.SV),
+		copysetRebalanceScoreFractionThreshold: copysetRebalanceScoreFractionThreshold.Get(&a.storePool.st.SV),
 	}
 }
 
@@ -1270,4 +1300,178 @@ func filterUnremovableReplicas(
 		}
 	}
 	return candidates
+}
+
+// CandidateCopyset represents the data structure to store the store-descriptors
+// and different scores of copysets.
+type CandidateCopyset struct {
+	csID             copysets.CopysetID
+	csScore          float64
+	convergenceScore int
+	maxQPS           float64
+	stores           []roachpb.StoreDescriptor
+	maxQPSStoreID    roachpb.StoreID
+}
+
+func (cc *CandidateCopyset) String() string {
+	return fmt.Sprintf(
+		"copysetID :%d copysetScore :%v convergenceScore :%d maxQPS :%v maxQPSStoreID :%d stores :%v",
+		cc.csID,
+		cc.csScore,
+		cc.convergenceScore,
+		cc.maxQPS,
+		cc.maxQPSStoreID,
+		cc.stores,
+	)
+}
+
+// CopysetForStores returns the ID of the copyset in which the stores are
+// contained.
+// If the stores are not contained within a single copyset, an error is
+// returned.
+func CopysetForStores(
+	storeIDs []roachpb.StoreID, cs *copysets.Copysets,
+) (copysets.CopysetID, error) {
+	if cs == nil {
+		return copysets.CopysetID(0), errors.Errorf("Copyset is nil")
+	}
+
+	for copysetID, copyset := range cs.Sets {
+		withinCopyset := true
+		// Check if stores is a subset of copyset.
+		for _, storeID := range storeIDs {
+			if _, ok := copyset.Ids[storeID]; !ok {
+				// Copyset does not contain storeID.
+				// Move to next copyset.
+				withinCopyset = false
+				break
+			}
+		}
+		if withinCopyset {
+			// stores are contained within copyset.
+			return copysetID, nil
+		}
+	}
+	// stores are not contained within any copyset.
+	return copysets.CopysetID(0), errors.Errorf("stores are not contained within any copyset")
+}
+
+// candidateCopysets creates a candidate list of copysets that can be used
+// for allocating a new replica ordered from the best to the worst. Only
+// copysets with good copyset scores (compared to the existing copyset) are
+// included in the list.
+func (a *Allocator) candidateCopysets(
+	ctx context.Context,
+	sl StoreList,
+	zone *config.ZoneConfig,
+	existing []roachpb.ReplicaDescriptor,
+	rangeInfo RangeInfo,
+	options scorerOptions,
+) ([]*CandidateCopyset, error) {
+	csScorer := a.newCopysetScorer(ctx, zone)
+	analyzedConstraints := analyzeConstraints(
+		ctx, a.storePool.getStoreDescriptor, existing, zone)
+	candidates := allocateCandidates(
+		ctx,
+		sl,
+		analyzedConstraints,
+		existing,
+		rangeInfo,
+		a.storePool.getLocalities(existing),
+		options,
+		csScorer,
+	)
+
+	cs, err := a.copysetsReader.ForRF(ctx, zone.NumReplicas)
+	if err != nil {
+		log.Errorf(ctx, "Error retrieving copysets for replication factor %d: %v", zone.NumReplicas, err)
+		return nil, err
+	}
+	var storeIDs []roachpb.StoreID
+	for _, replica := range rangeInfo.Desc.Replicas {
+		storeIDs = append(storeIDs, replica.StoreID)
+	}
+
+	// Discard the range which are not confined into a single copysets. These ranges
+	// (don't belong to a single copyset) will be gradually moved to a single copyset
+	// by replicate queue.
+	_, err = CopysetForStores(storeIDs, cs)
+	if err != nil {
+		return nil, err
+	}
+
+	existingCopysetsCSScore := copysetRebalanceScore(
+		ctx,
+		csScorer,
+		rangeInfo,
+		nil, // added store
+		nil, // removed store
+		options,
+	)
+
+	candidateCopysets := make(map[copysets.CopysetID]*CandidateCopyset)
+
+	for _, candidate := range candidates {
+		csIDs := csScorer.copysets[candidate.store.StoreID]
+
+		// Discard the candidate if existing copyset is significantly better than
+		// the candidate as this can cause the range to thrash between the two
+		// copysets.
+		// options.copysetRebalanceScoreFractionThreshold *
+		// options.copysetsIdleScoreDifferenceThreshold
+		// is used as a buffer.
+		if existingCopysetsCSScore >=
+			(candidate.copysetScore +
+				options.copysetRebalanceScoreFractionThreshold*options.copysetsIdleScoreDifferenceThreshold) {
+			continue
+		}
+
+		for _, csID := range csIDs {
+			if csID == 0 {
+				return nil, errors.New("copyset ID (0) is invalid")
+			}
+
+			if _, ok := candidateCopysets[csID]; !ok {
+				srcs := &CandidateCopyset{
+					csID:             csID,
+					stores:           []roachpb.StoreDescriptor{candidate.store},
+					convergenceScore: candidate.convergesScore,
+					csScore:          candidate.copysetScore,
+					maxQPS:           candidate.store.Capacity.QueriesPerSecond,
+					maxQPSStoreID:    candidate.store.StoreID,
+				}
+				candidateCopysets[csID] = srcs
+			} else {
+				srcs := candidateCopysets[csID]
+
+				srcs.stores = append(srcs.stores, candidate.store)
+				srcs.csScore = math.Min(srcs.csScore, candidate.copysetScore)
+				srcs.convergenceScore = int(math.Min(float64(srcs.convergenceScore), float64(candidate.convergesScore)))
+				if srcs.maxQPS < candidate.store.Capacity.QueriesPerSecond {
+					srcs.maxQPS = candidate.store.Capacity.QueriesPerSecond
+					srcs.maxQPSStoreID = candidate.store.StoreID
+				}
+			}
+		}
+	}
+
+	var sortedCandidateCopysets []*CandidateCopyset
+	for _, v := range candidateCopysets {
+		sortedCandidateCopysets = append(sortedCandidateCopysets, v)
+	}
+
+	sort.Slice(sortedCandidateCopysets, func(i, j int) bool {
+		if sortedCandidateCopysets[i].csScore != sortedCandidateCopysets[j].csScore {
+			return sortedCandidateCopysets[i].csScore > sortedCandidateCopysets[j].csScore
+		}
+		if sortedCandidateCopysets[i].maxQPS != sortedCandidateCopysets[j].maxQPS {
+			return sortedCandidateCopysets[i].maxQPS < sortedCandidateCopysets[j].maxQPS
+		}
+		if sortedCandidateCopysets[i].convergenceScore != sortedCandidateCopysets[j].convergenceScore {
+			return sortedCandidateCopysets[i].convergenceScore > sortedCandidateCopysets[j].convergenceScore
+		}
+		return sortedCandidateCopysets[i].csID < sortedCandidateCopysets[j].csID
+	})
+
+	return sortedCandidateCopysets, nil
 }
