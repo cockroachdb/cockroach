@@ -616,8 +616,11 @@ func (e *TxnAlreadyEncounteredErrorError) Error() string {
 	return e.message(nil)
 }
 
-func (*TxnAlreadyEncounteredErrorError) message(_ *Error) string {
-	return "txn already encountered an error; cannot be used anymore"
+func (e *TxnAlreadyEncounteredErrorError) message(_ *Error) string {
+	return fmt.Sprintf(
+		"txn already encountered an error; cannot be used anymore (previous err: %s)",
+		e.PrevError,
+	)
 }
 
 var _ ErrorDetailInterface = &TxnAlreadyEncounteredErrorError{}
