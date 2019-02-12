@@ -476,7 +476,9 @@ func (q *Queue) MaybeWaitForPush(
 			// Caller has given up.
 			log.VEvent(ctx, 2, "pusher giving up due to context cancellation")
 			return nil, roachpb.NewError(ctx.Err())
-
+		case <-q.store.Stopper().ShouldQuiesce():
+			// Let the push out so that they can be sent looking elsewhere.
+			return nil, nil
 		case txn := <-push.pending:
 			log.VEventf(ctx, 2, "result of pending push: %v", txn)
 			// If txn is nil, the queue was cleared, presumably because the
