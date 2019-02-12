@@ -34,13 +34,16 @@ expr
 inner-join
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:5(int!null) t.public.def.e:6(int) t.public.def.f:7(int)
  ├── stats: [rows=10000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
+ ├── cost: 2270.03
  ├── fd: (1)==(5), (5)==(1)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
- │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    └── cost: 1070.01
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
- │    └── stats: [rows=1000, distinct(5)=100, null(5)=10]
+ │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
+ │    └── cost: 1070.01
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: t.public.abc.a [type=int]
@@ -57,9 +60,11 @@ left-join (lookup abc@ab)
  ├── columns: t.public.abc.a:5(int) t.public.abc.b:6(int)
  ├── key columns: [5] = [5]
  ├── stats: [rows=333333.333]
+ ├── cost: 355060.02
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:1(int) t.public.def.e:2(int)
- │    └── stats: [rows=1000]
+ │    ├── stats: [rows=1000]
+ │    └── cost: 1060.01
  └── filters
       └── gt [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: t.public.abc.a [type=int]

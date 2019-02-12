@@ -21,24 +21,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-// canProvidePhysicalProps returns true if the given expression can provide the
-// required physical properties. The optimizer calls the canProvide methods to
-// determine whether an expression provides a required physical property. If it
-// does not, then the optimizer inserts an enforcer operator that is able to
-// provide it.
+// CanProvidePhysicalProps returns true if the given expression can provide the
+// required physical properties. The optimizer uses this to determine whether an
+// expression provides a required physical property. If it does not, then the
+// optimizer inserts an enforcer operator that is able to provide it.
 //
 // Some operators, like Select and Project, may not directly provide a required
 // physical property, but do "pass through" the requirement to their input.
 // Operators that do this should return true from the appropriate canProvide
 // method and then pass through that property in the buildChildPhysicalProps
 // method.
-func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *physical.Required) bool {
+func CanProvidePhysicalProps(e memo.RelExpr, required *physical.Required) bool {
 	// All operators can provide the Presentation property, so no need to check
 	// for that.
-	return ordering.CanProvide(e, &required.Ordering)
+	return e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
 }
 
-// buildChildPhysicalProps returns the set of physical properties required of
+// BuildChildPhysicalProps returns the set of physical properties required of
 // the nth child, based upon the properties required of the parent. For example,
 // the Project operator passes through any ordering requirement to its child,
 // but provides any presentation requirement.
@@ -46,8 +45,8 @@ func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *physical.R
 // The childProps argument is allocated once by the caller and can be reused
 // repeatedly as physical properties are derived for each child. On each call,
 // buildChildPhysicalProps updates the childProps argument.
-func (o *Optimizer) buildChildPhysicalProps(
-	parent memo.RelExpr, nth int, parentProps *physical.Required,
+func BuildChildPhysicalProps(
+	mem *memo.Memo, parent memo.RelExpr, nth int, parentProps *physical.Required,
 ) *physical.Required {
 	var childProps physical.Required
 
@@ -63,12 +62,12 @@ func (o *Optimizer) buildChildPhysicalProps(
 		return parentProps
 	}
 
-	return o.mem.InternPhysicalProps(&childProps)
+	return mem.InternPhysicalProps(&childProps)
 }
 
-// buildChildPhysicalPropsScalar is like buildChildPhysicalProps, but for
+// BuildChildPhysicalPropsScalar is like BuildChildPhysicalProps, but for
 // when the parent is a scalar expression.
-func (o *Optimizer) buildChildPhysicalPropsScalar(parent opt.Expr, nth int) *physical.Required {
+func BuildChildPhysicalPropsScalar(mem *memo.Memo, parent opt.Expr, nth int) *physical.Required {
 	var childProps physical.Required
 	switch parent.Op() {
 	case opt.ArrayFlattenOp:
@@ -80,7 +79,7 @@ func (o *Optimizer) buildChildPhysicalPropsScalar(parent opt.Expr, nth int) *phy
 			childProps.Presentation = physical.Presentation{
 				opt.AliasedColumn{
 					// Keep the existing label for the column.
-					Alias: o.mem.Metadata().ColumnMeta(af.RequestedCol).Alias,
+					Alias: mem.Metadata().ColumnMeta(af.RequestedCol).Alias,
 					ID:    af.RequestedCol,
 				},
 			}
@@ -88,5 +87,5 @@ func (o *Optimizer) buildChildPhysicalPropsScalar(parent opt.Expr, nth int) *phy
 	default:
 		return physical.MinRequired
 	}
-	return o.mem.InternPhysicalProps(&childProps)
+	return mem.InternPhysicalProps(&childProps)
 }
