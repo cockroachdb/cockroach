@@ -101,11 +101,13 @@ drop database  ·  ·
 query TTT
 EXPLAIN SHOW JOBS
 ----
-sort              ·      ·
- │                order  -"coalesce",-started
- └── render       ·      ·
-      └── values  ·      ·
-·                 size   15 columns, 0 rows
+sort                   ·       ·
+ │                     order   -"coalesce",-started
+ └── render            ·       ·
+      └── filter       ·       ·
+           │           filter  (finished IS NULL) OR (finished > (now() - '12:00:00'))
+           └── values  ·       ·
+·                      size    15 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)

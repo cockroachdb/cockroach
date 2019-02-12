@@ -1223,7 +1223,8 @@ func dropIndexSchemaChange(
 	}
 }
 
-// TestDropColumn tests that dropped columns properly drop their Table's CHECK constraints
+// TestDropColumn tests that dropped columns properly drop their Table's CHECK constraints,
+// or an error occurs if a CHECK constraint is being added on it.
 func TestDropColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
@@ -1266,6 +1267,22 @@ CREATE TABLE t.test (
 
 	if tableDesc.Checks[0].Name != "check_ab" {
 		t.Fatalf("Only check_ab should remain, got: %s ", tableDesc.Checks[0].Name)
+	}
+
+	// Test that a constraint being added prevents the column from being dropped.
+	txn, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec(`ALTER TABLE t.test ADD CONSTRAINT check_bk CHECK (b >= k)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec(`ALTER TABLE t.test DROP b`); !testutils.IsError(err,
+		"referencing constraint \"check_bk\" in the middle of being added") {
+		t.Fatalf("err = %+v", err)
+	}
+	if err := txn.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -2558,6 +2575,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		{`select-create`, `SELECT * FROM t.kv`, `CREATE INDEX bar ON t.kv (v)`, ``},
 		{`index-on-add-col`, `ALTER TABLE t.kv ADD i INT`,
 			`CREATE INDEX foobar ON t.kv (i)`, ``},
+		{`check-on-add-col`, `ALTER TABLE t.kv ADD j INT`,
+			`ALTER TABLE t.kv ADD CONSTRAINT ck_j CHECK (j >= 0)`, ``},
 	}
 
 	for _, testCase := range testCases {
@@ -3417,7 +3436,7 @@ CREATE DATABASE t;
 		t.Fatal(err)
 	}
 
-	if _, err := tx.Exec(`CREATE TABLE t.testing (k INT PRIMARY KEY, v INT, INDEX foo(v));`); err != nil {
+	if _, err := tx.Exec(`CREATE TABLE t.testing (k INT PRIMARY KEY, v INT, INDEX foo(v), CONSTRAINT ck_k CHECK (k >= 0));`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3434,9 +3453,9 @@ CREATE DATABASE t;
 		t.Fatal(err)
 	}
 
-	// Run schema changes that are execute Column and Index backfills.
+	// Run schema changes that execute Column, Check and Index backfills.
 	if _, err := tx.Exec(`
-ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (c)
+ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (c), DROP CONSTRAINT ck_k, ADD CONSTRAINT ck_c CHECK (c >= 4)
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -3486,6 +3505,16 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 	eCount := maxValue + 1
 	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+
+	// Constraint ck_k dropped, ck_c public.
+	if _, err := sqlDB.Exec(fmt.Sprintf("INSERT INTO t.test (k, v) VALUES (-1, %d)", maxValue+10)); err != nil {
+		t.Fatal(err)
+	}
+	q := fmt.Sprintf("INSERT INTO t.test (k, v) VALUES (%d, -1)", maxValue+10)
+	if _, err := sqlDB.Exec(q); !testutils.IsError(err,
+		`failed to satisfy CHECK constraint \(c >= 4\)`) {
+		t.Fatalf("err = %+v", err)
 	}
 
 	// The descriptor version hasn't changed.

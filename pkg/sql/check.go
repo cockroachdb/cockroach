@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,26 +32,28 @@ import (
 func validateCheckExpr(
 	ctx context.Context,
 	exprStr string,
-	tableName tree.TableExpr,
 	tableDesc *sqlbase.TableDescriptor,
-	evalCtx *tree.EvalContext,
+	ie tree.SessionBoundInternalExecutor,
+	txn *client.Txn,
 ) error {
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
 		return err
 	}
 	// Construct AST and then convert to a string, to avoid problems with escaping the check expression
+	tblref := tree.TableRef{TableID: int64(tableDesc.ID), As: tree.AliasClause{Alias: "t"}}
 	sel := &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns, false /* forUpdateOrDelete */),
-		From:  &tree.From{Tables: tree.TableExprs{tableName}},
+		From:  &tree.From{Tables: []tree.TableExpr{&tblref}},
 		Where: &tree.Where{Type: tree.AstWhere, Expr: &tree.NotExpr{Expr: expr}},
 	}
 	lim := &tree.Limit{Count: tree.NewDInt(1)}
 	stmt := &tree.Select{Select: sel, Limit: lim}
 
 	queryStr := tree.AsStringWithFlags(stmt, tree.FmtParsable)
+	log.Infof(ctx, "Validating check constraint %q with query %q", expr.String(), queryStr)
 
-	rows, err := evalCtx.InternalExecutor.QueryRow(ctx, "validate check constraint", evalCtx.Txn, queryStr)
+	rows, err := ie.QueryRow(ctx, "validate check constraint", txn, queryStr)
 	if err != nil {
 		return err
 	}

@@ -173,7 +173,7 @@ func (p *planner) Update(
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
 		requestedCols = desc.Columns
-	} else if len(desc.Checks) > 0 {
+	} else if len(desc.AllChecks()) > 0 {
 		// Request any columns we'll need when validating check constraints. We
 		// could be smarter and only validate check constraints which depend on
 		// columns that are being modified in the UPDATE statement, in which
@@ -188,7 +188,7 @@ func (p *planner) Update(
 		for _, col := range requestedCols {
 			requestedColSet.Add(int(col.ID))
 		}
-		for _, ck := range desc.Checks {
+		for _, ck := range desc.AllChecks() {
 			cols, err := ck.ColumnsUsed(desc.TableDesc())
 			if err != nil {
 				return nil, err

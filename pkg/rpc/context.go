@@ -88,7 +88,24 @@ var sourceAddr = func() net.Addr {
 
 var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
 
-func spanInclusionFunc(
+// spanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
+// of RPCs, deciding for which operations the gRPC opentracing interceptor should
+// create a span.
+func spanInclusionFuncForServer(
+	t *tracing.Tracer, parentSpanCtx opentracing.SpanContext, method string, req, resp interface{},
+) bool {
+	// Is client tracing?
+	return (parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)) ||
+		// Should we trace regardless of the client? This is useful for calls coming
+		// through the HTTP->RPC gateway (i.e. the AdminUI), where client is never
+		// tracing.
+		t.AlwaysTrace()
+}
+
+// spanInclusionFuncForClient is used as a SpanInclusionFunc for the client-side
+// of RPCs, deciding for which operations the gRPC opentracing interceptor should
+// create a span.
+func spanInclusionFuncForClient(
 	parentSpanCtx opentracing.SpanContext, method string, req, resp interface{},
 ) bool {
 	return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
@@ -172,7 +189,16 @@ func NewServerWithInterceptor(
 		// tracing is disabled.
 		unaryInterceptor = otgrpc.OpenTracingServerInterceptor(
 			tracer,
-			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFunc)),
+			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(
+				func(
+					parentSpanCtx opentracing.SpanContext,
+					method string,
+					req, resp interface{}) bool {
+					// This anonymous func serves to bind the tracer for
+					// spanInclusionFuncForServer.
+					return spanInclusionFuncForServer(
+						tracer.(*tracing.Tracer), parentSpanCtx, method, req, resp)
+				})),
 		)
 		// TODO(tschottdorf): should set up tracing for stream-based RPCs as
 		// well. The otgrpc package has no such facility, but there's also this:
@@ -574,7 +600,7 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 		// the number of packets (even with an empty context!). See #17177.
 		interceptor := otgrpc.OpenTracingClientInterceptor(
 			tracer,
-			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFunc)),
+			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFuncForClient)),
 		)
 		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(interceptor))
 	}
