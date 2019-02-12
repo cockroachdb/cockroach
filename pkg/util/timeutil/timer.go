@@ -94,6 +94,8 @@ func (t *Timer) Reset(d time.Duration) {
 // the timer, false if the timer has already expired, been stopped previously,
 // or had never been initialized with a call to Timer.Reset. Stop does not
 // close the channel, to prevent a read from succeeding incorrectly.
+// Note that a Timer must never be used again after calls to Stop as the timer
+// object will be put into an object pool for reuse.
 func (t *Timer) Stop() bool {
 	var res bool
 	if t.timer != nil {

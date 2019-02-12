@@ -51,6 +51,39 @@ func (c chanSender) Send(
 	return resp.br, resp.pe
 }
 
+func TestBatcherSendOnSizeWithReset(t *testing.T) {
+	// This test ensures that when a single batch ends up sending due to size
+	// constrains its timer is successfully canceled and does not lead to a
+	// nil panic due to an attempt to send a batch due to the old timer.
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	sc := make(chanSender)
+	const wait = 5 * time.Millisecond
+	b := New(Config{
+		MaxIdle:         wait,
+		MaxWait:         wait,
+		MaxMsgsPerBatch: 2,
+		Sender:          sc,
+		Stopper:         stopper,
+	})
+	var g errgroup.Group
+	sendRequest := func(rangeID roachpb.RangeID, request roachpb.Request) {
+		g.Go(func() error {
+			_, err := b.Send(context.Background(), rangeID, request)
+			return err
+		})
+	}
+	sendRequest(1, &roachpb.GetRequest{})
+	sendRequest(1, &roachpb.GetRequest{})
+	s := <-sc
+	s.respChan <- batchResp{}
+	time.Sleep(wait)
+	if err := g.Wait(); err != nil {
+		t.Fatalf("Failed to send: %v", err)
+	}
+}
+
 func TestBatcherSend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
