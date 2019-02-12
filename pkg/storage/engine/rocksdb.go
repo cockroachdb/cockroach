@@ -1609,6 +1609,7 @@ func (r *rocksDBBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
+	r.distinctNeedsFlush = true
 	return r.builder.ApplyRepr(repr)
 }
 
