@@ -71,6 +71,28 @@ func TestCloudStorageSink(t *testing.T) {
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
 	e := makeJSONEncoder(opts)
 
+	t.Run(`golden`, func(t *testing.T) {
+		t1 := &sqlbase.TableDescriptor{Name: `t1`}
+
+		sinkDir := `golden`
+		s, err := makeCloudStorageSink(`nodelocal:///`+sinkDir, 1, unlimitedFileSize, settings, opts)
+		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
+		require.NoError(t, err)
+
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
+		require.NoError(t, s.Flush(ctx))
+		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(5)))
+
+		dataFile, err := ioutil.ReadFile(filepath.Join(
+			dir, sinkDir, `1970-01-01`, `197001010000000000000010000000000-t1-0-1-7-0.ndjson`))
+		require.NoError(t, err)
+		require.Equal(t, "v1\n", string(dataFile))
+
+		resolvedFile, err := ioutil.ReadFile(filepath.Join(
+			dir, sinkDir, `1970-01-01`, `197001010000000000000050000000000.RESOLVED`))
+		require.NoError(t, err)
+		require.Equal(t, `{"resolved":"5.0000000000"}`, string(resolvedFile))
+	})
 	t.Run(`single-node`, func(t *testing.T) {
 		t1 := &sqlbase.TableDescriptor{Name: `t1`}
 		t2 := &sqlbase.TableDescriptor{Name: `t2`}
@@ -78,6 +100,7 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `single-node`
 		s, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts)
 		require.NoError(t, err)
+		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 		// Empty flush emits no files.
 		require.NoError(t, s.Flush(ctx))
@@ -194,8 +217,10 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `zombie`
 		s1, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts)
 		require.NoError(t, err)
+		s1.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 		s2, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts)
 		require.NoError(t, err)
+		s2.(*cloudStorageSink).sinkID = 8 // Force a deterministic sinkID.
 
 		// Good job writes
 		require.NoError(t, s1.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
@@ -224,6 +249,7 @@ func TestCloudStorageSink(t *testing.T) {
 		const targetMaxFileSize = 6
 		s, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, targetMaxFileSize, settings, opts)
 		require.NoError(t, err)
+		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 		// Writing more than the max file size chunks the file up and flushes it
 		// out as necessary.
@@ -284,6 +310,7 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `file-ordering`
 		s, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts)
 		require.NoError(t, err)
+		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 		// Simulate initial scan, which emits data at a timestamp, then an equal
 		// resolved timestamp.
