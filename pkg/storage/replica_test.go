@@ -3209,18 +3209,19 @@ func TestEndTransactionDeadline(t *testing.T) {
 				if pErr != nil {
 					t.Error(pErr)
 				}
+
 			case 1:
 				// Past deadline.
-				if statusError, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); !ok {
-					t.Errorf("expected TransactionStatusError but got %T: %s", pErr, pErr)
-				} else if e := "transaction deadline exceeded"; statusError.Msg != e {
-					t.Errorf("expected %s, got %s", e, statusError.Msg)
+				if err := roachpb.CheckTxnDeadlineExceededErr(pErr.GetDetail()); err != nil {
+					t.Error(err)
 				}
+
 			case 2:
 				// Equal deadline.
 				if pErr != nil {
 					t.Error(pErr)
 				}
+
 			case 3:
 				// Future deadline.
 				if pErr != nil {
@@ -3471,10 +3472,8 @@ func TestEndTransactionDeadline_1PC(t *testing.T) {
 	ba.Add(&bt, &put, &et)
 	assignSeqNumsForReqs(txn, &bt, &put, &et)
 	_, pErr := tc.Sender().Send(context.Background(), ba)
-	if statusError, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); !ok {
-		t.Errorf("expected TransactionStatusError but got %T: %s", pErr, pErr)
-	} else if e := "transaction deadline exceeded"; statusError.Msg != e {
-		t.Errorf("expected %s, got %s", e, statusError.Msg)
+	if err := roachpb.CheckTxnDeadlineExceededErr(pErr.GetDetail()); err != nil {
+		t.Error(err)
 	}
 }
 
