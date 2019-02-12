@@ -463,12 +463,12 @@ func (o *Optimizer) optimizeGroupMember(
 	// properties? That case is taken care of by enforceProps, which will
 	// recursively optimize the group with property subsets and then add
 	// enforcers to provide the remainder.
-	if o.canProvidePhysicalProps(member, required) {
+	if CanProvidePhysicalProps(member, required) {
 		var cost memo.Cost
 		for i, n := 0, member.ChildCount(); i < n; i++ {
 			// Given required parent properties, get the properties required from
 			// the nth child.
-			childRequired := o.buildChildPhysicalProps(member, i, required)
+			childRequired := BuildChildPhysicalProps(o.mem, member, i, required)
 
 			// Optimize the child with respect to those properties.
 			childCost, childOptimized := o.optimizeExpr(member.Child(i), childRequired)
@@ -500,7 +500,7 @@ func (o *Optimizer) optimizeScalarExpr(
 ) (cost memo.Cost, fullyOptimized bool) {
 	fullyOptimized = true
 	for i, n := 0, scalar.ChildCount(); i < n; i++ {
-		childProps := o.buildChildPhysicalPropsScalar(scalar, i)
+		childProps := BuildChildPhysicalPropsScalar(o.mem, scalar, i)
 		childCost, childOptimized := o.optimizeExpr(scalar.Child(i), childProps)
 
 		// Accumulate cost of children.
@@ -633,9 +633,9 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		before := parent.Child(i)
 
 		if relParent != nil {
-			childProps = o.buildChildPhysicalProps(relParent, i, parentProps)
+			childProps = BuildChildPhysicalProps(o.mem, relParent, i, parentProps)
 		} else {
-			childProps = o.buildChildPhysicalPropsScalar(parent, i)
+			childProps = BuildChildPhysicalPropsScalar(o.mem, parent, i)
 		}
 
 		after := o.setLowestCostTree(before, childProps)
