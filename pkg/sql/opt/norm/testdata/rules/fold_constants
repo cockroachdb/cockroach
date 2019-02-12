@@ -236,6 +236,17 @@ values
  ├── fd: ()-->(1)
  └── (ARRAY[1,2,3],) [type=tuple{int[]}]
 
+# Regression test for #34270.
+opt expect=FoldBinary
+VALUES ((e'{}' ->> 0) || (e'{}' ->> 0))
+----
+values
+ ├── columns: column1:1(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,) [type=tuple{string}]
+
 # --------------------------------------------------
 # FoldUnary
 # --------------------------------------------------

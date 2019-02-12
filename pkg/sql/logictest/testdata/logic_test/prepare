@@ -429,6 +429,9 @@ query II
 EXECUTE x21701c(NULL)
 ----
 
+statement ok
+DROP TABLE kv
+
 # Test that a PREPARE statement after a CREATE TABLE in the same TRANSACTION
 # doesn't hang.
 subtest 24578
@@ -941,3 +944,13 @@ query IIB
 EXECUTE seqsel
 ----
 0  0  true
+
+# Null placeholder values need to be assigned static types. Otherwise, we won't
+# be able to disambiguate the concat function overloads.
+statement ok
+PREPARE foobar AS VALUES ($1:::string || $2:::string)
+
+query T
+EXECUTE foobar(NULL, NULL)
+----
+NULL

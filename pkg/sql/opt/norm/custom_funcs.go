@@ -1180,12 +1180,12 @@ func (c *CustomFuncs) IsConstArray(scalar opt.ScalarExpr) bool {
 // ConvertConstArrayToTuple converts a constant ARRAY datum to the equivalent
 // homogeneous tuple, so ARRAY[1, 2, 3] becomes (1, 2, 3).
 func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.ScalarExpr {
-	d := scalar.(*memo.ConstExpr).Value.(*tree.DArray)
-	elems := make(memo.ScalarListExpr, len(d.Array))
-	ts := make([]types.T, len(d.Array))
-	for i := range d.Array {
-		elems[i] = c.f.ConstructConst(d.Array[i])
-		ts[i] = d.ParamTyp
+	darr := scalar.(*memo.ConstExpr).Value.(*tree.DArray)
+	elems := make(memo.ScalarListExpr, len(darr.Array))
+	ts := make([]types.T, len(darr.Array))
+	for i, delem := range darr.Array {
+		elems[i] = c.f.ConstructConstVal(delem, delem.ResolvedType())
+		ts[i] = darr.ParamTyp
 	}
 	return c.f.ConstructTuple(elems, types.TTuple{Types: ts})
 }
@@ -1322,7 +1322,7 @@ func (c *CustomFuncs) FoldBinary(op opt.Operator, left, right opt.ScalarExpr) op
 	if err != nil {
 		return nil
 	}
-	return c.f.ConstructConstVal(result)
+	return c.f.ConstructConstVal(result, o.ReturnType)
 }
 
 // FoldUnary evaluates a unary expression with a constant input. It returns
@@ -1340,7 +1340,7 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) opt.Scala
 	if err != nil {
 		return nil
 	}
-	return c.f.ConstructConstVal(result)
+	return c.f.ConstructConstVal(result, o.ReturnType)
 }
 
 // isMonotonicConversion returns true if conversion of a value from FROM to
@@ -1462,7 +1462,7 @@ func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr
 	if b, ok := result.(*tree.DBool); ok && not {
 		result = tree.MakeDBool(!*b)
 	}
-	return c.f.ConstructConstVal(result)
+	return c.f.ConstructConstVal(result, types.Bool)
 }
 
 // AreFiltersSorted determines whether the expressions in a FiltersExpr are
