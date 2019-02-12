@@ -246,6 +246,18 @@ func TestLocalIOLimits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	for host, expectErr := range map[string]bool{"": false, "1": false, "0": false, "blah": true} {
+		u := fmt.Sprintf("nodelocal://%s/path/to/file", host)
+
+		var expected string
+		if expectErr {
+			expected = "host component of nodelocal URI must be a node ID"
+		}
+		if _, err := ExportStorageConfFromURI(u); !testutils.IsError(err, expected) {
+			t.Fatalf("%q: expected error %q, got %v", u, expected, err)
+		}
+	}
 }
 
 func TestPutHttp(t *testing.T) {
