@@ -34,7 +34,8 @@ type Builder struct {
 	// subqueries accumulates information about subqueries that are part of scalar
 	// expressions we built. Each entry is associated with a tree.Subquery
 	// expression node.
-	subqueries []exec.Subquery
+	subqueries          []exec.Subquery
+	hackMissingVarExprs bool
 }
 
 // New constructs an instance of the execution node builder using the

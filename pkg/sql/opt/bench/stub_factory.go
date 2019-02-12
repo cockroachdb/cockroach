@@ -15,6 +15,7 @@
 package bench
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -80,7 +81,9 @@ func (f *stubFactory) ConstructHashJoin(
 func (f *stubFactory) ConstructApplyJoin(
 	joinType sqlbase.JoinType,
 	left exec.Node,
+	leftBoundColMap opt.ColMap,
 	memo *memo.Memo,
+	fakeRight exec.Node,
 	right memo.RelExpr,
 	onCond tree.TypedExpr,
 ) (exec.Node, error) {

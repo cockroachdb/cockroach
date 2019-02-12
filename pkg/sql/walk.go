@@ -252,7 +252,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *applyJoinNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "type", joinTypeStr(n.joinType)+"apply")
+			v.observer.attr(name, "type", joinTypeStr(n.joinType))
 		}
 		if v.observer.expr != nil {
 			v.expr(name, "pred", -1, n.pred.onCond)
