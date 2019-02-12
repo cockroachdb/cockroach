@@ -344,15 +344,15 @@ $left
     $on
 )
 
-# HoistJoinProject lifts a passthrough Project operator from within a Join
-# operator to outside the join. This often allows the Project operator to be
-# merged with an outer Project. Since Project operators tend to prevent other
-# rules from matching, this and other rules try to either push them down (to
-# prune columns), or else to pull them up (to get them out of the way of other
-# operators).
+# HoistJoinProjectRight lifts a passthrough Project operator from within a Join
+# operator's right input to outside the join. This often allows the Project
+# operator to be merged with an outer Project. Since Project operators tend to
+# prevent other rules from matching, this and other rules try to either push
+# them down (to prune columns), or else to pull them up (to get them out of the
+# way of other operators).
 #
 # TODO(andyk): Add other join types.
-[HoistJoinProject, Normalize]
+[HoistJoinProjectRight, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
     $left:*
     $right:(Project $input:* $projections:[])
@@ -363,6 +363,25 @@ $left
     ((OpName)
         $left
         $input
+        $on
+    )
+    $projections
+    (OutputCols2 $left $right)
+)
+
+# HoistJoinProjectLeft is the same as HoistJoinProjectRight, but for the left
+# input of the join.
+[HoistJoinProjectLeft, Normalize]
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+    $left:(Project $input:* $projections:[])
+    $right:*
+    $on:*
+)
+=>
+(Project
+    ((OpName)
+        $input
+        $right
         $on
     )
     $projections
