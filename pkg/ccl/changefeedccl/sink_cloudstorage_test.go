@@ -71,6 +71,27 @@ func TestCloudStorageSink(t *testing.T) {
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
 	e := makeJSONEncoder(opts)
 
+	t.Run(`golden`, func(t *testing.T) {
+		t1 := &sqlbase.TableDescriptor{Name: `t1`}
+
+		sinkDir := `golden`
+		s, err := makeCloudStorageSink(`nodelocal:///`+sinkDir, 1, unlimitedFileSize, settings, opts)
+		require.NoError(t, err)
+
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
+		require.NoError(t, s.Flush(ctx))
+		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(5)))
+
+		dataFile, err := ioutil.ReadFile(filepath.Join(
+			dir, sinkDir, `1970-01-01`, `197001010000000000000010000000000-t1-0-1-1-0.ndjson`))
+		require.NoError(t, err)
+		require.Equal(t, "v1\n", string(dataFile))
+
+		resolvedFile, err := ioutil.ReadFile(filepath.Join(
+			dir, sinkDir, `1970-01-01`, `197001010000000000000050000000000.RESOLVED`))
+		require.NoError(t, err)
+		require.Equal(t, `{"resolved":"5.0000000000"}`, string(resolvedFile))
+	})
 	t.Run(`single-node`, func(t *testing.T) {
 		t1 := &sqlbase.TableDescriptor{Name: `t1`}
 		t2 := &sqlbase.TableDescriptor{Name: `t2`}
