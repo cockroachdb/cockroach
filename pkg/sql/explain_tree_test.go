@@ -122,7 +122,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 							},
 							{
 								Key:   "render",
-								Value: "1 - agg1",
+								Value: "_ - agg1",
 							},
 						},
 						Children: []*roachpb.ExplainTreePlanNode{
@@ -169,7 +169,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 													},
 													{
 														Key:   "filter",
-														Value: "date > '2015-01-01'",
+														Value: "date > _",
 													},
 												},
 											},
@@ -208,11 +208,11 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
 							{
 								Key:   "render",
-								Value: "NULL",
+								Value: "_",
 							},
 							{
 								Key:   "render",
-								Value: "NULL",
+								Value: "_",
 							},
 							{
 								Key:   "render",
@@ -346,6 +346,157 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 		},
 	}
 	assertExpectedPlansForTests(t, sqlSetup, plansToTest)
+}
+
+func TestScrubExplainTreeButNotExplainString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sqlSetup := `CREATE DATABASE t; 
+create table t.movies (
+  id serial primary key,
+  title text,
+  released int
+);
+
+create table t.actors (
+  id serial primary key,
+  name text
+);`
+
+	//subquery is `(SELECT name FROM t.actors WHERE name = 'Foo')`.
+	sqlWithSubquery := "SELECT id AS movie_id, title, (SELECT name FROM t.actors WHERE name = 'Foo') FROM t.movies"
+
+	//`EXPLAIN` should not scrub subquery.
+	expectedPlantoStringWithNoScrubbing := `0 root  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+1 render  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+1 .render 0 (@1)[int] (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+1 .render 1 (@2)[string] (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+1 .render 2 (@S1)[string] (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+2 scan  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+2 .table movies@primary (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+2 .spans ALL (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+1 subquery  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+1 .id @S1 (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+1 .original sql (SELECT name FROM t.public.actors WHERE name = 'Foo') (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+1 .exec mode one row (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+2 limit  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+2 .count (2)[int] (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+3 max1row  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+4 render  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+4 .render 0 (@2)[string] (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+5 scan  (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+5 .table actors@primary (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+5 .spans ALL (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+5 .filter ((@2)[string] = ('Foo')[string])[bool] (movie_id int, title string, name string) name=CONST; movie_id!=NULL; key(movie_id)
+`
+	//explainToTree should scrub expressions and subquery attributes.
+	expectedPlanToTreeShouldScrub := &roachpb.ExplainTreePlanNode{
+		Name: "root",
+		Children: []*roachpb.ExplainTreePlanNode{
+			{
+				Name: "render",
+				Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+					{
+						Key:   "render",
+						Value: "id",
+					},
+					{
+						Key:   "render",
+						Value: "title",
+					},
+					{
+						Key:   "render",
+						Value: "(SELECT name FROM t.public.actors WHERE name = _)",
+					},
+				},
+				Children: []*roachpb.ExplainTreePlanNode{
+					{
+						Name: "scan",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "table",
+								Value: "movies@primary",
+							},
+							{
+								Key:   "spans",
+								Value: "ALL",
+							},
+						},
+					},
+				},
+			},
+			{
+				Name: "subquery",
+				Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+					{
+						Key:   "id",
+						Value: "@S1",
+					},
+					{
+						Key:   "original sql",
+						Value: "(SELECT name FROM t.public.actors WHERE name = _)",
+					},
+					{
+						Key:   "exec mode",
+						Value: "one row",
+					},
+				},
+				Children: []*roachpb.ExplainTreePlanNode{
+					{
+						Name: "limit",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "count",
+								Value: "_",
+							},
+						},
+						Children: []*roachpb.ExplainTreePlanNode{
+							{
+								Name: "max1row",
+								Children: []*roachpb.ExplainTreePlanNode{
+									{
+										Name: "render",
+										Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+											{
+												Key:   "render",
+												Value: "name",
+											},
+										},
+										Children: []*roachpb.ExplainTreePlanNode{
+											{
+												Name: "scan",
+												Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+													{
+														Key:   "table",
+														Value: "actors@primary",
+													},
+													{
+														Key:   "spans",
+														Value: "ALL",
+													},
+													{
+														Key:   "filter",
+														Value: "name = _",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	assertExpectedPlansForTests(t, sqlSetup, []*TestData{
+		{
+			SQL:                sqlWithSubquery,
+			ExpectedPlanString: expectedPlantoStringWithNoScrubbing,
+			ExpectedPlanTree:   expectedPlanToTreeShouldScrub,
+		},
+	})
 }
 
 func assertExpectedPlansForTests(t *testing.T, sqlSetup string, plansToTest []*TestData) {

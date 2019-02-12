@@ -60,7 +60,7 @@ func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode 
 			stackTop := nodeStack.peek()
 			stackTop.Attrs = append(stackTop.Attrs, &roachpb.ExplainTreePlanNode_Attr{
 				Key:   fieldName,
-				Value: expr.String(),
+				Value: tree.AsStringWithFlags(expr, sampledLogicalPlanFmtFlags),
 			})
 		},
 		attr: func(nodeName, fieldName, attr string) {
@@ -81,7 +81,9 @@ func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode 
 		},
 	}
 
-	if err := populateEntriesForObserver(ctx, top.plan, top.subqueryPlans, observer, true /* returnError */); err != nil {
+	if err := populateEntriesForObserver(
+		ctx, top.plan, top.subqueryPlans, observer, true /* returnError */, sampledLogicalPlanFmtFlags,
+	); err != nil {
 		panic(fmt.Sprintf("error while walking plan to save it to statement stats: %s", err.Error()))
 	}
 	return nodeStack.peek()
