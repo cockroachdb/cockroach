@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -89,6 +90,7 @@ type cloudStorageSink struct {
 	sinkID            int64
 	targetMaxFileSize int64
 	settings          *cluster.Settings
+	partitionFormat   string
 
 	ext           string
 	recordDelimFn func(io.Writer) error
@@ -107,6 +109,10 @@ func makeCloudStorageSink(
 	settings *cluster.Settings,
 	opts map[string]string,
 ) (Sink, error) {
+	// Date partitioning is pretty standard, so no override for now, but we could
+	// plumb one down if someone needs it.
+	const defaultPartitionFormat = `2006-01-02`
+
 	sinkID := atomic.AddInt64(&cloudStorageSinkIDAtomic, 1)
 	s := &cloudStorageSink{
 		nodeID:            nodeID,
@@ -114,6 +120,7 @@ func makeCloudStorageSink(
 		settings:          settings,
 		targetMaxFileSize: targetMaxFileSize,
 		files:             make(map[cloudStorageSinkKey]*cloudStorageSinkFile),
+		partitionFormat:   defaultPartitionFormat,
 	}
 
 	switch formatType(opts[optFormat]) {
@@ -201,11 +208,12 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	}
 	// Don't need to copy payload because we never buffer it anywhere.
 
+	part := resolved.GoTime().Format(s.partitionFormat)
 	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
 	if log.V(1) {
 		log.Info(ctx, "writing ", filename)
 	}
-	return s.es.WriteFile(ctx, filename, bytes.NewReader(payload))
+	return s.es.WriteFile(ctx, filepath.Join(part, filename), bytes.NewReader(payload))
 }
 
 // Flush implements the Sink interface.
@@ -234,6 +242,7 @@ func (s *cloudStorageSink) flushFile(
 		return nil
 	}
 
+	part := file.earliestTs.GoTime().Format(s.partitionFormat)
 	ts := cloudStorageFormatTime(file.earliestTs)
 	fileID := s.fileID
 	s.fileID++
@@ -242,7 +251,7 @@ func (s *cloudStorageSink) flushFile(
 	if log.V(1) {
 		log.Info(ctx, "writing ", filename)
 	}
-	return s.es.WriteFile(ctx, filename, bytes.NewReader(file.buf.Bytes()))
+	return s.es.WriteFile(ctx, filepath.Join(part, filename), bytes.NewReader(file.buf.Bytes()))
 }
 
 // Close implements the Sink interface.
