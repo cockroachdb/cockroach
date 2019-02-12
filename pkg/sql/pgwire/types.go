@@ -181,8 +181,11 @@ func (b *writeBuffer) writeTextDatum(
 	}
 }
 
+// writeBinaryDatum writes d to the buffer. Oid must be specified for types
+// that have various width encodings. It is ignored (and can be 0) for types
+// with a 1:1 datum:oid mapping.
 func (b *writeBuffer) writeBinaryDatum(
-	ctx context.Context, d tree.Datum, sessionLoc *time.Location,
+	ctx context.Context, d tree.Datum, sessionLoc *time.Location, Oid oid.Oid,
 ) {
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing BINARY datum of type: %T, %#v", d, d)
@@ -233,12 +236,31 @@ func (b *writeBuffer) writeBinaryDatum(
 		}
 
 	case *tree.DInt:
-		b.putInt32(8)
-		b.putInt64(int64(*v))
+		switch Oid {
+		case oid.T_int2:
+			b.putInt32(2)
+			b.putInt16(int16(*v))
+		case oid.T_int4:
+			b.putInt32(4)
+			b.putInt32(int32(*v))
+		case oid.T_int8:
+			b.putInt32(8)
+			b.putInt64(int64(*v))
+		default:
+			b.setError(errors.Errorf("unsupported int oid: %v", Oid))
+		}
 
 	case *tree.DFloat:
-		b.putInt32(8)
-		b.putInt64(int64(math.Float64bits(float64(*v))))
+		switch Oid {
+		case oid.T_float4:
+			b.putInt32(4)
+			b.putInt32(int32(math.Float32bits(float32(*v))))
+		case oid.T_float8:
+			b.putInt32(8)
+			b.putInt64(int64(math.Float64bits(float64(*v))))
+		default:
+			b.setError(errors.Errorf("unsupported float oid: %v", Oid))
+		}
 
 	case *tree.DDecimal:
 		if v.Form != apd.Finite {
@@ -400,8 +422,9 @@ func (b *writeBuffer) writeBinaryDatum(
 		// Put the number of datums.
 		subWriter.putInt32(int32(len(v.D)))
 		for _, elem := range v.D {
-			subWriter.putInt32(int32(elem.ResolvedType().Oid()))
-			subWriter.writeBinaryDatum(ctx, elem, sessionLoc)
+			oid := elem.ResolvedType().Oid()
+			subWriter.putInt32(int32(oid))
+			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, oid)
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 
@@ -418,13 +441,14 @@ func (b *writeBuffer) writeBinaryDatum(
 		if v.HasNulls {
 			hasNulls = 1
 		}
+		oid := v.ParamTyp.Oid()
 		subWriter.putInt32(int32(hasNulls))
-		subWriter.putInt32(int32(v.ParamTyp.Oid()))
+		subWriter.putInt32(int32(oid))
 		subWriter.putInt32(int32(v.Len()))
 		// Lower bound, we only support a lower bound of 1.
 		subWriter.putInt32(1)
 		for _, elem := range v.Array {
-			subWriter.writeBinaryDatum(ctx, elem, sessionLoc)
+			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, oid)
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 	case *tree.DJSON:

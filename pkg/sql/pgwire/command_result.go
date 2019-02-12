@@ -77,6 +77,10 @@ type commandResult struct {
 	// case for queries executed through the simple protocol). Otherwise, it needs
 	// to have an entry for every column.
 	formatCodes []pgwirebase.FormatCode
+
+	// oids is a map from result column index to its Oid, similar to formatCodes
+	// (except oids must always be set).
+	oids []oid.Oid
 }
 
 func (c *conn) makeCommandResult(
@@ -213,7 +217,7 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	}
 	r.rowsAffected++
 
-	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv)
+	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.oids)
 	_ /* flushed */, err := r.conn.maybeFlush(r.pos)
 	return err
 }
@@ -223,6 +227,10 @@ func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColum
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.descOpt == sql.NeedRowDesc {
 		_ /* err */ = r.conn.writeRowDescription(ctx, cols, r.formatCodes, &r.conn.writerState.buf)
+	}
+	r.oids = make([]oid.Oid, len(cols))
+	for i, col := range cols {
+		r.oids[i] = col.Typ.Oid()
 	}
 }
 

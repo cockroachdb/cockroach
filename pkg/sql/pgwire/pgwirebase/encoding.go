@@ -531,7 +531,7 @@ func DecodeOidDatum(
 				return nil, err
 			}
 			return tree.ParseDJSON(string(b))
-		case oid.T_varbit:
+		case oid.T_varbit, oid.T_bit:
 			if len(b) < 4 {
 				return nil, errors.Errorf("missing varbit bitlen prefix")
 			}

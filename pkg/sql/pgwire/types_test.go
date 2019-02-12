@@ -103,13 +103,13 @@ func TestWriteBinaryArray(t *testing.T) {
 
 	writeBuf1 := newWriteBuffer(nil /* bytecount */)
 	writeBuf1.writeTextDatum(context.Background(), ary, defaultConv)
-	writeBuf1.writeBinaryDatum(context.Background(), ary, time.UTC)
+	writeBuf1.writeBinaryDatum(context.Background(), ary, time.UTC, 0 /* oid */)
 
 	writeBuf2 := newWriteBuffer(nil /* bytecount */)
 	writeBuf2.writeTextDatum(context.Background(), ary, defaultConv)
 
 	writeBuf3 := newWriteBuffer(nil /* bytecount */)
-	writeBuf3.writeBinaryDatum(context.Background(), ary, defaultConv.Location)
+	writeBuf3.writeBinaryDatum(context.Background(), ary, defaultConv.Location, 0 /* oid */)
 
 	concatted := bytes.Join([][]byte{writeBuf2.wrapped.Bytes(), writeBuf3.wrapped.Bytes()}, nil)
 
@@ -253,7 +253,7 @@ func TestCanWriteAllDatums(t *testing.T) {
 				t.Fatalf("got %s while attempting to write datum %s as text", buf.err, d)
 			}
 
-			buf.writeBinaryDatum(context.Background(), d, defaultConv.Location)
+			buf.writeBinaryDatum(context.Background(), d, defaultConv.Location, d.ResolvedType().Oid())
 			if buf.err != nil {
 				t.Fatalf("got %s while attempting to write datum %s as binary", buf.err, d)
 			}
@@ -273,7 +273,9 @@ func benchmarkWriteType(b *testing.B, d tree.Datum, format pgwirebase.FormatCode
 		buf.writeTextDatum(ctx, d, defaultConv)
 	}
 	if format == pgwirebase.FormatBinary {
-		writeMethod = buf.writeBinaryDatum
+		writeMethod = func(ctx context.Context, d tree.Datum, loc *time.Location) {
+			buf.writeBinaryDatum(ctx, d, loc, 0)
+		}
 	}
 
 	// Warm up the buffer.
@@ -453,7 +455,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	if err := expected.SetString(s); err != nil {
 		b.Fatalf("could not set %q on decimal", s)
 	}
-	wbuf.writeBinaryDatum(context.Background(), expected, nil /* sessionLoc */)
+	wbuf.writeBinaryDatum(context.Background(), expected, nil /* sessionLoc */, 0 /* oid */)
 
 	rbuf := pgwirebase.ReadBuffer{Msg: wbuf.wrapped.Bytes()}
 
