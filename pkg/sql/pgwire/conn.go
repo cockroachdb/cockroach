@@ -915,6 +915,7 @@ func (c *conn) bufferRow(
 	row tree.Datums,
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondata.DataConversionConfig,
+	oids []oid.Oid,
 ) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 	c.msgBuilder.putInt16(int16(len(row)))
@@ -927,7 +928,7 @@ func (c *conn) bufferRow(
 		case pgwirebase.FormatText:
 			c.msgBuilder.writeTextDatum(ctx, col, conv)
 		case pgwirebase.FormatBinary:
-			c.msgBuilder.writeBinaryDatum(ctx, col, conv.Location)
+			c.msgBuilder.writeBinaryDatum(ctx, col, conv.Location, oids[i])
 		default:
 			c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}
