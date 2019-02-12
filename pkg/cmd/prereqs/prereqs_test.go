@@ -16,9 +16,14 @@ package main
 
 import (
 	"bytes"
+	"go/build"
+	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -89,7 +94,33 @@ vendor/foo.com/baz/baz.go:
 vendor/foo.com/baz:
 `
 
+type fakeFileInfo struct {
+	dir      bool
+	basename string
+	modtime  time.Time
+	contents string
+}
+
+func (f *fakeFileInfo) Name() string       { return f.basename }
+func (f *fakeFileInfo) Sys() interface{}   { return nil }
+func (f *fakeFileInfo) ModTime() time.Time { return f.modtime }
+func (f *fakeFileInfo) IsDir() bool        { return f.dir }
+func (f *fakeFileInfo) Size() int64        { return int64(len(f.contents)) }
+func (f *fakeFileInfo) Mode() os.FileMode  { return 0644 }
+
+type fakeFile struct {
+	*strings.Reader
+}
+
+func (f *fakeFile) Close() error {
+	return nil
+}
+
 func TestPrereqs(t *testing.T) {
+	defer func(origCtx build.Context) {
+		buildCtx = origCtx
+	}(buildCtx)
+
 	gopath, err := filepath.Abs("testdata")
 	if err != nil {
 		t.Fatal(err)
@@ -101,6 +132,9 @@ func TestPrereqs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func(dir string, err error) {
+		_ = os.Chdir(dir)
+	}(os.Getwd())
 	if err := os.Chdir(pkg); err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +175,6 @@ func TestPrereqs(t *testing.T) {
 			{path: "foo.com/foo", exp: expectedFoo},
 			{path: "./vendor/foo.com/foo", exp: expectedFoo},
 			{path: "example.com/vendor/foo.com/foo", exp: expectedFoo},
-			{path: "example.com/specialchars", exp: expectedSpecialChars},
 			{path: "example.com/test", exp: expectedTestNoDeps},
 			{path: "example.com/test", exp: expectedTestWithDeps, includeTest: true},
 		} {
@@ -154,6 +187,69 @@ func TestPrereqs(t *testing.T) {
 					t.Fatalf("expected:\n%s\nactual:\n%s\n", e, a)
 				}
 			})
+		}
+	})
+
+	// The test for special character handling is special because creating a
+	// filename with these special characters is problematic in some
+	// contexts. Notably, we can't create such files on Windows or add them to
+	// zips, which in turn prohibits the Cockroach source code from being used in
+	// those contexts. To workaround this limitation, we customize buildCtx and
+	// override the directory and file operations to overlay a filename containing
+	// special characters.
+	t.Run("example.com/specialchars", func(t *testing.T) {
+		defer func(origCtx build.Context) {
+			buildCtx = origCtx
+		}(buildCtx)
+
+		srcDir := filepath.Join(buildCtx.GOPATH, "src")
+		pkg := "example.com/specialchars"
+		pkgPath := filepath.Join(srcDir, pkg)
+		fakeContents := "package specialchars\n"
+
+		buildCtx.IsDir = func(path string) bool {
+			if path == pkgPath {
+				return true
+			}
+			fi, err := os.Stat(path)
+			return err == nil && fi.IsDir()
+		}
+		buildCtx.ReadDir = func(dir string) ([]os.FileInfo, error) {
+			if dir == pkgPath {
+				return []os.FileInfo{
+					&fakeFileInfo{
+						basename: "_ignore.go",
+						contents: fakeContents,
+					},
+					&fakeFileInfo{
+						basename: "a[]*?~ $%#.go",
+						contents: fakeContents,
+					},
+				}, nil
+			}
+			return ioutil.ReadDir(dir)
+		}
+		buildCtx.OpenFile = func(path string) (io.ReadCloser, error) {
+			if filepath.Dir(path) == pkgPath {
+				return &fakeFile{
+					Reader: strings.NewReader(fakeContents),
+				}, nil
+			}
+			f, err := os.Open(path)
+			if err != nil {
+				return nil, err // nil interface
+			}
+			return f, nil
+		}
+
+		var buf bytes.Buffer
+		if err := run(&buf, pkg, false, ""); err != nil {
+			t.Fatal(err)
+		}
+
+		exp := expectedSpecialChars
+		if e, a := exp, buf.String(); e != a {
+			t.Fatalf("expected:\n%s\nactual:\n%s\n", e, a)
 		}
 	})
 }

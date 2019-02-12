@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 func (e *UnhandledRetryableError) Error() string {
@@ -423,6 +424,18 @@ func (e *TransactionStatusError) Error() string {
 
 func (e *TransactionStatusError) message(pErr *Error) string {
 	return fmt.Sprintf("%s: %s", e.Error(), pErr.GetTxn())
+}
+
+// CheckTxnDeadlineExceededErr returns an error if deadlineErr is not a
+// transaction deadline exceeded roachpb.TransactionStatusError.
+func CheckTxnDeadlineExceededErr(deadlineErr error) error {
+	if statusError, ok := deadlineErr.(*TransactionStatusError); !ok {
+		return errors.Errorf("expected TransactionStatusError but got %T: %s",
+			deadlineErr, deadlineErr)
+	} else if e := "transaction deadline exceeded"; !strings.Contains(statusError.Msg, e) {
+		return errors.Errorf("expected %s, got %s", e, statusError.Msg)
+	}
+	return nil
 }
 
 var _ ErrorDetailInterface = &TransactionStatusError{}
