@@ -59,7 +59,7 @@ func TestTrimProvided(t *testing.T) {
 	for tcIdx, tc := range testCases {
 		t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
 			req := physical.ParseOrderingChoice(tc.req)
-			prov := parseOrdering(tc.prov)
+			prov := physical.ParseOrdering(tc.prov)
 			res := trimProvided(prov, &req, &tc.fds).String()
 			if res != tc.exp {
 				t.Errorf("expected %s, got %s", tc.exp, res)
@@ -112,27 +112,13 @@ func TestRemapProvided(t *testing.T) {
 	}
 	for tcIdx, tc := range testCases {
 		t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
-			prov := parseOrdering(tc.prov)
+			prov := physical.ParseOrdering(tc.prov)
 			res := remapProvided(prov, &tc.fds, tc.cols).String()
 			if res != tc.exp {
 				t.Errorf("expected %s, got %s", tc.exp, res)
 			}
 		})
 	}
-}
-
-// parseOrdering parses a simple opt.Ordering.
-func parseOrdering(str string) opt.Ordering {
-	prov := physical.ParseOrderingChoice(str)
-	if !prov.Optional.Empty() {
-		panic(fmt.Sprintf("invalid ordering %s", str))
-	}
-	for i := range prov.Columns {
-		if prov.Columns[i].Group.Len() != 1 {
-			panic(fmt.Sprintf("invalid ordering %s", str))
-		}
-	}
-	return prov.ToOrdering()
 }
 
 // testFDs returns FDs that can be used for testing:
