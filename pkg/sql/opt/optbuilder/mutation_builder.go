@@ -374,6 +374,10 @@ func (mb *mutationBuilder) addSynthesizedCols(
 // a constraint violation error if the value of the column is false.
 func (mb *mutationBuilder) addCheckConstraintCols() {
 	if mb.tab.CheckCount() > 0 {
+		// Disambiguate names so that references in the constraint expression refer
+		// to the correct columns.
+		mb.disambiguateColumns()
+
 		mb.checkColList = make(opt.ColList, mb.tab.CheckCount())
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
@@ -396,6 +400,29 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 	}
 }
 
+// disambiguateColumns ranges over the scope and ensures that at most one column
+// has each table column name, and that name refers to the column with the final
+// value that the mutation applies.
+func (mb *mutationBuilder) disambiguateColumns() {
+	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
+		colName := mb.tab.Column(i).ColName()
+		colID := mb.mapToReturnColID(i)
+		for i := range mb.outScope.cols {
+			col := &mb.outScope.cols[i]
+			if col.name == colName {
+				if col.id == colID {
+					// Use table name, not alias name, since computed column
+					// expressions will not reference aliases.
+					col.table = *mb.tab.Name()
+				} else {
+					// Clear name so that it will never match.
+					col.clearName()
+				}
+			}
+		}
+	}
+}
+
 // makeMutationPrivate builds a MutationPrivate struct containing the table and
 // column metadata needed for the mutation operator.
 func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationPrivate {
@@ -414,27 +441,41 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		// can be non-zero.
 		private.ReturnCols = make(opt.ColList, mb.tab.DeletableColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			// Map to columns in this order: upsert, update, fetch, insert.
-			switch {
-			case mb.upsertColList != nil && mb.upsertColList[i] != 0:
-				private.ReturnCols[i] = mb.upsertColList[i]
-
-			case mb.updateColList != nil && mb.updateColList[i] != 0:
-				private.ReturnCols[i] = mb.updateColList[i]
-
-			case mb.fetchColList != nil && mb.fetchColList[i] != 0:
-				private.ReturnCols[i] = mb.fetchColList[i]
-
-			case mb.insertColList != nil && mb.insertColList[i] != 0:
-				private.ReturnCols[i] = mb.insertColList[i]
-
-			default:
-				panic("could not find return column")
-			}
+			private.ReturnCols[i] = mb.mapToReturnColID(i)
 		}
 	}
 
 	return private
+}
+
+// mapToReturnColID returns the ID of the input column that will provide the
+// value for the corresponding return column. Columns take priority in this
+// order:
+//
+//   upsert, update, fetch, insert
+//
+// If an upsert column is available, then it already combines an update/fetch
+// value with an insert value, so it takes priority. If an update column is
+// available, then it overrides any fetch value. Finally, the relative priority
+// of fetch and insert columns doesn't matter, since they're only used together
+// in the upsert case where an upsert column would be available.
+func (mb *mutationBuilder) mapToReturnColID(ord int) opt.ColumnID {
+	switch {
+	case mb.upsertColList != nil && mb.upsertColList[ord] != 0:
+		return mb.upsertColList[ord]
+
+	case mb.updateColList != nil && mb.updateColList[ord] != 0:
+		return mb.updateColList[ord]
+
+	case mb.fetchColList != nil && mb.fetchColList[ord] != 0:
+		return mb.fetchColList[ord]
+
+	case mb.insertColList != nil && mb.insertColList[ord] != 0:
+		return mb.insertColList[ord]
+
+	default:
+		panic("could not find return column")
+	}
 }
 
 // buildReturning wraps the input expression with a Project operator that
