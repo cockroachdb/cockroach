@@ -45,8 +45,10 @@ var secondaryLogRegistry struct {
 // The given directory name can be either nil or empty, in which case
 // the global logger's own dirName is used; or non-nil and non-empty,
 // in which case it specifies the directory for that new logger.
+//
+// The logger's GC daemon stops when the provided context is canceled.
 func NewSecondaryLogger(
-	dirName *DirName, fileNamePrefix string, enableGc, forceSyncWrites bool,
+	ctx context.Context, dirName *DirName, fileNamePrefix string, enableGc, forceSyncWrites bool,
 ) *SecondaryLogger {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
@@ -78,7 +80,7 @@ func NewSecondaryLogger(
 
 	if enableGc {
 		// Start the log file GC for the secondary logger.
-		go l.logger.gcDaemon()
+		go l.logger.gcDaemon(ctx)
 	}
 
 	return l

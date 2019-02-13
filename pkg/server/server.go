@@ -594,6 +594,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		sqlExecutorTestingKnobs = new(sql.ExecutorTestingKnobs)
 	}
 
+	loggerCtx, _ := s.stopper.WithCancelOnStop(ctx)
+
 	execCfg = sql.ExecutorConfig{
 		Settings:                s.st,
 		NodeInfo:                nodeInfo,
@@ -638,11 +640,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		),
 
 		ExecLogger: log.NewSecondaryLogger(
-			nil /* dirName */, "sql-exec", true /* enableGc */, false, /*forceSyncWrites*/
+			loggerCtx, nil /* dirName */, "sql-exec", true /* enableGc */, false, /*forceSyncWrites*/
 		),
 
 		AuditLogger: log.NewSecondaryLogger(
-			s.cfg.SQLAuditLogDirName, "sql-audit", true /*enableGc*/, true, /*forceSyncWrites*/
+			loggerCtx, s.cfg.SQLAuditLogDirName, "sql-audit", true /*enableGc*/, true, /*forceSyncWrites*/
 		),
 
 		QueryCache: querycache.New(s.cfg.SQLQueryCacheSize),
