@@ -53,6 +53,9 @@ type ColVec interface {
 	// Col returns the raw, typeless backing storage for this ColVec.
 	Col() interface{}
 
+	// SetCol sets the member column (in the case of mutable columns).
+	SetCol(col column)
+
 	// TemplateType returns an []interface{} and is used for operator templates.
 	// Do not call this from normal code - it'll always panic.
 	_TemplateType() []interface{}
@@ -61,9 +64,18 @@ type ColVec interface {
 	// elements of this ColVec, assuming that both ColVecs are of type colType.
 	Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16)
 
+	// AppendSlice appends vec[srcStartIdx:srcEndIdx] elements to
+	// this ColVec starting at destStartIdx.
+	AppendSlice(vec ColVec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16)
+
 	// AppendWithSel appends into itself another column vector from a ColBatch with
 	// maximum size of ColBatchSize, filtered by the given selection vector.
 	AppendWithSel(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
+
+	// AppendSliceWithSel appends srcEndIdx - srcStartIdx elements to this ColVec starting
+	// at destStartIdx. These elements come from vec, filtered by the selection
+	// vector sel.
+	AppendSliceWithSel(vec ColVec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16, sel []uint16)
 
 	// Copy copies src[srcStartIdx:srcEndIdx] into this ColVec.
 	Copy(src ColVec, srcStartIdx, srcEndIdx uint64, typ types.T)
@@ -71,9 +83,11 @@ type ColVec interface {
 	// CopyWithSelInt64 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
 	CopyWithSelInt64(vec ColVec, sel []uint64, nSel uint16, colType types.T)
+
 	// CopyWithSelInt16 copies vec, filtered by sel, into this ColVec. It replaces
 	// the contents of this ColVec.
 	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
+
 	// CopyWithSelAndNilsInt64 copies vec, filtered by sel, unless nils is set,
 	// into ColVec. It replaces the contents of this ColVec.
 	CopyWithSelAndNilsInt64(vec ColVec, sel []uint64, nSel uint16, nils []bool, colType types.T)
@@ -85,6 +99,14 @@ type ColVec interface {
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this ColVec.
 	// It uses the reflect package and is not suitable for calling in hot paths.
 	PrettyValueAt(idx uint16, colType types.T) string
+
+	// ExtendNulls extends the null member of a ColVec and sets the right indexes to null,
+	// needed when the length of the underlying column changes.
+	ExtendNulls(vec ColVec, outputLen uint64, srcStartIdx uint16, batchSize uint16, destStartIdx uint64)
+
+	// ExtendNullsWithSel extends the null member of a ColVec and sets the right indexes to null
+	// with the selection vector in mind, needed when the length of the underlying column changes.
+	ExtendNullsWithSel(vec ColVec, outputLen uint64, srcStartIdx uint16, batchSize uint16, destStartIdx uint64, sel []uint16)
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -180,6 +202,10 @@ func (m *memColumn) NullAt(i uint16) bool {
 
 func (m *memColumn) SetNull(i uint16) {
 	m.SetNull64(uint64(i))
+}
+
+func (m *memColumn) SetCol(col column) {
+	m.col = col
 }
 
 func (m *memColumn) UnsetNulls() {
