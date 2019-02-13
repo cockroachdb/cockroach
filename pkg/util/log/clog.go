@@ -646,8 +646,10 @@ func LoggingToStderr(s Severity) bool {
 // StartGCDaemon starts the log file GC -- this must be called after
 // command-line parsing has completed so that no data is lost when the
 // user configures larger max sizes than the defaults.
-func StartGCDaemon() {
-	go logging.gcDaemon()
+//
+// The logger's GC daemon stops when the provided context is canceled.
+func StartGCDaemon(ctx context.Context) {
+	go logging.gcDaemon(ctx)
 }
 
 // Flush flushes all pending log I/O.
@@ -1280,9 +1282,14 @@ func (l *loggingT) flushAndSync(doSync bool) {
 	}
 }
 
-func (l *loggingT) gcDaemon() {
+func (l *loggingT) gcDaemon(ctx context.Context) {
 	l.gcOldFiles()
-	for range l.gcNotify {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-l.gcNotify:
+		}
 		l.mu.Lock()
 		if !l.disableDaemons {
 			l.gcOldFiles()
