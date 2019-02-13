@@ -521,11 +521,11 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str> NOT NOTHING NOTNULL NULL NULLIF NUMERIC
 
-%token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPTION OPTIONS OR
+%token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
-%token <str> PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
+%token <str> PLAN PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 %token <str> PROCEDURAL PUBLICATION
 
 %token <str> QUERIES QUERY
@@ -2430,6 +2430,15 @@ prepare_stmt:
       Name: tree.Name($2),
       Types: $3.colTypes(),
       Statement: $5.stmt(),
+    }
+  }
+| PREPARE table_alias_name prep_type_clause AS OPT PLAN SCONST
+  {
+    /* SKIP DOC */
+    $$.val = &tree.Prepare{
+      Name: tree.Name($2),
+      Types: $3.colTypes(),
+      Statement: &tree.CannedOptPlan{Plan: $7},
     }
   }
 | PREPARE error // SHOW HELP: PREPARE
@@ -8718,6 +8727,7 @@ unreserved_keyword:
 | OIDS
 | OIDVECTOR
 | OPERATOR
+| OPT
 | OPTION
 | OPTIONS
 | ORDINALITY
@@ -8729,6 +8739,7 @@ unreserved_keyword:
 | PASSWORD
 | PAUSE
 | PHYSICAL
+| PLAN
 | PLANS
 | PRECEDING
 | PREPARE
