@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -66,19 +65,6 @@ func (p *planner) optimizeSubquery(ctx context.Context, sq *subquery) error {
 
 	if log.V(2) {
 		log.Infof(ctx, "optimizing subquery %d (%q)", sq.subquery.Idx, sq.subquery)
-	}
-
-	if sq.execMode == distsqlrun.SubqueryExecModeExists ||
-		sq.execMode == distsqlrun.SubqueryExecModeOneRow {
-		numRows := tree.DInt(1)
-		if sq.execMode == distsqlrun.SubqueryExecModeOneRow {
-			// When using a sub-query in a scalar context, we must
-			// appropriately reject sub-queries that return more than 1
-			// row.
-			numRows = 2
-		}
-
-		sq.plan = &limitNode{plan: sq.plan, countExpr: tree.NewDInt(numRows)}
 	}
 
 	needed := make([]bool, len(planColumns(sq.plan)))
