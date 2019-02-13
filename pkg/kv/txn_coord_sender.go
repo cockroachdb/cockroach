@@ -149,7 +149,7 @@ type TxnCoordSender struct {
 	interceptorStack []txnInterceptor
 	interceptorAlloc struct {
 		arr [6]txnInterceptor
-		txnHeartbeat
+		txnHeartbeater
 		txnIntentCollector
 		txnPipeliner
 		txnSpanRefresher
@@ -422,7 +422,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	}
 	// Some interceptors are only needed by roots.
 	if typ == client.RootTxn {
-		tcs.interceptorAlloc.txnHeartbeat.init(
+		tcs.interceptorAlloc.txnHeartbeater.init(
 			&tcs.mu.Mutex,
 			&tcs.mu.txn,
 			tcf.st,
@@ -458,8 +458,8 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	}
 	if typ == client.RootTxn {
 		tcs.interceptorAlloc.arr = [...]txnInterceptor{
-			&tcs.interceptorAlloc.txnHeartbeat,
-			// The seq num allocator is below the txnHeartbeat so that it sees the
+			&tcs.interceptorAlloc.txnHeartbeater,
+			// The seq num allocator is below the txnHeartbeater so that it sees the
 			// BeginTransaction prepended by that interceptor. (An alternative would
 			// be to not assign seq nums to BeginTransaction; it doesn't need it.)
 			// Note though that it skips assigning seq nums to heartbeats.
@@ -577,14 +577,14 @@ func (tc *TxnCoordSender) EagerRecord() error {
 	if tc.mu.active {
 		return errors.Errorf("cannot request an eager transaction record write on a running transaction")
 	}
-	tc.interceptorAlloc.txnHeartbeat.eagerRecord = true
+	tc.interceptorAlloc.txnHeartbeater.eagerRecord = true
 	return nil
 }
 
 // commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
 // cheaper than, sending an EndTransactionRequest. A read-only txn doesn't have
 // a transaction record, so there's no need to send any request to the server.
-// An EndTransactionRequest for a read-only txn is elided by the txnHeartbeat
+// An EndTransactionRequest for a read-only txn is elided by the txnHeartbeater
 // interceptor. However, calling this and short-circuting even earlier is
 // even more efficient (and shows in benchmarks).
 func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
@@ -619,7 +619,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnHeartbeat.mu.everWroteIntents {
+	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnHeartbeater.mu.everWroteIntents {
 		return nil, tc.commitReadOnlyTxnLocked(ctx, ba.Requests[0].GetEndTransaction().Deadline)
 	}
 
@@ -865,7 +865,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		tc.mu.txn.Status = roachpb.ABORTED
 		// Abort the old txn. The client is not supposed to use use this
 		// TxnCoordSender any more.
-		tc.interceptorAlloc.txnHeartbeat.abortTxnAsyncLocked(ctx)
+		tc.interceptorAlloc.txnHeartbeater.abortTxnAsyncLocked(ctx)
 		return retErr
 	}
 
