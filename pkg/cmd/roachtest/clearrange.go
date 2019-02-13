@@ -27,8 +27,10 @@ func registerClearRange(r *registry) {
 	for _, checks := range []bool{true, false} {
 		checks := checks
 		r.Add(testSpec{
-			Name:       fmt.Sprintf(`clearrange/checks=%t`, checks),
-			Timeout:    3*time.Hour + 90*time.Minute, // 3h for import, 90 for the test
+			Name: fmt.Sprintf(`clearrange/checks=%t`, checks),
+			// 5h for import, 90 for the test. The import should take closer
+			// to <3:30h but it varies.
+			Timeout:    5*time.Hour + 90*time.Minute,
 			MinVersion: `v2.2.0`,
 			Cluster:    makeClusterSpec(10),
 			Run: func(ctx context.Context, t *test, c *cluster) {
