@@ -135,6 +135,8 @@ enum TransactionAbortedReason {
   // the TxnSpanGCThreshold, so there might have been an ABORTED txn record that
   // got GCed (so, we might be in the ABORT_REASON_ABORTED_RECORD_FOUND case and
   // not know).
+  // TODO(nvanbenschoten): Remove this error reason in 2.3, at which point no
+  // nodes in the cluster will ever return it.
   ABORT_REASON_NEW_TXN_RECORD_TOO_OLD = 2;
 
   // The client is trying to use a transaction that's already been aborted. The

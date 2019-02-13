@@ -36,7 +36,6 @@ func declareKeysQueryTransaction(
 ) {
 	qr := req.(*roachpb.QueryTxnRequest)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.TransactionKey(qr.Txn.Key, qr.Txn.ID)})
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID)})
 }
 
 // QueryTxn fetches the current state of a transaction.

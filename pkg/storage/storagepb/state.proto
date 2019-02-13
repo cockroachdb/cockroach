@@ -68,6 +68,8 @@ message ReplicaState {
   // records may have been garbage collected (as measured by txn.LastActive()).
   // Transactions at lower timestamps must not be allowed to write their initial
   // transaction entry.
+  // TODO(nvanbenschoten): Remove this in 2.3, at which point we won't need to
+  // maintain it because no nodes in the cluster will ever consult it.
   util.hlc.Timestamp txn_span_gc_threshold = 9 [(gogoproto.customname) = "TxnSpanGCThreshold", (gogoproto.moretags) = "cockroachdb:\"randnullable\""];
   reserved 10;
   // using_applied_state_key specifies whether the Range has been upgraded
