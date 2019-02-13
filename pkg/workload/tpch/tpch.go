@@ -88,15 +88,6 @@ func (w *tpch) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
 			for _, queryName := range strings.Split(w.queriesRaw, `,`) {
-				queryName = strings.TrimSpace(queryName)
-				switch queryName {
-				case `2`, `4`, `13`, `16`, `17`, `18`, `20`, `21`, `22`:
-					return errors.Errorf(`query is unsupported: %s`, queryName)
-				case `5`, `6`, `10`, `12`, `14`:
-					return errors.Errorf(`query causes Cockroach panic (see #13692): %s`, queryName)
-				case `11`:
-					return errors.Errorf(`group with having not supported yet: %s`, queryName)
-				}
 				if _, ok := queriesByName[queryName]; !ok {
 					return errors.Errorf(`unknown query: %s`, queryName)
 				}
