@@ -39,14 +39,15 @@ func Parse(input string) (*Conf, error) {
 	cs, p, pe, eof := 0, 0, len(data), len(data)
 
 	var (
-		mark int
-		ms []String
-		s String
-		ipn *net.IPNet
-		e Entry
-		err error
-		d string
-		conf Conf
+		mark   int
+		ms     []String
+		s      String
+		ipn    *net.IPNet
+		e      Entry
+		err    error
+		d      string
+		option [2]string
+		conf   Conf
 	)
 
 	%%{
@@ -120,6 +121,16 @@ func Parse(input string) (*Conf, error) {
 		action method {
 			e.Method = string(data[mark:p])
 		}
+		action option {
+			copy(option[:], strings.Split(string(data[mark:p]), "="))
+			e.Options = append(e.Options, option)
+		}
+		token = alnum | '.' | '_' | '-';
+		option =
+			token+ >mark
+			'='
+			token+ %option
+			;
 		action host {
 			conf.Entries = append(conf.Entries, e)
 		}
@@ -129,6 +140,10 @@ func Parse(input string) (*Conf, error) {
 			multiString %user ws
 			address >mark ws
 			method >mark %method
+			(
+				ws
+				option >mark %option
+			)*
 			ws? (comment | '\n')
 			;
 		action invalidHost { return nil, errors.Errorf("entry %d invalid", len(conf.Entries) + 1) }
