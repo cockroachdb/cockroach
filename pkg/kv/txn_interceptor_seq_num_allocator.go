@@ -42,7 +42,6 @@ import (
 //    but the result of a write at a larger sequence number is, an error is
 //    returned.
 //
-// TODO(nvanbenschoten): Unit test this file.
 type txnSeqNumAllocator struct {
 	wrapped lockedSender
 	seqGen  int32
