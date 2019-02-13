@@ -233,9 +233,9 @@ query TTTTBBBB colnames
 SELECT * FROM constraint_db.pg_catalog.pg_tables WHERE schemaname = 'public'
 ----
 schemaname  tablename  tableowner  tablespace  hasindexes  hasrules  hastriggers  rowsecurity
-public      t1         NULL        NULL        true        false     false        false
-public      t2         NULL        NULL        true        false     false        false
-public      t3         NULL        NULL        true        false     false        false
+public      t1         NULL        pg_default  true        false     false        false
+public      t2         NULL        pg_default  true        false     false        false
+public      t3         NULL        pg_default  true        false     false        false
 
 query TB colnames
 SELECT tablename, hasindexes FROM pg_catalog.pg_tables WHERE schemaname = 'information_schema' AND tablename LIKE '%table%'
@@ -1537,7 +1537,7 @@ SET DATABASE = 'constraint_db'
 query I
 SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public'
 ----
-3
+0
 
 user root
 
@@ -1713,4 +1713,6 @@ CREATE TABLE d34856.t(x INT);
 query T
 SELECT tablename FROM d34856.pg_catalog.pg_tables WHERE schemaname = 'public'
 ----
-t
+coltab
+a
+b

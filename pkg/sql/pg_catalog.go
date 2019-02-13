@@ -211,7 +211,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogSettingsTableID:            pgCatalogSettingsTable,
 		sqlbase.PgCatalogUserTableID:                pgCatalogUserTable,
 		sqlbase.PgCatalogUserMappingTableID:         pgCatalogUserMappingTable,
-		sqlbase.PgCatalogTablesTableID:              pgCatalogTablesTable,
+		sqlbase.PgCatalogTablesTableID:              pgCatalogTablesView,
 		sqlbase.PgCatalogTablespaceTableID:          pgCatalogTablespaceTable,
 		sqlbase.PgCatalogTriggerTableID:             pgCatalogTriggerTable,
 		sqlbase.PgCatalogTypeTableID:                pgCatalogTypeTable,
@@ -481,9 +481,12 @@ CREATE TABLE pg_catalog.pg_class (
 	relhasrules BOOL,
 	relhastriggers BOOL,
 	relhassubclass BOOL,
+	relrowsecurity BOOL,
 	relfrozenxid INT,
 	relacl STRING[],
-	reloptions STRING[]
+	reloptions STRING[],
+	CONSTRAINT pg_class_oid_index PRIMARY KEY (oid),
+	CONSTRAINT pg_class_relname_nsp_index UNIQUE (relname, relnamespace)
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
@@ -522,6 +525,7 @@ CREATE TABLE pg_catalog.pg_class (
 					tree.DBoolFalse, // relhasrules
 					tree.DBoolFalse, // relhastriggers
 					tree.DBoolFalse, // relhassubclass
+					tree.DBoolFalse, // relrowsecurity
 					zeroVal,         // relfrozenxid
 					tree.DNull,      // relacl
 					tree.DNull,      // reloptions
@@ -563,6 +567,7 @@ CREATE TABLE pg_catalog.pg_class (
 						tree.DBoolFalse, // relhasrules
 						tree.DBoolFalse, // relhastriggers
 						tree.DBoolFalse, // relhassubclass
+						tree.DBoolFalse, // relrowsecurity
 						zeroVal,         // relfrozenxid
 						tree.DNull,      // relacl
 						tree.DNull,      // reloptions
@@ -1881,38 +1886,31 @@ CREATE TABLE pg_catalog.pg_settings (
 }
 
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-tables.html.
-var pgCatalogTablesTable = virtualSchemaTable{
+var pgCatalogTablesView = virtualSchemaView{
 	schema: `
-CREATE TABLE pg_catalog.pg_tables (
-	schemaname NAME,
-	tablename NAME,
-	tableowner NAME,
-	tablespace NAME,
-	hasindexes BOOL,
-	hasrules BOOL,
-	hastriggers BOOL,
-	rowsecurity BOOL
-)`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// Note: pg_catalog.pg_tables is not well-defined if the dbContext is
-		// empty -- listing tables across databases can yield duplicate
-		// schema/table names.
-		return forEachTableDesc(ctx, p, dbContext, virtualMany,
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				if !table.IsTable() {
-					return nil
-				}
-				return addRow(
-					tree.NewDName(scName),     // schemaname
-					tree.NewDName(table.Name), // tablename
-					tree.DNull,                // tableowner
-					tree.DNull,                // tablespace
-					tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // hasindexes
-					tree.DBoolFalse, // hasrules
-					tree.DBoolFalse, // hastriggers
-					tree.DBoolFalse, // rowsecurity
-				)
-			})
+CREATE VIEW pg_catalog.pg_tables AS SELECT
+    n.nspname AS schemaname,
+    c.relname AS tablename,
+    pg_get_userbyid(c.relowner) AS tableowner,
+    t.spcname AS tablespace,
+    c.relhasindex AS hasindexes,
+    c.relhasrules AS hasrules,
+    c.relhastriggers AS hastriggers,
+    c.relrowsecurity AS rowsecurity
+   FROM pg_class c
+     LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+     LEFT JOIN pg_tablespace t ON t.oid = c.reltablespace
+  WHERE c.relkind = ANY (ARRAY['r'::"char", 'p'::"char"])
+`,
+	resultColumns: sqlbase.ResultColumns{
+		{Name: `schemaname`, Typ: types.String},
+		{Name: `tablename`, Typ: types.String},
+		{Name: `tableowner`, Typ: types.String},
+		{Name: `tablespace`, Typ: types.String},
+		{Name: `hasindexes`, Typ: types.Bool},
+		{Name: `hasrules`, Typ: types.Bool},
+		{Name: `hastriggers`, Typ: types.Bool},
+		{Name: `rowsecurity`, Typ: types.Bool},
 	},
 }
 
