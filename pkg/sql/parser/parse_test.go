@@ -509,6 +509,9 @@ func TestParse(t *testing.T) {
 		{`PREPARE a AS IMPORT TABLE a CREATE USING 'b' CSV DATA ('c') WITH temp = 'd'`},
 		{`PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING $1 CSV DATA ($2) WITH temp = $3`},
 
+		{`PREPARE a AS OPT PLAN 'some-string'`},
+		{`PREPARE a (STRING, INT8) AS OPT PLAN 'some-string'`},
+
 		{`EXECUTE a`},
 		{`EXECUTE a (1)`},
 		{`EXECUTE a (1, 1)`},
