@@ -38,14 +38,6 @@ type txnMetricRecorder struct {
 	onePCCommit   bool
 }
 
-// init initializes the txnMetricRecorder. This method exists instead of a
-// constructor because txnMetricRecorder lives in a pool in the TxnCoordSender.
-func (m *txnMetricRecorder) init(txn *roachpb.Transaction, clock *hlc.Clock, metrics *TxnMetrics) {
-	m.clock = clock
-	m.metrics = metrics
-	m.txn = txn
-}
-
 // SendLocked is part of the txnInterceptor interface.
 func (m *txnMetricRecorder) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,

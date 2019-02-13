@@ -150,10 +150,10 @@ type TxnCoordSender struct {
 	interceptorAlloc struct {
 		arr [6]txnInterceptor
 		txnHeartbeater
+		txnSeqNumAllocator
 		txnIntentCollector
 		txnPipeliner
 		txnSpanRefresher
-		txnSeqNumAllocator
 		txnMetricRecorder
 		txnLockGatekeeper // not in interceptorStack array.
 	}
@@ -409,7 +409,8 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	// this stack are pre-allocated on the TxnCoordSender struct, so this just
 	// initializes the interceptors and pieces them together. It then adds a
 	// txnLockGatekeeper at the bottom of the stack to connect it with the
-	// TxnCoordSender's wrapped sender.
+	// TxnCoordSender's wrapped sender. First, each of the interceptor objects
+	// is initialized.
 	var ri *RangeIterator
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		ri = NewRangeIterator(ds)
@@ -427,10 +428,14 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 			tcs.stopper,
 			tcs.cleanupTxnLocked,
 		)
-		tcs.interceptorAlloc.txnMetricRecorder.init(&tcs.mu.txn, tcs.clock, &tcs.metrics)
 		tcs.interceptorAlloc.txnIntentCollector = txnIntentCollector{
 			st: tcf.st,
 			ri: ri,
+		}
+		tcs.interceptorAlloc.txnMetricRecorder = txnMetricRecorder{
+			metrics: &tcs.metrics,
+			clock:   tcs.clock,
+			txn:     &tcs.mu.txn,
 		}
 	}
 	tcs.interceptorAlloc.txnPipeliner = txnPipeliner{
@@ -448,31 +453,51 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	}
 	tcs.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
 		wrapped: tcs.wrapped,
-		mu:      &tcs.mu,
+		mu:      &tcs.mu.Mutex,
 	}
-	if typ == client.RootTxn {
+
+	// Once the interceptors are initialized, piece them all together in the
+	// correct order.
+	switch typ {
+	case client.RootTxn:
 		tcs.interceptorAlloc.arr = [...]txnInterceptor{
 			&tcs.interceptorAlloc.txnHeartbeater,
-			// The seq num allocator is below the txnHeartbeater so that it sees the
-			// BeginTransaction prepended by that interceptor. (An alternative would
-			// be to not assign seq nums to BeginTransaction; it doesn't need it.)
-			// Note though that it skips assigning seq nums to heartbeats.
+			// Various interceptors below rely on sequence number allocation,
+			// so the sequence number allocator is near the top of the stack.
 			&tcs.interceptorAlloc.txnSeqNumAllocator,
 			&tcs.interceptorAlloc.txnIntentCollector,
+			// The pipelinger sits above the span refresher because it will
+			// never generate transaction retry errors that could be avoided
+			// with a refresh.
 			&tcs.interceptorAlloc.txnPipeliner,
+			// The span refresher may resend entire batches to avoid transaction
+			// retries. Because of that, we need to be careful which interceptors
+			// sit below it in the stack.
 			&tcs.interceptorAlloc.txnSpanRefresher,
+			// The metrics recorder sits at the bottom of the stack so that it
+			// can observe all transformations performed by other interceptors.
 			&tcs.interceptorAlloc.txnMetricRecorder,
 		}
 		tcs.interceptorStack = tcs.interceptorAlloc.arr[:]
-	} else {
+	case client.LeafTxn:
+		// LeafTxns never perform writes so the sequence number allocator should
+		// never increment its sequence number counter over its lifetime, but it
+		// still plays the important role of assigning each read request the
+		// latest sequence number.
 		tcs.interceptorAlloc.arr[0] = &tcs.interceptorAlloc.txnSeqNumAllocator
+		// The pipeliner is needed on leaves to ensure that in-flight writes are
+		// chained onto by reads that should see them.
 		tcs.interceptorAlloc.arr[1] = &tcs.interceptorAlloc.txnPipeliner
-		// The txnSpanRefresher was configured above to not actually perform
-		// refreshes for leaves. It is still needed for accumulating the spans to be
-		// reported to the Root. But the gateway doesn't do much with them; see
-		// #24798.
+		// The span refresher was configured above to not actually perform
+		// refreshes for leaves. It is still needed for accumulating the spans
+		// to be reported to the Root. But the gateway doesn't do much with
+		// them; see #24798.
 		tcs.interceptorAlloc.arr[2] = &tcs.interceptorAlloc.txnSpanRefresher
+		// All other interceptors are absent from a LeafTxn's interceptor stack
+		// because they do not serve a role on leaves.
 		tcs.interceptorStack = tcs.interceptorAlloc.arr[:3]
+	default:
+		panic(fmt.Sprintf("unknown TxnType %v", typ))
 	}
 	for i, reqInt := range tcs.interceptorStack {
 		if i < len(tcs.interceptorStack)-1 {
