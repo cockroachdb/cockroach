@@ -52,7 +52,7 @@ func makeScrubTPCCTest(
 	}
 
 	return testSpec{
-		Name:    fmt.Sprintf("scrub/%s/tpcc-%d", optionName, warehouses),
+		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
 		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
