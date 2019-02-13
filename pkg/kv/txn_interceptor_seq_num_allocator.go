@@ -58,7 +58,6 @@ import (
 //    returned. Likewise, if an intent with the same sequence is present but its
 //    value is different than what we recompute, an error is returned.
 //
-// TODO(nvanbenschoten): Unit test this file.
 type txnSeqNumAllocator struct {
 	wrapped lockedSender
 	seqGen  int32
