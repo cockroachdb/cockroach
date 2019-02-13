@@ -377,7 +377,8 @@ func TestCloudStorage(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-	foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved`)
+	foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved`)
+	defer closeFeed(t, foo)
 
 	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'b')`)

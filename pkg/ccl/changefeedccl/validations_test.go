@@ -47,8 +47,8 @@ func TestValidations(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			bankFeed := f.Feed(t, `CREATE CHANGEFEED FOR bank WITH updated, resolved`)
-			defer bankFeed.Close(t)
+			bankFeed := feed(t, f, `CREATE CHANGEFEED FOR bank WITH updated, resolved`)
+			defer closeFeed(t, bankFeed)
 
 			var done int64
 			g := ctxgroup.WithContext(ctx)
@@ -77,23 +77,23 @@ func TestValidations(t *testing.T) {
 			}
 			sqlDB.Exec(t, `CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`)
 			for {
-				_, partition, key, value, resolved, ok := bankFeed.Next(t)
-				if !ok {
-					t.Fatal(`expected more rows`)
-				} else if key != nil {
-					updated, _, err := cdctest.ParseJSONValueTimestamps(value)
+				m, err := bankFeed.Next()
+				if err != nil {
+					t.Fatal(err)
+				} else if len(m.Key) > 0 || len(m.Value) > 0 {
+					updated, _, err := cdctest.ParseJSONValueTimestamps(m.Value)
 					if err != nil {
 						t.Fatal(err)
 					}
-					v.NoteRow(partition, string(key), string(value), updated)
+					v.NoteRow(m.Partition, string(m.Key), string(m.Value), updated)
 					rowsSinceResolved++
-				} else if resolved != nil {
-					_, resolved, err := cdctest.ParseJSONValueTimestamps(resolved)
+				} else if m.Resolved != nil {
+					_, resolved, err := cdctest.ParseJSONValueTimestamps(m.Resolved)
 					if err != nil {
 						t.Fatal(err)
 					}
 					if rowsSinceResolved > 0 || true {
-						if err := v.NoteResolved(partition, resolved); err != nil {
+						if err := v.NoteResolved(m.Partition, resolved); err != nil {
 							t.Fatal(err)
 						}
 						numResolved++
@@ -142,8 +142,8 @@ func TestCatchupScanOrdering(t *testing.T) {
 				}
 			}
 
-			bankFeed := f.Feed(t, `CREATE CHANGEFEED FOR bank WITH updated, cursor=$1`, nowString)
-			defer bankFeed.Close(t)
+			bankFeed := feed(t, f, `CREATE CHANGEFEED FOR bank WITH updated, cursor=$1`, nowString)
+			defer closeFeed(t, bankFeed)
 
 			var done int64
 			g := ctxgroup.WithContext(ctx)
@@ -162,15 +162,15 @@ func TestCatchupScanOrdering(t *testing.T) {
 			v := cdctest.NewOrderValidator(`bank`)
 			seenChanges := 0
 			for {
-				_, partition, key, value, _, ok := bankFeed.Next(t)
-				if !ok {
-					t.Fatal(`expected more rows`)
-				} else if key != nil {
-					updated, _, err := cdctest.ParseJSONValueTimestamps(value)
+				m, err := bankFeed.Next()
+				if err != nil {
+					t.Fatal(err)
+				} else if len(m.Key) > 0 || len(m.Value) > 0 {
+					updated, _, err := cdctest.ParseJSONValueTimestamps(m.Value)
 					if err != nil {
 						t.Fatal(err)
 					}
-					v.NoteRow(partition, string(key), string(value), updated)
+					v.NoteRow(m.Partition, string(m.Key), string(m.Value), updated)
 					seenChanges++
 					if seenChanges >= 200 {
 						atomic.StoreInt64(&done, 1)
