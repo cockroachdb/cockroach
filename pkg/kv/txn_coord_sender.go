@@ -148,12 +148,13 @@ type TxnCoordSender struct {
 	// additional heap allocations necessary.
 	interceptorStack []txnInterceptor
 	interceptorAlloc struct {
-		arr [6]txnInterceptor
+		arr [7]txnInterceptor
 		txnHeartbeater
 		txnSeqNumAllocator
 		txnIntentCollector
 		txnPipeliner
 		txnSpanRefresher
+		txnCommitter
 		txnMetricRecorder
 		txnLockGatekeeper // not in interceptorStack array.
 	}
@@ -474,6 +475,13 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 			// retries. Because of that, we need to be careful which interceptors
 			// sit below it in the stack.
 			&tcs.interceptorAlloc.txnSpanRefresher,
+			// The committer sits beneath the span refresher so that any
+			// retryable errors that it generates have a chance of being
+			// "refreshed away" without the need for a txn restart. Because the
+			// span refresher can re-issue batches, it needs to be careful about
+			// what parts of the batch it mutates. Any mutation needs to be
+			// idempotent.
+			&tcs.interceptorAlloc.txnCommitter,
 			// The metrics recorder sits at the bottom of the stack so that it
 			// can observe all transformations performed by other interceptors.
 			&tcs.interceptorAlloc.txnMetricRecorder,
@@ -603,9 +611,12 @@ func (tc *TxnCoordSender) EagerRecord() error {
 // commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
 // cheaper than, sending an EndTransactionRequest. A read-only txn doesn't have
 // a transaction record, so there's no need to send any request to the server.
-// An EndTransactionRequest for a read-only txn is elided by the txnHeartbeater
+// An EndTransactionRequest for a read-only txn is elided by the txnCommitter
 // interceptor. However, calling this and short-circuting even earlier is
 // even more efficient (and shows in benchmarks).
+// TODO(nvanbenschoten): we could have this call into txnCommitter's
+// sendLockedWithElidedEndTransaction method, but we would want to confirm
+// that doing so doesn't cut into the speed-up we see from this fast-path.
 func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 	ctx context.Context, deadline *hlc.Timestamp,
 ) *roachpb.Error {
@@ -638,7 +649,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnHeartbeater.mu.everWroteIntents {
+	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnIntentCollector.haveIntents() {
 		return nil, tc.commitReadOnlyTxnLocked(ctx, ba.Requests[0].GetEndTransaction().Deadline)
 	}
 

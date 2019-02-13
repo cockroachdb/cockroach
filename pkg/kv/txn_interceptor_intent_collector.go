@@ -68,15 +68,11 @@ func (ic *txnIntentCollector) SendLocked(
 		if len(et.IntentSpans) > 0 {
 			return nil, roachpb.NewErrorf("client must not pass intents to EndTransaction")
 		}
-		if len(et.Key) != 0 {
-			return nil, roachpb.NewErrorf("EndTransaction must not have a Key set")
-		}
-		et.Key = ba.Txn.Key
 
 		// Defensively set distinctSpans to false if we had any previous
 		// writes in this transaction. This effectively limits the distinct
 		// spans optimization to 1pc transactions.
-		distinctSpans := len(ic.intents) == 0
+		distinctSpans := !ic.haveIntents()
 
 		// We can't pass in a batch response here to better limit the key
 		// spans as we don't know what is going to be affected. This will
@@ -247,4 +243,8 @@ func (ic *txnIntentCollector) maybeCondenseIntentSpans(
 	}
 
 	return spans, spansSize, nil
+}
+
+func (ic *txnIntentCollector) haveIntents() bool {
+	return len(ic.intents) > 0
 }
