@@ -87,6 +87,9 @@ type SessionData struct {
 	// ResultsBufferSize specifies the size at which the pgwire results buffer
 	// will self-flush.
 	ResultsBufferSize int64
+	// AllowPrepareAsOptPlan must be set to allow use of
+	//   PREPARE name AS OPT PLAN '...'
+	AllowPrepareAsOptPlan bool
 }
 
 // DataConversionConfig contains the parameters that influence

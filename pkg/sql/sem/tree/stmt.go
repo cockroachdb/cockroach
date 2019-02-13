@@ -185,24 +185,6 @@ func (*AlterTable) StatementTag() string { return "ALTER TABLE" }
 func (*AlterTable) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
-func (*CommentOnColumn) StatementType() StatementType { return DDL }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*CommentOnColumn) StatementTag() string { return "COMMENT ON COLUMN" }
-
-// StatementType implements the Statement interface.
-func (*CommentOnDatabase) StatementType() StatementType { return DDL }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*CommentOnDatabase) StatementTag() string { return "COMMENT ON DATABASE" }
-
-// StatementType implements the Statement interface.
-func (*CommentOnTable) StatementType() StatementType { return DDL }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*CommentOnTable) StatementTag() string { return "COMMENT ON TABLE" }
-
-// StatementType implements the Statement interface.
 func (*AlterSequence) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -255,6 +237,30 @@ func (*CancelSessions) StatementType() StatementType { return RowsAffected }
 func (*CancelSessions) StatementTag() string { return "CANCEL SESSIONS" }
 
 func (*CancelSessions) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
+func (*CannedOptPlan) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CannedOptPlan) StatementTag() string { return "PREPARE AS OPT PLAN" }
+
+// StatementType implements the Statement interface.
+func (*CommentOnColumn) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnColumn) StatementTag() string { return "COMMENT ON COLUMN" }
+
+// StatementType implements the Statement interface.
+func (*CommentOnDatabase) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnDatabase) StatementTag() string { return "COMMENT ON DATABASE" }
+
+// StatementType implements the Statement interface.
+func (*CommentOnTable) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommentOnTable) StatementTag() string { return "COMMENT ON TABLE" }
 
 // StatementType implements the Statement interface.
 func (*CommitTransaction) StatementType() StatementType { return Ack }
@@ -825,9 +831,6 @@ func (n *AlterTableDropConstraint) String() string  { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string     { return AsString(n) }
 func (n *AlterTableDropStored) String() string      { return AsString(n) }
 func (n *AlterTableSetDefault) String() string      { return AsString(n) }
-func (n *CommentOnColumn) String() string           { return AsString(n) }
-func (n *CommentOnDatabase) String() string         { return AsString(n) }
-func (n *CommentOnTable) String() string            { return AsString(n) }
 func (n *AlterUserSetPassword) String() string      { return AsString(n) }
 func (n *AlterSequence) String() string             { return AsString(n) }
 func (n *Backup) String() string                    { return AsString(n) }
@@ -835,6 +838,10 @@ func (n *BeginTransaction) String() string          { return AsString(n) }
 func (n *ControlJobs) String() string               { return AsString(n) }
 func (n *CancelQueries) String() string             { return AsString(n) }
 func (n *CancelSessions) String() string            { return AsString(n) }
+func (n *CannedOptPlan) String() string             { return AsString(n) }
+func (n *CommentOnColumn) String() string           { return AsString(n) }
+func (n *CommentOnDatabase) String() string         { return AsString(n) }
+func (n *CommentOnTable) String() string            { return AsString(n) }
 func (n *CommitTransaction) String() string         { return AsString(n) }
 func (n *CopyFrom) String() string                  { return AsString(n) }
 func (n *CreateChangefeed) String() string          { return AsString(n) }

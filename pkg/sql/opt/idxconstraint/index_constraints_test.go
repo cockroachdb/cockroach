@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -91,7 +92,7 @@ func TestIndexConstraints(t *testing.T) {
 				key, vals := arg.Key, arg.Vals
 				switch key {
 				case "vars":
-					varTypes, err = testutils.ParseTypes(vals)
+					varTypes, err = exprgen.ParseTypes(vals)
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
@@ -236,7 +237,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
-			varTypes, err := testutils.ParseTypes(strings.Split(tc.varTypes, ", "))
+			varTypes, err := exprgen.ParseTypes(strings.Split(tc.varTypes, ", "))
 			if err != nil {
 				b.Fatal(err)
 			}

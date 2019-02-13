@@ -30,13 +30,14 @@ scan t.public.abc@ab
  └── cost: 1050.01
 
 expr
-(Require
+(Root
   (Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
+  (Presentation "a,b")
   (OrderingChoice "+a,+b")
 )
 ----
 scan t.public.abc@ab
- ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+ ├── columns: a:1(int) b:2(int)
  ├── stats: [rows=1000]
  ├── cost: 1050.01
  └── ordering: +1,+2
