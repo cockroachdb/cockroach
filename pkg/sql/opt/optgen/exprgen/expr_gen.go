@@ -25,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -72,19 +74,30 @@ func Build(catalog cat.Catalog, factory *norm.Factory, input string) (_ opt.Expr
 			mem: factory.Memo(),
 			cat: catalog,
 		},
+		coster: xform.MakeDefaultCoster(factory.Memo()),
 	}
 
 	// To create a valid optgen "file", we create a rule with a bogus match.
 	contents := "[FakeRule] (True) => " + input
 	parsed := eg.parse(contents)
-	res := eg.eval(parsed.Rules[0].Replace)
+	result := eg.eval(parsed.Rules[0].Replace)
 
-	// TODO(radu): fill in best props (cost, physical props etc).
-	return res.(opt.Expr), nil
+	var expr opt.Expr
+	required := physical.MinRequired
+	if root, ok := result.(*rootSentinel); ok {
+		expr = root.expr
+		required = root.required
+	} else {
+		expr = result.(opt.Expr)
+	}
+	eg.populateBestProps(expr, required)
+	return expr, nil
 }
 
 type exprGen struct {
 	customFuncs
+
+	coster xform.Coster
 }
 
 type exprGenErr struct {
@@ -271,4 +284,37 @@ func convertSlice(
 		res.Index(i).Set(val)
 	}
 	return res
+}
+
+// populateBestProps sets the physical properties and costs of the expressions
+// in the tree. Returns the cost of the expression tree.
+func (eg *exprGen) populateBestProps(expr opt.Expr, required *physical.Required) memo.Cost {
+	rel, _ := expr.(memo.RelExpr)
+	if rel != nil {
+		if !xform.CanProvidePhysicalProps(rel, required) {
+			panic(errorf("operator %s cannot provide required props %s", rel.Op(), required))
+		}
+	}
+
+	var cost memo.Cost
+	for i, n := 0, expr.ChildCount(); i < n; i++ {
+		var childProps *physical.Required
+		if rel != nil {
+			childProps = xform.BuildChildPhysicalProps(eg.mem, rel, i, required)
+		} else {
+			childProps = xform.BuildChildPhysicalPropsScalar(eg.mem, expr, i)
+		}
+		cost += eg.populateBestProps(expr.Child(i), childProps)
+	}
+
+	if rel != nil {
+		provided := &physical.Provided{}
+		// BuildProvided relies on ProvidedPhysical() being set in the children, so
+		// it must run after the recursive calls on the children.
+		provided.Ordering = ordering.BuildProvided(rel, &required.Ordering)
+
+		cost += eg.coster.ComputeCost(rel, required)
+		eg.mem.SetBestProps(rel, required, provided, cost)
+	}
+	return cost
 }
