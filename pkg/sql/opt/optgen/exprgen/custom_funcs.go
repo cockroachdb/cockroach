@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 )
 
 type customFuncs struct {
@@ -35,7 +34,7 @@ type customFuncs struct {
 
 // NewColumn creates a new column in the metadata.
 func (c *customFuncs) NewColumn(name, typeStr string) opt.ColumnID {
-	typ, err := testutils.ParseType(typeStr)
+	typ, err := ParseType(typeStr)
 	if err != nil {
 		panic(exprGenErr{err})
 	}
@@ -62,14 +61,58 @@ func (c *customFuncs) LookupColumn(name string) opt.ColumnID {
 	return res
 }
 
+// ColList creates a ColList from a comma-separated list of column names,
+// looking up each column.
+func (c *customFuncs) ColList(cols string) opt.ColList {
+	strs := strings.Split(cols, ",")
+	res := make(opt.ColList, len(strs))
+	for i, col := range strs {
+		res[i] = c.LookupColumn(col)
+	}
+	return res
+}
+
+// ColSet creates a ColSet from a comma-separated list of column names, looking
+// up each column.
+func (c *customFuncs) ColSet(cols string) opt.ColSet {
+	return c.ColList(cols).ToSet()
+}
+
 // Var creates a VariableOp for the given column. It allows (Var "name") as a
 // shorthand for (Variable (LookupColumn "name")).
 func (c *customFuncs) Var(colName string) opt.ScalarExpr {
 	return c.f.ConstructVariable(c.LookupColumn(colName))
 }
 
+// ProjectionItem creates a ProjectionItem. A list of such items can be used as
+// a ProjectionsExpr.
+func (c *customFuncs) ProjectionItem(
+	element opt.ScalarExpr, col opt.ColumnID,
+) memo.ProjectionsItem {
+	return memo.ProjectionsItem{
+		Element:    element,
+		ColPrivate: memo.ColPrivate{Col: col},
+		Typ:        c.mem.Metadata().ColumnMeta(col).Type,
+	}
+}
+
+// Ordering parses a string like "+a,-b" into an Ordering.
+func (c *customFuncs) Ordering(str string) opt.Ordering {
+	defer func() {
+		if r := recover(); r != nil {
+			panic(errorf("could not parse Ordering \"%s\"", str))
+		}
+	}()
+	return physical.ParseOrdering(c.substituteCols(str))
+}
+
 // OrderingChoice parses a string like "+a,-(b|c)" into an OrderingChoice.
 func (c *customFuncs) OrderingChoice(str string) physical.OrderingChoice {
+	defer func() {
+		if r := recover(); r != nil {
+			panic(errorf("could not parse OrderingChoice \"%s\"", str))
+		}
+	}()
 	return physical.ParseOrderingChoice(c.substituteCols(str))
 }
 
@@ -125,15 +168,41 @@ func (c *customFuncs) Sort(input memo.RelExpr) memo.RelExpr {
 	return &memo.SortExpr{Input: input}
 }
 
-// rootSentinel is used as the root value when Required is used.
+// rootSentinel is used as the root value when Root is used.
 type rootSentinel struct {
 	expr     memo.RelExpr
 	required *physical.Required
 }
 
-// Require can be used only at the top level on an expression, to annotate the
-// root with a required ordering. The operator must be able to provide that
-// ordering.
-func (c *customFuncs) Require(root memo.RelExpr, ordering physical.OrderingChoice) *rootSentinel {
-	return &rootSentinel{expr: root, required: &physical.Required{Ordering: ordering}}
+// Presentation converts a ColList to a Presentation.
+func (c *customFuncs) Presentation(cols opt.ColList) physical.Presentation {
+	res := make(physical.Presentation, len(cols))
+	for i := range cols {
+		res[i].ID = cols[i]
+		res[i].Alias = c.mem.Metadata().ColumnMeta(cols[i]).Alias
+	}
+	return res
+}
+
+// NoOrdering returns the empty OrderingChoice.
+func (c *customFuncs) NoOrdering() physical.OrderingChoice {
+	return physical.OrderingChoice{}
+}
+
+// Root can be used only at the top level on an expression, to annotate the
+// root with a presentation and/or required ordering. The operator must be able
+// to provide the ordering. For example:
+//   (Root
+//     ( ... )
+//     (Presentation "a,b")
+//     (OrderingChoice "+a")
+//   )
+func (c *customFuncs) Root(
+	root memo.RelExpr, presentation physical.Presentation, ordering physical.OrderingChoice,
+) *rootSentinel {
+	props := &physical.Required{
+		Presentation: presentation,
+		Ordering:     ordering,
+	}
+	return &rootSentinel{expr: root, required: props}
 }

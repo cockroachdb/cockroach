@@ -1,0 +1,58 @@
+# LogicTest: local-opt
+
+# TODO(radu): when we no longer have a heuristic planner, merge this file with
+# the rest of the prepare tests.
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, str STRING)
+
+statement ok
+INSERT INTO t SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i)
+
+statement error PREPARE AS OPT PLAN is a testing facility that should not be used directly
+PREPARE a AS OPT PLAN 'xx'
+
+statement ok
+SET allow_prepare_as_opt_plan = ON
+
+statement ok
+PREPARE a AS OPT PLAN '
+(Root
+  (Scan [ (Table "t") (Cols "k,str") ])
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT rowsort
+EXECUTE a
+----
+1  one
+2  two
+3  three
+4  four
+5  five
+
+statement ok
+PREPARE b AS OPT PLAN '
+(Root
+  (Sort
+    (Select
+      (Scan [ (Table "t") (Cols "k,str") ])
+      [
+        (Eq
+          (Mod (Var "k") (Const 2))
+          (Const 1)
+        )
+      ]
+    )
+  )
+  (Presentation "k,str")
+  (OrderingChoice "+str")
+)'
+
+query IT
+EXECUTE b
+----
+5  five
+1  one
+3  three

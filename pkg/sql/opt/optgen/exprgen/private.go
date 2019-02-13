@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -75,31 +74,19 @@ func (eg *exprGen) convertPrivateFieldValue(
 		case reflect.TypeOf(opt.TableID(0)):
 			return eg.addTable(str)
 
-		case reflect.TypeOf(opt.ColSet{}), reflect.TypeOf(opt.ColList{}):
-			var cols opt.ColList
-			for _, col := range strings.Split(str, ",") {
-				cols = append(cols, eg.LookupColumn(col))
-			}
-			if fieldType == reflect.TypeOf(opt.ColSet{}) {
-				return cols.ToSet()
-			}
-			return cols
-
 		case reflect.TypeOf(0):
-			return eg.findIndex(str)
+			if strings.HasSuffix(fieldName, "Index") {
+				return eg.findIndex(str)
+			}
 
 		case reflect.TypeOf(opt.Operator(0)):
 			return eg.opFromStr(str)
-
-		case reflect.TypeOf(opt.Ordering{}):
-			return physical.ParseOrdering(eg.substituteCols(str))
-
-		case reflect.TypeOf(physical.OrderingChoice{}):
-			return eg.OrderingChoice(str)
 		}
 	}
 
-	// TODO(radu): handle more kinds of fields.
+	if res := eg.castToDesiredType(value, fieldType); res != nil {
+		return res
+	}
 	panic(errorf("invalid value for %s.%s: %v", privType, fieldName, value))
 }
 
