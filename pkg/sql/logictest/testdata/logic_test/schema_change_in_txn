@@ -707,7 +707,7 @@ CREATE UNIQUE INDEX i_idx ON customers (i)
 statement ok
 CREATE UNIQUE INDEX n_idx ON customers (n)
 
-statement error violates unique constraint "i_idx"
+statement error violates unique constraint
 COMMIT
 
 query TTBTTTB
