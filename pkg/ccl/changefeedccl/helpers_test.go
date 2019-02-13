@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -57,14 +59,16 @@ func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
 
 	var actual []string
 	for len(actual) < len(expected) {
-		topic, _, key, value, _, ok := f.Next(t)
+		m, err := f.Next()
 		if log.V(1) {
-			log.Infof(context.TODO(), `%v %s: %s->%s`, ok, topic, key, value)
+			log.Infof(context.TODO(), `%v %s: %s->%s`, err, m.Topic, m.Key, m.Value)
 		}
-		if !ok {
-			t.Fatalf(`expected another row: %s`, f.Err())
-		} else if key != nil || value != nil {
-			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic, key, value))
+		if err != nil {
+			t.Fatal(err)
+		} else if m == nil {
+			t.Fatal(`expected message`)
+		} else if len(m.Key) > 0 || len(m.Value) > 0 {
+			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
 		}
 	}
 
@@ -103,12 +107,14 @@ func assertPayloadsAvro(
 
 	var actual []string
 	for len(actual) < len(expected) {
-		topic, _, keyBytes, valueBytes, _, ok := f.Next(t)
-		if !ok {
-			break
-		} else if keyBytes != nil || valueBytes != nil {
-			key, value := avroToJSON(t, reg, keyBytes), avroToJSON(t, reg, valueBytes)
-			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic, key, value))
+		m, err := f.Next()
+		if err != nil {
+			t.Fatal(err)
+		} else if m == nil {
+			t.Fatal(`expected message`)
+		} else if m.Key != nil {
+			key, value := avroToJSON(t, reg, m.Key), avroToJSON(t, reg, m.Value)
+			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, m.Topic, key, value))
 		}
 	}
 
@@ -123,13 +129,15 @@ func assertPayloadsAvro(
 }
 
 func skipResolvedTimestamps(t *testing.T, f cdctest.TestFeed) {
+	t.Helper()
 	for {
-		table, _, key, value, _, ok := f.Next(t)
-		if !ok {
-			break
-		}
-		if key != nil || value != nil {
-			t.Errorf(`unexpected row %s: %s->%s`, table, key, value)
+		m, err := f.Next()
+		if err != nil {
+			t.Fatal(err)
+		} else if m == nil {
+			t.Fatal(`expected message`)
+		} else if m.Key != nil {
+			t.Errorf(`unexpected row %s: %s->%s`, m.Topic, m.Key, m.Value)
 		}
 	}
 }
@@ -149,37 +157,47 @@ func parseTimeToHLC(t testing.TB, s string) hlc.Timestamp {
 
 func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
 	t.Helper()
-	topic, _, key, value, resolved, _ := f.Next(t)
-	if key != nil || value != nil {
-		t.Fatalf(`unexpected row %s: %s -> %s`, topic, key, value)
+	m, err := f.Next()
+	if err != nil {
+		t.Fatal(err)
+	} else if m == nil {
+		t.Fatal(`expected message`)
 	}
-	if resolved == nil {
+	if m.Key != nil {
+		t.Fatalf(`unexpected row %s: %s -> %s`, m.Topic, m.Key, m.Value)
+	}
+	if m.Resolved == nil {
 		t.Fatal(`expected a resolved timestamp notification`)
 	}
 
-	var valueRaw struct {
+	var resolvedRaw struct {
 		Resolved string `json:"resolved"`
 	}
-	if err := gojson.Unmarshal(resolved, &valueRaw); err != nil {
+	if err := gojson.Unmarshal(m.Resolved, &resolvedRaw); err != nil {
 		t.Fatal(err)
 	}
 
-	return parseTimeToHLC(t, valueRaw.Resolved)
+	return parseTimeToHLC(t, resolvedRaw.Resolved)
 }
 
 func expectResolvedTimestampAvro(
 	t testing.TB, reg *testSchemaRegistry, f cdctest.TestFeed,
 ) hlc.Timestamp {
 	t.Helper()
-	topic, _, keyBytes, valueBytes, resolvedBytes, _ := f.Next(t)
-	if keyBytes != nil || valueBytes != nil {
-		key, value := avroToJSON(t, reg, keyBytes), avroToJSON(t, reg, valueBytes)
-		t.Fatalf(`unexpected row %s: %s -> %s`, topic, key, value)
+	m, err := f.Next()
+	if err != nil {
+		t.Fatal(err)
+	} else if m == nil {
+		t.Fatal(`expected message`)
 	}
-	if resolvedBytes == nil {
+	if m.Key != nil {
+		key, value := avroToJSON(t, reg, m.Key), avroToJSON(t, reg, m.Value)
+		t.Fatalf(`unexpected row %s: %s -> %s`, m.Topic, key, value)
+	}
+	if m.Resolved == nil {
 		t.Fatal(`expected a resolved timestamp notification`)
 	}
-	resolvedNative, err := reg.encodedAvroToNative(resolvedBytes)
+	resolvedNative, err := reg.encodedAvroToNative(m.Resolved)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +228,9 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) f
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 
-		f := cdctest.MakeSinklessFeedFactory(s)
+		sink, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+		defer cleanup()
+		f := cdctest.MakeSinklessFeedFactory(s, sink)
 		testFn(t, db, f)
 	}
 }
@@ -243,7 +263,9 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory))
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.push.enabled = false`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
-		f := cdctest.MakeTableFeedFactory(s, db, flushCh)
+		sink, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+		defer cleanup()
+		f := cdctest.MakeTableFeedFactory(s, db, flushCh, sink)
 
 		testFn(t, db, f)
 	}
@@ -260,6 +282,24 @@ func pollerTest(
 			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 			testFn(t, db, f)
 		})(t)
+	}
+}
+
+func feed(
+	t testing.TB, f cdctest.TestFeedFactory, create string, args ...interface{},
+) cdctest.TestFeed {
+	t.Helper()
+	feed, err := f.Feed(create, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return feed
+}
+
+func closeFeed(t testing.TB, f cdctest.TestFeed) {
+	t.Helper()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -20,14 +20,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx"
@@ -37,9 +34,17 @@ import (
 // TestFeedFactory is an interface to create changefeeds.
 type TestFeedFactory interface {
 	// Feed creates a new TestFeed.
-	Feed(t testing.TB, create string, args ...interface{}) TestFeed
+	Feed(create string, args ...interface{}) (TestFeed, error)
 	// Server returns the raw underlying TestServer, if applicable.
 	Server() serverutils.TestServerInterface
+}
+
+// TestFeedMessage represents one row update or resolved timestamp message from
+// a changefeed.
+type TestFeedMessage struct {
+	Topic, Partition string
+	Key, Value       []byte
+	Resolved         []byte
 }
 
 // TestFeed abstracts over reading from the various types of changefeed sinks.
@@ -50,43 +55,40 @@ type TestFeed interface {
 	// Next returns the next message. Within a given topic+partition, the order is
 	// preserved, but not otherwise. Either len(key) and len(value) will be
 	// greater than zero (a row updated) or len(payload) will be (a resolved
-	// timestamp). If there are no more messages, Next will return false and Err
-	// should be checked.
-	Next(t testing.TB) (topic, partition string, key, value, payload []byte, ok bool)
-	// If Next returns false, Err will return the relevant error, if any.
-	Err() error
+	// timestamp).
+	Next() (*TestFeedMessage, error)
 	// Close shuts down the changefeed and releases resources.
-	Close(t testing.TB)
+	Close() error
 }
 
 type sinklessFeedFactory struct {
-	s serverutils.TestServerInterface
+	s    serverutils.TestServerInterface
+	sink url.URL
 }
 
-// MakeSinklessFeedFactory returns a TestFeedFactory implementation for
-// "sinkless" (results returned over pgwire) feeds.
-func MakeSinklessFeedFactory(s serverutils.TestServerInterface) TestFeedFactory {
-	return &sinklessFeedFactory{s: s}
+// MakeSinklessFeedFactory returns a TestFeedFactory implementation using the
+// `experimental-sql` sink.
+func MakeSinklessFeedFactory(s serverutils.TestServerInterface, sink url.URL) TestFeedFactory {
+	return &sinklessFeedFactory{s: s, sink: sink}
 }
 
 // Feed implements the TestFeedFactory interface
-func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interface{}) TestFeed {
-	t.Helper()
-	url, cleanup := sqlutils.PGUrl(t, f.s.ServingAddr(), t.Name(), url.User(security.RootUser))
-	q := url.Query()
+func (f *sinklessFeedFactory) Feed(create string, args ...interface{}) (TestFeed, error) {
+	sink := f.sink
+	q := sink.Query()
 	q.Add(`results_buffer_size`, `1`)
-	url.RawQuery = q.Encode()
-	s := &sinklessFeed{cleanup: cleanup, seen: make(map[string]struct{})}
-	url.Path = `d`
+	sink.RawQuery = q.Encode()
+	sink.Path = `d`
 	// Use pgx directly instead of database/sql so we can close the conn
 	// (instead of returning it to the pool).
-	pgxConfig, err := pgx.ParseConnectionString(url.String())
+	pgxConfig, err := pgx.ParseConnectionString(sink.String())
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
+	s := &sinklessFeed{seen: make(map[string]struct{})}
 	s.conn, err = pgx.Connect(pgxConfig)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	// The syntax for a sinkless changefeed is `EXPERIMENTAL CHANGEFEED FOR ...`
@@ -98,9 +100,9 @@ func (f *sinklessFeedFactory) Feed(t testing.TB, create string, args ...interfac
 
 	s.rows, err = s.conn.Query(create, args...)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	return s
+	return s, nil
 }
 
 // Server implements the TestFeedFactory interface.
@@ -111,63 +113,48 @@ func (f *sinklessFeedFactory) Server() serverutils.TestServerInterface {
 // sinklessFeed is an implementation of the `TestFeed` interface for a
 // "sinkless" (results returned over pgwire) feed.
 type sinklessFeed struct {
-	conn    *pgx.Conn
-	cleanup func()
-	rows    *pgx.Rows
-	seen    map[string]struct{}
+	conn *pgx.Conn
+	rows *pgx.Rows
+	seen map[string]struct{}
 }
 
 // Partitions implements the TestFeed interface.
 func (c *sinklessFeed) Partitions() []string { return []string{`sinkless`} }
 
 // Next implements the TestFeed interface.
-func (c *sinklessFeed) Next(
-	t testing.TB,
-) (topic, partition string, key, value, resolved []byte, ok bool) {
-	t.Helper()
-	partition = `sinkless`
-	var noKey, noValue, noResolved []byte
+func (c *sinklessFeed) Next() (*TestFeedMessage, error) {
+	m := &TestFeedMessage{Partition: `sinkless`}
 	for {
 		if !c.rows.Next() {
-			return ``, ``, nil, nil, nil, false
+			return nil, c.rows.Err()
 		}
 		var maybeTopic gosql.NullString
-		if err := c.rows.Scan(&maybeTopic, &key, &value); err != nil {
-			t.Fatal(err)
+		if err := c.rows.Scan(&maybeTopic, &m.Key, &m.Value); err != nil {
+			return nil, err
 		}
 		if len(maybeTopic.String) > 0 {
+			m.Topic = maybeTopic.String
 			// TODO(dan): This skips duplicates, since they're allowed by the
-			// semantics of our changefeeds. Now that we're switching to
-			// RangeFeed, this can actually happen (usually because of splits)
-			// and cause flakes. However, we really should be de-deuping key+ts,
-			// this is too coarse. Fixme.
-			seenKey := maybeTopic.String + partition + string(key) + string(value)
+			// semantics of our changefeeds. Now that we're switching to RangeFeed,
+			// this can actually happen (usually because of splits) and cause flakes.
+			// However, we really should be de-duping key+ts, this is too coarse.
+			// Fixme.
+			seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
 			if _, ok := c.seen[seenKey]; ok {
 				continue
 			}
 			c.seen[seenKey] = struct{}{}
-			return maybeTopic.String, partition, key, value, noResolved, true
+			return m, nil
 		}
-		resolvedPayload := value
-		return ``, partition, noKey, noValue, resolvedPayload, true
+		m.Resolved = m.Value
+		m.Key, m.Value = nil, nil
+		return m, nil
 	}
-}
-
-// Err implements the TestFeed interface.
-func (c *sinklessFeed) Err() error {
-	if c.rows != nil {
-		return c.rows.Err()
-	}
-	return nil
 }
 
 // Close implements the TestFeed interface.
-func (c *sinklessFeed) Close(t testing.TB) {
-	t.Helper()
-	if err := c.conn.Close(); err != nil {
-		t.Error(err)
-	}
-	c.cleanup()
+func (c *sinklessFeed) Close() error {
+	return c.conn.Close()
 }
 
 type jobFeed struct {
@@ -221,26 +208,25 @@ type tableFeedFactory struct {
 	s       serverutils.TestServerInterface
 	db      *gosql.DB
 	flushCh chan struct{}
+	sink    url.URL
 }
 
 // MakeTableFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` sink.
 func MakeTableFeedFactory(
-	s serverutils.TestServerInterface, db *gosql.DB, flushCh chan struct{},
+	s serverutils.TestServerInterface, db *gosql.DB, flushCh chan struct{}, sink url.URL,
 ) TestFeedFactory {
-	return &tableFeedFactory{s: s, db: db, flushCh: flushCh}
+	return &tableFeedFactory{s: s, db: db, flushCh: flushCh, sink: sink}
 }
 
 // Feed implements the TestFeedFactory interface
-func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}) TestFeed {
-	t.Helper()
-
-	sink, cleanup := sqlutils.PGUrl(t, f.s.ServingAddr(), t.Name(), url.User(security.RootUser))
+func (f *tableFeedFactory) Feed(create string, args ...interface{}) (TestFeed, error) {
+	sink := f.sink
 	sink.Path = fmt.Sprintf(`table_%d`, timeutil.Now().UnixNano())
 
 	db, err := gosql.Open("postgres", sink.String())
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	sink.Scheme = `experimental-sql`
@@ -249,28 +235,28 @@ func (f *tableFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 			db:      db,
 			flushCh: f.flushCh,
 		},
-		urlCleanup: cleanup,
-		sinkURI:    sink.String(),
-		seen:       make(map[string]struct{}),
+		sinkURI: sink.String(),
+		seen:    make(map[string]struct{}),
 	}
 	if _, err := c.db.Exec(`CREATE DATABASE ` + sink.Path); err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	parsed, err := parser.ParseOne(create)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 	if createStmt.SinkURI != nil {
-		t.Fatalf(`unexpected sink provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
+		return nil, errors.Errorf(
+			`unexpected sink provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}
 	createStmt.SinkURI = tree.NewStrVal(c.sinkURI)
 
 	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.JobID); err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	return c
+	return c, nil
 }
 
 // Server implements the TestFeedFactory interface.
@@ -281,8 +267,7 @@ func (f *tableFeedFactory) Server() serverutils.TestServerInterface {
 // TableFeed is a TestFeed implementation using the `experimental-sql` sink.
 type TableFeed struct {
 	jobFeed
-	sinkURI    string
-	urlCleanup func()
+	sinkURI string
 
 	rows *gosql.Rows
 	seen map[string]struct{}
@@ -295,9 +280,7 @@ func (c *TableFeed) Partitions() []string {
 }
 
 // Next implements the TestFeed interface.
-func (c *TableFeed) Next(
-	t testing.TB,
-) (topic, partition string, key, value, payload []byte, ok bool) {
+func (c *TableFeed) Next() (*TestFeedMessage, error) {
 	// sinkSink writes all changes to a table with primary key of topic,
 	// partition, message_id. To simulate the semantics of kafka, message_ids
 	// are only comparable within a given (topic, partition). Internally the
@@ -307,41 +290,44 @@ func (c *TableFeed) Next(
 	// through the results until they are empty and repeats.
 	for {
 		if c.rows != nil && c.rows.Next() {
+			m := &TestFeedMessage{}
 			var msgID int64
-			if err := c.rows.Scan(&topic, &partition, &msgID, &key, &value, &payload); err != nil {
-				t.Fatal(err)
+			if err := c.rows.Scan(
+				&m.Topic, &m.Partition, &msgID, &m.Key, &m.Value, &m.Resolved,
+			); err != nil {
+				return nil, err
 			}
 
 			// Scan turns NULL bytes columns into a 0-length, non-nil byte
 			// array, which is pretty unexpected. Nil them out before returning.
 			// Either key+value or payload will be set, but not both.
-			if len(key) > 0 || len(value) > 0 {
-				// TODO(dan): This skips duplicates, since they're allowed by
-				// the semantics of our changefeeds. Now that we're switching to
-				// RangeFeed, this can actually happen (usually because of
-				// splits) and cause flakes. However, we really should be
-				// de-deuping key+ts, this is too coarse. Fixme.
-				seenKey := topic + partition + string(key) + string(value)
+			if len(m.Key) > 0 || len(m.Value) > 0 {
+				// TODO(dan): This skips duplicates, since they're allowed by the
+				// semantics of our changefeeds. Now that we're switching to RangeFeed,
+				// this can actually happen (usually because of splits) and cause
+				// flakes. However, we really should be de-duping key+ts, this is too
+				// coarse. Fixme.
+				seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
 				if _, ok := c.seen[seenKey]; ok {
 					continue
 				}
 				c.seen[seenKey] = struct{}{}
 
-				payload = nil
-			} else {
-				key, value = nil, nil
+				m.Resolved = nil
+				return m, nil
 			}
-			return topic, partition, key, value, payload, true
+			m.Key, m.Value = nil, nil
+			return m, nil
 		}
 		if c.rows != nil {
 			if err := c.rows.Close(); err != nil {
-				t.Fatal(err)
+				return nil, err
 			}
 			c.rows = nil
 		}
 
 		if err := c.fetchJobError(); err != nil {
-			return ``, ``, nil, nil, nil, false
+			return nil, c.jobErr
 		}
 
 		// TODO(dan): It's a bummer that this mutates the sqlsink table. I
@@ -356,30 +342,22 @@ func (c *TableFeed) Next(
 		c.rows, err = c.db.Query(
 			`SELECT * FROM [DELETE FROM sqlsink RETURNING *] ORDER BY topic, partition, message_id`)
 		if err != nil {
-			t.Fatal(err)
+			return nil, err
 		}
 	}
 }
 
-// Err implements the TestFeed interface.
-func (c *TableFeed) Err() error {
-	return c.jobErr
-}
-
 // Close implements the TestFeed interface.
-func (c *TableFeed) Close(t testing.TB) {
+func (c *TableFeed) Close() error {
 	if c.rows != nil {
 		if err := c.rows.Close(); err != nil {
-			t.Errorf(`could not close rows: %v`, err)
+			return errors.Errorf(`could not close rows: %v`, err)
 		}
 	}
 	if _, err := c.db.Exec(`CANCEL JOB $1`, c.JobID); err != nil {
 		log.Infof(context.Background(), `could not cancel feed %d: %v`, c.JobID, err)
 	}
-	if err := c.db.Close(); err != nil {
-		t.Error(err)
-	}
-	c.urlCleanup()
+	return c.db.Close()
 }
 
 var cloudFeedFileRE = regexp.MustCompile(`^\d{33}-(.+?)-(\d+)-`)
@@ -402,16 +380,14 @@ func MakeCloudFeedFactory(
 }
 
 // Feed implements the TestFeedFactory interface
-func (f *cloudFeedFactory) Feed(t testing.TB, create string, args ...interface{}) TestFeed {
-	t.Helper()
-
+func (f *cloudFeedFactory) Feed(create string, args ...interface{}) (TestFeed, error) {
 	parsed, err := parser.ParseOne(create)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 	if createStmt.SinkURI != nil {
-		t.Fatalf(`unexpected sink provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
+		return nil, errors.Errorf(`unexpected sink provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}
 	feedDir := strconv.Itoa(f.feedIdx)
 	f.feedIdx++
@@ -425,7 +401,7 @@ func (f *cloudFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 	// cloudFeedFactory.
 	feedDir = filepath.Join(f.dir, feedDir)
 	if err := os.Mkdir(feedDir, 0755); err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	c := &cloudFeed{
@@ -437,9 +413,9 @@ func (f *cloudFeedFactory) Feed(t testing.TB, create string, args ...interface{}
 		seen: make(map[string]struct{}),
 	}
 	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.JobID); err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	return c
+	return c, nil
 }
 
 // Server implements the TestFeedFactory interface.
@@ -471,33 +447,35 @@ func (c *cloudFeed) Partitions() []string {
 }
 
 // Next implements the TestFeed interface.
-func (c *cloudFeed) Next(
-	t testing.TB,
-) (topic, partition string, key, value, payload []byte, ok bool) {
+func (c *cloudFeed) Next() (*TestFeedMessage, error) {
 	for {
 		if len(c.rows) > 0 {
 			e := c.rows[0]
 			c.rows = c.rows[1:]
-			topic, key, value, payload = e.topic, nil, e.value, e.payload
+			m := &TestFeedMessage{
+				Topic:    e.topic,
+				Value:    e.value,
+				Resolved: e.payload,
+			}
 
-			if len(value) > 0 {
-				seen := topic + string(value)
-				if _, ok := c.seen[seen]; ok {
+			if len(m.Key) > 0 || len(m.Value) > 0 {
+				seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
+				if _, ok := c.seen[seenKey]; ok {
 					continue
 				}
-				c.seen[seen] = struct{}{}
-				payload = nil
-				return topic, cloudFeedPartition, key, value, payload, true
+				c.seen[seenKey] = struct{}{}
+				m.Resolved = nil
+				return m, nil
 			}
-			key, value = nil, nil
-			return topic, cloudFeedPartition, key, value, payload, true
+			m.Key, m.Value = nil, nil
+			return m, nil
 		}
 
 		if err := c.fetchJobError(); err != nil {
-			return ``, ``, nil, nil, nil, false
+			return nil, err
 		}
 		if err := filepath.Walk(c.dir, c.walkDir); err != nil {
-			t.Fatal(err)
+			return nil, err
 		}
 	}
 }
@@ -549,17 +527,10 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, _ error) error {
 	return nil
 }
 
-// Err implements the TestFeed interface.
-func (c *cloudFeed) Err() error {
-	return c.jobErr
-}
-
 // Close implements the TestFeed interface.
-func (c *cloudFeed) Close(t testing.TB) {
+func (c *cloudFeed) Close() error {
 	if _, err := c.db.Exec(`CANCEL JOB $1`, c.JobID); err != nil {
 		log.Infof(context.Background(), `could not cancel feed %d: %v`, c.JobID, err)
 	}
-	if err := c.db.Close(); err != nil {
-		t.Error(err)
-	}
+	return c.db.Close()
 }
