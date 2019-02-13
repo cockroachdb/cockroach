@@ -73,7 +73,7 @@ func makeTS(walltime int64, logical int32) hlc.Timestamp {
 func (tc *TxnCoordSender) isTracking() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.interceptorAlloc.txnHeartbeat.mu.txnEnd != nil
+	return tc.interceptorAlloc.txnHeartbeater.mu.txnEnd != nil
 }
 
 // Test that the Transaction.Writing flag is set after performing any writes.
@@ -2333,7 +2333,7 @@ func TestAnchorKey(t *testing.T) {
 // TestCommitTurnedToRollback tests that the TxnCoordSender (or, rather, one of
 // the interceptors) turns a commit into a rollback in situations where a txn
 // has performed writes at old epochs but no writes at the current epoch. See
-// the comment in txnHeartbeat about why this is needed.
+// the comment in txnHeartbeater about why this is needed.
 // We check that the transformation happened (by looking at a trace) and that
 // other things (e.g. the proto status) look like a committed transaction even
 // though we technically performed a rollback.

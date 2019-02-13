@@ -28,17 +28,42 @@ import (
 )
 
 const (
-	turningCommitToRollbackMsg string = "Turning commit to rollback. All writes are part of old epochs."
+	turningCommitToRollbackMsg = "Turning commit to rollback. All writes are part of old epochs."
 )
 
-// txnHeartbeat is a txnInterceptor in charge of the txn's heartbeat loop.
-// The heartbeat loop is started upon the first write. txnHeartbeat is also in
-// charge of prepending a BeginTransaction to the first write batch and possibly
-// eliding EndTransaction requests on read-only transactions.
+// txnHeartbeater is a txnInterceptor in charge of a transaction's heartbeat
+// loop. Transaction coordinators heartbeat their transaction record
+// periodically to indicate the liveness of their transaction. Other actors like
+// concurrent transactions and GC processes observe a transaction record's last
+// heartbeat time to learn about its disposition and to determine whether it
+// should be considered abandoned. When a transaction is considered abandoned,
+// other actors are free to abort it at will. As such, it is important for a
+// transaction coordinator to heartbeat its transaction record with a
+// periodicity well below the abandonment threshold.
 //
-// txnHeartbeat should only be used for root transactions; leafs don't perform
-// writes and don't need any of the functionality here.
-type txnHeartbeat struct {
+// Transaction coordinators only need to perform heartbeats for transactions
+// that risk running for longer than the abandonment duration. For transactions
+// that finish well beneath this time, a heartbeat will never be sent and the
+// EndTransaction request will create and immediately finalize the transaction.
+// However, for transactions that live long enough that they risk running into
+// issues with other's perceiving them as abandoned, the first HeartbeatTxn
+// request they send will create the transaction record in the PENDING state.
+// Future heartbeats will update the transaction record to indicate
+// progressively larger heartbeat timestamps.
+//
+// Interestingly, there are other mechanisms by which concurrent actors could
+// determine the liveness of transactions. One proposal is to have concurrent
+// actors communicate directly with transaction coordinators themselves. This
+// would avoid the need for transaction heartbeats and the PENDING transaction
+// state entirely, but it creates other complications. For instance, by not
+// replicating the liveness information of transactions, a concurrent actor's
+// ability to determine the liveness of a transaction would depend not on its
+// ability to communicate with a highly-available replication group, but on its
+// ability to communicate with the node housing the transaction's coordinator.
+// Still, this is an approach we could consider in the future.
+//
+// TODO(nvanbenschoten): Unit test this file.
+type txnHeartbeater struct {
 	log.AmbientContext
 
 	// wrapped is the next sender in the stack
@@ -111,9 +136,9 @@ type txnHeartbeat struct {
 	}
 }
 
-// init initializes the txnHeartbeat. This method exists instead of a
-// constructor because txnHeartbeats live in a pool in the TxnCoordSender.
-func (h *txnHeartbeat) init(
+// init initializes the txnHeartbeater. This method exists instead of a
+// constructor because txnHeartbeaters live in a pool in the TxnCoordSender.
+func (h *txnHeartbeater) init(
 	mu sync.Locker,
 	txn *roachpb.Transaction,
 	st *cluster.Settings,
@@ -137,7 +162,7 @@ func (h *txnHeartbeat) init(
 }
 
 // SendLocked is part of the txnInteceptor interface.
-func (h *txnHeartbeat) SendLocked(
+func (h *txnHeartbeater) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// If finalErr is set, we reject everything but rollbacks.
@@ -323,23 +348,23 @@ func (h *txnHeartbeat) SendLocked(
 }
 
 // setWrapped is part of the txnInteceptor interface.
-func (h *txnHeartbeat) setWrapped(wrapped lockedSender) {
+func (h *txnHeartbeater) setWrapped(wrapped lockedSender) {
 	h.wrapped = wrapped
 }
 
 // populateMetaLocked is part of the txnInteceptor interface.
-func (h *txnHeartbeat) populateMetaLocked(*roachpb.TxnCoordMeta) {}
+func (h *txnHeartbeater) populateMetaLocked(*roachpb.TxnCoordMeta) {}
 
 // augmentMetaLocked is part of the txnInteceptor interface.
-func (h *txnHeartbeat) augmentMetaLocked(roachpb.TxnCoordMeta) {}
+func (h *txnHeartbeater) augmentMetaLocked(roachpb.TxnCoordMeta) {}
 
 // epochBumpedLocked is part of the txnInteceptor interface.
-func (h *txnHeartbeat) epochBumpedLocked() {
+func (h *txnHeartbeater) epochBumpedLocked() {
 	h.mu.needBeginTxn = true
 }
 
 // closeLocked is part of the txnInteceptor interface.
-func (h *txnHeartbeat) closeLocked() {
+func (h *txnHeartbeater) closeLocked() {
 	// If the heartbeat loop has already finished, there's nothing more to do.
 	if h.mu.txnEnd == nil {
 		return
@@ -349,7 +374,7 @@ func (h *txnHeartbeat) closeLocked() {
 }
 
 // startHeartbeatLoopLocked starts a heartbeat loop in a different goroutine.
-func (h *txnHeartbeat) startHeartbeatLoopLocked(ctx context.Context) error {
+func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) error {
 	if h.mu.txnEnd != nil {
 		log.Fatal(ctx, "attempting to start a second heartbeat loop ")
 	}
@@ -374,7 +399,7 @@ func (h *txnHeartbeat) startHeartbeatLoopLocked(ctx context.Context) error {
 // heartbeatLoop periodically sends a HeartbeatTxn request to the transaction
 // record, stopping in the event the transaction is aborted or committed after
 // attempting to resolve the intents.
-func (h *txnHeartbeat) heartbeatLoop(ctx context.Context) {
+func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 	var tickChan <-chan time.Time
 	{
 		ticker := time.NewTicker(h.heartbeatInterval)
@@ -417,7 +442,7 @@ func (h *txnHeartbeat) heartbeatLoop(ctx context.Context) {
 			}
 		case <-closer:
 			// Transaction finished normally.
-			finalErr = roachpb.NewErrorf("txnHeartbeat already closed")
+			finalErr = roachpb.NewErrorf("txnHeartbeater already closed")
 			return
 		case <-h.stopper.ShouldQuiesce():
 			finalErr = roachpb.NewErrorf("node already quiescing")
@@ -431,7 +456,7 @@ func (h *txnHeartbeat) heartbeatLoop(ctx context.Context) {
 // update the txn. Other errors are swallowed.
 // Returns true if heartbeating should continue, false if the transaction is no
 // longer Pending and so there's no point in heartbeating further.
-func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
+func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	// Like with the TxnCoordSender, the locking here is peculiar. The lock is not
 	// held continuously throughout this method: we acquire the lock here and
 	// then, inside the wrapped.Send() call, the interceptor at the bottom of the
@@ -441,7 +466,7 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 
 	// If the txn is no longer pending, there's nothing for us to heartbeat.
 	// This h.heartbeat() call could have raced with a response that updated the
-	// status. That response is supposed to have closed the txnHeartbeat.
+	// status. That response is supposed to have closed the txnHeartbeater.
 	if h.mu.txn.Status != roachpb.PENDING {
 		if h.mu.txnEnd != nil {
 			log.Fatalf(ctx,
@@ -529,7 +554,7 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 
 // abortTxnAsyncLocked send an EndTransaction(commmit=false) asynchronously.
 // The asyncAbortCallbackLocked callback is also called.
-func (h *txnHeartbeat) abortTxnAsyncLocked(ctx context.Context) {
+func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	if h.mu.txn.Status != roachpb.ABORTED {
 		log.Fatalf(ctx, "abortTxnAsyncLocked called for non-aborted txn: %s", h.mu.txn)
 	}
@@ -552,7 +577,7 @@ func (h *txnHeartbeat) abortTxnAsyncLocked(ctx context.Context) {
 
 	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
 	if err := h.stopper.RunAsyncTask(
-		ctx, "txnHeartbeat: aborting txn", func(ctx context.Context) {
+		ctx, "txnHeartbeater: aborting txn", func(ctx context.Context) {
 			// Send the abort request through the interceptor stack. This is important
 			// because we need the txnIntentCollector to append intents to the
 			// EndTransaction request.
