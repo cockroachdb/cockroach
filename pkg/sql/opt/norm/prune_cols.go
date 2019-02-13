@@ -128,6 +128,9 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			// It is possible to update a subset of families only for the primary
 			// index, and only when key columns are not being updated. Otherwise,
 			// all columns in the index must be fetched.
+			// TODO(andyk): It should be possible to not include columns that are
+			// being updated, since the existing value is not used. However, this
+			// would require execution support.
 			if i == cat.PrimaryIndex && !keyCols.Intersects(updateCols) {
 				addFamilyCols(updateCols)
 			} else {
