@@ -97,10 +97,10 @@ func TestListFailures(t *testing.T) {
 					author:   "nikhil.benesch@gmail.com",
 				},
 				{
-					testName: "TestCommitTurnedToRollback",
-					title:    "kv: TestCommitTurnedToRollback timed out under stress",
+					testName: "TestAbortReadOnlyTransaction",
+					title:    "kv: TestAbortReadOnlyTransaction timed out under stress",
 					message: `Slow failing tests:
-TestCommitTurnedToRollback - 3.99s
+TestAbortReadOnlyTransaction - 3.99s
 TestTxnCoordSenderPipelining - 1.00s
 
 Slow passing tests:
