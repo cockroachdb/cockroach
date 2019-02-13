@@ -206,14 +206,8 @@ type txnInterceptor interface {
 	epochBumpedLocked()
 
 	// closeLocked closes the interceptor. It is called when the TxnCoordSender
-	// shuts down due to either a txn commit or a txn abort.
-	//
-	// This method can be called multiple times (e.g. if the txn is aborted by the
-	// heartbeat loop and then upon a client rollback); implementers beware.
-	//
-	// Note that EndTransaction(commit=false) requests can still be sent (via the
-	// lockedSender interface) after this is called, and they're expected to be
-	// forwarded along. The idea for this method is to stop background tasks.
+	// shuts down due to either a txn commit or a txn abort. The method will
+	// always be called exactly once.
 	closeLocked()
 }
 
