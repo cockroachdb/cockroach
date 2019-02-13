@@ -294,32 +294,16 @@ func findIndexProblem(
 }
 
 func registerSchemaChangeIndexTPCC1000(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2, false /* builkInsert */))
+	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2))
 }
 
 func registerSchemaChangeIndexTPCC100(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15, false /* builkInsert */))
+	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15))
 }
 
-func registerSchemaChangeBulkInsertIndexTPCC1000(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2, true /* builkInsert */))
-}
-
-func registerSchemaChangeBulkInsertIndexTPCC100(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15, true /* builkInsert */))
-}
-
-func makeIndexAddTpccTest(
-	numNodes, warehouses int, length time.Duration, bulkInsert bool,
-) testSpec {
-	name := fmt.Sprintf("schemachange/index/tpcc-%d", warehouses)
-	minVersion := ""
-	if bulkInsert {
-		name = fmt.Sprintf("schemachange/bulkindex/tpcc-%d", warehouses)
-		minVersion = "v2.2.0"
-	}
+func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
 	return testSpec{
-		Name:    name,
+		Name:    fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
 		Cluster: makeClusterSpec(numNodes),
 		Timeout: length * 2,
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -327,30 +311,16 @@ func makeIndexAddTpccTest(
 				Warehouses: warehouses,
 				Extra:      "--wait=false --tolerate-errors",
 				During: func(ctx context.Context) error {
-					if bulkInsert {
-						db := c.Conn(ctx, 1)
-						if _, err := db.Exec(`
-SET CLUSTER SETTING schemachanger.bulk_index_backfill.enabled = true
-`); err != nil {
-							t.Fatal(err)
-						}
-						db.Close()
-					}
-					if bulkInsert {
-						return runAndLogStmts(ctx, t, c, "addindex", []string{
-							`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
-							`CREATE INDEX ON tpcc.order (o_carrier_id);`,
-							`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
-						})
-					}
 					return runAndLogStmts(ctx, t, c, "addindex", []string{
 						`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
+						`CREATE INDEX ON tpcc.order (o_carrier_id);`,
+						`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
 					})
 				},
 				Duration: length,
 			})
 		},
-		MinVersion: minVersion,
+		MinVersion: "v2.2.0",
 	}
 }
 
@@ -398,7 +368,7 @@ func createIndexAddJob(
 
 func makeIndexAddRollbackTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
 	return testSpec{
-		Name:    fmt.Sprintf("schemachange/indexrollback/tpcc-%d", warehouses),
+		Name:    fmt.Sprintf("schemachange/indexrollback/tpcc/w=%d", warehouses),
 		Cluster: makeClusterSpec(numNodes),
 		Timeout: length * 2,
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -458,6 +428,7 @@ func makeIndexAddRollbackTpccTest(numNodes, warehouses int, length time.Duration
 				Duration: length,
 			})
 		},
+		MinVersion: "v2.2.0",
 	}
 }
 
