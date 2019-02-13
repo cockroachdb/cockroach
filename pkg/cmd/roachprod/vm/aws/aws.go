@@ -31,6 +31,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 // ProviderName is aws.
@@ -226,6 +227,8 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	// We're looping over regions to create all of the nodes in one region
 	// in the same iteration so they're contiguous.
 	node := 0
+	const rateLimit = 2 // per second
+	limiter := rate.NewLimiter(rateLimit, 2 /* buckets */)
 	for i, region := range regions {
 		zones, err := p.allZones(region)
 		if err != nil {
@@ -241,8 +244,9 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			}
 			capName := names[node]
 			placement := zones[availabilityZone]
-
+			res := limiter.Reserve()
 			g.Go(func() error {
+				time.Sleep(res.Delay())
 				return p.runInstance(capName, placement, opts)
 			})
 			node++
