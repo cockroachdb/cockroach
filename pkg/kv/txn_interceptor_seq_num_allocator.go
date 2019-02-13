@@ -23,18 +23,45 @@ import (
 // txnSeqNumAllocator is a txnInterceptor in charge of allocating sequence
 // numbers to all the individual requests in batches.
 //
-// The sequence number is used for replay and reordering protection. At the
-// Store, a sequence number less than or equal to the last observed one (on a
-// given key) incurs a transaction restart (if the request is transactional).
-// This semantic could be adjusted in the future to provide idempotency for
-// replays and re-issues. However, a side effect of providing this property is
-// that reorder protection would no longer be provided by the counter, so
-// ordering guarantees between requests within the same transaction would need
-// to be strengthened elsewhere (e.g. by the transport layer).
+// Sequence numbers serve a few roles in the transaction model:
+//
+// 1. they are used to enforce an ordering between read and write operations in a
+//    single transaction that go to the same key. Each read request that travels
+//    through the interceptor is assigned the sequence number of the most recent
+//    write. Each write request that travels through the interceptor is assigned
+//    a sequence number larger than any previously allocated.
+//
+//    This is true even for leaf transaction coordinators. In their case, they are
+//    provided the sequence number of the most recent write during construction.
+//    Because they only perform read operations and never issue writes, they assign
+//    each read this sequence number without ever incrementing their own counter.
+//    In this way, sequence numbers are maintained correctly across a distributed
+//    tree of transaction coordinators.
+//
+// 2. they are used to uniquely identify write operations. Because every write
+//    request is given a new sequence number, the tuple (txn_id, txn_epoch, seq)
+//    uniquely identifies a write operation across an entire cluster. This property
+//    is exploited when determining the status of an individual write by looking
+//    for its intent. We perform such an operation using the QueryIntent request
+//    type when pipelining transactional writes. We will do something similar
+//    during the recovery stage of implicitly committed transactions.
+//
+// 3. they are used to determine whether a batch contains the entire write set
+//    for a transaction. See BatchRequest.IsCompleteTransaction.
+//
+// 4. they are used to provide idempotency for replays and re-issues. The MVCC
+//    layer is sequence number-aware and ensures that reads at a given sequence
+//    number ignore writes in the same transaction at larger sequence numbers.
+//    Likewise, writes at a sequence number become no-ops if an intent with the
+//    same sequence is already present. If an intent with the same sequence is not
+//    already present but an intent with a larger sequence number is, an error is
+//    returned. Likewise, if an intent with the same sequence is present but its
+//    value is different than what we recompute, an error is returned.
+//
+// TODO(nvanbenschoten): Unit test this file.
 type txnSeqNumAllocator struct {
 	wrapped lockedSender
-
-	seqNumCounter int32
+	seqGen  int32
 
 	// commandCount indicates how many requests have been sent through
 	// this transaction. Reset on retryable txn errors.
@@ -53,11 +80,11 @@ func (s *txnSeqNumAllocator) SendLocked(
 		// This enables ba.IsCompleteTransaction to work properly.
 		req := ru.GetInner()
 		if roachpb.IsTransactionWrite(req) || req.Method() == roachpb.EndTransaction {
-			s.seqNumCounter++
+			s.seqGen++
 		}
 
 		oldHeader := req.Header()
-		oldHeader.Sequence = s.seqNumCounter
+		oldHeader.Sequence = s.seqGen
 		ru.GetInner().SetHeader(oldHeader)
 	}
 
@@ -72,20 +99,20 @@ func (s *txnSeqNumAllocator) setWrapped(wrapped lockedSender) { s.wrapped = wrap
 // populateMetaLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
 	meta.CommandCount = s.commandCount
-	meta.Txn.Sequence = s.seqNumCounter
+	meta.Txn.Sequence = s.seqGen
 }
 
 // augmentMetaLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
 	s.commandCount += meta.CommandCount
-	if meta.Txn.Sequence > s.seqNumCounter {
-		s.seqNumCounter = meta.Txn.Sequence
+	if meta.Txn.Sequence > s.seqGen {
+		s.seqGen = meta.Txn.Sequence
 	}
 }
 
 // epochBumpedLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) epochBumpedLocked() {
-	s.seqNumCounter = 0
+	s.seqGen = 0
 	s.commandCount = 0
 }
 
