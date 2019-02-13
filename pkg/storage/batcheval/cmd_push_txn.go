@@ -39,7 +39,6 @@ func declareKeysPushTransaction(
 	pr := req.(*roachpb.PushTxnRequest)
 	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, pr.PusheeTxn.ID)})
 	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, pr.PusheeTxn.ID)})
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID)})
 }
 
 // PushTxn resolves conflicts between concurrent txns (or between

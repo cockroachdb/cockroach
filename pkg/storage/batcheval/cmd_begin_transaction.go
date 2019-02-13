@@ -40,9 +40,6 @@ func declareKeysWriteTransaction(
 		spans.Add(spanset.SpanReadWrite, roachpb.Span{
 			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
 		})
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{
-			Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID),
-		})
 	}
 }
 

@@ -238,8 +238,8 @@ func (r *Replica) applyTimestampCache(
 // the original timestamp of its first epoch). If this is not exact then the
 // method may return false positives (i.e. it determines that the record could
 // be created when it actually couldn't) but will never return false negatives
-// (i.e. it determines that the record could not be created when it actually
-// could).
+// (i.e. it will never determine that the record could not be created when it
+// actually could).
 //
 // Because of this, callers who intend to write the transaction record should
 // always provide an exact minimum timestamp. They can't provide their
@@ -257,50 +257,56 @@ func (r *Replica) applyTimestampCache(
 // to reject that transaction going forwards.
 //
 // The method performs two critical roles:
-// 1. It protects against replays or other requests that could otherwise cause
-//    a transaction record to be created after the transaction has already been
-//    finalized and its record cleaned up.
+// 1. It protects against replayed requests or new requests from a transaction's
+//    coordinator that could otherwise cause a transaction record to be created
+//    after the transaction has already been finalized and its record cleaned up.
 // 2. It serves as the mechanism by which successful push requests convey
 //    information to transactions who have not yet written their transaction
-//    record. In doing so, it protects against transaction records from being
-//    created with too low of a timestamp.
+//    record. In doing so, it ensures that transaction records are created with a
+//    sufficiently high timestamp after a successful PushTxn(TIMESTAMP) and ensures
+//    that transactions records are never created at all after a successful
+//    PushTxn(ABORT). As a result of this mechanism, a transaction never needs to
+//    explicitly create the transaction record for contending transactions.
 //
 // This is detailed in the transaction record state machine below:
 //
 // +-----------------------------------+
-// |vars                               |
+// | vars                              |
 // |-----------------------------------|
-// |v1 = rTSCache[txn.id]   = timestamp|
-// |v2 = wTSCache[txn.id]   = timestamp|
-// |v3 = txnSpanGCThreshold = timestamp|
+// | v1 = rTSCache[txn.id] = timestamp |
+// | v2 = wTSCache[txn.id] = timestamp |
+// +-----------------------------------+
+// | operations                        |
+// |-----------------------------------|
+// | v -> t = forward v by timestamp t |
 // +-----------------------------------+
 //
 //                PushTxn(TIMESTAMP)                               HeartbeatTxn
-//                then: v1 = push.ts                            then: update record
-//                   +------+                                       +------+
-//  PushTxn(ABORT)   |      |       BeginTxn or HeartbeatTxn        |      |   PushTxn(TIMESTAMP)
-// then: v2 = txn.ts |      v       if: v2 < txn.orig               |      v  then: update record
-//                +---------------+   & v3 < txn.orig        +--------------------+
-//           +----|               | then: txn.ts.forward(v1) |                    |----+
-//           |    |               | else: fail               |                    |    |
+//                then: v1 -> push.ts                            then: update record
+//                    +------+                                       +------+
+//  PushTxn(ABORT)    |      |       BeginTxn or HeartbeatTxn        |      |   PushTxn(TIMESTAMP)
+// then: v2 -> txn.ts |      v       if: v2 < txn.orig               |      v  then: update record
+//                +---------------+  then: txn.ts -> v1      +--------------------+
+//           +----|               |  else: fail              |                    |----+
+//           |    |               |                          |                    |    |
 //           |    | no txn record |------------------------->| txn record written |    |
 //           +--->|               |                          |     [pending]      |<---+
 //                |               |-+                        |                    |
 //                +---------------+  \                       +--------------------+
-//                  ^          ^      \                             /           /
-//                  |           \      \ EndTxn                    / EndTxn    /
-//                  |            \      \ if: same conditions     / then: v2 = txn.ts
-//                  |             \      \    as above           /           /
-//                  |     Eager GC \      \ then: v2 = txn.ts   /           /
-//                  |    if: EndTxn \      \ else: fail        /           / PushTxn(ABORT)
-//                  |    transition  \      v                 v           / then: v2 = txn.ts
-//                  |         taken   \    +--------------------+        /
-//                  |                  \   |                    |       /
-//                   \                  +--|                    |      /
-//                    \                    | txn record written |<----+
+//                  ^                 \                            /           /
+//                  |                  \ EndTxn                   / EndTxn    /
+//                  |                   \ if: v2 < txn.orig      / then: v2 -> txn.ts
+//                  |                    \ then: v2 -> txn.ts   /           /
+//                  |  Eager GC           \ else: fail         /           /
+//                  |     or               \                  /           / PushTxn(ABORT)
+//                  |  GC queue             v                v           / then: v2 -> txn.ts
+//                  |                      +--------------------+       /
+//                  |                      |                    |      /
+//                   \                     |                    |     /
+//                    \                    | txn record written |<---+
 //                     +-------------------|     [finalized]    |
-//                       GC queue          |                    |
-//                     then: v3 = now()    +--------------------+
+//                                         |                    |
+//                                         +--------------------+
 //                                                ^      |
 //                                                |      | PushTxn(*)
 //                                                +------+ then: no-op
@@ -366,21 +372,5 @@ func (r *Replica) CanCreateTxnRecord(
 			return false, minCommitTS, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
 		}
 	}
-
-	// Disallow creation or modification of a transaction record if its original
-	// timestamp is before the TxnSpanGCThreshold, as in that case our transaction
-	// may already have been aborted by a concurrent actor which encountered one
-	// of our intents (which may have been written before our transaction record).
-	//
-	// See #9265.
-	//
-	// TODO(nvanbenschoten): If we forwarded the Range's entire local txn span in
-	// the write timestamp cache when we performed a GC then we wouldn't need this
-	// check at all. Another alternative is that we could rely on the PushTxn(ABORT)
-	// that the GC queue sends to bump the write timestamp cache on aborted txns.
-	if !r.GetTxnSpanGCThreshold().Less(txnMinTSUpperBound) {
-		return false, minCommitTS, roachpb.ABORT_REASON_NEW_TXN_RECORD_TOO_OLD
-	}
-
 	return true, minCommitTS, 0
 }
