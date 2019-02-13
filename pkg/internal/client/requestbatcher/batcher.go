@@ -232,7 +232,7 @@ func (b *RequestBatcher) cleanup(err error) {
 
 func (b *RequestBatcher) run(ctx context.Context) {
 	var deadline time.Time
-	var timer timeutil.Timer
+	timer := timeutil.NewTimer()
 	maybeSetTimer := func() {
 		var nextDeadline time.Time
 		if next := b.batches.peekFront(); next != nil {
@@ -242,6 +242,11 @@ func (b *RequestBatcher) run(ctx context.Context) {
 			deadline = nextDeadline
 			if !deadline.IsZero() {
 				timer.Reset(time.Until(deadline))
+			} else {
+				// Clear the current timer due to a sole batch already sent before
+				// the timer fired.
+				timer.Stop()
+				timer = timeutil.NewTimer()
 			}
 		}
 	}
