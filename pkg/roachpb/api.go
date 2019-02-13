@@ -1044,10 +1044,7 @@ func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 func (*MergeRequest) flags() int              { return isWrite }
-
-func (*RequestLeaseRequest) flags() int {
-	return isWrite | isAlone | skipLeaseCheck
-}
+func (*RequestLeaseRequest) flags() int       { return isWrite | isAlone | skipLeaseCheck }
 
 // LeaseInfoRequest is usually executed in an INCONSISTENT batch, which has the
 // effect of the `skipLeaseCheck` flag that lease write operations have.
@@ -1091,8 +1088,7 @@ func (r *RefreshRangeRequest) flags() int {
 	return isRead | isTxn | isRange | updatesReadTSCache
 }
 
-func (*SubsumeRequest) flags() int { return isRead | isAlone | updatesReadTSCache }
-
+func (*SubsumeRequest) flags() int    { return isRead | isAlone | updatesReadTSCache }
 func (*RangeStatsRequest) flags() int { return isRead }
 
 // Keys returns credentials in an aws.Config.

@@ -528,11 +528,11 @@ message ErrorDetail {
 // TransactionRestart indicates how an error should be handled in a
 // transactional context.
 enum TransactionRestart {
-  //  NONE (the default) is used for errors which have no effect on the
-  //  transaction state. That is, a transactional operation which receives such
-  //  an error is still PENDING and does not need to restart (at least not as a
-  //  result of the error). Examples are a CPut whose condition wasn't met, or
-  //  a spurious RPC error.
+  // NONE (the default) is used for errors which have no effect on the
+  // transaction state. That is, a transactional operation which receives such
+  // an error is still PENDING and does not need to restart (at least not as a
+  // result of the error). Examples are a CPut whose condition wasn't met, or
+  // a spurious RPC error.
   NONE = 0;
 
   // BACKOFF is for errors that can retried by restarting the transaction
