@@ -59,6 +59,13 @@ type coster struct {
 	perturbation float64
 }
 
+var _ Coster = &coster{}
+
+// MakeDefaultCoster creates an instance of the default coster.
+func MakeDefaultCoster(mem *memo.Memo) Coster {
+	return &coster{mem: mem}
+}
+
 const (
 	// These costs have been copied from the Postgres optimizer:
 	// https://github.com/postgres/postgres/blob/master/src/include/optimizer/cost.h
@@ -81,10 +88,9 @@ func (c *coster) Init(mem *memo.Memo, perturbation float64) {
 	c.perturbation = perturbation
 }
 
-// computeCost calculates the estimated cost of the candidate best expression,
-// based on its logical properties as well as the cost of its children. Each
-// expression's cost must always be >= the total costs of its children, so that
-// branch-and-bound pruning will work properly.
+// ComputeCost calculates the estimated cost of the top-level operator in a
+// candidate best expression, based on its logical properties and those of its
+// children.
 //
 // Note: each custom function to compute the cost of an operator calculates
 // the cost based on Big-O estimated complexity. Most constant factors are

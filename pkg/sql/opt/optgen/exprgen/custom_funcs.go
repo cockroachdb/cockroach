@@ -118,3 +118,22 @@ func (c *customFuncs) MakeLookupJoin(
 ) memo.RelExpr {
 	return c.f.ConstructLookupJoin(input, on, lookupJoinPrivate)
 }
+
+// Sort adds a sort enforcer which sorts according to the ordering that will be
+// required by its parent.
+func (c *customFuncs) Sort(input memo.RelExpr) memo.RelExpr {
+	return &memo.SortExpr{Input: input}
+}
+
+// rootSentinel is used as the root value when Required is used.
+type rootSentinel struct {
+	expr     memo.RelExpr
+	required *physical.Required
+}
+
+// Require can be used only at the top level on an expression, to annotate the
+// root with a required ordering. The operator must be able to provide that
+// ordering.
+func (c *customFuncs) Require(root memo.RelExpr, ordering physical.OrderingChoice) *rootSentinel {
+	return &rootSentinel{expr: root, required: &physical.Required{Ordering: ordering}}
+}
