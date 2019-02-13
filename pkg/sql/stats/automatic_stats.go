@@ -352,24 +352,33 @@ func (r *Refresher) maybeRefreshStats(
 			}
 		}
 		if err != nil {
-			// It's likely that another stats job was already running. Attempt
-			// to reschedule this refresh.
-			if mustRefresh {
-				// For the cases where mustRefresh=true (stats don't yet exist or it
-				// has been 2x the average time since a refresh), we want to make sure
-				// that maybeRefreshStats is called on this table during the next
-				// cycle so that we have another chance to trigger a refresh. We pass
-				// rowsAffected=0 so that we don't force a refresh if another node has
-				// already done it.
-				r.mutations <- mutation{tableID: tableID, rowsAffected: 0}
-			} else {
-				// If this refresh was caused by a "dice roll", we want to make sure
-				// that the refresh is rescheduled so that we adhere to the
-				// targetFractionOfRowsUpdatedBeforeRefresh statistical ideal. We
-				// ensure that the refresh is triggered during the next cycle by
-				// passing a very large number for rowsAffected.
-				r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32}
+			pgerr, ok := errors.Cause(err).(*pgerror.Error)
+			if ok && pgerr.Code == pgerror.CodeLockNotAvailableError {
+				// Another stats job was already running. Attempt to reschedule this
+				// refresh.
+				if mustRefresh {
+					// For the cases where mustRefresh=true (stats don't yet exist or it
+					// has been 2x the average time since a refresh), we want to make sure
+					// that maybeRefreshStats is called on this table during the next
+					// cycle so that we have another chance to trigger a refresh. We pass
+					// rowsAffected=0 so that we don't force a refresh if another node has
+					// already done it.
+					r.mutations <- mutation{tableID: tableID, rowsAffected: 0}
+				} else {
+					// If this refresh was caused by a "dice roll", we want to make sure
+					// that the refresh is rescheduled so that we adhere to the
+					// targetFractionOfRowsUpdatedBeforeRefresh statistical ideal. We
+					// ensure that the refresh is triggered during the next cycle by
+					// passing a very large number for rowsAffected.
+					r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32}
+				}
+				return
 			}
+
+			// Log other errors but don't automatically reschedule the refresh, since
+			// that could lead to endless retries.
+			log.Errorf(ctx, "failed to create statistics: %v", err)
+			return
 		}
 	}
 }
