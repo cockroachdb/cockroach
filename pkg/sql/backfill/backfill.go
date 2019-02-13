@@ -297,6 +297,16 @@ type IndexBackfiller struct {
 	rowVals tree.Datums
 }
 
+// ContainsInvertedIndex returns true if backfilling an inverted index.
+func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
+	for _, idx := range ib.added {
+		if idx.Type == sqlbase.IndexDescriptor_INVERTED {
+			return true
+		}
+	}
+	return false
+}
+
 // Init initializes an IndexBackfiller.
 func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 	numCols := len(desc.Columns)
@@ -354,7 +364,7 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 
 // BulkWriteIndex enables experimental bulk-ingestion of index entries.
 var BulkWriteIndex = settings.RegisterBoolSetting(
-	"schemachanger.bulk_index_backfill.enabled", "backfill indexes in bulk via addsstable", false,
+	"schemachanger.bulk_index_backfill.enabled", "backfill indexes in bulk via addsstable", true,
 )
 
 // BuildIndexEntriesChunk reads a chunk of rows from a table using the span sp
@@ -367,7 +377,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	chunkSize int64,
 	traceKV bool,
 ) ([]sqlbase.IndexEntry, roachpb.Key, error) {
-	entries := make([]sqlbase.IndexEntry, 0, chunkSize*int64(len(ib.added)))
+	// This ought to be chunkSize but in most tests we are actually building smaller
+	// indexes so use a smaller value.
+	const initBufferSize = 1000
+	entries := make([]sqlbase.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
 
 	// Get the next set of rows.
 	//
@@ -378,7 +391,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	if err := ib.fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, traceKV,
+		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, initBufferSize, traceKV,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return nil, nil, err

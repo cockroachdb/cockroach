@@ -659,8 +659,8 @@ func (sc *SchemaChanger) validateIndexes(
 						// TODO(vivek): find the offending row and include it in the error.
 						return pgerror.NewErrorf(
 							pgerror.CodeUniqueViolationError,
-							"index %q uniqueness violation: %d entries, expected %d",
-							idx.Name, idxLen, tableRowCount,
+							"%d entries, expected %d violates unique constraint %q",
+							idxLen, tableRowCount, idx.Name,
 						)
 					}
 

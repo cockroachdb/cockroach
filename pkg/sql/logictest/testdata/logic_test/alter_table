@@ -65,19 +65,19 @@ ALTER TABLE t ADD c INT
 statement ok
 INSERT INTO t VALUES (2, 9, 1, 1), (3, 9, 2, 1)
 
-statement error duplicate key value \(c\)=\(1\) violates unique constraint "bar"
+statement error pgcode 23505 violates unique constraint "bar"
 ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
 # Test that rollback was successful
-query TTTTTRT
-SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, running_status, fraction_completed::decimal(10,2), error
+query TTTTTR
+SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, running_status, fraction_completed::decimal(10,2)
 FROM crdb_internal.jobs
 WHERE job_type = 'SCHEMA CHANGE'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE  ROLL BACK JOB ...: ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  waiting for GC TTL  0.00  ·
-SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   NULL                0.00  duplicate key value (c)=(1) violates unique constraint "bar"
+SCHEMA CHANGE  ROLL BACK JOB ...: ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  waiting for GC TTL  0.00
+SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   NULL                0.00
 
 query IIII colnames,rowsort
 SELECT * FROM t
@@ -526,7 +526,7 @@ SELECT a,b,f FROM add_default
 
 # Adding a unique column to an existing table with data with a default value
 # is illegal
-statement error duplicate key value .* violates unique constraint \"add_default_g_key\"
+statement error pgcode 23505 violates unique constraint \"add_default_g_key\"
 ALTER TABLE add_default ADD g INT UNIQUE DEFAULT 1
 
 # various default evaluation errors
