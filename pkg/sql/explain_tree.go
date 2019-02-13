@@ -47,6 +47,14 @@ import (
 func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode {
 	nodeStack := &planNodeStack{}
 	observer := planObserver{
+		// We set followRowSourceToPlanNode to true, to instruct the plan observer
+		// to follow the edges from rowSourceToPlanNodes (indicating that the prior
+		// node was not plannable by DistSQL) to the original planNodes that were
+		// replaced by DistSQL nodes. This prevents the walk from ending at these
+		// special replacement nodes.
+		// TODO(jordan): this is pretty hacky. We should modify DistSQL physical
+		//  planning to avoid mutating its input planNode tree instead.
+		followRowSourceToPlanNode: true,
 		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
 			nodeStack.push(&roachpb.ExplainTreePlanNode{
 				Name: nodeName,
