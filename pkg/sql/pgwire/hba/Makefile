@@ -7,5 +7,4 @@ conf.go: conf.rl
 	 echo "// GENERATED FILE DO NOT EDIT"; \
 	 cat conf.go) > conf.go.tmp
 	mv conf.go.tmp conf.go
-	../../../../bin/gofmt -w -s conf.go
-	../../../../bin/goimports -w conf.go
+	../../../../bin/crlfmt -w conf.go >/dev/null
