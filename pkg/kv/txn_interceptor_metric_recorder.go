@@ -36,7 +36,6 @@ type txnMetricRecorder struct {
 	txn           *roachpb.Transaction
 	txnStartNanos int64
 	onePCCommit   bool
-	closed        bool
 }
 
 // init initializes the txnMetricRecorder. This method exists instead of a
@@ -74,11 +73,6 @@ func (*txnMetricRecorder) epochBumpedLocked() {}
 
 // closeLocked is part of the txnInterceptor interface.
 func (m *txnMetricRecorder) closeLocked() {
-	if m.closed {
-		return
-	}
-	m.closed = true
-
 	if m.onePCCommit {
 		m.metrics.Commits1PC.Inc(1)
 	}
