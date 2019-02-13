@@ -370,6 +370,12 @@ func (c *CustomFuncs) PruneOrdering(
 	return ordCopy
 }
 
+// EmptyOrdering returns a pseudo-choice that does not require any
+// ordering.
+func (c *CustomFuncs) EmptyOrdering() physical.OrderingChoice {
+	return physical.OrderingChoice{}
+}
+
 // -----------------------------------------------------------------------
 //
 // Filter functions
@@ -1235,6 +1241,21 @@ func (c *CustomFuncs) MakeOrderedGrouping(
 	groupingCols opt.ColSet, ordering physical.OrderingChoice,
 ) *memo.GroupingPrivate {
 	return &memo.GroupingPrivate{GroupingCols: groupingCols, Ordering: ordering}
+}
+
+// IsLimited indicates whether a limit was pushed under the subquery
+// already. See e.g. the rule IntroduceExistsLimit.
+func (c *CustomFuncs) IsLimited(sub *memo.SubqueryPrivate) bool {
+	return sub.WasLimited
+}
+
+// MakeLimited specifies that the subquery has a limit set
+// already. This prevents e.g. the rule IntroduceExistsLimit from
+// applying twice.
+func (c *CustomFuncs) MakeLimited(sub *memo.SubqueryPrivate) *memo.SubqueryPrivate {
+	newSub := *sub
+	newSub.WasLimited = true
+	return &newSub
 }
 
 // ----------------------------------------------------------------------

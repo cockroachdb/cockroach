@@ -37,16 +37,21 @@ define Subquery {
 # across all the subquery operators.
 [Private]
 define SubqueryPrivate {
-	OriginalExpr Subquery
-	Ordering Ordering
+    OriginalExpr Subquery
+    Ordering Ordering
 
-  # RequestedCol is set if there could possibly be other columns in the input
-  # (say, if there was an ordering that must be respected) besides the one that
-  # will eventually be output.
-	RequestedCol ColumnID
+    # RequestedCol is set if there could possibly be other columns in the input
+    # (say, if there was an ordering that must be respected) besides the one that
+    # will eventually be output.
+    RequestedCol ColumnID
 
-	# Cmp is only used for AnyOp.
-	Cmp Operator
+    # Cmp is only used for AnyOp.
+    Cmp Operator
+
+    # WasLimited indicates a limit was applied "under" the subquery to
+    # restrict how many rows are fetched to determine the result.  See
+    # e.g. the rule IntroduceExistsLimit.
+    WasLimited bool
 }
 
 # Any is a SQL operator that applies a comparison to every row of an input

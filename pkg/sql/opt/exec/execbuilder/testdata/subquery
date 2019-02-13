@@ -21,9 +21,9 @@ root                               ·             ·
       │                            id            @S1
       │                            original sql  (SELECT 42)
       │                            exec mode     one row
-      └── limit                    ·             ·
-           │                       count         2
-           └── max1row             ·             ·
+      └── max1row                  ·             ·
+           └── limit               ·             ·
+                │                  count         2
                 └── render         ·             ·
                      └── emptyrow  ·             ·
 
@@ -43,6 +43,7 @@ root            ·             ·
       └── scan  ·             ·
 ·               table         abc@primary
 ·               spans         ALL
+·               limit         1
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
@@ -56,7 +57,9 @@ root                 ·             ·                                          
  │    │              id            @S1                                                                          ·          ·
  │    │              original sql  EXISTS (SELECT * FROM abc WHERE c = (a + 3))                                 ·          ·
  │    │              exec mode     exists                                                                       ·          ·
- │    └── scan       ·             ·                                                                            (a, b, c)  ·
+ │    └── limit      ·             ·                                                                            (a, b, c)  ·
+ │         │         count         1                                                                            ·          ·
+ │         └── scan  ·             ·                                                                            (a, b, c)  ·
  │                   table         abc@primary                                                                  ·          ·
  │                   spans         ALL                                                                          ·          ·
  │                   filter        c = (a + 3)                                                                  ·          ·
