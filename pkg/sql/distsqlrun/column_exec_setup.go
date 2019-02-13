@@ -247,6 +247,78 @@ func newColOperator(
 			core.HashJoiner.Type,
 		)
 
+	case core.MergeJoiner != nil:
+		if err := checkNumIn(inputs, 2); err != nil {
+			return nil, err
+		}
+
+		if !core.MergeJoiner.OnExpr.Empty() {
+			return nil, errors.New("can't plan merge join with on expressions")
+		}
+
+		if len(core.MergeJoiner.LeftOrdering.Columns) > 1 || len(core.MergeJoiner.RightOrdering.Columns) > 1 {
+			return nil, errors.New("multi column merge join is still unsupported")
+		}
+
+		leftTypes := types.FromColumnTypes(spec.Input[0].ColumnTypes)
+		rightTypes := types.FromColumnTypes(spec.Input[1].ColumnTypes)
+
+		nLeftCols := uint32(len(leftTypes))
+		nRightCols := uint32(len(rightTypes))
+
+		leftEqCols := make([]uint32, 0, nLeftCols)
+		rightEqCols := make([]uint32, 0, nRightCols)
+
+		for _, oCol := range core.MergeJoiner.LeftOrdering.Columns {
+			if leftTypes[oCol.ColIdx] != types.Int64 {
+				return nil, errors.New("merge join equality is only supported on Int64")
+			}
+			leftEqCols = append(leftEqCols, oCol.ColIdx)
+		}
+
+		for _, oCol := range core.MergeJoiner.RightOrdering.Columns {
+			if rightTypes[oCol.ColIdx] != types.Int64 {
+				return nil, errors.New("merge join equality is only supported on Int64")
+			}
+			rightEqCols = append(rightEqCols, oCol.ColIdx)
+		}
+
+		leftOutCols := make([]uint32, 0, nLeftCols)
+		rightOutCols := make([]uint32, 0, nRightCols)
+
+		if post.Projection {
+			for _, col := range post.OutputColumns {
+				if col < nLeftCols {
+					leftOutCols = append(leftOutCols, col)
+				} else {
+					rightOutCols = append(rightOutCols, col-nLeftCols)
+				}
+			}
+		} else {
+			for i := uint32(0); i < nLeftCols; i++ {
+				leftOutCols = append(leftOutCols, i)
+			}
+
+			for i := uint32(0); i < nRightCols; i++ {
+				rightOutCols = append(rightOutCols, i)
+			}
+		}
+
+		op = exec.NewMergeJoinOp(
+			inputs[0],
+			inputs[1],
+			leftOutCols,
+			rightOutCols,
+			leftTypes,
+			rightTypes,
+			leftEqCols,
+			rightEqCols,
+		)
+
+		columnTypes = make([]sqlbase.ColumnType, nLeftCols+nRightCols)
+		copy(columnTypes, spec.Input[0].ColumnTypes)
+		copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
+
 	case core.JoinReader != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
