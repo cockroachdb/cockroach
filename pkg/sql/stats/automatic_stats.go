@@ -236,6 +236,8 @@ func (r *Refresher) ensureAllTables(ctx context.Context, settings *settings.Valu
 	for _, row := range rows {
 		tableID := sqlbase.ID(*row[0].(*tree.DInt))
 		// Don't create statistics for system tables or virtual tables.
+		// TODO(rytaft): Don't add views here either. Unfortunately views are not
+		// identified differently from tables in crdb_internal.tables.
 		if !sqlbase.IsReservedID(tableID) && !sqlbase.IsVirtualTable(tableID) {
 			r.mutationCounts[tableID] += 0
 		}
@@ -329,47 +331,47 @@ func (r *Refresher) maybeRefreshStats(
 
 	if err := r.refreshStats(ctx, tableID, asOf); err != nil {
 		pgerr, ok := errors.Cause(err).(*pgerror.Error)
-		if ok {
-			switch pgerr.Code {
-			case pgerror.CodeUndefinedTableError:
-				// Wait so that the latest changes will be reflected according to the
-				// AS OF time, then try again.
-				timer := time.NewTimer(asOf)
-				defer timer.Stop()
-				select {
-				case <-timer.C:
-					break
-				case <-stopper.ShouldQuiesce():
-					return
-				}
-				err = r.refreshStats(ctx, tableID, asOf)
-
-			case pgerror.CodeWrongObjectTypeError:
-				// Don't reschedule the refresh for this error, as it gets produced
-				// if we're trying to run auto statistics on a view.
-				// TODO(rytaft): Change code to not enqueue views to begin with.
+		if ok && pgerr.Code == pgerror.CodeUndefinedTableError {
+			// Wait so that the latest changes will be reflected according to the
+			// AS OF time, then try again.
+			timer := time.NewTimer(asOf)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				break
+			case <-stopper.ShouldQuiesce():
 				return
 			}
+			err = r.refreshStats(ctx, tableID, asOf)
 		}
 		if err != nil {
-			// It's likely that another stats job was already running. Attempt
-			// to reschedule this refresh.
-			if mustRefresh {
-				// For the cases where mustRefresh=true (stats don't yet exist or it
-				// has been 2x the average time since a refresh), we want to make sure
-				// that maybeRefreshStats is called on this table during the next
-				// cycle so that we have another chance to trigger a refresh. We pass
-				// rowsAffected=0 so that we don't force a refresh if another node has
-				// already done it.
-				r.mutations <- mutation{tableID: tableID, rowsAffected: 0}
-			} else {
-				// If this refresh was caused by a "dice roll", we want to make sure
-				// that the refresh is rescheduled so that we adhere to the
-				// targetFractionOfRowsUpdatedBeforeRefresh statistical ideal. We
-				// ensure that the refresh is triggered during the next cycle by
-				// passing a very large number for rowsAffected.
-				r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32}
+			pgerr, ok := errors.Cause(err).(*pgerror.Error)
+			if ok && pgerr.Code == pgerror.CodeLockNotAvailableError {
+				// Another stats job was already running. Attempt to reschedule this
+				// refresh.
+				if mustRefresh {
+					// For the cases where mustRefresh=true (stats don't yet exist or it
+					// has been 2x the average time since a refresh), we want to make sure
+					// that maybeRefreshStats is called on this table during the next
+					// cycle so that we have another chance to trigger a refresh. We pass
+					// rowsAffected=0 so that we don't force a refresh if another node has
+					// already done it.
+					r.mutations <- mutation{tableID: tableID, rowsAffected: 0}
+				} else {
+					// If this refresh was caused by a "dice roll", we want to make sure
+					// that the refresh is rescheduled so that we adhere to the
+					// targetFractionOfRowsUpdatedBeforeRefresh statistical ideal. We
+					// ensure that the refresh is triggered during the next cycle by
+					// passing a very large number for rowsAffected.
+					r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32}
+				}
+				return
 			}
+
+			// Log other errors but don't automatically reschedule the refresh, since
+			// that could lead to endless retries.
+			log.Errorf(ctx, "failed to create statistics on table %d: %v", tableID, err)
+			return
 		}
 	}
 }
