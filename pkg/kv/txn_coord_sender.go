@@ -154,7 +154,7 @@ type TxnCoordSender struct {
 		txnPipeliner
 		txnSpanRefresher
 		txnSeqNumAllocator
-		txnMetrics
+		txnMetricRecorder
 		txnLockGatekeeper // not in interceptorStack array.
 	}
 
@@ -433,7 +433,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 			tcs.stopper,
 			tcs.cleanupTxnLocked,
 		)
-		tcs.interceptorAlloc.txnMetrics.init(&tcs.mu.txn, tcs.clock, &tcs.metrics)
+		tcs.interceptorAlloc.txnMetricRecorder.init(&tcs.mu.txn, tcs.clock, &tcs.metrics)
 		tcs.interceptorAlloc.txnIntentCollector = txnIntentCollector{
 			st: tcf.st,
 			ri: ri,
@@ -467,7 +467,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 			&tcs.interceptorAlloc.txnIntentCollector,
 			&tcs.interceptorAlloc.txnPipeliner,
 			&tcs.interceptorAlloc.txnSpanRefresher,
-			&tcs.interceptorAlloc.txnMetrics,
+			&tcs.interceptorAlloc.txnMetricRecorder,
 		}
 		tcs.interceptorStack = tcs.interceptorAlloc.arr[:]
 	} else {

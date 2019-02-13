@@ -22,9 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// txnMetrics is a txnInterceptor in charge of updating some metrics in response
-// of transactions going through it.
-type txnMetrics struct {
+// txnMetricRecorder is a txnInterceptor in charge of updating metrics about
+// the behavior and outcome of a transaction. It records information about the
+// requests that a transaction sends and updates counters and histograms when
+// the transaction completes.
+//
+// TODO(nvanbenschoten): Unit test this file.
+type txnMetricRecorder struct {
 	wrapped lockedSender
 	metrics *TxnMetrics
 	clock   *hlc.Clock
@@ -35,16 +39,16 @@ type txnMetrics struct {
 	closed        bool
 }
 
-// init initializes the txnMetrics. This method exists instead of a constructor
-// because txnMetrics lives in a pool in the TxnCoordSender.
-func (m *txnMetrics) init(txn *roachpb.Transaction, clock *hlc.Clock, metrics *TxnMetrics) {
+// init initializes the txnMetricRecorder. This method exists instead of a
+// constructor because txnMetricRecorder lives in a pool in the TxnCoordSender.
+func (m *txnMetricRecorder) init(txn *roachpb.Transaction, clock *hlc.Clock, metrics *TxnMetrics) {
 	m.clock = clock
 	m.metrics = metrics
 	m.txn = txn
 }
 
 // SendLocked is part of the txnInterceptor interface.
-func (m *txnMetrics) SendLocked(
+func (m *txnMetricRecorder) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	m.onePCCommit = ba.IsCompleteTransaction()
@@ -57,19 +61,19 @@ func (m *txnMetrics) SendLocked(
 }
 
 // setWrapped is part of the txnInterceptor interface.
-func (m *txnMetrics) setWrapped(wrapped lockedSender) { m.wrapped = wrapped }
+func (m *txnMetricRecorder) setWrapped(wrapped lockedSender) { m.wrapped = wrapped }
 
 // populateMetaLocked is part of the txnInterceptor interface.
-func (*txnMetrics) populateMetaLocked(*roachpb.TxnCoordMeta) {}
+func (*txnMetricRecorder) populateMetaLocked(*roachpb.TxnCoordMeta) {}
 
 // augmentMetaLocked is part of the txnInterceptor interface.
-func (*txnMetrics) augmentMetaLocked(roachpb.TxnCoordMeta) {}
+func (*txnMetricRecorder) augmentMetaLocked(roachpb.TxnCoordMeta) {}
 
 // epochBumpedLocked is part of the txnInterceptor interface.
-func (*txnMetrics) epochBumpedLocked() {}
+func (*txnMetricRecorder) epochBumpedLocked() {}
 
 // closeLocked is part of the txnInterceptor interface.
-func (m *txnMetrics) closeLocked() {
+func (m *txnMetricRecorder) closeLocked() {
 	if m.closed {
 		return
 	}
