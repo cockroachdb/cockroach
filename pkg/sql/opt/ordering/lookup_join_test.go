@@ -100,7 +100,7 @@ func TestLookupJoinProvided(t *testing.T) {
 			input := &testexpr.Instance{
 				Rel: &props.Relational{},
 				Provided: &physical.Provided{
-					Ordering: parseOrdering(tc.input),
+					Ordering: physical.ParseOrdering(tc.input),
 				},
 			}
 			lookupJoin := f.Memo().MemoizeLookupJoin(

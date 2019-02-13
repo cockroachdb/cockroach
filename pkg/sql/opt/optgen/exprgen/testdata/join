@@ -1,0 +1,84 @@
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
+----
+TABLE abc
+ ├── a int
+ ├── b int
+ ├── c int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX ab
+      ├── a int
+      ├── b int
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE def (d INT, e INT, f INT)
+----
+TABLE def
+ ├── d int
+ ├── e int
+ ├── f int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+expr
+(InnerJoin
+  (Scan [ (Table "abc") (Cols "a,b,c") ])
+  (Scan [ (Table "def") (Cols "d,e,f") ])
+  [ (Eq (Var "a") (Var "d")) ]
+)
+----
+inner-join
+ ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:5(int!null) t.public.def.e:6(int) t.public.def.f:7(int)
+ ├── stats: [rows=10000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
+ ├── fd: (1)==(5), (5)==(1)
+ ├── scan t.public.abc
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ ├── scan t.public.def
+ │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
+ │    └── stats: [rows=1000, distinct(5)=100, null(5)=10]
+ └── filters
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           ├── variable: t.public.abc.a [type=int]
+           └── variable: t.public.def.d [type=int]
+
+expr
+(MakeLookupJoin
+  (Scan [ (Table "def") (Cols "d,e") ])
+  [ (JoinType "left-join") (Table "abc") (Index "abc@ab") (KeyCols "a") (Cols "a,b") ]
+  [ (Gt (Var "a") (Var "e")) ]
+)
+----
+left-join (lookup abc@ab)
+ ├── columns: t.public.abc.a:5(int) t.public.abc.b:6(int)
+ ├── key columns: [5] = [5]
+ ├── stats: [rows=333333.333]
+ ├── scan t.public.def
+ │    ├── columns: t.public.def.d:1(int) t.public.def.e:2(int)
+ │    └── stats: [rows=1000]
+ └── filters
+      └── gt [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+           ├── variable: t.public.abc.a [type=int]
+           └── variable: t.public.def.e [type=int]
+
+# TODO(radu): support merge joins (we can't generate them because we don't have
+# code for generating relational properties for merge join).
+#
+# expr
+# (MergeJoin
+#   (Scan [ (Table "abc") (Cols "a,b,c") ])
+#   (Scan [ (Table "def") (Cols "d,e,f") ])
+#   [ ]
+#   [
+#     (JoinType "inner-join")
+#     (LeftEq "+a")
+#     (RightEq "+d")
+#     (LeftOrdering "+a")
+#     (RightOrdering "+d")
+#   ]
+# )
+# ----

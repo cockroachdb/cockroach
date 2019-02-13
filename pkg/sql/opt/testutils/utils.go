@@ -15,7 +15,9 @@
 package testutils
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -25,7 +27,27 @@ import (
 )
 
 // ParseType parses a string describing a type.
+// It supports tuples using the syntax "tuple{<type>, <type>, ...}" but does not
+// support tuples of tuples.
 func ParseType(typeStr string) (types.T, error) {
+	// Special case for tuples for which there is no SQL syntax.
+	if strings.HasPrefix(typeStr, "tuple{") && strings.HasSuffix(typeStr, "}") {
+		s := strings.TrimPrefix(typeStr, "tuple{")
+		s = strings.TrimSuffix(s, "}")
+		// Hijack the PREPARE syntax which takes a list of types.
+		// TODO(radu): this won't work for tuples of tuples; we would need to add
+		// some special syntax.
+		parsed, err := parser.ParseOne(fmt.Sprintf("PREPARE x ( %s ) AS SELECT 1", s))
+		if err != nil {
+			return nil, fmt.Errorf("cannot parse %s as a type: %s", typeStr, err)
+		}
+		colTypes := parsed.AST.(*tree.Prepare).Types
+		res := types.TTuple{Types: make([]types.T, len(colTypes))}
+		for i := range colTypes {
+			res.Types[i] = coltypes.CastTargetToDatumType(colTypes[i])
+		}
+		return res, nil
+	}
 	colType, err := parser.ParseType(typeStr)
 	if err != nil {
 		return nil, err
