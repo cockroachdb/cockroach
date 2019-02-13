@@ -4143,30 +4143,28 @@ project
       ├── project
       │    ├── columns: y:7(int) v:9(int)
       │    └── left-join (merge)
-      │         ├── columns: k:1(int!null) y:7(int) u:8(int) v:9(int)
+      │         ├── columns: k:1(int!null) x:6(int) y:7(int) u:8(int) v:9(int)
       │         ├── left ordering: +1
       │         ├── right ordering: +8
-      │         ├── fd: (8)-->(9)
-      │         ├── project
-      │         │    ├── columns: k:1(int!null) y:7(int)
+      │         ├── key: (1,6,8)
+      │         ├── fd: (6)-->(7), (8)-->(9)
+      │         ├── left-join (merge)
+      │         │    ├── columns: k:1(int!null) x:6(int) y:7(int)
+      │         │    ├── left ordering: +1
+      │         │    ├── right ordering: +6
+      │         │    ├── key: (1,6)
+      │         │    ├── fd: (6)-->(7)
       │         │    ├── ordering: +1
-      │         │    └── left-join (merge)
-      │         │         ├── columns: k:1(int!null) x:6(int) y:7(int)
-      │         │         ├── left ordering: +1
-      │         │         ├── right ordering: +6
-      │         │         ├── key: (1,6)
-      │         │         ├── fd: (6)-->(7)
-      │         │         ├── ordering: +1
-      │         │         ├── scan a
-      │         │         │    ├── columns: k:1(int!null)
-      │         │         │    ├── key: (1)
-      │         │         │    └── ordering: +1
-      │         │         ├── scan xy
-      │         │         │    ├── columns: x:6(int!null) y:7(int)
-      │         │         │    ├── key: (6)
-      │         │         │    ├── fd: (6)-->(7)
-      │         │         │    └── ordering: +6
-      │         │         └── filters (true)
+      │         │    ├── scan a
+      │         │    │    ├── columns: k:1(int!null)
+      │         │    │    ├── key: (1)
+      │         │    │    └── ordering: +1
+      │         │    ├── scan xy
+      │         │    │    ├── columns: x:6(int!null) y:7(int)
+      │         │    │    ├── key: (6)
+      │         │    │    ├── fd: (6)-->(7)
+      │         │    │    └── ordering: +6
+      │         │    └── filters (true)
       │         ├── scan uv
       │         │    ├── columns: u:8(int!null) v:9(int)
       │         │    ├── key: (8)
@@ -4189,37 +4187,38 @@ project
  ├── columns: generate_series:8(int) information_schema._pg_expandarray:13(tuple{int AS x, int AS n})
  ├── side-effects
  ├── project-set
- │    ├── columns: k:1(int!null) v:7(int) generate_series:8(int) xy.x:9(int) x:11(int) n:12(int)
+ │    ├── columns: v:7(int) generate_series:8(int) xy.x:9(int) x:11(int) n:12(int)
  │    ├── side-effects
- │    ├── left-join (merge)
- │    │    ├── columns: k:1(int!null) v:7(int) xy.x:9(int)
- │    │    ├── left ordering: +1
- │    │    ├── right ordering: +9
- │    │    ├── project
- │    │    │    ├── columns: k:1(int!null) v:7(int)
- │    │    │    ├── ordering: +1
- │    │    │    └── left-join (merge)
- │    │    │         ├── columns: k:1(int!null) u:6(int) v:7(int)
- │    │    │         ├── left ordering: +1
- │    │    │         ├── right ordering: +6
- │    │    │         ├── key: (1,6)
- │    │    │         ├── fd: (6)-->(7)
- │    │    │         ├── ordering: +1
- │    │    │         ├── scan a
- │    │    │         │    ├── columns: k:1(int!null)
- │    │    │         │    ├── key: (1)
- │    │    │         │    └── ordering: +1
- │    │    │         ├── scan uv
- │    │    │         │    ├── columns: u:6(int!null) v:7(int)
- │    │    │         │    ├── key: (6)
- │    │    │         │    ├── fd: (6)-->(7)
- │    │    │         │    └── ordering: +6
- │    │    │         └── filters (true)
- │    │    ├── scan xy
- │    │    │    ├── columns: xy.x:9(int!null)
- │    │    │    ├── key: (9)
- │    │    │    └── ordering: +9
- │    │    └── filters (true)
+ │    ├── project
+ │    │    ├── columns: v:7(int) xy.x:9(int)
+ │    │    └── left-join (merge)
+ │    │         ├── columns: k:1(int!null) u:6(int) v:7(int) xy.x:9(int)
+ │    │         ├── left ordering: +1
+ │    │         ├── right ordering: +9
+ │    │         ├── key: (1,6,9)
+ │    │         ├── fd: (6)-->(7)
+ │    │         ├── left-join (merge)
+ │    │         │    ├── columns: k:1(int!null) u:6(int) v:7(int)
+ │    │         │    ├── left ordering: +1
+ │    │         │    ├── right ordering: +6
+ │    │         │    ├── key: (1,6)
+ │    │         │    ├── fd: (6)-->(7)
+ │    │         │    ├── ordering: +1
+ │    │         │    ├── scan a
+ │    │         │    │    ├── columns: k:1(int!null)
+ │    │         │    │    ├── key: (1)
+ │    │         │    │    └── ordering: +1
+ │    │         │    ├── scan uv
+ │    │         │    │    ├── columns: u:6(int!null) v:7(int)
+ │    │         │    │    ├── key: (6)
+ │    │         │    │    ├── fd: (6)-->(7)
+ │    │         │    │    └── ordering: +6
+ │    │         │    └── filters (true)
+ │    │         ├── scan xy
+ │    │         │    ├── columns: xy.x:9(int!null)
+ │    │         │    ├── key: (9)
+ │    │         │    └── ordering: +9
+ │    │         └── filters (true)
  │    └── zip
  │         ├── function: generate_series [type=int, outer=(7), side-effects]
  │         │    ├── const: 1 [type=int]

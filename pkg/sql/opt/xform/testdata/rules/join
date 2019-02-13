@@ -1868,42 +1868,43 @@ project
  ├── side-effects, mutations
  ├── fd: ()-->(21)
  ├── inner-join
+ │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── side-effects, mutations
+ │    ├── fd: ()-->(5-7)
  │    ├── values
  │    │    ├── cardinality: [0 - 0]
  │    │    └── key: ()
  │    ├── inner-join
+ │    │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
  │    │    ├── cardinality: [0 - 0]
  │    │    ├── side-effects, mutations
- │    │    ├── project
+ │    │    ├── fd: ()-->(5-7)
+ │    │    ├── select
+ │    │    │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
  │    │    │    ├── cardinality: [0 - 0]
  │    │    │    ├── side-effects, mutations
- │    │    │    └── select
- │    │    │         ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
- │    │    │         ├── cardinality: [0 - 0]
- │    │    │         ├── side-effects, mutations
- │    │    │         ├── fd: ()-->(5-7)
- │    │    │         ├── insert abc
- │    │    │         │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
- │    │    │         │    ├── insert-mapping:
- │    │    │         │    │    ├──  "?column?":13 => abc.a:5
- │    │    │         │    │    ├──  column14:14 => abc.b:6
- │    │    │         │    │    ├──  column14:14 => abc.c:7
- │    │    │         │    │    └──  column15:15 => abc.rowid:8
- │    │    │         │    ├── side-effects, mutations
- │    │    │         │    ├── fd: ()-->(5-7)
- │    │    │         │    └── project
- │    │    │         │         ├── columns: column14:14(int) column15:15(int) "?column?":13(int!null)
- │    │    │         │         ├── side-effects
- │    │    │         │         ├── fd: ()-->(13,14)
- │    │    │         │         ├── scan abc
- │    │    │         │         └── projections
- │    │    │         │              ├── null [type=int]
- │    │    │         │              ├── unique_rowid() [type=int, side-effects]
- │    │    │         │              └── const: 1 [type=int]
- │    │    │         └── filters
- │    │    │              └── false [type=bool]
+ │    │    │    ├── fd: ()-->(5-7)
+ │    │    │    ├── insert abc
+ │    │    │    │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
+ │    │    │    │    ├── insert-mapping:
+ │    │    │    │    │    ├──  "?column?":13 => abc.a:5
+ │    │    │    │    │    ├──  column14:14 => abc.b:6
+ │    │    │    │    │    ├──  column14:14 => abc.c:7
+ │    │    │    │    │    └──  column15:15 => abc.rowid:8
+ │    │    │    │    ├── side-effects, mutations
+ │    │    │    │    ├── fd: ()-->(5-7)
+ │    │    │    │    └── project
+ │    │    │    │         ├── columns: column14:14(int) column15:15(int) "?column?":13(int!null)
+ │    │    │    │         ├── side-effects
+ │    │    │    │         ├── fd: ()-->(13,14)
+ │    │    │    │         ├── scan abc
+ │    │    │    │         └── projections
+ │    │    │    │              ├── null [type=int]
+ │    │    │    │              ├── unique_rowid() [type=int, side-effects]
+ │    │    │    │              └── const: 1 [type=int]
+ │    │    │    └── filters
+ │    │    │         └── false [type=bool]
  │    │    ├── values
  │    │    │    ├── cardinality: [0 - 0]
  │    │    │    └── key: ()
