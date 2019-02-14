@@ -876,7 +876,7 @@ roachprod-stress roachprod-stressrace: bin/roachprod-stress
 	    -test.run "$(TESTS)" $(filter-out -v,$(TESTFLAGS)) -test.v -test.timeout $(TESTTIMEOUT); \
 	fi
 
-testlogic: testbaselogic testplannerlogic testoptlogic
+testlogic: testbaselogic testplannerlogic testoptlogic testccllogic
 
 testbaselogic: ## Run SQL Logic Tests.
 testbaselogic: bin/logictest
@@ -891,7 +891,8 @@ testoptlogic: ## Run SQL Logic Tests from opt package.
 testoptlogic: bin/logictestopt
 
 logic-test-selector := $(if $(TESTCONFIG),^$(TESTCONFIG)$$)/$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
-testbaselogic testccllogic: TESTS := TestLogic/$(logic-test-selector)
+testbaselogic: TESTS := TestLogic/$(logic-test-selector)
+testccllogic: TESTS := TestCCLLogic/$(logic-test-selector)
 testplannerlogic: TESTS := TestPlannerLogic/$(logic-test-selector)
 testoptlogic: TESTS := TestExecBuild/$(logic-test-selector)
 
