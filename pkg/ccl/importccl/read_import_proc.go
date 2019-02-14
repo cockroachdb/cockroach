@@ -362,7 +362,7 @@ type progressFn func(finished bool) error
 
 type inputConverter interface {
 	start(group ctxgroup.Group)
-	readFile(ctx context.Context, input io.Reader, fileIdx int32, filename string, progress progressFn) error
+	readFiles(ctx context.Context, dataFiles map[int32]string, format roachpb.IOFileFormat, progressFn func(float32) error, settings *cluster.Settings) error
 	inputFinished(ctx context.Context)
 }
 
@@ -464,7 +464,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			})
 		}
 
-		return readInputFiles(ctx, cp.spec.Uri, cp.spec.Format, conv.readFile, progFn, cp.flowCtx.Settings)
+		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Settings)
 	})
 
 	// Sample KVs

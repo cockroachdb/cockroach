@@ -14,6 +14,7 @@ import (
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -67,6 +68,16 @@ func (c *csvInputReader) start(group ctxgroup.Group) {
 
 func (c *csvInputReader) inputFinished(_ context.Context) {
 	close(c.recordCh)
+}
+
+func (c *csvInputReader) readFiles(
+	ctx context.Context,
+	dataFiles map[int32]string,
+	format roachpb.IOFileFormat,
+	progressFn func(float32) error,
+	settings *cluster.Settings,
+) error {
+	return readInputFiles(ctx, dataFiles, format, c.readFile, progressFn, settings)
 }
 
 func (c *csvInputReader) flushBatch(ctx context.Context, finished bool, progFn progressFn) error {
