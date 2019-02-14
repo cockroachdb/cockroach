@@ -341,7 +341,7 @@ func Setup(
 					if len(params) > 0 {
 						insertStmt := insertStmtBuf.String()
 						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
-							return errors.Wrapf(err, "failed insert into %s", table.Name)
+							return errors.Wrapf(err, "failed insert into %s. Query: %q", table.Name, insertStmt)
 						}
 					}
 					insertStmtBuf.Reset()
