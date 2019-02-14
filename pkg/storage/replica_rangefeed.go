@@ -115,12 +115,12 @@ func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
 
 type semaphoreLimitedIterator struct {
 	engine.SimpleIterator
-	sem limit.ConcurrentRequestLimiter
+	finish func()
 }
 
 func (sli semaphoreLimitedIterator) Close() {
 	sli.SimpleIterator.Close()
-	sli.sem.Finish()
+	sli.finish()
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
@@ -215,7 +215,7 @@ func (r *Replica) RangeFeed(
 		})
 		catchUpIter = semaphoreLimitedIterator{
 			SimpleIterator: innerIter,
-			sem:            iteratorLimiter,
+			finish:         iterFinish,
 		}
 		// Responsibility for finishing the semaphore now passes to the
 		// iterator.
