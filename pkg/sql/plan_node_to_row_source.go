@@ -161,10 +161,6 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerM
 			// by Nexting our source until exhaustion.
 			next, err := p.node.Next(p.params)
 			for ; next; next, err = p.node.Next(p.params) {
-				// If we're tracking memory, clear the previous row's memory account.
-				if p.params.extendedEvalCtx.ActiveMemAcc != nil {
-					p.params.extendedEvalCtx.ActiveMemAcc.Clear(p.params.ctx)
-				}
 				count++
 			}
 			if err != nil {
