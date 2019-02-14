@@ -546,7 +546,8 @@ func scrubRunDistSQL(
 	columnTypes []sqlbase.ColumnType,
 ) (*sqlbase.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
-	rows := sqlbase.NewRowContainer(*p.extendedEvalCtx.ActiveMemAcc, ci, 0 /* rowCapacity */)
+	acc := p.extendedEvalCtx.Mon.MakeBoundAccount()
+	rows := sqlbase.NewRowContainer(acc, ci, 0 /* rowCapacity */)
 	rowResultWriter := NewRowResultWriter(rows)
 	recv := MakeDistSQLReceiver(
 		ctx,

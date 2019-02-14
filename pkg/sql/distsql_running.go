@@ -615,8 +615,6 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 		subqueryMemAccount = subqueryMonitor.MakeBoundAccount()
 		defer subqueryMemAccount.Close(ctx)
 
-		evalCtx.ActiveMemAcc = &subqueryMemAccount
-
 		var subqueryPlanCtx PlanningCtx
 		var distributeSubquery bool
 		if maybeDistribute {
