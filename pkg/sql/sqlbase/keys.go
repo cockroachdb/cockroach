@@ -15,8 +15,6 @@
 package sqlbase
 
 import (
-	"bytes"
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -124,9 +122,11 @@ func PrettyKey(valDirs []encoding.Direction, key roachpb.Key, skip int) string {
 
 // PrettySpan returns a human-readable representation of a span.
 func PrettySpan(valDirs []encoding.Direction, span roachpb.Span, skip int) string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s-%s", PrettyKey(valDirs, span.Key, skip), PrettyKey(valDirs, span.EndKey, skip))
-	return buf.String()
+	var b strings.Builder
+	b.WriteString(PrettyKey(valDirs, span.Key, skip))
+	b.WriteByte('-')
+	b.WriteString(PrettyKey(valDirs, span.EndKey, skip))
+	return b.String()
 }
 
 // PrettySpans returns a human-readable description of the spans.
@@ -139,12 +139,12 @@ func PrettySpans(index *IndexDescriptor, spans []roachpb.Span, skip int) string 
 
 	valDirs := IndexKeyValDirs(index)
 
-	var buf bytes.Buffer
+	var b strings.Builder
 	for i, span := range spans {
 		if i > 0 {
-			buf.WriteString(" ")
+			b.WriteString(" ")
 		}
-		buf.WriteString(PrettySpan(valDirs, span, skip))
+		b.WriteString(PrettySpan(valDirs, span, skip))
 	}
-	return buf.String()
+	return b.String()
 }

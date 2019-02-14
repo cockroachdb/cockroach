@@ -22,6 +22,7 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -1381,7 +1382,7 @@ func PrettyPrintValue(valDirs []Direction, b []byte, sep string) string {
 
 func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bool) {
 	allDecoded := true
-	var buf bytes.Buffer
+	var buf strings.Builder
 	for len(b) > 0 {
 		// If there are more values than encoding directions specified,
 		// valDir will contain the 0 value of Direction.
@@ -1396,9 +1397,13 @@ func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bo
 		bb, s, err := prettyPrintFirstValue(valDir, b)
 		if err != nil {
 			allDecoded = false
-			fmt.Fprintf(&buf, "%s???", sep)
+			buf.WriteString(sep)
+			buf.WriteByte('?')
+			buf.WriteByte('?')
+			buf.WriteByte('?')
 		} else {
-			fmt.Fprintf(&buf, "%s%s", sep, s)
+			buf.WriteString(sep)
+			buf.WriteString(s)
 		}
 		b = bb
 	}
