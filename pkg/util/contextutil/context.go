@@ -16,7 +16,9 @@ package contextutil
 
 import (
 	"context"
+	"fmt"
 	"runtime/debug"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -38,4 +40,63 @@ func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, cont
 		}
 		cancel()
 	}
+}
+
+type TimeoutError struct {
+	operation string
+	duration  time.Duration
+	deadline  time.Time
+}
+
+func (t TimeoutError) Error() string {
+	if !t.deadline.IsZero() {
+		return fmt.Sprintf("operation %q missed deadline of %s", t.operation, t.deadline)
+	}
+	return fmt.Sprintf("operation %q timed out after %s", t.operation, t.duration)
+}
+func (TimeoutError) Timeout() bool   { return true }
+func (TimeoutError) Temporary() bool { return true }
+func (TimeoutError) Cause() error {
+	// This ensures that people looking for DeadlineExceeded in particular still
+	// see it.
+	return context.DeadlineExceeded
+}
+
+// RunWithTimeout runs a function with a timeout, the same way you'd do with
+// context.WithTimeout. It improve the opaque error messages returned by
+// WithTimeout by augmenting them with the op string that is passed in.
+func RunWithTimeout(
+	ctx context.Context, op string, timeout time.Duration, fn func(ctx context.Context) error,
+) error {
+	if timeout <= 0 {
+		return fn(ctx)
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	err := fn(ctx)
+	if err == context.DeadlineExceeded || ctx.Err() == context.DeadlineExceeded {
+		return TimeoutError{
+			operation: op,
+			duration:  timeout,
+		}
+	}
+	return err
+}
+
+// RunWithDeadline runs a function with a deadline, the same way you'd do with
+// context.WithDeadline. It improve the opaque error messages returned by
+// WithDeadline by augmenting them with the op string that is passed in.
+func RunWithDeadline(
+	ctx context.Context, op string, d time.Time, fn func(ctx context.Context) error,
+) error {
+	ctx, cancel := context.WithDeadline(ctx, d)
+	defer cancel()
+	err := fn(ctx)
+	if err == context.DeadlineExceeded || ctx.Err() == context.DeadlineExceeded {
+		return TimeoutError{
+			operation: op,
+			deadline:  d,
+		}
+	}
+	return err
 }
