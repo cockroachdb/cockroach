@@ -122,6 +122,13 @@ var importRequestsLimit = settings.RegisterPositiveIntSetting(
 	1,
 )
 
+// concurrentRangefeedItersLimit limits concurrent rangefeed catchup iterators.
+var concurrentRangefeedItersLimit = settings.RegisterPositiveIntSetting(
+	"kv.rangefeed.concurrent_catchup_iterators",
+	"number of rangefeeds catchup iterators a store will allow concurrently before queueing",
+	64,
+)
+
 // ExportRequestsLimit is the number of Export requests that can run at once.
 // Each extracts data from RocksDB to a temp file and then uploads it to cloud
 // storage. In order to not exhaust the disk or memory, or saturate the network,
@@ -828,10 +835,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.limiters.ConcurrentExports = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
-	// TODO: Make this configurable as the other limiters.
-	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
-		"rangefeedIterLimiter", 64,
-	)
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
 	exportCores := runtime.NumCPU() - 1
@@ -844,6 +847,13 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 			limit = exportCores
 		}
 		s.limiters.ConcurrentExports.SetLimit(limit)
+	})
+	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
+		"rangefeedIterLimiter", int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)),
+	)
+	concurrentRangefeedItersLimit.SetOnChange(&cfg.Settings.SV, func() {
+		s.limiters.ConcurrentRangefeedIters.SetLimit(
+			int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)))
 	})
 
 	if s.cfg.Gossip != nil {
