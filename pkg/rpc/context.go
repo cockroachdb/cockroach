@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -768,18 +769,16 @@ func (ctx *Context) runHeartbeat(
 			heartbeatTimer.Read = true
 		}
 
-		goCtx := ctx.masterCtx
-		var cancel context.CancelFunc
-		if hbTimeout := ctx.heartbeatTimeout; hbTimeout > 0 {
-			goCtx, cancel = context.WithTimeout(goCtx, hbTimeout)
-		}
+		var response *PingResponse
 		sendTime := ctx.LocalClock.PhysicalTime()
-		// NB: We want the request to fail-fast (the default), otherwise we won't
-		// be notified of transport failures.
-		response, err := heartbeatClient.Ping(goCtx, &request)
-		if cancel != nil {
-			cancel()
-		}
+		err := contextutil.RunWithTimeout(ctx.masterCtx, "rpc heartbeat", ctx.heartbeatTimeout,
+			func(goCtx context.Context) error {
+				// NB: We want the request to fail-fast (the default), otherwise we won't
+				// be notified of transport failures.
+				var err error
+				response, err = heartbeatClient.Ping(goCtx, &request)
+				return err
+			})
 
 		if err == nil {
 			err = errors.Wrap(

@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/armon/circbuf"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	// "postgres" gosql driver
@@ -886,15 +887,14 @@ func (c *cluster) FetchLogs(ctx context.Context) error {
 	c.status("fetching logs")
 
 	// Don't hang forever if we can't fetch the logs.
-	execCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
+	return contextutil.RunWithTimeout(ctx, "fetch logs", 2*time.Minute, func(ctx context.Context) error {
+		path := filepath.Join(c.t.ArtifactsDir(), "logs")
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
 
-	path := filepath.Join(c.t.ArtifactsDir(), "logs")
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-
-	return execCmd(execCtx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */)
+		return execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */)
+	})
 }
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
@@ -909,19 +909,19 @@ func (c *cluster) FetchDebugZip(ctx context.Context) error {
 	c.status("fetching debug zip")
 
 	// Don't hang forever if we can't fetch the debug zip.
-	execCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	const zipName = "debug.zip"
-	path := filepath.Join(c.t.ArtifactsDir(), zipName)
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-	err := execCmd(execCtx, c.l, roachprod, "ssh", c.name+":1", "--",
-		"./cockroach", "debug", "zip", "--url", "{pgurl:1}", zipName)
-	if err != nil {
-		return err
-	}
-	return execCmd(execCtx, c.l, roachprod, "get", c.name+":1", zipName /* src */, path /* dest */)
+	return contextutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
+		const zipName = "debug.zip"
+		path := filepath.Join(c.t.ArtifactsDir(), zipName)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+		err := execCmd(ctx, c.l, roachprod, "ssh", c.name+":1", "--",
+			"./cockroach", "debug", "zip", "--url", "{pgurl:1}", zipName)
+		if err != nil {
+			return err
+		}
+		return execCmd(ctx, c.l, roachprod, "get", c.name+":1", zipName /* src */, path /* dest */)
+	})
 }
 
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
@@ -937,22 +937,22 @@ func (c *cluster) FetchDmesg(ctx context.Context) error {
 	c.status("fetching dmesg")
 
 	// Don't hang forever.
-	execCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	const name = "dmesg.txt"
-	path := filepath.Join(c.t.ArtifactsDir(), name)
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-	if err := execCmd(
-		execCtx, c.l, roachprod, "ssh", c.name, "--",
-		"/bin/bash", "-c", "'sudo dmesg > "+name+"'", /* src */
-	); err != nil {
-		// Don't error out because it might've worked on some nodes. Fetching will
-		// error out below but will get everything it can first.
-		c.l.Printf("during dmesg fetching: %s", err)
-	}
-	return execCmd(execCtx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
+	return contextutil.RunWithTimeout(ctx, "debug zip", 20*time.Second, func(ctx context.Context) error {
+		const name = "dmesg.txt"
+		path := filepath.Join(c.t.ArtifactsDir(), name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+		if err := execCmd(
+			ctx, c.l, roachprod, "ssh", c.name, "--",
+			"/bin/bash", "-c", "'sudo dmesg > "+name+"'", /* src */
+		); err != nil {
+			// Don't error out because it might've worked on some nodes. Fetching will
+			// error out below but will get everything it can first.
+			c.l.Printf("during dmesg fetching: %s", err)
+		}
+		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
+	})
 }
 
 func (c *cluster) Destroy(ctx context.Context) {
