@@ -65,12 +65,7 @@ type tableWriter interface {
 	// The traceKV parameter determines whether the individual K/V operations
 	// should be logged to the context. See the comment above for why
 	// this a separate parameter as opposed to a Value field on the context.
-	//
-	// autoCommit specifies whether the tableWriter is free to commit the txn in
-	// which it was operating once all writes are performed.
-	finalize(
-		ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
-	) (*rowcontainer.RowContainer, error)
+	finalize(ctx context.Context, traceKV bool) (*rowcontainer.RowContainer, error)
 
 	// tableDesc returns the TableDescriptor for the table that the tableWriter
 	// will modify.
@@ -85,14 +80,14 @@ type tableWriter interface {
 	// desc returns a name suitable for describing the table writer in
 	// the output of EXPLAIN.
 	desc() string
+
+	// enable auto commit in call to finalize().
+	enableAutoCommit()
 }
 
 type autoCommitOpt int
 
-const (
-	noAutoCommit autoCommitOpt = iota
-	autoCommitEnabled
-)
+const autoCommitEnabled autoCommitOpt = 1
 
 // extendedTableWriter is a temporary interface introduced
 // until all the tableWriters implement it. When that is achieved, it will be merged into
@@ -127,6 +122,8 @@ var _ extendedTableWriter = (*tableInserter)(nil)
 type tableWriterBase struct {
 	// txn is the current KV transaction.
 	txn *client.Txn
+	// is autoCommit turned on.
+	autoCommit autoCommitOpt
 	// b is the current batch.
 	b *client.Batch
 	// batchSize is the current batch size (when known).
@@ -156,9 +153,9 @@ func (tb *tableWriterBase) curBatchSize() int { return tb.batchSize }
 
 // finalize shares the common finalize code between extendedTableWriters.
 func (tb *tableWriterBase) finalize(
-	ctx context.Context, autoCommit autoCommitOpt, tableDesc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor,
 ) (err error) {
-	if autoCommit == autoCommitEnabled {
+	if tb.autoCommit == autoCommitEnabled {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
@@ -171,6 +168,10 @@ func (tb *tableWriterBase) finalize(
 		return row.ConvertBatchError(ctx, tableDesc, tb.b)
 	}
 	return nil
+}
+
+func (tb *tableWriterBase) enableAutoCommit() {
+	tb.autoCommit = autoCommitEnabled
 }
 
 // batchedTableWriter is used for tableWriters that

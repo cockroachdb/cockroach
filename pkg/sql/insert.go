@@ -379,10 +379,6 @@ type insertRun struct {
 	// index is not public.
 	rowIdxToRetIdx []int
 
-	// autoCommit indicates whether the last KV batch processed by
-	// this update will also commit the KV txn.
-	autoCommit autoCommitOpt
-
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 }
@@ -509,7 +505,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
-		if _, err := n.run.ti.finalize(params.ctx, n.run.autoCommit, n.run.traceKV); err != nil {
+		if _, err := n.run.ti.finalize(params.ctx, n.run.traceKV); err != nil {
 			return false, err
 		}
 		// Remember we're done for the next call to BatchedNext().
@@ -608,7 +604,7 @@ func (n *insertNode) Close(ctx context.Context) {
 
 // enableAutoCommit is part of the autoCommitNode interface.
 func (n *insertNode) enableAutoCommit() {
-	n.run.autoCommit = autoCommitEnabled
+	n.run.ti.enableAutoCommit()
 }
 
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default

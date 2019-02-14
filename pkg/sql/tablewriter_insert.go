@@ -54,10 +54,8 @@ func (ti *tableInserter) flushAndStartNewBatch(ctx context.Context) error {
 }
 
 // finalize is part of the tableWriter interface.
-func (ti *tableInserter) finalize(
-	ctx context.Context, autoCommit autoCommitOpt, _ bool,
-) (*rowcontainer.RowContainer, error) {
-	return nil, ti.tableWriterBase.finalize(ctx, autoCommit, ti.tableDesc())
+func (ti *tableInserter) finalize(ctx context.Context, _ bool) (*rowcontainer.RowContainer, error) {
+	return nil, ti.tableWriterBase.finalize(ctx, ti.tableDesc())
 }
 
 // tableDesc is part of the tableWriter interface.

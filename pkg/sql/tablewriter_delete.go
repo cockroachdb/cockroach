@@ -56,10 +56,8 @@ func (td *tableDeleter) flushAndStartNewBatch(ctx context.Context) error {
 }
 
 // finalize is part of the tableWriter interface.
-func (td *tableDeleter) finalize(
-	ctx context.Context, autoCommit autoCommitOpt, _ bool,
-) (*rowcontainer.RowContainer, error) {
-	return nil, td.tableWriterBase.finalize(ctx, autoCommit, td.rd.Helper.TableDesc)
+func (td *tableDeleter) finalize(ctx context.Context, _ bool) (*rowcontainer.RowContainer, error) {
+	return nil, td.tableWriterBase.finalize(ctx, td.rd.Helper.TableDesc)
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
@@ -104,13 +102,13 @@ func fastPathDeleteAvailable(ctx context.Context, desc *ImmutableTableDescriptor
 // limit is a limit on either the number of keys or table-rows (for
 // interleaved tables) deleted in the operation.
 func (td *tableDeleter) deleteAllRows(
-	ctx context.Context, resume roachpb.Span, limit int64, autoCommit autoCommitOpt, traceKV bool,
+	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if td.rd.Helper.TableDesc.IsInterleaved() {
 		log.VEvent(ctx, 2, "delete forced to scan: table is interleaved")
-		return td.deleteAllRowsScan(ctx, resume, limit, autoCommit, traceKV)
+		return td.deleteAllRowsScan(ctx, resume, limit, traceKV)
 	}
-	return td.deleteAllRowsFast(ctx, resume, limit, autoCommit, traceKV)
+	return td.deleteAllRowsFast(ctx, resume, limit, traceKV)
 }
 
 // deleteAllRowsFast uses the DelRange KV request to delete data quickly,
@@ -122,7 +120,7 @@ func (td *tableDeleter) deleteAllRows(
 // ClearRange KV request, which uses RocksDB range deletion tombstones to avoid
 // write amplification.
 func (td *tableDeleter) deleteAllRowsFast(
-	ctx context.Context, resume roachpb.Span, limit int64, autoCommit autoCommitOpt, traceKV bool,
+	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		tablePrefix := roachpb.Key(
@@ -138,7 +136,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
-	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
+	if _, err := td.finalize(ctx, traceKV); err != nil {
 		return resume, err
 	}
 	if l := len(td.b.Results); l != 1 {
@@ -148,7 +146,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 }
 
 func (td *tableDeleter) deleteAllRowsScan(
-	ctx context.Context, resume roachpb.Span, limit int64, autoCommit autoCommitOpt, traceKV bool,
+	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
@@ -194,7 +192,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 		// Update the resume start key for the next iteration.
 		resume.Key = rf.Key()
 	}
-	_, err := td.finalize(ctx, autoCommit, traceKV)
+	_, err := td.finalize(ctx, traceKV)
 	return resume, err
 }
 
@@ -208,29 +206,19 @@ func (td *tableDeleter) deleteAllRowsScan(
 //
 // limit is a limit on the number of index entries deleted in the operation.
 func (td *tableDeleter) deleteIndex(
-	ctx context.Context,
-	idx *sqlbase.IndexDescriptor,
-	resume roachpb.Span,
-	limit int64,
-	autoCommit autoCommitOpt,
-	traceKV bool,
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if idx.IsInterleaved() {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
-		return td.deleteIndexScan(ctx, idx, resume, limit, autoCommit, traceKV)
+		return td.deleteIndexScan(ctx, idx, resume, limit, traceKV)
 	}
-	return td.deleteIndexFast(ctx, idx, resume, limit, autoCommit, traceKV)
+	return td.deleteIndexFast(ctx, idx, resume, limit, traceKV)
 }
 
 func (td *tableDeleter) deleteIndexFast(
-	ctx context.Context,
-	idx *sqlbase.IndexDescriptor,
-	resume roachpb.Span,
-	limit int64,
-	autoCommit autoCommitOpt,
-	traceKV bool,
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.IndexSpan(idx.ID)
@@ -241,7 +229,7 @@ func (td *tableDeleter) deleteIndexFast(
 	}
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
-	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
+	if _, err := td.finalize(ctx, traceKV); err != nil {
 		return resume, err
 	}
 	if l := len(td.b.Results); l != 1 {
@@ -270,12 +258,7 @@ func (td *tableDeleter) clearIndex(ctx context.Context, idx *sqlbase.IndexDescri
 }
 
 func (td *tableDeleter) deleteIndexScan(
-	ctx context.Context,
-	idx *sqlbase.IndexDescriptor,
-	resume roachpb.Span,
-	limit int64,
-	autoCommit autoCommitOpt,
-	traceKV bool,
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
@@ -321,7 +304,7 @@ func (td *tableDeleter) deleteIndexScan(
 		// Update the resume start key for the next iteration.
 		resume.Key = rf.Key()
 	}
-	_, err := td.finalize(ctx, autoCommit, traceKV)
+	_, err := td.finalize(ctx, traceKV)
 	return resume, err
 }
 
