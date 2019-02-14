@@ -17,6 +17,7 @@ package gce
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -320,7 +321,8 @@ func (p *Provider) Delete(vms vm.List) error {
 	}
 
 	var g errgroup.Group
-
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
 	for zone, names := range zoneMap {
 		args := []string{
 			"compute", "instances", "delete",
@@ -332,7 +334,7 @@ func (p *Provider) Delete(vms vm.List) error {
 		args = append(args, names...)
 
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", args...)
+			cmd := exec.CommandContext(ctx, "gcloud", args...)
 
 			output, err := cmd.CombinedOutput()
 			if err != nil {
