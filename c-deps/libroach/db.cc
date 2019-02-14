@@ -675,7 +675,7 @@ DBStatus DBGetSortedWALFiles(DBEngine* db, DBWALFile** files, int* n) {
 DBString DBGetUserProperties(DBEngine* db) { return db->GetUserProperties(); }
 
 DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files,
-                               bool allow_file_modifications) {
+                               bool write_global_seqno, bool allow_file_modifications) {
   std::vector<std::string> paths_vec;
   for (size_t i = 0; i < len; i++) {
     paths_vec.push_back(paths[i]);
@@ -691,9 +691,15 @@ DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move
   ingest_options.snapshot_consistency = true;
   // If a file is ingested over existing data (including the range tombstones
   // used by range snapshots) or if a RocksDB snapshot is outstanding when this
-  // ingest runs, then after moving/copying the file, RocksDB will edit it
-  // (overwrite some of the bytes) to have a global sequence number. If this is
-  // false, it will error in these cases instead.
+  // ingest runs, then after moving/copying the file, historically RocksDB would
+  // edit it (overwrite some of the bytes) to have a global sequence number.
+  // After https://github.com/facebook/rocksdb/pull/4172 this can be disabled
+  // (with the mutable manifest/metadata tracking that instead). However it is
+  // only safe to disable the seqno if older versions of RocksDB (<5.16) will
+  // not be used to read these SSTs.
+  // Before editing a file to insert a seq_no, RocksDB also checks the option
+  // allow_global_seqno and, if it is false, returns an error instead.
+  ingest_options.write_global_seqno = write_global_seqno;
   ingest_options.allow_global_seqno = allow_file_modifications;
   // If there are mutations in the memtable for the keyrange covered by the file
   // being ingested, this option is checked. If true, the memtable is flushed
