@@ -1162,7 +1162,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
 		if PushEnabled.Get(&f.Server().ClusterSettings().SV) {
-			t.Skip(`#34456`)
+			t.Skip(`covered in storage.TestReplicaRangefeed`)
 		}
 
 		// Set a very simple channel-based, wait-and-resume function as the
