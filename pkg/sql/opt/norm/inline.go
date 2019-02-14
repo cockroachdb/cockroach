@@ -78,7 +78,7 @@ func (c *CustomFuncs) InlineFilterConstants(
 func (c *CustomFuncs) inlineConstants(
 	e opt.Expr, input memo.RelExpr, constCols opt.ColSet,
 ) opt.Expr {
-	var replace ReconstructFunc
+	var replace ReplaceFunc
 	replace = func(e opt.Expr) opt.Expr {
 		switch t := e.(type) {
 		case *memo.VariableExpr:
@@ -87,7 +87,7 @@ func (c *CustomFuncs) inlineConstants(
 			}
 			return t
 		}
-		return c.f.Reconstruct(e, replace)
+		return c.f.Replace(e, replace)
 	}
 	return replace(e)
 }
@@ -263,7 +263,7 @@ func (c *CustomFuncs) InlineProjectProject(
 // Recursively walk the tree looking for references to projection expressions
 // that need to be replaced.
 func (c *CustomFuncs) inlineProjections(e opt.Expr, projections memo.ProjectionsExpr) opt.Expr {
-	var replace ReconstructFunc
+	var replace ReplaceFunc
 	replace = func(e opt.Expr) opt.Expr {
 		switch t := e.(type) {
 		case *memo.VariableExpr:
@@ -284,7 +284,7 @@ func (c *CustomFuncs) inlineProjections(e opt.Expr, projections memo.Projections
 			return t
 		}
 
-		return c.f.Reconstruct(e, replace)
+		return c.f.Replace(e, replace)
 	}
 
 	return replace(e)
