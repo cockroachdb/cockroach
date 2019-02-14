@@ -343,7 +343,9 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 
 			// This is not the first CreateStats job running. This job should fail
 			// so that the earlier job can succeed.
-			return errors.New("another CREATE STATISTICS job is already running")
+			return pgerror.NewError(
+				pgerror.CodeLockNotAvailableError, "another CREATE STATISTICS job is already running",
+			)
 		}
 	}
 	return nil

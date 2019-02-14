@@ -17,6 +17,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -347,6 +348,29 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		[][]string{
 			{"__auto__", "{k}", "0"},
 		})
+}
+
+func TestNoRetryOnFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
+
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	cache := NewTableStatisticsCache(10 /* cacheSize */, s.Gossip(), kvDB, executor)
+	r := MakeRefresher(executor, cache, 0 /* asOfTime */)
+
+	// Try to refresh stats on a table that doesn't exist.
+	r.maybeRefreshStats(ctx, s.Stopper(), 100 /* tableID */, math.MaxInt32, 0 /* asOfTime */)
+
+	// Ensure that we will not try to refresh tableID 100 again.
+	if expected, actual := 0, len(r.mutations); expected != actual {
+		t.Fatalf("expected channel size %d but found %d", expected, actual)
+	}
 }
 
 func TestMutationsChannel(t *testing.T) {
