@@ -53,7 +53,7 @@ func TestCoalescer(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, []types.T{}, func(t *testing.T, input []Operator) {
+		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
 			coalescer := NewCoalescerOp(input[0], tc.colTypes)
 
 			colIndices := make([]int, len(tc.colTypes))

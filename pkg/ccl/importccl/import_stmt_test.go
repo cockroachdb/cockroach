@@ -55,11 +55,12 @@ import (
 
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	const nodes = 3
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(db)
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	tests := []struct {
 		name   string

@@ -501,6 +501,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			}
 			cs, err := cp.out.EmitRow(ctx, sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+				sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes([]byte{}))),
 			})
 			if err != nil {
 				return err

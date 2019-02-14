@@ -247,7 +247,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 
 			// Run randomized tests on this test case.
 			t.Run(fmt.Sprintf("Randomized"), func(t *testing.T) {
-				runTests(t, []tuples{tc.input}, nil, func(t *testing.T, input []Operator) {
+				runTests(t, []tuples{tc.input}, func(t *testing.T, input []Operator) {
 					a, err := NewOrderedAggregator(
 						input[0], tc.groupCols, tc.groupTypes, tc.aggFns, tc.aggCols, tc.aggTypes,
 					)
@@ -333,7 +333,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			if err := tc.init(); err != nil {
 				t.Fatal(err)
 			}
-			runTests(t, []tuples{tc.input}, nil, func(t *testing.T, input []Operator) {
+			runTests(t, []tuples{tc.input}, func(t *testing.T, input []Operator) {
 				a, err := NewOrderedAggregator(
 					input[0], tc.groupCols, tc.groupTypes, tc.aggFns, tc.aggCols, tc.aggTypes,
 				)
@@ -384,7 +384,7 @@ func TestAggregatorKitchenSink(t *testing.T) {
 			if err := tc.init(); err != nil {
 				t.Fatal(err)
 			}
-			runTests(t, []tuples{tc.input}, nil, func(t *testing.T, input []Operator) {
+			runTests(t, []tuples{tc.input}, func(t *testing.T, input []Operator) {
 				a, err := NewOrderedAggregator(
 					input[0], tc.groupCols, tc.groupTypes, tc.aggFns, tc.aggCols, tc.aggTypes,
 				)
