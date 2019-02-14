@@ -32,21 +32,26 @@ import (
 //
 // ----------------------------------------------------------------------
 
+// EmptyJoinPrivate returns an unset JoinPrivate.
+func (c *CustomFuncs) EmptyJoinPrivate() *memo.JoinPrivate {
+	return memo.EmptyJoinPrivate
+}
+
 // ConstructNonLeftJoin maps a left join to an inner join and a full join to a
 // right join when it can be proved that the right side of the join always
 // produces at least one row for every row on the left.
 func (c *CustomFuncs) ConstructNonLeftJoin(
-	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
+	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr, private *memo.JoinPrivate,
 ) memo.RelExpr {
 	switch joinOp {
 	case opt.LeftJoinOp:
-		return c.f.ConstructInnerJoin(left, right, on)
+		return c.f.ConstructInnerJoin(left, right, on, private)
 	case opt.LeftJoinApplyOp:
-		return c.f.ConstructInnerJoinApply(left, right, on)
+		return c.f.ConstructInnerJoinApply(left, right, on, private)
 	case opt.FullJoinOp:
-		return c.f.ConstructRightJoin(left, right, on)
+		return c.f.ConstructRightJoin(left, right, on, private)
 	case opt.FullJoinApplyOp:
-		return c.f.ConstructRightJoinApply(left, right, on)
+		return c.f.ConstructRightJoinApply(left, right, on, private)
 	}
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }
@@ -55,17 +60,17 @@ func (c *CustomFuncs) ConstructNonLeftJoin(
 // left join when it can be proved that the left side of the join always
 // produces at least one row for every row on the right.
 func (c *CustomFuncs) ConstructNonRightJoin(
-	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
+	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr, private *memo.JoinPrivate,
 ) memo.RelExpr {
 	switch joinOp {
 	case opt.RightJoinOp:
-		return c.f.ConstructInnerJoin(left, right, on)
+		return c.f.ConstructInnerJoin(left, right, on, private)
 	case opt.RightJoinApplyOp:
-		return c.f.ConstructInnerJoinApply(left, right, on)
+		return c.f.ConstructInnerJoinApply(left, right, on, private)
 	case opt.FullJoinOp:
-		return c.f.ConstructLeftJoin(left, right, on)
+		return c.f.ConstructLeftJoin(left, right, on, private)
 	case opt.FullJoinApplyOp:
-		return c.f.ConstructLeftJoinApply(left, right, on)
+		return c.f.ConstructLeftJoinApply(left, right, on, private)
 	}
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }
@@ -593,7 +598,11 @@ func (c *CustomFuncs) CanExtractJoinEquality(
 // variables, by pushing down more complicated expressions as projections. See
 // the ExtractJoinEqualities rule.
 func (c *CustomFuncs) ExtractJoinEquality(
-	joinOp opt.Operator, left, right memo.RelExpr, filters memo.FiltersExpr, item *memo.FiltersItem,
+	joinOp opt.Operator,
+	left, right memo.RelExpr,
+	filters memo.FiltersExpr,
+	item *memo.FiltersItem,
+	private *memo.JoinPrivate,
 ) memo.RelExpr {
 	leftCols := c.OutputCols(left)
 	rightCols := c.OutputCols(right)
@@ -631,6 +640,7 @@ func (c *CustomFuncs) ExtractJoinEquality(
 		leftProj.buildProject(left, leftCols),
 		rightProj.buildProject(right, rightCols),
 		newFilters,
+		private,
 	)
 
 	// Project away the synthesized columns.

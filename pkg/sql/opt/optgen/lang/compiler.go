@@ -348,6 +348,12 @@ func (c *ruleCompiler) inferTypes(e Expr, suggested DataType) {
 		// match. The matching is checked in ruleContentCompiler.compileFunc.
 		prototype := defType.Defines[0]
 
+		if len(t.Args) > len(prototype.Fields) {
+			err := fmt.Errorf("%s has too many args", e.Op())
+			c.compiler.addErr(t.Source(), err)
+			break
+		}
+
 		// Recurse on name and arguments.
 		c.inferTypes(t.Name, AnyDataType)
 		for i, arg := range t.Args {

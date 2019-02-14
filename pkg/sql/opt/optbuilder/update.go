@@ -261,6 +261,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 					mb.outScope.expr,
 					mb.b.factory.ConstructMax1Row(subqueryScope.expr),
 					memo.TrueFilter,
+					memo.EmptyJoinPrivate,
 				)
 
 				// Project all subquery output columns.

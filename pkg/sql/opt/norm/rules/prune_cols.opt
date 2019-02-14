@@ -177,6 +177,7 @@
         $left:*
         $right:*
         $on:*
+        $private:*
     )
     $projections:*
     $passthrough:* &
@@ -196,6 +197,7 @@
         (PruneCols $left $needed)
         $right
         $on
+        $private
     )
     $projections
     $passthrough
@@ -213,6 +215,7 @@
         $left:*
         $right:*
         $on:*
+        $private:*
     )
     $projections:*
     $passthrough:* &
@@ -231,6 +234,7 @@
         $left
         (PruneCols $right $needed)
         $on
+        $private
     )
     $projections
     $passthrough

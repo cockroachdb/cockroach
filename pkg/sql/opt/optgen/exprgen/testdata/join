@@ -29,6 +29,7 @@ expr
   (Scan [ (Table "abc") (Cols "a,b,c") ])
   (Scan [ (Table "def") (Cols "d,e,f") ])
   [ (Eq (Var "a") (Var "d")) ]
+  [ ]
 )
 ----
 inner-join

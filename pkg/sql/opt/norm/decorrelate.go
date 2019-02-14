@@ -209,7 +209,7 @@ func (c *CustomFuncs) HoistProjectSubquery(
 //   ON u IS NULL
 //
 func (c *CustomFuncs) HoistJoinSubquery(
-	op opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
+	op opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr, private *memo.JoinPrivate,
 ) memo.RelExpr {
 	newFilters := make(memo.FiltersExpr, 0, len(on))
 
@@ -227,7 +227,7 @@ func (c *CustomFuncs) HoistJoinSubquery(
 		}
 	}
 
-	join := c.ConstructApplyJoin(op, left, hoister.input(), newFilters)
+	join := c.ConstructApplyJoin(op, left, hoister.input(), newFilters, private)
 	passthrough := c.OutputCols(left).Union(c.OutputCols(right))
 	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, passthrough)
 }
@@ -263,7 +263,7 @@ func (c *CustomFuncs) HoistValuesSubquery(rows memo.ScalarListExpr, cols opt.Col
 	}
 
 	values := c.f.ConstructValues(newRows, cols)
-	join := c.f.ConstructInnerJoinApply(hoister.input(), values, memo.TrueFilter)
+	join := c.f.ConstructInnerJoinApply(hoister.input(), values, memo.TrueFilter, memo.EmptyJoinPrivate)
 	outCols := values.Relational().OutputCols
 	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, outCols)
 }
@@ -316,21 +316,21 @@ func (c *CustomFuncs) HoistProjectSetSubquery(input memo.RelExpr, zip memo.ZipEx
 // ConstructNonApplyJoin constructs the non-apply join operator that corresponds
 // to the given join operator type.
 func (c *CustomFuncs) ConstructNonApplyJoin(
-	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
+	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr, private *memo.JoinPrivate,
 ) memo.RelExpr {
 	switch joinOp {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
-		return c.f.ConstructInnerJoin(left, right, on)
+		return c.f.ConstructInnerJoin(left, right, on, private)
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		return c.f.ConstructLeftJoin(left, right, on)
+		return c.f.ConstructLeftJoin(left, right, on, private)
 	case opt.RightJoinOp, opt.RightJoinApplyOp:
-		return c.f.ConstructRightJoin(left, right, on)
+		return c.f.ConstructRightJoin(left, right, on, private)
 	case opt.FullJoinOp, opt.FullJoinApplyOp:
-		return c.f.ConstructFullJoin(left, right, on)
+		return c.f.ConstructFullJoin(left, right, on, private)
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
-		return c.f.ConstructSemiJoin(left, right, on)
+		return c.f.ConstructSemiJoin(left, right, on, private)
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		return c.f.ConstructAntiJoin(left, right, on)
+		return c.f.ConstructAntiJoin(left, right, on, private)
 	}
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }
@@ -338,21 +338,21 @@ func (c *CustomFuncs) ConstructNonApplyJoin(
 // ConstructApplyJoin constructs the apply join operator that corresponds
 // to the given join operator type.
 func (c *CustomFuncs) ConstructApplyJoin(
-	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
+	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr, private *memo.JoinPrivate,
 ) memo.RelExpr {
 	switch joinOp {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
-		return c.f.ConstructInnerJoinApply(left, right, on)
+		return c.f.ConstructInnerJoinApply(left, right, on, private)
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		return c.f.ConstructLeftJoinApply(left, right, on)
+		return c.f.ConstructLeftJoinApply(left, right, on, private)
 	case opt.RightJoinOp, opt.RightJoinApplyOp:
-		return c.f.ConstructRightJoinApply(left, right, on)
+		return c.f.ConstructRightJoinApply(left, right, on, private)
 	case opt.FullJoinOp, opt.FullJoinApplyOp:
-		return c.f.ConstructFullJoinApply(left, right, on)
+		return c.f.ConstructFullJoinApply(left, right, on, private)
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
-		return c.f.ConstructSemiJoinApply(left, right, on)
+		return c.f.ConstructSemiJoinApply(left, right, on, private)
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		return c.f.ConstructAntiJoinApply(left, right, on)
+		return c.f.ConstructAntiJoinApply(left, right, on, private)
 	}
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }
@@ -782,12 +782,12 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 		if subqueryProps.Cardinality.CanBeZero() {
 			// Zero cardinality allowed, so must use left outer join to preserve
 			// outer row (padded with nulls) in case the subquery returns zero rows.
-			r.hoisted = r.f.ConstructLeftJoinApply(r.hoisted, subquery, memo.TrueFilter)
+			r.hoisted = r.f.ConstructLeftJoinApply(r.hoisted, subquery, memo.TrueFilter, memo.EmptyJoinPrivate)
 		} else {
 			// Zero cardinality not allowed, so inner join suffices. Inner joins
 			// are preferable to left joins since null handling is much simpler
 			// and they allow the optimizer more choices.
-			r.hoisted = r.f.ConstructInnerJoinApply(r.hoisted, subquery, memo.TrueFilter)
+			r.hoisted = r.f.ConstructInnerJoinApply(r.hoisted, subquery, memo.TrueFilter, memo.EmptyJoinPrivate)
 		}
 
 		// Replace the Subquery operator with a Variable operator referring to
@@ -857,7 +857,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.RelExpr) memo.Rel
 				Agg:        r.f.ConstructConstAgg(r.f.ConstructVariable(trueColID)),
 				ColPrivate: memo.ColPrivate{Col: aggColID},
 			}},
-			&memo.EmptyGroupingPrivate,
+			memo.EmptyGroupingPrivate,
 		),
 		memo.ProjectionsExpr{{
 			Element: r.f.ConstructIsNot(
@@ -987,7 +987,7 @@ func (r *subqueryHoister) constructGroupByAny(
 				),
 				ColPrivate: memo.ColPrivate{Col: aggColID},
 			}},
-			&memo.EmptyGroupingPrivate,
+			memo.EmptyGroupingPrivate,
 		),
 		memo.ProjectionsExpr{{
 			Element: r.f.ConstructCase(
