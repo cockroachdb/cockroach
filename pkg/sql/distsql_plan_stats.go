@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	sqlstats "github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -121,9 +122,11 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// Set up the samplers.
 	sampler := &distsqlpb.SamplerSpec{Sketches: sketchSpecs}
 	for _, s := range stats {
+		if s.name == sqlstats.AutoStatsName {
+			sampler.FractionIdle = sqlstats.AutomaticStatisticsIdleTime.Get(&dsp.st.SV)
+		}
 		if s.histogram {
 			sampler.SampleSize = histogramSamples
-			break
 		}
 	}
 

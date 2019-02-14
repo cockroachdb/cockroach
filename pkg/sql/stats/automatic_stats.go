@@ -41,6 +41,16 @@ var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+// AutomaticStatisticsIdleTime controls the cluster setting for the fraction
+// of time that the sampler processors will be idle when scanning large tables
+// for automatic statistics. This value can be tuned to trade off the runtime
+// v. performance impact of automatic stats.
+var AutomaticStatisticsIdleTime = settings.RegisterFloatSetting(
+	"sql.stats.experimental_automatic_collection.fraction_idle",
+	"fraction of time that automatic statistics sampler processors are idle",
+	0.9,
+)
+
 // DefaultRefreshInterval is the frequency at which the Refresher will check if
 // the stats for each table should be refreshed. It is mutable for testing.
 // NB: Updates to this value after Refresher.Start has been called will not
@@ -64,7 +74,7 @@ const (
 	// targetFractionOfRowsUpdatedBeforeRefresh indicates the target fraction
 	// of rows in a table that should be updated before statistics on that table
 	// are refreshed.
-	targetFractionOfRowsUpdatedBeforeRefresh = 0.05
+	targetFractionOfRowsUpdatedBeforeRefresh = 0.1
 
 	// defaultAverageTimeBetweenRefreshes is the default time to use as the
 	// "average" time between refreshes when there is no information for a given
@@ -86,7 +96,7 @@ const (
 //
 // The Refresher is designed to schedule a CREATE STATISTICS refresh job after
 // approximately X% of total rows have been updated/inserted/deleted in a given
-// table. Currently, X is hardcoded to be 5%.
+// table. Currently, X is hardcoded to be 10%.
 //
 // The decision to refresh is based on a percentage rather than a fixed number
 // of rows because if a table is huge and rarely updated, we don't want to
@@ -94,10 +104,10 @@ const (
 // updated, we want to update stats more often.
 //
 // To avoid contention on row update counters, we use a statistical approach.
-// For example, suppose we want to refresh stats after 5% of rows are updated
+// For example, suppose we want to refresh stats after 10% of rows are updated
 // and there are currently 1M rows in the table. If a user updates 10 rows,
 // we use random number generation to refresh stats with probability
-// 10/(1M * 0.05) = 0.0002. The general formula is:
+// 10/(1M * 0.1) = 0.0001. The general formula is:
 //
 //                            # rows updated/inserted/deleted
 //    p =  --------------------------------------------------------------------
