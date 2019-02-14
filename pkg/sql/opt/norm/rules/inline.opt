@@ -58,12 +58,14 @@
     $left:* & ^(ColsAreEmpty $constCols:(FindInlinableConstants $left))
     $right:*
     $on:[ ... $item:* & (ColsIntersect (OuterCols $item) $constCols) ... ]
+    $private:*
 )
 =>
 ((OpName)
     $left
     $right
     (InlineFilterConstants $on $left $constCols)
+    $private
 )
 
 # InlineJoinConstantsRight finds variable references in a join condition that
@@ -76,12 +78,14 @@
     $left:*
     $right:* & ^(ColsAreEmpty $constCols:(FindInlinableConstants $right))
     $on:[ ... $item:* & (ColsIntersect (OuterCols $item) $constCols) ... ]
+    $private:*
 )
 =>
 ((OpName)
     $left
     $right
     (InlineFilterConstants $on $right $constCols)
+    $private
 )
 
 # PushSelectIntoInlinableProject pushes the Select operator into a Project, even

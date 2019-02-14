@@ -147,7 +147,11 @@ var ScalarListWithEmptyTuple = ScalarListExpr{EmptyTuple}
 
 // EmptyGroupingPrivate is a global instance of a GroupingPrivate that has no
 // grouping columns and no ordering.
-var EmptyGroupingPrivate = GroupingPrivate{}
+var EmptyGroupingPrivate = &GroupingPrivate{}
+
+// EmptyJoinPrivate is a global instance of a JoinPrivate that has no fields
+// set.
+var EmptyJoinPrivate = &JoinPrivate{}
 
 // LastGroupMember returns the last member in the same memo group of the given
 // relational expression.

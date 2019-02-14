@@ -548,7 +548,11 @@ func (c *CustomFuncs) GenerateLimitedScans(
 
 // GenerateMergeJoins spawns MergeJoinOps, based on any interesting orderings.
 func (c *CustomFuncs) GenerateMergeJoins(
-	grp memo.RelExpr, originalOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
+	grp memo.RelExpr,
+	originalOp opt.Operator,
+	left, right memo.RelExpr,
+	on memo.FiltersExpr,
+	joinPrivate *memo.JoinPrivate,
 ) {
 	leftProps := left.Relational()
 	rightProps := right.Relational()
@@ -662,6 +666,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	input memo.RelExpr,
 	scanPrivate *memo.ScanPrivate,
 	on memo.FiltersExpr,
+	joinPrivate *memo.JoinPrivate,
 ) {
 	inputProps := input.Relational()
 

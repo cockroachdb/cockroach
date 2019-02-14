@@ -62,6 +62,7 @@
         $left:*
         $right:*
         $on:*
+        $private:*
     )
     $filters:* & (HasNullRejectingFilter $filters (OutputCols $right))
 )
@@ -72,6 +73,7 @@
         $left
         $right
         $on
+        $private
     )
     $filters
 )
@@ -88,6 +90,7 @@
         $left:*
         $right:*
         $on:*
+        $private:*
     )
     $filters:* & (HasNullRejectingFilter $filters (OutputCols $left))
 )
@@ -98,6 +101,7 @@
         $left
         $right
         $on
+        $private
     )
     $filters
 )

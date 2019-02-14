@@ -10,12 +10,14 @@
     $left:*
     $right:*
     $on:[ ... (FiltersItem (And | True | False | Null)) ... ] & ^(IsFilterFalse $on)
+    $private:*
 )
 =>
 ((OpName)
     $left
     $right
     (SimplifyFilters $on)
+    $private
 )
 
 # DetectJoinContradiction replaces a Join condition with False if it detects a
@@ -25,12 +27,14 @@
     $left:*
     $right:*
     [ ... $item:(FiltersItem) & (IsContradiction $item) ... ]
+    $private:*
 )
 =>
 ((OpName)
     $left
     $right
     [ (FiltersItem (False)) ]
+    $private
 )
 
 # PushFilterIntoJoinLeftAndRight pushes a filter into both the left and right
@@ -65,6 +69,7 @@
             (CanMap $on $item $right)
         ...
     ]
+    $private:*
 )
 =>
 ((OpName)
@@ -77,6 +82,7 @@
         [ (FiltersItem (Map $on $item $right)) ]
     )
     (RemoveFiltersItem $on $item)
+    $private
 )
 
 # MapFilterIntoJoinLeft maps a filter that is not bound by the left side of
@@ -106,12 +112,14 @@
             (CanMap $on $item $left)
         ...
     ]
+    $private:*
 )
 =>
 ((OpName)
     $left
     $right
     (ReplaceFiltersItem $on $item (Map $on $item $left))
+    $private
 )
 
 # MapFilterIntoJoinRight is symmetric with MapFilterIntoJoinLeft. It maps
@@ -130,12 +138,14 @@
             (CanMap $on $item $right)
         ...
     ]
+    $private:*
 )
 =>
 ((OpName)
     $left
     $right
     (ReplaceFiltersItem $on $item (Map $on $item $right))
+    $private
 )
 
 # PushFilterIntoJoinLeft pushes Join filter conditions into the left side of the
@@ -169,6 +179,7 @@
         $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
         ...
     ]
+    $private:*
 )
 =>
 ((OpName)
@@ -178,6 +189,7 @@
     )
     $right
     (ExtractUnboundConditions $on $leftCols)
+    $private
 )
 
 # PushFilterIntoJoinRight is symmetric with PushFilterIntoJoinLeft. It pushes
@@ -193,6 +205,7 @@
         $item:* & (IsBoundBy $item $rightCols:(OutputCols $right))
         ...
     ]
+    $private:*
 )
 =>
 ((OpName)
@@ -202,6 +215,7 @@
         (ExtractBoundConditions $on $rightCols)
     )
     (ExtractUnboundConditions $on $rightCols)
+    $private
 )
 
 # SimplifyLeftJoinWithoutFilters reduces a LeftJoin operator to an InnerJoin
@@ -214,6 +228,7 @@
     $left:*
     $right:* & ^(CanHaveZeroRows $right)
     $on:[]
+    $private:*
 )
 =>
 (ConstructNonLeftJoin
@@ -221,6 +236,7 @@
     $left
     $right
     $on
+    $private
 )
 
 # SimplifyRightJoinWithoutFilters reduces a RightJoin operator to an InnerJoin
@@ -233,6 +249,7 @@
     $left:* & ^(CanHaveZeroRows $left)
     $right:*
     $on:[]
+    $private:*
 )
 =>
 (ConstructNonRightJoin
@@ -240,6 +257,7 @@
     $left
     $right
     $on
+    $private
 )
 
 # SimplifyLeftJoinWithFilters reduces a LeftJoin operator to an InnerJoin
@@ -264,6 +282,7 @@
     $left:*
     $right:*
     $on:^[] & (JoinFiltersMatchAllLeftRows $left $right $on)
+    $private:*
 )
 =>
 (ConstructNonLeftJoin
@@ -271,6 +290,7 @@
     $left
     $right
     $on
+    $private
 )
 
 # SimplifyRightJoinWithFilters reduces a RightJoin operator to an InnerJoin
@@ -283,6 +303,7 @@
     $left:*
     $right:*
     $on:^[] & (JoinFiltersMatchAllLeftRows $right $left $on)
+    $private:*
 )
 =>
 (ConstructNonRightJoin
@@ -290,6 +311,7 @@
     $left
     $right
     $on
+    $private
 )
 
 # EliminateSemiJoin discards a SemiJoin operator when it's known that the right
@@ -309,7 +331,6 @@ $left
 (AntiJoin | AntiJoinApply
     $left:*
     $right:* & (HasZeroRows $right)
-    *
 )
 =>
 $left
@@ -357,6 +378,7 @@ $left
     $left:*
     $right:(Project $input:* $projections:[])
     $on:*
+    $private:*
 )
 =>
 (Project
@@ -364,6 +386,7 @@ $left
         $left
         $input
         $on
+        $private
     )
     $projections
     (OutputCols2 $left $right)
@@ -376,6 +399,7 @@ $left
     $left:(Project $input:* $projections:[])
     $right:*
     $on:*
+    $private:*
 )
 =>
 (Project
@@ -383,6 +407,7 @@ $left
         $input
         $right
         $on
+        $private
     )
     $projections
     (OutputCols2 $left $right)
@@ -418,6 +443,7 @@ $left
         )
         ...
     ]
+    $private:*
 )
 =>
 ((OpName)
@@ -432,6 +458,7 @@ $left
             (OpName $cnst)
         )
     )
+    $private
 )
 
 # ExtractJoinEqualities finds equality conditions such that one side only
@@ -463,9 +490,10 @@ $left
         )
         ...
     ]
+    $private:*
 )
 =>
-(ExtractJoinEquality (OpName) $left $right $on $item)
+(ExtractJoinEquality (OpName) $left $right $on $item $private)
 
 # SortFiltersInJoin ensures that any filters in an inner join are canonicalized
 # by sorting them.
@@ -474,10 +502,12 @@ $left
     $left:*
     $right:*
     $on:* & ^(AreFiltersSorted $on)
+    $private:*
 )
 =>
 (InnerJoin
-  $left
-  $right
-  (SortFilters $on)
+    $left
+    $right
+    (SortFilters $on)
+    $private
 )
