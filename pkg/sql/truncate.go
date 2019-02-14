@@ -515,7 +515,7 @@ func truncateTableInChunks(
 			if err := td.init(txn, nil /* *tree.EvalContext */); err != nil {
 				return err
 			}
-			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, noAutoCommit, traceKV)
+			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, traceKV)
 			return err
 		}); err != nil {
 			return err

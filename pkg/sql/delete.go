@@ -210,10 +210,6 @@ type deleteRun struct {
 	// rows contains the accumulated result rows if rowsNeeded is set.
 	rows *rowcontainer.RowContainer
 
-	// autoCommit indicates whether the last KV batch processed by
-	// this delete will also commit the KV txn.
-	autoCommit autoCommitOpt
-
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 }
@@ -308,7 +304,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
-		if _, err := d.run.td.finalize(params.ctx, d.run.autoCommit, d.run.traceKV); err != nil {
+		if _, err := d.run.td.finalize(params.ctx, d.run.traceKV); err != nil {
 			return false, err
 		}
 		// Remember we're done for the next call to BatchedNext().
@@ -446,5 +442,5 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 
 // enableAutoCommit is part of the autoCommitNode interface.
 func (d *deleteNode) enableAutoCommit() {
-	d.run.autoCommit = autoCommitEnabled
+	d.run.td.enableAutoCommit()
 }

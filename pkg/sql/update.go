@@ -425,10 +425,6 @@ type updateRun struct {
 	// rows contains the accumulated result rows if rowsNeeded is set.
 	rows *rowcontainer.RowContainer
 
-	// autoCommit indicates whether the last KV batch processed by
-	// this update will also commit the KV txn.
-	autoCommit autoCommitOpt
-
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 
@@ -573,7 +569,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
-		if _, err := u.run.tu.finalize(params.ctx, u.run.autoCommit, u.run.traceKV); err != nil {
+		if _, err := u.run.tu.finalize(params.ctx, u.run.traceKV); err != nil {
 			return false, err
 		}
 		// Remember we're done for the next call to BatchedNext().
@@ -744,7 +740,7 @@ func (u *updateNode) Close(ctx context.Context) {
 
 // enableAutoCommit implements the autoCommitNode interface.
 func (u *updateNode) enableAutoCommit() {
-	u.run.autoCommit = autoCommitEnabled
+	u.run.tu.enableAutoCommit()
 }
 
 // sourceSlot abstracts the idea that our update sources can either be tuples
