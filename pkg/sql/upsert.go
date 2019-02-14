@@ -423,8 +423,8 @@ func (n *upsertNode) Close(ctx context.Context) {
 }
 
 // enableAutoCommit is part of the autoCommitNode interface.
-func (n *upsertNode) enableAutoCommit() {
-	n.run.tw.enableAutoCommit()
+func (n *upsertNode) enableAutoCommit(txnDeadline txnDeadline) {
+	n.run.tw.enableAutoCommit(txnDeadline)
 }
 
 // upsertExcludedTable is the name of a synthetic table used in an upsert's set

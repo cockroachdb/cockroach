@@ -739,8 +739,8 @@ func (u *updateNode) Close(ctx context.Context) {
 }
 
 // enableAutoCommit implements the autoCommitNode interface.
-func (u *updateNode) enableAutoCommit() {
-	u.run.tu.enableAutoCommit()
+func (u *updateNode) enableAutoCommit(txnDeadline txnDeadline) {
+	u.run.tu.enableAutoCommit(txnDeadline)
 }
 
 // sourceSlot abstracts the idea that our update sources can either be tuples

@@ -47,9 +47,9 @@ func (d *delayedNode) Close(ctx context.Context) {
 }
 
 // enableAutoCommit is part of the autoCommitNode interface.
-func (d *delayedNode) enableAutoCommit() {
+func (d *delayedNode) enableAutoCommit(txnDeadline txnDeadline) {
 	if ac, ok := d.plan.(autoCommitNode); ok {
-		ac.enableAutoCommit()
+		ac.enableAutoCommit(txnDeadline)
 	}
 }
 

@@ -441,6 +441,6 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 }
 
 // enableAutoCommit is part of the autoCommitNode interface.
-func (d *deleteNode) enableAutoCommit() {
-	d.run.td.enableAutoCommit()
+func (d *deleteNode) enableAutoCommit(txnDeadline txnDeadline) {
+	d.run.td.enableAutoCommit(txnDeadline)
 }

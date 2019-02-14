@@ -482,7 +482,7 @@ func startPlan(params runParams, plan planNode) error {
 type autoCommitNode interface {
 	// enableAutoCommit is called on the root planNode (if it implements this
 	// interface).
-	enableAutoCommit()
+	enableAutoCommit(txnDeadline txnDeadline)
 }
 
 var _ autoCommitNode = &createTableNode{}

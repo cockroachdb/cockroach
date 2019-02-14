@@ -783,7 +783,7 @@ func (ef *execFactory) ConstructPlan(
 	// Enable auto-commit if the planner setting allows it.
 	if ef.planner.autoCommit {
 		if ac, ok := root.(autoCommitNode); ok {
-			ac.enableAutoCommit()
+			ac.enableAutoCommit(ef.planner.extendedEvalCtx.Tables)
 		}
 	}
 	// No need to spool at the root.
