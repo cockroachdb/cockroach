@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -432,30 +433,31 @@ func (nl *NodeLiveness) StartHeartbeat(
 			case <-stopper.ShouldStop():
 				return
 			}
-			func(ctx context.Context) {
-				// Give the context a timeout approximately as long as the time we
-				// have left before our liveness entry expires.
-				ctx, cancel := context.WithTimeout(ctx, nl.livenessThreshold-nl.heartbeatInterval)
-				defer cancel()
-
-				// Retry heartbeat in the event the conditional put fails.
-				for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-					liveness, err := nl.Self()
-					if err != nil && err != ErrNoLivenessRecord {
-						log.Errorf(ctx, "unexpected error getting liveness: %v", err)
-					}
-					if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
-						if err == ErrEpochIncremented {
-							log.Infof(ctx, "%s; retrying", err)
-							continue
+			// Give the context a timeout approximately as long as the time we
+			// have left before our liveness entry expires.
+			if err := contextutil.RunWithTimeout(ctx, "node liveness heartbeat", nl.livenessThreshold-nl.heartbeatInterval,
+				func(ctx context.Context) error {
+					// Retry heartbeat in the event the conditional put fails.
+					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+						liveness, err := nl.Self()
+						if err != nil && err != ErrNoLivenessRecord {
+							log.Errorf(ctx, "unexpected error getting liveness: %v", err)
 						}
-						log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
-					} else {
+						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
+							if err == ErrEpochIncremented {
+								log.Infof(ctx, "%s; retrying", err)
+								continue
+							}
+							return err
+						}
 						incrementEpoch = false // don't increment epoch after first heartbeat
+						break
 					}
-					break
-				}
-			}(ctx)
+					return nil
+				}); err != nil {
+				log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
+			}
+
 			nl.heartbeatToken <- struct{}{}
 			select {
 			case <-ticker.C:

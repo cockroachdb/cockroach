@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
@@ -385,16 +386,13 @@ func (cli resilientDockerClient) ContainerStart(
 	clientCtx context.Context, id string, opts types.ContainerStartOptions,
 ) error {
 	for {
-		err := func() error {
-			ctx, cancel := context.WithTimeout(clientCtx, 20*time.Second)
-			defer cancel()
-
+		err := contextutil.RunWithTimeout(clientCtx, "start container", 20*time.Second, func(ctx context.Context) error {
 			return cli.APIClient.ContainerStart(ctx, id, opts)
-		}()
+		})
 
 		// Keep going if ContainerStart timed out, but client's context is not
 		// expired.
-		if err == context.DeadlineExceeded && clientCtx.Err() == nil {
+		if errors.Cause(err) == context.DeadlineExceeded && clientCtx.Err() == nil {
 			log.Warningf(clientCtx, "ContainerStart timed out, retrying")
 			continue
 		}

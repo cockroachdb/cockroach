@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -1054,27 +1055,26 @@ func (s *Store) SetDraining(drain bool) {
 
 	transferAllAway()
 
-	var cancel func()
-	ctx, cancel = context.WithTimeout(ctx, raftLeadershipTransferWait)
-	defer cancel()
-
-	opts := retry.Options{
-		InitialBackoff: 10 * time.Millisecond,
-		MaxBackoff:     time.Second,
-		Multiplier:     2,
-	}
-	// Avoid retry.ForDuration because of https://github.com/cockroachdb/cockroach/issues/25091.
-	everySecond := log.Every(time.Second)
-	if err := retry.WithMaxAttempts(ctx, opts, 10000, func() error {
-		if numRemaining := transferAllAway(); numRemaining > 0 {
-			err := errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
-			if everySecond.ShouldLog() {
-				log.Info(ctx, err)
+	if err := contextutil.RunWithTimeout(ctx, "wait for raft leadership transfer", raftLeadershipTransferWait,
+		func(ctx context.Context) error {
+			opts := retry.Options{
+				InitialBackoff: 10 * time.Millisecond,
+				MaxBackoff:     time.Second,
+				Multiplier:     2,
 			}
-			return err
-		}
-		return nil
-	}); err != nil {
+			// Avoid retry.ForDuration because of https://github.com/cockroachdb/cockroach/issues/25091.
+			everySecond := log.Every(time.Second)
+			return retry.WithMaxAttempts(ctx, opts, 10000, func() error {
+				if numRemaining := transferAllAway(); numRemaining > 0 {
+					err := errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
+					if everySecond.ShouldLog() {
+						log.Info(ctx, err)
+					}
+					return err
+				}
+				return nil
+			})
+		}); err != nil {
 		// You expect this message when shutting down a server in an unhealthy
 		// cluster. If we see it on healthy ones, there's likely something to fix.
 		log.Warningf(ctx, "unable to drain cleanly within %s, service might briefly deteriorate: %s", raftLeadershipTransferWait, err)

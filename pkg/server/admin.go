@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -703,19 +704,20 @@ func (s *adminServer) statsForSpan(
 			ctx, "server.adminServer: requesting remote stats",
 			func(ctx context.Context) {
 				// Set a generous timeout on the context for each individual query.
-				ctx, cancel := context.WithTimeout(ctx, 5*base.NetworkTimeout)
-				defer cancel()
-
 				var spanResponse *serverpb.SpanStatsResponse
-				client, err := s.server.status.dialNode(ctx, nodeID)
-				if err == nil {
-					req := serverpb.SpanStatsRequest{
-						StartKey: startKey,
-						EndKey:   endKey,
-						NodeID:   nodeID.String(),
-					}
-					spanResponse, err = client.SpanStats(ctx, &req)
-				}
+				err := contextutil.RunWithTimeout(ctx, "request remote stats", 5*base.NetworkTimeout,
+					func(ctx context.Context) error {
+						client, err := s.server.status.dialNode(ctx, nodeID)
+						if err == nil {
+							req := serverpb.SpanStatsRequest{
+								StartKey: startKey,
+								EndKey:   endKey,
+								NodeID:   nodeID.String(),
+							}
+							spanResponse, err = client.SpanStats(ctx, &req)
+						}
+						return err
+					})
 
 				// Channel is buffered, can always write.
 				responses <- nodeResponse{
@@ -1674,13 +1676,12 @@ func (s *adminServer) EnqueueRange(
 		response.Details = append(response.Details, errDetail)
 	}
 
-	nodeCtx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-
-	if err := s.server.status.iterateNodes(
-		nodeCtx, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
-		dialFn, nodeFn, responseFn, errorFn,
-	); err != nil {
+	if err := contextutil.RunWithTimeout(ctx, "enqueue range", time.Minute, func(ctx context.Context) error {
+		return s.server.status.iterateNodes(
+			ctx, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
+			dialFn, nodeFn, responseFn, errorFn,
+		)
+	}); err != nil {
 		if len(response.Details) == 0 {
 			return nil, err
 		}
