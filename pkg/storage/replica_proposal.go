@@ -393,6 +393,12 @@ func addSSTablePreApply(
 		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
 	}
 
+	// as of VersionUnreplicatedRaftTruncatedState we were on rocksdb 5.17 so this
+	// cluster version should indicate that we will never use rocksdb < 5.16 to
+	// read these SSTs, so it is safe to use https://github.com/facebook/rocksdb/pull/4172
+	// to avoid needing the global seq_no edits and the copies they required.
+	canSkipSeqNo := st.Version.IsActive(cluster.VersionUnreplicatedRaftTruncatedState)
+
 	copied := false
 	if inmem, ok := eng.(engine.InMem); ok {
 		path = fmt.Sprintf("%x", checksum)
@@ -416,7 +422,7 @@ func addSSTablePreApply(
 			// pass it the path in the sideload store as it deletes the passed path on
 			// success.
 			if linkErr := eng.LinkFile(path, ingestPath); linkErr == nil {
-				ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath}, noModify)
+				ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath}, canSkipSeqNo, noModify)
 				if ingestErr == nil {
 					// Adding without modification succeeded, no copy necessary.
 					log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
@@ -457,7 +463,7 @@ func addSSTablePreApply(
 		copied = true
 	}
 
-	if err := eng.IngestExternalFiles(ctx, []string{path}, modify); err != nil {
+	if err := eng.IngestExternalFiles(ctx, []string{path}, canSkipSeqNo, modify); err != nil {
 		log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 	}
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, path)
