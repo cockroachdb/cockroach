@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -371,12 +372,13 @@ func TestCloudStorage(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 
-	f := makeCloud(s, db, dir, flushCh)
+	f := cdctest.MakeCloudFeedFactory(s, db, dir, flushCh)
 
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-	foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved`)
+	foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved`)
+	defer closeFeed(t, foo)
 
 	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'b')`)
