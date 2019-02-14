@@ -289,7 +289,6 @@ func TestNormalizeExpr(t *testing.T) {
 			rOrig := typedExpr.String()
 			ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer ctx.Mon.Stop(context.Background())
-			defer ctx.ActiveMemAcc.Close(context.Background())
 			r, err := ctx.NormalizeExpr(typedExpr)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)

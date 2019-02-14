@@ -2514,11 +2514,6 @@ type EvalContext struct {
 	TestingKnobs EvalContextTestingKnobs
 
 	Mon *mon.BytesMonitor
-
-	// ActiveMemAcc is the account to which values are allocated during
-	// evaluation. It can change over the course of evaluation, such as on a
-	// per-row basis.
-	ActiveMemAcc *mon.BoundAccount
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
@@ -2547,8 +2542,6 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor
 	ctx.Context = context.TODO()
-	acc := monitor.MakeBoundAccount()
-	ctx.ActiveMemAcc = &acc
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
