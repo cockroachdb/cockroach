@@ -26,7 +26,7 @@ import (
 
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	tups := tuples{{0}, {1}, {2}}
-	runTests(t, []tuples{tups}, nil /* extraTypes */, func(t *testing.T, input []Operator) {
+	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
 		op := selLTInt64Int64ConstOp{
 			input:    input[0],
 			colIdx:   0,
@@ -47,7 +47,7 @@ func TestSelLTInt64Int64(t *testing.T) {
 		{1, 0},
 		{1, 1},
 	}
-	runTests(t, []tuples{tups}, nil /* extraTypes */, func(t *testing.T, input []Operator) {
+	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
 		op := selLTInt64Int64Op{
 			input:   input[0],
 			col1Idx: 0,

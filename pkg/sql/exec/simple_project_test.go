@@ -14,11 +14,7 @@
 
 package exec
 
-import (
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-)
+import "testing"
 
 func TestSimpleProjectOp(t *testing.T) {
 	tcs := []struct {
@@ -61,7 +57,7 @@ func TestSimpleProjectOp(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, []types.T{}, func(t *testing.T, input []Operator) {
+		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
 			count := NewSimpleProjectOp(input[0], tc.colsToKeep)
 			out := newOpTestOutput(count, []int{0, 1}, tc.expected)
 
@@ -72,7 +68,7 @@ func TestSimpleProjectOp(t *testing.T) {
 	}
 
 	// Empty projection.
-	runTests(t, []tuples{{{1, 2, 3}, {1, 2, 3}}}, []types.T{}, func(t *testing.T, input []Operator) {
+	runTests(t, []tuples{{{1, 2, 3}, {1, 2, 3}}}, func(t *testing.T, input []Operator) {
 		count := NewSimpleProjectOp(input[0], nil)
 		out := newOpTestOutput(count, []int{}, tuples{{}, {}})
 		if err := out.Verify(); err != nil {
