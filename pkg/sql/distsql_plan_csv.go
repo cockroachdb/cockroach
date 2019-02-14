@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -185,62 +186,15 @@ func LoadCSV(
 	makeRewriter func(map[sqlbase.ID]*sqlbase.TableDescriptor) (KeyRewriter, error),
 ) error {
 	ctx = logtags.AddTag(ctx, "import-distsql", nil)
-
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* txn */)
 
-	resp, err := phs.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	planCtx, nodes, err := dsp.setupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
 	if err != nil {
 		return err
 	}
-	// Because we're not going through the normal pathways, we have to set up
-	// the nodeID -> nodeAddress map ourselves.
-	for _, node := range resp.Nodes {
-		if err := dsp.CheckNodeHealthAndVersion(planCtx, &node.Desc); err != nil {
-			continue
-		}
-	}
-	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeAddresses))
-	for nodeID := range planCtx.NodeAddresses {
-		nodes = append(nodes, nodeID)
-	}
-	// Shuffle node order so that multiple IMPORTs done in parallel will not
-	// identically schedule CSV reading. For example, if there are 3 nodes and 4
-	// files, the first node will get 2 files while the other nodes will each get 1
-	// file. Shuffling will make that first node random instead of always the same.
-	rand.Shuffle(len(nodes), func(i, j int) {
-		nodes[i], nodes[j] = nodes[j], nodes[i]
-	})
 
-	// Setup common to both stages.
-
-	// For each input file, assign it to a node.
-	inputSpecs := make([]*distsqlpb.ReadImportDataSpec, 0, len(nodes))
-	for i, input := range from {
-		// Round robin assign CSV files to nodes. Files 0 through len(nodes)-1
-		// creates the spec. Future files just add themselves to the Uris.
-		if i < len(nodes) {
-			spec := &distsqlpb.ReadImportDataSpec{
-				Tables: tables,
-				Format: format,
-				Progress: distsqlpb.JobProgress{
-					JobID: *job.ID(),
-					Slot:  int32(i),
-				},
-				Uri: make(map[int32]string),
-			}
-			inputSpecs = append(inputSpecs, spec)
-		}
-		n := i % len(nodes)
-		inputSpecs[n].Uri[int32(i)] = input
-	}
-
-	for i := range inputSpecs {
-		// TODO(mjibson): using the actual file sizes here would improve progress
-		// accuracy.
-		inputSpecs[i].Progress.Contribution = float32(len(inputSpecs[i].Uri)) / float32(len(from))
-	}
+	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime)
 
 	sstSpecs := make([]distsqlpb.SSTWriterSpec, len(nodes))
 	for i := range nodes {
@@ -488,6 +442,75 @@ func LoadCSV(
 	})
 }
 
+func (dsp *DistSQLPlanner) setupAllNodesPlanning(
+	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
+) (*PlanningCtx, []roachpb.NodeID, error) {
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* txn */)
+
+	resp, err := execCfg.StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return nil, nil, err
+	}
+	// Because we're not going through the normal pathways, we have to set up
+	// the nodeID -> nodeAddress map ourselves.
+	for _, node := range resp.Nodes {
+		if err := dsp.CheckNodeHealthAndVersion(planCtx, &node.Desc); err != nil {
+			continue
+		}
+	}
+	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeAddresses))
+	for nodeID := range planCtx.NodeAddresses {
+		nodes = append(nodes, nodeID)
+	}
+	// Shuffle node order so that multiple IMPORTs done in parallel will not
+	// identically schedule CSV reading. For example, if there are 3 nodes and 4
+	// files, the first node will get 2 files while the other nodes will each get 1
+	// file. Shuffling will make that first node random instead of always the same.
+	rand.Shuffle(len(nodes), func(i, j int) {
+		nodes[i], nodes[j] = nodes[j], nodes[i]
+	})
+	return planCtx, nodes, nil
+}
+
+func makeImportReaderSpecs(
+	job *jobs.Job,
+	tables map[string]*sqlbase.TableDescriptor,
+	from []string,
+	format roachpb.IOFileFormat,
+	nodes []roachpb.NodeID,
+	walltime int64,
+) []*distsqlpb.ReadImportDataSpec {
+
+	// For each input file, assign it to a node.
+	inputSpecs := make([]*distsqlpb.ReadImportDataSpec, 0, len(nodes))
+	for i, input := range from {
+		// Round robin assign CSV files to nodes. Files 0 through len(nodes)-1
+		// creates the spec. Future files just add themselves to the Uris.
+		if i < len(nodes) {
+			spec := &distsqlpb.ReadImportDataSpec{
+				Tables: tables,
+				Format: format,
+				Progress: distsqlpb.JobProgress{
+					JobID: *job.ID(),
+					Slot:  int32(i),
+				},
+				WalltimeNanos: walltime,
+				Uri:           make(map[int32]string),
+			}
+			inputSpecs = append(inputSpecs, spec)
+		}
+		n := i % len(nodes)
+		inputSpecs[n].Uri[int32(i)] = input
+	}
+
+	for i := range inputSpecs {
+		// TODO(mjibson): using the actual file sizes here would improve progress
+		// accuracy.
+		inputSpecs[i].Progress.Contribution = float32(len(inputSpecs[i].Uri)) / float32(len(from))
+	}
+	return inputSpecs
+}
+
 func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	ctx context.Context,
 	job *jobs.Job,
@@ -634,4 +657,99 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(samples), job.Payload().Description)
 
 	return samples, nil
+}
+
+// DistIngest is used by IMPORT to run a DistSQL flow to ingest data by starting
+// reader processes on many nodes that each read and ingest their assigned files
+// and then send back a summary of what they ingested. The combined summary is
+// returned.
+func DistIngest(
+	ctx context.Context,
+	phs PlanHookState,
+	job *jobs.Job,
+	tables map[string]*sqlbase.TableDescriptor,
+	from []string,
+	format roachpb.IOFileFormat,
+	walltime int64,
+) (roachpb.BulkOpSummary, error) {
+	ctx = logtags.AddTag(ctx, "import-distsql-ingest", nil)
+
+	dsp := phs.DistSQLPlanner()
+	evalCtx := phs.ExtendedEvalContext()
+
+	planCtx, nodes, err := dsp.setupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
+	if err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
+
+	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime)
+
+	for i := range inputSpecs {
+		inputSpecs[i].IngestDirectly = true
+	}
+
+	var p PhysicalPlan
+
+	// Setup a one-stage plan with one proc per input spec.
+	stageID := p.NewStageID()
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(inputSpecs))
+	for i, rcs := range inputSpecs {
+		proc := distsqlplan.Processor{
+			Node: nodes[i],
+			Spec: distsqlpb.ProcessorSpec{
+				Core:    distsqlpb.ProcessorCoreUnion{ReadImport: rcs},
+				Output:  []distsqlpb.OutputRouterSpec{{Type: distsqlpb.OutputRouterSpec_PASS_THROUGH}},
+				StageID: stageID,
+			},
+		}
+		pIdx := p.AddProcessor(proc)
+		p.ResultRouters[i] = pIdx
+	}
+
+	var res roachpb.BulkOpSummary
+
+	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
+	p.PlanToStreamColMap = []int{0}
+	p.ResultTypes = []sqlbase.ColumnType{colTypeBytes}
+
+	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		var counts roachpb.BulkOpSummary
+		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
+			return err
+		}
+		res.Add(counts)
+		return nil
+	})
+
+	dsp.FinalizePlan(planCtx, &p)
+
+	if err := job.FractionDetailProgressed(ctx,
+		func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32 {
+			prog := progress.(*jobspb.Progress_Import).Import
+			prog.ReadProgress = make([]float32, len(inputSpecs))
+			return prog.Completed()
+		},
+	); err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
+
+	recv := MakeDistSQLReceiver(
+		ctx,
+		rowResultWriter,
+		tree.Rows,
+		nil, /* rangeCache */
+		nil, /* leaseCache */
+		nil, /* txn - the flow does not read or write the database */
+		func(ts hlc.Timestamp) {},
+		evalCtx.Tracing,
+	)
+	defer recv.Release()
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := *evalCtx
+	dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	if err := rowResultWriter.Err(); err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
+
+	return res, nil
 }
