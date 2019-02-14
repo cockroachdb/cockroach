@@ -63,6 +63,19 @@ func RandBytes(r *rand.Rand, size int) []byte {
 	return arr
 }
 
+// ReadTestdataBytes reads random bytes, but then nudges them into printable
+// ASCII, *reducing their randomness* to make them a little friendlier for
+// humans using them as testdata.
+func ReadTestdataBytes(r *rand.Rand, arr []byte) {
+	_, _ = r.Read(arr)
+	for i := range arr {
+		arr[i] = arr[i] & 0x7F // mask out non-ascii
+		if arr[i] < ' ' {      // Nudge the control chars up, into the letters.
+			arr[i] += 'A'
+		}
+	}
+}
+
 // SeedForTests seeds the random number generator and prints the seed
 // value used. This value can be specified via an environment variable
 // COCKROACH_RANDOM_SEED=x to reuse the same value later. This function should
