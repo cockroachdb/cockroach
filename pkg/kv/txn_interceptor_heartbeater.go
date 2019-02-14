@@ -86,10 +86,6 @@ type txnHeartbeater struct {
 	// is to notify the TxnCoordSender to shut itself down.
 	asyncAbortCallbackLocked func(context.Context)
 
-	// When set to true, the transaction will always send a BeginTxn request to
-	// lay down a transaction record as early as possible.
-	eagerRecord bool
-
 	// mu contains state protected by the TxnCoordSender's mutex.
 	mu struct {
 		sync.Locker
@@ -186,7 +182,7 @@ func (h *txnHeartbeater) SendLocked(
 			ba.Txn.Key = anchor
 		}
 
-		if h.eagerRecord || !h.st.Version.IsActive(cluster.VersionLazyTxnRecord) {
+		if !h.st.Version.IsActive(cluster.VersionLazyTxnRecord) {
 			addedBeginTxn = true
 
 			// Set the key in the begin transaction request to the txn's anchor key.
