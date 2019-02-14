@@ -600,17 +600,6 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 	return nil
 }
 
-// EagerRecord is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) EagerRecord() error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if tc.mu.active {
-		return errors.Errorf("cannot request an eager transaction record write on a running transaction")
-	}
-	tc.interceptorAlloc.txnHeartbeater.eagerRecord = true
-	return nil
-}
-
 // commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
 // cheaper than, sending an EndTransactionRequest. A read-only txn doesn't have
 // a transaction record, so there's no need to send any request to the server.

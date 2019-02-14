@@ -294,18 +294,6 @@ func (txn *Txn) DisablePipelining() error {
 	return txn.mu.sender.DisablePipelining()
 }
 
-// EagerRecord instructs the transaction write its transaction record as soon as
-// possible, instead of waiting for the transaction's first heartbeat or for the
-// end of the transaction to write it.
-//
-// EagerRecord must be called before any operations are performed on the
-// transaction.
-func (txn *Txn) EagerRecord() error {
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	return txn.mu.sender.EagerRecord()
-}
-
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
 	return &Batch{txn: txn}
