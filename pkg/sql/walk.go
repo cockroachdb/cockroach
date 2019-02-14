@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -49,6 +50,9 @@ type planObserver struct {
 
 	// expr is invoked for each expression field in each node.
 	expr func(verbosity observeVerbosity, nodeName, fieldName string, n int, expr tree.Expr)
+
+	// spans is invoked for spans embbeded in each node.
+	spans func(nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span)
 
 	// attr is invoked for non-expression metadata in each node.
 	attr func(nodeName, fieldName, attr string)
@@ -186,19 +190,17 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			if n.specifiedIndex != nil {
 				v.observer.attr(name, "hint", fmt.Sprintf("force index @%s", n.specifiedIndex.Name))
 			}
-			spans := sqlbase.PrettySpans(n.index, n.spans, 2)
-			if spans != "" {
-				if spans == "-" {
-					spans = "ALL"
-				}
-				v.observer.attr(name, "spans", spans)
-				// Only print out "parallel" when it makes sense. i.e. don't print if
-				// we know we will get only one result from the scan. There are cases
-				// in which "parallel" will be printed out even though the spans cover
-				// a single range, but there is nothing we can do about that.
-				if n.canParallelize() && (len(n.spans) > 1 || n.maxResults > 1) {
-					v.observer.attr(name, "parallel", "")
-				}
+		}
+		if v.observer.spans != nil {
+			v.observer.spans(name, "spans", n.index, n.spans)
+		}
+		if v.observer.attr != nil {
+			// Only print out "parallel" when it makes sense. i.e. don't print if
+			// we know we will get only one result from the scan. There are cases
+			// in which "parallel" will be printed out even though the spans cover
+			// a single range, but there is nothing we can do about that.
+			if n.canParallelize() && (len(n.spans) > 1 || n.maxResults > 1) {
+				v.observer.attr(name, "parallel", "")
 			}
 			if n.hardLimit > 0 && isFilterTrue(n.filter) {
 				v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
@@ -512,8 +514,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *deleteRangeNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "from", n.desc.Name)
-			spans := sqlbase.PrettySpans(&n.desc.PrimaryIndex, n.spans, 2)
-			v.observer.attr(name, "spans", spans)
+		}
+		if v.observer.spans != nil {
+			v.observer.spans(name, "spans", &n.desc.PrimaryIndex, n.spans)
 		}
 
 	case *serializeNode:

@@ -36,6 +36,42 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 	sqlSetup := "CREATE DATABASE t; CREATE TABLE t.orders (oid INT PRIMARY KEY, cid INT, value DECIMAL, date DATE);"
 	plansToTest := []*TestData{
 		{
+			// Test span anonymization.
+			SQL: `SELECT oid FROM t.orders WHERE oid = 123`,
+			// In the string version, the constants are not anonimized.
+			ExpectedPlanString: `0 render  (oid int) oid=CONST; key()
+0 .render 0 (@1)[int] (oid int) oid=CONST; key()
+1 scan  (oid int) oid=CONST; key()
+1 .table orders@primary (oid int) oid=CONST; key()
+1 .spans /123-/123/# (oid int) oid=CONST; key()
+`,
+			ExpectedPlanTree: &roachpb.ExplainTreePlanNode{
+				Name: "render",
+				Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+					{
+						Key:   "render",
+						Value: "oid",
+					},
+				},
+				Children: []*roachpb.ExplainTreePlanNode{
+					{
+						Name: "scan",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "table",
+								Value: "orders@primary",
+							},
+							{
+								// Span is anonimized.
+								Key:   "spans",
+								Value: "1 span",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			// Test select statement 1.
 			SQL: "SELECT CId, Date, Value FROM t.Orders",
 			ExpectedPlanString: `0 render  (cid int, date date, value decimal) 
