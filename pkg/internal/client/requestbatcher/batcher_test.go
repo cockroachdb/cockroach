@@ -16,10 +16,14 @@ package requestbatcher
 
 import (
 	"context"
+	"fmt"
+	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/assert"
@@ -82,6 +86,60 @@ func TestBatcherSendOnSizeWithReset(t *testing.T) {
 	if err := g.Wait(); err != nil {
 		t.Fatalf("Failed to send: %v", err)
 	}
+}
+
+func TestBackpressure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	sc := make(chanSender)
+	b := New(Config{
+		MaxIdle:                   50 * time.Millisecond,
+		MaxWait:                   50 * time.Millisecond,
+		MaxMsgsPerBatch:           1,
+		Sender:                    sc,
+		Stopper:                   stopper,
+		InFlightBackpressureLimit: 3,
+	})
+
+	// These 3 should all send without blocking but should put the batcher into
+	// back pressure.
+	sendChan := make(chan Response, 6)
+	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 1, &roachpb.GetRequest{}))
+	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 2, &roachpb.GetRequest{}))
+	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 3, &roachpb.GetRequest{}))
+	var sent int64
+	send := func() {
+		assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 4, &roachpb.GetRequest{}))
+		atomic.AddInt64(&sent, 1)
+	}
+	go send()
+	go send()
+	canReply := make(chan struct{})
+	reply := func(bs batchSend) {
+		<-canReply
+		bs.respChan <- batchResp{}
+	}
+	for i := 0; i < 3; i++ {
+		bs := <-sc
+		go reply(bs)
+		// Shouldn't need to use atomics to read sent. A race would indicate a bug.
+		assert.Equal(t, int64(0), sent)
+	}
+	// Allow one reply to fly which should not unblock the requests.
+	canReply <- struct{}{}
+	runtime.Gosched() // tickle the runtime in case there might be a timing bug
+	assert.Equal(t, int64(0), sent)
+	canReply <- struct{}{} // now the two requests should send
+	testutils.SucceedsSoon(t, func() error {
+		if numSent := atomic.LoadInt64(&sent); numSent != 2 {
+			return fmt.Errorf("expected %d to have been sent, so far %d", 2, numSent)
+		}
+		return nil
+	})
+	close(canReply)
+	reply(<-sc)
+	reply(<-sc)
 }
 
 func TestBatcherSend(t *testing.T) {
