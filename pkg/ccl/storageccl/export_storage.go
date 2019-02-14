@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
@@ -442,24 +443,29 @@ func (h *httpStorage) ReadFile(ctx context.Context, basename string) (io.ReadClo
 }
 
 func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&h.settings.SV))
-	defer cancel()
-	_, err := h.reqNoBody(ctx, "PUT", basename, content)
-	return err
+	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("PUT %s", basename),
+		timeoutSetting.Get(&h.settings.SV), func(ctx context.Context) error {
+			_, err := h.reqNoBody(ctx, "PUT", basename, content)
+			return err
+		})
 }
 
 func (h *httpStorage) Delete(ctx context.Context, basename string) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&h.settings.SV))
-	defer cancel()
-	_, err := h.reqNoBody(ctx, "DELETE", basename, nil)
-	return err
+	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("DELETE %s", basename),
+		timeoutSetting.Get(&h.settings.SV), func(ctx context.Context) error {
+			_, err := h.reqNoBody(ctx, "DELETE", basename, nil)
+			return err
+		})
 }
 
 func (h *httpStorage) Size(ctx context.Context, basename string) (int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&h.settings.SV))
-	defer cancel()
-	resp, err := h.reqNoBody(ctx, "HEAD", basename, nil)
-	if err != nil {
+	var resp *http.Response
+	if err := contextutil.RunWithTimeout(ctx, fmt.Sprintf("HEAD %s", basename),
+		timeoutSetting.Get(&h.settings.SV), func(ctx context.Context) error {
+			var err error
+			resp, err = h.reqNoBody(ctx, "HEAD", basename, nil)
+			return err
+		}); err != nil {
 		return 0, err
 	}
 	if resp.ContentLength < 0 {
@@ -617,13 +623,16 @@ func (s *s3Storage) Conf() roachpb.ExportStorage {
 }
 
 func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
-	defer cancel()
-	_, err := s.s3.PutObjectWithContext(ctx, &s3.PutObjectInput{
-		Bucket: s.bucket,
-		Key:    aws.String(path.Join(s.prefix, basename)),
-		Body:   content,
-	})
+	err := contextutil.RunWithTimeout(ctx, "put s3 object",
+		timeoutSetting.Get(&s.settings.SV),
+		func(ctx context.Context) error {
+			_, err := s.s3.PutObjectWithContext(ctx, &s3.PutObjectInput{
+				Bucket: s.bucket,
+				Key:    aws.String(path.Join(s.prefix, basename)),
+				Body:   content,
+			})
+			return err
+		})
 	return errors.Wrap(err, "failed to put s3 object")
 }
 
@@ -640,22 +649,29 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 }
 
 func (s *s3Storage) Delete(ctx context.Context, basename string) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
-	defer cancel()
-	_, err := s.s3.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
-		Bucket: s.bucket,
-		Key:    aws.String(path.Join(s.prefix, basename)),
-	})
-	return err
+	return contextutil.RunWithTimeout(ctx, "delete s3 object",
+		timeoutSetting.Get(&s.settings.SV),
+		func(ctx context.Context) error {
+			_, err := s.s3.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
+				Bucket: s.bucket,
+				Key:    aws.String(path.Join(s.prefix, basename)),
+			})
+			return err
+		})
 }
 
 func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
-	defer cancel()
-	out, err := s.s3.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
-		Bucket: s.bucket,
-		Key:    aws.String(path.Join(s.prefix, basename)),
-	})
+	var out *s3.HeadObjectOutput
+	err := contextutil.RunWithTimeout(ctx, "get s3 object header",
+		timeoutSetting.Get(&s.settings.SV),
+		func(ctx context.Context) error {
+			var err error
+			out, err = s.s3.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
+				Bucket: s.bucket,
+				Key:    aws.String(path.Join(s.prefix, basename)),
+			})
+			return err
+		})
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get s3 object headers")
 	}
@@ -757,18 +773,19 @@ func makeGCSStorage(
 func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
 	const maxAttempts = 3
 	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		// Set the timeout within the retry loop.
-		deadlineCtx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&g.settings.SV))
-		defer cancel()
 		if _, err := content.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(deadlineCtx)
-		if _, err := io.Copy(w, content); err != nil {
-			_ = w.Close()
-			return err
-		}
-		return w.Close()
+		// Set the timeout within the retry loop.
+		return contextutil.RunWithTimeout(ctx, "put gcs file", timeoutSetting.Get(&g.settings.SV),
+			func(ctx context.Context) error {
+				w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
+				if _, err := io.Copy(w, content); err != nil {
+					_ = w.Close()
+					return err
+				}
+				return w.Close()
+			})
 	})
 	return errors.Wrap(err, "write to google cloud")
 }
@@ -786,16 +803,22 @@ func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadClos
 }
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&g.settings.SV))
-	defer cancel()
-	return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
+	return contextutil.RunWithTimeout(ctx, "delete gcs file",
+		timeoutSetting.Get(&g.settings.SV),
+		func(ctx context.Context) error {
+			return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
+		})
 }
 
 func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&g.settings.SV))
-	defer cancel()
-	r, err := g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
-	if err != nil {
+	var r *gcs.Reader
+	if err := contextutil.RunWithTimeout(ctx, "size gcs file",
+		timeoutSetting.Get(&g.settings.SV),
+		func(ctx context.Context) error {
+			var err error
+			r, err = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
+			return err
+		}); err != nil {
 		return 0, err
 	}
 	sz := r.Attrs.Size
@@ -855,10 +878,12 @@ func (s *azureStorage) Conf() roachpb.ExportStorage {
 func (s *azureStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
-	defer cancel()
-	blob := s.getBlob(basename)
-	_, err := blob.Upload(ctx, content, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	err := contextutil.RunWithTimeout(ctx, "write azure file", timeoutSetting.Get(&s.settings.SV),
+		func(ctx context.Context) error {
+			blob := s.getBlob(basename)
+			_, err := blob.Upload(ctx, content, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+			return err
+		})
 	return errors.Wrapf(err, "write file: %s", basename)
 }
 
@@ -874,18 +899,24 @@ func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCl
 }
 
 func (s *azureStorage) Delete(ctx context.Context, basename string) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
-	defer cancel()
-	blob := s.getBlob(basename)
-	_, err := blob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+	err := contextutil.RunWithTimeout(ctx, "delete azure file", timeoutSetting.Get(&s.settings.SV),
+		func(ctx context.Context) error {
+			blob := s.getBlob(basename)
+			_, err := blob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			return err
+		})
 	return errors.Wrap(err, "delete file")
 }
 
 func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
-	defer cancel()
-	blob := s.getBlob(basename)
-	props, err := blob.GetProperties(ctx, azblob.BlobAccessConditions{})
+	var props *azblob.BlobGetPropertiesResponse
+	err := contextutil.RunWithTimeout(ctx, "size azure file", timeoutSetting.Get(&s.settings.SV),
+		func(ctx context.Context) error {
+			blob := s.getBlob(basename)
+			var err error
+			props, err = blob.GetProperties(ctx, azblob.BlobAccessConditions{})
+			return err
+		})
 	if err != nil {
 		return 0, errors.Wrap(err, "get file properties")
 	}

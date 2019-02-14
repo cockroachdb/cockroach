@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/causer"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -714,46 +715,48 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl *Replica) error {
 
 	ctx, span := bq.AnnotateCtxWithSpan(ctx, bq.name)
 	defer span.Finish()
-	ctx, cancel := context.WithTimeout(ctx, bq.processTimeout)
-	defer cancel()
-	log.VEventf(ctx, 1, "processing replica")
 
-	if !repl.IsInitialized() {
-		// We checked this when adding the replica, but we need to check it again
-		// in case this is a different replica with the same range ID (see #14193).
-		return errors.New("cannot process uninitialized replica")
-	}
+	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("%s queue process replica %d", bq.name, repl.RangeID),
+		bq.processTimeout, func(ctx context.Context) error {
+			log.VEventf(ctx, 1, "processing replica")
 
-	if reason, err := repl.IsDestroyed(); err != nil {
-		if !bq.queueConfig.processDestroyedReplicas || reason == destroyReasonRemoved {
-			log.VEventf(ctx, 3, "replica destroyed (%s); skipping", err)
-			return nil
-		}
-	}
-
-	// If the queue requires a replica to have the range lease in
-	// order to be processed, check whether this replica has range lease
-	// and renew or acquire if necessary.
-	if bq.needsLease {
-		if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
-			switch v := pErr.GetDetail().(type) {
-			case *roachpb.NotLeaseHolderError, *roachpb.RangeNotFoundError:
-				log.VEventf(ctx, 3, "%s; skipping", v)
-				return nil
-			default:
-				log.VErrEventf(ctx, 2, "could not obtain lease: %s", pErr)
-				return errors.Wrapf(pErr.GoError(), "%s: could not obtain lease", repl)
+			if !repl.IsInitialized() {
+				// We checked this when adding the replica, but we need to check it again
+				// in case this is a different replica with the same range ID (see #14193).
+				return errors.New("cannot process uninitialized replica")
 			}
-		}
-	}
 
-	log.VEventf(ctx, 3, "processing...")
-	if err := bq.impl.process(ctx, repl, cfg); err != nil {
-		return err
-	}
-	log.VEventf(ctx, 3, "processing... done")
-	bq.successes.Inc(1)
-	return nil
+			if reason, err := repl.IsDestroyed(); err != nil {
+				if !bq.queueConfig.processDestroyedReplicas || reason == destroyReasonRemoved {
+					log.VEventf(ctx, 3, "replica destroyed (%s); skipping", err)
+					return nil
+				}
+			}
+
+			// If the queue requires a replica to have the range lease in
+			// order to be processed, check whether this replica has range lease
+			// and renew or acquire if necessary.
+			if bq.needsLease {
+				if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
+					switch v := pErr.GetDetail().(type) {
+					case *roachpb.NotLeaseHolderError, *roachpb.RangeNotFoundError:
+						log.VEventf(ctx, 3, "%s; skipping", v)
+						return nil
+					default:
+						log.VErrEventf(ctx, 2, "could not obtain lease: %s", pErr)
+						return errors.Wrapf(pErr.GoError(), "%s: could not obtain lease", repl)
+					}
+				}
+			}
+
+			log.VEventf(ctx, 3, "processing...")
+			if err := bq.impl.process(ctx, repl, cfg); err != nil {
+				return err
+			}
+			log.VEventf(ctx, 3, "processing... done")
+			bq.successes.Inc(1)
+			return nil
+		})
 }
 
 type benignError struct {

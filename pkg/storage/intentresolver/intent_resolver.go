@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -805,10 +806,10 @@ func (ir *IntentResolver) ResolveIntents(
 		// ever cleaning up all of its intents in time to then delete the
 		// txn record, causing an infinite loop on that txn record, where
 		// the same initial set of intents is endlessly re-resolved.
-		ctxWithTimeout, cancel := context.WithTimeout(ctx, intentResolverTimeout)
-		err := ir.db.Run(ctxWithTimeout, b)
-		cancel()
-		if err != nil {
+		if err := contextutil.RunWithTimeout(ctx, "resolve intents", intentResolverTimeout,
+			func(ctx context.Context) error {
+				return ir.db.Run(ctx, b)
+			}); err != nil {
 			// Bail out on the first error.
 			return err
 		}
@@ -822,11 +823,10 @@ func (ir *IntentResolver) ResolveIntents(
 			b := &client.Batch{}
 			b.Header.MaxSpanRequestKeys = intentResolverBatchSize
 			b.AddRawRequest(req)
-			ctxWithTimeout, cancel := context.WithTimeout(ctx, intentResolverTimeout)
-			err := ir.db.Run(ctxWithTimeout, b)
-			cancel()
-			if err != nil {
-				// Bail out on the first error.
+			if err := contextutil.RunWithTimeout(ctx, "resolve span intents", intentResolverTimeout,
+				func(ctx context.Context) error {
+					return ir.db.Run(ctx, b)
+				}); err != nil {
 				return err
 			}
 			// Check response to see if it must be resumed.
