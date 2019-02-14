@@ -615,6 +615,12 @@ func (ex *connExecutor) commitSQLTransaction(
 		return ex.makeErrEvent(err, stmt)
 	}
 
+	// Set the txn deadline before committing.
+	if deadline := ex.extraTxnState.tables.deadline(); !deadline.IsEmpty() {
+		if err := ex.state.mu.txn.SetDeadline(deadline); err != nil {
+			return ex.makeErrEvent(err, stmt)
+		}
+	}
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}

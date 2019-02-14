@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -81,8 +82,9 @@ type tableWriter interface {
 	// the output of EXPLAIN.
 	desc() string
 
-	// enable auto commit in call to finalize().
-	enableAutoCommit()
+	// enable auto commit in call to finalize(). Pass in the
+	// txnDeadline interface.
+	enableAutoCommit(txnDeadline txnDeadline)
 }
 
 type autoCommitOpt int
@@ -117,6 +119,15 @@ var _ extendedTableWriter = (*tableUpdater)(nil)
 var _ extendedTableWriter = (*tableDeleter)(nil)
 var _ extendedTableWriter = (*tableInserter)(nil)
 
+// txnDeadline is the interface used to get an appropriate deadline
+// for the txn.
+type txnDeadline interface {
+	// returns deadline.
+	deadline() hlc.Timestamp
+}
+
+var _ txnDeadline = (*TableCollection)(nil)
+
 // tableWriterBase is meant to be used to factor common code between
 // the other tableWriters.
 type tableWriterBase struct {
@@ -124,6 +135,8 @@ type tableWriterBase struct {
 	txn *client.Txn
 	// is autoCommit turned on.
 	autoCommit autoCommitOpt
+	// txnDeadline is the txn deadline interface.
+	txnDeadline txnDeadline
 	// b is the current batch.
 	b *client.Batch
 	// batchSize is the current batch size (when known).
@@ -158,7 +171,12 @@ func (tb *tableWriterBase) finalize(
 	if tb.autoCommit == autoCommitEnabled {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
-		// coordinator.
+		// coordinator. Set the txn deadline before committing.
+		if deadline := tb.txnDeadline.deadline(); !deadline.IsEmpty() {
+			if err := tb.txn.SetDeadline(deadline); err != nil {
+				return err
+			}
+		}
 		err = tb.txn.CommitInBatch(ctx, tb.b)
 	} else {
 		err = tb.txn.Run(ctx, tb.b)
@@ -170,8 +188,9 @@ func (tb *tableWriterBase) finalize(
 	return nil
 }
 
-func (tb *tableWriterBase) enableAutoCommit() {
+func (tb *tableWriterBase) enableAutoCommit(txnDeadline txnDeadline) {
 	tb.autoCommit = autoCommitEnabled
+	tb.txnDeadline = txnDeadline
 }
 
 // batchedTableWriter is used for tableWriters that

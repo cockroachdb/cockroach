@@ -603,8 +603,8 @@ func (n *insertNode) Close(ctx context.Context) {
 }
 
 // enableAutoCommit is part of the autoCommitNode interface.
-func (n *insertNode) enableAutoCommit() {
-	n.run.ti.enableAutoCommit()
+func (n *insertNode) enableAutoCommit(txnDeadline txnDeadline) {
+	n.run.ti.enableAutoCommit(txnDeadline)
 }
 
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default

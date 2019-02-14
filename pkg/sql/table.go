@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -179,6 +180,16 @@ type TableCollection struct {
 	// return different values, such as when the txn timestamp changes or when
 	// new descriptors are written in the txn.
 	allDescriptors []sqlbase.DescriptorProto
+
+	// deadline to be used by the transaction represented by this TableCollection.
+	// This deadline by default reflects the smallest expiration time for the table
+	// descriptors used by the transaction. It is used at commit time to set the
+	// transaction's deadline.
+	// TODO(vivek): discuss with core team when we should extend this deadline
+	// so that the transaction will not hit a deadline exceeded error. The process
+	// of extending a deadline will involve using the renewed expiration time for
+	// the latest lease for the table descriptors.
+	txnDeadline hlc.Timestamp
 }
 
 type dbCacheSubscriber interface {
@@ -355,7 +366,7 @@ func (tc *TableCollection) getTableVersion(
 	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
-	txn.UpdateDeadlineMaybe(ctx, expiration)
+	tc.updateDeadlineMaybe(ctx, expiration)
 	return table, nil, nil
 }
 
@@ -420,7 +431,7 @@ func (tc *TableCollection) getTableVersionByID(
 	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
-	txn.UpdateDeadlineMaybe(ctx, expiration)
+	tc.updateDeadlineMaybe(ctx, expiration)
 	return table, nil
 }
 
@@ -448,6 +459,7 @@ func (tc *TableCollection) releaseLeases(ctx context.Context) {
 		}
 		tc.leasedTables = tc.leasedTables[:0]
 	}
+	tc.txnDeadline = hlc.Timestamp{}
 }
 
 // releaseTables releases all tables currently held by the TableCollection.
@@ -673,6 +685,18 @@ func (tc *TableCollection) copyModifiedSchema(to *TableCollection) {
 
 type tableCollectionModifier interface {
 	copyModifiedSchema(to *TableCollection)
+}
+
+func (tc *TableCollection) deadline() hlc.Timestamp {
+	return tc.txnDeadline
+}
+
+// updateDeadlineMaybe updates the deadline if it's lower than
+// an existing deadline.
+func (tc *TableCollection) updateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) {
+	if tc.txnDeadline.IsEmpty() || deadline.Less(tc.txnDeadline) {
+		tc.txnDeadline = deadline
+	}
 }
 
 // createOrUpdateSchemaChangeJob finalizes the current mutations in the table

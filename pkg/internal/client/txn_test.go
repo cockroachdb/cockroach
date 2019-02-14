@@ -449,7 +449,8 @@ func TestBatchMixRawRequest(t *testing.T) {
 	}
 }
 
-func TestUpdateDeadlineMaybe(t *testing.T) {
+// TestSetDeadline tests SetDeadline().
+func TestSetDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -470,26 +471,18 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 
 	deadline := hlc.Timestamp{WallTime: 10, Logical: 1}
-	if !txn.UpdateDeadlineMaybe(ctx, deadline) {
-		t.Errorf("expected update, but it didn't happen")
+	if err := txn.SetDeadline(deadline); err != nil {
+		t.Errorf("expected update, but it didn't happen: %s", err)
 	}
 	if d := *txn.deadline(); d != deadline {
 		t.Errorf("unexpected deadline: %s", d)
 	}
 
 	futureDeadline := hlc.Timestamp{WallTime: 11, Logical: 1}
-	if txn.UpdateDeadlineMaybe(ctx, futureDeadline) {
+	if err := txn.SetDeadline(futureDeadline); err == nil {
 		t.Errorf("expected no update, but update happened")
 	}
 	if d := *txn.deadline(); d != deadline {
-		t.Errorf("unexpected deadline: %s", d)
-	}
-
-	pastDeadline := hlc.Timestamp{WallTime: 9, Logical: 1}
-	if !txn.UpdateDeadlineMaybe(ctx, pastDeadline) {
-		t.Errorf("expected update, but it didn't happen")
-	}
-	if d := *txn.deadline(); d != pastDeadline {
 		t.Errorf("unexpected deadline: %s", d)
 	}
 }

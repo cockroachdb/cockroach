@@ -94,6 +94,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 // during local execution.
 type createTableRun struct {
 	autoCommit   autoCommitOpt
+	txnDeadline  txnDeadline
 	rowsAffected int
 
 	// synthRowID indicates whether an input column needs to be synthesized to
@@ -231,7 +232,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		*ti = tableInserter{ri: ri}
 		tw := tableWriter(ti)
 		if n.run.autoCommit == autoCommitEnabled {
-			tw.enableAutoCommit()
+			tw.enableAutoCommit(n.run.txnDeadline)
 		}
 		defer func() {
 			tw.close(params.ctx)
@@ -315,8 +316,9 @@ func (n *createTableNode) startExec(params runParams) error {
 }
 
 // enableAutoCommit is part of the autoCommitNode interface.
-func (n *createTableNode) enableAutoCommit() {
+func (n *createTableNode) enableAutoCommit(txnDeadline txnDeadline) {
 	n.run.autoCommit = autoCommitEnabled
+	n.run.txnDeadline = txnDeadline
 }
 
 func (*createTableNode) Next(runParams) (bool, error) { return false, nil }

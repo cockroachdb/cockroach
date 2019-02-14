@@ -40,7 +40,7 @@ func (p *planner) expandPlan(ctx context.Context, plan planNode) (planNode, erro
 
 	if p.autoCommit {
 		if ac, ok := plan.(autoCommitNode); ok {
-			ac.enableAutoCommit()
+			ac.enableAutoCommit(p.extendedEvalCtx.Tables)
 		}
 	}
 

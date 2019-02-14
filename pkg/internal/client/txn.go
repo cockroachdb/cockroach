@@ -557,22 +557,20 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 	return err
 }
 
-// UpdateDeadlineMaybe sets the transactions deadline to the lower of the
-// current one (if any) and the passed value.
-//
+// SetDeadline sets the transactions deadline.
 // The deadline cannot be lower than txn.OrigTimestamp.
-func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
+func (txn *Txn) SetDeadline(deadline hlc.Timestamp) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	if txn.mu.deadline == nil || deadline.Less(*txn.mu.deadline) {
-		if deadline.Less(txn.origTimestampLocked()) {
-			log.Fatalf(ctx, "deadline below txn.OrigTimestamp() is nonsensical; "+
-				"txn has would have no change to commit. Deadline: %s", deadline)
-		}
-		txn.mu.deadline = &deadline
-		return true
+	if deadline.Less(txn.origTimestampLocked()) {
+		return errors.Errorf("deadline (%s) < start timestamp (%s) is nonsensical",
+			deadline, txn.origTimestampLocked())
 	}
-	return false
+	if txn.mu.deadline != nil {
+		return errors.Errorf("deadline already set to %s", txn.mu.deadline)
+	}
+	txn.mu.deadline = &deadline
+	return nil
 }
 
 // resetDeadlineLocked resets the deadline.

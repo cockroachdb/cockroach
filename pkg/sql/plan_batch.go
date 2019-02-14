@@ -144,7 +144,9 @@ func (s *serializeNode) FastPathResults() (int, bool) {
 func (s *serializeNode) requireSpool() {}
 
 // enableAutocommit implements the autoCommitNode interface.
-func (s *serializeNode) enableAutoCommit() { s.source.enableAutoCommit() }
+func (s *serializeNode) enableAutoCommit(txnDeadline txnDeadline) {
+	s.source.enableAutoCommit(txnDeadline)
+}
 
 // rowCountNode serializes the results of a batchedPlanNode into a
 // plain planNode interface that has guaranteed FastPathResults
@@ -187,4 +189,6 @@ func (r *rowCountNode) Close(ctx context.Context)           { r.source.Close(ctx
 func (r *rowCountNode) FastPathResults() (int, bool) { return r.rowCount, true }
 
 // enableAutocommit implements the autoCommitNode interface.
-func (r *rowCountNode) enableAutoCommit() { r.source.enableAutoCommit() }
+func (r *rowCountNode) enableAutoCommit(txnDeadline txnDeadline) {
+	r.source.enableAutoCommit(txnDeadline)
+}

@@ -223,6 +223,6 @@ func (*deleteRangeNode) Values() tree.Datums {
 func (*deleteRangeNode) Close(ctx context.Context) {}
 
 // enableAutoCommit implements the autoCommitNode interface.
-func (d *deleteRangeNode) enableAutoCommit() {
-	d.tableWriter.enableAutoCommit()
+func (d *deleteRangeNode) enableAutoCommit(txnDeadline txnDeadline) {
+	d.tableWriter.enableAutoCommit(txnDeadline)
 }
