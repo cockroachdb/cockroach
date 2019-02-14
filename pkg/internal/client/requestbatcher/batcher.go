@@ -64,9 +64,10 @@ import (
 // no data dependencies between operations and the only key will be the guess
 // for where an operation should go.
 
-// TODO(ajwerner): Consider providing a limit on maximum number of requests in
-// flight at a time. This may ultimately lead to a need for queuing. Furthermore
-// consider using batch time to dynamically tune the amount of time we wait.
+// TODO(ajwerner): Consider a more sophisticated mechanism to limit on maximum
+// number of requests in flight at a time. This may ultimately lead to a need
+// for queuing. Furthermore consider using batch time to dynamically tune the
+// amount of time we wait.
 
 // TODO(ajwerner): Consider filtering requests which might have been canceled
 // before sending a batch.
@@ -121,6 +122,37 @@ type Config struct {
 	// when throughput is low. If MaxWait is <= 0 then no wait timeout is
 	// enforced. It is inadvisable to disable both MaxIdle and MaxWait.
 	MaxIdle time.Duration
+
+	// InFlightBackpressureLimit is the number of batches in flight above which
+	// sending clients should experience backpressure. If the batcher has more
+	// requests than this in flight it will not accept new requests until the
+	// number of in flight batches is again below this threshold. This value does
+	// not limit the number of batches which may ultimately be in flight as
+	// batches which are queued to send but not yet in flight will still send.
+	// Note that values	less than or equal to zero will result in the use of
+	// DefaultInFlightBackpressureLimit.
+	InFlightBackpressureLimit int
+}
+
+const (
+	// DefaultInFlightBackpressureLimit is the InFlightBackpressureLimit used if
+	// a zero value for that setting is passed in a Config to New.
+	// TODO(ajwerner): Justify this number.
+	DefaultInFlightBackpressureLimit = 1000
+
+	// BackpressureRecoveryFraction is the fraction of InFlightBackpressureLimit
+	// used to detect when enough in flight requests have completed such that more
+	// requests should now be accepted. A value less than 1 is chosen in order to
+	// avoid thrashing on backpressure which might ultimately defeat the purpose
+	// of the RequestBatcher.
+	backpressureRecoveryFraction = .8
+)
+
+func backpressureRecoveryThreshold(limit int) int {
+	if l := int(float64(limit) * backpressureRecoveryFraction); l > 0 {
+		return l
+	}
+	return 1 // don't allow the recovery threshold to be 0
 }
 
 // RequestBatcher batches requests destined for a single range based on
@@ -131,7 +163,8 @@ type RequestBatcher struct {
 
 	batches batchQueue
 
-	requestChan chan *request
+	requestChan  chan *request
+	sendDoneChan chan struct{}
 }
 
 // Response is exported for use with the channel-oriented SendWithChan method.
@@ -145,10 +178,11 @@ type Response struct {
 func New(cfg Config) *RequestBatcher {
 	validateConfig(&cfg)
 	b := &RequestBatcher{
-		cfg:         cfg,
-		pool:        makePool(),
-		batches:     makeBatchQueue(),
-		requestChan: make(chan *request),
+		cfg:          cfg,
+		pool:         makePool(),
+		batches:      makeBatchQueue(),
+		requestChan:  make(chan *request),
+		sendDoneChan: make(chan struct{}),
 	}
 	if err := cfg.Stopper.RunAsyncTask(context.Background(), b.cfg.Name, b.run); err != nil {
 		panic(err)
@@ -161,6 +195,9 @@ func validateConfig(cfg *Config) {
 		panic("cannot construct a Batcher with a nil Stopper")
 	} else if cfg.Sender == nil {
 		panic("cannot construct a Batcher with a nil Sender")
+	}
+	if cfg.InFlightBackpressureLimit <= 0 {
+		cfg.InFlightBackpressureLimit = DefaultInFlightBackpressureLimit
 	}
 }
 
@@ -204,8 +241,16 @@ func (b *RequestBatcher) Send(
 	}
 }
 
+func (b *RequestBatcher) sendDone() {
+	select {
+	case b.sendDoneChan <- struct{}{}:
+	case <-b.cfg.Stopper.ShouldQuiesce():
+	}
+}
+
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
+		defer b.sendDone()
 		resp, pErr := b.cfg.Sender.Send(ctx, ba.batchRequest())
 		for i, r := range ba.reqs {
 			res := Response{}
@@ -252,28 +297,38 @@ func (b *RequestBatcher) cleanup(err error) {
 }
 
 func (b *RequestBatcher) run(ctx context.Context) {
-	var deadline time.Time
-	timer := timeutil.NewTimer()
-	maybeSetTimer := func() {
-		var nextDeadline time.Time
-		if next := b.batches.peekFront(); next != nil {
-			nextDeadline = next.deadline
+	var (
+		// inFlight tracks the number of batches currently being sent.
+		// true.
+		inFlight = 0
+		// inBackPressure indicates whether the reqChan is enabled.
+		// It becomes true when inFlight exceeds b.cfg.InFlightBackpressureLimit.
+		inBackPressure = false
+		// recoveryThreshold is the number of in flight requests below which the
+		// the inBackPressure state should exit.
+		recoveryThreshold = backpressureRecoveryThreshold(b.cfg.InFlightBackpressureLimit)
+		// reqChan consults inBackPressure to determine whether the goroutine is
+		// accepting new requests.
+		reqChan = func() <-chan *request {
+			if inBackPressure {
+				return nil
+			}
+			return b.requestChan
 		}
-		if !deadline.Equal(nextDeadline) {
-			deadline = nextDeadline
-			if !deadline.IsZero() {
-				timer.Reset(time.Until(deadline))
-			} else {
-				// Clear the current timer due to a sole batch already sent before
-				// the timer fired.
-				timer.Stop()
-				timer = timeutil.NewTimer()
+		sendBatch = func(ba *batch) {
+			inFlight++
+			if inFlight >= b.cfg.InFlightBackpressureLimit {
+				inBackPressure = true
+			}
+			b.sendBatch(ctx, ba)
+		}
+		handleSendDone = func() {
+			inFlight--
+			if inFlight < recoveryThreshold {
+				inBackPressure = false
 			}
 		}
-	}
-	for {
-		select {
-		case req := <-b.requestChan:
+		handleRequest = func(req *request) {
 			now := timeutil.Now()
 			ba, existsInQueue := b.batches.get(req.rangeID)
 			if !existsInQueue {
@@ -283,15 +338,43 @@ func (b *RequestBatcher) run(ctx context.Context) {
 				if existsInQueue {
 					b.batches.remove(ba)
 				}
-				b.sendBatch(ctx, ba)
+				sendBatch(ba)
 			} else {
 				b.batches.upsert(ba)
 			}
+		}
+		deadline      time.Time
+		timer         = timeutil.NewTimer()
+		maybeSetTimer = func() {
+			var nextDeadline time.Time
+			if next := b.batches.peekFront(); next != nil {
+				nextDeadline = next.deadline
+			}
+			if !deadline.Equal(nextDeadline) {
+				deadline = nextDeadline
+				if !deadline.IsZero() {
+					timer.Reset(time.Until(deadline))
+				} else {
+					// Clear the current timer due to a sole batch already sent before
+					// the timer fired.
+					timer.Stop()
+					timer = timeutil.NewTimer()
+				}
+				deadline = nextDeadline
+			}
+		}
+	)
+	for {
+		select {
+		case req := <-reqChan():
+			handleRequest(req)
 			maybeSetTimer()
 		case <-timer.C:
 			timer.Read = true
-			b.sendBatch(ctx, b.batches.popFront())
+			sendBatch(b.batches.popFront())
 			maybeSetTimer()
+		case <-b.sendDoneChan:
+			handleSendDone()
 		case <-b.cfg.Stopper.ShouldQuiesce():
 			b.cleanup(stop.ErrUnavailable)
 			return
