@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,7 +29,7 @@ import (
 )
 
 // runSampler runs the sampler aggregator on numRows and returns numSamples rows.
-func runSampler(t *testing.T, numRows, numSamples int) []int {
+func runSampler(t *testing.T, numRows, numSamples int, isAutoStats bool) []int {
 	rows := make([]sqlbase.EncDatumRow, numRows)
 	for i := range rows {
 		rows[i] = sqlbase.EncDatumRow{sqlbase.IntEncDatum(i)}
@@ -53,7 +54,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 		EvalCtx:  &evalCtx,
 	}
 
-	spec := &distsqlpb.SamplerSpec{SampleSize: uint32(numSamples)}
+	spec := &distsqlpb.SamplerSpec{SampleSize: uint32(numSamples), IsAutoStats: isAutoStats}
 	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &distsqlpb.PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +110,7 @@ func TestSampler(t *testing.T) {
 	// and exit early. This speeds up the test.
 	for r := 0; r < maxRuns; r += minRuns {
 		for i := 0; i < minRuns; i++ {
-			for _, v := range runSampler(t, numRows, numSamples) {
+			for _, v := range runSampler(t, numRows, numSamples, false /* isAutoStats */) {
 				freq[v]++
 			}
 		}
@@ -240,5 +241,48 @@ func TestSamplerSketch(t *testing.T) {
 		if v := int(s.Estimate()); v != cardinalities[sketchIdx] {
 			t.Errorf("expected cardinality %d, got %d", cardinalities[sketchIdx], v)
 		}
+	}
+}
+
+func TestSamplerThrottling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We run many samplings and record the average time.
+	numRows := 1000
+	numSamples := 20
+	runs := 200
+	idleTime := 0.5
+
+	defer func(oldProgressInterval int, oldIdleTime float64) {
+		SamplerProgressInterval = oldProgressInterval
+		AutoStatsIdleTime = oldIdleTime
+	}(SamplerProgressInterval, AutoStatsIdleTime)
+	SamplerProgressInterval = 10
+
+	var durationThrottled, durationNotThrottled time.Duration
+	for i := 0; i < runs; i++ {
+		// Run the sampler with throttling.
+		AutoStatsIdleTime = idleTime
+		startTime := time.Now()
+		runSampler(t, numRows, numSamples, true /* isAutoStats */)
+		durationThrottled += time.Now().Sub(startTime)
+
+		// Run the sampler without throttling.
+		AutoStatsIdleTime = 0
+		startTime = time.Now()
+		runSampler(t, numRows, numSamples, true /* isAutoStats */)
+		durationNotThrottled += time.Now().Sub(startTime)
+	}
+
+	// It's really difficult to ensure that the ratio between the throttled and
+	// not-throttled run durations will be 2:1, since there are so many factors
+	// that affect timing. Instead, we just require that the average duration of
+	// the throttled runs is greater than the average duration of the not-throttled
+	// runs.
+	if durationNotThrottled > durationThrottled {
+		t.Errorf(
+			"Unexpected ratio of throttled (%s) to not-throttled (%s) sampler processor duration",
+			durationThrottled, durationNotThrottled,
+		)
 	}
 }
