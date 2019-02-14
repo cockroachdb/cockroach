@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -105,6 +106,25 @@ func (z *zipper) createError(name string, e error) error {
 	return nil
 }
 
+func (z *zipper) createJSONOrError(name string, m interface{}, e error) error {
+	if e != nil {
+		return z.createError(name, e)
+	}
+	return z.createJSON(name, m)
+}
+
+func (z *zipper) createRawOrError(name string, b []byte, e error) error {
+	if e != nil {
+		return z.createError(name, e)
+	}
+	return z.createRaw(name, b)
+}
+
+type zipRequest struct {
+	fn       func(ctx context.Context) (interface{}, error)
+	pathName string
+}
+
 func runDebugZip(cmd *cobra.Command, args []string) error {
 	const (
 		base               = "debug"
@@ -150,67 +170,54 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	z := newZipper(out)
 	defer z.close()
 
-	timeoutCtx := func(baseCtx context.Context) (context.Context, func()) {
-		timeout := 10 * time.Second
-		if cliCtx.cmdTimeout != 0 {
-			timeout = cliCtx.cmdTimeout
-		}
-		return context.WithTimeout(baseCtx, timeout)
+	timeout := 10 * time.Second
+	if cliCtx.cmdTimeout != 0 {
+		timeout = cliCtx.cmdTimeout
 	}
 
-	{
-		ctx, cancel := timeoutCtx(baseCtx)
-		defer cancel()
-		if events, err := admin.Events(ctx, &serverpb.EventsRequest{}); err != nil {
-			if err := z.createError(eventsName, err); err != nil {
-				return err
-			}
-		} else {
-			if err := z.createJSON(eventsName, events); err != nil {
-				return err
-			}
-		}
+	var runZipRequest = func(r zipRequest) error {
+		var data interface{}
+		err = contextutil.RunWithTimeout(baseCtx, "request "+r.pathName, timeout, func(ctx context.Context) error {
+			data, err = r.fn(ctx)
+			return err
+		})
+		return z.createJSONOrError(r.pathName, data, err)
 	}
 
-	{
-		ctx, cancel := timeoutCtx(baseCtx)
-		defer cancel()
-		if rangelog, err := admin.RangeLog(ctx, &serverpb.RangeLogRequest{}); err != nil {
-			if err := z.createError(rangelogName, err); err != nil {
-				return err
-			}
-		} else {
-			if err := z.createJSON(rangelogName, rangelog); err != nil {
-				return err
-			}
-		}
-	}
-
-	{
-		ctx, cancel := timeoutCtx(baseCtx)
-		defer cancel()
-		if liveness, err := admin.Liveness(ctx, &serverpb.LivenessRequest{}); err != nil {
-			if err := z.createError(livenessName, err); err != nil {
-				return err
-			}
-		} else {
-			if err := z.createJSON(livenessName, liveness); err != nil {
-				return err
-			}
-		}
-	}
-
-	{
-		ctx, cancel := timeoutCtx(baseCtx)
-		defer cancel()
-		if settings, err := admin.Settings(ctx, &serverpb.SettingsRequest{}); err != nil {
-			if err := z.createError(settingsName, err); err != nil {
-				return err
-			}
-		} else {
-			if err := z.createJSON(settingsName, settings); err != nil {
-				return err
-			}
+	for _, r := range []zipRequest{
+		{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return admin.Events(ctx, &serverpb.EventsRequest{})
+			},
+			pathName: eventsName,
+		},
+		{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return admin.RangeLog(ctx, &serverpb.RangeLogRequest{})
+			},
+			pathName: rangelogName,
+		},
+		{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return admin.Liveness(ctx, &serverpb.LivenessRequest{})
+			},
+			pathName: livenessName,
+		},
+		{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return admin.Settings(ctx, &serverpb.SettingsRequest{})
+			},
+			pathName: settingsName,
+		},
+		{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
+			},
+			pathName: reportsPrefix + "/problemranges",
+		},
+	} {
+		if err := runZipRequest(r); err != nil {
+			return err
 		}
 	}
 
@@ -229,9 +236,11 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	}
 
 	{
-		ctx, cancel := timeoutCtx(baseCtx)
-		defer cancel()
-		if nodes, err := status.Nodes(ctx, &serverpb.NodesRequest{}); err != nil {
+		var nodes *serverpb.NodesResponse
+		if err := contextutil.RunWithTimeout(baseCtx, "request nodes", timeout, func(ctx context.Context) error {
+			nodes, err = status.Nodes(ctx, &serverpb.NodesRequest{})
+			return err
+		}); err != nil {
 			if err := z.createError(nodesPrefix, err); err != nil {
 				return err
 			}
@@ -243,130 +252,124 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					return err
 				}
 
-				{
-					ctx, cancel := timeoutCtx(baseCtx)
-					defer cancel()
-					details, err := status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Ready: false})
-					if err != nil {
-						if err := z.createError(prefix+"/details", err); err != nil {
-							return err
-						}
-					} else if err := z.createJSON(prefix+"/details", details); err != nil {
+				for _, r := range []zipRequest{
+					{
+						fn: func(ctx context.Context) (interface{}, error) {
+							return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Ready: false})
+						},
+						pathName: prefix + "/details",
+					},
+					{
+						fn: func(ctx context.Context) (interface{}, error) {
+							return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id})
+						},
+						pathName: prefix + "/gossip",
+					},
+				} {
+					if err := runZipRequest(r); err != nil {
 						return err
 					}
 				}
 
-				{
-					ctx, cancel := timeoutCtx(baseCtx)
-					defer cancel()
-					if gossip, err := status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id}); err != nil {
-						if err := z.createError(prefix+"/gossip", err); err != nil {
-							return err
-						}
-					} else if err := z.createJSON(prefix+"/gossip", gossip); err != nil {
+				var stacks *serverpb.JSONResponse
+				err = contextutil.RunWithTimeout(baseCtx, "request stacks", timeout,
+					func(ctx context.Context) error {
+						stacks, err = status.Stacks(ctx, &serverpb.StacksRequest{NodeId: id})
 						return err
-					}
+					})
+				if err := z.createRawOrError(prefix+"/stacks", stacks.Data, err); err != nil {
+					return err
 				}
 
-				{
-					ctx, cancel := timeoutCtx(baseCtx)
-					defer cancel()
-					if stacks, err := status.Stacks(ctx, &serverpb.StacksRequest{NodeId: id}); err != nil {
-						if err := z.createError(prefix+"/stacks", err); err != nil {
-							return err
-						}
-					} else if err := z.createRaw(prefix+"/stacks", stacks.Data); err != nil {
-						return err
-					}
-				}
-
-				{
-					ctx, cancel := timeoutCtx(baseCtx)
-					defer cancel()
-					if heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
-						NodeId: id,
-						Type:   serverpb.ProfileRequest_HEAP,
-					}); err != nil {
-						if err := z.createError(prefix+"/heap", err); err != nil {
-							return err
-						}
-					} else if err := z.createRaw(prefix+"/heap", heap.Data); err != nil {
-						return err
-					}
-				}
-
-				{
-					ctx, cancel := timeoutCtx(baseCtx)
-					defer cancel()
-					if profiles, err := status.GetFiles(ctx, &serverpb.GetFilesRequest{
-						NodeId:   id,
-						Type:     serverpb.FileType_HEAP,
-						Patterns: []string{"*"},
-					}); err != nil {
-						if err := z.createError(prefix+"/heapfiles", err); err != nil {
-							return err
-						}
-					} else {
-						for _, file := range profiles.Files {
-							name := prefix + "/heapprof/" + file.Name
-							if err := z.createRaw(name, file.Contents); err != nil {
-								return err
-							}
-						}
-					}
-				}
-
-				{
-					ctx, cancel := timeoutCtx(baseCtx)
-					defer cancel()
-					if logs, err := status.LogFilesList(
-						ctx, &serverpb.LogFilesListRequest{NodeId: id}); err != nil {
-						if err := z.createError(prefix+"/logs", err); err != nil {
-							return err
-						}
-					} else {
-						for _, file := range logs.Files {
-							name := prefix + "/logs/" + file.Name
-							ctx, cancel := timeoutCtx(baseCtx)
-							defer cancel()
-							entries, err := status.LogFile(
-								ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
-							if err != nil {
-								if err := z.createError(name, err); err != nil {
-									return err
-								}
-								continue
-							}
-							logOut, err := z.create(name, timeutil.Unix(0, file.ModTimeNanos))
-							if err != nil {
-								return err
-							}
-							for _, e := range entries.Entries {
-								if err := e.Format(logOut); err != nil {
-									return err
-								}
-							}
-						}
-					}
-				}
-
-				{
-					ctx, cancel := timeoutCtx(baseCtx)
-					defer cancel()
-					if ranges, err := status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id}); err != nil {
-						if err := z.createError(prefix+"/ranges", err); err != nil {
-							return err
-						}
-					} else {
-						sort.Slice(ranges.Ranges, func(i, j int) bool {
-							return ranges.Ranges[i].State.Desc.RangeID <
-								ranges.Ranges[j].State.Desc.RangeID
+				var heap *serverpb.JSONResponse
+				err = contextutil.RunWithTimeout(baseCtx, "request heap profile", timeout,
+					func(ctx context.Context) error {
+						heap, err = status.Profile(ctx, &serverpb.ProfileRequest{
+							NodeId: id,
+							Type:   serverpb.ProfileRequest_HEAP,
 						})
-						for _, r := range ranges.Ranges {
-							name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
-							if err := z.createJSON(name, r); err != nil {
+						return err
+					})
+				if err := z.createRawOrError(prefix+"/heap", heap.Data, err); err != nil {
+					return err
+				}
+
+				var profiles *serverpb.GetFilesResponse
+				if err := contextutil.RunWithTimeout(baseCtx, "request files", timeout,
+					func(ctx context.Context) error {
+						profiles, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
+							NodeId:   id,
+							Type:     serverpb.FileType_HEAP,
+							Patterns: []string{"*"},
+						})
+						return err
+					}); err != nil {
+					if err := z.createError(prefix+"/heapfiles", err); err != nil {
+						return err
+					}
+				} else {
+					for _, file := range profiles.Files {
+						name := prefix + "/heapprof/" + file.Name
+						if err := z.createRaw(name, file.Contents); err != nil {
+							return err
+						}
+					}
+				}
+
+				var logs *serverpb.LogFilesListResponse
+				if err := contextutil.RunWithTimeout(baseCtx, "request logs", timeout,
+					func(ctx context.Context) error {
+						logs, err = status.LogFilesList(
+							ctx, &serverpb.LogFilesListRequest{NodeId: id})
+						return err
+					}); err != nil {
+					if err := z.createError(prefix+"/logs", err); err != nil {
+						return err
+					}
+				} else {
+					for _, file := range logs.Files {
+						name := prefix + "/logs/" + file.Name
+						var entries *serverpb.LogEntriesResponse
+						if err := contextutil.RunWithTimeout(baseCtx, fmt.Sprintf("request log %s", file.Name), timeout,
+							func(ctx context.Context) error {
+								entries, err = status.LogFile(
+									ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
+								return err
+							}); err != nil {
+							if err := z.createError(name, err); err != nil {
 								return err
 							}
+							continue
+						}
+						logOut, err := z.create(name, timeutil.Unix(0, file.ModTimeNanos))
+						if err != nil {
+							return err
+						}
+						for _, e := range entries.Entries {
+							if err := e.Format(logOut); err != nil {
+								return err
+							}
+						}
+					}
+				}
+
+				var ranges *serverpb.RangesResponse
+				if err := contextutil.RunWithTimeout(baseCtx, "request ranges", timeout, func(ctx context.Context) error {
+					ranges, err = status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id})
+					return err
+				}); err != nil {
+					if err := z.createError(prefix+"/ranges", err); err != nil {
+						return err
+					}
+				} else {
+					sort.Slice(ranges.Ranges, func(i, j int) bool {
+						return ranges.Ranges[i].State.Desc.RangeID <
+							ranges.Ranges[j].State.Desc.RangeID
+					})
+					for _, r := range ranges.Ranges {
+						name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
+						if err := z.createJSON(name, r); err != nil {
+							return err
 						}
 					}
 				}
@@ -375,54 +378,39 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	}
 
 	{
-		ctx, cancel := timeoutCtx(baseCtx)
-		defer cancel()
-		if problems, err := status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{}); err != nil {
-			if err := z.createError(reportsPrefix+"/problemranges", err); err != nil {
-				return err
-			}
-		} else if err := z.createJSON(reportsPrefix+"/problemranges", problems); err != nil {
+		var databases *serverpb.DatabasesResponse
+		if err := contextutil.RunWithTimeout(baseCtx, "request databases", timeout, func(ctx context.Context) error {
+			databases, err = admin.Databases(ctx, &serverpb.DatabasesRequest{})
 			return err
-		}
-	}
-
-	{
-		ctx, cancel := timeoutCtx(baseCtx)
-		defer cancel()
-		if databases, err := admin.Databases(ctx, &serverpb.DatabasesRequest{}); err != nil {
+		}); err != nil {
 			if err := z.createError(schemaPrefix, err); err != nil {
 				return err
 			}
 		} else {
 			for _, dbName := range databases.Databases {
 				prefix := schemaPrefix + "/" + dbName
-				ctx, cancel := timeoutCtx(baseCtx)
-				defer cancel()
-				database, err := admin.DatabaseDetails(
-					ctx, &serverpb.DatabaseDetailsRequest{Database: dbName})
-				if err != nil {
-					if err := z.createError(prefix, err); err != nil {
+				var database *serverpb.DatabaseDetailsResponse
+				requestErr := contextutil.RunWithTimeout(baseCtx, fmt.Sprintf("request database %s", dbName), timeout,
+					func(ctx context.Context) error {
+						database, err = admin.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{Database: dbName})
 						return err
-					}
-					continue
-				}
-				if err := z.createJSON(prefix+"@details", database); err != nil {
+					})
+				if err := z.createJSONOrError(prefix+"@details", database, requestErr); err != nil {
 					return err
+				}
+				if requestErr != nil {
+					continue
 				}
 
 				for _, tableName := range database.TableNames {
 					name := prefix + "/" + tableName
-					ctx, cancel := timeoutCtx(baseCtx)
-					defer cancel()
-					table, err := admin.TableDetails(
-						ctx, &serverpb.TableDetailsRequest{Database: dbName, Table: tableName})
-					if err != nil {
-						if err := z.createError(name, err); err != nil {
+					var table *serverpb.TableDetailsResponse
+					err := contextutil.RunWithTimeout(baseCtx, fmt.Sprintf("request table %s", tableName), timeout,
+						func(ctx context.Context) error {
+							table, err = admin.TableDetails(ctx, &serverpb.TableDetailsRequest{Database: dbName, Table: tableName})
 							return err
-						}
-						continue
-					}
-					if err := z.createJSON(name, table); err != nil {
+						})
+					if err := z.createJSONOrError(name, table, err); err != nil {
 						return err
 					}
 				}

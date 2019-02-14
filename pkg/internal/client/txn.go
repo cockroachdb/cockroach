@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -611,16 +612,13 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	// long this request is going to be around or it could leak a goroutine (in case of a
 	// long-lived network partition).
 	stopper := txn.db.ctx.Stopper
-	ctx, cancel1 := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
-	// NB: cancel2 makes cancel1 obsolete, but the linters don't know that.
-	ctx, cancel2 := context.WithTimeout(ctx, 3*time.Second)
-
+	ctx, cancel := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
 	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
-		defer cancel1()
-		defer cancel2()
+		defer cancel()
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
-		if _, pErr := txn.Send(ctx, ba); pErr != nil {
+		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", 3*time.Second, func(ctx context.Context) error {
+			_, pErr := txn.Send(ctx, ba)
 			if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
 				statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
 				// A common cause of these async rollbacks failing is when they're
@@ -631,10 +629,10 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 			} else {
 				log.Infof(ctx, "async rollback failed: %s", pErr)
 			}
-		}
+			return nil
+		})
 	}); err != nil {
-		cancel1()
-		cancel2()
+		cancel()
 		return roachpb.NewError(err)
 	}
 	return nil

@@ -16,7 +16,10 @@ package contextutil
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"runtime/debug"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -38,4 +41,53 @@ func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, cont
 		}
 		cancel()
 	}
+}
+
+// TimeoutError is a wrapped ContextDeadlineExceeded error. It indicates that
+// an operation didn't complete within its designated timeout.
+type TimeoutError struct {
+	operation string
+	duration  time.Duration
+}
+
+func (t TimeoutError) Error() string {
+	return fmt.Sprintf("operation %q timed out after %s", t.operation, t.duration)
+}
+
+// Timeout implements net.Error.
+func (TimeoutError) Timeout() bool { return true }
+
+// Temporary implements net.Error.
+func (TimeoutError) Temporary() bool { return true }
+
+// Cause implements Causer.
+func (TimeoutError) Cause() error {
+	// This ensures that people looking for DeadlineExceeded in particular still
+	// see it.
+	return context.DeadlineExceeded
+}
+
+// We implement net.Error the same way that context.DeadlineExceeded does, so
+// that people looking for net.Error attributes will still find them.
+var _ net.Error = TimeoutError{}
+
+// RunWithTimeout runs a function with a timeout, the same way you'd do with
+// context.WithTimeout. It improves the opaque error messages returned by
+// WithTimeout by augmenting them with the op string that is passed in.
+func RunWithTimeout(
+	ctx context.Context, op string, timeout time.Duration, fn func(ctx context.Context) error,
+) error {
+	if timeout <= 0 {
+		return fn(ctx)
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	err := fn(ctx)
+	if err == context.DeadlineExceeded || ctx.Err() == context.DeadlineExceeded {
+		return TimeoutError{
+			operation: op,
+			duration:  timeout,
+		}
+	}
+	return err
 }
