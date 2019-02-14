@@ -35,12 +35,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
+
+var useWorkloadFastpath = envutil.EnvOrDefaultBool("COCKROACH_IMPORT_WORKLOAD_FASTER", false)
 
 type readFileFunc func(context.Context, io.Reader, int32, string, progressFn) error
 
@@ -430,7 +433,18 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	var err error
 	switch cp.spec.Format.Format {
 	case roachpb.IOFileFormat_CSV:
-		conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, cp.flowCtx)
+		isWorkload := useWorkloadFastpath
+		for _, file := range cp.spec.Uri {
+			if conf, err := storageccl.ExportStorageConfFromURI(file); err != nil || conf.Provider != roachpb.ExportStorageProvider_Workload {
+				isWorkload = false
+				break
+			}
+		}
+		if isWorkload {
+			conv, err = newWorkloadReader(kvCh, singleTable, evalCtx)
+		} else {
+			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, cp.flowCtx)
+		}
 	case roachpb.IOFileFormat_MysqlOutfile:
 		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
