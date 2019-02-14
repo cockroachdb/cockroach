@@ -61,7 +61,8 @@ const (
 	VersionExportStorageWorkload
 	VersionLazyTxnRecord
 	VersionSequencedReads
-	VersionUnreplicatedRaftTruncatedState // see versionsSingleton for details
+	VersionUnreplicatedRaftTruncatedState
+	VersionDirectImport // see versionsSingleton for details
 
 	// Add new versions here (step one of two).
 
@@ -405,6 +406,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// @enduml
 		Key:     VersionUnreplicatedRaftTruncatedState,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 6},
+	},
+	{
+		Key:     VersionDirectImport,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 7},
 	},
 
 	// Add new versions here (step two of two).
