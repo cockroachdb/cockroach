@@ -96,6 +96,12 @@ message ImportDetails {
   // used if a job is resumed to guarantee that AddSSTable will not attempt
   // to add ranges with an old split point within them.
   repeated bytes samples = 8;
+
+  // ingest_directly means the Import job directly ingests the data as readers
+  // produce it instead of sampling it and then setting up a distsql shuffle and
+  // sort that produced sorted, non-overlapping data to ingest. When ingesting
+  // directly, many other fields like samples, oversample, sst_size are ignored.
+  bool ingest_directly = 11;
 }
 
 message ImportProgress {

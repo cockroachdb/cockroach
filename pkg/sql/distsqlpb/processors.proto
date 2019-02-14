@@ -657,6 +657,14 @@ message ReadImportDataSpec {
   reserved 5;
 
   optional bool skip_missing_foreign_keys = 10 [(gogoproto.nullable) = false];
+
+  // walltimeNanos is the MVCC time at which the created KVs will be written.
+  optional int64 walltimeNanos = 11 [(gogoproto.nullable) = false];
+
+  // ingestDirectly specifies that this reader should bulk-ingest the kvs it
+  // reads rather than emitting them to its output (and instead should emit a
+  // single row containing an encoded BulkOpSummary).
+  optional bool ingestDirectly = 12 [(gogoproto.nullable) = false];
 }
 
 // SSTWriterSpec is the specification for a processor that consumes rows, uses
