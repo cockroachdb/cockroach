@@ -221,7 +221,7 @@ WHERE
 	NOT proisagg
 	AND NOT proiswindow
 	AND NOT proretset
-	AND proname NOT IN ('crdb_internal.force_panic', 'crdb_internal.force_log_fatal', 'crdb_internal.force_error', 'crdb_internal.force_assertion_error')
+	AND proname NOT LIKE 'crdb_internal.force_%'
 `)
 	if err != nil {
 		return nil, err
