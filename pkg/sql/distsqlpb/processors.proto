@@ -765,6 +765,10 @@ message SketchSpec {
 message SamplerSpec {
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
   optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+
+  // This is true if this sampler is part of an automated run of
+  // CREATE STATISTICS.
+  optional bool is_auto_stats = 3 [(gogoproto.nullable) = false];
 }
 
 // SampleAggregatorSpec is the specification of a processor that aggregates the
