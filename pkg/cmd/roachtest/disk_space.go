@@ -269,6 +269,10 @@ func registerDiskUsage(r *registry) {
 
 	testCases := []diskUsageTestCase{
 		// Check the behavior when disk space left is of around one range.
+		// NB: these tests are fragile in that they rely on how fast data gets written to the
+		// nodes based on the underlying node configuration and cockroach version. If the
+		// test starts to fail with nodes running out of disk space (as in #34703), consider
+		// throttling the data generation to some "harmless" value.
 		{
 			// The workload involves both hot row update and mix rows with equal probability.
 			name:             "update_mix_hot_key",
@@ -327,6 +331,7 @@ func registerDiskUsage(r *registry) {
 					}
 					runDiskUsage(t, c, duration, testCase)
 				},
+				Skip: "https://github.com/cockroachdb/cockroach/issues/34703#issuecomment-463567238",
 			},
 		)
 	}
