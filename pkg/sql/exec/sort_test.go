@@ -113,7 +113,7 @@ func TestSort(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, []types.T{}, func(t *testing.T, input []Operator) {
+		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
 			sort, err := NewSorter(input[0], tc.typ, tc.ordCols)
 			if err != nil {
 				t.Fatal(err)
@@ -165,7 +165,7 @@ func TestSortRandomized(t *testing.T) {
 		return false
 	})
 
-	runTests(t, []tuples{tups}, []types.T{}, func(t *testing.T, input []Operator) {
+	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
 		sorter, err := NewSorter(input[0], typs, ordCols)
 		if err != nil {
 			t.Fatal(err)

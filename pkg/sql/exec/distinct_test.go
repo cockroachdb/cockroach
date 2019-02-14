@@ -51,7 +51,7 @@ func TestSortedDistinct(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, []types.T{}, func(t *testing.T, input []Operator) {
+		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
 			distinct, err := NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
 			if err != nil {
 				t.Fatal(err)
