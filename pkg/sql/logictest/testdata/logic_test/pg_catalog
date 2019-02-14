@@ -1698,3 +1698,22 @@ SELECT conkey, confkey FROM pg_catalog.pg_constraint WHERE conname = 'my_fkey'
 ----
 conkey  confkey
 {1}     {1}
+
+subtest regression_34856
+
+statement ok
+CREATE DATABASE d34856
+
+statement ok
+CREATE TABLE d34856.t(x INT);
+  CREATE VIEW d34856.v AS SELECT x FROM d34856.t;
+  CREATE SEQUENCE d34856.s
+
+# Check that only tables show up in pg_tables.
+query T
+SELECT tablename FROM d34856.pg_catalog.pg_tables WHERE schemaname = 'public'
+----
+t
+
+statement ok
+DROP DATABASE d34856 CASCADE
