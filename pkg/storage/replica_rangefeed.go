@@ -113,14 +113,14 @@ func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
 	return tp.ir.CleanupTxnIntentsAsync(ctx, tp.r.RangeID, endTxns, true /* allowSyncProcessing */)
 }
 
-type semaphoreLimitedIterator struct {
+type iteratorWithCloser struct {
 	engine.SimpleIterator
-	sem limit.ConcurrentRequestLimiter
+	close func()
 }
 
-func (sli semaphoreLimitedIterator) Close() {
-	sli.SimpleIterator.Close()
-	sli.sem.Finish()
+func (i iteratorWithCloser) Close() {
+	i.SimpleIterator.Close()
+	i.close()
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
@@ -169,7 +169,7 @@ func (r *Replica) RangeFeed(
 	// If we will be using a catch-up iterator, wait for the limiter here before
 	// locking raftMu.
 	usingCatchupIter := false
-	var iterFinish func()
+	var iterSemRelease func()
 	if !args.Timestamp.IsEmpty() {
 		usingCatchupIter = true
 		if err := iteratorLimiter.Begin(ctx); err != nil {
@@ -177,10 +177,10 @@ func (r *Replica) RangeFeed(
 		}
 		// Finish the iterator limit, but only if we exit before
 		// creating the iterator itself.
-		iterFinish = iteratorLimiter.Finish
+		iterSemRelease = iteratorLimiter.Finish
 		defer func() {
-			if iterFinish != nil {
-				iterFinish()
+			if iterSemRelease != nil {
+				iterSemRelease()
 			}
 		}()
 	}
@@ -213,13 +213,12 @@ func (r *Replica) RangeFeed(
 			UpperBound:       args.Span.EndKey,
 			MinTimestampHint: args.Timestamp,
 		})
-		catchUpIter = semaphoreLimitedIterator{
+		catchUpIter = iteratorWithCloser{
 			SimpleIterator: innerIter,
-			sem:            iteratorLimiter,
+			close:          iterSemRelease,
 		}
-		// Responsibility for finishing the semaphore now passes to the
-		// iterator.
-		iterFinish = nil
+		// Responsibility for releasing the semaphore now passes to the iterator.
+		iterSemRelease = nil
 	}
 	p.Register(rspan, args.Timestamp, catchUpIter, lockedStream, errC)
 	r.raftMu.Unlock()
