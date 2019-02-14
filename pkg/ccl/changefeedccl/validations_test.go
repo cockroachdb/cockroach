@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -29,7 +30,7 @@ func TestValidations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		// Poller-based tests get checkpoints every 10 milliseconds, whereas
 		// rangefeed tests get on at most every 200 milliseconds, and there is
 		// also a short lead time for rangefeed-based feeds before the
@@ -46,8 +47,8 @@ func TestValidations(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			bankFeed := f.Feed(t, `CREATE CHANGEFEED FOR bank WITH updated, resolved`)
-			defer bankFeed.Close(t)
+			bankFeed := feed(t, f, `CREATE CHANGEFEED FOR bank WITH updated, resolved`)
+			defer closeFeed(t, bankFeed)
 
 			var done int64
 			g := ctxgroup.WithContext(ctx)
@@ -70,29 +71,29 @@ func TestValidations(t *testing.T) {
 			const requestedResolved = 7
 			var numResolved, rowsSinceResolved int
 
-			v := Validators{
-				NewOrderValidator(`bank`),
-				NewFingerprintValidator(db, `bank`, `fprint`, bankFeed.Partitions()),
+			v := cdctest.Validators{
+				cdctest.NewOrderValidator(`bank`),
+				cdctest.NewFingerprintValidator(db, `bank`, `fprint`, bankFeed.Partitions()),
 			}
 			sqlDB.Exec(t, `CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`)
 			for {
-				_, partition, key, value, resolved, ok := bankFeed.Next(t)
-				if !ok {
-					t.Fatal(`expected more rows`)
-				} else if key != nil {
-					updated, _, err := ParseJSONValueTimestamps(value)
+				m, err := bankFeed.Next()
+				if err != nil {
+					t.Fatal(err)
+				} else if len(m.Key) > 0 || len(m.Value) > 0 {
+					updated, _, err := cdctest.ParseJSONValueTimestamps(m.Value)
 					if err != nil {
 						t.Fatal(err)
 					}
-					v.NoteRow(partition, string(key), string(value), updated)
+					v.NoteRow(m.Partition, string(m.Key), string(m.Value), updated)
 					rowsSinceResolved++
-				} else if resolved != nil {
-					_, resolved, err := ParseJSONValueTimestamps(resolved)
+				} else if m.Resolved != nil {
+					_, resolved, err := cdctest.ParseJSONValueTimestamps(m.Resolved)
 					if err != nil {
 						t.Fatal(err)
 					}
 					if rowsSinceResolved > 0 || true {
-						if err := v.NoteResolved(partition, resolved); err != nil {
+						if err := v.NoteResolved(m.Partition, resolved); err != nil {
 							t.Fatal(err)
 						}
 						numResolved++
@@ -122,7 +123,7 @@ func TestCatchupScanOrdering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		t.Run("bank", func(t *testing.T) {
 			ctx := context.Background()
 			const numRows, numRanges, payloadBytes, maxTransfer = 10, 10, 10, 999
@@ -141,8 +142,8 @@ func TestCatchupScanOrdering(t *testing.T) {
 				}
 			}
 
-			bankFeed := f.Feed(t, `CREATE CHANGEFEED FOR bank WITH updated, cursor=$1`, nowString)
-			defer bankFeed.Close(t)
+			bankFeed := feed(t, f, `CREATE CHANGEFEED FOR bank WITH updated, cursor=$1`, nowString)
+			defer closeFeed(t, bankFeed)
 
 			var done int64
 			g := ctxgroup.WithContext(ctx)
@@ -158,18 +159,18 @@ func TestCatchupScanOrdering(t *testing.T) {
 				}
 			})
 
-			v := NewOrderValidator(`bank`)
+			v := cdctest.NewOrderValidator(`bank`)
 			seenChanges := 0
 			for {
-				_, partition, key, value, _, ok := bankFeed.Next(t)
-				if !ok {
-					t.Fatal(`expected more rows`)
-				} else if key != nil {
-					updated, _, err := ParseJSONValueTimestamps(value)
+				m, err := bankFeed.Next()
+				if err != nil {
+					t.Fatal(err)
+				} else if len(m.Key) > 0 || len(m.Value) > 0 {
+					updated, _, err := cdctest.ParseJSONValueTimestamps(m.Value)
 					if err != nil {
 						t.Fatal(err)
 					}
-					v.NoteRow(partition, string(key), string(value), updated)
+					v.NoteRow(m.Partition, string(m.Key), string(m.Value), updated)
 					seenChanges++
 					if seenChanges >= 200 {
 						atomic.StoreInt64(&done, 1)

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -270,7 +271,7 @@ func (r *testSchemaRegistry) encodedAvroToNative(b []byte) (interface{}, error) 
 func TestAvroEncoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
 		reg := makeTestSchemaRegistry()
 		defer reg.Close()
@@ -282,10 +283,10 @@ func TestAvroEncoder(t *testing.T) {
 			`INSERT INTO foo VALUES (1, 'bar'), (2, NULL) RETURNING cluster_logical_timestamp()`,
 		).Scan(&ts1)
 
-		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo `+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
 			`WITH format=$1, confluent_schema_registry=$2, resolved`,
 			optFormatAvro, reg.server.URL)
-		defer foo.Close(t)
+		defer closeFeed(t, foo)
 		assertPayloadsAvro(t, reg, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}}}`,
 			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}}}`,
@@ -295,15 +296,15 @@ func TestAvroEncoder(t *testing.T) {
 			t.Fatalf(`expected a resolved timestamp greater than %s got %s`, ts, resolved)
 		}
 
-		fooUpdated := f.Feed(t, `CREATE CHANGEFEED FOR foo `+
+		fooUpdated := feed(t, f, `CREATE CHANGEFEED FOR foo `+
 			`WITH format=$1, confluent_schema_registry=$2, updated`,
 			optFormatAvro, reg.server.URL)
-		defer fooUpdated.Close(t)
+		defer closeFeed(t, fooUpdated)
 		// Skip over the first two rows since we don't know the statement timestamp.
-		_, _, _, _, _, ok := fooUpdated.Next(t)
-		require.True(t, ok)
-		_, _, _, _, _, ok = fooUpdated.Next(t)
-		require.True(t, ok)
+		_, err := fooUpdated.Next()
+		require.NoError(t, err)
+		_, err = fooUpdated.Next()
+		require.NoError(t, err)
 
 		var ts2 string
 		require.NoError(t, crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
@@ -325,7 +326,7 @@ func TestAvroEncoder(t *testing.T) {
 func TestAvroSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		reg := makeTestSchemaRegistry()
 		defer reg.Close()
 
@@ -333,20 +334,17 @@ func TestAvroSchemaChange(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo `+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
 			`WITH format=$1, confluent_schema_registry=$2`,
 			optFormatAvro, reg.server.URL)
-		defer foo.Close(t)
+		defer closeFeed(t, foo)
 		assertPayloadsAvro(t, reg, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1}}}}`,
 		})
 
 		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b UUID`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, gen_random_uuid())`)
-		if _, _, _, _, _, ok := foo.Next(t); ok {
-			t.Fatal(`unexpected row`)
-		}
-		if err := foo.Err(); !testutils.IsError(err, `type UUID not yet supported with avro`) {
+		if _, err := foo.Next(); !testutils.IsError(err, `type UUID not yet supported with avro`) {
 			t.Fatalf(`expected "type UUID not yet supported with avro" error got: %+v`, err)
 		}
 	}
@@ -359,7 +357,7 @@ func TestAvroSchemaChange(t *testing.T) {
 func TestAvroLedger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		reg := makeTestSchemaRegistry()
 		defer reg.Close()
 
@@ -368,10 +366,10 @@ func TestAvroLedger(t *testing.T) {
 		_, err := workload.Setup(ctx, db, gen, 0, 0)
 		require.NoError(t, err)
 
-		ledger := f.Feed(t, `CREATE CHANGEFEED FOR customer, transaction, entry, session
+		ledger := feed(t, f, `CREATE CHANGEFEED FOR customer, transaction, entry, session
 	                       WITH format=$1, confluent_schema_registry=$2
 	               `, optFormatAvro, reg.server.URL)
-		defer ledger.Close(t)
+		defer closeFeed(t, ledger)
 
 		assertPayloadsAvro(t, reg, ledger, []string{
 			`customer: {"id":{"long":0}}->{"after":{"customer":{"balance":{"bytes.decimal":"0"},"created":{"long.timestamp-micros":"2114-03-27T13:14:27.287114Z"},"credit_limit":null,"currency_code":{"string":"XVL"},"id":{"long":0},"identifier":{"string":"0"},"is_active":{"boolean":true},"is_system_customer":{"boolean":true},"name":null,"sequence_number":{"long":-1}}}}`,
