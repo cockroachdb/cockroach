@@ -43,8 +43,6 @@ type deleteRangeNode struct {
 	// we can count the number of rows deleted.
 	fetcher row.Fetcher
 
-	// autoCommit will be set to true at runtime if autocommit is available.
-	autoCommit autoCommitOpt
 	// rowCount will be set to the count of rows deleted.
 	rowCount int
 }
@@ -174,7 +172,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		d.tableWriter.b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 	}
 
-	if err := d.tableWriter.finalize(ctx, d.autoCommit, d.desc); err != nil {
+	if err := d.tableWriter.finalize(ctx, d.desc); err != nil {
 		return err
 	}
 
@@ -226,5 +224,5 @@ func (*deleteRangeNode) Close(ctx context.Context) {}
 
 // enableAutoCommit implements the autoCommitNode interface.
 func (d *deleteRangeNode) enableAutoCommit() {
-	d.autoCommit = autoCommitEnabled
+	d.tableWriter.enableAutoCommit()
 }

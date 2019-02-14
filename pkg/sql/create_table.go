@@ -230,6 +230,9 @@ func (n *createTableNode) startExec(params runParams) error {
 		ti := tableInserterPool.Get().(*tableInserter)
 		*ti = tableInserter{ri: ri}
 		tw := tableWriter(ti)
+		if n.run.autoCommit == autoCommitEnabled {
+			tw.enableAutoCommit()
+		}
 		defer func() {
 			tw.close(params.ctx)
 			*ti = tableInserter{}
@@ -278,7 +281,7 @@ func (n *createTableNode) startExec(params runParams) error {
 					return err
 				}
 				_, err := tw.finalize(
-					params.ctx, n.run.autoCommit, params.extendedEvalCtx.Tracing.KVTracingEnabled())
+					params.ctx, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 				if err != nil {
 					return err
 				}

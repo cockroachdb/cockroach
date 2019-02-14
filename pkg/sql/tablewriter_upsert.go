@@ -162,9 +162,9 @@ func (tu *tableUpserterBase) close(ctx context.Context) {
 
 // finalize is part of the tableWriter interface.
 func (tu *tableUpserterBase) finalize(
-	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
+	ctx context.Context, traceKV bool,
 ) (*rowcontainer.RowContainer, error) {
-	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
+	return nil, tu.tableWriterBase.finalize(ctx, tu.tableDesc())
 }
 
 // makeResultFromRow reshapes a row that was inserted or updated to a row

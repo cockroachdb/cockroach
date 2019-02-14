@@ -260,10 +260,6 @@ type upsertRun struct {
 	// BatchedNext() has completed the work already.
 	done bool
 
-	// autoCommit indicates whether the last KV batch processed by
-	// this update will also commit the KV txn.
-	autoCommit autoCommitOpt
-
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 }
@@ -349,7 +345,7 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
-		if _, err := n.run.tw.finalize(params.ctx, n.run.autoCommit, n.run.traceKV); err != nil {
+		if _, err := n.run.tw.finalize(params.ctx, n.run.traceKV); err != nil {
 			return false, err
 		}
 		// Remember we're done for the next call to BatchedNext().
@@ -428,7 +424,7 @@ func (n *upsertNode) Close(ctx context.Context) {
 
 // enableAutoCommit is part of the autoCommitNode interface.
 func (n *upsertNode) enableAutoCommit() {
-	n.run.autoCommit = autoCommitEnabled
+	n.run.tw.enableAutoCommit()
 }
 
 // upsertExcludedTable is the name of a synthetic table used in an upsert's set
