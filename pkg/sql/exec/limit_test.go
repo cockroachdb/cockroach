@@ -14,11 +14,7 @@
 
 package exec
 
-import (
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-)
+import "testing"
 
 func TestLimit(t *testing.T) {
 	tcs := []struct {
@@ -64,7 +60,7 @@ func TestLimit(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, []types.T{}, func(t *testing.T, input []Operator) {
+		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
 			limit := NewLimitOp(input[0], tc.limit)
 			out := newOpTestOutput(limit, []int{0}, tc.expected)
 

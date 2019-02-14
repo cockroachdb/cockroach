@@ -36,9 +36,7 @@ type tuples []tuple
 // sizes and with and without a random selection vector.
 // Provide a test function that takes a list of input Operators, which will give
 // back the tuples provided in batches.
-func runTests(
-	t *testing.T, tups []tuples, extraTypes []types.T, test func(t *testing.T, inputs []Operator),
-) {
+func runTests(t *testing.T, tups []tuples, test func(t *testing.T, inputs []Operator)) {
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, batchSize := range []uint16{1, 2, 3, 16, 1024} {
@@ -47,11 +45,11 @@ func runTests(
 				inputSources := make([]Operator, len(tups))
 				if useSel {
 					for i, tup := range tups {
-						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, extraTypes...)
+						inputSources[i] = newOpTestSelInput(rng, batchSize, tup)
 					}
 				} else {
 					for i, tup := range tups {
-						inputSources[i] = newOpTestInput(batchSize, tup, extraTypes...)
+						inputSources[i] = newOpTestInput(batchSize, tup)
 					}
 				}
 				test(t, inputSources)
@@ -75,8 +73,7 @@ func runTests(
 //     t.Fatal(err)
 // }
 type opTestInput struct {
-	typs      []types.T
-	extraCols []types.T
+	typs []types.T
 
 	batchSize uint16
 	tuples    tuples
@@ -88,29 +85,23 @@ type opTestInput struct {
 
 var _ Operator = &opTestInput{}
 
-// newOpTestInput returns a new opTestInput, with the given input tuples and
-// the given extra column types. The input tuples are translated into types
-// automatically, using simple rules (e.g. integers always become Int64).
-// The extraCols slice represents any extra columns that the batch must have
-// for output or temp columns for operators in the test.
-func newOpTestInput(batchSize uint16, tuples tuples, extraCols ...types.T) *opTestInput {
+// newOpTestInput returns a new opTestInput with the given input tuples. The
+// input tuples are translated into types automatically, using simple rules
+// (e.g. integers always become Int64).
+func newOpTestInput(batchSize uint16, tuples tuples) *opTestInput {
 	ret := &opTestInput{
 		batchSize: batchSize,
 		tuples:    tuples,
-		extraCols: extraCols,
 	}
 	return ret
 }
 
-func newOpTestSelInput(
-	rng *rand.Rand, batchSize uint16, tuples tuples, extraCols ...types.T,
-) *opTestInput {
+func newOpTestSelInput(rng *rand.Rand, batchSize uint16, tuples tuples) *opTestInput {
 	ret := &opTestInput{
 		useSel:    true,
 		rng:       rng,
 		batchSize: batchSize,
 		tuples:    tuples,
-		extraCols: extraCols,
 	}
 	return ret
 }
@@ -134,7 +125,7 @@ func (s *opTestInput) Init() {
 	}
 
 	s.typs = typs
-	s.batch = NewMemBatch(append(typs, s.extraCols...))
+	s.batch = NewMemBatch(typs)
 
 	s.selection = make([]uint16, ColBatchSize)
 	for i := range s.selection {
@@ -278,25 +269,25 @@ func (r *opTestOutput) Verify() error {
 	return assertTuplesEquals(r.expected, actual)
 }
 
-// assertTupleEquals asserts that two tuples are equal, using a slow,
-// reflection-based method to do the assertion. Reflection is used so that
+// tupleEquals checks that two tuples are equal, using a slow,
+// reflection-based method to do the comparison. Reflection is used so that
 // values can be compared in a type-agnostic way.
-func assertTupleEquals(expected tuple, actual tuple) error {
+func tupleEquals(expected tuple, actual tuple) bool {
 	if len(expected) != len(actual) {
-		return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
+		return false
 	}
 	for i := 0; i < len(actual); i++ {
 		if expected[i] == nil || actual[i] == nil {
 			if expected[i] != nil || actual[i] != nil {
-				return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
+				return false
 			}
 		} else {
 			if !reflect.DeepEqual(reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(), expected[i]) {
-				return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
+				return false
 			}
 		}
 	}
-	return nil
+	return true
 }
 
 // assertTuplesEquals asserts that two sets of tuples are equal.
@@ -304,9 +295,20 @@ func assertTuplesEquals(expected tuples, actual tuples) error {
 	if len(expected) != len(actual) {
 		return errors.Errorf("expected %+v, actual %+v", expected, actual)
 	}
-	for i, t := range expected {
-		if err := assertTupleEquals(t, actual[i]); err != nil {
-			return errors.Wrapf(err, "expected %+v, actual %+v:\n", expected, actual)
+	actualTupleUsed := make([]bool, len(actual))
+	for _, te := range expected {
+		matched := false
+		for j, ta := range actual {
+			if !actualTupleUsed[j] {
+				if tupleEquals(te, ta) {
+					actualTupleUsed[j] = true
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			return errors.Errorf("expected %+v, actual %+v\n", expected, actual)
 		}
 	}
 	return nil
@@ -416,7 +418,7 @@ func TestOpTestInputOutput(t *testing.T) {
 			{1, 5, 0},
 		},
 	}
-	runTests(t, inputs, nil, func(t *testing.T, sources []Operator) {
+	runTests(t, inputs, func(t *testing.T, sources []Operator) {
 		out := newOpTestOutput(sources[0], []int{0, 1, 2}, inputs[0])
 
 		if err := out.Verify(); err != nil {

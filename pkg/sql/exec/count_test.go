@@ -14,11 +14,7 @@
 
 package exec
 
-import (
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-)
+import "testing"
 
 func TestCount(t *testing.T) {
 	tcs := []struct {
@@ -35,7 +31,7 @@ func TestCount(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, []types.T{}, func(t *testing.T, input []Operator) {
+		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
 			count := NewCountOp(input[0])
 			out := newOpTestOutput(count, []int{0}, tc.expected)
 

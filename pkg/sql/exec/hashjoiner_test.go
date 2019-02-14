@@ -709,7 +709,7 @@ func TestHashJoinerInt64(t *testing.T) {
 
 		for _, buildDistinct := range buildFlags {
 			t.Run(fmt.Sprintf("buildDistinct=%v", buildDistinct), func(t *testing.T) {
-				runTests(t, inputs, []types.T{types.Bool}, func(t *testing.T, sources []Operator) {
+				runTests(t, inputs, func(t *testing.T, sources []Operator) {
 					leftSource, rightSource := sources[0], sources[1]
 
 					hj, err := NewEqHashJoinerOp(

@@ -54,7 +54,7 @@ func TestOffset(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, []types.T{}, func(t *testing.T, input []Operator) {
+		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
 			s := NewOffsetOp(input[0], tc.offset)
 			out := newOpTestOutput(s, []int{0}, tc.expected)
 
