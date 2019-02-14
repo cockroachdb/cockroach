@@ -395,14 +395,6 @@ func (r *Replica) AdminMerge(
 		// TODO(benesch): expose a proper API for preventing the fast path.
 		_ = txn.CommitTimestamp()
 
-		// Multiple merge tests rely on a transaction record being written as
-		// early as possible in the lifecycle of a transaction. They aren't
-		// prepared for an untimely lease transfer to cause a restart.
-		// TODO(nvanbenschoten): Remove this once the tests are fixed.
-		if err := txn.EagerRecord(); err != nil {
-			return err
-		}
-
 		// Pipelining might send QueryIntent requests to the RHS after the RHS has
 		// noticed the merge and started blocking all traffic. This causes the merge
 		// transaction to deadlock. Just turn pipelining off; the structure of the
