@@ -697,8 +697,14 @@ func importPlanHook(
 		}
 
 		_, ingestDirectly := opts[importOptionDirectIngest]
-		if transform != "" && ingestDirectly {
-			return errors.Errorf("cannot use %q and %q options together", importOptionDirectIngest, importOptionTransform)
+		if ingestDirectly {
+			if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionDirectImport) {
+				return errors.Errorf("Using %q requires all nodes to be upgraded to %s",
+					importOptionDirectIngest, cluster.VersionByKey(cluster.VersionDirectImport))
+			}
+			if transform != "" {
+				return errors.Errorf("cannot use %q and %q options together", importOptionDirectIngest, importOptionTransform)
+			}
 		}
 
 		var tableDescs []*sqlbase.TableDescriptor
