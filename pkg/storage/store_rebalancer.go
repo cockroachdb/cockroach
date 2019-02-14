@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -251,15 +252,12 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 		log.VEventf(ctx, 1, "transferring r%d (%.2f qps) to s%d to better balance load",
 			replWithStats.repl.RangeID, replWithStats.qps, target.StoreID)
-		replCtx, cancel := context.WithTimeout(replWithStats.repl.AnnotateCtx(ctx), sr.rq.processTimeout)
-		if err := sr.rq.transferLease(
-			replCtx, replWithStats.repl, target, replWithStats.qps,
-		); err != nil {
-			cancel()
-			log.Errorf(replCtx, "unable to transfer lease to s%d: %v", target.StoreID, err)
+		if err := contextutil.RunWithTimeout(ctx, "transfer lease", sr.rq.processTimeout, func(ctx context.Context) error {
+			return sr.rq.transferLease(ctx, replWithStats.repl, target, replWithStats.qps)
+		}); err != nil {
+			log.Errorf(ctx, "unable to transfer lease to s%d: %v", target.StoreID, err)
 			continue
 		}
-		cancel()
 		sr.metrics.LeaseTransferCount.Inc(1)
 
 		// Finally, update our local copies of the descriptors so that if
@@ -313,13 +311,12 @@ func (sr *StoreRebalancer) rebalanceStore(
 		descBeforeRebalance := replWithStats.repl.Desc()
 		log.VEventf(ctx, 1, "rebalancing r%d (%.2f qps) from %v to %v to better balance load",
 			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas, targets)
-		replCtx, cancel := context.WithTimeout(replWithStats.repl.AnnotateCtx(ctx), sr.rq.processTimeout)
-		if err := sr.rq.store.AdminRelocateRange(replCtx, *descBeforeRebalance, targets); err != nil {
-			cancel()
-			log.Errorf(replCtx, "unable to relocate range to %v: %v", targets, err)
+		if err := contextutil.RunWithTimeout(ctx, "relocate range", sr.rq.processTimeout, func(ctx context.Context) error {
+			return sr.rq.store.AdminRelocateRange(ctx, *descBeforeRebalance, targets)
+		}); err != nil {
+			log.Errorf(ctx, "unable to relocate range to %v: %v", targets, err)
 			continue
 		}
-		cancel()
 		sr.metrics.RangeRebalanceCount.Inc(1)
 
 		// Finally, update our local copies of the descriptors so that if

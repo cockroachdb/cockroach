@@ -17,6 +17,7 @@ package contextutil
 import (
 	"context"
 	"fmt"
+	"net"
 	"runtime/debug"
 	"time"
 
@@ -42,28 +43,36 @@ func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, cont
 	}
 }
 
+// TimeoutError is a wrapped ContextDeadlineExceeded error. It indicates that
+// an operation didn't complete within its designated timeout.
 type TimeoutError struct {
 	operation string
 	duration  time.Duration
-	deadline  time.Time
 }
 
 func (t TimeoutError) Error() string {
-	if !t.deadline.IsZero() {
-		return fmt.Sprintf("operation %q missed deadline of %s", t.operation, t.deadline)
-	}
 	return fmt.Sprintf("operation %q timed out after %s", t.operation, t.duration)
 }
-func (TimeoutError) Timeout() bool   { return true }
+
+// Timeout implements net.Error.
+func (TimeoutError) Timeout() bool { return true }
+
+// Temporary implements net.Error.
 func (TimeoutError) Temporary() bool { return true }
+
+// Cause implements Causer.
 func (TimeoutError) Cause() error {
 	// This ensures that people looking for DeadlineExceeded in particular still
 	// see it.
 	return context.DeadlineExceeded
 }
 
+// We implement net.Error the same way that context.DeadlineExceeded does, so
+// that people looking for net.Error attributes will still find them.
+var _ net.Error = TimeoutError{}
+
 // RunWithTimeout runs a function with a timeout, the same way you'd do with
-// context.WithTimeout. It improve the opaque error messages returned by
+// context.WithTimeout. It improves the opaque error messages returned by
 // WithTimeout by augmenting them with the op string that is passed in.
 func RunWithTimeout(
 	ctx context.Context, op string, timeout time.Duration, fn func(ctx context.Context) error,
@@ -78,24 +87,6 @@ func RunWithTimeout(
 		return TimeoutError{
 			operation: op,
 			duration:  timeout,
-		}
-	}
-	return err
-}
-
-// RunWithDeadline runs a function with a deadline, the same way you'd do with
-// context.WithDeadline. It improve the opaque error messages returned by
-// WithDeadline by augmenting them with the op string that is passed in.
-func RunWithDeadline(
-	ctx context.Context, op string, d time.Time, fn func(ctx context.Context) error,
-) error {
-	ctx, cancel := context.WithDeadline(ctx, d)
-	defer cancel()
-	err := fn(ctx)
-	if err == context.DeadlineExceeded || ctx.Err() == context.DeadlineExceeded {
-		return TimeoutError{
-			operation: op,
-			deadline:  d,
 		}
 	}
 	return err

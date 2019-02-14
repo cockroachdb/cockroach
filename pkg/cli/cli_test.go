@@ -2305,6 +2305,7 @@ writing ` + os.DevNull + `
   debug/rangelog
   debug/liveness
   debug/settings
+  debug/reports/problemranges
   debug/gossip/liveness
   debug/gossip/network
   debug/gossip/nodes
@@ -2335,7 +2336,6 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/18
   debug/nodes/1/ranges/19
   debug/nodes/1/ranges/20
-  debug/reports/problemranges
   debug/schema/defaultdb@details
   debug/schema/postgres@details
   debug/schema/system@details

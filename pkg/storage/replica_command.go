@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/causer"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -546,27 +547,25 @@ func (r *Replica) AdminMerge(
 func waitForApplication(
 	ctx context.Context, dialer *nodedialer.Dialer, desc roachpb.RangeDescriptor, leaseIndex uint64,
 ) error {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	g := ctxgroup.WithContext(ctx)
-	for _, repl := range desc.Replicas {
-		repl := repl // copy for goroutine
-		g.GoCtx(func(ctx context.Context) error {
-			conn, err := dialer.Dial(ctx, repl.NodeID)
-			if err != nil {
-				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
-			}
-			_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
-				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
-				RangeID:            desc.RangeID,
-				LeaseIndex:         leaseIndex,
+	return contextutil.RunWithTimeout(ctx, "wait for application", 5*time.Second, func(ctx context.Context) error {
+		g := ctxgroup.WithContext(ctx)
+		for _, repl := range desc.Replicas {
+			repl := repl // copy for goroutine
+			g.GoCtx(func(ctx context.Context) error {
+				conn, err := dialer.Dial(ctx, repl.NodeID)
+				if err != nil {
+					return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
+				}
+				_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
+					StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
+					RangeID:            desc.RangeID,
+					LeaseIndex:         leaseIndex,
+				})
+				return err
 			})
-			return err
-		})
-	}
-	return g.Wait()
+		}
+		return g.Wait()
+	})
 }
 
 // waitForReplicasInit blocks until it has proof that the replicas listed in
@@ -576,26 +575,24 @@ func waitForApplication(
 func waitForReplicasInit(
 	ctx context.Context, dialer *nodedialer.Dialer, desc roachpb.RangeDescriptor,
 ) error {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	g := ctxgroup.WithContext(ctx)
-	for _, repl := range desc.Replicas {
-		repl := repl // copy for goroutine
-		g.GoCtx(func(ctx context.Context) error {
-			conn, err := dialer.Dial(ctx, repl.NodeID)
-			if err != nil {
-				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
-			}
-			_, err = NewPerReplicaClient(conn).WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
-				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
-				RangeID:            desc.RangeID,
+	return contextutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
+		g := ctxgroup.WithContext(ctx)
+		for _, repl := range desc.Replicas {
+			repl := repl // copy for goroutine
+			g.GoCtx(func(ctx context.Context) error {
+				conn, err := dialer.Dial(ctx, repl.NodeID)
+				if err != nil {
+					return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
+				}
+				_, err = NewPerReplicaClient(conn).WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
+					StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
+					RangeID:            desc.RangeID,
+				})
+				return err
 			})
-			return err
-		})
-	}
-	return g.Wait()
+		}
+		return g.Wait()
+	})
 }
 
 type snapshotError struct {

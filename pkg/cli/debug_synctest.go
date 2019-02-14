@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
@@ -80,34 +81,33 @@ func (sn scriptNemesis) Off() error {
 func runDebugSyncTest(cmd *cobra.Command, args []string) error {
 	// TODO(tschottdorf): make this a flag.
 	duration := 10 * time.Minute
+	return contextutil.RunWithTimeout(context.Background(), "synctest", duration, func(ctx context.Context) error {
 
-	ctx, cancel := context.WithTimeout(context.Background(), duration)
-	defer cancel()
-
-	nem := scriptNemesis(args[1])
-	if err := nem.Off(); err != nil {
-		return errors.Wrap(err, "unable to disable nemesis at beginning of run")
-	}
-
-	var generation int
-	var lastSeq int64
-	for {
-		dir := filepath.Join(args[0], strconv.Itoa(generation))
-		curLastSeq, err := runSyncer(ctx, dir, lastSeq, nem)
-		if err != nil {
-			return err
+		nem := scriptNemesis(args[1])
+		if err := nem.Off(); err != nil {
+			return errors.Wrap(err, "unable to disable nemesis at beginning of run")
 		}
-		lastSeq = curLastSeq
-		if curLastSeq == 0 {
-			if ctx.Err() != nil {
-				// Clean shutdown.
-				return nil
+
+		var generation int
+		var lastSeq int64
+		for {
+			dir := filepath.Join(args[0], strconv.Itoa(generation))
+			curLastSeq, err := runSyncer(ctx, dir, lastSeq, nem)
+			if err != nil {
+				return err
 			}
-			// RocksDB dir got corrupted.
-			generation++
-			continue
+			lastSeq = curLastSeq
+			if curLastSeq == 0 {
+				if ctx.Err() != nil {
+					// Clean shutdown.
+					return nil
+				}
+				// RocksDB dir got corrupted.
+				generation++
+				continue
+			}
 		}
-	}
+	})
 }
 
 type nemesisI interface {

@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -364,44 +365,43 @@ func (s *statusServer) AllocatorRange(
 
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
-	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
-	defer cancel()
-
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
 	type nodeResponse struct {
 		nodeID roachpb.NodeID
 		resp   *serverpb.AllocatorResponse
 		err    error
 	}
-
 	responses := make(chan nodeResponse)
 	// TODO(bram): consider abstracting out this repeated pattern.
 	for nodeID := range isLiveMap {
 		nodeID := nodeID
 		if err := s.stopper.RunAsyncTask(
-			nodeCtx,
+			ctx,
 			"server.statusServer: requesting remote Allocator simulation",
 			func(ctx context.Context) {
-				status, err := s.dialNode(ctx, nodeID)
-				var allocatorResponse *serverpb.AllocatorResponse
-				if err == nil {
-					allocatorRequest := &serverpb.AllocatorRequest{
-						RangeIDs: []roachpb.RangeID{roachpb.RangeID(req.RangeId)},
+				_ = contextutil.RunWithTimeout(ctx, "allocator range", base.NetworkTimeout, func(ctx context.Context) error {
+					status, err := s.dialNode(ctx, nodeID)
+					var allocatorResponse *serverpb.AllocatorResponse
+					if err == nil {
+						allocatorRequest := &serverpb.AllocatorRequest{
+							RangeIDs: []roachpb.RangeID{roachpb.RangeID(req.RangeId)},
+						}
+						allocatorResponse, err = status.Allocator(ctx, allocatorRequest)
 					}
-					allocatorResponse, err = status.Allocator(ctx, allocatorRequest)
-				}
-				response := nodeResponse{
-					nodeID: nodeID,
-					resp:   allocatorResponse,
-					err:    err,
-				}
+					response := nodeResponse{
+						nodeID: nodeID,
+						resp:   allocatorResponse,
+						err:    err,
+					}
 
-				select {
-				case responses <- response:
-					// Response processed.
-				case <-ctx.Done():
-					// Context completed, response no longer needed.
-				}
+					select {
+					case responses <- response:
+						// Response processed.
+					case <-ctx.Done():
+						// Context completed, response no longer needed.
+					}
+					return nil
+				})
 			}); err != nil {
 			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 		}
@@ -1040,14 +1040,6 @@ func (s *statusServer) RaftDebug(
 		},
 	}
 
-	// Subtract base.NetworkTimeout from the deadline so we have time to process
-	// the results and return them.
-	if deadline, ok := ctx.Deadline(); ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithDeadline(ctx, deadline.Add(-base.NetworkTimeout))
-		defer cancel()
-	}
-
 	// Parallelize fetching of ranges to minimize total time.
 	var wg sync.WaitGroup
 	for _, node := range nodes.Nodes {
@@ -1493,10 +1485,12 @@ func (s *statusServer) iterateNodes(
 	responseChan := make(chan nodeResponse, numNodes)
 
 	nodeQuery := func(ctx context.Context, nodeID roachpb.NodeID) {
-		rpcCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
-		defer cancel()
-
-		client, err := dialFn(rpcCtx, nodeID)
+		var client interface{}
+		err := contextutil.RunWithTimeout(ctx, "dial node", base.NetworkTimeout, func(ctx context.Context) error {
+			var err error
+			client, err = dialFn(ctx, nodeID)
+			return err
+		})
 		if err != nil {
 			err = errors.Wrapf(err, "failed to dial into node %d (%s)",
 				nodeID, nodeStatuses[nodeID].LivenessStatus)

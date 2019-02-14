@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -250,14 +251,17 @@ func (r *Replica) RunConsistencyCheck(
 			func(ctx context.Context) {
 				defer wg.Done()
 
-				ctx, cancel := context.WithTimeout(ctx, collectChecksumTimeout)
-				defer cancel()
-
-				var masterChecksum []byte
-				if len(results) > 0 {
-					masterChecksum = results[0].Response.Checksum
-				}
-				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
+				var resp CollectChecksumResponse
+				err := contextutil.RunWithTimeout(ctx, "collect checksum", collectChecksumTimeout,
+					func(ctx context.Context) error {
+						var masterChecksum []byte
+						if len(results) > 0 {
+							masterChecksum = results[0].Response.Checksum
+						}
+						var err error
+						resp, err = r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
+						return err
+					})
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,
