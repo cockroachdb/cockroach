@@ -672,6 +672,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 					mb.outScope.expr,
 					scanScope.expr,
 					on,
+					memo.EmptyJoinPrivate,
 				),
 				memo.FiltersExpr{memo.FiltersItem{
 					Condition: mb.b.factory.ConstructIs(
@@ -764,6 +765,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		mb.outScope.expr,
 		fetchScope.expr,
 		on,
+		memo.EmptyJoinPrivate,
 	)
 
 	// Add a filter from the WHERE clause if one exists.

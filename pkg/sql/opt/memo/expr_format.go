@@ -828,6 +828,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 			fmt.Fprintf(f.Buffer, " ordering=%s", t)
 		}
 
+	case *JoinPrivate:
+		// TODO(radu): add code here when we add fields to JoinPrivate.
+
 	case *ExplainPrivate, *opt.ColSet, *opt.ColList, *SetPrivate, types.T:
 		// Don't show anything, because it's mostly redundant.
 
