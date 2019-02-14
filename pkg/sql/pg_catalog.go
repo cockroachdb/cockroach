@@ -1899,7 +1899,7 @@ CREATE TABLE pg_catalog.pg_tables (
 		// schema/table names.
 		return forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				if table.IsView() {
+				if !table.IsTable() {
 					return nil
 				}
 				return addRow(
