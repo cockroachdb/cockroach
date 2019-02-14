@@ -441,7 +441,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		if err := db2.WriteFile(`ingest`, sstContents); err != nil {
 			t.Fatal(err)
 		}
-		if err := db2.IngestExternalFiles(ctx, []string{`ingest`}, true); err != nil {
+		if err := db2.IngestExternalFiles(ctx, []string{`ingest`}, true, true); err != nil {
 			t.Fatal(err)
 		}
 	}
