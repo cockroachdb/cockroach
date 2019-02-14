@@ -250,22 +250,6 @@ func (f *Flow) setupInboundStream(
 	return nil
 }
 
-// This RowReceiver clears its BoundAccount on every input row. This is useful
-// for clearing the per-row memory account that's used for expression
-// evaluation.
-type accountClearingRowReceiver struct {
-	RowReceiver
-	ctx context.Context
-	acc *mon.BoundAccount
-}
-
-func (r *accountClearingRowReceiver) Push(
-	row sqlbase.EncDatumRow, meta *ProducerMetadata,
-) ConsumerStatus {
-	r.acc.Clear(r.ctx)
-	return r.RowReceiver.Push(row, meta)
-}
-
 // setupOutboundStream sets up an output stream; if the stream is local, the
 // RowChannel is looked up in the localStreams map; otherwise an outgoing
 // mailbox is created.
@@ -273,13 +257,7 @@ func (f *Flow) setupOutboundStream(spec distsqlpb.StreamEndpointSpec) (RowReceiv
 	sid := spec.StreamID
 	switch spec.Type {
 	case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
-		// Wrap the syncFlowConsumer in a row receiver that clears the row's memory
-		// account.
-		return &accountClearingRowReceiver{
-			acc:         f.EvalCtx.ActiveMemAcc,
-			ctx:         f.EvalCtx.Ctx(),
-			RowReceiver: f.syncFlowConsumer,
-		}, nil
+		return f.syncFlowConsumer, nil
 
 	case distsqlpb.StreamEndpointSpec_REMOTE:
 		outbox := newOutbox(&f.FlowCtx, spec.TargetNodeID, f.id, sid)
@@ -373,10 +351,6 @@ func (f *Flow) makeProcessor(
 	// Initialize any routers (the setupRouter case above) and outboxes.
 	types := proc.OutputTypes()
 	rowRecv := output.(*copyingRowReceiver).RowReceiver
-	clearer, ok := rowRecv.(*accountClearingRowReceiver)
-	if ok {
-		rowRecv = clearer.RowReceiver
-	}
 	switch o := rowRecv.(type) {
 	case router:
 		o.init(ctx, &f.FlowCtx, types)
@@ -687,8 +661,7 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	if f.status == FlowFinished {
 		panic("flow cleanup called twice")
 	}
-	// This closes the account and monitor opened in ServerImpl.setupFlow.
-	f.EvalCtx.ActiveMemAcc.Close(ctx)
+	// This closes the monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.Stop(ctx)
 	for _, p := range f.processors {
 		if d, ok := p.(Releasable); ok {

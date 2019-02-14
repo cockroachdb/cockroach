@@ -414,12 +414,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	// contexts.
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
-	// constantMemAcc accounts for all constant folded values that are computed
-	// prior to any rows being computed.
-	constantMemAcc := p.EvalContext().Mon.MakeBoundAccount()
-	p.EvalContext().ActiveMemAcc = &constantMemAcc
-	defer constantMemAcc.Close(ctx)
-
 	if runInParallel {
 		cols, err := ex.execStmtInParallel(ctx, p, queryDone)
 		queryDone = nil
