@@ -89,6 +89,12 @@ func (*createStatsNode) Values() tree.Datums   { return nil }
 
 // startJob starts a CreateStats job to plan and execute statistics creation.
 func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	if !n.p.ExecCfg().Settings.Version.IsActive(cluster.VersionCreateStats) {
+		return errors.Errorf(`CREATE STATISTICS requires all nodes to be upgraded to %s`,
+			cluster.VersionByKey(cluster.VersionCreateStats),
+		)
+	}
+
 	var tableDesc *ImmutableTableDescriptor
 	var err error
 	switch t := n.Table.(type) {
