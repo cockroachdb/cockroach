@@ -90,6 +90,10 @@ var fixturesMakeOnlyTable = fixturesMakeCmd.PersistentFlags().String(
 
 var fixturesLoadImportShared = pflag.NewFlagSet(`load/import`, pflag.ContinueOnError)
 
+var fixturesImportDirectIngestionTable = fixturesImportCmd.PersistentFlags().Bool(
+	`experimental-direct-ingestion`, false,
+	`Use the faster, but limited and still quite experimental, IMPORT without a distributed sort`)
+
 var fixturesRunChecks = fixturesLoadImportShared.Bool(
 	`checks`, true, `Run validity checks on the loaded fixture`)
 
@@ -300,7 +304,8 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 		return err
 	}
 
-	if err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName); err != nil {
+	directIngestion := *fixturesImportDirectIngestionTable
+	if err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName, directIngestion); err != nil {
 		return errors.Wrap(err, `importing fixture`)
 	}
 

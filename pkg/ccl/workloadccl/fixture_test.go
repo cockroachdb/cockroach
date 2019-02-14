@@ -156,7 +156,6 @@ func TestImportFixture(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `CREATE DATABASE d`)
 
 	gen := makeTestWorkload()
 	flag := fmt.Sprintf(`val=%d`, timeutil.Now().UnixNano())
@@ -164,7 +163,16 @@ func TestImportFixture(t *testing.T) {
 		t.Fatalf(`%+v`, err)
 	}
 
-	require.NoError(t, ImportFixture(ctx, db, gen, `d`))
+	sqlDB.Exec(t, `CREATE DATABASE distsort`)
+	require.NoError(t, ImportFixture(ctx, db, gen, `distsort`, false /* directIngestion */))
 	sqlDB.CheckQueryResults(t,
-		`SELECT count(*) FROM d.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
+		`SELECT count(*) FROM distsort.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
+
+	sqlDB.Exec(t, `CREATE DATABASE direct`)
+	require.NoError(t, ImportFixture(ctx, db, gen, `direct`, true /* directIngestion */))
+	sqlDB.CheckQueryResults(t,
+		`SELECT count(*) FROM direct.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
+
+	fingerprints := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE distsort.fx`)
+	sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE direct.fx`, fingerprints)
 }
