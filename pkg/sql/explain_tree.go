@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // planToTree uses a stack to "parse" the planObserver's sequence of calls
@@ -70,6 +72,23 @@ func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode 
 				Key:   fieldName,
 				Value: tree.AsStringWithFlags(expr, sampledLogicalPlanFmtFlags),
 			})
+		},
+		spans: func(nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span) {
+			spanss := sqlbase.PrettySpans(index, spans, 2)
+			if spanss != "" {
+				if spanss == "-" {
+					spanss = "ALL"
+				} else {
+					// Spans contain literal values from the query and thus
+					// cannot be spelled out in the collected plan.
+					spanss = fmt.Sprintf("%d span%s", len(spans), util.Pluralize(int64(len(spans))))
+				}
+				stackTop := nodeStack.peek()
+				stackTop.Attrs = append(stackTop.Attrs, &roachpb.ExplainTreePlanNode_Attr{
+					Key:   fieldName,
+					Value: spanss,
+				})
+			}
 		},
 		attr: func(nodeName, fieldName, attr string) {
 			stackTop := nodeStack.peek()
