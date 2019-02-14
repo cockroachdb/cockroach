@@ -18,6 +18,7 @@ package tpch
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,12 +46,14 @@ type tpch struct {
 	seed        int64
 	scaleFactor int
 
-	distsql bool
+	distsql       bool
+	disableChecks bool
 
 	queriesRaw      string
 	selectedQueries []string
 }
 
+// TODO(yuzefovich): this seems to not be used anywhere, should we delete it?
 func init() {
 	workload.Register(tpchMeta)
 }
@@ -61,17 +64,19 @@ var tpchMeta = workload.Meta{
 	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &tpch{}
-		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
+		g.flags.FlagSet = pflag.NewFlagSet(`tpch`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`queries`:  {RuntimeOnly: true},
-			`dist-sql`: {RuntimeOnly: true},
+			`queries`:        {RuntimeOnly: true},
+			`dist-sql`:       {RuntimeOnly: true},
+			`disable-checks`: {RuntimeOnly: true},
 		}
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.scaleFactor, `scale-factor`, 1,
 			`Linear scale of how much data to use (each SF is ~1GB)`)
-		g.flags.StringVar(&g.queriesRaw, `queries`, `1,3,7,8,9,19`,
+		g.flags.StringVar(&g.queriesRaw, `queries`, `1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22`,
 			`Queries to run. Use a comma separated list of query numbers`)
 		g.flags.BoolVar(&g.distsql, `dist-sql`, true, `Use DistSQL for query execution`)
+		g.flags.BoolVar(&g.disableChecks, `disable-checks`, false, `Disable checking the output against the expected rows.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -87,11 +92,15 @@ func (w *tpch) Flags() workload.Flags { return w.flags }
 func (w *tpch) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
+			initExpectedRows()
+
 			for _, queryName := range strings.Split(w.queriesRaw, `,`) {
 				if _, ok := queriesByName[queryName]; !ok {
 					return errors.Errorf(`unknown query: %s`, queryName)
 				}
-				w.selectedQueries = append(w.selectedQueries, queryName)
+				if !queriesToSkip[queryName] {
+					w.selectedQueries = append(w.selectedQueries, queryName)
+				}
 			}
 			return nil
 		},
@@ -191,6 +200,11 @@ func (w *worker) run(ctx context.Context) error {
 		query = `SET DISTSQL = 'off'; ` + queriesByName[queryName]
 	}
 
+	vals := make([]interface{}, maxCols)
+	for i := range vals {
+		vals[i] = new(interface{})
+	}
+
 	start := timeutil.Now()
 	rows, err := w.db.Query(query)
 	if err != nil {
@@ -198,10 +212,34 @@ func (w *worker) run(ctx context.Context) error {
 	}
 	var numRows int
 	for rows.Next() {
+		if !w.config.disableChecks {
+			if !queriesToCheckOnlyNumRows[queryName] && !queriesToSkip[queryName] {
+				if err = rows.Scan(vals[:numColsByQueryName[queryName]]...); err != nil {
+					return err
+				}
+
+				expectedRow := expectedRowsByQueryName[queryName][numRows]
+				for i, expectedValue := range expectedRow {
+					if val := *vals[i].(*interface{}); val != nil {
+						if strings.Compare(expectedValue, fmt.Sprint(val)) != 0 {
+							return errors.Errorf("wrong result on query %s in row %d in column %d: got %q, expected %q",
+								queryName, numRows, i, fmt.Sprint(val), expectedValue)
+						}
+					}
+				}
+			}
+		}
 		numRows++
 	}
 	if err := rows.Err(); err != nil {
 		return err
+	}
+	if !w.config.disableChecks {
+		if !queriesToSkip[queryName] {
+			if numRows != numExpectedRowsByQueryName[queryName] {
+				return errors.Errorf("query %s returned wrong number of rows: got %d, expected %d", queryName, numRows, numExpectedRowsByQueryName[queryName])
+			}
+		}
 	}
 	elapsed := timeutil.Since(start)
 	w.hists.Get(queryName).Record(elapsed)
