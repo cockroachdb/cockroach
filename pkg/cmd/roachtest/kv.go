@@ -335,8 +335,9 @@ func registerKVSplits(r *registry) {
 		{true, 300000, 2 * time.Hour},
 		// This version of the test prevents range quiescence to trigger the
 		// badness described above more reliably for when we wish to improve
-		// the performance.
-		{false, 100000, 2 * time.Hour},
+		// the performance. For now, just verify that 30k unquiesced ranges
+		// is tenable.
+		{false, 30000, 2 * time.Hour},
 	} {
 		item := item // for use in closure below
 		r.Add(testSpec{
