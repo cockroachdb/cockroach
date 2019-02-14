@@ -45,7 +45,7 @@ import (
 //
 // and planToTree would return the join node.
 func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode {
-	nodeStack := &planNodeStack{}
+	var nodeStack planNodeStack
 	observer := planObserver{
 		// We set followRowSourceToPlanNode to true, to instruct the plan observer
 		// to follow the edges from rowSourceToPlanNodes (indicating that the prior

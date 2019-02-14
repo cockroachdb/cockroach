@@ -512,13 +512,13 @@ func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRaw
 	}
 
 	helper := func(key roachpb.Key) (string, bool) {
-		var buf bytes.Buffer
+		var b strings.Builder
 		for _, k := range keyDict {
 			if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
-				buf.WriteString(k.name)
+				b.WriteString(k.name)
 				if k.end != nil && k.end.Compare(key) == 0 {
-					buf.WriteString("/Max")
-					return buf.String(), true
+					b.WriteString("/Max")
+					return b.String(), true
 				}
 
 				hasPrefix := false
@@ -526,20 +526,24 @@ func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRaw
 					if bytes.HasPrefix(key, e.prefix) {
 						hasPrefix = true
 						key = key[len(e.prefix):]
-						fmt.Fprintf(&buf, "%s%s", e.name, e.ppFunc(valDirs, key))
+						b.WriteString(e.name)
+						b.WriteString(e.ppFunc(valDirs, key))
 						break
 					}
 				}
 				if !hasPrefix {
 					key = key[len(k.start):]
 					if quoteRawKeys {
-						fmt.Fprintf(&buf, "/%q", []byte(key))
-					} else {
-						fmt.Fprintf(&buf, "/%s", []byte(key))
+						b.WriteByte('/')
+						b.WriteByte('"')
+					}
+					b.Write([]byte(key))
+					if quoteRawKeys {
+						b.WriteByte('"')
 					}
 				}
 
-				return buf.String(), true
+				return b.String(), true
 			}
 		}
 

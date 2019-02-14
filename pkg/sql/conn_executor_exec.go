@@ -961,10 +961,12 @@ func (ex *connExecutor) saveLogicalPlanDescription(
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
 	}
+	now := timeutil.Now()
+	period := logicalPlanCollectionPeriod.Get(&ex.appStats.st.SV)
 	stats.Lock()
 	defer stats.Unlock()
 	timeLastSampled := stats.data.SensitiveInfo.MostRecentPlanTimestamp
-	return timeutil.Since(timeLastSampled) >= logicalPlanCollectionPeriod.Get(&ex.appStats.st.SV)
+	return now.Sub(timeLastSampled) >= period
 }
 
 // canFallbackFromOpt returns whether we can fallback on the heuristic planner
