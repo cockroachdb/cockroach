@@ -95,6 +95,10 @@ var fixturesImportDirectIngestionTable = fixturesImportCmd.PersistentFlags().Boo
 	`experimental-direct-ingestion`, false,
 	`Use the faster, but limited and still quite experimental, IMPORT without a distributed sort`)
 
+var fixturesImportFilesPerNode = fixturesImportCmd.PersistentFlags().Int(
+	`files-per-node`, 1,
+	`number of file URLs to generate per node`)
+
 var fixturesRunChecks = fixturesLoadImportShared.Bool(
 	`checks`, true, `Run validity checks on the loaded fixture`)
 
@@ -306,7 +310,8 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 	}
 
 	directIngestion := *fixturesImportDirectIngestionTable
-	bytes, err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName, directIngestion)
+	filesPerNode := *fixturesImportFilesPerNode
+	bytes, err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName, directIngestion, filesPerNode)
 	if err != nil {
 		return errors.Wrap(err, `importing fixture`)
 	}
