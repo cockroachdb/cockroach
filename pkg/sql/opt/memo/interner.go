@@ -329,13 +329,11 @@ func (h *hasher) HashBytes(val []byte) {
 }
 
 func (h *hasher) HashOperator(val opt.Operator) {
-	h.hash ^= internHash(val)
-	h.hash *= prime64
+	h.HashUint64(uint64(val))
 }
 
 func (h *hasher) HashType(val reflect.Type) {
-	h.hash ^= internHash(uint64(reflect.ValueOf(val).Pointer()))
-	h.hash *= prime64
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
 func (h *hasher) HashDatum(val tree.Datum) {
@@ -404,13 +402,11 @@ func (h *hasher) HashColType(val coltypes.T) {
 }
 
 func (h *hasher) HashTypedExpr(val tree.TypedExpr) {
-	h.hash ^= internHash(uint64(reflect.ValueOf(val).Pointer()))
-	h.hash *= prime64
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
 func (h *hasher) HashColumnID(val opt.ColumnID) {
-	h.hash ^= internHash(val)
-	h.hash *= prime64
+	h.HashUint64(uint64(val))
 }
 
 func (h *hasher) HashColSet(val opt.ColSet) {
@@ -451,36 +447,34 @@ func (h *hasher) HashOrderingChoice(val physical.OrderingChoice) {
 }
 
 func (h *hasher) HashSchemaID(val opt.SchemaID) {
-	h.hash ^= internHash(val)
-	h.hash *= prime64
+	h.HashUint64(uint64(val))
 }
 
 func (h *hasher) HashTableID(val opt.TableID) {
-	h.hash ^= internHash(val)
-	h.hash *= prime64
+	h.HashUint64(uint64(val))
 }
 
 func (h *hasher) HashSequenceID(val opt.SequenceID) {
-	h.hash ^= internHash(val)
-	h.hash *= prime64
+	h.HashUint64(uint64(val))
 }
 
 func (h *hasher) HashScanLimit(val ScanLimit) {
-	h.hash ^= internHash(val)
-	h.hash *= prime64
+	h.HashUint64(uint64(val))
 }
 
 func (h *hasher) HashScanFlags(val ScanFlags) {
 	h.HashBool(val.NoIndexJoin)
 	h.HashBool(val.ForceIndex)
-	h.hash ^= internHash(val.Index)
-	h.hash *= prime64
+	h.HashUint64(uint64(val.Index))
 }
 
 func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
 	h.HashColSet(val.Flags)
-	h.hash ^= internHash(val.Mode)
-	h.hash *= prime64
+	h.HashUint64(uint64(val.Mode))
+}
+
+func (h *hasher) HashStatementType(val tree.StatementType) {
+	h.HashUint64(uint64(val))
 }
 
 func (h *hasher) HashShowTraceType(val tree.ShowTraceType) {
@@ -488,8 +482,7 @@ func (h *hasher) HashShowTraceType(val tree.ShowTraceType) {
 }
 
 func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
-	h.hash ^= internHash(val)
-	h.hash *= prime64
+	h.HashUint64(uint64(val))
 }
 
 func (h *hasher) HashPhysProps(val *physical.Required) {
@@ -502,13 +495,11 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 }
 
 func (h *hasher) HashRelExpr(val RelExpr) {
-	h.hash ^= internHash(uint64(reflect.ValueOf(val).Pointer()))
-	h.hash *= prime64
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
 func (h *hasher) HashScalarExpr(val opt.ScalarExpr) {
-	h.hash ^= internHash(uint64(reflect.ValueOf(val).Pointer()))
-	h.hash *= prime64
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
 func (h *hasher) HashScalarListExpr(val ScalarListExpr) {
@@ -548,8 +539,7 @@ func (h *hasher) HashZipExpr(val ZipExpr) {
 }
 
 func (h *hasher) HashPointer(val unsafe.Pointer) {
-	h.hash ^= internHash(uintptr(val))
-	h.hash *= prime64
+	h.HashUint64(uint64(uintptr(val)))
 }
 
 // ----------------------------------------------------------------------
@@ -739,8 +729,12 @@ func (h *hasher) IsExplainOptionsEqual(l, r tree.ExplainOptions) bool {
 	return l.Mode == r.Mode && l.Flags.Equals(r.Flags)
 }
 
+func (h *hasher) IsStatementTypeEqual(l, r tree.StatementType) bool {
+	return l == r
+}
+
 func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
-	return bytes.Equal([]byte(l), []byte(r))
+	return l == r
 }
 
 func (h *hasher) IsTupleOrdinalEqual(l, r TupleOrdinal) bool {
