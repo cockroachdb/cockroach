@@ -65,7 +65,7 @@ func (s *streamGroupAccumulator) start(ctx context.Context) {
 // nextGroup returns the next group from the inputs. The returned slice is not safe
 // to use after the next call to nextGroup.
 func (s *streamGroupAccumulator) nextGroup(
-	evalCtx *tree.EvalContext,
+	ctx context.Context, evalCtx *tree.EvalContext,
 ) ([]sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.srcConsumed {
 		// If src has been exhausted, then we also must have advanced away from the
@@ -88,7 +88,7 @@ func (s *streamGroupAccumulator) nextGroup(
 			return s.curGroup, nil
 		}
 
-		if err := s.memAcc.Grow(evalCtx.Ctx(), int64(row.Size())); err != nil {
+		if err := s.memAcc.Grow(ctx, int64(row.Size())); err != nil {
 			return nil, &ProducerMetadata{Err: err}
 		}
 		row = s.rowAlloc.CopyRow(row)
@@ -117,7 +117,7 @@ func (s *streamGroupAccumulator) nextGroup(
 			n := len(s.curGroup)
 			ret := s.curGroup[:n:n]
 			s.curGroup = s.curGroup[:0]
-			s.memAcc.Empty(evalCtx.Ctx())
+			s.memAcc.Empty(ctx)
 			s.leftoverRow = row
 			return ret, nil
 		}
