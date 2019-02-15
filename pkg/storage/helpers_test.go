@@ -86,11 +86,6 @@ func (s *Store) ConsistencyQueueShouldQueue(
 	return s.consistencyQueue.shouldQueue(ctx, now, r, cfg)
 }
 
-// GetDeadReplicas exports s.deadReplicas for tests.
-func (s *Store) GetDeadReplicas() roachpb.StoreDeadReplicas {
-	return s.deadReplicas()
-}
-
 // LogReplicaChangeTest adds a fake replica change event to the log for the
 // range which contains the given key.
 func (s *Store) LogReplicaChangeTest(

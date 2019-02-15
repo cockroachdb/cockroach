@@ -133,16 +133,6 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	}
 	r.mu.lastTerm = invalidLastTerm
 
-	pErr, err := r.mu.stateLoader.LoadReplicaDestroyedError(ctx, r.store.Engine())
-	if err != nil {
-		return err
-	}
-	if r.mu.destroyStatus.RemovedOrCorrupt() {
-		if err := pErr.GetDetail(); err != nil {
-			r.mu.destroyStatus.Set(err, destroyReasonRemoved)
-		}
-	}
-
 	if replicaID == 0 {
 		repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID())
 		if !ok {

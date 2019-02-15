@@ -5949,39 +5949,16 @@ func TestReplicaCorruption(t *testing.T) {
 
 	key := roachpb.Key("boom")
 
-	// maybeSetCorrupt should have been called.
 	args = putArgs(key, []byte("value"))
 	_, pErr := tc.SendWrapped(&args)
 	if !testutils.IsPError(pErr, "replica corruption \\(processed=true\\)") {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
 
-	// Verify replica destroyed was set.
-	rkey, err := keys.Addr(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := tc.store.LookupReplica(rkey)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.mu.destroyStatus.err.Error() != pErr.GetDetail().Error() {
-		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyStatus.err, pErr.GetDetail())
-	}
-
-	// Verify destroyed error was persisted.
-	pErr, err = r.mu.stateLoader.LoadReplicaDestroyedError(context.Background(), r.store.Engine())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r.mu.destroyStatus.err.Error() != pErr.GetDetail().Error() {
-		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyStatus.err, pErr.GetDetail())
-	}
-
+	// Should have triggered fatal error.
 	if exitStatus != 255 {
 		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
-
-	// TODO(bdarnell): when maybeSetCorrupt is finished verify that future commands fail too.
 }
 
 // TestChangeReplicasDuplicateError tests that a replica change that would

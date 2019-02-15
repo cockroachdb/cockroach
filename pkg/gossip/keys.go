@@ -178,11 +178,6 @@ func StoreIDFromKey(storeKey string) (roachpb.StoreID, error) {
 	return roachpb.StoreID(storeID), nil
 }
 
-// MakeDeadReplicasKey returns the dead replicas gossip key for the given store.
-func MakeDeadReplicasKey(storeID roachpb.StoreID) string {
-	return MakeKey(KeyDeadReplicasPrefix, storeID.String())
-}
-
 // MakeDistSQLNodeVersionKey returns the gossip key for the given store.
 func MakeDistSQLNodeVersionKey(nodeID roachpb.NodeID) string {
 	return MakeKey(KeyDistSQLNodeVersionKeyPrefix, nodeID.String())

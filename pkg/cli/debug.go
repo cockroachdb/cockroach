@@ -965,12 +965,6 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, liveness))
-		} else if strings.HasPrefix(key, gossip.KeyDeadReplicasPrefix) {
-			var deadReplicas roachpb.StoreDeadReplicas
-			if err := protoutil.Unmarshal(bytes, &deadReplicas); err != nil {
-				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
-			}
-			output = append(output, fmt.Sprintf("%q: %+v", key, deadReplicas))
 		} else if strings.HasPrefix(key, gossip.KeyNodeHealthAlertPrefix) {
 			var healthAlert statuspb.HealthCheckResult
 			if err := protoutil.Unmarshal(bytes, &healthAlert); err != nil {

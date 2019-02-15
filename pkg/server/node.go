@@ -763,10 +763,7 @@ func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
 // gossipStores broadcasts each store and dead replica to the gossip network.
 func (n *Node) gossipStores(ctx context.Context) {
 	if err := n.stores.VisitStores(func(s *storage.Store) error {
-		if err := s.GossipStore(ctx, false /* useCached */); err != nil {
-			return err
-		}
-		return s.GossipDeadReplicas(ctx)
+		return s.GossipStore(ctx, false /* useCached */)
 	}); err != nil {
 		log.Warning(ctx, err)
 	}
