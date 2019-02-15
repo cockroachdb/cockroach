@@ -58,6 +58,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //
 // Chaining on to in-flight async writes is important for two main reasons to
 // txnPipeliner:
+//
 // 1. requests proposed to Raft will not necessarily succeed. For any number of
 //    reasons, the request may make it through Raft and be discarded or fail to
 //    ever even be replicated. A transaction must check that all async writes
@@ -69,6 +70,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //    discovered during write *evaluation*, which an async write will perform
 //    synchronously before consensus. Any error during consensus is outside of the
 //    Transaction-domain and can always trigger a transaction retry.
+//
 // 2. transport layers beneath the txnPipeliner do not provide strong enough
 //    ordering guarantees between concurrent requests in the same transaction to
 //    avoid needing explicit chaining. For instance, DistSender uses unary gRPC
@@ -98,12 +100,14 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 // would be in the txnPipeliner's best interest to prove outstanding writes as
 // early as possible, even if no other overlapping requests force them to be
 // proven. The approaches are:
+//
 // 1. launch a background process after each successful async write to query its
 //    intents and wait for it to succeed. This would effectively solve the issue,
 //    but at the cost of many more goroutines and many more QueryIntent requests,
 //    most of which would be redundant because their corresponding write wouldn't
 //    complete until after an EndTransaction synchronously needed to prove them
 //    anyway.
+//
 // 2. to address the issue of an unbounded number of background goroutines
 //    proving writes in approach 1, a single background goroutine could be run
 //    that repeatedly loops over all outstanding writes and attempts to prove
@@ -113,12 +117,14 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //    reason as approach 1: most of its QueryIntent requests will be useless
 //    because a transaction will send an EndTransaction immediately after sending
 //    all of its writes.
+//
 // 3. turn the KV interface into a streaming protocol (#8360) that could support
 //    returning multiple results. This would allow clients to return immediately
 //    after a writes "evaluation" phase completed but hold onto a handle to the
 //    request and be notified immediately after its "replication" phase completes.
 //    This would allow txnPipeliner to prove outstanding writes immediately after
 //    they finish consensus without any extra RPCs.
+//
 // So far, none of these approaches have been integrated.
 //
 // [1] A proposal called "parallel commits" (#24194) exists that would allow all
