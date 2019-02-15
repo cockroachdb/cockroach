@@ -225,6 +225,31 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// TestTabsInOptgen verifies tabs aren't used in optgen (.opt) files.
+	t.Run("TestTabsInOptgen", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", "^ *\t", "--", "*.opt")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf(`%s <- tab detected, use spaces instead`, s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestEnvutil", func(t *testing.T) {
 		t.Parallel()
 		for _, tc := range []struct {
