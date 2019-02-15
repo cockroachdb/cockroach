@@ -473,6 +473,17 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
+	if f := join.Private().(*memo.JoinPrivate).Flags; f.DisallowHashJoin {
+		hint := tree.AstLookup
+		if !f.DisallowMergeJoin {
+			hint = tree.AstMerge
+		}
+
+		return execPlan{}, errors.Errorf(
+			"could not produce a query plan conforming to the %s JOIN hint", hint,
+		)
+	}
+
 	joinType := joinOpToJoinType(join.Op())
 	leftExpr := join.Child(0).(memo.RelExpr)
 	rightExpr := join.Child(1).(memo.RelExpr)
