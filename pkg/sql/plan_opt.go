@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 var queryCacheEnabled = settings.RegisterBoolSetting(
@@ -176,7 +177,8 @@ func checkOptSupportForTopStatement(AST tree.Statement) error {
 	switch AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
 		*tree.UnionClause, *tree.ValuesClause, *tree.Explain,
-		*tree.Insert, *tree.Update, *tree.Delete, *tree.CreateTable:
+		*tree.Insert, *tree.Update, *tree.Delete, *tree.CreateTable,
+		*tree.CannedOptPlan:
 		return nil
 
 	default:
@@ -211,7 +213,7 @@ func (opc *optPlanningCtx) init(p *planner, AST tree.Statement) {
 	// cached memo).
 	switch AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause, *tree.UnionClause, *tree.ValuesClause,
-		*tree.Insert, *tree.Update, *tree.Delete:
+		*tree.Insert, *tree.Update, *tree.Delete, *tree.CannedOptPlan:
 		// If the current transaction has uncommitted DDL statements, we cannot rely
 		// on descriptor versions for detecting a "stale" memo. This is because
 		// descriptor versions are bumped at most once per transaction, even if there
@@ -246,6 +248,14 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	ctx context.Context,
 ) (_ *memo.Memo, isCorrelated bool, _ error) {
 	p := opc.p
+
+	_, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan)
+	if isCanned && !p.EvalContext().SessionData.AllowPrepareAsOptPlan {
+		return nil, false, errors.Errorf(
+			"PREPARE AS OPT PLAN is a testing facility that should not be used directly",
+		)
+	}
+
 	// Build the Memo (optbuild) and apply normalization rules to it. If the
 	// query contains placeholders, values are not assigned during this phase,
 	// as that only happens during the EXECUTE phase. If the query does not
@@ -258,10 +268,21 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	if err := bld.Build(); err != nil {
 		return nil, bld.IsCorrelated, err
 	}
-	// If the memo doesn't have placeholders, then fully optimize it, since
-	// it can be reused without further changes to build the execution tree.
-	if !f.Memo().HasPlaceholders() {
-		p.optimizer.Optimize()
+
+	if isCanned {
+		if f.Memo().HasPlaceholders() {
+			// We don't support placeholders inside the canned plan. The main reason
+			// is that they would be invisible to the parser (which is reports the
+			// number of placeholders, used to initialize the relevant structures).
+			return nil, false, errors.Errorf("placeholders are not supported with PREPARE AS OPT PLAN")
+		}
+		// With a canned plan, the memo is already optimized.
+	} else {
+		// If the memo doesn't have placeholders, then fully optimize it, since
+		// it can be reused without further changes to build the execution tree.
+		if !f.Memo().HasPlaceholders() {
+			p.optimizer.Optimize()
+		}
 	}
 
 	// Detach the prepared memo from the factory and transfer its ownership
@@ -363,7 +384,9 @@ func (opc *optPlanningCtx) buildExecMemo(
 	if err := bld.Build(); err != nil {
 		return nil, bld.IsCorrelated, err
 	}
-	p.optimizer.Optimize()
+	if _, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan); !isCanned {
+		p.optimizer.Optimize()
+	}
 
 	// If this statement doesn't have placeholders, add it to the cache. Note
 	// that non-prepared statements from pgwire clients cannot have

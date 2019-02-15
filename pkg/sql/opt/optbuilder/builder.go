@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -142,6 +143,13 @@ func (b *Builder) Build() (err error) {
 			}
 		}
 	}()
+
+	// Special case for CannedOptPlan.
+	if canned, ok := b.stmt.(*tree.CannedOptPlan); ok {
+		b.factory.DisableOptimizations()
+		_, err := exprgen.Build(b.catalog, b.factory, canned.Plan)
+		return err
+	}
 
 	// Build the memo, and call SetRoot on the memo to indicate the root group
 	// and physical properties.

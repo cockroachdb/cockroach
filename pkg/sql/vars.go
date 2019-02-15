@@ -684,6 +684,23 @@ var varGen = map[string]sessionVar{
 		},
 		// Setting is done by the SetTracing statement.
 	},
+
+	// CockroachDB extension.
+	`allow_prepare_as_opt_plan`: {
+		Hidden: true,
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.AllowPrepareAsOptPlan)
+		},
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetAllowPrepareAsOptPlan(b)
+			return nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func makeBoolGetStringValFn(varName string) getStringValFn {
