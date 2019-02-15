@@ -608,6 +608,8 @@ func errPriority(err error) errorPriority {
 		return scoreTxnRestart
 	}
 	return scoreNonRetriable
+	// !!! do I need to deal with TxnAlreadyFinalizedError now that leaves reject
+	// clients after they encounter the first error?
 }
 
 // ProducerDone is part of the RowReceiver interface.

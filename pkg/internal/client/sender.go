@@ -91,12 +91,37 @@ type Sender interface {
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
+// !!!
+/* type SendResult struct { */
+// // br is the result of the request, if the request succeeded.
+// // Either br or err is set.
+// br *roachpb.BatchResponse
+//
+// // err represents the error encountered by the request.
+// // Generally, when err is set, the transaction can be considered rolled back
+// // and the sender cannot be used any more. However, clientbase.TxnRestartError
+// // is an exception. In that case, the transaction is supposed to restart. The
+// // sender should or should not continue to be used based on
+// // TxnRestartError.NewTxn. In either case, future requests will not see any
+// // previous writes.
+// err error
+//
+// // !!!
+// // // txnFinalized is set if this transaction was committed or rolled-back. If
+// // // set, this TxnSender should not be used any more.
+// // txnFinalized bool
+/* } */
+
 // TxnSender is the interface used to call into a CockroachDB instance
 // when sending transactional requests. In addition to the usual
 // Sender interface, TxnSender facilitates marshaling of transaction
 // metadata between the "root" client.Txn and "leaf" instances.
 type TxnSender interface {
-	Sender
+	// !!! Sender
+	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+
+	// RollbackAsync initiates a rollback.
+	RollbackAsync(context.Context)
 
 	// OnFinish invokes the supplied closure when the sender has finished
 	// with the txn (i.e. it's been abandoned, aborted, or committed).
@@ -162,6 +187,10 @@ type TxnSender interface {
 
 	// UpdateStateOnRemoteRetryableErr updates the txn in response to an error
 	// encountered when running a request through the txn.
+	//
+	// The caller is supposed to inspect the txn id in the return value and, if
+	// it's a new id, it needs to stop using this sender.
+	// !!! comment
 	UpdateStateOnRemoteRetryableErr(context.Context, *roachpb.Error) *roachpb.Error
 
 	// DisablePipelining instructs the TxnSender not to pipeline requests. It
@@ -272,8 +301,13 @@ func NewMockTransactionalSender(
 // Send is part of the TxnSender interface.
 func (m *MockTransactionalSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	return m.senderFunc(ctx, &m.txn, ba)
+) (*roachpb.BatchResponse, error) {
+	br, pErr := m.senderFunc(ctx, &m.txn, ba)
+	return br, pErr.GoError()
+}
+
+func (m *MockTransactionalSender) RollbackAsync(ctx context.Context) {
+	panic("unimplemented")
 }
 
 // GetMeta is part of the TxnSender interface.

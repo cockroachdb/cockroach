@@ -81,10 +81,10 @@ type txnHeartbeater struct {
 	// when quiescing.
 	stopper *stop.Stopper
 
-	// asyncAbortCallbackLocked is called when the heartbeat loop shuts itself
+	// onTxnAbortDetectedLocked is called when the heartbeat loop shuts itself
 	// down because it has detected the transaction to be aborted. The intention
-	// is to notify the TxnCoordSender to shut itself down.
-	asyncAbortCallbackLocked func(context.Context)
+	// is to notify the TxnCoordSender rollback.
+	onTxnAbortDetectedLocked func(context.Context)
 
 	// mu contains state protected by the TxnCoordSender's mutex.
 	mu struct {
@@ -126,8 +126,8 @@ func (h *txnHeartbeater) init(
 	heartbeatInterval time.Duration,
 	gatekeeper lockedSender,
 	metrics *TxnMetrics,
+	txnAbortDetectedLocked func(context.Context),
 	stopper *stop.Stopper,
-	asyncAbortCallbackLocked func(context.Context),
 ) {
 	h.stopper = stopper
 	h.st = st
@@ -138,10 +138,10 @@ func (h *txnHeartbeater) init(
 	h.mu.txn = txn
 	h.mu.needBeginTxn = true
 	h.gatekeeper = gatekeeper
-	h.asyncAbortCallbackLocked = asyncAbortCallbackLocked
+	h.onTxnAbortDetectedLocked = txnAbortDetectedLocked
 }
 
-// SendLocked is part of the txnInteceptor interface.
+// SendLocked is part of the txnInterceptor interface.
 func (h *txnHeartbeater) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -258,6 +258,8 @@ func (h *txnHeartbeater) epochBumpedLocked() {
 }
 
 // closeLocked is part of the txnInteceptor interface.
+//
+// This implementation of closeLocked() can be called multiple times.
 func (h *txnHeartbeater) closeLocked() {
 	// If the heartbeat loop has already finished, there's nothing more to do.
 	if h.mu.txnEnd == nil {
@@ -414,7 +416,10 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 			h.mu.txn.Status = roachpb.ABORTED
 			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
-			h.abortTxnAsyncLocked(ctx)
+			// Stop the heartbeat loop.
+			h.closeLocked()
+			// Tell the TxnCoordSender to rollback.
+			h.onTxnAbortDetectedLocked(ctx)
 			return false
 		}
 
@@ -439,52 +444,14 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	if h.mu.txn.Status != roachpb.PENDING {
 		if h.mu.txn.Status == roachpb.ABORTED {
 			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
-			h.abortTxnAsyncLocked(ctx)
+			// Stop the heartbeat loop.
+			h.closeLocked()
+			// Tell the TxnCoordSender to rollback.
+			h.onTxnAbortDetectedLocked(ctx)
 		}
 		return false
 	}
 	return true
-}
-
-// abortTxnAsyncLocked send an EndTransaction(commmit=false) asynchronously.
-// The asyncAbortCallbackLocked callback is also called.
-func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
-	if h.mu.txn.Status != roachpb.ABORTED {
-		log.Fatalf(ctx, "abortTxnAsyncLocked called for non-aborted txn: %s", h.mu.txn)
-	}
-	h.asyncAbortCallbackLocked(ctx)
-	txn := h.mu.txn.Clone()
-
-	// NB: We use context.Background() here because we don't want a canceled
-	// context to interrupt the aborting.
-	ctx = h.AnnotateCtx(context.Background())
-
-	// Construct a batch with an EndTransaction request.
-	ba := roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.EndTransactionRequest{
-		Commit: false,
-		// Resolved intents should maintain an abort span entry to prevent
-		// concurrent requests from failing to notice the transaction was aborted.
-		Poison: true,
-	})
-
-	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
-	if err := h.stopper.RunAsyncTask(
-		ctx, "txnHeartbeater: aborting txn", func(ctx context.Context) {
-			// Send the abort request through the interceptor stack. This is important
-			// because we need the txnIntentCollector to append intents to the
-			// EndTransaction request.
-			h.mu.Lock()
-			defer h.mu.Unlock()
-			_, pErr := h.wrapped.SendLocked(ctx, ba)
-			if pErr != nil {
-				log.VErrEventf(ctx, 1, "async abort failed for %s: %s ", txn, pErr)
-			}
-		},
-	); err != nil {
-		log.Warning(ctx, err)
-	}
 }
 
 // firstWriteIndex returns the index of the first transactional write in the

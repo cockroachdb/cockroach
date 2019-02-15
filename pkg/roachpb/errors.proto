@@ -139,11 +139,8 @@ enum TransactionAbortedReason {
   // nodes in the cluster will ever return it.
   ABORT_REASON_NEW_TXN_RECORD_TOO_OLD = 2;
 
-  // The client is trying to use a transaction that's already been aborted. The
-  // TxnCoordSender detects this. Either the client is misusing a txn, or the
-  // TxnCoordSender found out about the transaction being aborted async through
-  // the heartbeat loop.
-  ABORT_REASON_CLIENT_REJECT = 3;
+  // The heartbeat loop detected an aborted transaction record.
+  ABORT_REASON_HB_LOOP_DETECTED= 3;
 
   // The txn was trying to push another and found out that it itself got aborted
   // somehow while waiting for the push.
@@ -370,6 +367,7 @@ message UnhandledRetryableError {
   optional Error pErr = 1 [(gogoproto.nullable) = false];
 }
 
+// !!! can be removed?
 // TransactionRetryWithProtoRefreshError is an error detail representing a retryable error
 // that has been "handled" by the TxnCoordSender. This error is produced by the
 // TxnCoordSender and is only produced for transactional requests.
@@ -400,9 +398,10 @@ message TransactionRetryWithProtoRefreshError {
   optional Transaction transaction = 3 [(gogoproto.nullable) = false];
 }
 
+// !!! I think this can go away?
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
 // transaction that already received an error from a previous request. Once that
-// happens, client.Txn rejects future requests.
+// happens, the TxnCoordSender rejects future requests.
 message TxnAlreadyEncounteredErrorError{
   option (gogoproto.equal) = true;
 
@@ -412,7 +411,7 @@ message TxnAlreadyEncounteredErrorError{
 }
 
 // An IntegerOverflowError indicates that an operation was aborted because
-// it would have caused an integeter overflow.
+// it would have caused an integer overflow.
 message IntegerOverflowError {
   option (gogoproto.equal) = true;
 

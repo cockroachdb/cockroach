@@ -518,6 +518,8 @@ message EndTransactionRequest {
   // independently of the main thread of client operation, as in the
   // case of an asynchronous abort from the TxnCoordSender on a failed
   // heartbeat.
+  // TODO(andrei): Remove this field one release after the client stops using it
+  // (which is when this comment is added).
   bool poison = 9;
   reserved 7;
 }

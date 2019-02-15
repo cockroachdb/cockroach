@@ -17,10 +17,8 @@ package client
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -71,9 +69,13 @@ type Txn struct {
 		previousIDs map[uuid.UUID]struct{}
 
 		// sender is a stateful sender for use with transactions (usually a
-		// TxnCoordSender). A new sender is created on transaction restarts (not
-		// retries).
+		// TxnCoordSender). A new sender is created on transaction restarts (i.e.
+		// TransactionAbortedError), but not on retries (i.e. when the epoch is
+		// incremented).
 		sender TxnSender
+
+		// !!! comment
+		storedErr error
 
 		// The txn has to be committed by this deadline. A nil value indicates no
 		// deadline.
@@ -485,7 +487,40 @@ func (txn *Txn) Run(ctx context.Context, b *Batch) error {
 	return sendAndFill(ctx, txn.Send, b)
 }
 
-func (txn *Txn) commit(ctx context.Context) error {
+// !!!
+// func (txn *Txn) commit(ctx context.Context) error {
+//   var ba roachpb.BatchRequest
+//   ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
+//   _, pErr := txn.Send(ctx, ba)
+//   if pErr == nil {
+//     for _, t := range txn.commitTriggers {
+//       t(ctx)
+//     }
+//   }
+//   return pErr.GoError()
+// }
+
+// !!!
+// // CleanupOnError cleans up the transaction as a result of an error.
+// func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
+//   if err == nil {
+//     log.Fatal(ctx, "CleanupOnError called with nil error")
+//   }
+//   if replyErr := txn.rollback(ctx); replyErr != nil {
+//     if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.status() == roachpb.ABORTED {
+//       log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+//     } else {
+//       log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+//     }
+//   }
+// }
+
+// !!! comment about CommitOrCleanup.
+// Commit is the same as CommitOrCleanup but will not attempt to clean
+// up on failure. This can be used when the caller is prepared to do proper
+// cleanup.
+func (txn *Txn) Commit(ctx context.Context) error {
+	// !!! return txn.commit(ctx)
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
 	_, pErr := txn.Send(ctx, ba)
@@ -495,27 +530,6 @@ func (txn *Txn) commit(ctx context.Context) error {
 		}
 	}
 	return pErr.GoError()
-}
-
-// CleanupOnError cleans up the transaction as a result of an error.
-func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
-	if err == nil {
-		log.Fatal(ctx, "CleanupOnError called with nil error")
-	}
-	if replyErr := txn.rollback(ctx); replyErr != nil {
-		if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.status() == roachpb.ABORTED {
-			log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
-		} else {
-			log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
-		}
-	}
-}
-
-// Commit is the same as CommitOrCleanup but will not attempt to clean
-// up on failure. This can be used when the caller is prepared to do proper
-// cleanup.
-func (txn *Txn) Commit(ctx context.Context) error {
-	return txn.commit(ctx)
 }
 
 // CommitInBatch executes the operations queued up within a batch and
@@ -535,16 +549,17 @@ func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	return txn.Run(ctx, b)
 }
 
-// CommitOrCleanup sends an EndTransactionRequest with Commit=true.
-// If that fails, an attempt to rollback is made.
-// txn should not be used to send any more commands after this call.
-func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
-	err := txn.commit(ctx)
-	if err != nil {
-		txn.CleanupOnError(ctx, err)
-	}
-	return err
-}
+// !!!
+// // CommitOrCleanup sends an EndTransactionRequest with Commit=true.
+// // If that fails, an attempt to rollback is made.
+// // txn should not be used to send any more commands after this call.
+// func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
+//   err := txn.commit(ctx)
+//   if err != nil {
+//     txn.CleanupOnError(ctx, err)
+//   }
+//   return err
+// }
 
 // UpdateDeadlineMaybe sets the transactions deadline to the lower of the
 // current one (if any) and the passed value.
@@ -571,59 +586,62 @@ func (txn *Txn) resetDeadlineLocked() {
 
 // Rollback sends an EndTransactionRequest with Commit=false.
 // txn is considered finalized and cannot be used to send any more commands.
-func (txn *Txn) Rollback(ctx context.Context) error {
-	return txn.rollback(ctx).GoError()
+func (txn *Txn) Rollback(ctx context.Context) {
+	txn.mu.sender.RollbackAsync(ctx)
+	// !!! .rollback(ctx).GoError()
 }
 
-func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
-	log.VEventf(ctx, 2, "rolling back transaction")
-
-	sync := true
-	if ctx.Err() != nil {
-		sync = false
-	}
-	if sync {
-		var ba roachpb.BatchRequest
-		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
-		_, pErr := txn.Send(ctx, ba)
-		if pErr == nil {
-			return nil
-		}
-		// If ctx has been canceled, assume that caused the error and try again
-		// async below.
-		if ctx.Err() == nil {
-			return pErr
-		}
-	}
-
-	// We don't have a client whose context we can attach to, but we do want to limit how
-	// long this request is going to be around or it could leak a goroutine (in case of a
-	// long-lived network partition).
-	stopper := txn.db.ctx.Stopper
-	ctx, cancel := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
-	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
-		defer cancel()
-		var ba roachpb.BatchRequest
-		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
-		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", 3*time.Second, func(ctx context.Context) error {
-			_, pErr := txn.Send(ctx, ba)
-			if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
-				statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
-				// A common cause of these async rollbacks failing is when they're
-				// triggered by a ctx canceled while a commit is in-flight (and it's too
-				// late for it to be canceled), and so the rollback finds the txn to be
-				// already committed. We don't spam the logs with those.
-				log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
-			} else {
-				log.Infof(ctx, "async rollback failed: %s", pErr)
-			}
-			return nil
-		})
-	}); err != nil {
-		cancel()
-		return roachpb.NewError(err)
-	}
-	return nil
+func (txn *Txn) rollback(ctx context.Context) {
+	txn.mu.sender.RollbackAsync(ctx)
+	// sync := true
+	// if ctx.Err() != nil {
+	//   sync = false
+	// }
+	// if sync {
+	//   var ba roachpb.BatchRequest
+	//   ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+	//   _, pErr := txn.Send(ctx, ba)
+	//   if pErr == nil {
+	//     return nil
+	//   }
+	//   // If ctx has been canceled, assume that caused the error and try again
+	//   // async below.
+	//   if ctx.Err() == nil {
+	//     return pErr
+	//   }
+	// }
+	//
+	// // We don't have a client whose context we can attach to, but we do want to limit how
+	// // long this request is going to be around or it could leak a goroutine (in case of a
+	// // long-lived network partition).
+	// stopper := txn.db.ctx.Stopper
+	// ctx, cancel1 := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
+	// // NB: cancel2 makes cancel1 obsolete, but the linters don't know that.
+	// ctx, cancel2 := context.WithTimeout(ctx, 3*time.Second)
+	//
+	// if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
+	//   defer cancel1()
+	//   defer cancel2()
+	//   var ba roachpb.BatchRequest
+	//   ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+	//   if _, pErr := txn.Send(ctx, ba); pErr != nil {
+	//     if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
+	//       statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
+	//       // A common cause of these async rollbacks failing is when they're
+	//       // triggered by a ctx canceled while a commit is in-flight (and it's too
+	//       // late for it to be canceled), and so the rollback finds the txn to be
+	//       // already committed. We don't spam the logs with those.
+	//       log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
+	//     } else {
+	//       log.Infof(ctx, "async rollback failed: %s", pErr)
+	//     }
+	//   }
+	// }); err != nil {
+	//   cancel1()
+	//   cancel2()
+	//   return roachpb.NewError(err)
+	// }
+	// return nil
 }
 
 // AddCommitTrigger adds a closure to be executed on successful commit
@@ -677,6 +695,7 @@ func (e *AutoCommitError) Error() string {
 // to clean up the transaction before returning an error. In case of
 // TransactionAbortedError, txn is reset to a fresh transaction, ready to be
 // used.
+// !!! comment about cleanup
 func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
@@ -792,6 +811,7 @@ func (txn *Txn) Send(
 		return br, nil
 	}
 
+	// !!! handle clientbase.TxnRestartError here instead
 	if retryErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryWithProtoRefreshError); ok {
 		if requestTxnID != retryErr.TxnID {
 			// KV should not return errors for transactions other than the one that sent
@@ -803,6 +823,9 @@ func (txn *Txn) Send(
 		txn.mu.Lock()
 		txn.handleErrIfRetryableLocked(ctx, retryErr)
 		txn.mu.Unlock()
+	} else {
+		txn.mu.sender = nil
+		txn.mu.storedErr = pErr.GoError()
 	}
 	return br, pErr
 }
@@ -854,9 +877,10 @@ func (txn *Txn) AugmentTxnCoordMeta(ctx context.Context, meta roachpb.TxnCoordMe
 	txn.mu.sender.AugmentMeta(ctx, meta)
 }
 
-// UpdateStateOnRemoteRetryableErr updates the txn in response to an error
-// encountered when running a request through the txn. Returns a
+// UpdateStateOnRemoteRetryableErr updates the txn in response to a retriable
+// error encountered when running a request through the txn. Returns a
 // TransactionRetryWithProtoRefreshError on success or another error on failure.
+// !!! comment about error type
 func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roachpb.Error) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()

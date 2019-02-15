@@ -1226,6 +1226,8 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
+	// In all the tests, the commit will fail with an injected error and then the
+	// transaction will be rolled-back.
 	testCases := []struct {
 		err        error
 		errFn      func(roachpb.Transaction) *roachpb.Error
@@ -1243,11 +1245,15 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			},
 			asyncAbort: false},
 		{err: &roachpb.TransactionAbortedError{}, asyncAbort: true},
+		// Retryable error.
 		{err: &roachpb.TransactionPushError{}, asyncAbort: false},
+		// Retryable error.
 		{err: &roachpb.TransactionRetryError{}, asyncAbort: false},
-		{err: &roachpb.RangeNotFoundError{}, asyncAbort: false},
-		{err: &roachpb.RangeKeyMismatchError{}, asyncAbort: false},
-		{err: &roachpb.TransactionStatusError{}, asyncAbort: false},
+		// On non-retryable errors,the rollback is performed asynchronously (as soon
+		// as the error is received by the TxnCoordSender).
+		{err: &roachpb.RangeNotFoundError{}, asyncAbort: true},
+		{err: &roachpb.RangeKeyMismatchError{}, asyncAbort: true},
+		{err: &roachpb.TransactionStatusError{}, asyncAbort: true},
 	}
 
 	for _, test := range testCases {
@@ -2369,13 +2375,11 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 		t.Fatalf("expected injected err, got: %v", err)
 	}
 
-	// Now use the leaf and check the error. At the TxnCoordSender level, the
-	// pErr will be TransactionAbortedError. When pErr.GoError() is called, that's
-	// transformed into an UnhandledRetryableError. For our purposes, what this
-	// test is interested in demonstrating is that it's not a
+	// Now use the leaf and check the error. For our purposes, what this test is
+	// interested in demonstrating is that it's not a
 	// TransactionRetryWithProtoRefreshError.
 	_, err := leafTxn.Get(ctx, roachpb.Key("a"))
-	if _, ok := err.(*roachpb.UnhandledRetryableError); !ok {
-		t.Fatalf("expected UnhandledRetryableError(TransactionAbortedError), got: (%T) %v", err, err)
+	if _, ok := err.(*roachpb.TxnAlreadyEncounteredErrorError); !ok {
+		t.Fatalf("expected TxnAlreadyEncounteredErrorError, got: (%T) %v", err, err)
 	}
 }

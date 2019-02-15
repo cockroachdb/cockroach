@@ -584,9 +584,12 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	err := txn.exec(ctx, func(ctx context.Context, txn *Txn) error {
 		return retryable(ctx, txn)
 	})
-	if err != nil {
-		txn.CleanupOnError(ctx, err)
-	}
+	// !!!
+	// if err != nil {
+	//   txn.CleanupOnError(ctx, err)
+	// }
+
+	// !!! code below still needed?
 	// Terminate TransactionRetryWithProtoRefreshError here, so it doesn't cause a higher-level
 	// txn to be retried. We don't do this in any of the other functions in DB; I
 	// guess we should.
