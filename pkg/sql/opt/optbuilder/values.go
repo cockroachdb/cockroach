@@ -87,7 +87,10 @@ func (b *Builder) buildValuesClause(
 	}
 
 	colList := colsToColList(outScope.cols)
-	outScope.expr = b.factory.ConstructValues(rows, colList)
+	outScope.expr = b.factory.ConstructValues(rows, &memo.ValuesPrivate{
+		Cols: colList,
+		ID:   b.factory.Metadata().NextValuesID(),
+	})
 	return outScope
 }
 

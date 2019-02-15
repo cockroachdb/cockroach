@@ -686,7 +686,10 @@ func (b *Builder) buildFrom(from *tree.From, inScope *scope) (outScope *scope) {
 		outScope = b.buildFromTables(from.Tables, inScope)
 	} else {
 		outScope = inScope.push()
-		outScope.expr = b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
+		outScope.expr = b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
+			Cols: opt.ColList{},
+			ID:   b.factory.Metadata().NextValuesID(),
+		})
 	}
 
 	return outScope

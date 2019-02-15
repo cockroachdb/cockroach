@@ -465,6 +465,11 @@ func (h *hasher) HashSequenceID(val opt.SequenceID) {
 	h.hash *= prime64
 }
 
+func (h *hasher) HashValuesID(val opt.ValuesID) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
 func (h *hasher) HashScanLimit(val ScanLimit) {
 	h.hash ^= internHash(val)
 	h.hash *= prime64
@@ -724,6 +729,10 @@ func (h *hasher) IsTableIDEqual(l, r opt.TableID) bool {
 }
 
 func (h *hasher) IsSequenceIDEqual(l, r opt.SequenceID) bool {
+	return l == r
+}
+
+func (h *hasher) IsValuesIDEqual(l, r opt.ValuesID) bool {
 	return l == r
 }
 

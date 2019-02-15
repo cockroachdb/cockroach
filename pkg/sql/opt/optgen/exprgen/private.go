@@ -99,6 +99,18 @@ func (eg *exprGen) convertPrivateFieldValue(
 		}
 	}
 
+	if list, ok := value.([]interface{}); ok {
+		switch fieldType {
+		case reflect.TypeOf(opt.ColList{}):
+			var cols opt.ColList
+			for _, col := range list {
+				cols = append(cols, col.(opt.ColumnID))
+			}
+
+			return cols
+		}
+	}
+
 	// TODO(radu): handle more kinds of fields.
 	panic(errorf("invalid value for %s.%s: %v", privType, fieldName, value))
 }

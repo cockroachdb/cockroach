@@ -316,7 +316,10 @@ func (c *CustomFuncs) pruneValuesCols(values *memo.ValuesExpr, neededCols opt.Co
 		newRows[irow] = c.f.ConstructTuple(newElems, typ)
 	}
 
-	return c.f.ConstructValues(newRows, newCols)
+	return c.f.ConstructValues(newRows, &memo.ValuesPrivate{
+		Cols: newCols,
+		ID:   values.ID,
+	})
 }
 
 // PruneOrderingGroupBy removes any columns referenced by the Ordering inside
