@@ -994,6 +994,11 @@ func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt *Stat
 			return false
 		}
 	}
+
+	// Never fall back on PREPARE AS OPT PLAN.
+	if _, ok := stmt.AST.(*tree.CannedOptPlan); ok {
+		return false
+	}
 	return true
 }
 

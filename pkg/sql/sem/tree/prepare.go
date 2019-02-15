@@ -14,7 +14,10 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+)
 
 // Prepare represents a PREPARE statement.
 type Prepare struct {
@@ -39,6 +42,21 @@ func (node *Prepare) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString(" AS ")
 	ctx.FormatNode(node.Statement)
+}
+
+// CannedOptPlan is used as the AST for a PREPARE .. AS OPT PLAN statement.
+// This is a testing facility that allows execution (and benchmarking) of
+// specific plans. See exprgen package for more information on the syntax.
+type CannedOptPlan struct {
+	Plan string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CannedOptPlan) Format(ctx *FmtCtx) {
+	// This node can only be used as the AST for a Prepare statement of the form:
+	//   PREPARE name AS OPT PLAN '...').
+	ctx.WriteString("OPT PLAN ")
+	ctx.WriteString(lex.EscapeSQLString(node.Plan))
 }
 
 // Execute represents an EXECUTE statement.
