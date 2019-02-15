@@ -79,7 +79,7 @@ type txnHeartbeater struct {
 
 	// stopper is the TxnCoordSender's stopper. Used to stop the heartbeat loop
 	// when quiescing.
-	stopper *stop.Stopper
+	stopper *stop.DelayedStopper
 
 	// asyncAbortCallbackLocked is called when the heartbeat loop shuts itself
 	// down because it has detected the transaction to be aborted. The intention
@@ -117,6 +117,8 @@ type txnHeartbeater struct {
 		// TODO(nvanbenschoten): Once we stop sending BeginTxn entirely (v2.3)
 		// we can get rid of this. For now, we keep it to ensure compatibility.
 		needBeginTxn bool
+
+		heartbeatTask stop.DelayedTask
 	}
 }
 
@@ -130,7 +132,7 @@ func (h *txnHeartbeater) init(
 	heartbeatInterval time.Duration,
 	gatekeeper lockedSender,
 	metrics *TxnMetrics,
-	stopper *stop.Stopper,
+	stopper *stop.DelayedStopper,
 	asyncAbortCallbackLocked func(context.Context),
 ) {
 	h.stopper = stopper
@@ -267,6 +269,7 @@ func (h *txnHeartbeater) closeLocked() {
 	if h.mu.txnEnd == nil {
 		return
 	}
+	h.mu.heartbeatTask.Cancel()
 	close(h.mu.txnEnd)
 	h.mu.txnEnd = nil
 }
@@ -288,23 +291,17 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) error {
 	hbCtx := h.AnnotateCtx(context.Background())
 	hbCtx = opentracing.ContextWithSpan(hbCtx, opentracing.SpanFromContext(ctx))
 
-	return h.stopper.RunAsyncTask(
+	_, err := h.stopper.RunDelayedAsyncTask(
 		hbCtx, "kv.TxnCoordSender: heartbeat loop", func(ctx context.Context) {
 			h.heartbeatLoop(ctx)
-		})
+		}, h.heartbeatInterval, &h.mu.heartbeatTask)
+	return err
 }
 
 // heartbeatLoop periodically sends a HeartbeatTxn request to the transaction
 // record, stopping in the event the transaction is aborted or committed after
 // attempting to resolve the intents.
 func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
-	var tickChan <-chan time.Time
-	{
-		ticker := time.NewTicker(h.heartbeatInterval)
-		tickChan = ticker.C
-		defer ticker.Stop()
-	}
-
 	var finalErr *roachpb.Error
 	defer func() {
 		h.mu.Lock()
@@ -317,7 +314,14 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 		}
 		h.mu.Unlock()
 	}()
-
+	// heartbeat once immediately on start.
+	if !h.heartbeat(ctx) {
+		// This error we're generating here should not be seen by clients. Since
+		// the transaction is aborted, they should be rejected before they reach
+		// this interceptor.
+		finalErr = roachpb.NewErrorf("heartbeat failed fatally")
+		return
+	}
 	var closer <-chan struct{}
 	{
 		h.mu.Lock()
@@ -326,6 +330,12 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 		if closer == nil {
 			return
 		}
+	}
+	var tickChan <-chan time.Time
+	{
+		ticker := time.NewTicker(h.heartbeatInterval)
+		tickChan = ticker.C
+		defer ticker.Stop()
 	}
 	// Loop with ticker for periodic heartbeats.
 	for {

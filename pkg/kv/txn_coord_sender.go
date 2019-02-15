@@ -343,7 +343,7 @@ type TxnCoordSenderFactory struct {
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	linearizable      bool // enables linearizable behavior
-	stopper           *stop.Stopper
+	stopper           *stop.DelayedStopper
 	metrics           TxnMetrics
 
 	testingKnobs ClientTestingKnobs
@@ -377,7 +377,7 @@ func NewTxnCoordSenderFactory(
 		st:                cfg.Settings,
 		wrapped:           wrapped,
 		clock:             cfg.Clock,
-		stopper:           cfg.Stopper,
+		stopper:           stop.NewDelayedStopper(cfg.Stopper),
 		linearizable:      cfg.Linearizable,
 		heartbeatInterval: cfg.HeartbeatInterval,
 		metrics:           cfg.Metrics,
