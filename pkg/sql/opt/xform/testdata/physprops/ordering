@@ -530,7 +530,7 @@ explain
 memo
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y
 ----
-memo (optimized, ~1KB, required=[presentation: tree:5,field:8,description:9,columns:10,ordering:11])
+memo (optimized, ~2KB, required=[presentation: tree:5,field:8,description:9,columns:10,ordering:11])
  ├── G1: (explain G2 [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
  │    └── [presentation: tree:5,field:8,description:9,columns:10,ordering:11]
  │         ├── best: (explain G2="[presentation: x:1,y:2,z:3,s:4] [ordering: +2]" [presentation: x:1,y:2,z:3,s:4] [ordering: +2])

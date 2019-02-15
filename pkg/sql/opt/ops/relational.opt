@@ -712,14 +712,17 @@ define Explain {
 
 [Private]
 define ExplainPrivate {
-    # Options contains settings that control the output of the explain statement.
-	Options ExplainOptions
+      # Options contains settings that control the output of the explain statement.
+	  Options ExplainOptions
 
-	# ColList stores the column IDs for the explain columns.
-	ColList ColList
+	  # ColList stores the column IDs for the explain columns.
+	  ColList ColList
 
-	# Props stores the required physical properties for the enclosed expression.
-	Props PhysProps
+	  # Props stores the required physical properties for the enclosed expression.
+	  Props PhysProps
+
+    # StmtType stores the type of the statement we are explaining.
+    StmtType StatementType
 }
 
 # ShowTraceForSession returns the current session traces.

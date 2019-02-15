@@ -159,6 +159,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ScanLimit":      {fullName: "memo.ScanLimit", passByVal: true},
 		"ScanFlags":      {fullName: "memo.ScanFlags", passByVal: true},
 		"ExplainOptions": {fullName: "tree.ExplainOptions", passByVal: true},
+		"StatementType":  {fullName: "tree.StatementType", passByVal: true},
 		"ShowTraceType":  {fullName: "tree.ShowTraceType", passByVal: true},
 		"bool":           {fullName: "bool", passByVal: true},
 		"int":            {fullName: "int", passByVal: true},
