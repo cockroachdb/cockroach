@@ -124,12 +124,13 @@ func TestFixture(t *testing.T) {
 		t.Errorf(`expected no fixtures but got: %+v`, fixtures)
 	}
 
-	fixture, err := MakeFixture(ctx, db, gcs, config, gen)
+	const filesPerNode = 1
+	fixture, err := MakeFixture(ctx, db, gcs, config, gen, filesPerNode)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 
-	_, err = MakeFixture(ctx, db, gcs, config, gen)
+	_, err = MakeFixture(ctx, db, gcs, config, gen, filesPerNode)
 	if !testutils.IsError(err, `already exists`) {
 		t.Fatalf(`expected 'already exists' error got: %+v`, err)
 	}
@@ -164,14 +165,15 @@ func TestImportFixture(t *testing.T) {
 		t.Fatalf(`%+v`, err)
 	}
 
+	const filesPerNode = 1
 	sqlDB.Exec(t, `CREATE DATABASE distsort`)
-	_, err := ImportFixture(ctx, db, gen, `distsort`, false /* directIngestion */)
+	_, err := ImportFixture(ctx, db, gen, `distsort`, false /* directIngestion */, filesPerNode)
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,
 		`SELECT count(*) FROM distsort.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
 
 	sqlDB.Exec(t, `CREATE DATABASE direct`)
-	_, err = ImportFixture(ctx, db, gen, `direct`, true /* directIngestion */)
+	_, err = ImportFixture(ctx, db, gen, `direct`, true /* directIngestion */, filesPerNode)
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,
 		`SELECT count(*) FROM direct.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
@@ -195,7 +197,8 @@ func BenchmarkImportFixtureTPCC(b *testing.B) {
 		sqlDB.Exec(b, `CREATE DATABASE d`)
 
 		b.StartTimer()
-		importBytes, err := ImportFixture(ctx, db, gen, `d`, true /* directIngestion */)
+		const filesPerNode = 1
+		importBytes, err := ImportFixture(ctx, db, gen, `d`, true /* directIngestion */, filesPerNode)
 		require.NoError(b, err)
 		bytes += importBytes
 		b.StopTimer()
