@@ -363,9 +363,9 @@ memo (optimized, ~5KB, required=[presentation: field:3])
  │         ├── best: (explain G4="[presentation: k:1]" [presentation: k:1])
  │         └── cost: 0.03
  ├── G3: (aggregations)
- ├── G4: (values G5)
+ ├── G4: (values G5 id=v1)
  │    └── [presentation: k:1]
- │         ├── best: (values G5)
+ │         ├── best: (values G5 id=v1)
  │         └── cost: 0.02
  ├── G5: (scalar-list G6)
  ├── G6: (tuple G7)
