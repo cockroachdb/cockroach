@@ -80,6 +80,9 @@ type Metadata struct {
 	// sequences stores information about each metadata sequence, indexed by SequenceID.
 	sequences []cat.Sequence
 
+	// values is the highest id for a Values clause that has been assigned.
+	values ValuesID
+
 	// deps stores information about all catalog objects depended on by the query,
 	// as well as the privileges required to access those objects. The objects are
 	// deduplicated: any name/object pair shows up at most once.
@@ -127,6 +130,7 @@ func (md *Metadata) Init() {
 	md.cols = md.cols[:0]
 	md.tables = md.tables[:0]
 	md.deps = md.deps[:0]
+	md.values = 0
 }
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.
@@ -139,6 +143,7 @@ func (md *Metadata) CopyFrom(from *Metadata) {
 	md.cols = append(md.cols, from.cols...)
 	md.tables = append(md.tables, from.tables...)
 	md.deps = append(md.deps, from.deps...)
+	md.values = from.values
 }
 
 // AddDataSourceDependency tracks one of the catalog data sources on which the
@@ -375,4 +380,17 @@ func (md *Metadata) AddSequence(seq cat.Sequence) SequenceID {
 // same sequence can be associated with multiple metadata ids.
 func (md *Metadata) Sequence(seqID SequenceID) cat.Sequence {
 	return md.sequences[seqID.index()]
+}
+
+// ValuesID uniquely identifies the usage of a values clause within the scope of a
+// query.
+//
+// See the comment for Metadata for more details on identifiers.
+type ValuesID uint64
+
+// NextValuesID returns a fresh ValuesID which is guaranteed to never have been
+// allocated prior in this memo.
+func (md *Metadata) NextValuesID() ValuesID {
+	md.values++
+	return md.values
 }

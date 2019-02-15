@@ -87,6 +87,7 @@ func (eg *exprGen) convertPrivateFieldValue(
 	if res := eg.castToDesiredType(value, fieldType); res != nil {
 		return res
 	}
+
 	panic(errorf("invalid value for %s.%s: %v", privType, fieldName, value))
 }
 

@@ -253,7 +253,9 @@ func (c *CustomFuncs) HoistJoinSubquery(
 // order to use the hoister, which requires an initial input query. While a
 // right join would be slightly better here, this is such a fringe case that
 // it's not worth the extra code complication.
-func (c *CustomFuncs) HoistValuesSubquery(rows memo.ScalarListExpr, cols opt.ColList) memo.RelExpr {
+func (c *CustomFuncs) HoistValuesSubquery(
+	rows memo.ScalarListExpr, private *memo.ValuesPrivate,
+) memo.RelExpr {
 	newRows := make(memo.ScalarListExpr, 0, len(rows))
 
 	var hoister subqueryHoister
@@ -262,7 +264,10 @@ func (c *CustomFuncs) HoistValuesSubquery(rows memo.ScalarListExpr, cols opt.Col
 		newRows = append(newRows, hoister.hoistAll(item))
 	}
 
-	values := c.f.ConstructValues(newRows, cols)
+	values := c.f.ConstructValues(newRows, &memo.ValuesPrivate{
+		Cols: private.Cols,
+		ID:   c.f.Metadata().NextValuesID(),
+	})
 	join := c.f.ConstructInnerJoinApply(hoister.input(), values, memo.TrueFilter, memo.EmptyJoinPrivate)
 	outCols := values.Relational().OutputCols
 	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, outCols)
@@ -681,7 +686,10 @@ func (c *CustomFuncs) ConstructBinary(op opt.Operator, left, right opt.ScalarExp
 // ConstructNoColsRow returns a Values operator having a single row with zero
 // columns.
 func (c *CustomFuncs) ConstructNoColsRow() memo.RelExpr {
-	return c.f.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
+	return c.f.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
+		Cols: opt.ColList{},
+		ID:   c.f.Metadata().NextValuesID(),
+	})
 }
 
 // referenceSingleColumn returns a Variable operator that refers to the one and

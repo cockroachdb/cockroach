@@ -32,6 +32,7 @@ func TestMetadata(t *testing.T) {
 	schID := md.AddSchema(&testcat.Schema{})
 	colID := md.AddColumn("col", types.Int)
 	tabID := md.AddTable(&testcat.Table{})
+	valuesID := md.NextValuesID()
 
 	// Call Init and add objects from catalog, verifying that IDs have been reset.
 	testCat := testcat.New()
@@ -47,6 +48,9 @@ func TestMetadata(t *testing.T) {
 	}
 	if md.AddTable(tab) != tabID {
 		t.Fatalf("unexpected table id")
+	}
+	if md.NextValuesID() != valuesID {
+		t.Fatalf("unexpected values id")
 	}
 
 	md.AddDataSourceDependency(tab.Name(), tab, privilege.CREATE)
@@ -67,6 +71,10 @@ func TestMetadata(t *testing.T) {
 
 	if mdNew.TableMeta(tabID).Table != tab {
 		t.Fatalf("unexpected table")
+	}
+
+	if mdNew.NextValuesID() != md.NextValuesID() {
+		t.Fatalf("unexpected values id")
 	}
 
 	depsUpToDate, err = md.CheckDependencies(context.TODO(), testCat)
