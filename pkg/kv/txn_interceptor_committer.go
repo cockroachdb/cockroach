@@ -52,8 +52,13 @@ func (tc *txnCommitter) SendLocked(
 		return tc.sendLockedWithElidedEndTransaction(ctx, ba, et)
 	}
 
-	// Assign the transaction's key to the Request's header.
-	et.Key = ba.Txn.Key
+	// Assign the transaction's key to the Request's header if it isn't already
+	// set. This is the only place where EndTransactionRequest.Key is assigned,
+	// but we could be dealing with a re-issued batch after a refresh. Remember,
+	// the committer is below the span refresh on the interceptor stack.
+	if et.Key == nil {
+		et.Key = ba.Txn.Key
+	}
 
 	// Pass the adjusted batch through the wrapped lockedSender.
 	return tc.wrapped.SendLocked(ctx, ba)
