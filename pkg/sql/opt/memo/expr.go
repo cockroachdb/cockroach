@@ -16,6 +16,7 @@ package memo
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -279,6 +280,42 @@ type ScanFlags struct {
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {
 	return !sf.NoIndexJoin && !sf.ForceIndex
+}
+
+// JoinFlags stores restrictions on the join execution method, derived from
+// hints for a join specified in the query (see tree.JoinTableExpr).
+type JoinFlags struct {
+	DisallowLookupJoin bool
+	DisallowMergeJoin  bool
+	DisallowHashJoin   bool
+}
+
+// Empty returns true if there are no flags set.
+func (jf JoinFlags) Empty() bool {
+	return !jf.DisallowLookupJoin && !jf.DisallowMergeJoin && !jf.DisallowHashJoin
+}
+
+func (jf JoinFlags) String() string {
+	if jf.Empty() {
+		return "no flags"
+	}
+	var b strings.Builder
+	if jf.DisallowLookupJoin {
+		b.WriteString("no-lookup-join")
+	}
+	if jf.DisallowMergeJoin {
+		if b.Len() > 0 {
+			b.WriteByte(';')
+		}
+		b.WriteString("no-merge-join")
+	}
+	if jf.DisallowHashJoin {
+		if b.Len() > 0 {
+			b.WriteByte(';')
+		}
+		b.WriteString("no-hash-join")
+	}
+	return b.String()
 }
 
 // NeedResults returns true if the mutation operator can return the rows that
