@@ -29,6 +29,7 @@ import (
 // batches of rows that are the cross-product of matching groups from each
 // stream.
 type streamMerger struct {
+	evalCtx    *tree.EvalContext
 	left       streamGroupAccumulator
 	right      streamGroupAccumulator
 	leftGroup  []sqlbase.EncDatumRow
@@ -48,19 +49,21 @@ func (sm *streamMerger) start(ctx context.Context) {
 // NextBatch returns a set of rows from the left stream and a set of rows from
 // the right stream, all matching on the equality columns. One of the sets can
 // be empty.
-func (sm *streamMerger) NextBatch(
-	evalCtx *tree.EvalContext,
-) ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRow, *ProducerMetadata) {
+func (sm *streamMerger) NextBatch() (
+	[]sqlbase.EncDatumRow,
+	[]sqlbase.EncDatumRow,
+	*ProducerMetadata,
+) {
 	if sm.leftGroup == nil {
 		var meta *ProducerMetadata
-		sm.leftGroup, meta = sm.left.nextGroup(evalCtx)
+		sm.leftGroup, meta = sm.left.nextGroup()
 		if meta != nil {
 			return nil, nil, meta
 		}
 	}
 	if sm.rightGroup == nil {
 		var meta *ProducerMetadata
-		sm.rightGroup, meta = sm.right.nextGroup(evalCtx)
+		sm.rightGroup, meta = sm.right.nextGroup()
 		if meta != nil {
 			return nil, nil, meta
 		}
@@ -79,7 +82,7 @@ func (sm *streamMerger) NextBatch(
 
 	cmp, err := CompareEncDatumRowForMerge(
 		sm.left.types, lrow, rrow, sm.left.ordering, sm.right.ordering,
-		sm.nullEquality, &sm.datumAlloc, evalCtx,
+		sm.nullEquality, &sm.datumAlloc, sm.evalCtx,
 	)
 	if err != nil {
 		return nil, nil, &ProducerMetadata{Err: err}
@@ -167,6 +170,7 @@ func (sm *streamMerger) close(ctx context.Context) {
 //
 // All metadata from the sources is forwarded to metadataSink.
 func makeStreamMerger(
+	evalCtx *tree.EvalContext,
 	leftSource RowSource,
 	leftOrdering sqlbase.ColumnOrdering,
 	rightSource RowSource,
@@ -185,8 +189,9 @@ func makeStreamMerger(
 	}
 
 	return streamMerger{
-		left:         makeStreamGroupAccumulator(leftSource, leftOrdering, memMonitor),
-		right:        makeStreamGroupAccumulator(rightSource, rightOrdering, memMonitor),
+		evalCtx:      evalCtx,
+		left:         makeStreamGroupAccumulator(evalCtx, leftSource, leftOrdering, memMonitor),
+		right:        makeStreamGroupAccumulator(evalCtx, rightSource, rightOrdering, memMonitor),
 		nullEquality: nullEquality,
 	}, nil
 }

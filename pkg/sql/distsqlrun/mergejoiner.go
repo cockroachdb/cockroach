@@ -99,6 +99,7 @@ func newMergeJoiner(
 
 	var err error
 	m.streamMerger, err = makeStreamMerger(
+		flowCtx.EvalCtx,
 		m.leftSource,
 		distsqlpb.ConvertToColumnOrdering(spec.LeftOrdering),
 		m.rightSource,
@@ -226,7 +227,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		// TODO(paul): Investigate (with benchmarks) whether or not it's
 		// worthwhile to only buffer one row from the right stream per batch
 		// for semi-joins.
-		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.evalCtx)
+		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch()
 		if meta != nil {
 			return nil, meta
 		}
@@ -242,7 +243,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 func (m *mergeJoiner) close() {
 	if m.InternalClose() {
-		ctx := m.evalCtx.Ctx()
+		ctx := m.Ctx
 		m.streamMerger.close(ctx)
 		m.MemMonitor.Stop(ctx)
 	}

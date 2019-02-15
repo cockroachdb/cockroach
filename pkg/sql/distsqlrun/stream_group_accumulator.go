@@ -26,6 +26,12 @@ import (
 // streamGroupAccumulator groups input rows coming from src into groups dictated
 // by equality according to the ordering columns.
 type streamGroupAccumulator struct {
+	// ctx is the captured context, created at Start time. It should be used for
+	// all operations that take a context.
+	ctx context.Context
+
+	evalCtx *tree.EvalContext
+
 	src   RowSource
 	types []sqlbase.ColumnType
 
@@ -48,9 +54,13 @@ type streamGroupAccumulator struct {
 }
 
 func makeStreamGroupAccumulator(
-	src RowSource, ordering sqlbase.ColumnOrdering, memMonitor *mon.BytesMonitor,
+	evalCtx *tree.EvalContext,
+	src RowSource,
+	ordering sqlbase.ColumnOrdering,
+	memMonitor *mon.BytesMonitor,
 ) streamGroupAccumulator {
 	return streamGroupAccumulator{
+		evalCtx:  evalCtx,
 		src:      src,
 		types:    src.OutputTypes(),
 		ordering: ordering,
@@ -59,14 +69,13 @@ func makeStreamGroupAccumulator(
 }
 
 func (s *streamGroupAccumulator) start(ctx context.Context) {
+	s.ctx = ctx
 	s.src.Start(ctx)
 }
 
 // nextGroup returns the next group from the inputs. The returned slice is not safe
 // to use after the next call to nextGroup.
-func (s *streamGroupAccumulator) nextGroup(
-	evalCtx *tree.EvalContext,
-) ([]sqlbase.EncDatumRow, *ProducerMetadata) {
+func (s *streamGroupAccumulator) nextGroup() ([]sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.srcConsumed {
 		// If src has been exhausted, then we also must have advanced away from the
 		// last group.
@@ -88,7 +97,7 @@ func (s *streamGroupAccumulator) nextGroup(
 			return s.curGroup, nil
 		}
 
-		if err := s.memAcc.Grow(evalCtx.Ctx(), int64(row.Size())); err != nil {
+		if err := s.memAcc.Grow(s.ctx, int64(row.Size())); err != nil {
 			return nil, &ProducerMetadata{Err: err}
 		}
 		row = s.rowAlloc.CopyRow(row)
@@ -101,7 +110,7 @@ func (s *streamGroupAccumulator) nextGroup(
 			continue
 		}
 
-		cmp, err := s.curGroup[0].Compare(s.types, &s.datumAlloc, s.ordering, evalCtx, row)
+		cmp, err := s.curGroup[0].Compare(s.types, &s.datumAlloc, s.ordering, s.evalCtx, row)
 		if err != nil {
 			return nil, &ProducerMetadata{Err: err}
 		}
@@ -117,7 +126,7 @@ func (s *streamGroupAccumulator) nextGroup(
 			n := len(s.curGroup)
 			ret := s.curGroup[:n:n]
 			s.curGroup = s.curGroup[:0]
-			s.memAcc.Empty(evalCtx.Ctx())
+			s.memAcc.Empty(s.ctx)
 			s.leftoverRow = row
 			return ret, nil
 		}
