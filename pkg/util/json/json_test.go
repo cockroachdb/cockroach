@@ -695,7 +695,7 @@ func TestJSONExists(t *testing.T) {
 			{`baz`, false},
 		},
 		`["a"]`: {{``, false}, {`0`, false}, {`a`, true}},
-		`"a"`:   {{``, false}, {`0`, false}, {`a`, false}},
+		`"a"`:   {{``, false}, {`0`, false}, {`a`, true}},
 		`1`:     {{``, false}, {`0`, false}, {`a`, false}},
 		`true`:  {{``, false}, {`0`, false}, {`a`, false}},
 	}
