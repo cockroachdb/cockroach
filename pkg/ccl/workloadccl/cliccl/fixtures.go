@@ -23,6 +23,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
@@ -305,9 +306,11 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 	}
 
 	directIngestion := *fixturesImportDirectIngestionTable
-	if err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName, directIngestion); err != nil {
+	bytes, err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName, directIngestion)
+	if err != nil {
 		return errors.Wrap(err, `importing fixture`)
 	}
+	log.Infof(ctx, "imported %s bytes in %d tables", humanizeutil.IBytes(bytes), len(gen.Tables()))
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
