@@ -77,9 +77,11 @@ const (
 	seqIOCostFactor  = 1
 	randIOCostFactor = 4
 
-	// hugeCost is used with expressions we want to avoid; for example: scanning
-	// an index that doesn't match a "force index" flag.
-	hugeCost = 1e100
+	// hugeCost is used with expressions we want to avoid; these are expressions
+	// that "violate" a hint like forcing a specific index or join algorithm.
+	// If the final expression has this cost or larger, it means that there was no
+	// plan that could satisfy the hints.
+	hugeCost memo.Cost = 1e100
 )
 
 // Init initializes a new coster structure with the given memo.
@@ -174,7 +176,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 
 	if c.perturbation != 0 {
 		// Don't perturb the cost if we are forcing an index.
-		if cost != hugeCost {
+		if cost < hugeCost {
 			// Get a random value in the range [-1.0, 1.0)
 			multiplier := 2*rand.Float64() - 1
 
@@ -260,6 +262,9 @@ func (c *coster) computeValuesCost(values *memo.ValuesExpr) memo.Cost {
 }
 
 func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
+	if join.Private().(*memo.JoinPrivate).Flags.DisallowHashJoin {
+		return hugeCost
+	}
 	leftRowCount := join.Child(0).(memo.RelExpr).Relational().Stats.RowCount
 	rightRowCount := join.Child(1).(memo.RelExpr).Relational().Stats.RowCount
 

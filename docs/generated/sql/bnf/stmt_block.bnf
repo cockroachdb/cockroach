@@ -622,6 +622,7 @@ unreserved_keyword ::=
 	| 'GLOBAL'
 	| 'GRANTS'
 	| 'GROUPS'
+	| 'HASH'
 	| 'HIGH'
 	| 'HISTOGRAM'
 	| 'HOUR'
@@ -656,10 +657,12 @@ unreserved_keyword ::=
 	| 'LEVEL'
 	| 'LIST'
 	| 'LOCAL'
+	| 'LOOKUP'
 	| 'LOW'
 	| 'MATCH'
 	| 'MATERIALIZED'
 	| 'MAXVALUE'
+	| 'MERGE'
 	| 'MINUTE'
 	| 'MINVALUE'
 	| 'MONTH'
@@ -2020,8 +2023,10 @@ joined_table ::=
 	'(' joined_table ')'
 	| table_ref 'CROSS' 'JOIN' table_ref
 	| table_ref join_type 'JOIN' table_ref join_qual
+	| table_ref join_type join_hint 'JOIN' table_ref join_qual
 	| table_ref 'JOIN' table_ref join_qual
 	| table_ref 'NATURAL' join_type 'JOIN' table_ref
+	| table_ref 'NATURAL' join_type join_hint 'JOIN' table_ref
 	| table_ref 'NATURAL' 'JOIN' table_ref
 
 alias_clause ::=
@@ -2160,6 +2165,11 @@ join_type ::=
 join_qual ::=
 	'USING' '(' name_list ')'
 	| 'ON' a_expr
+
+join_hint ::=
+	'HASH'
+	| 'MERGE'
+	| 'LOOKUP'
 
 func_expr_windowless ::=
 	func_application
