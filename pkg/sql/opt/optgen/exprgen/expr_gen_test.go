@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
-func TestPlanGen(t *testing.T) {
+func TestExprGen(t *testing.T) {
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {

@@ -164,6 +164,8 @@ define InnerJoin {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
@@ -171,6 +173,8 @@ define LeftJoin {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+   _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
@@ -178,6 +182,8 @@ define RightJoin {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
@@ -185,6 +191,8 @@ define FullJoin {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
@@ -192,6 +200,8 @@ define SemiJoin {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
@@ -199,6 +209,14 @@ define AntiJoin {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
+}
+
+# JoinPrivate is shared between the various join operators including apply
+# variants, but excluding IndexJoin, LookupJoin, MergeJoin.
+[Private]
+define JoinPrivate {
 }
 
 # IndexJoin represents an inner join between an input expression and a primary
@@ -376,6 +394,8 @@ define InnerJoinApply {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinApply]
@@ -383,6 +403,8 @@ define LeftJoinApply {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinApply]
@@ -390,6 +412,8 @@ define RightJoinApply {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinApply]
@@ -397,6 +421,8 @@ define FullJoinApply {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinApply]
@@ -404,6 +430,8 @@ define SemiJoinApply {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinApply]
@@ -411,6 +439,8 @@ define AntiJoinApply {
     Left  RelExpr
     Right RelExpr
     On    FiltersExpr
+
+    _ JoinPrivate
 }
 
 # GroupBy computes aggregate functions over groups of input rows. Input rows
