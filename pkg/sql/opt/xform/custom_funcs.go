@@ -546,6 +546,11 @@ func (c *CustomFuncs) GenerateLimitedScans(
 //
 // ----------------------------------------------------------------------
 
+// NoJoinHints returns true if no hints were specified for this join.
+func (c *CustomFuncs) NoJoinHints(p *memo.JoinPrivate) bool {
+	return p.Flags.Empty()
+}
+
 // GenerateMergeJoins spawns MergeJoinOps, based on any interesting orderings.
 func (c *CustomFuncs) GenerateMergeJoins(
 	grp memo.RelExpr,
@@ -554,6 +559,10 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
+	if joinPrivate.Flags.DisallowMergeJoin {
+		return
+	}
+
 	leftProps := left.Relational()
 	rightProps := right.Relational()
 
@@ -568,9 +577,26 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	// We generate MergeJoin expressions based on interesting orderings from the
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
-	leftOrders := DeriveInterestingOrderings(left).Copy()
-	leftOrders.RestrictToCols(leftEq.ToSet())
-	if len(leftOrders) == 0 {
+	orders := DeriveInterestingOrderings(left).Copy()
+	orders.RestrictToCols(leftEq.ToSet())
+
+	if joinPrivate.Flags.DisallowHashJoin {
+		// If we are using a hint, CommuteJoin won't run. Add the orderings
+		// from the right side.
+		rightOrders := DeriveInterestingOrderings(right).Copy()
+		rightOrders.RestrictToCols(leftEq.ToSet())
+		orders = append(orders, rightOrders...)
+
+		// Also append an arbitrary ordering (in case the interesting orderings
+		// don't result in any merge joins).
+		o := make(opt.Ordering, len(leftEq))
+		for i := range o {
+			o[i] = opt.MakeOrderingColumn(leftEq[i], false /* descending */)
+		}
+		orders.Add(o)
+	}
+
+	if len(orders) == 0 {
 		return
 	}
 
@@ -582,7 +608,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 
 	var remainingFilters memo.FiltersExpr
 
-	for _, o := range leftOrders {
+	for _, o := range orders {
 		if len(o) < n {
 			// TODO(radu): we have a partial ordering on the equality columns. We
 			// should augment it with the other columns (in arbitrary order) in the
@@ -668,6 +694,9 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
+	if joinPrivate.Flags.DisallowLookupJoin {
+		return
+	}
 	inputProps := input.Relational()
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)

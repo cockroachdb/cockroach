@@ -920,13 +920,18 @@ func TestParse(t *testing.T) {
 
 		{`SELECT a FROM t1 JOIN t2 ON a = b`},
 		{`SELECT a FROM t1 JOIN t2 USING (a)`},
+		{`SELECT a FROM t1 INNER MERGE JOIN t2 USING (a)`},
 		{`SELECT a FROM t1 LEFT JOIN t2 ON a = b`},
+		{`SELECT a FROM t1 LEFT LOOKUP JOIN t2 ON a = b`},
 		{`SELECT a FROM t1 RIGHT JOIN t2 ON a = b`},
 		{`SELECT a FROM t1 INNER JOIN t2 ON a = b`},
+		{`SELECT a FROM t1 INNER HASH JOIN t2 ON a = b`},
 		{`SELECT a FROM t1 CROSS JOIN t2`},
 		{`SELECT a FROM t1 NATURAL JOIN t2`},
+		{`SELECT a FROM t1 NATURAL INNER MERGE JOIN t2`},
 		{`SELECT a FROM t1 INNER JOIN t2 USING (a)`},
 		{`SELECT a FROM t1 FULL JOIN t2 USING (a)`},
+		{`SELECT a FROM t1 FULL MERGE JOIN t2 USING (a)`},
 		{`SELECT * FROM (t1 WITH ORDINALITY AS o1 CROSS JOIN t2 WITH ORDINALITY AS o2) WITH ORDINALITY AS o3`},
 
 		{`SELECT a FROM t1 AS OF SYSTEM TIME '2016-01-01'`},
@@ -1415,6 +1420,8 @@ func TestParse2(t *testing.T) {
 			`SELECT a FROM t1 LEFT JOIN t2 ON a = b`},
 		{`SELECT a FROM t1 RIGHT OUTER JOIN t2 ON a = b`,
 			`SELECT a FROM t1 RIGHT JOIN t2 ON a = b`},
+		{`SELECT a FROM t1 RIGHT OUTER MERGE JOIN t2 ON a = b`,
+			`SELECT a FROM t1 RIGHT MERGE JOIN t2 ON a = b`},
 		// Some functions are nearly keywords.
 		{`SELECT CURRENT_SCHEMA`,
 			`SELECT current_schema()`},

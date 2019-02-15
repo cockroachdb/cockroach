@@ -500,7 +500,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> GLOBAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HIGH HISTOGRAM HOUR
+%token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
 %token <str> IMMEDIATE IMPORT INCREMENT INCREMENTAL IF IFERROR IFNULL ILIKE IN ISERROR
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
@@ -514,9 +514,9 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> LANGUAGE LATERAL LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
-%token <str> LOCALTIME LOCALTIMESTAMP LOW LSHIFT
+%token <str> LOCALTIME LOCALTIMESTAMP LOOKUP LOW LSHIFT
 
-%token <str> MATCH MATERIALIZED MINVALUE MAXVALUE MINUTE MONTH
+%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 
 %token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str> NOT NOTHING NOTNULL NULL NULLIF NUMERIC
@@ -828,6 +828,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <empty> join_outer
 %type <tree.JoinCond> join_qual
 %type <str> join_type
+%type <str> opt_join_hint
 
 %type <tree.Exprs> extract_list
 %type <tree.Exprs> overlay_list
@@ -5888,13 +5889,13 @@ opt_index_flags:
 // %Category: DML
 // %Text:
 // Data sources:
-//   <tablename> [ @ { <idxname> | <indexhint> } ]
+//   <tablename> [ @ { <idxname> | <indexflags> } ]
 //   <tablefunc> ( <exprs...> )
 //   ( { <selectclause> | <source> } )
 //   <source> [AS] <alias> [( <colnames...> )]
-//   <source> { [INNER] | { LEFT | RIGHT | FULL } [OUTER] } JOIN <source> ON <expr>
-//   <source> { [INNER] | { LEFT | RIGHT | FULL } [OUTER] } JOIN <source> USING ( <colnames...> )
-//   <source> NATURAL { [INNER] | { LEFT | RIGHT | FULL } [OUTER] } JOIN <source>
+//   <source> [ <jointype> ] JOIN <source> ON <expr>
+//   <source> [ <jointype> ] JOIN <source> USING ( <colnames...> )
+//   <source> NATURAL [ <jointype> ] JOIN <source>
 //   <source> CROSS JOIN <source>
 //   <source> WITH ORDINALITY
 //   '[' EXPLAIN ... ']'
@@ -5903,6 +5904,9 @@ opt_index_flags:
 // Index flags:
 //   '{' FORCE_INDEX = <idxname> [, ...] '}'
 //   '{' NO_INDEX_JOIN [, ...] '}'
+//
+// Join types:
+//   { INNER | { LEFT | RIGHT | FULL } [OUTER] } [ { HASH | MERGE | LOOKUP } ]
 //
 // %SeeAlso: WEBDOCS/table-expressions.html
 table_ref:
@@ -6046,23 +6050,23 @@ joined_table:
   }
 | table_ref CROSS JOIN table_ref
   {
-    $$.val = &tree.JoinTableExpr{Join: tree.AstCrossJoin, Left: $1.tblExpr(), Right: $4.tblExpr()}
+    $$.val = &tree.JoinTableExpr{JoinType: tree.AstCross, Left: $1.tblExpr(), Right: $4.tblExpr()}
   }
-| table_ref join_type JOIN table_ref join_qual
+| table_ref join_type opt_join_hint JOIN table_ref join_qual
   {
-    $$.val = &tree.JoinTableExpr{Join: $2, Left: $1.tblExpr(), Right: $4.tblExpr(), Cond: $5.joinCond()}
+    $$.val = &tree.JoinTableExpr{JoinType: $2, Left: $1.tblExpr(), Right: $5.tblExpr(), Cond: $6.joinCond(), Hint: $3}
   }
 | table_ref JOIN table_ref join_qual
   {
-    $$.val = &tree.JoinTableExpr{Join: tree.AstJoin, Left: $1.tblExpr(), Right: $3.tblExpr(), Cond: $4.joinCond()}
+    $$.val = &tree.JoinTableExpr{Left: $1.tblExpr(), Right: $3.tblExpr(), Cond: $4.joinCond()}
   }
-| table_ref NATURAL join_type JOIN table_ref
+| table_ref NATURAL join_type opt_join_hint JOIN table_ref
   {
-    $$.val = &tree.JoinTableExpr{Join: $3, Left: $1.tblExpr(), Right: $5.tblExpr(), Cond: tree.NaturalJoinCond{}}
+    $$.val = &tree.JoinTableExpr{JoinType: $3, Left: $1.tblExpr(), Right: $6.tblExpr(), Cond: tree.NaturalJoinCond{}, Hint: $4}
   }
 | table_ref NATURAL JOIN table_ref
   {
-    $$.val = &tree.JoinTableExpr{Join: tree.AstJoin, Left: $1.tblExpr(), Right: $4.tblExpr(), Cond: tree.NaturalJoinCond{}}
+    $$.val = &tree.JoinTableExpr{Left: $1.tblExpr(), Right: $4.tblExpr(), Cond: tree.NaturalJoinCond{}}
   }
 
 alias_clause:
@@ -6098,25 +6102,60 @@ opt_as_of_clause:
 join_type:
   FULL join_outer
   {
-    $$ = tree.AstFullJoin
+    $$ = tree.AstFull
   }
 | LEFT join_outer
   {
-    $$ = tree.AstLeftJoin
+    $$ = tree.AstLeft
   }
 | RIGHT join_outer
   {
-    $$ = tree.AstRightJoin
+    $$ = tree.AstRight
   }
 | INNER
   {
-    $$ = tree.AstInnerJoin
+    $$ = tree.AstInner
   }
 
 // OUTER is just noise...
 join_outer:
   OUTER {}
 | /* EMPTY */ {}
+
+// Join hint specifies that the join in the query should use a
+// specific method.
+
+// The semantics are as follows:
+//  - HASH forces a hash join; in other words, it disables merge and lookup
+//    join. A hash join is always possible; even if there are no equality
+//    columns - we consider cartesian join a degenerate case of the hash join
+//    (one bucket).
+//  - MERGE forces a merge join, even if it requires resorting both sides of
+//    the join.
+//  - LOOKUP forces a lookup join into the right side; the right side must be
+//    a table with a suitable index. `LOOKUP` can only be used with INNER and
+//    LEFT joins (though this is not enforced by the syntax).
+//  - If it is not possible to use the algorithm in the hint, an error is
+//    returned.
+//  - When a join hint is specified, the two tables will not be reordered
+//    by the optimizer.
+opt_join_hint:
+  HASH
+  {
+    $$ = tree.AstHash
+  }
+| MERGE
+  {
+    $$ = tree.AstMerge
+  }
+| LOOKUP
+  {
+    $$ = tree.AstLookup
+  }
+| /* EMPTY */
+  {
+    $$ = ""
+  }
 
 // JOIN qualification clauses
 // Possibilities are:
@@ -8707,6 +8746,7 @@ unreserved_keyword:
 | GLOBAL
 | GRANTS
 | GROUPS
+| HASH
 | HIGH
 | HISTOGRAM
 | HOUR
@@ -8741,10 +8781,12 @@ unreserved_keyword:
 | LEVEL
 | LIST
 | LOCAL
+| LOOKUP
 | LOW
 | MATCH
 | MATERIALIZED
 | MAXVALUE
+| MERGE
 | MINUTE
 | MINVALUE
 | MONTH
