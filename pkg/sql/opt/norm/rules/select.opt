@@ -100,6 +100,7 @@
         $left:*
         $right:*
         $on:*
+        $private:*
     )
     $filters:*
 )
@@ -108,6 +109,7 @@
     $left
     $right
     (ConcatFilters $on $filters)
+    $private
 )
 
 # PushSelectCondLeftIntoJoinLeftAndRight applies to the case when a condition
@@ -138,6 +140,7 @@
         $left:*
         $right:*
         $on:*
+        $private:*
     )
     $filters:[
         ...
@@ -159,6 +162,7 @@
             [ (FiltersItem (Map $on $item $right)) ]
         )
         $on
+        $private
     )
     (RemoveFiltersItem $filters $item)
 )
@@ -176,6 +180,7 @@
         $left:*
         $right:*
         $on:*
+        $private:*
     )
     $filters:[
         ...
@@ -197,6 +202,7 @@
             [ (FiltersItem $condition) ]
         )
         $on
+        $private
     )
     (RemoveFiltersItem $filters $item)
 )
@@ -222,6 +228,7 @@
         $left:*
         $right:*
         $on:*
+        $private:*
     )
     $filters:[
         ...
@@ -238,6 +245,7 @@
         )
         $right
         $on
+        $private
     )
     (ExtractUnboundConditions $filters $leftCols)
 )
@@ -251,6 +259,7 @@
         $left:*
         $right:*
         $on:*
+        $private:*
     )
     $filters:[
         ...
@@ -267,6 +276,7 @@
             (ExtractBoundConditions $filters $rightCols)
         )
         $on
+        $private
     )
     (ExtractUnboundConditions $filters $rightCols)
 )

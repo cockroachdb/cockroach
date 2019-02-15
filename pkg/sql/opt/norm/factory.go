@@ -282,33 +282,33 @@ func (f *Factory) ConstructZeroValues() memo.RelExpr {
 // ConstructJoin constructs the join operator that corresponds to the given join
 // operator type.
 func (f *Factory) ConstructJoin(
-	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
+	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr, private *memo.JoinPrivate,
 ) memo.RelExpr {
 	switch joinOp {
 	case opt.InnerJoinOp:
-		return f.ConstructInnerJoin(left, right, on)
+		return f.ConstructInnerJoin(left, right, on, private)
 	case opt.InnerJoinApplyOp:
-		return f.ConstructInnerJoinApply(left, right, on)
+		return f.ConstructInnerJoinApply(left, right, on, private)
 	case opt.LeftJoinOp:
-		return f.ConstructLeftJoin(left, right, on)
+		return f.ConstructLeftJoin(left, right, on, private)
 	case opt.LeftJoinApplyOp:
-		return f.ConstructLeftJoinApply(left, right, on)
+		return f.ConstructLeftJoinApply(left, right, on, private)
 	case opt.RightJoinOp:
-		return f.ConstructRightJoin(left, right, on)
+		return f.ConstructRightJoin(left, right, on, private)
 	case opt.RightJoinApplyOp:
-		return f.ConstructRightJoinApply(left, right, on)
+		return f.ConstructRightJoinApply(left, right, on, private)
 	case opt.FullJoinOp:
-		return f.ConstructFullJoin(left, right, on)
+		return f.ConstructFullJoin(left, right, on, private)
 	case opt.FullJoinApplyOp:
-		return f.ConstructFullJoinApply(left, right, on)
+		return f.ConstructFullJoinApply(left, right, on, private)
 	case opt.SemiJoinOp:
-		return f.ConstructSemiJoin(left, right, on)
+		return f.ConstructSemiJoin(left, right, on, private)
 	case opt.SemiJoinApplyOp:
-		return f.ConstructSemiJoinApply(left, right, on)
+		return f.ConstructSemiJoinApply(left, right, on, private)
 	case opt.AntiJoinOp:
-		return f.ConstructAntiJoin(left, right, on)
+		return f.ConstructAntiJoin(left, right, on, private)
 	case opt.AntiJoinApplyOp:
-		return f.ConstructAntiJoinApply(left, right, on)
+		return f.ConstructAntiJoinApply(left, right, on, private)
 	}
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }

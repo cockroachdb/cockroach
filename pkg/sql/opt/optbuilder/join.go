@@ -76,7 +76,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 
 		left := leftScope.expr.(memo.RelExpr)
 		right := rightScope.expr.(memo.RelExpr)
-		outScope.expr = b.constructJoin(joinType, left, right, filters)
+		outScope.expr = b.constructJoin(joinType, left, right, filters, memo.EmptyJoinPrivate)
 		return outScope
 
 	default:
@@ -140,17 +140,20 @@ func (b *Builder) findJoinColsToValidate(scope *scope) util.FastIntSet {
 }
 
 func (b *Builder) constructJoin(
-	joinType sqlbase.JoinType, left, right memo.RelExpr, on memo.FiltersExpr,
+	joinType sqlbase.JoinType,
+	left, right memo.RelExpr,
+	on memo.FiltersExpr,
+	private *memo.JoinPrivate,
 ) memo.RelExpr {
 	switch joinType {
 	case sqlbase.InnerJoin:
-		return b.factory.ConstructInnerJoin(left, right, on)
+		return b.factory.ConstructInnerJoin(left, right, on, private)
 	case sqlbase.LeftOuterJoin:
-		return b.factory.ConstructLeftJoin(left, right, on)
+		return b.factory.ConstructLeftJoin(left, right, on, private)
 	case sqlbase.RightOuterJoin:
-		return b.factory.ConstructRightJoin(left, right, on)
+		return b.factory.ConstructRightJoin(left, right, on, private)
 	case sqlbase.FullOuterJoin:
-		return b.factory.ConstructFullJoin(left, right, on)
+		return b.factory.ConstructFullJoin(left, right, on, private)
 	default:
 		panic(fmt.Errorf("unsupported JOIN type %d", joinType))
 	}
@@ -313,6 +316,7 @@ func (jb *usingJoinBuilder) finishBuild() {
 		jb.leftScope.expr.(memo.RelExpr),
 		jb.rightScope.expr.(memo.RelExpr),
 		jb.filters,
+		memo.EmptyJoinPrivate,
 	)
 
 	if !jb.ifNullCols.Empty() {

@@ -750,7 +750,7 @@ func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outSc
 
 	left := outScope.expr.(memo.RelExpr)
 	right := tableScope.expr.(memo.RelExpr)
-	outScope.expr = b.factory.ConstructInnerJoin(left, right, memo.TrueFilter)
+	outScope.expr = b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
 	return outScope
 }
 

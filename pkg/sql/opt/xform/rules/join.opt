@@ -29,9 +29,10 @@
   $left:* & ^(HasNoCols $left)
   $right:* & ^(HasNoCols $right)
   $on:*
+  $private:*
 )
 =>
-((OpName) $right $left $on)
+((OpName) $right $left $on $private)
 
 # CommuteLeftJoin creates a Join with the left and right inputs swapped.
 [CommuteLeftJoin, Explore]
@@ -39,9 +40,10 @@
   $left:* & ^(HasNoCols $left)
   $right:* & ^(HasNoCols $left)
   $on:*
+  $private:*
 )
 =>
-(RightJoin $right $left $on)
+(RightJoin $right $left $on $private)
 
 # CommuteRightJoin creates a Join with the left and right inputs swapped.
 [CommuteRightJoin, Explore]
@@ -49,16 +51,17 @@
   $left:* & ^(HasNoCols $left)
   $right:* & ^(HasNoCols $left)
   $on:*
+  $private:*
 )
 =>
-(LeftJoin $right $left $on)
+(LeftJoin $right $left $on $private)
 
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]
-(JoinNonApply $left:* $right:* $on:*)
+(JoinNonApply $left:* $right:* $on:* $private:*)
 =>
-(GenerateMergeJoins (OpName) $left $right $on)
+(GenerateMergeJoins (OpName) $left $right $on $private)
 
 # GenerateLookupJoins creates LookupJoin operators for all indexes (of the Scan
 # table) which allow it (including non-covering indexes). See the
@@ -68,9 +71,10 @@
     $left:*
     (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
     $on:*
+    $private:*
 )
 =>
-(GenerateLookupJoins (OpName) $left $scanPrivate $on)
+(GenerateLookupJoins (OpName) $left $scanPrivate $on $private)
 
 # GenerateZigzagJoins creates ZigzagJoin operators for all index pairs (of the
 # Scan table) where the prefix column(s) of both indexes is/are fixed to
@@ -110,15 +114,18 @@
         $filters:*
     )
     $on:*
+    $private:*
 )
 =>
-(GenerateLookupJoins (OpName) $left $scanPrivate (ConcatFilters $on $filters))
+(GenerateLookupJoins (OpName) $left $scanPrivate (ConcatFilters $on $filters) $private)
 
 # AssociateJoin applies the rule of join associativity. It converts an
 # expression like:
 #   (A JOIN B ON A.y = B.y) JOIN C ON B.x = C.x
 # to the logically equivalent expression:
 #   A JOIN (B JOIN C ON B.x = C.x) ON A.y = B.y
+#
+# TODO(radu): handle the scan privates.
 [AssociateJoin, Explore]
 (InnerJoin
     $left:(InnerJoin
@@ -136,6 +143,7 @@
         $innerRight
         $right
         (ExtractBoundConditions $on (OutputCols2 $innerRight $right))
+        (EmptyJoinPrivate)
     )
     (SortFilters
         (ConcatFilters
@@ -143,4 +151,5 @@
             $innerOn
         )
     )
+    (EmptyJoinPrivate)
 )

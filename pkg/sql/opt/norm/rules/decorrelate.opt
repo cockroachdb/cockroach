@@ -41,9 +41,10 @@
     $left:*
     $right:* & ^(IsCorrelated $right $left)
     $on:*
+    $private:*
 )
 =>
-(ConstructNonApplyJoin (OpName) $left $right $on)
+(ConstructNonApplyJoin (OpName) $left $right $on $private)
 
 # DecorrelateProjectSet pulls an input relation outside of a ProjectSet if the
 # input is not correlated with any of the functions in the ProjectSet. The
@@ -66,6 +67,7 @@
         $zip
     )
     []
+    (EmptyJoinPrivate)
 )
 
 # TryDecorrelateSelect "pushes down" the join apply into the select operator,
@@ -87,12 +89,14 @@
     $left:*
     $right:* & (HasOuterCols $right) & (Select $input:* $filters:*)
     $on:*
+    $private:*
 )
 =>
 ((OpName)
     $left
     $input
     (ConcatFilters $on $filters)
+    $private
 )
 
 # TryDecorrelateProject "pushes down" a Join into a Project operator, in an
@@ -109,6 +113,7 @@
         (HasOuterCols $right) &
         (Project $input:* $projections:* $passthrough:*)
     $on:*
+    $private:*
 )
 =>
 (Select
@@ -117,6 +122,7 @@
             $left
             $input
             []
+            $private
         )
         $projections
         (UnionCols (OutputCols $left) $passthrough)
@@ -141,6 +147,7 @@
         $passthrough:*
     )
     $on:*
+    $private:*
 )
 =>
 (Project
@@ -152,6 +159,7 @@
             (UnionCols $passthrough (OutputCols $selectInput))
         )
         (ConcatFilters $on $filters)
+        $private
     )
     []
     (OutputCols2 $left $right)
@@ -171,11 +179,13 @@
             $innerLeft:*
             $innerRight:*
             $innerOn:* & ^(FiltersBoundBy $innerOn (OutputCols2 $innerLeft $innerRight))
+            $innerPrivate:*
         )
         $projections:*
         $passthrough:*
     )
     $on:*
+    $private:*
 )
 =>
 (Project
@@ -186,11 +196,13 @@
                 $innerLeft
                 $innerRight
                 []
+                $innerPrivate
             )
             $projections
             (UnionCols $passthrough (OutputCols $join))
         )
         (ConcatFilters $on $innerOn)
+        $private
     )
     []
     (OutputCols2 $left $right)
@@ -212,8 +224,10 @@
             $innerLeft:*
             $innerRight:*
             $innerOn:* & ^(FiltersBoundBy $innerOn (OutputCols2 $innerLeft $innerRight))
+            $innerPrivate:*
         )
     $on:*
+    $private:*
 )
 =>
 ((OpName)
@@ -222,8 +236,10 @@
         $innerLeft
         $innerRight
         []
+        $innerPrivate
     )
     (ConcatFilters $on $innerOn)
+    $private
 )
 
 # TryDecorrelateInnerLeftJoin tries to decorrelate a LeftJoin operator nested
@@ -242,8 +258,10 @@
             $innerLeft:*
             $innerRight:*
             $innerOn:*
+            $innerPrivate:*
         )
     $on:* & (FiltersBoundBy $on (OutputCols2 $left $innerLeft))
+    $private:*
 )
 =>
 (LeftJoinApply
@@ -251,9 +269,11 @@
         $left
         $innerLeft
         $on
+        $innerPrivate
     )
     $innerRight
     $innerOn
+    $private
 )
 
 # TryDecorrelateGroupBy "pushes down" a Join into a GroupBy operator, in an
@@ -304,6 +324,7 @@
         ) &
         (IsUnorderedGrouping $groupingPrivate)
     $on:*
+    $private:*
 )
 =>
 (Select
@@ -312,6 +333,7 @@
             $newLeft:(EnsureKey $left)
             $input
             []
+            $private
         )
         (AppendAggCols
             $aggregations
@@ -421,6 +443,7 @@
         ) &
         (AggsCanBeDecorrelated $aggregations)
     $on:*
+    $private:*
 )
 =>
 (Select
@@ -437,6 +460,7 @@
                     $canaryCol:(EnsureCanaryCol $input $aggregations)
                 )
                 []
+                $private
             )
             (AppendAggCols2
                 $translatedAggs:(EnsureAggsCanIgnoreNulls
@@ -470,6 +494,7 @@
         (CanHaveZeroRows $right) & # Let EliminateExistsGroupBy match instead.
         (GroupBy | DistinctOn | Project | ProjectSet)
     $on:*
+    $private:*
 )
 =>
 (GroupBy
@@ -477,6 +502,7 @@
         $newLeft:(EnsureKey $left)
         $right
         $on
+        $private
     )
     (MakeAggCols ConstAgg (NonKeyCols $newLeft))
     (MakeGrouping (KeyCols $newLeft))
@@ -503,6 +529,7 @@
         (HasOuterCols $right) &
         (Limit $input:* (Const 1) $ordering:*)
     $on:*
+    $private:*
 )
 =>
 (DistinctOn
@@ -510,6 +537,7 @@
         $newLeft:(EnsureKey $left)
         $input
         $on
+        $private
     )
     (MakeAggCols2
         ConstAgg (NonKeyCols $newLeft)
@@ -531,6 +559,7 @@
         $zip:*
     )
     $on:*
+    $private:*
 )
 =>
 (Select
@@ -539,6 +568,7 @@
             $left
             $input
             []
+            $private
         )
         $zip
     )
@@ -571,6 +601,7 @@
         $input
         $subquery
         []
+        (EmptyJoinPrivate)
     )
     (RemoveFiltersItem $filters $item)
 )
@@ -597,6 +628,7 @@
         $input
         $subquery
         []
+        (EmptyJoinPrivate)
     )
     (RemoveFiltersItem $filters $item)
 )
@@ -645,9 +677,10 @@
     $left:*
     $right:*
     $on:[ ... $item:* & (HasHoistableSubquery $item) ... ]
+    $private:*
 )
 =>
-(HoistJoinSubquery (OpName) $left $right $on)
+(HoistJoinSubquery (OpName) $left $right $on $private)
 
 # HoistValuesSubquery extracts subqueries from row tuples and joins them with
 # the Values operator. This and other subquery hoisting patterns create a
@@ -713,6 +746,7 @@
     $left:*
     $right:*
     $on:[ ... $item:(FiltersItem (Any $anyInput:* $scalar:* $anyPrivate:*)) ... ]
+    $private:*
 )
 =>
 ((OpName)
@@ -729,6 +763,7 @@
             $anyPrivate
         )
     )
+    $private
 )
 
 # NormalizeSelectNotAnyFilter rewrites a Not Any expression that is a top-level
@@ -778,6 +813,7 @@
     $left:*
     $right:*
     $on:[ ... $item:(FiltersItem (Not (Any $anyInput:* $scalar:* $anyPrivate:*))) ... ]
+    $private:*
 )
 =>
 ((OpName)
@@ -803,4 +839,5 @@
             )
         )
     )
+    $private
 )
