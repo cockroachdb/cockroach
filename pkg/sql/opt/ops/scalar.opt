@@ -694,10 +694,10 @@ define Function {
 
 [Private]
 define FunctionPrivate {
-	Name       string
-	Typ        DatumType
-	Properties FuncProps
-	Overload   FuncOverload
+    Name       string
+    Typ        DatumType
+    Properties FuncProps
+    Overload   FuncOverload
 }
 
 # Collate is an expression of the form
