@@ -41,7 +41,9 @@ type FixedTimestampSSTBatcher struct {
 func MakeFixedTimestampSSTBatcher(
 	db *client.DB, rangeCache *kv.RangeDescriptorCache, flushBytes int64, timestamp hlc.Timestamp,
 ) (*FixedTimestampSSTBatcher, error) {
-	b := &FixedTimestampSSTBatcher{timestamp, SSTBatcher{db: db, maxSize: flushBytes, rc: rangeCache}}
+	b := &FixedTimestampSSTBatcher{
+		timestamp, SSTBatcher{db: db, maxSize: flushBytes, rc: rangeCache, presplitOnFullFlush: true},
+	}
 	err := b.Reset()
 	return b, err
 }
@@ -66,6 +68,9 @@ type SSTBatcher struct {
 	rc              *kv.RangeDescriptorCache
 
 	maxSize int64
+	// split+scatter at start key before adding a "full" (i.e. >= maxSize) SST.
+	presplitOnFullFlush bool
+
 	// rows written in the current batch.
 	rowCounter RowCounter
 	totalRows  roachpb.BulkOpSummary
@@ -76,8 +81,10 @@ type SSTBatcher struct {
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
-func MakeSSTBatcher(ctx context.Context, db *client.DB, flushBytes int64) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, maxSize: flushBytes}
+func MakeSSTBatcher(
+	ctx context.Context, db *client.DB, flushBytes int64, presplit bool,
+) (*SSTBatcher, error) {
+	b := &SSTBatcher{db: db, maxSize: flushBytes, presplitOnFullFlush: presplit}
 	err := b.Reset()
 	return b, err
 }
@@ -167,6 +174,27 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 	// The end key of the WriteBatch request is exclusive, but batchEndKey is
 	// currently the largest key in the batch. Increment it.
 	end := roachpb.Key(append([]byte(nil), b.batchEndKey...)).Next()
+
+	if b.presplitOnFullFlush && b.sstWriter.DataSize > b.maxSize {
+		log.VEventf(ctx, 1, "preparing to ingest %db SST by splitting at key %s",
+			b.sstWriter.DataSize, roachpb.PrettyPrintKey(nil, start))
+		if err := b.db.AdminSplit(ctx, start, start); err != nil {
+			return err
+		}
+
+		log.VEventf(ctx, 1, "scattering key %s", roachpb.PrettyPrintKey(nil, start))
+		scatterReq := &roachpb.AdminScatterRequest{
+			RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{Key: start, EndKey: start.Next()}),
+		}
+		if _, pErr := client.SendWrapped(ctx, b.db.NonTransactionalSender(), scatterReq); pErr != nil {
+			// TODO(dan): Unfortunately, Scatter is still too unreliable to
+			// fail the IMPORT when Scatter fails. I'm uncomfortable that
+			// this could break entirely and not start failing the tests,
+			// but on the bright side, it doesn't affect correctness, only
+			// throughput.
+			log.Errorf(ctx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, start), pErr)
+		}
+	}
 
 	sstBytes, err := b.sstWriter.Finish()
 	if err != nil {
