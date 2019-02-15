@@ -84,6 +84,7 @@ var (
 	tag            string
 	external       = false
 	adminurlOpen   = false
+	adminurlPath   = ""
 	useTreeDist    = true
 	encrypt        = false
 	quiet          = false
@@ -1236,7 +1237,10 @@ var adminurlCmd = &cobra.Command{
 			if c.Secure {
 				scheme = "https"
 			}
-			url := fmt.Sprintf("%s://%s:%d/", scheme, ip, port)
+			if !strings.HasPrefix(adminurlPath, "/") {
+				adminurlPath = "/" + adminurlPath
+			}
+			url := fmt.Sprintf("%s://%s:%d%s", scheme, ip, port, adminurlPath)
 			if adminurlOpen {
 				if err := exec.Command("python", "-m", "webbrowser", url).Run(); err != nil {
 					return err
@@ -1400,6 +1404,8 @@ func main() {
 
 	adminurlCmd.Flags().BoolVar(
 		&adminurlOpen, `open`, false, `Open the url in a browser`)
+	adminurlCmd.Flags().StringVar(
+		&adminurlPath, `path`, "/", `Path to add to URL (e.g. to open a same page on each node)`)
 
 	gcCmd.Flags().BoolVarP(
 		&dryrun, "dry-run", "n", dryrun, "dry run (don't perform any actions)")
