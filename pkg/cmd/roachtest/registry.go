@@ -53,6 +53,7 @@ func registerTests(r *registry) {
 	registerKVSplits(r)
 	registerLargeRange(r)
 	registerNetwork(r)
+	registerPsycopg(r)
 	registerQueue(r)
 	registerRebalanceLoad(r)
 	registerReplicaGC(r)
