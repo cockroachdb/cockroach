@@ -276,7 +276,10 @@ func (f *Factory) onConstructScalar(scalar opt.ScalarExpr) opt.ScalarExpr {
 // ConstructZeroValues constructs a Values operator with zero rows and zero
 // columns. It is used to create a dummy input for operators like CreateTable.
 func (f *Factory) ConstructZeroValues() memo.RelExpr {
-	return f.ConstructValues(memo.EmptyScalarListExpr, opt.ColList{})
+	return f.ConstructValues(memo.EmptyScalarListExpr, &memo.ValuesPrivate{
+		Cols: opt.ColList{},
+		ID:   f.Metadata().NextValuesID(),
+	})
 }
 
 // ConstructJoin constructs the join operator that corresponds to the given join

@@ -805,6 +805,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).Name())
 		}
 
+	case *ValuesPrivate:
+		fmt.Fprintf(f.Buffer, " id=v%d", t.ID)
+
 	case *ZigzagJoinPrivate:
 		leftTab := f.Memo.metadata.Table(t.LeftTable)
 		rightTab := f.Memo.metadata.Table(t.RightTable)

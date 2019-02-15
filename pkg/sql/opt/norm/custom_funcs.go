@@ -611,7 +611,10 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	}
 
 	rows := memo.ScalarListExpr{c.f.ConstructTuple(newExprs, types.TTuple{Types: newTypes})}
-	return c.f.ConstructValues(rows, newCols)
+	return c.f.ConstructValues(rows, &memo.ValuesPrivate{
+		Cols: newCols,
+		ID:   values.ID,
+	})
 }
 
 // ProjectionCols returns the ids of the columns synthesized by the given
@@ -770,7 +773,10 @@ func (c *CustomFuncs) ConstructEmptyValues(cols opt.ColSet) memo.RelExpr {
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
 		colList = append(colList, opt.ColumnID(i))
 	}
-	return c.f.ConstructValues(memo.EmptyScalarListExpr, colList)
+	return c.f.ConstructValues(memo.EmptyScalarListExpr, &memo.ValuesPrivate{
+		Cols: colList,
+		ID:   c.mem.Metadata().NextValuesID(),
+	})
 }
 
 // ----------------------------------------------------------------------
