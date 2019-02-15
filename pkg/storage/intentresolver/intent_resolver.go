@@ -16,6 +16,7 @@
 package intentresolver
 
 import (
+	"bytes"
 	"context"
 	"sort"
 	"time"
@@ -64,7 +65,14 @@ const (
 	// possible for the commit of a transaction that spans many ranges) will be
 	// split into many batches by the DistSender, leading to high CPU overhead
 	// and quadratic memory usage.
+	// TODO(ajwerner): justify this value
 	intentResolverBatchSize = 100
+
+	// cleanupIntentsTxnsPerBatch is the number of transactions whose
+	// corresponding intents will be resolved at a time. Intents are batched
+	// by transaction to avoid timeouts while resolving intents and ensure that
+	// progress is made.
+	cleanupIntentsTxnsPerBatch = 100
 
 	// defaultGCBatchIdle is the default duration which the gc request batcher
 	// will wait between requests for a range before sending it.
@@ -200,7 +208,7 @@ func (ir *IntentResolver) ProcessWriteIntentError(
 		}
 	}
 
-	resolveIntents, pErr := ir.MaybePushIntents(
+	resolveIntents, pErr := ir.maybePushIntents(
 		ctx, wiErr.Intents, h, pushType, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
@@ -239,7 +247,7 @@ func getPusherTxn(h roachpb.Header) roachpb.Transaction {
 	return *txn
 }
 
-// MaybePushIntents tries to push the conflicting transaction(s)
+// maybePushIntents tries to push the conflicting transaction(s)
 // responsible for the given intents: either move its
 // timestamp forward on a read/write conflict, abort it on a
 // write/write conflict, or do nothing if the transaction is no longer
@@ -263,7 +271,7 @@ func getPusherTxn(h roachpb.Header) roachpb.Transaction {
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (ir *IntentResolver) MaybePushIntents(
+func (ir *IntentResolver) maybePushIntents(
 	ctx context.Context,
 	intents []roachpb.Intent,
 	h roachpb.Header,
@@ -287,8 +295,21 @@ func (ir *IntentResolver) MaybePushIntents(
 	if pErr != nil {
 		return nil, pErr
 	}
+	return updateIntentTxnStatus(ctx, pushedTxns, intents, skipIfInFlight, nil), nil
+}
 
-	var resolveIntents []roachpb.Intent
+// updateIntentTxnStatus takes a slice of intents and a set of pushed
+// transactions (like returned from MaybePushTransactions) and updates
+// each intent with its corresponding TxnMeta and Status.
+// resultSlice is an optional value to allow the caller to preallocate
+// the returned intent slice.
+func updateIntentTxnStatus(
+	ctx context.Context,
+	pushedTxns map[uuid.UUID]roachpb.Transaction,
+	intents []roachpb.Intent,
+	skipIfInFlight bool,
+	results []roachpb.Intent,
+) []roachpb.Intent {
 	for _, intent := range intents {
 		pushee, ok := pushedTxns[intent.Txn.ID]
 		if !ok {
@@ -301,9 +322,9 @@ func (ir *IntentResolver) MaybePushIntents(
 		}
 		intent.Txn = pushee.TxnMeta
 		intent.Status = pushee.Status
-		resolveIntents = append(resolveIntents, intent)
+		results = append(results, intent)
 	}
-	return resolveIntents, nil
+	return results
 }
 
 // MaybePushTransactions is like maybePushIntents except it takes a set of
@@ -463,38 +484,68 @@ func (ir *IntentResolver) CleanupIntents(
 	ctx context.Context, intents []roachpb.Intent, now hlc.Timestamp, pushType roachpb.PushTxnType,
 ) (int, error) {
 	h := roachpb.Header{Timestamp: now}
-	resolveIntents, pushErr := ir.MaybePushIntents(
-		ctx, intents, h, pushType, true, /* skipIfInFlight */
-	)
-	if pushErr != nil {
-		return 0, errors.Wrapf(pushErr.GoError(), "failed to push during intent resolution")
-	}
 
-	// resolveIntents with poison=true because we're resolving
-	// intents outside of the context of an EndTransaction.
-	//
-	// Naively, it doesn't seem like we need to poison the abort
-	// cache since we're pushing with PUSH_TOUCH - meaning that
-	// the primary way our Push leads to aborting intents is that
-	// of the transaction having timed out (and thus presumably no
-	// client being around any more, though at the time of writing
-	// we don't guarantee that). But there are other paths in which
-	// the Push comes back successful while the coordinating client
-	// may still be active. Examples of this are when:
-	//
-	// - the transaction was aborted by someone else, but the
-	//   coordinating client may still be running.
-	// - the transaction entry wasn't written yet, which at the
-	//   time of writing has our push abort it, leading to the
-	//   same situation as above.
-	//
-	// Thus, we must poison.
-	if err := ir.ResolveIntents(
-		ctx, resolveIntents, ResolveOptions{Wait: true, Poison: true},
-	); err != nil {
-		return 0, errors.Wrapf(err, "failed to resolve intents")
+	// All transactions in MaybePushTxns (called by maybePushIntents) will be sent
+	// in a single batch. In order to ensure that progress is made, we want to
+	// ensure that this batch does not become too big as to time out due to a
+	// deadline set above this call. If the attempt to push intents times out
+	// before any intents have been resolved, no progress is made. Since batches
+	// are atomic, a batch that times out has no effect. Hence, we chunk the work
+	// to ensure progress even when a timeout is eventually hit.
+	sort.Sort(intentsByTxn(intents))
+	resolved := 0
+	const skipIfInFlight = true
+	pushTxns := make(map[uuid.UUID]enginepb.TxnMeta)
+	for unpushed := intents; len(unpushed) > 0; {
+		for k := range pushTxns { // clear the pushTxns map
+			delete(pushTxns, k)
+		}
+		var prevTxnID uuid.UUID
+		var i int
+		for i = 0; i < len(unpushed); i++ {
+			if curTxn := unpushed[i].Txn; curTxn.ID != prevTxnID {
+				if len(pushTxns) == cleanupIntentsTxnsPerBatch {
+					break
+				}
+				prevTxnID = curTxn.ID
+				pushTxns[curTxn.ID] = curTxn
+			}
+		}
+
+		pushedTxns, pErr := ir.MaybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
+		if pErr != nil {
+			return 0, errors.Wrapf(pErr.GoError(), "failed to push during intent resolution")
+		}
+		resolveIntents := updateIntentTxnStatus(ctx, pushedTxns, unpushed[:i],
+			skipIfInFlight, unpushed[:0])
+		// resolveIntents with poison=true because we're resolving
+		// intents outside of the context of an EndTransaction.
+		//
+		// Naively, it doesn't seem like we need to poison the abort
+		// cache since we're pushing with PUSH_TOUCH - meaning that
+		// the primary way our Push leads to aborting intents is that
+		// of the transaction having timed out (and thus presumably no
+		// client being around any more, though at the time of writing
+		// we don't guarantee that). But there are other paths in which
+		// the Push comes back successful while the coordinating client
+		// may still be active. Examples of this are when:
+		//
+		// - the transaction was aborted by someone else, but the
+		//   coordinating client may still be running.
+		// - the transaction entry wasn't written yet, which at the
+		//   time of writing has our push abort it, leading to the
+		//   same situation as above.
+		//
+		// Thus, we must poison.
+		if err := ir.ResolveIntents(
+			ctx, resolveIntents, ResolveOptions{Wait: true, Poison: true},
+		); err != nil {
+			return 0, errors.Wrapf(err, "failed to resolve intents")
+		}
+		resolved += len(resolveIntents)
+		unpushed = unpushed[i:]
 	}
-	return len(resolveIntents), nil
+	return resolved, nil
 }
 
 // CleanupTxnIntentsAsync asynchronously cleans up intents owned by
@@ -841,4 +892,15 @@ func (ir *IntentResolver) ResolveIntents(
 	}
 
 	return nil
+}
+
+// intentsByTxn implements sort.Interface to sort intents based on txnID.
+type intentsByTxn []roachpb.Intent
+
+var _ sort.Interface = intentsByTxn(nil)
+
+func (s intentsByTxn) Len() int      { return len(s) }
+func (s intentsByTxn) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s intentsByTxn) Less(i, j int) bool {
+	return bytes.Compare(s[i].Txn.ID[:], s[j].Txn.ID[:]) < 0
 }
