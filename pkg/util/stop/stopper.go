@@ -325,7 +325,6 @@ func (s *Stopper) RunAsyncTask(
 		f(ctx)
 	}()
 	return nil
-
 }
 
 // RunLimitedAsyncTask runs function f in a goroutine, using the given

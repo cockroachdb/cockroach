@@ -32,6 +32,16 @@ var pipelinedWritesEnabled = settings.RegisterBoolSetting(
 	"if enabled, transactional writes are pipelined through Raft consensus",
 	true,
 )
+var pipelinedWritesMaxOutstandingSize = settings.RegisterByteSizeSetting(
+	// TODO(nvanbenschoten): The need for this extra setting alongside
+	// kv.transaction.max_intents_bytes indicates that we should explore
+	// the unification of intent tracking and in-flight write tracking.
+	// The two mechanisms track subtly different information, but there's
+	// no fundamental reason why they can't be unified.
+	"kv.transaction.write_pipelining_max_outstanding_size",
+	"maximum number of bytes used to track in-flight pipelined writes before disabling pipelining",
+	1<<18, /* 256 KB */
+)
 var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 	"kv.transaction.write_pipelining_max_batch_size",
 	"if non-zero, defines that maximum size batch that will be pipelined through Raft consensus",
@@ -139,6 +149,7 @@ type txnPipeliner struct {
 	disabled bool
 
 	outstandingWrites *btree.BTree
+	owSizeBytes       int64 // byte size of all keys in outstandingWrites
 	owAlloc           outstandingWriteAlloc
 	tmpOW1, tmpOW2    outstandingWrite // avoid allocs
 }
@@ -198,6 +209,12 @@ func (tp *txnPipeliner) SendLocked(
 func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
 	asyncConsensus := pipelinedWritesEnabled.Get(&tp.st.SV) && !tp.disabled
 
+	// We provide a setting to bound the size of outstanding writes that the
+	// pipeliner is tracking. If this batch would push us over this setting,
+	// don't allow it to perform async consensus.
+	owSizeBytes := tp.owSizeBytes
+	maxOWSizeBytes := pipelinedWritesMaxOutstandingSize.Get(&tp.st.SV)
+
 	// We provide a setting to bound the number of writes we permit in a batch
 	// that uses async consensus. This is useful because we'll have to prove
 	// each write that uses async consensus using a QueryIntent, so there's a
@@ -234,15 +251,33 @@ func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachp
 			// writes.
 			continue
 		}
-		if !roachpb.IsTransactionWrite(req) || roachpb.IsRange(req) {
-			// Only allow batches consisting of solely transactional point
-			// writes to perform consensus asynchronously.
-			// TODO(nvanbenschoten): We could allow batches with reads and point
-			// writes to perform async consensus, but this would be a bit
-			// tricky. Any read would need to chain on to any write that came
-			// before it in the batch and overlaps. For now, it doesn't seem
-			// worth it.
-			asyncConsensus = false
+
+		if asyncConsensus {
+			// If we're currently planning on performing the batch with
+			// performing async consensus, determine whether this request
+			// changes that.
+			if !roachpb.IsTransactionWrite(req) || roachpb.IsRange(req) {
+				// Only allow batches consisting of solely transactional point
+				// writes to perform consensus asynchronously.
+				// TODO(nvanbenschoten): We could allow batches with reads and point
+				// writes to perform async consensus, but this would be a bit
+				// tricky. Any read would need to chain on to any write that came
+				// before it in the batch and overlaps. For now, it doesn't seem
+				// worth it.
+				asyncConsensus = false
+			} else {
+				// Only allow batches that would not push us over the maximum
+				// outstanding write size limit to perform consensus asynchronously.
+				//
+				// NB: this estimation is conservative because it doesn't factor
+				// in that some writes may be proven by this batch and removed
+				// from the outstanding write set. The real accounting in
+				// maybe{InsertOutstanding/RemoveProven}WriteLocked gets this
+				// right.
+				owSizeBytes += int64(len(req.Header().Key))
+				asyncConsensus = owSizeBytes <= maxOWSizeBytes
+			}
+
 		}
 
 		if tp.outstandingWritesLen() > len(chainedKeys) {
@@ -323,7 +358,7 @@ func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachp
 // two actions:
 // 1. it removes all outstanding writes that the request proved to exist from
 //    the outstanding writes set.
-// 2. it adds all async writes the the request performed to the outstanding
+// 2. it adds all async writes that the request performed to the outstanding
 //    write set.
 //
 // While doing so, the method also strips all QueryIntent responses from the
@@ -335,6 +370,7 @@ func (tp *txnPipeliner) updateOutstandingWrites(
 	// tree. This will turn maybeRemoveProvenWriteLocked into a quick no-op.
 	if br.Txn != nil && br.Txn.Status != roachpb.PENDING && tp.outstandingWrites != nil {
 		tp.outstandingWrites.Clear(false /* addNodesToFreelist */)
+		tp.owSizeBytes = 0
 	}
 
 	j := 0
@@ -427,6 +463,7 @@ func (tp *txnPipeliner) epochBumpedLocked() {
 	if tp.outstandingWrites != nil {
 		// Add nodes to freelist so that next epoch can reuse btree memory.
 		tp.outstandingWrites.Clear(true /* addNodesToFreelist */)
+		tp.owSizeBytes = 0
 		tp.owAlloc.Clear()
 	}
 }
@@ -464,6 +501,7 @@ func (tp *txnPipeliner) maybeInsertOutstandingWriteLocked(key roachpb.Key, seq i
 
 	w := tp.owAlloc.Alloc(key, seq)
 	tp.outstandingWrites.ReplaceOrInsert(w)
+	tp.owSizeBytes += int64(len(key))
 }
 
 // maybeRemoveProvenWriteLocked attempts to remove an outstanding write that
@@ -490,6 +528,14 @@ func (tp *txnPipeliner) maybeRemoveProvenWriteLocked(key roachpb.Key, seq int32)
 	delItem := tp.outstandingWrites.Delete(item)
 	if delItem != nil {
 		*delItem.(*outstandingWrite) = outstandingWrite{} // for GC
+	}
+	tp.owSizeBytes -= int64(len(key))
+
+	// Assert that the byte accounting is believable.
+	if tp.owSizeBytes < 0 {
+		panic("negative outstanding write size")
+	} else if tp.outstandingWrites.Len() == 0 && tp.owSizeBytes != 0 {
+		panic("non-zero outstanding write size with 0 outstanding writes")
 	}
 }
 
