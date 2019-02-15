@@ -141,7 +141,7 @@ func (p *planner) getDataSource(
 		if err != nil {
 			return right, err
 		}
-		return p.makeJoin(ctx, sqlbase.JoinTypeFromAstString(t.Join), left, right, t.Cond)
+		return p.makeJoin(ctx, sqlbase.JoinTypeFromAstString(t.JoinType), left, right, t.Cond)
 
 	case *tree.StatementSource:
 		plan, err := p.newPlan(ctx, t.Statement, nil /* desiredTypes */)

@@ -622,6 +622,7 @@ unreserved_keyword ::=
 	| 'GLOBAL'
 	| 'GRANTS'
 	| 'GROUPS'
+	| 'HASH'
 	| 'HIGH'
 	| 'HISTOGRAM'
 	| 'HOUR'
@@ -656,10 +657,12 @@ unreserved_keyword ::=
 	| 'LEVEL'
 	| 'LIST'
 	| 'LOCAL'
+	| 'LOOKUP'
 	| 'LOW'
 	| 'MATCH'
 	| 'MATERIALIZED'
 	| 'MAXVALUE'
+	| 'MERGE'
 	| 'MINUTE'
 	| 'MINVALUE'
 	| 'MONTH'
@@ -2019,9 +2022,9 @@ opt_alias_clause ::=
 joined_table ::=
 	'(' joined_table ')'
 	| table_ref 'CROSS' 'JOIN' table_ref
-	| table_ref join_type 'JOIN' table_ref join_qual
+	| table_ref join_type opt_join_hint 'JOIN' table_ref join_qual
 	| table_ref 'JOIN' table_ref join_qual
-	| table_ref 'NATURAL' join_type 'JOIN' table_ref
+	| table_ref 'NATURAL' join_type opt_join_hint 'JOIN' table_ref
 	| table_ref 'NATURAL' 'JOIN' table_ref
 
 alias_clause ::=
@@ -2156,6 +2159,12 @@ join_type ::=
 	| 'LEFT' join_outer
 	| 'RIGHT' join_outer
 	| 'INNER'
+
+opt_join_hint ::=
+	'HASH'
+	| 'MERGE'
+	| 'LOOKUP'
+	| 
 
 join_qual ::=
 	'USING' '(' name_list ')'

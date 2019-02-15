@@ -356,6 +356,14 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *CreateTableExpr:
 		tp.Child(t.Syntax.String())
+
+	default:
+		if opt.IsJoinOp(t) {
+			p := t.Private().(*JoinPrivate)
+			if !p.Flags.Empty() {
+				tp.Childf("flags: %s", p.Flags.String())
+			}
+		}
 	}
 
 	if !f.HasFlags(ExprFmtHideMiscProps) {
@@ -832,7 +840,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		}
 
 	case *JoinPrivate:
-		// TODO(radu): add code here when we add fields to JoinPrivate.
+		// Nothing to show; flags are shown separately.
 
 	case *ExplainPrivate, *opt.ColSet, *opt.ColList, *SetPrivate, types.T:
 		// Don't show anything, because it's mostly redundant.

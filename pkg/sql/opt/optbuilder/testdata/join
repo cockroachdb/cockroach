@@ -3200,3 +3200,43 @@ build
 SELECT * FROM foo JOIN bar ON max(foo.c) < 2
 ----
 error: max(): aggregate functions are not allowed in ON
+
+# Verify join hints get populated.
+build
+SELECT * FROM onecolumn AS a(x) INNER MERGE JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1(int!null) y:3(int!null)
+ └── inner-join
+      ├── columns: x:1(int!null) a.rowid:2(int!null) y:3(int!null) b.rowid:4(int!null)
+      ├── flags: no-lookup-join;no-hash-join
+      ├── scan a
+      │    └── columns: x:1(int) a.rowid:2(int!null)
+      ├── scan b
+      │    └── columns: y:3(int) b.rowid:4(int!null)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: x [type=int]
+                └── variable: y [type=int]
+
+build
+SELECT * FROM onecolumn AS a NATURAL LEFT LOOKUP JOIN onecolumn as b USING(x)
+----
+error (42601): syntax error at or near "using"
+
+build
+SELECT * FROM onecolumn AS a(x) FULL OUTER HASH JOIN onecolumn AS b(y) ON a.x = b.y
+----
+project
+ ├── columns: x:1(int) y:3(int)
+ └── full-join
+      ├── columns: x:1(int) a.rowid:2(int) y:3(int) b.rowid:4(int)
+      ├── flags: no-lookup-join;no-merge-join
+      ├── scan a
+      │    └── columns: x:1(int) a.rowid:2(int!null)
+      ├── scan b
+      │    └── columns: y:3(int) b.rowid:4(int!null)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: x [type=int]
+                └── variable: y [type=int]

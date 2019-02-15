@@ -573,3 +573,34 @@ render            ·         ·            (d, e, f, a, b, c)  ·
       └── scan    ·         ·            (a, b, c)           +a
 ·                 table     abc@primary  ·                   ·
 ·                 spans     ALL          ·                   ·
+
+# Test that we don't get a lookup join if we force a merge join.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
+----
+join       ·               ·            (d, e, f, a, b, c)  +f
+ │         type            inner        ·                   ·
+ │         equality        (f) = (a)    ·                   ·
+ │         mergeJoinOrder  +"(f=a)"     ·                   ·
+ ├── scan  ·               ·            (d, e, f)           +f
+ │         table           def@primary  ·                   ·
+ │         spans           ALL          ·                   ·
+ └── scan  ·               ·            (a, b, c)           +a
+·          table           abc@primary  ·                   ·
+·          spans           ALL          ·                   ·
+
+# Test that we don't get a lookup join if we force a hash join.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
+----
+sort            ·         ·            (d, e, f, a, b, c)  +f
+ │              order     +f           ·                   ·
+ └── join       ·         ·            (d, e, f, a, b, c)  ·
+      │         type      inner        ·                   ·
+      │         equality  (f) = (a)    ·                   ·
+      ├── scan  ·         ·            (d, e, f)           ·
+      │         table     def@primary  ·                   ·
+      │         spans     ALL          ·                   ·
+      └── scan  ·         ·            (a, b, c)           ·
+·               table     abc@primary  ·                   ·
+·               spans     ALL          ·                   ·

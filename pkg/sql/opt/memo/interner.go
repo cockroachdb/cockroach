@@ -472,6 +472,12 @@ func (h *hasher) HashScanFlags(val ScanFlags) {
 	h.HashUint64(uint64(val.Index))
 }
 
+func (h *hasher) HashJoinFlags(val JoinFlags) {
+	h.HashBool(val.DisallowHashJoin)
+	h.HashBool(val.DisallowMergeJoin)
+	h.HashBool(val.DisallowLookupJoin)
+}
+
 func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
 	h.HashColSet(val.Flags)
 	h.HashUint64(uint64(val.Mode))
@@ -730,6 +736,10 @@ func (h *hasher) IsScanLimitEqual(l, r ScanLimit) bool {
 }
 
 func (h *hasher) IsScanFlagsEqual(l, r ScanFlags) bool {
+	return l == r
+}
+
+func (h *hasher) IsJoinFlagsEqual(l, r JoinFlags) bool {
 	return l == r
 }
 

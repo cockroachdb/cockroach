@@ -117,3 +117,46 @@ inner-join (merge)
  │         ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
  │         └── cost: 1070.01
  └── filters (true)
+
+expr
+(InnerJoinApply
+  (Sort (Scan [ (Table "abc") (Cols "a,b,c") ]))
+  (Select
+    (Scan [ (Table "def") (Cols "d,e,f") ])
+    [ (Eq (Var "a") (Plus (Var "d") (Var "e"))) ]
+  )
+  [ ]
+  [ ]
+)
+----
+inner-join-apply
+ ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
+ ├── stats: [rows=333333.333]
+ ├── cost: 5611.37451
+ ├── prune: (7)
+ ├── sort
+ │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1179.67784
+ │    └── scan t.public.abc
+ │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
+ │         ├── stats: [rows=1000]
+ │         └── cost: 1070.01
+ ├── select
+ │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
+ │    ├── outer: (1)
+ │    ├── stats: [rows=333.333333]
+ │    ├── cost: 1080.02
+ │    ├── prune: (7)
+ │    ├── scan t.public.def
+ │    │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── cost: 1070.01
+ │    │    └── prune: (5-7)
+ │    └── filters
+ │         └── eq [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ])]
+ │              ├── variable: t.public.abc.a [type=int]
+ │              └── plus [type=int]
+ │                   ├── variable: t.public.def.d [type=int]
+ │                   └── variable: t.public.def.e [type=int]
+ └── filters (true)
