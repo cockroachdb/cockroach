@@ -323,7 +323,7 @@ func TestAvroEncoder(t *testing.T) {
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
-func TestAvroSchemaChange(t *testing.T) {
+func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
@@ -342,10 +342,10 @@ func TestAvroSchemaChange(t *testing.T) {
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1}}}}`,
 		})
 
-		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b UUID`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, gen_random_uuid())`)
-		if _, err := foo.Next(); !testutils.IsError(err, `type UUID not yet supported with avro`) {
-			t.Fatalf(`expected "type UUID not yet supported with avro" error got: %+v`, err)
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b OID`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 3::OID)`)
+		if _, err := foo.Next(); !testutils.IsError(err, `type OID not yet supported with avro`) {
+			t.Fatalf(`expected "type OID not yet supported with avro" error got: %+v`, err)
 		}
 	}
 
