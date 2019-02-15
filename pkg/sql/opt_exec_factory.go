@@ -821,7 +821,7 @@ func (ef *execFactory) ConstructPlan(
 
 // ConstructExplain is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExplain(
-	options *tree.ExplainOptions, plan exec.Plan,
+	options *tree.ExplainOptions, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
 	p := plan.(*planTop)
 
@@ -833,6 +833,7 @@ func (ef *execFactory) ConstructExplain(
 			plan:          p.plan,
 			subqueryPlans: p.subqueryPlans,
 			analyze:       analyzeSet,
+			stmtType:      stmtType,
 		}, nil
 
 	case tree.ExplainPlan:

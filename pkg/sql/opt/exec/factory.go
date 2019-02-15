@@ -230,7 +230,9 @@ type Factory interface {
 
 	// ConstructExplain returns a node that implements EXPLAIN, showing
 	// information about the given plan.
-	ConstructExplain(options *tree.ExplainOptions, plan Plan) (Node, error)
+	ConstructExplain(
+		options *tree.ExplainOptions, stmtType tree.StatementType, plan Plan,
+	) (Node, error)
 
 	// ConstructShowTrace returns a node that implements a SHOW TRACE
 	// FOR SESSION statement.

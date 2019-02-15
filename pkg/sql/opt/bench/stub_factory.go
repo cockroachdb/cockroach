@@ -184,7 +184,7 @@ func (f *stubFactory) ConstructPlan(root exec.Node, subqueries []exec.Subquery) 
 }
 
 func (f *stubFactory) ConstructExplain(
-	options *tree.ExplainOptions, plan exec.Plan,
+	options *tree.ExplainOptions, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

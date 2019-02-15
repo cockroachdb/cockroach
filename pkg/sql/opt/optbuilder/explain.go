@@ -61,9 +61,10 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 
 	input := stmtScope.expr.(memo.RelExpr)
 	private := memo.ExplainPrivate{
-		Options: opts,
-		ColList: colsToColList(outScope.cols),
-		Props:   stmtScope.makePhysicalProps(),
+		Options:  opts,
+		ColList:  colsToColList(outScope.cols),
+		Props:    stmtScope.makePhysicalProps(),
+		StmtType: explain.Statement.StatementType(),
 	}
 	outScope.expr = b.factory.ConstructExplain(input, &private)
 	return outScope
