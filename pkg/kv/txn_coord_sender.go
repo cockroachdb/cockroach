@@ -480,7 +480,8 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 			// "refreshed away" without the need for a txn restart. Because the
 			// span refresher can re-issue batches, it needs to be careful about
 			// what parts of the batch it mutates. Any mutation needs to be
-			// idempotent.
+			// idempotent and should avoid writing to memory when not changing
+			// it to avoid looking like a data race.
 			&tcs.interceptorAlloc.txnCommitter,
 			// The metrics recorder sits at the bottom of the stack so that it
 			// can observe all transformations performed by other interceptors.
