@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
@@ -164,15 +165,42 @@ func TestImportFixture(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `CREATE DATABASE distsort`)
-	require.NoError(t, ImportFixture(ctx, db, gen, `distsort`, false /* directIngestion */))
+	_, err := ImportFixture(ctx, db, gen, `distsort`, false /* directIngestion */)
+	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,
 		`SELECT count(*) FROM distsort.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
 
 	sqlDB.Exec(t, `CREATE DATABASE direct`)
-	require.NoError(t, ImportFixture(ctx, db, gen, `direct`, true /* directIngestion */))
+	_, err = ImportFixture(ctx, db, gen, `direct`, true /* directIngestion */)
+	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,
 		`SELECT count(*) FROM direct.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
 
 	fingerprints := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE distsort.fx`)
 	sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE direct.fx`, fingerprints)
+}
+
+func BenchmarkImportFixtureTPCC(b *testing.B) {
+	if testing.Short() {
+		b.Skip("skipping long benchmark")
+	}
+	ctx := context.Background()
+	gen := tpcc.FromWarehouses(1)
+
+	var bytes int64
+	b.StopTimer()
+	for i := 0; i < b.N; i++ {
+		s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(b, `CREATE DATABASE d`)
+
+		b.StartTimer()
+		importBytes, err := ImportFixture(ctx, db, gen, `d`, true /* directIngestion */)
+		require.NoError(b, err)
+		bytes += importBytes
+		b.StopTimer()
+
+		s.Stopper().Stop(ctx)
+	}
+	b.SetBytes(bytes / int64(b.N))
 }

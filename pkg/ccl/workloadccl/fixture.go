@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"net/url"
 	"path"
@@ -411,7 +412,7 @@ func MakeFixture(
 			}
 			output := config.objectPathToURI(filepath.Join(fixtureFolder, table.Name))
 			const directIngestion = false
-			err := importFixtureTable(ctx, sqlDB, gen.Meta().Name, table, paths, directIngestion, output)
+			_, err := importFixtureTable(ctx, sqlDB, gen.Meta().Name, table, paths, directIngestion, output)
 			return errors.Wrapf(err, `creating backup for table %s`, table.Name)
 		})
 	}
@@ -427,22 +428,25 @@ func MakeFixture(
 // writing a backup to cloud storage, it finishes ingesting the data.
 func ImportFixture(
 	ctx context.Context, sqlDB *gosql.DB, gen workload.Generator, dbName string, directIngestion bool,
-) error {
+) (int64, error) {
 	var numNodes int
 	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
-		return err
+		return 0, err
 	}
 
+	var bytesAtomic int64
 	g := ctxgroup.WithContext(ctx)
 	for _, t := range gen.Tables() {
 		table := t
 		paths := csvServerPaths(`experimental-workload://`, gen, table, numNodes)
 		g.GoCtx(func(ctx context.Context) error {
-			err := importFixtureTable(ctx, sqlDB, dbName, table, paths, directIngestion, `` /* output */)
+			tableBytes, err := importFixtureTable(
+				ctx, sqlDB, dbName, table, paths, directIngestion, `` /* output */)
+			atomic.AddInt64(&bytesAtomic, tableBytes)
 			return errors.Wrapf(err, `importing table %s`, table.Name)
 		})
 	}
-	return g.Wait()
+	return bytesAtomic, g.Wait()
 }
 
 func importFixtureTable(
@@ -453,7 +457,7 @@ func importFixtureTable(
 	paths []string,
 	directIngestion bool,
 	output string,
-) error {
+) (int64, error) {
 	var buf bytes.Buffer
 	var params []interface{}
 	fmt.Fprintf(&buf, `IMPORT TABLE "%s"."%s" %s CSV DATA (`, dbName, table.Name, table.Schema)
@@ -473,8 +477,12 @@ func importFixtureTable(
 	if directIngestion {
 		buf.WriteString(`, experimental_direct_ingestion`)
 	}
-	_, err := sqlDB.Exec(buf.String(), params...)
-	return err
+	var ignored driver.Value
+	var bytes int64
+	err := sqlDB.QueryRow(buf.String(), params...).Scan(
+		&ignored, &ignored, &ignored, &ignored, &ignored, &ignored, &bytes,
+	)
+	return bytes, err
 }
 
 // RestoreFixture loads a fixture into a CockroachDB cluster. An enterprise
