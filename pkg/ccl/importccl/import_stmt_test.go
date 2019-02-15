@@ -55,6 +55,7 @@ import (
 
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#34975")
 	const nodes = 3
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
