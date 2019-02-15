@@ -89,11 +89,19 @@ var fixturesMakeOnlyTable = fixturesMakeCmd.PersistentFlags().String(
 	`only-tables`, ``,
 	`Only load the tables with the given comma-separated names`)
 
+var fixturesMakeFilesPerNode = fixturesMakeCmd.PersistentFlags().Int(
+	`files-per-node`, 1,
+	`number of file URLs to generate per node when using csv-server`)
+
 var fixturesLoadImportShared = pflag.NewFlagSet(`load/import`, pflag.ContinueOnError)
 
 var fixturesImportDirectIngestionTable = fixturesImportCmd.PersistentFlags().Bool(
 	`experimental-direct-ingestion`, false,
 	`Use the faster, but limited and still quite experimental, IMPORT without a distributed sort`)
+
+var fixturesImportFilesPerNode = fixturesImportCmd.PersistentFlags().Int(
+	`files-per-node`, 1,
+	`number of file URLs to generate per node`)
 
 var fixturesRunChecks = fixturesLoadImportShared.Bool(
 	`checks`, true, `Run validity checks on the loaded fixture`)
@@ -249,7 +257,8 @@ func fixturesMake(gen workload.Generator, urls []string, _ string) error {
 			filter: filter,
 		}
 	}
-	fixture, err := workloadccl.MakeFixture(ctx, sqlDB, gcs, config(), gen)
+	filesPerNode := *fixturesMakeFilesPerNode
+	fixture, err := workloadccl.MakeFixture(ctx, sqlDB, gcs, config(), gen, filesPerNode)
 	if err != nil {
 		return err
 	}
@@ -306,7 +315,8 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 	}
 
 	directIngestion := *fixturesImportDirectIngestionTable
-	bytes, err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName, directIngestion)
+	filesPerNode := *fixturesImportFilesPerNode
+	bytes, err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName, directIngestion, filesPerNode)
 	if err != nil {
 		return errors.Wrap(err, `importing fixture`)
 	}
