@@ -64,6 +64,29 @@ func (m *memColumn) Append(vec ColVec, colType types.T, toLength uint64, fromLen
 	}
 }
 
+func (m *memColumn) AppendSlice(
+	vec ColVec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16,
+) {
+	batchSize := srcEndIdx - srcStartIdx
+	outputLen := destStartIdx + uint64(batchSize)
+
+	switch colType {
+	// {{range .}}
+	case _TYPES_T:
+		if outputLen > uint64(len(m._TemplateType())) {
+			m.col = append(m._TemplateType()[:destStartIdx], vec._TemplateType()[srcStartIdx:srcEndIdx]...)
+		} else {
+			copy(m._TemplateType()[destStartIdx:], vec._TemplateType()[srcStartIdx:srcEndIdx])
+		}
+
+		// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+
+	m.ExtendNulls(vec, outputLen, srcStartIdx, batchSize, destStartIdx)
+}
+
 func (m *memColumn) AppendWithSel(
 	vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64,
 ) {
@@ -200,6 +223,20 @@ func (m *memColumn) CopyWithSelAndNilsInt64(
 	}
 }
 
+func (m *memColumn) Slice(colType types.T, start uint64, end uint64) ColVec {
+	switch colType {
+	// {{range .}}
+	case _TYPES_T:
+		col := m._TemplateType()
+		return &memColumn{
+			col: col[start:end],
+		}
+	// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}
+
 func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
 	if m.NullAt(colIdx) {
 		return "NULL"
@@ -211,5 +248,20 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
 	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}
+
+func (m *memColumn) ExtendNulls(
+	vec ColVec, outputLen uint64, srcStartIdx uint16, batchSize uint16, destStartIdx uint64,
+) {
+	if uint64(cap(m.nulls)) < outputLen/64 {
+		m.nulls = append(m.nulls, make([]int64, (batchSize-1)>>6+1)...)
+	}
+	if vec.HasNulls() {
+		for i := uint16(0); i < batchSize; i++ {
+			if vec.NullAt(srcStartIdx + i) {
+				m.SetNull64(destStartIdx + uint64(i))
+			}
+		}
 	}
 }
