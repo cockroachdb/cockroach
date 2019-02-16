@@ -480,7 +480,8 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 			// "refreshed away" without the need for a txn restart. Because the
 			// span refresher can re-issue batches, it needs to be careful about
 			// what parts of the batch it mutates. Any mutation needs to be
-			// idempotent.
+			// idempotent and should avoid writing to memory when not changing
+			// it to avoid looking like a data race.
 			&tcs.interceptorAlloc.txnCommitter,
 			// The metrics recorder sits at the bottom of the stack so that it
 			// can observe all transformations performed by other interceptors.
@@ -488,19 +489,21 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		}
 		tcs.interceptorStack = tcs.interceptorAlloc.arr[:]
 	case client.LeafTxn:
-		// LeafTxns never perform writes so the sequence number allocator should
-		// never increment its sequence number counter over its lifetime, but it
-		// still plays the important role of assigning each read request the
-		// latest sequence number.
-		tcs.interceptorAlloc.arr[0] = &tcs.interceptorAlloc.txnSeqNumAllocator
-		// The pipeliner is needed on leaves to ensure that in-flight writes are
-		// chained onto by reads that should see them.
-		tcs.interceptorAlloc.arr[1] = &tcs.interceptorAlloc.txnPipeliner
-		// The span refresher was configured above to not actually perform
-		// refreshes for leaves. It is still needed for accumulating the spans
-		// to be reported to the Root. But the gateway doesn't do much with
-		// them; see #24798.
-		tcs.interceptorAlloc.arr[2] = &tcs.interceptorAlloc.txnSpanRefresher
+		tcs.interceptorAlloc.arr = [cap(tcs.interceptorAlloc.arr)]txnInterceptor{
+			// LeafTxns never perform writes so the sequence number allocator
+			// should never increment its sequence number counter over its
+			// lifetime, but it still plays the important role of assigning each
+			// read request the latest sequence number.
+			&tcs.interceptorAlloc.txnSeqNumAllocator,
+			// The pipeliner is needed on leaves to ensure that in-flight writes
+			// are chained onto by reads that should see them.
+			&tcs.interceptorAlloc.txnPipeliner,
+			// The span refresher was configured above to not actually perform
+			// refreshes for leaves. It is still needed for accumulating the
+			// spans to be reported to the Root. But the gateway doesn't do much
+			// with them; see #24798.
+			&tcs.interceptorAlloc.txnSpanRefresher,
+		}
 		// All other interceptors are absent from a LeafTxn's interceptor stack
 		// because they do not serve a role on leaves.
 		tcs.interceptorStack = tcs.interceptorAlloc.arr[:3]
