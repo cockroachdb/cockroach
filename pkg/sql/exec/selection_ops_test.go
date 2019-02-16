@@ -34,7 +34,7 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0}, tuples{{0}, {1}})
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(false /* setComparison */); err != nil {
 			t.Error(err)
 		}
 	})
@@ -55,7 +55,7 @@ func TestSelLTInt64Int64(t *testing.T) {
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0, 1}, tuples{{0, 1}})
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(false /* setComparison */); err != nil {
 			t.Error(err)
 		}
 	})

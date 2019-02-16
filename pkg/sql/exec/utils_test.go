@@ -257,7 +257,12 @@ func (r *opTestOutput) next() tuple {
 // as the ones expected in the opTestOutput's expected tuples, using a slow,
 // reflection-based comparison method, returning an error if the input isn't
 // equal to the expected.
-func (r *opTestOutput) Verify() error {
+//
+// setComparison indicates whether the results should be matched using set
+// comparison (i.e. whether sets contain the same tuples) or using ordered
+// comparison (i.e. whether each expected tuple matches each actual tuple in
+// order).
+func (r *opTestOutput) Verify(setComparison bool) error {
 	var actual tuples
 	for {
 		tup := r.next()
@@ -266,7 +271,10 @@ func (r *opTestOutput) Verify() error {
 		}
 		actual = append(actual, tup)
 	}
-	return assertTuplesEquals(r.expected, actual)
+	if setComparison {
+		return assertTuplesSetsEqual(r.expected, actual)
+	}
+	return assertTuplesOrderedEqual(r.expected, actual)
 }
 
 // tupleEquals checks that two tuples are equal, using a slow,
@@ -290,8 +298,8 @@ func tupleEquals(expected tuple, actual tuple) bool {
 	return true
 }
 
-// assertTuplesEquals asserts that two sets of tuples are equal.
-func assertTuplesEquals(expected tuples, actual tuples) error {
+// assertTuplesSetsEqual asserts that two sets of tuples are equal.
+func assertTuplesSetsEqual(expected tuples, actual tuples) error {
 	if len(expected) != len(actual) {
 		return errors.Errorf("expected %+v, actual %+v", expected, actual)
 	}
@@ -308,6 +316,20 @@ func assertTuplesEquals(expected tuples, actual tuples) error {
 			}
 		}
 		if !matched {
+			return errors.Errorf("expected %+v, actual %+v\n", expected, actual)
+		}
+	}
+	return nil
+}
+
+// assertTuplesOrderedEqual asserts that two permutations of tuples are equal
+// in order.
+func assertTuplesOrderedEqual(expected tuples, actual tuples) error {
+	if len(expected) != len(actual) {
+		return errors.Errorf("expected %+v, actual %+v", expected, actual)
+	}
+	for i := range expected {
+		if !tupleEquals(expected[i], actual[i]) {
 			return errors.Errorf("expected %+v, actual %+v\n", expected, actual)
 		}
 	}
@@ -421,7 +443,7 @@ func TestOpTestInputOutput(t *testing.T) {
 	runTests(t, inputs, func(t *testing.T, sources []Operator) {
 		out := newOpTestOutput(sources[0], []int{0, 1, 2}, inputs[0])
 
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(false /* setComparison */); err != nil {
 			t.Fatal(err)
 		}
 	})

@@ -63,7 +63,8 @@ func TestCoalescer(t *testing.T) {
 
 			out := newOpTestOutput(coalescer, colIndices, tc.tuples)
 
-			if err := out.Verify(); err != nil {
+			// TODO(yuzefovich): should be set comparison, right?
+			if err := out.Verify(true /* setComparison */); err != nil {
 				t.Fatal(err)
 			}
 		})

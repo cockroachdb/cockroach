@@ -61,7 +61,7 @@ func TestSimpleProjectOp(t *testing.T) {
 			count := NewSimpleProjectOp(input[0], tc.colsToKeep)
 			out := newOpTestOutput(count, []int{0, 1}, tc.expected)
 
-			if err := out.Verify(); err != nil {
+			if err := out.Verify(false /* setComparison */); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -71,7 +71,7 @@ func TestSimpleProjectOp(t *testing.T) {
 	runTests(t, []tuples{{{1, 2, 3}, {1, 2, 3}}}, func(t *testing.T, input []Operator) {
 		count := NewSimpleProjectOp(input[0], nil)
 		out := newOpTestOutput(count, []int{}, tuples{{}, {}})
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(false /* setComparison */); err != nil {
 			t.Fatal(err)
 		}
 	})

@@ -34,7 +34,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0, 1}, tuples{{1, 2}, {2, 3}})
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(false /* setComparison */); err != nil {
 			t.Error(err)
 		}
 	})
@@ -50,7 +50,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0, 1, 2}, tuples{{1, 2, 3}, {3, 4, 7}})
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(false /* setComparison */); err != nil {
 			t.Error(err)
 		}
 	})

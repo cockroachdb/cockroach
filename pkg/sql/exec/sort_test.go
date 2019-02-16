@@ -124,7 +124,7 @@ func TestSort(t *testing.T) {
 			}
 			out := newOpTestOutput(sort, cols, tc.expected)
 
-			if err := out.Verify(); err != nil {
+			if err := out.Verify(false /* setComparison */); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -176,7 +176,7 @@ func TestSortRandomized(t *testing.T) {
 		}
 		out := newOpTestOutput(sorter, cols, expected)
 
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(false /* setComparison */); err != nil {
 			t.Fatalf("for input %v:\n%v", tups, err)
 		}
 	})
