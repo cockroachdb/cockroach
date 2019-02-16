@@ -169,7 +169,7 @@ func (f *Factory) CustomFuncs() *CustomFuncs {
 // CopyAndRelaceDefault, which constructs a copy of the source operator using
 // children returned by recursive calls to the replace callback. Note that if a
 // non-leaf replacement node is constructed, its inputs must be copied using
-// CopyAndReplaceDefault
+// CopyAndReplaceDefault.
 //
 // Sample usage:
 //

@@ -73,6 +73,14 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	return false
 }
 
+// CopyFrom initializes s with the values from another object; s then can be
+// independently modified.
+func (s *Statistics) CopyFrom(from *Statistics) {
+	s.RowCount = from.RowCount
+	s.ColStats.CopyFrom(&from.ColStats)
+	s.Selectivity = from.Selectivity
+}
+
 // ApplySelectivity applies a given selectivity to the statistics. RowCount and
 // Selectivity are updated. Note that DistinctCounts are not updated, other than
 // limiting them to the new RowCount. See ColumnStatistic.ApplySelectivity for
@@ -142,6 +150,13 @@ type ColumnStatistic struct {
 	// count tracks all instances of at least one null value in the
 	// column set.
 	NullCount float64
+}
+
+// CopyFrom initializes c with the values from another column statistic.
+func (c *ColumnStatistic) CopyFrom(from *ColumnStatistic) {
+	c.Cols = c.Cols.Copy()
+	c.DistinctCount = from.DistinctCount
+	c.NullCount = from.NullCount
 }
 
 // ApplySelectivity updates the distinct count and null count according to a

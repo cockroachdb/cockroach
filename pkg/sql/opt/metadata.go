@@ -89,6 +89,8 @@ type Metadata struct {
 	// might resolve to the same object now but to different objects later; we
 	// want to verify the resolution of both names.
 	deps []mdDep
+
+	// NOTE! When adding fields here, update CopyFrom.
 }
 
 type mdDep struct {
@@ -133,12 +135,23 @@ func (md *Metadata) Init() {
 // CopyFrom initializes the metadata with a copy of the provided metadata.
 // This metadata can then be modified independent of the copied metadata.
 func (md *Metadata) CopyFrom(from *Metadata) {
-	if len(md.cols) != 0 || len(md.tables) != 0 || len(md.deps) != 0 {
+	if len(md.schemas) != 0 || len(md.cols) != 0 || len(md.tables) != 0 ||
+		len(md.sequences) != 0 || len(md.deps) != 0 {
 		panic("CopyFrom requires empty destination")
 	}
 	md.schemas = append(md.schemas, from.schemas...)
 	md.cols = append(md.cols, from.cols...)
-	md.tables = append(md.tables, from.tables...)
+
+	if cap(md.tables) >= len(from.tables) {
+		md.tables = md.tables[:len(from.tables)]
+	} else {
+		md.tables = make([]TableMeta, len(from.tables))
+	}
+	for i := range md.tables {
+		md.tables[i].CopyFrom(&from.tables[i])
+	}
+
+	md.sequences = append(md.sequences, from.sequences...)
 	md.deps = append(md.deps, from.deps...)
 }
 
