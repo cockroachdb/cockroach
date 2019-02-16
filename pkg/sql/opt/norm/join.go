@@ -349,7 +349,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 
 	md := c.f.Metadata()
 
-	var leftTabMeta, rightTabMeta *opt.TableMeta
+	var leftTab, rightTab opt.TableID
 
 	// Any left columns that don't match conditions 1-4 end up in this set.
 	var remainingLeftColIDs opt.ColSet
@@ -386,25 +386,25 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 			return false
 		}
 
-		if leftTabMeta == nil {
-			leftTabMeta = md.ColumnMeta(leftColID).TableMeta
-			rightTabMeta = md.ColumnMeta(rightColID).TableMeta
-			if leftTabMeta == nil || rightTabMeta == nil {
+		if leftTab == 0 {
+			leftTab = md.ColumnMeta(leftColID).Table
+			rightTab = md.ColumnMeta(rightColID).Table
+			if leftTab == 0 || rightTab == 0 {
 				// Condition #2: Columns don't come from base tables.
 				return false
 			}
-		} else if md.ColumnMeta(leftColID).TableMeta != leftTabMeta {
+		} else if md.ColumnMeta(leftColID).Table != leftTab {
 			// Condition #2: All left columns don't come from same table.
 			return false
-		} else if md.ColumnMeta(rightColID).TableMeta != rightTabMeta {
+		} else if md.ColumnMeta(rightColID).Table != rightTab {
 			// Condition #2: All right columns don't come from same table.
 			return false
 		}
 
-		if leftTabMeta.Table == rightTabMeta.Table {
+		if md.TableMeta(leftTab).Table == md.TableMeta(rightTab).Table {
 			// Check self-join case.
-			leftColOrd := leftTabMeta.MetaID.ColumnOrdinal(leftColID)
-			rightColOrd := rightTabMeta.MetaID.ColumnOrdinal(rightColID)
+			leftColOrd := leftTab.ColumnOrdinal(leftColID)
+			rightColOrd := rightTab.ColumnOrdinal(rightColID)
 			if leftColOrd != rightColOrd {
 				// Condition #4: Left and right column ordinals do not match.
 				return false
@@ -421,6 +421,8 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 
 	var leftRightColMap map[opt.ColumnID]opt.ColumnID
 	// Condition #5: All remaining left columns correspond to a foreign key relation.
+	leftTabMeta := md.TableMeta(leftTab)
+	rightTabMeta := md.TableMeta(rightTab)
 	for i, cnt := 0, leftTabMeta.Table.IndexCount(); i < cnt; i++ {
 		index := leftTabMeta.Table.Index(i)
 		fkRef, ok := index.ForeignKey()
@@ -458,7 +460,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		var leftIndexCols opt.ColSet
 		for j := 0; j < fkPrefix; j++ {
 			ord := index.Column(j).Ordinal
-			leftIndexCols.Add(int(leftTabMeta.MetaID.ColumnID(ord)))
+			leftIndexCols.Add(int(leftTab.ColumnID(ord)))
 		}
 
 		if !remainingLeftColIDs.SubsetOf(leftIndexCols) {
@@ -480,14 +482,14 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		// referenced) that it's being equated to.
 		fkMatch := true
 		for j := 0; j < fkPrefix; j++ {
-			indexLeftCol := leftTabMeta.MetaID.ColumnID(index.Column(j).Ordinal)
+			indexLeftCol := leftTab.ColumnID(index.Column(j).Ordinal)
 
 			// Not every fk column needs to be in the equality conditions.
 			if !remainingLeftColIDs.Contains(int(indexLeftCol)) {
 				continue
 			}
 
-			indexRightCol := rightTabMeta.MetaID.ColumnID(fkIndex.Column(j).Ordinal)
+			indexRightCol := rightTab.ColumnID(fkIndex.Column(j).Ordinal)
 
 			if rightCol, ok := leftRightColMap[indexLeftCol]; !ok || rightCol != indexRightCol {
 				fkMatch = false
