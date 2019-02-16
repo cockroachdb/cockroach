@@ -254,9 +254,9 @@ func (r *opTestOutput) next() tuple {
 }
 
 // Verify ensures that the input to this opTestOutput produced the same results
-// as the ones expected in the opTestOutput's expected tuples, using a slow,
-// reflection-based comparison method, returning an error if the input isn't
-// equal to the expected.
+// and in the same order as the ones expected in the opTestOutput's expected
+// tuples, using a slow, reflection-based comparison method, returning an error
+// if the input isn't equal to the expected.
 func (r *opTestOutput) Verify() error {
 	var actual tuples
 	for {
@@ -266,7 +266,24 @@ func (r *opTestOutput) Verify() error {
 		}
 		actual = append(actual, tup)
 	}
-	return assertTuplesEquals(r.expected, actual)
+	return assertTuplesOrderedEqual(r.expected, actual)
+}
+
+// VerifyAnyOrder ensures that the input to this opTestOutput produced the same
+// results but in any order (meaning set comparison behavior is used) as the
+// ones expected in the opTestOutput's expected tuples, using a slow,
+// reflection-based comparison method, returning an error if the input isn't
+// equal to the expected.
+func (r *opTestOutput) VerifyAnyOrder() error {
+	var actual tuples
+	for {
+		tup := r.next()
+		if tup == nil {
+			break
+		}
+		actual = append(actual, tup)
+	}
+	return assertTuplesSetsEqual(r.expected, actual)
 }
 
 // tupleEquals checks that two tuples are equal, using a slow,
@@ -290,8 +307,8 @@ func tupleEquals(expected tuple, actual tuple) bool {
 	return true
 }
 
-// assertTuplesEquals asserts that two sets of tuples are equal.
-func assertTuplesEquals(expected tuples, actual tuples) error {
+// assertTuplesSetsEqual asserts that two sets of tuples are equal.
+func assertTuplesSetsEqual(expected tuples, actual tuples) error {
 	if len(expected) != len(actual) {
 		return errors.Errorf("expected %+v, actual %+v", expected, actual)
 	}
@@ -308,6 +325,20 @@ func assertTuplesEquals(expected tuples, actual tuples) error {
 			}
 		}
 		if !matched {
+			return errors.Errorf("expected %+v, actual %+v\n", expected, actual)
+		}
+	}
+	return nil
+}
+
+// assertTuplesOrderedEqual asserts that two permutations of tuples are equal
+// in order.
+func assertTuplesOrderedEqual(expected tuples, actual tuples) error {
+	if len(expected) != len(actual) {
+		return errors.Errorf("expected %+v, actual %+v", expected, actual)
+	}
+	for i := range expected {
+		if !tupleEquals(expected[i], actual[i]) {
 			return errors.Errorf("expected %+v, actual %+v\n", expected, actual)
 		}
 	}

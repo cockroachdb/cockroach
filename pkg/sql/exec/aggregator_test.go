@@ -241,7 +241,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 			// Explicitly reinitialize the aggregator with the given output batch
 			// size.
 			a.(*orderedAggregator).initWithBatchSize(tc.batchSize, tc.outputBatchSize)
-			if err := out.Verify(); err != nil {
+			if err := out.VerifyAnyOrder(); err != nil {
 				t.Fatal(err)
 			}
 
@@ -255,7 +255,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 						t.Fatal(err)
 					}
 					out := newOpTestOutput(a, []int{0}, tc.expected)
-					if err := out.Verify(); err != nil {
+					if err := out.VerifyAnyOrder(); err != nil {
 						t.Fatal(err)
 					}
 				})
@@ -341,7 +341,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 					t.Fatal(err)
 				}
 				out := newOpTestOutput(a, []int{0, 1}, tc.expected)
-				if err := out.Verify(); err != nil {
+				if err := out.VerifyAnyOrder(); err != nil {
 					t.Fatal(err)
 				}
 			})
@@ -392,7 +392,7 @@ func TestAggregatorKitchenSink(t *testing.T) {
 					t.Fatal(err)
 				}
 				out := newOpTestOutput(a, []int{0, 1, 2, 3}, tc.expected)
-				if err := out.Verify(); err != nil {
+				if err := out.VerifyAnyOrder(); err != nil {
 					t.Fatal(err)
 				}
 			})
