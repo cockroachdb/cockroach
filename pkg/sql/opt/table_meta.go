@@ -109,6 +109,14 @@ var tableAnnIDCount TableAnnID
 // table struct.
 const maxTableAnnIDCount = 2
 
+// CopyTableAnnFn is a function that must be provided for each TableAnnID.
+// It is used when the metadata is copied; it must return an instance of the
+// annotation that can be used in the new copy. For immutable types, this can be
+// the same instance. For mutable types, it should be a copy.
+type CopyTableAnnFn func(from interface{}) interface{}
+
+var copyTableAnnFns [maxTableAnnIDCount]CopyTableAnnFn
+
 // TableMeta stores information about one of the tables stored in the metadata.
 type TableMeta struct {
 	// MetaID is the identifier for this table that is unique within the query
@@ -155,6 +163,18 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 	return indexCols
 }
 
+// CopyFrom copies the given TableMeta into this TableMeta, replacing any
+// existing data.
+func (tm *TableMeta) CopyFrom(from *TableMeta) {
+	*tm = *from
+	// Make copies of the objects stored as table annotations.
+	for i, val := range tm.anns {
+		if val != nil {
+			tm.anns[i] = copyTableAnnFns[i](val)
+		}
+	}
+}
+
 // TableAnnotation returns the given annotation that is associated with the
 // given table. If the table has no such annotation, TableAnnotation returns
 // nil.
@@ -182,11 +202,12 @@ func (md *Metadata) SetTableAnnotation(tabID TableID, tabAnnID TableAnnID, ann i
 // variables).
 //
 // See the TableAnnID comment for more details and a usage example.
-func NewTableAnnID() TableAnnID {
+func NewTableAnnID(copyFn CopyTableAnnFn) TableAnnID {
 	if tableAnnIDCount == maxTableAnnIDCount {
 		panic("can't allocate table annotation id; increase maxTableAnnIDCount to allow")
 	}
-	cnt := tableAnnIDCount
+	id := tableAnnIDCount
+	copyTableAnnFns[id] = copyFn
 	tableAnnIDCount++
-	return cnt
+	return id
 }

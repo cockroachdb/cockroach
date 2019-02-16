@@ -216,6 +216,27 @@ func (m *ColStatsMap) RemoveIntersecting(cols opt.ColSet) {
 	}
 }
 
+// CopyFrom initializes m with a copy of the given ColStatsMap.
+func (m *ColStatsMap) CopyFrom(from *ColStatsMap) {
+	for i := 0; i < m.count && i < initialColStatsCap; i++ {
+		m.initial[i].CopyFrom(&from.initial[i])
+	}
+	if len(from.other) > 0 {
+		m.other = make([]ColumnStatistic, len(from.other))
+		for i := range from.other {
+			m.other[i].CopyFrom(&from.other[i])
+		}
+	}
+	if len(from.index) > 0 {
+		m.index = make(map[colStatKey]colStatVal, len(from.index))
+		for k, v := range from.index {
+			m.index[k] = v
+		}
+	}
+	m.count = from.count
+	m.unique = from.unique
+}
+
 // Clear empties the map of all column statistics.
 func (m *ColStatsMap) Clear() {
 	m.count = 0
