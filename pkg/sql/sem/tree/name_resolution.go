@@ -52,7 +52,10 @@ func classifyTablePattern(n *UnresolvedName) (TablePattern, error) {
 		lastCheck = 2
 	}
 	for i := firstCheck; i < lastCheck; i++ {
-		if len(n.Parts[i]) == 0 {
+		part := n.Parts[i]
+		// An identifier can not empty or begin with a digit.
+		if len(part) == 0 ||
+			('0' <= part[0] && part[0] <= '9') {
 			return nil, newInvTableNameError(n)
 		}
 	}

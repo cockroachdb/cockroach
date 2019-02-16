@@ -1486,6 +1486,10 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
+				_, err := tree.NewUnresolvedName(string(name)).NormalizeTablePattern()
+				if err != nil {
+					return nil, err
+				}
 				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
 				if err != nil {
 					return nil, err
