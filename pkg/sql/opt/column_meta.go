@@ -15,9 +15,6 @@
 package opt
 
 import (
-	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -58,73 +55,9 @@ type ColumnMeta struct {
 	// Type is the scalar SQL type of this column.
 	Type types.T
 
-	// TableMeta is the metadata for the base table to which this column belongs.
-	// If the column was synthesized (i.e. no base table), then is is null.
-	TableMeta *TableMeta
-
-	// md is a back-reference to the query metadata.
-	md *Metadata
-}
-
-// QualifiedAlias returns the column alias, possibly qualified with the table,
-// schema, or database name:
-//
-//   1. If fullyQualify is true, then the returned alias is prefixed by the
-//      original, fully qualified name of the table: tab.Name().FQString().
-//
-//   2. If there's another column in the metadata with the same column alias but
-//      a different table name, then prefix the column alias with the table
-//      name: "tabName.columnAlias".
-//
-func (cm *ColumnMeta) QualifiedAlias(fullyQualify bool) string {
-	if cm.TableMeta == nil {
-		// Column doesn't belong to a table, so no need to qualify it further.
-		return cm.Alias
-	}
-	md := cm.md
-
-	// If a fully qualified alias has not been requested, then only qualify it if
-	// it would otherwise be ambiguous.
-	var tabAlias tree.TableName
-	qualify := fullyQualify
-	if !fullyQualify {
-		for i := range md.cols {
-			if i == int(cm.MetaID-1) {
-				continue
-			}
-
-			// If there are two columns with same alias, then column is ambiguous.
-			cm2 := &md.cols[i]
-			if cm2.Alias == cm.Alias {
-				tabAlias = cm.TableMeta.Alias
-				if cm2.TableMeta == nil {
-					qualify = true
-				} else {
-					// Only qualify if the qualified names are actually different.
-					tabAlias2 := cm2.TableMeta.Alias
-					if tabAlias.String() != tabAlias2.String() {
-						qualify = true
-					}
-				}
-			}
-		}
-	}
-
-	// If the column name should not even be partly qualified, then no more to do.
-	if !qualify {
-		return cm.Alias
-	}
-
-	var sb strings.Builder
-	if fullyQualify {
-		s := cm.TableMeta.Table.Name().FQString()
-		sb.WriteString(s)
-	} else {
-		sb.WriteString(tabAlias.String())
-	}
-	sb.WriteRune('.')
-	sb.WriteString(cm.Alias)
-	return sb.String()
+	// Table is the base table to which this column belongs.
+	// If the column was synthesized (i.e. no base table), then it is 0.
+	Table TableID
 }
 
 // ToSet converts a column id list to a column id set.

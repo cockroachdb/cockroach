@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math/bits"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -274,7 +275,6 @@ func (md *Metadata) AddTableWithAlias(tab cat.Table, alias *tree.TableName) Tabl
 		md.tables = make([]TableMeta, 0, 4)
 	}
 	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab, Alias: *alias})
-	tabMeta := md.TableMeta(tabID)
 
 	colCount := tab.DeletableColumnCount()
 	if md.cols == nil {
@@ -284,7 +284,7 @@ func (md *Metadata) AddTableWithAlias(tab cat.Table, alias *tree.TableName) Tabl
 	for i := 0; i < colCount; i++ {
 		col := tab.Column(i)
 		colID := md.AddColumn(string(col.ColName()), col.DatumType())
-		md.ColumnMeta(colID).TableMeta = tabMeta
+		md.ColumnMeta(colID).Table = tabID
 	}
 
 	return tabID
@@ -327,7 +327,7 @@ func (md *Metadata) AddColumn(alias string, typ types.T) ColumnID {
 		alias = fmt.Sprintf("column%d", len(md.cols)+1)
 	}
 	colID := ColumnID(len(md.cols) + 1)
-	md.cols = append(md.cols, ColumnMeta{MetaID: colID, Alias: alias, Type: typ, md: md})
+	md.cols = append(md.cols, ColumnMeta{MetaID: colID, Alias: alias, Type: typ})
 	return colID
 }
 
@@ -341,6 +341,67 @@ func (md *Metadata) NumColumns() int {
 // and associated with multiple column ids.
 func (md *Metadata) ColumnMeta(colID ColumnID) *ColumnMeta {
 	return &md.cols[colID.index()]
+}
+
+// QualifiedAlias returns the column alias, possibly qualified with the table,
+// schema, or database name:
+//
+//   1. If fullyQualify is true, then the returned alias is prefixed by the
+//      original, fully qualified name of the table: tab.Name().FQString().
+//
+//   2. If there's another column in the metadata with the same column alias but
+//      a different table name, then prefix the column alias with the table
+//      name: "tabName.columnAlias".
+//
+func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool) string {
+	cm := md.ColumnMeta(colID)
+	if cm.Table == 0 {
+		// Column doesn't belong to a table, so no need to qualify it further.
+		return cm.Alias
+	}
+
+	// If a fully qualified alias has not been requested, then only qualify it if
+	// it would otherwise be ambiguous.
+	var tabAlias tree.TableName
+	qualify := fullyQualify
+	if !fullyQualify {
+		for i := range md.cols {
+			if i == int(cm.MetaID-1) {
+				continue
+			}
+
+			// If there are two columns with same alias, then column is ambiguous.
+			cm2 := &md.cols[i]
+			if cm2.Alias == cm.Alias {
+				tabAlias = md.TableMeta(cm.Table).Alias
+				if cm2.Table == 0 {
+					qualify = true
+				} else {
+					// Only qualify if the qualified names are actually different.
+					tabAlias2 := md.TableMeta(cm2.Table).Alias
+					if tabAlias.String() != tabAlias2.String() {
+						qualify = true
+					}
+				}
+			}
+		}
+	}
+
+	// If the column name should not even be partly qualified, then no more to do.
+	if !qualify {
+		return cm.Alias
+	}
+
+	var sb strings.Builder
+	if fullyQualify {
+		s := md.TableMeta(cm.Table).Table.Name().FQString()
+		sb.WriteString(s)
+	} else {
+		sb.WriteString(tabAlias.String())
+	}
+	sb.WriteRune('.')
+	sb.WriteString(cm.Alias)
+	return sb.String()
 }
 
 // SequenceID uniquely identifies the usage of a sequence within the scope of a
