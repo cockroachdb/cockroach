@@ -58,7 +58,7 @@ func TestOffset(t *testing.T) {
 			s := NewOffsetOp(input[0], tc.offset)
 			out := newOpTestOutput(s, []int{0}, tc.expected)
 
-			if err := out.Verify(); err != nil {
+			if err := out.VerifyAnyOrder(); err != nil {
 				t.Fatal(err)
 			}
 		})
