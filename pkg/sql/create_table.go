@@ -1379,8 +1379,8 @@ func iterColDescriptorsInExpr(
 			return nil, true, expr
 		}
 
-		col, err := desc.FindActiveColumnByName(string(c.ColumnName))
-		if err != nil {
+		col, dropped, err := desc.FindColumnByName(c.ColumnName)
+		if err != nil || dropped {
 			return pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
 				"column %q not found, referenced in %q",
 				c.ColumnName, rootExpr), false, nil

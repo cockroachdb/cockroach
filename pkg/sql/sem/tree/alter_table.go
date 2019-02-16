@@ -102,6 +102,51 @@ func (node *AlterTableAddColumn) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.ColumnDef)
 }
 
+// HoistAddColumnConstraints converts column constraints in ADD COLUMN commands,
+// stored in node.Cmds, into top-level commands to add those constraints.
+// Currently, this only applies to checks. For example, the ADD COLUMN in
+//
+//     ALTER TABLE t ADD COLUMN a INT CHECK (a < 1)
+//
+// is transformed into two commands, as in
+//
+//     ALTER TABLE t ADD COLUMN a INT, ADD CONSTRAINT check_a CHECK (a < 1)
+//
+// (with an auto-generated name).
+//
+// Note that some SQL databases require that a constraint attached to a column
+// to refer only to the column it is attached to. We follow Postgres' behavior,
+// however, in omitting this restriction by blindly hoisting all column
+// constraints. For example, the following statement is accepted in
+// CockroachDB and Postgres, but not necessarily other SQL databases:
+//
+//     ALTER TABLE t ADD COLUMN a INT CHECK (a < b)
+//
+func (node *AlterTable) HoistAddColumnConstraints() {
+	var normalizedCmds AlterTableCmds
+
+	for _, cmd := range node.Cmds {
+		normalizedCmds = append(normalizedCmds, cmd)
+
+		if t, ok := cmd.(*AlterTableAddColumn); ok {
+			d := t.ColumnDef
+			for _, checkExpr := range d.CheckExprs {
+				normalizedCmds = append(normalizedCmds,
+					&AlterTableAddConstraint{
+						ConstraintDef: &CheckConstraintTableDef{
+							Expr: checkExpr.Expr,
+							Name: checkExpr.ConstraintName,
+						},
+						ValidationBehavior: ValidationDefault,
+					},
+				)
+			}
+			d.CheckExprs = nil
+		}
+	}
+	node.Cmds = normalizedCmds
+}
+
 // ValidationBehavior specifies whether or not a constraint is validated.
 type ValidationBehavior int
 
