@@ -89,6 +89,8 @@ type Metadata struct {
 	// might resolve to the same object now but to different objects later; we
 	// want to verify the resolution of both names.
 	deps []mdDep
+
+	// NOTE! When adding fields here, update CopyFrom.
 }
 
 type mdDep struct {
@@ -132,13 +134,25 @@ func (md *Metadata) Init() {
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.
 // This metadata can then be modified independent of the copied metadata.
+//
+// Table annotations are not transferred over; all annotations are unset on
+// the copy.
 func (md *Metadata) CopyFrom(from *Metadata) {
-	if len(md.cols) != 0 || len(md.tables) != 0 || len(md.deps) != 0 {
+	if len(md.schemas) != 0 || len(md.cols) != 0 || len(md.tables) != 0 ||
+		len(md.sequences) != 0 || len(md.deps) != 0 {
 		panic("CopyFrom requires empty destination")
 	}
 	md.schemas = append(md.schemas, from.schemas...)
 	md.cols = append(md.cols, from.cols...)
 	md.tables = append(md.tables, from.tables...)
+
+	// Clear table annotations. These objects can be mutable and can't be safely
+	// shared between different metadata instances.
+	for i := range md.tables {
+		md.tables[i].clearAnnotations()
+	}
+
+	md.sequences = append(md.sequences, from.sequences...)
 	md.deps = append(md.deps, from.deps...)
 }
 
