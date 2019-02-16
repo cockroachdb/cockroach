@@ -26,8 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-var fdAnnID = opt.NewTableAnnID()
-
 // logicalPropsBuilder is a helper class that consolidates the code that derives
 // a parent expression's logical properties from those of its children.
 //
@@ -1670,3 +1668,9 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 		return innerJoinCard
 	}
 }
+
+var fdAnnID = opt.NewTableAnnID(func(from interface{}) interface{} {
+	// The *FuncDepSet we cache in the table annotation is immutable; it's safe to
+	// share it.
+	return from
+})
