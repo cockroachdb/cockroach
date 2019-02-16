@@ -15,18 +15,19 @@
 package xform_test
 
 import (
-	"context"
 	"flag"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -39,23 +40,9 @@ func TestDetachMemo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := parser.ParseOne("SELECT * FROM abc WHERE c=$1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
-	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
-		t.Fatal(err)
-	}
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-
 	var o xform.Optimizer
-	o.Init(&evalCtx)
-	if err := optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt.AST).Build(); err != nil {
-		t.Fatal(err)
-	}
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE c=$1")
 
 	before := o.DetachMemo()
 
@@ -63,22 +50,7 @@ func TestDetachMemo(t *testing.T) {
 		t.Error("memo expression should be reinitialized by DetachMemo")
 	}
 
-	if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
-		t.Fatal(err)
-	}
-	o.Init(&evalCtx)
-
-	stmt2, err := parser.ParseOne("SELECT a=$1 FROM abc")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := semaCtx.Placeholders.Init(stmt2.NumPlaceholders, nil /* typeHints */); err != nil {
-		t.Fatal(err)
-	}
-	if err := optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt2.AST).Build(); err != nil {
-		t.Fatal(err)
-	}
+	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT a=$1 FROM abc")
 
 	after := o.Memo()
 	if after == before {
@@ -104,6 +76,58 @@ func TestDetachMemo(t *testing.T) {
 	if !strings.Contains(before.RootExpr().String(), "variable: c [type=string]") {
 		t.Error("detached memo did not contain expected operator")
 	}
+}
+
+// TestDetachMemoRace reproduces the condition in #34904: a detached memo still
+// aliases table annotations in the metadata. The problematic annotation is a
+// statistics object. Construction of new expression can trigger calculation of
+// new statistics.
+func TestDetachMemoRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	catalog := testcat.New()
+
+	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT, b INT, c INT, d INT)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var o xform.Optimizer
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE a = $1")
+	mem := o.DetachMemo()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		col := opt.ColumnID(i + 1)
+		wg.Add(1)
+		go func() {
+			var o xform.Optimizer
+			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+			o.Init(&evalCtx)
+			f := o.Factory()
+			var replaceFn norm.ReplaceFunc
+			replaceFn = func(e opt.Expr) opt.Expr {
+				if sel, ok := e.(*memo.SelectExpr); ok {
+					return f.ConstructSelect(
+						f.CopyAndReplaceDefault(sel.Input, replaceFn).(memo.RelExpr),
+						memo.FiltersExpr{{
+							Condition: f.ConstructEq(
+								f.ConstructVariable(col),
+								f.ConstructConst(tree.NewDInt(10)),
+							),
+						}},
+					)
+				}
+				return f.CopyAndReplaceDefault(e, replaceFn)
+			}
+			// Rewrite the filter to use a different column, which will trigger creation
+			// of new table statistics. If the statistics object is aliased, this will
+			// be racy.
+			f.CopyAndReplace(mem.RootExpr().(memo.RelExpr), mem.RootProps(), replaceFn)
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }
 
 // TestCoster files can be run separately like this:

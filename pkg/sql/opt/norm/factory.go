@@ -165,19 +165,25 @@ func (f *Factory) CustomFuncs() *CustomFuncs {
 // The "replace" callback function allows the caller to override the default
 // traversal and cloning behavior with custom logic. It is called for each node
 // in the "from" subtree, and has the choice of constructing an arbitrary
-// replacement node, or else delegating to the default behavior by returning the
-// unchanged "e" expression. The default behavior simply constructs a copy of
-// the source operator using children returned by recursive calls to the replace
-// callback. Here is example usage:
+// replacement node, or delegating to the default behavior by calling
+// CopyAndReplaceDefault, which constructs a copy of the source operator using
+// children returned by recursive calls to the replace callback. Note that if a
+// non-leaf replacement node is constructed, its inputs must be copied using
+// CopyAndReplaceDefault.
 //
-//   f.CopyAndReplace(from, fromProps, func(e opt.Expr) opt.Expr {
+// Sample usage:
+//
+//   var replaceFn ReplaceFunc
+//   replaceFn = func(e opt.Expr) opt.Expr {
 //     if e.Op() == opt.PlaceholderOp {
 //       return f.ConstructConst(evalPlaceholder(e))
 //     }
 //
-//     // Return unchanged "e" expression to get default behavior.
-//     return e
-//   })
+//     // Copy e, calling replaceFn on its inputs recursively.
+//     return f.CopyAndReplaceDefault(e, replaceFn)
+//   }
+//
+//   f.CopyAndReplace(from, fromProps, replaceFn)
 //
 // NOTE: Callers must take care to always create brand new copies of non-
 // singleton source nodes rather than referencing existing nodes. The source
@@ -222,7 +228,8 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 
 	// Copy the "from" memo to this memo, replacing any Placeholder operators as
 	// the copy proceeds.
-	f.CopyAndReplace(from.RootExpr().(memo.RelExpr), from.RootProps(), func(e opt.Expr) opt.Expr {
+	var replaceFn ReplaceFunc
+	replaceFn = func(e opt.Expr) opt.Expr {
 		if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
 			d, err := e.(*memo.PlaceholderExpr).Value.Eval(f.evalCtx)
 			if err != nil {
@@ -230,8 +237,9 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 			}
 			return f.ConstructConstVal(d, placeholder.DataType())
 		}
-		return e
-	})
+		return f.CopyAndReplaceDefault(e, replaceFn)
+	}
+	f.CopyAndReplace(from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
 
 	return nil
 }
