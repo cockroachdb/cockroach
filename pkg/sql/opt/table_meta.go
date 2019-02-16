@@ -83,6 +83,11 @@ func (t TableID) index() int {
 // metadata, which can be used to avoid recalculating base table properties or
 // other information each time it's needed.
 //
+// WARNING! When copying memo metadata (which happens when we use a cached
+// memo), the annotations are cleared. Any code using a annotation must treat
+// this as a best-effort cache and be prepared to repopulate the annotation as
+// necessary.
+//
 // To create a TableAnnID, call NewTableAnnID during Go's program initialization
 // phase. The returned TableAnnID never clashes with other annotations on the
 // same table. Here is a usage example:
@@ -126,6 +131,14 @@ type TableMeta struct {
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
+}
+
+// clearAnnotations resets all the table annotations; used when copying a
+// Metadata.
+func (tm *TableMeta) clearAnnotations() {
+	for i := range tm.anns {
+		tm.anns[i] = nil
+	}
 }
 
 // IndexColumns returns the metadata IDs for the set of columns in the given
