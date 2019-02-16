@@ -28,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
-var statsAnnID = opt.NewTableAnnID()
-
 // statisticsBuilder is responsible for building the statistics that are
 // used by the coster to estimate the cost of expressions.
 //
@@ -2705,3 +2703,9 @@ func RequestColStat(evalCtx *tree.EvalContext, e RelExpr, cols opt.ColSet) {
 	sb.init(evalCtx, e.Memo().Metadata())
 	sb.colStat(cols, e)
 }
+
+var statsAnnID = opt.NewTableAnnID(func(from interface{}) interface{} {
+	// The Statistics object can be recalculated as needed. We could copy it, but
+	// that turns out to be slower in practice.
+	return nil
+})
