@@ -40,17 +40,19 @@ const (
 	textB docBestType = iota
 	lineB
 	spacesB
+	keywordB
 )
 
-// Pretty returns a pretty-printed string for the Doc d at line length
-// n and tab width t.
-func Pretty(d Doc, n int, useTabs bool, tabWidth int) string {
+// Pretty returns a pretty-printed string for the Doc d at line length n and
+// tab width t. Keyword Docs are filtered through keywordTransform if not nil.
+func Pretty(d Doc, n int, useTabs bool, tabWidth int, keywordTransform func(string) string) string {
 	var sb strings.Builder
 	b := beExec{
-		w:        int16(n),
-		tabWidth: int16(tabWidth),
-		memoBe:   make(map[beArgs]*docBest),
-		memoiDoc: make(map[iDoc]*iDoc),
+		w:                int16(n),
+		tabWidth:         int16(tabWidth),
+		memoBe:           make(map[beArgs]*docBest),
+		memoiDoc:         make(map[iDoc]*iDoc),
+		keywordTransform: keywordTransform,
 	}
 	ldoc := b.best(d)
 	b.layout(&sb, useTabs, ldoc)
@@ -98,6 +100,9 @@ type beExec struct {
 	// idocAlloc speeds up the allocations by (*beExec).iDoc() defined
 	// below.
 	idocAlloc []iDoc
+
+	// keywordTransform filters keywords if not nil.
+	keywordTransform func(string) string
 }
 
 func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
@@ -132,6 +137,12 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 	case text:
 		res = b.newDocBest(docBest{
 			tag: textB,
+			s:   string(t),
+			d:   b.be(docPos{k.tabs, k.spaces + int16(len(t))}, z),
+		})
+	case keyword:
+		res = b.newDocBest(docBest{
+			tag: keywordB,
 			s:   string(t),
 			d:   b.be(docPos{k.tabs, k.spaces + int16(len(t))}, z),
 		})
@@ -234,7 +245,7 @@ func fits(w int16, x *docBest) bool {
 		return true
 	}
 	switch x.tag {
-	case textB:
+	case textB, keywordB:
 		return fits(w-int16(len(x.s)), x.d)
 	case lineB:
 		return true
@@ -250,6 +261,12 @@ func (b *beExec) layout(sb *strings.Builder, useTabs bool, d *docBest) {
 		switch d.tag {
 		case textB:
 			sb.WriteString(d.s)
+		case keywordB:
+			if b.keywordTransform != nil {
+				sb.WriteString(b.keywordTransform(d.s))
+			} else {
+				sb.WriteString(d.s)
+			}
 		case lineB:
 			sb.WriteByte('\n')
 			// Fill the tabs first.
