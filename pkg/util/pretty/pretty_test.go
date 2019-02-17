@@ -27,7 +27,7 @@ func Example_align() {
 			pretty.Text("aaa"),
 			pretty.Text("bbb"),
 			pretty.Text("ccc")),
-		pretty.RLTable(true,
+		pretty.RLTable(true, pretty.Text,
 			pretty.RLTableRow{Label: "SELECT",
 				Doc: pretty.Join(",",
 					pretty.Text("aaa"),
@@ -40,7 +40,7 @@ func Example_align() {
 					pretty.Text("u"),
 					pretty.Text("v")),
 			}),
-		pretty.RLTable(true,
+		pretty.RLTable(true, pretty.Text,
 			pretty.RLTableRow{Label: "woo", Doc: nil}, // check nil rows are omitted
 			pretty.RLTableRow{Label: "", Doc: pretty.Nil},
 			pretty.RLTableRow{Label: "KEY", Doc: pretty.Text("VALUE")},
@@ -51,7 +51,7 @@ func Example_align() {
 	for _, n := range []int{1, 15, 30, 80} {
 		fmt.Printf("%d:\n", n)
 		for _, doc := range testData {
-			p := pretty.Pretty(doc, n, true /*useTabs*/, 4 /*tabWidth*/)
+			p := pretty.Pretty(doc, n, true /*useTabs*/, 4 /*tabWidth*/, nil /*keywordTransform*/)
 			fmt.Printf("%s\n\n", p)
 		}
 	}
@@ -188,7 +188,7 @@ func Example_tree() {
 		))
 	}
 	for _, n := range []int{1, 30, 80} {
-		p := pretty.Pretty(showTree(tree), n, false /*useTabs*/, 4 /*tabWidth*/)
+		p := pretty.Pretty(showTree(tree), n, false /*useTabs*/, 4 /*tabWidth*/, nil /*keywordTransform*/)
 		fmt.Printf("%d:\n%s\n\n", n, p)
 	}
 	// Output:
