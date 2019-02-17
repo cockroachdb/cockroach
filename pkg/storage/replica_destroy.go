@@ -33,8 +33,6 @@ type DestroyReason int
 const (
 	// The replica is alive.
 	destroyReasonAlive DestroyReason = iota
-	// The replica has been corrupted.
-	destroyReasonCorrupted
 	// The replica has been marked for GC, but hasn't been GCed yet.
 	destroyReasonRemovalPending
 	// The replica has been GCed.
@@ -63,9 +61,9 @@ func (s destroyStatus) IsAlive() bool {
 	return s.reason == destroyReasonAlive
 }
 
-// RemovedOrCorrupt returns true if a replica has either been removed or is corrupted.
-func (s destroyStatus) RemovedOrCorrupt() bool {
-	return (s.reason == destroyReasonCorrupted) || (s.reason == destroyReasonRemoved)
+// Removed returns whether the replica has been removed.
+func (s destroyStatus) Removed() bool {
+	return s.reason == destroyReasonRemoved
 }
 
 func (r *Replica) preDestroyRaftMuLocked(

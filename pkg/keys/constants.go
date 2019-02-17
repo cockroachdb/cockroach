@@ -153,10 +153,6 @@ var (
 	// last verification timestamp (for checking integrity of on-disk data).
 	// Note: DEPRECATED.
 	LocalRangeLastVerificationTimestampSuffixDeprecated = []byte("rlvt")
-	// LocalRangeReplicaDestroyedErrorSuffix is the suffix for a range's replica
-	// destroyed error (for marking replicas as dead).
-	LocalRangeReplicaDestroyedErrorSuffix = []byte("rrde")
-
 	// LocalRangePrefix is the prefix identifying per-range data indexed
 	// by range key (either start key, or some key in the range). The
 	// key is appended to this prefix, encoded using EncodeBytes. The

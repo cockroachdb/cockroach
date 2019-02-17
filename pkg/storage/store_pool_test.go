@@ -238,13 +238,8 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		Node:    roachpb.NodeDescriptor{NodeID: 6},
 		Attrs:   roachpb.Attributes{Attrs: required},
 	}
-	corruptReplicaStore := roachpb.StoreDescriptor{
-		StoreID: 7,
-		Node:    roachpb.NodeDescriptor{NodeID: 7},
-		Attrs:   roachpb.Attributes{Attrs: required},
-	}
 
-	corruptedRangeID := roachpb.RangeID(1)
+	const rangeID = roachpb.RangeID(1)
 
 	// Gossip and mark all alive initially.
 	sg.GossipStores([]*roachpb.StoreDescriptor{
@@ -254,47 +249,9 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		&emptyStore,
 		&deadStore,
 		&declinedStore,
-		&corruptReplicaStore,
 	}, t)
 	for i := 1; i <= 7; i++ {
 		mnl.setNodeStatus(roachpb.NodeID(i), storagepb.NodeLivenessStatus_LIVE)
-	}
-
-	// Add some corrupt replicas that should not affect getStoreList().
-	sp.detailsMu.Lock()
-	sp.detailsMu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
-		[]roachpb.ReplicaDescriptor{{
-			StoreID: matchingStore.StoreID,
-			NodeID:  matchingStore.Node.NodeID,
-		}}
-	sp.detailsMu.storeDetails[matchingStore.StoreID].deadReplicas[roachpb.RangeID(11)] =
-		[]roachpb.ReplicaDescriptor{{
-			StoreID: matchingStore.StoreID,
-			NodeID:  matchingStore.Node.NodeID,
-		}}
-	sp.detailsMu.storeDetails[corruptReplicaStore.StoreID].deadReplicas[roachpb.RangeID(10)] =
-		[]roachpb.ReplicaDescriptor{{
-			StoreID: corruptReplicaStore.StoreID,
-			NodeID:  corruptReplicaStore.Node.NodeID,
-		}}
-	sp.detailsMu.Unlock()
-
-	if err := verifyStoreList(
-		sp,
-		constraints,
-		corruptedRangeID,
-		[]int{
-			int(matchingStore.StoreID),
-			int(supersetStore.StoreID),
-			int(deadStore.StoreID),
-			int(declinedStore.StoreID),
-			int(corruptReplicaStore.StoreID),
-		},
-		storeFilterNone,
-		/* expectedAliveStoreCount */ 7,
-		/* expectedThrottledStoreCount */ 0,
-	); err != nil {
-		t.Error(err)
 	}
 
 	// Set deadStore as dead.
@@ -302,25 +259,19 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	sp.detailsMu.Lock()
 	// Set declinedStore as throttled.
 	sp.detailsMu.storeDetails[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
-	// Add a corrupt replica to corruptReplicaStore.
-	sp.detailsMu.storeDetails[corruptReplicaStore.StoreID].deadReplicas[roachpb.RangeID(1)] =
-		[]roachpb.ReplicaDescriptor{{
-			StoreID: corruptReplicaStore.StoreID,
-			NodeID:  corruptReplicaStore.Node.NodeID,
-		}}
 	sp.detailsMu.Unlock()
 
 	if err := verifyStoreList(
 		sp,
 		constraints,
-		corruptedRangeID,
+		rangeID,
 		[]int{
 			int(matchingStore.StoreID),
 			int(supersetStore.StoreID),
 			int(declinedStore.StoreID),
 		},
 		storeFilterNone,
-		/* expectedAliveStoreCount */ 6,
+		/* expectedAliveStoreCount */ 5,
 		/* expectedThrottledStoreCount */ 1,
 	); err != nil {
 		t.Error(err)
@@ -329,13 +280,13 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	if err := verifyStoreList(
 		sp,
 		constraints,
-		corruptedRangeID,
+		rangeID,
 		[]int{
 			int(matchingStore.StoreID),
 			int(supersetStore.StoreID),
 		},
 		storeFilterThrottled,
-		/* expectedAliveStoreCount */ 6,
+		/* expectedAliveStoreCount */ 5,
 		/* expectedThrottledStoreCount */ 1,
 	); err != nil {
 		t.Error(err)

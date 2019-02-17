@@ -1779,20 +1779,6 @@ func (s *Store) recordNewPerSecondStats(newQPS, newWPS float64) {
 	s.asyncGossipStore(context.TODO(), message, false /* useCached */)
 }
 
-// GossipDeadReplicas broadcasts the store's dead replicas on the gossip
-// network.
-func (s *Store) GossipDeadReplicas(ctx context.Context) error {
-	deadReplicas := s.deadReplicas()
-	// Don't gossip if there's nothing to gossip.
-	if len(deadReplicas.Replicas) == 0 {
-		return nil
-	}
-	// Unique gossip key per store.
-	key := gossip.MakeDeadReplicasKey(s.StoreID())
-	// Gossip dead replicas.
-	return s.cfg.Gossip.AddInfoProto(key, &deadReplicas, gossip.StoreTTL)
-}
-
 // VisitReplicas invokes the visitor on the Store's Replicas until the visitor returns false.
 // Replicas which are added to the Store after iteration begins may or may not be observed.
 func (s *Store) VisitReplicas(visitor func(*Replica) bool) {
@@ -2699,34 +2685,6 @@ func (s *Store) Descriptor(useCached bool) (*roachpb.StoreDescriptor, error) {
 		Node:     *s.nodeDesc,
 		Capacity: capacity,
 	}, nil
-}
-
-// deadReplicas returns a list of all the corrupt replicas on the store.
-func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
-	// We can't use a storeReplicaVisitor here as it skips destroyed replicas.
-	//
-	// TODO(bram): does this need to visit all the replicas? Could we just use the
-	// store pool to locate any dead replicas on this store directly?
-	var deadReplicas []roachpb.ReplicaIdent
-	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-		r := (*Replica)(v)
-		r.mu.RLock()
-		corrupted := r.mu.destroyStatus.reason == destroyReasonCorrupted
-		desc := r.mu.state.Desc
-		r.mu.RUnlock()
-		replicaDesc, ok := desc.GetReplicaDescriptor(s.Ident.StoreID)
-		if ok && corrupted {
-			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
-				RangeID: desc.RangeID,
-				Replica: replicaDesc,
-			})
-		}
-		return true
-	})
-	return roachpb.StoreDeadReplicas{
-		StoreID:  s.Ident.StoreID,
-		Replicas: deadReplicas,
-	}
 }
 
 // Send fetches a range based on the header's replica, assembles method, args &
@@ -3946,8 +3904,6 @@ func (s *Store) tryGetOrCreateReplica(
 			err = replTooOldErr
 		} else if ds := repl.mu.destroyStatus; ds.reason == destroyReasonRemoved {
 			err = errRetry
-		} else if ds.reason == destroyReasonCorrupted {
-			err = ds.err
 		} else {
 			err = repl.setReplicaIDRaftMuLockedMuLocked(replicaID)
 		}

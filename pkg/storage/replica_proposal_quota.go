@@ -95,7 +95,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// replica can get destroyed is an option, alternatively we can clear
 	// our leader status and close the proposalQuota whenever the replica is
 	// destroyed.
-	if r.mu.destroyStatus.RemovedOrCorrupt() {
+	if r.mu.destroyStatus.Removed() {
 		if r.mu.proposalQuota != nil {
 			r.mu.proposalQuota.close()
 		}

@@ -1535,7 +1535,7 @@ func (s pendingCmdSlice) Less(i, j int) bool {
 func (r *Replica) withRaftGroupLocked(
 	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
-	if r.mu.destroyStatus.RemovedOrCorrupt() {
+	if r.mu.destroyStatus.Removed() {
 		// Silently ignore all operations on destroyed replicas. We can't return an
 		// error here as all errors returned from this method are considered fatal.
 		return nil
