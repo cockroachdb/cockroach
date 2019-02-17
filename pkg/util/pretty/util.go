@@ -175,9 +175,10 @@ func simplifyNil(a, b Doc, fn func(Doc, Doc) Doc) Doc {
 // only done if there are enough "simple spaces" (as per previous uses
 // of Align) to de-indent. No attempt is made to de-indent hard tabs,
 // otherwise alignment may break on output devices with a different
-// physical tab width.
-func JoinNestedOuter(lbl string, d ...Doc) Doc {
-	sep := Text(lbl)
+// physical tab width. docFn should be set to Text or Keyword and will be
+// used when converting lbl to a Doc.
+func JoinNestedOuter(lbl string, docFn func(string) Doc, d ...Doc) Doc {
+	sep := docFn(lbl)
 	return &snesting{
 		f: func(k int16) Doc {
 			if k < int16(len(lbl)+1) {
@@ -229,7 +230,10 @@ type RLTableRow struct {
 // For convenience, the function also takes a boolean "align" which,
 // if false, skips the alignment and only produces the section-based
 // output.
-func RLTable(align bool, rows ...RLTableRow) Doc {
+//
+// docFn should be set to Text or Keyword and will be used when converting
+// RLTableRow label's to Docs.
+func RLTable(align bool, docFn func(string) Doc, rows ...RLTableRow) Doc {
 	items := make([]Doc, 0, len(rows))
 
 	// Compute the nested formatting in "sections". It's simple.
@@ -240,7 +244,7 @@ func RLTable(align bool, rows ...RLTableRow) Doc {
 			continue
 		}
 		if r.Label != "" {
-			d := simplifyNil(Text(r.Label), r.Doc,
+			d := simplifyNil(docFn(r.Label), r.Doc,
 				func(a, b Doc) Doc {
 					return Concat(a, NestT(Concat(Line, Group(b))))
 				})
@@ -271,7 +275,7 @@ func RLTable(align bool, rows ...RLTableRow) Doc {
 				continue
 			}
 			if r.Label != "" {
-				d := simplifyNil(Text(r.Label), r.Doc,
+				d := simplifyNil(docFn(r.Label), r.Doc,
 					func(a, b Doc) Doc {
 						return ConcatSpace(a, Align(Group(b)))
 					})
