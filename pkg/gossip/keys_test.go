@@ -41,7 +41,6 @@ func TestNodeIDFromKey(t *testing.T) {
 		{MakePrefixPattern(KeyNodeIDPrefix), 0, false},
 		{MakeNodeLivenessKey(1), 0, false},
 		{MakeStoreKey(1), 0, false},
-		{MakeDeadReplicasKey(1), 0, false},
 	}
 
 	for _, tc := range testCases {

@@ -566,33 +566,6 @@ func (rsl StateLoader) SetRaftTruncatedState(
 		rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, nil, truncState)
 }
 
-// LoadReplicaDestroyedError loads the replica destroyed error for the specified
-// range. If there is no error, nil is returned.
-func (rsl StateLoader) LoadReplicaDestroyedError(
-	ctx context.Context, reader engine.Reader,
-) (*roachpb.Error, error) {
-	var v roachpb.Error
-	found, err := engine.MVCCGetProto(ctx, reader,
-		rsl.RangeReplicaDestroyedErrorKey(),
-		hlc.Timestamp{}, &v, engine.MVCCGetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, nil
-	}
-	return &v, nil
-}
-
-// SetReplicaDestroyedError sets an error indicating that the replica has been
-// destroyed.
-func (rsl StateLoader) SetReplicaDestroyedError(
-	ctx context.Context, eng engine.ReadWriter, err *roachpb.Error,
-) error {
-	return engine.MVCCPutProto(ctx, eng, nil,
-		rsl.RangeReplicaDestroyedErrorKey(), hlc.Timestamp{}, nil /* txn */, err)
-}
-
 // LoadHardState loads the HardState.
 func (rsl StateLoader) LoadHardState(
 	ctx context.Context, reader engine.Reader,
