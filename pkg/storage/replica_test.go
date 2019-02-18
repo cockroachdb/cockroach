@@ -7932,7 +7932,7 @@ func TestCommandTimeThreshold(t *testing.T) {
 	// Do the same Get, which should now fail.
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{
 		Timestamp: ts1,
-	}, &gArgs); !testutils.IsPError(pErr, `batch timestamp 0.\d+,\d+ must be after GC threshold 0.\d+,\d+`) {
+	}, &gArgs); !testutils.IsPError(pErr, `batch timestamp 0.\d+,\d+ must be after replica GC threshold 0.\d+,\d+`) {
 		t.Fatalf("unexpected error: %v", pErr)
 	}
 
@@ -7947,7 +7947,7 @@ func TestCommandTimeThreshold(t *testing.T) {
 	cpArgs := cPutArgs(keycp, vb, va)
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{
 		Timestamp: ts2,
-	}, &cpArgs); !testutils.IsPError(pErr, `batch timestamp 0.\d+,\d+ must be after GC threshold 0.\d+,\d+`) {
+	}, &cpArgs); !testutils.IsPError(pErr, `batch timestamp 0.\d+,\d+ must be after replica GC threshold 0.\d+,\d+`) {
 		t.Fatalf("unexpected error: %v", pErr)
 	}
 	// Verify a later CPut works.

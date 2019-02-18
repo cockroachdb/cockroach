@@ -212,6 +212,36 @@ func TestReplicaRangefeed(t *testing.T) {
 			t.Fatalf("got error for RangeFeed: %v", pErr)
 		}
 	}
+
+	// Bump the GC threshold and assert that RangeFeed below the timestamp will
+	// catch an error.
+	gcReq := &roachpb.GCRequest{
+		Threshold: initTime.Add(0, 1),
+	}
+	gcReq.Key = roachpb.Key(startKey)
+	gcReq.EndKey = mtc.Store(0).LookupReplica(startKey).Desc().EndKey.AsRawKey()
+	var ba roachpb.BatchRequest
+	ba.RangeID = rangeID
+	ba.Add(gcReq)
+	if _, pErr := mtc.Store(0).Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	stream := newTestStream()
+	defer stream.Cancel()
+	req := roachpb.RangeFeedRequest{
+		Header: roachpb.Header{
+			Timestamp: initTime,
+			RangeID:   rangeID,
+		},
+		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+	}
+
+	for i := 0; i < replNum; i++ {
+		if pErr := mtc.Store(i).RangeFeed(ctx, &req, stream); !testutils.IsPError(pErr, `must be after replica GC threshold`) {
+			t.Error(pErr)
+		}
+	}
 }
 
 func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
