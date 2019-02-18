@@ -238,7 +238,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	}
 
 	for i := 0; i < replNum; i++ {
-		if pErr := mtc.Store(i).RangeFeed(ctx, &req, stream); !testutils.IsPError(pErr, `must be after GC threshold`) {
+		if pErr := mtc.Store(i).RangeFeed(ctx, &req, stream); !testutils.IsPError(pErr, `must be after replica GC threshold`) {
 			t.Error(pErr)
 		}
 	}
