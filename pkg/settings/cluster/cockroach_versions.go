@@ -64,6 +64,7 @@ const (
 	VersionUnreplicatedRaftTruncatedState // see versionsSingleton for details
 	VersionCreateStats
 	VersionDirectImport
+	VersionSideloadedStorageNoReplicaID // see versionsSingleton for details
 
 	// Add new versions here (step one of two).
 
@@ -416,6 +417,24 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     VersionDirectImport,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 8},
+	},
+	{
+		// VersionSideloadedStorageNoReplicaID is https://github.com/cockroachdb/cockroach/pull/35035.
+		//
+		// It moves from a sideloaded directory naming scheme of
+		// <rangeID>.<replicaID> to one that only depends on the rangeID. The
+		// migration itself happens in storage.newDiskSideloadStorage, via
+		// (*Replica).setReplicaIDRaftMuLockedMuLocked and is thus expected to
+		// have completed when cluster version has been bumped and the cluster
+		// restarted at least once post the bump (as calls to NewReplica then
+		// carry out the migration for all replicas). We can thus safely remove
+		// support for the legacy directory scheme in 2020.1 or we do it in
+		// 2019.2 but have to require that all nodes be restarted at least once
+		// while running 2019.1. It is straightforward to detect whether legacy
+		// directories exist, so by adding code to 2020.1 to error out in this
+		// case we can make removal in 2019.2 safe.
+		Key:     VersionSideloadedStorageNoReplicaID,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 9},
 	},
 
 	// Add new versions here (step two of two).
