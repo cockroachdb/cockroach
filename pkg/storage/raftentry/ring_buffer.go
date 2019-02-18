@@ -184,6 +184,9 @@ func computeExtension(b *ringBuf, lo, hi uint64) (before, after int, ok bool) {
 type iterator int
 
 func iterateFrom(b *ringBuf, index uint64) (_ iterator, ok bool) {
+	if b.len == 0 {
+		return -1, false
+	}
 	offset := int(index) - int(first(b).index(b))
 	if offset < 0 || offset >= b.len {
 		return -1, false
