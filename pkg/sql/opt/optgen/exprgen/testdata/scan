@@ -19,7 +19,9 @@ expr
 scan t.public.abc
  ├── columns: t.public.abc.a:1(int)
  ├── stats: [rows=1000]
- └── cost: 1050.01
+ ├── cost: 1050.01
+ ├── prune: (1)
+ └── interesting orderings: (+1)
 
 expr
 (Scan [ (Table "abc") (Index "abc@ab") (Cols "a,b") ])
@@ -27,7 +29,9 @@ expr
 scan t.public.abc@ab
  ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  ├── stats: [rows=1000]
- └── cost: 1050.01
+ ├── cost: 1050.01
+ ├── prune: (1,2)
+ └── interesting orderings: (+1,+2)
 
 expr
 (Root
@@ -40,7 +44,9 @@ scan t.public.abc@ab
  ├── columns: a:1(int) b:2(int)
  ├── stats: [rows=1000]
  ├── cost: 1050.01
- └── ordering: +1,+2
+ ├── ordering: +1,+2
+ ├── prune: (1,2)
+ └── interesting orderings: (+1,+2)
 
 expr
 (Select
@@ -53,10 +59,14 @@ select
  ├── stats: [rows=9.9, distinct(1)=1, null(1)=0]
  ├── cost: 1080.02
  ├── fd: ()-->(1)
+ ├── prune: (2,3)
+ ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    └── cost: 1070.01
+ │    ├── cost: 1070.01
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1,+2)
  └── filters
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
            ├── variable: t.public.abc.a [type=int]

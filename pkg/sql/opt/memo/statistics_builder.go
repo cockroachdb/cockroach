@@ -218,15 +218,16 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 
 	case *LookupJoinExpr:
 		lookupJoin = t
+		ensureLookupJoinInputProps(lookupJoin, sb)
 
 	case *ZigzagJoinExpr:
 		zigzagJoin = t
+		ensureZigzagJoinInputProps(zigzagJoin, sb)
 	}
 
-	if lookupJoin != nil || zigzagJoin != nil || opt.IsJoinOp(e) {
+	if lookupJoin != nil || zigzagJoin != nil || opt.IsJoinOp(e) || e.Op() == opt.MergeJoinOp {
 		var leftProps *props.Relational
 		if zigzagJoin != nil {
-			ensureZigzagJoinInputProps(zigzagJoin, sb)
 			leftProps = &zigzagJoin.leftProps
 		} else {
 			leftProps = e.Child(0).(RelExpr).Relational()
@@ -234,7 +235,6 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 		intersectsLeft := leftProps.OutputCols.Intersects(colSet)
 		var intersectsRight bool
 		if lookupJoin != nil {
-			ensureLookupJoinInputProps(lookupJoin, sb)
 			intersectsRight = lookupJoin.lookupProps.OutputCols.Intersects(colSet)
 		} else if zigzagJoin != nil {
 			intersectsRight = zigzagJoin.rightProps.OutputCols.Intersects(colSet)
@@ -274,6 +274,9 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 // populating either s.ColStats or s.MultiColStats with the statistic as it
 // gets passed up the expression tree.
 func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.ColumnStatistic {
+	for opt.IsEnforcerOp(e) {
+		e = e.Child(0).(RelExpr)
+	}
 	if colSet.Empty() {
 		panic("column statistics cannot be determined for empty column set")
 	}
@@ -304,7 +307,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp,
-		opt.LookupJoinOp, opt.ZigzagJoinOp:
+		opt.MergeJoinOp, opt.LookupJoinOp, opt.ZigzagJoinOp:
 		return sb.colStatJoin(colSet, e)
 
 	case opt.IndexJoinOp:
@@ -923,24 +926,24 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 	relProps := join.Relational()
 	s := &relProps.Stats
 
+	var joinType opt.Operator
 	var leftProps, rightProps *props.Relational
-	var lookupJoin *LookupJoinExpr
-	var zigzagJoin *ZigzagJoinExpr
 
-	joinType := join.Op()
-	if joinType == opt.LookupJoinOp {
-		leftProps = join.Child(0).(RelExpr).Relational()
-		lookupJoin = join.(*LookupJoinExpr)
-		joinType = lookupJoin.JoinType
-		ensureLookupJoinInputProps(lookupJoin, sb)
-		rightProps = &lookupJoin.lookupProps
-	} else if joinType == opt.ZigzagJoinOp {
-		zigzagJoin = join.(*ZigzagJoinExpr)
+	switch j := join.(type) {
+	case *LookupJoinExpr:
+		joinType = j.JoinType
+		leftProps = j.Input.Relational()
+		ensureLookupJoinInputProps(j, sb)
+		rightProps = &j.lookupProps
+
+	case *ZigzagJoinExpr:
 		joinType = opt.InnerJoinOp
-		ensureZigzagJoinInputProps(zigzagJoin, sb)
-		leftProps = &zigzagJoin.leftProps
-		rightProps = &zigzagJoin.rightProps
-	} else {
+		ensureZigzagJoinInputProps(j, sb)
+		leftProps = &j.leftProps
+		rightProps = &j.rightProps
+
+	default:
+		joinType = join.Op()
 		leftProps = join.Child(0).(RelExpr).Relational()
 		rightProps = join.Child(1).(RelExpr).Relational()
 	}
