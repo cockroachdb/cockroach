@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
 )
@@ -233,13 +234,6 @@ func testSideloadingSideloadedStorage(
 		}
 	}
 
-	// Verify a sideloaded storage for another ReplicaID doesn't see the files.
-	if otherSS, err := maker(st, 1, 999 /* ReplicaID */, dir, eng); err != nil {
-		t.Fatal(err)
-	} else if _, err = otherSS.Get(ctx, payloads[0], highTerm); err != errSideloadedFileNotFound {
-		t.Fatal("expected not found")
-	}
-
 	// Just for fun, recreate the original storage (unless it's the in-memory
 	// one), which shouldn't change anything about its state.
 	if !isInMem {
@@ -394,6 +388,72 @@ func testSideloadingSideloadedStorage(
 	if size, err := maybePurgeSideloaded(ctx, ss, 0, 100, 10); err != nil || size != 0 {
 		t.Fatalf("expected noop, got (%d, %v)", size, err)
 	}
+}
+
+func TestSideloadedStorageReplicaIDMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	preV := cluster.VersionByKey(cluster.VersionSideloadedStorageNoReplicaID - 1)
+	stPre := cluster.MakeTestingClusterSettingsWithVersion(preV, preV)
+
+	postV := cluster.VersionByKey(cluster.VersionSideloadedStorageNoReplicaID)
+	stPost := cluster.MakeTestingClusterSettingsWithVersion(postV, postV)
+
+	const rangeID = roachpb.RangeID(1)
+
+	cleanup, cache, eng := newRocksDB(t)
+	defer cleanup()
+	defer cache.Release()
+	defer eng.Close()
+	limiter := rate.NewLimiter(rate.Inf, 1<<9)
+
+	var ss sideloadStorage
+	create := func(st *cluster.Settings, replicaID roachpb.ReplicaID) *diskSideloadStorage {
+		t.Helper()
+		if err := moveSideloadedData(ss, dir, rangeID, replicaID); err != nil {
+			t.Fatal(err)
+		}
+		ss, err := newDiskSideloadStorage(st, rangeID, replicaID, dir, limiter, eng)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ss
+	}
+
+	ss = create(stPre, 120)
+	foo := []byte("foo")
+	if err := ss.Put(ctx, 1, 10, foo); err != nil {
+		t.Fatal(err)
+	}
+
+	// Jog moveSideloadedData (via create) prior to the migration.
+	for _, replicaID := range []roachpb.ReplicaID{123, 124} {
+		ss = create(stPre, replicaID)
+		v, err := ss.Get(ctx, 1, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, foo, v)
+	}
+
+	// Migrate.
+	for _, replicaID := range []roachpb.ReplicaID{125, 126} {
+		ss = create(stPost, replicaID)
+		v, err := ss.Get(ctx, 1, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, foo, v)
+	}
+
+	// Check that we really did migrate.
+	prevDir := ss.Dir()
+	ss = create(stPost, 129)
+	assert.Equal(t, prevDir, ss.Dir())
 }
 
 func TestRaftSSTableSideloadingInline(t *testing.T) {
@@ -1090,63 +1150,4 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 		t.Fatalf("expected all files to be cleaned up, but found %v", sideloadStrings)
 	}
 
-}
-
-func TestRaftSSTableSideloadingUpdatedReplicaID(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	cleanup, cache, eng := newRocksDB(t)
-	defer cleanup()
-	defer cache.Release()
-	defer eng.Close()
-
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.engine = eng
-
-	tc.Start(t, stopper)
-	repl := tc.repl
-	ctx := context.Background()
-
-	const (
-		index = 123
-		term  = 456
-	)
-
-	val := []byte("foo")
-
-	repl.raftMu.Lock()
-	oldDir := repl.raftMu.sideloaded.Dir()
-	err := repl.raftMu.sideloaded.Put(ctx, index, term, val)
-	repl.raftMu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Set the ReplicaID on the replica.
-	if err := repl.setReplicaID(2); err != nil {
-		t.Fatal(err)
-	}
-
-	newDir := repl.raftMu.sideloaded.Dir()
-
-	if oldDir == newDir {
-		t.Fatalf("old and new sideloaded directory are equal: %s", oldDir)
-	}
-
-	// We assert below that oldDir moved to newDir.
-
-	repl.raftMu.Lock()
-	_, err = repl.raftMu.sideloaded.Get(ctx, index, term)
-	repl.raftMu.Unlock()
-
-	log.Infof(ctx, "olddir is %s, newdir is %s", oldDir, newDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
-		t.Fatal(err)
-	}
 }
