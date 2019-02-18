@@ -675,7 +675,7 @@ func (e *BatchTimestampBeforeGCError) Error() string {
 }
 
 func (e *BatchTimestampBeforeGCError) message(_ *Error) string {
-	return fmt.Sprintf("batch timestamp %v must be after GC threshold %v", e.Timestamp, e.Threshold)
+	return fmt.Sprintf("batch timestamp %v must be after replica GC threshold %v", e.Timestamp, e.Threshold)
 }
 
 var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
