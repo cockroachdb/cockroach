@@ -432,12 +432,12 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		inputPruneCols := DerivePruneCols(rowNum.Input)
 		relProps.Rule.PruneCols = inputPruneCols.Difference(rowNum.Ordering.ColSet())
 
-	case opt.IndexJoinOp, opt.LookupJoinOp:
-		// There is no need to prune columns projected by Index or Lookup joins,
-		// since its parent will always be an "alternate" expression in the memo.
-		// Any pruneable columns should have already been pruned at the time the
-		// IndexJoin is constructed. Additionally, there is not currently a
-		// PruneCols rule for these operators.
+	case opt.IndexJoinOp, opt.LookupJoinOp, opt.MergeJoinOp:
+		// There is no need to prune columns projected by Index, Lookup or Merge
+		// joins, since its parent will always be an "alternate" expression in the
+		// memo. Any pruneable columns should have already been pruned at the time
+		// one of these operators is constructed. Additionally, there is not
+		// currently a PruneCols rule for these operators.
 
 	case opt.ProjectSetOp:
 		// Any pruneable input columns can potentially be pruned, as long as

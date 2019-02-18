@@ -12,6 +12,7 @@ values
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
  ├── cost: 0.03
+ ├── prune: (1,2)
  ├── tuple [type=tuple{int, int}]
  │    ├── const: 1 [type=int]
  │    └── const: 1 [type=int]
@@ -36,6 +37,7 @@ project
  ├── cost: 0.05
  ├── key: ()
  ├── fd: ()-->(1,2)
+ ├── prune: (1,2)
  ├── values
  │    ├── columns: x:1(int)
  │    ├── cardinality: [1 - 1]

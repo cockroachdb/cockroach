@@ -479,7 +479,7 @@ func (b *logicalPropsBuilder) buildZigzagJoinProps(join *ZigzagJoinExpr, rel *pr
 }
 
 func (b *logicalPropsBuilder) buildMergeJoinProps(join *MergeJoinExpr, rel *props.Relational) {
-	panic("no relational properties for merge join expression")
+	b.buildJoinProps(join, rel)
 }
 
 func (b *logicalPropsBuilder) buildGroupByProps(groupBy *GroupByExpr, rel *props.Relational) {
@@ -1436,7 +1436,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		ensureLookupJoinInputProps(join, &b.sb)
 		h.joinType = join.JoinType
 		h.rightProps = &join.lookupProps
-		h.filters = *join.Child(1).(*FiltersExpr)
+		h.filters = join.On
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
@@ -1454,12 +1454,33 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.filterIsTrue = false
 		h.filterIsFalse = h.filters.IsFalse()
 
+	case *MergeJoinExpr:
+		h.joinType = join.JoinType
+		h.leftProps = join.Left.Relational()
+		h.rightProps = join.Right.Relational()
+		h.filters = join.On
+		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
+		h.filterNotNullCols = b.rejectNullCols(h.filters)
+
+		// Apply the merge join equalities.
+		for i := range join.LeftEq {
+			l := join.LeftEq[i].ID()
+			r := join.RightEq[i].ID()
+			h.filterNotNullCols.Add(int(l))
+			h.filterNotNullCols.Add(int(r))
+			h.filtersFD.AddEquivalency(l, r)
+		}
+
+		// Merge join has implicit equality conditions on the merge columns.
+		h.filterIsTrue = false
+		h.filterIsFalse = h.filters.IsFalse()
+
 	case *ZigzagJoinExpr:
 		ensureZigzagJoinInputProps(join, &b.sb)
 		h.joinType = opt.InnerJoinOp
 		h.leftProps = &join.leftProps
 		h.rightProps = &join.rightProps
-		h.filters = *join.Child(0).(*FiltersExpr)
+		h.filters = join.On
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
@@ -1475,7 +1496,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 
 	default:
 		h.joinType = join.Op()
-		h.leftProps = joinExpr.Child(0).(RelExpr).Relational()
+		h.leftProps = join.Child(0).(RelExpr).Relational()
 		h.rightProps = join.Child(1).(RelExpr).Relational()
 
 		h.filters = *join.Child(2).(*FiltersExpr)
