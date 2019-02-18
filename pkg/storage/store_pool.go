@@ -114,7 +114,6 @@ type storeDetail struct {
 	// lastUpdatedTime is set when a store is first consulted and every time
 	// gossip arrives for a store.
 	lastUpdatedTime time.Time
-	deadReplicas    map[roachpb.RangeID][]roachpb.ReplicaDescriptor
 }
 
 // isThrottled returns whether the store is currently throttled.
@@ -179,9 +178,6 @@ func (sd *storeDetail) status(
 
 	if sd.isThrottled(now) {
 		return storeStatusThrottled
-	}
-	if len(sd.deadReplicas[rangeID]) > 0 {
-		return storeStatusReplicaCorrupted
 	}
 
 	return storeStatusAvailable
@@ -252,8 +248,6 @@ func NewStorePool(
 	// hasn't otherwise changed.
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate, gossip.Redundant)
-	deadReplicasRegex := gossip.MakePrefixPattern(gossip.KeyDeadReplicasPrefix)
-	g.RegisterCallback(deadReplicasRegex, sp.deadReplicasGossipUpdate)
 
 	return sp
 }
@@ -311,25 +305,6 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	sp.localitiesMu.nodeLocalities[storeDesc.Node.NodeID] =
 		localityWithString{storeDesc.Node.Locality, storeDesc.Node.Locality.String()}
 	sp.localitiesMu.Unlock()
-}
-
-// deadReplicasGossipUpdate is the gossip callback used to keep the StorePool up to date.
-func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
-	var replicas roachpb.StoreDeadReplicas
-	if err := content.GetProto(&replicas); err != nil {
-		ctx := sp.AnnotateCtx(context.TODO())
-		log.Error(ctx, err)
-		return
-	}
-
-	sp.detailsMu.Lock()
-	defer sp.detailsMu.Unlock()
-	detail := sp.getStoreDetailLocked(replicas.StoreID)
-	deadReplicas := make(map[roachpb.RangeID][]roachpb.ReplicaDescriptor)
-	for _, r := range replicas.Replicas {
-		deadReplicas[r.RangeID] = append(deadReplicas[r.RangeID], r.Replica)
-	}
-	detail.deadReplicas = deadReplicas
 }
 
 // updateLocalStoreAfterRebalance is used to update the local copy of the
@@ -397,9 +372,7 @@ func (sp *StorePool) updateLocalStoresAfterLeaseTransfer(
 // newStoreDetail makes a new storeDetail struct. It sets index to be -1 to
 // ensure that it will be processed by a queue immediately.
 func newStoreDetail() *storeDetail {
-	return &storeDetail{
-		deadReplicas: make(map[roachpb.RangeID][]roachpb.ReplicaDescriptor),
-	}
+	return &storeDetail{}
 }
 
 // getStoreDetailLocked returns the store detail for the given storeID.
@@ -481,22 +454,6 @@ func (sp *StorePool) liveAndDeadReplicas(
 		switch status {
 		case storeStatusDead:
 			deadReplicas = append(deadReplicas, repl)
-		case storeStatusReplicaCorrupted:
-			// Check whether the replica we're examining has been marked as dead.
-			var corrupt bool
-			for _, deadRepl := range detail.deadReplicas[rangeID] {
-				if deadRepl.ReplicaID == repl.ReplicaID {
-					corrupt = true
-					break
-				}
-			}
-			// This replica is the corrupt replica, so consider the store dead.
-			if corrupt {
-				deadReplicas = append(deadReplicas, repl)
-			} else {
-				// Otherwise, consider the store live.
-				liveReplicas = append(liveReplicas, repl)
-			}
 		case storeStatusAvailable, storeStatusThrottled, storeStatusDecommissioning:
 			// We count both available and throttled stores to be live for the
 			// purpose of computing quorum.

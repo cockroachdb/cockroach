@@ -41,17 +41,9 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 		log.Errorf(ctx, "stalling replica due to: %s", cErr.ErrorMsg)
 		cErr.Processed = true
-		r.mu.destroyStatus.Set(cErr, destroyReasonCorrupted)
-		pErr = roachpb.NewError(cErr)
-
-		// Try to persist the destroyed error message. If the underlying store is
-		// corrupted the error won't be processed and a panic will occur.
-		if err := r.mu.stateLoader.SetReplicaDestroyedError(ctx, r.store.Engine(), pErr); err != nil {
-			cErr.Processed = false
-			return roachpb.NewError(cErr)
-		}
-
-		log.Fatalf(ctx, "replica is corrupted: %s", pErr)
+		r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
+		log.Fatalf(ctx, "replica is corrupted: %s", cErr)
+		return roachpb.NewError(cErr)
 	}
 	return pErr
 }

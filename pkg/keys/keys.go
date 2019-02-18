@@ -979,9 +979,3 @@ func (b RangeIDPrefixBuf) RangeLastReplicaGCTimestampKey() roachpb.Key {
 func (b RangeIDPrefixBuf) RangeLastVerificationTimestampKeyDeprecated() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRangeLastVerificationTimestampSuffixDeprecated...)
 }
-
-// RangeReplicaDestroyedErrorKey returns a range-local key for
-// the range's replica destroyed error.
-func (b RangeIDPrefixBuf) RangeReplicaDestroyedErrorKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRangeReplicaDestroyedErrorSuffix...)
-}

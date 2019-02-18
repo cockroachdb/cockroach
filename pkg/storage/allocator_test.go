@@ -328,8 +328,7 @@ func createTestAllocator(
 }
 
 // mockStorePool sets up a collection of a alive and dead stores in the store
-// pool for testing purposes. It also adds dead replicas to the stores and
-// ranges in deadReplicas.
+// pool for testing purposes.
 func mockStorePool(
 	storePool *StorePool,
 	aliveStoreIDs []roachpb.StoreID,
@@ -337,7 +336,6 @@ func mockStorePool(
 	deadStoreIDs []roachpb.StoreID,
 	decommissioningStoreIDs []roachpb.StoreID,
 	decommissionedStoreIDs []roachpb.StoreID,
-	deadReplicas []roachpb.ReplicaIdent,
 ) {
 	storePool.detailsMu.Lock()
 	defer storePool.detailsMu.Unlock()
@@ -384,14 +382,6 @@ func mockStorePool(
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
 	}
-	for storeID, detail := range storePool.detailsMu.storeDetails {
-		for _, replica := range deadReplicas {
-			if storeID != replica.Replica.StoreID {
-				continue
-			}
-			detail.deadReplicas[replica.RangeID] = append(detail.deadReplicas[replica.RangeID], replica.Replica)
-		}
-	}
 
 	// Set the node liveness function using the set we constructed.
 	storePool.nodeLivenessFn =
@@ -420,39 +410,6 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	}
 	if result.Node.NodeID != 1 || result.StoreID != 1 {
 		t.Errorf("expected NodeID 1 and StoreID 1: %+v", result)
-	}
-}
-
-// TestAllocatorCorruptReplica ensures that the allocator never attempts to
-// allocate a new replica on top of a dead (corrupt) one.
-func TestAllocatorCorruptReplica(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stopper, g, sp, a, _ := createTestAllocator(1, false /* deterministic */)
-	defer stopper.Stop(context.Background())
-	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	const store1ID = roachpb.StoreID(1)
-
-	// Set store 1 to have a dead replica in the store pool.
-	sp.detailsMu.Lock()
-	sp.detailsMu.storeDetails[store1ID].deadReplicas[firstRange] =
-		[]roachpb.ReplicaDescriptor{{
-			NodeID:  roachpb.NodeID(1),
-			StoreID: store1ID,
-		}}
-	sp.detailsMu.Unlock()
-
-	result, _, err := a.AllocateTarget(
-		context.Background(),
-		&simpleZoneConfig,
-		[]roachpb.ReplicaDescriptor{},
-		firstRangeInfo,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Node.NodeID != 2 || result.StoreID != 2 {
-		t.Errorf("expected NodeID 2 and StoreID 2; got %+v", result)
 	}
 }
 
@@ -941,7 +898,6 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 		[]roachpb.StoreID{1, 2, 3, 4, 5, 6},
 		nil,
 		[]roachpb.StoreID{7, 8},
-		nil,
 		nil,
 		nil,
 	)
@@ -4487,14 +4443,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		[]roachpb.StoreID{6, 7},
 		nil,
 		nil,
-		[]roachpb.ReplicaIdent{{
-			RangeID: 0,
-			Replica: roachpb.ReplicaDescriptor{
-				NodeID:    8,
-				StoreID:   8,
-				ReplicaID: 8,
-			},
-		}})
+	)
 
 	lastPriority := float64(999999999)
 	for i, tcase := range testCases {
@@ -4593,7 +4542,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for i, tcase := range testCases {
-		mockStorePool(sp, tcase.live, nil, tcase.dead, nil, nil, nil)
+		mockStorePool(sp, tcase.live, nil, tcase.dead, nil, nil)
 
 		action, _ := a.ComputeAction(ctx, &zone, RangeInfo{Desc: &tcase.desc})
 		if tcase.expectedAction != action {
@@ -4814,7 +4763,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for i, tcase := range testCases {
-		mockStorePool(sp, tcase.live, nil, tcase.dead, tcase.decommissioning, tcase.decommissioned, nil)
+		mockStorePool(sp, tcase.live, nil, tcase.dead, tcase.decommissioning, tcase.decommissioned)
 
 		action, _ := a.ComputeAction(ctx, &tcase.zone, RangeInfo{Desc: &tcase.desc})
 		if tcase.expectedAction != action {
@@ -4972,7 +4921,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			t.Run("", func(t *testing.T) {
 				numNodes = len(c.storeList) - len(c.decommissioning)
 				mockStorePool(sp, c.live, c.unavailable, c.dead,
-					c.decommissioning, []roachpb.StoreID{}, nil)
+					c.decommissioning, []roachpb.StoreID{})
 				desc := makeDescriptor(c.storeList)
 				desc.EndKey = prefixKey
 				action, _ := a.ComputeAction(ctx, zone, RangeInfo{Desc: &desc})
