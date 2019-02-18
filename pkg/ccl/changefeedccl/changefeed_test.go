@@ -1114,10 +1114,6 @@ func TestChangefeedDataTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		if PushEnabled.Get(&f.Server().ClusterSettings().SV) {
-			t.Skip(`#34456`)
-		}
-
 		// Set a very simple channel-based, wait-and-resume function as the
 		// BeforeEmitRow hook.
 		var shouldWait int32

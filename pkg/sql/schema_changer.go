@@ -168,7 +168,7 @@ func isPermanentSchemaChangeError(err error) bool {
 	// Ignore error thrown because of a read at a very old timestamp.
 	// The Backfill will grab a new timestamp to read at for the rest
 	// of the backfill.
-	if strings.Contains(err.Error(), "must be after GC threshold") {
+	if strings.Contains(err.Error(), "must be after replica GC threshold") {
 		return false
 	}
 
