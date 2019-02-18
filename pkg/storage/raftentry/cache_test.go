@@ -427,6 +427,41 @@ func TestPartitionList(t *testing.T) {
 	l.remove(&l.root)
 }
 
+// TestConcurrentClearAddGet exercises the case where a partition is
+// concurrently written to as well as read and evicted from. Partitions are
+// created and added to the cache lazily upon calls to Add. Because of the two
+// level locking, a partition may be created and added to the cache before the
+// Add call proceeds to lock the partition and the entries to the buffer.
+// During this period a concurrent read operation may discover the uninitialized
+// empty partition. This test attempts to exercise these scenarios and ensure
+// that they are safe.
+func TestConcurrentAddGetAndEviction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const N = 1000
+	var wg sync.WaitGroup
+	doAction := func(action func()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < N; i++ {
+				action()
+			}
+		}()
+	}
+	// A cache size of 1000 is chosen relative to the below entry size of 500
+	// so that each add operation will lead to the eviction of the other
+	// partition.
+	c := NewCache(1000)
+	ents := []raftpb.Entry{newEntry(1, 500)}
+	doAddAndGetToRange := func(rangeID roachpb.RangeID) {
+		doAction(func() { c.Add(rangeID, ents) })
+		doAction(func() { c.Get(rangeID, ents[0].Index) })
+	}
+	doAddAndGetToRange(1)
+	doAddAndGetToRange(2)
+	wg.Wait()
+}
+
 func BenchmarkEntryCache(b *testing.B) {
 	rangeID := roachpb.RangeID(1)
 	ents := make([]raftpb.Entry, 1000)
