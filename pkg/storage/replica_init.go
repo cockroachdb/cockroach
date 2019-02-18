@@ -17,7 +17,6 @@ package storage
 import (
 	"context"
 	"math/rand"
-	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -196,33 +195,22 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 	//
 	// Note that we can't race with a concurrent replicaGC here because both that
 	// and this is under raftMu.
-	var prevSideloadedDir string
-	if ss := r.raftMu.sideloaded; ss != nil {
-		prevSideloadedDir = ss.Dir()
+	ssBase := r.store.Engine().GetAuxiliaryDir()
+	rangeID := r.mu.state.Desc.RangeID
+	if err := moveSideloadedData(r.raftMu.sideloaded, ssBase, rangeID, replicaID); err != nil {
+		return err
 	}
+
 	var err error
 	if r.raftMu.sideloaded, err = newDiskSideloadStorage(
 		r.store.cfg.Settings,
-		r.mu.state.Desc.RangeID,
+		rangeID,
 		replicaID,
-		r.store.Engine().GetAuxiliaryDir(),
+		ssBase,
 		r.store.limiters.BulkIOWriteRate,
 		r.store.engine,
 	); err != nil {
 		return errors.Wrap(err, "while initializing sideloaded storage")
-	}
-	if prevSideloadedDir != "" {
-		if _, err := os.Stat(prevSideloadedDir); err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
-			// Old directory not found.
-		} else {
-			// Old directory found, so we have something to move over to the new one.
-			if err := os.Rename(prevSideloadedDir, r.raftMu.sideloaded.Dir()); err != nil {
-				return errors.Wrap(err, "while moving sideloaded directory")
-			}
-		}
 	}
 
 	previousReplicaID := r.mu.replicaID
