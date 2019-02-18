@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"reflect"
 	"runtime"
 	"sync"
@@ -47,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
@@ -1435,145 +1433,6 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 
 	if !againR.HasBogusSideloadedData() {
 		t.Fatalf("sideloaded storage changed after fake message to replicaID zero")
-	}
-}
-
-// TestStoreRangeCorruptionChangeReplicas verifies that the replication queue
-// will notice corrupted replicas and replace them.
-func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	var exitStatus int
-	log.SetExitFunc(true /* hideStack */, func(i int) {
-		exitStatus = i
-	})
-	defer log.ResetExitFunc()
-
-	const numReplicas = 5
-	const extraStores = 3
-
-	ctx := context.Background()
-
-	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableReplicaRebalancing = true
-	var corrupt struct {
-		syncutil.Mutex
-		store *storage.Store
-	}
-	// TODO(bdarnell): I think this should be a TestingApplyFilter
-	// instead of a TestingPostApplyFilter, but making that change
-	// causes this test to fail.
-	sc.TestingKnobs.TestingPostApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
-		corrupt.Lock()
-		defer corrupt.Unlock()
-
-		if corrupt.store == nil || filterArgs.StoreID != corrupt.store.StoreID() {
-			return 0, nil
-		}
-
-		return 0, roachpb.NewError(
-			roachpb.NewReplicaCorruptionError(errors.New("boom")),
-		)
-	}
-
-	// Don't timeout raft leader.
-	sc.RaftElectionTimeoutTicks = 1000000
-	mtc := &multiTestContext{
-		storeConfig: &sc,
-		// This test was written before the multiTestContext started creating many
-		// system ranges at startup, and hasn't been update to take that into
-		// account.
-		startWithSingleRange: true,
-	}
-	defer mtc.Stop()
-	mtc.Start(t, numReplicas+extraStores)
-	mtc.initGossipNetwork()
-	store0 := mtc.stores[0]
-
-	for i := 0; i < extraStores; i++ {
-		testutils.SucceedsSoon(t, func() error {
-			if err := store0.ForceReplicationScanAndProcess(); err != nil {
-				return nil
-			}
-
-			replicas := store0.LookupReplica(roachpb.RKey("a")).Desc().Replicas
-			if len(replicas) < numReplicas {
-				return errors.Errorf("initial replication: expected len(replicas) = %d, got %+v", numReplicas, replicas)
-			}
-
-			corrupt.Lock()
-			defer corrupt.Unlock()
-			// Pick a random replica to corrupt.
-			for corrupt.store = nil; corrupt.store == nil || corrupt.store == store0; {
-				storeID := replicas[rand.Intn(len(replicas))].StoreID
-				for _, store := range mtc.stores {
-					if store.StoreID() == storeID {
-						corrupt.store = store
-						break
-					}
-				}
-			}
-			return nil
-		})
-
-		var corruptRep roachpb.ReplicaDescriptor
-		testutils.SucceedsSoon(t, func() error {
-			r := corrupt.store.LookupReplica(roachpb.RKey("a"))
-			if r == nil {
-				return errors.New("replica is not available yet")
-			}
-			var err error
-			corruptRep, err = r.GetReplicaDescriptor()
-			return err
-		})
-
-		args := putArgs(roachpb.Key("any write"), []byte("should mark as corrupted"))
-		if _, err := client.SendWrapped(ctx, store0.TestSender(), args); err != nil {
-			t.Fatal(err)
-		}
-
-		// Wait until maybeSetCorrupt has been called. This isn't called immediately
-		// since the put command has quorum with the other good node.
-		testutils.SucceedsSoon(t, func() error {
-			corrupt.Lock()
-			defer corrupt.Unlock()
-			replicas := corrupt.store.GetDeadReplicas()
-			if len(replicas.Replicas) == 0 {
-				return errors.New("expected corrupt store to have a dead replica")
-			}
-			return nil
-		})
-
-		corrupt.Lock()
-		err := corrupt.store.GossipDeadReplicas(ctx)
-		corrupt.Unlock()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		testutils.SucceedsSoon(t, func() error {
-			if err := store0.ForceReplicationScanAndProcess(); err != nil {
-				t.Fatal(err)
-			}
-			// Should be removed from the corrupt store.
-			replicas := store0.LookupReplica(roachpb.RKey("a")).Desc().Replicas
-			for _, rep := range replicas {
-				if rep == corruptRep {
-					return errors.Errorf("expected corrupt replica %+v to be removed from %+v", rep, replicas)
-				}
-				if rep.StoreID == corruptRep.StoreID {
-					return errors.Errorf("expected new replica to not be placed back on same store as corrupt replica")
-				}
-			}
-			if len(replicas) < numReplicas {
-				return errors.Errorf("expected len(replicas) = %d, got %+v", numReplicas, replicas)
-			}
-			return nil
-		})
-	}
-
-	if exitStatus != 255 {
-		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 }
 
