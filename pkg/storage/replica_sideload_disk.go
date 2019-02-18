@@ -39,6 +39,69 @@ type diskSideloadStorage struct {
 	eng        engine.Engine
 }
 
+func deprecatedSideloadedPath(
+	baseDir string, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+) string {
+	return filepath.Join(
+		baseDir,
+		"sideloading",
+		fmt.Sprintf("%d", rangeID%1000), // sharding
+		fmt.Sprintf("%d.%d", rangeID, replicaID),
+	)
+}
+
+func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
+	return filepath.Join(
+		baseDir,
+		"sideloading",
+		fmt.Sprintf("r%dXXX", rangeID%1000), // sharding
+		fmt.Sprintf("r%d", rangeID),
+	)
+}
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+func moveSideloadedData(
+	prevSideloaded sideloadStorage, base string, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+) error {
+	if prevSideloaded == nil || prevSideloaded.Dir() == "" {
+		// No storage or in-memory storage.
+		return nil
+	}
+	prevSideloadedDir := prevSideloaded.Dir()
+	ex, err := exists(prevSideloadedDir)
+	if err != nil {
+		return errors.Wrap(err, "looking up previous sideloaded directory")
+	}
+	if !ex {
+		return nil
+	}
+	if prevSideloadedDir == sideloadedPath(base, rangeID) {
+		// ReplicaID didn't change or already migrated (see below).
+		return nil
+	}
+
+	// NB: when the below version is active (and has been active inside of
+	// newDiskSideloadStorage at least once), this block of code is dead as
+	// the sideloaded directory no longer depends on the replica ID and so
+	// equality above will always hold.
+	_ = cluster.VersionSideloadedStorageNoReplicaID
+
+	if err := os.Rename(prevSideloadedDir, deprecatedSideloadedPath(base, rangeID, replicaID)); err != nil {
+		return errors.Wrap(err, "moving sideloaded directory")
+	}
+	return nil
+}
+
 func newDiskSideloadStorage(
 	st *cluster.Settings,
 	rangeID roachpb.RangeID,
@@ -46,14 +109,27 @@ func newDiskSideloadStorage(
 	baseDir string,
 	limiter *rate.Limiter,
 	eng engine.Engine,
-) (sideloadStorage, error) {
+) (*diskSideloadStorage, error) {
+	path := deprecatedSideloadedPath(baseDir, rangeID, replicaID)
+	if st.Version.IsActive(cluster.VersionSideloadedStorageNoReplicaID) {
+		newPath := sideloadedPath(baseDir, rangeID)
+		exists, err := exists(path)
+		if err != nil {
+			return nil, errors.Wrap(err, "checking pre-migration sideloaded directory")
+		}
+		if exists {
+			if err := os.MkdirAll(filepath.Dir(newPath), 0755); err != nil {
+				return nil, errors.Wrap(err, "creating migrated sideloaded directory")
+			}
+			if err := os.Rename(path, newPath); err != nil {
+				return nil, errors.Wrap(err, "while migrating sideloaded directory")
+			}
+		}
+		path = newPath
+	}
+
 	ss := &diskSideloadStorage{
-		dir: filepath.Join(
-			baseDir,
-			"sideloading",
-			fmt.Sprintf("%d", rangeID%1000), // sharding
-			fmt.Sprintf("%d.%d", rangeID, replicaID),
-		),
+		dir:     path,
 		eng:     eng,
 		st:      st,
 		limiter: limiter,

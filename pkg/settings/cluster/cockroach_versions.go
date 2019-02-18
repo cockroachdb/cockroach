@@ -64,6 +64,7 @@ const (
 	VersionUnreplicatedRaftTruncatedState // see versionsSingleton for details
 	VersionCreateStats
 	VersionDirectImport
+	VersionSideloadedStorageNoReplicaID
 
 	// Add new versions here (step one of two).
 
@@ -416,6 +417,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     VersionDirectImport,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 8},
+	},
+	{
+		// TODO(tbg): VersionCreateStats is https://github.com/cockroachdb/cockroach/pull/X.
+		Key:     VersionSideloadedStorageNoReplicaID,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 9},
 	},
 
 	// Add new versions here (step two of two).
