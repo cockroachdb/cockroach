@@ -444,6 +444,56 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	}
 }
 
+// Test that the outbox unblocks its producers if it fails to connect during
+// startup.
+func TestOutboxUnblocksProducers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(context.Background())
+	flowCtx := FlowCtx{
+		Settings:   st,
+		stopper:    stopper,
+		EvalCtx:    &evalCtx,
+		nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(nil)),
+	}
+	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
+	streamID := distsqlpb.StreamID(42)
+	var outbox *outbox
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	outbox = newOutbox(&flowCtx, staticNodeID, flowID, streamID)
+	outbox.init(sqlbase.OneIntCol)
+
+	// Fill up the outbox.
+	for i := 0; i < outboxBufRows; i++ {
+		outbox.Push(nil, &ProducerMetadata{})
+	}
+
+	var blockedPusherWg sync.WaitGroup
+	blockedPusherWg.Add(1)
+	go func() {
+		// Push to the outbox one last time, which will block since the channel
+		// is full.
+		outbox.Push(nil, &ProducerMetadata{})
+		// We should become unblocked once outbox.start fails.
+		blockedPusherWg.Done()
+	}()
+
+	// Cancel the context to force the outbox to fail to connect.
+	cancel()
+	outbox.start(ctx, &wg, cancel)
+
+	wg.Wait()
+	blockedPusherWg.Wait()
+}
+
 func BenchmarkOutbox(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 
