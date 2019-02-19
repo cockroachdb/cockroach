@@ -428,7 +428,7 @@ func (mdb MockRangeDescriptorDB) withMetaRecursion(
 	return func(key roachpb.RKey, useReverseScan bool) (rs, preRs []roachpb.RangeDescriptor, err error) {
 		metaKey := keys.RangeMetaKey(key)
 		if !metaKey.Equal(roachpb.RKeyMin) {
-			_, _, err := rdc.LookupRangeDescriptor(context.Background(), metaKey, nil, useReverseScan)
+			_, _, err := rdc.LookupRangeDescriptorWithEvictionToken(context.Background(), metaKey, nil, useReverseScan)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -882,7 +882,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 	rAnyKey := keys.MustAddr(anyKey)
 
 	call := func() {
-		if _, _, err := ds.rangeCache.LookupRangeDescriptor(
+		if _, _, err := ds.rangeCache.LookupRangeDescriptorWithEvictionToken(
 			context.Background(), rAnyKey, nil, false,
 		); err != nil {
 			t.Fatal(err)

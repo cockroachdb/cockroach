@@ -120,7 +120,7 @@ func runTestImport(t *testing.T, batchSize int64) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r, _, err := s.DistSender().RangeDescriptorCache().LookupRangeDescriptor(ctx, addr, nil, false)
+			r, _, err := s.DistSender().RangeDescriptorCache().LookupRangeDescriptorWithEvictionToken(ctx, addr, nil, false)
 			if err != nil {
 				t.Fatal(err)
 			}

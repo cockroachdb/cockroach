@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -182,7 +183,8 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run("", func(t *testing.T) {
-			ir := newIntentResolverWithSendFuncs(stopper, clock, &c.sendFuncs)
+			sf := &sendFuncs{sendFuncs: c.sendFuncs}
+			ir := newIntentResolverWithSendFuncs(stopper, clock, sf)
 			var didPush, didSucceed bool
 			done := make(chan struct{})
 			onComplete := func(pushed, succeeded bool) {
@@ -194,7 +196,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 				t.Fatalf("unexpected error sending async transaction")
 			}
 			<-done
-			if len(c.sendFuncs) != 0 {
+			if sf.len() != 0 {
 				t.Errorf("Not all send funcs called")
 			}
 			if didSucceed != c.expectSucceed {
@@ -427,12 +429,12 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	sendFuncs := []sendFunc{
-		singlePushTxnSendFunc,
-		resolveIntentsSendFunc,
-	}
 	txn := beginTransaction(t, clock, 1, roachpb.Key("a"), true /* putKey */)
-	ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
+	sf := newSendFuncs(
+		pushTxnSendFunc(1),
+		resolveIntentsSendFunc,
+	)
+	ir := newIntentResolverWithSendFuncs(stopper, clock, sf)
 	// Run defaultTaskLimit tasks which will block until blocker is closed.
 	blocker := make(chan struct{})
 	defer close(blocker)
@@ -461,7 +463,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 	// sendFuncs.
 	err = ir.CleanupIntentsAsync(context.Background(), testIntentsWithArg, true)
 	assert.Nil(t, err)
-	assert.Len(t, sendFuncs, 0)
+	assert.Equal(t, sf.len(), 0)
 }
 
 // TestCleanupIntentsAsync verifies that CleanupIntentsAsync sends the expected
@@ -504,14 +506,45 @@ func TestCleanupIntentsAsync(t *testing.T) {
 	for _, c := range cases {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
-			sendFuncs := c.sendFuncs
-			ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
+			sf := newSendFuncs(c.sendFuncs...)
+			ir := newIntentResolverWithSendFuncs(stopper, clock, sf)
 			err := ir.CleanupIntentsAsync(context.Background(), c.intents, true)
+			testutils.SucceedsSoon(t, func() error {
+				if l := sf.len(); l > 0 {
+					return fmt.Errorf("Still have %d funcs to send", l)
+				}
+				return nil
+			})
 			stopper.Stop(context.Background())
 			assert.Nil(t, err, "error from CleanupIntentsAsync")
-			assert.Len(t, sendFuncs, 0, "did not use all sendFuncs")
 		})
 	}
+}
+
+func newSendFuncs(sf ...sendFunc) *sendFuncs {
+	return &sendFuncs{sendFuncs: sf}
+}
+
+type sendFuncs struct {
+	mu        syncutil.Mutex
+	sendFuncs []sendFunc
+}
+
+func (sf *sendFuncs) len() int {
+	sf.mu.Lock()
+	defer sf.mu.Unlock()
+	return len(sf.sendFuncs)
+}
+
+func (sf *sendFuncs) pop() sendFunc {
+	sf.mu.Lock()
+	defer sf.mu.Unlock()
+	if len(sf.sendFuncs) == 0 {
+		panic("no send funcs left!")
+	}
+	ret := sf.sendFuncs[0]
+	sf.sendFuncs = sf.sendFuncs[1:]
+	return ret
 }
 
 // TestCleanupTxnIntentsAsync verifies that CleanupTxnIntentsAsync sends the
@@ -560,8 +593,8 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			var sendFuncCalled int64
 			numSendFuncs := int64(len(c.sendFuncs))
-			sendFuncs := counterSendFuncs(&sendFuncCalled, c.sendFuncs)
-			ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
+			sf := newSendFuncs(counterSendFuncs(&sendFuncCalled, c.sendFuncs)...)
+			ir := newIntentResolverWithSendFuncs(stopper, clock, sf)
 			if c.before != nil {
 				defer c.before(&c, ir)()
 			}
@@ -574,7 +607,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 			})
 			stopper.Stop(context.Background())
 			assert.Nil(t, err)
-			assert.Len(t, sendFuncs, 0)
+			assert.Equal(t, sf.len(), 0)
 		})
 	}
 }
@@ -650,8 +683,7 @@ func TestCleanupIntents(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	for _, c := range cases {
 		t.Run("", func(t *testing.T) {
-			sendFuncs := c.sendFuncs
-			ir := newIntentResolverWithSendFuncs(stopper, clock, &sendFuncs)
+			ir := newIntentResolverWithSendFuncs(stopper, clock, newSendFuncs(c.sendFuncs...))
 			num, err := ir.CleanupIntents(context.Background(), c.intents, clock.Now(), roachpb.PUSH_ABORT)
 			assert.Equal(t, num, c.expectedNum, "number of resolved intents")
 			assert.Equal(t, err != nil, c.expectedErr, "error during CleanupIntents: %v", err)
@@ -739,15 +771,11 @@ func makeTxnIntents(t *testing.T, clock *hlc.Clock, numIntents int) []roachpb.In
 type sendFunc func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
 func newIntentResolverWithSendFuncs(
-	stopper *stop.Stopper, clock *hlc.Clock, sendFuncs *[]sendFunc,
+	stopper *stop.Stopper, clock *hlc.Clock, sf *sendFuncs,
 ) *IntentResolver {
 	txnSenderFactory := client.NonTransactionalFactoryFunc(
 		func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			if len(*sendFuncs) == 0 {
-				panic("no send funcs left!")
-			}
-			f := (*sendFuncs)[0]
-			*sendFuncs = (*sendFuncs)[1:]
+			f := sf.pop()
 			return f(ba)
 		})
 	db := client.NewDB(log.AmbientContext{
