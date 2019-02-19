@@ -256,11 +256,6 @@ func (c *CustomFuncs) HasNoCols(input memo.RelExpr) bool {
 	return input.Relational().OutputCols.Empty()
 }
 
-// HasZeroRows returns true if the input expression never returns any rows.
-func (c *CustomFuncs) HasZeroRows(input memo.RelExpr) bool {
-	return input.Relational().Cardinality.IsZero()
-}
-
 // HasOneRow returns true if the input expression always returns exactly one
 // row.
 func (c *CustomFuncs) HasOneRow(input memo.RelExpr) bool {

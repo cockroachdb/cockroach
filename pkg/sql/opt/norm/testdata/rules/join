@@ -1840,18 +1840,6 @@ scan a
  └── fd: (1)-->(2-5)
 
 # --------------------------------------------------
-# EliminateAntiJoin
-# --------------------------------------------------
-# TODO(justin): figure out if there's a good way to make this still apply.
-opt disable=SimplifyZeroCardinalityGroup expect=EliminateAntiJoin
-SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM (VALUES (k)) OFFSET 1)
-----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
- ├── key: (1)
- └── fd: (1)-->(2-5)
-
-# --------------------------------------------------
 # EliminateJoinNoColsLeft
 # --------------------------------------------------
 opt expect=EliminateJoinNoColsLeft

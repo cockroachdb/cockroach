@@ -350,7 +350,7 @@
 [EliminateUnionAllLeft, Normalize]
 (UnionAll
     $left:*
-    $right:* & (HasZeroRows $right)
+    $right:(Values [])
     $colmap:*
 )
 =>
@@ -364,7 +364,7 @@
 # cardinality of zero, with just the right side operand.
 [EliminateUnionAllRight, Normalize]
 (UnionAll
-    $left:* & (HasZeroRows $left)
+    $left:(Values [])
     $right:*
     $colmap:*
 )

@@ -1170,6 +1170,55 @@ project
  └── projections
       └── variable: b.k [type=int, outer=(6)]
 
+opt expect-not=EliminateUnionAllLeft
+SELECT k FROM
+  (SELECT k FROM b)
+  UNION ALL
+  (SELECT * FROM [INSERT INTO b VALUES (1, 1, 1, '') RETURNING 1] WHERE false)
+----
+union-all
+ ├── columns: k:17(int!null)
+ ├── left columns: b.k:1(int)
+ ├── right columns: "?column?":16(int)
+ ├── side-effects, mutations
+ ├── scan b
+ │    ├── columns: b.k:1(int!null)
+ │    └── key: (1)
+ └── project
+      ├── columns: "?column?":16(int!null)
+      ├── cardinality: [0 - 0]
+      ├── side-effects, mutations
+      ├── key: ()
+      ├── fd: ()-->(16)
+      ├── select
+      │    ├── columns: b.k:6(int!null) i:7(int) f:8(float) s:9(string!null) j:10(jsonb)
+      │    ├── cardinality: [0 - 0]
+      │    ├── side-effects, mutations
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-10)
+      │    ├── insert b
+      │    │    ├── columns: b.k:6(int!null) i:7(int) f:8(float) s:9(string!null) j:10(jsonb)
+      │    │    ├── insert-mapping:
+      │    │    │    ├──  column1:11 => b.k:6
+      │    │    │    ├──  column2:12 => i:7
+      │    │    │    ├──  column3:13 => f:8
+      │    │    │    ├──  column4:14 => s:9
+      │    │    │    └──  column15:15 => j:10
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── side-effects, mutations
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(6-10)
+      │    │    └── values
+      │    │         ├── columns: column1:11(int) column2:12(int) column3:13(float) column4:14(string) column15:15(jsonb)
+      │    │         ├── cardinality: [1 - 1]
+      │    │         ├── key: ()
+      │    │         ├── fd: ()-->(11-15)
+      │    │         └── (1, 1, 1.0, '', NULL) [type=tuple{int, int, float, string, jsonb}]
+      │    └── filters
+      │         └── false [type=bool]
+      └── projections
+           └── const: 1 [type=int]
+
 opt
 SELECT k FROM
   (SELECT k FROM b WHERE False)

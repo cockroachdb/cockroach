@@ -325,12 +325,13 @@
 =>
 $left
 
+# TODO(justin): figure out if this rule can still trigger.
 # EliminateAntiJoin discards an AntiJoin operator when it's known that the right
 # input never returns any rows.
 [EliminateAntiJoin, Normalize]
 (AntiJoin | AntiJoinApply
     $left:*
-    $right:* & (HasZeroRows $right)
+    $right:(Values [])
 )
 =>
 $left
