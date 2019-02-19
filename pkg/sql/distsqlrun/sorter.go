@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // sorter sorts the input rows according to the specified ordering.
@@ -198,11 +200,16 @@ func newSorter(
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (Processor, error) {
-	count := int64(0)
+	count := uint64(0)
 	if post.Limit != 0 && post.Filter.Empty() {
 		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
 		// will discard the first Offset ones.
-		count = int64(post.Limit) + int64(post.Offset)
+		// LIMIT and OFFSET should each never be greater than math.MaxInt64, the
+		// parser ensures this.
+		if post.Limit > math.MaxInt64 || post.Offset > math.MaxInt64 {
+			return nil, errors.Errorf("error creating sorter: limit %d offset %d too large", post.Limit, post.Offset)
+		}
+		count = post.Limit + post.Offset
 	}
 
 	// Choose the optimal processor.
@@ -348,13 +355,15 @@ func (s *sortAllProcessor) ConsumerClosed() {
 // sorted in linearithmic time.
 type sortTopKProcessor struct {
 	sorterBase
-	k int64
+	k uint64
 }
 
 var _ Processor = &sortTopKProcessor{}
 var _ RowSource = &sortTopKProcessor{}
 
 const sortTopKProcName = "sortTopK"
+
+var errSortTopKZeroK = errors.New("invalid value 0 for k")
 
 func newSortTopKProcessor(
 	flowCtx *FlowCtx,
@@ -363,8 +372,11 @@ func newSortTopKProcessor(
 	input RowSource,
 	post *distsqlpb.PostProcessSpec,
 	out RowReceiver,
-	k int64,
+	k uint64,
 ) (Processor, error) {
+	if k == 0 {
+		return nil, errors.Wrap(errSortTopKZeroK, "error creating top k sorter")
+	}
 	ordering := distsqlpb.ConvertToColumnOrdering(spec.OutputOrdering)
 	proc := &sortTopKProcessor{k: k}
 	if err := proc.sorterBase.init(
@@ -406,7 +418,7 @@ func (s *sortTopKProcessor) Start(ctx context.Context) context.Context {
 			break
 		}
 
-		if int64(s.rows.Len()) < s.k {
+		if uint64(s.rows.Len()) < s.k {
 			// Accumulate up to k values.
 			if err := s.rows.AddRow(ctx, row); err != nil {
 				s.MoveToDraining(err)
