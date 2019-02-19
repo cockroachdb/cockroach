@@ -164,7 +164,7 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		conf.LocalFile.NodeID = roachpb.NodeID(nodeID)
 	case "experimental-workload":
 		conf.Provider = roachpb.ExportStorageProvider_Workload
-		if conf.WorkloadConfig, err = parseWorkloadConfig(uri); err != nil {
+		if conf.WorkloadConfig, err = ParseWorkloadConfig(uri); err != nil {
 			return conf, err
 		}
 	default:
@@ -927,7 +927,8 @@ func (s *azureStorage) Close() error {
 	return nil
 }
 
-func parseWorkloadConfig(uri *url.URL) (*roachpb.ExportStorage_Workload, error) {
+// ParseWorkloadConfig parses a workload config URI to a proto config.
+func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExportStorage_Workload, error) {
 	c := &roachpb.ExportStorage_Workload{}
 	pathParts := strings.Split(strings.Trim(uri.Path, `/`), `/`)
 	if len(pathParts) != 3 {

@@ -18,6 +18,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -56,6 +57,16 @@ func (d *pgCopyReader) start(ctx ctxgroup.Group) {
 
 func (d *pgCopyReader) inputFinished(ctx context.Context) {
 	close(d.conv.kvCh)
+}
+
+func (d *pgCopyReader) readFiles(
+	ctx context.Context,
+	dataFiles map[int32]string,
+	format roachpb.IOFileFormat,
+	progressFn func(float32) error,
+	settings *cluster.Settings,
+) error {
+	return readInputFiles(ctx, dataFiles, format, d.readFile, progressFn, settings)
 }
 
 type postgreStreamCopy struct {

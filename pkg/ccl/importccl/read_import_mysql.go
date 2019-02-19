@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -74,6 +76,16 @@ func (m *mysqldumpReader) start(ctx ctxgroup.Group) {
 
 func (m *mysqldumpReader) inputFinished(ctx context.Context) {
 	close(m.kvCh)
+}
+
+func (m *mysqldumpReader) readFiles(
+	ctx context.Context,
+	dataFiles map[int32]string,
+	format roachpb.IOFileFormat,
+	progressFn func(float32) error,
+	settings *cluster.Settings,
+) error {
+	return readInputFiles(ctx, dataFiles, format, m.readFile, progressFn, settings)
 }
 
 func (m *mysqldumpReader) readFile(

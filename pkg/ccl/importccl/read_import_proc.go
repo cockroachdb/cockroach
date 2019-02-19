@@ -35,12 +35,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
+
+var useWorkloadFastpath = envutil.EnvOrDefaultBool("COCKROACH_IMPORT_WORKLOAD_FASTER", false)
 
 type readFileFunc func(context.Context, io.Reader, int32, string, progressFn) error
 
@@ -367,7 +370,7 @@ type progressFn func(finished bool) error
 
 type inputConverter interface {
 	start(group ctxgroup.Group)
-	readFile(ctx context.Context, input io.Reader, fileIdx int32, filename string, progress progressFn) error
+	readFiles(ctx context.Context, dataFiles map[int32]string, format roachpb.IOFileFormat, progressFn func(float32) error, settings *cluster.Settings) error
 	inputFinished(ctx context.Context)
 }
 
@@ -430,7 +433,18 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	var err error
 	switch cp.spec.Format.Format {
 	case roachpb.IOFileFormat_CSV:
-		conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, cp.flowCtx)
+		isWorkload := useWorkloadFastpath
+		for _, file := range cp.spec.Uri {
+			if conf, err := storageccl.ExportStorageConfFromURI(file); err != nil || conf.Provider != roachpb.ExportStorageProvider_Workload {
+				isWorkload = false
+				break
+			}
+		}
+		if isWorkload {
+			conv, err = newWorkloadReader(kvCh, singleTable, evalCtx)
+		} else {
+			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, cp.flowCtx)
+		}
 	case roachpb.IOFileFormat_MysqlOutfile:
 		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
@@ -471,7 +485,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			})
 		}
 
-		return readInputFiles(ctx, cp.spec.Uri, cp.spec.Format, conv.readFile, progFn, cp.flowCtx.Settings)
+		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Settings)
 	})
 
 	if cp.spec.IngestDirectly {
