@@ -216,6 +216,7 @@ message ForeignKeyReference {
     option (gogoproto.goproto_enum_stringer) = false;
     SIMPLE = 0;
     FULL = 1;
+    // TODO(knz/bram): Update pg_constraint when PARTIAL is supported.
   }
 
   optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
