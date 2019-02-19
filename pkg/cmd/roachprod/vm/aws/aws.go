@@ -534,8 +534,8 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		return errors.Errorf("use the --aws-machine-type-ssd flag to set the " +
 			"machine type when --local-ssd=true")
 	} else if !opts.SSDOpts.UseLocalSSD &&
-		p.opts.MachineType != defaultMachineType &&
-		p.opts.SSDMachineType == defaultSSDMachineType {
+		p.opts.MachineType == defaultMachineType &&
+		p.opts.SSDMachineType != defaultSSDMachineType {
 		return errors.Errorf("use the --aws-machine-type flag to set the " +
 			"machine type when --local-ssd=false")
 	}
