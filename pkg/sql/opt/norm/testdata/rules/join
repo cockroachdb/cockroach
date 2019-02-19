@@ -1829,17 +1829,6 @@ right-join
       └── k = x [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
 
 # --------------------------------------------------
-# EliminateSemiJoin
-# --------------------------------------------------
-opt expect=EliminateSemiJoin
-SELECT * FROM a WHERE EXISTS(SELECT count(*) FROM b WHERE x=k)
-----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
- ├── key: (1)
- └── fd: (1)-->(2-5)
-
-# --------------------------------------------------
 # EliminateAntiJoin
 # --------------------------------------------------
 # TODO(justin): figure out if there's a good way to make this still apply.

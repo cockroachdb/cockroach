@@ -314,6 +314,7 @@
     $private
 )
 
+# TODO(justin): figure out if this rule can still trigger.
 # EliminateSemiJoin discards a SemiJoin operator when it's known that the right
 # input never returns zero rows, and there is no join condition.
 [EliminateSemiJoin, Normalize]

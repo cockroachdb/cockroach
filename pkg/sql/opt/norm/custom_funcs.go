@@ -256,6 +256,12 @@ func (c *CustomFuncs) HasNoCols(input memo.RelExpr) bool {
 	return input.Relational().OutputCols.Empty()
 }
 
+// CanHaveSide effects returns true if the input expression can have
+// side effects.
+func (c *CustomFuncs) CanHaveSideEffects(input memo.RelExpr) bool {
+	return input.Relational().CanHaveSideEffects
+}
+
 // HasZeroRows returns true if the input expression never returns any rows.
 func (c *CustomFuncs) HasZeroRows(input memo.RelExpr) bool {
 	return input.Relational().Cardinality.IsZero()

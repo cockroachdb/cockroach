@@ -358,6 +358,83 @@ project
       └── s NOT IN ('foo', s || 'foo', 'bar', length(s)::STRING, NULL) [type=bool, outer=(4)]
 
 # --------------------------------------------------
+# FoldExistsEmpty
+# --------------------------------------------------
+opt expect=FoldExistsEmpty
+SELECT * FROM a WHERE EXISTS(SELECT * FROM a WHERE false)
+----
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-6)
+
+opt expect-not=FoldExistsEmpty
+SELECT * FROM a WHERE EXISTS(SELECT * FROM a)
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      └── exists [type=bool]
+           └── scan a
+                ├── columns: k:7(int!null) i:8(int) f:9(float) s:10(string) j:11(jsonb) arr:12(int[])
+                ├── limit: 1
+                ├── key: ()
+                └── fd: ()-->(7-12)
+
+# --------------------------------------------------
+# FoldExistsNonempty
+# --------------------------------------------------
+opt expect=FoldExistsNonempty
+SELECT * FROM a WHERE EXISTS(VALUES (1))
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── key: (1)
+ └── fd: (1)-->(2-6)
+
+opt expect-not=FoldExistsNonempty
+SELECT * FROM a WHERE EXISTS(SELECT * FROM [INSERT INTO a VALUES (1) RETURNING 1])
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── side-effects, mutations
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      └── exists [type=bool, side-effects]
+           └── insert a
+                ├── columns: k:7(int!null) i:8(int) f:9(float) s:10(string) j:11(jsonb) arr:12(int[])
+                ├── insert-mapping:
+                │    ├──  column1:13 => k:7
+                │    ├──  column14:14 => i:8
+                │    ├──  column15:15 => f:9
+                │    ├──  column16:16 => s:10
+                │    ├──  column17:17 => j:11
+                │    └──  column18:18 => arr:12
+                ├── cardinality: [1 - 1]
+                ├── side-effects, mutations
+                ├── key: ()
+                ├── fd: ()-->(7-12)
+                └── values
+                     ├── columns: column1:13(int) column14:14(int) column15:15(float) column16:16(string) column17:17(jsonb) column18:18(int[])
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(13-18)
+                     └── (1, NULL, NULL, NULL, NULL, NULL) [type=tuple{int, int, float, string, jsonb, int[]}]
+
+
+# --------------------------------------------------
 # EliminateExistsProject
 # --------------------------------------------------
 opt expect=EliminateExistsProject
@@ -384,7 +461,7 @@ select
 # --------------------------------------------------
 
 # Scalar group by shouldn't get eliminated.
-opt expect-not=EliminateExistsGroupBy
+opt expect-not=EliminateExistsGroupBy disable=FoldExistsNonempty
 SELECT * FROM a WHERE EXISTS(SELECT max(s) FROM a WHERE False)
 ----
 select

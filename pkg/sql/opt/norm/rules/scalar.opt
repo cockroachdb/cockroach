@@ -153,6 +153,16 @@
     $result
 )
 
+# FoldExistsEmpty discards an EXISTS operator whose input is known to have
+# zero rows.
+[FoldExistsEmpty, Normalize]
+(Exists (Values [])) => (False)
+
+# FoldExistsNonempty discards an EXISTS operator whose input is known to have
+# at least one row and no side-effects.
+[FoldExistsNonempty, Normalize]
+(Exists $input:* & ^(CanHaveZeroRows $input) & ^(CanHaveSideEffects $input)) => (True)
+
 # EliminateExistsProject discards a Project input to the Exists operator. The
 # Project operator never changes the row cardinality of its input, and row
 # cardinality is the only thing that Exists cares about, so Project is a no-op.
