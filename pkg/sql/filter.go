@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // filterNode implements a filtering stage. It is intended to be used
@@ -56,26 +55,13 @@ func (f *filterNode) startExec(runParams) error {
 
 // Next implements the planNode interface.
 func (f *filterNode) Next(params runParams) (bool, error) {
-	for {
-		if next, err := f.source.plan.Next(params); !next {
-			return false, err
-		}
-
-		params.extendedEvalCtx.PushIVarContainer(f)
-		passesFilter, err := sqlbase.RunFilter(f.filter, params.EvalContext())
-		params.extendedEvalCtx.PopIVarContainer()
-		if err != nil {
-			return false, err
-		}
-
-		if passesFilter {
-			return true, nil
-		}
-		// Row was filtered out; grab the next row.
-	}
+	panic("filterNode cannot be run in local mode")
 }
 
-func (f *filterNode) Values() tree.Datums       { return f.source.plan.Values() }
+func (f *filterNode) Values() tree.Datums {
+	panic("filterNode cannot be run in local mode")
+}
+
 func (f *filterNode) Close(ctx context.Context) { f.source.plan.Close(ctx) }
 
 func (f *filterNode) computePhysicalProps(evalCtx *tree.EvalContext) {

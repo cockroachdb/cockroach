@@ -223,7 +223,7 @@ func (r *Refresher) ensureAllTables(ctx context.Context, settings *settings.Valu
 		return
 	}
 
-	rows, _ /* columns */, err := r.ex.Query(
+	rows, err := r.ex.Query(
 		ctx,
 		"get-tables",
 		nil, /* txn */

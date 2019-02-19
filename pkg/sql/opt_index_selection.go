@@ -229,7 +229,7 @@ func (p *planner) selectIndex(
 	c := candidates[0]
 	s.index = c.index
 	s.specifiedIndex = nil
-	s.run.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
+	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 
 	constraint := c.ic.Constraint()
 

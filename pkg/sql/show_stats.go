@@ -65,7 +65,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			//  - convert column IDs to column names
 			//  - if the statistic has a histogram, we return the statistic ID as a
 			//    "handle" which can be used with SHOW HISTOGRAM.
-			rows, _ /* cols */, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
 				ctx,
 				"read-table-stats",
 				p.txn,

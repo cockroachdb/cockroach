@@ -47,6 +47,15 @@ type InternalExecutor interface {
 	// If txn is not nil, the statement will be executed in the respective txn.
 	Query(
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+	) ([]tree.Datums, error)
+
+	// QueryWithCols executes the supplied SQL statement and returns the resulting
+	// rows and their column types.
+	// The statement is executed as the root user.
+	//
+	// If txn is not nil, the statement will be executed in the respective txn.
+	QueryWithCols(
+		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 	) ([]tree.Datums, sqlbase.ResultColumns, error)
 
 	// QueryRow is like Query, except it returns a single row, or nil if not row is

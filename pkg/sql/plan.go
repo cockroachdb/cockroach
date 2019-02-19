@@ -426,14 +426,6 @@ func (p *planTop) close(ctx context.Context) {
 	}
 }
 
-// start starts the plan.
-func (p *planTop) start(params runParams) error {
-	if err := p.evalSubqueries(params); err != nil {
-		return err
-	}
-	return startPlan(params, p.plan)
-}
-
 // columns retrieves the plan's columns.
 func (p *planTop) columns() sqlbase.ResultColumns {
 	return planColumns(p.plan)
@@ -453,20 +445,6 @@ func (p *planTop) collectSpans(params runParams) (readSpans, writeSpans roachpb.
 		writeSpans = append(writeSpans, writes...)
 	}
 	return readSpans, writeSpans, nil
-}
-
-// startPlan starts the given plan and all its sub-query nodes.
-func startPlan(params runParams, plan planNode) error {
-	// Now start execution.
-	if err := startExec(params, plan); err != nil {
-		return err
-	}
-
-	// Finally, trigger limit propagation through the plan.  The actual
-	// LIMIT values will have been evaluated by startExec().
-	params.p.setUnlimited(plan)
-
-	return nil
 }
 
 // autoCommitNode is implemented by planNodes that might be able to commit the

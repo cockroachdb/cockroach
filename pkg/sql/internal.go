@@ -230,6 +230,19 @@ func (ie *internalExecutorImpl) initConnEx(
 // If txn is not nil, the statement will be executed in the respective txn.
 func (ie *InternalExecutor) Query(
 	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+) ([]tree.Datums, error) {
+	datums, _, err := ie.queryInternal(
+		ctx, opName, txn,
+		internalExecRootSession,
+		SessionArgs{},
+		stmt, qargs...)
+	return datums, err
+}
+
+// QueryWithCols is like Query, but it also returns the computed ResultColumns
+// of the input query.
+func (ie *InternalExecutor) QueryWithCols(
+	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, sqlbase.ResultColumns, error) {
 	return ie.queryInternal(
 		ctx, opName, txn,
@@ -273,7 +286,7 @@ func (ie *InternalExecutor) QueryWithUser(
 func (ie *InternalExecutor) QueryRow(
 	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
 ) (tree.Datums, error) {
-	rows, _, err := ie.Query(ctx, opName, txn, stmt, qargs...)
+	rows, err := ie.Query(ctx, opName, txn, stmt, qargs...)
 	if err != nil {
 		return nil, err
 	}
@@ -328,6 +341,19 @@ func (ie *InternalExecutor) ExecWithUser(
 //
 // If txn is not nil, the statement will be executed in the respective txn.
 func (ie *SessionBoundInternalExecutor) Query(
+	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+) ([]tree.Datums, error) {
+	rows, _, err := ie.impl.queryInternal(
+		ctx, opName, txn,
+		internalExecInheritSession,
+		SessionArgs{},
+		stmt, qargs...)
+	return rows, err
+}
+
+// QueryWithCols is like Query, but it also returns the computed ResultColumns
+// of the input query.
+func (ie *SessionBoundInternalExecutor) QueryWithCols(
 	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, sqlbase.ResultColumns, error) {
 	return ie.impl.queryInternal(

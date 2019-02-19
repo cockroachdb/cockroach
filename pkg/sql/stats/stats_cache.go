@@ -297,7 +297,7 @@ FROM system.table_statistics
 WHERE "tableID" = $1
 ORDER BY "createdAt" DESC
 `
-	rows, _ /* cols */, err := sc.SQLExecutor.Query(
+	rows, err := sc.SQLExecutor.Query(
 		ctx, "get-table-statistics", nil /* txn */, getTableStatisticsStmt, tableID,
 	)
 	if err != nil {

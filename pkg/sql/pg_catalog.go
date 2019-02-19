@@ -991,7 +991,7 @@ CREATE TABLE pg_catalog.pg_description (
 		p *planner,
 		dbContext *DatabaseDescriptor,
 		addRow func(...tree.Datum) error) error {
-		comments, _, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+		comments, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
 			ctx,
 			"select-comments",
 			p.EvalContext().Txn,

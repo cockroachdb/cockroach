@@ -65,8 +65,7 @@ import (
 type unionNode struct {
 	// right and left are the data source operands.
 	// right is read first, to populate the `emit` field.
-	right, left             planNode
-	rightClosed, leftClosed bool
+	right, left planNode
 
 	// columns contains the metadata for the results of this node.
 	columns sqlbase.ResultColumns
@@ -76,16 +75,11 @@ type unionNode struct {
 	// emitAll is a performance optimization for UNION ALL. When set
 	// the union logic avoids the `emit` logic entirely.
 	emitAll bool
-	// emit contains the rows seen on the right so far and performs the
-	// selection/filtering logic.
-	emit unionNodeEmit
 
 	// unionType is the type of operation (UNION, INTERSECT, EXCEPT)
 	unionType tree.UnionType
 	// all indicates if the operation is the ALL or DISTINCT version
 	all bool
-
-	run unionRun
 }
 
 // Union constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
@@ -107,27 +101,14 @@ func (p *planner) Union(
 func (p *planner) newUnionNode(
 	typ tree.UnionType, all bool, left, right planNode,
 ) (planNode, error) {
-	var emitAll = false
-	var emit unionNodeEmit
+	emitAll := false
 	switch typ {
 	case tree.UnionOp:
 		if all {
 			emitAll = true
-		} else {
-			emit = make(unionNodeEmitDistinct)
 		}
 	case tree.IntersectOp:
-		if all {
-			emit = make(intersectNodeEmitAll)
-		} else {
-			emit = make(intersectNodeEmitDistinct)
-		}
 	case tree.ExceptOp:
-		if all {
-			emit = make(exceptNodeEmitAll)
-		} else {
-			emit = make(exceptNodeEmitDistinct)
-		}
 	default:
 		return nil, errors.Errorf("%v is not supported", typ)
 	}
@@ -177,179 +158,25 @@ func (p *planner) newUnionNode(
 		columns:   unionColumns,
 		inverted:  inverted,
 		emitAll:   emitAll,
-		emit:      emit,
 		unionType: typ,
 		all:       all,
 	}
 	return node, nil
 }
 
-// unionRun contains the run-time state of unionNode during local execution.
-type unionRun struct {
-	// scratch is a preallocated buffer for formatting the key of the
-	// current row on the right.
-	scratch []byte
-}
-
 func (n *unionNode) startExec(params runParams) error {
-	n.run.scratch = make([]byte, 0)
-	return nil
+	panic("unionNode cannot be run in local mode")
 }
 
 func (n *unionNode) Next(params runParams) (bool, error) {
-	if err := params.p.cancelChecker.Check(); err != nil {
-		return false, err
-	}
-	if !n.rightClosed {
-		return n.readRight(params)
-	}
-	if !n.leftClosed {
-		return n.readLeft(params)
-	}
-	return false, nil
+	panic("unionNode cannot be run in local mode")
 }
 
 func (n *unionNode) Values() tree.Datums {
-	if !n.rightClosed {
-		return n.right.Values()
-	}
-	if !n.leftClosed {
-		return n.left.Values()
-	}
-	return nil
+	panic("unionNode cannot be run in local mode")
 }
 
 func (n *unionNode) Close(ctx context.Context) {
 	n.right.Close(ctx)
 	n.left.Close(ctx)
-}
-
-func (n *unionNode) readRight(params runParams) (bool, error) {
-	next, err := n.right.Next(params)
-	for ; next; next, err = n.right.Next(params) {
-		if n.emitAll {
-			return true, nil
-		}
-		n.run.scratch = n.run.scratch[:0]
-		if n.run.scratch, err = sqlbase.EncodeDatumsKeyAscending(
-			n.run.scratch, n.right.Values()); err != nil {
-			return false, err
-		}
-		// TODO(dan): Sending the entire encodeDTuple to be stored in the map would
-		// use a lot of memory for big rows or big resultsets. Consider using a hash
-		// of the bytes instead.
-		if n.emit.emitRight(n.run.scratch) {
-			return true, nil
-		}
-	}
-	if err != nil {
-		return false, err
-	}
-
-	n.rightClosed = true
-	return n.readLeft(params)
-}
-
-func (n *unionNode) readLeft(params runParams) (bool, error) {
-	next, err := n.left.Next(params)
-	for ; next; next, err = n.left.Next(params) {
-		if n.emitAll {
-			return true, nil
-		}
-		n.run.scratch = n.run.scratch[:0]
-		if n.run.scratch, err = sqlbase.EncodeDatumsKeyAscending(
-			n.run.scratch, n.left.Values()); err != nil {
-			return false, err
-		}
-		if n.emit.emitLeft(n.run.scratch) {
-			return true, nil
-		}
-	}
-	if err != nil {
-		return false, err
-	}
-
-	n.leftClosed = true
-	return false, nil
-}
-
-// unionNodeEmit represents the emitter logic for one of the six combinations of
-// UNION/INTERSECT/EXCEPT and ALL/DISTINCT. As right and then left are iterated,
-// state is kept and used to compute the set operation as well as distinctness.
-type unionNodeEmit interface {
-	emitRight([]byte) bool
-	emitLeft([]byte) bool
-}
-
-type unionNodeEmitDistinct map[string]int
-type intersectNodeEmitAll map[string]int
-type intersectNodeEmitDistinct map[string]int
-type exceptNodeEmitAll map[string]int
-type exceptNodeEmitDistinct map[string]int
-
-// NB: the compiler optimizes out the string allocation in
-// `myMap[string(myBytes)]`. See:
-// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
-func (e unionNodeEmitDistinct) emitRight(b []byte) bool {
-	_, ok := e[string(b)]
-	e[string(b)] = 1
-	return !ok
-}
-
-func (e unionNodeEmitDistinct) emitLeft(b []byte) bool {
-	_, ok := e[string(b)]
-	e[string(b)] = 1
-	return !ok
-}
-
-func (e intersectNodeEmitAll) emitRight(b []byte) bool {
-	e[string(b)]++
-	return false
-}
-
-func (e intersectNodeEmitAll) emitLeft(b []byte) bool {
-	if v, ok := e[string(b)]; ok && v > 0 {
-		e[string(b)]--
-		return true
-	}
-	return false
-}
-
-func (e intersectNodeEmitDistinct) emitRight(b []byte) bool {
-	e[string(b)]++
-	return false
-}
-
-func (e intersectNodeEmitDistinct) emitLeft(b []byte) bool {
-	if v, ok := e[string(b)]; ok && v > 0 {
-		e[string(b)] = 0
-		return true
-	}
-	return false
-}
-
-func (e exceptNodeEmitAll) emitRight(b []byte) bool {
-	e[string(b)]++
-	return false
-}
-
-func (e exceptNodeEmitAll) emitLeft(b []byte) bool {
-	if v, ok := e[string(b)]; ok && v > 0 {
-		e[string(b)]--
-		return false
-	}
-	return true
-}
-
-func (e exceptNodeEmitDistinct) emitRight(b []byte) bool {
-	e[string(b)]++
-	return false
-}
-
-func (e exceptNodeEmitDistinct) emitLeft(b []byte) bool {
-	if _, ok := e[string(b)]; !ok {
-		e[string(b)] = 0
-		return true
-	}
-	return false
 }

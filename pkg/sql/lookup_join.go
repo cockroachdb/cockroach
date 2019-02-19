@@ -17,7 +17,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -43,130 +42,21 @@ type lookupJoinNode struct {
 	onCond tree.TypedExpr
 
 	props physicalProps
-
-	run lookupJoinRun
-}
-
-// lookupJoinRun is the state for the local execution path for lookup join.
-//
-// We have no local execution path; we fall back on doing a full table scan and
-// using the joinNode to do the join. Note that this can be significantly worse
-// than not having lookup joins at all, because no filters are being pushed into
-// the scan as constraints.
-//
-// This path is temporary and only exists to avoid failures (especially in logic
-// tests) when DistSQL is not being used.
-type lookupJoinRun struct {
-	n *joinNode
 }
 
 func (lj *lookupJoinNode) startExec(params runParams) error {
-	// Make sure the table node has a span (full scan).
-	var err error
-	lj.table.spans, err = spansFromConstraint(
-		lj.table.desc, lj.table.index, nil /* constraint */, exec.ColumnOrdinalSet{},
-		false /* forDelete */)
-	if err != nil {
-		return err
-	}
-
-	// Create a joinNode that joins the input and the table. Note that startExec
-	// will be called on lj.input and lj.table.
-
-	leftSrc := planDataSource{
-		info: &sqlbase.DataSourceInfo{SourceColumns: planColumns(lj.input)},
-		plan: lj.input,
-	}
-
-	indexColIDs := lj.table.index.ColumnIDs
-	if !lj.table.index.Unique {
-		// Add implicit key columns.
-		indexColIDs = append(indexColIDs, lj.table.index.ExtraColumnIDs...)
-	}
-
-	// The lookup side may not output all the index columns on which we are doing
-	// the lookup. We need them to be produced so that we can refer to them in the
-	// join predicate. So we find any such instances and adjust the scan node
-	// accordingly.
-	for i := range lj.keyCols {
-		colID := indexColIDs[i]
-		if _, ok := lj.table.colIdxMap[colID]; !ok {
-			// Tricky case: the lookup join doesn't output this column so we can't
-			// refer to it; we have to add it.
-			n := lj.table
-			colPos := len(n.cols)
-			var colDesc *sqlbase.ColumnDescriptor
-			for i := range n.desc.Columns {
-				if n.desc.Columns[i].ID == colID {
-					colDesc = &n.desc.Columns[i]
-					break
-				}
-			}
-			n.cols = append(n.cols, *colDesc)
-			n.resultColumns = append(
-				n.resultColumns,
-				leftSrc.info.SourceColumns[lj.keyCols[i]],
-			)
-			n.colIdxMap[colID] = colPos
-			n.valNeededForCol.Add(colPos)
-			n.run.row = make([]tree.Datum, len(n.cols))
-			n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
-			// startExec was already called for the node, run it again.
-			if err := n.startExec(params); err != nil {
-				return err
-			}
-		}
-	}
-
-	if err := lj.table.startExec(params); err != nil {
-		return err
-	}
-
-	rightSrc := planDataSource{
-		info: &sqlbase.DataSourceInfo{SourceColumns: planColumns(lj.table)},
-		plan: lj.table,
-	}
-
-	pred, _, err := params.p.makeJoinPredicate(
-		context.TODO(), leftSrc.info, rightSrc.info, lj.joinType, nil, /* cond */
-	)
-	if err != nil {
-		return err
-	}
-
-	// Program the equalities implied by keyCols.
-	for i := range lj.keyCols {
-		colID := indexColIDs[i]
-		pred.addEquality(leftSrc.info, lj.keyCols[i], rightSrc.info, lj.table.colIdxMap[colID])
-	}
-
-	onAndExprs := splitAndExpr(params.EvalContext(), lj.onCond, nil /* exprs */)
-	for _, e := range onAndExprs {
-		if e != tree.DBoolTrue && !pred.tryAddEqualityFilter(e, leftSrc.info, rightSrc.info) {
-			pred.onCond = mergeConj(pred.onCond, e)
-		}
-	}
-	lj.run.n = params.p.makeJoinNode(leftSrc, rightSrc, pred)
-	if err := lj.run.n.startExec(params); err != nil {
-		return err
-	}
-	return lj.table.startExec(params)
+	panic("lookupJoinNode cannot be run in local mode")
 }
 
 func (lj *lookupJoinNode) Next(params runParams) (bool, error) {
-	return lj.run.n.Next(params)
+	panic("lookupJoinNode cannot be run in local mode")
 }
 
 func (lj *lookupJoinNode) Values() tree.Datums {
-	// Chop off any values we may have tacked onto the table scanNode.
-	return lj.run.n.Values()[:len(lj.columns)]
+	panic("lookupJoinNode cannot be run in local mode")
 }
 
 func (lj *lookupJoinNode) Close(ctx context.Context) {
-	if lj.run.n != nil {
-		lj.run.n.Close(ctx)
-	} else {
-		lj.input.Close(ctx)
-		lj.table.Close(ctx)
-	}
+	lj.input.Close(ctx)
+	lj.table.Close(ctx)
 }

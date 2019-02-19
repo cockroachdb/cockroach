@@ -60,8 +60,6 @@ type groupNode struct {
 	funcs []*aggregateFuncHolder
 
 	props physicalProps
-
-	run groupRun
 }
 
 // groupBy constructs a planNode "complex" consisting of a groupNode and other
@@ -308,184 +306,22 @@ func (p *planner) groupBy(
 	return plan, group, nil
 }
 
-// groupRun contains the run-time state for groupNode during local execution.
-type groupRun struct {
-	// The set of bucket keys. We add buckets as we are processing input rows, and
-	// we remove them as we are outputting results.
-	buckets     map[string]struct{}
-	populated   bool
-	sourceEmpty bool
-
-	lastOrderedGroupKey tree.Datums
-	consumedGroupKey    bool
-
-	// The current result row.
-	values tree.Datums
-
-	// gotOneRow becomes true after one result row has been produced.
-	// Used in conjunction with needOnlyOneRow.
-	gotOneRow bool
-
-	scratch []byte
-}
-
-// matchLastGroupKey takes a row and matches it with the row stored by
-// lastOrderedGroupKey. It returns true if the two rows are equal on the
-// grouping columns, and false otherwise.
-func (n *groupNode) matchLastGroupKey(ctx *tree.EvalContext, row tree.Datums) bool {
-	for _, i := range n.orderedGroupCols {
-		if n.run.lastOrderedGroupKey[i].Compare(ctx, row[i]) != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// accumulateRow takes a row and accumulates it into all the aggregate
-// functions.
-func (n *groupNode) accumulateRow(params runParams, values tree.Datums) error {
-	bucket := n.run.scratch
-	for _, idx := range n.groupCols {
-		var err error
-		bucket, err = sqlbase.EncodeDatumKeyAscending(bucket, values[idx])
-		if err != nil {
-			return err
-		}
-	}
-
-	n.run.buckets[string(bucket)] = struct{}{}
-
-	// Feed the aggregateFuncHolders for this bucket the non-grouped values.
-	for _, f := range n.funcs {
-		if f.hasFilter() && values[f.filterRenderIdx] != tree.DBoolTrue {
-			continue
-		}
-
-		var value tree.Datum
-		if f.argRenderIdx != noRenderIdx {
-			value = values[f.argRenderIdx]
-		}
-
-		if err := f.add(params.ctx, params.EvalContext(), bucket, value); err != nil {
-			return err
-		}
-	}
-
-	n.run.scratch = bucket[:0]
-	n.run.gotOneRow = true
-
-	return nil
-}
-
 func (n *groupNode) startExec(params runParams) error {
-	// TODO(peter): This memory isn't being accounted for. The similar code in
-	// sql/distsqlrun/aggregator.go does account for the memory.
-	n.run.buckets = make(map[string]struct{})
-	return nil
+	panic("groupNode cannot be run in local mode")
 }
 
 func (n *groupNode) Next(params runParams) (bool, error) {
-	// We're going to accumulate rows from n.plan until it's either exhausted or
-	// the ordered group columns change. Subsequent calls to Next will return the
-	// result of each bucket, then continue accumulating n.plan when there are no
-	// more buckets.
-	for (!n.run.populated || len(n.run.buckets) == 0) && !n.run.sourceEmpty {
-		// We've finished consuming the old buckets.
-		n.run.populated = false
-
-		if !n.run.consumedGroupKey && n.run.lastOrderedGroupKey != nil {
-			if err := n.accumulateRow(params, n.run.lastOrderedGroupKey); err != nil {
-				return false, err
-			}
-			n.run.consumedGroupKey = true
-		}
-
-		next := false
-		if err := params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-		if !(n.needOnlyOneRow && n.run.gotOneRow) {
-			var err error
-			next, err = n.plan.Next(params)
-			if err != nil {
-				return false, err
-			}
-		}
-		if !next {
-			n.run.sourceEmpty = true
-			n.setupOutput()
-			break
-		}
-
-		values := n.plan.Values()
-		if n.run.lastOrderedGroupKey == nil {
-			n.run.lastOrderedGroupKey = make(tree.Datums, len(values))
-			copy(n.run.lastOrderedGroupKey, values)
-			n.run.consumedGroupKey = true
-		}
-		if !n.matchLastGroupKey(params.EvalContext(), values) {
-			copy(n.run.lastOrderedGroupKey, values)
-			n.run.consumedGroupKey = false
-			n.run.populated = true
-			n.setupOutput()
-			break
-		}
-
-		// Add row to bucket.
-		if err := n.accumulateRow(params, values); err != nil {
-			return false, err
-		}
-	}
-
-	if len(n.run.buckets) == 0 {
-		return false, nil
-	}
-	var bucket string
-	// Pick an arbitrary bucket.
-	for bucket = range n.run.buckets {
-		break
-	}
-	// TODO(peter): Deleting from the n.run.buckets is fairly slow. The similar
-	// code in distsqlrun.aggregator performs a single step of copying all of the
-	// buckets to a slice and then releasing the buckets map.
-	delete(n.run.buckets, bucket)
-	for i, f := range n.funcs {
-		aggregateFunc, ok := f.run.buckets[bucket]
-		if !ok {
-			// No input for this bucket (possible if f has a FILTER).
-			// In most cases the result is NULL but there are exceptions
-			// (like COUNT).
-			aggregateFunc = f.create(params.EvalContext(), nil /* arguments */)
-		}
-		var err error
-		n.run.values[i], err = aggregateFunc.Result()
-		if err != nil {
-			return false, err
-		}
-	}
-	return true, nil
+	panic("groupNode cannot be run in local mode")
 }
 
 func (n *groupNode) Values() tree.Datums {
-	return n.run.values
+	panic("groupNode cannot be run in local mode")
 }
 
 func (n *groupNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 	for _, f := range n.funcs {
 		f.close(ctx)
-	}
-	n.run.buckets = nil
-}
-
-// setupOutput runs once after all the input rows have been processed. It sets
-// up the necessary state to start iterating through the buckets in Next().
-func (n *groupNode) setupOutput() {
-	if len(n.run.buckets) < 1 && n.isScalar {
-		n.run.buckets[""] = struct{}{}
-	}
-	if n.run.values == nil {
-		n.run.values = make(tree.Datums, len(n.funcs))
 	}
 }
 
@@ -851,36 +687,4 @@ func (a *aggregateFuncHolder) close(ctx context.Context) {
 	a.run.seen = nil
 
 	a.run.bucketsMemAcc.Close(ctx)
-}
-
-// add accumulates one more value for a particular bucket into an aggregation
-// function.
-func (a *aggregateFuncHolder) add(
-	ctx context.Context, evalCtx *tree.EvalContext, bucket []byte, d tree.Datum,
-) error {
-	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
-	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
-
-	if a.run.seen != nil {
-		encoded, err := sqlbase.EncodeDatumKeyAscending(bucket, d)
-		if err != nil {
-			return err
-		}
-		if _, ok := a.run.seen[string(encoded)]; ok {
-			// skip
-			return nil
-		}
-		if err := a.run.bucketsMemAcc.Grow(ctx, int64(len(encoded))); err != nil {
-			return err
-		}
-		a.run.seen[string(encoded)] = struct{}{}
-	}
-
-	impl, ok := a.run.buckets[string(bucket)]
-	if !ok {
-		impl = a.create(evalCtx, a.arguments)
-		a.run.buckets[string(bucket)] = impl
-	}
-
-	return impl.Add(ctx, d)
 }

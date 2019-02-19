@@ -266,23 +266,6 @@ func (p *joinPredicate) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return p.rightInfo.NodeFormatter(idx - p.numLeftCols)
 }
 
-// eval for joinPredicate runs the on condition across the columns that do
-// not participate in the equality (the equality columns are checked
-// in the join algorithm already).
-// Returns true if there is no on condition or the on condition accepts the
-// row.
-func (p *joinPredicate) eval(ctx *tree.EvalContext, leftRow, rightRow tree.Datums) (bool, error) {
-	if p.onCond != nil {
-		copy(p.curRow[:len(leftRow)], leftRow)
-		copy(p.curRow[len(leftRow):], rightRow)
-		ctx.PushIVarContainer(p.iVarHelper.Container())
-		pred, err := sqlbase.RunFilter(p.onCond, ctx)
-		ctx.PopIVarContainer()
-		return pred, err
-	}
-	return true, nil
-}
-
 // getNeededColumns figures out the columns needed for the two
 // sources.  This takes into account both the equality columns and the
 // predicate expression.
@@ -307,30 +290,6 @@ func (p *joinPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
 		rightNeeded[p.rightEqualityIndices[i]] = true
 	}
 	return leftNeeded, rightNeeded
-}
-
-// prepareRow prepares the output row by combining values from the
-// input data sources.
-func (p *joinPredicate) prepareRow(result, leftRow, rightRow tree.Datums) {
-	copy(result[:len(leftRow)], leftRow)
-	copy(result[len(leftRow):], rightRow)
-}
-
-// encode returns the encoding of a row from a given side (left or right),
-// according to the columns specified by the equality constraints.
-func (p *joinPredicate) encode(b []byte, row tree.Datums, cols []int) ([]byte, bool, error) {
-	var err error
-	containsNull := false
-	for _, colIdx := range cols {
-		if row[colIdx] == tree.DNull {
-			containsNull = true
-		}
-		b, err = sqlbase.EncodeDatumKeyAscending(b, row[colIdx])
-		if err != nil {
-			return nil, false, err
-		}
-	}
-	return b, containsNull, nil
 }
 
 // usingColumns captures the information about equality columns

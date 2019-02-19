@@ -862,7 +862,7 @@ func initTableReaderSpec(
 	*s = distsqlpb.TableReaderSpec{
 		Table:      *n.desc.TableDesc(),
 		Reverse:    n.reverse,
-		IsCheck:    n.run.isCheck,
+		IsCheck:    n.isCheck,
 		Visibility: n.colCfg.visibility.toDistSQLScanVisibility(),
 
 		// Retain the capacity of the spans slice.
@@ -877,7 +877,7 @@ func initTableReaderSpec(
 	// When a TableReader is running scrub checks, do not allow a
 	// post-processor. This is because the outgoing stream is a fixed
 	// format (distsqlrun.ScrubTypes).
-	if n.run.isCheck {
+	if n.isCheck {
 		return s, distsqlpb.PostProcessSpec{}, nil
 	}
 
@@ -2446,12 +2446,6 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 			case *explainDistSQLNode, *explainPlanNode:
 				// Don't continue recursing into explain nodes - they need to be left
 				// alone since they handle their own planning later.
-				return false, nil
-			case *deleteNode:
-				// DeleteNode currently uses its scanNode directly, if it exists. This
-				// is a bit tough to fix, so for now, don't try to recurse through
-				// deleteNodes.
-				// TODO(jordan): fix deleteNode to stop doing that.
 				return false, nil
 			}
 			if !seenTop {
