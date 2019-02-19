@@ -252,9 +252,9 @@ func (f *Factory) onConstructRelational(rel memo.RelExpr) memo.RelExpr {
 	// SimplifyZeroCardinalityGroup replaces a group with [0 - 0] cardinality
 	// with an empty values expression. It is placed here because it depends on
 	// the logical properties of the group in question.
-	if rel.Op() != opt.ValuesOp {
+	if rel.Op() != opt.ValuesOp && !opt.IsMutationOp(rel) {
 		relational := rel.Relational()
-		if relational.Cardinality.IsZero() && !relational.CanHaveSideEffects {
+		if relational.Cardinality.IsZero() {
 			if f.matchedRule == nil || f.matchedRule(opt.SimplifyZeroCardinalityGroup) {
 				values := f.funcs.ConstructEmptyValues(relational.OutputCols)
 				if f.appliedRule != nil {

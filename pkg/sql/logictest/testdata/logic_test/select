@@ -239,9 +239,6 @@ SELECT * FROM xyzw ORDER BY 1 LIMIT '1'
 query error argument of OFFSET must be type int, not type decimal
 SELECT * FROM xyzw OFFSET 1.5
 
-query error negative value for LIMIT
-SELECT * FROM xyzw LIMIT -100
-
 query error negative value for OFFSET
 SELECT * FROM xyzw OFFSET -100
 
