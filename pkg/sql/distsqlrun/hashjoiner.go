@@ -642,6 +642,49 @@ func (h *hashJoiner) receiveNext(
 		} else if row == nil {
 			return nil, nil, false, nil
 		}
+		// We make the explicit check for whether or not the row contained a NULL value
+		// on an equality column. The reasoning here is because of the way we expect
+		// NULL equality checks to behave (i.e. NULL != NULL) and the fact that we
+		// use the encoding of any given row as key into our bucket. Thus if we
+		// encountered a NULL row when building the hashmap we have to store in
+		// order to use it for RIGHT OUTER joins but if we encounter another
+		// NULL row when going through the left stream (probing phase), matching
+		// this with the first NULL row would be incorrect.
+		//
+		// If we have have the following:
+		// CREATE TABLE t(x INT); INSERT INTO t(x) VALUES (NULL);
+		//    |  x   |
+		//     ------
+		//    | NULL |
+		//
+		// For the following query:
+		// SELECT * FROM t AS a FULL OUTER JOIN t AS b USING(x);
+		//
+		// We expect:
+		//    |  x   |
+		//     ------
+		//    | NULL |
+		//    | NULL |
+		//
+		// The following examples illustrates the behavior when joining on two
+		// or more columns, and only one of them contains NULL.
+		// If we have have the following:
+		// CREATE TABLE t(x INT, y INT);
+		// INSERT INTO t(x, y) VALUES (44,51), (NULL,52);
+		//    |  x   |  y   |
+		//     ------
+		//    |  44  |  51  |
+		//    | NULL |  52  |
+		//
+		// For the following query:
+		// SELECT * FROM t AS a FULL OUTER JOIN t AS b USING(x, y);
+		//
+		// We expect:
+		//    |  x   |  y   |
+		//     ------
+		//    |  44  |  51  |
+		//    | NULL |  52  |
+		//    | NULL |  52  |
 		hasNull := false
 		for _, c := range h.eqCols[side] {
 			if row[c].IsNull() {

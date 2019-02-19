@@ -322,7 +322,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 	}
 	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2) ORDER BY created`
 
-	rows, _ /* cols */, err := p.ExecCfg().InternalExecutor.Query(
+	rows, err := p.ExecCfg().InternalExecutor.Query(
 		ctx, "get-jobs", nil /* txn */, stmt, jobs.StatusPending, jobs.StatusRunning,
 	)
 	if err != nil {

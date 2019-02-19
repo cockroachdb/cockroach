@@ -2371,6 +2371,11 @@ type EvalPlanner interface {
 // this interface are always "session-bound" - they inherit session variables
 // from a parent session.
 type SessionBoundInternalExecutor interface {
+	// Query is part of the sqlutil.InternalExecutor interface.
+	Query(
+		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+	) ([]Datums, error)
+
 	// QueryRow is part of the sqlutil.InternalExecutor interface.
 	QueryRow(
 		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},

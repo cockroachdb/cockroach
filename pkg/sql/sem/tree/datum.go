@@ -142,13 +142,6 @@ type Datums []Datum
 // Len returns the number of Datum values.
 func (d Datums) Len() int { return len(d) }
 
-// Reverse reverses the order of the Datum values.
-func (d Datums) Reverse() {
-	for i, j := 0, d.Len()-1; i < j; i, j = i+1, j-1 {
-		d[i], d[j] = d[j], d[i]
-	}
-}
-
 // Format implements the NodeFormatter interface.
 func (d *Datums) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')

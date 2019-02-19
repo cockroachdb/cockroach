@@ -93,7 +93,7 @@ func (ef *execFactory) ConstructScan(
 		return newZeroNode(scan.resultColumns), nil
 	}
 	scan.index = indexDesc
-	scan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
+	scan.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 	scan.hardLimit = hardLimit
 	scan.reverse = reverse
 	scan.maxResults = maxResults
@@ -541,7 +541,7 @@ func (ef *execFactory) ConstructIndexJoin(
 
 	primaryIndex := tabDesc.GetPrimaryIndex()
 	tableScan.index = &primaryIndex
-	tableScan.run.isSecondaryIndex = false
+	tableScan.isSecondaryIndex = false
 	tableScan.disableBatchLimit()
 
 	primaryKeyColumns, colIDtoRowIndex := processIndexJoinColumns(tableScan, scan)
@@ -584,7 +584,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	}
 
 	tableScan.index = indexDesc
-	tableScan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
+	tableScan.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 
 	n := &lookupJoinNode{
 		input:    input.(planNode),
@@ -631,7 +631,7 @@ func (ef *execFactory) constructScanForZigzag(
 	}
 
 	scan.index = indexDesc
-	scan.run.isSecondaryIndex = (indexDesc.ID != tableDesc.PrimaryIndex.ID)
+	scan.isSecondaryIndex = (indexDesc.ID != tableDesc.PrimaryIndex.ID)
 
 	return scan, nil
 }

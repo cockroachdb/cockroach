@@ -247,7 +247,7 @@ func (p *planner) resolveMemberOfWithAdminOption(
 		}
 		visited[m] = struct{}{}
 
-		rows, _ /* cols */, err := p.ExecCfg().InternalExecutor.Query(
+		rows, err := p.ExecCfg().InternalExecutor.Query(
 			ctx, "expand-roles", nil /* txn */, lookupRolesStmt, m,
 		)
 		if err != nil {
