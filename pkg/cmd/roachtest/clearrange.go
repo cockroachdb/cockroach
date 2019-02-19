@@ -98,25 +98,17 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 		defer conn.Close()
 
 		var startHex string
-		// NB: set this to false to save yourself some time during development. Selecting
-		// from crdb_internal.ranges is very slow because it contacts all of the leaseholders.
-		// You may actually want to run a version of cockroach that doesn't do that because
-		// it'll still slow you down every time the method returned below is called.
-		if true {
-			if err := conn.QueryRow(
-				`SELECT to_hex(start_key) FROM crdb_internal.ranges WHERE database_name = 'bigbank' AND table_name = 'bank' ORDER BY start_key ASC LIMIT 1`,
-			).Scan(&startHex); err != nil {
-				t.Fatal(err)
-			}
-		} else {
-			startHex = "bd" // extremely likely to be the right thing (b'\275').
+		if err := conn.QueryRow(
+			`SELECT to_hex(start_key) FROM crdb_internal.ranges_no_leases WHERE database_name = 'bigbank' AND table_name = 'bank' ORDER BY start_key ASC LIMIT 1`,
+		).Scan(&startHex); err != nil {
+			t.Fatal(err)
 		}
 		return func() int {
 			conn := c.Conn(ctx, 1)
 			defer conn.Close()
 			var n int
 			if err := conn.QueryRow(
-				`SELECT count(*) FROM crdb_internal.ranges WHERE substr(to_hex(start_key), 1, length($1::string)) = $1`, startHex,
+				`SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE substr(to_hex(start_key), 1, length($1::string)) = $1`, startHex,
 			).Scan(&n); err != nil {
 				t.Fatal(err)
 			}
