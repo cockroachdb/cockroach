@@ -1711,3 +1711,7 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 		return innerJoinCard
 	}
 }
+
+func (b *logicalPropsBuilder) buildFakeRelProps(fake *FakeRelExpr, rel *props.Relational) {
+	*rel = *fake.Props
+}
