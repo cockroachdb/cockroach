@@ -114,7 +114,10 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	}
 
 	// Construct the zip as a ProjectSet with empty input.
-	input := b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
+	input := b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
+		Cols: opt.ColList{},
+		ID:   b.factory.Metadata().NextValuesID(),
+	})
 	outScope.expr = b.factory.ConstructProjectSet(input, zip)
 	return outScope
 }

@@ -1826,12 +1826,12 @@ union-all
  │    ├── inner-join
  │    │    ├── cardinality: [6 - 6]
  │    │    ├── values
- │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── tuple [type=tuple{}]
  │    │    │    ├── tuple [type=tuple{}]
  │    │    │    └── tuple [type=tuple{}]
  │    │    ├── values
- │    │    │    ├── cardinality: [3 - 3]
- │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    ├── cardinality: [2 - 2]
  │    │    │    ├── tuple [type=tuple{}]
  │    │    │    └── tuple [type=tuple{}]
  │    │    └── filters (true)
@@ -1856,6 +1856,56 @@ union-all
       └── projections
            └── const: 1 [type=int]
 
+memo
+SELECT 1 FROM (VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true
+UNION ALL
+SELECT 1 FROM (VALUES (1), (1), (1)) JOIN (VALUES (1), (1)) ON true
+----
+memo (optimized, ~17KB, required=[presentation: ?column?:7])
+ ├── G1: (union-all G2 G3)
+ │    └── [presentation: ?column?:7]
+ │         ├── best: (union-all G2 G3)
+ │         └── cost: 0.82
+ ├── G2: (project G4 G5)
+ │    └── []
+ │         ├── best: (project G4 G5)
+ │         └── cost: 0.34
+ ├── G3: (project G6 G5)
+ │    └── []
+ │         ├── best: (project G6 G5)
+ │         └── cost: 0.34
+ ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9)
+ │    └── []
+ │         ├── best: (inner-join G8 G7 G9)
+ │         └── cost: 0.21
+ ├── G5: (projections G10)
+ ├── G6: (inner-join G11 G12 G9) (inner-join G12 G11 G9)
+ │    └── []
+ │         ├── best: (inner-join G11 G12 G9)
+ │         └── cost: 0.21
+ ├── G7: (values G13 id=v1)
+ │    └── []
+ │         ├── best: (values G13 id=v1)
+ │         └── cost: 0.03
+ ├── G8: (values G14 id=v2)
+ │    └── []
+ │         ├── best: (values G14 id=v2)
+ │         └── cost: 0.04
+ ├── G9: (filters)
+ ├── G10: (const 1)
+ ├── G11: (values G14 id=v3)
+ │    └── []
+ │         ├── best: (values G14 id=v3)
+ │         └── cost: 0.04
+ ├── G12: (values G13 id=v4)
+ │    └── []
+ │         ├── best: (values G13 id=v4)
+ │         └── cost: 0.03
+ ├── G13: (scalar-list G15 G15)
+ ├── G14: (scalar-list G15 G15 G15)
+ ├── G15: (tuple G16)
+ └── G16: (scalar-list)
+
 opt join-limit=3
 SELECT
     false
@@ -1872,43 +1922,34 @@ project
  │    ├── cardinality: [0 - 0]
  │    ├── side-effects, mutations
  │    ├── fd: ()-->(5-7)
- │    ├── values
- │    │    ├── cardinality: [0 - 0]
- │    │    └── key: ()
- │    ├── inner-join
+ │    ├── select
  │    │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
  │    │    ├── cardinality: [0 - 0]
  │    │    ├── side-effects, mutations
  │    │    ├── fd: ()-->(5-7)
- │    │    ├── select
+ │    │    ├── insert abc
  │    │    │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
- │    │    │    ├── cardinality: [0 - 0]
+ │    │    │    ├── insert-mapping:
+ │    │    │    │    ├──  "?column?":13 => abc.a:5
+ │    │    │    │    ├──  column14:14 => abc.b:6
+ │    │    │    │    ├──  column14:14 => abc.c:7
+ │    │    │    │    └──  column15:15 => abc.rowid:8
  │    │    │    ├── side-effects, mutations
  │    │    │    ├── fd: ()-->(5-7)
- │    │    │    ├── insert abc
- │    │    │    │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
- │    │    │    │    ├── insert-mapping:
- │    │    │    │    │    ├──  "?column?":13 => abc.a:5
- │    │    │    │    │    ├──  column14:14 => abc.b:6
- │    │    │    │    │    ├──  column14:14 => abc.c:7
- │    │    │    │    │    └──  column15:15 => abc.rowid:8
- │    │    │    │    ├── side-effects, mutations
- │    │    │    │    ├── fd: ()-->(5-7)
- │    │    │    │    └── project
- │    │    │    │         ├── columns: column14:14(int) column15:15(int) "?column?":13(int!null)
- │    │    │    │         ├── side-effects
- │    │    │    │         ├── fd: ()-->(13,14)
- │    │    │    │         ├── scan abc
- │    │    │    │         └── projections
- │    │    │    │              ├── null [type=int]
- │    │    │    │              ├── unique_rowid() [type=int, side-effects]
- │    │    │    │              └── const: 1 [type=int]
- │    │    │    └── filters
- │    │    │         └── false [type=bool]
- │    │    ├── values
- │    │    │    ├── cardinality: [0 - 0]
- │    │    │    └── key: ()
- │    │    └── filters (true)
+ │    │    │    └── project
+ │    │    │         ├── columns: column14:14(int) column15:15(int) "?column?":13(int!null)
+ │    │    │         ├── side-effects
+ │    │    │         ├── fd: ()-->(13,14)
+ │    │    │         ├── scan abc
+ │    │    │         └── projections
+ │    │    │              ├── null [type=int]
+ │    │    │              ├── unique_rowid() [type=int, side-effects]
+ │    │    │              └── const: 1 [type=int]
+ │    │    └── filters
+ │    │         └── false [type=bool]
+ │    ├── values
+ │    │    ├── cardinality: [0 - 0]
+ │    │    └── key: ()
  │    └── filters (true)
  └── projections
       └── false [type=bool]
@@ -1929,24 +1970,24 @@ union-all
  │    ├── fd: ()-->(4)
  │    ├── inner-join
  │    │    ├── cardinality: [24 - 24]
- │    │    ├── values
- │    │    │    ├── cardinality: [2 - 2]
- │    │    │    ├── tuple [type=tuple{}]
- │    │    │    └── tuple [type=tuple{}]
  │    │    ├── inner-join
- │    │    │    ├── cardinality: [12 - 12]
+ │    │    │    ├── cardinality: [6 - 6]
  │    │    │    ├── values
  │    │    │    │    ├── cardinality: [3 - 3]
  │    │    │    │    ├── tuple [type=tuple{}]
  │    │    │    │    ├── tuple [type=tuple{}]
  │    │    │    │    └── tuple [type=tuple{}]
  │    │    │    ├── values
- │    │    │    │    ├── cardinality: [4 - 4]
- │    │    │    │    ├── tuple [type=tuple{}]
- │    │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    │    ├── cardinality: [2 - 2]
  │    │    │    │    ├── tuple [type=tuple{}]
  │    │    │    │    └── tuple [type=tuple{}]
  │    │    │    └── filters (true)
+ │    │    ├── values
+ │    │    │    ├── cardinality: [4 - 4]
+ │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    ├── tuple [type=tuple{}]
+ │    │    │    └── tuple [type=tuple{}]
  │    │    └── filters (true)
  │    └── projections
  │         └── const: 1 [type=int]
@@ -1959,12 +2000,12 @@ union-all
       │    ├── inner-join
       │    │    ├── cardinality: [6 - 6]
       │    │    ├── values
-      │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    ├── tuple [type=tuple{}]
       │    │    │    ├── tuple [type=tuple{}]
       │    │    │    └── tuple [type=tuple{}]
       │    │    ├── values
-      │    │    │    ├── cardinality: [3 - 3]
-      │    │    │    ├── tuple [type=tuple{}]
+      │    │    │    ├── cardinality: [2 - 2]
       │    │    │    ├── tuple [type=tuple{}]
       │    │    │    └── tuple [type=tuple{}]
       │    │    └── filters (true)
@@ -2019,9 +2060,13 @@ union-all
       ├── cardinality: [2 - 6]
       ├── side-effects
       ├── fd: ()-->(6)
-      ├── right-join
+      ├── left-join
       │    ├── cardinality: [2 - 6]
       │    ├── side-effects
+      │    ├── values
+      │    │    ├── cardinality: [2 - 2]
+      │    │    ├── tuple [type=tuple{}]
+      │    │    └── tuple [type=tuple{}]
       │    ├── select
       │    │    ├── cardinality: [0 - 3]
       │    │    ├── side-effects
@@ -2032,10 +2077,6 @@ union-all
       │    │    │    └── tuple [type=tuple{}]
       │    │    └── filters
       │    │         └── random() = 0.0 [type=bool, side-effects]
-      │    ├── values
-      │    │    ├── cardinality: [2 - 2]
-      │    │    ├── tuple [type=tuple{}]
-      │    │    └── tuple [type=tuple{}]
       │    └── filters (true)
       └── projections
            └── const: 1 [type=int]

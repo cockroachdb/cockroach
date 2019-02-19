@@ -50,7 +50,10 @@ func TestSimplifyFilters(t *testing.T) {
 	eq := f.ConstructEq(variable, constant)
 
 	// Filters expression evaluates to False if any operand is False.
-	vals := f.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
+	vals := f.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
+		Cols: opt.ColList{},
+		ID:   f.Metadata().NextValuesID(),
+	})
 	filters := memo.FiltersExpr{{Condition: eq}, {Condition: &memo.FalseFilter}, {Condition: eq}}
 	sel := f.ConstructSelect(vals, filters)
 	if sel.Relational().Cardinality.Max == 0 {
