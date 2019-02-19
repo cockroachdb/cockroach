@@ -192,6 +192,10 @@ func (m *outbox) flush(ctx context.Context) error {
 // Depending on the specific error, the stream might or might not need to be
 // closed. In case it doesn't, m.stream has been set to nil.
 func (m *outbox) mainLoop(ctx context.Context) error {
+	// No matter what happens, we need to make sure we close our RowChannel, since
+	// writers could be writing to it as soon as we are started.
+	defer m.RowChannel.ConsumerClosed()
+
 	var span opentracing.Span
 	ctx, span = processorSpan(ctx, "outbox")
 	if span != nil && tracing.IsRecording(span) {
@@ -219,6 +223,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		if log.V(2) {
 			log.Infof(ctx, "outbox: calling FlowStream")
 		}
+		// The context used here escapes, so it has to be a background context.
 		m.stream, err = client.FlowStream(context.TODO())
 		if err != nil {
 			if log.V(1) {
@@ -235,7 +240,6 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	defer flushTimer.Stop()
 
 	draining := false
-	defer m.RowChannel.ConsumerClosed()
 
 	// TODO(andrei): It's unfortunate that we're spawning a goroutine for every
 	// outgoing stream, but I'm not sure what to do instead. The streams don't
