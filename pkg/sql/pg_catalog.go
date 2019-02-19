@@ -627,19 +627,23 @@ var (
 	fkActionSetNull    = tree.NewDString("n")
 	fkActionSetDefault = tree.NewDString("d")
 
-	// Avoid unused warning for constants.
-	_ = fkActionRestrict
-	_ = fkActionCascade
-	_ = fkActionSetNull
-	_ = fkActionSetDefault
+	fkActionMap = map[sqlbase.ForeignKeyReference_Action]tree.Datum{
+		sqlbase.ForeignKeyReference_NO_ACTION:   fkActionNone,
+		sqlbase.ForeignKeyReference_RESTRICT:    fkActionRestrict,
+		sqlbase.ForeignKeyReference_CASCADE:     fkActionCascade,
+		sqlbase.ForeignKeyReference_SET_NULL:    fkActionSetNull,
+		sqlbase.ForeignKeyReference_SET_DEFAULT: fkActionSetDefault,
+	}
 
 	fkMatchTypeFull    = tree.NewDString("f")
 	fkMatchTypePartial = tree.NewDString("p")
 	fkMatchTypeSimple  = tree.NewDString("s")
 
-	// Avoid unused warning for constants.
-	_ = fkMatchTypeFull
-	_ = fkMatchTypePartial
+	fkMatchMap = map[sqlbase.ForeignKeyReference_Match]tree.Datum{
+		sqlbase.ForeignKeyReference_SIMPLE:  fkMatchTypeSimple,
+		sqlbase.ForeignKeyReference_FULL:    fkMatchTypeFull,
+		sqlbase.ForeignKeyReference_PARTIAL: fkMatchTypePartial,
+	}
 )
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-constraint.html.
@@ -727,9 +731,15 @@ CREATE TABLE pg_catalog.pg_constraint (
 					contype = conTypeFK
 					conindid = h.IndexOid(referencedDB, tree.PublicSchema, con.ReferencedTable, con.ReferencedIndex)
 					confrelid = defaultOid(con.ReferencedTable.ID)
-					confupdtype = fkActionNone
-					confdeltype = fkActionNone
-					confmatchtype = fkMatchTypeSimple
+					if r, ok := fkActionMap[con.FK.OnUpdate]; ok {
+						confupdtype = r
+					}
+					if r, ok := fkActionMap[con.FK.OnDelete]; ok {
+						confdeltype = r
+					}
+					if r, ok := fkMatchMap[con.FK.Match]; ok {
+						confmatchtype = r
+					}
 					columnIDs := con.Index.ColumnIDs
 					if int(con.FK.SharedPrefixLen) > len(columnIDs) {
 						return pgerror.NewAssertionErrorf(

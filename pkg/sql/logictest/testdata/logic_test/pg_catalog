@@ -1717,3 +1717,63 @@ t
 
 statement ok
 DROP DATABASE d34856 CASCADE
+
+subtest regression_34862
+
+statement ok
+CREATE DATABASE d34862; SET database=d34862
+
+statement ok
+CREATE TABLE t(x INT UNIQUE);
+  CREATE TABLE u(
+    a INT REFERENCES t(x) ON DELETE NO ACTION,
+    b INT REFERENCES t(x) ON DELETE RESTRICT,
+    c INT REFERENCES t(x) ON DELETE SET NULL,
+    d INT DEFAULT 123 REFERENCES t(x) ON DELETE SET DEFAULT,
+    e INT REFERENCES t(x) ON DELETE CASCADE,
+    f INT REFERENCES t(x) ON UPDATE NO ACTION,
+    g INT REFERENCES t(x) ON UPDATE RESTRICT,
+    h INT REFERENCES t(x) ON UPDATE SET NULL,
+    i INT DEFAULT 123 REFERENCES t(x) ON UPDATE SET DEFAULT,
+    j INT REFERENCES t(x) ON UPDATE CASCADE,
+    k INT REFERENCES t(x) ON DELETE RESTRICT ON UPDATE SET NULL
+  );
+
+query TTT
+SELECT conname, confupdtype, confdeltype FROM pg_constraint ORDER BY conname
+----
+fk_a_ref_t  a     a
+fk_b_ref_t  a     r
+fk_c_ref_t  a     n
+fk_d_ref_t  a     d
+fk_e_ref_t  a     c
+fk_f_ref_t  a     a
+fk_g_ref_t  r     a
+fk_h_ref_t  n     a
+fk_i_ref_t  d     a
+fk_j_ref_t  c     a
+fk_k_ref_t  n     r
+t_x_key     NULL  NULL
+
+statement ok
+DROP TABLE u; DROP TABLE t
+
+statement ok
+CREATE TABLE v(x INT, y INT, UNIQUE (x,y))
+
+statement ok
+CREATE TABLE w(
+  a INT, b INT, c INT, d INT,
+  FOREIGN KEY (a,b) REFERENCES v(x,y) MATCH FULL,
+  FOREIGN KEY (c,d) REFERENCES v(x,y) MATCH SIMPLE
+  );
+
+query TT
+SELECT conname, confmatchtype FROM pg_constraint ORDER BY conname
+----
+fk_a_ref_v  f
+fk_c_ref_v  s
+v_x_y_key   NULL
+
+statement ok
+DROP DATABASE d34862 CASCADE; SET database=test
