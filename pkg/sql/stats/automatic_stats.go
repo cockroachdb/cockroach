@@ -38,7 +38,7 @@ import (
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 	"sql.stats.experimental_automatic_collection.enabled",
 	"experimental automatic statistics collection mode",
-	true,
+	false,
 )
 
 // DefaultRefreshInterval is the frequency at which the Refresher will check if
