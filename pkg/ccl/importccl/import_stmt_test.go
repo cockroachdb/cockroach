@@ -55,13 +55,11 @@ import (
 
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#34975")
-	const nodes = 3
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
-	sqlDB := sqlutils.MakeSQLRunner(conn)
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	tests := []struct {
 		name   string
@@ -647,6 +645,11 @@ COPY t (a, b, c) FROM stdin;
 	sqlDB.Exec(t, `DROP TABLE blah`)
 
 	for _, direct := range []bool{false, true} {
+		// this test is big and slow as is, so we can't afford to double it in race.
+		if util.RaceEnabled && direct {
+			continue
+		}
+
 		for i, tc := range tests {
 			if direct {
 				if tc.with == "" {
