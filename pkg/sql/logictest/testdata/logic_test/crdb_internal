@@ -374,3 +374,23 @@ query T
 SELECT crdb_internal.pretty_key(e'\\xa82a00918ed9':::BYTES, (-5096189069466142898):::INT8);
 ----
 /Table/32/???/9/6/81
+
+query I
+SELECT crdb_internal.json_num_index_entries('0')
+----
+1
+
+query I
+SELECT crdb_internal.json_num_index_entries('{}')
+----
+1
+
+query I
+SELECT crdb_internal.json_num_index_entries('[1, 2, 1, 2]')
+----
+2
+
+query I
+SELECT crdb_internal.json_num_index_entries('[{"a": 1, "b": 2}, {"a": 1, "b": 3}]')
+----
+3

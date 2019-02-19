@@ -28,6 +28,7 @@ import (
 	"math/rand"
 	"net"
 	"regexp/syntax"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -2991,6 +2992,36 @@ may increase either contention or retry errors, or both.`,
 				"Example syntax: `crdb_internal.set_vmodule('recordio=2,file=1,gfs*=3')`. " +
 				"Reset with: `crdb_internal.set_vmodule('')`. " +
 				"Raising the verbosity can severely affect performance.",
+		},
+	),
+
+	// Returns the number of distinct inverted index entries that would be generated for a JSON value.
+	"crdb_internal.json_num_index_entries": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.JSON}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				keys, err := json.EncodeInvertedIndexKeys(make([]byte, 0), tree.MustBeDJSON(args[0]).JSON)
+				if err != nil {
+					return nil, err
+				}
+
+				// Count distinct keys
+				sort.Slice(keys, func(i int, j int) bool {
+					return bytes.Compare(keys[i], keys[j]) < 0
+				})
+				n := 0
+				for i := 0; i < len(keys); i++ {
+					if i == 0 || bytes.Compare(keys[i-1], keys[i]) < 0 {
+						n++
+					}
+				}
+				return tree.NewDInt(tree.DInt(n)), nil
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	),
 }
