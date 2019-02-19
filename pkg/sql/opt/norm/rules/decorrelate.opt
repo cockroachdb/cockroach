@@ -690,10 +690,10 @@
 [HoistValuesSubquery, Normalize, LowPriority]
 (Values
     $rows:[ ... $item:* & (HasHoistableSubquery $item) ... ]
-    $cols:*
+    $private:*
 )
 =>
-(HoistValuesSubquery $rows $cols)
+(HoistValuesSubquery $rows $private)
 
 # HoistProjectSetSubquery extracts subqueries from zipped functions and joins
 # them with the ProjectSet operator's input. This and other subquery hoisting
