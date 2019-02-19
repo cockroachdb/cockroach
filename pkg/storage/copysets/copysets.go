@@ -14,17 +14,37 @@
 
 package copysets
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/settings"
+)
 
 // CopysetID is a custom type for a cockroach copyset ID.
 // Copyset is a group of stores where a range should be contained within
 // if copyset based rebalancing is enabled.
 type CopysetID int32
 
+// Enabled is a setting which denotes whether copysets are enabled.
+var Enabled = settings.RegisterBoolSetting(
+	"kv.allocator.enable_copysets",
+	"enable copysets to improve tolerance to multi node failures. "+
+		"This feature is currently experimental",
+	false,
+)
+
+// StoreRebalancerEnabled is a setting which denotes whether the store
+// rebalancer should take copysets into account while rebalancing replicas.
+var StoreRebalancerEnabled = settings.RegisterBoolSetting(
+	"kv.allocator.enable_store_rebalancer_with_copysets",
+	"enable store rebalancer feature with copysets",
+	true,
+)
+
 // Reader is used to read copysets in the cluster.
 type Reader interface {
-	// forRF returns copysets for the given replication factor.
-	forRF(ctx context.Context, replicationFactor int32) (*Copysets, error)
+	// ForRF returns copysets for the given replication factor.
+	ForRF(ctx context.Context, replicationFactor *int32) (*Copysets, error)
 }
 
 // Maintainer maintains and assigns copysets to stores.
@@ -35,7 +55,7 @@ type Maintainer struct {
 // Ensure Maintainer implements Reader.
 var _ Reader = &Maintainer{}
 
-// forRF returns copysets for the given replication factor.
-func (cs *Maintainer) forRF(ctx context.Context, replicationFactor int32) (*Copysets, error) {
+// ForRF returns copysets for the given replication factor.
+func (cs *Maintainer) ForRF(ctx context.Context, replicationFactor *int32) (*Copysets, error) {
 	return nil, nil
 }

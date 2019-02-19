@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/copysets"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -278,6 +279,16 @@ func (sr *StoreRebalancer) rebalanceStore(
 		return
 	}
 
+	copysetsEnabled := copysets.Enabled.Get(&sr.st.SV)
+	if copysetsEnabled {
+		storeRebalancerEnabledWithCopysets := copysets.StoreRebalancerEnabled.Get(&sr.st.SV)
+		if !storeRebalancerEnabledWithCopysets {
+			log.Info(ctx,
+				"replica rebalancing in store rebalancer is disabled with copysets to avoid thrashing with replica rebalancer")
+			return
+		}
+	}
+
 	if mode != LBRebalancingLeasesAndReplicas {
 		log.Infof(ctx,
 			"ran out of leases worth transferring and qps (%.2f) is still above desired threshold (%.2f)",
@@ -508,65 +519,124 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		// Check the range's existing diversity score, since we want to ensure we
 		// don't hurt locality diversity just to improve QPS.
 		curDiversity := rangeDiversityScore(sr.rq.allocator.storePool.getLocalities(desc.Replicas))
-
-		// Check the existing replicas, keeping around those that aren't overloaded.
-		for i := range desc.Replicas {
-			if desc.Replicas[i].StoreID == localDesc.StoreID {
-				continue
-			}
-			// Keep the replica in the range if we don't know its QPS or if its QPS
-			// is below the upper threshold. Punishing stores not in our store map
-			// could cause mass evictions if the storePool gets out of sync.
-			storeDesc, ok := storeMap[desc.Replicas[i].StoreID]
-			if !ok || storeDesc.Capacity.QueriesPerSecond < maxQPS {
-				targets = append(targets, roachpb.ReplicationTarget{
-					NodeID:  desc.Replicas[i].NodeID,
-					StoreID: desc.Replicas[i].StoreID,
-				})
-				targetReplicas = append(targetReplicas, roachpb.ReplicaDescriptor{
-					NodeID:  desc.Replicas[i].NodeID,
-					StoreID: desc.Replicas[i].StoreID,
-				})
-			}
-		}
-
-		// Then pick out which new stores to add the remaining replicas to.
 		rangeInfo := rangeInfoForRepl(replWithStats.repl, desc)
 		// Make sure to use the same qps measurement throughout everything we do.
 		rangeInfo.QueriesPerSecond = replWithStats.qps
 		options := sr.rq.allocator.scorerOptions()
 		options.qpsRebalanceThreshold = qpsRebalanceThreshold.Get(&sr.st.SV)
-		for len(targets) < desiredReplicas {
-			// Use the preexisting AllocateTarget logic to ensure that considerations
-			// such as zone constraints, locality diversity, and full disk come
-			// into play.
-			target, _ := sr.rq.allocator.allocateTargetFromList(
+
+		copysetsEnabled := copysets.Enabled.Get(&sr.st.SV)
+
+		if copysetsEnabled {
+			existingReplicas := make([]roachpb.ReplicaDescriptor, 0)
+			for i := range rangeInfo.Desc.Replicas {
+				existingReplicas = append(existingReplicas, roachpb.ReplicaDescriptor{
+					NodeID:  rangeInfo.Desc.Replicas[i].NodeID,
+					StoreID: rangeInfo.Desc.Replicas[i].StoreID,
+				})
+			}
+			var copysets []*CandidateCopyset
+			var err error
+			if copysets, err = sr.rq.allocator.candidateCopysets(
 				ctx,
 				storeList,
 				zone,
-				targetReplicas,
+				existingReplicas,
 				rangeInfo,
 				options,
+			); err != nil {
+				log.Errorf(
+					ctx,
+					"Error while allocating target for range :%v with copysets enabled: %v",
+					rangeInfo,
+					err,
+				)
+				continue
+			}
+			log.VEventf(
+				ctx,
+				3,
+				"copyset candidates for rebalancing range %v in copyset %v are:",
+				rangeInfo,
+				copysets,
 			)
-			if target == nil {
-				log.VEventf(ctx, 3, "no rebalance targets found to replace the current store for r%d",
-					desc.RangeID)
-				break
-			}
-
 			meanQPS := storeList.candidateQueriesPerSecond.mean
-			if shouldNotMoveTo(ctx, storeMap, replWithStats, target.StoreID, meanQPS, minQPS, maxQPS) {
-				break
+
+			for _, copyset := range copysets {
+				if shouldNotMoveTo(ctx, storeMap, replWithStats, copyset.maxQPSStoreID, meanQPS, minQPS, maxQPS) {
+					continue
+				}
+				if len(copyset.stores) >= desiredReplicas {
+					for i := 0; i < desiredReplicas; i++ {
+						t := copyset.stores[i]
+						targets = append(targets, roachpb.ReplicationTarget{
+							NodeID:  t.Node.NodeID,
+							StoreID: t.StoreID,
+						})
+						targetReplicas = append(targetReplicas, roachpb.ReplicaDescriptor{
+							NodeID:  t.Node.NodeID,
+							StoreID: t.StoreID,
+						})
+					}
+					break
+				}
+			}
+		} else {
+
+			// Check the existing replicas, keeping around those that aren't overloaded.
+			for i := range desc.Replicas {
+				if desc.Replicas[i].StoreID == localDesc.StoreID {
+					continue
+				}
+				// Keep the replica in the range if we don't know its QPS or if its QPS
+				// is below the upper threshold. Punishing stores not in our store map
+				// could cause mass evictions if the storePool gets out of sync.
+				storeDesc, ok := storeMap[desc.Replicas[i].StoreID]
+				if !ok || storeDesc.Capacity.QueriesPerSecond < maxQPS {
+					targets = append(targets, roachpb.ReplicationTarget{
+						NodeID:  desc.Replicas[i].NodeID,
+						StoreID: desc.Replicas[i].StoreID,
+					})
+					targetReplicas = append(targetReplicas, roachpb.ReplicaDescriptor{
+						NodeID:  desc.Replicas[i].NodeID,
+						StoreID: desc.Replicas[i].StoreID,
+					})
+				}
 			}
 
-			targets = append(targets, roachpb.ReplicationTarget{
-				NodeID:  target.Node.NodeID,
-				StoreID: target.StoreID,
-			})
-			targetReplicas = append(targetReplicas, roachpb.ReplicaDescriptor{
-				NodeID:  target.Node.NodeID,
-				StoreID: target.StoreID,
-			})
+			// Then pick out which new stores to add the remaining replicas to.
+			for len(targets) < desiredReplicas {
+				// Use the preexisting AllocateTarget logic to ensure that considerations
+				// such as zone constraints, locality diversity, and full disk come
+				// into play.
+				target, _ := sr.rq.allocator.allocateTargetFromList(
+					ctx,
+					storeList,
+					zone,
+					targetReplicas,
+					rangeInfo,
+					options,
+				)
+				if target == nil {
+					log.VEventf(ctx, 3, "no rebalance targets found to replace the current store for r%d",
+						desc.RangeID)
+					break
+				}
+
+				meanQPS := storeList.candidateQueriesPerSecond.mean
+				if shouldNotMoveTo(ctx, storeMap, replWithStats, target.StoreID, meanQPS, minQPS, maxQPS) {
+					break
+				}
+
+				targets = append(targets, roachpb.ReplicationTarget{
+					NodeID:  target.Node.NodeID,
+					StoreID: target.StoreID,
+				})
+				targetReplicas = append(targetReplicas, roachpb.ReplicaDescriptor{
+					NodeID:  target.Node.NodeID,
+					StoreID: target.StoreID,
+				})
+			}
 		}
 
 		// If we couldn't find enough valid targets, forget about this range.
