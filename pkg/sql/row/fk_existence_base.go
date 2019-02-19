@@ -227,6 +227,10 @@ func computeFkCheckColumnIDs(
 			return nil, pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 				"missing values for columns %q in multi-part foreign key", missingColumns)
 		}
+
+	case sqlbase.ForeignKeyReference_PARTIAL:
+		return nil, pgerror.UnimplementedWithIssueError(20305, "MATCH PARTIAL not supported")
+
 	default:
 		return nil, pgerror.NewAssertionErrorf("unknown composite key match type: %v", match)
 	}

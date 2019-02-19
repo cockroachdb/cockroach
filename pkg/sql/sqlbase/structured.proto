@@ -216,6 +216,7 @@ message ForeignKeyReference {
     option (gogoproto.goproto_enum_stringer) = false;
     SIMPLE = 0;
     FULL = 1;
+    PARTIAL = 2; // Note: not actually supported, but we reserve the value for future use.
   }
 
   optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
