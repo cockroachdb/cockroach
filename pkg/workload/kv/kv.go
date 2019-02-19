@@ -497,7 +497,7 @@ func randomBlock(config *kv, r *rand.Rand) []byte {
 	}
 	for i := range blockData {
 		if i >= uniqueSize {
-			blockData[i] = blockData[i - uniqueSize]
+			blockData[i] = blockData[i-uniqueSize]
 		} else {
 			blockData[i] = byte(r.Int() & 0xff)
 		}
