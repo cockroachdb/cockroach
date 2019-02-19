@@ -58,9 +58,13 @@ func assertEngineHealth(ctx context.Context, engines []engine.Engine, maxDuratio
 	for _, eng := range engines {
 		func() {
 			t := time.AfterFunc(maxDuration, func() {
+				var stats string
+				if rocks, ok := eng.(*engine.RocksDB); ok {
+					stats = "\n" + rocks.GetCompactionStats()
+				}
 				// NB: the disk-stall-detected roachtest matches on this message.
-				guaranteedExitFatal(ctx, "disk stall detected: unable to write to %s within %s",
-					eng, maxSyncDuration,
+				guaranteedExitFatal(ctx, "disk stall detected: unable to write to %s within %s %s",
+					eng, maxSyncDuration, stats,
 				)
 			})
 			defer t.Stop()
