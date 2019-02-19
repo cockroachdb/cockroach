@@ -80,16 +80,8 @@ values
 opt
 SELECT * FROM (SELECT CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END FROM b) WHERE false
 ----
-project
+values
  ├── columns: case:6(decimal)
  ├── cardinality: [0 - 0]
- ├── side-effects
  ├── key: ()
- ├── fd: ()-->(6)
- ├── values
- │    ├── columns: k:1(int)
- │    ├── cardinality: [0 - 0]
- │    ├── key: ()
- │    └── fd: ()-->(1)
- └── projections
-      └── CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END [type=decimal, outer=(1), side-effects]
+ └── fd: ()-->(6)
