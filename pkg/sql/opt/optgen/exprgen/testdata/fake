@@ -1,0 +1,21 @@
+expr
+(FakeRel [])
+----
+fake-rel
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ └── cost: 0.01
+
+expr
+(FakeRel
+  [
+    (OutputCols [ (NewColumn "a" "int") (NewColumn "b" "int") (NewColumn "c" "int")] )
+    (NotNullCols "a,b")
+    (Cardinality "-")
+  ]
+)
+----
+fake-rel
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── stats: [rows=0]
+ └── cost: 0.01
