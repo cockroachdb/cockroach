@@ -41,37 +41,6 @@ const _TYPES_T = types.Unhandled
 
 // */}}
 
-func (m *memColumn) ExtendNulls(
-	vec ColVec, outputLen uint64, srcStartIdx uint16, batchSize uint16, destStartIdx uint64,
-) {
-	if uint64(cap(m.nulls)) < outputLen/64 {
-		m.nulls = append(m.nulls, make([]int64, (batchSize-1)>>6+1)...)
-	}
-	if vec.HasNulls() {
-		for i := uint16(0); i < batchSize; i++ {
-			if vec.NullAt(srcStartIdx + i) {
-				m.SetNull64(uint64(destStartIdx) + uint64(i))
-			}
-		}
-	}
-}
-
-func (m *memColumn) ExtendNullsWithSel(
-	vec ColVec,
-	outputLen uint64,
-	srcStartIdx uint16,
-	batchSize uint16,
-	destStartIdx uint64,
-	sel []uint16,
-) {
-	m.nulls = append(m.nulls, make([]int64, (batchSize-1)>>6+1)...)
-	for i := uint16(0); i < batchSize; i++ {
-		if vec.NullAt(sel[srcStartIdx+i]) {
-			m.SetNull64(uint64(destStartIdx) + uint64(i))
-		}
-	}
-}
-
 func (m *memColumn) Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16) {
 	switch colType {
 	// {{range .}}
@@ -115,18 +84,7 @@ func (m *memColumn) AppendSlice(
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}
 
-	if batchSize > 0 {
-		if uint64(cap(m.nulls)) < outputLen/64 {
-			m.nulls = append(m.nulls, make([]int64, 16)...) // 16 = 1024/64
-		}
-		if vec.HasNulls() {
-			for i := uint16(0); i < batchSize; i++ {
-				if vec.NullAt(srcStartIdx + i) {
-					m.SetNull64(destStartIdx + uint64(i))
-				}
-			}
-		}
-	}
+	m.ExtendNulls(vec, outputLen, srcStartIdx, batchSize, destStartIdx)
 }
 
 func (m *memColumn) AppendWithSel(
@@ -184,17 +142,7 @@ func (m *memColumn) AppendSliceWithSel(
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}
 
-	if batchSize > 0 {
-		if uint64(cap(m.nulls)) < outputLen/64 {
-			m.nulls = append(m.nulls, make([]int64, 16)...) // 16 = 1024/64
-		}
-
-		for i := srcStartIdx; i < srcEndIdx; i++ {
-			if vec.NullAt(sel[i]) {
-				m.SetNull64(destStartIdx + uint64(i))
-			}
-		}
-	}
+	m.ExtendNullsWithSel(vec, outputLen, srcStartIdx, batchSize, destStartIdx, sel)
 }
 
 func (m *memColumn) Copy(src ColVec, srcStartIdx, srcEndIdx uint64, typ types.T) {
@@ -333,5 +281,39 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
 	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}
+
+func (m *memColumn) ExtendNulls(
+	vec ColVec, outputLen uint64, srcStartIdx uint16, batchSize uint16, destStartIdx uint64,
+) {
+	if uint64(cap(m.nulls)) < outputLen/64 {
+		m.nulls = append(m.nulls, make([]int64, (batchSize-1)>>6+1)...)
+	}
+	if vec.HasNulls() {
+		for i := uint16(0); i < batchSize; i++ {
+			if vec.NullAt(srcStartIdx + i) {
+				m.SetNull64(destStartIdx + uint64(i))
+			}
+		}
+	}
+}
+
+func (m *memColumn) ExtendNullsWithSel(
+	vec ColVec,
+	outputLen uint64,
+	srcStartIdx uint16,
+	batchSize uint16,
+	destStartIdx uint64,
+	sel []uint16,
+) {
+	if uint64(cap(m.nulls)) < outputLen/64 {
+		// (batchSize-1)>>6+1 is the number of Int64s needed to encode the additional elements/nulls in the ColVec.
+		m.nulls = append(m.nulls, make([]int64, (batchSize-1)>>6+1)...)
+	}
+	for i := uint16(0); i < batchSize; i++ {
+		if vec.NullAt(sel[srcStartIdx+i]) {
+			m.SetNull64(destStartIdx + uint64(i))
+		}
 	}
 }

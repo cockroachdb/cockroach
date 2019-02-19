@@ -311,7 +311,7 @@ func TestMergeJoinerLongMultiBatch(t *testing.T) {
 							if outVal != expVal {
 								t.Fatalf("Found val %d, expected %d, idx %d of batch %d", outVal, expVal, j, i)
 							}
-							lastVal += 1
+							lastVal++
 						}
 						i++
 					}

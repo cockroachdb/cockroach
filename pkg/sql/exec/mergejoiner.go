@@ -52,19 +52,21 @@ type mergeJoinInput struct {
 
 // The merge join operator uses a "two scan" approach to generate the join.
 // What this means is that instead of going through and expanding the cross product
-// row by row, the operator performs a first pass where it
-// generates a list of chunks (denoted by the row ordinals) of matching rows based
-// on the equality column, and then performs a second pass where each of these
-// chunks are either expanded or repeated, saving big on the type introspection.
+// row by row, the operator performs two passes.
+// The first pass generates a list of chunks of matching rows based on the equality
+// column. A "chunk" is a ADT representing a run, or in other words, multiple
+// repeated values. This run is represented as the starting row ordinal, the ending
+// row ordinal, and the number of times this chunk is expanded/repeated.
+// The second pass is where each of these chunks are either expanded or repeated
+// into the output or savedOutput buffer, saving big on the type introspection.
 
 // The current implementation only works on an inner join
 // with a single equality column of Int64s.
 
-// Two buffers are used, one for the run on the left table and
-// one for the run on the right table. These buffers are only used if the run ends
-// with a batch, to make sure that we don't miss any cross product entries while
-// expanding the chunks (repeatedRows and repeatedGroups) when a run
-// spans multiple batches.
+// Two buffers are used, one for the run on the left table and one for the run on the
+// right table. These buffers are only used if the run ends with a batch, to make sure
+// that we don't miss any cross product entries while expanding the chunks
+// (repeatedRows and repeatedGroups) when a run spans multiple batches.
 
 // There is also a savedOutput buffer in the case that the cross product overflows
 // the out buffer.
@@ -184,10 +186,10 @@ func (c *mergeJoinOp) buildSavedOutput() uint16 {
 		toAppend = uint16(c.outputBatchSize)
 	}
 	for gi, idx := range c.left.outCols {
-		c.out.ColVec(int(idx)).AppendSlice(c.savedOutput.ColVec(gi), c.left.sourceTypes[idx], 0, 0, toAppend)
+		c.out.ColVec(int(idx)).AppendSlice(c.savedOutput.ColVec(gi), c.left.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, toAppend)
 	}
 	for gi, idx := range c.right.outCols {
-		c.out.ColVec(len(c.left.sourceTypes)+int(idx)).AppendSlice(c.savedOutput.ColVec(len(c.left.outCols)+gi), c.right.sourceTypes[idx], 0, 0, toAppend)
+		c.out.ColVec(len(c.left.sourceTypes)+int(idx)).AppendSlice(c.savedOutput.ColVec(len(c.left.outCols)+gi), c.right.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, toAppend)
 	}
 
 	if c.savedOutputEndIdx > int(toAppend) {

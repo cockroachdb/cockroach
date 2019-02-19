@@ -60,14 +60,6 @@ type ColVec interface {
 	// Do not call this from normal code - it'll always panic.
 	_TemplateType() []interface{}
 
-	// ExtendNulls extends the null member of a ColVec and sets the right indexes to null,
-	// needed when the length of the underlying column changes.
-	ExtendNulls(vec ColVec, outputLen uint64, srcStartIdx uint16, batchSize uint16, destStartIdx uint64)
-
-	// ExtendNulls extends the null member of a ColVec and sets the right indexes to null
-	// with the selection vector in mind, needed when the length of the underlying column changes.
-	ExtendNullsWithSel(vec ColVec, outputLen uint64, srcStartIdx uint16, batchSize uint16, destStartIdx uint64, sel []uint16)
-
 	// Append appends fromLength elements of the given ColVec to toLength
 	// elements of this ColVec, assuming that both ColVecs are of type colType.
 	Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16)
@@ -106,6 +98,14 @@ type ColVec interface {
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this ColVec.
 	// It uses the reflect package and is not suitable for calling in hot paths.
 	PrettyValueAt(idx uint16, colType types.T) string
+
+	// ExtendNulls extends the null member of a ColVec and sets the right indexes to null,
+	// needed when the length of the underlying column changes.
+	ExtendNulls(vec ColVec, outputLen uint64, srcStartIdx uint16, batchSize uint16, destStartIdx uint64)
+
+	// ExtendNullsWithSel extends the null member of a ColVec and sets the right indexes to null
+	// with the selection vector in mind, needed when the length of the underlying column changes.
+	ExtendNullsWithSel(vec ColVec, outputLen uint64, srcStartIdx uint16, batchSize uint16, destStartIdx uint64, sel []uint16)
 }
 
 // Nulls represents a list of potentially nullable values.
