@@ -423,6 +423,16 @@ func (m *pgDumpReader) inputFinished(ctx context.Context) {
 	close(m.kvCh)
 }
 
+func (m *pgDumpReader) readFiles(
+	ctx context.Context,
+	dataFiles map[int32]string,
+	format roachpb.IOFileFormat,
+	progressFn func(float32) error,
+	settings *cluster.Settings,
+) error {
+	return readInputFiles(ctx, dataFiles, format, m.readFile, progressFn, settings)
+}
+
 func (m *pgDumpReader) readFile(
 	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
