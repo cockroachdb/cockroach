@@ -1881,11 +1881,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	db := mtc.dbs[0]
 	txnOld := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 
-	// Perform a write with txnOld so that its timestamp gets set and so
-	// that it writes its transaction record.
-	if err := txnOld.EagerRecord(); err != nil {
-		t.Fatal(err)
-	}
+	// Perform a write with txnOld so that its timestamp gets set.
 	if _, err := txnOld.Inc(ctx, keyB, 3); err != nil {
 		t.Fatal(err)
 	}
@@ -1894,6 +1890,16 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	// transaction from refreshing when it hits the serializable error.
 	if _, err := txnOld.Get(ctx, keyC); err != nil {
 		t.Fatal(err)
+	}
+
+	// Ensure that the transaction sends its first hearbeat so that it creates
+	// its transaction record and doesn't run into trouble with the low water
+	// mark of the new leaseholder's timestamp cache. Amusingly, if the bug
+	// we're regression testing against here still existed, we would not have
+	// to do this.
+	hb, hbH := heartbeatArgs(txnOld.Serialize(), mtc.clock.Now())
+	if _, pErr := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), hbH, hb); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Another client comes along at a higher timestamp and reads. We should

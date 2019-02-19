@@ -1395,6 +1395,17 @@ func truncateLogArgs(index uint64, rangeID roachpb.RangeID) *roachpb.TruncateLog
 	}
 }
 
+func heartbeatArgs(
+	txn *roachpb.Transaction, now hlc.Timestamp,
+) (*roachpb.HeartbeatTxnRequest, roachpb.Header) {
+	return &roachpb.HeartbeatTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txn.Key,
+		},
+		Now: now,
+	}, roachpb.Header{Txn: txn}
+}
+
 func TestSortRangeDescByAge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var replicaDescs []roachpb.ReplicaDescriptor

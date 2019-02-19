@@ -82,7 +82,7 @@ func RequestLease(
 		// time here, which makes it not Equivalent() to the preceding lease for the
 		// same store.
 		//
-		// Note also that leastPostApply makes sure to update the timestamp cache in
+		// Note also that leasePostApply makes sure to update the timestamp cache in
 		// this case: even though the lease holder does not change, the the sequence
 		// number does and this triggers a low water mark bump.
 		//

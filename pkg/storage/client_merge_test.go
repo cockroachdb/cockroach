@@ -1202,12 +1202,12 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// read the meat of the test.
 
 	// Install a hook to control when the merge transaction commits.
-	mergeEndTxnReceived := make(chan struct{}, 10) // headroom in case the merge transaction retries
+	mergeEndTxnReceived := make(chan *roachpb.Transaction, 10) // headroom in case the merge transaction retries
 	finishMerge := make(chan struct{})
 	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, r := range ba.Requests {
 			if et := r.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
-				mergeEndTxnReceived <- struct{}{}
+				mergeEndTxnReceived <- ba.Txn
 				<-finishMerge
 			}
 		}
@@ -1261,13 +1261,24 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 
 	// Wait for the merge transaction to send its EndTransaction request. It won't
 	// be able to complete just yet, thanks to the hook we installed above.
-	<-mergeEndTxnReceived
+	mergeTxn := <-mergeEndTxnReceived
 
 	// Now's our chance to move the lease on the RHS from the second store to the
 	// first. This isn't entirely straightforward. The replica on the second store
 	// is aware of the merge and is refusing all traffic, so we can't just send a
 	// TransferLease request. Instead, we need to expire the second store's lease,
 	// then acquire the lease on the first store.
+
+	// Before doing so, however, ensure that the merge transaction has written
+	// its transaction record so that it doesn't run into trouble with the low
+	// water mark of the new leaseholder's timestamp cache. This could result in
+	// the transaction being inadvertently aborted during its first attempt,
+	// which this test is not designed to handle. If the merge transaction did
+	// abort then the get requests could complete on r2 before the merge retried.
+	hb, hbH := heartbeatArgs(mergeTxn, mtc.clock.Now())
+	if _, pErr := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), hbH, hb); pErr != nil {
+		t.Fatal(pErr)
+	}
 
 	// Turn off liveness heartbeats on the second store, then advance the clock
 	// past the liveness expiration time. This expires all leases on all stores.
