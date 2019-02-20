@@ -125,7 +125,7 @@ func TestReplicaRangefeed(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(i).RangeFeed(ctx, &req, stream)
+			pErr := mtc.Store(i).RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}(i)
 	}
@@ -245,12 +245,12 @@ func TestReplicaRangefeed(t *testing.T) {
 			if cur := repl.GetGCThreshold(); cur.Less(gcReq.Threshold) {
 				return errors.Errorf("%s has GCThreshold %s < %s; hasn't applied the bump yet", repl, cur, gcReq.Threshold)
 			}
-			cCtx, cancel := context.WithTimeout(ctx, 10*time.Second) // fail instead of hang
-			defer cancel()
 			stream := newTestStream()
+			timer := time.AfterFunc(10*time.Second, stream.Cancel)
+			defer timer.Stop()
 			defer stream.Cancel()
 
-			if pErr := mtc.Store(i).RangeFeed(cCtx, &req, stream); !testutils.IsPError(
+			if pErr := mtc.Store(i).RangeFeed(&req, stream); !testutils.IsPError(
 				pErr, `must be after replica GC threshold`,
 			) {
 				return pErr.GoError()
@@ -263,7 +263,6 @@ func TestReplicaRangefeed(t *testing.T) {
 func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	storage.RangefeedEnabled.Override(&sc.Settings.SV, true)
 	mtc := &multiTestContext{
@@ -289,7 +288,7 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	// immediately even if it didn't return the correct error.
 	stream.Cancel()
 
-	pErr := mtc.Store(0).RangeFeed(ctx, &req, stream)
+	pErr := mtc.Store(0).RangeFeed(&req, stream)
 	const exp = "expiration-based leases are incompatible with rangefeeds"
 	if !testutils.IsPError(pErr, exp) {
 		t.Errorf("expected error %q, found %v", exp, pErr)
@@ -404,7 +403,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(removeStore).RangeFeed(ctx, &req, stream)
+			pErr := mtc.Store(removeStore).RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
 
@@ -433,7 +432,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(0).RangeFeed(ctx, &req, stream)
+			pErr := mtc.Store(0).RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
 
@@ -481,7 +480,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: splitKey},
 			}
 
-			pErr := mtc.Store(0).RangeFeed(ctx, &req, streamLeft)
+			pErr := mtc.Store(0).RangeFeed(&req, streamLeft)
 			streamLeftErrC <- pErr
 		}()
 
@@ -496,7 +495,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: splitKey, EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(0).RangeFeed(ctx, &req, streamRight)
+			pErr := mtc.Store(0).RangeFeed(&req, streamRight)
 			streamRightErrC <- pErr
 		}()
 
@@ -539,7 +538,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := partitionStore.RangeFeed(ctx, &req, stream)
+			pErr := partitionStore.RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
 
@@ -599,7 +598,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(0).RangeFeed(ctx, &req, stream)
+			pErr := mtc.Store(0).RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
 

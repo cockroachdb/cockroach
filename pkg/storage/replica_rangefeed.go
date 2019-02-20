@@ -128,7 +128,6 @@ func (i iteratorWithCloser) Close() {
 // complete. The provided ConcurrentRequestLimiter is used to limit the number
 // of rangefeeds using catchup iterators at the same time.
 func (r *Replica) RangeFeed(
-	ctx context.Context,
 	args *roachpb.RangeFeedRequest,
 	stream roachpb.Internal_RangeFeedServer,
 	iteratorLimiter limit.ConcurrentRequestLimiter,
@@ -136,6 +135,7 @@ func (r *Replica) RangeFeed(
 	if !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds are not enabled. See kv.rangefeed.enabled.")
 	}
+	ctx := r.AnnotateCtx(stream.Context())
 
 	var rspan roachpb.RSpan
 	var err error
@@ -230,7 +230,8 @@ func (r *Replica) RangeFeed(
 		r.raftMu.Unlock()
 	}()
 
-	// Block on the registration's error channel.
+	// Block on the registration's error channel. Note that the registration
+	// observes stream.Context().Done.
 	return <-errC
 }
 
