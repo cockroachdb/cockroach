@@ -605,6 +605,46 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+		case *tree.AlterTableRenameColumn:
+			descChanged, err := params.p.renameColumn(params.ctx, n.tableDesc, &t.Column, &t.NewName)
+			if err != nil {
+				return err
+			}
+			descriptorChanged = descChanged
+
+		case *tree.AlterTableRenameConstraint:
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			if err != nil {
+				return err
+			}
+			details, ok := info[string(t.Constraint)]
+			if !ok {
+				return fmt.Errorf("constraint %q does not exist", tree.ErrString(&t.Constraint))
+			}
+			if t.Constraint == t.NewName {
+				// Nothing to do.
+				break
+			}
+
+			if _, ok := info[string(t.NewName)]; ok {
+				return errors.Errorf("duplicate constraint name: %q", tree.ErrString(&t.NewName))
+			}
+
+			if err := params.p.CheckPrivilege(params.ctx, n.tableDesc, privilege.CREATE); err != nil {
+				return err
+			}
+
+			depViewRenameError := func(objType string, refTableID sqlbase.ID) error {
+				return params.p.dependentViewRenameError(params.ctx,
+					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID)
+			}
+
+			if err := n.tableDesc.RenameConstraint(
+				details, string(t.Constraint), string(t.NewName), depViewRenameError); err != nil {
+				return err
+			}
+			descriptorChanged = true
+
 		default:
 			return pgerror.NewAssertionErrorf("unsupported alter command: %T", cmd)
 		}

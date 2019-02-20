@@ -2106,6 +2106,36 @@ func (desc *MutableTableDescriptor) RenameIndexDescriptor(
 	return fmt.Errorf("index with id = %d does not exist", id)
 }
 
+// RenameConstraint renames a constraint.
+func (desc *MutableTableDescriptor) RenameConstraint(
+	detail ConstraintDetail, oldName, newName string, dependentViewRenameError func(string, ID) error,
+) error {
+	switch detail.Kind {
+	case ConstraintTypePK, ConstraintTypeUnique:
+		for _, tableRef := range desc.DependedOnBy {
+			if tableRef.IndexID != detail.Index.ID {
+				continue
+			}
+			return dependentViewRenameError("index", tableRef.ID)
+		}
+		return desc.RenameIndexDescriptor(detail.Index, newName)
+	case ConstraintTypeFK:
+		idx, err := desc.FindIndexByID(detail.Index.ID)
+		if err != nil {
+			return err
+		}
+		if !idx.ForeignKey.IsSet() || idx.ForeignKey.Name != oldName {
+			return pgerror.NewAssertionErrorf("constraint %q not found", newName)
+		}
+		idx.ForeignKey.Name = newName
+		return nil
+	case ConstraintTypeCheck:
+		detail.CheckConstraint.Name = newName
+		return nil
+	}
+	return pgerror.UnimplementedWithIssueError(32555, "RENAME CONSTRAINT not supported")
+}
+
 // FindIndexByID finds an index (active or inactive) with the specified ID.
 // Must return a pointer to the IndexDescriptor in the TableDescriptor, so that
 // callers can use returned values to modify the TableDesc.

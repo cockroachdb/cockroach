@@ -1208,8 +1208,6 @@ alter_zone_table_stmt ::=
 alter_rename_table_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'RENAME' 'TO' table_name
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' table_name
-	| 'ALTER' 'TABLE' relation_expr 'RENAME' opt_column column_name 'TO' column_name
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'RENAME' opt_column column_name 'TO' column_name
 
 alter_oneindex_stmt ::=
 	'ALTER' 'INDEX' table_index_name alter_index_cmds
@@ -1618,13 +1616,6 @@ set_zone_config ::=
 	'CONFIGURE' 'ZONE' 'USING' var_set_list
 	| 'CONFIGURE' 'ZONE' 'DISCARD'
 
-opt_column ::=
-	'COLUMN'
-	| 
-
-column_name ::=
-	name
-
 alter_index_cmds ::=
 	( alter_index_cmd ) ( ( ',' alter_index_cmd ) )*
 
@@ -1675,6 +1666,9 @@ signed_iconst ::=
 
 target_name ::=
 	unrestricted_name
+
+column_name ::=
+	name
 
 col_qual_list ::=
 	(  ) ( ( col_qualification ) )*
@@ -1825,7 +1819,9 @@ user_priority ::=
 	| 'HIGH'
 
 alter_table_cmd ::=
-	'ADD' column_def
+	'RENAME' opt_column column_name 'TO' column_name
+	| 'RENAME' 'CONSTRAINT' column_name 'TO' column_name
+	| 'ADD' column_def
 	| 'ADD' 'IF' 'NOT' 'EXISTS' column_def
 	| 'ADD' 'COLUMN' column_def
 	| 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def
@@ -2031,6 +2027,10 @@ alias_clause ::=
 func_table ::=
 	func_expr_windowless
 	| 'ROWS' 'FROM' '(' rowsfrom_list ')'
+
+opt_column ::=
+	'COLUMN'
+	| 
 
 alter_column_default ::=
 	'SET' 'DEFAULT' a_expr

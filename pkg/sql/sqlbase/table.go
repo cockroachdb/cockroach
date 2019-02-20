@@ -291,20 +291,16 @@ func (desc *TableDescriptor) collectConstraintInfo(
 				continue
 			}
 			detail := ConstraintDetail{Kind: ConstraintTypePK}
-			if tableLookup != nil {
-				detail.Columns = index.ColumnNames
-				detail.Index = index
-			}
+			detail.Columns = index.ColumnNames
+			detail.Index = index
 			info[index.Name] = detail
 		} else if index.Unique {
 			if _, ok := info[index.Name]; ok {
 				return nil, errors.Errorf("duplicate constraint name: %q", index.Name)
 			}
 			detail := ConstraintDetail{Kind: ConstraintTypeUnique}
-			if tableLookup != nil {
-				detail.Columns = index.ColumnNames
-				detail.Index = index
-			}
+			detail.Columns = index.ColumnNames
+			detail.Index = index
 			info[index.Name] = detail
 		}
 
@@ -320,6 +316,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 			}
 			detail.Columns = index.ColumnNames[:numCols]
 			detail.Index = index
+			detail.FK = &index.ForeignKey
 
 			if tableLookup != nil {
 				other, err := tableLookup(index.ForeignKey.Table)
@@ -333,7 +330,6 @@ func (desc *TableDescriptor) collectConstraintInfo(
 						"in foreign key", index.ForeignKey.Index, other.Name)
 				}
 				detail.Details = fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames)
-				detail.FK = &index.ForeignKey
 				detail.ReferencedTable = other
 				detail.ReferencedIndex = otherIdx
 			}
@@ -348,10 +344,9 @@ func (desc *TableDescriptor) collectConstraintInfo(
 		detail := ConstraintDetail{Kind: ConstraintTypeCheck}
 		// Constraints in the Validating state are considered Unvalidated for this purpose
 		detail.Unvalidated = c.Validity != ConstraintValidity_Validated
+		detail.CheckConstraint = c
+		detail.Details = c.Expr
 		if tableLookup != nil {
-			detail.Details = c.Expr
-			detail.CheckConstraint = c
-
 			colsUsed, err := c.ColumnsUsed(desc)
 			if err != nil {
 				return nil, errors.Wrapf(err, "error computing columns used in check constraint %q", c.Name)
