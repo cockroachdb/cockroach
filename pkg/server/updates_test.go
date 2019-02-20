@@ -330,7 +330,7 @@ func TestReportUsage(t *testing.T) {
 		) {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec(`ALTER TABLE foo RENAME CONSTRAINT x TO y`); !testutils.IsError(
+		if _, err := db.Exec(`ALTER TABLE foo ALTER COLUMN x SET NOT NULL`); !testutils.IsError(
 			err, "unimplemented",
 		) {
 			t.Fatal(err)
@@ -541,7 +541,7 @@ func TestReportUsage(t *testing.T) {
 
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
-		"unimplemented.syntax.#32555":                   10,
+		"unimplemented.syntax.#28751":                   10,
 		"unimplemented.syntax.#32564":                   10,
 		"unimplemented.#9148":                           10,
 		"internalerror.":                                10,

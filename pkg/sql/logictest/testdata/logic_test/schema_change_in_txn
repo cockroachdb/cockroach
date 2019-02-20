@@ -894,6 +894,42 @@ COMMIT
 statement ok
 DROP TABLE check_table
 
+subtest check_rename
+
+statement ok
+CREATE TABLE check_table (k INT PRIMARY KEY)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD f INT
+
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT f_0 CHECK (f > 0)
+
+statement error pq: constraint "f_0" in the middle of being added
+ALTER TABLE check_table RENAME CONSTRAINT f_0 to f_1
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD f INT
+
+statement error pq: constraint "f_0" in the middle of being added
+ALTER TABLE check_table ADD CONSTRAINT f_0 CHECK (f > 0),
+                        RENAME CONSTRAINT f_0 to f_1
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE check_table
+
 # Test adding a check constraint to a table that was created in the same transaction
 subtest check_on_new_table
 

@@ -181,7 +181,7 @@ ALTER TABLE t DROP CONSTRAINT bar
 statement ok
 ALTER TABLE t DROP CONSTRAINT IF EXISTS bar
 
-statement error UNIQUE constraint depends on index "foo", use DROP INDEX with CASCADE if you really want to drop it
+statement error cannot drop UNIQUE constraint \"foo\" using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead
 ALTER TABLE t DROP CONSTRAINT foo
 
 statement ok

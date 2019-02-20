@@ -1416,8 +1416,18 @@ alter_table_cmds:
   }
 
 alter_table_cmd:
+  // ALTER TABLE <name> RENAME [COLUMN] <name> TO <newname>
+  RENAME opt_column column_name TO column_name
+  {
+    $$.val = &tree.AlterTableRenameColumn{Column: tree.Name($3), NewName: tree.Name($5) }
+  }
+  // ALTER TABLE <name> RENAME CONSTRAINT <name> TO <newname>
+| RENAME CONSTRAINT column_name TO column_name
+  {
+    $$.val = &tree.AlterTableRenameConstraint{Constraint: tree.Name($3), NewName: tree.Name($5) }
+  }
   // ALTER TABLE <name> ADD <coldef>
-  ADD column_def
+| ADD column_def
   {
     $$.val = &tree.AlterTableAddColumn{IfNotExists: false, ColumnDef: $2.colDef()}
   }
@@ -4720,30 +4730,6 @@ alter_rename_table_stmt:
     newName := $8.unresolvedObjectName().ToTableName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsView: false}
   }
-| ALTER TABLE relation_expr RENAME opt_column column_name TO column_name
-  {
-    table := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.RenameColumn{
-      Table:    table,
-      Name:     tree.Name($6),
-      NewName:  tree.Name($8),
-      IfExists: false,
-    }
-  }
-| ALTER TABLE IF EXISTS relation_expr RENAME opt_column column_name TO column_name
-  {
-    table := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.RenameColumn{
-      Table:    table,
-      Name:     tree.Name($8),
-      NewName:  tree.Name($10),
-      IfExists: true,
-    }
-  }
-| ALTER TABLE relation_expr RENAME CONSTRAINT constraint_name TO constraint_name
-  { return unimplementedWithIssue(sqllex, 32555) }
-| ALTER TABLE IF EXISTS relation_expr RENAME CONSTRAINT constraint_name TO constraint_name
-  { return unimplementedWithIssue(sqllex, 32555) }
 
 alter_rename_view_stmt:
   ALTER VIEW relation_expr RENAME TO view_name

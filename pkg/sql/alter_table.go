@@ -449,35 +449,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				return fmt.Errorf("constraint %q does not exist", t.Constraint)
 			}
-			switch details.Kind {
-			case sqlbase.ConstraintTypePK:
-				return fmt.Errorf("cannot drop primary key")
-			case sqlbase.ConstraintTypeUnique:
-				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX with CASCADE if you really want to drop it", t.Constraint)
-			case sqlbase.ConstraintTypeCheck:
-				for i, c := range n.tableDesc.Checks {
-					if c.Name == name {
-						if c.Validity == sqlbase.ConstraintValidity_Validating {
-							return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
-						}
-						n.tableDesc.Checks = append(n.tableDesc.Checks[:i], n.tableDesc.Checks[i+1:]...)
-						descriptorChanged = true
-						break
-					}
-				}
-			case sqlbase.ConstraintTypeFK:
-				idx, err := n.tableDesc.FindIndexByID(details.Index.ID)
-				if err != nil {
-					return err
-				}
-				if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, idx); err != nil {
-					return err
-				}
-				idx.ForeignKey = sqlbase.ForeignKeyReference{}
-				descriptorChanged = true
-			default:
-				return errors.Errorf("dropping %s constraint %q unsupported", details.Kind, t.Constraint)
+			if err := n.tableDesc.DropConstraint(
+				name, details,
+				func(desc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor) error {
+					return params.p.removeFKBackReference(params.ctx, desc, idx)
+				}); err != nil {
+				return err
 			}
+			descriptorChanged = true
 
 		case *tree.AlterTableValidateConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
@@ -598,6 +577,46 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err := injectTableStats(params, n.tableDesc.TableDesc(), sd); err != nil {
 				return err
 			}
+
+		case *tree.AlterTableRenameColumn:
+			descChanged, err := params.p.renameColumn(params.ctx, n.tableDesc, &t.Column, &t.NewName)
+			if err != nil {
+				return err
+			}
+			descriptorChanged = descChanged
+
+		case *tree.AlterTableRenameConstraint:
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			if err != nil {
+				return err
+			}
+			details, ok := info[string(t.Constraint)]
+			if !ok {
+				return fmt.Errorf("constraint %q does not exist", tree.ErrString(&t.Constraint))
+			}
+			if t.Constraint == t.NewName {
+				// Nothing to do.
+				break
+			}
+
+			if _, ok := info[string(t.NewName)]; ok {
+				return errors.Errorf("duplicate constraint name: %q", tree.ErrString(&t.NewName))
+			}
+
+			if err := params.p.CheckPrivilege(params.ctx, n.tableDesc, privilege.CREATE); err != nil {
+				return err
+			}
+
+			depViewRenameError := func(objType string, refTableID sqlbase.ID) error {
+				return params.p.dependentViewRenameError(params.ctx,
+					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID)
+			}
+
+			if err := n.tableDesc.RenameConstraint(
+				details, string(t.Constraint), string(t.NewName), depViewRenameError); err != nil {
+				return err
+			}
+			descriptorChanged = true
 
 		default:
 			return pgerror.NewAssertionErrorf("unsupported alter command: %T", cmd)
