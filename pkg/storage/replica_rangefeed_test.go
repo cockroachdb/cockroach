@@ -18,6 +18,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -227,8 +228,6 @@ func TestReplicaRangefeed(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	stream := newTestStream()
-	defer stream.Cancel()
 	req := roachpb.RangeFeedRequest{
 		Header: roachpb.Header{
 			Timestamp: initTime,
@@ -237,11 +236,28 @@ func TestReplicaRangefeed(t *testing.T) {
 		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 	}
 
-	for i := 0; i < replNum; i++ {
-		if pErr := mtc.Store(i).RangeFeed(ctx, &req, stream); !testutils.IsPError(pErr, `must be after replica GC threshold`) {
-			t.Error(pErr)
+	testutils.SucceedsSoon(t, func() error {
+		for i := 0; i < replNum; i++ {
+			repl := mtc.Store(i).LookupReplica(startKey)
+			if repl == nil {
+				return errors.Errorf("replica not found on node #%d", i+1)
+			}
+			if cur := repl.GetGCThreshold(); cur.Less(gcReq.Threshold) {
+				return errors.Errorf("%s has GCThreshold %s < %s; hasn't applied the bump yet", repl, cur, gcReq.Threshold)
+			}
+			cCtx, cancel := context.WithTimeout(ctx, 10*time.Second) // fail instead of hang
+			defer cancel()
+			stream := newTestStream()
+			defer stream.Cancel()
+
+			if pErr := mtc.Store(i).RangeFeed(cCtx, &req, stream); !testutils.IsPError(
+				pErr, `must be after replica GC threshold`,
+			) {
+				return pErr.GoError()
+			}
 		}
-	}
+		return nil
+	})
 }
 
 func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
