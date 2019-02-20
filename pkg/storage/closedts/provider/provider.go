@@ -330,35 +330,12 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 	}
 }
 
-// CanServe implements closedts.Provider.
-func (p *Provider) CanServe(
-	nodeID roachpb.NodeID, ts hlc.Timestamp, rangeID roachpb.RangeID, epoch ctpb.Epoch, lai ctpb.LAI,
-) bool {
-	var ok bool
-	p.cfg.Storage.VisitDescending(nodeID, func(entry ctpb.Entry) bool {
-		mlai, found := entry.MLAI[rangeID]
-		ctOK := !entry.ClosedTimestamp.Less(ts)
-
-		ok = found &&
-			ctOK &&
-			entry.Epoch == epoch &&
-			mlai <= lai
-
-		// We're done either if we proved that the read is possible, or if we're
-		// already done looking at closed timestamps large enough to satisfy it.
-		done := ok || !ctOK
-		return done
-	})
-
-	return ok
-}
-
 // MaxClosed implements closedts.Provider.
 func (p *Provider) MaxClosed(
 	nodeID roachpb.NodeID, rangeID roachpb.RangeID, epoch ctpb.Epoch, lai ctpb.LAI,
 ) hlc.Timestamp {
 	var maxTS hlc.Timestamp
-	p.cfg.Storage.VisitDescending(nodeID, func(entry ctpb.Entry) bool {
+	p.cfg.Storage.VisitDescending(nodeID, func(entry ctpb.Entry) (done bool) {
 		if mlai, found := entry.MLAI[rangeID]; found {
 			if entry.Epoch == epoch && mlai <= lai {
 				maxTS = entry.ClosedTimestamp

@@ -137,7 +137,6 @@ type Provider interface {
 	Producer
 	Notifyee
 	Start()
-	CanServe(roachpb.NodeID, hlc.Timestamp, roachpb.RangeID, ctpb.Epoch, ctpb.LAI) bool
 	MaxClosed(roachpb.NodeID, roachpb.RangeID, ctpb.Epoch, ctpb.LAI) hlc.Timestamp
 }
 
