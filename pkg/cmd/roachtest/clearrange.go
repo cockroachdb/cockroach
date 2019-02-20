@@ -54,8 +54,10 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 		c.Start(ctx, t)
 
 		// NB: on a 10 node cluster, this should take well below 3h.
+		tBegin := timeutil.Now()
 		c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
 			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
+		c.l.Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
 		c.Stop(ctx)
 		t.Status()
 
@@ -85,7 +87,10 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	t.Status(`restoring tiny table`)
 	defer t.WorkerStatus()
 
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "DROP DATABASE IF EXISTS tinybank"`)
+	// Use a 120s connect timeout to work around the fact that the server will
+	// declare itself ready before it's actually 100% ready. See:
+	// https://github.com/cockroachdb/cockroach/issues/34897#issuecomment-465089057
+	c.Run(ctx, c.Node(1), `COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --insecure -e "DROP DATABASE IF EXISTS tinybank"`)
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank", "--db=tinybank",
 		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1")
 
@@ -98,25 +103,17 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 		defer conn.Close()
 
 		var startHex string
-		// NB: set this to false to save yourself some time during development. Selecting
-		// from crdb_internal.ranges is very slow because it contacts all of the leaseholders.
-		// You may actually want to run a version of cockroach that doesn't do that because
-		// it'll still slow you down every time the method returned below is called.
-		if true {
-			if err := conn.QueryRow(
-				`SELECT to_hex(start_key) FROM crdb_internal.ranges WHERE database_name = 'bigbank' AND table_name = 'bank' ORDER BY start_key ASC LIMIT 1`,
-			).Scan(&startHex); err != nil {
-				t.Fatal(err)
-			}
-		} else {
-			startHex = "bd" // extremely likely to be the right thing (b'\275').
+		if err := conn.QueryRow(
+			`SELECT to_hex(start_key) FROM crdb_internal.ranges_no_leases WHERE database_name = 'bigbank' AND table_name = 'bank' ORDER BY start_key ASC LIMIT 1`,
+		).Scan(&startHex); err != nil {
+			t.Fatal(err)
 		}
 		return func() int {
 			conn := c.Conn(ctx, 1)
 			defer conn.Close()
 			var n int
 			if err := conn.QueryRow(
-				`SELECT count(*) FROM crdb_internal.ranges WHERE substr(to_hex(start_key), 1, length($1::string)) = $1`, startHex,
+				`SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE substr(to_hex(start_key), 1, length($1::string)) = $1`, startHex,
 			).Scan(&n); err != nil {
 				t.Fatal(err)
 			}
