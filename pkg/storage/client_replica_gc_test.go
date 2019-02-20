@@ -16,6 +16,7 @@ package storage_test
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -77,21 +78,30 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Put some bogus data on the replica which we're about to remove. Then,
-		// at the end of the test, check that that sideloaded storage is now
-		// empty (in other words, GC'ing the Replica took care of cleanup).
-		repl1.PutBogusSideloadedData()
-		if !repl1.HasBogusSideloadedData() {
-			t.Fatal("sideloaded storage ate our data")
+
+		// Put some bogus sideloaded data on the replica which we're about to
+		// remove. Then, at the end of the test, check that that sideloaded
+		// storage is now empty (in other words, GC'ing the Replica took care of
+		// cleanup).
+		//
+		// NB: the awkward key below works around KeyMin while at the same time
+		// not breaking should the range on which this operates ever change.
+		if err := storage.ProposeAddSSTable(
+			context.Background(), string(append(repl1.Desc().StartKey, 'a')), "v", mtc.clocks[0].Now(), mtc.stores[0],
+		); err != nil {
+			t.Fatal(err)
 		}
 
 		defer func() {
 			if !t.Failed() {
 				testutils.SucceedsSoon(t, func() error {
-					if repl1.HasBogusSideloadedData() {
-						return errors.Errorf("first replica still has sideloaded files despite GC")
+					// Verify that the whole directory for the replica is gone.
+					dir := repl1.SideloadedDir()
+					_, err := os.Stat(dir)
+					if os.IsNotExist(err) {
+						return nil
 					}
-					return nil
+					return errors.Errorf("first replica still has sideloaded files despite GC: %v", err)
 				})
 			}
 		}()

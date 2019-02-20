@@ -380,23 +380,9 @@ const (
 	sideloadBogusTerm  = 67890
 )
 
-func (r *Replica) PutBogusSideloadedData() {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	if err := r.raftMu.sideloaded.Put(context.Background(), sideloadBogusIndex, sideloadBogusTerm, []byte("bogus")); err != nil {
-		panic(err)
-	}
-}
-
-func (r *Replica) HasBogusSideloadedData() bool {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	if _, err := r.raftMu.sideloaded.Get(context.Background(), sideloadBogusIndex, sideloadBogusTerm); err == errSideloadedFileNotFound {
-		return false
-	} else if err != nil {
-		panic(err)
-	}
-	return true
+// SideloadedDir returns r.raftMu.sideloaded.Dir().
+func (r *Replica) SideloadedDir() string {
+	return r.raftMu.sideloaded.Dir()
 }
 
 func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyValue) {
