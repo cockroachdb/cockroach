@@ -2604,16 +2604,18 @@ func (cc *TableDescriptor_CheckConstraint) UsesColumn(
 // CompositeKeyMatchMethodValue allows the conversion from a
 // tree.ReferenceCompositeKeyMatchMethod to a ForeignKeyReference_Match.
 var CompositeKeyMatchMethodValue = [...]ForeignKeyReference_Match{
-	tree.MatchSimple: ForeignKeyReference_SIMPLE,
-	tree.MatchFull:   ForeignKeyReference_FULL,
+	tree.MatchSimple:  ForeignKeyReference_SIMPLE,
+	tree.MatchFull:    ForeignKeyReference_FULL,
+	tree.MatchPartial: ForeignKeyReference_PARTIAL,
 }
 
 // ForeignKeyReferenceMatchValue allows the conversion from a
 // ForeignKeyReference_Match to a tree.ReferenceCompositeKeyMatchMethod.
 // This should match CompositeKeyMatchMethodValue.
 var ForeignKeyReferenceMatchValue = [...]tree.CompositeKeyMatchMethod{
-	ForeignKeyReference_SIMPLE: tree.MatchSimple,
-	ForeignKeyReference_FULL:   tree.MatchFull,
+	ForeignKeyReference_SIMPLE:  tree.MatchSimple,
+	ForeignKeyReference_FULL:    tree.MatchFull,
+	ForeignKeyReference_PARTIAL: tree.MatchPartial,
 }
 
 // String implements the fmt.Stringer interface.
@@ -2623,6 +2625,8 @@ func (x ForeignKeyReference_Match) String() string {
 		return "MATCH SIMPLE"
 	case ForeignKeyReference_FULL:
 		return "MATCH FULL"
+	case ForeignKeyReference_PARTIAL:
+		return "MATCH PARTIAL"
 	default:
 		return strconv.Itoa(int(x))
 	}

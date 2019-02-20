@@ -652,11 +652,13 @@ type CompositeKeyMatchMethod int
 const (
 	MatchSimple CompositeKeyMatchMethod = iota
 	MatchFull
+	MatchPartial // Note: PARTIAL not actually supported at this point.
 )
 
 var compositeKeyMatchMethodName = [...]string{
-	MatchSimple: "MATCH SIMPLE",
-	MatchFull:   "MATCH FULL",
+	MatchSimple:  "MATCH SIMPLE",
+	MatchFull:    "MATCH FULL",
+	MatchPartial: "MATCH PARTIAL",
 }
 
 func (c CompositeKeyMatchMethod) String() string {
