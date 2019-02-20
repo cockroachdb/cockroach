@@ -463,11 +463,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			case sqlbase.ConstraintTypeUnique:
 				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX with CASCADE if you really want to drop it", t.Constraint)
 			case sqlbase.ConstraintTypeCheck:
-				for i := range n.tableDesc.Checks {
-					if n.tableDesc.Checks[i].Validity == sqlbase.ConstraintValidity_Validating {
-						return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
-					}
-					if n.tableDesc.Checks[i].Name == name {
+				for i, c := range n.tableDesc.Checks {
+					if c.Name == name {
+						if c.Validity == sqlbase.ConstraintValidity_Validating {
+							return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
+						}
 						n.tableDesc.Checks = append(n.tableDesc.Checks[:i], n.tableDesc.Checks[i+1:]...)
 						descriptorChanged = true
 						break
