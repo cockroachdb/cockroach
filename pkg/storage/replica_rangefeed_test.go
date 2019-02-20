@@ -538,6 +538,9 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
+			timer := time.AfterFunc(10*time.Second, stream.Cancel)
+			defer timer.Stop()
+
 			pErr := partitionStore.RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
