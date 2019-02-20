@@ -357,6 +357,7 @@ func MakeFixture(
 	gcs *storage.Client,
 	config FixtureConfig,
 	gen workload.Generator,
+	filesPerNode int,
 ) (Fixture, error) {
 	const writeCSVChunkSize = 64 * 1 << 20 // 64 MB
 
@@ -396,7 +397,8 @@ func MakeFixture(
 			if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
 				return err
 			}
-			paths := csvServerPaths(config.CSVServerURL, gen, table, numNodes)
+			numPaths := numNodes * filesPerNode
+			paths := csvServerPaths(config.CSVServerURL, gen, table, numPaths)
 			for _, path := range paths {
 				tableCSVPathsCh <- path
 			}
@@ -427,7 +429,12 @@ func MakeFixture(
 // ImportFixture works like MakeFixture, but instead of stopping halfway or
 // writing a backup to cloud storage, it finishes ingesting the data.
 func ImportFixture(
-	ctx context.Context, sqlDB *gosql.DB, gen workload.Generator, dbName string, directIngestion bool,
+	ctx context.Context,
+	sqlDB *gosql.DB,
+	gen workload.Generator,
+	dbName string,
+	directIngestion bool,
+	filesPerNode int,
 ) (int64, error) {
 	var numNodes int
 	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
@@ -438,7 +445,7 @@ func ImportFixture(
 	g := ctxgroup.WithContext(ctx)
 	for _, t := range gen.Tables() {
 		table := t
-		paths := csvServerPaths(`experimental-workload://`, gen, table, numNodes)
+		paths := csvServerPaths(`experimental-workload://`, gen, table, numNodes*filesPerNode)
 		g.GoCtx(func(ctx context.Context) error {
 			tableBytes, err := importFixtureTable(
 				ctx, sqlDB, dbName, table, paths, directIngestion, `` /* output */)
