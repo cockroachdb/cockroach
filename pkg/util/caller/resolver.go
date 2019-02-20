@@ -72,7 +72,8 @@ var defaultRE = func() *regexp.Regexp {
 		// creates packages inside of a "src" directory within their GOPATH.
 		return regexp.MustCompile(".*" + qSep + "src" + pkgStrip)
 	}
-	if !strings.HasSuffix(root, sep+"src") && !strings.HasSuffix(root, sep+"vendor") {
+	if !strings.HasSuffix(root, sep+"src") && !strings.HasSuffix(root, sep+"vendor") &&
+		!strings.HasSuffix(root, sep+"pkg/mod") {
 		panic("unable to find base path for default call resolver, got " + root)
 	}
 	return regexp.MustCompile(regexp.QuoteMeta(root) + pkgStrip)
