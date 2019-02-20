@@ -90,11 +90,11 @@ const (
 	// for other contending reads or writes. The chosen value was selected based
 	// on some light experimentation to ensure that performance does not degrade
 	// in the face of highly contended workloads.
-	intentResolutionBatchWait = 10 * time.Millisecond
+	defaultIntentResolutionBatchWait = 10 * time.Millisecond
 
 	// intentResolutionBatchIdle is similar to the above setting but is used when
 	// when no additional traffic hits the batch.
-	intentResolutionBatchIdle = 5 * time.Millisecond
+	defaultIntentResolutionBatchIdle = 5 * time.Millisecond
 )
 
 // Config contains the dependencies to construct an IntentResolver.
@@ -106,9 +106,11 @@ type Config struct {
 	TestingKnobs         storagebase.IntentResolverTestingKnobs
 	RangeDescriptorCache kvbase.RangeDescriptorCache
 
-	TaskLimit      int
-	MaxGCBatchWait time.Duration
-	MaxGCBatchIdle time.Duration
+	TaskLimit                    int
+	MaxGCBatchWait               time.Duration
+	MaxGCBatchIdle               time.Duration
+	MaxIntentResolutionBatchWait time.Duration
+	MaxIntentResolutionBatchIdle time.Duration
 }
 
 // IntentResolver manages the process of pushing transactions and
@@ -153,6 +155,12 @@ func setConfigDefaults(c *Config) {
 	}
 	if c.MaxGCBatchWait == 0 {
 		c.MaxGCBatchWait = defaultGCBatchWait
+	}
+	if c.MaxIntentResolutionBatchIdle == 0 {
+		c.MaxIntentResolutionBatchIdle = defaultIntentResolutionBatchIdle
+	}
+	if c.MaxIntentResolutionBatchWait == 0 {
+		c.MaxIntentResolutionBatchWait = defaultIntentResolutionBatchWait
 	}
 	if c.RangeDescriptorCache == nil {
 		c.RangeDescriptorCache = nopRangeDescriptorCache{}
@@ -200,8 +208,8 @@ func New(c Config) *IntentResolver {
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
 		Name:            "intent_resolver_ir_batcher",
 		MaxMsgsPerBatch: batchSize,
-		MaxWait:         intentResolutionBatchWait,
-		MaxIdle:         intentResolutionBatchIdle,
+		MaxWait:         c.MaxIntentResolutionBatchWait,
+		MaxIdle:         c.MaxIntentResolutionBatchIdle,
 		Stopper:         c.Stopper,
 		Sender:          c.DB.NonTransactionalSender(),
 	})
