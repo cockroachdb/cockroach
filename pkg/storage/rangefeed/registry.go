@@ -252,7 +252,12 @@ func (r *registration) runCatchupScan() error {
 				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
 			}
 			if !meta.IsInline() {
-				// Not an inline value. Ignore.
+				// This is an MVCCMetadata key for an intent. Ignore this and
+				// skip past the corresponding provisional key-value. To do
+				// this, scan directly to the provisional key and let the loop
+				// scan to the following key after it.
+				unsafeKey.Timestamp = hlc.Timestamp(meta.Timestamp)
+				r.catchupIter.Seek(unsafeKey)
 				continue
 			}
 
