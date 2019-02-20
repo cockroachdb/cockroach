@@ -642,6 +642,8 @@ func TestCleanupIntents(t *testing.T) {
 		sendFuncs   []sendFunc
 		expectedErr bool
 		expectedNum int
+		before      func(tc *testCase)
+		after       func()
 	}
 
 	cases := []testCase{
@@ -677,12 +679,23 @@ func TestCleanupIntents(t *testing.T) {
 				resolveIntentsSendFunc,
 			},
 			expectedNum: 3*intentResolverBatchSize + 3,
+			before: func(tc *testCase) {
+				// Under stress sometimes it can take more than 10ms to even call send.
+				// The batch wait is increased dramatically during this test to eliminate
+				// flakiness and ensure that all requests make it to the batcher in a timely
+				// manner.
+				resetWait := setDuration(&intentResolutionBatchWait, 500*time.Millisecond)
+				resetIdle := setDuration(&intentResolutionBatchIdle, 20*time.Millisecond)
+				tc.after = func() { resetWait(); resetIdle() }
+			},
 		},
 	}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	for _, c := range cases {
 		t.Run("", func(t *testing.T) {
+			c.before(&c)
+			defer c.after()
 			ir := newIntentResolverWithSendFuncs(stopper, clock, newSendFuncs(c.sendFuncs...))
 			num, err := ir.CleanupIntents(context.Background(), c.intents, clock.Now(), roachpb.PUSH_ABORT)
 			assert.Equal(t, num, c.expectedNum, "number of resolved intents")
@@ -840,3 +853,9 @@ var (
 		return resp, nil
 	}
 )
+
+func setDuration(cur *time.Duration, new time.Duration) (cleanup func()) {
+	old := *cur
+	*cur = new
+	return func() { *cur = old }
+}

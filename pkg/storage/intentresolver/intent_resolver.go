@@ -82,14 +82,17 @@ const (
 	// defaultGCBatchWait is the default duration which the gc request batcher
 	// will wait between requests for a range before sending it.
 	defaultGCBatchWait = time.Second
+)
 
+var (
 	// intentResolutionBatchWait is used to configure the RequestBatcher which
 	// batches intent resolution requests across transactions. Intent resolution
 	// needs to occur in a relatively short period of time after the completion
 	// of a transaction in order to minimize the contention footprint of the write
 	// for other contending reads or writes. The chosen value was selected based
 	// on some light experimentation to ensure that performance does not degrade
-	// in the face of highly contended workloads.
+	// in the face of highly contended workloads. This setting is a var rather
+	// than a const in order to allow injection by unit tests.
 	intentResolutionBatchWait = 10 * time.Millisecond
 
 	// intentResolutionBatchIdle is similar to the above setting but is used when
