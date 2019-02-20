@@ -18,6 +18,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -124,7 +127,7 @@ func TestReplicaRangefeed(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(i).RangeFeed(ctx, &req, stream)
+			pErr := mtc.Store(i).RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}(i)
 	}
@@ -227,8 +230,6 @@ func TestReplicaRangefeed(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	stream := newTestStream()
-	defer stream.Cancel()
 	req := roachpb.RangeFeedRequest{
 		Header: roachpb.Header{
 			Timestamp: initTime,
@@ -237,17 +238,33 @@ func TestReplicaRangefeed(t *testing.T) {
 		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 	}
 
-	for i := 0; i < replNum; i++ {
-		if pErr := mtc.Store(i).RangeFeed(ctx, &req, stream); !testutils.IsPError(pErr, `must be after replica GC threshold`) {
-			t.Error(pErr)
+	testutils.SucceedsSoon(t, func() error {
+		for i := 0; i < replNum; i++ {
+			repl := mtc.Store(i).LookupReplica(startKey)
+			if repl == nil {
+				return errors.Errorf("replica not found on node #%d", i+1)
+			}
+			if cur := repl.GetGCThreshold(); cur.Less(gcReq.Threshold) {
+				return errors.Errorf("%s has GCThreshold %s < %s; hasn't applied the bump yet", repl, cur, gcReq.Threshold)
+			}
+			stream := newTestStream()
+			timer := time.AfterFunc(10*time.Second, stream.Cancel)
+			defer timer.Stop()
+			defer stream.Cancel()
+
+			if pErr := mtc.Store(i).RangeFeed(&req, stream); !testutils.IsPError(
+				pErr, `must be after replica GC threshold`,
+			) {
+				return pErr.GoError()
+			}
 		}
-	}
+		return nil
+	})
 }
 
 func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	storage.RangefeedEnabled.Override(&sc.Settings.SV, true)
 	mtc := &multiTestContext{
@@ -273,7 +290,7 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	// immediately even if it didn't return the correct error.
 	stream.Cancel()
 
-	pErr := mtc.Store(0).RangeFeed(ctx, &req, stream)
+	pErr := mtc.Store(0).RangeFeed(&req, stream)
 	const exp = "expiration-based leases are incompatible with rangefeeds"
 	if !testutils.IsPError(pErr, exp) {
 		t.Errorf("expected error %q, found %v", exp, pErr)
@@ -388,7 +405,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(removeStore).RangeFeed(ctx, &req, stream)
+			pErr := mtc.Store(removeStore).RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
 
@@ -417,7 +434,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(0).RangeFeed(ctx, &req, stream)
+			pErr := mtc.Store(0).RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
 
@@ -465,7 +482,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: splitKey},
 			}
 
-			pErr := mtc.Store(0).RangeFeed(ctx, &req, streamLeft)
+			pErr := mtc.Store(0).RangeFeed(&req, streamLeft)
 			streamLeftErrC <- pErr
 		}()
 
@@ -480,7 +497,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: splitKey, EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(0).RangeFeed(ctx, &req, streamRight)
+			pErr := mtc.Store(0).RangeFeed(&req, streamRight)
 			streamRightErrC <- pErr
 		}()
 
@@ -523,12 +540,31 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := partitionStore.RangeFeed(ctx, &req, stream)
+			timer := time.AfterFunc(10*time.Second, stream.Cancel)
+			defer timer.Stop()
+
+			pErr := partitionStore.RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
 
 		// Wait for the first checkpoint event.
 		waitForInitialCheckpoint(t, stream, streamErrC)
+
+		// Force the leader off the replica on partitionedStore. If it's the
+		// leader, this test will fall over when it cuts the replica off from
+		// Raft traffic.
+		testutils.SucceedsSoon(t, func() error {
+			repl, err := partitionStore.GetReplica(rangeID)
+			if err != nil {
+				return err
+			}
+			raftStatus := repl.RaftStatus()
+			if raftStatus != nil && raftStatus.RaftState == raft.StateFollower {
+				return nil
+			}
+			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1))
+			return errors.Errorf("not raft follower: %+v, transferred lease: %v", raftStatus, err)
+		})
 
 		// Partition the replica from the rest of its range.
 		mtc.transport.Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
@@ -562,7 +598,16 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}
 
 		// Remove the partition. Snapshot should follow.
-		mtc.transport.Listen(partitionStore.Ident.StoreID, partitionStore)
+		mtc.transport.Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
+			rangeID:            rangeID,
+			RaftMessageHandler: partitionStore,
+			drop: func(req *storage.RaftMessageRequest, _ *storage.RaftMessageResponse) bool {
+				// Make sure that even going forward no MsgApp for what we just truncated can
+				// make it through. The Raft transport is asynchronous so this is necessary
+				// to make the test pass reliably.
+				return req != nil && req.Message.Type == raftpb.MsgApp && req.Message.Index <= index
+			},
+		})
 
 		// Check the error.
 		pErr := <-streamErrC
@@ -583,7 +628,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			}
 
-			pErr := mtc.Store(0).RangeFeed(ctx, &req, stream)
+			pErr := mtc.Store(0).RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
 
