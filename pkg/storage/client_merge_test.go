@@ -2844,6 +2844,8 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 type unreliableRaftHandler struct {
 	rangeID roachpb.RangeID
 	storage.RaftMessageHandler
+	// If non-nil, can return false to avoid dropping a msg to rangeID
+	drop func(request *storage.RaftMessageRequest, response *storage.RaftMessageResponse) bool
 }
 
 func (h *unreliableRaftHandler) HandleRaftRequest(
@@ -2852,7 +2854,9 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 	respStream storage.RaftMessageResponseStream,
 ) *roachpb.Error {
 	if req.RangeID == h.rangeID {
-		return nil
+		if h.drop == nil || h.drop(req, nil) {
+			return nil
+		}
 	}
 	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 }
@@ -2861,7 +2865,9 @@ func (h *unreliableRaftHandler) HandleRaftResponse(
 	ctx context.Context, resp *storage.RaftMessageResponse,
 ) error {
 	if resp.RangeID == h.rangeID {
-		return nil
+		if h.drop == nil || h.drop(nil, resp) {
+			return nil
+		}
 	}
 	return h.RaftMessageHandler.HandleRaftResponse(ctx, resp)
 }
