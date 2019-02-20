@@ -262,6 +262,15 @@ func (dsp *DistSQLPlanner) Run(
 	flow.Cleanup(ctx)
 }
 
+type errorScore int
+
+const (
+	scoreNoError errorScore = iota
+	scoreTxnRestart
+	scoreTxnAbort
+	scoreNonRetriable
+)
+
 // DistSQLReceiver is a RowReceiver that writes results to a rowResultWriter.
 // This is where the DistSQL execution meets the SQL Session - the RowContainer
 // comes from a client Session.
@@ -340,6 +349,7 @@ type rowResultWriter interface {
 	AddRow(ctx context.Context, row tree.Datums) error
 	IncrementRowsAffected(n int)
 	SetError(error)
+	OverwriteError(error)
 	Err() error
 }
 
@@ -352,6 +362,9 @@ type errOnlyResultWriter struct {
 var _ rowResultWriter = &errOnlyResultWriter{}
 
 func (w *errOnlyResultWriter) SetError(err error) {
+	w.err = err
+}
+func (w *errOnlyResultWriter) OverwriteError(err error) {
 	w.err = err
 }
 func (w *errOnlyResultWriter) Err() error {
@@ -467,23 +480,29 @@ func (r *DistSQLReceiver) Push(
 					errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnCoordMeta))
 			}
 		}
-		if meta.Err != nil && r.resultWriter.Err() == nil {
-			if r.txn != nil {
-				if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
-					// Update the txn in response to remote errors. In the non-DistSQL
-					// world, the TxnCoordSender handles "unhandled" retryable errors,
-					// but this one is coming from a distributed SQL node, which has
-					// left the handling up to the root transaction.
-					meta.Err = r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, &retryErr.PErr)
-					// Update the clock with information from the error. On non-DistSQL
-					// code paths, the DistSender does this.
-					// TODO(andrei): We don't propagate clock signals on success cases
-					// through DistSQL; we should. We also don't propagate them through
-					// non-retryable errors; we also should.
-					r.updateClock(retryErr.PErr.Now)
+		if meta.Err != nil {
+			// Check if the error we just received should take precedence over a
+			// previous error (if any).
+			if errScore(meta.Err) > errScore(r.resultWriter.Err()) {
+				if r.txn != nil {
+					if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
+						// Update the txn in response to remote errors. In the non-DistSQL
+						// world, the TxnCoordSender handles "unhandled" retryable errors,
+						// but this one is coming from a distributed SQL node, which has
+						// left the handling up to the root transaction.
+						meta.Err = r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, &retryErr.PErr)
+						// Update the clock with information from the error. On non-DistSQL
+						// code paths, the DistSender does this.
+						// TODO(andrei): We don't propagate clock signals on success cases
+						// through DistSQL; we should. We also don't propagate them through
+						// non-retryable errors; we also should.
+						r.updateClock(retryErr.PErr.Now)
+					}
 				}
+				// We call OverwriteError() instead of SetError() because we might get
+				// here multiple times with errors of different scores.
+				r.resultWriter.OverwriteError(meta.Err)
 			}
-			r.resultWriter.SetError(meta.Err)
 		}
 		if len(meta.Ranges) > 0 {
 			if err := r.updateCaches(r.ctx, meta.Ranges); err != nil && r.resultWriter.Err() == nil {
@@ -560,6 +579,28 @@ func (r *DistSQLReceiver) Push(
 		return r.status
 	}
 	return r.status
+}
+
+func errScore(err error) errorScore {
+	if err == nil {
+		return scoreNoError
+	}
+	if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
+		pErr := retryErr.PErr
+		switch pErr.GetDetail().(type) {
+		case *roachpb.TransactionAbortedError:
+			return scoreTxnAbort
+		default:
+			return scoreTxnRestart
+		}
+	}
+	if retryErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
+		if retryErr.PrevTxnAborted {
+			return scoreTxnAbort
+		}
+		return scoreTxnRestart
+	}
+	return scoreNonRetriable
 }
 
 // ProducerDone is part of the RowReceiver interface.

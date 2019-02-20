@@ -349,7 +349,12 @@ func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbo
 func NewTransactionRetryWithProtoRefreshError(
 	msg string, txnID uuid.UUID, txn Transaction,
 ) *TransactionRetryWithProtoRefreshError {
-	return &TransactionRetryWithProtoRefreshError{Msg: msg, TxnID: txnID, Transaction: txn}
+	return &TransactionRetryWithProtoRefreshError{
+		Msg:            msg,
+		TxnID:          txnID,
+		Transaction:    txn,
+		PrevTxnAborted: !txnID.Equal(txn.ID),
+	}
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.

@@ -327,10 +327,10 @@ message RaftGroupDeletedError {
 message ReplicaCorruptionError {
   option (gogoproto.equal) = true;
 
-  optional string error_msg = 1 [(gogoproto.nullable) = false];;
+  optional string error_msg = 1 [(gogoproto.nullable) = false];
   // processed indicates that the error has been taken into account and
   // necessary steps will be taken. For now, required for testing.
-  optional bool processed = 2 [(gogoproto.nullable) = false];;
+  optional bool processed = 2 [(gogoproto.nullable) = false];
 }
 
 // ReplicaTooOldError is sent in response to a raft message when the
@@ -398,6 +398,11 @@ message TransactionRetryWithProtoRefreshError {
   // before, but with an incremented epoch and timestamp, or a completely new
   // Transaction.
   optional Transaction transaction = 3 [(gogoproto.nullable) = false];
+
+  // prev_txn_aborted is set if this error was generated from a
+  // TransactionAbortedError. This indicates that the client will continue with
+  // a completely new transaction, not the old transaction at a different epoch.
+  optional bool prev_txn_aborted = 4 [(gogoproto.nullable) = false];
 }
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a

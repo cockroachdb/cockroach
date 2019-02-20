@@ -635,7 +635,8 @@ type CommandResultErrBase interface {
 	Err() error
 
 	// OverwriteError is like SetError(), except it can be called after SetError()
-	// has already been called and it will overwrite the error. Used by high-level
+	// has already been called and it will overwrite the error (it can also be
+	// called without Err() having been previously called). Used by high-level
 	// code when it has a strong opinion about what the error that should be
 	// returned to the client is and doesn't much care about whether an error has
 	// already been set on the result.
