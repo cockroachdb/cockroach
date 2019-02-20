@@ -73,11 +73,6 @@ func (noopEverything) Notify(roachpb.NodeID) chan<- ctpb.Entry {
 }
 func (noopEverything) Subscribe(context.Context, chan<- ctpb.Entry) {}
 func (noopEverything) Start()                                       {}
-func (noopEverything) CanServe(
-	roachpb.NodeID, hlc.Timestamp, roachpb.RangeID, ctpb.Epoch, ctpb.LAI,
-) bool {
-	return false
-}
 func (noopEverything) MaxClosed(
 	roachpb.NodeID, roachpb.RangeID, ctpb.Epoch, ctpb.LAI,
 ) hlc.Timestamp {
