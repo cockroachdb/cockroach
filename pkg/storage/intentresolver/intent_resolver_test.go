@@ -630,6 +630,9 @@ func counterSendFunc(counter *int64, f sendFunc) sendFunc {
 // and returns the appropriate errors.
 func TestCleanupIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("https://github.com/cockroachdb/cockroach/pull/35085")
+
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	txn := beginTransaction(t, clock, roachpb.MinUserPriority, roachpb.Key("a"), true)
 	// Set txn.ID to a very small value so it's sorted deterministically first.
