@@ -58,7 +58,7 @@ func TestSortedDistinct(t *testing.T) {
 			}
 			out := newOpTestOutput(distinct, []int{0, 1, 2, 3}, tc.expected)
 
-			if err := out.Verify(); err != nil {
+			if err := out.VerifyAnyOrder(); err != nil {
 				t.Fatal(err)
 			}
 		})
