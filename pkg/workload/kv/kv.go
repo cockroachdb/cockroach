@@ -61,6 +61,7 @@ type kv struct {
 	splits                               int
 	secondaryIndex                       bool
 	useOpt                               bool
+	targetCompressionRatio               float64
 }
 
 func init() {
@@ -113,6 +114,8 @@ var kvMeta = workload.Meta{
 		g.flags.BoolVar(&g.secondaryIndex, `secondary-index`, false,
 			`Add a secondary index to the schema`)
 		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
+		g.flags.Float64Var(&g.targetCompressionRatio, `target-compression-ratio`, 1.0,
+			`Target compression ratio for data blocks. Must be >= 1.0`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -140,6 +143,9 @@ func (w *kv) Hooks() workload.Hooks {
 			}
 			if w.readPercent+w.spanPercent > 100 {
 				return errors.New("'read-percent' and 'span-percent' higher than 100")
+			}
+			if w.targetCompressionRatio < 1.0 || math.IsNaN(w.targetCompressionRatio) {
+				return errors.New("'target-compression-ratio' must be a number >= 1.0")
 			}
 			return nil
 		},
@@ -485,8 +491,16 @@ func (g *zipfGenerator) sequence() int64 {
 func randomBlock(config *kv, r *rand.Rand) []byte {
 	blockSize := r.Intn(config.maxBlockSizeBytes-config.minBlockSizeBytes) + config.minBlockSizeBytes
 	blockData := make([]byte, blockSize)
+	uniqueSize := int(float64(blockSize) / config.targetCompressionRatio)
+	if uniqueSize < 1 {
+		uniqueSize = 1
+	}
 	for i := range blockData {
-		blockData[i] = byte(r.Int() & 0xff)
+		if i >= uniqueSize {
+			blockData[i] = blockData[i-uniqueSize]
+		} else {
+			blockData[i] = byte(r.Int() & 0xff)
+		}
 	}
 	return blockData
 }
