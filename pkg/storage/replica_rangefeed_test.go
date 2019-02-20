@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -547,6 +548,22 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Wait for the first checkpoint event.
 		waitForInitialCheckpoint(t, stream, streamErrC)
+
+		// Force the leader off the replica on partitionedStore. If it's the
+		// leader, this test will fall over when it cuts the replica off from
+		// Raft traffic.
+		testutils.SucceedsSoon(t, func() error {
+			repl, err := partitionStore.GetReplica(rangeID)
+			if err != nil {
+				return err
+			}
+			raftStatus := repl.RaftStatus()
+			if raftStatus != nil && raftStatus.RaftState == raft.StateFollower {
+				return nil
+			}
+			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1))
+			return errors.Errorf("not raft follower: %+v, transferred lease: %v", raftStatus, err)
+		})
 
 		// Partition the replica from the rest of its range.
 		mtc.transport.Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
