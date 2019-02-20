@@ -189,16 +189,8 @@ func (r *commandResult) Err() error {
 // SetError is part of the CommandResult interface.
 //
 // We're not going to write any bytes to the buffer in order to support future
-// OverwriteError() calls. The error will only be serialized at Close() time.
+// SetError() calls. The error will only be serialized at Close() time.
 func (r *commandResult) SetError(err error) {
-	if r.err != nil {
-		panic(fmt.Sprintf("can't overwrite err: %s with err: %s", r.err, err))
-	}
-	r.err = err
-}
-
-// OverwriteError is part of the CommandResult interface.
-func (r *commandResult) OverwriteError(err error) {
 	r.err = err
 }
 
