@@ -35,7 +35,7 @@ func TestCount(t *testing.T) {
 			count := NewCountOp(input[0])
 			out := newOpTestOutput(count, []int{0}, tc.expected)
 
-			if err := out.Verify(); err != nil {
+			if err := out.VerifyAnyOrder(); err != nil {
 				t.Fatal(err)
 			}
 		})

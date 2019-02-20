@@ -738,7 +738,7 @@ func TestHashJoinerInt64(t *testing.T) {
 
 					out := newOpTestOutput(hj, cols, tc.expectedTuples)
 
-					if err := out.Verify(); err != nil {
+					if err := out.VerifyAnyOrder(); err != nil {
 						t.Fatal(err)
 					}
 				})

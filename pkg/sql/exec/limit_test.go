@@ -64,7 +64,7 @@ func TestLimit(t *testing.T) {
 			limit := NewLimitOp(input[0], tc.limit)
 			out := newOpTestOutput(limit, []int{0}, tc.expected)
 
-			if err := out.Verify(); err != nil {
+			if err := out.VerifyAnyOrder(); err != nil {
 				t.Fatal(err)
 			}
 		})
