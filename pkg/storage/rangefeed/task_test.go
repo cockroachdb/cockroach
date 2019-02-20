@@ -39,6 +39,10 @@ func makeKV(key, val string, ts int64) engine.MVCCKeyValue {
 	}
 }
 
+func makeProvisionalKV(key, val string, ts int64) engine.MVCCKeyValue {
+	return makeKV(key, val, ts)
+}
+
 func makeMetaKV(key string, meta enginepb.MVCCMetadata) engine.MVCCKeyValue {
 	b, err := protoutil.Marshal(&meta)
 	if err != nil {
@@ -59,11 +63,14 @@ func makeInline(key, val string) engine.MVCCKeyValue {
 }
 
 func makeIntent(key string, txnID uuid.UUID, txnKey string, txnTS int64) engine.MVCCKeyValue {
-	return makeMetaKV(key, enginepb.MVCCMetadata{Txn: &enginepb.TxnMeta{
-		ID:        txnID,
-		Key:       []byte(txnKey),
-		Timestamp: hlc.Timestamp{WallTime: txnTS},
-	}})
+	return makeMetaKV(key, enginepb.MVCCMetadata{
+		Txn: &enginepb.TxnMeta{
+			ID:        txnID,
+			Key:       []byte(txnKey),
+			Timestamp: hlc.Timestamp{WallTime: txnTS},
+		},
+		Timestamp: hlc.LegacyTimestamp{WallTime: txnTS},
+	})
 }
 
 type testIterator struct {
@@ -77,11 +84,39 @@ type testIterator struct {
 }
 
 func newTestIterator(kvs []engine.MVCCKeyValue) *testIterator {
+	// Ensure that the key-values are sorted.
 	if !sort.SliceIsSorted(kvs, func(i, j int) bool {
 		return kvs[i].Key.Less(kvs[j].Key)
 	}) {
 		panic("unsorted kvs")
 	}
+
+	// Ensure that every intent has a matching MVCCMetadata key
+	// and provisional key-value pair.
+	const missingErr = "missing provisional kv (makeProvisionalKV) for intent meta key (makeIntent)"
+	var meta enginepb.MVCCMetadata
+	for i := 0; i < len(kvs); i++ {
+		kv := kvs[i]
+		if !kv.Key.IsValue() {
+			if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+				panic(err)
+			}
+			if !meta.IsInline() {
+				i++
+				if i == len(kvs) {
+					panic(missingErr)
+				}
+				expNextKey := engine.MVCCKey{
+					Key:       kv.Key.Key,
+					Timestamp: hlc.Timestamp(meta.Timestamp),
+				}
+				if !kvs[i].Key.Equal(expNextKey) {
+					panic(missingErr)
+				}
+			}
+		}
+	}
+
 	return &testIterator{
 		kvs:  kvs,
 		cur:  -1,
@@ -171,19 +206,25 @@ func TestInitResolvedTSScan(t *testing.T) {
 		makeKV("a", "val1", 10),
 		makeInline("b", "val2"),
 		makeIntent("c", txn1, "txnKey1", 15),
+		makeProvisionalKV("c", "txnKey1", 15),
 		makeKV("c", "val3", 11),
 		makeKV("c", "val4", 9),
 		makeIntent("d", txn2, "txnKey2", 21),
+		makeProvisionalKV("d", "txnKey2", 21),
 		makeKV("d", "val5", 20),
 		makeKV("d", "val6", 19),
 		makeInline("g", "val7"),
 		makeKV("m", "val8", 1),
 		makeIntent("n", txn1, "txnKey1", 12),
+		makeProvisionalKV("n", "txnKey1", 12),
 		makeIntent("r", txn1, "txnKey1", 19),
+		makeProvisionalKV("r", "txnKey1", 19),
 		makeKV("r", "val9", 4),
 		makeIntent("w", txn1, "txnKey1", 3),
+		makeProvisionalKV("w", "txnKey1", 3),
 		makeInline("x", "val10"),
 		makeIntent("z", txn2, "txnKey2", 21),
+		makeProvisionalKV("z", "txnKey2", 21),
 		makeKV("z", "val11", 4),
 	})
 
