@@ -3111,6 +3111,51 @@ func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 	}
 }
 
+// TestMVCCPutOldOrigTimestampNewCommitTimestamp tests a case where a
+// transactional Put occurs to the same key, but with an older original
+// timestamp than a pre-existing key. As always, this should result in a
+// WriteTooOld error. However, in this case the transaction has a larger
+// provisional commit timestamp than the pre-existing key. It should write
+// its intent at this timestamp instead of directly above the existing key.
+func TestMVCCPutOldOrigTimestampNewCommitTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, value1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Perform a transactional Put with a transaction whose original timestamp is
+	// below the existing key's timestamp and whose provisional commit timestamp
+	// is above the existing key's timestamp.
+	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
+	txn.Timestamp = hlc.Timestamp{WallTime: 5}
+	txn.Sequence++
+	err = MVCCPut(ctx, engine, nil, testKey1, txn.OrigTimestamp, value2, txn)
+
+	// Verify that the Put returned a WriteTooOld with the ActualTime set to the
+	// transactions provisional commit timestamp.
+	expTS := txn.Timestamp
+	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
+		t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, wtoErr)
+	}
+
+	// Verify new value was actually written at the transaction's provisional
+	// commit timestamp.
+	value, _, err := MVCCGet(ctx, engine, testKey1, hlc.MaxTimestamp, MVCCGetOptions{Txn: txn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.Timestamp != expTS || !bytes.Equal(value2.RawBytes, value.RawBytes) {
+		t.Fatalf("expected timestamp=%s (got %s), value=%q (got %q)",
+			value.Timestamp, expTS, value2.RawBytes, value.RawBytes)
+	}
+}
+
 func TestMVCCAbortTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
