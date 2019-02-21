@@ -193,7 +193,7 @@ func testSideloadingSideloadedStorage(
 		{
 			err: nil,
 			fun: func() error {
-				_, err := ss.TruncateTo(ctx, 123)
+				_, _, err := ss.TruncateTo(ctx, 123)
 				return err
 			},
 		},
@@ -258,7 +258,7 @@ func testSideloadingSideloadedStorage(
 
 	for n := range payloads {
 		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
-		if _, err := ss.TruncateTo(ctx, payloads[n]); err != nil {
+		if _, _, err := ss.TruncateTo(ctx, payloads[n]); err != nil {
 			t.Fatalf("%d: %s", n, err)
 		}
 		// Index payloads[n] and above are still there (truncation is exclusive)
@@ -291,7 +291,7 @@ func testSideloadingSideloadedStorage(
 		}
 		defer f.Close()
 
-		_, err = ss.TruncateTo(ctx, math.MaxUint64)
+		_, _, err = ss.TruncateTo(ctx, math.MaxUint64)
 		if err == nil {
 			t.Fatalf("sideloaded directory should not have been removable due to extra file %s", nonRemovableFile)
 		}
@@ -306,7 +306,7 @@ func testSideloadingSideloadedStorage(
 		}
 
 		// Test that directory is removed when filepath.Glob returns 0 matches.
-		if _, err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
+		if _, _, err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
 			t.Fatal(err)
 		}
 		// Ensure directory is removed, now that all files should be gone.
@@ -330,7 +330,7 @@ func testSideloadingSideloadedStorage(
 			}
 		}
 		assertCreated(true)
-		if _, err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
+		if _, _, err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
 			t.Fatal(err)
 		}
 		// Ensure directory is removed when all records are removed.
@@ -352,7 +352,7 @@ func testSideloadingSideloadedStorage(
 	assertCreated(false)
 
 	// Sanity check that we can call TruncateTo without the directory existing.
-	if _, err := ss.TruncateTo(ctx, 1); err != nil {
+	if _, _, err := ss.TruncateTo(ctx, 1); err != nil {
 		t.Fatal(err)
 	}
 
