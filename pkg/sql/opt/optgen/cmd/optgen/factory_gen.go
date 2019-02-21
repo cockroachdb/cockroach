@@ -284,11 +284,11 @@ func (g *factoryGen) genReplace() {
 // default traversal and cloning behavior for the factory's CopyAndReplace
 // method.
 func (g *factoryGen) genCopyAndReplaceDefault() {
-	g.w.writeIndent("// copyAndReplaceDefault performs the default traversal and cloning behavior\n")
+	g.w.writeIndent("// CopyAndReplaceDefault performs the default traversal and cloning behavior\n")
 	g.w.writeIndent("// for the CopyAndReplace method. It constructs a copy of the given source\n")
 	g.w.writeIndent("// operator using children copied (and potentially remapped) by the given replace\n")
 	g.w.writeIndent("// function. See comments for CopyAndReplace for more details.\n")
-	g.w.nestIndent("func (f *Factory) copyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr)")
+	g.w.nestIndent("func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst opt.Expr)")
 	g.w.nest("{\n")
 	g.w.writeIndent("switch t := src.(type) {\n")
 
@@ -376,23 +376,14 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 		g.w.unnest("}\n\n")
 	}
 
-	g.w.writeIndent("// invokeReplace wraps the user-provided replace function. If replace returns\n")
-	g.w.writeIndent("// its input unchanged, then invokeReplace automatically calls\n")
-	g.w.writeIndent("// copyAndReplaceDefault to get default replace behavior. See comments for\n")
+	g.w.writeIndent("// invokeReplace wraps the user-provided replace function. See comments for\n")
 	g.w.writeIndent("// CopyAndReplace for more details.\n")
 	g.w.nestIndent("func (f *Factory) invokeReplace(src opt.Expr, replace ReplaceFunc) (dst opt.Expr)")
 	g.w.nest("{\n")
 	g.w.nest("if rel, ok := src.(memo.RelExpr); ok {\n")
 	g.w.writeIndent("src = rel.FirstExpr()\n")
-	g.w.writeIndent("dst = replace(src)\n")
-	g.w.unnest("}")
-	g.w.nest(" else {\n")
-	g.w.writeIndent("dst = replace(src)\n")
 	g.w.unnest("}\n")
-	g.w.nest("if src == dst {\n")
-	g.w.writeIndent("return f.copyAndReplaceDefault(src, replace)\n")
-	g.w.unnest("}\n")
-	g.w.writeIndent("return dst\n")
+	g.w.nest("return replace(src)\n")
 	g.w.unnest("}\n\n")
 }
 
