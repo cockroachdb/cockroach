@@ -17,16 +17,12 @@ package storage
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -337,17 +333,10 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize
 	r.mu.Unlock()
-	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 1))
-	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, math.MaxUint64))
-
-	var ms enginepb.MVCCStats
-	iter := r.store.engine.NewIterator(engine.IterOptions{UpperBound: end.Key})
-	defer iter.Close()
-	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
+	actualRaftLogSize, err := ComputeRaftLogSize(r.RangeID, r.Engine(), r.SideloadedRaftMuLocked())
 	if err != nil {
 		t.Fatal(err)
 	}
-	actualRaftLogSize := ms.SysBytes
 	if actualRaftLogSize != raftLogSize {
 		t.Fatalf("replica claims raft log size %d, but computed %d", raftLogSize, actualRaftLogSize)
 	}
