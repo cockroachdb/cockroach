@@ -2972,6 +2972,25 @@ may increase either contention or retry errors, or both.`,
 				"Raising the verbosity can severely affect performance.",
 		},
 	),
+
+	// Returns the number of distinct inverted index entries that would be generated for a JSON value.
+	"crdb_internal.json_num_index_entries": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.JSON}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				n, err := json.NumInvertedIndexEntries(tree.MustBeDJSON(args[0]).JSON)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(n)), nil
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+	),
 }
 
 var lengthImpls = makeBuiltin(tree.FunctionProperties{Category: categoryString},
