@@ -588,142 +588,259 @@ func (sc *SchemaChanger) validateIndexes(
 			return err
 		}
 
-		grp := ctxgroup.WithContext(ctx)
+		var forwardIndexes []*sqlbase.IndexDescriptor
+		var invertedIndexes []*sqlbase.IndexDescriptor
 
-		var tableRowCount int64
-		// Close when table count is ready.
-		tableCountReady := make(chan struct{})
-		// Notify of count completion even when an error is encountered.
-		// Provision such that a sender will never block.
-		countDone := make(chan struct{}, len(tableDesc.Mutations)+1)
-		numIndexCounts := 0
-		// Compute the size of each index.
 		for _, m := range tableDesc.Mutations {
 			if sc.mutationID != m.MutationID {
 				break
 			}
 			idx := m.GetIndex()
-			// An inverted index doesn't matchup in length.
-			if idx == nil ||
-				idx.Type == sqlbase.IndexDescriptor_INVERTED ||
-				m.Direction == sqlbase.DescriptorMutation_DROP {
+			if idx == nil || m.Direction == sqlbase.DescriptorMutation_DROP {
 				continue
 			}
+			switch idx.Type {
+			case sqlbase.IndexDescriptor_FORWARD:
+				forwardIndexes = append(forwardIndexes, idx)
+			case sqlbase.IndexDescriptor_INVERTED:
+				invertedIndexes = append(invertedIndexes, idx)
+			}
+		}
+		if len(forwardIndexes) == 0 && len(invertedIndexes) == 0 {
+			return nil
+		}
 
-			numIndexCounts++
-			grp.GoCtx(func(ctx context.Context) error {
-				defer func() { countDone <- struct{}{} }()
-				start := timeutil.Now()
-				// Make the mutations public in a private copy of the descriptor
-				// and add it to the TableCollection, so that we can use SQL below to perform
-				// the validation. We wouldn't have needed to do this if we could have
-				// updated the descriptor and run validation in the same transaction. However,
-				// our current system is incapable of running long running schema changes
-				// (the validation can take many minutes). So we pretend that the schema
-				// has been updated and actually update it in a separate transaction that
-				// follows this one.
-				desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic()
-				if err != nil {
-					return err
+		grp := ctxgroup.WithContext(ctx)
+
+		forwardIndexesDone := make(chan struct{})
+		invertedIndexesDone := make(chan struct{})
+
+		grp.GoCtx(func(ctx context.Context) error {
+			defer close(forwardIndexesDone)
+			if len(forwardIndexes) > 0 {
+				return sc.validateForwardIndexes(ctx, evalCtx, txn, tableDesc, readAsOf, forwardIndexes)
+			}
+			return nil
+		})
+
+		grp.GoCtx(func(ctx context.Context) error {
+			defer close(invertedIndexesDone)
+			if len(invertedIndexes) > 0 {
+				return sc.validateInvertedIndexes(ctx, evalCtx, txn, tableDesc, readAsOf, invertedIndexes)
+			}
+			return nil
+		})
+
+		// Periodic schema change lease extension.
+		grp.GoCtx(func(ctx context.Context) error {
+			forwardDone := false
+			invertedDone := false
+
+			refreshTimer := timeutil.NewTimer()
+			defer refreshTimer.Stop()
+			refreshTimer.Reset(checkpointInterval)
+			for {
+				if forwardDone && invertedDone {
+					return nil
 				}
-				tc := &TableCollection{leaseMgr: sc.leaseMgr}
-				// pretend that the schema has been modified.
-				if err := tc.addUncommittedTable(*desc); err != nil {
-					return err
-				}
-
-				// Create a new eval context only because the eval context cannot be shared across many
-				// goroutines.
-				newEvalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, evalCtx.Tracing, sc.ieFactory)
-				// TODO(vivek): This is not a great API. Leaving #34304 open.
-				ie := newEvalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
-				ie.impl.tcModifier = tc
-				defer func() {
-					ie.impl.tcModifier = nil
-				}()
-
-				row, err := newEvalCtx.InternalExecutor.QueryRow(ctx, "verify-idx-count", txn,
-					fmt.Sprintf(`SELECT count(*) FROM [%d AS t]@[%d]`, tableDesc.ID, idx.ID))
-				if err != nil {
-					return err
-				}
-				idxLen := int64(tree.MustBeDInt(row[0]))
-
-				log.Infof(ctx, "index %s/%s row count = %d, took %s",
-					tableDesc.Name, idx.Name, idxLen, timeutil.Since(start))
-
 				select {
-				case <-tableCountReady:
-					if idxLen != tableRowCount {
-						// TODO(vivek): find the offending row and include it in the error.
-						return pgerror.NewErrorf(
-							pgerror.CodeUniqueViolationError,
-							"%d entries, expected %d violates unique constraint %q",
-							idxLen, tableRowCount, idx.Name,
-						)
+				case <-forwardIndexesDone:
+					forwardDone = true
+
+				case <-invertedIndexesDone:
+					invertedDone = true
+
+				case <-refreshTimer.C:
+					refreshTimer.Read = true
+					refreshTimer.Reset(checkpointInterval)
+					if err := sc.ExtendLease(ctx, lease); err != nil {
+						return err
 					}
 
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+			}
+		})
+		return grp.Wait()
+	})
+}
 
-				return nil
-			})
-		}
+func (sc *SchemaChanger) validateInvertedIndexes(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	txn *client.Txn,
+	tableDesc *TableDescriptor,
+	readAsOf hlc.Timestamp,
+	indexes []*sqlbase.IndexDescriptor,
+) error {
+	grp := ctxgroup.WithContext(ctx)
 
-		if numIndexCounts > 0 {
-			grp.GoCtx(func(ctx context.Context) error {
-				defer close(tableCountReady)
-				defer func() { countDone <- struct{}{} }()
-				var tableRowCountTime time.Duration
-				start := timeutil.Now()
-				// Count the number of rows in the table.
-				cnt, err := evalCtx.InternalExecutor.QueryRow(ctx, "VERIFY INDEX", txn,
-					fmt.Sprintf(`SELECT count(1) FROM [%d AS t]`, tableDesc.ID))
+	expectedCount := make([]int64, len(indexes))
+	countReady := make([]chan struct{}, len(indexes))
+
+	for i, idx := range indexes {
+		i, idx := i, idx
+		countReady[i] = make(chan struct{})
+
+		grp.GoCtx(func(ctx context.Context) error {
+			// Inverted indexes currently can't be interleaved, so a KV scan can be
+			// used to get the index length.
+			// TODO (lucy): Switch to using DistSQL to get the count, so that we get
+			// distributed execution and avoid bypassing the SQL decoding
+			start := timeutil.Now()
+			var idxLen int64
+			key := tableDesc.IndexSpan(idx.ID).Key
+			endKey := tableDesc.IndexSpan(idx.ID).EndKey
+			for {
+				kvs, err := txn.Scan(ctx, key, endKey, 1000000)
 				if err != nil {
 					return err
 				}
-				tableRowCount = int64(tree.MustBeDInt(cnt[0]))
-				tableRowCountTime = timeutil.Since(start)
-				log.Infof(ctx, "table %s row count = %d, took %s",
-					tableDesc.Name, tableRowCount, tableRowCountTime)
-				return nil
-			})
-
-			// Periodic schema change lease extension.
-			grp.GoCtx(func(ctx context.Context) error {
-				count := numIndexCounts + 1
-				refreshTimer := timeutil.NewTimer()
-				defer refreshTimer.Stop()
-				refreshTimer.Reset(checkpointInterval)
-				for {
-					select {
-					case <-countDone:
-						count--
-						if count == 0 {
-							// Stop.
-							return nil
-						}
-
-					case <-refreshTimer.C:
-						refreshTimer.Read = true
-						refreshTimer.Reset(checkpointInterval)
-						if err := sc.ExtendLease(ctx, lease); err != nil {
-							return err
-						}
-
-					case <-ctx.Done():
-						return ctx.Err()
-					}
+				if len(kvs) == 0 {
+					break
 				}
-			})
+				idxLen += int64(len(kvs))
+				key = kvs[len(kvs)-1].Key.PrefixEnd()
+			}
+			log.Infof(ctx, "inverted index %s/%s count = %d, took %s",
+				tableDesc.Name, idx.Name, idxLen, timeutil.Since(start))
+			select {
+			case <-countReady[i]:
+				if idxLen != expectedCount[i] {
+					// JSON columns cannot have unique indexes, so if the expected and
+					// actual counts do not match, it's always a bug rather than a
+					// uniqueness violation.
+					return errors.Errorf("validation of index %s failed: expected %d rows, found %d",
+						idx.Name, expectedCount[i], idxLen)
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			return nil
+		})
 
-			if err := grp.Wait(); err != nil {
+		grp.GoCtx(func(ctx context.Context) error {
+			defer close(countReady[i])
+
+			start := timeutil.Now()
+			if len(idx.ColumnNames) != 1 {
+				panic(fmt.Sprintf("expected inverted index %s to have exactly 1 column, but found columns %+v",
+					idx.Name, idx.ColumnNames))
+			}
+			col := idx.ColumnNames[0]
+			row, err := evalCtx.InternalExecutor.QueryRow(ctx, "verify-inverted-idx-count", txn,
+				fmt.Sprintf(
+					`SELECT coalesce(sum_int(crdb_internal.json_num_index_entries(%s)), 0) FROM [%d AS t]`,
+					col, tableDesc.ID,
+				),
+			)
+			if err != nil {
 				return err
 			}
+			expectedCount[i] = int64(tree.MustBeDInt(row[0]))
+			log.Infof(ctx, "JSON column %s/%s expected inverted index count = %d, took %s",
+				tableDesc.Name, col, expectedCount[i], timeutil.Since(start))
+			return nil
+		})
+	}
+
+	return grp.Wait()
+}
+
+func (sc *SchemaChanger) validateForwardIndexes(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	txn *client.Txn,
+	tableDesc *TableDescriptor,
+	readAsOf hlc.Timestamp,
+	indexes []*sqlbase.IndexDescriptor,
+) error {
+	grp := ctxgroup.WithContext(ctx)
+
+	var tableRowCount int64
+	// Close when table count is ready.
+	tableCountReady := make(chan struct{})
+	// Compute the size of each index.
+	for _, idx := range indexes {
+		idx := idx
+		grp.GoCtx(func(ctx context.Context) error {
+			start := timeutil.Now()
+			// Make the mutations public in a private copy of the descriptor
+			// and add it to the TableCollection, so that we can use SQL below to perform
+			// the validation. We wouldn't have needed to do this if we could have
+			// updated the descriptor and run validation in the same transaction. However,
+			// our current system is incapable of running long running schema changes
+			// (the validation can take many minutes). So we pretend that the schema
+			// has been updated and actually update it in a separate transaction that
+			// follows this one.
+			desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic()
+			if err != nil {
+				return err
+			}
+			tc := &TableCollection{leaseMgr: sc.leaseMgr}
+			// pretend that the schema has been modified.
+			if err := tc.addUncommittedTable(*desc); err != nil {
+				return err
+			}
+
+			// Create a new eval context only because the eval context cannot be shared across many
+			// goroutines.
+			newEvalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, evalCtx.Tracing, sc.ieFactory)
+			// TODO(vivek): This is not a great API. Leaving #34304 open.
+			ie := newEvalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
+			ie.impl.tcModifier = tc
+			defer func() {
+				ie.impl.tcModifier = nil
+			}()
+
+			row, err := newEvalCtx.InternalExecutor.QueryRow(ctx, "verify-idx-count", txn,
+				fmt.Sprintf(`SELECT count(*) FROM [%d AS t]@[%d]`, tableDesc.ID, idx.ID))
+			if err != nil {
+				return err
+			}
+			idxLen := int64(tree.MustBeDInt(row[0]))
+
+			log.Infof(ctx, "index %s/%s row count = %d, took %s",
+				tableDesc.Name, idx.Name, idxLen, timeutil.Since(start))
+
+			select {
+			case <-tableCountReady:
+				if idxLen != tableRowCount {
+					// TODO(vivek): find the offending row and include it in the error.
+					return pgerror.NewErrorf(
+						pgerror.CodeUniqueViolationError,
+						"%d entries, expected %d violates unique constraint %q",
+						idxLen, tableRowCount, idx.Name,
+					)
+				}
+
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			return nil
+		})
+	}
+
+	grp.GoCtx(func(ctx context.Context) error {
+		defer close(tableCountReady)
+		var tableRowCountTime time.Duration
+		start := timeutil.Now()
+		// Count the number of rows in the table.
+		cnt, err := evalCtx.InternalExecutor.QueryRow(ctx, "VERIFY INDEX", txn,
+			fmt.Sprintf(`SELECT count(1) FROM [%d AS t]`, tableDesc.ID))
+		if err != nil {
+			return err
 		}
+		tableRowCount = int64(tree.MustBeDInt(cnt[0]))
+		tableRowCountTime = timeutil.Since(start)
+		log.Infof(ctx, "table %s row count = %d, took %s",
+			tableDesc.Name, tableRowCount, tableRowCountTime)
 		return nil
 	})
+
+	return grp.Wait()
 }
 
 func (sc *SchemaChanger) backfillIndexes(
