@@ -1,0 +1,3 @@
+repeat 10
+statement ok
+CREATE STATISTICS s FROM data

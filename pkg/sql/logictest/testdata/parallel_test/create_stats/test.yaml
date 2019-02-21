@@ -1,0 +1,20 @@
+# This test runs CREATE STATS many times on the same table from three different
+# hosts.
+
+cluster_size: 3
+
+range_split_size: 32768
+
+run:
+   # First run setup
+   - - file: setup
+
+   # Run create_stats on all nodes in parallel.
+   - - node: 0
+       file: create_stats
+
+     - node: 1
+       file: create_stats
+
+     - node: 2
+       file: create_stats

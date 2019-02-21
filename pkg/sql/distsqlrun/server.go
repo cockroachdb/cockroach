@@ -320,7 +320,7 @@ func (ds *ServerImpl) setupFlow(
 	// sp will be Finish()ed by Flow.Cleanup().
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
-	// The monitor and account opened here are closed in Flow.Cleanup().
+	// The monitor opened here are closed in Flow.Cleanup().
 	monitor := mon.MakeMonitor(
 		"flow",
 		mon.MemoryResource,
@@ -331,7 +331,6 @@ func (ds *ServerImpl) setupFlow(
 		ds.Settings,
 	)
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
-	acc := monitor.MakeBoundAccount()
 
 	// Figure out what txn the flow needs to run in, if any.
 	// For local flows, the txn comes from localState.Txn. For non-local ones, we
@@ -355,7 +354,6 @@ func (ds *ServerImpl) setupFlow(
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
 		evalCtx.Mon = &monitor
-		evalCtx.ActiveMemAcc = &acc
 		evalCtx.Txn = txn
 	} else {
 		location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
@@ -403,13 +401,12 @@ func (ds *ServerImpl) setupFlow(
 		evalPlanner := &sqlbase.DummyEvalPlanner{}
 		sequence := &sqlbase.DummySequenceOperators{}
 		evalCtx = &tree.EvalContext{
-			Settings:     ds.ServerConfig.Settings,
-			SessionData:  sd,
-			ClusterID:    ds.ServerConfig.ClusterID.Get(),
-			NodeID:       nodeID,
-			ReCache:      ds.regexpCache,
-			Mon:          &monitor,
-			ActiveMemAcc: &acc,
+			Settings:    ds.ServerConfig.Settings,
+			SessionData: sd,
+			ClusterID:   ds.ServerConfig.ClusterID.Get(),
+			NodeID:      nodeID,
+			ReCache:     ds.regexpCache,
+			Mon:         &monitor,
 			// TODO(andrei): This is wrong. Each processor should override Ctx with its
 			// own context.
 			Context:          ctx,

@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -69,7 +70,11 @@ var (
 	errChrValueTooSmall = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "input value must be >= 0")
 	errChrValueTooLarge = pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
 		"input value must be <= %d (maximum Unicode code point)", utf8.MaxRune)
+	errStringTooLarge = pgerror.NewErrorf(pgerror.CodeProgramLimitExceededError,
+		fmt.Sprintf("requested length too large, exceeds %s", humanizeutil.IBytes(maxAllocatedStringSize)))
 )
+
+const maxAllocatedStringSize = 128 * 1024 * 1024
 
 const errInsufficientArgsFmtString = "unknown signature: %s()"
 
@@ -181,17 +186,11 @@ var builtins = map[string]builtinDefinition{
 
 	"lower": makeBuiltin(tree.FunctionProperties{Category: categoryString},
 		stringOverload1(func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
-			if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
-				return nil, err
-			}
 			return tree.NewDString(strings.ToLower(s)), nil
 		}, types.String, "Converts all characters in `val` to their lower-case equivalents.")),
 
 	"upper": makeBuiltin(tree.FunctionProperties{Category: categoryString},
 		stringOverload1(func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
-			if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
-				return nil, err
-			}
 			return tree.NewDString(strings.ToUpper(s)), nil
 		}, types.String, "Converts all characters in `val` to their to their upper-case equivalents.")),
 
@@ -206,13 +205,14 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				var buffer bytes.Buffer
+				length := 0
 				for _, d := range args {
 					if d == tree.DNull {
 						continue
 					}
-					nextLength := len(string(tree.MustBeDString(d)))
-					if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(nextLength)); err != nil {
-						return nil, err
+					length += len(string(tree.MustBeDString(d)))
+					if length > maxAllocatedStringSize {
+						return nil, errStringTooLarge
 					}
 					buffer.WriteString(string(tree.MustBeDString(d)))
 				}
@@ -236,14 +236,14 @@ var builtins = map[string]builtinDefinition{
 				sep := string(tree.MustBeDString(args[0]))
 				var buf bytes.Buffer
 				prefix := ""
+				length := 0
 				for _, d := range args[1:] {
 					if d == tree.DNull {
 						continue
 					}
-					nextLength := len(prefix) + len(string(tree.MustBeDString(d)))
-					if err := evalCtx.ActiveMemAcc.Grow(
-						evalCtx.Ctx(), int64(nextLength)); err != nil {
-						return nil, err
+					length += len(prefix) + len(string(tree.MustBeDString(d)))
+					if length > maxAllocatedStringSize {
+						return nil, errStringTooLarge
 					}
 					// Note: we can't use the range index here because that
 					// would break when the 2nd argument is NULL.
@@ -677,14 +677,11 @@ var builtins = map[string]builtinDefinition{
 					count = 0
 				} else if ln/count != len(s) {
 					// Detect overflow and trigger an error.
-					return nil, pgerror.NewError(
-						pgerror.CodeProgramLimitExceededError, "requested length too large",
-					)
+					return nil, errStringTooLarge
+				} else if ln > maxAllocatedStringSize {
+					return nil, errStringTooLarge
 				}
 
-				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(ln)); err != nil {
-					return nil, err
-				}
 				return tree.NewDString(strings.Repeat(s, count)), nil
 			},
 			Info: "Concatenates `input` `repeat_counter` number of times.\n\nFor example, " +
@@ -922,10 +919,7 @@ var builtins = map[string]builtinDefinition{
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				length := int(tree.MustBeDInt(args[1]))
-				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(length)); err != nil {
-					return nil, err
-				}
-				ret, err := lpad(evalCtx, s, length, " ")
+				ret, err := lpad(s, length, " ")
 				if err != nil {
 					return nil, err
 				}
@@ -941,7 +935,7 @@ var builtins = map[string]builtinDefinition{
 				s := string(tree.MustBeDString(args[0]))
 				length := int(tree.MustBeDInt(args[1]))
 				fill := string(tree.MustBeDString(args[2]))
-				ret, err := lpad(evalCtx, s, length, fill)
+				ret, err := lpad(s, length, fill)
 				if err != nil {
 					return nil, err
 				}
@@ -960,7 +954,7 @@ var builtins = map[string]builtinDefinition{
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				length := int(tree.MustBeDInt(args[1]))
-				ret, err := rpad(evalCtx, s, length, " ")
+				ret, err := rpad(s, length, " ")
 				if err != nil {
 					return nil, err
 				}
@@ -976,7 +970,7 @@ var builtins = map[string]builtinDefinition{
 				s := string(tree.MustBeDString(args[0]))
 				length := int(tree.MustBeDInt(args[1]))
 				fill := string(tree.MustBeDString(args[2]))
-				ret, err := rpad(evalCtx, s, length, fill)
+				ret, err := rpad(s, length, fill)
 				if err != nil {
 					return nil, err
 				}
@@ -1025,8 +1019,8 @@ var builtins = map[string]builtinDefinition{
 
 	"reverse": makeBuiltin(defProps(),
 		stringOverload1(func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
-			if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
-				return nil, err
+			if len(s) > maxAllocatedStringSize {
+				return nil, errStringTooLarge
 			}
 			runes := []rune(s)
 			for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
@@ -1050,13 +1044,10 @@ var builtins = map[string]builtinDefinition{
 					// Largest result is if there are no replacements.
 					maxResultLen = int64(len(input))
 				}
-				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), maxResultLen); err != nil {
-					return nil, err
+				if maxResultLen > maxAllocatedStringSize {
+					return nil, errStringTooLarge
 				}
 				result := strings.Replace(input, from, to, -1)
-				if err := evalCtx.ActiveMemAcc.Resize(evalCtx.Ctx(), maxResultLen, int64(len(result))); err != nil {
-					return nil, err
-				}
 				return tree.NewDString(result), nil
 			},
 			types.String,
@@ -1066,9 +1057,6 @@ var builtins = map[string]builtinDefinition{
 	"translate": makeBuiltin(defProps(),
 		stringOverload3("input", "find", "replace",
 			func(evalCtx *tree.EvalContext, s, from, to string) (tree.Datum, error) {
-				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
-					return nil, err
-				}
 				const deletionRune = utf8.MaxRune + 1
 				translation := make(map[rune]rune, len(from))
 				for _, fromRune := range from {
@@ -1125,9 +1113,6 @@ var builtins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(string(tree.MustBeDString(result))))); err != nil {
-					return nil, err
-				}
 				return result, nil
 			},
 			Info: "Replaces matches for the Regular Expression `regex` in `input` with the " +
@@ -1148,9 +1133,6 @@ var builtins = map[string]builtinDefinition{
 				sqlFlags := string(tree.MustBeDString(args[3]))
 				result, err := regexpReplace(evalCtx, s, pattern, to, sqlFlags)
 				if err != nil {
-					return nil, err
-				}
-				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(string(tree.MustBeDString(result))))); err != nil {
 					return nil, err
 				}
 				return result, nil
@@ -1256,9 +1238,6 @@ CockroachDB supports the following flags:
 
 	"initcap": makeBuiltin(defProps(),
 		stringOverload1(func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
-			if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
-				return nil, err
-			}
 			return tree.NewDString(strings.Title(strings.ToLower(s))), nil
 		}, types.String, "Capitalizes the first letter of `val`.")),
 
@@ -4456,13 +4435,13 @@ func padMaybeTruncate(s string, length int, fill string) (ok bool, slen int, ret
 	return false, slen, s
 }
 
-func lpad(evalCtx *tree.EvalContext, s string, length int, fill string) (string, error) {
+func lpad(s string, length int, fill string) (string, error) {
+	if length > maxAllocatedStringSize {
+		return "", errStringTooLarge
+	}
 	ok, slen, ret := padMaybeTruncate(s, length, fill)
 	if ok {
 		return ret, nil
-	}
-	if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(length)); err != nil {
-		return "", err
 	}
 	var buf strings.Builder
 	fillRunes := []rune(fill)
@@ -4474,13 +4453,13 @@ func lpad(evalCtx *tree.EvalContext, s string, length int, fill string) (string,
 	return buf.String(), nil
 }
 
-func rpad(evalCtx *tree.EvalContext, s string, length int, fill string) (string, error) {
+func rpad(s string, length int, fill string) (string, error) {
+	if length > maxAllocatedStringSize {
+		return "", errStringTooLarge
+	}
 	ok, slen, ret := padMaybeTruncate(s, length, fill)
 	if ok {
 		return ret, nil
-	}
-	if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(length)); err != nil {
-		return "", err
 	}
 	var buf strings.Builder
 	buf.WriteString(s)

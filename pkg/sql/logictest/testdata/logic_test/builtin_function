@@ -262,7 +262,7 @@ SELECT repeat('Pg', -1) || 'empty'
 ----
 empty
 
-statement error pq: repeat\(\): .* memory budget exceeded
+statement error pq: repeat\(\): requested length too large
 SELECT repeat('s', 9223372036854775807)
 
 # Regression for #19035.
@@ -2012,10 +2012,10 @@ SELECT lpad('abc', 5, ''), rpad('abc', 5, '')
 ----
 abc  abc
 
-query error memory budget exceeded
+query error requested length too large
 SELECT lpad('abc', 100000000000000)
 
-query error memory budget exceeded
+query error requested length too large
 SELECT rpad('abc', 100000000000000)
 
 query TT
