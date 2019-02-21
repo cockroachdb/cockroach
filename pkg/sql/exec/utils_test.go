@@ -804,3 +804,29 @@ func (c *chunkingBatchSource) Next() coldata.Batch {
 	c.curIdx = lastIdx
 	return c.batch
 }
+
+// batchBuffer exposes a buffer of coldata.Batches through an Operator
+// interface. If there are no batches to return, Next will panic.
+type batchBuffer struct {
+	buffer []coldata.Batch
+}
+
+var _ Operator = &batchBuffer{}
+
+func newBatchBuffer() *batchBuffer {
+	return &batchBuffer{
+		buffer: make([]coldata.Batch, 0, 2),
+	}
+}
+
+func (b *batchBuffer) add(batch coldata.Batch) {
+	b.buffer = append(b.buffer, batch)
+}
+
+func (b *batchBuffer) Init() {}
+
+func (b *batchBuffer) Next() coldata.Batch {
+	batch := b.buffer[0]
+	b.buffer = b.buffer[1:]
+	return batch
+}
