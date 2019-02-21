@@ -653,25 +653,30 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assertEqualRaftLogSize := func() error {
-		var expectedSize int64
-		for i, s := range mtc.stores {
+	assertCorrectRaftLogSize := func() error {
+		for _, s := range mtc.stores {
 			repl, err := s.GetReplica(rangeID)
 			if err != nil {
 				t.Fatal(err)
 			}
 
+			repl.RaftLock()
+			realSize, err := storage.ComputeRaftLogSize(repl.RangeID, repl.Engine(), repl.SideloadedRaftMuLocked())
 			size := repl.GetRaftLogSize()
-			if i == 0 {
-				expectedSize = size
-			} else if expectedSize != size {
-				return fmt.Errorf("%s: expected raftLogSize %d, but found %d", repl, expectedSize, size)
+			repl.RaftUnlock()
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if size != realSize {
+				return fmt.Errorf("%s: raft log claims size %d, but is in fact %d", repl, size, realSize)
 			}
 		}
 		return nil
 	}
 
-	testutils.SucceedsSoon(t, assertEqualRaftLogSize)
+	testutils.SucceedsSoon(t, assertCorrectRaftLogSize)
 
 	truncArgs := truncateLogArgs(index+1, 1)
 	if _, err := client.SendWrapped(
@@ -679,7 +684,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutils.SucceedsSoon(t, assertEqualRaftLogSize)
+	testutils.SucceedsSoon(t, assertCorrectRaftLogSize)
 }
 
 // TestSnapshotAfterTruncation tests that Raft will properly send a
