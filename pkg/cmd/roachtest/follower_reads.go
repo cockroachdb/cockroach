@@ -187,37 +187,62 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 	case <-ctx.Done():
 		t.Fatalf("context canceled: %v", ctx.Err())
 	}
-	// Read the follower read counts before issuing the follower reads to observe
-	// the delta and protect from follower reads which might have happened due to
-	// system queries.
-	followerReadsBefore, err := getFollowerReadCounts(ctx, c)
-	if err != nil {
-		t.Fatalf("failed to get follower read counts: %v", err)
+	observeFollowerReads := func() error {
+		// Read the follower read counts before issuing the follower reads to observe
+		// the delta and protect from follower reads which might have happened due to
+		// system queries.
+		followerReadsBefore, err := getFollowerReadCounts(ctx, c)
+		if err != nil {
+			return errors.Wrap(err, "failed to get follower read counts")
+		}
+		// Perform reads at follower_timestamp() and ensure we get the expected value.
+		g, gCtx = errgroup.WithContext(ctx)
+		k, v := chooseKV()
+		for i := 1; i <= c.nodes; i++ {
+			g.Go(verifySelect(gCtx, i, k, false, v))
+		}
+		if err := g.Wait(); err != nil {
+			return errors.Wrap(err, "error verifying node values")
+		}
+		// Verify that the follower read count increments on at least two nodes.
+		followerReadsAfter, err := getFollowerReadCounts(ctx, c)
+		if err != nil {
+			return errors.Wrap(err, "failed to get follower read counts")
+		}
+		nodesWhichSawFollowerReads := 0
+		for i := 0; i < len(followerReadsAfter); i++ {
+			if followerReadsAfter[i] > followerReadsBefore[i] {
+				nodesWhichSawFollowerReads++
+			}
+		}
+		if nodesWhichSawFollowerReads < 2 {
+			return errors.Errorf("fewer than 2 follower reads occurred: saw %v before and %v after",
+				followerReadsBefore, followerReadsAfter)
+		}
+		return nil
 	}
-	// Perform reads at follower_timestamp() and ensure we get the expected value.
-	g, gCtx = errgroup.WithContext(ctx)
-	k, v := chooseKV()
-	for i := 1; i <= c.nodes; i++ {
-		g.Go(verifySelect(gCtx, i, k, false, v))
-	}
-	if err := g.Wait(); err != nil {
-		t.Fatalf("error verifying node values: %v", err)
-	}
-	// Verify that the follower read count increments on at least two nodes.
-	followerReadsAfter, err := getFollowerReadCounts(ctx, c)
-	if err != nil {
-		t.Fatalf("failed to get follower read counts: %v", err)
-	}
-	nodesWhichSawFollowerReads := 0
-	for i := 0; i < len(followerReadsAfter); i++ {
-		if followerReadsAfter[i] > followerReadsBefore[i] {
-			nodesWhichSawFollowerReads++
+	// Follower reads are not guaranteed to happen. They will not occur if
+	// follower replicas are too far behind or if they hit a range in the midst of
+	// a merge or split. Given the cluster should be idle, eventually we should
+	// eventually observe a follower read.
+	const maxRetries = 5
+	for i := 0; true; i++ {
+		if err := observeFollowerReads(); err != nil {
+			if i > maxRetries {
+				t.Fatalf("failed to observe a follower read after %d retries: %v", err)
+			} else {
+				t.l.Printf("failed to observe a follower read after %d retries, retrying: %v", i, err)
+				// Give the cluster some time to resolve whatever prevented the follower
+				// read. Most likely this is a lease transfer. The hope is that in the
+				// worst case waiting out 5 seconds will be enough time for a closed
+				// timestamp update to propagate.
+				time.Sleep(time.Second)
+			}
+		} else {
+			break
 		}
 	}
-	if nodesWhichSawFollowerReads < 2 {
-		t.Fatalf("fewer than 2 follower reads occurred: saw %v before and %v after",
-			followerReadsBefore, followerReadsAfter)
-	}
+
 	// Run reads for 3m which given the metrics window of 10s should guarantee
 	// that the most recent SQL latency time series data should relate to at least
 	// some of these reads.
