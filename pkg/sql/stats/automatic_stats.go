@@ -197,6 +197,13 @@ func (r *Refresher) Start(
 					ctx, "stats.Refresher: maybeRefreshStats", func(ctx context.Context) {
 						for tableID, rowsAffected := range mutationCounts {
 							r.maybeRefreshStats(ctx, stopper, tableID, rowsAffected, r.asOfTime)
+							select {
+							case <-stopper.ShouldQuiesce():
+								// Don't bother trying to refresh the remaining tables if we
+								// are shutting down.
+								return
+							default:
+							}
 						}
 						timer.Reset(refreshInterval)
 					}); err != nil {
