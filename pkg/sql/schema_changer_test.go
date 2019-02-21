@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -3977,7 +3978,7 @@ func TestBlockedSchemaChange(t *testing.T) {
 	wg.Wait()
 }
 
-// Tests index baxckfill validation step by purposely deleting an index
+// Tests index backfill validation step by purposely deleting an index
 // value during the index backfill and checking that the validation
 // fails.
 func TestIndexBackfillValidation(t *testing.T) {
@@ -4045,5 +4046,141 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	if len(tableDesc.Indexes) > 0 || len(tableDesc.Mutations) > 0 {
 		t.Fatalf("descriptor broken %d, %d", len(tableDesc.Indexes), len(tableDesc.Mutations))
+	}
+}
+
+// Tests inverted index backfill validation step by purposely deleting an index
+// value during the index backfill and checking that the validation fails.
+func TestInvertedIndexBackfillValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	const maxValue = 1000
+	backfillCount := int64(0)
+	var db *client.DB
+	var tableDesc *sqlbase.TableDescriptor
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: maxValue / 5,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunAfterBackfillChunk: func() {
+				count := atomic.AddInt64(&backfillCount, 1)
+				if count == 2 {
+					// drop an index value before validation.
+					keyEnc := keys.MakeTablePrefix(uint32(tableDesc.ID))
+					key := roachpb.Key(encoding.EncodeUvarintAscending(keyEnc, uint64(tableDesc.NextIndexID)))
+					kv, err := db.Scan(context.TODO(), key, key.PrefixEnd(), 1)
+					if err != nil {
+						t.Error(err)
+					}
+					if err := db.Del(context.TODO(), kv[0].Key); err != nil {
+						t.Error(err)
+					}
+				}
+			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	db = kvDB
+	defer server.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v JSON);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	// Insert enough rows to exceed the chunk size.
+	for i := 0; i < maxValue+1; i++ {
+		jsonVal, err := json.Random(20, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ($1, $2)`, i, jsonVal.String()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Start schema change that eventually runs a backfill.
+	if _, err := sqlDB.Exec(`CREATE INVERTED INDEX foo ON t.test (v)`); !testutils.IsError(
+		err, "validation of index foo failed",
+	) {
+		t.Fatal(err)
+	}
+
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if len(tableDesc.Indexes) > 0 || len(tableDesc.Mutations) > 0 {
+		t.Fatalf("descriptor broken %d, %d", len(tableDesc.Indexes), len(tableDesc.Mutations))
+	}
+}
+
+// Test multiple index backfills (for forward and inverted indexes) from the
+// same transaction.
+func TestMultipleIndexBackfills(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	const maxValue = 1000
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: maxValue / 5,
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+	server, sqlDB, _ := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (a INT, b INT, c JSON, d JSON);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	// Insert enough rows to exceed the chunk size.
+	for i := 0; i < maxValue+1; i++ {
+		jsonVal1, err := json.Random(20, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		jsonVal2, err := json.Random(20, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ($1, $2, $3, $4)`, i, i, jsonVal1.String(), jsonVal2.String()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Start schema changes.
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`CREATE INDEX idx_a ON t.test (a)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`CREATE INDEX idx_b ON t.test (b)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`CREATE INVERTED INDEX idx_c ON t.test (c)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`CREATE INVERTED INDEX idx_d ON t.test (d)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 }

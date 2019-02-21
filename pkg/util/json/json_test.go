@@ -1287,6 +1287,41 @@ func TestEncodeJSONInvertedIndex(t *testing.T) {
 	}
 }
 
+func TestNumInvertedIndexEntries(t *testing.T) {
+	testCases := []struct {
+		value    string
+		expCount int
+	}{
+		{`1`, 1},
+		{`"a"`, 1},
+		{`null`, 1},
+		{`false`, 1},
+		{`true`, 1},
+		{`[]`, 1},
+		{`{}`, 1},
+		{`[[[]]]`, 1},
+		{`[[{}]]`, 1},
+		{`[{}, []]`, 2},
+		{`[1, 2]`, 2},
+		{`[1, [1]]`, 2},
+		{`[1, 2, 1, 2]`, 2},
+		{`[[1, 2], [2, 3]]`, 3},
+		{`[{"a": 1, "b": 2}]`, 2},
+		{`[{"a": 1, "b": 2}, {"a": 1, "b": 3}]`, 3},
+		{`[{"a": [1, 2], "b": 2}, {"a": [1, 3], "b": 3}]`, 5},
+	}
+	for _, c := range testCases {
+		n, err := NumInvertedIndexEntries(jsonTestShorthand(c.value))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != c.expCount {
+			t.Errorf("unexpected count of index entries for %v. expected %d, got %d",
+				c.value, c.expCount, n)
+		}
+	}
+}
+
 const expectError = "<<error>>"
 
 func TestConcat(t *testing.T) {

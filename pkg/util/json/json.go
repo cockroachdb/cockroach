@@ -743,6 +743,30 @@ func (j jsonObject) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	return outKeys, nil
 }
 
+// NumInvertedIndexEntries returns the number of inverted index entries that
+// would be created for the given JSON value. Since identical elements of an
+// array are encoded identically in the inverted index, the total number of
+// distinct index entries may be less than the total number of paths.
+func NumInvertedIndexEntries(j JSON) (int, error) {
+	// TODO (lucy): Figure out how to avoid allocating every path
+	keys, err := EncodeInvertedIndexKeys(make([]byte, 0), j)
+	if err != nil {
+		return 0, err
+	}
+
+	// Count distinct keys
+	sort.Slice(keys, func(i int, j int) bool {
+		return bytes.Compare(keys[i], keys[j]) < 0
+	})
+	n := 0
+	for i := 0; i < len(keys); i++ {
+		if i == 0 || bytes.Compare(keys[i-1], keys[i]) < 0 {
+			n++
+		}
+	}
+	return n, nil
+}
+
 // AllPaths returns a slice of new JSON documents, each a path to a leaf
 // through the input. Note that leaves include the empty object and array
 // in addition to scalars.
