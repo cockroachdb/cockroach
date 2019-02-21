@@ -487,9 +487,9 @@ func SendCrashReport(
 // Like SendCrashReport, the format string should not contain any sensitive
 // data, and unsafe reportables will be redacted before reporting.
 func ReportOrPanic(
-	ctx context.Context, sv *settings.Values, format string, reportables []interface{},
+	ctx context.Context, sv *settings.Values, format string, reportables ...interface{},
 ) {
-	if !build.IsRelease() || PanicOnAssertions.Get(sv) {
+	if !build.IsRelease() || (sv != nil && PanicOnAssertions.Get(sv)) {
 		panic(fmt.Sprintf(format, reportables...))
 	}
 	Warningf(ctx, format, reportables...)
