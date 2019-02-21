@@ -105,7 +105,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		// remove. Then, at the end of the test, check that that sideloaded
 		// storage is now empty (in other words, GC'ing the Replica took care of
 		// cleanup).
-		dir := repl1.SideloadedDir()
+		dir := repl1.SideloadedRaftMuLocked().Dir()
 		if dir == "" {
 			t.Fatal("no sideloaded directory")
 		}
@@ -120,7 +120,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 			if !t.Failed() {
 				testutils.SucceedsSoon(t, func() error {
 					// Verify that the whole directory for the replica is gone.
-					dir := repl1.SideloadedDir()
+					dir := repl1.SideloadedRaftMuLocked().Dir()
 					_, err := os.Stat(dir)
 					if os.IsNotExist(err) {
 						return nil
