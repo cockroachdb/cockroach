@@ -287,6 +287,10 @@ type DistSQLReceiver struct {
 	// existence of a single row. Used by subqueries in EXISTS mode.
 	noColsRequired bool
 
+	// discardRows is set when we want to discard rows (for testing/benchmarks).
+	// See EXECUTE .. DISCARD ROWS.
+	discardRows bool
+
 	// commErr keeps track of the error received from interacting with the
 	// resultWriter. This represents a "communication error" and as such is unlike
 	// query execution errors: when the DistSQLReceiver is used within a SQL
@@ -522,6 +526,12 @@ func (r *DistSQLReceiver) Push(
 		r.resultWriter.IncrementRowsAffected(int(tree.MustBeDInt(row[0].Datum)))
 		return r.status
 	}
+
+	if r.discardRows {
+		// Discard rows.
+		return r.status
+	}
+
 	// If no columns are needed by the output, the consumer is only looking for
 	// whether a single row is pushed or not, so the contents do not matter, and
 	// planNodeToRowSource is not set up to handle decoding the row.
