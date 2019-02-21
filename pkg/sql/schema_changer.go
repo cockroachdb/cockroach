@@ -1875,9 +1875,10 @@ func createSchemaChangeEvalCtx(
 			InternalExecutor: ieFactory(ctx, sd),
 			// TODO(andrei): This is wrong (just like on the main code path on
 			// setupFlow). Each processor should override Ctx with its own context.
-			Context:  ctx,
-			Sequence: &sqlbase.DummySequenceOperators{},
-			Planner:  &sqlbase.DummyEvalPlanner{},
+			Context:         ctx,
+			Sequence:        &sqlbase.DummySequenceOperators{},
+			Planner:         &sqlbase.DummyEvalPlanner{},
+			SessionAccessor: &sqlbase.DummySessionAccessor{},
 		},
 	}
 	// The backfill is going to use the current timestamp for the various
