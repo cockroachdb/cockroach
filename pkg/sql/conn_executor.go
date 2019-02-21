@@ -1823,9 +1823,10 @@ func (ex *connExecutor) evalCtx(
 
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Planner:       p,
-			Sequence:      p,
-			StmtTimestamp: stmtTS,
+			Planner:         p,
+			SessionAccessor: p,
+			Sequence:        p,
+			StmtTimestamp:   stmtTS,
 
 			Txn:              txn,
 			SessionData:      &ex.sessionData,
