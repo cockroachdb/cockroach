@@ -2018,8 +2018,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
-				return txn.DelRange(ctx, "a", "b") // del range sets RetryOnPush, but only for SNAPSHOT
+				return txn.DelRange(ctx, "a", "b")
 			},
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			name: "forwarded timestamp with put in batch commit",
@@ -2134,6 +2136,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.Run(ctx, b)
 			},
 			filter: newUncertaintyFilter(roachpb.Key([]byte("a"))),
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			// Even if accounting for the refresh spans would have exhausted the
@@ -2361,7 +2365,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.InitPut(ctx, "iput", "put", false)
 			},
-			// No retries.
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			name: "write too old with initput matching older value",
@@ -2495,7 +2500,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true,
 		},
 		{
-			name: "multi-range batch with forwarded timestamp and cput and delRange",
+			name: "multi-range batch with forwarded timestamp and cput and delete range",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "c", "value")
 			},
@@ -2683,7 +2688,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true, // can restart at higher timestamp despite mixed success because read-only
 		},
 		{
-			name: "multi-range DelRange with uncertainty interval error",
+			name: "multi-range delete range with uncertainty interval error",
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.DelRange(ctx, "a", "d")
 			},
@@ -2751,9 +2756,13 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			autoRetries := metrics.AutoRetries.Count() - lastAutoRetries
 			if tc.txnCoordRetry && autoRetries == 0 {
 				t.Errorf("expected [at least] one txn coord sender auto retry; got %d", autoRetries)
+			} else if !tc.txnCoordRetry && autoRetries != 0 {
+				t.Errorf("expected no txn coord sender auto retries; got %d", autoRetries)
 			}
 			if tc.clientRetry && !hadClientRetry {
 				t.Errorf("expected but did not experience client retry")
+			} else if !tc.clientRetry && hadClientRetry {
+				t.Errorf("did not expect but experienced client retry")
 			}
 		})
 	}
