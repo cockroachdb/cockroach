@@ -1417,23 +1417,6 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	if generated != preemptiveApplied {
 		t.Fatalf("expected %d preemptive snapshots, but found %d", generated, preemptiveApplied)
 	}
-
-	r.PutBogusSideloadedData()
-
-	againR, _, err := mtc.stores[2].GetOrCreateReplica(
-		context.Background(),
-		r.RangeID,
-		0,   // replicaID
-		nil, // fromReplica
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	againR.RaftUnlock()
-
-	if !againR.HasBogusSideloadedData() {
-		t.Fatalf("sideloaded storage changed after fake message to replicaID zero")
-	}
 }
 
 // getRangeMetadata retrieves the current range descriptor for the target

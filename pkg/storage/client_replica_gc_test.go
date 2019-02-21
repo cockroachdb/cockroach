@@ -16,11 +16,16 @@ package storage_test
 
 import (
 	"context"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,6 +39,24 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	mtc := &multiTestContext{}
 	const numStores = 3
 	rangeID := roachpb.RangeID(1)
+
+	// Use actual engines (not in memory) because the in-mem ones don't write
+	// to disk. The test would still pass if we didn't do this except it
+	// would probably look at an empty sideloaded directory and fail.
+	tempDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	cache := engine.NewRocksDBCache(1 << 20)
+	defer cache.Release()
+	for i := 0; i < 3; i++ {
+		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
+			Dir: filepath.Join(tempDir, strconv.Itoa(i)),
+		}, cache)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer eng.Close()
+		mtc.engines = append(mtc.engines, eng)
+	}
 
 	// In this test, the Replica on the second Node is removed, and the test
 	// verifies that that Node adds this Replica to its RangeGCQueue. However,
@@ -77,21 +100,32 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Put some bogus data on the replica which we're about to remove. Then,
-		// at the end of the test, check that that sideloaded storage is now
-		// empty (in other words, GC'ing the Replica took care of cleanup).
-		repl1.PutBogusSideloadedData()
-		if !repl1.HasBogusSideloadedData() {
-			t.Fatal("sideloaded storage ate our data")
+
+		// Put some bogus sideloaded data on the replica which we're about to
+		// remove. Then, at the end of the test, check that that sideloaded
+		// storage is now empty (in other words, GC'ing the Replica took care of
+		// cleanup).
+		dir := repl1.SideloadedDir()
+		if dir == "" {
+			t.Fatal("no sideloaded directory")
+		}
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := ioutil.WriteFile(filepath.Join(dir, "i1000000.t100000"), []byte("foo"), 0644); err != nil {
+			t.Fatal(err)
 		}
 
 		defer func() {
 			if !t.Failed() {
 				testutils.SucceedsSoon(t, func() error {
-					if repl1.HasBogusSideloadedData() {
-						return errors.Errorf("first replica still has sideloaded files despite GC")
+					// Verify that the whole directory for the replica is gone.
+					dir := repl1.SideloadedDir()
+					_, err := os.Stat(dir)
+					if os.IsNotExist(err) {
+						return nil
 					}
-					return nil
+					return errors.Errorf("replica still has sideloaded files despite GC: %v", err)
 				})
 			}
 		}()
