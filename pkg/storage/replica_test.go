@@ -7194,28 +7194,11 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 		)
-		if retry != proposalIllegalLeaseIndex {
-			t.Fatalf("expected retry from illegal lease index, but got (%v, %v, %d)", br, pErr, retry)
-		}
-		if exp, act := int32(1), atomic.LoadInt32(&c); exp != act {
-			t.Fatalf("expected %d proposals, got %d", exp, act)
-		}
-	}
-
-	atomic.StoreInt32(&c, 0)
-	{
-		br, pErr := tc.repl.executeWriteBatch(
-			context.WithValue(ctx, magicKey{}, "foo"),
-			ba,
-		)
-		if pErr != nil {
-			t.Fatal(pErr)
+		if retry != proposalNoReevaluation {
+			t.Fatalf("expected no retry from illegal lease index, but got (%v, %v, %d)", br, pErr, retry)
 		}
 		if exp, act := int32(2), atomic.LoadInt32(&c); exp != act {
 			t.Fatalf("expected %d proposals, got %d", exp, act)
-		}
-		if resp, ok := br.Responses[0].GetInner().(*roachpb.IncrementResponse); !ok || resp.NewValue != expInc {
-			t.Fatalf("expected new value %d, got (%t, %+v)", expInc, ok, resp)
 		}
 	}
 
