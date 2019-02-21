@@ -1475,6 +1475,52 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	// See https://www.postgresql.org/docs/10/functions-admin.html#FUNCTIONS-ADMIN-SET
+	"current_setting": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemInfo,
+			DistsqlBlacklist: true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"setting_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return getSessionVar(ctx, string(tree.MustBeDString(args[0])), false /* missingOk */)
+			},
+			Info: notUsableInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"setting_name", types.String}, {"missing_ok", types.Bool}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return getSessionVar(ctx, string(tree.MustBeDString(args[0])), bool(tree.MustBeDBool(args[1])))
+			},
+			Info: notUsableInfo,
+		},
+	),
+
+	// See https://www.postgresql.org/docs/10/functions-admin.html#FUNCTIONS-ADMIN-SET
+	"set_config": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemInfo,
+			DistsqlBlacklist: true,
+			Impure:           true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"setting_name", types.String}, {"new_value", types.String}, {"is_local", types.Bool}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				varName := string(tree.MustBeDString(args[0]))
+				err := setSessionVar(ctx, varName, string(tree.MustBeDString(args[1])), bool(tree.MustBeDBool(args[2])))
+				if err != nil {
+					return nil, err
+				}
+				return getSessionVar(ctx, varName, false /* missingOk */)
+			},
+			Info: notUsableInfo,
+		},
+	),
+
 	// inet_{client,server}_{addr,port} return either an INet address or integer
 	// port that corresponds to either the client or server side of the current
 	// session's connection.
@@ -1529,4 +1575,28 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: notUsableInfo,
 		},
 	),
+}
+
+func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (tree.Datum, error) {
+	if ctx.SessionAccessor == nil {
+		return nil, pgerror.NewAssertionErrorf("session accessor not set")
+	}
+	ok, s, err := ctx.SessionAccessor.GetSessionVar(ctx.Context, settingName, missingOk)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return tree.DNull, nil
+	}
+	return tree.NewDString(s), nil
+}
+
+func setSessionVar(ctx *tree.EvalContext, settingName, newVal string, isLocal bool) error {
+	if ctx.SessionAccessor == nil {
+		return pgerror.NewAssertionErrorf("session accessor not set")
+	}
+	if isLocal {
+		return pgerror.UnimplementedWithIssueErrorf(32562, "transaction-scoped settings are not supported")
+	}
+	return ctx.SessionAccessor.SetSessionVar(ctx.Context, settingName, newVal)
 }

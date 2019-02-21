@@ -257,6 +257,7 @@ func newInternalPlanner(
 		ctx, sd, dataMutator, tables, txn, ts, ts, execCfg, &plannerMon,
 	)
 	p.extendedEvalCtx.Planner = p
+	p.extendedEvalCtx.SessionAccessor = p
 	p.extendedEvalCtx.Sequence = p
 	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID.Get()
