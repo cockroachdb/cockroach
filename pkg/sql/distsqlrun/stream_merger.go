@@ -49,18 +49,18 @@ func (sm *streamMerger) start(ctx context.Context) {
 // the right stream, all matching on the equality columns. One of the sets can
 // be empty.
 func (sm *streamMerger) NextBatch(
-	evalCtx *tree.EvalContext,
+	ctx context.Context, evalCtx *tree.EvalContext,
 ) ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRow, *ProducerMetadata) {
 	if sm.leftGroup == nil {
 		var meta *ProducerMetadata
-		sm.leftGroup, meta = sm.left.nextGroup(evalCtx)
+		sm.leftGroup, meta = sm.left.nextGroup(ctx, evalCtx)
 		if meta != nil {
 			return nil, nil, meta
 		}
 	}
 	if sm.rightGroup == nil {
 		var meta *ProducerMetadata
-		sm.rightGroup, meta = sm.right.nextGroup(evalCtx)
+		sm.rightGroup, meta = sm.right.nextGroup(ctx, evalCtx)
 		if meta != nil {
 			return nil, nil, meta
 		}
