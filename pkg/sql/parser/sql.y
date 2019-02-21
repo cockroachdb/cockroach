@@ -2465,6 +2465,15 @@ execute_stmt:
       Params: $3.exprs(),
     }
   }
+| EXECUTE table_alias_name execute_param_clause RETURNING NOTHING
+  {
+    /* SKIP DOC */
+    $$.val = &tree.Execute{
+      Name: tree.Name($2),
+      Params: $3.exprs(),
+      DiscardResults: true,
+    }
+  }
 | EXECUTE error // SHOW HELP: EXECUTE
 
 execute_param_clause:

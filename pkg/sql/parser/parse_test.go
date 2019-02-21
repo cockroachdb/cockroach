@@ -513,8 +513,10 @@ func TestParse(t *testing.T) {
 		{`PREPARE a (STRING, INT8) AS OPT PLAN 'some-string'`},
 
 		{`EXECUTE a`},
+		{`EXECUTE a RETURNING NOTHING`},
 		{`EXECUTE a (1)`},
 		{`EXECUTE a (1, 1)`},
+		{`EXECUTE a (1, 1) RETURNING NOTHING`},
 		{`EXECUTE a (1 + 1)`},
 
 		{`DEALLOCATE a`},

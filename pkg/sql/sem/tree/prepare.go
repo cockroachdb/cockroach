@@ -63,6 +63,9 @@ func (node *CannedOptPlan) Format(ctx *FmtCtx) {
 type Execute struct {
 	Name   Name
 	Params Exprs
+	// DiscardResults is set when we want to throw away all the rows rather than
+	// returning for client (used for testing and benchmarking).
+	DiscardResults bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -73,6 +76,9 @@ func (node *Execute) Format(ctx *FmtCtx) {
 		ctx.WriteString(" (")
 		ctx.FormatNode(&node.Params)
 		ctx.WriteByte(')')
+	}
+	if node.DiscardResults {
+		ctx.WriteString(" RETURNING NOTHING")
 	}
 }
 
