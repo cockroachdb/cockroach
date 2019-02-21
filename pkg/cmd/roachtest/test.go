@@ -833,7 +833,6 @@ func (t *test) decorate(skip int, s string) string {
 			// Handle the special case of the runner function being the caller of
 			// t.Fatal(). In that case, that's the line to be used for issue creation.
 			if t.mu.failLoc.file == "" {
-				fmt.Printf("!!! remembering*: %s:%d (%s)\n", frame.File, frame.Line, frame.Function)
 				t.mu.failLoc.file = frame.File
 				t.mu.failLoc.line = frame.Line
 			}
