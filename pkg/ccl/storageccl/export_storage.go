@@ -191,6 +191,9 @@ func SanitizeExportStorageURI(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if uri.Scheme == "experimental-workload" {
+		return path, nil
+	}
 	// All current export storage providers store credentials in the query string,
 	// if they store it in the URI at all.
 	uri.RawQuery = ""
