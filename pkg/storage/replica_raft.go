@@ -1765,7 +1765,6 @@ func (r *Replica) processRaftCommand(
 	if proposedLocally {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = proposal.ctx
-		proposal.ctx = nil // avoid confusion
 		delete(r.mu.proposals, idKey)
 	}
 
@@ -2062,12 +2061,41 @@ func (r *Replica) processRaftCommand(
 	}
 
 	if proposedLocally {
-		proposal.finishApplication(response)
+		if response.ProposalRetry == proposalIllegalLeaseIndex {
+			// If we failed to apply at the right lease index, try again with a new one.
+			r.mu.Lock()
+			lease := *r.mu.state.Lease
+			r.mu.Unlock()
+			if lease.OwnedBy(r.StoreID()) {
+				// Some tests check for this log message in the trace.
+				log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
+				// Use a goroutine so this doesn't count as "marshaling a proto downstream of raft".
+				go proposeAfterIllegalLeaseIndex(ctx, r, proposal, *r.mu.state.Lease)
+				return false
+			}
+		} else {
+			proposal.finishApplication(response)
+		}
 	} else if response.Err != nil {
 		log.VEventf(ctx, 1, "applying raft command resulted in error: %s", response.Err)
 	}
 
 	return raftCmd.ReplicatedEvalResult.ChangeReplicas != nil
+}
+
+// proposeAfterIllegalLeaseIndex is used by processRaftCommand to
+// repropose commands that have gotten an illegal lease index error.
+// It is not intended for use elsewhere and is only a top-level
+// function so that it can avoid the below_raft_protos check.
+func proposeAfterIllegalLeaseIndex(
+	ctx context.Context, r *Replica, proposal *ProposalData, lease roachpb.Lease,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, pErr := r.proposeLocked(ctx, proposal, lease)
+	if pErr != nil {
+		panic(pErr)
+	}
 }
 
 // maybeAcquireSnapshotMergeLock checks whether the incoming snapshot subsumes
