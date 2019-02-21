@@ -963,7 +963,7 @@ func (rb *rowSourceBase) consumerDone() {
 func (rb *rowSourceBase) consumerClosed(name string) {
 	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.consumerStatus)))
 	if status == ConsumerClosed {
-		log.Fatalf(context.Background(), "%s already closed", name)
+		log.ReportOrPanic(context.Background(), nil, "%s already closed", log.Safe(name))
 	}
 	atomic.StoreUint32((*uint32)(&rb.consumerStatus), uint32(ConsumerClosed))
 }
