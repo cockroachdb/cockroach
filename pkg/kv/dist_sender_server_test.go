@@ -1638,24 +1638,48 @@ func TestBadRequest(t *testing.T) {
 	}
 }
 
-// TestPropagateTxnOnError verifies that DistSender.sendBatch properly
-// propagates the txn data to a next iteration. Use txn.Writing field to
-// verify that.
+// TestPropagateTxnOnError verifies that DistSender.Send properly propagates the
+// txn data to a next iteration. Use the txn.ObservedTimestamps field to verify
+// that.
 func TestPropagateTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var storeKnobs storage.StoreTestingKnobs
+	// Inject this observed timestamp into the part of the batch's response that
+	// does not result in an error. Even though the batch as a whole results in
+	// an error, the transaction should still propagate this information.
+	observedTS := roachpb.ObservedTimestamp{
+		NodeID: 7, Timestamp: hlc.Timestamp{WallTime: 15},
+	}
+	containsObservedTS := func(txn *roachpb.Transaction) bool {
+		for _, ts := range txn.ObservedTimestamps {
+			if ts.Equal(observedTS) {
+				return true
+			}
+		}
+		return false
+	}
+
 	// Set up a filter to so that the first CPut operation will
-	// get a ReadWithinUncertaintyIntervalError.
-	targetKey := roachpb.Key("b")
-	var numGets int32
+	// get a ReadWithinUncertaintyIntervalError and so that the
+	// Put operation will return with the new observed timestamp.
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	var numCPuts int32
+	var storeKnobs storage.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
 		func(fArgs storagebase.FilterArgs) *roachpb.Error {
-			_, ok := fArgs.Req.(*roachpb.ConditionalPutRequest)
-			if ok && fArgs.Req.Header().Key.Equal(targetKey) {
-				if atomic.AddInt32(&numGets, 1) == 1 {
-					pErr := roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil)
-					return roachpb.NewErrorWithTxn(pErr, fArgs.Hdr.Txn)
+			k := fArgs.Req.Header().Key
+			switch fArgs.Req.(type) {
+			case *roachpb.PutRequest:
+				if k.Equal(keyA) {
+					fArgs.Hdr.Txn.ObservedTimestamps = append(fArgs.Hdr.Txn.ObservedTimestamps, observedTS)
+				}
+			case *roachpb.ConditionalPutRequest:
+				if k.Equal(keyB) {
+					if atomic.AddInt32(&numCPuts, 1) == 1 {
+						pErr := roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil)
+						return roachpb.NewErrorWithTxn(pErr, fArgs.Hdr.Txn)
+					}
 				}
 			}
 			return nil
@@ -1675,7 +1699,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	// Set the initial value on the target key "b".
 	origVal := "val"
-	if err := db.Put(ctx, targetKey, origVal); err != nil {
+	if err := db.Put(ctx, keyB, origVal); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1685,31 +1709,36 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// retried.
 	epoch := 0
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Observe the commit timestamp to prevent refreshes.
+		_ = txn.CommitTimestamp()
+
 		epoch++
 		proto := txn.Serialize()
 		if epoch >= 2 {
-			// Writing must be true since we ran the BeginTransaction command.
-			if !proto.Writing {
-				t.Errorf("unexpected non-writing txn")
+			// ObservedTimestamps must contain the timestamp returned from the
+			// Put operation.
+			if !containsObservedTS(proto) {
+				t.Errorf("expected observed timestamp, found: %v", proto.ObservedTimestamps)
 			}
 		} else {
-			// Writing must be false since we haven't run any write command.
-			if proto.Writing {
-				t.Errorf("unexpected writing txn")
+			// ObservedTimestamps must not contain the timestamp returned from
+			// the Put operation.
+			if containsObservedTS(proto) {
+				t.Errorf("unexpected observed timestamp, found: %v", proto.ObservedTimestamps)
 			}
 		}
 
 		b := txn.NewBatch()
-		b.Put("a", "val")
-		b.CPut(targetKey, "new_val", origVal)
+		b.Put(keyA, "val")
+		b.CPut(keyB, "new_val", origVal)
 		err := txn.CommitInBatch(ctx, b)
 		if epoch == 1 {
 			if retErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
 				if !testutils.IsError(retErr, "ReadWithinUncertaintyIntervalError") {
-					t.Errorf("expected ReadWithinUncertaintyIntervalError, but got: %s", retErr)
+					t.Errorf("expected ReadWithinUncertaintyIntervalError, but got: %v", retErr)
 				}
 			} else {
-				t.Errorf("expected a retryable error, but got: %s", err)
+				t.Errorf("expected a retryable error, but got: %v", err)
 			}
 		}
 		return err
@@ -1989,8 +2018,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
-				return txn.DelRange(ctx, "a", "b") // del range sets RetryOnPush, but only for SNAPSHOT
+				return txn.DelRange(ctx, "a", "b")
 			},
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			name: "forwarded timestamp with put in batch commit",
@@ -2105,6 +2136,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.Run(ctx, b)
 			},
 			filter: newUncertaintyFilter(roachpb.Key([]byte("a"))),
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			// Even if accounting for the refresh spans would have exhausted the
@@ -2332,7 +2365,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.InitPut(ctx, "iput", "put", false)
 			},
-			// No retries.
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			name: "write too old with initput matching older value",
@@ -2466,7 +2500,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true,
 		},
 		{
-			name: "multi-range batch with forwarded timestamp and cput and delRange",
+			name: "multi-range batch with forwarded timestamp and cput and delete range",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "c", "value")
 			},
@@ -2654,7 +2688,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true, // can restart at higher timestamp despite mixed success because read-only
 		},
 		{
-			name: "multi-range DelRange with uncertainty interval error",
+			name: "multi-range delete range with uncertainty interval error",
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.DelRange(ctx, "a", "d")
 			},
@@ -2722,9 +2756,13 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			autoRetries := metrics.AutoRetries.Count() - lastAutoRetries
 			if tc.txnCoordRetry && autoRetries == 0 {
 				t.Errorf("expected [at least] one txn coord sender auto retry; got %d", autoRetries)
+			} else if !tc.txnCoordRetry && autoRetries != 0 {
+				t.Errorf("expected no txn coord sender auto retries; got %d", autoRetries)
 			}
 			if tc.clientRetry && !hadClientRetry {
 				t.Errorf("expected but did not experience client retry")
+			} else if !tc.clientRetry && hadClientRetry {
+				t.Errorf("did not expect but experienced client retry")
 			}
 		})
 	}
