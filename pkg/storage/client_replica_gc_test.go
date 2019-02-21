@@ -120,8 +120,11 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 			if !t.Failed() {
 				testutils.SucceedsSoon(t, func() error {
 					// Verify that the whole directory for the replica is gone.
+					repl1.RaftLock()
 					dir := repl1.SideloadedRaftMuLocked().Dir()
 					_, err := os.Stat(dir)
+					repl1.RaftUnlock()
+
 					if os.IsNotExist(err) {
 						return nil
 					}
