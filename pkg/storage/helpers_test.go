@@ -143,16 +143,6 @@ func (s *Store) SetReplicaScannerActive(active bool) {
 	s.setScannerActive(active)
 }
 
-// GetOrCreateReplica passes through to its lowercase sibling.
-func (s *Store) GetOrCreateReplica(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	replicaID roachpb.ReplicaID,
-	creatingReplica *roachpb.ReplicaDescriptor,
-) (*Replica, bool, error) {
-	return s.getOrCreateReplica(ctx, rangeID, replicaID, creatingReplica)
-}
-
 // EnqueueRaftUpdateCheck enqueues the replica for a Raft update check, forcing
 // the replica's Raft group into existence.
 func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
@@ -375,28 +365,9 @@ func (sl *StoreList) Stores() []roachpb.StoreDescriptor {
 	return stores
 }
 
-const (
-	sideloadBogusIndex = 12345
-	sideloadBogusTerm  = 67890
-)
-
-func (r *Replica) PutBogusSideloadedData() {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	if err := r.raftMu.sideloaded.Put(context.Background(), sideloadBogusIndex, sideloadBogusTerm, []byte("bogus")); err != nil {
-		panic(err)
-	}
-}
-
-func (r *Replica) HasBogusSideloadedData() bool {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	if _, err := r.raftMu.sideloaded.Get(context.Background(), sideloadBogusIndex, sideloadBogusTerm); err == errSideloadedFileNotFound {
-		return false
-	} else if err != nil {
-		panic(err)
-	}
-	return true
+// SideloadedDir returns r.raftMu.sideloaded.Dir().
+func (r *Replica) SideloadedDir() string {
+	return r.raftMu.sideloaded.Dir()
 }
 
 func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyValue) {
