@@ -42,7 +42,7 @@ import (
 )
 
 var runFlags = pflag.NewFlagSet(`run`, pflag.ContinueOnError)
-var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on error")
+var tolerateErrors = runFlags.Bool("tolerate-errors", true, "Keep running on error")
 var maxRate = runFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
 var maxOps = runFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
@@ -497,6 +497,9 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				}
 			}
 
+			if numErr > 0 {
+				return errors.Errorf(`encountered %d query errors`, numErr)
+			}
 			return nil
 		}
 	}
