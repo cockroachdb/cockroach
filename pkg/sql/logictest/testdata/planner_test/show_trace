@@ -15,6 +15,7 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
   AND tag NOT LIKE '%intExec=%'
   AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
@@ -28,10 +29,8 @@ flow              CPut /Table/3/1/53/2/1 -> database:<name:"t" id:53 privileges:
 dist sender send  querying next range at /Table/2/1/0/"t"/3/1
 dist sender send  r6: sending batch 2 CPut to (n1,s1):1
 sql txn           rows affected: 0
-dist sender send  querying next range at /Table/SystemConfigSpan/Start
 dist sender send  querying next range at /Table/2/1/0/"t"/3/1
 dist sender send  r8: sending batch 5 QueryIntent to (n1,s1):1
-dist sender send  querying next range at /Table/SystemConfigSpan/Start
 dist sender send  r6: sending batch 1 EndTxn to (n1,s1):1
 
 
@@ -44,6 +43,7 @@ SELECT operation, regexp_replace(message, 'wall_time:\d+', 'wall_time:...') as m
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
   AND tag NOT LIKE '%intExec=%'
   AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
@@ -67,10 +67,8 @@ dist sender send  r6: sending batch 2 CPut to (n1,s1):1
 dist sender send  querying next range at /Table/3/1/53/2/1
 dist sender send  r6: sending batch 1 Get to (n1,s1):1
 sql txn           rows affected: 0
-dist sender send  querying next range at /Table/SystemConfigSpan/Start
 dist sender send  querying next range at /Table/2/1/53/"kv"/3/1
 dist sender send  r8: sending batch 5 QueryIntent to (n1,s1):1
-dist sender send  querying next range at /Table/SystemConfigSpan/Start
 dist sender send  r6: sending batch 1 EndTxn to (n1,s1):1
 
 # We avoid using the full trace output, because that would make the
@@ -90,7 +88,7 @@ WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
   AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
   /* since the transactions involved are multi-range, intent resolving is async and
   sometimes there's still intents around */
-  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent)%'
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
   AND tag NOT LIKE '%intExec=%'
   AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
@@ -158,6 +156,7 @@ SELECT operation, regexp_replace(regexp_replace(message, 'wall_time:\d+', 'wall_
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
   AND tag NOT LIKE '%intExec=%'
   AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
@@ -185,12 +184,10 @@ dist sender send  querying next range at /Table/3/1/53/2/1
 dist sender send  r6: sending batch 1 Get to (n1,s1):1
 table reader      fetched: /kv/primary/1/v -> /2
 flow              CPut /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/2
-dist sender send  querying next range at /Table/SystemConfigSpan/Start
 dist sender send  querying next range at /Table/55/1/...PK.../0
 dist sender send  r20: sending batch 1 CPut to (n1,s1):1
 dist sender send  querying next range at /Table/2/1/53/"kv2"/3/1
 dist sender send  r8: sending batch 5 QueryIntent to (n1,s1):1
-dist sender send  querying next range at /Table/SystemConfigSpan/Start
 dist sender send  r6: sending batch 1 EndTxn to (n1,s1):1
 flow              fast path completed
 sql txn           rows affected: 1
@@ -202,6 +199,7 @@ query TT
 SELECT operation, regexp_replace(message, '(\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d\.)?\d\d\d\d\d+', '...PK...') as message
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
   AND tag NOT LIKE '%intExec=%'
   AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
@@ -242,6 +240,7 @@ SELECT operation,
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
   AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
   AND tag NOT LIKE '%intExec=%'
   AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
@@ -290,7 +289,7 @@ WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
   AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
   /* since the transactions involved are multi-range, intent resolving is async and
   sometimes there's still intents around */
-  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent)%'
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
   AND tag NOT LIKE '%intExec=%'
   AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
@@ -325,6 +324,7 @@ SELECT operation, regexp_replace(regexp_replace(regexp_replace(message, 'job_id:
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
   AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
+  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
   AND tag NOT LIKE '%intExec=%'
   AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'

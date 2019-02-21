@@ -1266,9 +1266,6 @@ func replayTransactionalWrite(
 // that the timestamp parameter be set to hlc.Timestamp{} when writing
 // transactionally, but hlc.Timestamp{} is already used as a sentinel
 // for inline puts.)
-//
-// TODO(andrei): explore alternate function signatures that reduce
-// confusion about which timestamp applies.
 func mvccPutInternal(
 	ctx context.Context,
 	engine Writer,
@@ -1326,18 +1323,23 @@ func mvccPutInternal(
 		return err
 	}
 
+	// Determine the read and write timestamps for the write. For a
+	// non-transactional write, these will be identical. For a transactional
+	// write, we read at the transaction's original timestamp (forwarded by any
+	// refresh timestamp) but write intents at its provisional commit timestamp.
+	// See the comment on the txn.Timestamp field definition for rationale.
+	readTimestamp := timestamp
 	writeTimestamp := timestamp
 	if txn != nil {
-		txnReadTimestamp := txn.OrigTimestamp
-		txnReadTimestamp.Forward(txn.RefreshedTimestamp)
-		if txnReadTimestamp != timestamp {
+		readTimestamp = txn.OrigTimestamp
+		readTimestamp.Forward(txn.RefreshedTimestamp)
+		if readTimestamp != timestamp {
 			return errors.Errorf("mvccPutInternal: txn's read timestamp %s does not match timestamp %s",
 				txn.OrigTimestamp, timestamp)
 		}
-		// A txn writes intents at its provisional commit timestamp. See the
-		// comment on the txn.Timestamp field definition for rationale.
 		writeTimestamp = txn.Timestamp
 	}
+	timestamp = hlc.Timestamp{} // prevent accidental use below
 
 	// Determine what the logical operation is. Are we writing an intent
 	// or a value directly?
@@ -1371,7 +1373,7 @@ func mvccPutInternal(
 				// The transaction has executed at this sequence before. This is merely a
 				// replay of the transactional write. Assert that all is in order and return
 				// early.
-				return replayTransactionalWrite(ctx, engine, iter, meta, ms, key, timestamp, value, txn, buf, valueFn)
+				return replayTransactionalWrite(ctx, engine, iter, meta, ms, key, readTimestamp, value, txn, buf, valueFn)
 			}
 
 			// We're overwriting the intent that was present at this key, before we do
@@ -1383,11 +1385,11 @@ func mvccPutInternal(
 			getBuf.meta = buf.meta // initialize get metadata from what we've already read
 
 			existingVal, _, _, err := mvccGetInternal(
-				ctx, iter, metaKey, timestamp, true /* consistent */, safeValue, txn, getBuf)
+				ctx, iter, metaKey, readTimestamp, true /* consistent */, safeValue, txn, getBuf)
 			if err != nil {
 				return err
 			}
-			// Its possible that the existing value is nil if the intent on the key
+			// It's possible that the existing value is nil if the intent on the key
 			// has a lower epoch. We don't have to deal with this as a special case
 			// because in this case, the value isn't written to the intent history.
 			// Instead, the intent history is blown away completely.
@@ -1460,35 +1462,54 @@ func mvccPutInternal(
 			} else {
 				buf.newMeta.IntentHistory = nil
 			}
-		} else if !metaTimestamp.Less(timestamp) {
-			// This is the case where we're trying to write under a
-			// committed value. Obviously we can't do that, but we can
-			// increment our timestamp to one logical tick past the existing
-			// value and go on to write, but then return a write-too-old
-			// error indicating what the timestamp ended up being. This
-			// timestamp can then be used to increment the txn timestamp and
-			// be returned with the response.
-			writeTimestamp = metaTimestamp.Next()
-			maybeTooOldErr = &roachpb.WriteTooOldError{Timestamp: timestamp, ActualTimestamp: writeTimestamp}
+		} else if !metaTimestamp.Less(readTimestamp) {
+			// This is the case where we're trying to write under a committed
+			// value. Obviously we can't do that, but we can increment our
+			// timestamp to one logical tick past the existing value and go on
+			// to write, but then also return a write-too-old error indicating
+			// what the timestamp ended up being. This timestamp can then be
+			// used to increment the txn timestamp and be returned with the
+			// response.
+			//
+			// For this to work, this function needs to complete its mutation to
+			// the Writer even if it plans to return a write-too-old error. This
+			// allows logic that lives in evaluateBatch to determine what to do
+			// with the error and whether it should prevent the batch from being
+			// proposed or not.
+			//
+			// NB: even if metaTimestamp is less than writeTimestamp, we can't
+			// avoid the WriteTooOld error if metaTimestamp is equal to or
+			// greater than readTimestamp. This is because certain operations
+			// like ConditionalPuts and InitPuts avoid ever needing refreshes
+			// by ensuring that they propagate WriteTooOld errors immediately
+			// instead of allowing their transactions to continue and be retried
+			// before committing.
+			writeTimestamp.Forward(metaTimestamp.Next())
+			maybeTooOldErr = &roachpb.WriteTooOldError{
+				Timestamp: readTimestamp, ActualTimestamp: writeTimestamp,
+			}
 			// If we're in a transaction, always get the value at the orig
 			// timestamp.
 			if txn != nil {
 				if value, err = maybeGetValue(
-					ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
+					ctx, iter, metaKey, value, ok, readTimestamp, txn, buf, valueFn); err != nil {
 					return err
 				}
 			} else {
-				// Outside of a transaction, read the latest value and advance
-				// the write timestamp to the latest value's timestamp + 1. The
-				// new timestamp is returned to the caller in maybeTooOldErr.
+				// Outside of a transaction, the read timestamp advances to the
+				// the latest value's timestamp + 1 as well. The new timestamp
+				// is returned to the caller in maybeTooOldErr. Because we're
+				// outside of a transaction, we'll never actually commit this
+				// value, but that's a concern of evaluateBatch and not here.
+				readTimestamp = writeTimestamp
 				if value, err = maybeGetValue(
-					ctx, iter, metaKey, value, ok, writeTimestamp, txn, buf, valueFn); err != nil {
+					ctx, iter, metaKey, value, ok, readTimestamp, txn, buf, valueFn); err != nil {
 					return err
 				}
 			}
 		} else {
 			if value, err = maybeGetValue(
-				ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
+				ctx, iter, metaKey, value, ok, readTimestamp, txn, buf, valueFn); err != nil {
 				return err
 			}
 		}
@@ -1754,7 +1775,8 @@ func mvccInitPutUsingIter(
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
-	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn,
+	return mvccPutUsingIter(
+		ctx, engine, iter, ms, key, timestamp, noValue, txn,
 		func(existVal *roachpb.Value) ([]byte, error) {
 			if failOnTombstones && existVal != nil && len(existVal.RawBytes) == 0 {
 				// We found a tombstone and failOnTombstones is true: fail.
@@ -1767,9 +1789,7 @@ func mvccInitPutUsingIter(
 				}
 			}
 			return value.RawBytes, nil
-		},
-	)
-	return err
+		})
 }
 
 // MVCCMerge implements a merge operation. Merge adds integer values,

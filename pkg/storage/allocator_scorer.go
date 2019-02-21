@@ -594,7 +594,7 @@ func rebalanceCandidates(
 			// ConvergesOnMean calculations below. This is subtle but important.
 			if nodeHasReplica(store.Node.NodeID, rangeInfo.Desc.Replicas) &&
 				!storeHasReplica(store.StoreID, rangeInfo.Desc.Replicas) {
-				log.Infof(ctx, "nodeHasReplica(n%d, %v)=true", store.Node.NodeID, rangeInfo.Desc.Replicas)
+				log.VEventf(ctx, 2, "nodeHasReplica(n%d, %v)=true", store.Node.NodeID, rangeInfo.Desc.Replicas)
 				continue
 			}
 			constraintsOK, necessary := rebalanceFromConstraintsCheck(
