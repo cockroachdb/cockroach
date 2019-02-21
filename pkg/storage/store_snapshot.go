@@ -677,11 +677,20 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, toStoreID roachpb.StoreID)
 }
 
+// rebalanceSnapshotRate is the rate at which preemptive snapshots can be sent.
+// This includes snapshots generated for upreplication or for rebalancing.
 var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_rebalance.max_rate",
-	"the rate limit (bytes/sec) to use for rebalance snapshots",
-	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 2<<20),
+	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
+	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 8<<20),
 )
+
+// recoverySnapshotRate is the rate at which Raft-initiated spanshots can be
+// sent. Ideally, one would never see a Raft-initiated snapshot; we'd like all
+// the snapshots to be preemptive. However, it has proved unfeasible to
+// completely get rid of them.
+// TODO(tbg): The existence of this rate, separate from rebalanceSnapshotRate,
+// does not make a whole lot of sense.
 var recoverySnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_recovery.max_rate",
 	"the rate limit (bytes/sec) to use for recovery snapshots",
