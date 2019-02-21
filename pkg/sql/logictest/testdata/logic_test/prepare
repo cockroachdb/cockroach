@@ -173,6 +173,10 @@ EXECUTE s
 2
 3
 
+query I
+EXECUTE s DISCARD ROWS
+----
+
 statement
 DEALLOCATE ALL
 
