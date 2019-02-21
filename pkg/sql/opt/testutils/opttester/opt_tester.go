@@ -320,6 +320,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
+		ot.postProcess(tb, d, e)
 		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
 	default:

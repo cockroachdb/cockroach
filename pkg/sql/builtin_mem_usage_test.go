@@ -17,14 +17,10 @@ package sql
 import (
 	"context"
 	gosql "database/sql"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/lib/pq"
@@ -96,71 +92,14 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 	}
 }
 
-func TestBuiltinsAccountForMemory(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	_, repeatFns := builtins.GetBuiltinProperties("repeat")
-	_, concatFns := builtins.GetBuiltinProperties("concat")
-	_, concatwsFns := builtins.GetBuiltinProperties("concat_ws")
-	_, lowerFns := builtins.GetBuiltinProperties("lower")
-
-	testData := []struct {
-		builtin            tree.Overload
-		args               tree.Datums
-		expectedAllocation int64
-	}{
-		{repeatFns[0],
-			tree.Datums{
-				tree.NewDString("abc"),
-				tree.NewDInt(123),
-			},
-			int64(3 * 123)},
-		{concatFns[0],
-			tree.Datums{
-				tree.NewDString("abc"),
-				tree.NewDString("abc"),
-			},
-			int64(3 + 3)},
-		{concatwsFns[0],
-			tree.Datums{
-				tree.NewDString("!"),
-				tree.NewDString("abc"),
-				tree.NewDString("abc"),
-			},
-			int64(3 + 1 + 3)},
-		{lowerFns[0],
-			tree.Datums{
-				tree.NewDString("ABC"),
-			},
-			int64(3)},
-	}
-
-	for _, test := range testData {
-		t.Run("", func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			defer evalCtx.Stop(context.Background())
-			defer evalCtx.ActiveMemAcc.Close(context.Background())
-			previouslyAllocated := evalCtx.ActiveMemAcc.Used()
-			_, err := test.builtin.Fn(evalCtx, test.args)
-			if err != nil {
-				t.Fatal(err)
-			}
-			deltaAllocated := evalCtx.ActiveMemAcc.Used() - previouslyAllocated
-			if deltaAllocated != test.expectedAllocation {
-				t.Errorf("Expected to allocate %d, actually allocated %d", test.expectedAllocation, deltaAllocated)
-			}
-		})
-	}
-}
-
 func TestEvaluatedMemoryIsChecked(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// We select the LENGTH here and elsewhere because if we passed the result of
 	// REPEAT up as a result, the memory error would be caught there even if
 	// REPEAT was not doing its accounting.
 	testData := []string{
-		`SELECT length(repeat('abc', 300000))`,
-		`SELECT crdb_internal.no_constant_folding(length(repeat('abc', 300000)))`,
+		`SELECT length(repeat('abc', 70000000))`,
+		`SELECT crdb_internal.no_constant_folding(length(repeat('abc', 70000000)))`,
 	}
 
 	for _, statement := range testData {
@@ -172,45 +111,9 @@ func TestEvaluatedMemoryIsChecked(t *testing.T) {
 
 			if _, err := sqlDB.Exec(
 				statement,
-			); err.(*pq.Error).Code != pgerror.CodeOutOfMemoryError {
+			); err.(*pq.Error).Code != pgerror.CodeProgramLimitExceededError {
 				t.Errorf("Expected \"%s\" to OOM, but it didn't", statement)
 			}
 		})
-	}
-}
-
-func TestMemoryGetsFreedOnEachRow(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// This test verifies that the memory allocated during the computation of a
-	// row gets freed before moving on to subsequent rows.
-
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		SQLMemoryPoolSize: lowMemoryBudget,
-	})
-	defer s.Stopper().Stop(context.Background())
-
-	stringLength := 300000
-	numRows := 100
-
-	// Check that if this string is allocated per-row, we don't OOM.
-	if _, err := sqlDB.Exec(
-		fmt.Sprintf(
-			`SELECT crdb_internal.no_constant_folding(length(repeat('a', %d))) FROM generate_series(1, %d)`,
-			stringLength,
-			numRows,
-		),
-	); err != nil {
-		t.Fatalf("Expected statement to run successfully, but got %s", err)
-	}
-
-	// Ensure that if this memory is all allocated at once, we OOM.
-	if _, err := sqlDB.Exec(
-		fmt.Sprintf(
-			`SELECT crdb_internal.no_constant_folding(length(repeat('a', %d * %d)))`,
-			stringLength,
-			numRows,
-		),
-	); err.(*pq.Error).Code != pgerror.CodeOutOfMemoryError {
-		t.Fatalf("Expected statement to OOM, but it didn't")
 	}
 }

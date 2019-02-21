@@ -489,11 +489,6 @@ func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 func forEachRow(params runParams, p planNode, f func(tree.Datums) error) error {
 	next, err := p.Next(params)
 	for ; next; next, err = p.Next(params) {
-		// If we're tracking memory, clear the previous row's memory account.
-		if params.extendedEvalCtx.ActiveMemAcc != nil {
-			params.extendedEvalCtx.ActiveMemAcc.Clear(params.ctx)
-		}
-
 		if err := f(p.Values()); err != nil {
 			return err
 		}

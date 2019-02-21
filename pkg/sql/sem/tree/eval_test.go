@@ -36,10 +36,7 @@ import (
 
 func TestEval(t *testing.T) {
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	// We have to manually close this account because we're doing the evaluations
-	// ourselves.
-	defer ctx.Mon.Stop(context.Background())
-	defer ctx.ActiveMemAcc.Close(context.Background())
+	defer ctx.Stop(context.Background())
 
 	walk := func(t *testing.T, getExpr func(tree.TypedExpr) (tree.TypedExpr, error)) {
 		datadriven.Walk(t, filepath.Join("testdata", "eval"), func(t *testing.T, path string) {

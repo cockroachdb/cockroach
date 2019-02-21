@@ -155,7 +155,6 @@ func insertNodeWithValuesSpans(
 	// completed, so that the values don't need to be computed again during
 	// plan execution.
 	rowAcc := params.extendedEvalCtx.Mon.MakeBoundAccount()
-	params.extendedEvalCtx.ActiveMemAcc = &rowAcc
 	defer rowAcc.Close(params.ctx)
 
 	defer v.Reset(params.ctx)
