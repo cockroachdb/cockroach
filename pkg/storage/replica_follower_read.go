@@ -47,14 +47,14 @@ func (r *Replica) canServeFollowerRead(
 
 		r.mu.RLock()
 		lai := r.mu.state.LeaseAppliedIndex
+		lease := r.mu.state.Lease
 		r.mu.RUnlock()
 		canServeFollowerRead = r.store.cfg.ClosedTimestamp.Provider.CanServe(
 			lErr.LeaseHolder.NodeID, ba.Timestamp, r.RangeID, ctpb.Epoch(lErr.Lease.Epoch), ctpb.LAI(lai),
 		)
-
 		if !canServeFollowerRead {
-			// We can't actually serve the read. Signal the clients that we want
-			// an update so that future requests can succeed.
+			// We can't actually serve the read based on the closed timestamp.
+			// Signal the clients that we want an update so that future requests can succeed.
 			r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
 
 			if false {
@@ -65,6 +65,12 @@ func (r *Replica) canServeFollowerRead(
 					ba.Timestamp, lErr.Lease.Epoch, lai,
 					r.store.cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
 				)
+			}
+			// We may be able to serve the read based on the lease start time.
+			// It is safe to serve a read for requests which occur before this
+			// Replica's view of the lease start time.
+			if ba.Timestamp.Less(lease.Start) {
+				canServeFollowerRead = true
 			}
 		}
 	}
