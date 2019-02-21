@@ -292,3 +292,15 @@ SET tracing.blah = 123
 
 statement error invalid value for parameter "ssl_renegotiation_limit"
 SET ssl_renegotiation_limit = 123
+
+subtest regression_35109_flowable
+
+statement ok
+SET DATESTYLE = ISO;
+  SET INTERVALSTYLE = POSTGRES;
+  SET extra_float_digits TO 3;
+  SET synchronize_seqscans TO off;
+  SET statement_timeout = 0;
+  SET lock_timeout = 0;
+  SET idle_in_transaction_session_timeout = 0;
+  SET row_security = off;
