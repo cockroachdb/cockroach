@@ -455,6 +455,8 @@ func (ht *hashTable) loadBatch(batch coldata.Batch) {
 // rehashing purposes.
 func (ht *hashTable) initHash(buckets []uint64, nKeys uint64) {
 	for i := uint64(0); i < nKeys; i++ {
+		// TODO(asubiotto): Could use a copy here instead of iterating through each
+		// element?
 		buckets[i] = 1
 	}
 }
