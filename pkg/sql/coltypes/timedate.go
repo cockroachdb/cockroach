@@ -16,6 +16,7 @@ package coltypes
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
@@ -32,7 +33,14 @@ func (node *TDate) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 }
 
 // TTime represents a TIME type.
-type TTime struct{}
+type TTime struct {
+	// PrecisionSet indicates whether the Precision type has been set.
+	// Note that this information is only used to round-trip the types
+	// during pretty-printing of an AST. It is not further used
+	// in CockroachDB. (See issue #32565)
+	PrecisionSet bool
+	Precision    int
+}
 
 // TypeName implements the ColTypeFormatter interface.
 func (node *TTime) TypeName() string { return "TIME" }
@@ -40,10 +48,20 @@ func (node *TTime) TypeName() string { return "TIME" }
 // Format implements the ColTypeFormatter interface.
 func (node *TTime) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.TypeName())
+	if node.PrecisionSet {
+		fmt.Fprintf(buf, "(%d)", node.Precision)
+	}
 }
 
 // TTimestamp represents a TIMESTAMP type.
-type TTimestamp struct{}
+type TTimestamp struct {
+	// PrecisionSet indicates whether the Precision type has been set.
+	// Note that this information is only used to round-trip the types
+	// during pretty-printing of an AST. It is not further used
+	// in CockroachDB. (See issue #32098)
+	PrecisionSet bool
+	Precision    int
+}
 
 // TypeName implements the ColTypeFormatter interface.
 func (node *TTimestamp) TypeName() string { return "TIMESTAMP" }
@@ -51,10 +69,20 @@ func (node *TTimestamp) TypeName() string { return "TIMESTAMP" }
 // Format implements the ColTypeFormatter interface.
 func (node *TTimestamp) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.TypeName())
+	if node.PrecisionSet {
+		fmt.Fprintf(buf, "(%d)", node.Precision)
+	}
 }
 
 // TTimestampTZ represents a TIMESTAMP type.
-type TTimestampTZ struct{}
+type TTimestampTZ struct {
+	// PrecisionSet indicates whether the Precision type has been set.
+	// Note that this information is only used to round-trip the types
+	// during pretty-printing of an AST. It is not further used
+	// in CockroachDB. (See issue #32098)
+	PrecisionSet bool
+	Precision    int
+}
 
 // TypeName implements the ColTypeFormatter interface.
 func (node *TTimestampTZ) TypeName() string { return "TIMESTAMPTZ" }
@@ -62,6 +90,9 @@ func (node *TTimestampTZ) TypeName() string { return "TIMESTAMPTZ" }
 // Format implements the ColTypeFormatter interface.
 func (node *TTimestampTZ) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.TypeName())
+	if node.PrecisionSet {
+		fmt.Fprintf(buf, "(%d)", node.Precision)
+	}
 }
 
 // TInterval represents an INTERVAL type
