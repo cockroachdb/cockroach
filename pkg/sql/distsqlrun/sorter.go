@@ -142,7 +142,7 @@ func (s *sorterBase) close() {
 		if s.i != nil {
 			s.i.Close()
 		}
-		ctx := s.evalCtx.Ctx()
+		ctx := s.Ctx
 		s.rows.Close(ctx)
 		s.MemMonitor.Stop(ctx)
 		if s.diskMonitor != nil {
@@ -522,7 +522,7 @@ func (s *sortChunksProcessor) chunkCompleted(
 // if a metadata record was encountered). The caller is expected to drain when
 // this returns false.
 func (s *sortChunksProcessor) fill() (bool, error) {
-	ctx := s.evalCtx.Ctx()
+	ctx := s.Ctx
 
 	var meta *ProducerMetadata
 
@@ -592,6 +592,7 @@ func (s *sortChunksProcessor) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	ctx := s.Ctx
 	for s.State == StateRunning {
 		ok, err := s.i.Valid()
 		if err != nil {
@@ -600,7 +601,6 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 		// If we don't have an active chunk, clear and refill it.
 		if !ok {
-			ctx := s.evalCtx.Ctx()
 			if err := s.rows.UnsafeReset(ctx); err != nil {
 				s.MoveToDraining(err)
 				break

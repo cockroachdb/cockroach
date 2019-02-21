@@ -707,7 +707,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		typ = sqlbase.ColTypeInfoFromColTypes(colTypes)
 	}
 	rows = rowcontainer.NewRowContainer(subqueryMemAccount, typ, 0)
-	defer rows.Close(evalCtx.Ctx())
+	defer rows.Close(ctx)
 
 	subqueryRowReceiver := NewRowResultWriter(rows)
 	subqueryRecv.resultWriter = subqueryRowReceiver
