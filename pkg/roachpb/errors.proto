@@ -398,11 +398,6 @@ message TransactionRetryWithProtoRefreshError {
   // before, but with an incremented epoch and timestamp, or a completely new
   // Transaction.
   optional Transaction transaction = 3 [(gogoproto.nullable) = false];
-
-  // prev_txn_aborted is set if this error was generated from a
-  // TransactionAbortedError. This indicates that the client will continue with
-  // a completely new transaction, not the old transaction at a different epoch.
-  optional bool prev_txn_aborted = 4 [(gogoproto.nullable) = false];
 }
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a

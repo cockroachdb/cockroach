@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"go/src/reflect"
 	"testing"
 	"time"
 
@@ -178,5 +179,50 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	}
 	if tracing.FindMsgInRecording(getRec(), clientRejectedMsg) == -1 {
 		t.Fatalf("didn't find expected message in trace: %s", clientRejectedMsg)
+	}
+}
+
+// Test that the DistSQLReceiver overwrites previous errors as "better" errors
+// come along.
+//
+// !!! add test for txn.UpdateStateOnRemoteRetryableErr that it can be called
+// multiple times
+func TestDistSQLReceiverErrorRanking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We're going to use a rowResultWriter to which only errors will be passed.
+	rw := newCallbackResultWriter(nil /* fn */)
+	// recv := MakeDistSQLReceiver(
+	//   context.Background(),
+	//   rw,
+	//   tree.Rows, /* StatementType */
+	//   nil,       /* rangeCache */
+	//   nil,       /* leaseCache */
+	//   nil,       /* txn */
+	//   nil,       /* updateClock */
+	//   nil,       /* tracing */
+	// )
+
+	retryErr := roachpb.NewError(roachpb.NewReadWithinUncertaintyIntervalError(
+		hlc.Timestamp{}, /* readTS */
+		hlc.Timestamp{}, /* existingTS */
+		nil /* txn */)).GoError()
+	// abortErr := roachpb.NewError(
+	//   roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND))
+
+	testCases := []struct {
+		err       error
+		expErrTyp reflect.Type
+	}{
+		{
+			err:       retryErr,
+			expErrTyp: reflect.TypeOf(&roachpb.UnhandledRetryableError{}),
+		},
+	}
+
+	for _, tc := range testCases {
+		if a, e := reflect.TypeOf(rw.Err()), tc.expErrTyp; a != e {
+			t.Fatalf("expected %s, got %s", a, e)
+		}
 	}
 }

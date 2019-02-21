@@ -262,10 +262,12 @@ func (dsp *DistSQLPlanner) Run(
 	flow.Cleanup(ctx)
 }
 
-type errorScore int
+// errorPriority is used to rank errors such that the "best" one is chosen to be
+// presented as the query result.
+type errorPriority int
 
 const (
-	scoreNoError errorScore = iota
+	scoreNoError errorPriority = iota
 	scoreTxnRestart
 	scoreTxnAbort
 	scoreNonRetriable
@@ -349,7 +351,6 @@ type rowResultWriter interface {
 	AddRow(ctx context.Context, row tree.Datums) error
 	IncrementRowsAffected(n int)
 	SetError(error)
-	OverwriteError(error)
 	Err() error
 }
 
@@ -362,9 +363,6 @@ type errOnlyResultWriter struct {
 var _ rowResultWriter = &errOnlyResultWriter{}
 
 func (w *errOnlyResultWriter) SetError(err error) {
-	w.err = err
-}
-func (w *errOnlyResultWriter) OverwriteError(err error) {
 	w.err = err
 }
 func (w *errOnlyResultWriter) Err() error {
@@ -483,7 +481,7 @@ func (r *DistSQLReceiver) Push(
 		if meta.Err != nil {
 			// Check if the error we just received should take precedence over a
 			// previous error (if any).
-			if errScore(meta.Err) > errScore(r.resultWriter.Err()) {
+			if errPriority(meta.Err) > errPriority(r.resultWriter.Err()) {
 				if r.txn != nil {
 					if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
 						// Update the txn in response to remote errors. In the non-DistSQL
@@ -499,9 +497,7 @@ func (r *DistSQLReceiver) Push(
 						r.updateClock(retryErr.PErr.Now)
 					}
 				}
-				// We call OverwriteError() instead of SetError() because we might get
-				// here multiple times with errors of different scores.
-				r.resultWriter.OverwriteError(meta.Err)
+				r.resultWriter.SetError(meta.Err)
 			}
 		}
 		if len(meta.Ranges) > 0 {
@@ -581,7 +577,8 @@ func (r *DistSQLReceiver) Push(
 	return r.status
 }
 
-func errScore(err error) errorScore {
+// errPriority computes the priority of err.
+func errPriority(err error) errorPriority {
 	if err == nil {
 		return scoreNoError
 	}
@@ -595,7 +592,7 @@ func errScore(err error) errorScore {
 		}
 	}
 	if retryErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
-		if retryErr.PrevTxnAborted {
+		if retryErr.PrevTxnAborted() {
 			return scoreTxnAbort
 		}
 		return scoreTxnRestart

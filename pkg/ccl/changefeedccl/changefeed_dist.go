@@ -222,9 +222,6 @@ func (w *changefeedResultWriter) IncrementRowsAffected(n int) {
 func (w *changefeedResultWriter) SetError(err error) {
 	w.err = err
 }
-func (w *changefeedResultWriter) OverwriteError(err error) {
-	w.err = err
-}
 func (w *changefeedResultWriter) Err() error {
 	return w.err
 }
