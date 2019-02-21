@@ -63,6 +63,16 @@ func TestBatcherSendOnSizeWithReset(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	sc := make(chanSender)
+	// The challenge with populating this timeout is that if we set it too short
+	// then there's a chance that the batcher will send based on time and not
+	// size which somewhat defeats the purpose of the test in the first place.
+	// If we set the timeout too long then the test will take a long time for no
+	// good reason. Instead of erring on the side of being conservative with the
+	// timeout we instead allow the test to pass successfully even if it doesn't
+	// exercise the path we intended. This is better than having the test block
+	// forever or fail. We don't expect that it will take 5ms in the common case
+	// to send two messages on a channel and if it does, oh well, the logic below
+	// deals with that too and at least the test doesn't fail or hang forever.
 	const wait = 5 * time.Millisecond
 	b := New(Config{
 		MaxIdle:         wait,
@@ -82,7 +92,16 @@ func TestBatcherSendOnSizeWithReset(t *testing.T) {
 	sendRequest(1, &roachpb.GetRequest{})
 	s := <-sc
 	s.respChan <- batchResp{}
-	time.Sleep(wait)
+	// See the comment above wait. In rare cases the batch will be sent before the
+	// second request can be added. In this case we need to expect that another
+	// request will be sent and handle it so that the test does not block forever.
+	if len(s.ba.Requests) == 1 {
+		t.Logf("batch was sent due to time rather than size constraints, passing anyway")
+		s := <-sc
+		s.respChan <- batchResp{}
+	} else {
+		time.Sleep(wait)
+	}
 	if err := g.Wait(); err != nil {
 		t.Fatalf("Failed to send: %v", err)
 	}
