@@ -15,17 +15,15 @@
 package norm_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -86,22 +84,9 @@ func TestCopyAndReplace(t *testing.T) {
 	}
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	semaCtx := tree.MakeSemaContext()
 
 	var o xform.Optimizer
-	o.Init(&evalCtx)
-
-	stmt, err := parser.ParseOne("SELECT * FROM ab INNER JOIN cde ON a=c AND d=$1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
-		t.Fatal(err)
-	}
-	b := optbuilder.New(context.Background(), &semaCtx, &evalCtx, cat, o.Factory(), stmt.AST)
-	if err := b.Build(); err != nil {
-		t.Fatal(err)
-	}
+	testutils.BuildQuery(t, &o, cat, &evalCtx, "SELECT * FROM ab INNER JOIN cde ON a=c AND d=$1")
 
 	if e := o.Optimize(); e.Op() != opt.MergeJoinOp {
 		t.Errorf("expected optimizer to choose merge-join, not %v", e.Op())
@@ -110,12 +95,14 @@ func TestCopyAndReplace(t *testing.T) {
 	m := o.Factory().DetachMemo()
 
 	o.Init(&evalCtx)
-	o.Factory().CopyAndReplace(m.RootExpr().(memo.RelExpr), m.RootProps(), func(e opt.Expr) opt.Expr {
+	var replaceFn norm.ReplaceFunc
+	replaceFn = func(e opt.Expr) opt.Expr {
 		if e.Op() == opt.PlaceholderOp {
 			return o.Factory().ConstructConstVal(tree.NewDInt(1), types.Int)
 		}
-		return e
-	})
+		return o.Factory().CopyAndReplaceDefault(e, replaceFn)
+	}
+	o.Factory().CopyAndReplace(m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
 
 	if e := o.Optimize(); e.Op() != opt.LookupJoinOp {
 		t.Errorf("expected optimizer to choose lookup-join, not %v", e.Op())

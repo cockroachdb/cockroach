@@ -64,7 +64,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, nd opt.Expr) bool {
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	fmtCtx.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
 		fullyQualify := !f.HasFlags(memo.ExprFmtHideQualifications)
-		alias := md.ColumnMeta(opt.ColumnID(idx + 1)).QualifiedAlias(fullyQualify)
+		alias := md.QualifiedAlias(opt.ColumnID(idx+1), fullyQualify)
 		ctx.WriteString(alias)
 	})
 	expr.Format(fmtCtx)

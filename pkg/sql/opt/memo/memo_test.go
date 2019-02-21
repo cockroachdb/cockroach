@@ -21,11 +21,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	opttestutils "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -61,24 +60,10 @@ func TestMemoInit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := parser.ParseOne("SELECT * FROM abc WHERE $1=10")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
-	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
-		t.Fatal(err)
-	}
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	var o xform.Optimizer
-	o.Init(&evalCtx)
-	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt.AST).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE $1=10")
 
 	o.Init(&evalCtx)
 	if !o.Memo().IsEmpty() {
@@ -110,27 +95,16 @@ func TestMemoIsStale(t *testing.T) {
 	// access via the view.
 	catalog.Table(tree.NewTableName("t", "abc")).Revoked = true
 
-	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-
 	// Initialize context with starting values.
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	evalCtx.SessionData.Database = "t"
 
-	stmt, err := parser.ParseOne("SELECT a, b+1 FROM abcview WHERE c='foo'")
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	var o xform.Optimizer
-	o.Init(&evalCtx)
-	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt.AST).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT a, b+1 FROM abcview WHERE c='foo'")
 	o.Memo().Metadata().AddSchemaDependency(catalog.Schema().Name(), catalog.Schema(), privilege.CREATE)
 	o.Memo().Metadata().AddSchema(catalog.Schema())
 
+	ctx := context.Background()
 	stale := func() {
 		t.Helper()
 		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
