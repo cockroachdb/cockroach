@@ -241,7 +241,6 @@ type multiTestContext struct {
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
 	rpcContext  *rpc.Context
-	injEngines  bool
 	// By default, a multiTestContext starts with a bunch of system ranges, just
 	// like a regular Server after bootstrap. If startWithSingleRange is set,
 	// we'll start with a single range spanning all the key space. The split
@@ -303,7 +302,6 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		mCopy.clock = nil
 		mCopy.engines = nil
 		mCopy.engineStoppers = nil
-		mCopy.injEngines = false
 		mCopy.startWithSingleRange = false
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
@@ -766,7 +764,12 @@ func (m *multiTestContext) addStore(idx int) {
 	var needBootstrap bool
 	if len(m.engines) > idx {
 		eng = m.engines[idx]
-		needBootstrap = m.injEngines
+		_, err := storage.ReadStoreIdent(context.Background(), eng)
+		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
+			needBootstrap = true
+		} else if err != nil {
+			m.t.Fatal(err)
+		}
 	} else {
 		engineStopper := stop.NewStopper()
 		m.engineStoppers = append(m.engineStoppers, engineStopper)
