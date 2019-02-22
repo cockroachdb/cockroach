@@ -215,8 +215,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// If this is a request issued by `go tool pprof`, just return the profile
+	// directly. This is convenient because it avoids having to expose the pprof
+	// endpoints separately, and also allows inserting hooks around CPU profiles
+	// in the future.
+	isGoPProf := strings.Contains(r.Header.Get("User-Agent"), "Go-http-client")
 	origURL.Path = path.Join(origURL.Path, id, "flamegraph")
-	http.Redirect(w, r, origURL.String(), http.StatusTemporaryRedirect)
+	if !isGoPProf {
+		http.Redirect(w, r, origURL.String(), http.StatusTemporaryRedirect)
+	} else {
+		_ = s.storage.Get(id, func(r io.Reader) error {
+			_, err := io.Copy(w, r)
+			return err
+		})
+	}
 }
 
 type fetcherFn func(_ string, _, _ time.Duration) (*profile.Profile, string, error)
