@@ -1751,8 +1751,8 @@ func (ex *connExecutor) setTransactionModes(modes tree.TransactionModes) error {
 	}
 	rwMode := modes.ReadWriteMode
 	if modes.AsOf.Expr != nil {
-		now := ex.server.cfg.Clock.Now()
-		ts, err := ex.planner.EvalAsOfTimestamp(modes.AsOf, now)
+
+		ts, err := ex.planner.EvalAsOfTimestamp(modes.AsOf)
 		if err != nil {
 			ex.state.mu.Unlock()
 			return err

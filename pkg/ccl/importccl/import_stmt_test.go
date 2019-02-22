@@ -2436,7 +2436,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 		stats.DefaultAsOfTime = oldAsOf
 	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
 	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = 0
+	stats.DefaultAsOfTime = time.Microsecond
 
 	const nodes = 1
 	ctx := context.Background()

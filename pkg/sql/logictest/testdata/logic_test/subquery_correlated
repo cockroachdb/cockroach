@@ -936,7 +936,7 @@ INNER JOIN o
 ON c.c_id=o.c_id AND o.ship = (SELECT o.ship FROM o WHERE o.c_id=c.c_id);
 
 statement error AS OF SYSTEM TIME must be provided on a top-level statement
-SELECT (SELECT c_id FROM o AS OF SYSTEM TIME '-0ns')
+SELECT (SELECT c_id FROM o AS OF SYSTEM TIME '-1us')
 FROM c
 WHERE EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id)
 
