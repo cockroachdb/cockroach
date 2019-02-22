@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -148,6 +149,16 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		createStatsColLists = []jobspb.CreateStatsDetails_ColList{{IDs: columnIDs}}
 	}
 
+	// Evaluate the AS OF time, if any.
+	var asOf *hlc.Timestamp
+	if n.AsOf.Expr != nil {
+		asOfTs, err := n.p.EvalAsOfTimestamp(n.AsOf, n.p.ExecCfg().Clock.Now())
+		if err != nil {
+			return err
+		}
+		asOf = &asOfTs
+	}
+
 	if n.Name == stats.AutoStatsName {
 		// Don't start the job if there is already a CREATE STATISTICS job running.
 		// (To handle race conditions we check this again after the job starts,
@@ -167,6 +178,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 			Table:       tableDesc.TableDescriptor,
 			ColumnLists: createStatsColLists,
 			Statement:   n.String(),
+			AsOf:        asOf,
 		},
 		Progress: jobspb.CreateStatsProgress{},
 	})
@@ -258,7 +270,8 @@ func (r *createStatsResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	p := phs.(*planner)
-	if job.Details().(jobspb.CreateStatsDetails).Name == stats.AutoStatsName {
+	details := job.Details().(jobspb.CreateStatsDetails)
+	if details.Name == stats.AutoStatsName {
 		// We want to make sure there is only one automatic CREATE STATISTICS job
 		// running at a time.
 		if err := checkRunningJobs(ctx, job, p); err != nil {
@@ -278,6 +291,12 @@ func (r *createStatsResumer) Resume(
 
 	dsp := p.DistSQLPlanner()
 	return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if details.AsOf != nil {
+			p.semaCtx.AsOfTimestamp = details.AsOf
+			p.extendedEvalCtx.SetTxnTimestamp(details.AsOf.GoTime())
+			txn.SetFixedTimestamp(ctx, *details.AsOf)
+		}
+
 		if err := dsp.planAndRunCreateStats(
 			ctx, r.evalCtx, txn, job, NewRowResultWriter(rows),
 		); err != nil {
