@@ -873,7 +873,7 @@ func NewPutInline(key Key, value Value) Request {
 
 // NewConditionalPut returns a Request initialized to put value as a byte
 // slice at key if the existing value at key equals expValueBytes.
-func NewConditionalPut(key Key, value, expValue Value) Request {
+func NewConditionalPut(key Key, value, expValue Value, allowNotExist bool) Request {
 	value.InitChecksum(key)
 	var expValuePtr *Value
 	if expValue.RawBytes != nil {
@@ -886,8 +886,9 @@ func NewConditionalPut(key Key, value, expValue Value) Request {
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
-		Value:    value,
-		ExpValue: expValuePtr,
+		Value:               value,
+		ExpValue:            expValuePtr,
+		AllowIfDoesNotExist: allowNotExist,
 	}
 }
 
