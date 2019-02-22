@@ -1659,12 +1659,13 @@ func MVCCConditionalPut(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal *roachpb.Value,
+	allowIfDoesNotExist bool,
 	txn *roachpb.Transaction,
 ) error {
 	iter := engine.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 
-	return mvccConditionalPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, expVal, txn)
+	return mvccConditionalPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, expVal, allowIfDoesNotExist, txn)
 }
 
 // MVCCBlindConditionalPut is a fast-path of MVCCConditionalPut. See the
@@ -1684,9 +1685,10 @@ func MVCCBlindConditionalPut(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal *roachpb.Value,
+	allowIfDoesNotExist bool,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccConditionalPutUsingIter(ctx, engine, nil, ms, key, timestamp, value, expVal, txn)
+	return mvccConditionalPutUsingIter(ctx, engine, nil, ms, key, timestamp, value, expVal, allowIfDoesNotExist, txn)
 }
 
 func mvccConditionalPutUsingIter(
@@ -1698,6 +1700,7 @@ func mvccConditionalPutUsingIter(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal *roachpb.Value,
+	allowNoExisting bool,
 	txn *roachpb.Transaction,
 ) error {
 	return mvccPutUsingIter(
@@ -1710,7 +1713,7 @@ func mvccConditionalPutUsingIter(
 						ActualValue: existVal.ShallowClone(),
 					}
 				}
-			} else if expValPresent != existValPresent {
+			} else if expValPresent != existValPresent && (existValPresent || !allowNoExisting) {
 				return nil, &roachpb.ConditionFailedError{
 					ActualValue: existVal.ShallowClone(),
 				}

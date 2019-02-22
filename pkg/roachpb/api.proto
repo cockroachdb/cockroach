@@ -170,6 +170,11 @@ message ConditionalPutRequest {
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
   bool blind = 4;
+  // Typically if a specific, non-empty expected value is supplied, it *must*
+  // exist with that value. Passing this indicates that it is also OK if the key
+  // does not exist. This is useful when a given value is expected but it is
+  // possible it has not yet been written.
+  bool allow_if_does_not_exist = 5;
 }
 
 // A ConditionalPutResponse is the return value from the
