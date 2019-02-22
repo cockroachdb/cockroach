@@ -413,21 +413,6 @@ message IntegerOverflowError {
   optional int64 increment_value = 3 [(gogoproto.nullable) = false];
 }
 
-// A MixedSuccessError indicates that some portion of the batch
-// request may have succeeded, but the batch as a whole failed with
-// the wrapped error.
-message MixedSuccessError {
-  option (gogoproto.equal) = true;
-
-  // wrapped is set when the mixed success error is wrapping a
-  // structured ErrorDetail.
-  optional ErrorDetail wrapped = 1 [(gogoproto.nullable) = false];
-  // wrapped_message is only set if wrapped is unset (i.e. if the
-  // mixed success error is wrapping an error that is not a structured
-  // ErrorDetail).
-  optional string wrapped_message = 2 [(gogoproto.nullable) = false];
-}
-
 // A BatchTimestampBeforeGCError indicates that a request's timestamp was
 // before the GC threshold.
 message BatchTimestampBeforeGCError {
@@ -498,7 +483,7 @@ message IndeterminateCommitError {
 message ErrorDetail {
   option (gogoproto.equal) = true;
 
-  reserved 22, 25, 29, 30;
+  reserved 22, 25, 29, 30, 33;
   oneof value {
     NotLeaseHolderError not_lease_holder = 1;
     RangeNotFoundError range_not_found = 2;
@@ -528,7 +513,6 @@ message ErrorDetail {
     TransactionRetryWithProtoRefreshError transaction_retry_with_proto_refresh = 28;
     IntegerOverflowError integer_overflow = 31;
     UnsupportedRequestError unsupported_request = 32;
-    MixedSuccessError mixed_success = 33;
     BatchTimestampBeforeGCError timestamp_before = 34;
     TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
     IntentMissingError intent_missing = 36;

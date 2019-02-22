@@ -927,11 +927,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 			}
 		}
 		if !ignoreMissing {
-			// Wrap this in a MixedSuccessError, as we know that the EndTransaction
-			// batch succeeded. It is not possible for qiPErr to be a MixedSuccessError
-			// itself.
 			qiPErr.UpdateTxn(br.Txn)
-			qiPErr.SetDetail(roachpb.WrapWithMixedSuccessError(qiPErr.GetDetail()))
 			maybeSwapErrorIndex(qiPErr, swapIdx, lastIdx)
 			return nil, qiPErr
 		}
@@ -1147,7 +1143,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// If we're in the middle of a panic, don't wait on responseChs.
 			panic(r)
 		}
-		var hadSuccessWriting bool
 		// Combine all the responses.
 		// It's important that we wait for all of them even if an error is caught
 		// because the client.Sender() contract mandates that we don't "hold on" to
@@ -1169,15 +1164,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				}
 				continue
 			}
-			if !hadSuccessWriting {
-				for _, i := range resp.positions {
-					req := ba.Requests[i].GetInner()
-					if !roachpb.IsReadOnly(req) {
-						hadSuccessWriting = true
-						break
-					}
-				}
-			}
 
 			// Combine the new response with the existing one (including updating
 			// the headers) if we haven't yet seen an error.
@@ -1193,20 +1179,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			}
 		}
 
-		// If we experienced an error, don't neglect to update the error's
-		// attached transaction with any responses which were received.
-		if pErr != nil {
-			// If this is a write batch with any successful responses, but
-			// we're ultimately returning an error, wrap the error with a
-			// MixedSuccessError.
-			if hadSuccessWriting {
-				// divideAndSendBatchToRanges can call sendPartialBatch, which in
-				// turn can call divideAndSendBatchToRanges recursively. Therefore,
-				// pErr can already be a MixedSuccessError returned from the
-				// recursive call. WrapWithMixedSuccessError handles this case.
-				pErr.SetDetail(roachpb.WrapWithMixedSuccessError(pErr.GetDetail()))
-			}
-		} else if couldHaveSkippedResponses {
+		if pErr == nil && couldHaveSkippedResponses {
 			fillSkippedResponses(ba, br, seekKey, resumeReason)
 		}
 	}()

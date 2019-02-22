@@ -13,7 +13,6 @@ package roachpb
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -80,7 +79,7 @@ func ErrPriority(err error) ErrorPriority {
 	}
 	switch v := err.(type) {
 	case *UnhandledRetryableError:
-		if isTxnAbortedDetail(v.PErr.GetDetail()) {
+		if _, ok := v.PErr.GetDetail().(*TransactionAbortedError); ok {
 			return ErrorScoreTxnAbort
 		}
 		return ErrorScoreTxnRestart
@@ -91,17 +90,6 @@ func ErrPriority(err error) ErrorPriority {
 		return ErrorScoreTxnRestart
 	}
 	return ErrorScoreNonRetriable
-}
-
-func isTxnAbortedDetail(err error) bool {
-	switch v := err.(type) {
-	case *TransactionAbortedError:
-		return true
-	case *MixedSuccessError:
-		return isTxnAbortedDetail(v.GetWrapped())
-	default:
-		return false
-	}
 }
 
 // NewError creates an Error from the given error.
@@ -255,7 +243,7 @@ func (e *Error) checkTxnStatusValid() {
 	if e.TransactionRestart == TransactionRestart_NONE {
 		return
 	}
-	if isTxnAbortedDetail(err) {
+	if _, ok := err.(*TransactionAbortedError); ok {
 		return
 	}
 	if txn.Status.IsFinalized() {
@@ -757,49 +745,6 @@ func (e *UnsupportedRequestError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &UnsupportedRequestError{}
-
-// WrapWithMixedSuccessError creates a new MixedSuccessError that wraps the
-// provided error detail. If the detail is already a MixedSuccessError then
-// no wrapping is performed.
-func WrapWithMixedSuccessError(detail error) *MixedSuccessError {
-	if m, ok := detail.(*MixedSuccessError); ok {
-		return m
-	}
-	var m MixedSuccessError
-	if !m.Wrapped.SetInner(detail) {
-		// If the detail was not an ErrorDetail, store
-		// it in the unstructured Message field.
-		m.WrappedMessage = detail.Error()
-	}
-	return &m
-}
-
-// GetWrapped returns the error that the MixedSuccessError wraps.
-func (e *MixedSuccessError) GetWrapped() error {
-	if w := e.Wrapped.GetInner(); w != nil {
-		return w
-	}
-	return errors.New(e.WrappedMessage)
-}
-
-func (e *MixedSuccessError) Error() string {
-	return e.message(nil)
-}
-
-func (e *MixedSuccessError) message(_ *Error) string {
-	return fmt.Sprintf("the batch experienced mixed success and failure: %s", e.GetWrapped())
-}
-
-func (e *MixedSuccessError) canRestartTransaction() TransactionRestart {
-	// MixedSuccessError inherits its "restartability" from the error that it wraps.
-	if r, ok := e.Wrapped.GetInner().(transactionRestartError); ok {
-		return r.canRestartTransaction()
-	}
-	return TransactionRestart_NONE
-}
-
-var _ ErrorDetailInterface = &MixedSuccessError{}
-var _ transactionRestartError = &MixedSuccessError{}
 
 func (e *BatchTimestampBeforeGCError) Error() string {
 	return e.message(nil)
