@@ -100,6 +100,7 @@ func startTestWriter(
 // which are resolved synchronously with EndTransaction and via RPC.
 func TestRangeSplitMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// t.Skip("WIP")
 	s := createTestDB(t)
 	defer s.Stop()
 

@@ -408,6 +408,57 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 	return result
 }
 
+// TestMaybeStripInFlightWrites verifies that in-flight writes declared
+// on an EndTransaction request are stripped if the corresponding write
+// is in the same batch as the EndTransaction.
+func TestMaybeStripInFlightWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	put1 := &roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
+	put1.Sequence = 1
+	put2 := &roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
+	put2.Sequence = 2
+	put3 := &roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
+	put3.Sequence = 3
+	et := &roachpb.EndTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}, Commit: true}
+	et.Sequence = 4
+	et.IntentSpans = []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}}
+	et.InFlightWrites = map[int32]int32{1: 0, 2: 1}
+	testCases := []struct {
+		reqs   []roachpb.Request
+		expIFW map[int32]int32
+		expErr string
+	}{
+		{[]roachpb.Request{et}, map[int32]int32{1: 0, 2: 1}, ""},
+		{[]roachpb.Request{put1, et}, map[int32]int32{2: 1}, ""},
+		{[]roachpb.Request{put2, et}, map[int32]int32{1: 0}, ""},
+		{[]roachpb.Request{put3, et}, map[int32]int32{1: 0, 2: 1}, "write in batch with EndTransaction missing from in-flight writes"},
+		{[]roachpb.Request{put1, put2, et}, map[int32]int32{}, ""},
+	}
+	for _, c := range testCases {
+		var ba roachpb.BatchRequest
+		ba.Add(c.reqs...)
+		t.Run(fmt.Sprint(ba), func(t *testing.T) {
+			resBa, err := maybeStripInFlightWrites(ba)
+			if c.expErr == "" {
+				if err != nil {
+					t.Errorf("expected no error, got %v", err)
+				}
+				resArgs, _ := resBa.GetArg(roachpb.EndTransaction)
+				resEt := resArgs.(*roachpb.EndTransactionRequest)
+				if !reflect.DeepEqual(resEt.InFlightWrites, c.expIFW) {
+					t.Errorf("expected in-flight writes %v, got %v", c.expIFW, resEt.InFlightWrites)
+				}
+			} else {
+				if !testutils.IsError(err, c.expErr) {
+					t.Errorf("expected error %q, got %v", c.expErr, err)
+				}
+			}
+		})
+	}
+}
+
 // TestIsOnePhaseCommit verifies the circumstances where a
 // transactional batch can be committed as an atomic write.
 func TestIsOnePhaseCommit(t *testing.T) {
@@ -5384,10 +5435,13 @@ func TestQueryIntentRequest(t *testing.T) {
 				largerTSMeta.Timestamp = largerTSMeta.Timestamp.Next()
 				queryIntent(key1, largerTSMeta, baTxn, true)
 
-				// Query the intent with a smaller timestamp. Should not see an intent.
+				// Query the intent with a smaller timestamp. Should not see an
+				// intent unless we're querying our own intent, in which case
+				// the smaller timestamp will be forwarded to the transaction's
+				// timestamp.
 				smallerTSMeta := txn.TxnMeta
 				smallerTSMeta.Timestamp = smallerTSMeta.Timestamp.Prev()
-				queryIntent(key1, smallerTSMeta, baTxn, false)
+				queryIntent(key1, smallerTSMeta, baTxn, baTxn == txn)
 
 				// Query the intent with a larger sequence number. Should not see an intent.
 				largerSeqMeta := txn.TxnMeta
@@ -9796,6 +9850,7 @@ func TestCreateTxnRecord(t *testing.T) {
 		}
 	}
 
+	// TODO(nvanbenschoten): Add some cases here!
 	testCases := []struct {
 		name             string
 		setup            runFunc

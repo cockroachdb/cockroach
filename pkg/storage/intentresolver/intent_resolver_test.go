@@ -60,6 +60,8 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 
 	testCases := [][]roachpb.Intent{
 		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
+			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.STAGING}},
+		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
 			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.ABORTED}},
 		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
 			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.COMMITTED}},
@@ -67,8 +69,8 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 	for _, intents := range testCases {
 		if _, pErr := ir.maybePushIntents(
 			context.Background(), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true,
-		); !testutils.IsPError(pErr, "unexpected (ABORTED|COMMITTED) intent") {
-			t.Errorf("expected error on aborted/resolved intent, but got %s", pErr)
+		); !testutils.IsPError(pErr, "unexpected (STAGING|ABORTED|COMMITTED) intent") {
+			t.Errorf("expected error on non-pending intent, but got %s", pErr)
 		}
 		if cnt := len(ir.mu.inFlightPushes); cnt != 0 {
 			t.Errorf("expected no inflight pushes refcount map entries, found %d", cnt)

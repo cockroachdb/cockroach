@@ -22,6 +22,12 @@ import (
 
 var emptySpan = roachpb.Span{}
 
+const (
+	filterNone int = iota
+	filterEndTxn
+	filterNotEndTxn
+)
+
 // truncate restricts all contained requests to the given key range and returns
 // a new, truncated, BatchRequest. All requests contained in that batch are
 // "truncated" to the given span, and requests which are found to not overlap
@@ -32,9 +38,23 @@ var emptySpan = roachpb.Span{}
 // rs = [a,bb],
 //
 // then truncate(ba,rs) returns a batch (Put[a], Put[b]) and positions [0,2].
-func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, []int, error) {
+func truncate(
+	ba roachpb.BatchRequest, rs roachpb.RSpan, filter int,
+) (roachpb.BatchRequest, []int, error) {
 	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
 		header := args.Header().Span()
+		switch filter {
+		case filterNone:
+		case filterEndTxn:
+			if args.Method() != roachpb.EndTransaction {
+				return false, emptySpan, nil
+			}
+		case filterNotEndTxn:
+			if args.Method() == roachpb.EndTransaction {
+				return false, emptySpan, nil
+			}
+		}
+
 		if !roachpb.IsRange(args) {
 			// This is a point request.
 			if len(header.EndKey) > 0 {

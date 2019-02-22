@@ -68,8 +68,17 @@ func QueryIntent(
 			(args.Txn.Epoch == intent.Txn.Epoch) &&
 			(args.Txn.Sequence <= intent.Txn.Sequence)
 
+		// TODO(nvanbenschoten): the idea here is that if a QueryIntent request
+		// is re-issued after a refresh, it should search for intents even at
+		// the newer timestamp. Should this work like this? Add some testing.
+		// Put this in a separate commit.
+		searchTs := args.Txn.Timestamp
+		if ownTxn {
+			searchTs.Forward(h.Txn.Timestamp)
+		}
+
 		// Check whether the intent was pushed past its expected timestamp.
-		if reply.FoundIntent && args.Txn.Timestamp.Less(intent.Txn.Timestamp) {
+		if reply.FoundIntent && searchTs.Less(intent.Txn.Timestamp) {
 			// The intent matched but was pushed to a later timestamp. Consider a
 			// pushed intent a missing intent.
 			curIntentPushed = true

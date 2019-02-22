@@ -619,10 +619,12 @@ func splitBatchAndCheckForRefreshSpans(
 	lastReq := lastPart[len(lastPart)-1].GetInner()
 	if et, ok := lastReq.(*roachpb.EndTransactionRequest); ok && et.NoRefreshSpans {
 		hasRefreshSpans := false
+	Loop:
 		for _, part := range parts[:len(parts)-1] {
 			for _, req := range part {
 				if roachpb.NeedsRefresh(req.GetInner()) {
 					hasRefreshSpans = true
+					break Loop
 				}
 			}
 		}
@@ -644,11 +646,6 @@ func splitBatchAndCheckForRefreshSpans(
 //
 // When the request spans ranges, it is split by range and a partial
 // subset of the batch request is sent to affected ranges in parallel.
-//
-// The first write in a transaction may not arrive before writes to
-// other ranges. This is relevant in the case of a BeginTransaction
-// request. Intents written to other ranges before the transaction
-// record is created will cause the transaction to abort early.
 //
 // Note that on error, this method will return any batch responses for
 // successfully processed batch requests. This allows the caller to
@@ -710,11 +707,12 @@ func (ds *DistSender) Send(
 		rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, 0 /* batchIdx */)
 
 		if pErr == errNo1PCTxn {
-			// If we tried to send a single round-trip EndTransaction but
-			// it looks like it's going to hit multiple ranges, split it
-			// here and try again.
+			// If we tried to send a single round-trip EndTransaction but it
+			// looks like it's going to hit multiple ranges and is not prepared
+			// to commit in parallel with writes on other ranges, split it here
+			// and try again.
 			if len(parts) != 1 {
-				panic("EndTransaction not in last chunk of batch")
+				log.Fatalf(ctx, "EndTransaction not in last chunk of batch: %s", ba)
 			} else if require1PC {
 				log.Fatalf(ctx, "required 1PC transaction cannot be split: %s", ba)
 			}
@@ -793,9 +791,32 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	if !ri.Valid() {
 		return nil, ri.Error()
 	}
+
+	// TODO(WIP): don't look at this. It's awful. The idea is that we don't
+	// want to send parallel commit end transactions in the same batch as
+	// query intent requests because query intent requests will block on
+	// in-flight writes.
+	var etRKey roachpb.RKey
+	var hasET, canETCrossRanges, shouldSendETAlone bool
+	if args, ok := ba.GetArg(roachpb.EndTransaction); ok {
+		hasET = true
+		et := args.(*roachpb.EndTransactionRequest)
+
+		var err error
+		if etRKey, err = keys.Addr(et.Key); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+
+		if l := len(ba.Requests); l > 1 {
+			parCommit := len(et.InFlightWrites) > 0
+			canETCrossRanges = parCommit
+			shouldSendETAlone = parCommit && ba.Requests[l-2].GetInner().Method() == roachpb.QueryIntent
+		}
+	}
+
 	// Take the fast path if this batch fits within a single range.
-	if !ri.NeedAnother(rs) {
-		resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, false /* needsTruncate */)
+	if !ri.NeedAnother(rs) && !shouldSendETAlone {
+		resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, filterNone, false /* needsTruncate */)
 		return resp.reply, resp.pErr
 	}
 
@@ -918,7 +939,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// If the request is more than but ends with EndTransaction, we
 			// want the caller to come again with the EndTransaction in an
 			// extra call.
-			if l := len(ba.Requests) - 1; l > 0 && ba.Requests[l].GetInner().Method() == roachpb.EndTransaction {
+			if hasET && !canETCrossRanges {
 				responseCh <- response{pErr: errNo1PCTxn}
 				return
 			}
@@ -951,15 +972,36 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			return
 		}
 
+		// TODO(WIP): again, don't look.
+		filter := filterNone
+		if shouldSendETAlone && rs.ContainsKey(etRKey) {
+			filter = filterNotEndTxn
+
+			if ds.rpcContext != nil &&
+				ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, filterEndTxn, responseCh) {
+				// Sent the batch asynchronously.
+			} else {
+				resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, filterEndTxn, true /* needsTruncate */)
+				responseCh <- resp
+				if resp.pErr != nil {
+					return
+				}
+			}
+
+			responseCh = make(chan response, 1)
+			responseChs = append(responseChs, responseCh)
+			batchIdx++
+		}
+
 		lastRange := !ri.NeedAnother(rs)
 		// Send the next partial batch to the first range in the "rs" span.
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
 		if canParallelize && !lastRange && ds.rpcContext != nil &&
-			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, responseCh) {
+			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, filter, responseCh) {
 			// Sent the batch asynchronously.
 		} else {
-			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, true /* needsTruncate */)
+			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, filter, true /* needsTruncate */)
 			responseCh <- resp
 			if resp.pErr != nil {
 				return
@@ -1051,6 +1093,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 	desc *roachpb.RangeDescriptor,
 	evictToken *EvictionToken,
 	batchIdx int,
+	filter int,
 	responseCh chan response,
 ) bool {
 	if err := ds.rpcContext.Stopper.RunLimitedAsyncTask(
@@ -1058,7 +1101,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 		ds.asyncSenderSem, false, /* wait */
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
-			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, batchIdx, true /* needsTruncate */)
+			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, batchIdx, filter, true /* needsTruncate */)
 		},
 	); err != nil {
 		ds.metrics.AsyncThrottledCount.Inc(1)
@@ -1085,6 +1128,7 @@ func (ds *DistSender) sendPartialBatch(
 	desc *roachpb.RangeDescriptor,
 	evictToken *EvictionToken,
 	batchIdx int,
+	filter int,
 	needsTruncate bool,
 ) response {
 	if batchIdx == 1 {
@@ -1105,12 +1149,14 @@ func (ds *DistSender) sendPartialBatch(
 		if err != nil {
 			return response{pErr: roachpb.NewError(err)}
 		}
-		ba, positions, err = truncate(ba, rs)
+		ba, positions, err = truncate(ba, rs, filter)
 		if len(positions) == 0 && err == nil {
 			// This shouldn't happen in the wild, but some tests exercise it.
-			return response{
-				pErr: roachpb.NewErrorf("truncation resulted in empty batch on %s: %s", rs, ba),
-			}
+			// return response{
+			// 	pErr: roachpb.NewErrorf("truncation resulted in empty batch on %s: %s", rs, ba),
+			// }
+			var reply roachpb.BatchResponse
+			return response{reply: &reply, positions: positions}
 		}
 		if err != nil {
 			return response{pErr: roachpb.NewError(err)}
@@ -1340,6 +1386,12 @@ func (ds *DistSender) sendToReplicas(
 	cachedLeaseHolder roachpb.ReplicaDescriptor,
 ) (*roachpb.BatchResponse, error) {
 	var ambiguousError error
+	// TODO(WIP): this is a big TODO. We'll need to figure out the best way to
+	// track ambiguous errors with parallel commits. Naively, we could set this
+	// flag to true across all write batches that execute in parallel with the
+	// commit as well. We could improve on this by ignoring the ambiguity if any
+	// of the batches run in parallel definitely failed. Let's think about this
+	// later.
 	var haveCommit bool
 	// We only check for committed txns, not aborts because aborts may
 	// be retried without any risk of inconsistencies.

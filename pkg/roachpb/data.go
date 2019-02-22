@@ -732,6 +732,13 @@ func (v Value) PrettyPrint() string {
 	return buf.String()
 }
 
+// IsFinalized determines whether the transaction status is in a finalized
+// state. A finalized state is terminal, meaning that once a transaction
+// enters one of these states, it will never leave it.
+func (ts TransactionStatus) IsFinalized() bool {
+	return ts == COMMITTED || ts == ABORTED
+}
+
 var _ log.SafeMessager = Transaction{}
 
 const (
@@ -825,6 +832,13 @@ func (t Transaction) Clone() Transaction {
 	// Note that we're not cloning the span keys under the assumption that the
 	// keys themselves are not mutable.
 	t.Intents = append([]Span(nil), t.Intents...)
+	if len(t.InFlightWrites) != 0 {
+		mw := t.InFlightWrites
+		t.InFlightWrites = make(map[int32]int32, len(mw))
+		for seq, idx := range mw {
+			t.InFlightWrites[seq] = idx
+		}
+	}
 	return t
 }
 
@@ -985,8 +999,12 @@ func (t *Transaction) Update(o *Transaction) {
 	if len(t.Key) == 0 {
 		t.Key = o.Key
 	}
-	if o.Status != PENDING {
+	if t.Epoch < o.Epoch {
 		t.Status = o.Status
+	} else if t.Epoch == o.Epoch {
+		if !t.Status.IsFinalized() && o.Status != PENDING {
+			t.Status = o.Status
+		}
 	}
 
 	// If the epoch or refreshed timestamp move forward, overwrite
@@ -1024,6 +1042,9 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	if len(o.Intents) > 0 {
 		t.Intents = o.Intents
+	}
+	if len(o.InFlightWrites) > 0 {
+		t.InFlightWrites = o.InFlightWrites
 	}
 	// On update, set epoch zero timestamp to the minimum seen by either txn.
 	if o.EpochZeroTimestamp != (hlc.Timestamp{}) {
@@ -1066,6 +1087,9 @@ func (t Transaction) String() string {
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
+	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
+		fmt.Fprintf(&buf, " ifw=%d", nw)
+	}
 	return buf.String()
 }
 
@@ -1086,6 +1110,9 @@ func (t Transaction) SafeMessage() string {
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
+	}
+	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
+		fmt.Fprintf(&buf, " ifw=%d", nw)
 	}
 	return buf.String()
 }
@@ -1133,6 +1160,7 @@ func (t *Transaction) AsRecord() TransactionRecord {
 	tr.LastHeartbeat = t.LastHeartbeat
 	tr.OrigTimestamp = t.OrigTimestamp
 	tr.Intents = t.Intents
+	tr.InFlightWrites = t.InFlightWrites
 	return tr
 }
 
@@ -1146,6 +1174,7 @@ func (tr *TransactionRecord) AsTransaction() Transaction {
 	t.LastHeartbeat = tr.LastHeartbeat
 	t.OrigTimestamp = tr.OrigTimestamp
 	t.Intents = tr.Intents
+	t.InFlightWrites = tr.InFlightWrites
 	return t
 }
 

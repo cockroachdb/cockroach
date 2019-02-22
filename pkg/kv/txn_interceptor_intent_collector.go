@@ -50,6 +50,10 @@ type txnIntentCollector struct {
 	// this coordinator. These spans allow the coordinator to set the
 	// list of intent spans in the EndTransactionRequest when the
 	// transaction is finalized.
+	// TODO(nvanbenschoten): This really shouldn't be stored as a slice.
+	// In addition to merging this with the tracking in txnPipeliner, we
+	// should track this using an ordered tree. This would also address
+	// the TODO below about sorting after each request.
 	intents []roachpb.Span
 	// an optional RangeIterator that is used to condense intent spans if
 	// provided.

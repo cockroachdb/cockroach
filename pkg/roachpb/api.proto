@@ -509,7 +509,21 @@ message EndTransactionRequest {
   // completion. Note that these spans may be condensed to cover
   // aggregate spans if the keys written by the transaction exceeded
   // a size threshold.
+  //
+  // The list is maintained in sorted order and all spans are maximally
+  // merged such that no two spans here overlap each other.
   repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
+  // Set of in-flight intent writes that have been issued by the transaction but
+  // which may not have succeeded yet. If any promised writes are provided, a
+  // committing EndTransaction request will move a PENDING transaction to the
+  // STAGING status instead of the COMMITTED status. These in-flight writes must
+  // then all be confirmed as successful before the transaction can be moved
+  // from STAGING to COMMITTED. For more, see txnCommitter.
+  //
+  // The map structure performs a mapping from the sequence number of an
+  // in-flight write to its corresponding index in intent_spans. This allows us
+  // to avoid storing the key twice per write.
+  map<int32, int32> in_flight_writes = 10 [(gogoproto.nullable) = false];
   // Requires that the transaction completes as a 1 phase commit. This
   // guarantees that all writes are to the same range and that no
   // intents are left in the event of an error.
@@ -778,6 +792,33 @@ message PushTxnResponse {
   Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
 }
 
+// A RecoverTxnRequest is arguments to the RecoverTxn() method. It is sent
+// during the recovery process for a transaction abandoned in the STAGING state.
+// The sender is expected to have queried all of the abandoned transaction's
+// in-flight writes and determined whether they all succeeded or not. This is
+// used to determine whether the result of the recovery should be committing the
+// abandoned transaction or aborting it.
+message RecoverTxnRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Transaction record to recover.
+  storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  // Were all of the STAGING transaction's writes found to have succeeded? If
+  // so, the transaction can be committed. If not, the transaction can be
+  // aborted, as long as the write that was found to have failed was prevented
+  // from ever succeeding in the future.
+  bool all_writes_found = 3;
+}
+
+// A RecoverTxnResponse is the return value from the RecoverTxn() method.
+message RecoverTxnResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Contains the finalized state of the recovered transaction.
+  Transaction recovered_txn = 2 [(gogoproto.nullable) = false];
+}
+
 // A QueryTxnResponse is arguments to the QueryTxn() method. It's sent
 // by transactions which are waiting to push another transaction because
 // of conflicting write intents to fetch updates to either the pusher's
@@ -846,8 +887,6 @@ message QueryIntentRequest {
     // Prevent the intent from ever being written in the future. If set as the
     // behavior, a response with found_intent=false implies that an intent will
     // never be writtable at the key at the transaction's timestamp or below.
-    //
-    // Cannot be used with SNAPSHOT transactions.
     PREVENT = 2;
   }
   // The behavior of the request if the expected intent is found to be not
@@ -1406,6 +1445,7 @@ message RequestUnion {
     HeartbeatTxnRequest heartbeat_txn = 12;
     GCRequest gc = 13;
     PushTxnRequest push_txn = 14;
+    RecoverTxnRequest recover_txn = 46;
     ResolveIntentRequest resolve_intent = 16;
     ResolveIntentRangeRequest resolve_intent_range = 17;
     MergeRequest merge = 18;
@@ -1455,6 +1495,7 @@ message ResponseUnion {
     HeartbeatTxnResponse heartbeat_txn = 12;
     GCResponse gc = 13;
     PushTxnResponse push_txn = 14;
+    RecoverTxnResponse recover_txn = 46;
     ResolveIntentResponse resolve_intent = 16;
     ResolveIntentRangeResponse resolve_intent_range = 17;
     MergeResponse merge = 18;
