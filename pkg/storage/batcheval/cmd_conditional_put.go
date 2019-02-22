@@ -47,5 +47,10 @@ func ConditionalPut(
 	if args.Blind {
 		return result.Result{}, engine.MVCCBlindConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
 	}
+	if args.AllowIfDoesNotExist {
+		return result.Result{}, engine.MVCCConditionalPutAllowingNotExist(
+			ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn,
+		)
+	}
 	return result.Result{}, engine.MVCCConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
 }

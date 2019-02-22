@@ -2429,6 +2429,47 @@ func TestMVCCConditionalPut(t *testing.T) {
 	if err := MVCCConditionalPut(ctx, engine, nil, testKey1, clock.Now(), valueEmpty, &value1, nil); err != nil {
 		t.Fatal(err)
 	}
+
+	// Move key2 (which does not exist) to from value1 to value2.
+	// Expect it to fail since it does not exist with value1.
+	err = MVCCConditionalPut(ctx, engine, nil, testKey2, clock.Now(), value2, &value1, nil)
+	if err == nil {
+		t.Fatal("expected error on key not exists")
+	}
+	switch e := err.(type) {
+	default:
+		t.Fatalf("unexpected error %T", e)
+	case *roachpb.ConditionFailedError:
+		if e.ActualValue != nil {
+			t.Fatalf("expected missing actual value: %v", e.ActualValue)
+		}
+	}
+
+	// Move key2 (which does not yet exist) to from value1 to value2, but allowing for it not existing.
+	if err := MVCCConditionalPutAllowingNotExist(ctx, engine, nil, testKey2, clock.Now(), value2, &value1, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try to move key2 (which has value2) from value1 to empty. Expect error.
+	err = MVCCConditionalPutAllowingNotExist(ctx, engine, nil, testKey2, clock.Now(), valueEmpty, &value1, nil)
+	if err == nil {
+		t.Fatal("expected error on key not exists")
+	}
+	switch e := err.(type) {
+	default:
+		t.Fatalf("unexpected error %T", e)
+	case *roachpb.ConditionFailedError:
+		if !bytes.Equal(e.ActualValue.RawBytes, value2.RawBytes) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				e.ActualValue.RawBytes, value2.RawBytes)
+		}
+	}
+
+	// Try to move key2 (which has value2) from value2 to empty. Expect success.
+	if err := MVCCConditionalPutAllowingNotExist(ctx, engine, nil, testKey2, clock.Now(), valueEmpty, &value2, nil); err != nil {
+		t.Fatal(err)
+	}
+
 	// Now move to value2 from expected empty value.
 	if err := MVCCConditionalPut(ctx, engine, nil, testKey1, clock.Now(), value2, &valueEmpty, nil); err != nil {
 		t.Fatal(err)
