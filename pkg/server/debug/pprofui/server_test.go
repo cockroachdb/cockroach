@@ -24,7 +24,7 @@ import (
 
 func TestServer(t *testing.T) {
 	storage := NewMemStorage(1, 0)
-	s := NewServer(storage)
+	s := NewServer(storage, nil)
 
 	for i := 0; i < 3; i++ {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
