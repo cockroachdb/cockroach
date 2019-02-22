@@ -121,8 +121,18 @@ func NewServer(st *cluster.Settings) *Server {
 
 	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), func(profile string, do func()) {
 		tBegin := timeutil.Now()
-		log.Infof(context.Background(), "pprofui: recording %s", profile)
+
+		extra := ""
+		if profile == "profile" {
+			extra = " (enabling profiler labels)"
+			log.Infof(context.Background(), "%s", profile)
+			st.SetCPUProfiling(true)
+			defer st.SetCPUProfiling(false)
+		}
+		log.Infof(context.Background(), "pprofui: recording %s%s", profile, extra)
+
 		do()
+
 		log.Infof(context.Background(), "pprofui: recorded %s in %.2fs", profile, timeutil.Since(tBegin).Seconds())
 	})
 	mux.Handle("/debug/pprof/ui/", http.StripPrefix("/debug/pprof/ui", ps))
