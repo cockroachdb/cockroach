@@ -56,7 +56,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	descA := sqlbase.GetTableDescriptor(s.DB(), "t", "a")
 	cache := NewTableStatisticsCache(10 /* cacheSize */, s.Gossip(), kvDB, executor)
-	refresher := MakeRefresher(executor, cache, 0 /* asOfTime */)
+	refresher := MakeRefresher(executor, cache, time.Microsecond /* asOfTime */)
 
 	// There should not be any stats yet.
 	if err := checkStatsCount(ctx, cache, descA.ID, 0 /* expected */); err != nil {
@@ -65,14 +65,14 @@ func TestMaybeRefreshStats(t *testing.T) {
 
 	// There are no stats yet, so this must refresh the statistics on table t
 	// even though rowsAffected=0.
-	refresher.maybeRefreshStats(ctx, s.Stopper(), descA.ID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(ctx, s.Stopper(), descA.ID, 0 /* rowsAffected */, time.Microsecond /* asOf */)
 	if err := checkStatsCount(ctx, cache, descA.ID, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
 	// Try to refresh again. With rowsAffected=0, the probability of a refresh
 	// is 0, so refreshing will not succeed.
-	refresher.maybeRefreshStats(ctx, s.Stopper(), descA.ID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(ctx, s.Stopper(), descA.ID, 0 /* rowsAffected */, time.Microsecond /* asOf */)
 	if err := checkStatsCount(ctx, cache, descA.ID, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	tableID := sqlbase.GetTableDescriptor(s.DB(), "t", "a").ID
 	cache := NewTableStatisticsCache(10 /* cacheSize */, s.Gossip(), kvDB, executor)
-	refresher := MakeRefresher(executor, cache, 0 /* asOfTime */)
+	refresher := MakeRefresher(executor, cache, time.Microsecond /* asOfTime */)
 
 	checkAverageRefreshTime := func(expected time.Duration) error {
 		cache.InvalidateTableStats(ctx, tableID)
@@ -262,7 +262,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	// average time between refreshes, so this call is not required to refresh
 	// the statistics on table t. With rowsAffected=0, the probability of refresh
 	// is 0.
-	refresher.maybeRefreshStats(ctx, s.Stopper(), tableID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(ctx, s.Stopper(), tableID, 0 /* rowsAffected */, time.Microsecond /* asOf */)
 	if err := checkStatsCount(ctx, cache, tableID, 20 /* expected */); err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	// on table t even though rowsAffected=0. After refresh, only 15 stats should
 	// remain (5 from column k and 10 from column v), since the old stats on k
 	// were deleted.
-	refresher.maybeRefreshStats(ctx, s.Stopper(), tableID, 0 /* rowsAffected */, 0 /* asOf */)
+	refresher.maybeRefreshStats(ctx, s.Stopper(), tableID, 0 /* rowsAffected */, time.Microsecond /* asOf */)
 	if err := checkStatsCount(ctx, cache, tableID, 15 /* expected */); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +332,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(10 /* cacheSize */, s.Gossip(), kvDB, executor)
-	refresher := MakeRefresher(executor, cache, 0 /* asOfTime */)
+	refresher := MakeRefresher(executor, cache, time.Microsecond /* asOfTime */)
 
 	AutomaticStatisticsClusterMode.Override(&st.SV, true)
 

@@ -191,7 +191,7 @@ func (ex *connExecutor) populatePrepared(
 
 	p.extendedEvalCtx.PrepareOnly = true
 
-	protoTS, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now() /* max */)
+	protoTS, err := p.isAsOf(stmt.AST)
 	if err != nil {
 		return 0, err
 	}

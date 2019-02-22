@@ -22,7 +22,7 @@ statement ok
 COMMIT
 
 statement ok
-BEGIN AS OF SYSTEM TIME '-1ns'
+BEGIN AS OF SYSTEM TIME '-1us'
 
 query I
 SELECT * FROM t
@@ -33,7 +33,7 @@ statement ok
 COMMIT
 
 statement ok
-BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1ns'
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1us'
 
 query I
 SELECT * FROM t
@@ -76,7 +76,7 @@ COMMIT
 # Verify transactions with a historical timestamps imply READ ONLY.
 
 statement ok
-BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1ns'
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1us'
 
 statement error pq: cannot execute INSERT in a read-only transaction
 INSERT INTO t VALUES (3)
@@ -85,7 +85,7 @@ statement ok
 COMMIT
 
 statement ok
-BEGIN AS OF SYSTEM TIME '-1ns'
+BEGIN AS OF SYSTEM TIME '-1us'
 
 statement error pq: cannot execute INSERT in a read-only transaction
 INSERT INTO t VALUES (3)
@@ -97,7 +97,7 @@ COMMIT
 # the previous value.
 
 statement ok
-BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION AS OF SYSTEM TIME '-1ns';
+BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION AS OF SYSTEM TIME '-1us';
 
 query I
 SELECT * FROM t
