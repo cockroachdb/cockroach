@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -198,15 +199,25 @@ func (oc *optCatalog) newDataSource(
 			// all databases. We treat the empty catalog as having database ID 0.
 			if name.Catalog() != "" {
 				// TODO(radu): it's unfortunate that we have to lookup the schema again.
-				found, dbDesc, err := oc.resolver.LookupSchema(ctx, name.Catalog(), name.Schema())
+				_, dbDesc, err := oc.resolver.LookupSchema(ctx, name.Catalog(), name.Schema())
 				if err != nil {
 					return nil, err
 				}
-				if !found {
-					// The virtual table should be valid if we got this far.
-					return nil, pgerror.NewAssertionErrorf("schema for virtual table not found")
+				if dbDesc == nil {
+					// The database was not found. This can happen e.g. when
+					// accessing a virtual schema over a non-existent
+					// database. This is a common scenario when the current db
+					// in the session points to a database that was not created
+					// yet.
+					//
+					// In that case we use an invalid database ID. We
+					// distinguish this from the empty database case because the
+					// virtual tables do not "contain" the same information in
+					// both cases.
+					id |= cat.StableID(math.MaxUint32) << 32
+				} else {
+					id |= cat.StableID(dbDesc.(*DatabaseDescriptor).ID) << 32
 				}
-				id |= cat.StableID(dbDesc.(*DatabaseDescriptor).ID) << 32
 			}
 		}
 
