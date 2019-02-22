@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -178,5 +179,87 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	}
 	if tracing.FindMsgInRecording(getRec(), clientRejectedMsg) == -1 {
 		t.Fatalf("didn't find expected message in trace: %s", clientRejectedMsg)
+	}
+}
+
+// Test that the DistSQLReceiver overwrites previous errors as "better" errors
+// come along.
+func TestDistSQLReceiverErrorRanking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// This test goes through the trouble of creating a server because it wants to
+	// create a txn. It creates the txn because it wants to test an interaction
+	// between the DistSQLReceiver and the TxnCoordSender: the DistSQLReceiver
+	// will feed retriable errors to the TxnCoordSender which will change those
+	// errors to TransactionRetryWithProtoRefreshError.
+	ctx := context.Background()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	txn := client.NewTxn(ctx, db, s.NodeID(), client.RootTxn)
+
+	// We're going to use a rowResultWriter to which only errors will be passed.
+	rw := newCallbackResultWriter(nil /* fn */)
+	recv := MakeDistSQLReceiver(
+		ctx,
+		rw,
+		tree.Rows, /* StatementType */
+		nil,       /* rangeCache */
+		nil,       /* leaseCache */
+		txn,
+		func(hlc.Timestamp) {}, /* updateClock */
+		&SessionTracing{},
+	)
+
+	retryErr := roachpb.NewErrorWithTxn(
+		roachpb.NewTransactionRetryError(
+			roachpb.RETRY_SERIALIZABLE),
+		txn.Serialize()).GoError()
+
+	abortErr := roachpb.NewErrorWithTxn(
+		roachpb.NewTransactionAbortedError(
+			roachpb.ABORT_REASON_ABORTED_RECORD_FOUND),
+		txn.Serialize()).GoError()
+
+	errs := []struct {
+		err    error
+		expErr string
+	}{
+		{
+			// Initial error, retriable.
+			err:    retryErr,
+			expErr: "TransactionRetryWithProtoRefreshError: TransactionRetryError",
+		},
+		{
+			// A TransactionAbortedError overwrites another retriable one.
+			err:    abortErr,
+			expErr: "TransactionRetryWithProtoRefreshError: TransactionAbortedError",
+		},
+		{
+			// A non-aborted retriable error does not overried the
+			// TransactionAbortedError.
+			err:    retryErr,
+			expErr: "TransactionRetryWithProtoRefreshError: TransactionAbortedError",
+		},
+		{
+			// A non-retriable error overwrites a retriable one.
+			err:    fmt.Errorf("err1"),
+			expErr: "err1",
+		},
+		{
+			// Another non-retriable error doesn't overwrite the previous one.
+			err:    fmt.Errorf("err2"),
+			expErr: "err1",
+		},
+	}
+
+	for i, tc := range errs {
+		recv.Push(nil, /* row */
+			&distsqlrun.ProducerMetadata{
+				Err: tc.err,
+			})
+		if !testutils.IsError(rw.Err(), tc.expErr) {
+			t.Fatalf("%d: expected %s, got %s", i, tc.expErr, rw.Err())
+		}
 	}
 }
