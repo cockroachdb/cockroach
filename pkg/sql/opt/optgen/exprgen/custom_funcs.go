@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type customFuncs struct {
@@ -50,7 +51,7 @@ func (c *customFuncs) LookupColumn(name string) opt.ColumnID {
 	for colID := opt.ColumnID(1); int(colID) <= md.NumColumns(); colID++ {
 		if md.ColumnMeta(colID).Alias == name {
 			if res != 0 {
-				panic(errorf("ambigous column %s", name))
+				panic(errorf("ambiguous column %s", name))
 			}
 			res = colID
 		}
@@ -78,10 +79,58 @@ func (c *customFuncs) ColSet(cols string) opt.ColSet {
 	return c.ColList(cols).ToSet()
 }
 
+// MinPhysProps returns the singleton minimum set of physical properties.
+func (c *customFuncs) MinPhysProps() *physical.Required {
+	return physical.MinRequired
+}
+
+// MakePhysProps returns a set of physical properties corresponding to the
+// input presentation and OrderingChoice.
+func (c *customFuncs) MakePhysProps(p physical.Presentation, o physical.OrderingChoice) *physical.Required {
+	return c.mem.InternPhysicalProps(&physical.Required{
+		Presentation: p,
+		Ordering:     o,
+	})
+}
+
+// ExplainOptions creates a tree.ExplainOptions from a comma-separated list of
+// options.
+func (c *customFuncs) ExplainOptions(opts string) tree.ExplainOptions {
+	res := tree.ExplainOptions{}
+	strs := strings.Split(opts, ",")
+	for _, o := range strs {
+		switch o {
+		case "opt":
+			res.Mode = tree.ExplainOpt
+		case "distsql":
+			res.Mode = tree.ExplainDistSQL
+		case "verbose":
+			res.Flags.Add(tree.ExplainFlagVerbose)
+		default:
+			panic(errorf("unknown explain flag %q", o))
+		}
+	}
+	return res
+}
+
 // Var creates a VariableOp for the given column. It allows (Var "name") as a
 // shorthand for (Variable (LookupColumn "name")).
 func (c *customFuncs) Var(colName string) opt.ScalarExpr {
 	return c.f.ConstructVariable(c.LookupColumn(colName))
+}
+
+// FindTable looks up a table in the metadata without creating it.
+// This is required to construct operators like IndexJoin which must
+// reference the same table multiple times.
+func (c *customFuncs) FindTable(name string) opt.TableID {
+	tables := c.mem.Metadata().AllTables()
+	for i := range tables {
+		// TODO(justin): should this error if it's ambiguous?
+		if string(tables[i].Table.Name().TableName) == name {
+			return tables[i].MetaID
+		}
+	}
+	panic(errorf("couldn't find table with name %q", name))
 }
 
 // ProjectionItem creates a ProjectionItem. A list of such items can be used as
@@ -140,7 +189,7 @@ func (c *customFuncs) substituteCols(str string) string {
 		lastPos = -1
 	}
 	for i, r := range str {
-		if unicode.IsLetter(r) {
+		if unicode.IsLetter(r) || r == '_' || unicode.IsNumber(r) {
 			if lastPos == -1 {
 				lastPos = i
 			}

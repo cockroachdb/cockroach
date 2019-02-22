@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -297,6 +298,20 @@ func (eg *exprGen) castToDesiredType(arg interface{}, desiredType reflect.Type) 
 		// String to ColSet.
 		if desiredType == reflect.TypeOf(opt.ColSet{}) {
 			return eg.ColSet(str)
+		}
+
+		// String to ExplainOptions.
+		if desiredType == reflect.TypeOf(tree.ExplainOptions{}) {
+			return eg.ExplainOptions(str)
+		}
+
+		// String to ScanLimit.
+		if desiredType == reflect.TypeOf(memo.ScanLimit(0)) {
+			s, err := strconv.ParseInt(str, 10, 64)
+			if err != nil {
+				panic(exprGenErr{err})
+			}
+			return memo.ScanLimit(s)
 		}
 	}
 	return nil

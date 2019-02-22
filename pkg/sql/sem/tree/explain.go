@@ -93,6 +93,16 @@ var explainModeStrings = map[string]ExplainMode{
 	"opt":     ExplainOpt,
 }
 
+// ExplainModeName returns the human-readable name of a given ExplainMode.
+func ExplainModeName(mode ExplainMode) (string, error) {
+	for k, v := range explainModeStrings {
+		if v == mode {
+			return k, nil
+		}
+	}
+	return "", fmt.Errorf("no name for explain mode %v", mode)
+}
+
 // Explain flags.
 const (
 	ExplainFlagVerbose = iota
