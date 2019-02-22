@@ -424,6 +424,7 @@ message IntegerOverflowError {
 // A MixedSuccessError indicates that some portion of the batch
 // request may have succeeded, but the batch as a whole failed with
 // the wrapped error.
+// TODO(nvanbenschoten): Remove this in 19.2.
 message MixedSuccessError {
   option (gogoproto.equal) = true;
 
