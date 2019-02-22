@@ -154,9 +154,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		// nicer to look at for the client.
 		if ctx.Err() != nil && res.Err() != nil {
 			if queryTimedOut {
-				res.OverwriteError(sqlbase.QueryTimeoutError)
+				res.SetError(sqlbase.QueryTimeoutError)
 			} else {
-				res.OverwriteError(sqlbase.QueryCanceledError)
+				res.SetError(sqlbase.QueryCanceledError)
 			}
 		}
 	}

@@ -327,10 +327,10 @@ message RaftGroupDeletedError {
 message ReplicaCorruptionError {
   option (gogoproto.equal) = true;
 
-  optional string error_msg = 1 [(gogoproto.nullable) = false];;
+  optional string error_msg = 1 [(gogoproto.nullable) = false];
   // processed indicates that the error has been taken into account and
   // necessary steps will be taken. For now, required for testing.
-  optional bool processed = 2 [(gogoproto.nullable) = false];;
+  optional bool processed = 2 [(gogoproto.nullable) = false];
 }
 
 // ReplicaTooOldError is sent in response to a raft message when the

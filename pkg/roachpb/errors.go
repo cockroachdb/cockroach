@@ -349,7 +349,19 @@ func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbo
 func NewTransactionRetryWithProtoRefreshError(
 	msg string, txnID uuid.UUID, txn Transaction,
 ) *TransactionRetryWithProtoRefreshError {
-	return &TransactionRetryWithProtoRefreshError{Msg: msg, TxnID: txnID, Transaction: txn}
+	return &TransactionRetryWithProtoRefreshError{
+		Msg:         msg,
+		TxnID:       txnID,
+		Transaction: txn,
+	}
+}
+
+// PrevTxnAborted returns true if this error originated from a
+// TransactionAbortedError. If true, the client will need to create a new
+// transaction, as opposed to continuing with the existing one at a bumped
+// epoch.
+func (e *TransactionRetryWithProtoRefreshError) PrevTxnAborted() bool {
+	return !e.TxnID.Equal(e.Transaction.ID)
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.

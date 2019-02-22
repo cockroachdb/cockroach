@@ -893,15 +893,15 @@ func (txn *Txn) replaceSenderIfTxnAbortedLocked(
 	// transaction attempt.
 	newTxn := &retryErr.Transaction
 
-	if txn.mu.ID == newTxn.ID {
-		// We don't need a new transaction as a result of this error. Nothing more
-		// to do.
-		return
-	}
 	if txn.mu.ID != origTxnID {
 		// The transaction has changed since the request that generated the error
 		// was sent. Nothing more to do.
 		log.VEventf(ctx, 2, "retriable error for old incarnation of the transaction")
+		return
+	}
+	if !retryErr.PrevTxnAborted() {
+		// We don't need a new transaction as a result of this error. Nothing more
+		// to do.
 		return
 	}
 
