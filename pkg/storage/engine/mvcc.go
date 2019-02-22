@@ -1641,6 +1641,18 @@ func MVCCIncrement(
 	return newInt64Val, err
 }
 
+// CPutMissingBehavior describes the handling a non-existing expected value.
+type CPutMissingBehavior bool
+
+const (
+	// CPutAllowIfMissing is used to indicate a CPut can also succeed when the
+	// expected entry does not exist.
+	CPutAllowIfMissing CPutMissingBehavior = true
+	// CPutFailIfMissing is used to indicate the existing value must match the
+	// expected value exactly i.e. if a value is expected, it must exist.
+	CPutFailIfMissing CPutMissingBehavior = false
+)
+
 // MVCCConditionalPut sets the value for a specified key only if the
 // expected value matches. If not, the return a ConditionFailedError
 // containing the actual value.
@@ -1659,12 +1671,13 @@ func MVCCConditionalPut(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal *roachpb.Value,
+	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
 	iter := engine.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 
-	return mvccConditionalPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, expVal, txn)
+	return mvccConditionalPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, expVal, allowIfDoesNotExist, txn)
 }
 
 // MVCCBlindConditionalPut is a fast-path of MVCCConditionalPut. See the
@@ -1684,9 +1697,10 @@ func MVCCBlindConditionalPut(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal *roachpb.Value,
+	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccConditionalPutUsingIter(ctx, engine, nil, ms, key, timestamp, value, expVal, txn)
+	return mvccConditionalPutUsingIter(ctx, engine, nil, ms, key, timestamp, value, expVal, allowIfDoesNotExist, txn)
 }
 
 func mvccConditionalPutUsingIter(
@@ -1698,6 +1712,7 @@ func mvccConditionalPutUsingIter(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal *roachpb.Value,
+	allowNoExisting CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
 	return mvccPutUsingIter(
@@ -1710,7 +1725,7 @@ func mvccConditionalPutUsingIter(
 						ActualValue: existVal.ShallowClone(),
 					}
 				}
-			} else if expValPresent != existValPresent {
+			} else if expValPresent != existValPresent && (existValPresent || !bool(allowNoExisting)) {
 				return nil, &roachpb.ConditionFailedError{
 					ActualValue: existVal.ShallowClone(),
 				}
