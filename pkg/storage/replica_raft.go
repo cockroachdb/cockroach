@@ -2468,7 +2468,7 @@ func handleTruncatedStateBelowRaft(
 //
 // The sideloaded storage may be nil, in which case it is treated as empty.
 func ComputeRaftLogSize(
-	rangeID roachpb.RangeID, reader engine.Reader, sideloaded sideloadStorage,
+	rangeID roachpb.RangeID, reader engine.Reader, sideloaded SideloadStorage,
 ) (int64, error) {
 	prefix := keys.RaftLogPrefix(rangeID)
 	iter := reader.NewIterator(engine.IterOptions{
