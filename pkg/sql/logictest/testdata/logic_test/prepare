@@ -954,3 +954,47 @@ query T
 EXECUTE foobar(NULL, NULL)
 ----
 NULL
+
+subtest regression_35145
+
+# Verify db-independent query behaves properly even when db does not exist
+
+statement ok
+SET application_name = ap35145
+
+# Prepare in custom db
+
+statement ok
+CREATE DATABASE d35145; SET database = d35145;
+
+statement ok
+PREPARE display_appname AS SELECT setting FROM pg_settings WHERE name = 'application_name'
+
+query T
+EXECUTE display_appname
+----
+ap35145
+
+subtest regression_35145_prepared_db_disappears
+
+statement ok
+DROP DATABASE d35145
+
+query error database "d35145" does not exist
+EXECUTE display_appname
+
+statement ok
+CREATE DATABASE d35145
+
+query T
+EXECUTE display_appname
+----
+ap35145
+
+subtest regression_35145_reuse_over_invalid_db
+
+statement ok
+CREATE DATABASE d35145_2; SET database = d35145_2; DROP DATABASE d35145_2
+
+query error database "d35145_2" does not exist
+EXECUTE display_appname
