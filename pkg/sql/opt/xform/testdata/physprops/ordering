@@ -521,6 +521,7 @@ EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y
 ----
 explain
  ├── columns: tree:5(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)  [hidden: level:6(int) node_type:7(string)]
+ ├── mode: verbose
  └── sort
       ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
       ├── ordering: +2

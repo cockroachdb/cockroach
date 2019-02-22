@@ -269,6 +269,12 @@ func (eg *exprGen) castToDesiredType(arg interface{}, desiredType reflect.Type) 
 		}
 	}
 
+	if i, ok := arg.(*tree.DInt); ok {
+		if desiredType == reflect.TypeOf(memo.ScanLimit(0)) {
+			return memo.MakeScanLimit(int64(*i), false)
+		}
+	}
+
 	if str, ok := arg.(string); ok {
 		// String to type.
 		if desiredType == reflect.TypeOf((*types.T)(nil)).Elem() {
@@ -297,6 +303,11 @@ func (eg *exprGen) castToDesiredType(arg interface{}, desiredType reflect.Type) 
 		// String to ColSet.
 		if desiredType == reflect.TypeOf(opt.ColSet{}) {
 			return eg.ColSet(str)
+		}
+
+		// String to ExplainOptions.
+		if desiredType == reflect.TypeOf(tree.ExplainOptions{}) {
+			return eg.ExplainOptions(str)
 		}
 	}
 	return nil
