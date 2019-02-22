@@ -214,7 +214,8 @@ message CreateStatsDetails {
   ];
   sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
   repeated ColList column_lists = 3 [(gogoproto.nullable) = false];
-  string Statement = 4;
+  string statement = 4;
+  util.hlc.Timestamp as_of = 5;
 }
 
 message CreateStatsProgress {
