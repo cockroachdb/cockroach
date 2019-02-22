@@ -2542,7 +2542,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			clientRetry: true, // cput with write too old requires restart
+			txnCoordRetry: false,              // non-matching value means we fail txn coord retry
+			expFailure:    "unexpected value", // the failure we get is a condition failed error
 		},
 		{
 			name: "multi-range batch with write too old and successful cput",
@@ -2558,7 +2559,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			clientRetry: true, // successful cput will still retry because of mixed success
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			name: "cput within uncertainty interval",
@@ -2675,8 +2677,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("c", "cput", "value")
 				return txn.CommitInBatch(ctx, b)
 			},
-			filter:      newUncertaintyFilter(roachpb.Key([]byte("c"))),
-			clientRetry: true, // client-side retry required as this will be an mixed success
+			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			name: "multi-range scan with uncertainty interval error",
@@ -2692,8 +2695,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.DelRange(ctx, "a", "d")
 			},
-			filter:      newUncertaintyFilter(roachpb.Key([]byte("c"))),
-			clientRetry: true, // can't restart because of mixed success and write batch
+			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 	}
 

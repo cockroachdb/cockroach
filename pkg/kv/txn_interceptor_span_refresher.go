@@ -175,15 +175,19 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 	pErr *roachpb.Error,
 	maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error, hlc.Timestamp) {
-	// With mixed success, we can't attempt a retry without potentially
-	// succeeding at the same conditional put or increment request
-	// twice; return the wrapped error instead. Because the dist sender
-	// splits up batches to send to multiple ranges in parallel, and
-	// then combines the results, partial success makes it very
-	// difficult to determine what can be retried.
+	// MixedSuccessErrors used to prevent refreshing because it created the
+	// potential for the writes that already succeeded to succeed again or to
+	// hit replay errors. This is no longer true because sequenced writes are
+	// now idempotent within a transaction. Re-issuing writes that have already
+	// succeeded, even at a higher timestamp, will be handled properly.
+	// TODO(nvanbenschoten): remove this in 19.2 when we remove MixedSuccessError.
 	if aPSErr, ok := pErr.GetDetail().(*roachpb.MixedSuccessError); ok {
-		log.VEventf(ctx, 2, "got partial success; cannot retry %s (pErr=%s)", ba, aPSErr.Wrapped)
-		return nil, aPSErr.Wrapped, hlc.Timestamp{}
+		if !sr.st.Version.IsActive(cluster.VersionSequencedReads) {
+			log.VEventf(ctx, 2, "got partial success; cannot retry %s (pErr=%s)", ba, aPSErr.Wrapped)
+			return nil, aPSErr.Wrapped, hlc.Timestamp{}
+		}
+		// Unwrap the MixedSuccessError.
+		pErr = aPSErr.Wrapped
 	}
 
 	// Check for an error which can be retried after updating spans.
