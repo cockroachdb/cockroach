@@ -166,12 +166,20 @@ EXECUTE i(3.3::int)
 ----
 4
 
-query I
+query I colnames
 EXECUTE s
 ----
+a
 1
 2
 3
+
+# DISCARD ROWS drops the results, but does not affect the schema or the
+# internal plan.
+query I colnames
+EXECUTE s DISCARD ROWS
+----
+a
 
 statement
 DEALLOCATE ALL

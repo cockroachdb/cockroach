@@ -136,6 +136,12 @@ type planner struct {
 	// want to do 1PC transactions have to implement the autoCommitNode interface.
 	autoCommit bool
 
+	// discardRows is set if we want to discard any results rather than sending
+	// them back to the client. Used for testing/benchmarking. Note that the
+	// resulting schema or the plan are not affected.
+	// See EXECUTE .. DISCARD ROWS.
+	discardRows bool
+
 	// cancelChecker is used by planNodes to check for cancellation of the associated
 	// query.
 	cancelChecker *sqlbase.CancelChecker

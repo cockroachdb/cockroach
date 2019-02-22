@@ -209,6 +209,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	if err != nil {
 		return makeErrEvent(err)
 	}
+	var discardRows bool
 
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
@@ -343,6 +344,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.AnonymizedStr = ps.AnonymizedStr
 		res.ResetStmtType(ps.AST)
 
+		discardRows = s.DiscardRows
+
 		// Check again if the statement should be parallelized.
 		parallelize, err = ex.maybeSynchronizeParallelStmts(ctx, stmt)
 		if err != nil {
@@ -405,6 +408,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	ex.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
+	p.discardRows = discardRows
 
 	// TODO(andrei): Ideally we'd like to fork off a context for each individual
 	// statement. But the heartbeat loop in TxnCoordSender currently assumes that
@@ -1039,7 +1043,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			return recv.commErr
 		}
 	}
-
+	recv.discardRows = planner.discardRows
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
 	ex.server.cfg.DistSQLPlanner.PlanAndRun(
