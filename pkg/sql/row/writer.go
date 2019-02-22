@@ -754,7 +754,7 @@ func (ru *Updater) UpdateRow(
 		if traceKV {
 			log.VEventf(ctx, 2, "CPut %s -> %v", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newSecondaryIndexEntry.Key), newSecondaryIndexEntry.Value.PrettyPrint())
 		}
-		batch.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
+		batch.CPutAllowingIfNotExists(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
 	}
 
 	// We're deleting indexes in a delete only state. We're bounding this by the number of indexes because inverted
