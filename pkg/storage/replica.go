@@ -197,7 +197,7 @@ type Replica struct {
 		// depending on which lock is being held.
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
-		sideloaded sideloadStorage
+		sideloaded SideloadStorage
 
 		// rangefeed is an instance of a rangefeed Processor that is capable of
 		// routing rangefeed events to a set of subscribers. Will be nil if no

@@ -367,7 +367,7 @@ func (sl *StoreList) Stores() []roachpb.StoreDescriptor {
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
 // to RaftLock() or some other guarantee that r.raftMu is held.
-func (r *Replica) SideloadedRaftMuLocked() sideloadStorage {
+func (r *Replica) SideloadedRaftMuLocked() SideloadStorage {
 	return r.raftMu.sideloaded
 }
 
