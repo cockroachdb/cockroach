@@ -125,7 +125,6 @@ func NewServer(st *cluster.Settings) *Server {
 		extra := ""
 		if profile == "profile" {
 			extra = " (enabling profiler labels)"
-			log.Infof(context.Background(), "%s", profile)
 			st.SetCPUProfiling(true)
 			defer st.SetCPUProfiling(false)
 		}
