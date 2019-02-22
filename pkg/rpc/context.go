@@ -65,12 +65,6 @@ const (
 	maximumPingDurationMult = 2
 )
 
-const (
-	defaultWindowSize     = 65535
-	initialWindowSize     = defaultWindowSize * 32 // for an RPC
-	initialConnWindowSize = initialWindowSize * 16 // for a connection
-)
-
 // sourceAddr is the environment-provided local address for outgoing
 // connections.
 var sourceAddr = func() net.Addr {
@@ -161,8 +155,6 @@ func NewServerWithInterceptor(
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		// Adjust the stream and connection window sizes. The gRPC defaults are too
 		// low for high latency connections.
-		grpc.InitialWindowSize(initialWindowSize),
-		grpc.InitialConnWindowSize(initialConnWindowSize),
 		// The default number of concurrent streams/requests on a client connection
 		// is 100, while the server is unlimited. The client setting can only be
 		// controlled by adjusting the server value. Set a very large value for the
@@ -654,9 +646,6 @@ func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{
 
 	dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
-	dialOpts = append(dialOpts,
-		grpc.WithInitialWindowSize(initialWindowSize),
-		grpc.WithInitialConnWindowSize(initialConnWindowSize))
 
 	dialer := onlyOnceDialer{
 		ctx:        ctx.masterCtx,
