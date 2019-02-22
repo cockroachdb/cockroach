@@ -61,6 +61,8 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		return nil, err
 	}
 
+	n.HoistAddColumnConstraints()
+
 	// See if there's any "inject statistics" in the query and type check the
 	// expressions.
 	statsData := make(map[int]tree.TypedExpr)
@@ -97,10 +99,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 		switch t := cmd.(type) {
 		case *tree.AlterTableAddColumn:
 			d := t.ColumnDef
-			if len(d.CheckExprs) > 0 {
-				return pgerror.UnimplementedWithIssueError(29639,
-					"adding a CHECK constraint while also adding a column via ALTER not supported")
-			}
 			if d.HasFKConstraint() {
 				return pgerror.UnimplementedWithIssueError(32917,
 					"adding a REFERENCES constraint while also adding a column via ALTER not supported")
