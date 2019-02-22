@@ -57,9 +57,13 @@ func NewServer(storage Storage) *Server {
 		// for a predetermined duration (recording the profile in the meantime).
 		// It is not included in `runtimepprof.Profiles` below.
 		"profile": func(w http.ResponseWriter, r *http.Request) {
-			const profileDurationSeconds = 5
-			r.Form = make(url.Values)
-			r.Form.Set("seconds", strconv.Itoa(profileDurationSeconds))
+			const defaultProfileDurationSeconds = 5
+			if r.Form == nil {
+				r.Form = url.Values{}
+			}
+			if r.Form.Get("seconds") == "" {
+				r.Form.Set("seconds", strconv.Itoa(defaultProfileDurationSeconds))
+			}
 			s.profileSem.Lock()
 			defer s.profileSem.Unlock()
 			pprof.Profile(w, r)
@@ -183,6 +187,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+
+		// Pass through any parameters. Most notably, allow ?seconds=10 for
+		// CPU profiles.
+		_ = r.ParseForm()
+		req.Form = r.Form
+
 		rw := &responseBridge{target: w}
 
 		fetchHandler(rw, req)
@@ -200,7 +210,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// shells out to `dot` for the default landing page and thus works
 	// only on hosts that have graphviz installed. You can still navigate
 	// to the dot page from there.
-	http.Redirect(w, r, r.RequestURI+"/"+id+"/flamegraph", http.StatusTemporaryRedirect)
+	origURL, err := url.Parse(r.RequestURI)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	origURL.Path = path.Join(origURL.Path, id, "flamegraph")
+	http.Redirect(w, r, origURL.String(), http.StatusTemporaryRedirect)
 }
 
 type fetcherFn func(_ string, _, _ time.Duration) (*profile.Profile, string, error)

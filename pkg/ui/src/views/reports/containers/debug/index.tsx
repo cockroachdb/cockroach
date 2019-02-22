@@ -220,7 +220,7 @@ export default function Debug() {
         </DebugTableRow>
         <DebugTableRow title="Profiling UI">
           <DebugTableLink name="Heap" url="/debug/pprof/ui/heap/" />
-          <DebugTableLink name="Profile" url="/debug/pprof/ui/profile/" />
+          <DebugTableLink name="Profile" url="/debug/pprof/ui/profile/?seconds=5" />
           <DebugTableLink name="Block" url="/debug/pprof/ui/block/" />
           <DebugTableLink name="Mutex" url="/debug/pprof/ui/mutex/" />
           <DebugTableLink name="Thread Create" url="/debug/pprof/ui/threadcreate/" />
