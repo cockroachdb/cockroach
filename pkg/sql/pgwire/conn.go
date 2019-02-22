@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -858,7 +859,7 @@ func convertToErrWithPGCode(err error) error {
 		return nil
 	}
 	switch tErr := err.(type) {
-	case *roachpb.TransactionRetryWithProtoRefreshError:
+	case client.TxnRestartError:
 		return sqlbase.NewRetryError(err)
 	case *roachpb.AmbiguousResultError:
 		// TODO(andrei): Once DistSQL starts executing writes, we'll need a

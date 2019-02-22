@@ -160,7 +160,7 @@ import (
 // order.
 func RangeLookup(
 	ctx context.Context,
-	sender Sender,
+	sender SenderErr,
 	key roachpb.Key,
 	rc roachpb.ReadConsistencyType,
 	prefetchNum int64,
@@ -259,7 +259,7 @@ func RangeLookup(
 
 func lookupRangeFwdScan(
 	ctx context.Context,
-	sender Sender,
+	sender SenderErr,
 	key roachpb.RKey,
 	rc roachpb.ReadConsistencyType,
 	prefetchNum int64,
@@ -315,9 +315,9 @@ func lookupRangeFwdScan(
 		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
 	}
 
-	br, pErr := sender.Send(ctx, ba)
-	if pErr != nil {
-		return nil, nil, pErr.GoError()
+	br, err := sender.Send(ctx, ba)
+	if err != nil {
+		return nil, nil, err
 	}
 	scanRes := br.Responses[0].GetInner().(*roachpb.ScanResponse)
 
@@ -347,7 +347,7 @@ func lookupRangeFwdScan(
 
 func lookupRangeRevScan(
 	ctx context.Context,
-	sender Sender,
+	sender SenderErr,
 	key roachpb.RKey,
 	rc roachpb.ReadConsistencyType,
 	prefetchNum int64,
@@ -384,9 +384,9 @@ func lookupRangeRevScan(
 		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
 	}
 
-	br, pErr := sender.Send(ctx, ba)
-	if pErr != nil {
-		return nil, nil, pErr.GoError()
+	br, err := sender.Send(ctx, ba)
+	if err != nil {
+		return nil, nil, err
 	}
 	revScanRes := br.Responses[0].GetInner().(*roachpb.ReverseScanResponse)
 

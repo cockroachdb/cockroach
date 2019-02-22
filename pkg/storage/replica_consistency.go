@@ -217,9 +217,9 @@ func (r *Replica) RunConsistencyCheck(
 ) ([]ConsistencyCheckResult, error) {
 	// Send a ComputeChecksum which will trigger computation of the checksum on
 	// all replicas.
-	res, pErr := client.SendWrapped(ctx, r.store.db.NonTransactionalSender(), &req)
-	if pErr != nil {
-		return nil, pErr.GoError()
+	res, err := client.SendWrapped(ctx, r.store.db.NonTransactionalSender(), &req)
+	if err != nil {
+		return nil, err
 	}
 	ccRes := res.(*roachpb.ComputeChecksumResponse)
 

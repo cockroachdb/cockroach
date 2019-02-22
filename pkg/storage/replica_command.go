@@ -472,17 +472,17 @@ func (r *Replica) AdminMerge(
 		// a consistent view of the data from the right-hand range. If the merge
 		// commits, we'll write this data to the left-hand range in the merge
 		// trigger.
-		br, pErr := client.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
+		br, err := client.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
 			&roachpb.SubsumeRequest{
 				RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
 				LeftRange:     *origLeftDesc,
 			})
-		if pErr != nil {
-			return pErr.GoError()
+		if err != nil {
+			return err
 		}
 		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
 
-		err := waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
+		err = waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
 		if err != nil {
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
 		}
@@ -524,9 +524,9 @@ func (r *Replica) AdminMerge(
 		txn := client.NewTxn(ctx, r.store.DB(), r.NodeID(), client.RootTxn)
 		err := runMergeTxn(txn)
 		if err != nil {
-			txn.CleanupOnError(ctx, err)
+			txn.Rollback(ctx)
 		}
-		if _, canRetry := errors.Cause(err).(*roachpb.TransactionRetryWithProtoRefreshError); !canRetry {
+		if _, canRetry := errors.Cause(err).(client.TxnRestartError); !canRetry {
 			if err != nil {
 				return reply, roachpb.NewErrorf("merge of range into %d failed: %s",
 					origLeftDesc.RangeID, err)

@@ -88,11 +88,11 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		},
 	}
 
-	pushedTxnMap, pErr := tp.ir.MaybePushTransactions(
+	pushedTxnMap, err := tp.ir.MaybePushTransactions(
 		ctx, pushTxnMap, h, roachpb.PUSH_TIMESTAMP, false, /* skipIfInFlight */
 	)
-	if pErr != nil {
-		return nil, pErr.GoError()
+	if err != nil {
+		return nil, err
 	}
 
 	pushedTxns := make([]roachpb.Transaction, 0, len(pushedTxnMap))

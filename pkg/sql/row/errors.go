@@ -52,7 +52,7 @@ func (f *singleKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 func ConvertBatchError(
 	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *client.Batch,
 ) error {
-	origPErr := b.MustPErr()
+	origPErr := b.MustErr()
 	if origPErr.Index == nil {
 		return origPErr.GoError()
 	}

@@ -83,6 +83,7 @@ type Txn struct {
 	}
 }
 
+// !!! stale references to CleanupOnError in comment
 // NewTxn returns a new txn. The typ parameter specifies whether this
 // transaction is the top level (root), or one of potentially many
 // distributed transactions (leaf).
@@ -523,13 +524,13 @@ func (txn *Txn) Commit(ctx context.Context) error {
 	// !!! return txn.commit(ctx)
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
-	_, pErr := txn.Send(ctx, ba)
-	if pErr == nil {
+	_, err := txn.Send(ctx, ba)
+	if err == nil {
 		for _, t := range txn.commitTriggers {
 			t(ctx)
 		}
 	}
-	return pErr.GoError()
+	return err
 }
 
 // CommitInBatch executes the operations queued up within a batch and
@@ -587,62 +588,67 @@ func (txn *Txn) resetDeadlineLocked() {
 // Rollback sends an EndTransactionRequest with Commit=false.
 // txn is considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback(ctx context.Context) {
+	if txn.mu.sender == nil {
+		// The transaction was already rolled back. Nothing to do.
+		return
+	}
 	txn.mu.sender.RollbackAsync(ctx)
 	// !!! .rollback(ctx).GoError()
 }
 
-func (txn *Txn) rollback(ctx context.Context) {
-	txn.mu.sender.RollbackAsync(ctx)
-	// sync := true
-	// if ctx.Err() != nil {
-	//   sync = false
-	// }
-	// if sync {
-	//   var ba roachpb.BatchRequest
-	//   ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
-	//   _, pErr := txn.Send(ctx, ba)
-	//   if pErr == nil {
-	//     return nil
-	//   }
-	//   // If ctx has been canceled, assume that caused the error and try again
-	//   // async below.
-	//   if ctx.Err() == nil {
-	//     return pErr
-	//   }
-	// }
-	//
-	// // We don't have a client whose context we can attach to, but we do want to limit how
-	// // long this request is going to be around or it could leak a goroutine (in case of a
-	// // long-lived network partition).
-	// stopper := txn.db.ctx.Stopper
-	// ctx, cancel1 := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
-	// // NB: cancel2 makes cancel1 obsolete, but the linters don't know that.
-	// ctx, cancel2 := context.WithTimeout(ctx, 3*time.Second)
-	//
-	// if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
-	//   defer cancel1()
-	//   defer cancel2()
-	//   var ba roachpb.BatchRequest
-	//   ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
-	//   if _, pErr := txn.Send(ctx, ba); pErr != nil {
-	//     if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
-	//       statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
-	//       // A common cause of these async rollbacks failing is when they're
-	//       // triggered by a ctx canceled while a commit is in-flight (and it's too
-	//       // late for it to be canceled), and so the rollback finds the txn to be
-	//       // already committed. We don't spam the logs with those.
-	//       log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
-	//     } else {
-	//       log.Infof(ctx, "async rollback failed: %s", pErr)
-	//     }
-	//   }
-	// }); err != nil {
-	//   cancel1()
-	//   cancel2()
-	//   return roachpb.NewError(err)
-	// }
-	// return nil
-}
+// !!!
+// func (txn *Txn) rollback(ctx context.Context) {
+//   txn.mu.sender.RollbackAsync(ctx)
+//   // sync := true
+//   // if ctx.Err() != nil {
+//   //   sync = false
+//   // }
+//   // if sync {
+//   //   var ba roachpb.BatchRequest
+//   //   ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+//   //   _, pErr := txn.Send(ctx, ba)
+//   //   if pErr == nil {
+//   //     return nil
+//   //   }
+//   //   // If ctx has been canceled, assume that caused the error and try again
+//   //   // async below.
+//   //   if ctx.Err() == nil {
+//   //     return pErr
+//   //   }
+//   // }
+//   //
+//   // // We don't have a client whose context we can attach to, but we do want to limit how
+//   // // long this request is going to be around or it could leak a goroutine (in case of a
+//   // // long-lived network partition).
+//   // stopper := txn.db.ctx.Stopper
+//   // ctx, cancel1 := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
+//   // // NB: cancel2 makes cancel1 obsolete, but the linters don't know that.
+//   // ctx, cancel2 := context.WithTimeout(ctx, 3*time.Second)
+//   //
+//   // if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
+//   //   defer cancel1()
+//   //   defer cancel2()
+//   //   var ba roachpb.BatchRequest
+//   //   ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+//   //   if _, pErr := txn.Send(ctx, ba); pErr != nil {
+//   //     if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
+//   //       statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
+//   //       // A common cause of these async rollbacks failing is when they're
+//   //       // triggered by a ctx canceled while a commit is in-flight (and it's too
+//   //       // late for it to be canceled), and so the rollback finds the txn to be
+//   //       // already committed. We don't spam the logs with those.
+//   //       log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
+//   //     } else {
+//   //       log.Infof(ctx, "async rollback failed: %s", pErr)
+//   //     }
+//   //   }
+//   // }); err != nil {
+//   //   cancel1()
+//   //   cancel2()
+//   //   return roachpb.NewError(err)
+//   // }
+//   // return nil
+// }
 
 // AddCommitTrigger adds a closure to be executed on successful commit
 // of the transaction.
@@ -712,7 +718,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\n", err)
 				if err != nil {
-					if _, retryable := err.(*roachpb.TransactionRetryWithProtoRefreshError); !retryable {
+					if _, retryable := err.(TxnRestartError); !retryable {
 						// We can't retry, so let the caller know we tried to
 						// autocommit.
 						err = &AutoCommitError{cause: err}
@@ -728,17 +734,17 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		case *roachpb.UnhandledRetryableError:
 			if txn.typ == RootTxn {
 				// We sent transactional requests, so the TxnCoordSender was supposed to
-				// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
+				// turn retryable errors into TxnRestartError. Note that this
 				// applies only in the case where this is the root transaction.
 				log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 			}
 
-		case *roachpb.TransactionRetryWithProtoRefreshError:
-			if !txn.IsRetryableErrMeantForTxn(*t) {
+		case TxnRestartError:
+			if !txn.IsRetryableErrMeantForTxn(t) {
 				// Make sure the txn record that err carries is for this txn.
 				// If it's not, we terminate the "retryable" character of the error. We
-				// might get a TransactionRetryWithProtoRefreshError if the closure ran another
-				// transaction internally and let the error propagate upwards.
+				// might get a TxnRestartError if the closure ran another transaction
+				// internally and let the error propagate upwards.
 				return errors.Wrapf(err, "retryable error from another txn")
 			}
 			retryable = true
@@ -766,9 +772,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context, err error) {
 
 // IsRetryableErrMeantForTxn returns true if err is a retryable
 // error meant to restart this client transaction.
-func (txn *Txn) IsRetryableErrMeantForTxn(
-	retryErr roachpb.TransactionRetryWithProtoRefreshError,
-) bool {
+func (txn *Txn) IsRetryableErrMeantForTxn(retryErr TxnRestartError) bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 
@@ -790,9 +794,7 @@ func (txn *Txn) IsRetryableErrMeantForTxn(
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous). Returns (nil, nil) for an empty batch.
-func (txn *Txn) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+func (txn *Txn) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	// Fill in the GatewayNodeID on the batch if the txn knows it.
 	// NOTE(andrei): It seems a bit ugly that we're filling in the batches here as
 	// opposed to the point where the requests are being created, but
@@ -803,40 +805,33 @@ func (txn *Txn) Send(
 	}
 
 	txn.mu.Lock()
-	requestTxnID := txn.mu.ID
-	sender := txn.mu.sender
 	txn.mu.Unlock()
-	br, pErr := txn.db.sendUsingSender(ctx, ba, sender)
-	if pErr == nil {
+	br, err := txn.db.sendUsingSender(ctx, ba, txn.mu.sender)
+	if err == nil {
 		return br, nil
 	}
 
-	// !!! handle clientbase.TxnRestartError here instead
-	if retryErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryWithProtoRefreshError); ok {
-		if requestTxnID != retryErr.TxnID {
-			// KV should not return errors for transactions other than the one that sent
-			// the request.
-			log.Fatalf(ctx, "retryable error for the wrong txn. "+
-				"requestTxnID: %s, retryErr.TxnID: %s. retryErr: %s",
-				requestTxnID, retryErr.TxnID, retryErr)
-		}
+	if retryErr, ok := err.(TxnRestartError); ok {
 		txn.mu.Lock()
 		txn.handleErrIfRetryableLocked(ctx, retryErr)
 		txn.mu.Unlock()
 	} else {
+		// Once we get an error, the TxnCoordSender has already rolled back the
+		// transaction. It can't be used any more. Any future request will be
+		// rejected by this Txn.
 		txn.mu.sender = nil
-		txn.mu.storedErr = pErr.GoError()
+		txn.mu.storedErr = err
 	}
-	return br, pErr
+	return br, err
 }
 
 func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
-	retryErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError)
+	retryErr, ok := err.(TxnRestartError)
 	if !ok {
 		return
 	}
 	txn.resetDeadlineLocked()
-	txn.replaceSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
+	txn.replaceSenderIfTxnAbortedLocked(ctx, retryErr)
 }
 
 // GetTxnCoordMeta returns the TxnCoordMeta information for this
@@ -879,8 +874,7 @@ func (txn *Txn) AugmentTxnCoordMeta(ctx context.Context, meta roachpb.TxnCoordMe
 
 // UpdateStateOnRemoteRetryableErr updates the txn in response to a retriable
 // error encountered when running a request through the txn. Returns a
-// TransactionRetryWithProtoRefreshError on success or another error on failure.
-// !!! comment about error type
+// TxnRestartError on success or another error on failure.
 func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roachpb.Error) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
@@ -899,10 +893,9 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 			txn.mu.ID, pErr)
 	}
 
-	pErr = txn.mu.sender.UpdateStateOnRemoteRetryableErr(ctx, pErr)
-	txn.replaceSenderIfTxnAbortedLocked(ctx, pErr.GetDetail().(*roachpb.TransactionRetryWithProtoRefreshError), origTxnID)
-
-	return pErr.GoError()
+	err := txn.mu.sender.UpdateStateOnRemoteRetryableErr(ctx, pErr)
+	txn.replaceSenderIfTxnAbortedLocked(ctx, err)
+	return err
 }
 
 // replaceSenderIfTxnAbortedLocked handles TransactionAbortedErrors, on which a new
@@ -910,27 +903,24 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 //
 // origTxnID is the id of the txn that generated retryErr. Note that this can be
 // different from retryErr.Transaction - the latter might be a new transaction.
-func (txn *Txn) replaceSenderIfTxnAbortedLocked(
-	ctx context.Context, retryErr *roachpb.TransactionRetryWithProtoRefreshError, origTxnID uuid.UUID,
-) {
-	// The proto inside the error has been prepared for use by the next
-	// transaction attempt.
-	newTxn := &retryErr.Transaction
-
-	if txn.mu.ID != origTxnID {
+func (txn *Txn) replaceSenderIfTxnAbortedLocked(ctx context.Context, retryErr TxnRestartError) {
+	if !txn.mu.ID.Equal(retryErr.TxnID) {
 		// The transaction has changed since the request that generated the error
 		// was sent. Nothing more to do.
 		log.VEventf(ctx, 2, "retriable error for old incarnation of the transaction")
 		return
 	}
-	if !retryErr.PrevTxnAborted() {
+	if retryErr.NewTxn == nil {
 		// We don't need a new transaction as a result of this error. Nothing more
 		// to do.
 		return
 	}
 
-	// The ID changed, which means that the cause was a TransactionAbortedError;
-	// we've created a new Transaction that we're about to start using, so we save
+	// The proto inside the error has been prepared for use by the next
+	// transaction attempt.
+	newTxn := retryErr.NewTxn
+
+	// We've created a new Transaction that we're about to start using, so we save
 	// the old transaction ID so that concurrent requests or delayed responses
 	// that that throw errors know that these errors were sent to the correct
 	// transaction, even once the proto is reset.
@@ -960,8 +950,8 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	txn.mu.sender.SetFixedTimestamp(ctx, ts)
 }
 
-// GenerateForcedRetryableError returns a TransactionRetryWithProtoRefreshError that will
-// cause the txn to be retried.
+// GenerateForcedRetryableError returns a TxnRestartError that will cause the
+// txn to be retried.
 //
 // The transaction's epoch is bumped, simulating to an extent what the
 // TxnCoordSender does on retriable errors. The transaction's timestamp is only
@@ -974,16 +964,18 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 	now := txn.db.clock.Now()
 	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now)
 	txn.resetDeadlineLocked()
-	return roachpb.NewTransactionRetryWithProtoRefreshError(
-		msg,
-		txn.mu.ID,
-		roachpb.MakeTransaction(
-			txn.debugNameLocked(),
-			nil, // baseKey
-			txn.mu.userPriority,
-			now,
-			txn.db.clock.MaxOffset().Nanoseconds(),
-		))
+	return NewTxnRestartError(msg, txn.mu.ID, nil /* newTxn */)
+	// !!!
+	// return roachpb.NewTransactionRetryWithProtoRefreshError(
+	//   msg,
+	//   txn.mu.ID,
+	//   roachpb.MakeTransaction(
+	//     txn.debugNameLocked(),
+	//     nil, // baseKey
+	//     txn.mu.userPriority,
+	//     now,
+	//     txn.db.clock.MaxOffset().Nanoseconds(),
+	//   ))
 }
 
 // ManualRestart bumps the transactions epoch, and can upgrade the timestamp.

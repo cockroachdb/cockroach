@@ -340,7 +340,20 @@ func (ds *DistSender) RangeLookup(
 	// RangeDescriptor is not on the first range we send the lookup too, we'll
 	// still find it when we scan to the next range. This addresses the issue
 	// described in #18032 and #16266, allowing us to support meta2 splits.
-	return client.RangeLookup(ctx, ds, key.AsRawKey(), rc, rangeLookupPrefetchCount, useReverseScan)
+	return client.RangeLookup(
+		ctx, distSenderSenderErrorAdapter{ds}, key.AsRawKey(), rc, rangeLookupPrefetchCount, useReverseScan)
+}
+
+// !!! comment
+type distSenderSenderErrorAdapter struct {
+	*DistSender
+}
+
+func (ds distSenderSenderErrorAdapter) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	br, pErr := ds.DistSender.Send(ctx, ba)
+	return br, pErr.GoError()
 }
 
 // FirstRange implements the RangeDescriptorDB interface.

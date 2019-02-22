@@ -2942,10 +2942,11 @@ func (s *Store) Send(
 				if cleanupAfterWriteIntentError != nil {
 					cleanupAfterWriteIntentError(t, nil)
 				}
-				if cleanupAfterWriteIntentError, pErr =
+				if cleanupAfterWriteIntentError, err =
 					s.intentResolver.ProcessWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
 					// Do not propagate ambiguous results; assume success and retry original op.
-					if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
+					if _, ok := err.(*roachpb.AmbiguousResultError); !ok {
+						pErr = roachpb.NewError(err)
 						// Preserve the error index.
 						pErr.Index = index
 						return nil, pErr

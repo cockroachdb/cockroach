@@ -512,6 +512,7 @@ message ErrorDetail {
     // The following three are ErrorDetails (and proto messages) because they
     // needs to be communicated from the TxnCoordSender and Txn to the upper
     // layers through the Sender interface.
+    // !!! can some of these not be pErrs any more?
     TransactionRetryWithProtoRefreshError transaction_retry_with_proto_refresh = 28;
     IntegerOverflowError integer_overflow = 31;
     UnsupportedRequestError unsupported_request = 32;

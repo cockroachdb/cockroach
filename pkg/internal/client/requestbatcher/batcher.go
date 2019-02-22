@@ -99,7 +99,7 @@ type Config struct {
 	Name string
 
 	// Sender can round-trip a batch. Sender must not be nil.
-	Sender client.Sender
+	Sender client.SenderErr
 
 	// Stopper controls the lifecycle of the Batcher. Stopper must not be nil.
 	Stopper *stop.Stopper
@@ -251,14 +251,14 @@ func (b *RequestBatcher) sendDone() {
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer b.sendDone()
-		resp, pErr := b.cfg.Sender.Send(ctx, ba.batchRequest())
+		resp, err := b.cfg.Sender.Send(ctx, ba.batchRequest())
 		for i, r := range ba.reqs {
 			res := Response{}
 			if resp != nil && i < len(resp.Responses) {
 				res.Resp = resp.Responses[i].GetInner()
 			}
-			if pErr != nil {
-				res.Err = pErr.GoError()
+			if err != nil {
+				res.Err = err
 			}
 			b.sendResponse(r, res)
 		}

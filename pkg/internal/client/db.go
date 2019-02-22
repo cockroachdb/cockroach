@@ -199,19 +199,20 @@ type CrossRangeTxnWrapperSender struct {
 	wrapped Sender
 }
 
-var _ Sender = &CrossRangeTxnWrapperSender{}
+// !!! var _ Sender = &CrossRangeTxnWrapperSender{}
 
+// !!! comment about iface
 // Send implements the Sender interface.
 func (s *CrossRangeTxnWrapperSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+) (*roachpb.BatchResponse, error) {
 	if ba.Txn != nil {
 		log.Fatalf(ctx, "CrossRangeTxnWrapperSender can't handle transactional requests")
 	}
 
 	br, pErr := s.wrapped.Send(ctx, ba)
 	if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); !ok {
-		return br, pErr
+		return br, pErr.GoError()
 	}
 
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
@@ -227,7 +228,7 @@ func (s *CrossRangeTxnWrapperSender) Send(
 		return err
 	})
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	br.Txn = nil // hide the evidence
 	return br, nil
@@ -256,7 +257,7 @@ type DB struct {
 //
 // The Sender returned should not be used for sending transactional requests -
 // it bypasses the TxnCoordSender. Use db.Txn() or db.NewTxn() for transactions.
-func (db *DB) NonTransactionalSender() Sender {
+func (db *DB) NonTransactionalSender() SenderErr {
 	return &db.crs
 }
 
@@ -535,7 +536,7 @@ func (db *DB) AddSSTable(ctx context.Context, begin, end interface{}, data []byt
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
-func sendAndFill(ctx context.Context, send SenderFunc, b *Batch) error {
+func sendAndFill(ctx context.Context, send SenderFunc2, b *Batch) error {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call
 	// fails. But send() also returns its own errors, so there's some dancing
@@ -544,12 +545,12 @@ func sendAndFill(ctx context.Context, send SenderFunc, b *Batch) error {
 	var ba roachpb.BatchRequest
 	ba.Requests = b.reqs
 	ba.Header = b.Header
-	b.response, b.pErr = send(ctx, ba)
+	b.response, b.err = send(ctx, ba)
 	b.fillResults(ctx)
-	if b.pErr == nil {
-		b.pErr = roachpb.NewError(b.resultErr())
+	if b.err == nil {
+		b.err = b.resultErr()
 	}
-	return b.pErr.GoError()
+	return b.err
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -601,33 +602,29 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns (nil, nil) for an empty batch.
-func (db *DB) send(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+func (db *DB) send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	return db.sendUsingSender(ctx, ba, db.NonTransactionalSender())
 }
 
 // sendUsingSender uses the specified sender to send the batch request.
 func (db *DB) sendUsingSender(
-	ctx context.Context, ba roachpb.BatchRequest, sender Sender,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx context.Context, ba roachpb.BatchRequest, sender SenderErr,
+) (*roachpb.BatchResponse, error) {
 	if len(ba.Requests) == 0 {
 		return nil, nil
 	}
 	if err := ba.ReadConsistency.SupportsBatch(ba); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, err
 	}
 	if ba.UserPriority == 0 && db.ctx.UserPriority != 1 {
 		ba.UserPriority = db.ctx.UserPriority
 	}
 
 	tracing.AnnotateTrace()
-	br, pErr := sender.Send(ctx, ba)
-	if pErr != nil {
-		if log.V(1) {
-			log.Infof(ctx, "failed batch: %s", pErr)
-		}
-		return nil, pErr
+	br, err := sender.Send(ctx, ba)
+	if err != nil {
+		log.VEventf(ctx, 1, "failed batch: %s", err)
+		return nil, err
 	}
 	return br, nil
 }

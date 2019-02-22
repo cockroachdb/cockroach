@@ -349,6 +349,7 @@ func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbo
 func NewTransactionRetryWithProtoRefreshError(
 	msg string, txnID uuid.UUID, txn Transaction,
 ) *TransactionRetryWithProtoRefreshError {
+	panic("!!!")
 	return &TransactionRetryWithProtoRefreshError{
 		Msg:         msg,
 		TxnID:       txnID,

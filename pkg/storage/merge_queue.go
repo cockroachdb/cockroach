@@ -192,13 +192,13 @@ var _ purgatoryError = rangeMergePurgatoryError{}
 func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
 ) (roachpb.RangeDescriptor, enginepb.MVCCStats, float64, error) {
-	res, pErr := client.SendWrappedWith(ctx, mq.db.NonTransactionalSender(), roachpb.Header{
+	res, err := client.SendWrappedWith(ctx, mq.db.NonTransactionalSender(), roachpb.Header{
 		ReturnRangeInfo: true,
 	}, &roachpb.RangeStatsRequest{
 		RequestHeader: roachpb.RequestHeader{Key: key},
 	})
-	if pErr != nil {
-		return roachpb.RangeDescriptor{}, enginepb.MVCCStats{}, 0, pErr.GoError()
+	if err != nil {
+		return roachpb.RangeDescriptor{}, enginepb.MVCCStats{}, 0, err
 	}
 	rangeInfos := res.Header().RangeInfos
 	if len(rangeInfos) != 1 {

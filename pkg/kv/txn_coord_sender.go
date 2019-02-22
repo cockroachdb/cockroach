@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/internal/clientbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -76,30 +75,42 @@ const (
 type txnAlreadyFinalizedError struct {
 	committed     bool
 	rollbackCause string
+	// leafErr is set if this Leaf txn previously got an error. The transaction
+	// may or may not have been rolled back yet (the Root is in charge of that),
+	// but in any case this Leaf is not to be used any more.
+	leafErr string
 	// req is the request that generated this error
 	req string
 }
 
 func (e txnAlreadyFinalizedError) Error() string {
-	return fmt.Sprintf(
-		"transaction already rolled back (rollback reason: ) while trying to execute: %v",
-		e.rollbackCause, e.req)
+	if e.rollbackCause != "" {
+		return fmt.Sprintf(
+			"transaction already rolled back (rollback reason: ) while trying to execute: %s",
+			e.rollbackCause, e.req)
+	}
+	if e.committed {
+		return fmt.Sprintf(
+			"transaction already committed while trying to execute: %s",
+			e.rollbackCause, e.req)
+	}
+	if e.leafErr != "" {
+		return fmt.Sprintf(
+			"leaf transaction already encountered error %s while trying to execute: %s",
+			e.leafErr, e.req)
+	}
+	panic("not reached")
 }
 
-func newTxnAlreadyFinalizedError(committed bool, rollbackCause, req string) error {
-	if commit && rollbackCause != "" {
+func newTxnAlreadyFinalizedError(committed bool, rollbackCause, leafErr, req string) error {
+	if committed && rollbackCause != "" {
 		log.Fatalf(context.TODO(), "both committed and rollbackCause specified")
 	}
-	return txnAlreadyFinalizedError{committed: committed, rollbackCause: rollbackCause, req: req}
-}
-
-type leafAlreadyFinalizedError struct {
-	prevErr string
-	req     string
-}
-
-func newLeafAlreadyFinalizedError(prevErr string, req string) error {
-	return leafAlreadyFinalizedError{prevErr: prevErr, req: req}
+	return txnAlreadyFinalizedError{
+		committed:     committed,
+		rollbackCause: rollbackCause,
+		leafErr:       leafErr,
+		req:           req}
 }
 
 // A TxnCoordSender is the production implementation of client.TxnSender. It is
@@ -207,10 +218,6 @@ type clientRejectState struct {
 	// error).
 	rollbackCause string
 
-	// prevLeafErr is set if this is a leaf txn and an error was previously
-	// generated (including a retriable error).
-	prevLeafErr string
-
 	// asyncAbortErr is set when a particular error needs to be returned to the
 	// client on the next Send(). This is used when async processes (i.e. the
 	// heartbeat loop) discover some error condition (in particular,
@@ -225,7 +232,7 @@ type clientRejectState struct {
 	// idea is that the client is only notified of this error once; other future
 	// requests will be rejected as they normally are after the transaction is
 	// rolled back.
-	asyncAbortErr clientbase.TxnRestartError
+	asyncAbortErr *client.TxnRestartError
 }
 
 // lockedSender is like a client.Sender but requires the caller to hold the
@@ -466,7 +473,6 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		typ:                   typ,
 		TxnCoordSenderFactory: tcf,
 	}
-	tcs.mu.txnState = txnPending
 
 	// Create a stack of request/response interceptors. All of the objects in
 	// this stack are pre-allocated on the TxnCoordSender struct, so this just
@@ -496,7 +502,11 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 				abortedErr := roachpb.NewErrorWithTxn(
 					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_HB_LOOP_DETECTED),
 					&tcs.mu.txn)
-				asyncErr := tc.handleRetryableErrLocked(ctx, abortedErr)
+				updatedTxn, asyncErr := tcs.handleRetryableErrLocked(ctx, abortedErr)
+				if updatedTxn == nil {
+					// We expect updateTxn == nil and asyncErr.NewTxn to be set.
+					log.Fatalf(ctx, "unexpected updatedTxn when heartbeat loop detected aborted txn")
+				}
 				tcs.rollbackAsyncLockedClientNotNotified(ctx, asyncErr)
 			},
 			tcs.stopper,
@@ -621,7 +631,7 @@ func (tc *TxnCoordSender) GetMeta(
 		if rejectErr == nil {
 			log.Fatal(ctx, "expected non-nil rejectErr")
 		}
-		return roachpb.TxnCoordMeta{}, rejectErr.GoError()
+		return roachpb.TxnCoordMeta{}, rejectErr
 	}
 	return meta, nil
 }
@@ -683,12 +693,11 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 // that doing so doesn't cut into the speed-up we see from this fast-path.
 func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 	ctx context.Context, deadline *hlc.Timestamp,
-) *roachpb.Error {
+) error {
 	if deadline != nil && deadline.Less(tc.mu.txn.Timestamp) {
-		return roachpb.NewError(
-			roachpb.NewTransactionStatusError("deadline exceeded before transaction finalization"))
+		return roachpb.NewTransactionStatusError("deadline exceeded before transaction finalization")
 	}
-	tc.mu.txnState = txnFinalized
+	tc.mu.clientRejectState.committed = true
 	// Mark the transaction as committed so that, in case this commit is done by
 	// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
 	// Also so that the correct metric gets incremented.
@@ -715,15 +724,16 @@ func (tc *TxnCoordSender) Send(
 
 	if ba.IsSingleEndTransactionRequest() {
 		et := ba.Requests[0].GetEndTransaction()
-		if !et.Commit &&
-			(tc.mu.txnState == txnErrorClientNotified || tc.mu.txnState == txnErrorClientNotNotified) {
-			// A rollback when we're in an error state is a no-op. An async rollback
-			// has already been sent.
-			// !!! maybe I should not handle these rollbacks specially, and I should
-			// detach this TxnCoordSender from the client.Txn when the error is
-			// returned.
-			return nil, nil
-		}
+		// !!!
+		// if !et.Commit &&
+		//   (tc.mu.txnState == txnErrorClientNotified || tc.mu.txnState == txnErrorClientNotNotified) {
+		//   // A rollback when we're in an error state is a no-op. An async rollback
+		//   // has already been sent.
+		//   // !!! maybe I should not handle these rollbacks specially, and I should
+		//   // detach this TxnCoordSender from the client.Txn when the error is
+		//   // returned.
+		//   return nil, nil
+		// }
 		if !tc.interceptorAlloc.txnIntentCollector.haveIntents() {
 			return nil, tc.commitReadOnlyTxnLocked(ctx, et.Deadline)
 		}
@@ -732,7 +742,7 @@ func (tc *TxnCoordSender) Send(
 	startNs := tc.clock.PhysicalNow()
 
 	if _, ok := ba.GetArg(roachpb.BeginTransaction); ok {
-		return nil, roachpb.NewErrorf("BeginTransaction added before the TxnCoordSender")
+		return nil, errors.Errorf("BeginTransaction added before the TxnCoordSender")
 	}
 
 	ctx, sp := tc.AnnotateCtxWithSpan(ctx, opTxnCoordSender)
@@ -753,8 +763,7 @@ func (tc *TxnCoordSender) Send(
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
 	// we still need to accept it as a parameter for this to compile.
 	if ba.ReadConsistency != roachpb.CONSISTENT {
-		return nil, roachpb.NewErrorf("cannot use %s ReadConsistency in txn",
-			ba.ReadConsistency)
+		return nil, errors.Errorf("cannot use %s ReadConsistency in txn", ba.ReadConsistency)
 	}
 
 	lastIndex := len(ba.Requests) - 1
@@ -786,17 +795,17 @@ func (tc *TxnCoordSender) Send(
 	// request succeeded: it might have raced with the cleaning up of intents and
 	// so it might have missed to see previous writes in this transaction.
 	if txnFinishedErr := tc.maybeRejectClientLocked(ctx, &ba); txnFinishedErr != nil {
-		return txnFinishedErr
+		return nil, txnFinishedErr
 	}
 
-	pErr = tc.updateStateLocked(ctx, startNs, ba, br, pErr)
+	err := tc.updateStateLocked(ctx, startNs, ba, br, pErr)
 
 	// If we succeeded to commit, or we attempted to rollback, we move to
 	// txnFinalized.
 	if req, ok := ba.GetArg(roachpb.EndTransaction); ok {
 		etReq := req.(*roachpb.EndTransactionRequest)
 		if etReq.Commit {
-			if pErr == nil {
+			if err == nil {
 				tc.mu.clientRejectState.committed = true
 				// !!! tc.mu.txnState = txnFinalized
 				tc.cleanupTxnLocked(ctx)
@@ -810,8 +819,8 @@ func (tc *TxnCoordSender) Send(
 		}
 	}
 
-	if pErr != nil {
-		return nil, pErr
+	if err != nil {
+		return nil, err
 	}
 
 	if br != nil && br.Error != nil {
@@ -870,86 +879,32 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	//   return nil
 	// }
 
+	req := "<none>"
+	if ba != nil {
+		req = ba.String()
+	}
 	if tc.mu.clientRejectState.committed {
-		return newTxnAlreadyFinalizedError(true /* committed */, "" /* rollbackCause */, req)
+		return newTxnAlreadyFinalizedError(
+			true /* committed */, "" /* rollbackCause */, "" /* leafErr */, req)
 	}
 	if rbc := tc.mu.clientRejectState.rollbackCause; rbc != "" {
-		return newTxnAlreadyFinalizedError(false /* committed */, rbc, req)
-	}
-	if lfe := tc.mu.clientRejectState.leafAlreadyFinalizedError; lfe != "" {
-		return newLeafAlreadyFinalizedError(lfe, req)
-	}
-	if asyncErr := tc.mu.clientRejectState.asyncErr; asyncErr != nil {
 		if tc.typ == client.LeafTxn {
-			// Even on retriable errors, leaves return raw retriable errors (which get
-			// handled by the root) rather than TxnRestartError.
-			tc.mu.clientRejectState.asyncErr = nil
-			tc.mu.clientRejectState.prevLeafErr = asyncErr
-			return asyncErr
+			return newTxnAlreadyFinalizedError(
+				false /* committed */, "" /* rollbackCause */, rbc, req)
 		}
-		// !!! check code below
-
-		// We return storedErr, except in the case when it's a
-		// TransactionAbortedError. In that case, we need to prepare a new
-		// Transaction first.
-		_, ok := tc.mu.asyncErr.(clientbase.TxnRestartError)
-		newTxn := roachpb.PrepareTransactionForRetry(
-			ctx, tc.mu.storedErr,
-			// priority is not used for aborted errors
-			roachpb.NormalUserPriority,
-			tc.clock)
-
-		// Advance to txnErrorClientNotified, since we're notifying the client. From
-		// now on,
-		tc.mu.txnState = txnErrorClientNotified
-
-		return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
-			tc.mu.storedErr.Message, tc.mu.txn.ID, newTxn))
+		return newTxnAlreadyFinalizedError(
+			false /* committed */, rbc, "" /* leafErr */, req)
+	}
+	if asyncAbortErr := tc.mu.clientRejectState.asyncAbortErr; asyncAbortErr != nil {
+		// We're now notifying the client about the "async error", so we move it to
+		// rollbackCause. Future calls will be rejected with a
+		// txnAlreadyFinalizedError.
+		tc.mu.clientRejectState.asyncAbortErr = nil
+		tc.mu.clientRejectState.rollbackCause = asyncAbortErr.Error()
+		return asyncAbortErr
 	}
 
 	return nil
-
-	// !!
-	// if tc.mu.txnState == txnFinalized {
-	//   msg := fmt.Sprintf("client already committed or rolled back the transaction. "+
-	//     "Trying to execute: %s", ba)
-	//   stack := string(debug.Stack())
-	//   log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
-	//   return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(msg), &tc.mu.txn)
-	// }
-	// if tc.mu.txnState == txnErrorClientNotified {
-	//   return roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{
-	//     PrevError: tc.mu.storedErr.Message,
-	//   })
-	// }
-	// if tc.mu.txnState == txnErrorClientNotNotified {
-	//   // We return storedErr, except in the case when it's a
-	//   // TransactionAbortedError. In that case, we need to prepare a new
-	//   // Transaction first.
-	//   _, ok := tc.mu.storedErr.GetDetail().(*roachpb.TransactionAbortedError)
-	//   // Leaf txns return raw retriable errors (which get handled by the root)
-	//   // rather than TransactionRetryWithProtoRefreshError.
-	//   if !ok || tc.typ == client.LeafTxn {
-	//     return tc.mu.storedErr
-	//   }
-	//   newTxn := roachpb.PrepareTransactionForRetry(
-	//     ctx, tc.mu.storedErr,
-	//     // priority is not used for aborted errors
-	//     roachpb.NormalUserPriority,
-	//     tc.clock)
-	//
-	//   // Advance to txnErrorClientNotified, since we're notifying the client. From
-	//   // now on,
-	//   tc.mu.txnState = txnErrorClientNotified
-	//
-	//   return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
-	//     tc.mu.storedErr.Message, tc.mu.txn.ID, newTxn))
-	// }
-	//
-	// if tc.mu.txn.Status != roachpb.PENDING {
-	//   log.Fatalf(ctx, "unexpected txn state: %s", tc.mu.txn)
-	// }
-	// return nil
 }
 
 // cleanupTxnLocked calls onFinishFn and closes all the interceptors.
@@ -959,7 +914,7 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context) {
 	}
 	tc.mu.closed = true
 	if tc.mu.onFinishFn != nil {
-		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */).GetDetail()
+		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */)
 		if rejectErr == nil {
 			log.Fatal(ctx, "expected non-nil rejectErr")
 		}
@@ -982,20 +937,36 @@ func (tc *TxnCoordSender) RollbackAsync(ctx context.Context) {
 // rollbackAsyncClientNotNotified takes in an error that was generated by an
 // async process (e.g. the heartbeat loop), sets the state so that the next
 // Send() operation returns an appropriate error, and rolls back the txn.
+// restartErr is expected to have its NewTxn field set. In other words it needs
+// to have come from a TransactionAbortedError (otherwise we wouldn't have
+// rolled back the txn).
 func (tc *TxnCoordSender) rollbackAsyncLockedClientNotNotified(
-	ctx context.Context, restartErr clientbase.TxnRestartError,
+	ctx context.Context, restartErr client.TxnRestartError,
 ) {
-	tc.mu.clientRejectState.asyncAbortErr = restartErr
+	if tc.typ == client.LeafTxn {
+		log.Fatalf(ctx, "unexpected rollbackAsync called in leaf txn: %s", restartErr)
+	}
+	if restartErr.NewTxn == nil {
+		log.Fatalf(ctx, "expected restartErr.NewTxn to be set: %s", restartErr)
+	}
+	tc.mu.clientRejectState.asyncAbortErr = &restartErr
 	tc.rollbackAsyncLocked(ctx, "async err: "+restartErr.Error())
 }
 
 // rollbackAsyncClientNotified sets the state so that future requests get
 // TxnAlreadyFinalizedError and rolls back the txn.
+//
+// For leaf transactions, there's no rollback, just some cleanup.
 func (tc *TxnCoordSender) rollbackAsyncLockedClientNotified(
 	ctx context.Context, rollbackCause string,
 ) {
 	tc.mu.clientRejectState.rollbackCause = rollbackCause
-	tc.rollbackAsyncLocked(ctx, err.Error())
+	if tc.typ == client.LeafTxn {
+		// Leafs can't rollback; that's the root's job.
+		tc.cleanupTxnLocked(ctx)
+		return
+	}
+	tc.rollbackAsyncLocked(ctx, rollbackCause)
 }
 
 // !!! don't call directly. Go through rollbackAsyncLockedClientNotified.
@@ -1028,9 +999,9 @@ func (tc *TxnCoordSender) rollbackAsyncLocked(ctx context.Context, rollbackCause
 	// We don't have a client whose context we can attach to, but we do want to
 	// limit how long this request is going to be around or it could leak a
 	// goroutine (in case of a long-lived network partition).
-	ctx, cancel := stopper.WithCancelOnQuiesce(tc.AnnotateCtx(context.Background()))
+	ctx, cancel := tc.stopper.WithCancelOnQuiesce(tc.AnnotateCtx(context.Background()))
 
-	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
+	log.VEventf(ctx, 2, "async abort for txn: %s", tc.mu.txn)
 	if err := tc.stopper.RunAsyncTask(
 		ctx, "txnHeartbeat: aborting txn", func(ctx context.Context) {
 			defer cancel()
@@ -1051,6 +1022,7 @@ func (tc *TxnCoordSender) rollbackAsyncLocked(ctx context.Context, rollbackCause
 				if pErr != nil {
 					log.VErrEventf(ctx, 1, "async abort failed for %s: %s ", txn, pErr)
 				}
+				return pErr.GoError()
 			})
 		},
 	); err != nil {
@@ -1064,7 +1036,7 @@ func (tc *TxnCoordSender) rollbackAsyncLocked(ctx context.Context, rollbackCause
 // UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
 func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 	ctx context.Context, pErr *roachpb.Error,
-) error {
+) client.TxnRestartError {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -1072,14 +1044,11 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 		log.Fatalf(ctx, "unexpected call on leaf txn")
 	}
 
-	txnID := tc.mu.txn.ID
-	err := tc.handleRetryableErrLocked(ctx, pErr)
+	updatedTxn, err := tc.handleRetryableErrLocked(ctx, pErr)
 	// We'll update our txn and possible rollback (in case we got a
 	// TransactionAbortedError).
-	if err.Transaction.ID == txnID {
-		// This is where we get a new epoch.
-		cp := err.Transaction.Clone()
-		tc.mu.txn.Update(&cp)
+	if updatedTxn != nil {
+		tc.mu.txn.Update(updatedTxn)
 	} else {
 		// Set the proto status to ABORTED, for sanity.
 		tc.mu.txn.Status = roachpb.ABORTED
@@ -1090,17 +1059,22 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 		// TxnCoordSender.
 		// !!! comment
 		// !!! what message do I pass here? Is pErr.Error() correct?
-		tc.rollbackAsyncLockedClientNotified(ctx, pErr.Error())
+		tc.rollbackAsyncLockedClientNotified(ctx, err.Error())
 	}
 	return err
 }
 
-// handleRetryableErrLocked takes a retriable error and creates a
-// TransactionRetryWithProtoRefreshError containing the transaction that needs
-// to be used by the next attempt.
+// handleRetryableErrLocked takes a retriable pErr and creates a TxnRestartError
+// to be passed to the client. Sometimes the TxnCoordSender needs to update its
+// Transaction before continuing; in these cases a Transaction is also returned.
+// In other cases (i.e. TransactionAbortedError), the TxnCoordSender needs to
+// rollback the existing transaction and shut down.  The client will create a
+// new TxnCoordSender. In these cases, the returned Transaction is nil
+// (TxnRestartError.NewTxn will be populated for the client, but the
+// TxnCoordSender shouldn't care about that).
 func (tc *TxnCoordSender) handleRetryableErrLocked(
 	ctx context.Context, pErr *roachpb.Error,
-) (*roachpb.Transaction, clientbase.TxnRestartError) {
+) (*roachpb.Transaction, client.TxnRestartError) {
 	if tc.typ == client.LeafTxn {
 		log.Fatalf(ctx, "LeafTxns are not supposed to handle retriable errors")
 	}
@@ -1123,19 +1097,20 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	newTxn := roachpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
 
 	// Are we suppose to start a new transaction?
-	var retErr clientbase.TxnRestartError
+	var retErr client.TxnRestartError
 	if errTxnID != newTxn.ID {
-		retErr = clientbase.NewTxnRestartError(pErr.Message, newTxn)
+		retErr = client.NewTxnRestartError(pErr.Message, errTxnID, &newTxn)
 		// Reset state as this is a retryable txn error that is incrementing
 		// the transaction's epoch.
 		log.VEventf(ctx, 2, "resetting epoch-based coordinator state on retry")
 		for _, reqInt := range tc.interceptorStack {
 			reqInt.epochBumpedLocked()
 		}
+		return nil, retErr
 	} else {
-		retErr = clientbase.NewTxnRestartError(pErr.Message, nil /* newTxn */)
+		retErr = client.NewTxnRestartError(pErr.Message, errTxnID, nil /* newTxn */)
+		return &newTxn, retErr
 	}
-	return newTxn, retErr
 }
 
 // updateStateLocked updates the transaction state in both the success and error
@@ -1182,14 +1157,9 @@ func (tc *TxnCoordSender) updateStateLocked(
 			// transaction is not supposed to be used any more after a retriable
 			// error. Separately, the error needs to make its way back to the root.
 
-			tc.mu.storedErr = pErr
-			tc.mu.txnState = txnErrorClientNotified
-
-			// Cleanup.
-			cp := pErr.GetTxn().Clone()
-			tc.mu.txn.Update(&cp)
-			tc.cleanupTxnLocked(ctx)
-			return pErr
+			// NB: For leaves, rollbackAsync doesn't actually rollback.
+			tc.rollbackAsyncLockedClientNotified(ctx, pErr.Message)
+			return pErr.GoError()
 		}
 
 		txnID := ba.Txn.ID
@@ -1200,13 +1170,11 @@ func (tc *TxnCoordSender) updateStateLocked(
 			log.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
 				ba.Txn, pErr)
 		}
-		newTxn, err := tc.handleRetryableErrLocked(ctx, pErr)
+		updatedTxn, err := tc.handleRetryableErrLocked(ctx, pErr)
 		// We'll update our txn, unless this was an abort error. If it was an abort
 		// error, the transaction will be rolled back.
-		if err.NewTxn == nil {
-			// This is where we get a new epoch.
-			cp := newTxn.Clone()
-			tc.mu.txn.Update(&cp)
+		if updatedTxn != nil {
+			tc.mu.txn.Update(updatedTxn)
 		} else {
 			// Set the proto status to ABORTED, for sanity.
 			tc.mu.txn.Status = roachpb.ABORTED
@@ -1326,10 +1294,6 @@ func (tc *TxnCoordSender) ManualRestart(
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
-	if tc.mu.txnState == txnFinalized {
-		log.Fatalf(ctx, "ManualRestart called on finalized txn: %s", tc.mu.txn)
-	}
-
 	// Invalidate any writes performed by any workers after the retry updated
 	// the txn's proto but before we synchronized (some of these writes might
 	// have been performed at the wrong epoch).
@@ -1338,10 +1302,6 @@ func (tc *TxnCoordSender) ManualRestart(
 	for _, reqInt := range tc.interceptorStack {
 		reqInt.epochBumpedLocked()
 	}
-
-	// The txn might have entered the txnError state after the epoch was bumped.
-	// Reset the state for the retry.
-	tc.mu.txnState = txnPending
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the client.TxnSender interface.

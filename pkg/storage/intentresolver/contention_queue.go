@@ -271,7 +271,8 @@ func (cq *contentionQueue) add(
 				b.AddRawRequest(pushReq)
 				log.VEventf(ctx, 3, "%s pushing %s to detect dependency cycles", txnID(curPusher.txn), pusheeTxn.ID.Short())
 				if err := cq.db.Run(ctx, b); err != nil {
-					log.VErrEventf(ctx, 2, "while waiting in push contention queue to push %s: %s", pusheeTxn.ID.Short(), b.MustPErr())
+					log.VErrEventf(ctx, 2, "while waiting in push contention queue to push %s: %s",
+						pusheeTxn.ID.Short(), b.MustErr())
 					done = true // done=true to avoid uselessly trying to push and resolve
 					break Loop
 				}

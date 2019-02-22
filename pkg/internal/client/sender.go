@@ -16,9 +16,11 @@ package client
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // TxnType specifies whether a transaction is the root (parent)
@@ -91,6 +93,18 @@ type Sender interface {
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
+// !!! see if this can be called SenderFun
+type SenderErr interface {
+	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+}
+
+type ErrWithIndex struct {
+	Err error
+	// Idx is the index of the request within a batch that generated the error. If
+	// none of the requests in particular generated the !!!
+	Idx int
+}
+
 // !!!
 /* type SendResult struct { */
 // // br is the result of the request, if the request succeeded.
@@ -99,7 +113,7 @@ type Sender interface {
 //
 // // err represents the error encountered by the request.
 // // Generally, when err is set, the transaction can be considered rolled back
-// // and the sender cannot be used any more. However, clientbase.TxnRestartError
+// // and the sender cannot be used any more. However, TxnRestartError
 // // is an exception. In that case, the transaction is supposed to restart. The
 // // sender should or should not continue to be used based on
 // // TxnRestartError.NewTxn. In either case, future requests will not see any
@@ -186,12 +200,11 @@ type TxnSender interface {
 	ManualRestart(context.Context, roachpb.UserPriority, hlc.Timestamp)
 
 	// UpdateStateOnRemoteRetryableErr updates the txn in response to an error
-	// encountered when running a request through the txn.
+	// encountered when running a request through a leaf txn.
 	//
-	// The caller is supposed to inspect the txn id in the return value and, if
-	// it's a new id, it needs to stop using this sender.
-	// !!! comment
-	UpdateStateOnRemoteRetryableErr(context.Context, *roachpb.Error) *roachpb.Error
+	// The caller is supposed to inspect TxnRestartError.NewTxn and, if set, not
+	// use this TxnSender any more.
+	UpdateStateOnRemoteRetryableErr(context.Context, *roachpb.Error) TxnRestartError
 
 	// DisablePipelining instructs the TxnSender not to pipeline requests. It
 	// should rarely be necessary to call this method. It is only recommended for
@@ -271,6 +284,9 @@ type TxnSenderFactory interface {
 // SenderFunc is an adapter to allow the use of ordinary functions
 // as Senders.
 type SenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+
+// Can SenderFunc and TxnSenderIface go away?
+type SenderFunc2 func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 
 // Send calls f(ctx, c).
 func (f SenderFunc) Send(
@@ -397,7 +413,7 @@ func (m *MockTransactionalSender) SerializeTxn() *roachpb.Transaction {
 // UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
 func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
 	ctx context.Context, pErr *roachpb.Error,
-) *roachpb.Error {
+) TxnRestartError {
 	panic("unimplemented")
 }
 
@@ -460,15 +476,15 @@ func (f NonTransactionalFactoryFunc) NonTransactionalSender() Sender {
 // response or an error. It's valid to pass a `nil` context; an empty one is
 // used in that case.
 func SendWrappedWith(
-	ctx context.Context, sender Sender, h roachpb.Header, args roachpb.Request,
-) (roachpb.Response, *roachpb.Error) {
+	ctx context.Context, sender SenderErr, h roachpb.Header, args roachpb.Request,
+) (roachpb.Response, error) {
 	ba := roachpb.BatchRequest{}
 	ba.Header = h
 	ba.Add(args)
 
-	br, pErr := sender.Send(ctx, ba)
-	if pErr != nil {
-		return nil, pErr
+	br, err := sender.Send(ctx, ba)
+	if err != nil {
+		return nil, err
 	}
 	unwrappedReply := br.Responses[0].GetInner()
 	header := unwrappedReply.Header()
@@ -481,8 +497,8 @@ func SendWrappedWith(
 // TODO(tschottdorf): should move this to testutils and merge with
 // other helpers which are used, for example, in `storage`.
 func SendWrapped(
-	ctx context.Context, sender Sender, args roachpb.Request,
-) (roachpb.Response, *roachpb.Error) {
+	ctx context.Context, sender SenderErr, args roachpb.Request,
+) (roachpb.Response, error) {
 	return SendWrappedWith(ctx, sender, roachpb.Header{}, args)
 }
 
@@ -492,4 +508,32 @@ func Wrap(sender Sender, f func(roachpb.BatchRequest) roachpb.BatchRequest) Send
 	return SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		return sender.Send(ctx, f(ba))
 	})
+}
+
+// TxnRestartError indicates that a retriable error happened and so the
+// transaction needs to be restarted.
+type TxnRestartError struct {
+	// txnID is the id of the transaction that this error is intended for.
+	TxnID uuid.UUID
+	cause string
+	// NewTxn, if set, means that the recepient of this error is supposed to
+	// create a new transaction using the information in this proto.
+	NewTxn *roachpb.Transaction
+}
+
+var _ error = TxnRestartError{}
+
+// Error implements the error interface.
+func (e TxnRestartError) Error() string {
+	return fmt.Sprintf("transaction restart error (caused by: %s)", e.cause)
+}
+
+func (e TxnRestartError) RestartCause() string {
+	return e.cause
+}
+
+func NewTxnRestartError(
+	cause string, txnID uuid.UUID, newTxn *roachpb.Transaction,
+) TxnRestartError {
+	return TxnRestartError{cause: cause, TxnID: txnID, NewTxn: newTxn}
 }

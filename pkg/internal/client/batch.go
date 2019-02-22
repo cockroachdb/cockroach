@@ -57,7 +57,7 @@ type Batch struct {
 	// Once received, the response from a successful batch.
 	response *roachpb.BatchResponse
 	// Once received, any error encountered sending the batch.
-	pErr *roachpb.Error
+	err error
 
 	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
 	resultsBuf    [8]Result
@@ -72,13 +72,13 @@ func (b *Batch) RawResponse() *roachpb.BatchResponse {
 	return b.response
 }
 
-// MustPErr returns the structured error resulting from a failed execution of
-// the batch, asserting that that error is non-nil.
-func (b *Batch) MustPErr() *roachpb.Error {
-	if b.pErr == nil {
+// MustErr returns the error resulting from a failed execution of the batch,
+// asserting that that error is non-nil.
+func (b *Batch) MustErr() error {
+	if b.err == nil {
 		panic(errors.Errorf("expected non-nil pErr for batch %+v", b))
 	}
-	return b.pErr
+	return b.err
 }
 
 func (b *Batch) prepare() error {
@@ -153,7 +153,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			// further.
 			if result.Err == nil {
 				// The outcome of each result is that of the batch as a whole.
-				result.Err = b.pErr.GoError()
+				result.Err = b.err
 				if result.Err == nil {
 					// For a successful request, load the reply to populate in
 					// this pass.
