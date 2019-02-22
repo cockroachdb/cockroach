@@ -1703,6 +1703,15 @@ func deleteArgs(key roachpb.Key) roachpb.DeleteRequest {
 	}
 }
 
+func deleteRangeArgs(key, endKey roachpb.Key) roachpb.DeleteRangeRequest {
+	return roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    key,
+			EndKey: endKey,
+		},
+	}
+}
+
 // readOrWriteArgs returns either get or put arguments depending on
 // value of "read". Get for true; Put for false.
 func readOrWriteArgs(key roachpb.Key, read bool) roachpb.Request {
@@ -2828,16 +2837,12 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 	txnNew.Timestamp = tsNew
 	keyGet := roachpb.Key("get")
 	keyDeleteRange := roachpb.Key("delete-range")
-	gArgs := &roachpb.GetRequest{
-		RequestHeader: roachpb.RequestHeader{Key: keyGet},
-	}
-	drArgs := &roachpb.DeleteRangeRequest{
-		RequestHeader: roachpb.RequestHeader{Key: keyDeleteRange, EndKey: keyDeleteRange.Next()},
-	}
-	assignSeqNumsForReqs(txnNew, gArgs, drArgs)
+	gArgs := getArgs(keyGet)
+	drArgs := deleteRangeArgs(keyDeleteRange, keyDeleteRange.Next())
+	assignSeqNumsForReqs(txnNew, &gArgs, &drArgs)
 	var ba roachpb.BatchRequest
 	ba.Header.Txn = txnNew
-	ba.Add(gArgs, drArgs)
+	ba.Add(&gArgs, &drArgs)
 	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -3249,74 +3254,6 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	}
 }
 
-// TestReplicaAbortSpanTxnIdempotency verifies that a TransactionAbortedError is
-// found when a put is tried on an aborted txn. It further verifies transactions
-// run successfully and in an idempotent manner when replaying the same requests.
-func TestReplicaAbortSpanTxnIdempotency(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-
-	key := []byte("a")
-	{
-		txn := newTransaction("test", key, 10, tc.Clock())
-		txn.Sequence = 1
-		entry := roachpb.AbortSpanEntry{
-			Key:       txn.Key,
-			Timestamp: txn.Timestamp,
-			Priority:  0,
-		}
-		if err := tc.repl.abortSpan.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
-			t.Fatal(err)
-		}
-
-		args := incrementArgs(key, 1)
-		assignSeqNumsForReqs(txn, &args)
-		_, pErr := tc.SendWrappedWith(roachpb.Header{
-			Txn: txn,
-		}, &args)
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
-			t.Fatalf("unexpected error %v", pErr)
-		}
-	}
-
-	// Try the same again, this time verifying that the Put will actually
-	// populate the cache appropriately.
-	txn := newTransaction("test", key, 10, tc.Clock())
-	txn.Sequence = 321
-	args := incrementArgs(key, 1)
-	try := func() *roachpb.Error {
-		_, pErr := tc.SendWrappedWith(roachpb.Header{
-			Txn: txn,
-		}, &args)
-		return pErr
-	}
-
-	assignSeqNumsForReqs(txn, &args)
-	if pErr := try(); pErr != nil {
-		t.Fatal(pErr)
-	}
-	txn.Timestamp.Forward(txn.Timestamp.Add(10, 10)) // can't hurt
-	if pErr := try(); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Pretend we restarted by increasing the epoch. That's all that's needed.
-	txn.Epoch++
-	assignSeqNumsForReqs(txn, &args)
-	if pErr := try(); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Try again with just an incremented sequence. Still good to go.
-	assignSeqNumsForReqs(txn, &args)
-	if pErr := try(); pErr != nil {
-		t.Fatal(pErr)
-	}
-}
-
 // TestReplicaAbortSpanOnlyWithIntent verifies that a transactional command
 // which goes through Raft but is not a transactional write (i.e. does not
 // leave intents) passes the AbortSpan unhindered.
@@ -3343,6 +3280,436 @@ func TestReplicaAbortSpanOnlyWithIntent(t *testing.T) {
 	// Instead, we expect no error and a successfully created transaction record.
 	if _, pErr := tc.SendWrappedWith(h, &args); pErr != nil {
 		t.Fatalf("unexpected error: %v", pErr)
+	}
+}
+
+// TestReplicaTxnIdempotency verifies that transactions run successfully and in
+// an idempotent manner when replaying the same requests.
+func TestReplicaTxnIdempotency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	runWithTxn := func(txn *roachpb.Transaction, reqs ...roachpb.Request) error {
+		ba := roachpb.BatchRequest{}
+		ba.Header.Txn = txn
+		ba.Add(reqs...)
+		_, pErr := tc.Sender().Send(context.Background(), ba)
+		return pErr.GoError()
+	}
+	keyAtSeqHasVal := func(txn *roachpb.Transaction, key []byte, seq enginepb.TxnSeq, val *roachpb.Value) error {
+		args := getArgs(key)
+		args.Sequence = seq
+		resp, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &args)
+		if pErr != nil {
+			return pErr.GoError()
+		}
+		foundVal := resp.(*roachpb.GetResponse).Value
+		if (foundVal == nil) == (val == nil) {
+			if foundVal == nil {
+				return nil
+			}
+			if foundVal.EqualData(*val) {
+				return nil
+			}
+		}
+		return errors.Errorf("expected val %v at seq %d, found %v", val, seq, foundVal)
+	}
+	firstErr := func(errs ...error) error {
+		for _, err := range errs {
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	val1 := []byte("value")
+	val2 := []byte("value2")
+	byteVal := func(b []byte) *roachpb.Value {
+		var v roachpb.Value
+		v.SetBytes(b)
+		return &v
+	}
+	intVal := func(i int64) *roachpb.Value {
+		var v roachpb.Value
+		v.SetInt(i)
+		return &v
+	}
+
+	testCases := []struct {
+		name           string
+		beforeTxnStart func(key []byte) error
+		afterTxnStart  func(txn *roachpb.Transaction, key []byte) error
+		run            func(txn *roachpb.Transaction, key []byte) error
+		validate       func(txn *roachpb.Transaction, key []byte) error
+		expError       string // regexp pattern to match on run error, if not empty
+	}{
+		{
+			// Requests are meant to be idempotent, so identical requests at the
+			// same sequence should always succeed without changing state.
+			name: "reissued put",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
+					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
+					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
+				)
+			},
+		},
+		{
+			name: "reissued cput",
+			beforeTxnStart: func(key []byte) error {
+				// Write an initial key for the CPuts to expect.
+				args := putArgs(key, val2)
+				return runWithTxn(nil, &args)
+			},
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := cPutArgs(key, val1, val2)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := cPutArgs(key, val1, val2)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, byteVal(val2)),
+					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
+					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
+				)
+			},
+		},
+		{
+			name: "reissued initput",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := iPutArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := iPutArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
+					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
+					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
+				)
+			},
+		},
+		{
+			name: "reissued increment",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := incrementArgs(key, 3)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := incrementArgs(key, 3)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
+					keyAtSeqHasVal(txn, key, 2, intVal(3)),
+					keyAtSeqHasVal(txn, key, 3, intVal(3)),
+				)
+			},
+		},
+		{
+			name: "reissued delete",
+			beforeTxnStart: func(key []byte) error {
+				// Write an initial key to delete.
+				args := putArgs(key, val2)
+				return runWithTxn(nil, &args)
+			},
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := deleteArgs(key)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := deleteArgs(key)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, byteVal(val2)),
+					keyAtSeqHasVal(txn, key, 2, nil),
+					keyAtSeqHasVal(txn, key, 3, nil),
+				)
+			},
+		},
+		{
+			name: "reissued delete range",
+			beforeTxnStart: func(key []byte) error {
+				// Write an initial key to delete.
+				args := putArgs(key, val2)
+				return runWithTxn(nil, &args)
+			},
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := deleteRangeArgs(key, append(key, 0))
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := deleteRangeArgs(key, append(key, 0))
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, byteVal(val2)),
+					keyAtSeqHasVal(txn, key, 2, nil),
+					keyAtSeqHasVal(txn, key, 3, nil),
+				)
+			},
+		},
+		{
+			// A request reissued from an earlier txn epoch will be rejected.
+			name: "reissued write at lower epoch",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				txnEpochBump := txn.Clone()
+				txnEpochBump.Epoch++
+
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txnEpochBump, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val2)
+				args.Sequence = 3
+				return runWithTxn(txn, &args)
+			},
+			expError: "put with epoch 0 came after put with epoch 1",
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				txnEpochBump := txn.Clone()
+				txnEpochBump.Epoch++
+
+				return firstErr(
+					keyAtSeqHasVal(txnEpochBump, key, 1, nil),
+					keyAtSeqHasVal(txnEpochBump, key, 2, byteVal(val1)),
+					keyAtSeqHasVal(txnEpochBump, key, 3, byteVal(val1)),
+				)
+			},
+		},
+		{
+			// A request issued after a request with a larger sequence has
+			// already laid down an intent on the same key will be rejected.
+			// Unlike the next case, seq two was not issued before seq three,
+			// which would indicate a faulty client.
+			name: "reordered write at lower sequence",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val1)
+				args.Sequence = 3
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			expError: "sequence 3 missing an intent with lower sequence 2",
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
+					keyAtSeqHasVal(txn, key, 2, nil),
+					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
+				)
+			},
+		},
+		{
+			// Unlike the previous case, here a request is reissued after a
+			// request with an identical sequence is issued AND a request with a
+			// larger sequence is issued. Because the replay isn't rewriting
+			// history, it can succeed. This does not indicate a faulty client.
+			// It is possible if a batch that writes to a key twice is reissued.
+			name: "reissued write at lower sequence",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				if err := runWithTxn(txn, &args); err != nil {
+					return err
+				}
+
+				args = putArgs(key, val2)
+				args.Sequence = 3
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
+					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
+					keyAtSeqHasVal(txn, key, 3, byteVal(val2)),
+				)
+			},
+		},
+		{
+			// A request at the same sequence as another but that produces a
+			// different result will be rejected.
+			name: "different write at same sequence",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val2)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			expError: "sequence 2 has a different value",
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
+					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
+					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
+				)
+			},
+		},
+		{
+			// A request is issued again, but with a lower timestamp than the
+			// timestamp in the intent. This is possible if an intent is pushed
+			// and then the request that wrote it is reissued. We allow this
+			// without issue because timestamps on intents are moved to the
+			// commit timestamp on commit.
+			name: "reissued write at lower timestamp",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				txnHighTS := txn.Clone()
+				txnHighTS.Timestamp = txnHighTS.Timestamp.Add(1, 0)
+
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txnHighTS, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
+					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
+					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
+				)
+			},
+		},
+		{
+			// A request is issued again, but with a higher timestamp than the
+			// timestamp in the intent. This is possible if the txn coordinator
+			// increased its timestamp between the two requests (for instance,
+			// after a refresh). We allow this without issue because timestamps
+			// on intents are moved to the commit timestamp on commit.
+			name: "reissued write at higher timestamp",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				txnHighTS := txn.Clone()
+				txnHighTS.Timestamp = txnHighTS.Timestamp.Add(1, 0)
+
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txnHighTS, &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
+					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
+					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
+				)
+			},
+		},
+		{
+			// If part of a batch has already succeeded and another part hasn't
+			// then the previously successful portion will be evaluated as a
+			// no-op while the rest will evaluate as normal. This isn't common,
+			// but it could happen if a partially successful batch is reissued
+			// after a range merge.
+			name: "reissued write in partially successful batch",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				pArgs := putArgs(key, val1)
+				pArgs.Sequence = 2
+				dArgs := deleteArgs(key)
+				dArgs.Sequence = 3
+				return runWithTxn(txn, &pArgs, &dArgs)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
+					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
+					keyAtSeqHasVal(txn, key, 3, nil),
+				)
+			},
+		},
+	}
+	for i, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			key := []byte(strconv.Itoa(i))
+			if c.beforeTxnStart != nil {
+				if err := c.beforeTxnStart(key); err != nil {
+					t.Fatalf("failed beforeTxnStart: %v", err)
+				}
+			}
+
+			txn := newTransaction(c.name, roachpb.Key(c.name), 1, tc.Clock())
+			if c.afterTxnStart != nil {
+				if err := c.afterTxnStart(txn, key); err != nil {
+					t.Fatalf("failed afterTxnStart: %v", err)
+				}
+			}
+
+			if err := c.run(txn, key); err != nil {
+				if len(c.expError) == 0 {
+					t.Fatalf("expected no failure, found %q", err.Error())
+				}
+				if !testutils.IsError(err, regexp.QuoteMeta(c.expError)) {
+					t.Fatalf("expected failure %q, found %q", c.expError, err.Error())
+				}
+			} else {
+				if len(c.expError) > 0 {
+					t.Fatalf("expected failure %q", c.expError)
+				}
+			}
+
+			if c.validate != nil {
+				if err := c.validate(txn, key); err != nil {
+					t.Fatalf("failed during validation: %v", err)
+				}
+			}
+		})
 	}
 }
 
