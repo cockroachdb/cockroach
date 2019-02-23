@@ -1458,7 +1458,11 @@ func (jsonNull) Exists(string) (bool, error)   { return false, nil }
 func (jsonTrue) Exists(string) (bool, error)   { return false, nil }
 func (jsonFalse) Exists(string) (bool, error)  { return false, nil }
 func (jsonNumber) Exists(string) (bool, error) { return false, nil }
-func (jsonString) Exists(string) (bool, error) { return false, nil }
+
+func (j jsonString) Exists(s string) (bool, error) {
+	return string(j) == s, nil
+}
+
 func (j jsonArray) Exists(s string) (bool, error) {
 	for i := 0; i < len(j); i++ {
 		if elem, ok := j[i].(jsonString); ok && string(elem) == s {

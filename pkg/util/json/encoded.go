@@ -606,8 +606,13 @@ func (j *jsonEncoded) Exists(key string) (bool, error) {
 				return true, nil
 			}
 		}
+	default:
+		s, err := j.decode()
+		if err != nil {
+			return false, err
+		}
+		return s.Exists(key)
 	}
-	return false, nil
 }
 
 func (j *jsonEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
