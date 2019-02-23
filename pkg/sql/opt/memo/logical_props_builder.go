@@ -407,7 +407,8 @@ func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational
 		// of left side of apply join. Since this is apply join, there is always a
 		// right input.
 		rightOuterCols := join.Child(1).(RelExpr).Relational().OuterCols
-		rel.OuterCols.DifferenceWith(rightOuterCols)
+		boundOuterCols := rightOuterCols.Intersection(join.Child(0).(RelExpr).Relational().OutputCols)
+		rel.OuterCols.DifferenceWith(boundOuterCols)
 	}
 
 	// Functional Dependencies
