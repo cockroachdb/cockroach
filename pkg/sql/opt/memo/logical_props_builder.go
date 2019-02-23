@@ -402,13 +402,6 @@ func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational
 	// bound by the input columns.
 	inputCols := h.leftProps.OutputCols.Union(h.rightProps.OutputCols)
 	rel.OuterCols.DifferenceWith(inputCols)
-	if opt.IsJoinApplyOp(join) {
-		// Outer columns of right side of apply join can be bound by output columns
-		// of left side of apply join. Since this is apply join, there is always a
-		// right input.
-		rightOuterCols := join.Child(1).(RelExpr).Relational().OuterCols
-		rel.OuterCols.DifferenceWith(rightOuterCols)
-	}
 
 	// Functional Dependencies
 	// -----------------------
