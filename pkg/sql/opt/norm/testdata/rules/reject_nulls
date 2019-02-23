@@ -419,51 +419,64 @@ project
 
 
 # Ignore ConstAgg aggregates on other columns.
-opt expect=RejectNullsGroupBy
-SELECT * FROM a WHERE (SELECT sum(x) FROM xy WHERE x=k)>i
+exprnorm expect=RejectNullsGroupBy
+(Root
+    (Select
+        (ScalarGroupBy
+            (LeftJoin
+              (Scan [ (Table "xy") (Cols "x,y") ])
+              (Scan [ (Table "uv") (Cols "u,v") ])
+              [ ]
+              [ ]
+            )
+            [
+                (AggregationsItem (Sum (Var "v")) (NewColumn "sum" "int"))
+                (AggregationsItem (ConstAgg (Var "u")) (NewColumn "const" "int"))
+            ]
+            [ ]
+        )
+        [ (Eq (Var "sum") (Const 10)) ]
+    )
+    (Presentation "u,v")
+    (NoOrdering)
+)
 ----
-project
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string)
- ├── key: (1)
- ├── fd: (1)-->(2-4)
- └── select
-      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) sum:7(decimal!null)
-      ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
-      ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) sum:7(decimal)
-      │    ├── grouping columns: k:1(int!null)
-      │    ├── internal-ordering: +(1|5)
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-4,7)
-      │    ├── inner-join (merge)
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null)
-      │    │    ├── left ordering: +1
-      │    │    ├── right ordering: +5
-      │    │    ├── key: (5)
-      │    │    ├── fd: (1)-->(2-4), (1)==(5), (5)==(1)
-      │    │    ├── ordering: +(1|5) [actual: +1]
-      │    │    ├── scan a
-      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-4)
-      │    │    │    └── ordering: +1
-      │    │    ├── scan xy
-      │    │    │    ├── columns: x:5(int!null)
-      │    │    │    ├── key: (5)
-      │    │    │    └── ordering: +5
-      │    │    └── filters (true)
-      │    └── aggregations
-      │         ├── sum [type=decimal, outer=(5)]
-      │         │    └── variable: x [type=int]
-      │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: i [type=int]
-      │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: f [type=float]
-      │         └── const-agg [type=string, outer=(4)]
-      │              └── variable: s [type=string]
-      └── filters
-           └── i < sum [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+select
+ ├── columns: u:3(int) v:4(int)  [hidden: sum:5(int!null) const:6(int)]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5,6)
+ ├── scalar-group-by
+ │    ├── columns: sum:5(int) const:6(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(5,6)
+ │    ├── inner-join
+ │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null)
+ │    │    ├── key: (1,3)
+ │    │    ├── fd: (1)-->(2), (3)-->(4)
+ │    │    ├── scan t.public.xy
+ │    │    │    ├── columns: x:1(int!null) y:2(int)
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── select
+ │    │    │    ├── columns: u:3(int!null) v:4(int!null)
+ │    │    │    ├── key: (3)
+ │    │    │    ├── fd: (3)-->(4)
+ │    │    │    ├── scan t.public.uv
+ │    │    │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    │    │    ├── key: (3)
+ │    │    │    │    └── fd: (3)-->(4)
+ │    │    │    └── filters
+ │    │    │         └── v IS NOT NULL [type=bool, outer=(4), constraints=(/4: (/NULL - ]; tight)]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         ├── sum [type=decimal, outer=(4)]
+ │         │    └── variable: v [type=int]
+ │         └── const-agg [type=int, outer=(3)]
+ │              └── variable: u [type=int]
+ └── filters
+      └── sum = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
 
 # Don't reject nulls when multiple columns are used.
 opt expect-not=RejectNullsGroupBy
@@ -599,3 +612,75 @@ project
  │         └── variable: exists [type=bool, outer=(16), constraints=(/16: [/true - /true]; tight), fd=()-->(16)]
  └── projections
       └── const: 1 [type=int]
+
+# Regression test: the not-null filter can't make it all the way down to the
+# join that requested it, so ensure that we don't endlessly try to introduce
+# them.
+exprnorm
+(Select
+    (ScalarGroupBy
+        (InnerJoinApply
+          (Scan [ (Table "xy") (Cols "x,y") ])
+              (LeftJoinApply
+                (Scan [ (Table "uv") (Cols "u,v") ])
+                (Select
+                    (Values
+                      [ (Tuple [ (Plus (Var "x") (Var "u")) ] "tuple{int}" ) ]
+                      [ (Cols [ (NewColumn "z" "int") ]) ]
+                    )
+                    [ (Eq (Var "x") (Const 3)) ]
+                )
+                [ ]
+                [ ]
+              )
+          [ ]
+          [ ]
+        )
+        [ (AggregationsItem (Sum (Var "z")) (NewColumn "sum" "int")) ]
+        [ ]
+    )
+    [ (Eq (Var "sum") (Const 10)) ]
+)
+----
+select
+ ├── columns: sum:6(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scalar-group-by
+ │    ├── columns: sum:6(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(6)
+ │    ├── inner-join-apply
+ │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) z:5(int)
+ │    │    ├── key: (1,3)
+ │    │    ├── fd: (1)-->(2), (1,3)-->(4,5)
+ │    │    ├── scan t.public.xy
+ │    │    │    ├── columns: x:1(int!null) y:2(int)
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── left-join-apply
+ │    │    │    ├── columns: u:3(int!null) v:4(int) z:5(int)
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── key: (3)
+ │    │    │    ├── fd: (3)-->(4,5)
+ │    │    │    ├── scan t.public.uv
+ │    │    │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    │    │    ├── key: (3)
+ │    │    │    │    └── fd: (3)-->(4)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: z:5(int)
+ │    │    │    │    ├── outer: (1,3)
+ │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(5)
+ │    │    │    │    └── (x + u,) [type=tuple{int}]
+ │    │    │    └── filters
+ │    │    │         └── x = 3 [type=bool, outer=(1), constraints=(/1: [/3 - /3]; tight), fd=()-->(1)]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── sum [type=decimal, outer=(5)]
+ │              └── variable: z [type=int]
+ └── filters
+      └── sum = 10 [type=bool, outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]

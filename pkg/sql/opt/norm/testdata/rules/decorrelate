@@ -4327,7 +4327,8 @@ limit
  │    └── const: 0 [type=int]
  └── const: 10 [type=int]
 
-opt expect=TryDecorrelateProjectSet
+# TODO(justin): figure out how to get this to decorrelate again.
+opt
 SELECT * FROM articles, xy WHERE EXISTS(
   SELECT * FROM ROWS FROM (generate_series(x, id), length(title), upper(title), unnest(tag_list))
 )
@@ -4336,51 +4337,62 @@ project
  ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int)
  ├── side-effects
  ├── key: (1,10)
- ├── fd: (1)-->(2-9), (10)-->(11), (1,10)-->(2-9,11)
+ ├── fd: (1)-->(2-9), (1,10)-->(2-9,11)
  └── select
       ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int) true_agg:17(bool!null)
       ├── side-effects
       ├── key: (1,10)
-      ├── fd: (1)-->(2-9), (10)-->(11), (1,10)-->(2-9,11,17)
+      ├── fd: (1)-->(2-9), (1,10)-->(2-9,11,17)
       ├── group-by
       │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int) true_agg:17(bool)
       │    ├── grouping columns: id:1(int!null) x:10(int!null)
       │    ├── side-effects
       │    ├── key: (1,10)
-      │    ├── fd: (1)-->(2-9), (10)-->(11), (1,10)-->(2-9,11,17)
-      │    ├── project
-      │    │    ├── columns: true:16(bool!null) id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int)
+      │    ├── fd: (1)-->(2-9), (1,10)-->(2-9,11,17)
+      │    ├── inner-join-apply
+      │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int) true:16(bool)
       │    │    ├── side-effects
-      │    │    ├── fd: ()-->(16), (1)-->(2-9), (10)-->(11)
-      │    │    ├── project-set
-      │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int) generate_series:12(int) length:13(int) upper:14(string) unnest:15(string)
+      │    │    ├── fd: (1)-->(2-9), (1,10)-->(11)
+      │    │    ├── scan articles
+      │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2-9)
+      │    │    ├── left-join-apply
+      │    │    │    ├── columns: x:10(int!null) y:11(int) true:16(bool)
+      │    │    │    ├── outer: (1,4,6)
       │    │    │    ├── side-effects
-      │    │    │    ├── fd: (1)-->(2-9), (10)-->(11)
-      │    │    │    ├── inner-join
-      │    │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) x:10(int!null) y:11(int)
-      │    │    │    │    ├── key: (1,10)
-      │    │    │    │    ├── fd: (1)-->(2-9), (10)-->(11)
-      │    │    │    │    ├── scan articles
-      │    │    │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
-      │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    └── fd: (1)-->(2-9)
-      │    │    │    │    ├── scan xy
-      │    │    │    │    │    ├── columns: x:10(int!null) y:11(int)
-      │    │    │    │    │    ├── key: (10)
-      │    │    │    │    │    └── fd: (10)-->(11)
-      │    │    │    │    └── filters (true)
-      │    │    │    └── zip
-      │    │    │         ├── function: generate_series [type=int, outer=(1,10), side-effects]
-      │    │    │         │    ├── variable: x [type=int]
-      │    │    │         │    └── variable: id [type=int]
-      │    │    │         ├── function: length [type=int, outer=(4)]
-      │    │    │         │    └── variable: title [type=string]
-      │    │    │         ├── function: upper [type=string, outer=(4)]
-      │    │    │         │    └── variable: title [type=string]
-      │    │    │         └── function: unnest [type=string, outer=(6), side-effects]
-      │    │    │              └── variable: tag_list [type=string[]]
-      │    │    └── projections
-      │    │         └── true [type=bool]
+      │    │    │    ├── fd: (10)-->(11)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:10(int!null) y:11(int)
+      │    │    │    │    ├── key: (10)
+      │    │    │    │    └── fd: (10)-->(11)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: true:16(bool!null)
+      │    │    │    │    ├── outer: (1,4,6,10)
+      │    │    │    │    ├── side-effects
+      │    │    │    │    ├── fd: ()-->(16)
+      │    │    │    │    ├── project-set
+      │    │    │    │    │    ├── columns: generate_series:12(int) length:13(int) upper:14(string) unnest:15(string)
+      │    │    │    │    │    ├── outer: (1,4,6,10)
+      │    │    │    │    │    ├── side-effects
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    ├── key: ()
+      │    │    │    │    │    │    └── tuple [type=tuple]
+      │    │    │    │    │    └── zip
+      │    │    │    │    │         ├── function: generate_series [type=int, outer=(1,10), side-effects]
+      │    │    │    │    │         │    ├── variable: x [type=int]
+      │    │    │    │    │         │    └── variable: id [type=int]
+      │    │    │    │    │         ├── function: length [type=int, outer=(4)]
+      │    │    │    │    │         │    └── variable: title [type=string]
+      │    │    │    │    │         ├── function: upper [type=string, outer=(4)]
+      │    │    │    │    │         │    └── variable: title [type=string]
+      │    │    │    │    │         └── function: unnest [type=string, outer=(6), side-effects]
+      │    │    │    │    │              └── variable: tag_list [type=string[]]
+      │    │    │    │    └── projections
+      │    │    │    │         └── true [type=bool]
+      │    │    │    └── filters (true)
+      │    │    └── filters (true)
       │    └── aggregations
       │         ├── const-not-null-agg [type=bool, outer=(16)]
       │         │    └── variable: true [type=bool]

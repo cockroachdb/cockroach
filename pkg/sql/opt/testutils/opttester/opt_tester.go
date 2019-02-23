@@ -323,6 +323,14 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		ot.postProcess(tb, d, e)
 		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
+	case "exprnorm":
+		e, err := ot.ExprNorm()
+		if err != nil {
+			d.Fatalf(tb, "%v", err)
+		}
+		ot.postProcess(tb, d, e)
+		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
 		return ""
@@ -565,6 +573,26 @@ func (ot *OptTester) Expr() (opt.Expr, error) {
 	var f norm.Factory
 	f.Init(&ot.evalCtx)
 	f.DisableOptimizations()
+
+	return exprgen.Build(ot.catalog, &f, ot.sql)
+}
+
+// ExprNorm parses the input directly into an expression and runs
+// normalization; see exprgen.Build.
+func (ot *OptTester) ExprNorm() (opt.Expr, error) {
+	var f norm.Factory
+	f.Init(&ot.evalCtx)
+
+	f.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		// exprgen.Build doesn't run optimization, so we don't need to explicitly
+		// disallow exploration rules here.
+
+		if ot.Flags.DisableRules.Contains(int(ruleName)) {
+			return false
+		}
+		ot.seenRules.Add(int(ruleName))
+		return true
+	})
 
 	return exprgen.Build(ot.catalog, &f, ot.sql)
 }
