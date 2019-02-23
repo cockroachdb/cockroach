@@ -133,6 +133,28 @@ SELECT bar FROM foo WHERE bar ? 'a'
 ----
 {"a": "b"}
 
+query BBBBBBB
+VALUES (
+  '"hello"'::JSONB   ? 'hello',
+  '"hello"'::JSONB   ? 'goodbye',
+  '"hello"'::JSONB   ? 'ello',
+  '"hello"'::JSONB   ? 'h',
+  'true'::JSONB      ? 'true',
+  '1'::JSONB         ? '1',
+  'null'::JSONB      ? 'null'
+)
+----
+true  false  false  false  false  false  false
+
+query T
+SELECT bar FROM foo WHERE bar ? 'hello'
+----
+"hello"
+
+query T
+SELECT bar FROM foo WHERE bar ? 'goodbye'
+----
+
 query T
 SELECT bar FROM foo WHERE bar ?| ARRAY['a','b']
 ----
