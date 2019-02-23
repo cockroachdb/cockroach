@@ -149,7 +149,7 @@ func (w *bulkingest) Tables() []workload.Table {
 				randutil.ReadTestdataBytes(rng, payload)
 				for c := 0; c < w.cCount; c++ {
 					off := c * w.payloadBytes
-					batch[c] = []interface{}{a, b, c, payload[off : off+w.payloadBytes]}
+					batch[c] = []interface{}{a, b, c, string(payload[off : off+w.payloadBytes])}
 				}
 				return batch
 			},
