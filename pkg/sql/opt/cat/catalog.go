@@ -52,6 +52,10 @@ type SchemaName = tree.TableNamePrefix
 
 // Catalog is an interface to a database catalog, exposing only the information
 // needed by the query optimizer.
+//
+// NOTE: Catalog implementations need not be thread-safe. However, the objects
+// returned by the Resolve methods (schemas and data sources) *must* be
+// immutable after construction, and therefore also thread-safe.
 type Catalog interface {
 	// ResolveSchema locates a schema with the given name and returns it along
 	// with the resolved SchemaName (which has all components filled in).
@@ -61,6 +65,9 @@ type Catalog interface {
 	// the input name. Its use is mainly for cosmetic purposes.
 	//
 	// If no such schema exists, then ResolveSchema returns an error.
+	//
+	// NOTE: The returned schema must be immutable after construction, and so can
+	// be safely copied or used across goroutines.
 	ResolveSchema(ctx context.Context, name *SchemaName) (Schema, SchemaName, error)
 
 	// ResolveDataSource locates a data source with the given name and returns it
@@ -75,11 +82,17 @@ type Catalog interface {
 	// "t".
 	//
 	// If no such data source exists, then ResolveDataSource returns an error.
+	//
+	// NOTE: The returned data source must be immutable after construction, and
+	// so can be safely copied or used across goroutines.
 	ResolveDataSource(ctx context.Context, name *DataSourceName) (DataSource, DataSourceName, error)
 
 	// ResolveDataSourceByID is similar to ResolveDataSource, except that it
 	// locates a data source by its StableID. See the comment for StableID for
 	// more details.
+	//
+	// NOTE: The returned data source must be immutable after construction, and
+	// so can be safely copied or used across goroutines.
 	ResolveDataSourceByID(ctx context.Context, id StableID) (DataSource, error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
