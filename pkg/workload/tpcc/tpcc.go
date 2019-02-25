@@ -95,7 +95,8 @@ var tpccMeta = workload.Meta{
 		` using a rich schema of multiple tables`,
 	// TODO(anyone): when bumping this version and regenerating fixtures, please
 	// address the TODO in PostLoad.
-	Version: `2.0.1`,
+	Version:      `2.0.1`,
+	PublicFacing: true,
 	New: func() workload.Generator {
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
