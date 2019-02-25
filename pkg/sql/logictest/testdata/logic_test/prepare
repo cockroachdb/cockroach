@@ -962,3 +962,55 @@ query T
 EXECUTE foobar(NULL, NULL)
 ----
 NULL
+
+subtest regression_35145
+
+# Verify db-independent query behaves properly even when db does not exist
+
+statement ok
+SET application_name = ap35145
+
+# Prepare in custom db
+
+statement ok
+CREATE DATABASE d35145; SET database = d35145;
+
+statement ok
+PREPARE display_appname AS SELECT setting FROM pg_settings WHERE name = 'application_name'
+
+query T
+EXECUTE display_appname
+----
+ap35145
+
+# Check what happens when the db where the stmt was prepared disappears "underneath".
+
+statement ok
+DROP DATABASE d35145
+
+query error database "d35145" does not exist
+EXECUTE display_appname
+
+statement ok
+CREATE DATABASE d35145
+
+query T
+EXECUTE display_appname
+----
+ap35145
+
+# Check what happens when the stmt is executed over a non-existent, unrelated db.
+
+statement ok
+CREATE DATABASE d35145_2; SET database = d35145_2; DROP DATABASE d35145_2
+
+query error database "d35145_2" does not exist
+EXECUTE display_appname
+
+# Check what happens when the stmt is executed over no db whatsoever.
+
+statement ok
+SET database = ''
+
+query error  cannot access virtual schema in anonymous database
+EXECUTE display_appname

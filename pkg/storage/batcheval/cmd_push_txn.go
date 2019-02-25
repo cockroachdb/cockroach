@@ -94,12 +94,12 @@ func declareKeysPushTransaction(
 // is PUSH_ABORT, txn.Status is set to ABORTED. If args.PushType is
 // PUSH_TIMESTAMP, txn.Timestamp is set to just after args.PushTo.
 //
-// TODO(nvanbenschoten): I don't understand this below...
-// If the pushee is aborted, its timestamp will be forwarded to match its last
-// client activity timestamp (i.e. last heartbeat), if available. This is done
-// so that the updated timestamp populates the AbortSpan, allowing the GC
-// queue to purge records for which the transaction coordinator must have found
-// out via its heartbeats that the transaction has failed.
+// If the pushee is aborted, its timestamp will be forwarded to match
+// its last client activity timestamp (i.e. last heartbeat), if available.
+// This is done so that the updated timestamp populates the AbortSpan when
+// the pusher proceeds to resolve intents, allowing the GC queue to purge
+// records for which the transaction coordinator must have found out via
+// its heartbeats that the transaction has failed.
 func PushTxn(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -252,15 +252,6 @@ func PushTxn(
 		// timestamp cache. If the transaction record was not already present
 		// then we rely on the read timestamp cache to prevent the record from
 		// ever being written with a timestamp beneath this timestamp.
-		//
-		// TODO(nvanbenschoten): Remove this comment - the migration path for
-		// this is subtle. We rely on the read timestamp cache for timestamp
-		// pushes of missing transaction records. However, in mixed version
-		// clusters we can't be sure that a future leaseholder will consult the
-		// read timestamp cache. Luckily, we can be sure that it will consult
-		// its write timestamp cache, whose low water mark will necessarily be
-		// equal to or greater than this timestamp. If it finds a transaction
-		// with an original timestamp below this time, it will abort it.
 		reply.PusheeTxn.Timestamp = args.PushTo.Next()
 	default:
 		return result.Result{}, errors.Errorf("unexpected push type: %v", args.PushType)

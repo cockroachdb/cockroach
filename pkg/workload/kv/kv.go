@@ -71,7 +71,7 @@ func init() {
 var kvMeta = workload.Meta{
 	Name: `kv`,
 	Description: `
-	KV reads and writes to keys spread (by default, uniformly	at random) across
+	KV reads and writes to keys spread (by default, uniformly at random) across
 	the cluster.
 	--concurrency workers alternate between doing selects and upserts (according
 	to a --read-percent ratio). Each select/upsert reads/writes a batch of --batch

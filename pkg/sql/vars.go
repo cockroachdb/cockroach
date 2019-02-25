@@ -469,6 +469,13 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-INTERVALSTYLE
 	`intervalstyle`: makeCompatStringVar(`IntervalStyle`, "postgres"),
 
+	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-LOC-TIMEOUT
+	`lock_timeout`: makeCompatIntVar(`lock_timeout`, 0),
+
+	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-IDLE-IN-TRANSACTION-SESSION-TIMEOUT
+	// See also issue #5924.
+	`idle_in_transaction_session_timeout`: makeCompatIntVar(`idle_in_transaction_session_timeout`, 0),
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-MAX-INDEX-KEYS
 	`max_index_keys`: makeReadOnlyVar("32"),
 
@@ -588,7 +595,22 @@ var varGen = map[string]sessionVar{
 
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/runtime-config-compatible.html#GUC-STANDARD-CONFORMING-STRINGS
-	`standard_conforming_strings`: makeCompatStringVar(`standard_conforming_strings`, "on"),
+	`standard_conforming_strings`: makeCompatBoolVar(`standard_conforming_strings`, true, false /* anyAllowed */),
+
+	// See https://www.postgresql.org/docs/10/static/runtime-config-compatible.html#GUC-SYNCHRONIZE-SEQSCANS
+	// The default in pg is "on" but the behavior in CockroachDB is "off". As this does not affect
+	// results received by clients, we accept both values.
+	`synchronize_seqscans`: makeCompatBoolVar(`synchronize_seqscans`, true, true /* anyAllowed */),
+
+	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-ROW-SECURITY
+	// The default in pg is "on" but row security is not supported in CockroachDB.
+	// We blindly accept both values because as long as there are now row security policies defined,
+	// either value produces the same query results in PostgreSQL. That is, as long as CockroachDB
+	// does not support row security, accepting either "on" and "off" but ignoring the result
+	// is postgres-compatible.
+	// If/when CockroachDB is extended to support row security, the default and allowed values
+	// should be modified accordingly.
+	`row_security`: makeCompatBoolVar(`row_security`, false, true /* anyAllowed */),
 
 	`statement_timeout`: {
 		GetStringVal: stmtTimeoutVarGetStringVal,
@@ -722,7 +744,47 @@ func makeReadOnlyVar(value string) sessionVar {
 	}
 }
 
-func globalFalse(_ *settings.Values) string { return formatBoolAsPostgresSetting(false) }
+func displayPgBool(val bool) func(_ *settings.Values) string {
+	strVal := formatBoolAsPostgresSetting(val)
+	return func(_ *settings.Values) string { return strVal }
+}
+
+var globalFalse = displayPgBool(false)
+
+func makeCompatBoolVar(varName string, displayValue, anyValAllowed bool) sessionVar {
+	displayValStr := formatBoolAsPostgresSetting(displayValue)
+	return sessionVar{
+		Get: func(_ *extendedEvalContext) string { return displayValStr },
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "%v", err)
+			}
+			if anyValAllowed || b == displayValue {
+				return nil
+			}
+			telemetry.Count(fmt.Sprintf("unimplemented.sql.session_var.%s.%s", varName, s))
+			allowedVals := []string{displayValStr}
+			if anyValAllowed {
+				allowedVals = append(allowedVals, formatBoolAsPostgresSetting(!displayValue))
+			}
+			return newVarValueError(varName, s, allowedVals...).SetDetailf(
+				"this parameter is currently recognized only for compatibility and has no effect in CockroachDB.")
+		},
+		GlobalDefault: func(sv *settings.Values) string { return displayValStr },
+	}
+}
+
+func makeCompatIntVar(varName string, displayValue int, extraAllowed ...int) sessionVar {
+	displayValueStr := strconv.Itoa(displayValue)
+	extraAllowedStr := make([]string, len(extraAllowed))
+	for i, v := range extraAllowed {
+		extraAllowedStr[i] = strconv.Itoa(v)
+	}
+	varObj := makeCompatStringVar(varName, displayValueStr, extraAllowedStr...)
+	varObj.GetStringVal = makeIntGetStringValFn(varName)
+	return varObj
+}
 
 func makeCompatStringVar(varName, displayValue string, extraAllowed ...string) sessionVar {
 	allowedVals := append(extraAllowed, strings.ToLower(displayValue))
@@ -737,6 +799,7 @@ func makeCompatStringVar(varName, displayValue string, extraAllowed ...string) s
 					return nil
 				}
 			}
+			telemetry.Count(fmt.Sprintf("unimplemented.sql.session_var.%s.%s", varName, s))
 			return newVarValueError(varName, s, allowedVals...).SetDetailf(
 				"this parameter is currently recognized only for compatibility and has no effect in CockroachDB.")
 		},
