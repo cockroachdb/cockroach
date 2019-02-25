@@ -56,9 +56,10 @@ func init() {
 }
 
 var bankMeta = workload.Meta{
-	Name:        `bank`,
-	Description: `Bank models a set of accounts with currency balances`,
-	Version:     `1.0.0`,
+	Name:         `bank`,
+	Description:  `Bank models a set of accounts with currency balances`,
+	Version:      `1.0.0`,
+	PublicFacing: true,
 	New: func() workload.Generator {
 		g := &bank{}
 		g.flags.FlagSet = pflag.NewFlagSet(`bank`, pflag.ContinueOnError)

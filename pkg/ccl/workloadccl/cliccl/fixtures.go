@@ -135,7 +135,7 @@ func getStorage(ctx context.Context) (*storage.Client, error) {
 }
 
 func init() {
-	workloadcli.AddSubCmd(func() *cobra.Command {
+	workloadcli.AddSubCmd(func(userFacing bool) *cobra.Command {
 		for _, meta := range workload.Registered() {
 			gen := meta.New()
 			var genFlags *pflag.FlagSet

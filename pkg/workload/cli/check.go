@@ -27,7 +27,7 @@ import (
 )
 
 func init() {
-	AddSubCmd(func() *cobra.Command {
+	AddSubCmd(func(userFacing bool) *cobra.Command {
 		var checkCmd = SetCmdDefaults(&cobra.Command{
 			Use:   `check`,
 			Short: `check a running cluster's data for consistency`,
