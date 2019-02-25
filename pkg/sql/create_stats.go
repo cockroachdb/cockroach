@@ -188,6 +188,10 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	return <-errCh
 }
 
+// maxNonIndexCols is the maximum number of non-index columns that we will use
+// when choosing a default set of column statistics.
+const maxNonIndexCols = 100
+
 // createStatsDefaultColumns creates column statistics on a default set of
 // column lists when no columns were specified by the caller.
 //
@@ -198,6 +202,10 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 // useful to have statistics on prefixes of those columns. For example, if a
 // table abc contains indexes on (a ASC, b ASC) and (b ASC, c ASC), we will
 // collect statistics on a, {a, b}, b, and {b, c}.
+//
+// In addition to the index columns, we collect stats on up to maxNonIndexCols
+// other columns from the table.
+//
 // TODO(rytaft): This currently only generates one single-column stat per
 // index. Add code to collect multi-column stats once they are supported.
 func createStatsDefaultColumns(
@@ -207,12 +215,10 @@ func createStatsDefaultColumns(
 
 	var requestedCols util.FastIntSet
 
-	// If the primary key is not the hidden rowid column, collect stats on it.
+	// Add a column for the primary key.
 	pkCol := desc.PrimaryIndex.ColumnIDs[0]
-	if !isHidden(desc, pkCol) {
-		columns = append(columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{pkCol}})
-		requestedCols.Add(int(pkCol))
-	}
+	columns = append(columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{pkCol}})
+	requestedCols.Add(int(pkCol))
 
 	// Add columns for each secondary index.
 	for i := range desc.Indexes {
@@ -225,34 +231,18 @@ func createStatsDefaultColumns(
 		}
 	}
 
-	// If there are no non-hidden index columns, collect stats on the first
-	// non-hidden column in the table.
-	if len(columns) == 0 {
-		for i := range desc.Columns {
-			if !desc.Columns[i].IsHidden() {
-				columns = append(
-					columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{desc.Columns[i].ID}},
-				)
-				break
-			}
+	// Add all remaining columns in the table, up to maxNonIndexCols.
+	nonIdxCols := 0
+	for i := 0; i < len(desc.Columns) && nonIdxCols < maxNonIndexCols; i++ {
+		if !requestedCols.Contains(int(desc.Columns[i].ID)) {
+			columns = append(
+				columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{desc.Columns[i].ID}},
+			)
+			nonIdxCols++
 		}
-	}
-
-	// If there are still no columns, return an error.
-	if len(columns) == 0 {
-		return nil, errors.New("CREATE STATISTICS called on a table with no visible columns")
 	}
 
 	return columns, nil
-}
-
-func isHidden(desc *ImmutableTableDescriptor, columnID sqlbase.ColumnID) bool {
-	for i := range desc.Columns {
-		if desc.Columns[i].ID == columnID {
-			return desc.Columns[i].IsHidden()
-		}
-	}
-	panic("column not found in table")
 }
 
 // createStatsResumer implements the jobs.Resumer interface for CreateStats
