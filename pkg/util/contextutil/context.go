@@ -48,6 +48,7 @@ func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, cont
 type TimeoutError struct {
 	operation string
 	duration  time.Duration
+	cause     error
 }
 
 func (t TimeoutError) Error() string {
@@ -61,10 +62,13 @@ func (TimeoutError) Timeout() bool { return true }
 func (TimeoutError) Temporary() bool { return true }
 
 // Cause implements Causer.
-func (TimeoutError) Cause() error {
+func (t TimeoutError) Cause() error {
 	// This ensures that people looking for DeadlineExceeded in particular still
 	// see it.
-	return context.DeadlineExceeded
+	if t.cause == nil {
+		return context.DeadlineExceeded
+	}
+	return t.cause
 }
 
 // We implement net.Error the same way that context.DeadlineExceeded does, so
@@ -87,6 +91,7 @@ func RunWithTimeout(
 		return TimeoutError{
 			operation: op,
 			duration:  timeout,
+			cause:     err,
 		}
 	}
 	return err
