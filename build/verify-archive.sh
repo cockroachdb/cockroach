@@ -9,7 +9,7 @@
 set -euo pipefail
 
 apt-get update
-apt-get install -y autoconf cmake libncurses-dev
+apt-get install -y autoconf bison cmake libncurses-dev
 
 workdir=$(mktemp -d)
 tar xzf cockroach.src.tgz -C "$workdir"

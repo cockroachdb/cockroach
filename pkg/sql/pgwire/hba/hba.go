@@ -51,6 +51,33 @@ type Entry struct {
 	Options [][2]string
 }
 
+// GetOption returns the value of option name if there is exactly one
+// occurrence of name in the options list, otherwise the empty string.
+func (h Entry) GetOption(name string) string {
+	var val string
+	for _, opt := range h.Options {
+		if opt[0] == name {
+			// If there is more than one entry, return empty string.
+			if val != "" {
+				return ""
+			}
+			val = opt[1]
+		}
+	}
+	return val
+}
+
+// GetOptions returns all values of option name.
+func (h Entry) GetOptions(name string) []string {
+	var val []string
+	for _, opt := range h.Options {
+		if opt[0] == name {
+			val = append(val, opt[1])
+		}
+	}
+	return val
+}
+
 func (h Entry) String() string {
 	var sb strings.Builder
 	sb.WriteString("host ")
