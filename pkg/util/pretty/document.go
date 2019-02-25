@@ -54,6 +54,7 @@ func (*union) isDoc()    {}
 func (*scolumn) isDoc()  {}
 func (*snesting) isDoc() {}
 func (pad) isDoc()       {}
+func (keyword) isDoc()   {}
 
 //
 // Implementations of Doc ("DOC" in paper).
@@ -164,7 +165,7 @@ func flatten(d Doc) Doc {
 		return NestT(flatten(t.d))
 	case nests:
 		return NestS(t.n, flatten(t.d))
-	case text:
+	case text, keyword:
 		return d
 	case line:
 		return textSpace
@@ -244,4 +245,14 @@ func Align(d Doc) Doc {
 // described above.
 type pad struct {
 	n int16
+}
+
+type keyword string
+
+// Keyword is identical to Text except they are filtered by
+// keywordTransform. The computed width is always len(s), regardless of
+// the result of the result of the transform. This allows for things like
+// coloring and other control characters in the output.
+func Keyword(s string) Doc {
+	return keyword(s)
 }
