@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	sqlstats "github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -62,7 +63,6 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	// Calculate the relevant columns.
 	scan.valNeededForCol = util.FastIntSet{}
-	var sampledColumnIDs []sqlbase.ColumnID
 	for _, s := range stats {
 		for _, c := range s.columns {
 			colIdx, ok := scan.colIdxMap[c]
@@ -71,7 +71,6 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			}
 			if !scan.valNeededForCol.Contains(colIdx) {
 				scan.valNeededForCol.Add(colIdx)
-				sampledColumnIDs = append(sampledColumnIDs, c)
 			}
 		}
 	}
@@ -83,6 +82,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	sketchSpecs := make([]distsqlpb.SketchSpec, len(stats))
 	post := p.GetLastStagePost()
+	sampledColumnIDs := make([]sqlbase.ColumnID, len(scan.cols))
 	for i, s := range stats {
 		spec := distsqlpb.SketchSpec{
 			SketchType:          distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
@@ -113,6 +113,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 				}
 			}
 			spec.Columns[i] = uint32(colIdx)
+			sampledColumnIDs[colIdx] = colID
 		}
 
 		sketchSpecs[i] = spec
@@ -179,9 +180,12 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	details := job.Details().(jobspb.CreateStatsDetails)
 	stats := make([]requestedStat, len(details.ColumnLists))
 	for i := 0; i < len(stats); i++ {
+		// Currently we do not use histograms, so don't bother creating one for
+		// automatic stats.
+		histogram := len(details.ColumnLists[i].IDs) == 1 && details.Name != sqlstats.AutoStatsName
 		stats[i] = requestedStat{
 			columns:             details.ColumnLists[i].IDs,
-			histogram:           len(details.ColumnLists[i].IDs) == 1,
+			histogram:           histogram,
 			histogramMaxBuckets: histogramBuckets,
 			name:                string(details.Name),
 		}

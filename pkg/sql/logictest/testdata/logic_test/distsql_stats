@@ -150,6 +150,8 @@ WHERE statistics_name = 's3'
 column_names  row_count  distinct_count  null_count
 {a}           10000      10              0
 {c}           10000      10              0
+{b}           10000      10              0
+{d}           10000      10              0
 
 # Add indexes, including duplicate index on column c.
 statement ok
@@ -166,8 +168,9 @@ WHERE statistics_name = 's4'
 ----
 column_names  row_count  distinct_count  null_count
 {a}           10000      10              0
-{b}           10000      10              0
 {c}           10000      10              0
+{b}           10000      10              0
+{d}           10000      10              0
 
 statement ok
 DROP INDEX data@c_idx; DROP INDEX data@data_c_b_idx
@@ -175,7 +178,8 @@ DROP INDEX data@c_idx; DROP INDEX data@data_c_b_idx
 statement ok
 CREATE STATISTICS s5 FROM [53]
 
-# We should no longer get stats for column c.
+# We should still get stats for column c, but now column c is added later as a
+# non-index column, resulting in a different ordering of the rows.
 query TIII colnames
 SELECT column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data]
@@ -184,9 +188,10 @@ WHERE statistics_name = 's5'
 column_names  row_count  distinct_count  null_count
 {a}           10000      10              0
 {b}           10000      10              0
+{c}           10000      10              0
+{d}           10000      10              0
 
-# A table with a hidden primary key and no other indexes has default
-# column stats collected on the first non-hidden column.
+# Table with a hidden primary key and no other indexes.
 statement ok
 CREATE TABLE simple (x INT, y INT)
 
@@ -198,7 +203,9 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE simple]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
+default_stat1    {rowid}       0          0               0
 default_stat1    {x}           0          0               0
+default_stat1    {y}           0          0               0
 
 # Add one null row.
 statement ok
@@ -211,14 +218,15 @@ CREATE UNIQUE INDEX ON simple (y) STORING (x)
 statement ok
 CREATE STATISTICS default_stat2 FROM simple
 
-# Now stats are only collected on the index column.
+# Now stats are collected on the index column y before column x.
 query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE simple]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-default_stat1    {x}           0          0               0
+default_stat2    {rowid}       1          1               0
 default_stat2    {y}           1          0               1
+default_stat2    {x}           1          0               1
 
 #
 # Test numeric references
@@ -232,8 +240,9 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-s4               {c}           10000      10              0
 s5               {b}           10000      10              0
+s5               {c}           10000      10              0
+s5               {d}           10000      10              0
 s6               {a}           10000      10              0
 
 # Combine default columns and numeric reference.
@@ -248,6 +257,8 @@ WHERE statistics_name = '__auto__'
 column_names  row_count  distinct_count  null_count
 {a}           10000      10              0
 {b}           10000      10              0
+{c}           10000      10              0
+{d}           10000      10              0
 
 #
 # Test delete stats
@@ -267,31 +278,57 @@ CREATE STATISTICS __auto__ FROM [53];
 # Only the last 4-5 automatic stats should remain for each column.
 query TT colnames
 SELECT statistics_name, column_names
-FROM [SHOW STATISTICS FOR TABLE data]
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names
-s4               {c}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
 __auto__         {b}
-__auto__         {a}
-__auto__         {a}
-__auto__         {a}
-__auto__         {a}
-__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
 
 statement ok
 CREATE STATISTICS s7 ON a FROM [53]
 
 query TT colnames
 SELECT statistics_name, column_names
-FROM [SHOW STATISTICS FOR TABLE data]
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names
-s4               {c}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
 __auto__         {b}
-__auto__         {a}
-__auto__         {a}
-__auto__         {a}
-__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
 s7               {a}
 
 statement ok
@@ -300,15 +337,28 @@ CREATE STATISTICS s8 ON a FROM [53]
 # s7 is deleted but the automatic stats remain.
 query TT colnames
 SELECT statistics_name, column_names
-FROM [SHOW STATISTICS FOR TABLE data]
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names
-s4               {c}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
+__auto__         {a}
 __auto__         {b}
-__auto__         {a}
-__auto__         {a}
-__auto__         {a}
-__auto__         {a}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {b}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {c}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
+__auto__         {d}
 s8               {a}
 
 # Regression test for #33195.
@@ -316,5 +366,5 @@ statement ok
 CREATE TABLE t (x int); INSERT INTO t VALUES (1); ALTER TABLE t DROP COLUMN x
 
 # Ensure that creating stats on a table with no columns does not cause a panic.
-statement error pq: CREATE STATISTICS called on a table with no visible columns
+statement ok
 CREATE STATISTICS s FROM t
