@@ -408,9 +408,12 @@ DBString DBGetUserProperties(DBEngine* db);
 // what can be added. If move_files is true, the files will be moved instead of
 // copied. If allow_file_modifications is false, RocksDB will return an error if
 // it would have tried to modify any of the files' sequence numbers rather than
-// editing the files in place.
+// editing the files in place. If write_global_seqno is false, it will skip
+// writing the seq_no to the SSTs -- this is only safe if this will only ever be
+// read by Rocks version >= 5.16 as older versions would still be looking for
+// the seqno.
 DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files,
-                               bool allow_file_modifications);
+                               bool write_global_seqno, bool allow_file_modifications);
 
 typedef struct DBSstFileWriter DBSstFileWriter;
 
