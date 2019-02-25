@@ -41,3 +41,9 @@ parse
 host "all all 0.0.0.0/0 trust
 ----
 error: entry 1 invalid
+
+# options
+parse
+host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM
+----
+host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM
