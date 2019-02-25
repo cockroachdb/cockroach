@@ -76,6 +76,7 @@ func init() {
 			genInitCmd := SetCmdDefaults(&cobra.Command{
 				Use:   meta.Name,
 				Short: meta.Description,
+				Long:  meta.Description + meta.Details,
 				Args:  cobra.ArbitraryArgs,
 			})
 			genInitCmd.Flags().AddFlagSet(initFlags)
@@ -110,6 +111,7 @@ func init() {
 			genRunCmd := SetCmdDefaults(&cobra.Command{
 				Use:   meta.Name,
 				Short: meta.Description,
+				Long:  meta.Description + meta.Details,
 				Args:  cobra.ArbitraryArgs,
 			})
 			genRunCmd.Flags().AddFlagSet(runFlags)
