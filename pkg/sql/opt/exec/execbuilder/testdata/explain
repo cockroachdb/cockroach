@@ -99,7 +99,7 @@ drop database  ·  ·
 # below, otherwise the result becomes non-deterministic.
 # Migrations with backfill will affect the number of rows.
 query TTT
-EXPLAIN SHOW JOBS
+SELECT * FROM [EXPLAIN SHOW JOBS] WHERE field != 'size'
 ----
 sort                   ·       ·
  │                     order   -"coalesce",-started
@@ -107,7 +107,6 @@ sort                   ·       ·
       └── filter       ·       ·
            │           filter  (finished IS NULL) OR (finished > (now() - '12:00:00'))
            └── values  ·       ·
-·                      size    15 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -136,7 +135,7 @@ EXPLAIN DROP TABLE foo
 drop table  ·  ·
 
 query TTT
-EXPLAIN SHOW DATABASES
+SELECT * FROM [EXPLAIN SHOW DATABASES] WHERE field != 'size'
 ----
 distinct               ·          ·
  │                     order key  database_name
@@ -144,10 +143,9 @@ distinct               ·          ·
       │                order      +database_name
       └── render       ·          ·
            └── values  ·          ·
-·                      size       4 columns, 20 rows
 
 query TTT
-EXPLAIN SHOW TABLES
+SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
 ----
 sort                   ·       ·
  │                     order   +table_schema,+table_name
@@ -155,10 +153,9 @@ sort                   ·       ·
       └── filter       ·       ·
            │           filter  table_schema = 'public'
            └── values  ·       ·
-·                      size    6 columns, 92 rows
 
 query TTT
-EXPLAIN SHOW TABLES WITH COMMENT
+SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
 ----
 sort                                  ·         ·
  │                                    order     +table_schema,+table_name
@@ -174,60 +171,53 @@ sort                                  ·         ·
            │         ├── filter       ·         ·
            │         │    │           filter    table_schema = 'public'
            │         │    └── values  ·         ·
-           │         │                size      6 columns, 92 rows
            │         └── values       ·         ·
-           │                          size      13 columns, 16 rows
            └── scan                   ·         ·
 ·                                     table     comments@primary
 ·                                     spans     ALL
 
 query TTT
-EXPLAIN SHOW DATABASE
+SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE field != 'size'
 ----
 render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'database'
       └── values  ·       ·
-·                 size    3 columns, 41 rows
 
 query TTT
-EXPLAIN SHOW TIME ZONE
+SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE field != 'size'
 ----
 render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'timezone'
       └── values  ·       ·
-·                 size    3 columns, 41 rows
 
 query TTT
-EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
+SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE field != 'size'
 ----
 render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'default_transaction_isolation'
       └── values  ·       ·
-·                 size    3 columns, 41 rows
 
 query TTT
-EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
+SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE field != 'size'
 ----
 render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'transaction_isolation'
       └── values  ·       ·
-·                 size    3 columns, 41 rows
 
 query TTT
-EXPLAIN SHOW TRANSACTION PRIORITY
+SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE field != 'size'
 ----
 render            ·       ·
  └── filter       ·       ·
       │           filter  variable = 'transaction_priority'
       └── values  ·       ·
-·                 size    3 columns, 41 rows
 
 query TTT
-EXPLAIN SHOW COLUMNS FROM foo
+SELECT * FROM [EXPLAIN SHOW COLUMNS FROM foo] WHERE field != 'size'
 ----
 sort                                       ·            ·
  │                                         order        +ordinal_position
@@ -250,15 +240,13 @@ sort                                       ·            ·
                      │    └── filter       ·            ·
                      │         │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
                      │         └── values  ·            ·
-                     │                     size         23 columns, 962 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
                                └── values  ·            ·
-·                                          size         13 columns, 3 rows
 
 query TTT
-EXPLAIN SHOW GRANTS ON foo
+SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE field != 'size'
 ----
 sort                   ·       ·
  │                     order   +database_name,+schema_name,+table_name,+grantee,+privilege_type
@@ -266,19 +254,17 @@ sort                   ·       ·
       └── filter       ·       ·
            │           filter  (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
            └── values  ·       ·
-·                      size    8 columns, 600 rows
 
 query TTT
-EXPLAIN SHOW INDEX FROM foo
+SELECT * FROM [EXPLAIN SHOW INDEX FROM foo] WHERE field != 'size'
 ----
 render            ·       ·
  └── filter       ·       ·
       │           filter  ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
       └── values  ·       ·
-·                 size    13 columns, 3 rows
 
 query TTT
-EXPLAIN SHOW CONSTRAINTS FROM foo
+SELECT * FROM [EXPLAIN SHOW CONSTRAINTS FROM foo] WHERE field != 'size'
 ----
 sort                             ·         ·
  │                               order     +table_name,+constraint_name
@@ -289,15 +275,12 @@ sort                             ·         ·
            ├── filter            ·         ·
            │    │                filter    relname = 'foo'
            │    └── values       ·         ·
-           │                     size      27 columns, 94 rows
            └── join              ·         ·
                 │                type      cross
                 ├── filter       ·         ·
                 │    │           filter    nspname = 'public'
                 │    └── values  ·         ·
-                │                size      4 columns, 4 rows
                 └── values       ·         ·
-·                                size      26 columns, 0 rows
 
 query TTT
 EXPLAIN SHOW USERS
