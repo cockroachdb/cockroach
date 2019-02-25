@@ -182,6 +182,72 @@ func TestSortRandomized(t *testing.T) {
 	})
 }
 
+func TestAllSpooler(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tcs := []struct {
+		tuples tuples
+		typ    []types.T
+	}{
+		{
+			tuples: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
+			typ:    []types.T{types.Int64},
+		},
+		{
+			tuples: tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
+			typ:    []types.T{types.Int64},
+		},
+		{
+			tuples: tuples{{1, 1}, {3, 2}, {2, 3}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
+			typ:    []types.T{types.Int64, types.Int64},
+		},
+		{
+			tuples: tuples{{1, 1}, {5, 2}, {3, 3}, {7, 4}, {2, 5}, {6, 6}, {4, 7}},
+			typ:    []types.T{types.Int64, types.Int64},
+		},
+		{
+			tuples: tuples{{1}, {5}, {3}, {3}, {2}, {6}, {4}},
+			typ:    []types.T{types.Int64},
+		},
+		{
+			tuples: tuples{{0, 1, 0}, {1, 2, 0}, {2, 3, 2}, {3, 7, 1}, {4, 2, 2}},
+			typ:    []types.T{types.Int64, types.Int64, types.Int64},
+		},
+		{
+			tuples: tuples{
+				{0, 1, 0},
+				{0, 1, 0},
+				{0, 1, 1},
+				{0, 0, 1},
+				{0, 0, 0},
+			},
+			typ: []types.T{types.Int64, types.Int64, types.Int64},
+		},
+	}
+	for _, tc := range tcs {
+		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
+			allSpooler := newAllSpooler(input[0], tc.typ)
+			allSpooler.init()
+			allSpooler.spool()
+			if len(tc.tuples) != int(allSpooler.getNumTuples()) {
+				t.Fatal(fmt.Sprintf("allSpooler spooled wrong number of tuples: expected %d, but received %d", len(tc.tuples), allSpooler.getNumTuples()))
+			}
+			if allSpooler.getPartitionsCol() != nil {
+				t.Fatal("allSpooler returned non-nil partitionsCol")
+			}
+			for col := 0; col < len(tc.typ); col++ {
+				colVec := allSpooler.getValues(col).Int64()
+				for i := 0; i < int(allSpooler.getNumTuples()); i++ {
+					if colVec[i] != int64(tc.tuples[i][col].(int)) {
+						t.Fatal(fmt.Sprintf("allSpooler returned wrong value in %d column of %d'th tuple : expected %v, but received %v",
+							col, i, tc.tuples[i][col].(int), colVec[i]))
+					}
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkSort(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -203,8 +269,8 @@ func BenchmarkSort(b *testing.B) {
 					ordCols[i].Direction = distsqlpb.Ordering_Column_Direction(rng.Int() % 2)
 
 					col := batch.ColVec(i).Int64()
-					for j := 0; i < ColBatchSize; i++ {
-						col[j] = rng.Int63() % int64((j*1024)+1)
+					for j := 0; j < ColBatchSize; j++ {
+						col[j] = rng.Int63() % int64((i*1024)+1)
 					}
 				}
 				b.ResetTimer()
@@ -222,6 +288,39 @@ func BenchmarkSort(b *testing.B) {
 							b.Fail()
 						}
 					}
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkAllSpooler(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
+		for _, nCols := range []int{1, 2, 4} {
+			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*ColBatchSize, nCols), func(b *testing.B) {
+				// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+				// batch) * nCols (number of columns / row).
+				b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols))
+				typs := make([]types.T, nCols)
+				for i := range typs {
+					typs[i] = types.Int64
+				}
+				batch := NewMemBatch(typs)
+				batch.SetLength(ColBatchSize)
+				for i := 0; i < nCols; i++ {
+					col := batch.ColVec(i).Int64()
+					for j := 0; j < ColBatchSize; j++ {
+						col[j] = rng.Int63() % int64((i*1024)+1)
+					}
+				}
+				b.ResetTimer()
+				for n := 0; n < b.N; n++ {
+					source := newFiniteBatchSource(batch, nBatches)
+					allSpooler := newAllSpooler(source, typs)
+					allSpooler.init()
+					allSpooler.spool()
 				}
 			})
 		}

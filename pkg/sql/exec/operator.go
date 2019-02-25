@@ -16,7 +16,9 @@ package exec
 
 // Operator is a column vector operator that produces a ColBatch as output.
 type Operator interface {
-	// Init initializes this operator. Will be called once at operator setup time.
+	// Init initializes this operator. Will be called once at operator setup
+	// time. If an operator has an input operator, it's responsible for calling
+	// Init on that input operator as well.
 	Init()
 
 	// Next returns the next ColBatch from this operator. Once the operator is
@@ -34,7 +36,9 @@ type noopOperator struct {
 
 var _ Operator = &noopOperator{}
 
-func (n *noopOperator) Init() {}
+func (n *noopOperator) Init() {
+	n.input.Init()
+}
 
 func (n *noopOperator) Next() ColBatch {
 	return n.input.Next()
