@@ -492,45 +492,87 @@ func TestQueryCache(t *testing.T) {
 func BenchmarkQueryCache(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 
-	for workload, workloadName := range []string{"GoodWorkload", "BadWorkload"} {
+	workloads := []string{"small", "large"}
+	methods := []string{"simple", "prepare-once", "prepare-each"}
+
+	run := func(
+		b *testing.B,
+		numClients int,
+		workloadIdx int,
+		methodIdx int,
+		cacheOn bool,
+	) {
+		h := makeQueryCacheTestHelper(b, numClients)
+		defer h.Stop()
+		r0 := h.runners[0]
+		r0.Exec(b, "CREATE TABLE kv (k INT PRIMARY KEY, v INT)")
+
+		r0.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.query_cache.enabled = %t", cacheOn))
+		var group errgroup.Group
+		b.ResetTimer()
+		for connIdx := 0; connIdx < numClients; connIdx++ {
+			c := h.conns[connIdx]
+			group.Go(func() error {
+				rng, _ := randutil.NewPseudoRand()
+				ctx := context.Background()
+				// We use a small or large range of values depending on the
+				// workload type.
+				valRange := 0
+				switch workloadIdx {
+				case 0: // small
+					valRange = 100
+				case 1: // large
+					valRange = 10000000
+				}
+				var stmt *gosql.Stmt
+				if methodIdx == 1 {
+					var err error
+					stmt, err = c.PrepareContext(ctx, "SELECT v FROM kv WHERE k=$1")
+					if err != nil {
+						return err
+					}
+				}
+
+				for i := 0; i < b.N/numClients; i++ {
+					val := rng.Intn(valRange)
+					var err error
+					switch methodIdx {
+					case 0: // simple
+						query := fmt.Sprintf("SELECT v FROM kv WHERE k=%d", val)
+						_, err = c.ExecContext(ctx, query)
+
+					case 1: // prepare-once
+						_, err = stmt.ExecContext(ctx, val)
+
+					case 2: // prepare-every-time
+						_, err = c.ExecContext(ctx, "SELECT v FROM kv WHERE k=$1", val)
+					}
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			if err := group.Wait(); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	for workload, workloadName := range workloads {
 		b.Run(workloadName, func(b *testing.B) {
 			for _, clients := range []int{1, 4, 8} {
-				b.Run(fmt.Sprintf("Clients%d", clients), func(b *testing.B) {
-					for _, cache := range []bool{true, false} {
-						name := "CacheOff"
-						if cache {
-							name = "CacheOn"
-						}
-						b.Run(name, func(b *testing.B) {
-							h := makeQueryCacheTestHelper(b, clients)
-							defer h.Stop()
-							r0 := h.runners[0]
-							r0.Exec(b, "CREATE TABLE kv (k INT PRIMARY KEY, v INT)")
-
-							r0.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.query_cache.enabled = %t", cache))
-							var group errgroup.Group
-							b.ResetTimer()
-							for connIdx := 0; connIdx < clients; connIdx++ {
-								c := h.conns[connIdx]
-								group.Go(func() error {
-									rng, _ := randutil.NewPseudoRand()
-									// We use a small or large range of values depending on the
-									// workload type.
-									valRange := 100
-									if workload == 1 {
-										valRange = 10000000
-									}
-									for i := 0; i < b.N/clients; i++ {
-										query := fmt.Sprintf("SELECT v FROM kv WHERE k=%d", rng.Intn(valRange))
-										if _, err := c.ExecContext(context.Background(), query); err != nil {
-											return err
-										}
-									}
-									return nil
-								})
-								if err := group.Wait(); err != nil {
-									b.Fatal(err)
+				b.Run(fmt.Sprintf("clients-%d", clients), func(b *testing.B) {
+					for method, methodName := range methods {
+						b.Run(methodName, func(b *testing.B) {
+							for _, cache := range []bool{false, true} {
+								name := "cache-off"
+								if cache {
+									name = "cache-on"
 								}
+								b.Run(name, func(b *testing.B) {
+									run(b, clients, workload, method, cache)
+								})
 							}
 						})
 					}
