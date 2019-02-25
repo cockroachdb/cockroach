@@ -50,9 +50,21 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return PhysicalPlan{}, errors.New("no stats requested")
 	}
 
+	// Calculate the set of columns we need to scan.
+	var colCfg scanColumnsConfig
+	var tableColSet util.FastIntSet
+	for _, s := range stats {
+		for _, c := range s.columns {
+			if !tableColSet.Contains(int(c)) {
+				tableColSet.Add(int(c))
+				colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(c))
+			}
+		}
+	}
+
 	// Create the table readers; for this we initialize a dummy scanNode.
 	scan := scanNode{desc: desc}
-	err := scan.initDescDefaults(nil /* planDependencies */, publicColumnsCfg)
+	err := scan.initDescDefaults(nil /* planDependencies */, colCfg)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -61,29 +73,13 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return PhysicalPlan{}, err
 	}
 
-	// Calculate the relevant columns.
-	scan.valNeededForCol = util.FastIntSet{}
-	var sampledColumnIDs []sqlbase.ColumnID
-	for _, s := range stats {
-		for _, c := range s.columns {
-			colIdx, ok := scan.colIdxMap[c]
-			if !ok {
-				return PhysicalPlan{}, errors.Errorf("unknown column ID %d", c)
-			}
-			if !scan.valNeededForCol.Contains(colIdx) {
-				scan.valNeededForCol.Add(colIdx)
-				sampledColumnIDs = append(sampledColumnIDs, c)
-			}
-		}
-	}
-
 	p, err := dsp.createTableReaders(planCtx, &scan, nil /* overrideResultColumns */)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
 
 	sketchSpecs := make([]distsqlpb.SketchSpec, len(stats))
-	post := p.GetLastStagePost()
+	sampledColumnIDs := make([]sqlbase.ColumnID, scan.valNeededForCol.Len())
 	for i, s := range stats {
 		spec := distsqlpb.SketchSpec{
 			SketchType:          distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
@@ -95,25 +91,11 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		for i, colID := range s.columns {
 			colIdx, ok := scan.colIdxMap[colID]
 			if !ok {
-				panic("columns should have been checked already")
+				panic("necessary column not scanned")
 			}
-			// The table readers can have a projection; we need to remap the column
-			// index accordingly.
-			if post.Projection {
-				found := false
-				for i, outColIdx := range post.OutputColumns {
-					if int(outColIdx) == colIdx {
-						// Column colIdx is the i-th output column.
-						colIdx = i
-						found = true
-						break
-					}
-				}
-				if !found {
-					panic("projection should include all needed columns")
-				}
-			}
-			spec.Columns[i] = uint32(colIdx)
+			streamColIdx := p.PlanToStreamColMap[colIdx]
+			spec.Columns[i] = uint32(streamColIdx)
+			sampledColumnIDs[streamColIdx] = colID
 		}
 
 		sketchSpecs[i] = spec
@@ -182,9 +164,12 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	details := job.Details().(jobspb.CreateStatsDetails)
 	stats := make([]requestedStat, len(details.ColumnLists))
 	for i := 0; i < len(stats); i++ {
+		// Currently we do not use histograms, so don't bother creating one for
+		// automatic stats.
+		histogram := len(details.ColumnLists[i].IDs) == 1 && details.Name != sqlstats.AutoStatsName
 		stats[i] = requestedStat{
 			columns:             details.ColumnLists[i].IDs,
-			histogram:           len(details.ColumnLists[i].IDs) == 1,
+			histogram:           histogram,
 			histogramMaxBuckets: histogramBuckets,
 			name:                string(details.Name),
 		}

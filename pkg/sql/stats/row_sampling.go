@@ -94,7 +94,7 @@ func (sr *SampleReservoir) SampleRow(row sqlbase.EncDatumRow, rank uint64) error
 		return nil
 	}
 	// Replace the max rank if ours is smaller.
-	if rank < sr.samples[0].Rank {
+	if len(sr.samples) > 0 && rank < sr.samples[0].Rank {
 		if err := sr.copyRow(sr.samples[0].Row, row); err != nil {
 			return err
 		}

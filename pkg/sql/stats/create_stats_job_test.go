@@ -71,7 +71,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE d.t (x INT)`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
 
 	t.Run("cancel", func(t *testing.T) {
@@ -397,7 +397,7 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE d.t (x INT)`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
 
 	var ts1 []uint8
 	sqlDB.QueryRow(t, `
