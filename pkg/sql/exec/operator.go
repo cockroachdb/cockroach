@@ -34,7 +34,9 @@ type noopOperator struct {
 
 var _ Operator = &noopOperator{}
 
-func (n *noopOperator) Init() {}
+func (n *noopOperator) Init() {
+	n.input.Init()
+}
 
 func (n *noopOperator) Next() ColBatch {
 	return n.input.Next()
