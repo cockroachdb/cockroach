@@ -20,6 +20,8 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
 __auto__         {d}           1000       0               1000
 
 # Disable automatic stats
@@ -37,6 +39,8 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
 __auto__         {d}           1000       0               1000
 
 # Enable automatic stats
@@ -54,6 +58,10 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
 __auto__         {a}           1000       11              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1000       10              0
 __auto__         {d}           1000       0               1000
 __auto__         {d}           1000       1               910
 
@@ -71,6 +79,12 @@ statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
 __auto__         {a}           1000       11              0
 __auto__         {a}           1019       12              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1019       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1019       10              0
 __auto__         {d}           1000       0               1000
 __auto__         {d}           1000       1               910
 __auto__         {d}           1019       2               819
@@ -88,6 +102,14 @@ __auto__         {a}           1000       10              0
 __auto__         {a}           1000       11              0
 __auto__         {a}           1019       12              0
 __auto__         {a}           519        12              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1019       10              0
+__auto__         {b}           519        10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1019       10              0
+__auto__         {c}           519        5               0
 __auto__         {d}           1000       0               1000
 __auto__         {d}           1000       1               910
 __auto__         {d}           1019       2               819
@@ -103,6 +125,10 @@ FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           519        12              0
+__auto__         {b}           519        10              0
+__auto__         {c}           519        5               0
+__auto__         {d}           519        2               364
+__auto__         {rowid}       519        519             0
 
 # Test fast path delete.
 statement ok
@@ -115,3 +141,11 @@ FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           519        12              0
 __auto__         {a}           0          0               0
+__auto__         {b}           519        10              0
+__auto__         {b}           0          0               0
+__auto__         {c}           519        5               0
+__auto__         {c}           0          0               0
+__auto__         {d}           519        2               364
+__auto__         {d}           0          0               0
+__auto__         {rowid}       519        519             0
+__auto__         {rowid}       0          0               0

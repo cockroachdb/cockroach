@@ -49,9 +49,9 @@ func TestMaybeRefreshStats(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
 		`CREATE DATABASE t;
-		CREATE TABLE t.a (k INT PRIMARY KEY, v CHAR);
-		INSERT INTO t.a VALUES (1, 'a');
-		CREATE VIEW t.vw AS SELECT k, v FROM t.a;`)
+		CREATE TABLE t.a (k INT PRIMARY KEY);
+		INSERT INTO t.a VALUES (1);
+		CREATE VIEW t.vw AS SELECT k, k+1 FROM t.a;`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	descA := sqlbase.GetTableDescriptor(s.DB(), "t", "a")
@@ -114,8 +114,8 @@ func TestAverageRefreshTime(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
 		`CREATE DATABASE t;
-		CREATE TABLE t.a (k INT PRIMARY KEY, v CHAR);
-		INSERT INTO t.a VALUES (1, 'a');`)
+		CREATE TABLE t.a (k INT PRIMARY KEY);
+		INSERT INTO t.a VALUES (1);`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	tableID := sqlbase.GetTableDescriptor(s.DB(), "t", "a").ID
@@ -328,7 +328,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
 		`CREATE DATABASE t;
-		CREATE TABLE t.a (k INT PRIMARY KEY, v CHAR);`)
+		CREATE TABLE t.a (k INT PRIMARY KEY);`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(10 /* cacheSize */, s.Gossip(), kvDB, executor)
@@ -391,6 +391,35 @@ func TestMutationsChannel(t *testing.T) {
 	if expected, actual := refreshChanBufferLen, len(r.mutations); expected != actual {
 		t.Fatalf("expected channel size %d but found %d", expected, actual)
 	}
+}
+
+func TestDefaultColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (c0 INT PRIMARY KEY);`)
+
+	for i := 1; i < 110; i++ {
+		// Add more columns than we will collect stats on.
+		sqlRun.Exec(t,
+			fmt.Sprintf("ALTER TABLE t.a ADD COLUMN c%d INT", i))
+	}
+
+	sqlRun.Exec(t, `CREATE STATISTICS s FROM t.a`)
+
+	// There should be 101 stats. One for the primary index, plus 100 other
+	// columns.
+	sqlRun.CheckQueryResults(t,
+		`SELECT count(*) FROM [SHOW STATISTICS FOR TABLE t.a] WHERE statistics_name = 's'`,
+		[][]string{
+			{"101"},
+		})
 }
 
 func checkStatsCount(
