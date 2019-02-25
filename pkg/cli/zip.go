@@ -271,26 +271,30 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					}
 				}
 
-				var stacks *serverpb.JSONResponse
+				var stacksData []byte
 				err = contextutil.RunWithTimeout(baseCtx, "request stacks", timeout,
 					func(ctx context.Context) error {
-						stacks, err = status.Stacks(ctx, &serverpb.StacksRequest{NodeId: id})
+						stacks, err := status.Stacks(ctx, &serverpb.StacksRequest{NodeId: id})
+						if err != nil {
+							stacksData = stacks.Data
+						}
 						return err
 					})
-				if err := z.createRawOrError(prefix+"/stacks", stacks.Data, err); err != nil {
+				if err := z.createRawOrError(prefix+"/stacks", stacksData, err); err != nil {
 					return err
 				}
 
-				var heap *serverpb.JSONResponse
+				var heapData []byte
 				err = contextutil.RunWithTimeout(baseCtx, "request heap profile", timeout,
 					func(ctx context.Context) error {
-						heap, err = status.Profile(ctx, &serverpb.ProfileRequest{
+						heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
 							NodeId: id,
 							Type:   serverpb.ProfileRequest_HEAP,
 						})
+						heapData = heap.Data
 						return err
 					})
-				if err := z.createRawOrError(prefix+"/heap", heap.Data, err); err != nil {
+				if err := z.createRawOrError(prefix+"/heap", heapData, err); err != nil {
 					return err
 				}
 
