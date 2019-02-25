@@ -634,6 +634,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// > recreated. The most interesting example is the commit index, which can
 	// > safely be reinitialized to zero on a restart.
 	msgApps, otherMsgs := splitMsgApps(rd.Messages)
+	r.traceMessageSends(msgApps, "sending msgApp")
 	r.sendRaftMessages(ctx, msgApps)
 
 	// Use a more efficient write-only batch because we don't need to do any
@@ -739,9 +740,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update raft log entry cache. We clear any older, uncommitted log entries
 	// and cache the latest ones.
 	r.store.raftEntryCache.Add(r.RangeID, rd.Entries)
-
+	r.traceMessageSends(otherMsgs, "sending otherMsgs")
 	r.sendRaftMessages(ctx, otherMsgs)
-
+	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 	for _, e := range rd.CommittedEntries {
 		switch e.Type {
 		case raftpb.EntryNormal:
@@ -848,6 +849,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			log.Fatalf(ctx, "unexpected Raft entry: %v", e)
 		}
 	}
+	r.traceEntries(rd.CommittedEntries, "committed, after applying all entries")
 	if refreshReason != noReason {
 		r.mu.Lock()
 		r.refreshProposalsLocked(0, refreshReason)
