@@ -26,7 +26,8 @@ package exec
 import (
 	"bytes"
 	"fmt"
-	"math"
+	"reflect"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,8 +38,11 @@ import (
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
 
-// Dummy import to pull in "math" package
-var _ = math.Pi
+// Dummy import to pull in "unsafe" package
+var _ unsafe.Pointer
+
+// Dummy import to pull in "reflect" package
+var _ reflect.SliceHeader
 
 // Dummy import to pull in "bytes" package.
 var _ bytes.Buffer
@@ -140,9 +144,9 @@ func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _SEL_STRIN
 	// {{define "rehashBody"}}
 	for i := uint64(0); i < nKeys; i++ {
 		v := keys[_SEL_IND]
-		var hash uint64
-		_ASSIGN_HASH(hash, v)
-		buckets[i] = buckets[i]*31 + hash
+		p := uintptr(buckets[i])
+		_ASSIGN_HASH(p, v)
+		buckets[i] = uint64(p)
 	}
 	// {{end}}
 
