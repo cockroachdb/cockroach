@@ -17,8 +17,7 @@ package exec
 // Operator is a column vector operator that produces a ColBatch as output.
 type Operator interface {
 	// Init initializes this operator. Will be called once at operator setup time.
-	Init()
-
+	Initializer
 	// Next returns the next ColBatch from this operator. Once the operator is
 	// finished, it will return a ColBatch with length 0. Subsequent calls to
 	// Next at that point will always return a ColBatch with length 0.
@@ -28,13 +27,20 @@ type Operator interface {
 	Next() ColBatch
 }
 
+type Initializer interface {
+	// Init will be called once at a setup time.
+	Init()
+}
+
 type noopOperator struct {
 	input Operator
 }
 
 var _ Operator = &noopOperator{}
 
-func (n *noopOperator) Init() {}
+func (n *noopOperator) Init() {
+	n.input.Init()
+}
 
 func (n *noopOperator) Next() ColBatch {
 	return n.input.Next()
