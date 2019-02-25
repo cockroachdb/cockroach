@@ -216,8 +216,8 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			// The second time though we had to make a copy of the SST since rocks saw
 			// existing data (from the first time), and rejected the no-modification
 			// attempt.
-			if after := metrics.AddSSTableApplicationCopies.Count(); before >= after {
-				t.Fatalf("expected sst copies to increase, %d before %d after", before, after)
+			if after := metrics.AddSSTableApplicationCopies.Count(); before != after {
+				t.Fatalf("expected sst copies not to increase, %d before %d after", before, after)
 			}
 		}
 	}
@@ -373,7 +373,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		if err := e.WriteFile(filename, sstBytes); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := e.IngestExternalFiles(ctx, []string{filename}, true /* modify the sst */); err != nil {
+		if err := e.IngestExternalFiles(ctx, []string{filename}, true /* skip writing global seqno */, true /* modify the sst */); err != nil {
 			t.Fatalf("%+v", err)
 		}
 

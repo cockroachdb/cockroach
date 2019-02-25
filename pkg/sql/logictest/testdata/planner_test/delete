@@ -61,7 +61,7 @@ tree               field  description
 count              ·      ·
  └── delete range  ·      ·
 ·                  from   unindexed
-·                  spans  -
+·                  spans  ALL
 
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
