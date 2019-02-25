@@ -118,6 +118,8 @@ type Meta struct {
 	Name string
 	// Description is a short description of this generator.
 	Description string
+	// Details optionally allows specifying longer, more in-depth usage details.
+	Details string
 	// Version is a semantic version for this generator. It should be bumped
 	// whenever InitialRowFn or InitialRowCount change for any of the tables.
 	Version string
