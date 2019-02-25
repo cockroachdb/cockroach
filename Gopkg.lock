@@ -1029,6 +1029,13 @@
   revision = "9f7362b77ad333b26c01c99de52a11bdb650ded2"
 
 [[projects]]
+  digest = "1:2eeeebccad4f052e6037527e86b8114c6bfd184a97f84d4449a5ea6ad202c216"
+  name = "github.com/maruel/panicparse"
+  packages = ["stack"]
+  pruneopts = "UT"
+  revision = "f20d4c4d746f810c9110e21928d4135e1f2a3efa"
+
+[[projects]]
   digest = "1:130d1249f8a867da8115c3de6cddf0ac29ca405117c88aa1541db690384a51c6"
   name = "github.com/marusama/semaphore"
   packages = ["."]
@@ -1786,6 +1793,7 @@
     "github.com/lightstep/lightstep-tracer-go",
     "github.com/linkedin/goavro",
     "github.com/lufia/iostat",
+    "github.com/maruel/panicparse/stack",
     "github.com/marusama/semaphore",
     "github.com/mattn/go-isatty",
     "github.com/mattn/goveralls",

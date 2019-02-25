@@ -36,6 +36,10 @@ ignored = [
   name = "github.com/docker/docker"
   branch = "master"
 
+[[constraint]]
+  name = "github.com/maruel/panicparse"
+  revision = "f20d4c4d746f810c9110e21928d4135e1f2a3efa"
+
 # https://github.com/getsentry/raven-go/pull/139
 [[constraint]]
   name = "github.com/getsentry/raven-go"
