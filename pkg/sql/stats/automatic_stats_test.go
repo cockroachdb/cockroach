@@ -393,6 +393,35 @@ func TestMutationsChannel(t *testing.T) {
 	}
 }
 
+func TestDefaultColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (c0 INT PRIMARY KEY);`)
+
+	for i := 1; i < 110; i++ {
+		// Add more columns than we will collect stats on.
+		sqlRun.Exec(t,
+			fmt.Sprintf("ALTER TABLE t.a ADD COLUMN c%d INT", i))
+	}
+
+	sqlRun.Exec(t, `CREATE STATISTICS s FROM t.a`)
+
+	// There should be 101 stats. One for the primary index, plus 100 other
+	// columns.
+	sqlRun.CheckQueryResults(t,
+		`SELECT count(*) FROM [SHOW STATISTICS FOR TABLE t.a] WHERE statistics_name = 's'`,
+		[][]string{
+			{"101"},
+		})
+}
+
 func checkStatsCount(
 	ctx context.Context, cache *TableStatisticsCache, tableID sqlbase.ID, expected int,
 ) error {

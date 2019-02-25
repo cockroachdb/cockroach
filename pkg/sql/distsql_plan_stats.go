@@ -180,8 +180,9 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	stats := make([]requestedStat, len(details.ColumnLists))
 	for i := 0; i < len(stats); i++ {
 		stats[i] = requestedStat{
-			columns:             details.ColumnLists[i].IDs,
-			histogram:           len(details.ColumnLists[i].IDs) == 1,
+			columns: details.ColumnLists[i].IDs,
+			// Currently we do not use histograms, so don't bother creating one.
+			histogram:           false,
 			histogramMaxBuckets: histogramBuckets,
 			name:                string(details.Name),
 		}
