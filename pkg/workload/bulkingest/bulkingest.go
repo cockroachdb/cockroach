@@ -88,7 +88,7 @@ type bulkingest struct {
 }
 
 func init() {
-	workload.Register(bulkingestMeta)
+	workload.RegisterInternal(bulkingestMeta)
 }
 
 var bulkingestMeta = workload.Meta{

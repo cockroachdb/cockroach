@@ -121,6 +121,11 @@ type Meta struct {
 	// Version is a semantic version for this generator. It should be bumped
 	// whenever InitialRowFn or InitialRowCount change for any of the tables.
 	Version string
+	// Internal indicates that this workload is primarily intended for use by the
+	// developers of cockroachdb (as opposed to developers and users doing their
+	// own evaluations) and thus may not be as well documented or publicized (e.g.
+	// in command-line help) as other workloads.
+	Internal bool
 	// New returns an unconfigured instance of this generator.
 	New func() Generator
 }
@@ -202,6 +207,12 @@ func Register(m Meta) {
 		panic(m.Name + " is already registered")
 	}
 	registered[m.Name] = m
+}
+
+// RegisterInternal marks a workload as for internal usage and registers it.
+func RegisterInternal(m Meta) {
+	m.Internal = true
+	Register(m)
 }
 
 // Get returns the registered Generator with the given name, if it exists.
