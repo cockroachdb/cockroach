@@ -448,8 +448,8 @@ C_LIBS_COMMON = $(if $(use-stdmalloc),,$(LIBJEMALLOC)) $(LIBPROTOBUF) $(LIBSNAPP
 C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBROACH)
 C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL)
 
-# We only include krb5 on linux.
-ifeq "$(findstring linux,$(TARGET_TRIPLE))" "linux"
+# We only include krb5 on linux, non-musl builds.
+ifeq "$(findstring linux-gnu,$(TARGET_TRIPLE))" "linux-gnu"
 C_LIBS_CCL += $(LIBKRB5)
 KRB_CPPFLAGS := -I$(KRB5_DIR)/include
 KRB_DIR := $(KRB5_DIR)/lib

@@ -369,7 +369,7 @@ func runMVCCConditionalPut(
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCConditionalPut(ctx, eng, nil, key, ts, value, expected, nil); err != nil {
+		if err := MVCCConditionalPut(ctx, eng, nil, key, ts, value, expected, CPutFailIfMissing, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
 		}
 	}
@@ -391,7 +391,7 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindConditionalPut(ctx, eng, nil, key, ts, value, nil, nil); err != nil {
+		if err := MVCCBlindConditionalPut(ctx, eng, nil, key, ts, value, nil, CPutFailIfMissing, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
 		}
 	}
