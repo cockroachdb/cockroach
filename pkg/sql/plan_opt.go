@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -223,6 +224,12 @@ func (opc *optPlanningCtx) init(p *planner, AST tree.Statement) {
 		opc.allowMemoReuse = !p.Tables().hasUncommittedTables()
 		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 
+		if _, isCanned := AST.(*tree.CannedOptPlan); isCanned {
+			// It's unsafe to use the cache, since PREPARE AS OPT PLAN doesn't track
+			// dependencies and check permissions.
+			opc.useCache = false
+		}
+
 	default:
 		opc.allowMemoReuse = false
 		opc.useCache = false
@@ -250,10 +257,18 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	p := opc.p
 
 	_, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan)
-	if isCanned && !p.EvalContext().SessionData.AllowPrepareAsOptPlan {
-		return nil, false, errors.Errorf(
-			"PREPARE AS OPT PLAN is a testing facility that should not be used directly",
-		)
+	if isCanned {
+		if !p.EvalContext().SessionData.AllowPrepareAsOptPlan {
+			return nil, false, errors.Errorf(
+				"PREPARE AS OPT PLAN is a testing facility that should not be used directly",
+			)
+		}
+
+		if p.SessionData().User != security.RootUser {
+			return nil, false, errors.Errorf(
+				"PREPARE AS OPT PLAN may only be used by root",
+			)
+		}
 	}
 
 	// Build the Memo (optbuild) and apply normalization rules to it. If the
