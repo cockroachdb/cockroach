@@ -1612,11 +1612,11 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::roachpb::TransactionStatus status() const;
   void set_status(::cockroach::roachpb::TransactionStatus value);
 
-  // bool writing = 9;
-  void clear_writing();
-  static const int kWritingFieldNumber = 9;
-  bool writing() const;
-  void set_writing(bool value);
+  // bool deprecated_writing = 9;
+  void clear_deprecated_writing();
+  static const int kDeprecatedWritingFieldNumber = 9;
+  bool deprecated_writing() const;
+  void set_deprecated_writing(bool value);
 
   // bool write_too_old = 12;
   void clear_write_too_old();
@@ -1644,7 +1644,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* epoch_zero_timestamp_;
   ::cockroach::util::hlc::Timestamp* refreshed_timestamp_;
   int status_;
-  bool writing_;
+  bool deprecated_writing_;
   bool write_too_old_;
   bool orig_timestamp_was_observed_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
@@ -3996,18 +3996,18 @@ Transaction::observed_timestamps() const {
   return observed_timestamps_;
 }
 
-// bool writing = 9;
-inline void Transaction::clear_writing() {
-  writing_ = false;
+// bool deprecated_writing = 9;
+inline void Transaction::clear_deprecated_writing() {
+  deprecated_writing_ = false;
 }
-inline bool Transaction::writing() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.writing)
-  return writing_;
+inline bool Transaction::deprecated_writing() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.deprecated_writing)
+  return deprecated_writing_;
 }
-inline void Transaction::set_writing(bool value) {
+inline void Transaction::set_deprecated_writing(bool value) {
   
-  writing_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.writing)
+  deprecated_writing_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.deprecated_writing)
 }
 
 // bool write_too_old = 12;

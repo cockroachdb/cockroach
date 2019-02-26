@@ -76,7 +76,9 @@ func (tc *TxnCoordSender) isTracking() bool {
 	return tc.interceptorAlloc.txnHeartbeater.mu.txnEnd != nil
 }
 
-// Test that the Transaction.Writing flag is set after performing any writes.
+// Test that the Transaction.DeprecatedWriting flag is set after performing any
+// writes.
+// TODO(nvanbenschoten): Remove this in 19.2.
 func TestTxnCoordSenderSetWritingFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
@@ -87,7 +89,7 @@ func TestTxnCoordSenderSetWritingFlag(t *testing.T) {
 	if err := txn.Put(ctx, roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if !txn.Serialize().Writing {
+	if !txn.Serialize().DeprecatedWriting {
 		t.Fatal("txn is not marked as writing")
 	}
 }
