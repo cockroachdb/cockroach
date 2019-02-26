@@ -444,6 +444,7 @@ func TestLint(t *testing.T) {
 			":!server/debug/**",
 			":!workload/**",
 			":!*_test.go",
+			":!cli/debug_synctest.go",
 			":!cmd/**",
 		)
 		if err != nil {
