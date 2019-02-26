@@ -106,7 +106,7 @@ func entries(
 	e engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	sideloaded sideloadStorage,
+	sideloaded SideloadStorage,
 	lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	if lo > hi {
@@ -424,7 +424,7 @@ func (r *Replica) GetSnapshot(
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
-	withSideloaded := func(fn func(sideloadStorage) error) error {
+	withSideloaded := func(fn func(SideloadStorage) error) error {
 		r.raftMu.Lock()
 		defer r.raftMu.Unlock()
 		return fn(r.raftMu.sideloaded)
@@ -461,7 +461,7 @@ type OutgoingSnapshot struct {
 	// this isn't a snapshot of the sideloaded storage congruent with EngineSnap
 	// or RaftSnap -- a log truncation could have removed files from the
 	// sideloaded storage in the meantime.
-	WithSideloaded func(func(sideloadStorage) error) error
+	WithSideloaded func(func(SideloadStorage) error) error
 	RaftEntryCache *raftentry.Cache
 	snapType       string
 	onClose        func()
@@ -511,7 +511,7 @@ func snapshot(
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	withSideloaded func(func(sideloadStorage) error) error,
+	withSideloaded func(func(SideloadStorage) error) error,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
 	var desc roachpb.RangeDescriptor

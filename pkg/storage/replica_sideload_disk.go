@@ -29,7 +29,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-var _ sideloadStorage = &diskSideloadStorage{}
+var _ SideloadStorage = &diskSideloadStorage{}
 
 type diskSideloadStorage struct {
 	st         *cluster.Settings
@@ -84,7 +84,7 @@ func exists(path string) (bool, error) {
 // The method is aware of the "new" naming scheme that is not dependent on the
 // replicaID (see sideloadedPath) and will not touch them.
 func moveSideloadedData(
-	prevSideloaded sideloadStorage, base string, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+	prevSideloaded SideloadStorage, base string, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
 ) error {
 	if prevSideloaded == nil || prevSideloaded.Dir() == "" {
 		// No storage or in-memory storage.
