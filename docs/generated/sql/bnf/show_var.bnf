@@ -12,6 +12,7 @@ show_stmt ::=
 	| show_ranges_stmt
 	| show_roles_stmt
 	| show_schemas_stmt
+	| show_sequences_stmt
 	| show_session_stmt
 	| show_sessions_stmt
 	| show_stats_stmt

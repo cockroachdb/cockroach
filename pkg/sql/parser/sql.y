@@ -716,6 +716,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_ranges_stmt
 %type <tree.Statement> show_roles_stmt
 %type <tree.Statement> show_schemas_stmt
+%type <tree.Statement> show_sequences_stmt
 %type <tree.Statement> show_session_stmt
 %type <tree.Statement> show_sessions_stmt
 %type <tree.Statement> show_stats_stmt
@@ -3012,9 +3013,10 @@ zone_value:
 // %Category: Group
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
-// SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW JOBS,
-// SHOW QUERIES, SHOW ROLES, SHOW SESSION, SHOW SESSIONS, SHOW STATISTICS,
-// SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS
+// SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW
+// JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW
+// SESSION, SHOW SESSIONS, SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES,
+// SHOW TRACE SHOW TRANSACTION, SHOW USERS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -3031,6 +3033,7 @@ show_stmt:
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
 | show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
+| show_sequences_stmt       // EXTEND WITH HELP: SHOW SEQUENCES
 | show_session_stmt         // EXTEND WITH HELP: SHOW SESSION
 | show_sessions_stmt        // EXTEND WITH HELP: SHOW SESSIONS
 | show_stats_stmt           // EXTEND WITH HELP: SHOW STATISTICS
@@ -3372,6 +3375,20 @@ show_schemas_stmt:
     $$.val = &tree.ShowSchemas{}
   }
 | SHOW SCHEMAS error // SHOW HELP: SHOW SCHEMAS
+
+// %Help: SHOW SEQUENCES - list sequences
+// %Category: DDL
+// %Text: SHOW SEQUENCES [FROM <databasename> ]
+show_sequences_stmt:
+  SHOW SEQUENCES FROM name
+  {
+    $$.val = &tree.ShowSequences{Database: tree.Name($4)}
+  }
+| SHOW SEQUENCES
+  {
+    $$.val = &tree.ShowSequences{}
+  }
+| SHOW SEQUENCES error // SHOW HELP: SHOW SEQUENCES
 
 // %Help: SHOW SYNTAX - analyze SQL syntax
 // %Category: Misc
