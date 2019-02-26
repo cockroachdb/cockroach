@@ -257,11 +257,23 @@ echo "ext {
 		fmt.Fprintf(&bResults, "%d Total Tests Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
 		)
-		fmt.Fprintf(&bResults, "%d tests passed\n", passUnexpectedCount+passExpectedCount)
-		fmt.Fprintf(&bResults, "%d tests failed\n", failUnexpectedCount+failExpectedCount)
-		fmt.Fprintf(&bResults, "%d tests passed unexpectedly\n", passUnexpectedCount)
-		fmt.Fprintf(&bResults, "%d tests failed unexpectedly\n", failUnexpectedCount)
-		fmt.Fprintf(&bResults, "%d tests expected failed, but not run \n", notRunCount)
+		fmt.Fprintf(&bResults, "%d %s passed\n",
+			passUnexpectedCount+passExpectedCount,
+			plural("test", "tests", passUnexpectedCount+passExpectedCount),
+		)
+		fmt.Fprintf(&bResults, "%d %s failed\n",
+			failUnexpectedCount+failExpectedCount,
+			plural("test", "tests", failUnexpectedCount+failExpectedCount),
+		)
+		fmt.Fprintf(&bResults, "%d %s passed unexpectedly\n",
+			passUnexpectedCount, plural("test", "tests", passUnexpectedCount),
+		)
+		fmt.Fprintf(&bResults, "%d %s failed unexpectedly\n",
+			failUnexpectedCount, plural("test", "tests", failUnexpectedCount),
+		)
+		fmt.Fprintf(&bResults, "%d %s expected failed, but not run \n",
+			notRunCount, plural("test", "tests", notRunCount),
+		)
 		fmt.Fprintf(&bResults, "For a full summary look at the hibernate artifacts \n")
 		t.l.Printf("%s\n", bResults.String())
 		t.l.Printf("------------------------\n")
@@ -355,4 +367,12 @@ func maybeAddGithubLink(issue string) string {
 		return issue
 	}
 	return fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issueNum)
+}
+
+// plural returns the appropriate string based on the passed in number.
+func plural(singular string, plural string, num int) string {
+	if num == 1 {
+		return singular
+	}
+	return plural
 }
