@@ -490,26 +490,32 @@ func (rlq *raftLogQueue) shouldQueue(
 	return shouldQ, prio
 }
 
+// shouldQueueImpl returns whether the given truncate decision should lead to
+// a log truncation. This is either the case if the decision says so or of
+// we want to recompute the log size (in which case `recomputeRaftLogSize` and
+// `shouldQ` are both true and a reasonable priority is returned).
 func (rlq *raftLogQueue) shouldQueueImpl(
 	ctx context.Context, decision truncateDecision,
-) (shouldQ bool, recompute bool, priority float64) {
+) (shouldQ bool, recomputeRaftLogSize bool, priority float64) {
 	if decision.ShouldTruncate() {
 		return true, false, float64(decision.Input.LogSize)
 	}
+	// NB: this should work all the same without Raft leadership, but it's not
+	// not
 	if decision.Input.LogSize > 0 ||
 		(decision.Input.RaftStatus.RaftState != raft.StateLeader) ||
 		decision.Input.LastIndex == decision.Input.FirstIndex {
 
 		return false, false, 0
 	}
-	// We have a nonempty log and think that its size is zero, which can't be
-	// true (even an empty entry's Size() is nonzero). We queue the replica;
-	// processing it will force a recomputation. For the priority, we have to
-	// pick one as we usually use the log size which is not available here.
-	// Going half-way between zero and the MaxLogSize should give a good
-	// tradeoff between processing the recomputation quickly, and not starving
-	// replicas which see a significant amount of write traffic until they run
-	// over and truncate more aggressively than they need to.
+	// We have a nonempty log (first index != last index) and think that its size is
+	// zero, which can't be true (even an empty entry's Size() is nonzero). We queue
+	// the replica; processing it will force a recomputation. For the priority, we
+	// have to pick one as we usually use the log size which is not available here.
+	// Going half-way between zero and the MaxLogSize should give a good tradeoff
+	// between processing the recomputation quickly, and not starving replicas which
+	// see a significant amount of write traffic until they run over and truncate
+	// more aggressively than they need to.
 	return true, true, 1.0 + float64(decision.Input.MaxLogSize)/2.0
 }
 
@@ -529,7 +535,7 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 		// make sure concurrent Raft activity doesn't foul up our update to the
 		// cached in-memory values.
 		r.raftMu.Lock()
-		n, err := ComputeRaftLogSize(r.RangeID, r.Engine(), r.raftMu.sideloaded)
+		n, err := ComputeRaftLogSize(ctx, r.RangeID, r.Engine(), r.raftMu.sideloaded)
 		if err == nil {
 			r.mu.Lock()
 			r.mu.raftLogSize = n

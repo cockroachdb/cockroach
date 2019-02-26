@@ -363,7 +363,7 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize
 	r.mu.Unlock()
-	actualRaftLogSize, err := ComputeRaftLogSize(r.RangeID, r.Engine(), r.SideloadedRaftMuLocked())
+	actualRaftLogSize, err := ComputeRaftLogSize(context.Background(), r.RangeID, r.Engine(), r.SideloadedRaftMuLocked())
 	if err != nil {
 		t.Fatal(err)
 	}
