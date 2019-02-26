@@ -176,10 +176,12 @@ func (ss *diskSideloadStorage) createDir() error {
 	return err
 }
 
+// Dir implements SideloadStorage.
 func (ss *diskSideloadStorage) Dir() string {
 	return ss.dir
 }
 
+// Put implements SideloadStorage.
 func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, contents []byte) error {
 	filename := ss.filename(ctx, index, term)
 	// There's a chance the whole path is missing (for example after Clear()),
@@ -201,6 +203,7 @@ func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 	}
 }
 
+// Get implements SideloadStorage.
 func (ss *diskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]byte, error) {
 	filename := ss.filename(ctx, index, term)
 	b, err := ss.eng.ReadFile(filename)
@@ -210,6 +213,7 @@ func (ss *diskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]b
 	return b, err
 }
 
+// Filename implements SideloadStorage.
 func (ss *diskSideloadStorage) Filename(ctx context.Context, index, term uint64) (string, error) {
 	return ss.filename(ctx, index, term), nil
 }
@@ -218,6 +222,7 @@ func (ss *diskSideloadStorage) filename(ctx context.Context, index, term uint64)
 	return filepath.Join(ss.dir, fmt.Sprintf("i%d.t%d", index, term))
 }
 
+// Purge implements SideloadStorage.
 func (ss *diskSideloadStorage) Purge(ctx context.Context, index, term uint64) (int64, error) {
 	return ss.purgeFile(ctx, ss.filename(ctx, index, term))
 }
@@ -252,12 +257,14 @@ func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 	return size, nil
 }
 
+// Clear implements SideloadStorage.
 func (ss *diskSideloadStorage) Clear(_ context.Context) error {
 	err := ss.eng.DeleteDirAndFiles(ss.dir)
 	ss.dirCreated = ss.dirCreated && err != nil
 	return err
 }
 
+// TruncateTo implements SideloadStorage.
 func (ss *diskSideloadStorage) TruncateTo(
 	ctx context.Context, firstIndex uint64,
 ) (bytesFreed, bytesRetained int64, _ error) {
@@ -283,6 +290,8 @@ func (ss *diskSideloadStorage) TruncateTo(
 	}
 
 	if deletedAll {
+		// The directory may not exist, or it may exist and have been empty.
+		// Not worth trying to figure out which one, just try to delete.
 		err := os.Remove(ss.dir)
 		if !os.IsNotExist(err) {
 			return bytesFreed, 0, errors.Wrapf(err, "while purging %q", ss.dir)
@@ -305,11 +314,11 @@ func (ss *diskSideloadStorage) forEach(
 		}
 		base = base[1:]
 		upToDot := strings.SplitN(base, ".", 2)
-		i, err := strconv.ParseUint(upToDot[0], 10, 64)
+		logIdx, err := strconv.ParseUint(upToDot[0], 10, 64)
 		if err != nil {
 			return errors.Wrapf(err, "while parsing %q during TruncateTo", match)
 		}
-		if err := visit(i, match); err != nil {
+		if err := visit(logIdx, match); err != nil {
 			return errors.Wrap(err, match)
 		}
 	}
