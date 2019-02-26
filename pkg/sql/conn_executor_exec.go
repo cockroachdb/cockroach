@@ -1045,12 +1045,16 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.stmtType = recv.stmtType
 
 	if len(planner.curPlan.subqueryPlans) != 0 {
+		var evalCtx extendedEvalContext
+		ex.initEvalCtx(ctx, &evalCtx, planner)
 		evalCtxFactory := func() *extendedEvalContext {
-			evalCtx := ex.evalCtx(ctx, planner, planner.ExtendedEvalContext().StmtTimestamp)
+			ex.resetEvalCtx(&evalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			evalCtx.Placeholders = &planner.semaCtx.Placeholders
 			return &evalCtx
 		}
-		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute) {
+		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
+			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute,
+		) {
 			return recv.commErr
 		}
 	}
