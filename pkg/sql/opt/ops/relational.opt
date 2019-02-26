@@ -229,6 +229,8 @@ define AntiJoin {
 # variants, but excluding IndexJoin, LookupJoin, MergeJoin.
 [Private]
 define JoinPrivate {
+    # Flags modify what type of join we choose.
+    Flags JoinFlags
 }
 
 # IndexJoin represents an inner join between an input expression and a primary

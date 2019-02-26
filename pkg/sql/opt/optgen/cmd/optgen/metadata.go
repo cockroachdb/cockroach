@@ -159,6 +159,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"TupleOrdinal":   {fullName: "memo.TupleOrdinal", passByVal: true},
 		"ScanLimit":      {fullName: "memo.ScanLimit", passByVal: true},
 		"ScanFlags":      {fullName: "memo.ScanFlags", passByVal: true},
+		"JoinFlags":      {fullName: "memo.JoinFlags", passByVal: true},
 		"ExplainOptions": {fullName: "tree.ExplainOptions", passByVal: true},
 		"StatementType":  {fullName: "tree.StatementType", passByVal: true},
 		"ShowTraceType":  {fullName: "tree.ShowTraceType", passByVal: true},
