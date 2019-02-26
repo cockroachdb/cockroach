@@ -533,22 +533,27 @@ func (t *multiTestContextKVTransport) SendNext(
 	// would happen with real RPCs.
 	t.mtc.mu.RLock()
 	s := t.mtc.stoppers[nodeIndex]
+	sender := t.mtc.senders[nodeIndex]
 	t.mtc.mu.RUnlock()
+
 	if s == nil {
 		t.setPending(rep.ReplicaID, false)
 		return nil, roachpb.NewSendError("store is stopped")
 	}
 
-	t.mtc.mu.RLock()
-	sender := t.mtc.senders[nodeIndex]
-	t.mtc.mu.RUnlock()
 	// Clone txn of ba args for sending.
 	ba.Replica = rep.ReplicaDescriptor
 	if txn := ba.Txn; txn != nil {
 		txnClone := ba.Txn.Clone()
 		ba.Txn = &txnClone
 	}
-	br, pErr := sender.Send(ctx, ba)
+	var br *roachpb.BatchResponse
+	var pErr *roachpb.Error
+	if err := s.RunTask(ctx, "mtc send", func(ctx context.Context) {
+		br, pErr = sender.Send(ctx, ba)
+	}); err != nil {
+		pErr = roachpb.NewError(err)
+	}
 	if br == nil {
 		br = &roachpb.BatchResponse{}
 	}
