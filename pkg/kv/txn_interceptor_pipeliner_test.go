@@ -17,6 +17,7 @@ package kv
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -492,7 +493,8 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
-	// Disable maxBatchSize limit.
+	// Disable maxOutstandingSize and maxBatchSize limits/
+	pipelinedWritesMaxOutstandingSize.Override(&tp.st.SV, math.MaxInt64)
 	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 0)
 
 	const writes = 2048
@@ -854,8 +856,186 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	require.Equal(t, 0, tp.outstandingWritesLen())
 }
 
+// TestTxnPipelinerMaxOutstandingSize tests that batches are not pipelined if
+// doing so would push the memory used to track outstanding writes over the
+// limit allowed by the kv.transaction.write_pipelining_max_outstanding_size
+// setting.
+func TestTxnPipelinerMaxOutstandingSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tp, mockSender := makeMockTxnPipeliner()
+
+	// Set maxOutstandingSize limit to 3 bytes.
+	pipelinedWritesMaxOutstandingSize.Override(&tp.st.SV, 3)
+
+	txn := makeTxnProto()
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
+
+	// Send a batch that would exceed the limit.
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}})
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, 4, len(ba.Requests))
+		require.False(t, ba.AsyncConsensus)
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr := tp.SendLocked(ctx, ba)
+	require.NotNil(t, br)
+	require.Nil(t, pErr)
+	require.Equal(t, int64(0), tp.owSizeBytes)
+
+	// Send a batch that is equal to the limit.
+	ba.Requests = nil
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}})
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, 3, len(ba.Requests))
+		require.True(t, ba.AsyncConsensus)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.NotNil(t, br)
+	require.Nil(t, pErr)
+	require.Equal(t, int64(3), tp.owSizeBytes)
+
+	// Send a batch that would be under the limit if we weren't already at it.
+	ba.Requests = nil
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}})
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, 1, len(ba.Requests))
+		require.False(t, ba.AsyncConsensus)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.NotNil(t, br)
+	require.Nil(t, pErr)
+	require.Equal(t, int64(3), tp.owSizeBytes)
+
+	// Send a batch that proves two of the outstanding writes.
+	ba.Requests = nil
+	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, 4, len(ba.Requests))
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.GetRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &roachpb.GetRequest{}, ba.Requests[3].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.NotNil(t, br)
+	require.Nil(t, pErr)
+	require.Equal(t, int64(1), tp.owSizeBytes)
+
+	// Now that we're not up against the limit, send a batch that proves one
+	// write and immediately writes it again, along with a second write.
+	ba.Requests = nil
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}})
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, 3, len(ba.Requests))
+		require.True(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[2].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[1].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.NotNil(t, br)
+	require.Nil(t, pErr)
+	require.Equal(t, int64(2), tp.owSizeBytes)
+
+	// Send the same batch again. Even though it would prove two outstanding
+	// writes while performing two others, we won't allow it to perform async
+	// consensus because the estimation is conservative.
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, 4, len(ba.Requests))
+		require.False(t, ba.AsyncConsensus)
+		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[3].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses[0].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.NotNil(t, br)
+	require.Nil(t, pErr)
+	require.Equal(t, int64(0), tp.owSizeBytes)
+
+	// Increase maxOutstandingSize limit to 5 bytes.
+	pipelinedWritesMaxOutstandingSize.Override(&tp.st.SV, 5)
+
+	// The original batch with 4 writes should succeed.
+	ba.Requests = nil
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}})
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}})
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, 4, len(ba.Requests))
+		require.True(t, ba.AsyncConsensus)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = tp.SendLocked(ctx, ba)
+	require.NotNil(t, br)
+	require.Nil(t, pErr)
+	require.Equal(t, int64(4), tp.owSizeBytes)
+
+	// Bump the txn epoch. The outstanding bytes counter should reset.
+	tp.epochBumpedLocked()
+	require.Equal(t, int64(0), tp.owSizeBytes)
+}
+
 // TestTxnPipelinerMaxBatchSize tests that batches that contain more requests
-// than allowed by the maxBatchSize setting will not be pipelined.
+// than allowed by the kv.transaction.write_pipelining_max_batch_size setting
+// will not be pipelined.
 func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
