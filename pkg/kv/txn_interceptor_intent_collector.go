@@ -36,7 +36,7 @@ import (
 var maxTxnIntentsBytes = settings.RegisterIntSetting(
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track write intents in transactions",
-	256*1000,
+	1<<18, /* 256 KB */
 )
 
 // txnIntentCollector is a txnInterceptor that collects write intentspans

@@ -1391,9 +1391,9 @@ func NewStdLogger(severity Severity) *stdLog.Logger {
 // of its .go suffix, and uses filepath.Match, which is a little more
 // general than the *? matching used in C++.
 // l.mu is held.
-func (l *loggingT) setV(pc uintptr) level {
-	fn := runtime.FuncForPC(pc)
-	file, _ := fn.FileLine(pc)
+func (l *loggingT) setV(pc [1]uintptr) level {
+	frame, _ := runtime.CallersFrames(pc[:]).Next()
+	file := frame.File
 	// The file is something like /a/b/c/d.go. We want just the d.
 	if strings.HasSuffix(file, ".go") {
 		file = file[:len(file)-3]
@@ -1403,11 +1403,11 @@ func (l *loggingT) setV(pc uintptr) level {
 	}
 	for _, filter := range l.vmodule.filter {
 		if filter.match(file) {
-			l.vmap[pc] = filter.level
+			l.vmap[pc[0]] = filter.level
 			return filter.level
 		}
 	}
-	l.vmap[pc] = 0
+	l.vmap[pc[0]] = 0
 	return 0
 }
 
@@ -1477,7 +1477,7 @@ func VDepth(l int32, depth int) bool {
 		logging.mu.Lock()
 		v, ok := logging.vmap[pcs[0]]
 		if !ok {
-			v = logging.setV(pcs[0])
+			v = logging.setV(pcs)
 		}
 		logging.mu.Unlock()
 		logging.pcsPool.Put(poolObj)
