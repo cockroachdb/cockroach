@@ -281,7 +281,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			if !sniffSideloadedRaftCommand(ent.Data) {
 				continue
 			}
-			if err := snap.WithSideloaded(func(ss sideloadStorage) error {
+			if err := snap.WithSideloaded(func(ss SideloadStorage) error {
 				newEnt, err := maybeInlineSideloadedRaftCommand(
 					ctx, rangeID, ent, ss, snap.RaftEntryCache,
 				)

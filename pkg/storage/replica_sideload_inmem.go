@@ -35,7 +35,7 @@ type inMemSideloadStorage struct {
 
 func mustNewInMemSideloadStorage(
 	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
-) sideloadStorage {
+) SideloadStorage {
 	ss, err := newInMemSideloadStorage(cluster.MakeTestingClusterSettings(), rangeID, replicaID, baseDir, nil)
 	if err != nil {
 		panic(err)
@@ -49,7 +49,7 @@ func newInMemSideloadStorage(
 	replicaID roachpb.ReplicaID,
 	baseDir string,
 	eng engine.Engine,
-) (sideloadStorage, error) {
+) (SideloadStorage, error) {
 	return &inMemSideloadStorage{
 		prefix: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),
 		m:      make(map[slKey][]byte),
