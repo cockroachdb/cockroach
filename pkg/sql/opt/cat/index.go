@@ -117,6 +117,16 @@ type Index interface {
 	// of an outbound foreign key relation. Returns false for the second
 	// return value if there is no foreign key reference on this index.
 	ForeignKey() (ForeignKeyReference, bool)
+
+	// Zone returns the zone which constrains placement of the index's range
+	// replicas. If the index was not explicitly assigned to a zone, then it
+	// inherits the zone of its owning table (which in turn inherits from its
+	// owning database or the default zone). In addition, any unspecified zone
+	// information will also be inherited.
+	//
+	// NOTE: This zone always applies to the entire index and never to any
+	// partifular partition of the index.
+	Zone() Zone
 }
 
 // IndexColumn describes a single column that is part of an index definition.

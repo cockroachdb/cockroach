@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -330,6 +331,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		IdxName:  tt.makeIndexName(def.Name, typ),
 		Unique:   typ != nonUniqueIndex,
 		Inverted: def.Inverted,
+		IdxZone:  &config.ZoneConfig{},
 		table:    tt,
 	}
 
