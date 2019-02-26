@@ -666,7 +666,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 			// compute its size.
 			repl.RaftLock()
 			realSize, err := storage.ComputeRaftLogSize(
-				repl.RangeID, repl.Engine(), repl.SideloadedRaftMuLocked(),
+				context.Background(), repl.RangeID, repl.Engine(), repl.SideloadedRaftMuLocked(),
 			)
 			size := repl.GetRaftLogSize()
 			repl.RaftUnlock()
