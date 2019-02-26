@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
@@ -104,6 +105,37 @@ func TestBatcherSendOnSizeWithReset(t *testing.T) {
 	}
 	if err := g.Wait(); err != nil {
 		t.Fatalf("Failed to send: %v", err)
+	}
+}
+
+// TestBatchesAtTheSameTime attempts to test that batches which seem to occur at
+// exactly the same moment are eventually sent. Sometimes it may be the case
+// that this test fails to exercise that path if the channel send to the
+// goroutine happens to take more than 10ms but in that case both batches will
+// definitely get sent and the test will pass. This test was added to account
+// for a bug where the internal timer would not get set if two batches had the
+// same deadline. This test failed regularly before that bug was fixed.
+func TestBatchesAtTheSameTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	sc := make(chanSender)
+	start := timeutil.Now()
+	then := start.Add(10 * time.Millisecond)
+	b := New(Config{
+		MaxIdle: 20 * time.Millisecond,
+		Sender:  sc,
+		Stopper: stopper,
+		NowFunc: func() time.Time { return then },
+	})
+	const N = 20
+	sendChan := make(chan Response, N)
+	for i := 0; i < N; i++ {
+		assert.Nil(t, b.SendWithChan(context.Background(), sendChan, roachpb.RangeID(i), &roachpb.GetRequest{}))
+	}
+	for i := 0; i < N; i++ {
+		bs := <-sc
+		bs.respChan <- batchResp{}
 	}
 }
 
