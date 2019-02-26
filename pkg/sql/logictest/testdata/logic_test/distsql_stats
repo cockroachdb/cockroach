@@ -368,3 +368,40 @@ CREATE TABLE t (x int); INSERT INTO t VALUES (1); ALTER TABLE t DROP COLUMN x
 # Ensure that creating stats on a table with no columns does not cause a panic.
 statement ok
 CREATE STATISTICS s FROM t
+
+# Regression test for #35150.
+statement ok
+CREATE TABLE groups (data JSON); INSERT INTO groups VALUES ('{"data": {"domain": "github.com"}}')
+
+# Ensure that trying to create statistics on a JSON column gives an appropriate error.
+statement error pq: CREATE STATISTICS is not supported for JSON columns
+CREATE STATISTICS s ON data FROM groups
+
+# The json column is not included in the default columns.
+statement ok
+CREATE STATISTICS s FROM groups
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE groups] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+s                {rowid}
+
+# Arrays are supported.
+statement ok
+CREATE TABLE arr (x INT[])
+
+statement ok
+INSERT INTO arr VALUES (ARRAY[1,2]), (ARRAY[1,2]), (ARRAY[3,4]), (NULL)
+
+statement ok
+CREATE STATISTICS arr_stats FROM arr
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE arr] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+arr_stats        {rowid}       4          4               0
+arr_stats        {x}           4          2               1
