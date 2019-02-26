@@ -489,7 +489,7 @@ var nonZeroTxn = Transaction{
 	RefreshedTimestamp:       makeTS(20, 22),
 	MaxTimestamp:             makeTS(40, 41),
 	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
-	Writing:                  true,
+	DeprecatedWriting:        true,
 	WriteTooOld:              true,
 	Intents:                  []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	EpochZeroTimestamp:       makeTS(1, 1),

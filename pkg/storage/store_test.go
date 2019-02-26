@@ -2171,7 +2171,6 @@ func TestStoreScanIntents(t *testing.T) {
 			if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: txn}, &args); pErr != nil {
 				t.Fatal(pErr)
 			}
-			txn.Writing = true
 		}
 
 		// Scan the range and verify count. Do this in a goroutine in case
@@ -2265,7 +2264,6 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 		if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: txn}, &args); pErr != nil {
 			t.Fatal(pErr)
 		}
-		txn.Writing = true
 	}
 
 	// Now, commit txn without resolving intents. If we hadn't disabled auto-gc
@@ -2312,7 +2310,6 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: txn1}, &args); pErr != nil {
 		t.Fatal(pErr)
 	}
-	txn1.Writing = true
 
 	key2 := roachpb.Key("foo")
 	txn2 := newTransaction("test2", key2, 1, store.cfg.Clock)
@@ -2321,7 +2318,6 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: txn2}, &args); pErr != nil {
 		t.Fatal(pErr)
 	}
-	txn2.Writing = true
 
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
@@ -2363,7 +2359,6 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	key1 := roachpb.Key("key00")
 	key10 := roachpb.Key("key09")
 	txn := newTransaction("test", key1, 1, store.cfg.Clock)
-	txn.Writing = true
 	ba := roachpb.BatchRequest{}
 	for i := 0; i < 10; i++ {
 		pArgs := putArgs(roachpb.Key(fmt.Sprintf("key%02d", i)), []byte("value"))
