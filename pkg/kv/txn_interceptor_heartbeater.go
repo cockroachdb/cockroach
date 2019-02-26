@@ -168,8 +168,11 @@ func (h *txnHeartbeater) SendLocked(
 		// From now on, all requests need to be checked against the AbortCache on
 		// the server side. We also conservatively update the current request,
 		// although I'm not sure if that's necessary.
-		h.mu.txn.Writing = true
-		ba.Txn.Writing = true
+		// NOTE: only 2.1 nodes will use this flag to check the transaction against
+		// the abort cache. 19.1 nodes will just look at whether the transaction
+		// key is set.
+		h.mu.txn.DeprecatedWriting = true
+		ba.Txn.DeprecatedWriting = true
 
 		// Set txn key based on the key of the first transactional write if not
 		// already set. If we're in a restart, make sure we keep the anchor key the

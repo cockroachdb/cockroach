@@ -943,7 +943,7 @@ func (t *Transaction) Restart(
 	t.Sequence = 0
 	// Reset Writing. Since we're using a new epoch, we don't care about the abort
 	// cache.
-	t.Writing = false
+	t.DeprecatedWriting = false
 }
 
 // BumpEpoch increments the transaction's epoch, allowing for an in-place
@@ -1017,7 +1017,7 @@ func (t *Transaction) Update(o *Transaction) {
 
 	// We can't assert against regression here since it can actually happen
 	// that we update from a transaction which isn't Writing.
-	t.Writing = t.Writing || o.Writing
+	t.DeprecatedWriting = t.DeprecatedWriting || o.DeprecatedWriting
 
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence
@@ -1043,6 +1043,12 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 	}
 }
 
+// IsWriting returns whether the transaction has begun writing intents.
+// This method will never return true for a read-only transaction.
+func (t *Transaction) IsWriting() bool {
+	return t.Key != nil
+}
+
 // String formats transaction into human readable string.
 //
 // NOTE: When updating String(), you probably want to also update SafeMessage().
@@ -1055,7 +1061,7 @@ func (t Transaction) String() string {
 	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f stat=%s epo=%d "+
 		"ts=%s orig=%s max=%s wto=%t seq=%d",
-		t.Short(), Key(t.Key), t.Writing, floatPri, t.Status, t.Epoch, t.Timestamp,
+		t.Short(), Key(t.Key), t.IsWriting(), floatPri, t.Status, t.Epoch, t.Timestamp,
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
@@ -1076,7 +1082,7 @@ func (t Transaction) SafeMessage() string {
 	}
 	fmt.Fprintf(&buf, "id=%s rw=%t pri=%.8f stat=%s epo=%d "+
 		"ts=%s orig=%s max=%s wto=%t seq=%d",
-		t.Short(), t.Writing, floatPri, t.Status, t.Epoch, t.Timestamp,
+		t.Short(), t.IsWriting(), floatPri, t.Status, t.Epoch, t.Timestamp,
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)

@@ -179,13 +179,15 @@ func evaluateBatch(
 		// on reads). Note that 1PC transactions have had their
 		// transaction field cleared by this point so we do not execute
 		// this check in that case.
-		if ba.IsTransactionWrite() || ba.Txn.Writing {
+		if ba.IsTransactionWrite() || ba.Txn.IsWriting() {
 			// We don't check the abort span for a couple of special requests:
 			// - if the request is asking to abort the transaction, then don't check the
 			// AbortSpan; we don't want the request to be rejected if the transaction
 			// has already been aborted.
 			// - heartbeats don't check the abort span. If the txn is aborted, they'll
 			// return an aborted proto in their otherwise successful response.
+			// TODO(nvanbenschoten): Let's remove heartbeats from this whitelist when
+			// we rationalize the TODO in txnHeartbeater.heartbeat.
 			singleAbort := ba.IsSingleEndTransactionRequest() &&
 				!ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest).Commit
 			if !singleAbort && !ba.IsSingleHeartbeatTxnRequest() {
