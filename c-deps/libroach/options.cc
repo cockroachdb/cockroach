@@ -108,9 +108,10 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // number of cpus. Always use at least 2 threads, otherwise
   // compactions and flushes may fight with each other.
   options.IncreaseParallelism(std::max(db_opts.num_cpu, 2));
-  // Enable subcompactions which will use multiple threads to speed up
-  // a single compaction. The value of num_cpu/2 has not been tuned.
-  options.max_subcompactions = std::max(db_opts.num_cpu / 2, 1);
+  // Disable subcompactions since they're a less stable feature, and not
+  // necessary for our workload, where frequent fsyncs naturally prevent
+  // foreground writes from getting too far ahead of compactions.
+  options.max_subcompactions = 1;
   options.comparator = &kComparator;
   options.create_if_missing = !db_opts.must_exist;
   options.info_log.reset(NewDBLogger(kDefaultLogLevel));
