@@ -61,7 +61,7 @@ var histograms = runFlags.String(
 	"File to write per-op incremental and cumulative histogram data.")
 
 func init() {
-	AddSubCmd(func() *cobra.Command {
+	AddSubCmd(func(userFacing bool) *cobra.Command {
 		var initCmd = SetCmdDefaults(&cobra.Command{
 			Use:   `init`,
 			Short: `set up tables for a workload`,
@@ -76,17 +76,21 @@ func init() {
 			genInitCmd := SetCmdDefaults(&cobra.Command{
 				Use:   meta.Name,
 				Short: meta.Description,
+				Long:  meta.Description + meta.Details,
 				Args:  cobra.ArbitraryArgs,
 			})
 			genInitCmd.Flags().AddFlagSet(initFlags)
 			genInitCmd.Flags().AddFlagSet(sharedFlags)
 			genInitCmd.Flags().AddFlagSet(genFlags)
 			genInitCmd.Run = CmdHelper(gen, runInit)
+			if userFacing && !meta.PublicFacing {
+				genInitCmd.Hidden = true
+			}
 			initCmd.AddCommand(genInitCmd)
 		}
 		return initCmd
 	})
-	AddSubCmd(func() *cobra.Command {
+	AddSubCmd(func(userFacing bool) *cobra.Command {
 		var runCmd = SetCmdDefaults(&cobra.Command{
 			Use:   `run`,
 			Short: `run a workload's operations against a cluster`,
@@ -107,6 +111,7 @@ func init() {
 			genRunCmd := SetCmdDefaults(&cobra.Command{
 				Use:   meta.Name,
 				Short: meta.Description,
+				Long:  meta.Description + meta.Details,
 				Args:  cobra.ArbitraryArgs,
 			})
 			genRunCmd.Flags().AddFlagSet(runFlags)
@@ -119,6 +124,9 @@ func init() {
 				genRunCmd.Flags().AddFlag(&f)
 			})
 			genRunCmd.Run = CmdHelper(gen, runRun)
+			if userFacing && !meta.PublicFacing {
+				genRunCmd.Hidden = true
+			}
 			runCmd.AddCommand(genRunCmd)
 		}
 		return runCmd

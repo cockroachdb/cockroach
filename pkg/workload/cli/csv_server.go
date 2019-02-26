@@ -35,7 +35,7 @@ var port *int
 
 func init() {
 	port = csvServerCmd.Flags().Int(`port`, 8081, `The port to bind to`)
-	AddSubCmd(func() *cobra.Command { return csvServerCmd })
+	AddSubCmd(func(_ bool) *cobra.Command { return csvServerCmd })
 }
 
 func runCSVServer(_ *cobra.Command, _ []string) error {
