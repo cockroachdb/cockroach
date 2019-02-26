@@ -283,6 +283,9 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW SCHEMAS FROM ??`, `SHOW SCHEMAS`},
 		{`SHOW SCHEMAS FROM blah ??`, `SHOW SCHEMAS`},
 
+		{`SHOW SEQUENCES FROM ??`, `SHOW SEQUENCES`},
+		{`SHOW SEQUENCES FROM blah ??`, `SHOW SEQUENCES`},
+
 		{`SHOW TABLES FROM ??`, `SHOW TABLES`},
 		{`SHOW TABLES FROM blah ??`, `SHOW TABLES`},
 
