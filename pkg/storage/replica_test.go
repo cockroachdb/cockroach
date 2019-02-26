@@ -3650,10 +3650,11 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		pusher := newTransaction("pusher", key, 1, tc.Clock())
 		pushee.Priority = roachpb.MinTxnPriority
 		pusher.Priority = roachpb.MaxTxnPriority // pusher will win
-		_, btH := beginTxnArgs(key, pushee)
 		put := putArgs(key, []byte("value"))
 		assignSeqNumsForReqs(pushee, &put)
-		if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), btH, &put); pErr != nil {
+		if _, pErr := client.SendWrappedWith(
+			context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put,
+		); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -3701,10 +3702,9 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 
 	key := []byte("a")
 	txn := newTransaction("test", key, 1, tc.Clock())
-	_, btH := beginTxnArgs(key, txn)
 	put := putArgs(key, key)
 	assignSeqNumsForReqs(txn, &put)
-	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), btH, &put); pErr != nil {
+	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
 	txn.Writing = true
@@ -3807,11 +3807,10 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 
 		key := []byte("a")
 		txn := newTransaction("test", key, 1, tc.Clock())
-		_, btH := beginTxnArgs(key, txn)
 		put := putArgs(key, key)
 		assignSeqNumsForReqs(txn, &put)
 		if _, pErr := client.SendWrappedWith(
-			context.TODO(), tc.Sender(), btH, &put,
+			context.TODO(), tc.Sender(), roachpb.Header{Txn: txn}, &put,
 		); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -3822,7 +3821,7 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 		// Abort the transaction by pushing it with maximum priority.
 		pusher := newTransaction("test", key, 1, tc.Clock())
 		pusher.Priority = roachpb.MaxTxnPriority
-		pushArgs := pushTxnArgs(pusher, btH.Txn, roachpb.PUSH_ABORT)
+		pushArgs := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 		if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -4146,10 +4145,9 @@ func TestEndTransactionLocalGC(t *testing.T) {
 		{[]roachpb.Span{{Key: roachpb.Key("a")}, {Key: splitKey.AsRawKey()}}, false},
 	} {
 		txn := newTransaction("test", key, 1, tc.Clock())
-		_, btH := beginTxnArgs(key, txn)
 		put := putArgs(putKey, key)
 		assignSeqNumsForReqs(txn, &put)
-		if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), btH, &put); pErr != nil {
+		if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
 		putKey = putKey.Next() // for the next iteration
@@ -4772,10 +4770,9 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 			pushee := newTransaction("test", key, 1, tc.Clock())
 
 			// Begin the pushee's transaction.
-			_, btH := beginTxnArgs(key, pushee)
 			put := putArgs(key, key)
 			assignSeqNumsForReqs(pushee, &put)
-			if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), btH, &put); pErr != nil {
+			if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 				t.Fatal(pErr)
 			}
 			// End the pushee's transaction.
@@ -4895,10 +4892,9 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 	pusher := newTransaction("test", key, 1, tc.Clock())
 	pusher.Priority = 2
 
-	_, btH := beginTxnArgs(key, pushee)
 	put := putArgs(key, key)
 	assignSeqNumsForReqs(pushee, &put)
-	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), btH, &put); pErr != nil {
+	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -5125,10 +5121,9 @@ func TestPushTxnPriorities(t *testing.T) {
 			pusher.ID, pushee.ID = pushee.ID, pusher.ID
 		}
 
-		_, btH := beginTxnArgs(key, pushee)
 		put := putArgs(key, key)
 		assignSeqNumsForReqs(pushee, &put)
-		if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), btH, &put); pErr != nil {
+		if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
 		// Now, attempt to push the transaction with intent epoch set appropriately.
@@ -5166,10 +5161,9 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	pushee.Timestamp = now.Add(5, 1)
 
 	key := roachpb.Key("a")
-	_, btH := beginTxnArgs(key, pushee)
 	put := putArgs(key, key)
 	assignSeqNumsForReqs(pushee, &put)
-	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), btH, &put); pErr != nil {
+	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
 	pushee.Writing = true
@@ -5210,10 +5204,9 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	pushee.Timestamp = now.Add(50, 1)
 
 	key := roachpb.Key("a")
-	_, btH := beginTxnArgs(key, pushee)
 	put := putArgs(key, key)
 	assignSeqNumsForReqs(pushee, &put)
-	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), btH, &put); pErr != nil {
+	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -6379,11 +6372,11 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// Create a transaction and write an intent to the system
 	// config span.
 	key := keys.SystemConfigSpan.Key
-	_, btH := beginTxnArgs(key, newTransaction("test", key, 1, repl.store.Clock()))
-	btH.Txn.Priority = roachpb.MinTxnPriority // low so it can be pushed
+	pushee := newTransaction("test", key, 1, repl.store.Clock())
+	pushee.Priority = roachpb.MinTxnPriority // low so it can be pushed
 	put := putArgs(key, []byte("foo"))
-	assignSeqNumsForReqs(btH.Txn, &put)
-	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), btH, &put); pErr != nil {
+	assignSeqNumsForReqs(pushee, &put)
+	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -6392,7 +6385,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// clearing the intent.
 	pusher := newTransaction("test", key, 1, repl.store.Clock())
 	pusher.Priority = roachpb.MaxTxnPriority // will push successfully
-	pushArgs := pushTxnArgs(pusher, btH.Txn, roachpb.PUSH_ABORT)
+	pushArgs := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
 	if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
 		t.Fatal(pErr)
 	}

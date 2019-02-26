@@ -1678,10 +1678,11 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 		// Second, lay down intent using the pushee's txn.
 		{
-			_, btH := beginTxnArgs(key, pushee)
 			args := putArgs(key, []byte("value2"))
 			assignSeqNumsForReqs(pushee, &args)
-			if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), btH, &args); pErr != nil {
+			if _, pErr := client.SendWrappedWith(
+				context.Background(), store.TestSender(), roachpb.Header{Txn: pushee}, &args,
+			); pErr != nil {
 				t.Fatal(pErr)
 			}
 		}
