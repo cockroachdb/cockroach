@@ -310,7 +310,7 @@ inner-join
 # Note the difference in memo size for with and without reorder-joins, for only four tables.
 # TODO(justin): Find a way to reduce this.
 
-memo
+memo join-limit=1
 SELECT * FROM bx, cy, dz, abc WHERE a = 1
 ----
 memo (optimized, ~11KB, required=[presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,c:9,d:10])
