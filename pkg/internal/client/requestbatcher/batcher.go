@@ -132,6 +132,9 @@ type Config struct {
 	// Note that values	less than or equal to zero will result in the use of
 	// DefaultInFlightBackpressureLimit.
 	InFlightBackpressureLimit int
+
+	// NowFunc is used to determine the current time. It defaults to timeutil.Now.
+	NowFunc func() time.Time
 }
 
 const (
@@ -198,6 +201,9 @@ func validateConfig(cfg *Config) {
 	}
 	if cfg.InFlightBackpressureLimit <= 0 {
 		cfg.InFlightBackpressureLimit = DefaultInFlightBackpressureLimit
+	}
+	if cfg.NowFunc == nil {
+		cfg.NowFunc = timeutil.Now
 	}
 }
 
@@ -329,7 +335,7 @@ func (b *RequestBatcher) run(ctx context.Context) {
 			}
 		}
 		handleRequest = func(req *request) {
-			now := timeutil.Now()
+			now := b.cfg.NowFunc()
 			ba, existsInQueue := b.batches.get(req.rangeID)
 			if !existsInQueue {
 				ba = b.pool.newBatch(now)
@@ -350,7 +356,7 @@ func (b *RequestBatcher) run(ctx context.Context) {
 			if next := b.batches.peekFront(); next != nil {
 				nextDeadline = next.deadline
 			}
-			if !deadline.Equal(nextDeadline) {
+			if !deadline.Equal(nextDeadline) || timer.Read {
 				deadline = nextDeadline
 				if !deadline.IsZero() {
 					timer.Reset(time.Until(deadline))
@@ -360,7 +366,6 @@ func (b *RequestBatcher) run(ctx context.Context) {
 					timer.Stop()
 					timer = timeutil.NewTimer()
 				}
-				deadline = nextDeadline
 			}
 		}
 	)
@@ -545,7 +550,11 @@ func (q *batchQueue) Swap(i, j int) {
 }
 
 func (q *batchQueue) Less(i, j int) bool {
-	return q.batches[i].deadline.Before(q.batches[j].deadline)
+	idl, jdl := q.batches[i].deadline, q.batches[j].deadline
+	if before := idl.Before(jdl); before || !idl.Equal(jdl) {
+		return before
+	}
+	return q.batches[i].rangeID() < q.batches[j].rangeID()
 }
 
 func (q *batchQueue) Push(v interface{}) {
