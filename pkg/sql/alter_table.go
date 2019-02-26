@@ -211,12 +211,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
-				// A previous command could have added a column which the new constraint uses,
-				// allocate IDs now.
-				if err != n.tableDesc.AllocateIDs() {
-					return err
-				}
-
 				ck, err := MakeCheckConstraint(params.ctx,
 					n.tableDesc, d, inuseNames, &params.p.semaCtx, n.n.Table)
 				if err != nil {
@@ -608,6 +602,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 		default:
 			return pgerror.NewAssertionErrorf("unsupported alter command: %T", cmd)
 		}
+
+		// Allocate IDs now, so new IDs are available to subsequent commands
+		if err := n.tableDesc.AllocateIDs(); err != nil {
+			return err
+		}
 	}
 	// Were some changes made?
 	//
@@ -619,10 +618,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 	addedMutations := len(n.tableDesc.Mutations) > origNumMutations
 	if !addedMutations && !descriptorChanged {
 		return nil
-	}
-
-	if err := n.tableDesc.AllocateIDs(); err != nil {
-		return err
 	}
 
 	mutationID := sqlbase.InvalidMutationID
