@@ -110,11 +110,15 @@ func registerPsycopg(r *registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		blacklistName, expectedFailures := getPsycopgBlacklistForVersion(version)
-		if expectedFailures == nil {
+		blacklistName, expectedFailureList, ignoredlistName, ignoredlist := getPsycopgBlacklistForVersion(version)
+		if expectedFailureList == nil {
 			t.Fatalf("No psycopg blacklist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blacklist %s", version, blacklistName)
+		if ignoredlist == nil {
+			t.Fatalf("No psycopg ignorelist defined for cockroach version %s", version)
+		}
+		c.l.Printf("Running cockroach version %s, using blacklist %s, using ignoredlist %s",
+			version, blacklistName, ignoredlistName)
 
 		t.Status("running psycopg test suite")
 		// Note that this is expected to return an error, since the test suite
@@ -133,7 +137,7 @@ func registerPsycopg(r *registry) {
 
 		// Find all the failed and errored tests.
 
-		var failUnexpectedCount, failExpectedCount int
+		var failUnexpectedCount, failExpectedCount, ignoredCount int
 		var passUnexpectedCount, passExpectedCount, notRunCount int
 		// Put all the results in a giant map of [testname]result
 		results := make(map[string]string)
@@ -153,9 +157,13 @@ func registerPsycopg(r *registry) {
 				test := fmt.Sprintf("%s.%s", groups["class"], groups["name"])
 				pass := groups["result"] == "ok"
 				allTests = append(allTests, test)
-				issue, expectedFailure := expectedFailures[test]
 
+				ignoredIssue, expectedIgnored := ignoredlist[test]
+				issue, expectedFailure := expectedFailureList[test]
 				switch {
+				case expectedIgnored:
+					results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
+					ignoredCount++
 				case pass && !expectedFailure:
 					results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
 					passExpectedCount++
@@ -180,7 +188,7 @@ func registerPsycopg(r *registry) {
 		}
 
 		// Collect all the tests that were not run.
-		for test, issue := range expectedFailures {
+		for test, issue := range expectedFailureList {
 			if _, ok := runTests[test]; ok {
 				continue
 			}
@@ -207,12 +215,22 @@ func registerPsycopg(r *registry) {
 		fmt.Fprintf(&bResults, "%d Total Tests Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
 		)
-		fmt.Fprintf(&bResults, "%d tests passed\n", passUnexpectedCount+passExpectedCount)
-		fmt.Fprintf(&bResults, "%d tests failed\n", failUnexpectedCount+failExpectedCount)
-		fmt.Fprintf(&bResults, "%d tests passed unexpectedly\n", passUnexpectedCount)
-		fmt.Fprintf(&bResults, "%d tests failed unexpectedly\n", failUnexpectedCount)
-		fmt.Fprintf(&bResults, "%d tests expected failed, but not run \n", notRunCount)
-		fmt.Fprintf(&bResults, "For a full summary look at the logs. \n")
+
+		p := func(msg string, count int) {
+			testString := "tests"
+			if count == 1 {
+				testString = "test"
+			}
+			fmt.Fprintf(&bResults, "%d %s %s\n", count, testString, msg)
+		}
+		p("passed", passUnexpectedCount+passExpectedCount)
+		p("failed", failUnexpectedCount+failExpectedCount)
+		p("ignored", ignoredCount)
+		p("passed unexpectedly", passUnexpectedCount)
+		p("failed unexpectedly", failUnexpectedCount)
+		p("expected failed but not run", notRunCount)
+
+		fmt.Fprintf(&bResults, "For a full summary look at the psycopg artifacts. \n")
 		t.l.Printf("%s\n", bResults.String())
 		t.l.Printf("------------------------\n")
 
@@ -223,7 +241,7 @@ func registerPsycopg(r *registry) {
 			fmt.Fprintf(&b, "Here is new psycopg blacklist that can be used to update the test:\n\n")
 			fmt.Fprintf(&b, "var %s = blacklist{\n", blacklistName)
 			for _, test := range currentFailures {
-				issue := expectedFailures[test]
+				issue := expectedFailureList[test]
 				if len(issue) == 0 {
 					issue = "unknown"
 				}
