@@ -300,3 +300,75 @@ query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(x) FROM (SELECT a, b::float + c AS x FROM data) WHERE a > x GROUP BY a ORDER BY a]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlk1r20wQx-_PpxBzSsgaaVbym07KJRDIY5c0OZTWBMVaHIOjNas1NIR89yIt1LLVzMi1cH30y08zu__fDHqHXGdqkr6qAuLvgCBAgoAQBEQgoA8zAWuj56ootCn_4oDb7CfEgYBlvt7Y8uuZgLk2CuJ3sEu7UhDDQ_q8UvcqzZTxAxCQKZsuV1WZtVm-puYtyVKbgoCv6zQvYq_no5fmmSc9bV-UKUDAvcozZWIvCa8SGcc3d9Prh5HwEoTZhwC9sdvyhU0XCmL8EO1bnOieXvv93eZulitb1ZTej00QhIoqJw8pd71YGLVIrTY-7t1IUt761GTKqKwsDQKuJ9-eJtOHp8nj3d1FIi_Li3r8_yLBy71utgWe37yXtHjZe3TZ_bbj8NOOt8_RrpH951y5B1HH6jdq14-FjWPh72NVB5xubHl6Qdx49Nf9y0_6dxbI3UQ-K9_fKY_tRwDbjICPPV9WQ4BuCDqYAaZHd_pBZzPAlKvLgucxA9jxDAxOPAOyvYSylYSy54cdS8j06CQcdiYhU66eljwPCWXHEg5PLGHYXsKwlYRhz486lpDp0Uk46kxCplw9rfA8JAw7lnB0Ygmj9hJGrSSMetXb4bHiMX058cadiceUqycUnYd4Ucfijf_ha-gfWrtXxVrnhWr1hhmUh1PZQrnLKPTGzNUXo-dVGfdxWnHVF5kqrPsV3Yfb3P1UNliHkYQlDct9GOtwuAPjYfDoGBjlUfTgGFoGNB2SFx7RcESnxWTdJ-kBDQ9IeEjDw2NEoWFGFBrmRGFoRhSa5kQZHSPKmN4JAbMUmJXC7ZTGUjkkboZm8mZoLnAOZxJncC5ybKyWQzJHerVgxKRGLxfsM3hjuxwUOk1zodM0GzqDc6HTOBs6vVm50BtLZje1EZMavWVwzOCNPXNQ6DTNhU7TbOgMzoVO41zokt6w-6HPPv77FQAA___0jY3c
+
+# Ensure that an interesting input ordering that causes an ordered group by
+# forces an ordered synchronizer. We create an index on b even though it's
+# not used to help the optimizer realize that there's an ordering available
+# on b for a constrained scan on the a,b primary index.
+
+statement ok
+CREATE TABLE data2 (a INT, b INT, PRIMARY KEY (a, b), INDEX(b));
+ALTER TABLE data2 SPLIT AT SELECT 1,i FROM generate_series(1, 9) AS g(i);
+ALTER TABLE data2 EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i);
+
+# Verify data placement.
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data2]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1/1     {2}       2
+/1/1       /1/2     {5}       5
+/1/2       /1/3     {5}       5
+/1/3       /1/4     {5}       5
+/1/4       /1/5     {5}       5
+/1/5       /1/6     {5}       5
+/1/6       /1/7     {5}       5
+/1/7       /1/8     {5}       5
+/1/8       /1/9     {5}       5
+/1/9       NULL     {5}       5
+
+
+query T
+EXPLAIN (opt,verbose) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b
+----
+group-by
+ ├── columns: b:2 count:3
+ ├── grouping columns: b:2
+ ├── internal-ordering: +2 opt(1)
+ ├── stats: [rows=9.5617925, distinct(2)=9.5617925, null(2)=0]
+ ├── cost: 10.7156179
+ ├── key: (2)
+ ├── fd: (2)-->(3)
+ ├── prune: (3)
+ ├── scan data2
+ │    ├── columns: a:1 b:2
+ │    ├── constraint: /1/2: [/1 - /1]
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(2)=9.5617925, null(2)=0]
+ │    ├── cost: 10.41
+ │    ├── key: (2)
+ │    ├── fd: ()-->(1)
+ │    ├── ordering: +2 opt(1) [actual: +2]
+ │    ├── prune: (2)
+ │    └── interesting orderings: (+1,+2) (+2,+1)
+ └── aggregations
+      └── count-rows
+
+query TTTTT
+EXPLAIN (verbose) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b
+----
+group           ·            ·              (b, count)  ·
+ │              aggregate 0  b              ·           ·
+ │              aggregate 1  count_rows()   ·           ·
+ │              group by     @1             ·           ·
+ │              ordered      @1             ·           ·
+ └── render     ·            ·              (b)         +b
+      │         render 0     b              ·           ·
+      └── scan  ·            ·              (a, b)      +b
+·               table        data2@primary  ·           ·
+·               spans        /1-/2          ·           ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b];
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlFtr3DAQhd_7K5Z52lAFW9pLQU8OfVpI7bIXSilmUazBMWwsI8nQUPa_F1sBX7pR1m0pfZRnvplz5oB_QKkkxuIJDfBvQIEAAwIrSAlUWmVojNJNyTVu5HfgIYGirGrrPtvCnhA41KXSEjVKICDRiuLU1NNzSiBTGoF3rbG6VVWwHjUSULV9GZsSMFbkCHx5Jr3VtLf6wuC9eDjhFoVEHYSD8VDp4kno50gKKxqHu0qUhs8CehvQoLGd1JbPIgavCaFThNzlucZcWKUDNtQRtbvcpfisfd3FX49xsj_Gh_v7eURvgMDH5BDvj9vky25-M1LULXl4nj0K8_jL_PbmL6rZq6q7OZdyg4i-h4vh9awtf8fa7vDpuIn384iNnXWqFwPV7PrQ6ZWhN7GzyaG_IaR3mcV_FDr7u6Gv_k3oof_WWzSVKg1e9Q8JG0soc3QnMKrWGX7WKmvXuGfScu0Hica66gf32JSu1Ajsw9QLMz_MxjDtw4sBTKfBaz-88MoO_fDSC6_8nld_4tkPv-F5Pclzen73MwAA__-UYket

@@ -171,10 +171,10 @@ query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
 ----
 tree                   field        description     columns                       ordering
-distinct               ·            ·               (title)                       weak-key(title)
+distinct               ·            ·               (title)                       weak-key(title); +title
  │                     distinct on  title           ·                             ·
  │                     order key    title           ·                             ·
- └── render            ·            ·               (title)                       ·
+ └── render            ·            ·               (title)                       +title
       │                render 0     title           ·                             ·
       └── lookup-join  ·            ·               (title, shelf, title, shelf)  +title
            │           table        books2@primary  ·                             ·

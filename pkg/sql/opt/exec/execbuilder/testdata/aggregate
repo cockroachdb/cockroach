@@ -945,28 +945,24 @@ render          ·         ·           (k)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
-group           ·            ·              (concat_agg)  ·
- │              aggregate 0  concat_agg(s)  ·             ·
- │              scalar       ·              ·             ·
- └── render     ·            ·              (s)           ·
-      │         render 0     s              ·             ·
-      └── scan  ·            ·              (k, s)        +k
-·               table        kv@primary     ·             ·
-·               spans        ALL            ·             ·
+group      ·            ·              (concat_agg)  ·
+ │         aggregate 0  concat_agg(s)  ·             ·
+ │         scalar       ·              ·             ·
+ └── scan  ·            ·              (k, s)        +k
+·          table        kv@primary     ·             ·
+·          spans        ALL            ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
-group                ·            ·             (array_agg)  ·
- │                   aggregate 0  array_agg(k)  ·            ·
- │                   scalar       ·             ·            ·
- └── render          ·            ·             (k)          ·
-      │              render 0     k             ·            ·
-      └── sort       ·            ·             (k, s)       +s
-           │         order        +s            ·            ·
-           └── scan  ·            ·             (k, s)       ·
-·                    table        kv@primary    ·            ·
-·                    spans        ALL           ·            ·
+group           ·            ·             (array_agg)  ·
+ │              aggregate 0  array_agg(k)  ·            ·
+ │              scalar       ·             ·            ·
+ └── sort       ·            ·             (k, s)       +s
+      │         order        +s            ·            ·
+      └── scan  ·            ·             (k, s)       ·
+·               table        kv@primary    ·            ·
+·               spans        ALL           ·            ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
@@ -974,8 +970,9 @@ EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
 group           ·            ·              (string_agg)  ·
  │              aggregate 0  string_agg(s)  ·             ·
  │              scalar       ·              ·             ·
- └── render     ·            ·              (s)           ·
-      │         render 0     s              ·             ·
+ └── render     ·            ·              (k, s)        +k
+      │         render 0     k              ·             ·
+      │         render 1     s              ·             ·
       └── scan  ·            ·              (k, s)        +k
 ·               table        kv@primary     ·             ·
 ·               spans        ALL            ·             ·

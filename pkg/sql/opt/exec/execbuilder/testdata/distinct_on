@@ -168,12 +168,12 @@ distinct   ·            ·            (pk1, pk2)  weak-key(pk1); +pk1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
-distinct             ·            ·            (a, c)     weak-key(a); +a
- │                   distinct on  a            ·          ·
- │                   order key    a            ·          ·
- └── render          ·            ·            (a, c)     +a
-      │              render 0     a            ·          ·
-      │              render 1     c            ·          ·
+render               ·            ·            (a, c)     ·
+ │                   render 0     a            ·          ·
+ │                   render 1     c            ·          ·
+ └── distinct        ·            ·            (a, b, c)  weak-key(a); +a,-c,+b
+      │              distinct on  a            ·          ·
+      │              order key    a            ·          ·
       └── sort       ·            ·            (a, b, c)  +a,-c,+b
            │         order        +a,-c,+b     ·          ·
            └── scan  ·            ·            (a, b, c)  ·

@@ -135,12 +135,12 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJykk01r4zAQhu_7K8x7lvH3Hn
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-distinct        ·            ·            (a, b)     weak-key(a,b); +a,+b
- │              distinct on  a, b         ·          ·
- │              order key    a, b         ·          ·
- └── render     ·            ·            (a, b)     +a,+b
-      │         render 0     a            ·          ·
-      │         render 1     b            ·          ·
+render          ·            ·            (a, b)     ·
+ │              render 0     a            ·          ·
+ │              render 1     b            ·          ·
+ └── distinct   ·            ·            (a, b, c)  weak-key(a,b); +a,+b,+c
+      │         distinct on  a, b         ·          ·
+      │         order key    a, b         ·          ·
       └── scan  ·            ·            (a, b, c)  +a,+b,+c
 ·               table        abc@primary  ·          ·
 ·               spans        ALL          ·          ·
@@ -148,4 +148,4 @@ distinct        ·            ·            (a, b)     weak-key(a,b); +a,+b
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lEFvmzAYhu_7Fei7xhHYJmnKicMulap26rbTwsHFnzqkFCPbkTZF-e8TeCKBLcYL2cWSgdfPq-dDPkCtJD6JdzSQfQMKBBgQ4EAgBQIrKAg0WpVojNLtJy7wIH9AlhCo6mZv28cFgVJphOwAtrI7hAy-iNcdvqCQqOP2XIlWVLsO0-jqXeifuXgtgcDnRtQmi-Knr4-Pp2UZb4FuoV_ZFoDA895mUU5JzkjOoTgSUHt76mCseEPI6JGE9_xYGVvVpY3Xw5IdpUVqiRrlb-xFJrvIPKGUO2rMWZCcLUjOF1AcfQVpMqshHzSk4dNjIdP7Y1rL882sAU5U7f3c3XCALFwP_xc97FyP2_BuTa_WM1G117O5oR4ericN0zNysTzfxFtYXa1nomqv5_6GetJwPUmAnuXoboxELSMaKfsd9ZVWJhr2Vlb_6VL8C_MFTaNqgwPipZOT9qZE-YbuhjVqr0v8pFXZYdz2uct1DyQa695St3mo3au24HmYesNsEKbjMPOTJ9Dcm0794XRO75U3vPaT13PId97wxk_ezCHf-2eVTPwm_p9szC6OH34FAAD__6vp-Bs=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lMFvmzAUxu_7K9C7xhHYkDTlxGGXSlUzddtpcHDxU4eUYmQbaVPF_z6BJQJsMa6SXSw9w-fv8-9Z7x1qKfCJv6GG9AdQIMCAQAwEEiCwg4JAo2SJWkvV_2IFD-IXpBGBqm5a028XBEqpENJ3MJU5IaTwjb-c8Bm5QBX25wo0vDoNNo2q3rj6nfGXEgh8bXit0yB8-v74eF62YQ40h3FlOUDREZCtOXtqw18RUtoR_1yfK22qujThfh4qoyTr735UAhWKNLAblzzZRc-zlbRHLX02JGMbksUbKDpXQBp5JSRwbM1a3HgWl_q3jvm07q9WbafFh7q3Em2Ec3fD7jF_HPFHcLApDlvEw5p441iJNuI43BBH7I8j8cOxuPt2WoQ57LxxrEQbcdzfEEfijyPywLFdDLqA1yKggTQ_UXlSWEk0Utj9pwn3D89n1I2sNc4cL50c9WMPxSvacallq0r8omQ52NjyOOiGDYHa2K_UFg-1_dQHnIqpU8xmYroUM7fzinXsVCducXJN7p1TvHc7769xvnOKD27nwzXO9-5eRSvPxP3Ilt5F9-lPAAAA__-Unui8
