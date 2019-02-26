@@ -144,6 +144,9 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 
 		columnIDs := make([]sqlbase.ColumnID, len(columns))
 		for i := range columns {
+			if columns[i].Type.SemanticType == sqlbase.ColumnType_JSONB {
+				return errors.New("CREATE STATISTICS is not supported for JSON columns")
+			}
 			columnIDs[i] = columns[i].ID
 		}
 		createStatsColLists = []jobspb.CreateStatsDetails_ColList{{IDs: columnIDs}}
@@ -231,12 +234,13 @@ func createStatsDefaultColumns(
 		}
 	}
 
-	// Add all remaining columns in the table, up to maxNonIndexCols.
+	// Add all remaining non-json columns in the table, up to maxNonIndexCols.
 	nonIdxCols := 0
 	for i := 0; i < len(desc.Columns) && nonIdxCols < maxNonIndexCols; i++ {
-		if !requestedCols.Contains(int(desc.Columns[i].ID)) {
+		col := &desc.Columns[i]
+		if col.Type.SemanticType != sqlbase.ColumnType_JSONB && !requestedCols.Contains(int(col.ID)) {
 			columns = append(
-				columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{desc.Columns[i].ID}},
+				columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{col.ID}},
 			)
 			nonIdxCols++
 		}
