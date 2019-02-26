@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -213,7 +214,7 @@ func (opc *optPlanningCtx) init(p *planner, AST tree.Statement) {
 	// cached memo).
 	switch AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause, *tree.UnionClause, *tree.ValuesClause,
-		*tree.Insert, *tree.Update, *tree.Delete, *tree.CannedOptPlan:
+		*tree.Insert, *tree.Update, *tree.Delete:
 		// If the current transaction has uncommitted DDL statements, we cannot rely
 		// on descriptor versions for detecting a "stale" memo. This is because
 		// descriptor versions are bumped at most once per transaction, even if there
@@ -250,10 +251,18 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	p := opc.p
 
 	_, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan)
-	if isCanned && !p.EvalContext().SessionData.AllowPrepareAsOptPlan {
-		return nil, false, errors.Errorf(
-			"PREPARE AS OPT PLAN is a testing facility that should not be used directly",
-		)
+	if isCanned {
+		if !p.EvalContext().SessionData.AllowPrepareAsOptPlan {
+			return nil, false, errors.Errorf(
+				"PREPARE AS OPT PLAN is a testing facility that should not be used directly",
+			)
+		}
+
+		if p.SessionData().User != security.RootUser {
+			return nil, false, errors.Errorf(
+				"PREPARE AS OPT PLAN may only be used by root",
+			)
+		}
 	}
 
 	// Build the Memo (optbuild) and apply normalization rules to it. If the
