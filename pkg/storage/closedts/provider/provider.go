@@ -119,6 +119,14 @@ func (p *Provider) runCloser(ctx context.Context) {
 	ch := p.Notify(p.cfg.NodeID)
 	defer close(ch)
 
+	confChanged := make(chan struct{}, 1)
+	closedts.TargetDuration.SetOnChange(&p.cfg.Settings.SV, func() {
+		select {
+		case confChanged <- struct{}{}:
+		default:
+		}
+	})
+
 	var t timeutil.Timer
 	defer t.Stop()
 	var lastEpoch ctpb.Epoch
@@ -134,6 +142,7 @@ func (p *Provider) runCloser(ctx context.Context) {
 			return
 		case <-t.C:
 			t.Read = true
+		case <-confChanged:
 		}
 
 		next, epoch, err := p.cfg.Clock(p.cfg.NodeID)
