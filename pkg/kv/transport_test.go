@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )
 
@@ -171,4 +172,30 @@ func (m *mockInternalClient) RangeFeed(
 	ctx context.Context, in *roachpb.RangeFeedRequest, opts ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
 	return nil, fmt.Errorf("unsupported RangeFeed call")
+}
+
+func TestWithMarshalingDebugging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	exp := `batch size 23 -> 28 bytes
+re-marshaled protobuf:
+00000000  0a 0a 0a 00 12 06 08 00  10 00 18 00 12 0e 3a 0c  |..............:.|
+00000010  0a 0a 1a 03 66 6f 6f 22  03 62 61 72              |....foo".bar|
+
+original panic:  <nil>
+`
+
+	assert.PanicsWithValue(t, exp, func() {
+		var ba roachpb.BatchRequest
+		ba.Add(&roachpb.ScanRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: []byte("foo"),
+			},
+		})
+		withMarshalingDebugging(ctx, ba, func() {
+			ba.Requests[0].GetInner().(*roachpb.ScanRequest).EndKey = roachpb.Key("bar")
+		})
+	})
 }
