@@ -25,7 +25,8 @@ sudo apt-get install -y --no-install-recommends \
   g++ \
   git \
   nodejs \
-  yarn
+  yarn \
+  bison
 
 sudo adduser "${USER}" docker
 

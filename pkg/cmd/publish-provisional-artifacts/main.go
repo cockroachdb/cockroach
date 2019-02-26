@@ -73,6 +73,7 @@ var libsRe = func() *regexp.Regexp {
 		regexp.QuoteMeta("libdl.so."),
 		regexp.QuoteMeta("libm.so."),
 		regexp.QuoteMeta("libc.so."),
+		regexp.QuoteMeta("libresolv.so."),
 		strings.Replace(regexp.QuoteMeta("ld-linux-ARCH.so."), "ARCH", ".*", -1),
 	}, "|")
 	return regexp.MustCompile(libs)
