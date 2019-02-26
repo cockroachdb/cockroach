@@ -57,6 +57,9 @@ type InternalExecutor struct {
 // the *WithUser methods of the InternalExecutor.
 type SessionBoundInternalExecutor struct {
 	impl internalExecutorImpl
+	// sessionDataCopy stores a copy of session data; impl has a pointer to this
+	// field.
+	sessionDataCopy sessiondata.SessionData
 }
 
 // internalExecutorImpl supports the implementation of InternalExecutor and
@@ -116,14 +119,11 @@ func MakeInternalExecutor(
 	}
 }
 
-// MakeSessionBoundInternalExecutor creates a SessionBoundInternalExecutor.
-func MakeSessionBoundInternalExecutor(
-	ctx context.Context,
-	sessionData *sessiondata.SessionData,
-	s *Server,
-	memMetrics MemoryMetrics,
-	settings *cluster.Settings,
-) SessionBoundInternalExecutor {
+// NewSessionBoundInternalExecutor creates a SessionBoundInternalExecutor.
+// CopySessionData must be called before using the internal executor.
+func NewSessionBoundInternalExecutor(
+	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
+) *SessionBoundInternalExecutor {
 	monitor := mon.MakeUnlimitedMonitor(
 		ctx,
 		"internal SQL executor",
@@ -133,17 +133,20 @@ func MakeSessionBoundInternalExecutor(
 		math.MaxInt64, /* noteworthy */
 		settings,
 	)
-	dataCopy := sessionData.Copy()
-	return SessionBoundInternalExecutor{
+	sbie := &SessionBoundInternalExecutor{
 		impl: internalExecutorImpl{
 			s:          s,
 			mon:        &monitor,
 			memMetrics: memMetrics,
-			// The internal executor gets a copy of the session data, so it can't
-			// update the parent session.
-			sessionData: &dataCopy,
 		},
 	}
+	sbie.impl.sessionData = &sbie.sessionDataCopy
+	return sbie
+}
+
+// CopySessionData populates the session data for an internal executor.
+func (sbie *SessionBoundInternalExecutor) CopySessionData(sessionData *sessiondata.SessionData) {
+	sbie.sessionDataCopy = *sessionData
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
