@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.D
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -90,7 +91,17 @@ func (ex *connExecutor) execStmt(
 	case stateNoTxn:
 		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
 	case stateOpen:
-		ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+		if ex.server.cfg.Settings.IsCPUProfiling() {
+			labels := pprof.Labels(
+				"stmt.tag", stmt.AST.StatementTag(),
+				"stmt.anonymized", stmt.AnonymizedStr,
+			)
+			pprof.Do(ctx, labels, func(ctx context.Context) {
+				ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+			})
+		} else {
+			ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+		}
 		switch ev.(type) {
 		case eventNonRetriableErr:
 			ex.recordFailure()
