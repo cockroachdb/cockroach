@@ -30,6 +30,12 @@ type Operator interface {
 	Next() ColBatch
 }
 
+// resetter is an interface that operators can implement if they can be reset
+// either for reusing (to keep the already allocated memory) or during tests.
+type resetter interface {
+	reset()
+}
+
 type noopOperator struct {
 	input Operator
 }
@@ -42,4 +48,10 @@ func (n *noopOperator) Init() {
 
 func (n *noopOperator) Next() ColBatch {
 	return n.input.Next()
+}
+
+func (n *noopOperator) reset() {
+	if r, ok := n.input.(resetter); ok {
+		r.reset()
+	}
 }
