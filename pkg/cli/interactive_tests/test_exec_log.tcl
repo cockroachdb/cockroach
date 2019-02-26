@@ -42,8 +42,18 @@ eexpect root@
 flush_server_logs
 
 # Now check the items are there in the log file.
-system "grep -q 'hello.*world' $logfile"
-system "grep -q nonexistent $logfile"
+# We need to iterate because flush_server_logs
+# only syncs on flush of cockroach.log, not
+# the exec log.
+system "for i in `seq 1 3`; do
+  grep 'hello.*world' $logfile &&
+  grep nonexistent $logfile &&
+  exit 0;
+  echo still waiting;
+  sleep 1;
+done;
+echo 'server failed to flush exec log?'
+exit 1;"
 system "if grep -q lovely $logfile; then false; fi"
 
 end_test
