@@ -69,10 +69,10 @@ func init() {
 }
 
 var kvMeta = workload.Meta{
-	Name: `kv`,
-	Description: `
-	KV reads and writes to keys spread (by default, uniformly at random) across
-	the cluster.
+	Name:        `kv`,
+	Description: `KV reads and writes to keys spread randomly across the cluster.`,
+	Details: `
+	By default, keys are picked uniformly at random across the cluster.
 	--concurrency workers alternate between doing selects and upserts (according
 	to a --read-percent ratio). Each select/upsert reads/writes a batch of --batch
 	rows. The write keys are randomly generated in a deterministic fashion (or
@@ -81,7 +81,8 @@ var kvMeta = workload.Meta{
 	--write-seq can be used to incorporate data produced by a previous run into
 	the current run.
 	`,
-	Version: `1.0.0`,
+	Version:      `1.0.0`,
+	PublicFacing: true,
 	New: func() workload.Generator {
 		g := &kv{}
 		g.flags.FlagSet = pflag.NewFlagSet(`kv`, pflag.ContinueOnError)

@@ -30,7 +30,7 @@ func WorkloadCmd(userFacing bool) *cobra.Command {
 		Short: `generators for data and query loads`,
 	})
 	for _, subCmdFn := range subCmdFns {
-		rootCmd.AddCommand(subCmdFn())
+		rootCmd.AddCommand(subCmdFn(userFacing))
 	}
 	if userFacing {
 		whitelist := map[string]struct{}{
@@ -56,7 +56,7 @@ func WorkloadCmd(userFacing bool) *cobra.Command {
 	return rootCmd
 }
 
-var subCmdFns []func() *cobra.Command
+var subCmdFns []func(userFacing bool) *cobra.Command
 
 // AddSubCmd adds a sub-command closure to the workload cli.
 //
@@ -67,7 +67,7 @@ var subCmdFns []func() *cobra.Command
 // now sometimes done in the outermost possible place (main.go) and so its init
 // runs last. Instead, we return a closure that is called in the main function,
 // which is guaranteed to run after all inits.
-func AddSubCmd(fn func() *cobra.Command) {
+func AddSubCmd(fn func(userFacing bool) *cobra.Command) {
 	subCmdFns = append(subCmdFns, fn)
 }
 
