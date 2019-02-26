@@ -441,10 +441,8 @@ func (q *Queue) MaybeWaitForPush(
 	var queryPusherErrCh <-chan *roachpb.Error    // accepts errors querying the pusher txn
 	var readyCh chan struct{}                     // signaled when pusher txn should be queried
 
-	// Query the pusher if it's a valid transaction which already [may]
-	// have a transaction record (note that key being non-nil does not
-	// guarantee a txn record has been successfully written yet).
-	if req.PusherTxn.ID != uuid.Nil && req.PusherTxn.Key != nil {
+	// Query the pusher if it's a valid read-write transaction.
+	if req.PusherTxn.ID != uuid.Nil && req.PusherTxn.IsWriting() {
 		// Create a context which will be canceled once this call completes.
 		// This ensures that the goroutine created to query the pusher txn
 		// is properly cleaned up.

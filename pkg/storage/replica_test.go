@@ -1390,7 +1390,6 @@ func TestReplicaNoGossipConfig(t *testing.T) {
 		if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), test.h, test.req); pErr != nil {
 			t.Fatal(pErr)
 		}
-		txn.Writing = true
 
 		// System config is not gossiped.
 		cfg := tc.gossip.GetSystemConfig()
@@ -1424,7 +1423,6 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	}, &req1); pErr != nil {
 		t.Fatal(pErr)
 	}
-	txn.Writing = true
 
 	req2, h := endTxnArgs(txn, true /* commit */)
 	req2.IntentSpans = []roachpb.Span{{Key: key}}
@@ -3158,7 +3156,6 @@ func TestEndTransactionDeadline(t *testing.T) {
 		); pErr != nil {
 			t.Fatal(pErr)
 		}
-		txn.Writing = true
 
 		etArgs, etHeader := endTxnArgs(txn, true /* commit */)
 		switch i {
@@ -3468,7 +3465,6 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	txn.Writing = true
 
 	args, h := endTxnArgs(txn, true /* commit */)
 	// Make an EndTransaction request which would fail if not
@@ -3516,7 +3512,6 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
 			key = roachpb.Key(key).Next()
 			txn := newTransaction("test", key, 1, tc.Clock())
-			txn.Writing = true
 
 			var ba roachpb.BatchRequest
 			bt, btH := beginTxnArgs(key, txn)
@@ -3707,7 +3702,6 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
-	txn.Writing = true
 
 	// Start out with a heartbeat to the transaction.
 	hBA, h := heartbeatArgs(txn, tc.Clock().Now())
@@ -3816,7 +3810,6 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 		}
 		// Simulate what the client is supposed to do (update the transaction
 		// based on the response). The Writing field is needed by this test.
-		txn.Writing = true
 
 		// Abort the transaction by pushing it with maximum priority.
 		pusher := newTransaction("test", key, 1, tc.Clock())
@@ -4593,7 +4586,6 @@ func TestAbortSpanPoisonOnResolve(t *testing.T) {
 			if pErr != nil {
 				return nil, pErr
 			}
-			actor.Writing = true
 			return reply.(*roachpb.IncrementResponse), nil
 		}
 
@@ -5166,7 +5158,6 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
-	pushee.Writing = true
 
 	// Now, push the transaction using a PUSH_TIMESTAMP push request.
 	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_TIMESTAMP)

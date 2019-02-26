@@ -336,7 +336,9 @@ message Transaction {
   // batch failed.
   // When set, the AbortCache must be checked by reads so that they don't miss
   // to see the txn's previous writes.
-  bool writing = 9;
+  // TODO(nvanbenschoten): This comment is only true when interacting with 2.1
+  // nodes. This field can be completely removed in 19.2.
+  bool deprecated_writing = 9;
   // If this is true, the transaction must retry. Relevant only for
   // SNAPSHOT transactions: a SERIALIZABLE transaction would have to
   // retry anyway due to its commit timestamp having moved forward (whenever

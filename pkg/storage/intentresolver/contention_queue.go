@@ -48,7 +48,7 @@ func newPusher(txn *roachpb.Transaction) *pusher {
 }
 
 func (p *pusher) activeTxn() bool {
-	return p.txn != nil && p.txn.Key != nil
+	return p.txn != nil && p.txn.IsWriting()
 }
 
 type contendedKey struct {
