@@ -194,6 +194,20 @@ func (node *ShowSchemas) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowSequences represents a SHOW SEQUENCES statement.
+type ShowSequences struct {
+	Database Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowSequences) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW SEQUENCES")
+	if node.Database != "" {
+		ctx.WriteString(" FROM ")
+		ctx.FormatNode(&node.Database)
+	}
+}
+
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
 	TableNamePrefix

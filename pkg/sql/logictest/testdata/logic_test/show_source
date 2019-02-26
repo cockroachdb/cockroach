@@ -147,6 +147,11 @@ pg_catalog
 public
 
 query T colnames
+SELECT * FROM [SHOW SEQUENCES FROM system]
+----
+sequence_name
+
+query T colnames
 SELECT * FROM [SHOW TABLES FROM system]
 ----
 table_name

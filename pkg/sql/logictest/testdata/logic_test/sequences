@@ -148,6 +148,26 @@ TRUNCATE foo
 statement error pgcode 42809 "foo" is not a table
 DROP TABLE foo
 
+# List sequences with SHOW
+
+query T
+SHOW SEQUENCES
+----
+foo
+high_minvalue_test
+ignored_options_test
+lastval_test
+lastval_test_2
+show_create_test
+
+statement ok
+CREATE DATABASE seqdb; USE seqdb; CREATE SEQUENCE otherseq; USE test
+
+query T
+SHOW SEQUENCES FROM seqdb
+----
+otherseq
+
 # You can select from a sequence to get its value.
 
 statement ok

@@ -788,6 +788,12 @@ func (*ShowSchemas) StatementType() StatementType { return Rows }
 func (*ShowSchemas) StatementTag() string { return "SHOW SCHEMAS" }
 
 // StatementType implements the Statement interface.
+func (*ShowSequences) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowSequences) StatementTag() string { return "SHOW SCHEMAS" }
+
+// StatementType implements the Statement interface.
 func (*Split) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -908,6 +914,7 @@ func (n *ShowRanges) String() string                { return AsString(n) }
 func (n *ShowRoleGrants) String() string            { return AsString(n) }
 func (n *ShowRoles) String() string                 { return AsString(n) }
 func (n *ShowSchemas) String() string               { return AsString(n) }
+func (n *ShowSequences) String() string             { return AsString(n) }
 func (n *ShowSessions) String() string              { return AsString(n) }
 func (n *ShowSyntax) String() string                { return AsString(n) }
 func (n *ShowTableStats) String() string            { return AsString(n) }
