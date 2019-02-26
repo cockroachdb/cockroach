@@ -104,10 +104,10 @@ scan  ·      ·            (x, y, z)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT z FROM (SELECT y, z FROM xyz WHERE y > 1)
 ----
-distinct        ·            ·        (z)     weak-key(z)
+distinct        ·            ·        (z)     weak-key(z); +z
  │              distinct on  z        ·       ·
  │              order key    z        ·       ·
- └── render     ·            ·        (z)     ·
+ └── render     ·            ·        (z)     +z
       │         render 0     z        ·       ·
       └── scan  ·            ·        (y, z)  +z
 ·               table        xyz@foo  ·       ·
