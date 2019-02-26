@@ -633,12 +633,21 @@ func (b *Builder) buildGroupByInput(ev memo.ExprView) (execPlan, error) {
 	// leads to significant speedup.
 	def := ev.Private().(*memo.GroupByDef)
 	neededCols := def.GroupingCols.Copy()
+	groupByInput := ev.Child(0)
 	aggs := ev.Child(1)
 	for i, n := 0, aggs.ChildCount(); i < n; i++ {
 		neededCols.UnionWith(memo.ExtractAggInputColumns(aggs.Child(i)))
 	}
 
-	if neededCols.Equals(ev.Child(0).Logical().Relational.OutputCols) {
+	// In rare cases, we might need a column only for its ordering, for example:
+	//   SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
+	// In this case we can't project the column away as it is still needed by
+	// distsql to maintain the desired ordering.
+	for _, c := range groupByInput.Physical().Ordering.Columns {
+		neededCols.Add(int(c.AnyID()))
+	}
+
+	if neededCols.Equals(groupByInput.Logical().Relational.OutputCols) {
 		// All columns produced by the input are used.
 		return input, nil
 	}
@@ -653,14 +662,14 @@ func (b *Builder) buildGroupByInput(ev memo.ExprView) (execPlan, error) {
 		}
 	})
 
-	reqOrdering := input.reqOrdering(ev.Physical())
+	input.outputCols = newOutputCols
+	reqOrdering := input.reqOrdering(groupByInput.Physical())
 	input.root, err = b.factory.ConstructSimpleProject(
 		input.root, cols, nil /* colNames */, reqOrdering,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
-	input.outputCols = newOutputCols
 	return input, nil
 }
 
