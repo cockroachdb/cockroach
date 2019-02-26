@@ -2,34 +2,16 @@
 # join.opt contains exploration rules for the Join operator.
 # =============================================================================
 
-# We don't allow any of the logical join -> logical join rules (CommuteJoin,
-# CommuteLeftJoin, CommuteRightJoin, AssociateJoin) to operate on inputs with
-# no columns. This is because zero-column groups can occur multiple times in
-# the same normalized tree, and exploration can cause group collisions:
-#
-# Let A be the 0-column values node with two rows `VALUES (), ()`,
-# and B be the 0-column values node with three rows `VALUES (), (), ()`.
-#
-# Then consider the following query:
-#
-# (A JOIN B) UNION (B JOIN A)
-#
-# During build, we add `A JOIN B` and `B JOIN A` to *separate memo groups*.
-# Then, during exploration, we apply the `CommuteJoin` rule to transform `A
-# JOIN B` to `B JOIN A`. This attempts to get interned into the same group, but
-# the interner finds that `B JOIN A` already exists in a different group, and
-# panics.
-# TODO(justin): find a more long-term solution to this problem.
-
 # CommuteJoin creates a Join with the left and right inputs swapped. This is
 # useful for other rules that convert joins to other operators (like merge
 # join).
+# If any join hints are specified, we keep the order in the query.
 [CommuteJoin, Explore]
 (InnerJoin | FullJoin
-  $left:*
-  $right:*
-  $on:*
-  $private:*
+    $left:*
+    $right:*
+    $on:*
+    $private:* & (NoJoinHints $private)
 )
 =>
 ((OpName) $right $left $on $private)
@@ -37,10 +19,10 @@
 # CommuteLeftJoin creates a Join with the left and right inputs swapped.
 [CommuteLeftJoin, Explore]
 (LeftJoin
-  $left:*
-  $right:*
-  $on:*
-  $private:*
+    $left:*
+    $right:*
+    $on:*
+    $private:* & (NoJoinHints $private)
 )
 =>
 (RightJoin $right $left $on $private)
@@ -48,10 +30,10 @@
 # CommuteRightJoin creates a Join with the left and right inputs swapped.
 [CommuteRightJoin, Explore]
 (RightJoin
-  $left:*
-  $right:*
-  $on:*
-  $private:*
+    $left:*
+    $right:*
+    $on:*
+    $private:* & (NoJoinHints $private)
 )
 =>
 (LeftJoin $right $left $on $private)
@@ -125,16 +107,18 @@
 # to the logically equivalent expression:
 #   A JOIN (B JOIN C ON B.x = C.x) ON A.y = B.y
 #
-# TODO(radu): handle the scan privates.
+# If any of the joins contains a hint, we do not rearrange the joins.
 [AssociateJoin, Explore]
 (InnerJoin
     $left:(InnerJoin
         $innerLeft:*
         $innerRight:*
         $innerOn:*
+        $innerPrivate:* & (NoJoinHints $innerPrivate)
     )
     $right:* & (ShouldReorderJoins $left $right)
     $on:*
+    $private:* & (NoJoinHints $private)
 )
 =>
 (InnerJoin

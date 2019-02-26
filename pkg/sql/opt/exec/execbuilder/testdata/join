@@ -9,13 +9,9 @@ CREATE TABLE twocolumn (x INT, y INT); INSERT INTO twocolumn(x, y) VALUES (44,51
 ## Simple test cases for inner, left, right, and outer joins
 
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM onecolumn JOIN twocolumn USING(x)
-]
+EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
 render          ·         ·
- │              render 0  x
- │              render 1  y
  └── join       ·         ·
       │         type      inner
       │         equality  (x) = (x)
@@ -27,9 +23,7 @@ render          ·         ·
 ·               spans     ALL
 
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
-]
+EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
 join       ·         ·
  │         type      inner
@@ -42,15 +36,9 @@ join       ·         ·
 ·          spans     ALL
 
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
-]
+EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
 render          ·         ·
- │              render 0  x
- │              render 1  y
- │              render 2  x
- │              render 3  y
  └── join       ·         ·
       │         type      cross
       ├── scan  ·         ·
@@ -62,9 +50,7 @@ render          ·         ·
 ·               filter    x = 44
 
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
-]
+EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 join       ·         ·
  │         type      inner
@@ -77,9 +63,7 @@ join       ·         ·
 ·          spans     ALL
 
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
-]
+EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 join       ·         ·
  │         type      inner
@@ -93,17 +77,14 @@ join       ·         ·
 
 
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
-]
+EXPLAIN SELECT * FROM
+  onecolumn
+  CROSS JOIN twocolumn
+  JOIN onecolumn AS a (b) ON a.b = twocolumn.x
+  JOIN twocolumn AS c (d, e) ON a.b = c.d AND c.d = onecolumn.x
+LIMIT 1
 ----
 render                    ·         ·
- │                        render 0  x
- │                        render 1  x
- │                        render 2  y
- │                        render 3  x
- │                        render 4  x
- │                        render 5  y
  └── limit                ·         ·
       │                   count     1
       └── join            ·         ·
@@ -431,7 +412,7 @@ statement ok
 CREATE TABLE cards(id INT PRIMARY KEY, cust INT NOT NULL REFERENCES customers(id))
 
 query TTT
-EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust 
+EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust
 ----
 join       ·               ·
  │         type            inner
@@ -1377,17 +1358,9 @@ join       ·         ·
 
 # Only a and c can be equality columns.
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
-]
+EXPLAIN SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
 ----
 render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  c
- │              render 3  d
- │              render 4  c
- │              render 5  d
  └── join       ·         ·
       │         type      inner
       │         equality  (a, c) = (a, c)
@@ -1412,9 +1385,7 @@ CREATE TABLE zigzag (
 
 # No zigzag join should be planned if experimental_enable_zigzag_join is false.
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
-]
+EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 filter           ·       ·
  │               filter  c = 6.0
@@ -1430,9 +1401,7 @@ SET experimental_enable_zigzag_join = true
 
 # Simple zigzag case - fixed columns, output cols from indexes only.
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
-]
+EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 zigzag-join  ·          ·
  │           type       inner
@@ -1447,9 +1416,7 @@ zigzag-join  ·          ·
 
 # Zigzag join nested inside a lookup.
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
-]
+EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 lookup-join       ·          ·
  │                table      zigzag@primary
@@ -1466,9 +1433,7 @@ lookup-join       ·          ·
 
 # Zigzag join nested inside a lookup, with an on condition on lookup join.
 query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
-]
+EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ----
 lookup-join       ·          ·
  │                table      zigzag@primary
@@ -1483,3 +1448,47 @@ lookup-join       ·          ·
       └── scan    ·          ·
 ·                 table      zigzag@c_idx
 ·                 fixedvals  1 column
+
+# Test that we can force a merge join.
+query TTT
+EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
+----
+render               ·               ·
+ └── join            ·               ·
+      │              type            inner
+      │              equality        (x) = (x)
+      │              mergeJoinOrder  +"(x=x)"
+      ├── sort       ·               ·
+      │    │         order           +x
+      │    └── scan  ·               ·
+      │              table           onecolumn@primary
+      │              spans           ALL
+      └── sort       ·               ·
+           │         order           +x
+           └── scan  ·               ·
+·                    table           twocolumn@primary
+·                    spans           ALL
+
+statement error LOOKUP can only be used with INNER or LEFT joins
+EXPLAIN SELECT * FROM onecolumn RIGHT LOOKUP JOIN twocolumn USING(x)
+
+statement error could not produce a query plan conforming to the LOOKUP JOIN hint
+EXPLAIN SELECT * FROM onecolumn INNER LOOKUP JOIN twocolumn USING(x)
+
+statement error could not produce a query plan conforming to the MERGE JOIN hint
+EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn ON onecolumn.x > twocolumn.y
+
+# Test that we can force a hash join (instead of merge join).
+query TTT
+EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = cards.cust
+----
+join       ·                   ·
+ │         type                inner
+ │         equality            (cust) = (id)
+ │         right cols are key  ·
+ ├── scan  ·                   ·
+ │         table               cards@primary
+ │         spans               ALL
+ └── scan  ·                   ·
+·          table               customers@primary
+·          spans               ALL

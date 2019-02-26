@@ -37,16 +37,16 @@ const (
 // statement (e.g. "INNER JOIN") and returns the JoinType.
 func JoinTypeFromAstString(joinStr string) JoinType {
 	switch joinStr {
-	case tree.AstJoin, tree.AstInnerJoin, tree.AstCrossJoin:
+	case "", tree.AstInner, tree.AstCross:
 		return InnerJoin
 
-	case tree.AstLeftJoin:
+	case tree.AstLeft:
 		return LeftOuterJoin
 
-	case tree.AstRightJoin:
+	case tree.AstRight:
 		return RightOuterJoin
 
-	case tree.AstFullJoin:
+	case tree.AstFull:
 		return FullOuterJoin
 
 	default:

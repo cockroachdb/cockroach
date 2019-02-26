@@ -775,19 +775,31 @@ func (node *AliasClause) doc(p *PrettyCfg) pretty.Doc {
 func (node *JoinTableExpr) doc(p *PrettyCfg) pretty.Doc {
 	d := []pretty.Doc{p.Doc(node.Left)}
 	if _, isNatural := node.Cond.(NaturalJoinCond); isNatural {
-		// Natural joins have a different syntax: "<a> NATURAL <join_type> <b>"
-		d = append(d,
-			p.nestUnder(
-				pretty.ConcatSpace(p.Doc(node.Cond), pretty.Text(node.Join)),
-				p.Doc(node.Right)),
-		)
-	} else {
-		// General syntax: "<a> <join_type> <b> <condition>"
-		operand := []pretty.Doc{
-			p.nestUnder(
-				pretty.Text(node.Join),
-				p.Doc(node.Right)),
+		// Natural joins have a different syntax:
+		//   "<a> NATURAL <join_type> [<join_hint>] <b>"
+		j := p.Doc(node.Cond)
+		if node.JoinType != "" {
+			j = pretty.ConcatSpace(j, pretty.Text(node.JoinType))
+			if node.Hint != "" {
+				j = pretty.ConcatSpace(j, pretty.Text(node.Hint))
+			}
 		}
+		j = pretty.ConcatSpace(j, pretty.Text("JOIN"))
+		d = append(d, p.nestUnder(j, p.Doc(node.Right)))
+	} else {
+		// General syntax: "<a> <join_type> [<join_hint>] JOIN <b> <condition>"
+		var j pretty.Doc
+		if node.JoinType != "" {
+			j = pretty.Text(node.JoinType)
+			if node.Hint != "" {
+				j = pretty.ConcatSpace(j, pretty.Text(node.Hint))
+			}
+			j = pretty.ConcatSpace(j, pretty.Text("JOIN"))
+		} else {
+			j = pretty.Text("JOIN")
+		}
+
+		operand := []pretty.Doc{p.nestUnder(j, p.Doc(node.Right))}
 		if node.Cond != nil {
 			operand = append(operand, p.Doc(node.Cond))
 		}
