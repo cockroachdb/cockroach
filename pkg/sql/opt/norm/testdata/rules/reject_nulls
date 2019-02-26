@@ -78,39 +78,39 @@ inner-join
  ├── key: (1,7,11)
  ├── fd: ()-->(5,6), (1)-->(2-4), (7)-->(8-10), (11)-->(12)
  ├── inner-join
- │    ├── columns: k:7(int!null) i:8(int) f:9(float) s:10(string) u:11(int!null) v:12(int!null)
+ │    ├── columns: u:5(int!null) v:6(int) k:7(int!null) i:8(int) f:9(float) s:10(string) u:11(int!null) v:12(int!null)
  │    ├── key: (7,11)
- │    ├── fd: (7)-->(8-10), (11)-->(12)
+ │    ├── fd: ()-->(5,6), (7)-->(8-10), (11)-->(12)
  │    ├── scan a
  │    │    ├── columns: k:7(int!null) i:8(int) f:9(float) s:10(string)
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(8-10)
- │    ├── select
- │    │    ├── columns: u:11(int!null) v:12(int!null)
+ │    ├── inner-join
+ │    │    ├── columns: u:5(int!null) v:6(int) u:11(int!null) v:12(int!null)
  │    │    ├── key: (11)
- │    │    ├── fd: (11)-->(12)
- │    │    ├── scan uv
- │    │    │    ├── columns: u:11(int!null) v:12(int)
+ │    │    ├── fd: ()-->(5,6), (11)-->(12)
+ │    │    ├── select
+ │    │    │    ├── columns: u:11(int!null) v:12(int!null)
  │    │    │    ├── key: (11)
- │    │    │    └── fd: (11)-->(12)
- │    │    └── filters
- │    │         └── v > 2 [type=bool, outer=(12), constraints=(/12: [/3 - ]; tight)]
+ │    │    │    ├── fd: (11)-->(12)
+ │    │    │    ├── scan uv
+ │    │    │    │    ├── columns: u:11(int!null) v:12(int)
+ │    │    │    │    ├── key: (11)
+ │    │    │    │    └── fd: (11)-->(12)
+ │    │    │    └── filters
+ │    │    │         └── v > 2 [type=bool, outer=(12), constraints=(/12: [/3 - ]; tight)]
+ │    │    ├── scan uv
+ │    │    │    ├── columns: u:5(int!null) v:6(int)
+ │    │    │    ├── constraint: /5: [/1 - /1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(5,6)
+ │    │    └── filters (true)
  │    └── filters (true)
- ├── inner-join
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) u:5(int!null) v:6(int)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  │    ├── key: (1)
- │    ├── fd: ()-->(5,6), (1)-->(2-4)
- │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-4)
- │    ├── scan uv
- │    │    ├── columns: u:5(int!null) v:6(int)
- │    │    ├── constraint: /5: [/1 - /1]
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    └── fd: ()-->(5,6)
- │    └── filters (true)
+ │    └── fd: (1)-->(2-4)
  └── filters (true)
 
 # Left-join operator.

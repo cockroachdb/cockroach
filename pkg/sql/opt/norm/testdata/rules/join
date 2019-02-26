@@ -1074,25 +1074,8 @@ project
  │         │    │    │    │    ├── columns: xy.x:6(int!null) u:8(int!null)
  │         │    │    │    │    ├── outer: (4)
  │         │    │    │    │    ├── inner-join
- │         │    │    │    │    │    ├── columns: xy.x:6(int!null) u:8(int!null)
- │         │    │    │    │    │    ├── key: (6,8)
- │         │    │    │    │    │    ├── select
- │         │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
- │         │    │    │    │    │    │    ├── key: (6)
- │         │    │    │    │    │    │    ├── scan xy
- │         │    │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
- │         │    │    │    │    │    │    │    └── key: (6)
- │         │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │         └── eq [type=bool]
- │         │    │    │    │    │    │              ├── subquery [type=string]
- │         │    │    │    │    │    │              │    └── max1-row
- │         │    │    │    │    │    │              │         ├── columns: s:19(string)
- │         │    │    │    │    │    │              │         ├── cardinality: [0 - 1]
- │         │    │    │    │    │    │              │         ├── key: ()
- │         │    │    │    │    │    │              │         ├── fd: ()-->(19)
- │         │    │    │    │    │    │              │         └── scan a
- │         │    │    │    │    │    │              │              └── columns: s:19(string)
- │         │    │    │    │    │    │              └── const: 'foo' [type=string]
+ │         │    │    │    │    │    ├── columns: u:8(int!null)
+ │         │    │    │    │    │    ├── outer: (4)
  │         │    │    │    │    │    ├── select
  │         │    │    │    │    │    │    ├── columns: u:8(int!null)
  │         │    │    │    │    │    │    ├── key: (8)
@@ -1110,16 +1093,33 @@ project
  │         │    │    │    │    │    │              │         └── scan a
  │         │    │    │    │    │    │              │              └── columns: s:19(string)
  │         │    │    │    │    │    │              └── const: 'foo' [type=string]
- │         │    │    │    │    │    └── filters (true)
- │         │    │    │    │    ├── limit
- │         │    │    │    │    │    ├── outer: (4)
- │         │    │    │    │    │    ├── cardinality: [0 - 10]
- │         │    │    │    │    │    ├── select
+ │         │    │    │    │    │    ├── limit
  │         │    │    │    │    │    │    ├── outer: (4)
- │         │    │    │    │    │    │    ├── scan b
- │         │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │         └── s >= 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
- │         │    │    │    │    │    └── const: 10 [type=int]
+ │         │    │    │    │    │    │    ├── cardinality: [0 - 10]
+ │         │    │    │    │    │    │    ├── select
+ │         │    │    │    │    │    │    │    ├── outer: (4)
+ │         │    │    │    │    │    │    │    ├── scan b
+ │         │    │    │    │    │    │    │    └── filters
+ │         │    │    │    │    │    │    │         └── s >= 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
+ │         │    │    │    │    │    │    └── const: 10 [type=int]
+ │         │    │    │    │    │    └── filters (true)
+ │         │    │    │    │    ├── select
+ │         │    │    │    │    │    ├── columns: xy.x:6(int!null)
+ │         │    │    │    │    │    ├── key: (6)
+ │         │    │    │    │    │    ├── scan xy
+ │         │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
+ │         │    │    │    │    │    │    └── key: (6)
+ │         │    │    │    │    │    └── filters
+ │         │    │    │    │    │         └── eq [type=bool]
+ │         │    │    │    │    │              ├── subquery [type=string]
+ │         │    │    │    │    │              │    └── max1-row
+ │         │    │    │    │    │              │         ├── columns: s:19(string)
+ │         │    │    │    │    │              │         ├── cardinality: [0 - 1]
+ │         │    │    │    │    │              │         ├── key: ()
+ │         │    │    │    │    │              │         ├── fd: ()-->(19)
+ │         │    │    │    │    │              │         └── scan a
+ │         │    │    │    │    │              │              └── columns: s:19(string)
+ │         │    │    │    │    │              └── const: 'foo' [type=string]
  │         │    │    │    │    └── filters (true)
  │         │    │    │    └── filters (true)
  │         │    │    └── projections
