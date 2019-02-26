@@ -23,6 +23,7 @@ import (
 	"net/http/pprof"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -135,6 +136,20 @@ func NewServer(st *cluster.Settings) *Server {
 		log.Infof(context.Background(), "pprofui: recorded %s in %.2fs", profile, timeutil.Since(tBegin).Seconds())
 	})
 	mux.Handle("/debug/pprof/ui/", http.StripPrefix("/debug/pprof/ui", ps))
+
+	mux.HandleFunc("/debug/pprof/goroutineui/", func(w http.ResponseWriter, req *http.Request) {
+		dump := goroutineui.NewDump(timeutil.Now())
+
+		_ = req.ParseForm()
+		switch req.Form.Get("sort") {
+		case "count":
+			dump.SortCountDesc()
+		case "wait":
+			dump.SortWaitDesc()
+		default:
+		}
+		_ = dump.HTML(w)
+	})
 
 	return &Server{
 		st:  st,
