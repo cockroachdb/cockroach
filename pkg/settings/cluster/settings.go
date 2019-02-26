@@ -71,6 +71,27 @@ type Settings struct {
 	ExternalIODir string
 
 	Initialized bool
+
+	// Set to 1 if a profile is active (if the profile is being grabbed through
+	// the `pprofui` server as opposed to the raw endpoint).
+	cpuProfiling int32 // atomic
+}
+
+// IsCPUProfiling returns true if a pprofui CPU profile is being recorded. This can
+// be used by moving parts across the system to add profiler labels which are
+// too expensive to be enabled at all times.
+func (s *Settings) IsCPUProfiling() bool {
+	return atomic.LoadInt32(&s.cpuProfiling) == 1
+}
+
+// SetCPUProfiling is called from the pprofui to inform the system that a CPU
+// profile is being recorded.
+func (s *Settings) SetCPUProfiling(to bool) {
+	i := int32(0)
+	if to {
+		i = 1
+	}
+	atomic.StoreInt32(&s.cpuProfiling, i)
 }
 
 // NoSettings is used when a func requires a Settings but none is available

@@ -44,12 +44,29 @@ type Server struct {
 	storage      Storage
 	profileSem   syncutil.Mutex
 	profileTypes map[string]http.HandlerFunc
+	hook         func(profile string, do func())
 }
 
-// NewServer creates a new Server backed by the supplied Storage.
-func NewServer(storage Storage) *Server {
+// NewServer creates a new Server backed by the supplied Storage and optionally
+// a hook which is called when a new profile is created. The closure passed to
+// the hook will carry out the work involved in creating the profile and must
+// be called by the hook. The intention is that hook will be a method such as
+// this:
+//
+// func hook(profile string, do func()) {
+// 	if profile == "profile" {
+// 		something.EnableProfilerLabels()
+// 		defer something.DisableProfilerLabels()
+// 		do()
+// 	}
+// }
+func NewServer(storage Storage, hook func(profile string, do func())) *Server {
+	if hook == nil {
+		hook = func(_ string, do func()) { do() }
+	}
 	s := &Server{
 		storage: storage,
+		hook:    hook,
 	}
 
 	s.profileTypes = map[string]http.HandlerFunc{
@@ -195,7 +212,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		rw := &responseBridge{target: w}
 
-		fetchHandler(rw, req)
+		s.hook(profileName, func() { fetchHandler(rw, req) })
 
 		if rw.statusCode != http.StatusOK && rw.statusCode != 0 {
 			return errors.Errorf("unexpected status: %d", rw.statusCode)
@@ -215,8 +232,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// If this is a request issued by `go tool pprof`, just return the profile
+	// directly. This is convenient because it avoids having to expose the pprof
+	// endpoints separately, and also allows inserting hooks around CPU profiles
+	// in the future.
+	isGoPProf := strings.Contains(r.Header.Get("User-Agent"), "Go-http-client")
 	origURL.Path = path.Join(origURL.Path, id, "flamegraph")
-	http.Redirect(w, r, origURL.String(), http.StatusTemporaryRedirect)
+	if !isGoPProf {
+		http.Redirect(w, r, origURL.String(), http.StatusTemporaryRedirect)
+	} else {
+		_ = s.storage.Get(id, func(r io.Reader) error {
+			_, err := io.Copy(w, r)
+			return err
+		})
+	}
 }
 
 type fetcherFn func(_ string, _, _ time.Duration) (*profile.Profile, string, error)
