@@ -208,7 +208,7 @@ type optPlanningCtx struct {
 
 func (opc *optPlanningCtx) init(p *planner, AST tree.Statement) {
 	opc.p = p
-	opc.catalog.init(p.execCfg.TableStatsCache, p)
+	opc.catalog.init(p)
 	p.optimizer.Init(p.EvalContext())
 	opc.flags = planFlagOptUsed
 

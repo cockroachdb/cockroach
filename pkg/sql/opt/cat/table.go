@@ -202,9 +202,9 @@ func FindTableColumnByName(tab Table, name tree.Name) int {
 	return -1
 }
 
-// FormatCatalogTable nicely formats a catalog table using a treeprinter for
-// debugging and testing.
-func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
+// FormatTable nicely formats a catalog table using a treeprinter for debugging
+// and testing.
+func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	child := tp.Childf("TABLE %s", tab.Name().TableName)
 
 	var buf bytes.Buffer

@@ -40,9 +40,9 @@ type View interface {
 	ColumnName(i int) tree.Name
 }
 
-// FormatCatalogView nicely formats a catalog view using a treeprinter for
-// debugging and testing.
-func FormatCatalogView(view View, tp treeprinter.Node) {
+// FormatView nicely formats a catalog view using a treeprinter for debugging
+// and testing.
+func FormatView(view View, tp treeprinter.Node) {
 	var buf bytes.Buffer
 	if view.ColumnNameCount() > 0 {
 		buf.WriteString(" (")
