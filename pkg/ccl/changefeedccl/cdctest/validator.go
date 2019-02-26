@@ -311,6 +311,44 @@ func (vs Validators) Failures() []string {
 	return f
 }
 
+// CountValidator wraps a Validator and keeps count of how many rows and
+// resolved timestamps have been seen.
+type CountValidator struct {
+	v Validator
+
+	NumRows, NumResolved                 int
+	NumResolvedRows, NumResolvedWithRows int
+	rowsSinceResolved                    int
+}
+
+// MakeCountValidator returns a CountValidator wrapping the given Validator.
+func MakeCountValidator(v Validator) *CountValidator {
+	return &CountValidator{v: v}
+}
+
+// NoteRow implements the Validator interface.
+func (v *CountValidator) NoteRow(partition string, key, value string, updated hlc.Timestamp) {
+	v.NumRows++
+	v.rowsSinceResolved++
+	v.v.NoteRow(partition, key, value, updated)
+}
+
+// NoteResolved implements the Validator interface.
+func (v *CountValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	v.NumResolved++
+	if v.rowsSinceResolved > 0 {
+		v.NumResolvedWithRows++
+		v.NumResolvedRows += v.rowsSinceResolved
+		v.rowsSinceResolved = 0
+	}
+	return v.v.NoteResolved(partition, resolved)
+}
+
+// Failures implements the Validator interface.
+func (v *CountValidator) Failures() []string {
+	return v.v.Failures()
+}
+
 // ParseJSONValueTimestamps returns the updated or resolved timestamp set in the
 // provided `format=json` value. Exported for acceptance testing.
 func ParseJSONValueTimestamps(v []byte) (updated, resolved hlc.Timestamp, err error) {
@@ -319,7 +357,7 @@ func ParseJSONValueTimestamps(v []byte) (updated, resolved hlc.Timestamp, err er
 		Updated  string `json:"updated"`
 	}
 	if err := gojson.Unmarshal(v, &valueRaw); err != nil {
-		return hlc.Timestamp{}, hlc.Timestamp{}, err
+		return hlc.Timestamp{}, hlc.Timestamp{}, errors.Wrapf(err, "parsing [%s] as json", v)
 	}
 	if valueRaw.Updated != `` {
 		var err error
