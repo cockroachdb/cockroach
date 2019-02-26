@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -277,8 +278,10 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return "", err
 	}
 
-	if stmt.AST.StatementType() != tree.DDL {
-		return "", fmt.Errorf("statement type is not DDL: %v", stmt.AST.StatementType())
+	switch stmt.AST.StatementType() {
+	case tree.DDL, tree.RowsAffected:
+	default:
+		return "", fmt.Errorf("statement type is not DDL or RowsAffected: %v", stmt.AST.StatementType())
 	}
 
 	switch stmt := stmt.AST.(type) {
@@ -301,6 +304,12 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 	case *tree.CreateSequence:
 		seq := tc.CreateSequence(stmt)
 		return seq.String(), nil
+
+	case *tree.SetZoneConfig:
+		zone := tc.SetZoneConfig(stmt)
+		tp := treeprinter.New()
+		cat.FormatZone(zone, tp)
+		return tp.String(), nil
 
 	default:
 		return "", fmt.Errorf("unsupported statement: %v", stmt)
@@ -391,7 +400,7 @@ var _ cat.View = &View{}
 
 func (tv *View) String() string {
 	tp := treeprinter.New()
-	cat.FormatCatalogView(tv, tp)
+	cat.FormatView(tv, tp)
 	return tp.String()
 }
 
@@ -463,7 +472,7 @@ var _ cat.Table = &Table{}
 
 func (tt *Table) String() string {
 	tp := treeprinter.New()
-	cat.FormatCatalogTable(tt.Catalog, tt, tp)
+	cat.FormatTable(tt.Catalog, tt, tp)
 	return tp.String()
 }
 
@@ -609,6 +618,10 @@ type Index struct {
 
 	Columns []cat.IndexColumn
 
+	// IdxZone is the zone associated with the index. This may be inherited from
+	// the parent table, database, or even the default zone.
+	IdxZone *config.ZoneConfig
+
 	// table is a back reference to the table this index is on.
 	table *Table
 
@@ -667,6 +680,11 @@ func (ti *Index) Column(i int) cat.IndexColumn {
 // ForeignKey is part of the cat.Index interface.
 func (ti *Index) ForeignKey() (cat.ForeignKeyReference, bool) {
 	return ti.foreignKey, ti.fkSet
+}
+
+// Zone is part of the cat.Index interface.
+func (ti *Index) Zone() cat.Zone {
+	return ti.IdxZone
 }
 
 // Column implements the cat.Column interface for testing purposes.
@@ -834,7 +852,7 @@ func (ts *Sequence) SequenceName() *tree.TableName {
 
 func (ts *Sequence) String() string {
 	tp := treeprinter.New()
-	cat.FormatCatalogSequence(ts.Catalog, ts, tp)
+	cat.FormatSequence(ts.Catalog, ts, tp)
 	return tp.String()
 }
 
