@@ -199,7 +199,7 @@ func (ib *indexBackfiller) runChunk(
 		}
 		retried = true
 		if err := txn.CommitInBatch(ctx, batch); err != nil {
-			if _, ok := batch.MustPErr().GetDetail().(*roachpb.ConditionFailedError); ok {
+			if _, ok := err.(*roachpb.ConditionFailedError); ok {
 				return pgerror.NewError(pgerror.CodeUniqueViolationError, "")
 			}
 			return err

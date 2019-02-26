@@ -85,9 +85,9 @@ func (f *fkExistenceBatchChecker) runCheck(
 	defer f.reset()
 
 	// Run the batch.
-	br, err := f.txn.Send(ctx, f.batch)
-	if err != nil {
-		return err.GoError()
+	br, errWIdx := f.txn.Send(ctx, f.batch)
+	if errWIdx != nil {
+		return errWIdx.Err
 	}
 
 	// Process the responses.

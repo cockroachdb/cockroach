@@ -315,9 +315,9 @@ func lookupRangeFwdScan(
 		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
 	}
 
-	br, err := sender.Send(ctx, ba)
+	br, errWIdx := sender.Send(ctx, ba)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errWIdx.Err
 	}
 	scanRes := br.Responses[0].GetInner().(*roachpb.ScanResponse)
 
@@ -384,9 +384,9 @@ func lookupRangeRevScan(
 		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
 	}
 
-	br, err := sender.Send(ctx, ba)
-	if err != nil {
-		return nil, nil, err
+	br, errWIdx := sender.Send(ctx, ba)
+	if errWIdx != nil {
+		return nil, nil, errWIdx.Err
 	}
 	revScanRes := br.Responses[0].GetInner().(*roachpb.ReverseScanResponse)
 

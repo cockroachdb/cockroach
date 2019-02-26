@@ -349,11 +349,12 @@ type distSenderSenderErrorAdapter struct {
 	*DistSender
 }
 
+// Send implements the SenderErr interface.
 func (ds distSenderSenderErrorAdapter) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+) (*roachpb.BatchResponse, *client.ErrWithIndex) {
 	br, pErr := ds.DistSender.Send(ctx, ba)
-	return br, pErr.GoError()
+	return br, client.GoErrorWithIdx(pErr)
 }
 
 // FirstRange implements the RangeDescriptorDB interface.

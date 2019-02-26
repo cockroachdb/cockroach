@@ -485,7 +485,7 @@ func (txn *Txn) Run(ctx context.Context, b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	return sendAndFill(ctx, txn.Send, b)
+	return sendAndFill(ctx, txn, b)
 }
 
 // !!!
@@ -524,13 +524,13 @@ func (txn *Txn) Commit(ctx context.Context) error {
 	// !!! return txn.commit(ctx)
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
-	_, err := txn.Send(ctx, ba)
-	if err == nil {
+	_, errWIdx := txn.Send(ctx, ba)
+	if errWIdx == nil {
 		for _, t := range txn.commitTriggers {
 			t(ctx)
 		}
 	}
-	return err
+	return errWIdx.Err
 }
 
 // CommitInBatch executes the operations queued up within a batch and
@@ -794,7 +794,10 @@ func (txn *Txn) IsRetryableErrMeantForTxn(retryErr TxnRestartError) bool {
 // EndTransaction call is silently dropped, allowing the caller to
 // always commit or clean-up explicitly even when that may not be
 // required (or even erroneous). Returns (nil, nil) for an empty batch.
-func (txn *Txn) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+// !!! comment on rollback. Still valid at all?
+func (txn *Txn) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *ErrWithIndex) {
 	// Fill in the GatewayNodeID on the batch if the txn knows it.
 	// NOTE(andrei): It seems a bit ugly that we're filling in the batches here as
 	// opposed to the point where the requests are being created, but
@@ -805,11 +808,16 @@ func (txn *Txn) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 	}
 
 	txn.mu.Lock()
+	if err := txn.mu.storedErr; err != nil {
+		return nil, NewErrWithIndex(err, -1)
+	}
+	sender := txn.mu.sender
 	txn.mu.Unlock()
-	br, err := txn.db.sendUsingSender(ctx, ba, txn.mu.sender)
-	if err == nil {
+	br, errWIdx := txn.db.sendUsingSender(ctx, ba, sender)
+	if errWIdx == nil {
 		return br, nil
 	}
+	err := errWIdx.Err
 
 	if retryErr, ok := err.(TxnRestartError); ok {
 		txn.mu.Lock()
@@ -822,7 +830,7 @@ func (txn *Txn) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.Bat
 		txn.mu.sender = nil
 		txn.mu.storedErr = err
 	}
-	return br, err
+	return br, errWIdx
 }
 
 func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {

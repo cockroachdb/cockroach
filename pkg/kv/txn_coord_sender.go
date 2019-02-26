@@ -693,9 +693,10 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 // that doing so doesn't cut into the speed-up we see from this fast-path.
 func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 	ctx context.Context, deadline *hlc.Timestamp,
-) error {
+) *client.ErrWithIndex {
 	if deadline != nil && deadline.Less(tc.mu.txn.Timestamp) {
-		return roachpb.NewTransactionStatusError("deadline exceeded before transaction finalization")
+		return client.NewErrWithIndex(
+			roachpb.NewTransactionStatusError("deadline exceeded before transaction finalization"), -1)
 	}
 	tc.mu.clientRejectState.committed = true
 	// Mark the transaction as committed so that, in case this commit is done by
@@ -709,7 +710,7 @@ func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 // Send is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+) (*roachpb.BatchResponse, *client.ErrWithIndex) {
 	// NOTE: The locking here is unusual. Although it might look like it, we are
 	// NOT holding the lock continuously for the duration of the Send. We lock
 	// here, and unlock at the botton of the interceptor stack, in the
@@ -719,7 +720,7 @@ func (tc *TxnCoordSender) Send(
 	defer tc.mu.Unlock()
 
 	if err := tc.maybeRejectClientLocked(ctx, &ba); err != nil {
-		return nil, err
+		return nil, client.NewErrWithIndex(err, -1)
 	}
 
 	if ba.IsSingleEndTransactionRequest() {
@@ -742,7 +743,8 @@ func (tc *TxnCoordSender) Send(
 	startNs := tc.clock.PhysicalNow()
 
 	if _, ok := ba.GetArg(roachpb.BeginTransaction); ok {
-		return nil, errors.Errorf("BeginTransaction added before the TxnCoordSender")
+		return nil, client.NewErrWithIndex(
+			errors.Errorf("BeginTransaction added before the TxnCoordSender"), -1)
 	}
 
 	ctx, sp := tc.AnnotateCtxWithSpan(ctx, opTxnCoordSender)
@@ -763,7 +765,9 @@ func (tc *TxnCoordSender) Send(
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
 	// we still need to accept it as a parameter for this to compile.
 	if ba.ReadConsistency != roachpb.CONSISTENT {
-		return nil, errors.Errorf("cannot use %s ReadConsistency in txn", ba.ReadConsistency)
+		return nil, client.NewErrWithIndex(
+			errors.Errorf("cannot use %s ReadConsistency in txn", ba.ReadConsistency),
+			-1)
 	}
 
 	lastIndex := len(ba.Requests) - 1
@@ -795,17 +799,17 @@ func (tc *TxnCoordSender) Send(
 	// request succeeded: it might have raced with the cleaning up of intents and
 	// so it might have missed to see previous writes in this transaction.
 	if txnFinishedErr := tc.maybeRejectClientLocked(ctx, &ba); txnFinishedErr != nil {
-		return nil, txnFinishedErr
+		return nil, client.NewErrWithIndex(txnFinishedErr, -1)
 	}
 
-	err := tc.updateStateLocked(ctx, startNs, ba, br, pErr)
+	errWIdx := tc.updateStateLocked(ctx, startNs, ba, br, pErr)
 
 	// If we succeeded to commit, or we attempted to rollback, we move to
 	// txnFinalized.
 	if req, ok := ba.GetArg(roachpb.EndTransaction); ok {
 		etReq := req.(*roachpb.EndTransactionRequest)
 		if etReq.Commit {
-			if err == nil {
+			if errWIdx == nil {
 				tc.mu.clientRejectState.committed = true
 				// !!! tc.mu.txnState = txnFinalized
 				tc.cleanupTxnLocked(ctx)
@@ -819,8 +823,8 @@ func (tc *TxnCoordSender) Send(
 		}
 	}
 
-	if err != nil {
-		return nil, err
+	if errWIdx != nil {
+		return nil, errWIdx
 	}
 
 	if br != nil && br.Error != nil {
@@ -1126,7 +1130,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 	ba roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	pErr *roachpb.Error,
-) error {
+) *client.ErrWithIndex {
 
 	// We handle a couple of different cases:
 	// 1) A successful response. If that response carries a transaction proto,
@@ -1159,7 +1163,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 
 			// NB: For leaves, rollbackAsync doesn't actually rollback.
 			tc.rollbackAsyncLockedClientNotified(ctx, pErr.Message)
-			return pErr.GoError()
+			return client.GoErrorWithIdx(pErr)
 		}
 
 		txnID := ba.Txn.ID
@@ -1182,7 +1186,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 			// TxnCoordSender, any more.
 			tc.rollbackAsyncLockedClientNotified(ctx, err.RestartCause())
 		}
-		return err
+		return client.NewErrWithIndex(err, -1 /* we don't keep track of indexes for TxnRestartErr */)
 	}
 
 	// This is the non-retriable error case.
@@ -1192,7 +1196,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 		tc.mu.txn.Update(&cp)
 		tc.rollbackAsyncLockedClientNotified(ctx, pErr.Message)
 	}
-	return pErr.GoError()
+	return client.GoErrorWithIdx(pErr)
 }
 
 // setTxnAnchorKey sets the key at which to anchor the transaction record. The

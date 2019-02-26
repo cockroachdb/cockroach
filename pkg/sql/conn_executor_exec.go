@@ -551,13 +551,22 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// Restart the transaction so that it is able to replay itself at a newer timestamp
 	// with the hope that the next time around there will be leases only at the current
 	// version.
-	retryErr := roachpb.NewTransactionRetryWithProtoRefreshError(
+	retryErr := client.NewTxnRestartError(
 		fmt.Sprintf(
 			`cannot publish new versions for tables: %v, old versions still in use`,
 			tables),
 		txn.ID(),
-		*txn.Serialize(),
+		nil, /* newTxn */
 	)
+	// !!!
+	// retryErr := roachpb.NewTransactionRetryWithProtoRefreshError(
+	//   fmt.Sprintf(
+	//     `cannot publish new versions for tables: %v, old versions still in use`,
+	//     tables),
+	//   txn.ID(),
+	//   *txn.Serialize(),
+	// )
+
 	// We cleanup the transaction and create a new transaction after
 	// waiting for the invariant to be satisfied because the wait time
 	// might be extensive and intents can block out leases being created
@@ -569,7 +578,8 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	userPriority := txn.UserPriority()
 	// We cleanup the transaction and create a new transaction wait time
 	// might be extensive and so we'd better get rid of all the intents.
-	txn.CleanupOnError(ctx, retryErr)
+	// !!!txn.CleanupOnError(ctx, retryErr)
+	txn.Rollback(ctx)
 
 	// Wait until all older version leases have been released or expired.
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
@@ -627,9 +637,7 @@ func (ex *connExecutor) commitSQLTransaction(
 // rolled-back and an event is produced.
 func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, fsm.EventPayload) {
 	ex.state.activeSavepointName = ""
-	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
-		log.Warningf(ctx, "txn rollback failed: %s", err)
-	}
+	ex.state.mu.txn.Rollback(ctx)
 	// We're done with this txn.
 	return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
 }

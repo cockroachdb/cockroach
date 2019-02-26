@@ -93,16 +93,38 @@ type Sender interface {
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
-// !!! see if this can be called SenderFun
+// !!! see if this can be called SenderFun, or maybe HighlevelSender
 type SenderErr interface {
-	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *ErrWithIndex)
 }
 
 type ErrWithIndex struct {
 	Err error
 	// Idx is the index of the request within a batch that generated the error. If
-	// none of the requests in particular generated the !!!
+	// none of the requests in particular generated the error, the index will be
+	// -1.
 	Idx int
+}
+
+func NewErrWithIndex(err error, idx int) *ErrWithIndex {
+	return &ErrWithIndex{Err: err, Idx: idx}
+}
+
+func (err *ErrWithIndex) String() string {
+	return err.Err.Error()
+}
+
+// !!! comment
+func GoErrorWithIdx(pErr *roachpb.Error) *ErrWithIndex {
+	err := pErr.GoError()
+	if err == nil {
+		return nil
+	}
+	idx := -1
+	if pErr.Index != nil {
+		idx = int(pErr.Index.Index)
+	}
+	return NewErrWithIndex(err, idx)
 }
 
 // !!!
@@ -132,7 +154,8 @@ type ErrWithIndex struct {
 // metadata between the "root" client.Txn and "leaf" instances.
 type TxnSender interface {
 	// !!! Sender
-	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+	// Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+	SenderErr
 
 	// RollbackAsync initiates a rollback.
 	RollbackAsync(context.Context)
@@ -286,6 +309,7 @@ type TxnSenderFactory interface {
 type SenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
 // Can SenderFunc and TxnSenderIface go away?
+// !!! still used?
 type SenderFunc2 func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 
 // Send calls f(ctx, c).
@@ -317,9 +341,9 @@ func NewMockTransactionalSender(
 // Send is part of the TxnSender interface.
 func (m *MockTransactionalSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+) (*roachpb.BatchResponse, *ErrWithIndex) {
 	br, pErr := m.senderFunc(ctx, &m.txn, ba)
-	return br, pErr.GoError()
+	return br, GoErrorWithIdx(pErr)
 }
 
 func (m *MockTransactionalSender) RollbackAsync(ctx context.Context) {
@@ -482,9 +506,9 @@ func SendWrappedWith(
 	ba.Header = h
 	ba.Add(args)
 
-	br, err := sender.Send(ctx, ba)
-	if err != nil {
-		return nil, err
+	br, errWIdx := sender.Send(ctx, ba)
+	if errWIdx != nil {
+		return nil, errWIdx.Err
 	}
 	unwrappedReply := br.Responses[0].GetInner()
 	header := unwrappedReply.Header()

@@ -542,9 +542,9 @@ func (c *cascader) deleteRows(
 	if len(req.Requests) == 0 {
 		return nil, nil, 0, nil
 	}
-	br, err := c.txn.Send(ctx, req)
-	if err != nil {
-		return nil, nil, 0, err
+	br, errWIdx := c.txn.Send(ctx, req)
+	if errWIdx != nil {
+		return nil, nil, 0, errWIdx.Err
 	}
 
 	// Create or retrieve the index pk row fetcher.
@@ -607,9 +607,9 @@ func (c *cascader) deleteRows(
 	if len(pkLookupReq.Requests) == 0 {
 		return nil, nil, 0, nil
 	}
-	pkResp, err := c.txn.Send(ctx, pkLookupReq)
-	if err != nil {
-		return nil, nil, 0, err
+	pkResp, errWIdx := c.txn.Send(ctx, pkLookupReq)
+	if errWIdx != nil {
+		return nil, nil, 0, errWIdx.Err
 	}
 
 	// Add the values to be checked for constraint violations after all cascading
@@ -773,9 +773,9 @@ func (c *cascader) updateRows(
 		if len(req.Requests) == 0 {
 			return nil, nil, nil, 0, nil
 		}
-		br, err := c.txn.Send(ctx, req)
-		if err != nil {
-			return nil, nil, nil, 0, err
+		br, errWIdx := c.txn.Send(ctx, req)
+		if errWIdx != nil {
+			return nil, nil, nil, 0, errWIdx.Err
 		}
 
 		// Create or retrieve the index pk row fetcher.
@@ -832,9 +832,9 @@ func (c *cascader) updateRows(
 		if len(pkLookupReq.Requests) == 0 {
 			return nil, nil, nil, 0, nil
 		}
-		pkResp, err := c.txn.Send(ctx, pkLookupReq)
-		if err != nil {
-			return nil, nil, nil, 0, err
+		pkResp, errWIdx := c.txn.Send(ctx, pkLookupReq)
+		if errWIdx != nil {
+			return nil, nil, nil, 0, errWIdx.Err
 		}
 
 		for _, resp := range pkResp.Responses {

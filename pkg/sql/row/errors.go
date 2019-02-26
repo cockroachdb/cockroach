@@ -52,20 +52,21 @@ func (f *singleKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 func ConvertBatchError(
 	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *client.Batch,
 ) error {
-	origPErr := b.MustErr()
-	if origPErr.Index == nil {
-		return origPErr.GoError()
+	errWIdx := b.MustErr()
+	if errWIdx.Idx == -1 {
+		return errWIdx.Err
 	}
-	j := origPErr.Index.Index
-	if j >= int32(len(b.Results)) {
+	err := errWIdx.Err
+	j := errWIdx.Idx
+	if j >= len(b.Results) {
 		panic(fmt.Sprintf("index %d outside of results: %+v", j, b.Results))
 	}
 	result := b.Results[j]
-	if cErr, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {
+	if cErr, ok := err.(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {
 		key := result.Rows[0].Key
 		return NewUniquenessConstraintViolationError(ctx, tableDesc, key, cErr.ActualValue)
 	}
-	return origPErr.GoError()
+	return err
 }
 
 // NewUniquenessConstraintViolationError creates an error that represents a

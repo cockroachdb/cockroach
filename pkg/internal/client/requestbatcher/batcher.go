@@ -251,14 +251,14 @@ func (b *RequestBatcher) sendDone() {
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer b.sendDone()
-		resp, err := b.cfg.Sender.Send(ctx, ba.batchRequest())
+		resp, errWIdx := b.cfg.Sender.Send(ctx, ba.batchRequest())
 		for i, r := range ba.reqs {
 			res := Response{}
 			if resp != nil && i < len(resp.Responses) {
 				res.Resp = resp.Responses[i].GetInner()
 			}
-			if err != nil {
-				res.Err = err
+			if errWIdx != nil {
+				res.Err = errWIdx.Err
 			}
 			b.sendResponse(r, res)
 		}

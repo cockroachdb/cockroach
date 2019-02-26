@@ -58,6 +58,10 @@ type Batch struct {
 	response *roachpb.BatchResponse
 	// Once received, any error encountered sending the batch.
 	err error
+	// errIdx represents the index of the request within the batch that generated
+	// the error. Only valid if err is set. -1 if no request in particular
+	// generated the error.
+	errIdx int
 
 	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
 	resultsBuf    [8]Result
@@ -74,11 +78,11 @@ func (b *Batch) RawResponse() *roachpb.BatchResponse {
 
 // MustErr returns the error resulting from a failed execution of the batch,
 // asserting that that error is non-nil.
-func (b *Batch) MustErr() error {
+func (b *Batch) MustErr() ErrWithIndex {
 	if b.err == nil {
 		panic(errors.Errorf("expected non-nil pErr for batch %+v", b))
 	}
-	return b.err
+	return *NewErrWithIndex(b.err, b.errIdx)
 }
 
 func (b *Batch) prepare() error {
