@@ -61,8 +61,12 @@ type ColVec interface {
 	// elements of this ColVec, assuming that both ColVecs are of type colType.
 	Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16)
 
-	// AppendWithSel appends into itself another column vector from a ColBatch with
-	// maximum size of ColBatchSize, filtered by the given selection vector.
+	// AppendSlice appends vec[srcStartIdx:srceEndIdx] elements to this ColVec
+	// starting at destStartIdx.
+	AppendSlice(vec ColVec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16)
+
+	// AppendWithSel appends into itself another column vector from a ColBatch
+	// with maximum size of ColBatchSize, filtered by the given selection vector.
 	AppendWithSel(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
 
 	// Copy copies src[srcStartIdx:srcEndIdx] into this ColVec.
@@ -79,9 +83,17 @@ type ColVec interface {
 	// into ColVec. It replaces the contents of this ColVec.
 	CopyWithSelAndNilsInt64(vec ColVec, sel []uint64, nSel uint16, nils []bool, colType types.T)
 
+	// Slice returns a new ColVec representing a slice of the current ColVec from
+	// [start, end).
+	Slice(colType types.T, start uint64, end uint64) ColVec
+
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this ColVec.
 	// It uses the reflect package and is not suitable for calling in hot paths.
 	PrettyValueAt(idx uint16, colType types.T) string
+
+	// ExtendNulls extends the null member of a ColVec and sets the right indexes
+	// to null, needed when the length of the underlying column changes.
+	ExtendNulls(vec ColVec, outputLen uint64, srcStartIdx uint16, batchSize uint16, destStartIdx uint64)
 }
 
 // Nulls represents a list of potentially nullable values.

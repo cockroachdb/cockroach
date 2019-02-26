@@ -32,6 +32,10 @@ type Initializer interface {
 	Init()
 }
 
+type resetter interface {
+	reset()
+}
+
 type noopOperator struct {
 	input Operator
 }
@@ -44,4 +48,10 @@ func (n *noopOperator) Init() {
 
 func (n *noopOperator) Next() ColBatch {
 	return n.input.Next()
+}
+
+func (n *noopOperator) reset() {
+	if resetter, ok := n.input.(resetter); ok {
+		resetter.reset()
+	}
 }
