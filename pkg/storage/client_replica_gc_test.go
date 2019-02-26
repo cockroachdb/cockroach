@@ -127,6 +127,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 					dir := repl1.SideloadedRaftMuLocked().Dir()
 					repl1.RaftUnlock()
 					_, err := os.Stat(dir)
+
 					if os.IsNotExist(err) {
 						return nil
 					}
