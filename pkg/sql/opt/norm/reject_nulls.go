@@ -78,20 +78,28 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 	switch in.Op() {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		// Pass through null-rejecting columns from both inputs.
-		relProps.Rule.RejectNullCols = DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
-		relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
+		if in.Child(0).(memo.RelExpr).Relational().OuterCols.Empty() {
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(0).(memo.RelExpr)))
+		}
+		if in.Child(1).(memo.RelExpr).Relational().OuterCols.Empty() {
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
+		}
 
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		// Pass through null-rejection columns from left input, and request null-
 		// rejection on right columns.
-		relProps.Rule.RejectNullCols = DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
+		if in.Child(0).(memo.RelExpr).Relational().OuterCols.Empty() {
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(0).(memo.RelExpr)))
+		}
 		relProps.Rule.RejectNullCols.UnionWith(in.Child(1).(memo.RelExpr).Relational().OutputCols)
 
 	case opt.RightJoinOp, opt.RightJoinApplyOp:
 		// Pass through null-rejection columns from right input, and request null-
 		// rejection on left columns.
 		relProps.Rule.RejectNullCols = in.Child(0).(memo.RelExpr).Relational().OutputCols
-		relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
+		if in.Child(1).(memo.RelExpr).Relational().OuterCols.Empty() {
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
+		}
 
 	case opt.FullJoinOp, opt.FullJoinApplyOp:
 		// Request null-rejection on all output columns.
