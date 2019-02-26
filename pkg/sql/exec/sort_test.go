@@ -135,6 +135,7 @@ func TestSortRandomized(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	nCols := 2
 	nTups := 8
+	// TODO(yuzefovich): randomize types as well.
 	typs := make([]types.T, nCols)
 	ordCols := make([]distsqlpb.Ordering_Column, nCols)
 	for i := range typs {

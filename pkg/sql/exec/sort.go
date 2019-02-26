@@ -32,7 +32,7 @@ func NewSorter(
 
 func newSorter(
 	input spooler, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column,
-) (Operator, error) {
+) (resettableOperator, error) {
 	sorters := make([]colSorter, len(orderingCols))
 	partitioners := make([]partitioner, len(orderingCols)-1)
 	isOrderingCol := make([]bool, len(inputTypes))
@@ -164,6 +164,13 @@ func (p *allSpooler) getPartitionsCol() []bool {
 	return nil
 }
 
+func (p *allSpooler) reset() {
+	p.spooledTuples = 0
+	if r, ok := p.input.(resetter); ok {
+		r.reset()
+	}
+}
+
 type sortOp struct {
 	input spooler
 
@@ -194,7 +201,8 @@ type sortOp struct {
 	// state is the current state of the sort.
 	state sortState
 
-	output ColBatch
+	workingSpace []uint64
+	output       ColBatch
 }
 
 // colSorter is a single-column sorter, specialized on a particular type.
@@ -267,22 +275,37 @@ func (p *sortOp) Next() ColBatch {
 	panic(fmt.Sprintf("invalid sort state %v", p.state))
 }
 
+// sort sorts the spooled tuples, so it must be called after spool() has been
+// performed.
 func (p *sortOp) sort() {
 	spooledTuples := p.input.getNumTuples()
+	if spooledTuples == 0 {
+		// There is nothing to sort.
+		return
+	}
+	// Allocate p.order and p.workingSpace if it hasn't been allocated yet or the
+	// underlying memory is insufficient.
+	if p.order == nil || uint64(cap(p.order)) < spooledTuples {
+		p.order = make([]uint64, spooledTuples)
+		p.workingSpace = make([]uint64, spooledTuples)
+	}
+	p.order = p.order[:spooledTuples]
+	p.workingSpace = p.workingSpace[:spooledTuples]
+
 	// Initialize the order vector to the ordinal positions within the input set.
-	p.order = make([]uint64, spooledTuples)
 	for i := uint64(0); i < uint64(len(p.order)); i++ {
 		p.order[i] = i
 	}
 
-	workingSpace := make([]uint64, spooledTuples)
 	for i := range p.orderingCols {
-		p.sorters[i].init(p.input.getValues(int(p.orderingCols[i].ColIdx)), p.order, workingSpace)
+		p.sorters[i].init(p.input.getValues(int(p.orderingCols[i].ColIdx)), p.order, p.workingSpace)
 	}
 
 	// Now, sort each column in turn.
 	sorters := p.sorters
 	partitionsCol := p.input.getPartitionsCol()
+	omitNextPartitioning := false
+	offset := 0
 	if partitionsCol == nil {
 		// All spooled tuples belong to the same partition, so the first column
 		// doesn't need special treatment - we just globally sort it.
@@ -293,6 +316,17 @@ func (p *sortOp) sort() {
 		}
 		sorters = sorters[1:]
 		partitionsCol = make([]bool, spooledTuples)
+	} else {
+		// There are at least two partitions already, so the first column needs the
+		// same special treatment as all others. The general sequence is as
+		// follows: global sort -> partition -> sort partitions -> partition ->
+		// -> sort partitions -> partition -> sort partitions -> ..., but in this
+		// case, global sort doesn't make sense and partitioning has already been
+		// done, so we want to skip the first partitioning step and sort partitions
+		// right away. Also, in order to account for not performed global sort, we
+		// introduce an offset of 1 for partitioners.
+		omitNextPartitioning = true
+		offset = 1
 	}
 
 	// The rest of the columns need p sorts, one per partition in the previous
@@ -319,11 +353,15 @@ func (p *sortOp) sort() {
 
 	partitions := make([]uint64, 0, 16)
 	for i, sorter := range sorters {
-		// We partition the previous column by running an ordered distinct operation
-		// on it, ORing the results together with each subsequent column. This
-		// produces a distinct vector (a boolean vector that has true in each
-		// position that is different from the last position).
-		p.partitioners[i].partition(p.input.getValues(int(p.orderingCols[i].ColIdx)), partitionsCol, spooledTuples)
+		if !omitNextPartitioning {
+			// We partition the previous column by running an ordered distinct operation
+			// on it, ORing the results together with each subsequent column. This
+			// produces a distinct vector (a boolean vector that has true in each
+			// position that is different from the last position).
+			p.partitioners[i-offset].partition(p.input.getValues(int(p.orderingCols[i].ColIdx)), partitionsCol, spooledTuples)
+		} else {
+			omitNextPartitioning = false
+		}
 		// Convert the distinct vector into a selection vector - a vector of indices
 		// that were true in the distinct vector.
 		partitions = boolVecToSel64(partitionsCol, partitions[:0])
@@ -334,4 +372,12 @@ func (p *sortOp) sort() {
 		// columns we've seen so far), sort based on the new column.
 		sorter.sortPartitions(partitions)
 	}
+}
+
+func (p *sortOp) reset() {
+	if r, ok := p.input.(resetter); ok {
+		r.reset()
+	}
+	p.emitted = 0
+	p.state = sortSpooling
 }
