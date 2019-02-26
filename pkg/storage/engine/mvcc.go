@@ -718,7 +718,6 @@ func MVCCGetAsTxn(
 		Txn: &roachpb.Transaction{
 			TxnMeta:       txnMeta,
 			Status:        roachpb.PENDING,
-			Writing:       true,
 			OrigTimestamp: txnMeta.Timestamp,
 			MaxTimestamp:  txnMeta.Timestamp,
 		}})
