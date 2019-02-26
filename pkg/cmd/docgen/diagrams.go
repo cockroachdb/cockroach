@@ -1122,6 +1122,10 @@ var specs = []stmtSpec{
 		stmt: "show_schemas_stmt",
 	},
 	{
+		name: "show_sequences",
+		stmt: "show_sequences_stmt",
+	},
+	{
 		name: "show_sessions",
 		stmt: "show_sessions_stmt",
 	},
