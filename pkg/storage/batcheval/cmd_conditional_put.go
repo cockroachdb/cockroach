@@ -44,8 +44,9 @@ func ConditionalPut(
 			defer batch.Close()
 		}
 	}
+	handleMissing := engine.CPutMissingBehavior(args.AllowIfDoesNotExist)
 	if args.Blind {
-		return result.Result{}, engine.MVCCBlindConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
+		return result.Result{}, engine.MVCCBlindConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, handleMissing, h.Txn)
 	}
-	return result.Result{}, engine.MVCCConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
+	return result.Result{}, engine.MVCCConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, handleMissing, h.Txn)
 }
