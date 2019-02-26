@@ -371,7 +371,7 @@ func addSSTablePreApply(
 	ctx context.Context,
 	st *cluster.Settings,
 	eng engine.Engine,
-	sideloaded sideloadStorage,
+	sideloaded SideloadStorage,
 	term, index uint64,
 	sst storagepb.ReplicatedEvalResult_AddSSTable,
 	limiter *rate.Limiter,
