@@ -325,18 +325,24 @@ func (r *createStatsResumer) Resume(
 }
 
 // checkRunningJobs checks whether there are any other CreateStats jobs in the
-// pending or running status that started earlier than this one. If there are,
-// checkRunningJobs returns an error. If job is nil, checkRunningJobs just
-// checks if there are any pending or running CreateStats jobs.
+// pending, running, or paused status that started earlier than this one. If
+// there are, checkRunningJobs returns an error. If job is nil, checkRunningJobs
+// just checks if there are any pending, running, or paused CreateStats jobs.
 func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 	var jobID int64
 	if job != nil {
 		jobID = *job.ID()
 	}
-	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2) ORDER BY created`
+	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2, $3) ORDER BY created`
 
 	rows, err := p.ExecCfg().InternalExecutor.Query(
-		ctx, "get-jobs", nil /* txn */, stmt, jobs.StatusPending, jobs.StatusRunning,
+		ctx,
+		"get-jobs",
+		nil, /* txn */
+		stmt,
+		jobs.StatusPending,
+		jobs.StatusRunning,
+		jobs.StatusPaused,
 	)
 	if err != nil {
 		return err
