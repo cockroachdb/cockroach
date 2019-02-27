@@ -39,8 +39,9 @@ type optCatalog struct {
 	statsCache *stats.TableStatisticsCache
 
 	// dataSources is a cache of table and view objects that's used to satisfy
-	// repeated calls for the same data source. The same underlying descriptor
-	// will always return the same data source wrapper object.
+	// repeated calls for the same data source.
+	// Note that the data source object might still need to be recreated if
+	// something outside of the descriptor has changed (e.g. table stats).
 	dataSources map[*sqlbase.ImmutableTableDescriptor]cat.DataSource
 
 	// tn is a temporary name used during resolution to avoid heap allocation.
@@ -49,11 +50,23 @@ type optCatalog struct {
 
 var _ cat.Catalog = &optCatalog{}
 
-// init allows the caller to pre-allocate optCatalog.
+// init initializes an optCatalog instance (which the caller can pre-allocate).
+// The instance can be used across multiple queries, but reset() should be
+// called for each query.
 func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver LogicalSchema) {
 	oc.resolver = resolver
 	oc.statsCache = statsCache
-	oc.dataSources = nil
+	oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
+}
+
+// reset prepares the optCatalog to be used for a new query.
+func (oc *optCatalog) reset() {
+	// If we have accumulated too many tables in our map, throw everything away.
+	// This deals with possible edge cases where we do a lot of DDL in a
+	// long-lived session.
+	if len(oc.dataSources) > 100 {
+		oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
+	}
 }
 
 // optSchema is a wrapper around sqlbase.DatabaseDescriptor that implements the
@@ -171,11 +184,34 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 func (oc *optCatalog) newDataSource(
 	ctx context.Context, desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName,
 ) (cat.DataSource, error) {
+	var tableStats []*stats.TableStatistic
+
+	if desc.IsTable() {
+		// For tables, we always need to re-check the table stats cache.
+		var err error
+		tableStats, err = oc.statsCache.GetTableStats(context.TODO(), desc.ID)
+		if err != nil {
+			// Ignore any error. We still want to be able to run queries even if we lose
+			// access to the statistics table.
+			// TODO(radu): at least log the error.
+			tableStats = nil
+		}
+	}
+
 	// Check to see if there's already a data source wrapper for this descriptor.
-	if oc.dataSources == nil {
-		oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
-	} else {
-		if ds, ok := oc.dataSources[desc]; ok {
+	if ds, ok := oc.dataSources[desc]; ok {
+		if t, ok := ds.(*optTable); ok {
+			// Fast check to verify that the statistics haven't changed: we check the
+			// length and the address of the underlying array. This is not a perfect
+			// check (in principle, the stats could have left the cache and then gotten
+			// regenerated), but it works in the common case.
+			if len(tableStats) == len(t.rawStats) &&
+				(len(tableStats) == 0 || &tableStats[0] == &t.rawStats[0]) {
+				return ds, nil
+			}
+			// Fall through to regenerate the object.
+		} else {
+			// For views and sequences, it's always safe to reuse the cached object.
 			return ds, nil
 		}
 	}
@@ -221,14 +257,7 @@ func (oc *optCatalog) newDataSource(
 			}
 		}
 
-		stats, err := oc.statsCache.GetTableStats(context.TODO(), desc.ID)
-		if err != nil {
-			// Ignore any error. We still want to be able to run queries even if we lose
-			// access to the statistics table.
-			// TODO(radu): at least log the error.
-			stats = nil
-		}
-		ds = newOptTable(desc, id, name, stats)
+		ds = newOptTable(desc, id, name, tableStats)
 
 	case desc.IsView():
 		ds = newOptView(desc, name)
@@ -367,6 +396,10 @@ type optTable struct {
 	// indexes.
 	indexes []optIndex
 
+	// rawStats stores the original table statistics slice. Used for a fast-path
+	// check that the statistics haven't changed.
+	rawStats []*stats.TableStatistic
+
 	// stats are the inlined wrappers for table statistics.
 	stats []optTableStat
 
@@ -394,7 +427,12 @@ func newOptTable(
 	name *cat.DataSourceName,
 	stats []*stats.TableStatistic,
 ) *optTable {
-	ot := &optTable{desc: desc, id: id, name: *name}
+	ot := &optTable{
+		desc:     desc,
+		id:       id,
+		name:     *name,
+		rawStats: stats,
+	}
 
 	// The cat.Table interface requires that table names be fully qualified.
 	ot.name.ExplicitSchema = true
@@ -465,6 +503,10 @@ func (ot *optTable) Equals(other cat.Object) bool {
 	otherTable, ok := other.(*optTable)
 	if !ok {
 		return false
+	}
+	if ot == otherTable {
+		// Fast path when it is the same object.
+		return true
 	}
 	if ot.id != otherTable.id || ot.desc.Version != otherTable.desc.Version {
 		return false

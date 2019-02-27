@@ -1898,6 +1898,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 
 	p.queryCacheSession.Init()
+	p.optPlanningCtx.init(p)
 }
 
 func (ex *connExecutor) resetPlanner(
