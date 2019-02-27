@@ -17,10 +17,7 @@ package batcheval_test
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"math/rand"
 	"os"
-	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -38,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
 )
@@ -191,7 +187,6 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			}
 			if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
 				"evaluating AddSSTable",
-				"target key range not empty, will merge existing data with sstable",
 				"sideloadable proposal detected",
 				"ingested SSTable at index",
 			); err != nil {
@@ -238,157 +233,157 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 	}
 }
 
-func randomMVCCKeyValues(rng *rand.Rand, numKVs int) []engine.MVCCKeyValue {
-	kvs := make([]engine.MVCCKeyValue, numKVs)
+type strKv struct {
+	k  string
+	ts int64
+	v  string
+}
+
+func mvccKVsFromStrs(in []strKv) []engine.MVCCKeyValue {
+	kvs := make([]engine.MVCCKeyValue, len(in))
 	for i := range kvs {
-		kvs[i] = engine.MVCCKeyValue{
-			Key: engine.MVCCKey{
-				Key:       randutil.RandBytes(rng, 1),
-				Timestamp: hlc.Timestamp{WallTime: 1 + rand.Int63n(10)},
-			},
-			Value: roachpb.MakeValueFromBytes(randutil.RandBytes(rng, rng.Intn(10))).RawBytes,
-		}
-		if rng.Intn(100) < 25 {
-			// 25% of the time, make the entry a deletion tombstone.
+		kvs[i].Key.Key = []byte(in[i].k)
+		kvs[i].Key.Timestamp.WallTime = in[i].ts
+		if in[i].v != "" {
+			kvs[i].Value = roachpb.MakeValueFromBytes([]byte(in[i].v)).RawBytes
+		} else {
 			kvs[i].Value = nil
 		}
 	}
+	sort.Slice(kvs, func(i, j int) bool { return kvs[i].Key.Less(kvs[j].Key) })
 	return kvs
 }
 
-type mvccKeyValues []engine.MVCCKeyValue
-
-func (kvs mvccKeyValues) Len() int           { return len(kvs) }
-func (kvs mvccKeyValues) Less(i, j int) bool { return kvs[i].Key.Less(kvs[j].Key) }
-func (kvs mvccKeyValues) Swap(i, j int)      { kvs[i], kvs[j] = kvs[j], kvs[i] }
-
 func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng, seed := randutil.NewPseudoRand()
-	t.Logf("random seed: %d", seed)
-
-	const numIterations, maxKVs = 10, 100
 
 	ctx := context.Background()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
-	// This test repeatedly:
-	// - puts some random data in an engine
-	// - randomly makes one key an intent
-	// - puts some random data in an sst
-	// - computes pre-ingest mvcc stats for the engine
-	// - gets the mvcc stats diff from evalAddSSTable for the sst
-	// - ingests the sstable into the engine
-	// - computes post-ingest mvcc stats for the engine
-	// - compares pre-ingest + diff stats vs post-ingest stats
-	//
-	// Each time through, the engine accumulates more directly Put keys and more
-	// ingested sstables.
-	var nowNanos int64
-	for i := 0; i < numIterations; i++ {
-		nowNanos += rng.Int63n(1e9)
-		for _, kv := range randomMVCCKeyValues(rng, 1+rand.Intn(maxKVs)) {
-			if err := e.Put(kv.Key, kv.Value); err != nil {
-				t.Fatalf("%+v", err)
-			}
+	for _, kv := range mvccKVsFromStrs([]strKv{
+		{"A", 1, "A"},
+		{"a", 1, "a"},
+		{"a", 6, ""},
+		{"b", 5, "bb"},
+		{"c", 6, "ccccccccccccccccccccccccccccccccccccccccccccc"}, // key 4b, 50b, live 64b
+		{"d", 1, "d"},
+		{"d", 2, ""},
+		{"e", 1, "e"},
+		{"z", 2, "zzzzzz"},
+	}) {
+		if err := e.Put(kv.Key, kv.Value); err != nil {
+			t.Fatalf("%+v", err)
 		}
-		// Add in a random metadata key.
-		ts := hlc.Timestamp{WallTime: nowNanos}
-		txn := roachpb.MakeTransaction(
-			"test",
-			nil, // baseKey
-			roachpb.NormalUserPriority,
-			ts,
-			base.DefaultMaxClockOffset.Nanoseconds(),
-		)
-		if err := engine.MVCCPut(
-			ctx, e, nil, randutil.RandBytes(rng, 1), ts,
-			roachpb.MakeValueFromBytes(randutil.RandBytes(rng, rng.Intn(10))),
-			&txn,
-		); err != nil {
-			if _, isWriteIntentErr := err.(*roachpb.WriteIntentError); !isWriteIntentErr {
-				t.Fatalf("%+v", err)
-			}
-		}
+	}
 
-		sstBytes := func() []byte {
-			sst, err := engine.MakeRocksDBSstFileWriter()
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
-			defer sst.Close()
-			sstKVs := mvccKeyValues(randomMVCCKeyValues(rng, 1+rand.Intn(maxKVs)))
-			sort.Sort(sstKVs)
-			var prevKey engine.MVCCKey
-			for _, kv := range sstKVs {
-				if kv.Key.Equal(prevKey) {
-					// RocksDB doesn't let us add the same key twice.
-					continue
-				}
-				prevKey.Key = append(prevKey.Key[:0], kv.Key.Key...)
-				prevKey.Timestamp = kv.Key.Timestamp
-				if err := sst.Add(kv); err != nil {
-					t.Fatalf("%+v", err)
-				}
-			}
-			sstBytes, err := sst.Finish()
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
-			return sstBytes
-		}()
+	sstKVs := mvccKVsFromStrs([]strKv{
+		{"a", 2, "aa"},     // mvcc-shadowed within SST.
+		{"a", 4, "aaaaaa"}, // mvcc-shadowed by existing delete.
+		{"c", 6, "ccc"},    // same TS as existing, LSM-shadows existing.
+		{"d", 4, "dddd"},   // mvcc-shadow existing deleted d.
+		{"e", 4, "eeee"},   // mvcc-shadow existing 1b.
+		{"j", 2, "jj"},     // no colission – via MVCC or LSM – with existing.
+	})
+	var delta enginepb.MVCCStats
+	// the sst will think it added 4 keys here, but a, c, and e shadow or are shadowed.
+	delta.LiveCount = -3
+	delta.LiveBytes = -109
+	// the sst will think it added 5 keys, but only j is new so 4 are over-counted.
+	delta.KeyCount = -4
+	delta.KeyBytes = -20
+	// the sst will think it added 6 values, but since one was a perfect (key+ts)
+	// collision, it *replaced* the existing value and is over-counted.
+	delta.ValCount = -1
+	delta.ValBytes = -50
 
-		nowNanos += rng.Int63n(1e9)
-		cArgs := batcheval.CommandArgs{
-			Header: roachpb.Header{
-				Timestamp: hlc.Timestamp{WallTime: nowNanos},
-			},
-			Args: &roachpb.AddSSTableRequest{
-				RequestHeader: roachpb.RequestHeader{Key: keys.MinKey, EndKey: keys.MaxKey},
-				Data:          sstBytes,
-			},
-			Stats: &enginepb.MVCCStats{},
+	// Add in a random metadata key.
+	ts := hlc.Timestamp{WallTime: 7}
+	txn := roachpb.MakeTransaction(
+		"test",
+		nil, // baseKey
+		roachpb.NormalUserPriority,
+		ts,
+		base.DefaultMaxClockOffset.Nanoseconds(),
+	)
+	if err := engine.MVCCPut(
+		ctx, e, nil, []byte("i"), ts,
+		roachpb.MakeValueFromBytes([]byte("it")),
+		&txn,
+	); err != nil {
+		if _, isWriteIntentErr := err.(*roachpb.WriteIntentError); !isWriteIntentErr {
+			t.Fatalf("%+v", err)
 		}
-		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+	}
+
+	// After evalAddSSTable, cArgs.Stats contains a diff to the existing
+	// stats. Make sure recomputing from scratch gets the same answer as
+	// applying the diff to the stats
+	beforeStats := func() enginepb.MVCCStats {
+		iter := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+		defer iter.Close()
+		beforeStats, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, 10)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
+		return beforeStats
+	}()
 
-		// After evalAddSSTable, cArgs.Stats contains a diff to the existing
-		// stats. Make sure recomputing from scratch gets the same answer as
-		// applying the diff to the stats
-		beforeStats := func() enginepb.MVCCStats {
-			iter := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
-			defer iter.Close()
-			beforeStats, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, nowNanos)
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
-			return beforeStats
-		}()
-		beforeStats.Add(*cArgs.Stats)
-
-		filename := fmt.Sprintf("/%d.sst", i)
-		if err := e.WriteFile(filename, sstBytes); err != nil {
+	sstBytes := func() []byte {
+		sst, err := engine.MakeRocksDBSstFileWriter()
+		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := e.IngestExternalFiles(ctx, []string{filename}, true /* skip writing global seqno */, true /* modify the sst */); err != nil {
-			t.Fatalf("%+v", err)
-		}
-
-		afterStats := func() enginepb.MVCCStats {
-			iter := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
-			defer iter.Close()
-			afterStats, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, nowNanos)
-			if err != nil {
+		defer sst.Close()
+		for _, kv := range sstKVs {
+			if err := sst.Add(kv); err != nil {
 				t.Fatalf("%+v", err)
 			}
-			return afterStats
-		}()
-
-		if !reflect.DeepEqual(beforeStats, afterStats) {
-			t.Errorf("mvcc stats mismatch: diff(expected, actual): %s", pretty.Diff(afterStats, beforeStats))
 		}
+		sstBytes, err := sst.Finish()
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		return sstBytes
+	}()
+
+	cArgs := batcheval.CommandArgs{
+		Header: roachpb.Header{
+			Timestamp: hlc.Timestamp{WallTime: 7},
+		},
+		Args: &roachpb.AddSSTableRequest{
+			RequestHeader: roachpb.RequestHeader{Key: keys.MinKey, EndKey: keys.MaxKey},
+			Data:          sstBytes,
+		},
+		Stats: &enginepb.MVCCStats{},
+	}
+	_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	evaledStats := beforeStats
+	evaledStats.Add(*cArgs.Stats)
+
+	if err := e.WriteFile("sst", sstBytes); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if err := e.IngestExternalFiles(ctx, []string{"sst"}, true /* skip writing global seqno */, true /* modify the sst */); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	afterStats := func() enginepb.MVCCStats {
+		iter := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+		defer iter.Close()
+		afterStats, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, 10)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		return afterStats
+	}()
+	evaledStats.Add(delta)
+	evaledStats.ContainsEstimates = false
+	if !afterStats.Equal(evaledStats) {
+		t.Errorf("mvcc stats mismatch: diff(expected, actual): %s", pretty.Diff(afterStats, evaledStats))
 	}
 }
