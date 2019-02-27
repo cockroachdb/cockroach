@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"net/url"
 	"regexp"
 	"sort"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -211,6 +213,23 @@ func changefeedPlanHook(
 			},
 		}
 
+		if details, err = validateDetails(details); err != nil {
+			return err
+		}
+
+		// Feature telemetry
+		parsedSink, err := url.Parse(sinkURI)
+		if err != nil {
+			return err
+		}
+		telemetrySink := parsedSink.Scheme
+		if telemetrySink == `` {
+			telemetrySink = `sinkless`
+		}
+		telemetry.Count(`changefeed.create.sink.` + telemetrySink)
+		telemetry.Count(`changefeed.create.format.` + details.Opts[optFormat])
+		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
+
 		if details.SinkURI == `` {
 			return distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
 		}
@@ -219,10 +238,6 @@ func changefeedPlanHook(
 		if err := utilccl.CheckEnterpriseEnabled(
 			settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
 		); err != nil {
-			return err
-		}
-
-		if details, err = validateDetails(details); err != nil {
 			return err
 		}
 
