@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1468,7 +1469,6 @@ func TestChangefeedDescription(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`poller`, pollerTest(enterpriseTest, testFn))
 }
-
 func TestChangefeedPauseUnpause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1662,5 +1662,49 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 		`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
 		`foo: [3]->{"after": {"a": 3, "b": "third"}}`,
 	})
+}
 
+func TestChangefeedTelemetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+
+		// Reset the counts.
+		_ = telemetry.GetAndResetFeatureCounts(false)
+
+		// Start some feeds (and read from them to make sure they've started.
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+		fooBar := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH format=json`)
+		defer closeFeed(t, fooBar)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+		assertPayloads(t, fooBar, []string{
+			`bar: [1]->{"after": {"a": 1}}`,
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+
+		var expectedSink string
+		if strings.Contains(t.Name(), `sinkless`) || strings.Contains(t.Name(), `poller`) {
+			expectedSink = `sinkless`
+		} else {
+			expectedSink = `experimental-sql`
+		}
+
+		counts := telemetry.GetAndResetFeatureCounts(false)
+		require.Equal(t, int32(2), counts[`changefeed.create.sink.`+expectedSink])
+		require.Equal(t, int32(2), counts[`changefeed.create.format.json`])
+		require.Equal(t, int32(1), counts[`changefeed.create.num_tables.1`])
+		require.Equal(t, int32(1), counts[`changefeed.create.num_tables.2`])
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
