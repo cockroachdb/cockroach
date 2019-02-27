@@ -211,7 +211,7 @@ func run(svc s3I, execFn execRunner, flags runFlags) {
 		// of a given triple.
 		{buildType: "darwin", suffix: ".darwin-10.9-amd64"},
 		{buildType: "linux-gnu", suffix: ".linux-2.6.32-gnu-amd64"},
-		{buildType: "linux-musl", suffix: ".linux-2.6.32-musl-amd64"},
+		//{buildType: "linux-musl", suffix: ".linux-2.6.32-musl-amd64"},
 		{buildType: "windows", suffix: ".windows-6.2-amd64.exe"},
 	} {
 		for i, extraArgs := range []struct {
