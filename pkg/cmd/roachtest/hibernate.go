@@ -257,11 +257,20 @@ echo "ext {
 		fmt.Fprintf(&bResults, "%d Total Tests Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
 		)
-		fmt.Fprintf(&bResults, "%d tests passed\n", passUnexpectedCount+passExpectedCount)
-		fmt.Fprintf(&bResults, "%d tests failed\n", failUnexpectedCount+failExpectedCount)
-		fmt.Fprintf(&bResults, "%d tests passed unexpectedly\n", passUnexpectedCount)
-		fmt.Fprintf(&bResults, "%d tests failed unexpectedly\n", failUnexpectedCount)
-		fmt.Fprintf(&bResults, "%d tests expected failed, but not run \n", notRunCount)
+
+		p := func(msg string, count int) {
+			testString := "tests"
+			if count == 1 {
+				testString = "test"
+			}
+			fmt.Fprintf(&bResults, "%d %s %s\n", count, testString, msg)
+		}
+		p("passed", passUnexpectedCount+passExpectedCount)
+		p("failed", failUnexpectedCount+failExpectedCount)
+		p("passed unexpectedly", passUnexpectedCount)
+		p("failed unexpectedly", failUnexpectedCount)
+		p("expected failed, but not run", notRunCount)
+
 		fmt.Fprintf(&bResults, "For a full summary look at the hibernate artifacts \n")
 		t.l.Printf("%s\n", bResults.String())
 		t.l.Printf("------------------------\n")
