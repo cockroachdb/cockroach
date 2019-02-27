@@ -939,8 +939,10 @@ func TestChangefeedMonitoring(t *testing.T) {
 		}
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		var usingRangeFeed bool
+		sqlDB.QueryRow(t, `SHOW CLUSTER SETTING changefeed.push.enabled`, &usingRangeFeed)
 
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		start := timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
@@ -962,6 +964,12 @@ func TestChangefeedMonitoring(t *testing.T) {
 		}
 		if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c != noMinHighWaterSentinel {
 			t.Errorf(`expected %d got %d`, noMinHighWaterSentinel, c)
+		}
+		if c := s.MustGetSQLCounter(`changefeed.buffer_entries.in`); c != 0 {
+			t.Errorf(`expected 0 got %d`, c)
+		}
+		if c := s.MustGetSQLCounter(`changefeed.buffer_entries.out`); c != 0 {
+			t.Errorf(`expected 0 got %d`, c)
 		}
 
 		beforeEmitRowCh <- struct{}{}
@@ -987,6 +995,15 @@ func TestChangefeedMonitoring(t *testing.T) {
 				return errors.New(`waiting for high-water to not be sentinel`)
 			} else if c <= start.UnixNano() {
 				return errors.Errorf(`expected > %d got %d`, start.UnixNano(), c)
+			}
+			if usingRangeFeed {
+				// Only RangeFeed-based changefeeds use this buffer.
+				if c := s.MustGetSQLCounter(`changefeed.buffer_entries.in`); c <= 0 {
+					return errors.Errorf(`expected > 0 got %d`, c)
+				}
+				if c := s.MustGetSQLCounter(`changefeed.buffer_entries.out`); c <= 0 {
+					return errors.Errorf(`expected > 0 got %d`, c)
+				}
 			}
 			return nil
 		})
