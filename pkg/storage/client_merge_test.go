@@ -236,7 +236,8 @@ func mergeWithData(t *testing.T, retries int64) {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&retries, -1) >= 0 {
-					return roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
+					return roachpb.NewError(
+						roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "filter err"))
 				}
 			}
 			if req.GetSubsume() != nil {
@@ -658,7 +659,8 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&retriesBeforeFailure, -1) >= 0 {
-					return roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
+					return roachpb.NewError(
+						roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "filter err"))
 				}
 				return roachpb.NewError(errors.New("injected permafail"))
 			}
@@ -2601,7 +2603,8 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&mergeTxnRetries, -1) >= 0 {
-					return roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
+					return roachpb.NewError(
+						roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "filter err"))
 				}
 			}
 			if pt := req.GetPushTxn(); pt != nil {

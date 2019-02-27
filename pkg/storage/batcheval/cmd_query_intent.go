@@ -95,9 +95,9 @@ func QueryIntent(
 				// return a TransactionRetryError immediately with an updated
 				// transaction proto. This is an optimization that can help
 				// the txn use refresh spans more effectively.
-				return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE)
+				return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "" /* extraMsg */)
 			}
-			return result.Result{}, roachpb.NewIntentMissingError(intent)
+			return result.Result{}, roachpb.NewIntentMissingError(args.Key, intent)
 		case roachpb.QueryIntentRequest_PREVENT:
 			// The intent will be prevented by bumping the timestamp cache for
 			// the key to the txn timestamp in Replica.updateTimestampCache.
