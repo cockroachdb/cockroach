@@ -164,6 +164,14 @@ func (c *CustomFuncs) ArrayType(in memo.RelExpr) types.T {
 	return types.TArray{Typ: inTyp}
 }
 
+// BinaryColType returns the column type of the binary overload for the
+// given operator and operands.
+func (c *CustomFuncs) BinaryColType(op opt.Operator, left, right opt.ScalarExpr) coltypes.T {
+	o, _ := memo.FindBinaryOverload(op, left.DataType(), right.DataType())
+	colType, _ := coltypes.DatumTypeToColumnType(o.ReturnType)
+	return colType
+}
+
 // ----------------------------------------------------------------------
 //
 // Property functions
@@ -1385,6 +1393,29 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) opt.Scala
 		return nil
 	}
 	return c.f.ConstructConstVal(result, o.ReturnType)
+}
+
+// FoldCast evaluates a cast expression with a constant input. It returns
+// a constant expression as long as the evaluation causes no error.
+func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, colType coltypes.T) opt.ScalarExpr {
+	switch colType.(type) {
+	case *coltypes.TOid:
+		// Save this cast for the execbuilder.
+		return nil
+	}
+
+	datum := memo.ExtractConstDatum(input)
+	texpr, err := tree.NewTypedCastExpr(datum, colType)
+	if err != nil {
+		return nil
+	}
+
+	result, err := texpr.Eval(c.f.evalCtx)
+	if err != nil {
+		return nil
+	}
+
+	return c.f.ConstructConstVal(result, c.ColTypeToDatumType(colType))
 }
 
 // isMonotonicConversion returns true if conversion of a value from FROM to
