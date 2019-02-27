@@ -667,7 +667,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			planIdx,
 			subqueryPlan,
 			planner,
-			evalCtxFactory,
+			evalCtxFactory(),
 			subqueryPlans,
 			recv,
 			maybeDistribute,
@@ -685,13 +685,11 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	planIdx int,
 	subqueryPlan subquery,
 	planner *planner,
-	evalCtxFactory func() *extendedEvalContext,
+	evalCtx *extendedEvalContext,
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
 	maybeDistribute bool,
 ) error {
-	evalCtx := evalCtxFactory()
-
 	subqueryMonitor := mon.MakeMonitor(
 		"subquery",
 		mon.MemoryResource,
