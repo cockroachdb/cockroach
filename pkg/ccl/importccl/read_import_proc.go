@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -619,15 +620,26 @@ func makeRowErr(file string, row int64, format string, args ...interface{}) erro
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
 func ingestKvs(ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan kvBatch) error {
-	// TODO(dt): allow configuring these.
-	const sortBatchSize = 1000000
-	// TODO(dt): track byte size as well as key count to trigger flushes.
+	const sortBatchSize = 48 << 20 // 48MB
 
 	// TODO(dt): buffer to disk instead of all in-mem.
 
-	buf := make(roachpb.KeyValueByKey, 0, sortBatchSize)
+	// Batching all kvs together leads to worst case overlap behavior in the
+	// resulting AddSSTable calls, leading to compactions and potentially L0
+	// stalls. Instead maintain a separate buffer for each table's primary data.
+	// This optimizes for the case when the data arriving to IMPORT is already
+	// sorted by primary key, leading to no overlapping AddSSTable requests. Given
+	// that many workloads (and actual imported data) will be sorted by primary
+	// key, it makes sense to try to exploit this.
+	//
+	// TODO(dan): This was merged because it stabilized direct ingest IMPORT, but
+	// we may be able to do something simpler (such as chunking along index
+	// boundaries in flush) or more general (such as chunking based on the common
+	// prefix of the last N kvs).
+	kvsByTableIDIndexID := make(map[string]roachpb.KeyValueByKey)
+	sizeByTableIDIndexID := make(map[string]int64)
 
-	flushBuf := func(ctx context.Context) error {
+	flush := func(ctx context.Context, buf roachpb.KeyValueByKey) error {
 		if len(buf) == 0 {
 			return nil
 		}
@@ -643,25 +655,41 @@ func ingestKvs(ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan kvB
 		if err := adder.Flush(ctx); err != nil {
 			return err
 		}
-		buf = buf[:0]
-		return nil
+		return adder.Reset()
 	}
 
 	for kvBatch := range kvCh {
-		// TODO(dt): consider checking if we want to flush an almost-full buffer
-		// to make room for a large batch.
-		buf = append(buf, kvBatch...)
-
-		if len(buf) > sortBatchSize {
-			if err := flushBuf(ctx); err != nil {
+		for _, kv := range kvBatch {
+			tableLen, err := encoding.PeekLength(kv.Key)
+			if err != nil {
 				return err
 			}
-			if err := adder.Reset(); err != nil {
+			indexLen, err := encoding.PeekLength(kv.Key[tableLen:])
+			if err != nil {
 				return err
+			}
+			bufKey := kv.Key[:tableLen+indexLen]
+			kvsByTableIDIndexID[string(bufKey)] = append(kvsByTableIDIndexID[string(bufKey)], kv)
+			sizeByTableIDIndexID[string(bufKey)] += int64(len(kv.Key) + len(kv.Value.RawBytes))
+
+			// TODO(dan): Prevent unbounded memory usage by flushing the largest
+			// buffer when the total size of all buffers exceeds some threshold.
+			if s := sizeByTableIDIndexID[string(bufKey)]; s > sortBatchSize {
+				buf := kvsByTableIDIndexID[string(bufKey)]
+				if err := flush(ctx, buf); err != nil {
+					return err
+				}
+				kvsByTableIDIndexID[string(bufKey)] = buf[:0]
+				sizeByTableIDIndexID[string(bufKey)] = 0
 			}
 		}
 	}
-	return flushBuf(ctx)
+	for _, buf := range kvsByTableIDIndexID {
+		if err := flush(ctx, buf); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func init() {
