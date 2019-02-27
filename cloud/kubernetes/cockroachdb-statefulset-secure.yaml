@@ -166,7 +166,7 @@ spec:
         image: cockroachdb/cockroach-k8s-request-cert:0.4
         imagePullPolicy: IfNotPresent
         command:
-        - "/bin/ash"
+        - "/bin/bash"
         - "-ecx"
         - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname -f),$(hostname -f|cut -f 1-2 -d '.'),cockroachdb-public,cockroachdb-public.$(hostname -f|cut -f 3- -d '.') -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
         env:
