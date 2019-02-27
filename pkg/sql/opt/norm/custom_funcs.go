@@ -164,6 +164,12 @@ func (c *CustomFuncs) ArrayType(in memo.RelExpr) types.T {
 	return types.TArray{Typ: inTyp}
 }
 
+// HasSameType returns true if the left expression has the same type as the
+// right expression.
+func (c *CustomFuncs) HasSameType(left, right opt.ScalarExpr) bool {
+	return left.DataType().Equivalent(right.DataType())
+}
+
 // ----------------------------------------------------------------------
 //
 // Property functions
