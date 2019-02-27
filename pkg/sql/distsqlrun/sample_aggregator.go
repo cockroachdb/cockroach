@@ -85,7 +85,7 @@ func newSampleAggregator(
 		}
 	}
 
-	rankCol := len(spec.SampledColumnIDs)
+	rankCol := len(input.OutputTypes()) - 5
 	s := &sampleAggregator{
 		spec:         spec,
 		input:        input,

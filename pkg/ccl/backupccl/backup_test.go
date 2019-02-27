@@ -2817,5 +2817,7 @@ func TestCreateStatsAfterRestore(t *testing.T) {
 	  FROM [SHOW STATISTICS FOR TABLE "data 2".bank]`,
 		[][]string{
 			{"__auto__", "{id}", "1", "1", "0"},
+			{"__auto__", "{balance}", "1", "1", "0"},
+			{"__auto__", "{payload}", "1", "1", "0"},
 		})
 }
