@@ -101,6 +101,18 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedBufferEntriesIn = metric.Metadata{
+		Name:        "changefeed.buffer_entries.in",
+		Help:        "Total entries entering the buffer between raft and changefeed sinks",
+		Measurement: "Entries",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedBufferEntriesOut = metric.Metadata{
+		Name:        "changefeed.buffer_entries.out",
+		Help:        "Total entries leaving the buffer between raft and changefeed sinks",
+		Measurement: "Entries",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	metaChangefeedPollRequestNanos = metric.Metadata{
 		Name:        "changefeed.poll_request_nanos",
@@ -155,6 +167,8 @@ type Metrics struct {
 	EmittedBytes     *metric.Counter
 	Flushes          *metric.Counter
 	SinkErrorRetries *metric.Counter
+	BufferEntriesIn  *metric.Counter
+	BufferEntriesOut *metric.Counter
 
 	PollRequestNanosHist *metric.Histogram
 	ProcessingNanos      *metric.Counter
@@ -180,6 +194,8 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		EmittedBytes:     metric.NewCounter(metaChangefeedEmittedBytes),
 		Flushes:          metric.NewCounter(metaChangefeedFlushes),
 		SinkErrorRetries: metric.NewCounter(metaChangefeedSinkErrorRetries),
+		BufferEntriesIn:  metric.NewCounter(metaChangefeedBufferEntriesIn),
+		BufferEntriesOut: metric.NewCounter(metaChangefeedBufferEntriesOut),
 
 		// Metrics for changefeed performance debugging: - PollRequestNanos and
 		// PollRequestNanosHist, things are first
