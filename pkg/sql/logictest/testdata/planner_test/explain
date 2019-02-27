@@ -167,24 +167,18 @@ sort                   ·       ·
 query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
 ----
-sort                                  ·         ·
- │                                    order     +table_schema,+table_name
- └── render                           ·         ·
-      └── join                        ·         ·
-           │                          type      left outer
-           │                          equality  (table_id) = (object_id)
-           ├── filter                 ·         ·
-           │    │                     filter    ((state = 'PUBLIC') OR (state IS NULL)) AND ((database_name = 'test') OR (database_name IS NULL))
-           │    └── join              ·         ·
-           │         │                type      left outer
-           │         │                equality  (table_name, table_catalog) = (name, database_name)
-           │         ├── filter       ·         ·
-           │         │    │           filter    table_schema = 'public'
-           │         │    └── values  ·         ·
-           │         └── values       ·         ·
-           └── scan                   ·         ·
-·                                     table     comments@primary
-·                                     spans     ALL
+sort                             ·         ·
+ │                               order     +table_schema,+table_name
+ └── render                      ·         ·
+      └── filter                 ·         ·
+           │                     filter    ((state = 'PUBLIC') OR (state IS NULL)) AND ((database_name = 'test') OR (database_name IS NULL))
+           └── join              ·         ·
+                │                type      left outer
+                │                equality  (table_name, table_catalog) = (name, database_name)
+                ├── filter       ·         ·
+                │    │           filter    table_schema = 'public'
+                │    └── values  ·         ·
+                └── values       ·         ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE field != 'size'

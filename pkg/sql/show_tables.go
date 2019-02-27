@@ -48,15 +48,14 @@ func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode,
 		// `crdb_internal.tables` with `system.comments` instead.
 		const getTablesQuery = `
 SELECT
-	i.table_name, c.comment
+	i.table_name,
+	obj_description(t.table_id::REGCLASS) AS comment
 FROM
 	%[1]s.information_schema.tables AS i
 	LEFT JOIN crdb_internal.tables AS t
 	ON
 		i.table_name = t.name
 		AND i.table_catalog = t.database_name
-	LEFT JOIN system.comments AS c
-	ON t.table_id = c.object_id
 WHERE
 	table_schema = %[2]s
 	AND (t.state = %[3]s OR t.state IS NULL)
