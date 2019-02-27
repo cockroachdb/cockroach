@@ -20,6 +20,8 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
 __auto__         {d}           1000       0               1000
 
 # Disable automatic stats
@@ -37,6 +39,8 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
 __auto__         {d}           1000       0               1000
 
 # Enable automatic stats
@@ -54,6 +58,10 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
 __auto__         {a}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1000       10              0
 __auto__         {d}           1000       0               1000
 __auto__         {d}           1000       1               820
 
@@ -71,6 +79,12 @@ statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
 __auto__         {a}           1000       10              0
 __auto__         {a}           1010       11              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1010       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1010       10              0
 __auto__         {d}           1000       0               1000
 __auto__         {d}           1000       1               820
 __auto__         {d}           1010       2               738
@@ -88,6 +102,14 @@ __auto__         {a}           1000       10              0
 __auto__         {a}           1000       10              0
 __auto__         {a}           1010       11              0
 __auto__         {a}           510        11              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1000       10              0
+__auto__         {b}           1010       10              0
+__auto__         {b}           510        10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1000       10              0
+__auto__         {c}           1010       10              0
+__auto__         {c}           510        5               0
 __auto__         {d}           1000       0               1000
 __auto__         {d}           1000       1               820
 __auto__         {d}           1010       2               738
@@ -97,21 +119,35 @@ __auto__         {d}           510        2               328
 statement ok
 CREATE TABLE copy AS SELECT * FROM data
 
-query TTIII colnames,rowsort,retry
-SELECT statistics_name, column_names, row_count, distinct_count, null_count
+# Distinct count for rowid can be flaky, so don't show it. The estimate is
+# almost always 510, but occasionally it is 509...
+query TTII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, null_count
 FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a}           510        11              0
+statistics_name  column_names  row_count  null_count
+__auto__         {a}           510        0
+__auto__         {b}           510        0
+__auto__         {c}           510        0
+__auto__         {d}           510        328
+__auto__         {rowid}       510        0
 
 # Test fast path delete.
 statement ok
 DELETE FROM copy WHERE true
 
-query TTIII colnames,rowsort,retry
-SELECT statistics_name, column_names, row_count, distinct_count, null_count
+query TTII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, null_count
 FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a}           510        11              0
-__auto__         {a}           0          0               0
+statistics_name  column_names  row_count  null_count
+__auto__         {a}           510        0
+__auto__         {a}           0          0
+__auto__         {b}           510        0
+__auto__         {b}           0          0
+__auto__         {c}           510        0
+__auto__         {c}           0          0
+__auto__         {d}           510        328
+__auto__         {d}           0          0
+__auto__         {rowid}       510        0
+__auto__         {rowid}       0          0
