@@ -103,6 +103,7 @@ dist sender send  r6: sending batch 1 Put to (n1,s1):1
 sql txn           rows affected: 0
 dist sender send  r11: sending batch 3 QueryIntent to (n1,s1):1
 dist sender send  r6: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r20: sending batch 1 ComputeChksum to (n1,s1):1
 
 statement ok
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off

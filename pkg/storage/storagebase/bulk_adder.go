@@ -40,3 +40,24 @@ type BulkAdder interface {
 	// Reset resets the bulk-adder, returning it to its initial state.
 	Reset() error
 }
+
+// CheckIngestedStats sends consistency checks for the ranges in the ingested
+// span. This will verify and fixup any stats that were estimated during ingest.
+func CheckIngestedStats(ctx context.Context, db *client.DB, ingested roachpb.Span) error {
+	if ingested.Key == nil {
+		return nil
+	}
+	if ingested.Key.Equal(ingested.EndKey) {
+		ingested.EndKey = ingested.EndKey.Next()
+	}
+	// TODO(dt): This will compute stats twice when there is a delta once to find
+	// the delta and then again to fix it. We could potentially just skip to the
+	// fixing but Recompute is a bit harder to use from a client on an entire
+	// table since it is a point request, while distsender will fan this one out.
+	req := &roachpb.CheckConsistencyRequest{RequestHeader: roachpb.RequestHeaderFromSpan(ingested)}
+	_, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), req)
+	if pErr != nil {
+		return pErr.GoError()
+	}
+	return nil
+}

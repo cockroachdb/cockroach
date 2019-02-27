@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -158,6 +159,8 @@ func (sp *sstWriter) Run(ctx context.Context) {
 			})
 			group.GoCtx(func(ctx context.Context) error {
 				chunk := -1
+				var ingestSpan roachpb.Span
+
 				for sst := range contentCh {
 					chunk++
 
@@ -188,6 +191,12 @@ func (sp *sstWriter) Run(ctx context.Context) {
 							// but on the bright side, it doesn't affect correctness, only
 							// throughput.
 							log.Errorf(ctx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
+						}
+						if k, cur := sst.span.Key, ingestSpan.Key; cur == nil || k.Compare(cur) < 0 {
+							ingestSpan.Key = append([]byte(nil), k...)
+						}
+						if k, cur := sst.span.EndKey, ingestSpan.EndKey; cur == nil || k.Compare(cur) > 0 {
+							ingestSpan.EndKey = append([]byte(nil), k...)
 						}
 						if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data); err != nil {
 							return err
@@ -247,7 +256,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 						return errors.New("unexpected closure of consumer")
 					}
 				}
-				return nil
+				return storagebase.CheckIngestedStats(ctx, sp.db, ingestSpan)
 			})
 			if err := group.Wait(); err != nil {
 				return err

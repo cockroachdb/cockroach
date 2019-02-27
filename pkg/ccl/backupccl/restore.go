@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -1217,6 +1218,17 @@ func restore(
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
 		return mu.res, nil, nil, errors.Wrapf(err, "importing %d ranges", len(importSpans))
+	}
+
+	g = ctxgroup.WithContext(restoreCtx)
+	for _, table := range tables {
+		span := table.TableSpan()
+		g.GoCtx(func(ctx context.Context) error {
+			return storagebase.CheckIngestedStats(ctx, db, span)
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return mu.res, nil, nil, errors.Wrap(err, "checking imported table ranges")
 	}
 
 	return mu.res, databases, tables, nil

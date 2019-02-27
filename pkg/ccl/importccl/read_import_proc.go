@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -505,7 +506,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			defer adder.Close()
 
 			// Drain the kvCh using the BulkAdder until it closes.
-			if err := ingestKvs(ctx, adder, kvCh); err != nil {
+			if err := ingestKvs(ctx, cp.flowCtx.ClientDB, adder, kvCh); err != nil {
 				return err
 			}
 
@@ -619,7 +620,11 @@ func makeRowErr(file string, row int64, format string, args ...interface{}) erro
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
-func ingestKvs(ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan kvBatch) error {
+func ingestKvs(
+	ctx context.Context, db *client.DB, adder storagebase.BulkAdder, kvCh <-chan kvBatch,
+) error {
+	var ingestSpan roachpb.Span
+
 	const sortBatchSize = 48 << 20 // 48MB
 
 	// TODO(dt): buffer to disk instead of all in-mem.
@@ -644,6 +649,17 @@ func ingestKvs(ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan kvB
 			return nil
 		}
 		sort.Sort(buf)
+
+		// Update the total span ingested.
+		if len(buf) > 0 {
+			if k, cur := buf[0].Key, ingestSpan.Key; cur == nil || k.Compare(cur) < 0 {
+				ingestSpan.Key = append([]byte(nil), k...)
+			}
+			if k, cur := buf[len(buf)-1].Key, ingestSpan.EndKey; cur == nil || k.Compare(cur) > 0 {
+				ingestSpan.EndKey = append([]byte(nil), k...)
+			}
+		}
+
 		for i := range buf {
 			if err := adder.Add(ctx, buf[i].Key, buf[i].Value.RawBytes); err != nil {
 				if i > 0 && bytes.Equal(buf[i].Key, buf[i-1].Key) {
@@ -689,7 +705,12 @@ func ingestKvs(ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan kvB
 			return err
 		}
 	}
-	return nil
+
+	// If somehow we only ingested one key...
+	if ingestSpan.Key.Equal(ingestSpan.EndKey) {
+		ingestSpan.EndKey = ingestSpan.EndKey.Next()
+	}
+	return storagebase.CheckIngestedStats(ctx, db, ingestSpan)
 }
 
 func init() {

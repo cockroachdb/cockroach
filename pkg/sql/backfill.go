@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -588,6 +589,7 @@ func (sc *SchemaChanger) validateIndexes(
 			return err
 		}
 
+		var allIndexSpans []roachpb.Span
 		var forwardIndexes []*sqlbase.IndexDescriptor
 		var invertedIndexes []*sqlbase.IndexDescriptor
 
@@ -599,6 +601,7 @@ func (sc *SchemaChanger) validateIndexes(
 			if idx == nil || m.Direction == sqlbase.DescriptorMutation_DROP {
 				continue
 			}
+			allIndexSpans = append(allIndexSpans, tableDesc.IndexSpan(idx.ID))
 			switch idx.Type {
 			case sqlbase.IndexDescriptor_FORWARD:
 				forwardIndexes = append(forwardIndexes, idx)
@@ -614,6 +617,15 @@ func (sc *SchemaChanger) validateIndexes(
 
 		forwardIndexesDone := make(chan struct{})
 		invertedIndexesDone := make(chan struct{})
+
+		grp.GoCtx(func(ctx context.Context) error {
+			for _, i := range allIndexSpans {
+				if err := storagebase.CheckIngestedStats(ctx, sc.db, i); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 
 		grp.GoCtx(func(ctx context.Context) error {
 			defer close(forwardIndexesDone)
