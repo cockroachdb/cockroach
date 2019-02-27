@@ -213,7 +213,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 
 	retryErr := roachpb.NewErrorWithTxn(
 		roachpb.NewTransactionRetryError(
-			roachpb.RETRY_SERIALIZABLE),
+			roachpb.RETRY_SERIALIZABLE, "test err"),
 		txn.Serialize()).GoError()
 
 	abortErr := roachpb.NewErrorWithTxn(

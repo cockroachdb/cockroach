@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
 
@@ -1010,10 +1012,14 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
-	deadlineError := "TransactionStatusError: transaction deadline exceeded"
-	if err := txWrite.Commit(); !testutils.IsError(err, deadlineError) {
-		t.Fatalf("err = %v", err)
+	checkDeadlineErr := func(err error, t *testing.T) {
+		pqe, ok := err.(*pq.Error)
+		if !ok || pqe.Code != pgerror.CodeSerializationFailureError ||
+			!testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
+			t.Fatalf("expected deadline exceeded, got: %v", err)
+		}
 	}
+	checkDeadlineErr(txWrite.Commit(), t)
 
 	// Test the deadline exceeded error with a CREATE/DROP INDEX.
 	txWrite, err = sqlDB.Begin()
@@ -1037,17 +1043,13 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
-	if err := txWrite.Commit(); !testutils.IsError(err, deadlineError) {
-		t.Fatalf("err = %v", err)
-	}
+	checkDeadlineErr(txWrite.Commit(), t)
 
 	if _, err := txUpdate.Exec(`UPDATE t.kv SET v = 'c' WHERE k = 'a';`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := txUpdate.Commit(); !testutils.IsError(err, deadlineError) {
-		t.Fatalf("err = %v", err)
-	}
+	checkDeadlineErr(txUpdate.Commit(), t)
 
 	txWrite, err = sqlDB.Begin()
 	if err != nil {
