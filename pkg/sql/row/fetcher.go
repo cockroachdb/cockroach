@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1249,16 +1250,15 @@ func (rf *Fetcher) finalizeRow() error {
 						indexColValues = append(indexColValues, "?")
 					}
 				}
-				if rf.isCheck {
-					return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
-						"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
-						table.desc.Name, table.cols[i].Name, table.index.Name,
-						strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
-				}
-				panic(fmt.Sprintf(
+				err := pgerror.NewAssertionErrorf(
 					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 					table.desc.Name, table.cols[i].Name, table.index.Name,
-					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
+					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ","))
+
+				if rf.isCheck {
+					return scrub.WrapError(scrub.UnexpectedNullValueError, err)
+				}
+				return err
 			}
 			table.row[i] = sqlbase.EncDatum{
 				Datum: tree.DNull,
