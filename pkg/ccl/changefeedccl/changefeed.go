@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,7 +43,8 @@ func init() {
 var PushEnabled = settings.RegisterBoolSetting(
 	"changefeed.push.enabled",
 	"if set, changed are pushed instead of pulled. This requires the "+
-		"kv.rangefeed.enabled setting.",
+		"kv.rangefeed.enabled setting. See "+
+		base.DocsURL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`),
 	true,
 )
 
