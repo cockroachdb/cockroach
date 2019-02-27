@@ -453,6 +453,7 @@ ifeq "$(findstring linux-gnu,$(TARGET_TRIPLE))" "linux-gnu"
 C_LIBS_CCL += $(LIBKRB5)
 KRB_CPPFLAGS := -I$(KRB5_DIR)/include
 KRB_DIR := $(KRB5_DIR)/lib
+override TAGS += gss
 endif
 
 # Go does not permit dashes in build tags. This is undocumented.
