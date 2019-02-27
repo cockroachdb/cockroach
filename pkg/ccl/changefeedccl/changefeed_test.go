@@ -1446,15 +1446,19 @@ func TestChangefeedDescription(t *testing.T) {
 
 		var jobID int64
 		sqlDB.QueryRow(t,
-			`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, envelope = $2`, sink.String(), `row`,
+			`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, envelope = $2`, sink.String(), `wrapped`,
 		).Scan(&jobID)
+
+		// Secrets get removed from the sink parameter.
+		expectedSink := sink
+		expectedSink.RawQuery = ``
 
 		var description string
 		sqlDB.QueryRow(t,
 			`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
 		).Scan(&description)
-		expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + sink.String() +
-			`' WITH envelope = 'row', updated`
+		expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + expectedSink.String() +
+			`' WITH envelope = 'wrapped', updated`
 		if description != expected {
 			t.Errorf(`got "%s" expected "%s"`, description, expected)
 		}
