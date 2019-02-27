@@ -1595,8 +1595,8 @@ type sessionDataMutator struct {
 	data     *sessiondata.SessionData
 	defaults SessionDefaults
 	settings *cluster.Settings
-	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
-	curTxnReadOnly *bool
+	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
+	setCurTxnReadOnly func(val bool)
 	// applicationNamedChanged, if set, is called when the "application name"
 	// variable is updated.
 	applicationNameChanged func(newName string)
@@ -1675,7 +1675,7 @@ func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
-	*m.curTxnReadOnly = val
+	m.setCurTxnReadOnly(val)
 }
 
 func (m *sessionDataMutator) SetStmtTimeout(timeout time.Duration) {
