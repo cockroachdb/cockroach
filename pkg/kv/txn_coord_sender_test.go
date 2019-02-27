@@ -2384,3 +2384,23 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 		t.Fatalf("expected UnhandledRetryableError(TransactionAbortedError), got: (%T) %v", err, err)
 	}
 }
+
+// Check that ingesting an Aborted txn record is a no-op. The TxnCoordSender is
+// supposed to reject such updates because they risk putting it into an
+// inconsistent state. See comments in TxnCoordSender.AugmentMeta().
+func TestAugmentTxnCoordMetaAbortedTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), nil /* knobs */)
+	defer s.Stop()
+	ctx := context.Background()
+
+	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	txnProto := txn.Serialize()
+	txnProto.Status = roachpb.ABORTED
+	txn.AugmentTxnCoordMeta(ctx, roachpb.TxnCoordMeta{Txn: *txnProto})
+	// Check that the transaction was not updated.
+	txnProto = txn.Serialize()
+	if txnProto.Status != roachpb.PENDING {
+		t.Fatalf("expected PENDING txn, got: %s", txnProto.Status)
+	}
+}
