@@ -23,16 +23,15 @@ export default function (props: GraphDashboardProps) {
   const { storeSources } = props;
 
   return [
-    <LineGraph title="Sink Byte Traffic" sources={storeSources}>
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        <Metric name="cr.node.changefeed.emitted_bytes" title="Emitted Bytes" nonNegativeRate />
+    <LineGraph title="Max Changefeed Latency" sources={storeSources}>
+      <Axis units={AxisUnits.Duration} label="time">
+        <Metric name="cr.node.changefeed.max_behind_nanos" title="Max Changefeed Latency" downsampleMax aggregateMax />
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Sink Timings" sources={storeSources}>
-      <Axis units={AxisUnits.Duration} label="time">
-        <Metric name="cr.node.changefeed.emit_nanos" title="Message Emit Time" nonNegativeRate />
-        <Metric name="cr.node.changefeed.flush_nanos" title="Flush Time" nonNegativeRate />
+    <LineGraph title="Sink Byte Traffic" sources={storeSources}>
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        <Metric name="cr.node.changefeed.emitted_bytes" title="Emitted Bytes" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
@@ -40,6 +39,13 @@ export default function (props: GraphDashboardProps) {
       <Axis units={AxisUnits.Count} label="actions">
         <Metric name="cr.node.changefeed.emitted_messages" title="Messages" nonNegativeRate />
         <Metric name="cr.node.changefeed.flushes" title="Flushes" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Sink Timings" sources={storeSources}>
+      <Axis units={AxisUnits.Duration} label="time">
+        <Metric name="cr.node.changefeed.emit_nanos" title="Message Emit Time" nonNegativeRate />
+        <Metric name="cr.node.changefeed.flush_nanos" title="Flush Time" nonNegativeRate />
       </Axis>
     </LineGraph>,
   ];

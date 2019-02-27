@@ -149,9 +149,17 @@ var (
 	// any changefeed ahead of its gc ttl threshold, but keeping that correct in
 	// the face of changing zone configs is much harder, so this will have to do
 	// for now.
+	metaChangefeedMaxBehindNanos = metric.Metadata{
+		Name:        "changefeed.max_behind_nanos",
+		Help:        "Largest commit-to-emit duration of any running feed",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	// Deprecated.
 	metaChangefeedMinHighWater = metric.Metadata{
 		Name:        "changefeed.min_high_water",
-		Help:        "Latest high_water timestamp of most behind feed",
+		Help:        "Latest high-water timestamp of most behind feed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_TIMESTAMP_NS,
 	}
@@ -181,7 +189,8 @@ type Metrics struct {
 		id       int
 		resolved map[int]hlc.Timestamp
 	}
-	MinHighWater *metric.Gauge
+	MaxBehindNanos *metric.Gauge
+	MinHighWater   *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -219,6 +228,19 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		FlushNanos:         metric.NewCounter(metaChangefeedFlushNanos),
 	}
 	m.mu.resolved = make(map[int]hlc.Timestamp)
+
+	m.MaxBehindNanos = metric.NewFunctionalGauge(metaChangefeedMaxBehindNanos, func() int64 {
+		now := timeutil.Now()
+		var maxBehind time.Duration
+		m.mu.Lock()
+		for _, resolved := range m.mu.resolved {
+			if behind := now.Sub(resolved.GoTime()); behind > maxBehind {
+				maxBehind = behind
+			}
+		}
+		m.mu.Unlock()
+		return maxBehind.Nanoseconds()
+	})
 	m.MinHighWater = metric.NewFunctionalGauge(metaChangefeedMinHighWater, func() int64 {
 		minHighWater := noMinHighWaterSentinel
 		m.mu.Lock()
