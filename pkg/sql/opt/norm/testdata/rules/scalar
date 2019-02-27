@@ -1103,14 +1103,10 @@ values
 opt
 SELECT k FROM a WHERE k = ANY '{1,2,3}'::INT[]
 ----
-select
+scan a
  ├── columns: k:1(int!null)
- ├── key: (1)
- ├── scan a
- │    ├── columns: k:1(int!null)
- │    └── key: (1)
- └── filters
-      └── k = ANY '{1,2,3}'::INT8[] [type=bool, outer=(1)]
+ ├── constraint: /1: [/1 - /3]
+ └── key: (1)
 
 # --------------------------------------------------
 # FoldCollate

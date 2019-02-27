@@ -4,27 +4,27 @@
 
 # FoldPlusZero folds $left + 0 for numeric types.
 [FoldPlusZero, Normalize]
-(Plus $left:* (Const 0)) => $left
+(Plus $left:* $right:(Const 0)) => (Cast $left (BinaryColumnType Plus $left $right))
 
 # FoldZeroPlus folds 0 + $right for numeric types.
 [FoldZeroPlus, Normalize]
-(Plus (Const 0) $right:*) => $right
+(Plus $left:(Const 0) $right:*) => (Cast $right (BinaryColumnType Plus $left $right))
 
 # FoldMinusZero folds $left - 0 for numeric types.
 [FoldMinusZero, Normalize]
-(Minus $left:* (Const 0)) => $left
+(Minus $left:* $right:(Const 0)) => (Cast $left (BinaryColumnType Minus $left $right))
 
 # FoldMultOne folds $left * 1 for numeric types.
 [FoldMultOne, Normalize]
-(Mult $left:* (Const 1)) => $left
+(Mult $left:* $right:(Const 1)) => (Cast $left (BinaryColumnType Mult $left $right))
 
 # FoldOneMult folds 1 * $right for numeric types.
 [FoldOneMult, Normalize]
-(Mult (Const 1) $right:*) => $right
+(Mult $left:(Const 1) $right:*) => (Cast $right (BinaryColumnType Mult $left $right))
 
 # FoldDivOne folds $left / 1 for numeric types.
 [FoldDivOne, Normalize]
-(Div | FloorDiv $left:* (Const 1)) => $left
+(Div | FloorDiv $left:* $right:(Const 1)) => (Cast $left (BinaryColumnType (OpName) $left $right))
 
 # InvertMinus rewrites -(a - b) to (b - a) if the operand types allow it.
 [InvertMinus, Normalize]
