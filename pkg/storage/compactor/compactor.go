@@ -64,7 +64,7 @@ func NewCompactor(
 }
 
 func (c *Compactor) enabled() bool {
-	return enabled.Get(&c.st.SV)
+	return enabled.Get(&c.st.SV) && !r.eng.IsBulkIngesting()
 }
 
 func (c *Compactor) minInterval() time.Duration {

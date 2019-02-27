@@ -491,6 +491,12 @@ type RocksDB struct {
 		syncutil.Mutex
 		m map[*rocksDBIterator][]byte
 	}
+
+	bulk struct {
+		syncutil.Mutex
+		running       bool
+		lastIngestion time.Time
+	}
 }
 
 var _ Engine = &RocksDB{}
@@ -684,6 +690,14 @@ func (r *RocksDB) syncLoop() {
 			b.commitWG.Done()
 		}
 
+		r.bulk.Lock()
+		if r.bulk.running && timeutil.Since(r.bulk.lastIngestion) > time.Minute {
+			if err := statusToError(C.DBFinishedBulkIngesting(r.rdb)); err != nil {
+				log.Fatal(context.TODO(), err)
+			}
+			r.bulk.running = false
+		}
+		r.bulk.Unlock()
 		s.Lock()
 	}
 }
@@ -899,6 +913,14 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 // Compact forces compaction over the entire database.
 func (r *RocksDB) Compact() error {
 	return statusToError(C.DBCompact(r.rdb))
+}
+
+// IsBulkIngesting is
+func (r *RocksDB) IsBulkIngesting() bool {
+	r.bulk.Lock()
+	ingesting := r.bulk.running
+	r.bulk.Unlock()
+	return ingesting
 }
 
 // CompactRange forces compaction over a specified range of keys in the database.
@@ -2950,11 +2972,22 @@ func (r *RocksDB) setAuxiliaryDir(d string) error {
 	return nil
 }
 
+var skipCompactionsDuringIngest = envutil.EnvOrDefaultBool("COCKROACH_INGEST_LIMIT_COMPACTIONS", false)
+
 // IngestExternalFiles atomically links a slice of files into the RocksDB
 // log-structured merge-tree.
 func (r *RocksDB) IngestExternalFiles(
 	ctx context.Context, paths []string, skipWritingSeqNo, allowFileModifications bool,
 ) error {
+
+	r.bulk.Lock()
+	r.bulk.lastIngestion = timeutil.Now()
+	if !r.bulk.running && skipCompactionsDuringIngest {
+		r.bulk.running = true
+		statusToError(C.DBOptimizeForBulkIngesting(r.rdb))
+	}
+	r.bulk.Unlock()
+
 	cPaths := make([]*C.char, len(paths))
 	for i := range paths {
 		cPaths[i] = C.CString(paths[i])

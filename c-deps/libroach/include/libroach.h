@@ -137,6 +137,15 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bot
 DBStatus DBDisableAutoCompaction(DBEngine* db);
 DBStatus DBEnableAutoCompaction(DBEngine* db);
 
+// Disable/enable ingestion-optimized compaction settings. Automatic compactions
+// are done at much higher file counts in L0, working on the assumption that the
+// majority of those files are essentially "staged" SSTs for something being
+// bulk-loaded but not yet in use, meaning the extra read-amplification of lots
+// of L0 files is less of an issue, and the extra write amplification of
+// repeated re-compactions before all SSTs are ingested could be.
+DBStatus DBOptimizeForBulkIngesting(DBEngine* db);
+DBStatus DBFinishedBulkIngesting(DBEngine* db);
+
 // Stores the approximate on-disk size of the given key range into the
 // supplied uint64.
 DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t* size);

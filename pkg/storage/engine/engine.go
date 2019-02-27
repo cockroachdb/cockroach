@@ -314,6 +314,9 @@ type Engine interface {
 	// that the key range is compacted all the way to the bottommost level of
 	// SSTables, which is necessary to pick up changes to bloom filters.
 	CompactRange(start, end roachpb.Key, forceBottommost bool) error
+	// IsBulkIngesting returns if the engine is currently optimized for doing bulk
+	// ingestion.
+	IsBulkIngesting() bool
 	// OpenFile opens a DBFile with the given filename.
 	OpenFile(filename string) (DBFile, error)
 	// ReadFile reads the content from the file with the given filename int this RocksDB's env.

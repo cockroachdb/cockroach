@@ -421,6 +421,29 @@ DBStatus DBEnableAutoCompaction(DBEngine* db) {
   return ToDBStatus(status);
 }
 
+DBStatus DBOptimizeForBulkIngesting(DBEngine* db) {
+  auto status = db->rep->SetOptions({
+    {"level0_file_num_compaction_trigger", "15"},
+    {"level0_slowdown_writes_trigger", "200"},
+    {"level0_stop_writes_trigger", "400"},
+    {"soft_pending_compaction_bytes_limit", "1000000000000"},
+    {"hard_pending_compaction_bytes_limit", "2000000000000"},
+  });
+  return ToDBStatus(status);
+}
+
+DBStatus DBFinishedBulkIngesting(DBEngine* db) {
+  // TODO(dt): remember the prior settings instead, or at least reuse defaults.
+  auto status = db->rep->SetOptions({
+    {"level0_file_num_compaction_trigger", "2"},
+    {"level0_slowdown_writes_trigger", "20"},
+    {"level0_stop_writes_trigger", "32"},
+    {"soft_pending_compaction_bytes_limit", "68719476736"},
+    {"hard_pending_compaction_bytes_limit", "274877906944"},
+  });
+  return ToDBStatus(status);
+}
+
 DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t* size) {
   const std::string start_key(EncodeKey(start));
   const std::string end_key(EncodeKey(end));
