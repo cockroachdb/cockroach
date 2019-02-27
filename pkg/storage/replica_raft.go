@@ -227,6 +227,18 @@ func (r *Replica) evalAndPropose(
 		return nil, nil, 0, roachpb.NewError(err)
 	}
 
+	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
+		filterArgs := storagebase.ProposalFilterArgs{
+			Ctx:   ctx,
+			Cmd:   *proposal.command,
+			CmdID: idKey,
+			Req:   ba,
+		}
+		if pErr := filter(filterArgs); pErr != nil {
+			return nil, nil, 0, pErr
+		}
+	}
+
 	// submitProposalLocked calls withRaftGroupLocked which requires that raftMu
 	// is held, but only if Replica.mu.internalRaftGroup == nil. To avoid
 	// locking Replica.raftMu in the common case where the raft group is
@@ -278,18 +290,6 @@ func (r *Replica) evalAndPropose(
 	maxLeaseIndex := r.insertProposalLocked(proposal, repDesc, lease)
 	if maxLeaseIndex == 0 && !ba.IsLeaseRequest() {
 		log.Fatalf(ctx, "no MaxLeaseIndex returned for %s", ba)
-	}
-
-	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
-		filterArgs := storagebase.ProposalFilterArgs{
-			Ctx:   ctx,
-			Cmd:   *proposal.command,
-			CmdID: idKey,
-			Req:   ba,
-		}
-		if pErr := filter(filterArgs); pErr != nil {
-			return nil, nil, 0, pErr
-		}
 	}
 
 	if err := r.submitProposalLocked(proposal); err == raft.ErrProposalDropped {
