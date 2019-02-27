@@ -46,34 +46,15 @@ func EvalAddSSTable(
 	// defer tracing.FinishSpan(span)
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
-	// Compute the stats for any existing data in the affected span. The sstable
-	// being ingested can overwrite all, some, or none of the existing kvs.
-	// (Note: the expected case is that it's none or, in the case of a retry of
-	// the request, all.) So subtract out the existing mvcc stats, and add back
-	// what they'll be after the sstable is ingested.
-	existingIter := batch.NewIterator(engine.IterOptions{UpperBound: args.EndKey})
-	defer existingIter.Close()
-	existingIter.Seek(mvccStartKey)
-	if ok, err := existingIter.Valid(); err != nil {
-		return result.Result{}, errors.Wrap(err, "computing existing stats")
-	} else if ok && existingIter.UnsafeKey().Less(mvccEndKey) {
-		log.Eventf(ctx, "target key range not empty, will merge existing data with sstable")
-	}
-	// This ComputeStats is cheap if the span is empty.
-	existingStats, err := existingIter.ComputeStats(mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
-	if err != nil {
-		return result.Result{}, errors.Wrap(err, "computing existing stats")
-	}
-	ms.Subtract(existingStats)
-
 	// Verify that the keys in the sstable are within the range specified by the
 	// request header, verify the key-value checksums, and compute the new
 	// MVCCStats.
 	stats, err := verifySSTable(
-		existingIter, args.Data, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+		args.Data, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "verifying sstable data")
 	}
+	stats.ContainsEstimates = true
 	ms.Add(stats)
 
 	return result.Result{
@@ -87,7 +68,7 @@ func EvalAddSSTable(
 }
 
 func verifySSTable(
-	existingIter engine.SimpleIterator, data []byte, start, end engine.MVCCKey, nowNanos int64,
+	data []byte, start, end engine.MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	// To verify every KV is a valid roachpb.KeyValue in the range [start, end)
 	// we a) pass a verify flag on the iterator so that as ComputeStatsGo calls
@@ -111,15 +92,7 @@ func verifySSTable(
 		}
 	}
 
-	// In the case that two iterators have an entry with the same key and
-	// timestamp, MultiIterator breaks ties by preferring later ones in the
-	// ordering. So it's important that the sstable iterator comes after the one
-	// for the existing data (because the sstable will overwrite it when
-	// ingested).
-	mergedIter := engine.MakeMultiIterator([]engine.SimpleIterator{existingIter, dataIter})
-	defer mergedIter.Close()
-
-	stats, err := engine.ComputeStatsGo(mergedIter, start, end, nowNanos)
+	stats, err := engine.ComputeStatsGo(dataIter, start, end, nowNanos)
 	if err != nil {
 		return stats, err
 	}
