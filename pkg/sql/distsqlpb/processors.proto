@@ -765,6 +765,12 @@ message SketchSpec {
 message SamplerSpec {
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
   optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+
+  // This is the fraction of time that the sampler processors will be idle when
+  // scanning large tables. Currently, this field is set only for automatic
+  // statistics based on the value of the cluster setting
+  // sql.stats.experimental_automatic_collection.fraction_idle.
+  optional double fraction_idle = 3 [(gogoproto.nullable) = false];
 }
 
 // SampleAggregatorSpec is the specification of a processor that aggregates the

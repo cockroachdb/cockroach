@@ -26,9 +26,9 @@ __auto__         {d}           1000       0               1000
 statement ok
 SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = false
 
-# Update more than 5% of the table.
+# Update more than 10% of the table.
 statement ok
-UPDATE data SET d = 11, a = 11 WHERE a = 1 AND b > 1
+UPDATE data SET d = 10 WHERE (a = 1 OR a = 2) AND b > 1
 
 # There should be no change to stats.
 query TTIII colnames,rowsort
@@ -43,9 +43,9 @@ __auto__         {d}           1000       0               1000
 statement ok
 SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = true
 
-# Update more than 5% of the table.
+# Update more than 10% of the table.
 statement ok
-UPDATE data SET d = 12, a = 12 WHERE a = 11
+UPDATE data SET d = 12 WHERE d = 10
 
 query TTIII colnames,rowsort,retry
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
@@ -53,11 +53,11 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
-__auto__         {a}           1000       11              0
+__auto__         {a}           1000       10              0
 __auto__         {d}           1000       0               1000
-__auto__         {d}           1000       1               910
+__auto__         {d}           1000       1               820
 
-# Upsert more than 5% of the table.
+# Upsert more than 10% of the table.
 statement ok
 UPSERT INTO data SELECT a, b, 1, 1 FROM
 generate_series(1, 11) AS a(a),
@@ -69,13 +69,13 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
-__auto__         {a}           1000       11              0
-__auto__         {a}           1019       12              0
+__auto__         {a}           1000       10              0
+__auto__         {a}           1010       11              0
 __auto__         {d}           1000       0               1000
-__auto__         {d}           1000       1               910
-__auto__         {d}           1019       2               819
+__auto__         {d}           1000       1               820
+__auto__         {d}           1010       2               738
 
-# Delete more than 5% of the table.
+# Delete more than 10% of the table.
 statement ok
 DELETE FROM data WHERE c > 5
 
@@ -85,13 +85,13 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
-__auto__         {a}           1000       11              0
-__auto__         {a}           1019       12              0
-__auto__         {a}           519        12              0
+__auto__         {a}           1000       10              0
+__auto__         {a}           1010       11              0
+__auto__         {a}           510        11              0
 __auto__         {d}           1000       0               1000
-__auto__         {d}           1000       1               910
-__auto__         {d}           1019       2               819
-__auto__         {d}           519        2               364
+__auto__         {d}           1000       1               820
+__auto__         {d}           1010       2               738
+__auto__         {d}           510        2               328
 
 # Test CREATE TABLE ... AS
 statement ok
@@ -102,7 +102,7 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a}           519        12              0
+__auto__         {a}           510        11              0
 
 # Test fast path delete.
 statement ok
@@ -113,5 +113,5 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a}           519        12              0
+__auto__         {a}           510        11              0
 __auto__         {a}           0          0               0
