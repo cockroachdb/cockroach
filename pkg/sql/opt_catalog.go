@@ -42,8 +42,9 @@ type optCatalog struct {
 	cfg *config.SystemConfig
 
 	// dataSources is a cache of table and view objects that's used to satisfy
-	// repeated calls for the same data source. The same underlying descriptor
-	// will always return the same data source wrapper object.
+	// repeated calls for the same data source.
+	// Note that the data source object might still need to be recreated if
+	// something outside of the descriptor has changed (e.g. table stats).
 	dataSources map[*sqlbase.ImmutableTableDescriptor]cat.DataSource
 
 	// tn is a temporary name used during resolution to avoid heap allocation.
@@ -52,14 +53,26 @@ type optCatalog struct {
 
 var _ cat.Catalog = &optCatalog{}
 
-// init allows the caller to pre-allocate optCatalog.
+// init initializes an optCatalog instance (which the caller can pre-allocate).
+// The instance can be used across multiple queries, but reset() should be
+// called for each query.
 func (oc *optCatalog) init(planner *planner) {
 	oc.planner = planner
-	oc.dataSources = nil
+	oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
+}
+
+// reset prepares the optCatalog to be used for a new query.
+func (oc *optCatalog) reset() {
+	// If we have accumulated too many tables in our map, throw everything away.
+	// This deals with possible edge cases where we do a lot of DDL in a
+	// long-lived session.
+	if len(oc.dataSources) > 100 {
+		oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
+	}
 
 	// Gossip can be nil in testing scenarios.
-	if planner.execCfg.Gossip != nil {
-		oc.cfg = planner.execCfg.Gossip.GetSystemConfig()
+	if oc.planner.execCfg.Gossip != nil {
+		oc.cfg = oc.planner.execCfg.Gossip.GetSystemConfig()
 	}
 }
 
@@ -128,7 +141,7 @@ func (oc *optCatalog) ResolveDataSource(
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
-	ds, err := oc.newDataSource(ctx, desc, &oc.tn)
+	ds, err := oc.dataSourceForDesc(ctx, desc, &oc.tn)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
@@ -155,7 +168,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	}
 
 	name := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
-	return oc.newDataSource(ctx, desc, &name)
+	return oc.dataSourceForDesc(ctx, desc, &name)
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
@@ -174,73 +187,22 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 	}
 }
 
-// newDataSource returns a data source wrapper for the given table descriptor.
+// dataSourceForDesc returns a data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
-func (oc *optCatalog) newDataSource(
+func (oc *optCatalog) dataSourceForDesc(
 	ctx context.Context, desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName,
 ) (cat.DataSource, error) {
-	// Check to see if there's already a data source wrapper for this descriptor.
-	if oc.dataSources == nil {
-		oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
-	} else {
-		if ds, ok := oc.dataSources[desc]; ok {
-			return ds, nil
-		}
+	if desc.IsTable() {
+		// Tables require invalidation logic for cached wrappers.
+		return oc.dataSourceForTable(ctx, desc, name)
 	}
 
-	// Create wrapper for the data source now.
-	var ds cat.DataSource
+	ds, ok := oc.dataSources[desc]
+	if ok {
+		return ds, nil
+	}
+
 	switch {
-	case desc.IsTable():
-		id := cat.StableID(desc.ID)
-		if desc.IsVirtualTable() {
-			// A virtual table can effectively have multiple instances, with different
-			// contents. For example `db1.pg_catalog.pg_sequence` contains info about
-			// sequences in db1, whereas `db2.pg_catalog.pg_sequence` contains info
-			// about sequences in db2.
-			//
-			// These instances should have different stable IDs. To achieve this, we
-			// prepend the database ID.
-			//
-			// Note that some virtual tables have a special instance with empty catalog,
-			// for example "".information_schema.tables contains info about tables in
-			// all databases. We treat the empty catalog as having database ID 0.
-			if name.Catalog() != "" {
-				// TODO(radu): it's unfortunate that we have to lookup the schema again.
-				_, dbDesc, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
-				if err != nil {
-					return nil, err
-				}
-				if dbDesc == nil {
-					// The database was not found. This can happen e.g. when
-					// accessing a virtual schema over a non-existent
-					// database. This is a common scenario when the current db
-					// in the session points to a database that was not created
-					// yet.
-					//
-					// In that case we use an invalid database ID. We
-					// distinguish this from the empty database case because the
-					// virtual tables do not "contain" the same information in
-					// both cases.
-					id |= cat.StableID(math.MaxUint32) << 32
-				} else {
-					id |= cat.StableID(dbDesc.(*DatabaseDescriptor).ID) << 32
-				}
-			}
-		}
-
-		stats, err := oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc.ID)
-		if err != nil {
-			// Ignore any error. We still want to be able to run queries even if we lose
-			// access to the statistics table.
-			// TODO(radu): at least log the error.
-			stats = nil
-		}
-		ds, err = newOptTable(oc.cfg, desc, id, name, stats)
-		if err != nil {
-			return nil, err
-		}
-
 	case desc.IsView():
 		ds = newOptView(desc, name)
 
@@ -251,12 +213,106 @@ func (oc *optCatalog) newDataSource(
 		return nil, pgerror.NewAssertionErrorf("unexpected table descriptor: %+v", desc)
 	}
 
+	oc.dataSources[desc] = ds
+	return ds, nil
+}
+
+// dataSourceForTable returns a table data source wrapper for the given descriptor.
+// The wrapper might come from the cache, or it may be created now.
+func (oc *optCatalog) dataSourceForTable(
+	ctx context.Context, desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName,
+) (cat.DataSource, error) {
+	// Even if we have a cached data source, we still have to cross-check that
+	// statistics and the zone config haven't changed.
+	tableStats, err := oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc.ID)
+	if err != nil {
+		// Ignore any error. We still want to be able to run queries even if we lose
+		// access to the statistics table.
+		// TODO(radu): at least log the error.
+		tableStats = nil
+	}
+
+	zoneConfig, err := oc.getZoneConfig(desc)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check to see if there's already a data source wrapper for this descriptor,
+	// and it was created with the same stats and zone config.
+	if ds, ok := oc.dataSources[desc]; ok && !ds.(*optTable).isStale(tableStats, zoneConfig) {
+		return ds, nil
+	}
+
+	id := cat.StableID(desc.ID)
+	if desc.IsVirtualTable() {
+		// A virtual table can effectively have multiple instances, with different
+		// contents. For example `db1.pg_catalog.pg_sequence` contains info about
+		// sequences in db1, whereas `db2.pg_catalog.pg_sequence` contains info
+		// about sequences in db2.
+		//
+		// These instances should have different stable IDs. To achieve this, we
+		// prepend the database ID.
+		//
+		// Note that some virtual tables have a special instance with empty catalog,
+		// for example "".information_schema.tables contains info about tables in
+		// all databases. We treat the empty catalog as having database ID 0.
+		if name.Catalog() != "" {
+			// TODO(radu): it's unfortunate that we have to lookup the schema again.
+			_, dbDesc, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
+			if err != nil {
+				return nil, err
+			}
+			if dbDesc == nil {
+				// The database was not found. This can happen e.g. when
+				// accessing a virtual schema over a non-existent
+				// database. This is a common scenario when the current db
+				// in the session points to a database that was not created
+				// yet.
+				//
+				// In that case we use an invalid database ID. We
+				// distinguish this from the empty database case because the
+				// virtual tables do not "contain" the same information in
+				// both cases.
+				id |= cat.StableID(math.MaxUint32) << 32
+			} else {
+				id |= cat.StableID(dbDesc.(*DatabaseDescriptor).ID) << 32
+			}
+		}
+	}
+
+	ds := newOptTable(desc, id, name, tableStats, zoneConfig)
 	if !desc.IsVirtualTable() {
 		// Virtual tables can have multiple effective instances that utilize the
 		// same descriptor (see above).
 		oc.dataSources[desc] = ds
 	}
 	return ds, nil
+}
+
+var emptyZoneConfig = &config.ZoneConfig{}
+
+// getZoneConfig returns the ZoneConfig data structure for the given table.
+// ZoneConfigs are stored in protobuf binary format in the SystemConfig, which
+// is gossiped around the cluster. Note that the returned ZoneConfig might be
+// somewhat stale, since it's taken from the gossiped SystemConfig.
+func (oc *optCatalog) getZoneConfig(
+	desc *sqlbase.ImmutableTableDescriptor,
+) (*config.ZoneConfig, error) {
+	// Lookup table's zone if system config is available (it may not be as node
+	// is starting up and before it's received the gossiped config). If it is
+	// not available, use an empty config that has no zone constraints.
+	if oc.cfg == nil || desc.IsVirtualTable() {
+		return emptyZoneConfig, nil
+	}
+	zone, err := oc.cfg.GetZoneConfigForObject(uint32(desc.ID))
+	if err != nil {
+		return nil, err
+	}
+	if zone == nil {
+		// This can happen with tests that override the hook.
+		zone = emptyZoneConfig
+	}
+	return zone, err
 }
 
 // optView is a wrapper around sqlbase.ImmutableTableDescriptor that implements
@@ -378,8 +434,14 @@ type optTable struct {
 	// indexes.
 	indexes []optIndex
 
+	// rawStats stores the original table statistics slice. Used for a fast-path
+	// check that the statistics haven't changed.
+	rawStats []*stats.TableStatistic
+
 	// stats are the inlined wrappers for table statistics.
 	stats []optTableStat
+
+	zone *config.ZoneConfig
 
 	// family is the inlined wrapper for the table's primary family. The primary
 	// family is the first family explicitly specified by the user. If no families
@@ -400,13 +462,19 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
-	cfg *config.SystemConfig,
 	desc *sqlbase.ImmutableTableDescriptor,
 	id cat.StableID,
 	name *cat.DataSourceName,
 	stats []*stats.TableStatistic,
-) (*optTable, error) {
-	ot := &optTable{desc: desc, id: id, name: *name}
+	tblZone *config.ZoneConfig,
+) *optTable {
+	ot := &optTable{
+		desc:     desc,
+		id:       id,
+		name:     *name,
+		rawStats: stats,
+		zone:     tblZone,
+	}
 
 	// The cat.Table interface requires that table names be fully qualified.
 	ot.name.ExplicitSchema = true
@@ -419,20 +487,6 @@ func newOptTable(
 	}
 
 	if !ot.desc.IsVirtualTable() {
-		// Lookup table's zone if system config is available (it may not be as node
-		// is starting up and before it's received the gossiped config). If it is
-		// not available, use an empty config that has no zone constraints.
-		var tblZone *config.ZoneConfig
-		if cfg != nil {
-			var err error
-			tblZone, err = lookupZone(cfg, uint32(id))
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			tblZone = &config.ZoneConfig{}
-		}
-
 		// Build the indexes (add 1 to account for lack of primary index in
 		// DeletableIndexes slice).
 		ot.indexes = make([]optIndex, 1+len(ot.desc.DeletableIndexes()))
@@ -490,7 +544,7 @@ func newOptTable(
 		ot.stats = ot.stats[:n]
 	}
 
-	return ot, nil
+	return ot
 }
 
 // ID is part of the cat.Object interface.
@@ -498,11 +552,34 @@ func (ot *optTable) ID() cat.StableID {
 	return ot.id
 }
 
+// isStale checks if the optTable object needs to be refreshed because the stats
+// or zone config have changed. False positives are ok.
+func (ot *optTable) isStale(tableStats []*stats.TableStatistic, zone *config.ZoneConfig) bool {
+	// Fast check to verify that the statistics haven't changed: we check the
+	// length and the address of the underlying array. This is not a perfect
+	// check (in principle, the stats could have left the cache and then gotten
+	// regenerated), but it works in the common case.
+	if len(tableStats) != len(ot.rawStats) {
+		return true
+	}
+	if len(tableStats) > 0 && &tableStats[0] != &ot.rawStats[0] {
+		return true
+	}
+	if !zonesAreEqual(zone, ot.zone) {
+		return true
+	}
+	return false
+}
+
 // Equals is part of the cat.Object interface.
 func (ot *optTable) Equals(other cat.Object) bool {
 	otherTable, ok := other.(*optTable)
 	if !ok {
 		return false
+	}
+	if ot == otherTable {
+		// Fast path when it is the same object.
+		return true
 	}
 	if ot.id != otherTable.id || ot.desc.Version != otherTable.desc.Version {
 		return false
@@ -940,21 +1017,12 @@ func (oi *optFamily) Table() cat.Table {
 	return oi.tab
 }
 
-// lookupZone returns the ZoneConfig data structure for the given schema object
-// ID. ZoneConfigs are stored in protobuf binary format in the SystemConfig,
-// which is gossiped around the cluster. Note that the returned ZoneConfig might
-// be somewhat stale, since it's taken from the gossiped SystemConfig.
-func lookupZone(cfg *config.SystemConfig, id uint32) (*config.ZoneConfig, error) {
-	zone, _, _, err := ZoneConfigHook(cfg, id)
-	if err != nil {
-		return nil, err
-	}
-	return zone, nil
-}
-
 // zonesAreEqual compares two zones for equality. Note that only fields actually
 // exposed by the cat.Zone interface and needed by the optimizer are compared.
 func zonesAreEqual(left, right *config.ZoneConfig) bool {
+	if left == right {
+		return true
+	}
 	if len(left.Constraints) != len(right.Constraints) {
 		return false
 	}

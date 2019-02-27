@@ -270,24 +270,45 @@ func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error
 	return s.getZoneConfigForKey(objectID, keySuffix)
 }
 
-func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneConfig, error) {
-	testingLock.Lock()
-	hook := ZoneConfigHook
-	testingLock.Unlock()
+// GetZoneConfigForObject returns the zone ID for a given object ID.
+func (s *SystemConfig) GetZoneConfigForObject(id uint32) (*ZoneConfig, error) {
+	entry, err := s.getZoneEntry(id)
+	if err != nil {
+		return nil, err
+	}
+	return entry.zone, nil
+}
+
+func (s *SystemConfig) getZoneEntry(id uint32) (zoneEntry, error) {
 	s.mu.RLock()
 	entry, ok := s.mu.zoneCache[id]
 	s.mu.RUnlock()
-	if !ok {
-		if zone, placeholder, cache, err := hook(s, id); err != nil {
-			return nil, err
-		} else if zone != nil {
-			entry = zoneEntry{zone: zone, placeholder: placeholder}
-			if cache {
-				s.mu.Lock()
-				s.mu.zoneCache[id] = entry
-				s.mu.Unlock()
-			}
+	if ok {
+		return entry, nil
+	}
+	testingLock.Lock()
+	hook := ZoneConfigHook
+	testingLock.Unlock()
+	zone, placeholder, cache, err := hook(s, id)
+	if err != nil {
+		return zoneEntry{}, err
+	}
+	if zone != nil {
+		entry := zoneEntry{zone: zone, placeholder: placeholder}
+		if cache {
+			s.mu.Lock()
+			s.mu.zoneCache[id] = entry
+			s.mu.Unlock()
 		}
+		return entry, nil
+	}
+	return zoneEntry{}, nil
+}
+
+func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneConfig, error) {
+	entry, err := s.getZoneEntry(id)
+	if err != nil {
+		return nil, err
 	}
 	if entry.zone != nil {
 		if entry.placeholder != nil {
