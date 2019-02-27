@@ -173,6 +173,10 @@ type Config struct {
 	// SQLQueryCacheSize is the memory size (in bytes) of the query plan cache.
 	SQLQueryCacheSize int64
 
+	// GoroutineDumpDirName is the directory name for goroutine dumps using
+	// goroutinedumper.
+	GoroutineDumpDirName string
+
 	// HeapProfileDirName is the directory name for heap profiles using
 	// heapprofiler.
 	HeapProfileDirName string
