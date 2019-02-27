@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"time"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -42,11 +44,12 @@ type sketchInfo struct {
 type samplerProcessor struct {
 	ProcessorBase
 
-	flowCtx  *FlowCtx
-	input    RowSource
-	sr       stats.SampleReservoir
-	sketches []sketchInfo
-	outTypes []sqlbase.ColumnType
+	flowCtx      *FlowCtx
+	input        RowSource
+	sr           stats.SampleReservoir
+	sketches     []sketchInfo
+	outTypes     []sqlbase.ColumnType
+	fractionIdle float64
 	// Output column indices for special columns.
 	rankCol      int
 	sketchIdxCol int
@@ -88,9 +91,10 @@ func newSamplerProcessor(
 	}
 
 	s := &samplerProcessor{
-		flowCtx:  flowCtx,
-		input:    input,
-		sketches: make([]sketchInfo, len(spec.Sketches)),
+		flowCtx:      flowCtx,
+		input:        input,
+		sketches:     make([]sketchInfo, len(spec.Sketches)),
+		fractionIdle: spec.FractionIdle,
 	}
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
@@ -166,6 +170,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	var da sqlbase.DatumAlloc
 	var buf []byte
 	rowCount := 0
+	lastWakeupTime := timeutil.Now()
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
@@ -195,6 +200,27 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			}
 			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				return true, nil
+			}
+
+			if s.fractionIdle > 0 {
+				elapsed := timeutil.Now().Sub(lastWakeupTime)
+				// Throttle the processor according to s.fractionIdle.
+				// Wait time is calculated as follows:
+				//
+				//       fraction_idle = t_wait / (t_run + t_wait)
+				//  ==>  t_wait = t_run * fraction_idle / (1 - fraction_idle)
+				//
+				timer := time.NewTimer(
+					time.Duration(float64(elapsed) * s.fractionIdle / (1 - s.fractionIdle)),
+				)
+				defer timer.Stop()
+				select {
+				case <-timer.C:
+					break
+				case <-s.flowCtx.Stopper().ShouldStop():
+					break
+				}
+				lastWakeupTime = timeutil.Now()
 			}
 		}
 
