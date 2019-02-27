@@ -12,7 +12,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -25,11 +27,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
 // Defines CCL-specific debug commands, adds the encryption flag to debug commands in
 // `pkg/cli/debug.go`, and registers a callback to generate encryption options.
+
+const (
+	// These constants are defined in libroach. They should NOT be changed.
+	plaintextKeyID       = "plain"
+	keyRegistryFilename  = "COCKROACHDB_DATA_KEYS"
+	fileRegistryFilename = "COCKROACHDB_REGISTRY"
+)
 
 var encryptionStatusOpts struct {
 	activeStoreIDOnly bool
@@ -51,11 +61,27 @@ and exits.
 		RunE: cli.MaybeDecorateGRPCError(runEncryptionStatus),
 	}
 
-	// Add it to the root debug command. We can't add it to the lists of commands (eg: DebugCmdsForRocksDB)
-	// as cli init() is called before us.
-	cli.DebugCmd.AddCommand(encryptionStatusCmd)
+	encryptionActiveKeyCmd := &cobra.Command{
+		Use:   "encryption-active-key <directory>",
+		Short: "return ID of the active store key",
+		Long: `
+Display the algorithm and key ID of the active store key for existing data directory 'directory'.
+Does not require knowing the key.
 
-	// Add the encryption flag.
+Some sample outputs:
+Plaintext:            # encryption not enabled
+AES128_CTR:be235...   # AES-128 encryption with store key ID
+`,
+		Args: cobra.ExactArgs(1),
+		RunE: cli.MaybeDecorateGRPCError(runEncryptionActiveKey),
+	}
+
+	// Add commands to the root debug command.
+	// We can't add them to the lists of commands (eg: DebugCmdsForRocksDB) as cli init() is called before us.
+	cli.DebugCmd.AddCommand(encryptionStatusCmd)
+	cli.DebugCmd.AddCommand(encryptionActiveKeyCmd)
+
+	// Add the encryption flag to commands that need it.
 	f := encryptionStatusCmd.Flags()
 	cli.VarFlag(f, &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 	// And other flags.
@@ -159,7 +185,7 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 	fileKeyMap := make(map[string][]string)
 
 	for name, entry := range fileRegistry.Files {
-		keyID := "plain"
+		keyID := plaintextKeyID
 
 		if entry.EnvType != enginepb.EnvType_Plaintext && len(entry.EncryptionSettings) > 0 {
 			var setting enginepbccl.EncryptionSettings
@@ -178,7 +204,7 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 
 	for _, dataKey := range keyRegistry.DataKeys {
 		info := dataKey.Info
-		parentKey := "plain"
+		parentKey := plaintextKeyID
 		if len(info.ParentKeyId) > 0 {
 			parentKey = info.ParentKeyId
 		}
@@ -248,4 +274,57 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func runEncryptionActiveKey(cmd *cobra.Command, args []string) error {
+	keyType, keyID, err := getActiveEncryptionkey(args[0])
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%s:%s\n", keyType, keyID)
+	return nil
+}
+
+// getActiveEncryptionkey opens the file registry directly, bypassing rocksdb.
+// This allows looking up the active encryption key ID without knowing it.
+func getActiveEncryptionkey(dir string) (string, string, error) {
+	registryFile := filepath.Join(dir, fileRegistryFilename)
+
+	// If the data directory does not exist, we return an error.
+	if _, err := os.Stat(dir); err != nil {
+		return "", "", errors.Wrapf(err, "data directory %s does not exist", dir)
+	}
+
+	// Open the file registry. Return plaintext if it does not exist.
+	contents, err := ioutil.ReadFile(registryFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return enginepbccl.EncryptionType_Plaintext.String(), "", nil
+		}
+		return "", "", errors.Wrapf(err, "could not open registry file %s", registryFile)
+	}
+
+	var fileRegistry enginepb.FileRegistry
+	if err := protoutil.Unmarshal(contents, &fileRegistry); err != nil {
+		return "", "", err
+	}
+
+	// Find the entry for the key registry file.
+	entry, ok := fileRegistry.Files[keyRegistryFilename]
+	if !ok {
+		return "", "", fmt.Errorf("key registry file %s was not found in the file registry", keyRegistryFilename)
+	}
+
+	if entry.EnvType == enginepb.EnvType_Plaintext || len(entry.EncryptionSettings) == 0 {
+		// Plaintext: no encryption settings to unmarshal.
+		return enginepbccl.EncryptionType_Plaintext.String(), "", nil
+	}
+
+	var setting enginepbccl.EncryptionSettings
+	if err := protoutil.Unmarshal(entry.EncryptionSettings, &setting); err != nil {
+		return "", "", fmt.Errorf("could not unmarshal encryption settings for %s: %v", keyRegistryFilename, err)
+	}
+
+	return setting.EncryptionType.String(), setting.KeyId, nil
 }

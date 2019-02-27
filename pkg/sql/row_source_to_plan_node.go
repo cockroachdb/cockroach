@@ -124,6 +124,7 @@ func (r *rowSourceToPlanNode) Values() tree.Datums {
 func (r *rowSourceToPlanNode) Close(ctx context.Context) {
 	if r.source != nil {
 		r.source.ConsumerClosed()
+		r.source = nil
 	}
 	if r.originalPlanNode != nil {
 		r.originalPlanNode.Close(ctx)
