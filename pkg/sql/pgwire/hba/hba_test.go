@@ -31,3 +31,7 @@ func TestParse(t *testing.T) {
 		return conf.String()
 	})
 }
+
+// TODO(mjibson): these are untested outside ccl +gss builds.
+var _ = Entry.GetOption
+var _ = Entry.GetOptions
