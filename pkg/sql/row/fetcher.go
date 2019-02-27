@@ -1249,16 +1249,15 @@ func (rf *Fetcher) finalizeRow() error {
 						indexColValues = append(indexColValues, "?")
 					}
 				}
-				if rf.isCheck {
-					return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
-						"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
-						table.desc.Name, table.cols[i].Name, table.index.Name,
-						strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
-				}
-				panic(fmt.Sprintf(
+				err := errors.Errorf(
 					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 					table.desc.Name, table.cols[i].Name, table.index.Name,
-					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
+					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ","))
+
+				if rf.isCheck {
+					return scrub.WrapError(scrub.UnexpectedNullValueError, err)
+				}
+				return err
 			}
 			table.row[i] = sqlbase.EncDatum{
 				Datum: tree.DNull,
