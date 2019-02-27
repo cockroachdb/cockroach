@@ -760,6 +760,14 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 		neededCols.UnionWith(memo.ExtractAggInputColumns(aggs[i].Agg))
 	}
 
+	// In rare cases, we might need a column only for its ordering, for example:
+	//   SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
+	// In this case we can't project the column away as it is still needed by
+	// distsql to maintain the desired ordering.
+	for _, c := range groupByInput.ProvidedPhysical().Ordering {
+		neededCols.Add(int(c.ID()))
+	}
+
 	if neededCols.Equals(groupByInput.Relational().OutputCols) {
 		// All columns produced by the input are used.
 		return input, nil
@@ -775,14 +783,14 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 		}
 	})
 
-	reqOrdering := input.reqOrdering(groupBy)
+	input.outputCols = newOutputCols
+	reqOrdering := input.reqOrdering(groupByInput)
 	input.root, err = b.factory.ConstructSimpleProject(
 		input.root, cols, nil /* colNames */, reqOrdering,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
-	input.outputCols = newOutputCols
 	return input, nil
 }
 
