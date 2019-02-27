@@ -499,7 +499,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.GetLease()
-	ch, _, _, pErr := r.propose(context.TODO(), exLease, ba, nil, &allSpans)
+	ch, _, _, pErr := r.evalAndPropose(context.TODO(), exLease, ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1275,7 +1275,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, _, pErr := tc.repl.propose(context.Background(), exLease, ba, nil, &allSpans)
+	ch, _, _, pErr := tc.repl.evalAndPropose(context.Background(), exLease, ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -7067,7 +7067,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 		},
 		Value: roachpb.MakeValueFromBytes([]byte("val")),
 	})
-	_, _, _, err := repl.propose(context.Background(), lease, ba, nil, &allSpans)
+	_, _, _, err := repl.evalAndPropose(context.Background(), lease, ba, nil, &allSpans)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -8525,7 +8525,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	}
 
 	exLease, _ := repl.GetLease()
-	ch, _, _, pErr := repl.propose(
+	ch, _, _, pErr := repl.evalAndPropose(
 		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
 	)
 	if pErr != nil {
@@ -8572,7 +8572,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	ch, _, _, pErr := repl.propose(
+	ch, _, _, pErr := repl.evalAndPropose(
 		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
 	)
 	if pErr != nil {
@@ -8637,7 +8637,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	_, _, _, pErr := repl.propose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
+	_, _, _, pErr := repl.evalAndPropose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -8655,7 +8655,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 		ba2.Timestamp = tc.Clock().Now()
 
 		var pErr *roachpb.Error
-		ch, _, _, pErr = repl.propose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
+		ch, _, _, pErr = repl.evalAndPropose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
