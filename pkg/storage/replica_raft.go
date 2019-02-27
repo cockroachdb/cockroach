@@ -91,7 +91,7 @@ func makeIDKey() storagebase.CmdIDKey {
 	return storagebase.CmdIDKey(idKeyBuf)
 }
 
-// propose prepares the necessary pending command struct and initializes a
+// evalAndPropose prepares the necessary pending command struct and initializes a
 // client command ID if one hasn't been. A verified lease is supplied
 // as a parameter if the command requires a lease; nil otherwise. It
 // then proposes the command to Raft if necessary and returns
@@ -107,7 +107,7 @@ func makeIDKey() storagebase.CmdIDKey {
 // - the MaxLeaseIndex of the resulting proposal, if any.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
-func (r *Replica) propose(
+func (r *Replica) evalAndPropose(
 	ctx context.Context,
 	lease roachpb.Lease,
 	ba roachpb.BatchRequest,
