@@ -369,7 +369,7 @@ func (r *Replica) evaluateWriteBatch(
 			if pErr != nil {
 				return batch, ms, nil, result.Result{}, pErr
 			} else if ba.Timestamp != br.Timestamp {
-				err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
+				err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN, "Require1PC batch pushed")
 				return batch, ms, nil, result.Result{}, roachpb.NewError(err)
 			}
 			log.Fatal(ctx, "unreachable")
@@ -484,7 +484,7 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	if batcheval.IsEndTransactionExceedingDeadline(ba.Txn.Timestamp, *etArg) {
 		return false
 	}
-	if retry, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, *etArg); retry {
+	if retry, _, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, *etArg); retry {
 		return false
 	}
 	return !knobs.DisableOptional1PC || etArg.Require1PC

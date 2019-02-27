@@ -2924,7 +2924,8 @@ func (s *Store) Send(
 				// If we're not retrying on push txn failures return a txn retry error
 				// after the first failure to guarantee a retry.
 				if ba.Txn != nil {
-					err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
+					err := roachpb.NewTransactionRetryError(
+						roachpb.RETRY_REASON_UNKNOWN, "DontRetryPushTxnFailures testing knob")
 					return nil, roachpb.NewErrorWithTxn(err, ba.Txn)
 				}
 				return nil, pErr
