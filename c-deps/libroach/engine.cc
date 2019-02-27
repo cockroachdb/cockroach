@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 
 #include "engine.h"
+#include <rocksdb/convenience.h>
 #include "db.h"
 #include "encoding.h"
 #include "env_manager.h"
@@ -222,7 +223,12 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
 DBString DBImpl::GetCompactionStats() {
   std::string tmp;
   rep->GetProperty("rocksdb.cfstats-no-file-histogram", &tmp);
-  return ToDBString(tmp);
+  const rocksdb::Options& opts = rep->GetOptions(rep->DefaultColumnFamily());
+  std::string tmp2;
+  rocksdb::GetStringFromDBOptions(&tmp2, opts);
+  std::string tmp3;
+  rocksdb::GetStringFromColumnFamilyOptions(&tmp3, opts);
+  return ToDBString(tmp+tmp2+tmp3);
 }
 
 DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {

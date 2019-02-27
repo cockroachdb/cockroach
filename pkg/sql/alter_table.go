@@ -393,7 +393,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						if err := params.p.dropIndexByName(
 							params.ctx, tn, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
 							t.DropBehavior, ignoreIdxConstraint,
-							tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
+							"DROP INDEX for "+tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames)+" job",
 						); err != nil {
 							return err
 						}
