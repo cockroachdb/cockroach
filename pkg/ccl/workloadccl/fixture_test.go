@@ -144,7 +144,7 @@ func TestFixture(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `CREATE DATABASE test`)
-	if err := RestoreFixture(ctx, db, fixture, `test`); err != nil {
+	if _, err := RestoreFixture(ctx, db, fixture, `test`); err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 	sqlDB.CheckQueryResults(t,

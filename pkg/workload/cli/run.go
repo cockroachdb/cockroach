@@ -33,6 +33,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
@@ -142,6 +143,14 @@ func CmdHelper(
 	const crdbDefaultURL = `postgres://root@localhost:26257?sslmode=disable`
 
 	return HandleErrs(func(cmd *cobra.Command, args []string) error {
+		if ls := cmd.Flags().Lookup(logflags.LogToStderrName); ls != nil {
+			if !ls.Changed {
+				// Unless the settings were overridden by the user, default to logging
+				// to stderr.
+				_ = ls.Value.Set(log.Severity_INFO.String())
+			}
+		}
+
 		if h, ok := gen.(workload.Hookser); ok {
 			if h.Hooks().Validate != nil {
 				if err := h.Hooks().Validate(); err != nil {

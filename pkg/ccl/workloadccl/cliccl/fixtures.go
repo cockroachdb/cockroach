@@ -288,9 +288,13 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	if err != nil {
 		return errors.Wrap(err, `finding fixture`)
 	}
-	if err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, dbName); err != nil {
+
+	log.Infof(ctx, "starting load of %d tables", len(gen.Tables()))
+	bytes, err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, dbName)
+	if err != nil {
 		return errors.Wrap(err, `restoring fixture`)
 	}
+	log.Infof(ctx, "loaded %s bytes in %d tables", humanizeutil.IBytes(bytes), len(gen.Tables()))
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
@@ -314,6 +318,7 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 		return err
 	}
 
+	log.Infof(ctx, "starting import of %d tables", len(gen.Tables()))
 	directIngestion := *fixturesImportDirectIngestionTable
 	filesPerNode := *fixturesImportFilesPerNode
 	bytes, err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName, directIngestion, filesPerNode)
