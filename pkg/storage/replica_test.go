@@ -3186,10 +3186,10 @@ func TestEndTransactionDeadline(t *testing.T) {
 
 			case 1:
 				// Past deadline.
-				if err := roachpb.CheckTxnDeadlineExceededErr(pErr.GetDetail()); err != nil {
-					t.Error(err)
+				retErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError)
+				if !ok || retErr.Reason != roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED {
+					t.Fatalf("expected deadline exceeded, got: %v", pErr)
 				}
-
 			case 2:
 				// Equal deadline.
 				if pErr != nil {
@@ -3400,8 +3400,9 @@ func TestEndTransactionDeadline_1PC(t *testing.T) {
 	ba.Add(&bt, &put, &et)
 	assignSeqNumsForReqs(txn, &bt, &put, &et)
 	_, pErr := tc.Sender().Send(context.Background(), ba)
-	if err := roachpb.CheckTxnDeadlineExceededErr(pErr.GetDetail()); err != nil {
-		t.Error(err)
+	retErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError)
+	if !ok || retErr.Reason != roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED {
+		t.Fatalf("expected deadline exceeded, got: %v", pErr)
 	}
 }
 

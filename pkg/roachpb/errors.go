@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
 )
 
 func (e *UnhandledRetryableError) Error() string {
@@ -391,9 +390,12 @@ func (*TransactionPushError) canRestartTransaction() TransactionRestart {
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
-func NewTransactionRetryError(reason TransactionRetryReason) *TransactionRetryError {
+func NewTransactionRetryError(
+	reason TransactionRetryReason, extraMsg string,
+) *TransactionRetryError {
 	return &TransactionRetryError{
-		Reason: reason,
+		Reason:   reason,
+		ExtraMsg: extraMsg,
 	}
 }
 
@@ -436,18 +438,6 @@ func (e *TransactionStatusError) Error() string {
 
 func (e *TransactionStatusError) message(pErr *Error) string {
 	return fmt.Sprintf("%s: %s", e.Error(), pErr.GetTxn())
-}
-
-// CheckTxnDeadlineExceededErr returns an error if deadlineErr is not a
-// transaction deadline exceeded roachpb.TransactionStatusError.
-func CheckTxnDeadlineExceededErr(deadlineErr error) error {
-	if statusError, ok := deadlineErr.(*TransactionStatusError); !ok {
-		return errors.Errorf("expected TransactionStatusError but got %T: %s",
-			deadlineErr, deadlineErr)
-	} else if e := "transaction deadline exceeded"; !strings.Contains(statusError.Msg, e) {
-		return errors.Errorf("expected %s, got %s", e, statusError.Msg)
-	}
-	return nil
 }
 
 var _ ErrorDetailInterface = &TransactionStatusError{}
@@ -693,8 +683,9 @@ func (e *BatchTimestampBeforeGCError) message(_ *Error) string {
 var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
 
 // NewIntentMissingError creates a new IntentMissingError.
-func NewIntentMissingError(wrongIntent *Intent) *IntentMissingError {
+func NewIntentMissingError(key Key, wrongIntent *Intent) *IntentMissingError {
 	return &IntentMissingError{
+		Key:         key,
 		WrongIntent: wrongIntent,
 	}
 }
