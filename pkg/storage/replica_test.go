@@ -6232,10 +6232,12 @@ func TestProposalOverhead(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// NB: the expected overhead reflects the space overhead currently present in
-	// Raft commands. This test will fail if that overhead changes. Try to make
-	// this number go down and not up.
-	const expectedOverhead = 52
+	// NB: the expected overhead reflects the space overhead currently
+	// present in Raft commands. This test will fail if that overhead
+	// changes. Try to make this number go down and not up. It slightly
+	// undercounts because our proposal filter is called before
+	// maxLeaseIndex and a few other fields are filled in.
+	const expectedOverhead = 48
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
