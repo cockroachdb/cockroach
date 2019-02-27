@@ -133,7 +133,7 @@ func (w *workloadReader) readFiles(
 		for b := conf.BatchBegin; b < conf.BatchEnd; b++ {
 			if rows-lastProgress > 10000 {
 				// how far we are on this file
-				fileProgress := float32(b) / float32(numBatches)
+				fileProgress := float32(b-conf.BatchBegin) / float32(numBatches)
 				progress := initialProgress + fileProgress/numFiles
 				if err := progressFn(progress); err != nil {
 					return err
