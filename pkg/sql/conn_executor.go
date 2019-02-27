@@ -584,6 +584,7 @@ func (s *Server) newConnExecutor(
 
 	ex.sessionTracing.ex = ex
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
+	ex.initPlanner(ctx, &ex.planner)
 
 	return ex, nil
 }
@@ -1561,6 +1562,7 @@ func (ex *connExecutor) execCopyIn(
 			// state machine, but the copyMachine manages its own transactions without
 			// going through the state machine.
 			ex.state.sqlTimestamp = txnTS
+			ex.initPlanner(ctx, p)
 			ex.resetPlanner(ctx, p, txn, stmtTS)
 		},
 	)
@@ -1796,51 +1798,30 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 	return mode
 }
 
-// evalCtx creates an ExtendedEvalCtx corresponding to the current state of the
-// session.
-//
-// p is the planner that the EvalCtx will link to. Note that the planner also
-// needs to have a reference to an evalCtx, so the caller will have to set that
-// up.
-// stmtTS is the timestamp that the statement_timestamp() SQL builtin will
-// return for statements executed with this evalCtx. Since generally each
-// statement is supposed to have a different timestamp, the evalCtx generally
-// shouldn't be reused across statements.
-func (ex *connExecutor) evalCtx(
-	ctx context.Context, p *planner, stmtTS time.Time,
-) extendedEvalContext {
-	txn := ex.state.mu.txn
-
+// initEvalCtx initializes the fields of an extendedEvalContext that stay the
+// same across multiple statements. resetEvalCtx must also be called before each
+// statement, to reinitialize other fields.
+func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
 	scInterface := newSchemaInterface(&ex.extraTxnState.tables, ex.server.cfg.VirtualSchemas)
 
-	ie := MakeSessionBoundInternalExecutor(
+	ie := NewSessionBoundInternalExecutor(
 		ctx,
-		&ex.sessionData,
 		ex.server,
 		ex.memMetrics,
 		ex.server.cfg.Settings,
 	)
 
-	return extendedEvalContext{
+	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Planner:       p,
-			Sequence:      p,
-			StmtTimestamp: stmtTS,
-
-			Txn:              txn,
+			Planner:          p,
+			Sequence:         p,
 			SessionData:      &ex.sessionData,
-			TxnState:         ex.getTransactionState(),
-			TxnReadOnly:      ex.state.readOnly,
-			TxnImplicit:      ex.implicitTxn(),
 			Settings:         ex.server.cfg.Settings,
-			Context:          ex.Ctx(),
-			Mon:              ex.state.mon,
 			TestingKnobs:     ex.server.cfg.EvalContextTestingKnobs,
-			TxnTimestamp:     ex.state.sqlTimestamp,
 			ClusterID:        ex.server.cfg.ClusterID(),
 			NodeID:           ex.server.cfg.NodeID.Get(),
 			ReCache:          ex.server.reCache,
-			InternalExecutor: &ie,
+			InternalExecutor: ie,
 		},
 		SessionMutator:  &ex.dataMutator,
 		VirtualSchemas:  ex.server.cfg.VirtualSchemas,
@@ -1854,6 +1835,32 @@ func (ex *connExecutor) evalCtx(
 		SchemaChangers:  &ex.extraTxnState.schemaChangers,
 		schemaAccessors: scInterface,
 	}
+}
+
+// resetEvalCtx initializes the fields of evalCtx that can change
+// during a session (i.e. the fields not set by initEvalCtx).
+//
+// stmtTS is the timestamp that the statement_timestamp() SQL builtin will
+// return for statements executed with this evalCtx. Since generally each
+// statement is supposed to have a different timestamp, the evalCtx generally
+// shouldn't be reused across statements.
+func (ex *connExecutor) resetEvalCtx(
+	evalCtx *extendedEvalContext, txn *client.Txn, stmtTS time.Time,
+) {
+	evalCtx.InternalExecutor.(*SessionBoundInternalExecutor).CopySessionData(&ex.sessionData)
+
+	evalCtx.TxnState = ex.getTransactionState()
+	evalCtx.TxnReadOnly = ex.state.readOnly
+	evalCtx.TxnImplicit = ex.implicitTxn()
+	evalCtx.StmtTimestamp = stmtTS
+	evalCtx.TxnTimestamp = ex.state.sqlTimestamp
+	evalCtx.Placeholders = nil
+	evalCtx.IVarContainer = nil
+	evalCtx.Context = ex.Ctx()
+	evalCtx.Txn = txn
+	evalCtx.Mon = ex.state.mon
+	evalCtx.PrepareOnly = false
+	evalCtx.SkipNormalize = false
 }
 
 // getTransactionState retrieves a text representation of the given state.
@@ -1882,45 +1889,44 @@ func (ex *connExecutor) newPlanner(
 	ctx context.Context, txn *client.Txn, stmtTS time.Time,
 ) *planner {
 	p := &planner{execCfg: ex.server.cfg}
+	ex.initPlanner(ctx, p)
 	ex.resetPlanner(ctx, p, txn, stmtTS)
 	return p
 }
 
-// resetPlanner re-initializes a planner so it can can be used for planning a
+// initPlanner initializes a planner so it can can be used for planning a
 // query in the context of this session.
+func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
+	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	p.statsCollector = ex.newStatsCollector()
+
+	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
+
+	p.sessionDataMutator = &ex.dataMutator
+	p.preparedStatements = ex.getPrepStmtsAccessor()
+
+	p.queryCacheSession.Init()
+}
+
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *client.Txn, stmtTS time.Time,
 ) {
 	p.txn = txn
 	p.stmt = nil
-	if p.cancelChecker == nil {
-		p.cancelChecker = sqlbase.NewCancelChecker(ctx)
-	} else {
-		p.cancelChecker.Reset(ctx)
-	}
-	if p.statsCollector == nil {
-		p.statsCollector = ex.newStatsCollector()
-	} else {
-		p.statsCollector.Reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
-	}
+
+	p.cancelChecker.Reset(ctx)
+	p.statsCollector.Reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 
 	p.semaCtx = tree.MakeSemaContext()
 	p.semaCtx.Location = &ex.sessionData.DataConversion.Location
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
 	p.semaCtx.AsOfTimestamp = nil
 
-	p.extendedEvalCtx = ex.evalCtx(ctx, p, stmtTS)
-	p.extendedEvalCtx.ClusterID = ex.server.cfg.ClusterID()
-	p.extendedEvalCtx.NodeID = ex.server.cfg.NodeID.Get()
-	p.extendedEvalCtx.ReCache = ex.server.reCache
+	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 
-	p.sessionDataMutator = &ex.dataMutator
-	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.autoCommit = false
 	p.isPreparing = false
 	p.avoidCachedDescriptors = false
-
-	p.queryCacheSession.Init()
 }
 
 // txnStateTransitionsApplyWrapper is a wrapper on top of Machine built with the
@@ -1970,13 +1976,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		scc := &ex.extraTxnState.schemaChangers
 		if len(scc.schemaChangers) != 0 {
 			ieFactory := func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-				ie := MakeSessionBoundInternalExecutor(
+				ie := NewSessionBoundInternalExecutor(
 					ctx,
-					sd,
 					ex.server,
 					ex.memMetrics,
-					ex.server.cfg.Settings)
-				return &ie
+					ex.server.cfg.Settings,
+				)
+				ie.CopySessionData(sd)
+				return ie
 			}
 			if schemaChangeErr := scc.execSchemaChanges(
 				ex.Ctx(), ex.server.cfg, &ex.sessionTracing, ieFactory,
