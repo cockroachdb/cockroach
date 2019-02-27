@@ -383,6 +383,50 @@ func (s *repeatableBatchSource) resetBatchesToReturn(b int) {
 	s.batchesReturned = 0
 }
 
+// chunkingBatchSource is a batch source that takes unlimited-size columns and
+// chunks them into ColBatchSize-sized chunks when Nexted.
+type chunkingBatchSource struct {
+	typs []types.T
+	cols []ColVec
+	len  uint64
+
+	curIdx uint64
+	batch  memBatch
+}
+
+// newChunkingBatchSource returns a new chunkingBatchSource with the given
+// column types, columns, and length.
+func newChunkingBatchSource(typs []types.T, cols []ColVec, len uint64) *chunkingBatchSource {
+	return &chunkingBatchSource{
+		typs: typs,
+		cols: cols,
+		len:  len,
+	}
+}
+
+func (c *chunkingBatchSource) Init() {
+	c.batch.b = make([]ColVec, len(c.cols))
+	for i := range c.cols {
+		c.batch.b[i] = c.cols[i]
+	}
+}
+
+func (c *chunkingBatchSource) Next() ColBatch {
+	if c.curIdx >= c.len {
+		c.batch.SetLength(0)
+	}
+	lastIdx := c.curIdx + ColBatchSize
+	if lastIdx > c.len {
+		lastIdx = c.len
+	}
+	for i := range c.batch.b {
+		c.batch.b[i] = c.cols[i].Slice(c.typs[i], c.curIdx, lastIdx)
+	}
+	c.batch.SetLength(uint16(lastIdx - c.curIdx))
+	c.curIdx = lastIdx
+	return &c.batch
+}
+
 // finiteBatchSource is an Operator that returns the same batch a specified
 // number of times.
 type finiteBatchSource struct {
