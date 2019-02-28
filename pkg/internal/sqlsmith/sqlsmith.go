@@ -15,9 +15,10 @@
 package sqlsmith
 
 import (
-	"bytes"
 	gosql "database/sql"
 	"math/rand"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // sqlsmith-go
@@ -73,8 +74,8 @@ func (s *Smither) Generate() string {
 		if !ok {
 			continue
 		}
-		var buf bytes.Buffer
-		stmt.expr.Format(&buf)
-		return buf.String()
+		ctx := &tree.FmtCtx{}
+		stmt.expr.Format(ctx)
+		return ctx.String()
 	}
 }

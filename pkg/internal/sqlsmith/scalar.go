@@ -15,7 +15,6 @@
 package sqlsmith
 
 import (
-	"bytes"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -102,7 +101,7 @@ func (c *caseExpr) Type() types.T {
 	return c.trueExpr.Type()
 }
 
-func (c *caseExpr) Format(buf *bytes.Buffer) {
+func (c *caseExpr) Format(buf *tree.FmtCtx) {
 	buf.WriteString("case when ")
 	c.condition.Format(buf)
 	buf.WriteString(" then ")
@@ -144,7 +143,7 @@ func (c *coalesceExpr) Type() types.T {
 	return c.firstExpr.Type()
 }
 
-func (c *coalesceExpr) Format(buf *bytes.Buffer) {
+func (c *coalesceExpr) Format(buf *tree.FmtCtx) {
 	buf.WriteString("cast(coalesce(")
 	c.firstExpr.Format(buf)
 	buf.WriteString(", ")
@@ -181,7 +180,7 @@ func (c *constExpr) Type() types.T {
 	return c.typ
 }
 
-func (c *constExpr) Format(buf *bytes.Buffer) {
+func (c *constExpr) Format(buf *tree.FmtCtx) {
 	buf.WriteString(c.expr)
 }
 
@@ -215,7 +214,7 @@ func (c *colRefExpr) Type() types.T {
 	return c.typ
 }
 
-func (c *colRefExpr) Format(buf *bytes.Buffer) {
+func (c *colRefExpr) Format(buf *tree.FmtCtx) {
 	buf.WriteString(c.ref)
 }
 
@@ -248,7 +247,7 @@ func (o *opExpr) Type() types.T {
 	return o.outTyp
 }
 
-func (o *opExpr) Format(buf *bytes.Buffer) {
+func (o *opExpr) Format(buf *tree.FmtCtx) {
 	buf.WriteByte('(')
 	o.left.Format(buf)
 	buf.WriteByte(' ')
@@ -300,7 +299,7 @@ func (f *funcExpr) Type() types.T {
 	return f.outTyp
 }
 
-func (f *funcExpr) Format(buf *bytes.Buffer) {
+func (f *funcExpr) Format(buf *tree.FmtCtx) {
 	buf.WriteString(f.name)
 	buf.WriteByte('(')
 	comma := ""
@@ -346,7 +345,7 @@ type exists struct {
 	subquery relExpr
 }
 
-func (e *exists) Format(buf *bytes.Buffer) {
+func (e *exists) Format(buf *tree.FmtCtx) {
 	buf.WriteString("exists(")
 	e.subquery.Format(buf)
 	buf.WriteString(")")
@@ -373,7 +372,7 @@ type scalarSubq struct {
 	subquery relExpr
 }
 
-func (s *scalarSubq) Format(buf *bytes.Buffer) {
+func (s *scalarSubq) Format(buf *tree.FmtCtx) {
 	buf.WriteString("(")
 	s.subquery.Format(buf)
 	buf.WriteString(")")
