@@ -110,9 +110,6 @@ type ProposalData struct {
 // counted on to invoke endCmds itself.)
 func (proposal *ProposalData) finishApplication(pr proposalResult) {
 	if proposal.endCmds != nil {
-		if pr.ProposalRetry != proposalNoReevaluation {
-			log.Fatalf(context.Background(), "expected no reevaluation")
-		}
 		proposal.endCmds.done(pr.Reply, pr.Err)
 		proposal.endCmds = nil
 	}
@@ -811,14 +808,12 @@ func (r *Replica) handleEvalResultRaftMuLocked(
 }
 
 // proposalResult indicates the result of a proposal. Exactly one of
-// Reply, Err and ProposalRetry is set, and it represents the result of
-// the proposal.
+// Reply and Err is set, and it represents the result of the proposal.
 type proposalResult struct {
-	Reply         *roachpb.BatchResponse
-	Err           *roachpb.Error
-	ProposalRetry proposalReevaluationReason
-	Intents       []result.IntentsWithArg
-	EndTxns       []result.EndTxnIntents
+	Reply   *roachpb.BatchResponse
+	Err     *roachpb.Error
+	Intents []result.IntentsWithArg
+	EndTxns []result.EndTxnIntents
 }
 
 // evaluateProposal generates a Result from the given request by
