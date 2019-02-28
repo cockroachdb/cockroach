@@ -110,7 +110,10 @@ type ProposalData struct {
 // counted on to invoke endCmds itself.)
 func (proposal *ProposalData) finishApplication(pr proposalResult) {
 	if proposal.endCmds != nil {
-		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
+		if pr.ProposalRetry != proposalNoReevaluation {
+			log.Fatalf(context.Background(), "expected no reevaluation")
+		}
+		proposal.endCmds.done(pr.Reply, pr.Err)
 		proposal.endCmds = nil
 	}
 	if proposal.sp != nil {
