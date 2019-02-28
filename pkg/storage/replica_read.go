@@ -68,7 +68,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
-		endCmds.done(br, pErr, proposalNoReevaluation)
+		endCmds.done(br, pErr)
 	}()
 
 	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
