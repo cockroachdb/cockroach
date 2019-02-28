@@ -761,7 +761,7 @@ func (tc *TxnCoordSender) Send(
 	// Send the command through the txnInterceptor stack.
 	br, pErr := tc.interceptorStack[0].SendLocked(ctx, ba)
 
-	pErr = tc.updateStateLocked(ctx, startNs, ba, br, pErr)
+	pErr = tc.updateStateLocked(ctx, ba, br, pErr)
 
 	// If we succeeded to commit, or we attempted to rollback, we move to
 	// txnFinalized.
@@ -986,17 +986,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 // updateStateLocked updates the transaction state in both the success and error
 // cases. It also updates retryable errors with the updated transaction for use
 // by client restarts.
-//
-// startNS is the time when the request that's updating the state has been sent.
-// This is not used if the request is known to not be the one in charge of
-// starting tracking the transaction - i.e. this is the case for DistSQL, which
-// just does reads and passes 0.
 func (tc *TxnCoordSender) updateStateLocked(
-	ctx context.Context,
-	startNS int64,
-	ba roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
-	pErr *roachpb.Error,
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) *roachpb.Error {
 
 	// We handle a couple of different cases:
