@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -221,13 +222,13 @@ func (c *colRefExpr) Format(buf *bytes.Buffer) {
 func (s *scope) makeColRef(typ types.T) (scalarExpr, bool) {
 	ref := s.refs[rand.Intn(len(s.refs))]
 	col := ref.Cols()[rand.Intn(len(ref.Cols()))]
-	if typ != types.Any && col.typ != typ {
+	if typ != types.Any && coltypes.CastTargetToDatumType(col.Type) != typ {
 		return nil, false
 	}
 
 	return &colRefExpr{
-		ref: ref.Name() + "." + col.name,
-		typ: col.typ,
+		ref: ref.Name() + "." + col.Name.String(),
+		typ: coltypes.CastTargetToDatumType(col.Type),
 	}, true
 }
 

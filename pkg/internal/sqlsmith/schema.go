@@ -18,6 +18,8 @@ import (
 	gosql "database/sql"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/lib/pq"
@@ -113,7 +115,7 @@ func extractTables(db *gosql.DB) ([]namedRelation, error) {
 	firstTime := true
 	var lastCatalog, lastSchema, lastName string
 	var tables []namedRelation
-	var currentCols []column
+	var currentCols []tree.ColumnTableDef
 	emit := func() {
 		tables = append(tables, namedRelation{
 			cols: currentCols,
@@ -139,20 +141,21 @@ func extractTables(db *gosql.DB) ([]namedRelation, error) {
 			currentCols = nil
 		}
 
-		writability := writable
-		if computed {
-			writability = notWritable
+		coltyp, err := coltypes.DatumTypeToColumnType(typeFromName(typ))
+		if err != nil {
+			return nil, err
 		}
-
-		currentCols = append(
-			currentCols,
-			column{
-				name:        col,
-				typ:         typeFromName(typ),
-				nullable:    nullable,
-				writability: writability,
-			},
-		)
+		column := tree.ColumnTableDef{
+			Name: tree.Name(col),
+			Type: coltyp,
+		}
+		if nullable {
+			column.Nullable.Nullability = tree.Null
+		}
+		if computed {
+			column.Computed.Computed = true
+		}
+		currentCols = append(currentCols, column)
 		lastCatalog = catalog
 		lastSchema = schema
 		lastName = name
