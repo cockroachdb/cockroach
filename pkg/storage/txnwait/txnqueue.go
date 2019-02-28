@@ -60,7 +60,7 @@ func ShouldPushImmediately(req *roachpb.PushTxnRequest) bool {
 // for transactions with pushed timestamps.
 func isPushed(req *roachpb.PushTxnRequest, txn *roachpb.Transaction) bool {
 	return (txn.Status != roachpb.PENDING ||
-		(req.PushType == roachpb.PUSH_TIMESTAMP && req.PushTo.Less(txn.Timestamp)))
+		(req.PushType == roachpb.PUSH_TIMESTAMP && !txn.Timestamp.Less(req.PushTo)))
 }
 
 // TxnExpiration computes the timestamp after which the transaction will be

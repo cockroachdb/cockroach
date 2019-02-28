@@ -2721,6 +2721,26 @@ func (s *Store) Send(
 		return nil, roachpb.NewError(err)
 	}
 
+	// TODO(nvanbenschoten): Remove this all in 19.2.
+	if !s.cfg.Settings.Version.IsActive(cluster.VersionPushTxnToInclusive) {
+		for _, union := range ba.Requests {
+			if pushReq, ok := union.GetInner().(*roachpb.PushTxnRequest); ok {
+				// While here, correct the request's PushTo arg. Before
+				// VersionPushTxnToInclusive, pushers would provide _their_
+				// timestamp instead of one logical tick past their timestamp
+				// for the PushTo arg. Handle this by bumping the PushTo arg.
+				// We only do this if the InclusivePushTo arg is false, which
+				// allows us to distinguish between 2.1 nodes and 19.1. nodes.
+				// Since we only observe this field when the cluster version
+				// is not active, we don't need to send it or observe it in
+				// 19.2.
+				if !pushReq.InclusivePushTo {
+					pushReq.PushTo = pushReq.PushTo.Next()
+				}
+			}
+		}
+	}
+
 	if s.cfg.TestingKnobs.ClockBeforeSend != nil {
 		s.cfg.TestingKnobs.ClockBeforeSend(s.cfg.Clock, ba)
 	}

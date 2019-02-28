@@ -1543,7 +1543,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 				return nil
 			}
 			if exp, act := manual.UnixNano(), pr.PushTo.WallTime; exp > act {
-				return roachpb.NewError(fmt.Errorf("expected PushTo >= WallTime, but got %d < %d:\n%+v", act, exp, pr))
+				return roachpb.NewError(fmt.Errorf("expected PushTo > WallTime, but got %d < %d:\n%+v", act, exp, pr))
 			}
 			return nil
 		}

@@ -433,9 +433,10 @@ func (ir *IntentResolver) MaybePushTransactions(
 			RequestHeader: roachpb.RequestHeader{
 				Key: pushTxn.Key,
 			},
-			PusherTxn: pusherTxn,
-			PusheeTxn: pushTxn,
-			PushTo:    h.Timestamp,
+			PusherTxn:       pusherTxn,
+			PusheeTxn:       pushTxn,
+			PushTo:          h.Timestamp.Next(),
+			InclusivePushTo: true,
 			// The timestamp is used by PushTxn for figuring out whether the
 			// transaction is abandoned. If we used the argument's timestamp
 			// here, we would run into busy loops because that timestamp
@@ -704,9 +705,10 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 					PusherTxn: roachpb.Transaction{
 						TxnMeta: enginepb.TxnMeta{Priority: roachpb.MaxTxnPriority},
 					},
-					PusheeTxn: txn.TxnMeta,
-					Now:       now,
-					PushType:  roachpb.PUSH_ABORT,
+					PusheeTxn:       txn.TxnMeta,
+					Now:             now,
+					PushType:        roachpb.PUSH_ABORT,
+					InclusivePushTo: true,
 				})
 				pushed = true
 				if err := ir.db.Run(ctx, b); err != nil {

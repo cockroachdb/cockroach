@@ -65,6 +65,7 @@ const (
 	VersionCreateStats
 	VersionDirectImport
 	VersionSideloadedStorageNoReplicaID // see versionsSingleton for details
+	VersionPushTxnToInclusive
 
 	// Add new versions here (step one of two).
 
@@ -415,6 +416,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 7},
 	},
 	{
+		// VersionDirectImport is https://github.com/cockroachdb/cockroach/pull/34751.
 		Key:     VersionDirectImport,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 8},
 	},
@@ -435,6 +437,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// case we can make removal in 2019.2 safe.
 		Key:     VersionSideloadedStorageNoReplicaID,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 9},
+	},
+	{
+		// VersionPushTxnToInclusive is https://github.com/cockroachdb/cockroach/pull/35297.
+		Key:     VersionPushTxnToInclusive,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 10},
 	},
 
 	// Add new versions here (step two of two).

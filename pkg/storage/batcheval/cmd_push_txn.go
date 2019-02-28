@@ -110,6 +110,7 @@ func PushTxn(
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
 	}
+
 	if args.Now == (hlc.Timestamp{}) {
 		return result.Result{}, errors.Errorf("the field Now must be provided")
 	}
@@ -183,7 +184,7 @@ func PushTxn(
 
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
-	if args.PushType == roachpb.PUSH_TIMESTAMP && args.PushTo.Less(reply.PusheeTxn.Timestamp) {
+	if args.PushType == roachpb.PUSH_TIMESTAMP && !reply.PusheeTxn.Timestamp.Less(args.PushTo) {
 		// Trivial noop.
 		return result.Result{}, nil
 	}
@@ -252,7 +253,7 @@ func PushTxn(
 		// timestamp cache. If the transaction record was not already present
 		// then we rely on the read timestamp cache to prevent the record from
 		// ever being written with a timestamp beneath this timestamp.
-		reply.PusheeTxn.Timestamp = args.PushTo.Next()
+		reply.PusheeTxn.Timestamp.Forward(args.PushTo)
 	default:
 		return result.Result{}, errors.Errorf("unexpected push type: %v", args.PushType)
 	}
