@@ -261,11 +261,12 @@ func (cq *contentionQueue) add(
 					RequestHeader: roachpb.RequestHeader{
 						Key: pusheeTxn.Key,
 					},
-					PusherTxn: getPusherTxn(h),
-					PusheeTxn: *pusheeTxn,
-					PushTo:    h.Timestamp,
-					Now:       cq.clock.Now(),
-					PushType:  roachpb.PUSH_ABORT,
+					PusherTxn:       getPusherTxn(h),
+					PusheeTxn:       *pusheeTxn,
+					PushTo:          h.Timestamp.Next(),
+					InclusivePushTo: true,
+					Now:             cq.clock.Now(),
+					PushType:        roachpb.PUSH_ABORT,
 				}
 				b := &client.Batch{}
 				b.AddRawRequest(pushReq)

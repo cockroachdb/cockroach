@@ -1371,9 +1371,10 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 				PusherTxn: roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{Priority: roachpb.MinTxnPriority},
 				},
-				PusheeTxn: intent.Txn,
-				Now:       r.Clock().Now(),
-				PushType:  roachpb.PUSH_ABORT,
+				PusheeTxn:       intent.Txn,
+				Now:             r.Clock().Now(),
+				PushType:        roachpb.PUSH_ABORT,
+				InclusivePushTo: true,
 			})
 			if pErr != nil {
 				select {
