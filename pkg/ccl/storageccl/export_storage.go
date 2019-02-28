@@ -335,16 +335,20 @@ func (l *localFileStorage) WriteFile(
 	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
 		return errors.Wrap(err, "creating local export storage path")
 	}
-	f, err := os.Create(p)
+	tmpP := p + `.tmp`
+	f, err := os.Create(tmpP)
 	if err != nil {
-		return errors.Wrapf(err, "creating local export file %q", p)
+		return errors.Wrapf(err, "creating local export tmp file %q", tmpP)
 	}
 	defer f.Close()
 	_, err = io.Copy(f, content)
 	if err != nil {
-		return errors.Wrapf(err, "writing to local export file %q", p)
+		return errors.Wrapf(err, "writing to local export tmp file %q", tmpP)
 	}
-	return f.Sync()
+	if err := f.Sync(); err != nil {
+		return errors.Wrapf(err, "syncing to local export tmp file %q", tmpP)
+	}
+	return errors.Wrapf(os.Rename(tmpP, p), "renaming to local export file %q", p)
 }
 
 func (l *localFileStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
