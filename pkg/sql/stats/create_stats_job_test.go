@@ -365,6 +365,17 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 		t.Fatalf("expected '%s' error, but got %v", expected, err)
 	}
 
+	// Pause the job. Starting another automatic stats run should still fail.
+	var jobID int64
+	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+	sqlDB.Exec(t, fmt.Sprintf("PAUSE JOB %d", jobID))
+
+	_, err = conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
+	expected = "another CREATE STATISTICS job is already running"
+	if !testutils.IsError(err, expected) {
+		t.Fatalf("expected '%s' error, but got %v", expected, err)
+	}
+
 	// Attempt to start a regular stats run. It should succeed.
 	errCh2 := make(chan error)
 	go func() {
@@ -380,13 +391,15 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	}
 	close(allowRequest)
 
-	// Verify that both jobs completed successfully.
-	if err := <-errCh; err != nil {
-		t.Fatalf("create stats job should have completed: %s", err)
-	}
+	// Verify that the second job completed successfully.
 	if err := <-errCh2; err != nil {
 		t.Fatalf("create stats job should have completed: %s", err)
 	}
+
+	// Verify that the first job completed successfully.
+	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", jobID))
+	jobutils.WaitForJob(t, sqlDB, jobID)
+	<-errCh
 }
 
 func TestCreateStatsAsOfTime(t *testing.T) {
