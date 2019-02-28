@@ -53,19 +53,16 @@ TABLE edges
 opt
 select nodes.id,dst from nodes join edges on edges.dst=nodes.id
 ----
-inner-join (merge)
+inner-join
  ├── columns: id:1(int!null) dst:4(int!null)
- ├── left ordering: +1
- ├── right ordering: +4
  ├── fd: (1)==(4), (4)==(1)
  ├── scan nodes
  │    ├── columns: id:1(int!null)
- │    ├── key: (1)
- │    └── ordering: +1
+ │    └── key: (1)
  ├── scan edges@edges_auto_index_fk_dst_ref_nodes
- │    ├── columns: dst:4(int!null)
- │    └── ordering: +4
- └── filters (true)
+ │    └── columns: dst:4(int!null)
+ └── filters
+      └── dst = id [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
 
 # ------------------------------------------------------------------------------
 # Github Issues 16313/16426: Ensure that STORING index is used to filter unread
@@ -140,24 +137,22 @@ project
       ├── key: (1)
       ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
       ├── ordering: +1 opt(9) [actual: +1]
-      ├── index-join article
+      ├── sort
       │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
       │    ├── key: (1)
       │    ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
       │    ├── ordering: +1 opt(9) [actual: +1]
       │    └── select
-      │         ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool!null)
+      │         ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
       │         ├── key: (1)
-      │         ├── fd: ()-->(9), (1)-->(2,3)
-      │         ├── ordering: +1 opt(9) [actual: +1]
-      │         ├── scan article@article_idx_read_key
-      │         │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool)
-      │         │    ├── constraint: /1: [/1 - ]
+      │         ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
+      │         ├── scan article
+      │         │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool) date:10(timestamptz)
       │         │    ├── key: (1)
-      │         │    ├── fd: (1)-->(2,3,9)
-      │         │    └── ordering: +1 opt(9) [actual: +1]
+      │         │    └── fd: (1)-->(2,3,5-10)
       │         └── filters
-      │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
+      │              ├── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
+      │              └── id > 0 [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
       └── const: 50 [type=int]
 
 # Check that forcing the index works as well.
@@ -389,18 +384,15 @@ group-by
  ├── grouping columns: owner_id:12(uuid)
  ├── key: (12)
  ├── fd: (12)-->(16)
- ├── inner-join (merge)
+ ├── inner-join
  │    ├── columns: vehicle_id:3(uuid!null) v.id:9(uuid!null) owner_id:12(uuid)
- │    ├── left ordering: +3
- │    ├── right ordering: +9
  │    ├── fd: (3)==(9), (9)==(3)
  │    ├── scan r@rides_vehicle_id_idx
- │    │    ├── columns: vehicle_id:3(uuid)
- │    │    └── ordering: +3
+ │    │    └── columns: vehicle_id:3(uuid)
  │    ├── scan v@vehicles_id_idx
- │    │    ├── columns: v.id:9(uuid!null) owner_id:12(uuid)
- │    │    └── ordering: +9
- │    └── filters (true)
+ │    │    └── columns: v.id:9(uuid!null) owner_id:12(uuid)
+ │    └── filters
+ │         └── v.id = vehicle_id [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
  └── aggregations
       └── count-rows [type=int]
 
@@ -737,19 +729,16 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(28)
- ├── inner-join (merge)
+ ├── inner-join
  │    ├── columns: o_orderkey:1(int!null) l_orderkey:11(int!null)
- │    ├── left ordering: +1
- │    ├── right ordering: +11
  │    ├── fd: (1)==(11), (11)==(1)
  │    ├── scan orders@o_ok
  │    │    ├── columns: o_orderkey:1(int!null)
- │    │    ├── key: (1)
- │    │    └── ordering: +1
+ │    │    └── key: (1)
  │    ├── scan lineitem@l_ok
- │    │    ├── columns: l_orderkey:11(int!null)
- │    │    └── ordering: +11
- │    └── filters (true)
+ │    │    └── columns: l_orderkey:11(int!null)
+ │    └── filters
+ │         └── o_orderkey = l_orderkey [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
  └── aggregations
       └── count [type=int, outer=(11)]
            └── variable: l_orderkey [type=int]
@@ -792,34 +781,32 @@ WHERE
 project
  ├── columns: secondary_id:6(string) "?column?":7(jsonb)
  ├── side-effects
- ├── inner-join (lookup idtable)
+ ├── inner-join
  │    ├── columns: primary_id:1(uuid!null) idtable.secondary_id:2(uuid!null) data:3(jsonb!null) json_array_elements:4(jsonb) column5:5(uuid!null)
- │    ├── key columns: [1] = [1]
  │    ├── side-effects
  │    ├── fd: (1)-->(2,3), (4)-->(5), (2)==(5), (5)==(2)
- │    ├── inner-join (lookup idtable@secondary_id)
- │    │    ├── columns: primary_id:1(uuid!null) idtable.secondary_id:2(uuid!null) json_array_elements:4(jsonb) column5:5(uuid!null)
- │    │    ├── key columns: [5] = [2]
+ │    ├── scan idtable
+ │    │    ├── columns: primary_id:1(uuid!null) idtable.secondary_id:2(uuid!null) data:3(jsonb!null)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
+ │    ├── project
+ │    │    ├── columns: column5:5(uuid) json_array_elements:4(jsonb)
  │    │    ├── side-effects
- │    │    ├── fd: (4)-->(5), (1)-->(2), (2)==(5), (5)==(2)
- │    │    ├── project
- │    │    │    ├── columns: column5:5(uuid) json_array_elements:4(jsonb)
+ │    │    ├── fd: (4)-->(5)
+ │    │    ├── project-set
+ │    │    │    ├── columns: json_array_elements:4(jsonb)
  │    │    │    ├── side-effects
- │    │    │    ├── fd: (4)-->(5)
- │    │    │    ├── project-set
- │    │    │    │    ├── columns: json_array_elements:4(jsonb)
- │    │    │    │    ├── side-effects
- │    │    │    │    ├── values
- │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── tuple [type=tuple]
- │    │    │    │    └── zip
- │    │    │    │         └── function: json_array_elements [type=jsonb, side-effects]
- │    │    │    │              └── const: '[{"person_id": "8e5dc104-9f38-4255-9283-fd080be16c57", "product_id": "a739c2d3-edec-413b-88d8-9c31d0414b1e"}, {"person_id": "308686c4-7415-4c2d-92d5-25b39a1c84e2", "product_id": "3f12802d-5b0f-43d7-a0d0-12ac8e88cb18"}]' [type=jsonb]
- │    │    │    └── projections
- │    │    │         └── (json_array_elements->>'secondary_id')::UUID [type=uuid, outer=(4)]
- │    │    └── filters (true)
- │    └── filters (true)
+ │    │    │    ├── values
+ │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    └── tuple [type=tuple]
+ │    │    │    └── zip
+ │    │    │         └── function: json_array_elements [type=jsonb, side-effects]
+ │    │    │              └── const: '[{"person_id": "8e5dc104-9f38-4255-9283-fd080be16c57", "product_id": "a739c2d3-edec-413b-88d8-9c31d0414b1e"}, {"person_id": "308686c4-7415-4c2d-92d5-25b39a1c84e2", "product_id": "3f12802d-5b0f-43d7-a0d0-12ac8e88cb18"}]' [type=jsonb]
+ │    │    └── projections
+ │    │         └── (json_array_elements->>'secondary_id')::UUID [type=uuid, outer=(4)]
+ │    └── filters
+ │         └── idtable.secondary_id = column5 [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
  └── projections
       ├── json_array_elements->>'secondary_id' [type=string, outer=(4)]
       └── data || jsonb_build_object('primary_id', primary_id) [type=jsonb, outer=(1,3)]
