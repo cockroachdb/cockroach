@@ -1651,7 +1651,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := TestStoreConfig(nil)
-	storeCfg.DontRetryPushTxnFailures = true
+	storeCfg.TestingKnobs.DontRetryPushTxnFailures = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &storeCfg)
