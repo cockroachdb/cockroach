@@ -17,25 +17,11 @@ package sqlsmith
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
-
-type writability int
-
-const (
-	notWritable writability = iota
-	writable
-)
-
-type column struct {
-	name        string
-	typ         types.T
-	nullable    bool
-	writability writability
-}
 
 type namedRelation struct {
-	cols []column
+	cols []tree.ColumnTableDef
 	name string
 }
 

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -90,7 +92,7 @@ type scalarExpr interface {
 type relExpr interface {
 	Format
 
-	Cols() []column
+	Cols() []tree.ColumnTableDef
 }
 
 type tableRef interface {
@@ -117,7 +119,7 @@ func (t tableExpr) Format(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "%s as %s", t.rel.name, t.alias)
 }
 
-func (t tableExpr) Cols() []column {
+func (t tableExpr) Cols() []tree.ColumnTableDef {
 	return t.rel.cols
 }
 
@@ -133,7 +135,7 @@ type join struct {
 	lhs  relExpr
 	rhs  relExpr
 	on   scalarExpr
-	cols []column
+	cols []tree.ColumnTableDef
 }
 
 // TODO(justin): also do outer joins.
@@ -152,7 +154,7 @@ func (s *scope) makeJoinExpr() (*scope, bool) {
 	lhs := leftScope.expr
 	rhs := rightScope.expr
 
-	var cols []column
+	var cols []tree.ColumnTableDef
 	cols = append(cols, lhs.Cols()...)
 	cols = append(cols, rhs.Cols()...)
 
@@ -181,7 +183,7 @@ func (j *join) Format(buf *bytes.Buffer) {
 	j.on.Format(buf)
 }
 
-func (j *join) Cols() []column {
+func (j *join) Cols() []tree.ColumnTableDef {
 	return j.cols
 }
 
@@ -312,7 +314,7 @@ func (s *scope) makeSelectList(desiredTypes []types.T) ([]scalarExpr, bool) {
 	return result, true
 }
 
-func (s *selectExpr) Cols() []column {
+func (s *selectExpr) Cols() []tree.ColumnTableDef {
 	return nil
 }
 
@@ -322,7 +324,7 @@ func (s *selectExpr) Cols() []column {
 
 type insert struct {
 	target  string
-	targets []column
+	targets []tree.ColumnTableDef
 	input   relExpr
 }
 
@@ -333,7 +335,7 @@ func (i *insert) Format(buf *bytes.Buffer) {
 	comma := ""
 	for _, c := range i.targets {
 		buf.WriteString(comma)
-		buf.WriteString(c.name)
+		buf.WriteString(c.Name.String())
 		comma = ", "
 	}
 	buf.WriteString(") ")
@@ -349,16 +351,16 @@ func (s *scope) makeInsert() (*scope, bool) {
 	target := out.expr.(*tableExpr)
 
 	var desiredTypes []types.T
-	var targets []column
+	var targets []tree.ColumnTableDef
 
 	// Grab some subset of the columns of the table to attempt to insert into.
 	// TODO(justin): also support the non-named variant.
 	for _, c := range target.Cols() {
 		// We *must* write a column if it's writable and non-nullable.
 		// We *can* write a column if it's writable and nullable.
-		if c.writability == writable && (!c.nullable || coin()) {
+		if !c.Computed.Computed && (c.Nullable.Nullability == tree.NotNull || coin()) {
 			targets = append(targets, c)
-			desiredTypes = append(desiredTypes, c.typ)
+			desiredTypes = append(desiredTypes, coltypes.CastTargetToDatumType(c.Type))
 		}
 	}
 
@@ -383,7 +385,7 @@ func (s *scope) makeInsert() (*scope, bool) {
 	return outScope, true
 }
 
-func (i *insert) Cols() []column {
+func (i *insert) Cols() []tree.ColumnTableDef {
 	return nil
 }
 
@@ -483,7 +485,7 @@ func (s *scope) makeValues(desiredTypes []types.T) (*scope, bool) {
 	return outScope, true
 }
 
-func (v *values) Cols() []column {
+func (v *values) Cols() []tree.ColumnTableDef {
 	return nil
 }
 
@@ -546,7 +548,7 @@ func (s *scope) makeSetOp(desiredTypes []types.T) (*scope, bool) {
 	return outScope, true
 }
 
-func (s *setOp) Cols() []column {
+func (s *setOp) Cols() []tree.ColumnTableDef {
 	return s.left.Cols()
 }
 
