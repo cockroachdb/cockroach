@@ -193,9 +193,6 @@ func (r *Replica) executeWriteBatch(
 					log.Warning(ctx, err)
 				}
 			}
-			if propResult.ProposalRetry != proposalNoReevaluation {
-				log.Fatalf(ctx, "expected no reevaluation")
-			}
 			return propResult.Reply, propResult.Err
 		case <-slowTimer.C:
 			slowTimer.Read = true

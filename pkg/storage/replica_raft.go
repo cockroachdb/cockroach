@@ -1958,11 +1958,8 @@ func (r *Replica) processRaftCommand(
 
 		var lResult *result.LocalResult
 		if proposedLocally {
-			if proposalRetry != proposalNoReevaluation {
-				response.ProposalRetry = proposalRetry
-				if pErr == nil {
-					log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", proposal)
-				}
+			if proposalRetry != proposalNoReevaluation && pErr == nil {
+				log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", proposal)
 			}
 			if pErr != nil {
 				// A forced error was set (i.e. we did not apply the proposal,
@@ -2044,7 +2041,7 @@ func (r *Replica) processRaftCommand(
 
 	if proposedLocally {
 		// If we failed to apply at the right lease index, try again with a new one.
-		if response.ProposalRetry == proposalIllegalLeaseIndex && r.tryReproposeWithNewLeaseIndex(proposal) {
+		if proposalRetry == proposalIllegalLeaseIndex && r.tryReproposeWithNewLeaseIndex(proposal) {
 			return false
 		}
 		// Otherwise, signal the command's status to the client.
