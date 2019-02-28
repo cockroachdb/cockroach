@@ -169,7 +169,7 @@ func (a *appStats) getStatsForStmt(
 		// Use the cached anonymized string.
 		key.stmt = stmt.AnonymizedStr
 	} else {
-		key.stmt = anonymizeStmt(stmt)
+		key.stmt = anonymizeStmt(stmt.AST)
 	}
 
 	return a.getStatsForStmtWithKey(key, createIfNonexistent)
@@ -188,8 +188,8 @@ func (a *appStats) getStatsForStmtWithKey(key stmtKey, createIfNonexistent bool)
 	return s
 }
 
-func anonymizeStmt(stmt *Statement) string {
-	return tree.AsStringWithFlags(stmt.AST, tree.FmtHideConstants)
+func anonymizeStmt(ast tree.Statement) string {
+	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
 // sqlStats carries per-application statistics for all applications on
