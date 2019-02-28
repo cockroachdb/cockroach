@@ -547,9 +547,11 @@ func (sf *sendFuncs) len() int {
 	return len(sf.sendFuncs)
 }
 
-func (sf *sendFuncs) pop() sendFunc {
-	sf.mu.Lock()
-	defer sf.mu.Unlock()
+func (sf *sendFuncs) pushFrontLocked(f ...sendFunc) {
+	sf.sendFuncs = append(f, sf.sendFuncs...)
+}
+
+func (sf *sendFuncs) popLocked() sendFunc {
 	if len(sf.sendFuncs) == 0 {
 		panic("no send funcs left!")
 	}
@@ -654,7 +656,7 @@ func TestCleanupIntents(t *testing.T) {
 	}
 	type testCase struct {
 		intents     []roachpb.Intent
-		sendFuncs   []sendFunc
+		sendFuncs   *sendFuncs
 		expectedErr bool
 		expectedNum int
 		cfg         Config
@@ -662,17 +664,17 @@ func TestCleanupIntents(t *testing.T) {
 	cases := []testCase{
 		{
 			intents: testIntents,
-			sendFuncs: []sendFunc{
+			sendFuncs: newSendFuncs(
 				singlePushTxnSendFunc,
 				resolveIntentsSendFunc,
-			},
+			),
 			expectedNum: 1,
 		},
 		{
 			intents: testIntents,
-			sendFuncs: []sendFunc{
+			sendFuncs: newSendFuncs(
 				failSendFunc,
-			},
+			),
 			expectedErr: true,
 		},
 		{
@@ -680,25 +682,24 @@ func TestCleanupIntents(t *testing.T) {
 				// Three intents with the same transaction will only attempt to push the
 				// txn 1 time. Hence 3 full batches plus 1 extra.
 				testIntents[0], testIntents[0], testIntents[0]),
-			sendFuncs: []sendFunc{
-				pushTxnSendFunc(intentResolverBatchSize),
-				resolveIntentsSendFunc,
-				resolveIntentsSendFunc,
-				pushTxnSendFunc(intentResolverBatchSize),
-				resolveIntentsSendFunc,
-				pushTxnSendFunc(intentResolverBatchSize),
-				resolveIntentsSendFunc,
-				pushTxnSendFunc(1),
-				resolveIntentsSendFunc,
-			},
+			sendFuncs: func() *sendFuncs {
+				sf := newSendFuncs()
+				sf.pushFrontLocked( // don't need to lock
+					pushTxnSendFuncs(sf, intentResolverBatchSize),
+					resolveIntentsSendFuncs(sf, 102 /* numIntents */, 2 /* minNumReqs */),
+					pushTxnSendFuncs(sf, intentResolverBatchSize),
+					resolveIntentsSendFuncs(sf, 100 /* numIntents */, 1 /* minNumReqs */),
+					pushTxnSendFuncs(sf, intentResolverBatchSize),
+					resolveIntentsSendFuncs(sf, 100 /* numIntents */, 1 /* minNumReqs */),
+					pushTxnSendFuncs(sf, 1),
+					resolveIntentsSendFuncs(sf, 1 /* numIntents */, 1 /* minNumReqs */),
+				)
+				return sf
+			}(),
 			expectedNum: 3*intentResolverBatchSize + 3,
-			// Under stress sometimes it can take more than 10ms to even call send.
-			// The batch wait is disabled and batch idle increased during this test
-			// to eliminate flakiness and ensure that all requests make it to the
-			// batcher in a timely manner.
 			cfg: Config{
 				MaxIntentResolutionBatchWait: -1, // disabled
-				MaxIntentResolutionBatchIdle: 20 * time.Millisecond,
+				MaxIntentResolutionBatchIdle: 1 * time.Microsecond,
 			},
 		},
 	}
@@ -708,7 +709,7 @@ func TestCleanupIntents(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			c.cfg.Stopper = stopper
 			c.cfg.Clock = clock
-			ir := newIntentResolverWithSendFuncs(c.cfg, newSendFuncs(c.sendFuncs...))
+			ir := newIntentResolverWithSendFuncs(c.cfg, c.sendFuncs)
 			num, err := ir.CleanupIntents(context.Background(), c.intents, clock.Now(), roachpb.PUSH_ABORT)
 			assert.Equal(t, num, c.expectedNum, "number of resolved intents")
 			assert.Equal(t, err != nil, c.expectedErr, "error during CleanupIntents: %v", err)
@@ -798,7 +799,9 @@ type sendFunc func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Er
 func newIntentResolverWithSendFuncs(c Config, sf *sendFuncs) *IntentResolver {
 	txnSenderFactory := client.NonTransactionalFactoryFunc(
 		func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			f := sf.pop()
+			sf.mu.Lock()
+			defer sf.mu.Unlock()
+			f := sf.popLocked()
 			return f(ba)
 		})
 	db := client.NewDB(log.AmbientContext{
@@ -809,53 +812,103 @@ func newIntentResolverWithSendFuncs(c Config, sf *sendFuncs) *IntentResolver {
 	return New(c)
 }
 
-var (
-	pushTxnSendFunc = func(numPushes int) sendFunc {
-		return func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			if len(ba.Requests) != numPushes {
-				panic(fmt.Errorf("expected %d PushTxnRequests in batch, got %d",
-					numPushes, len(ba.Requests)))
-			}
-			resp := &roachpb.BatchResponse{}
-			for _, r := range ba.Requests {
-				req := r.GetInner().(*roachpb.PushTxnRequest)
-				txn := req.PusheeTxn
-				resp.Add(&roachpb.PushTxnResponse{
-					PusheeTxn: roachpb.Transaction{
-						Status:  roachpb.ABORTED,
-						TxnMeta: txn,
-					},
-				})
-			}
-			return resp, nil
+// pushTxnSendFuncs allows the pushing of N txns across several invocations.
+func pushTxnSendFuncs(sf *sendFuncs, N int) sendFunc {
+	toPush := int64(N)
+	var f sendFunc
+	f = func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		if remaining := atomic.LoadInt64(&toPush); len(ba.Requests) > int(remaining) {
+			panic(fmt.Errorf("expected at most %d PushTxnRequests in batch, got %d",
+				remaining, len(ba.Requests)))
+		}
+		nowRemaining := atomic.AddInt64(&toPush, -1*int64(len(ba.Requests)))
+		if nowRemaining > 0 {
+			sf.pushFrontLocked(f)
+		}
+		return respForPushTxnBatch(ba), nil
+	}
+	return f
+}
+
+func pushTxnSendFunc(numPushes int) sendFunc {
+	return func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		if len(ba.Requests) != numPushes {
+			panic(fmt.Errorf("expected %d PushTxnRequests in batch, got %d",
+				numPushes, len(ba.Requests)))
+		}
+		return respForPushTxnBatch(ba), nil
+	}
+}
+
+var singlePushTxnSendFunc = pushTxnSendFunc(1)
+
+func resolveIntentsSendFuncs(sf *sendFuncs, numIntents int, minRequests int) sendFunc {
+	toResolve := int64(numIntents)
+	reqsSeen := int64(0)
+	var f sendFunc
+	f = func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		if remaining := atomic.LoadInt64(&toResolve); len(ba.Requests) > int(remaining) {
+			panic(fmt.Errorf("expected at most %d ResolveIntentRequests in batch, got %d",
+				remaining, len(ba.Requests)))
+		}
+		nowRemaining := atomic.AddInt64(&toResolve, -1*int64(len(ba.Requests)))
+		seen := atomic.AddInt64(&reqsSeen, 1)
+		if nowRemaining > 0 {
+			sf.pushFrontLocked(f)
+		} else if seen < int64(minRequests) {
+			panic(fmt.Errorf("expected at least %d requests to resolve %d intents, only saw %d",
+				minRequests, numIntents, seen))
+		}
+		return respForResolveIntentBatch(ba), nil
+	}
+	return f
+}
+
+func resolveIntentsSendFunc(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	return respForResolveIntentBatch(ba), nil
+}
+
+func failSendFunc(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	return nil, roachpb.NewError(fmt.Errorf("boom"))
+}
+
+func gcSendFunc(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	resp := &roachpb.BatchResponse{}
+	for _, r := range ba.Requests {
+		if _, ok := r.GetInner().(*roachpb.GCRequest); ok {
+			resp.Add(&roachpb.GCResponse{})
+		} else {
+			panic(fmt.Errorf("Unexpected request type %T, expecte GCRequest", r.GetInner()))
 		}
 	}
-	singlePushTxnSendFunc           = pushTxnSendFunc(1)
-	resolveIntentsSendFunc sendFunc = func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		resp := &roachpb.BatchResponse{}
-		for _, r := range ba.Requests {
-			if _, ok := r.GetInner().(*roachpb.ResolveIntentRequest); ok {
-				resp.Add(&roachpb.ResolveIntentResponse{})
-			} else if _, ok := r.GetInner().(*roachpb.ResolveIntentRangeRequest); ok {
-				resp.Add(&roachpb.ResolveIntentRangeResponse{})
-			} else {
-				panic(fmt.Errorf("Unexpected request in batch for intent resolution: %T", r.GetInner()))
-			}
+	return resp, nil
+}
+
+func respForPushTxnBatch(ba roachpb.BatchRequest) *roachpb.BatchResponse {
+	resp := &roachpb.BatchResponse{}
+	for _, r := range ba.Requests {
+		req := r.GetInner().(*roachpb.PushTxnRequest)
+		txn := req.PusheeTxn
+		resp.Add(&roachpb.PushTxnResponse{
+			PusheeTxn: roachpb.Transaction{
+				Status:  roachpb.ABORTED,
+				TxnMeta: txn,
+			},
+		})
+	}
+	return resp
+}
+
+func respForResolveIntentBatch(ba roachpb.BatchRequest) *roachpb.BatchResponse {
+	resp := &roachpb.BatchResponse{}
+	for _, r := range ba.Requests {
+		if _, ok := r.GetInner().(*roachpb.ResolveIntentRequest); ok {
+			resp.Add(&roachpb.ResolveIntentResponse{})
+		} else if _, ok := r.GetInner().(*roachpb.ResolveIntentRangeRequest); ok {
+			resp.Add(&roachpb.ResolveIntentRangeResponse{})
+		} else {
+			panic(fmt.Errorf("Unexpected request in batch for intent resolution: %T", r.GetInner()))
 		}
-		return resp, nil
 	}
-	failSendFunc sendFunc = func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		return nil, roachpb.NewError(fmt.Errorf("boom"))
-	}
-	gcSendFunc sendFunc = func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		resp := &roachpb.BatchResponse{}
-		for _, r := range ba.Requests {
-			if _, ok := r.GetInner().(*roachpb.GCRequest); ok {
-				resp.Add(&roachpb.GCResponse{})
-			} else {
-				panic(fmt.Errorf("Unexpected request type %T, expecte GCRequest", r.GetInner()))
-			}
-		}
-		return resp, nil
-	}
-)
+	return resp
+}
