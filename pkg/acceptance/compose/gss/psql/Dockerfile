@@ -18,7 +18,7 @@ COPY gss_test.go /test/
 # volume mounted at run-time enabling it to be changed without rebuilding
 # the image.
 RUN cd /test \
-  && go get -d -t -tags gss \
+  && go get -d -t -tags gss_compose \
   && rm -rf /test
 
 ENTRYPOINT ["/start.sh"]
