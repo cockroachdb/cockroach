@@ -196,6 +196,13 @@ func (r *Refresher) Start(
 		// on startup.
 		r.ensureAllTables(ctx, st)
 
+		// We always sleep for r.asOfTime at the beginning of each refresh, so
+		// subtract it from the refreshInterval.
+		refreshInterval -= r.asOfTime
+		if refreshInterval < 0 {
+			refreshInterval = 0
+		}
+
 		timer := time.NewTimer(refreshInterval)
 		defer timer.Stop()
 
@@ -205,6 +212,17 @@ func (r *Refresher) Start(
 				mutationCounts := r.mutationCounts
 				if err := stopper.RunAsyncTask(
 					ctx, "stats.Refresher: maybeRefreshStats", func(ctx context.Context) {
+						// Wait so that the latest changes will be reflected according to the
+						// AS OF time.
+						timerAsOf := time.NewTimer(r.asOfTime)
+						defer timerAsOf.Stop()
+						select {
+						case <-timerAsOf.C:
+							break
+						case <-stopper.ShouldQuiesce():
+							return
+						}
+
 						for tableID, rowsAffected := range mutationCounts {
 							r.maybeRefreshStats(ctx, stopper, tableID, rowsAffected, r.asOfTime)
 							select {
@@ -348,48 +366,32 @@ func (r *Refresher) maybeRefreshStats(
 
 	if err := r.refreshStats(ctx, tableID, asOf); err != nil {
 		pgerr, ok := errors.Cause(err).(*pgerror.Error)
-		if ok && pgerr.Code == pgerror.CodeUndefinedTableError {
-			// Wait so that the latest changes will be reflected according to the
-			// AS OF time, then try again.
-			timer := time.NewTimer(asOf)
-			defer timer.Stop()
-			select {
-			case <-timer.C:
-				break
-			case <-stopper.ShouldQuiesce():
-				return
+		if ok && pgerr.Code == pgerror.CodeLockNotAvailableError {
+			// Another stats job was already running. Attempt to reschedule this
+			// refresh.
+			if mustRefresh {
+				// For the cases where mustRefresh=true (stats don't yet exist or it
+				// has been 2x the average time since a refresh), we want to make sure
+				// that maybeRefreshStats is called on this table during the next
+				// cycle so that we have another chance to trigger a refresh. We pass
+				// rowsAffected=0 so that we don't force a refresh if another node has
+				// already done it.
+				r.mutations <- mutation{tableID: tableID, rowsAffected: 0}
+			} else {
+				// If this refresh was caused by a "dice roll", we want to make sure
+				// that the refresh is rescheduled so that we adhere to the
+				// targetFractionOfRowsUpdatedBeforeRefresh statistical ideal. We
+				// ensure that the refresh is triggered during the next cycle by
+				// passing a very large number for rowsAffected.
+				r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32}
 			}
-			err = r.refreshStats(ctx, tableID, asOf)
-		}
-		if err != nil {
-			pgerr, ok := errors.Cause(err).(*pgerror.Error)
-			if ok && pgerr.Code == pgerror.CodeLockNotAvailableError {
-				// Another stats job was already running. Attempt to reschedule this
-				// refresh.
-				if mustRefresh {
-					// For the cases where mustRefresh=true (stats don't yet exist or it
-					// has been 2x the average time since a refresh), we want to make sure
-					// that maybeRefreshStats is called on this table during the next
-					// cycle so that we have another chance to trigger a refresh. We pass
-					// rowsAffected=0 so that we don't force a refresh if another node has
-					// already done it.
-					r.mutations <- mutation{tableID: tableID, rowsAffected: 0}
-				} else {
-					// If this refresh was caused by a "dice roll", we want to make sure
-					// that the refresh is rescheduled so that we adhere to the
-					// targetFractionOfRowsUpdatedBeforeRefresh statistical ideal. We
-					// ensure that the refresh is triggered during the next cycle by
-					// passing a very large number for rowsAffected.
-					r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32}
-				}
-				return
-			}
-
-			// Log other errors but don't automatically reschedule the refresh, since
-			// that could lead to endless retries.
-			log.Errorf(ctx, "failed to create statistics on table %d: %v", tableID, err)
 			return
 		}
+
+		// Log other errors but don't automatically reschedule the refresh, since
+		// that could lead to endless retries.
+		log.Errorf(ctx, "failed to create statistics on table %d: %v", tableID, err)
+		return
 	}
 }
 
