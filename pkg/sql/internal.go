@@ -57,9 +57,6 @@ type InternalExecutor struct {
 // the *WithUser methods of the InternalExecutor.
 type SessionBoundInternalExecutor struct {
 	impl internalExecutorImpl
-	// sessionDataCopy stores a copy of session data; impl has a pointer to this
-	// field.
-	sessionDataCopy sessiondata.SessionData
 }
 
 // internalExecutorImpl supports the implementation of InternalExecutor and
@@ -77,14 +74,8 @@ type internalExecutorImpl struct {
 
 	// sessionData, if not nil, represents the session variables used by
 	// statements executed on this internalExecutor. This field supports the
-	// implementation of SessionBoundInternalExecutor. Note that different
-	// executors never share sessionData; instead they make copies. Updating the
-	// sessionData through an internalExecutor doesn't affect the real client
-	// session from whence it came (and thus updating this data is probably not
-	// what you want).
-	// NOTE: We could consider allowing an internalExecutor to share/update the
-	// parent session state if need be, but then we'd need to share a
-	// sessionDataMutator.
+	// implementation of SessionBoundInternalExecutor. Note that a session bound
+	// internal executor cannot modify session data.
 	sessionData *sessiondata.SessionData
 
 	// The internal executor uses its own TableCollection. A TableCollection
@@ -121,7 +112,11 @@ func MakeInternalExecutor(
 
 // NewSessionBoundInternalExecutor creates a SessionBoundInternalExecutor.
 func NewSessionBoundInternalExecutor(
-	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
+	ctx context.Context,
+	sessionData *sessiondata.SessionData,
+	s *Server,
+	memMetrics MemoryMetrics,
+	settings *cluster.Settings,
 ) *SessionBoundInternalExecutor {
 	monitor := mon.MakeUnlimitedMonitor(
 		ctx,
@@ -132,20 +127,14 @@ func NewSessionBoundInternalExecutor(
 		math.MaxInt64, /* noteworthy */
 		settings,
 	)
-	ie := &SessionBoundInternalExecutor{
+	return &SessionBoundInternalExecutor{
 		impl: internalExecutorImpl{
-			s:          s,
-			mon:        &monitor,
-			memMetrics: memMetrics,
+			s:           s,
+			mon:         &monitor,
+			memMetrics:  memMetrics,
+			sessionData: sessionData,
 		},
 	}
-	ie.impl.sessionData = &ie.sessionDataCopy
-	return ie
-}
-
-// CopySessionData populates the session data for an internal executor.
-func (ie *SessionBoundInternalExecutor) CopySessionData(sessionData *sessiondata.SessionData) {
-	ie.sessionDataCopy = sessionData.Copy()
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -170,17 +159,19 @@ func (ie *internalExecutorImpl) initConnEx(
 		lastDelivered: -1,
 	}
 
-	var sp sessionParams
+	var sd *sessiondata.SessionData
+	var sdMut *sessionDataMutator
 	if sargs.isDefined() {
 		if ie.sessionData != nil {
 			log.Fatal(ctx, "sargs used on a session bound executor")
 		}
-		sp.args = sargs
+		sd, sdMut = ie.s.newSessionDataAndMutator(sargs)
 	} else {
 		if ie.sessionData == nil {
 			log.Fatal(ctx, "initConnEx called with no sargs, and the executor is also not session bound")
 		}
-		sp.data = ie.sessionData
+		sd = ie.sessionData
+		// sdMut stays nil for session bound executors.
 	}
 
 	stmtBuf := NewStmtBuf()
@@ -189,7 +180,7 @@ func (ie *internalExecutorImpl) initConnEx(
 	if txn == nil {
 		ex, err = ie.s.newConnExecutor(
 			ctx,
-			sp,
+			sd, sdMut,
 			stmtBuf,
 			clientComm,
 			ie.memMetrics,
@@ -197,7 +188,7 @@ func (ie *internalExecutorImpl) initConnEx(
 	} else {
 		ex, err = ie.s.newConnExecutorWithTxn(
 			ctx,
-			sp,
+			sd, sdMut,
 			stmtBuf,
 			clientComm,
 			ie.mon,

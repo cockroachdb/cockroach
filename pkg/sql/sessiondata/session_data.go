@@ -154,13 +154,6 @@ func (c *DataConversionConfig) Equals(other *DataConversionConfig) bool {
 	return true
 }
 
-// Copy performs a deep copy of SessionData.
-func (s *SessionData) Copy() SessionData {
-	cp := *s
-	cp.SequenceState = s.SequenceState.copy()
-	return cp
-}
-
 // BytesEncodeFormat controls which format to use for BYTES->STRING
 // conversions.
 type BytesEncodeFormat int
