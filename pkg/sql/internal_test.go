@@ -117,14 +117,14 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	expDB := "foo"
 	ie := sql.NewSessionBoundInternalExecutor(
 		ctx,
+		&sessiondata.SessionData{
+			Database:      expDB,
+			SequenceState: &sessiondata.SequenceState{},
+		},
 		s.(*server.TestServer).Server.PGServer().SQLServer,
 		sql.MemoryMetrics{},
 		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 	)
-	ie.CopySessionData(&sessiondata.SessionData{
-		Database:      expDB,
-		SequenceState: &sessiondata.SequenceState{},
-	})
 
 	row, err := ie.QueryRow(ctx, "test", nil /* txn */, "show database")
 	if err != nil {
@@ -178,16 +178,16 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 
 		ie := sql.NewSessionBoundInternalExecutor(
 			context.TODO(),
+			&sessiondata.SessionData{
+				User:            security.RootUser,
+				Database:        "defaultdb",
+				ApplicationName: "appname_findme",
+				SequenceState:   &sessiondata.SequenceState{},
+			},
 			s.(*server.TestServer).Server.PGServer().SQLServer,
 			sql.MemoryMetrics{},
 			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 		)
-		ie.CopySessionData(&sessiondata.SessionData{
-			User:            security.RootUser,
-			Database:        "defaultdb",
-			ApplicationName: "appname_findme",
-			SequenceState:   &sessiondata.SequenceState{},
-		})
 		testInternalExecutorAppNameInitialization(
 			t, sem,
 			"appname_findme", // app name in SHOW

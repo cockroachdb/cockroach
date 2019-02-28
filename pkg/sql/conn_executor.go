@@ -370,8 +370,8 @@ func (s *Server) SetupConn(
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 ) (ConnectionHandler, error) {
-	ex, err := s.newConnExecutor(
-		ctx, sessionParams{args: args}, stmtBuf, clientComm, memMetrics, &s.Metrics)
+	sd, sdMut := s.newSessionDataAndMutator(args)
+	ex, err := s.newConnExecutor(ctx, sd, sdMut, stmtBuf, clientComm, memMetrics, &s.Metrics)
 	return ConnectionHandler{ex}, err
 }
 
@@ -409,7 +409,7 @@ func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) s
 		log.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
 		return ""
 	}
-	hasDefault, defVal := getSessionVarDefaultString(name, v, &h.ex.dataMutator)
+	hasDefault, defVal := getSessionVarDefaultString(name, v, h.ex.dataMutator)
 	if !hasDefault {
 		log.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
 		return ""
@@ -429,43 +429,38 @@ func (s *Server) ServeConn(
 	return h.ex.run(ctx, s.pool, reserved, cancel)
 }
 
-// sessionParams groups arguments for initializing a connExecutor's session
-// variables. Exactly one of the fields must be filled in. The idea is that a
-// connExecutor can be initialized either from a restricted set of variables
-// known by pgwire (args) or by a full set of variables (e.g. coming from a
-// parent session in the case of the InternalExecutor).
-type sessionParams struct {
-	args SessionArgs
-	data *sessiondata.SessionData
-}
-
-func (sp sessionParams) initialSessionData(
-	ctx context.Context,
-) (sessiondata.SessionData, bool, SessionDefaults) {
-	if sp.data != nil {
-		// We're constructing a child executor on behalf of a parent. This
-		// is for executing ::regproc casts or "internal" queries. In this
-		// case we want to inherit the session configuration and
-		// not reset any parameter.
-		return *sp.data, false, nil
-	}
-
-	sd := sessiondata.SessionData{
-		User:          sp.args.User,
-		RemoteAddr:    sp.args.RemoteAddr,
+// newSessionDataAndMutator creates a SessionData and sessionDataMutator that
+// can be passed to newConnExecutor.
+func (s *Server) newSessionDataAndMutator(
+	args SessionArgs,
+) (*sessiondata.SessionData, *sessionDataMutator) {
+	sd := &sessiondata.SessionData{
+		User:          args.User,
+		RemoteAddr:    args.RemoteAddr,
 		SequenceState: sessiondata.NewSequenceState(),
 		DataConversion: sessiondata.DataConversionConfig{
 			Location: time.UTC,
 		},
-		ResultsBufferSize: sp.args.ConnResultsBufferSize,
+		ResultsBufferSize: args.ConnResultsBufferSize,
 	}
 
-	return sd, true, sp.args.SessionDefaults
+	m := &sessionDataMutator{
+		data:     sd,
+		defaults: args.SessionDefaults,
+		settings: s.cfg.Settings,
+	}
+
+	return sd, m
 }
 
+// newConnExecutor creates a new connExecutor.
+//
+// sdMutator can be nil if SET statements are not going to be executed; this is
+// appropriate for session-bound internal executors.
 func (s *Server) newConnExecutor(
 	ctx context.Context,
-	sargs sessionParams,
+	sd *sessiondata.SessionData,
+	sdMutator *sessionDataMutator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
@@ -473,24 +468,28 @@ func (s *Server) newConnExecutor(
 ) (*connExecutor, error) {
 	// Create the various monitors.
 	// The session monitors are started in activate().
-	sessionRootMon := mon.MakeMonitor("session root",
+	sessionRootMon := mon.MakeMonitor(
+		"session root",
 		mon.MemoryResource,
 		memMetrics.CurBytesCount,
 		memMetrics.MaxBytesHist,
-		-1, math.MaxInt64, s.cfg.Settings)
-	sessionMon := mon.MakeMonitor("session",
+		-1 /* increment */, math.MaxInt64, s.cfg.Settings,
+	)
+	sessionMon := mon.MakeMonitor(
+		"session",
 		mon.MemoryResource,
 		memMetrics.SessionCurBytesCount,
 		memMetrics.SessionMaxBytesHist,
-		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
+		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
+	)
 	// The txn monitor is started in txnState.resetForNewSQLTxn().
-	txnMon := mon.MakeMonitor("txn",
+	txnMon := mon.MakeMonitor(
+		"txn",
 		mon.MemoryResource,
 		memMetrics.TxnCurBytesCount,
 		memMetrics.TxnMaxBytesHist,
-		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
-
-	sd, setFromDefaults, sessionDefaults := sargs.initialSessionData(ctx)
+		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings,
+	)
 
 	ex := &connExecutor{
 		server:      s,
@@ -500,6 +499,7 @@ func (s *Server) newConnExecutor(
 		mon:         &sessionRootMon,
 		sessionMon:  &sessionMon,
 		sessionData: sd,
+		dataMutator: sdMutator,
 		state: txnState{
 			mon:     &txnMon,
 			connCtx: ctx,
@@ -524,25 +524,17 @@ func (s *Server) newConnExecutor(
 
 	ex.state.txnAbortCount = ex.metrics.StatementCounters.TxnAbortCount
 
-	ex.dataMutator = sessionDataMutator{
-		data:           &ex.sessionData,
-		defaults:       sessionDefaults,
-		settings:       s.cfg.Settings,
-		curTxnReadOnly: &ex.state.readOnly,
-		// applicationNameChanged is used when setting app name in client
-		// sessions or when using the session defaults map. When
-		// populating session data for internal executors, we use a
-		// different logic, see below.
-		applicationNameChanged: func(newName string) {
+	if sdMutator != nil {
+		sdMutator.setCurTxnReadOnly = func(val bool) {
+			ex.state.readOnly = val
+		}
+		sdMutator.applicationNameChanged = func(newName string) {
 			ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
 			ex.applicationName.Store(newName)
-		},
-	}
-
-	if setFromDefaults {
+		}
 		// Initialize the session data from provided defaults. We need to do this early
 		// because other initializations below use the configured values.
-		if err := resetSessionVars(ctx, &ex.dataMutator); err != nil {
+		if err := resetSessionVars(ctx, sdMutator); err != nil {
 			log.Errorf(ctx, "error setting up client session: %v", err)
 			return nil, err
 		}
@@ -601,7 +593,8 @@ func (s *Server) newConnExecutor(
 // to release resources.
 func (s *Server) newConnExecutorWithTxn(
 	ctx context.Context,
-	sargs sessionParams,
+	sd *sessiondata.SessionData,
+	sdMutator *sessionDataMutator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	parentMon *mon.BytesMonitor,
@@ -610,7 +603,7 @@ func (s *Server) newConnExecutorWithTxn(
 	txn *client.Txn,
 	tcModifier tableCollectionModifier,
 ) (*connExecutor, error) {
-	ex, err := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, memMetrics, srvMetrics)
+	ex, err := s.newConnExecutor(ctx, sd, sdMutator, stmtBuf, clientComm, memMetrics, srvMetrics)
 	if err != nil {
 		return nil, err
 	}
@@ -884,8 +877,10 @@ type connExecutor struct {
 	}
 
 	// sessionData contains the user-configurable connection variables.
-	sessionData sessiondata.SessionData
-	dataMutator sessionDataMutator
+	sessionData *sessiondata.SessionData
+	// dataMutator is nil for session-bound internal executors; we shouldn't issue
+	// statements that manipulate session state to an internal executor.
+	dataMutator *sessionDataMutator
 	// appStats tracks per-application SQL usage statistics. It is maintained to
 	// represent statistrics for the application currently identified by
 	// sessiondata.ApplicationName.
@@ -1806,6 +1801,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 
 	ie := NewSessionBoundInternalExecutor(
 		ctx,
+		ex.sessionData,
 		ex.server,
 		ex.memMetrics,
 		ex.server.cfg.Settings,
@@ -1815,7 +1811,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		EvalContext: tree.EvalContext{
 			Planner:          p,
 			Sequence:         p,
-			SessionData:      &ex.sessionData,
+			SessionData:      ex.sessionData,
 			Settings:         ex.server.cfg.Settings,
 			TestingKnobs:     ex.server.cfg.EvalContextTestingKnobs,
 			ClusterID:        ex.server.cfg.ClusterID(),
@@ -1823,7 +1819,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ReCache:          ex.server.reCache,
 			InternalExecutor: ie,
 		},
-		SessionMutator:  &ex.dataMutator,
+		SessionMutator:  ex.dataMutator,
 		VirtualSchemas:  ex.server.cfg.VirtualSchemas,
 		Tracing:         &ex.sessionTracing,
 		StatusServer:    ex.server.cfg.StatusServer,
@@ -1847,8 +1843,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 func (ex *connExecutor) resetEvalCtx(
 	evalCtx *extendedEvalContext, txn *client.Txn, stmtTS time.Time,
 ) {
-	evalCtx.InternalExecutor.(*SessionBoundInternalExecutor).CopySessionData(&ex.sessionData)
-
 	evalCtx.TxnState = ex.getTransactionState()
 	evalCtx.TxnReadOnly = ex.state.readOnly
 	evalCtx.TxnImplicit = ex.implicitTxn()
@@ -1902,7 +1896,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 
 	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
 
-	p.sessionDataMutator = &ex.dataMutator
+	p.sessionDataMutator = ex.dataMutator
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 
 	p.queryCacheSession.Init()
@@ -1978,11 +1972,11 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			ieFactory := func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
 				ie := NewSessionBoundInternalExecutor(
 					ctx,
+					sd,
 					ex.server,
 					ex.memMetrics,
 					ex.server.cfg.Settings,
 				)
-				ie.CopySessionData(sd)
 				return ie
 			}
 			if schemaChangeErr := scc.execSchemaChanges(

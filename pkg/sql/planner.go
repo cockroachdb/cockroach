@@ -219,15 +219,14 @@ func newInternalPlanner(
 		leaseMgr:      execCfg.LeaseManager,
 		databaseCache: newDatabaseCache(config.NewSystemConfig()),
 	}
-	txnReadOnly := new(bool)
 	dataMutator := &sessionDataMutator{
 		data: sd,
 		defaults: SessionDefaults(map[string]string{
 			"application_name": "crdb-internal",
 			"database":         "system",
 		}),
-		settings:       execCfg.Settings,
-		curTxnReadOnly: txnReadOnly,
+		settings:          execCfg.Settings,
+		setCurTxnReadOnly: func(bool) {},
 	}
 
 	var ts time.Time
@@ -304,7 +303,7 @@ func internalExtendedEvalCtx(
 		EvalContext: tree.EvalContext{
 			Txn:           txn,
 			SessionData:   sd,
-			TxnReadOnly:   *dataMutator.curTxnReadOnly,
+			TxnReadOnly:   false,
 			TxnImplicit:   true,
 			Settings:      execCfg.Settings,
 			Context:       ctx,

@@ -694,11 +694,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		) sqlutil.InternalExecutor {
 			ie := sql.NewSessionBoundInternalExecutor(
 				ctx,
+				sessionData,
 				s.pgServer.SQLServer,
 				s.sqlMemMetrics,
 				s.st,
 			)
-			ie.CopySessionData(sessionData)
 			return ie
 		}
 
