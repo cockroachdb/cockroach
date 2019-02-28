@@ -40,7 +40,6 @@ type function struct {
 // schema represents the state of the database as sqlsmith-go understands it, including
 // not only the tables present but also things like what operator overloads exist.
 type schema struct {
-	db        *gosql.DB
 	rnd       *rand.Rand
 	lock      syncutil.Mutex
 	tables    []namedRelation
@@ -65,28 +64,27 @@ func (s *schema) GetFunctionsByOutputType(outTyp types.T) []function {
 
 func makeSchema(db *gosql.DB, rnd *rand.Rand) (*schema, error) {
 	s := &schema{
-		db:  db,
 		rnd: rnd,
 	}
-	return s, s.ReloadSchemas()
+	return s, s.ReloadSchemas(db)
 }
 
-func (s *schema) ReloadSchemas() error {
+func (s *schema) ReloadSchemas(db *gosql.DB) error {
 	var err error
-	s.tables, err = s.extractTables()
+	s.tables, err = extractTables(db)
 	if err != nil {
 		return err
 	}
-	s.operators, err = s.extractOperators()
+	s.operators, err = extractOperators(db)
 	if err != nil {
 		return err
 	}
-	s.functions, err = s.extractFunctions()
+	s.functions, err = extractFunctions(db)
 	return err
 }
 
-func (s *schema) extractTables() ([]namedRelation, error) {
-	rows, err := s.db.Query(`
+func extractTables(db *gosql.DB) ([]namedRelation, error) {
+	rows, err := db.Query(`
 	SELECT
 		table_catalog,
 		table_schema,
@@ -165,8 +163,8 @@ func (s *schema) extractTables() ([]namedRelation, error) {
 	return tables, rows.Err()
 }
 
-func (s *schema) extractOperators() (map[oid.Oid][]operator, error) {
-	rows, err := s.db.Query(`
+func extractOperators(db *gosql.DB) (map[oid.Oid][]operator, error) {
+	rows, err := db.Query(`
 SELECT
 	oprname, oprleft, oprright, oprresult
 FROM
@@ -211,8 +209,8 @@ WHERE
 	return result, rows.Err()
 }
 
-func (s *schema) extractFunctions() (map[oid.Oid][]function, error) {
-	rows, err := s.db.Query(`
+func extractFunctions(db *gosql.DB) (map[oid.Oid][]function, error) {
+	rows, err := db.Query(`
 SELECT
 	proname, proargtypes::INT[], prorettype
 FROM
