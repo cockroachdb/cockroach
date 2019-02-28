@@ -174,6 +174,10 @@ type StoreTestingKnobs struct {
 	SystemLogsGCGCDone chan<- struct{}
 	// TxnWait contains knobs for txnwait.Queue instances.
 	TxnWait txnwait.TestingKnobs
+	// DontRetryPushTxnFailures will propagate a push txn failure immediately
+	// instead of utilizing the txn wait queue to wait for the transaction to
+	// finish or be pushed by a higher priority contender.
+	DontRetryPushTxnFailures bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
