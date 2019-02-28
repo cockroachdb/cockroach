@@ -39,6 +39,7 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 // the following stmt.Prepared fields:
 //  - Columns
 //  - Types
+//  - AnonymizedStmt
 //  - Memo (for reuse during exec, if appropriate).
 //
 // On success, the returned flags always have planFlagOptUsed set.
@@ -71,6 +72,7 @@ func (p *planner) prepareUsingOptimizer(
 				if !isStale {
 					opc.log(ctx, "query cache hit (prepare)")
 					opc.flags.Set(planFlagOptCacheHit)
+					stmt.Prepared.AnonymizedStr = pm.AnonymizedStr
 					stmt.Prepared.Columns = pm.Columns
 					stmt.Prepared.Types = pm.Types
 					stmt.Prepared.Memo = cachedData.Memo
@@ -85,6 +87,8 @@ func (p *planner) prepareUsingOptimizer(
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
 	}
+
+	stmt.Prepared.AnonymizedStr = anonymizeStmt(stmt.AST)
 
 	memo, isCorrelated, err := opc.buildReusableMemo(ctx)
 	if err != nil {
