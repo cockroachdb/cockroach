@@ -20,19 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type namedRelation struct {
-	cols []tree.ColumnTableDef
-	name string
-}
-
-// namer is a helper to generate names with unique prefixes.
-type namer struct {
-	counts map[string]int
-}
-
-func (n *namer) name(prefix string) string {
-	n.counts[prefix] = n.counts[prefix] + 1
-	return fmt.Sprintf("%s_%d", prefix, n.counts[prefix])
+type tableRef struct {
+	TableName *tree.TableName
+	Columns   []*tree.ColumnTableDef
 }
 
 type scope struct {
@@ -49,9 +39,6 @@ type scope struct {
 
 	// namer is used to generate unique table and column names.
 	namer *namer
-
-	// expr is the expression associated with this scope.
-	expr relExpr
 }
 
 func (s *scope) push() *scope {
@@ -65,4 +52,40 @@ func (s *scope) push() *scope {
 
 func (s *scope) name(prefix string) string {
 	return s.namer.name(prefix)
+}
+
+// namer is a helper to generate names with unique prefixes.
+type namer struct {
+	counts map[string]int
+}
+
+func (n *namer) name(prefix string) string {
+	n.counts[prefix] = n.counts[prefix] + 1
+	return fmt.Sprintf("%s_%d", prefix, n.counts[prefix])
+}
+
+func (s *scope) addRefs(exprs ...tree.TableExpr) {
+	for _, expr := range exprs {
+		switch expr := expr.(type) {
+		case *tree.AliasedTableExpr:
+			s.addRefs(expr.Expr)
+		case *tree.TableName:
+			for _, ref := range s.schema.tables {
+				if ref.TableName == expr {
+					s.refs = append(s.refs, ref)
+				}
+			}
+		case *tree.StatementSource:
+			switch stmt := expr.Statement.(type) {
+			case *tree.Insert:
+				s.addRefs(stmt.Table)
+			default:
+				panic(fmt.Errorf("Cols: %T\n", stmt))
+			}
+		case *tree.JoinTableExpr:
+			s.addRefs(expr.Left, expr.Right)
+		default:
+			panic(fmt.Errorf("Cols: %T\n", expr))
+		}
+	}
 }

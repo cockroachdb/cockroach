@@ -27,7 +27,7 @@ import (
 )
 
 type operator struct {
-	name  string
+	op    tree.BinaryOperator
 	left  types.T
 	right types.T
 	out   types.T
@@ -44,7 +44,7 @@ type function struct {
 type schema struct {
 	rnd       *rand.Rand
 	lock      syncutil.Mutex
-	tables    []namedRelation
+	tables    []tableRef
 	operators map[oid.Oid][]operator
 	functions map[oid.Oid][]function
 }
@@ -85,7 +85,7 @@ func (s *schema) ReloadSchemas(db *gosql.DB) error {
 	return err
 }
 
-func extractTables(db *gosql.DB) ([]namedRelation, error) {
+func extractTables(db *gosql.DB) ([]tableRef, error) {
 	rows, err := db.Query(`
 	SELECT
 		table_catalog,
@@ -113,17 +113,21 @@ func extractTables(db *gosql.DB) ([]namedRelation, error) {
 	// or something for a cleaner processing step?
 
 	firstTime := true
-	var lastCatalog, lastSchema, lastName string
-	var tables []namedRelation
-	var currentCols []tree.ColumnTableDef
+	var lastCatalog, lastSchema, lastName tree.Name
+	var tables []tableRef
+	var currentCols []*tree.ColumnTableDef
 	emit := func() {
-		tables = append(tables, namedRelation{
-			cols: currentCols,
-			name: lastName,
+		if lastSchema != "public" {
+			return
+		}
+		tables = append(tables, tableRef{
+			TableName: tree.NewTableName(lastCatalog, lastName),
+			Columns:   currentCols,
 		})
 	}
 	for rows.Next() {
-		var catalog, schema, name, col, typ string
+		var catalog, schema, name, col tree.Name
+		var typ string
 		var computed, nullable bool
 		if err := rows.Scan(&catalog, &schema, &name, &col, &typ, &computed, &nullable); err != nil {
 			return nil, err
@@ -155,7 +159,7 @@ func extractTables(db *gosql.DB) ([]namedRelation, error) {
 		if computed {
 			column.Computed.Computed = true
 		}
-		currentCols = append(currentCols, column)
+		currentCols = append(currentCols, &column)
 		lastCatalog = catalog
 		lastSchema = schema
 		lastName = name
@@ -187,6 +191,10 @@ WHERE
 		if err := rows.Scan(&name, &left, &right, &out); err != nil {
 			return nil, err
 		}
+		binop, ok := binOps[name]
+		if !ok {
+			continue
+		}
 		leftTyp, ok := types.OidToType[left]
 		if !ok {
 			continue
@@ -202,7 +210,7 @@ WHERE
 		result[out] = append(
 			result[out],
 			operator{
-				name:  name,
+				op:    binop,
 				left:  leftTyp,
 				right: rightTyp,
 				out:   outTyp,
@@ -210,6 +218,26 @@ WHERE
 		)
 	}
 	return result, rows.Err()
+}
+
+var binOps = map[string]tree.BinaryOperator{
+	"&":   tree.Bitand,
+	"|":   tree.Bitor,
+	"#":   tree.Bitxor,
+	"+":   tree.Plus,
+	"-":   tree.Minus,
+	"*":   tree.Mult,
+	"/":   tree.Div,
+	"//":  tree.FloorDiv,
+	"%":   tree.Mod,
+	"^":   tree.Pow,
+	"||":  tree.Concat,
+	"<<":  tree.LShift,
+	">>":  tree.RShift,
+	"->":  tree.JSONFetchVal,
+	"->>": tree.JSONFetchText,
+	"#>":  tree.JSONFetchValPath,
+	"#>>": tree.JSONFetchTextPath,
 }
 
 func extractFunctions(db *gosql.DB) (map[oid.Oid][]function, error) {

@@ -25,7 +25,7 @@ import (
 
 // makeScalar attempts to construct a scalar expression of the requested type.
 // If it was unsuccessful, it will return false.
-func (s *scope) makeScalar(typ types.T) (scalarExpr, bool) {
+func (s *scope) makeScalar(typ types.T) (tree.TypedExpr, bool) {
 	pickedType := typ
 	if typ == types.Any {
 		pickedType = getRandType()
@@ -33,7 +33,7 @@ func (s *scope) makeScalar(typ types.T) (scalarExpr, bool) {
 	s = s.push()
 
 	for i := 0; i < retryCount; i++ {
-		var result scalarExpr
+		var result tree.TypedExpr
 		var ok bool
 		// TODO(justin): this is how sqlsmith chooses what to do, but it feels
 		// to me like there should be a more clean/principled approach here.
@@ -63,11 +63,11 @@ func (s *scope) makeScalar(typ types.T) (scalarExpr, bool) {
 
 // TODO(justin): sqlsmith separated this out from the general case for
 // some reason - I think there must be a clean way to unify the two.
-func (s *scope) makeBoolExpr() (scalarExpr, bool) {
+func (s *scope) makeBoolExpr() (tree.TypedExpr, bool) {
 	s = s.push()
 
 	for i := 0; i < retryCount; i++ {
-		var result scalarExpr
+		var result tree.TypedExpr
 		var ok bool
 
 		if d6() < 4 {
@@ -87,31 +87,7 @@ func (s *scope) makeBoolExpr() (scalarExpr, bool) {
 	return nil, false
 }
 
-///////
-// CASE
-///////
-
-type caseExpr struct {
-	condition scalarExpr
-	trueExpr  scalarExpr
-	falseExpr scalarExpr
-}
-
-func (c *caseExpr) Type() types.T {
-	return c.trueExpr.Type()
-}
-
-func (c *caseExpr) Format(buf *tree.FmtCtx) {
-	buf.WriteString("case when ")
-	c.condition.Format(buf)
-	buf.WriteString(" then ")
-	c.trueExpr.Format(buf)
-	buf.WriteString(" else ")
-	c.falseExpr.Format(buf)
-	buf.WriteString(" end")
-}
-
-func (s *scope) makeCaseExpr(typ types.T) (scalarExpr, bool) {
+func (s *scope) makeCaseExpr(typ types.T) (*tree.CaseExpr, bool) {
 	condition, ok := s.makeScalar(types.Bool)
 	if !ok {
 		return nil, false
@@ -127,33 +103,19 @@ func (s *scope) makeCaseExpr(typ types.T) (scalarExpr, bool) {
 		return nil, false
 	}
 
-	return &caseExpr{condition, trueExpr, falseExpr}, true
+	expr, err := tree.NewTypedCaseExpr(
+		nil,
+		[]*tree.When{&tree.When{
+			Cond: condition,
+			Val:  trueExpr,
+		}},
+		falseExpr,
+		typ,
+	)
+	return expr, err == nil
 }
 
-///////////
-// COALESCE
-///////////
-
-type coalesceExpr struct {
-	firstExpr  scalarExpr
-	secondExpr scalarExpr
-}
-
-func (c *coalesceExpr) Type() types.T {
-	return c.firstExpr.Type()
-}
-
-func (c *coalesceExpr) Format(buf *tree.FmtCtx) {
-	buf.WriteString("cast(coalesce(")
-	c.firstExpr.Format(buf)
-	buf.WriteString(", ")
-	c.secondExpr.Format(buf)
-	buf.WriteString(") as ")
-	buf.WriteString(c.firstExpr.Type().SQLName())
-	buf.WriteString(")")
-}
-
-func (s *scope) makeCoalesceExpr(typ types.T) (scalarExpr, bool) {
+func (s *scope) makeCoalesceExpr(typ types.T) (tree.TypedExpr, bool) {
 	firstExpr, ok := s.makeScalar(typ)
 	if !ok {
 		return nil, false
@@ -164,27 +126,16 @@ func (s *scope) makeCoalesceExpr(typ types.T) (scalarExpr, bool) {
 		return nil, false
 	}
 
-	return &coalesceExpr{firstExpr, secondExpr}, true
+	return tree.NewTypedCoalesceExpr(
+		tree.TypedExprs{
+			firstExpr,
+			secondExpr,
+		},
+		typ,
+	), true
 }
 
-////////
-// CONST
-////////
-
-type constExpr struct {
-	typ  types.T
-	expr string
-}
-
-func (c *constExpr) Type() types.T {
-	return c.typ
-}
-
-func (c *constExpr) Format(buf *tree.FmtCtx) {
-	buf.WriteString(c.expr)
-}
-
-func (s *scope) makeConstExpr(typ types.T) scalarExpr {
+func (s *scope) makeConstExpr(typ types.T) tree.TypedExpr {
 	var datum tree.Datum
 	col, err := sqlbase.DatumTypeToColumnType(typ)
 	if err != nil {
@@ -198,66 +149,33 @@ func (s *scope) makeConstExpr(typ types.T) scalarExpr {
 	// TODO(justin): maintain context and see if we're in an INSERT, and maybe use
 	// DEFAULT (which is a legal "value" in such a context).
 
-	return &constExpr{typ, datum.String()}
+	return datum
 }
 
-/////////
-// COLREF
-/////////
-
-type colRefExpr struct {
-	ref string
-	typ types.T
-}
-
-func (c *colRefExpr) Type() types.T {
-	return c.typ
-}
-
-func (c *colRefExpr) Format(buf *tree.FmtCtx) {
-	buf.WriteString(c.ref)
-}
-
-func (s *scope) makeColRef(typ types.T) (scalarExpr, bool) {
+func (s *scope) makeColRef(typ types.T) (tree.TypedExpr, bool) {
 	ref := s.refs[rand.Intn(len(s.refs))]
-	col := ref.Cols()[rand.Intn(len(ref.Cols()))]
-	if typ != types.Any && coltypes.CastTargetToDatumType(col.Type) != typ {
+	// Filter by needed type.
+	cols := make([]*tree.ColumnTableDef, 0, len(ref.Columns))
+	for _, c := range ref.Columns {
+		if typ == types.Any || coltypes.CastTargetToDatumType(c.Type) == typ {
+			cols = append(cols, c)
+		}
+	}
+	if len(cols) == 0 {
 		return nil, false
 	}
+	col := cols[rand.Intn(len(cols))]
 
-	return &colRefExpr{
-		ref: ref.Name() + "." + col.Name.String(),
-		typ: coltypes.CastTargetToDatumType(col.Type),
-	}, true
+	return makeTypedExpr(
+		tree.NewColumnItem(
+			ref.TableName,
+			col.Name,
+		),
+		coltypes.CastTargetToDatumType(col.Type),
+	), true
 }
 
-/////////
-// BIN OP
-/////////
-
-type opExpr struct {
-	outTyp types.T
-
-	left  scalarExpr
-	right scalarExpr
-	op    string
-}
-
-func (o *opExpr) Type() types.T {
-	return o.outTyp
-}
-
-func (o *opExpr) Format(buf *tree.FmtCtx) {
-	buf.WriteByte('(')
-	o.left.Format(buf)
-	buf.WriteByte(' ')
-	buf.WriteString(o.op)
-	buf.WriteByte(' ')
-	o.right.Format(buf)
-	buf.WriteByte(')')
-}
-
-func (s *scope) makeBinOp(typ types.T) (scalarExpr, bool) {
+func (s *scope) makeBinOp(typ types.T) (*tree.BinaryExpr, bool) {
 	if typ == types.Any {
 		typ = getRandType()
 	}
@@ -276,42 +194,15 @@ func (s *scope) makeBinOp(typ types.T) (scalarExpr, bool) {
 		return nil, false
 	}
 
-	return &opExpr{
-		outTyp: typ,
-		left:   left,
-		right:  right,
-		op:     op.name,
-	}, true
+	return tree.NewTypedBinaryExpr(
+		op.op,
+		left,
+		right,
+		typ,
+	), true
 }
 
-//////////
-// FUNC OP
-//////////
-
-type funcExpr struct {
-	outTyp types.T
-
-	name   string
-	inputs []scalarExpr
-}
-
-func (f *funcExpr) Type() types.T {
-	return f.outTyp
-}
-
-func (f *funcExpr) Format(buf *tree.FmtCtx) {
-	buf.WriteString(f.name)
-	buf.WriteByte('(')
-	comma := ""
-	for _, a := range f.inputs {
-		buf.WriteString(comma)
-		a.Format(buf)
-		comma = ", "
-	}
-	buf.WriteByte(')')
-}
-
-func (s *scope) makeFunc(typ types.T) (scalarExpr, bool) {
+func (s *scope) makeFunc(typ types.T) (tree.TypedExpr, bool) {
 	if typ == types.Any {
 		typ = getRandType()
 	}
@@ -321,7 +212,7 @@ func (s *scope) makeFunc(typ types.T) (scalarExpr, bool) {
 	}
 	op := ops[rand.Intn(len(ops))]
 
-	args := make([]scalarExpr, 0)
+	args := make(tree.TypedExprs, 0)
 	for i := range op.inputs {
 		in, ok := s.makeScalar(op.inputs[i])
 		if !ok {
@@ -330,64 +221,49 @@ func (s *scope) makeFunc(typ types.T) (scalarExpr, bool) {
 		args = append(args, in)
 	}
 
-	return &funcExpr{
-		outTyp: typ,
-		name:   op.name,
-		inputs: args,
-	}, true
+	fd, ok := tree.FunDefs[op.name]
+	if !ok {
+		return nil, false
+	}
+	return tree.NewTypedFuncExpr(
+		tree.ResolvableFunctionReference{fd},
+		0, /* aggQualifier */
+		args,
+		nil, /* filter */
+		nil, /* windowDef */
+		typ,
+		nil, /* props */
+		nil, /* overload */
+	), true
 }
 
-/////////
-// EXISTS
-/////////
-
-type exists struct {
-	subquery relExpr
-}
-
-func (e *exists) Format(buf *tree.FmtCtx) {
-	buf.WriteString("exists(")
-	e.subquery.Format(buf)
-	buf.WriteString(")")
-}
-
-func (e *exists) Type() types.T {
-	return types.Bool
-}
-
-func (s *scope) makeExists() (scalarExpr, bool) {
-	outScope, ok := s.makeSelect(nil)
+func (s *scope) makeExists() (tree.TypedExpr, bool) {
+	selectStmt, ok := s.makeSelect(nil)
 	if !ok {
 		return nil, false
 	}
 
-	return &exists{outScope.expr}, true
+	return makeTypedExpr(
+		&tree.Subquery{
+			Select: &tree.ParenSelect{Select: selectStmt},
+			Exists: true,
+		},
+		types.Bool,
+	), true
 }
 
-//////////////////
-// SCALAR SUBQUERY
-//////////////////
-
-type scalarSubq struct {
-	subquery relExpr
-}
-
-func (s *scalarSubq) Format(buf *tree.FmtCtx) {
-	buf.WriteString("(")
-	s.subquery.Format(buf)
-	buf.WriteString(")")
-}
-
-func (s *scalarSubq) Type() types.T {
-	return s.subquery.(*selectExpr).selectList[0].Type()
-}
-
-func (s *scope) makeScalarSubquery(typ types.T) (scalarExpr, bool) {
-	outScope, ok := s.makeSelect([]types.T{typ})
+func (s *scope) makeScalarSubquery(typ types.T) (tree.TypedExpr, bool) {
+	selectStmt, ok := s.makeSelect([]types.T{typ})
 	if !ok {
 		return nil, false
 	}
+	selectStmt.Limit = &tree.Limit{Count: tree.NewDInt(1)}
 
-	outScope.expr.(*selectExpr).limit = "limit 1"
-	return &scalarSubq{outScope.expr}, true
+	return makeTypedExpr(
+		&tree.Subquery{
+			Select: &tree.ParenSelect{Select: selectStmt},
+		},
+		typ,
+	), true
+
 }

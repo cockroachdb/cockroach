@@ -74,8 +74,7 @@ func (s *Smither) Generate() string {
 		if !ok {
 			continue
 		}
-		ctx := &tree.FmtCtx{}
-		stmt.expr.Format(ctx)
-		return ctx.String()
+		cfg := tree.DefaultPrettyCfg()
+		return cfg.Pretty(stmt)
 	}
 }
