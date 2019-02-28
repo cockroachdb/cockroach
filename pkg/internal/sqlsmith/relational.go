@@ -15,7 +15,6 @@
 package sqlsmith
 
 import (
-	"bytes"
 	"fmt"
 	"math/rand"
 
@@ -77,20 +76,15 @@ func (s *scope) makeDataSource() (*scope, bool) {
 	return s.getTableExpr()
 }
 
-// Format defines a type that can write to a buffer.
-type Format interface {
-	Format(*bytes.Buffer)
-}
-
 type scalarExpr interface {
-	Format
+	tree.NodeFormatter
 	Type() types.T
 }
 
 // REL OPS
 
 type relExpr interface {
-	Format
+	tree.NodeFormatter
 
 	Cols() []tree.ColumnTableDef
 }
@@ -115,7 +109,7 @@ func (t tableExpr) Name() string {
 	return t.alias
 }
 
-func (t tableExpr) Format(buf *bytes.Buffer) {
+func (t tableExpr) Format(buf *tree.FmtCtx) {
 	fmt.Fprintf(buf, "%s as %s", t.rel.name, t.alias)
 }
 
@@ -175,7 +169,7 @@ func (s *scope) makeJoinExpr() (*scope, bool) {
 	return outScope, true
 }
 
-func (j *join) Format(buf *bytes.Buffer) {
+func (j *join) Format(buf *tree.FmtCtx) {
 	j.lhs.Format(buf)
 	buf.WriteString(" join ")
 	j.rhs.Format(buf)
@@ -202,7 +196,7 @@ type selectExpr struct {
 	orderBy    []scalarExpr
 }
 
-func (s *selectExpr) Format(buf *bytes.Buffer) {
+func (s *selectExpr) Format(buf *tree.FmtCtx) {
 	buf.WriteString("select ")
 	if s.distinct {
 		buf.WriteString("distinct ")
@@ -328,7 +322,7 @@ type insert struct {
 	input   relExpr
 }
 
-func (i *insert) Format(buf *bytes.Buffer) {
+func (i *insert) Format(buf *tree.FmtCtx) {
 	buf.WriteString("insert into ")
 	buf.WriteString(i.target)
 	buf.WriteString(" (")
@@ -435,7 +429,7 @@ func (s *scope) makeInsertReturning(desiredTypes []types.T) (*scope, bool) {
 	return outScope, true
 }
 
-func (i *insertReturning) Format(buf *bytes.Buffer) {
+func (i *insertReturning) Format(buf *tree.FmtCtx) {
 	buf.WriteByte('[')
 	i.insert.Format(buf)
 	buf.WriteString(" returning ")
@@ -489,7 +483,7 @@ func (v *values) Cols() []tree.ColumnTableDef {
 	return nil
 }
 
-func (v *values) Format(buf *bytes.Buffer) {
+func (v *values) Format(buf *tree.FmtCtx) {
 	buf.WriteString("values ")
 	comma := ""
 	for _, t := range v.values {
@@ -552,7 +546,7 @@ func (s *setOp) Cols() []tree.ColumnTableDef {
 	return s.left.Cols()
 }
 
-func (s *setOp) Format(buf *bytes.Buffer) {
+func (s *setOp) Format(buf *tree.FmtCtx) {
 	buf.WriteByte('(')
 	s.left.Format(buf)
 	buf.WriteByte(')')
