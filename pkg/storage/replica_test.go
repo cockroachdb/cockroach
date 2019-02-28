@@ -1573,7 +1573,7 @@ func pushTxnArgs(
 			Key: pushee.Key,
 		},
 		Now:       pusher.Timestamp,
-		PushTo:    pusher.Timestamp,
+		PushTo:    pusher.Timestamp.Next(),
 		PusherTxn: *pusher,
 		PusheeTxn: pushee.TxnMeta,
 		PushType:  pushType,
@@ -10285,7 +10285,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			},
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
-				record.Timestamp.Forward(now.Add(0, 1))
+				record.Timestamp.Forward(now)
 				return record
 			},
 		},
@@ -10303,7 +10303,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			},
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
-				record.Timestamp.Forward(now.Add(0, 1))
+				record.Timestamp.Forward(now)
 				record.LastHeartbeat.Forward(now.Add(0, 5))
 				return record
 			},
