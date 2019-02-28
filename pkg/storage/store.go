@@ -615,11 +615,6 @@ type StoreConfig struct {
 	// maintenance queue to dispatch individual maintenance tasks.
 	TimeSeriesDataStore TimeSeriesDataStore
 
-	// DontRetryPushTxnFailures will propagate a push txn failure immediately
-	// instead of utilizing the txn wait queue to wait for the transaction to
-	// finish or be pushed by a higher priority contender.
-	DontRetryPushTxnFailures bool
-
 	// CoalescedHeartbeatsInterval is the interval for which heartbeat messages
 	// are queued and then sent as a single coalesced heartbeat; it is a
 	// fraction of the RaftTickInterval so that heartbeats don't get delayed by
@@ -2885,7 +2880,7 @@ func (s *Store) Send(
 			// enqueue into the txnWaitQueue in order to await further updates to
 			// the unpushed txn's status. We check ShouldPushImmediately to avoid
 			// retrying non-queueable PushTxnRequests (see #18191).
-			dontRetry := s.cfg.DontRetryPushTxnFailures
+			dontRetry := s.cfg.TestingKnobs.DontRetryPushTxnFailures
 			if !dontRetry && ba.IsSinglePushTxnRequest() {
 				pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
 				dontRetry = txnwait.ShouldPushImmediately(pushReq)

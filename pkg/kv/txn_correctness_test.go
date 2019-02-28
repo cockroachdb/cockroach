@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -818,7 +819,9 @@ func (hv *historyVerifier) runCmd(
 func checkConcurrency(name string, txns []string, verify *verifier, t *testing.T) {
 	verifier := newHistoryVerifier(name, txns, verify, t)
 	s := &localtestcluster.LocalTestCluster{
-		DontRetryPushTxnFailures: true,
+		StoreTestingKnobs: &storage.StoreTestingKnobs{
+			DontRetryPushTxnFailures: true,
+		},
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
 	defer s.Stop()

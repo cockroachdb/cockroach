@@ -51,20 +51,19 @@ import (
 // Note that the LocalTestCluster is different from server.TestCluster
 // in that although it uses a distributed sender, there is no RPC traffic.
 type LocalTestCluster struct {
-	Cfg                      storage.StoreConfig
-	Manual                   *hlc.ManualClock
-	Clock                    *hlc.Clock
-	Gossip                   *gossip.Gossip
-	Eng                      engine.Engine
-	Store                    *storage.Store
-	StoreTestingKnobs        *storage.StoreTestingKnobs
-	DBContext                *client.DBContext
-	DB                       *client.DB
-	Stores                   *storage.Stores
-	Stopper                  *stop.Stopper
-	Latency                  time.Duration // sleep for each RPC sent
-	tester                   testing.TB
-	DontRetryPushTxnFailures bool
+	Cfg               storage.StoreConfig
+	Manual            *hlc.ManualClock
+	Clock             *hlc.Clock
+	Gossip            *gossip.Gossip
+	Eng               engine.Engine
+	Store             *storage.Store
+	StoreTestingKnobs *storage.StoreTestingKnobs
+	DBContext         *client.DBContext
+	DB                *client.DB
+	Stores            *storage.Stores
+	Stopper           *stop.Stopper
+	Latency           time.Duration // sleep for each RPC sent
+	tester            testing.TB
 
 	// DisableLivenessHeartbeat, if set, inhibits the heartbeat loop. Some tests
 	// need this because, for example, the heartbeat loop increments some
@@ -143,7 +142,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	} else {
 		cfg.TestingKnobs = *ltc.StoreTestingKnobs
 	}
-	cfg.DontRetryPushTxnFailures = ltc.DontRetryPushTxnFailures
 	cfg.AmbientCtx = ambient
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
