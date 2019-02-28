@@ -792,15 +792,20 @@ func (sc *SchemaChanger) exec(
 	// Wait for the schema change to propagate to all nodes after this function
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
-	waitToUpdateLeases := func() {
+	waitToUpdateLeases := func(refreshStats bool) {
 		if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
 			log.Warning(ctx, err)
+		}
+		// We wait to trigger a stats refresh until we know the leases have been
+		// updated.
+		if refreshStats {
+			sc.refreshStats()
 		}
 	}
 
 	if sc.mutationID == sqlbase.InvalidMutationID {
 		// Nothing more to do.
-		waitToUpdateLeases()
+		waitToUpdateLeases(false /* refreshStats */)
 		return nil
 	}
 
@@ -842,10 +847,10 @@ func (sc *SchemaChanger) exec(
 		}
 	}
 
-	defer waitToUpdateLeases()
-
 	// Run through mutation state machine and backfill.
 	err = sc.runStateMachineAndBackfill(ctx, &lease, evalCtx)
+
+	defer waitToUpdateLeases(err == nil /* refreshStats */)
 
 	// Purge the mutations if the application of the mutations failed due to
 	// a permanent error. All other errors are transient errors that are
@@ -1097,6 +1102,17 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	// Mark the mutations as completed.
 	_, err := sc.done(ctx)
 	return err
+}
+
+func (sc *SchemaChanger) refreshStats() {
+	// Initiate an asynchronous run of CREATE STATISTICS. We use a large number
+	// for rowsAffected because we want to make sure that stats always get
+	// created/refreshed here.
+	sc.execCfg.StatsRefresher.NotifyMutation(
+		&sc.settings.SV,
+		sc.tableID,
+		math.MaxInt32, /* rowsAffected */
+	)
 }
 
 // reverseMutations reverses the direction of all the mutations with the
