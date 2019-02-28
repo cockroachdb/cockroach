@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -4198,4 +4199,56 @@ CREATE TABLE t.test (a INT, b INT, c JSON, d JSON);
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestCreateStatsAfterSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldRefreshInterval, oldAsOf time.Duration) {
+		stats.DefaultRefreshInterval = oldRefreshInterval
+		stats.DefaultAsOfTime = oldAsOf
+	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
+	stats.DefaultRefreshInterval = time.Millisecond
+	stats.DefaultAsOfTime = time.Microsecond
+
+	server, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer server.Stopper().Stop(context.TODO())
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+
+	sqlRun.Exec(t, `
+		CREATE DATABASE t;
+		CREATE TABLE t.test (k INT PRIMARY KEY, v CHAR, w CHAR);`)
+
+	sqlRun.Exec(t, `SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled=true`)
+
+	// Add an index.
+	sqlRun.Exec(t, `CREATE INDEX foo ON t.test (w)`)
+
+	// Verify that statistics have been created for the new index (note that
+	// column w is ordered before column v, since index columns are added first).
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+	  FROM [SHOW STATISTICS FOR TABLE t.test]`,
+		[][]string{
+			{"__auto__", "{k}", "0", "0", "0"},
+			{"__auto__", "{w}", "0", "0", "0"},
+			{"__auto__", "{v}", "0", "0", "0"},
+		})
+
+	// Add a column.
+	sqlRun.Exec(t, `ALTER TABLE t.test ADD COLUMN x INT`)
+
+	// Verify that statistics have been created for the new column.
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
+	  FROM [SHOW STATISTICS FOR TABLE t.test] ORDER BY column_names::STRING`,
+		[][]string{
+			{"__auto__", "{k}", "0", "0", "0"},
+			{"__auto__", "{k}", "0", "0", "0"},
+			{"__auto__", "{v}", "0", "0", "0"},
+			{"__auto__", "{v}", "0", "0", "0"},
+			{"__auto__", "{w}", "0", "0", "0"},
+			{"__auto__", "{w}", "0", "0", "0"},
+			{"__auto__", "{x}", "0", "0", "0"},
+		})
 }
