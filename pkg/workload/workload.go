@@ -36,6 +36,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 // Generator represents one or more sql query loads and associated initial data.
@@ -435,6 +436,8 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 
 	log.Infof(ctx, `starting %d splits`, len(splitPoints))
 	g := ctxgroup.WithContext(ctx)
+	// Rate limit splitting to prevent replica imbalance.
+	r := rate.NewLimiter(128, 1)
 	for i := 0; i < concurrency; i++ {
 		g.GoCtx(func(ctx context.Context) error {
 			var buf bytes.Buffer
@@ -444,7 +447,9 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 					if !ok {
 						return nil
 					}
-
+					if err := r.Wait(ctx); err != nil {
+						return err
+					}
 					m := (p.lo + p.hi) / 2
 					split := strings.Join(StringTuple(splitPoints[m]), `,`)
 
