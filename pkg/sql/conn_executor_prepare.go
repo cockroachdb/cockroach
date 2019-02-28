@@ -142,7 +142,6 @@ func (ex *connExecutor) prepare(
 		return prepared, nil
 	}
 	prepared.Statement = stmt.Statement
-	prepared.AnonymizedStr = anonymizeStmt(&stmt)
 
 	// Point to the prepared state, which can be further populated during query
 	// preparation.
@@ -232,6 +231,7 @@ func (ex *connExecutor) populatePrepared(
 	// Fallback on the heuristic planner if the optimizer was not enabled or used:
 	// create a plan for the statement to figure out the typing, then close the
 	// plan.
+	prepared.AnonymizedStr = anonymizeStmt(stmt.AST)
 	if err := p.prepare(ctx, stmt.AST); err != nil {
 		enhanceErrWithCorrelation(err, isCorrelated)
 		return 0, err
