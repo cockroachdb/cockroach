@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	gosql "database/sql"
-	gojson "encoding/json"
 	"fmt"
 	"net/url"
 	"sort"
@@ -22,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -33,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -208,38 +206,37 @@ func TestChangefeedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		beforeEmitRowCh := make(chan struct{})
-		beforeEmitRowHook := func() error {
-			<-beforeEmitRowCh
-			return nil
-		}
-		f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsqlrun.TestingKnobs).
-			Changefeed.(*TestingKnobs).BeforeEmitRow = beforeEmitRowHook
-
 		ctx := context.Background()
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
 
-		var ts0 string
-		if err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
-			return tx.QueryRow(
-				`INSERT INTO foo VALUES (0) RETURNING cluster_logical_timestamp()`,
-			).Scan(&ts0)
-		}); err != nil {
-			t.Fatal(err)
-		}
-
-		beforeFeed := tree.TimestampToDecimal(f.Server().Clock().Now())
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, resolved`)
 		defer closeFeed(t, foo)
-		// Make sure the changefeed has picked a statement timestamp by waiting
-		// on something that happens after it (the first BeforeEmitRow hook
-		// call). Then unblock the hook for the rest of the test.
-		beforeEmitRowCh <- struct{}{}
-		close(beforeEmitRowCh)
-		afterFeed := tree.TimestampToDecimal(f.Server().Clock().Now())
 
+		// Grab the first non resolved-timestamp row.
+		var row0 *cdctest.TestFeedMessage
+		for {
+			var err error
+			row0, err = foo.Next()
+			assert.NoError(t, err)
+			if len(row0.Value) > 0 {
+				break
+			}
+		}
+
+		// If this changefeed uses jobs (and thus stores a ChangefeedDetails), get
+		// the statement timestamp from row0 and verify that they match. Otherwise,
+		// just skip the row.
+		if !strings.Contains(t.Name(), `sinkless`) {
+			d, err := foo.(*cdctest.TableFeed).Details()
+			assert.NoError(t, err)
+			expected := `{"after": {"a": 0}, "updated": "` + d.StatementTime.AsOfSystemTime() + `"}`
+			assert.Equal(t, expected, string(row0.Value))
+		}
+
+		// Assert the remaining key using assertPayloads, since we know the exact
+		// timestamp expected.
 		var ts1 string
 		if err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
 			return tx.QueryRow(
@@ -248,50 +245,6 @@ func TestChangefeedTimestamps(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-
-		// TODO(mtracy): Find a way to get the statement time of a feed. Without the
-		// exact timestamp, we are forced to parse and compare the feed results to
-		// our sentinel before and after timestamps, which is significantly more
-		// complicated.
-		var m *cdctest.TestFeedMessage
-		for {
-			var err error
-			m, err = foo.Next()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if m == nil {
-				t.Fatal("unexpected end of feed")
-			}
-			if m.Key != nil {
-				break
-			}
-		}
-
-		if a, e := string(m.Key), "[0]"; a != e {
-			t.Errorf("got key %s, wanted %s", a, e)
-		}
-		var out map[string]interface{}
-		if err := gojson.Unmarshal(m.Value, &out); err != nil {
-			t.Fatal(err)
-		}
-		after := out["after"].(map[string]interface{})
-		if a, e := after["a"].(float64), float64(0); a != e {
-			t.Fatalf("column a got value %f, wanted %f", a, e)
-		}
-		tsApd, _, err := apd.NewFromString(out["updated"].(string))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if beforeFeed.Cmp(tsApd) > 0 {
-			t.Fatalf("ts %s was before lower bound %s", tsApd, beforeFeed)
-		}
-		if afterFeed.Cmp(tsApd) < 0 {
-			t.Fatalf("ts %s was after upper bound %s", tsApd, afterFeed)
-		}
-
-		// Assert the remaining key using assertPayloads, since we know the exact
-		// timestamp expected.
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"a": 1}, "updated": "` + ts1 + `"}`,
 		})
@@ -307,7 +260,9 @@ func TestChangefeedTimestamps(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
+	// Most poller tests use sinklessTest, but this one uses enterpriseTest
+	// because we get an extra assertion out of it.
+	t.Run(`poller`, pollerTest(enterpriseTest, testFn))
 }
 
 func TestChangefeedResolvedFrequency(t *testing.T) {
