@@ -7192,13 +7192,14 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	iArg := incrementArgs(roachpb.Key("b"), expInc)
 	ba.Add(&iArg)
 	{
-		br, pErr, retry := tc.repl.tryExecuteWriteBatch(
+		_, pErr := tc.repl.executeWriteBatch(
 			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 		)
-		if retry != proposalNoReevaluation {
-			t.Fatalf("expected no retry from illegal lease index, but got (%v, %v, %d)", br, pErr, retry)
+		if pErr != nil {
+			t.Fatalf("write batch returned error: %s", pErr)
 		}
+		// The command was reproposed internally, for two total proposals.
 		if exp, act := int32(2), atomic.LoadInt32(&c); exp != act {
 			t.Fatalf("expected %d proposals, got %d", exp, act)
 		}

@@ -988,13 +988,11 @@ type endCmds struct {
 
 // done releases the latches acquired by the command and updates
 // the timestamp cache using the final timestamp of each command.
-func (ec *endCmds) done(
-	br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalReevaluationReason,
-) {
+func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Update the timestamp cache if the request is not being re-evaluated. Each
 	// request is considered in turn; only those marked as affecting the cache are
 	// processed. Inconsistent reads are excluded.
-	if retry == proposalNoReevaluation && ec.ba.ReadConsistency == roachpb.CONSISTENT {
+	if ec.ba.ReadConsistency == roachpb.CONSISTENT {
 		ec.repl.updateTimestampCache(&ec.ba, br, pErr)
 	}
 
