@@ -263,42 +263,10 @@ func (r *Replica) evalAndPropose(
 	if r.mu.commandSizes != nil {
 		r.mu.commandSizes[proposal.idKey] = proposalSize
 	}
-	// Make sure we clean up the proposal if we fail to submit it successfully.
-	// This is important both to ensure that that the proposals map doesn't
-	// grow without bound and to ensure that we always release any quota that
-	// we acquire.
-	defer func() {
-		if pErr != nil {
-			r.cleanupFailedProposalLocked(proposal)
-		}
-	}()
-
-	// NB: We need to check Replica.mu.destroyStatus again in case the Replica has
-	// been destroyed between the initial check at the beginning of this method
-	// and the acquisition of Replica.mu. Failure to do so will leave pending
-	// proposals that never get cleared.
-	if !r.mu.destroyStatus.IsAlive() {
-		return nil, nil, 0, roachpb.NewError(r.mu.destroyStatus.err)
+	maxLeaseIndex, pErr := r.proposeLocked(ctx, proposal, lease)
+	if pErr != nil {
+		return nil, nil, 0, pErr
 	}
-
-	repDesc, err := r.getReplicaDescriptorRLocked()
-	if err != nil {
-		return nil, nil, 0, roachpb.NewError(err)
-	}
-	maxLeaseIndex := r.insertProposalLocked(proposal, repDesc, lease)
-	if maxLeaseIndex == 0 && !ba.IsLeaseRequest() {
-		log.Fatalf(ctx, "no MaxLeaseIndex returned for %s", ba)
-	}
-
-	if err := r.submitProposalLocked(proposal); err == raft.ErrProposalDropped {
-		// Silently ignore dropped proposals (they were always silently ignored
-		// prior to the introduction of ErrProposalDropped).
-		// TODO(bdarnell): Handle ErrProposalDropped better.
-		// https://github.com/cockroachdb/cockroach/issues/21849
-	} else if err != nil {
-		return nil, nil, 0, roachpb.NewError(err)
-	}
-
 	// Must not use `proposal` in the closure below as a proposal which is not
 	// present in r.mu.proposals is no longer protected by the mutex. Abandoning
 	// a command only abandons the associated context. As soon as we propose a
@@ -319,6 +287,45 @@ func (r *Replica) evalAndPropose(
 		return ok
 	}
 	return proposalCh, tryAbandon, maxLeaseIndex, nil
+}
+
+func (r *Replica) proposeLocked(
+	ctx context.Context, proposal *ProposalData, lease roachpb.Lease,
+) (_ int64, pErr *roachpb.Error) {
+	// Make sure we clean up the proposal if we fail to submit it successfully.
+	// This is important both to ensure that that the proposals map doesn't
+	// grow without bound and to ensure that we always release any quota that
+	// we acquire.
+	defer func() {
+		if pErr != nil {
+			r.cleanupFailedProposalLocked(proposal)
+		}
+	}()
+
+	// NB: We need to check Replica.mu.destroyStatus again in case the Replica has
+	// been destroyed between the initial check at the beginning of this method
+	// and the acquisition of Replica.mu. Failure to do so will leave pending
+	// proposals that never get cleared.
+	if !r.mu.destroyStatus.IsAlive() {
+		return 0, roachpb.NewError(r.mu.destroyStatus.err)
+	}
+
+	repDesc, err := r.getReplicaDescriptorRLocked()
+	if err != nil {
+		return 0, roachpb.NewError(err)
+	}
+	maxLeaseIndex := r.insertProposalLocked(proposal, repDesc, lease)
+
+	if err := r.submitProposalLocked(proposal); err == raft.ErrProposalDropped {
+		// Silently ignore dropped proposals (they were always silently ignored
+		// prior to the introduction of ErrProposalDropped).
+		// TODO(bdarnell): Handle ErrProposalDropped better.
+		// https://github.com/cockroachdb/cockroach/issues/21849
+	} else if err != nil {
+		return 0, roachpb.NewError(err)
+	}
+
+	return maxLeaseIndex, nil
 }
 
 // submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
