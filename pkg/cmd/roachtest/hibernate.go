@@ -20,7 +20,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -60,11 +59,11 @@ func registerHibernate(r *registry) {
 			attempt++
 
 			c.l.Printf("attempt %d - update dependencies", attempt)
-			if err := c.RunE(ctx, node, `sudo apt-get -q update`); err != nil {
+			if err := c.RunE(ctx, node, `sudo apt-get -qq update`); err != nil {
 				continue
 			}
 			if err := c.RunE(
-				ctx, node, `sudo apt-get -qy install default-jre openjdk-8-jdk-headless gradle`,
+				ctx, node, `sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
 			); err != nil {
 				continue
 			}
@@ -133,7 +132,7 @@ echo "ext {
 		if err != nil {
 			t.Fatal(err)
 		}
-		blacklistName, expectedFailures := getHibernateBlacklistForVersion(version)
+		blacklistName, expectedFailures, _, _ := hibernateBlacklists.getLists(version)
 		if expectedFailures == nil {
 			t.Fatalf("No hibernate blacklist defined for cockroach version %s", version)
 		}
@@ -336,32 +335,4 @@ func extractFailureFromHibernateXML(contents []byte) ([]string, []bool, error) {
 	}
 
 	return tests, passed, nil
-}
-
-func fetchCockroachVersion(ctx context.Context, c *cluster, nodeIndex int) (string, error) {
-	db, err := c.ConnE(ctx, nodeIndex)
-	if err != nil {
-		return "", err
-	}
-	defer db.Close()
-	var version string
-	if err := db.QueryRowContext(ctx,
-		`SELECT value FROM crdb_internal.node_build_info where field = 'Version'`,
-	).Scan(&version); err != nil {
-		return "", err
-	}
-	return version, nil
-}
-
-// maybeAddGithubLink will take the issue and if it is just a number, then it
-// will return a full github link.
-func maybeAddGithubLink(issue string) string {
-	if len(issue) == 0 {
-		return ""
-	}
-	issueNum, err := strconv.Atoi(issue)
-	if err != nil {
-		return issue
-	}
-	return fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issueNum)
 }

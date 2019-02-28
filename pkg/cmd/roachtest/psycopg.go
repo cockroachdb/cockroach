@@ -62,11 +62,11 @@ func registerPsycopg(r *registry) {
 			attempt++
 
 			c.l.Printf("attempt %d - update dependencies", attempt)
-			if err := c.RunE(ctx, node, `sudo apt-get -q update`); err != nil {
+			if err := c.RunE(ctx, node, `sudo apt-get -qq update`); err != nil {
 				continue
 			}
 			if err := c.RunE(
-				ctx, node, `sudo apt-get -qy install make python3 libpq-dev python-dev gcc`,
+				ctx, node, `sudo apt-get -qq install make python3 libpq-dev python-dev gcc`,
 			); err != nil {
 				continue
 			}
@@ -110,7 +110,7 @@ func registerPsycopg(r *registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		blacklistName, expectedFailureList, ignoredlistName, ignoredlist := getPsycopgBlacklistForVersion(version)
+		blacklistName, expectedFailureList, ignoredlistName, ignoredlist := psycopgBlacklists.getLists(version)
 		if expectedFailureList == nil {
 			t.Fatalf("No psycopg blacklist defined for cockroach version %s", version)
 		}
