@@ -136,12 +136,12 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyskj1rwzAQhvf-jHdWiT87eO
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-distinct        ·            ·            (a, b)     weak-key(a,b); +a,+b
- │              distinct on  a, b         ·          ·
- │              order key    a, b         ·          ·
- └── render     ·            ·            (a, b)     +a,+b
-      │         render 0     a            ·          ·
-      │         render 1     b            ·          ·
+render          ·            ·            (a, b)     ·
+ │              render 0     a            ·          ·
+ │              render 1     b            ·          ·
+ └── distinct   ·            ·            (a, b, c)  weak-key(a,b); +a,+b,+c
+      │         distinct on  a, b         ·          ·
+      │         order key    a, b         ·          ·
       └── scan  ·            ·            (a, b, c)  +a,+b,+c
 ·               table        abc@primary  ·          ·
 ·               spans        ALL          ·          ·
@@ -149,4 +149,4 @@ distinct        ·            ·            (a, b)     weak-key(a,b); +a,+b
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lM-LqzAQx-_vr3jMtQM10f7y5OFdenldyt4WD9YMRWiNJBF2Kf7vi2axa9lGwezRxO985sOEuUEpBf3PrqQhfgMGCBwQQkCIAGEFKUKlZE5aS9X-YgN78Q5xgFCUVW3a4xQhl4ogvoEpzIUghtfsdKEjZYLUsq0ryGTFpcNUqrhm6iPJTjkgHGoT_00YJhyTENIGQdbmXleb7EwQswans_8V2hRlbpbrIbijtEglSJH4wj5l8qfMO0raUo-cBSZ8gUm4gLRxNciCWR2Ggw7Z9Ilw3xMZYffCG48T4dN9Q9--I-zed-vRN5zuG_n2HWH3vjuPvtF038C37wi791390ob5gXkkXclS04D4rHLQrh0SZ7LrSsta5fSiZN5h7Oehy3UHgrSxt8x-7Et71Tb4PcycYT4Is8cwd5NH0KEzHbnD0Zy-V87w2k1ezyFvnOGtm7ydQ965ZxWMPBP3I3tkp82fzwAAAP__G57AJg==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lE-LszAQh-_vp3iZawM10f7z5GEvvWyXsrfFQ2qGIrRGkgi7FL_7ogG7lm0ixD2a-JtnHibMDSop8JVfUUP6ARQIMCAQA4EECKwgJ1ArWaDWUnW_2MBefEIaESirujHdcU6gkAohvYEpzQUhhXd-uuARuUC17OoKNLy89JhalVeuvjJ-KiBvCcjG3Otow88IKW3JdNZLqU1ZFWa5HoMySrLO56AEKhTpf3vwjMmeMu8oaUs9chYkYwuSxQvIW1eDNJrUIYFDY3ztxqN26fRxsNBxeFiD7WbGcbDpfnGon4c1-G1n9Iun-yWhfh7W4Leb0S-Z7heF-nlYg9_qj9bFL8wj6lpWGkfEZ5WjboegOKPdPVo2qsA3JYseYz8Pfa4_EKiNvaX2Y1_Zq67Bn2HqDLNRmD6GmZvsQcfOdOIOJyF9r5zhtZu8DiFvnOGtm7wNIe_cs4o8z8T9yB7ZefvvOwAA__8Qr7DH
