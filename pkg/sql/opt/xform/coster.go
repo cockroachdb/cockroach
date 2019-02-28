@@ -20,7 +20,6 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -229,7 +228,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
 		}
 	}
-	return memo.Cost(rowCount) * (seqIOCostFactor + perRowCost)
+	return memo.Cost(rowCount) * perRowCost
 }
 
 func (c *coster) computeVirtualScanCost(scan *memo.VirtualScanExpr) memo.Cost {
@@ -283,7 +282,6 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	// Add the CPU cost of emitting the rows.
 	// TODO(radu): ideally we would have an estimate of how many rows we actually
 	// have to run the ON condition on.
-	cost += memo.Cost(join.Relational().Stats.RowCount) * cpuCostFactor
 	return cost
 }
 
@@ -306,27 +304,22 @@ func (c *coster) computeIndexJoinCost(join *memo.IndexJoinExpr) memo.Cost {
 	// The rows in the (left) input are used to probe into the (right) table.
 	// Since the matching rows in the table may not all be in the same range, this
 	// counts as random I/O.
-	perRowCost := cpuCostFactor + randIOCostFactor +
-		c.rowScanCost(join.Table, cat.PrimaryIndex, join.Cols.Len())
-	return memo.Cost(leftRowCount) * perRowCost
+	return memo.Cost(1.3435*leftRowCount + 0.0160*float64(join.Cols.Len())*leftRowCount)
 }
 
 func (c *coster) computeLookupJoinCost(join *memo.LookupJoinExpr) memo.Cost {
 	leftRowCount := join.Input.Relational().Stats.RowCount
+	numLookupCols := join.Cols.Difference(join.Input.Relational().OutputCols).Len()
 
 	// The rows in the (left) input are used to probe into the (right) table.
 	// Since the matching rows in the table may not all be in the same range, this
 	// counts as random I/O.
-	perLookupCost := memo.Cost(randIOCostFactor)
-	cost := memo.Cost(leftRowCount) * perLookupCost
 
-	// Each lookup might retrieve many rows; add the IO cost of retrieving the
-	// rows (relevant when we expect many resulting rows per lookup) and the CPU
-	// cost of emitting the rows.
-	numLookupCols := join.Cols.Difference(join.Input.Relational().OutputCols).Len()
-	perRowCost := seqIOCostFactor + c.rowScanCost(join.Table, join.Index, numLookupCols)
-	cost += memo.Cost(join.Relational().Stats.RowCount) * perRowCost
-	return cost
+	const constRowCost = 1.33
+	const returnedColFactor = 0.02
+	perLookupCost := constRowCost + memo.Cost(numLookupCols)*returnedColFactor
+
+	return perLookupCost * memo.Cost(leftRowCount)
 }
 
 func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
@@ -453,9 +446,16 @@ func (c *coster) rowScanCost(table opt.TableID, index int, numScannedCols int) m
 	md := c.mem.Metadata()
 	numCols := md.Table(table).Index(index).ColumnCount()
 
+	const scannedColFactor = 0.00082
+	const returnedColFactor = 0.01714
+	const constRowCost = 0.04731
+
 	// The number of the columns in the index matter because more columns means
 	// more data to scan. The number of columns we actually return also matters
 	// because that is the amount of data that we could potentially transfer over
 	// the network.
-	return memo.Cost(numCols+numScannedCols) * cpuCostFactor
+	return memo.Cost(
+		constRowCost +
+			memo.Cost(numCols)*scannedColFactor +
+			memo.Cost(numScannedCols)*returnedColFactor)
 }
