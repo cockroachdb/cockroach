@@ -17,6 +17,7 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -49,7 +50,6 @@ func (b *Builder) buildUnion(
 	}
 
 	outScope = inScope.push()
-	outScope.appendColumnsFromScope(leftScope)
 
 	// newColsNeeded indicates whether or not we need to synthesize output
 	// columns. This is always required for a UNION, because the output columns
@@ -57,20 +57,20 @@ func (b *Builder) buildUnion(
 	// synthesize new columns to contain these values. This is not necessary for
 	// INTERSECT or EXCEPT, since these operations are basically filters on the
 	// left relation.
-	//
-	// Another benefit to synthesizing new columns is to handle the case
-	// when the type of one of the columns in the left relation is unknown, but
-	// the type of the matching column in the right relation is known.
+	newColsNeeded := clause.Type == tree.UnionOp
+	if newColsNeeded {
+		outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
+	}
+
+	// propagateTypesLeft/propagateTypesRight indicate whether we need to wrap
+	// the left/right side in a projection to cast some of the columns to the
+	// correct type.
 	// For example:
 	//   SELECT NULL UNION SELECT 1
 	// The type of NULL is unknown, and the type of 1 is int. We need to
-	// synthesize a new column so the output column will have the correct type.
-	newColsNeeded := clause.Type == tree.UnionOp
-	if newColsNeeded {
-		// Create a new scope to hold the new synthesized columns.
-		outScope = outScope.push()
-		outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
-	}
+	// wrap the left side in a project operation with a Cast expression so the
+	// output column will have the correct type.
+	var propagateTypesLeft, propagateTypesRight bool
 
 	// Build map from left columns to right columns.
 	for i := range leftScope.cols {
@@ -88,16 +88,29 @@ func (b *Builder) buildUnion(
 			panic(fmt.Errorf("%v types cannot be matched", clause.Type))
 		}
 
-		if newColsNeeded {
-			var typ types.T
-			if l.typ != types.Unknown {
-				typ = l.typ
-			} else {
-				typ = r.typ
+		var typ types.T
+		if l.typ != types.Unknown {
+			typ = l.typ
+			if r.typ == types.Unknown {
+				propagateTypesRight = true
 			}
+		} else {
+			typ = r.typ
+			if r.typ != types.Unknown {
+				propagateTypesLeft = true
+			}
+		}
 
+		if newColsNeeded {
 			b.synthesizeColumn(outScope, string(l.name), typ, nil, nil /* scalar */)
 		}
+	}
+
+	if propagateTypesLeft {
+		leftScope = b.propagateTypes(leftScope, rightScope)
+	}
+	if propagateTypesRight {
+		rightScope = b.propagateTypes(rightScope, leftScope)
 	}
 
 	// Create the mapping between the left-side columns, right-side columns and
@@ -108,6 +121,7 @@ func (b *Builder) buildUnion(
 	if newColsNeeded {
 		newCols = colsToColList(outScope.cols)
 	} else {
+		outScope.appendColumnsFromScope(leftScope)
 		newCols = leftCols
 	}
 
@@ -136,4 +150,33 @@ func (b *Builder) buildUnion(
 	}
 
 	return outScope
+}
+
+// propagateTypes propagates the types of the source columns to the destination
+// columns by wrapping the destination in a Project operation. The Project
+// operation passes through columns that already have the correct type, and
+// creates cast expressions for those that don't.
+func (b *Builder) propagateTypes(dst, src *scope) *scope {
+	expr := dst.expr.(memo.RelExpr)
+	dstCols := dst.cols
+
+	dst = dst.push()
+	dst.cols = make([]scopeColumn, 0, len(dstCols))
+
+	for i := 0; i < len(dstCols); i++ {
+		dstType := dstCols[i].typ
+		srcType := src.cols[i].typ
+		if dstType == types.Unknown && srcType != types.Unknown {
+			// Create a new column which casts the old column to the correct type.
+			colType, _ := coltypes.DatumTypeToColumnType(srcType)
+			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(dstCols[i].id), colType)
+			b.synthesizeColumn(dst, string(dstCols[i].name), srcType, nil /* expr */, castExpr)
+		} else {
+			// The column is already the correct type, so add it as a passthrough
+			// column.
+			dst.appendColumn(&dstCols[i])
+		}
+	}
+	dst.expr = b.constructProject(expr, dst.cols)
+	return dst
 }

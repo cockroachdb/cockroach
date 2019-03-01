@@ -135,27 +135,36 @@ func (s *scope) replace() *scope {
 }
 
 // appendColumnsFromScope adds newly bound variables to this scope.
-// The groups in the new columns are reset to 0.
+// The expressions in the new columns are reset to nil.
 func (s *scope) appendColumnsFromScope(src *scope) {
 	l := len(s.cols)
 	s.cols = append(s.cols, src.cols...)
-	// We want to reset the groups, as these become pass-through columns in the
-	// new scope.
+	// We want to reset the expressions, as these become pass-through columns in
+	// the new scope.
 	for i := l; i < len(s.cols); i++ {
 		s.cols[i].scalar = nil
 	}
 }
 
 // appendColumns adds newly bound variables to this scope.
-// The groups in the new columns are reset to 0.
+// The expressions in the new columns are reset to nil.
 func (s *scope) appendColumns(cols []scopeColumn) {
 	l := len(s.cols)
 	s.cols = append(s.cols, cols...)
-	// We want to reset the groups, as these become pass-through columns in the
-	// new scope.
+	// We want to reset the expressions, as these become pass-through columns in
+	// the new scope.
 	for i := l; i < len(s.cols); i++ {
 		s.cols[i].scalar = nil
 	}
+}
+
+// appendColumn adds a newly bound variable to this scope.
+// The expression in the new column is reset to nil.
+func (s *scope) appendColumn(col *scopeColumn) {
+	s.cols = append(s.cols, *col)
+	// We want to reset the expression, as this becomes a pass-through column in
+	// the new scope.
+	s.cols[len(s.cols)-1].scalar = nil
 }
 
 // addExtraColumns adds the given columns as extra columns, ignoring any
