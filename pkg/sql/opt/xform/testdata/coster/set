@@ -64,14 +64,14 @@ opt
 SELECT k, i FROM a INTERSECT SELECT * FROM b
 ----
 intersect
- ├── columns: k:1(int) i:2(int)
- ├── left columns: k:1(int) i:2(int)
+ ├── columns: k:8(int) i:9(int)
+ ├── left columns: a.k:1(int) a.i:2(int)
  ├── right columns: x:5(int) z:6(int)
- ├── stats: [rows=990, distinct(1,2)=990, null(1,2)=9.91]
+ ├── stats: [rows=990, distinct(8,9)=990, null(8,9)=9.91]
  ├── cost: 2139.93
- ├── key: (1,2)
+ ├── key: (8,9)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
  │    ├── cost: 1060.01
  │    ├── key: (1)
@@ -85,13 +85,13 @@ opt
 SELECT k, i FROM a INTERSECT ALL SELECT * FROM b
 ----
 intersect-all
- ├── columns: k:1(int) i:2(int)
- ├── left columns: k:1(int) i:2(int)
+ ├── columns: k:8(int) i:9(int)
+ ├── left columns: a.k:1(int) a.i:2(int)
  ├── right columns: x:5(int) z:6(int)
  ├── stats: [rows=1000]
  ├── cost: 2140.03
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1060.01
  │    ├── key: (1)
@@ -105,14 +105,14 @@ opt
 SELECT k, i FROM a EXCEPT SELECT * FROM b
 ----
 except
- ├── columns: k:1(int) i:2(int)
- ├── left columns: k:1(int) i:2(int)
+ ├── columns: k:8(int) i:9(int)
+ ├── left columns: a.k:1(int) a.i:2(int)
  ├── right columns: x:5(int) z:6(int)
- ├── stats: [rows=990, distinct(1,2)=990, null(1,2)=9.91]
+ ├── stats: [rows=990, distinct(8,9)=990, null(8,9)=9.91]
  ├── cost: 2139.93
- ├── key: (1,2)
+ ├── key: (8,9)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
  │    ├── cost: 1060.01
  │    ├── key: (1)
@@ -126,13 +126,13 @@ opt
 SELECT k, i FROM a EXCEPT ALL SELECT * FROM b
 ----
 except-all
- ├── columns: k:1(int) i:2(int)
- ├── left columns: k:1(int) i:2(int)
+ ├── columns: k:8(int) i:9(int)
+ ├── left columns: a.k:1(int) a.i:2(int)
  ├── right columns: x:5(int) z:6(int)
  ├── stats: [rows=1000]
  ├── cost: 2140.03
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1060.01
  │    ├── key: (1)

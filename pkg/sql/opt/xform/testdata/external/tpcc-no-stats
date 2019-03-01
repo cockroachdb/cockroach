@@ -991,13 +991,13 @@ EXCEPT ALL
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 ----
 except-all
- ├── columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
- ├── left columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
+ ├── columns: no_w_id:12(int!null) no_d_id:13(int!null) no_o_id:14(int!null)
+ ├── left columns: new_order.no_w_id:3(int) new_order.no_d_id:2(int) new_order.no_o_id:1(int)
  ├── right columns: o_w_id:6(int) o_d_id:5(int) o_id:4(int)
  ├── stats: [rows=1000]
  ├── cost: 2170.25
  ├── scan new_order
- │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
+ │    ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1060.01
  │    ├── key: (1-3)
@@ -1037,20 +1037,20 @@ EXCEPT ALL
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
 ----
 except-all
- ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
- ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
+ ├── columns: o_w_id:12(int!null) o_d_id:13(int!null) o_id:14(int!null)
+ ├── left columns: "order".o_w_id:3(int) "order".o_d_id:2(int) "order".o_id:1(int)
  ├── right columns: no_w_id:11(int) no_d_id:10(int) no_o_id:9(int)
  ├── stats: [rows=10]
  ├── cost: 2160.35
  ├── project
- │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
+ │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null)
  │    ├── stats: [rows=10]
  │    ├── cost: 1090.13
  │    ├── key: (1-3)
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    └── select
- │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) o_carrier_id:6(int)
  │         ├── stats: [rows=10, distinct(1)=9.5617925, null(1)=0, distinct(2)=9.5617925, null(2)=0, distinct(3)=9.5617925, null(3)=0, distinct(6)=1, null(6)=10]
  │         ├── cost: 1090.02
  │         ├── key: (1-3)
@@ -1058,7 +1058,7 @@ except-all
  │         ├── prune: (1-3)
  │         ├── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
  │         ├── scan "order"@order_idx
- │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │         │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) o_carrier_id:6(int)
  │         │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0, distinct(6)=100, null(6)=10]
  │         │    ├── cost: 1080.01
  │         │    ├── key: (1-3)
@@ -1092,13 +1092,13 @@ EXCEPT ALL
 )
 ----
 except-all
- ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
- ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
+ ├── columns: o_w_id:20(int!null) o_d_id:21(int!null) o_id:22(int!null) o_ol_cnt:23(int)
+ ├── left columns: "order".o_w_id:3(int) "order".o_d_id:2(int) "order".o_id:1(int) "order".o_ol_cnt:7(int)
  ├── right columns: ol_w_id:11(int) ol_d_id:10(int) ol_o_id:9(int) count_rows:19(int)
  ├── stats: [rows=1000]
  ├── cost: 2290.04
  ├── scan "order"
- │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
+ │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_ol_cnt:7(int)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1120.01
  │    ├── key: (1-3)
@@ -1138,14 +1138,14 @@ EXCEPT ALL
 )
 ----
 except-all
- ├── columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count:11(int)
- ├── left columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count_rows:11(int)
+ ├── columns: ol_w_id:20(int!null) ol_d_id:21(int!null) ol_o_id:22(int!null) count:23(int)
+ ├── left columns: order_line.ol_w_id:3(int) order_line.ol_d_id:2(int) order_line.ol_o_id:1(int) count_rows:11(int)
  ├── right columns: o_w_id:14(int) o_d_id:13(int) o_id:12(int) o_ol_cnt:18(int)
  ├── stats: [rows=1000]
  ├── cost: 2290.04
  ├── group-by
- │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
- │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
+ │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) count_rows:11(int)
+ │    ├── grouping columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null)
  │    ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0]
  │    ├── cost: 1140.02
  │    ├── key: (1-3)
@@ -1153,7 +1153,7 @@ except-all
  │    ├── prune: (11)
  │    ├── interesting orderings: (+3,+2,-1)
  │    ├── scan order_line@order_line_fk
- │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
+ │    │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null)
  │    │    ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0]
  │    │    ├── cost: 1080.01
  │    │    ├── prune: (1-3)
