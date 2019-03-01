@@ -292,6 +292,7 @@ func (tc *testContext) Sender() client.Sender {
 				tc.Fatal(err)
 			}
 		}
+		tc.Clock().Update(ba.Timestamp)
 		return ba
 	})
 }
@@ -4841,7 +4842,10 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		pushee.Timestamp = test.ts
 		args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
 
-		resp, pErr := tc.SendWrapped(&args)
+		// Set header timestamp to the maximum of the pusher and pushee timestamps.
+		h := roachpb.Header{Timestamp: args.PushTo}
+		h.Timestamp.Forward(pushee.Timestamp)
+		resp, pErr := tc.SendWrappedWith(h, &args)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -5119,7 +5123,10 @@ func TestPushTxnPriorities(t *testing.T) {
 		// Now, attempt to push the transaction with intent epoch set appropriately.
 		args := pushTxnArgs(pusher, pushee, test.pushType)
 
-		_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
+		// Set header timestamp to the maximum of the pusher and pushee timestamps.
+		h := roachpb.Header{Timestamp: args.PushTo}
+		h.Timestamp.Forward(pushee.Timestamp)
+		_, pErr := tc.SendWrappedWith(h, &args)
 
 		if test.expSuccess != (pErr == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, pErr)
