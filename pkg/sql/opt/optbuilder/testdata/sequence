@@ -60,31 +60,31 @@ EXCEPT (SELECT * FROM x)
 EXCEPT (SELECT * FROM y)
 ----
 except
- ├── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
- ├── left columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
- ├── right columns: last_value:13(int) log_cnt:14(int) is_called:15(bool)
+ ├── columns: last_value:25(int!null) log_cnt:26(int!null) is_called:27(bool!null)
+ ├── left columns: last_value:19(int) log_cnt:20(int) is_called:21(bool)
+ ├── right columns: last_value:22(int) log_cnt:23(int) is_called:24(bool)
  ├── except
- │    ├── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
- │    ├── left columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
- │    ├── right columns: last_value:10(int) log_cnt:11(int) is_called:12(bool)
+ │    ├── columns: last_value:19(int!null) log_cnt:20(int!null) is_called:21(bool!null)
+ │    ├── left columns: last_value:13(int) log_cnt:14(int) is_called:15(bool)
+ │    ├── right columns: last_value:16(int) log_cnt:17(int) is_called:18(bool)
  │    ├── except
- │    │    ├── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
- │    │    ├── left columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
- │    │    ├── right columns: last_value:7(int) log_cnt:8(int) is_called:9(bool)
+ │    │    ├── columns: last_value:13(int!null) log_cnt:14(int!null) is_called:15(bool!null)
+ │    │    ├── left columns: last_value:7(int) log_cnt:8(int) is_called:9(bool)
+ │    │    ├── right columns: last_value:10(int) log_cnt:11(int) is_called:12(bool)
  │    │    ├── except
- │    │    │    ├── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
- │    │    │    ├── left columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
+ │    │    │    ├── columns: last_value:7(int!null) log_cnt:8(int!null) is_called:9(bool!null)
+ │    │    │    ├── left columns: last_value:1(int) log_cnt:2(int) is_called:3(bool)
  │    │    │    ├── right columns: last_value:4(int) log_cnt:5(int) is_called:6(bool)
  │    │    │    ├── sequence-select t.public.x
  │    │    │    │    └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
  │    │    │    └── sequence-select t.public.x
  │    │    │         └── columns: last_value:4(int!null) log_cnt:5(int!null) is_called:6(bool!null)
  │    │    └── sequence-select t.public.y
- │    │         └── columns: last_value:7(int!null) log_cnt:8(int!null) is_called:9(bool!null)
+ │    │         └── columns: last_value:10(int!null) log_cnt:11(int!null) is_called:12(bool!null)
  │    └── sequence-select t.public.x
- │         └── columns: last_value:10(int!null) log_cnt:11(int!null) is_called:12(bool!null)
+ │         └── columns: last_value:16(int!null) log_cnt:17(int!null) is_called:18(bool!null)
  └── sequence-select t.public.y
-      └── columns: last_value:13(int!null) log_cnt:14(int!null) is_called:15(bool!null)
+      └── columns: last_value:22(int!null) log_cnt:23(int!null) is_called:24(bool!null)
 
 # Ensure index flags are ignored.
 build

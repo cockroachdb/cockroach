@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local-opt fakedist-opt
 
 statement ok
 CREATE TABLE uniontest (
@@ -101,3 +101,12 @@ render                 ·              ·                 ("?column?", "?column?
 ·                      row 0, expr 0  ''                ·                                     ·
 ·                      row 0, expr 1  ''                ·                                     ·
 ·                      row 0, expr 2  'x'               ·                                     ·
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+# Regression test for #34524. This test is here because the issue still exists
+# in the heuristic planner.
+query I
+(SELECT NULL FROM a) EXCEPT (VALUES((SELECT 1 FROM a LIMIT 1)), (1))
+----
