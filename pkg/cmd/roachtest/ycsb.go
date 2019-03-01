@@ -33,7 +33,7 @@ var performanceExpectations = map[string]map[int]float64{
 }
 
 func getPerformanceExpectation(wl string, cpus int) (float64, bool) {
-	m, exists := performanceExpectations[cloud]
+	m, exists := performanceExpectations[wl]
 	if !exists {
 		return 0, false
 	}
