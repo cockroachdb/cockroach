@@ -140,7 +140,7 @@ func registerTPCC(r *registry) {
 		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			warehouses := 1400
+			warehouses := 1350
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				Duration:   120 * time.Minute,
@@ -165,7 +165,7 @@ func registerTPCC(r *registry) {
 		Tags:       []string{`weekly`},
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			warehouses := 1400
+			warehouses := 1350
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				Duration:   6 * 24 * time.Hour,
