@@ -89,6 +89,25 @@ sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
 # root and non-root users. Load generators running a lot of concurrent
 # workers bump into this often.
 sudo sh -c 'echo "root - nofile 65536\n* - nofile 65536" > /etc/security/limits.d/10-roachprod-nofiles.conf'
+
+# Enable core dumps
+cat <<EOF > /etc/security/limits.d/core_unlimited.conf
+* soft core unlimited
+* hard core unlimited
+root soft core unlimited
+root hard core unlimited
+EOF
+
+mkdir -p /tmp/cores
+chmod a+w /tmp/cores
+CORE_PATTERN="/tmp/cores/core.%e.%p.%h.%t"
+echo "$CORE_PATTERN" > /proc/sys/kernel/core_pattern
+sed -i'~' 's/enabled=1/enabled=0/' /etc/default/apport
+sed -i'~' '/.*kernel\\.core_pattern.*/c\\' /etc/sysctl.conf
+echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
+
+sysctl --system  # reload sysctl settings
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
