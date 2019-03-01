@@ -50,11 +50,17 @@ func NameString(s string) string {
 	return ((*Name)(&s)).String()
 }
 
-// ErrNameString escapes an identifier stored a string to a SQL
+// ErrNameStringP escapes an identifier stored a string to a SQL
 // identifier suitable for printing in error messages, avoiding a heap
 // allocation.
-func ErrNameString(s *string) string {
+func ErrNameStringP(s *string) string {
 	return ErrString(((*Name)(s)))
+}
+
+// ErrNameString escapes an identifier stored a string to a SQL
+// identifier suitable for printing in error messages.
+func ErrNameString(s string) string {
+	return ErrString(((*Name)(&s)))
 }
 
 // Normalize normalizes to lowercase and Unicode Normalization Form C

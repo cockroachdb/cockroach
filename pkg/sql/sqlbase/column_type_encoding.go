@@ -691,7 +691,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			// the mutation planning code.
 			return r, pgerror.NewAssertionErrorf(
 				"locale mismatch %q vs %q for column %q",
-				v.Locale, *col.Type.Locale, tree.ErrNameString(&col.Name))
+				v.Locale, *col.Type.Locale, tree.ErrNameString(col.Name))
 		}
 	case ColumnType_OID:
 		if v, ok := val.(*tree.DOid); ok {
@@ -702,7 +702,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 		return r, pgerror.NewAssertionErrorf("unsupported column type: %s", col.Type.SemanticType)
 	}
 	return r, pgerror.NewAssertionErrorf("mismatched type %q vs %q for column %q",
-		val.ResolvedType(), col.Type.SemanticType, tree.ErrNameString(&col.Name))
+		val.ResolvedType(), col.Type.SemanticType, tree.ErrNameString(col.Name))
 }
 
 // UnmarshalColumnValue is the counterpart to MarshalColumnValues.
