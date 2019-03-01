@@ -515,12 +515,12 @@ func (s *Server) newConnExecutor(
 		},
 		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
 		memMetrics:       memMetrics,
-		planner:          planner{execCfg: s.cfg},
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
 		ctxHolder: ctxHolder{connCtx: ctx},
 	}
+	ex.plannerPool.ex = ex
 
 	ex.state.txnAbortCount = ex.metrics.StatementCounters.TxnAbortCount
 
@@ -576,7 +576,6 @@ func (s *Server) newConnExecutor(
 
 	ex.sessionTracing.ex = ex
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
-	ex.initPlanner(ctx, &ex.planner)
 
 	return ex, nil
 }
@@ -902,11 +901,8 @@ type connExecutor struct {
 	// If nil, canceling this session will be a no-op.
 	onCancelSession context.CancelFunc
 
-	// planner is the "default planner" on a session, to save planner allocations
-	// during serial execution. Since planners are not threadsafe, this is only
-	// safe to use when a statement is not being parallelized. It must be reset
-	// before using.
-	planner planner
+	plannerPool plannerPool
+
 	// phaseTimes tracks session-level phase times. It is copied-by-value
 	// to each planner in session.newPlanner.
 	phaseTimes phaseTimes
@@ -937,6 +933,51 @@ type connExecutor struct {
 	// activated determines whether activate() was called already.
 	// When this is set, close() must be called to release resources.
 	activated bool
+}
+
+// plannerPool creates planners. It can cache one planner to be reused.
+type plannerPool struct {
+	ex *connExecutor
+
+	mu struct {
+		syncutil.Mutex
+		// p is the planner in the pool. Nil if there's currently no planner in the
+		// pool.
+		// It is reset before handing out to clients.
+		p *planner
+	}
+}
+
+// Checkout returns a planner: either a planner from the pool (after resetting),
+// or a brand new one. When done, the caller is supposed to put the planner back
+// with Release().
+//
+// txn can be nil.
+func (pa *plannerPool) Checkout(ctx context.Context, txn *client.Txn, stmtTS time.Time) *planner {
+	pa.mu.Lock()
+	defer pa.mu.Unlock()
+
+	if pa.mu.p == nil {
+		p := &planner{execCfg: pa.ex.server.cfg}
+		pa.ex.initPlanner(ctx, p)
+		pa.ex.resetPlanner(ctx, p, txn, stmtTS)
+		return p
+	}
+	p := pa.mu.p
+	pa.ex.resetPlanner(ctx, p, txn, stmtTS)
+	pa.mu.p = nil
+	return p
+}
+
+func (pa *plannerPool) Release(p *planner) {
+	pa.mu.Lock()
+	defer pa.mu.Unlock()
+
+	if pa.mu.p != nil {
+		// Nothing to do; we only have a single slot for an idle planner.
+		return
+	}
+	pa.mu.p = p
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1870,20 +1911,6 @@ func (ex *connExecutor) implicitTxn() bool {
 	state := ex.machine.CurState()
 	os, ok := state.(stateOpen)
 	return ok && os.ImplicitTxn.Get()
-}
-
-// newPlanner creates a planner inside the scope of the given Session. The
-// statement executed by the planner will be executed in txn. The planner
-// should only be used to execute one statement.
-//
-// txn can be nil.
-func (ex *connExecutor) newPlanner(
-	ctx context.Context, txn *client.Txn, stmtTS time.Time,
-) *planner {
-	p := &planner{execCfg: ex.server.cfg}
-	ex.initPlanner(ctx, p)
-	ex.resetPlanner(ctx, p, txn, stmtTS)
-	return p
 }
 
 // initPlanner initializes a planner so it can can be used for planning a
