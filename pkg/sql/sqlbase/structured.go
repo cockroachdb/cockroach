@@ -584,6 +584,25 @@ func (desc *TableDescriptor) AllNonDropIndexes() []*IndexDescriptor {
 	return indexes
 }
 
+// AllPublicAndNonPublicChecks returns all the checks, including those being
+// added in the mutations.
+func (desc *TableDescriptor) AllPublicAndNonPublicChecks() []*TableDescriptor_CheckConstraint {
+	// For now, a check constraint is either in the mutations list or Validated.
+	// If it shows up twice after combining those two slices, it's a duplicate.
+	checks := make([]*TableDescriptor_CheckConstraint, 0, len(desc.Checks)+len(desc.Mutations))
+	for _, c := range desc.Checks {
+		if c.Validity == ConstraintValidity_Validated {
+			checks = append(checks, c)
+		}
+	}
+	for _, m := range desc.Mutations {
+		if c := m.GetConstraint(); c != nil {
+			checks = append(checks, &c.Check)
+		}
+	}
+	return checks
+}
+
 // ForeachNonDropIndex runs a function on all indexes, including those being
 // added in the mutations.
 func (desc *TableDescriptor) ForeachNonDropIndex(f func(*IndexDescriptor) error) error {
@@ -2216,12 +2235,14 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 	return nil
 }
 
-// AddCheckValidationMutation adds a check constraint mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddCheckValidationMutation(name string) {
+// AddCheckValidationMutation adds a check constraint validation mutation to desc.Mutations.
+func (desc *MutableTableDescriptor) AddCheckValidationMutation(
+	ck *TableDescriptor_CheckConstraint,
+) {
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToValidate{
-				ConstraintType: ConstraintToValidate_CHECK, Name: name,
+				ConstraintType: ConstraintToValidate_CHECK, Name: ck.Name, Check: *ck,
 			},
 		},
 		Direction: DescriptorMutation_ADD,

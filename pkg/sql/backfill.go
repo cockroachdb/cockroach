@@ -125,6 +125,8 @@ func (sc *SchemaChanger) runBackfill(
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexDescs []sqlbase.IndexDescriptor
 
+	var addedChecks []sqlbase.TableDescriptor_CheckConstraint
+	var droppedChecks []sqlbase.TableDescriptor_CheckConstraint
 	var checksToValidate []sqlbase.ConstraintToValidate
 
 	var tableDesc *sqlbase.TableDescriptor
@@ -161,6 +163,7 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
 				case sqlbase.ConstraintToValidate_CHECK:
+					addedChecks = append(addedChecks, t.Constraint.Check)
 					checksToValidate = append(checksToValidate, *t.Constraint)
 				default:
 					return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
@@ -178,7 +181,16 @@ func (sc *SchemaChanger) runBackfill(
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				}
 			case *sqlbase.DescriptorMutation_Constraint:
-				// no-op
+				// Only possible during a rollback
+				if !m.Rollback {
+					panic("trying to drop constraint through schema changer outside of a rollback")
+				}
+				switch t.Constraint.ConstraintType {
+				case sqlbase.ConstraintToValidate_CHECK:
+					droppedChecks = append(droppedChecks, t.Constraint.Check)
+				default:
+					return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
+				}
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
 			}
@@ -205,6 +217,39 @@ func (sc *SchemaChanger) runBackfill(
 	if len(addedIndexDescs) > 0 {
 		// Check if bulk-adding is enabled and supported by indexes (ie non-unique).
 		if err := sc.backfillIndexes(ctx, evalCtx, lease, version); err != nil {
+			return err
+		}
+	}
+
+	// Make check constraints public (or drop them, if it's a rollback).
+	if len(addedChecks) > 0 || len(droppedChecks) > 0 {
+		_, err := sc.leaseMgr.Publish(ctx, sc.tableID,
+			func(desc *sqlbase.MutableTableDescriptor) error {
+				checks := make([]*sqlbase.TableDescriptor_CheckConstraint, 0)
+				for _, c := range desc.Checks {
+					found := false
+					for _, dropped := range droppedChecks {
+						if dropped.Name == c.Name {
+							found = true
+							break
+						}
+					}
+					if !found {
+						checks = append(checks, c)
+					}
+				}
+				for i := range addedChecks {
+					checks = append(checks, &addedChecks[i])
+				}
+
+				desc.Checks = checks
+				return nil
+			},
+			func(txn *client.Txn) error {
+				return nil
+			},
+		)
+		if err != nil {
 			return err
 		}
 	}
@@ -939,6 +984,7 @@ func runSchemaChangesInTxn(
 			case *sqlbase.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
 				case sqlbase.ConstraintToValidate_CHECK:
+					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
 					checksToValidate = append(checksToValidate, *t.Constraint)
 				default:
 					return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)

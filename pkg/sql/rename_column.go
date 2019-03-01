@@ -121,6 +121,7 @@ func (n *renameColumnNode) startExec(params runParams) error {
 	}
 
 	// Rename the column in CHECK constraints.
+	// TODO (lucy): update after #35091 is merged
 	for i := range tableDesc.Checks {
 		var err error
 		tableDesc.Checks[i].Expr, err = renameIn(tableDesc.Checks[i].Expr)
