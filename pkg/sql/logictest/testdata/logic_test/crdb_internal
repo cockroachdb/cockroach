@@ -290,8 +290,8 @@ node_id  component  field   value
 query ITTTTT colnames
 SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version FROM crdb_internal.gossip_nodes WHERE node_id = 1
 ----
-node_id  network  address           attrs  locality            server_version
-1        tcp      127.0.0.1:<port>  []     {"region": "test"}  <server_version>
+node_id  network  address           attrs  locality                         server_version
+1        tcp      127.0.0.1:<port>  []     {"dc": "dc1", "region": "test"}  <server_version>
 
 query IITBB colnames
 SELECT node_id, epoch, regexp_replace(expiration, '^\d+\.\d+,\d+$', '<timestamp>') as expiration, draining, decommissioning FROM crdb_internal.gossip_liveness WHERE node_id = 1
@@ -303,8 +303,8 @@ query ITTTTTT colnames
 SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version, regexp_replace(go_version, '^go.+$', '<go_version>') as go_version
 FROM crdb_internal.kv_node_status WHERE node_id = 1
 ----
-node_id  network  address           attrs  locality            server_version    go_version
-1        tcp      127.0.0.1:<port>  []     {"region": "test"}  <server_version>  <go_version>
+node_id  network  address           attrs  locality                         server_version    go_version
+1        tcp      127.0.0.1:<port>  []     {"dc": "dc1", "region": "test"}  <server_version>  <go_version>
 
 query IITI colnames
 SELECT node_id, store_id, attrs, used
