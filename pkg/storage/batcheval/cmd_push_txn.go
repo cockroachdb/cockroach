@@ -111,8 +111,13 @@ func PushTxn(
 		return result.Result{}, ErrTransactionUnsupported
 	}
 
-	if args.Now == (hlc.Timestamp{}) {
-		return result.Result{}, errors.Errorf("the field Now must be provided")
+	// Verify that the PushTxn's timestamp is not less than the timestamp that
+	// the request intends to push the transaction to. Transactions should not
+	// be pushed into the future or their effect may not be fully reflected in
+	// a future leaseholder's timestamp cache. This is analogous to how reads
+	// should not be performed at a timestamp in the future.
+	if h.Timestamp.Less(args.PushTo) {
+		return result.Result{}, errors.Errorf("PushTo %s larger than PushRequest header timestamp %s", args.PushTo, h.Timestamp)
 	}
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
@@ -200,7 +205,7 @@ func PushTxn(
 	var reason string
 
 	switch {
-	case txnwait.IsExpired(args.Now, &reply.PusheeTxn):
+	case txnwait.IsExpired(h.Timestamp, &reply.PusheeTxn):
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).
@@ -244,9 +249,11 @@ func PushTxn(
 	case roachpb.PUSH_ABORT:
 		// If aborting the transaction, set the new status.
 		reply.PusheeTxn.Status = roachpb.ABORTED
-		// Forward the timestamp to accommodate AbortSpan GC. See method
-		// comment for details.
-		reply.PusheeTxn.Timestamp.Forward(reply.PusheeTxn.LastActive())
+		// If the transaction record was already present, forward the timestamp
+		// to accommodate AbortSpan GC. See method comment for details.
+		if ok {
+			reply.PusheeTxn.Timestamp.Forward(reply.PusheeTxn.LastActive())
+		}
 	case roachpb.PUSH_TIMESTAMP:
 		// Otherwise, update timestamp to be one greater than the request's
 		// timestamp. This new timestamp will be use to update the read

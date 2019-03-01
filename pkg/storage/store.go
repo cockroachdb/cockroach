@@ -2721,10 +2721,16 @@ func (s *Store) Send(
 		return nil, roachpb.NewError(err)
 	}
 
+	// In 2.1 it was possible for nodes to send PushTxn requests without
+	// properly reflecting the time that they wanted the push to happen
+	// in the batch's header timestamp. Ensure that this timestamp is
+	// sufficiently advanced to prevent lost timestamp cache updates.
 	// TODO(nvanbenschoten): Remove this all in 19.2.
 	if !s.cfg.Settings.Version.IsActive(cluster.VersionPushTxnToInclusive) {
 		for _, union := range ba.Requests {
 			if pushReq, ok := union.GetInner().(*roachpb.PushTxnRequest); ok {
+				ba.Timestamp.Forward(pushReq.DeprecatedNow)
+
 				// While here, correct the request's PushTo arg. Before
 				// VersionPushTxnToInclusive, pushers would provide _their_
 				// timestamp instead of one logical tick past their timestamp
@@ -3068,7 +3074,9 @@ func (s *Store) maybeWaitForPushee(
 		// request may have been waiting to push the txn. If we don't
 		// move the timestamp forward to the current time, we may fail
 		// to push a txn which has expired.
-		pushReqCopy.Now.Forward(s.Clock().Now())
+		now := s.Clock().Now()
+		ba.Timestamp.Forward(now)
+		pushReqCopy.DeprecatedNow.Forward(now)
 		ba.Requests = nil
 		ba.Add(&pushReqCopy)
 	} else if ba.IsSingleQueryTxnRequest() {

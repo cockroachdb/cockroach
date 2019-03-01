@@ -80,16 +80,6 @@ func (r *Replica) updateTimestampCache(
 				// creation of the transaction record entirely.
 				pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 
-				// Update the local clock to the pushee's new timestamp. This
-				// ensures that we can safely update the timestamp cache based
-				// on this value. The pushee's timestamp is not reflected in
-				// the batch request's or response's timestamp.
-				// TODO(nvanbenschoten): there are some concerns that this is
-				// incorrect because this pushee.Timestamp was not accounted
-				// for in the local clock before this request's lease check.
-				// Do something about it.
-				r.store.Clock().Update(pushee.Timestamp)
-
 				var readCache bool
 				switch pushee.Status {
 				case roachpb.PENDING:

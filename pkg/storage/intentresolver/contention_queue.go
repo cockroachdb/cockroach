@@ -257,7 +257,10 @@ func (cq *contentionQueue) add(
 					log.VEventf(ctx, 3, "%s at front of queue; breaking from loop", txnID(curPusher.txn))
 					break Loop
 				}
-				pushReq := &roachpb.PushTxnRequest{
+
+				b := &client.Batch{}
+				b.Header.Timestamp = cq.clock.Now()
+				b.AddRawRequest(&roachpb.PushTxnRequest{
 					RequestHeader: roachpb.RequestHeader{
 						Key: pusheeTxn.Key,
 					},
@@ -265,11 +268,9 @@ func (cq *contentionQueue) add(
 					PusheeTxn:       *pusheeTxn,
 					PushTo:          h.Timestamp.Next(),
 					InclusivePushTo: true,
-					Now:             cq.clock.Now(),
+					DeprecatedNow:   b.Header.Timestamp,
 					PushType:        roachpb.PUSH_ABORT,
-				}
-				b := &client.Batch{}
-				b.AddRawRequest(pushReq)
+				})
 				log.VEventf(ctx, 3, "%s pushing %s to detect dependency cycles", txnID(curPusher.txn), pusheeTxn.ID.Short())
 				if err := cq.db.Run(ctx, b); err != nil {
 					log.VErrEventf(ctx, 2, "while waiting in push contention queue to push %s: %s", pusheeTxn.ID.Short(), b.MustPErr())
