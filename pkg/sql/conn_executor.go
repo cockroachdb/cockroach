@@ -623,7 +623,7 @@ func (s *Server) newConnExecutorWithTxn(
 		ctx,
 		explicitTxn,
 		txn.OrigTimestamp().GoTime(),
-		/* historicalTimestamp */ nil,
+		nil, /* historicalTimestamp */
 		txn.UserPriority(),
 		tree.ReadWrite,
 		txn,
