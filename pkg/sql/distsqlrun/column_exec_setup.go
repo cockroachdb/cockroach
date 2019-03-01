@@ -331,12 +331,13 @@ func newColOperator(
 			)
 			if len(core.JoinReader.LookupColumns) == 0 {
 				jr, err = newIndexJoiner(
-					flowCtx, spec.ProcessorID, core.JoinReader, input, &distsqlpb.PostProcessSpec{}, nil /* output */)
+					flowCtx, spec.ProcessorID, core.JoinReader, input, post, nil /* output */)
 			} else {
 				jr, err = newJoinReader(
-					flowCtx, spec.ProcessorID, core.JoinReader, input, &distsqlpb.PostProcessSpec{}, nil, /* output */
+					flowCtx, spec.ProcessorID, core.JoinReader, input, post, nil, /* output */
 				)
 			}
+			post = &distsqlpb.PostProcessSpec{}
 			if err != nil {
 				return nil, err
 			}
