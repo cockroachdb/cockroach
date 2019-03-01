@@ -618,7 +618,7 @@ values
  └── (NULL,) [type=tuple{string}]
 
 # Regression test for #34930.
-norm
+norm expect=SimplifyCaseWhenConstValue
 SELECT
     CASE
     WHEN true THEN NULL
@@ -632,6 +632,19 @@ values
  ├── key: ()
  ├── fd: ()-->(1)
  └── (NULL,) [type=tuple{decimal}]
+
+# Regression test for #35246.
+norm expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE WHEN true THEN NULL ELSE 'foo' END ||
+    CASE WHEN true THEN NULL ELSE 'bar' END
+----
+values
+ ├── columns: "?column?":1(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,) [type=tuple{string}]
 
 # Verify that a true condition does not remove non-constant expressions
 # proceeding it.

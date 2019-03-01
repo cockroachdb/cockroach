@@ -65,6 +65,25 @@ func InferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
 	return o.ReturnType
 }
 
+// InferWhensType returns the type of a CASE expression, which is
+// of the form:
+//   CASE [ <cond> ]
+//       WHEN <condval1> THEN <expr1>
+//     [ WHEN <condval2> THEN <expr2> ] ...
+//     [ ELSE <expr> ]
+//   END
+// The type is equal to the type of the WHEN <condval> THEN <expr> clauses, or
+// the type of the ELSE <expr> value if all the previous types are unknown.
+func InferWhensType(whens ScalarListExpr, orElse opt.ScalarExpr) types.T {
+	for _, when := range whens {
+		childType := when.DataType()
+		if childType != types.Unknown {
+			return childType
+		}
+	}
+	return orElse.DataType()
+}
+
 // BinaryOverloadExists returns true if the given binary operator exists with the
 // given arguments.
 func BinaryOverloadExists(op opt.Operator, leftType, rightType types.T) bool {
@@ -280,13 +299,7 @@ func typeCoalesce(e opt.ScalarExpr) types.T {
 // the type of the ELSE <expr> value if all the previous types are unknown.
 func typeCase(e opt.ScalarExpr) types.T {
 	caseExpr := e.(*CaseExpr)
-	for _, when := range caseExpr.Whens {
-		childType := when.DataType()
-		if childType != types.Unknown {
-			return childType
-		}
-	}
-	return caseExpr.OrElse.DataType()
+	return InferWhensType(caseExpr.Whens, caseExpr.OrElse)
 }
 
 // typeWhen returns the type of a WHEN <condval> THEN <expr> clause inside a
