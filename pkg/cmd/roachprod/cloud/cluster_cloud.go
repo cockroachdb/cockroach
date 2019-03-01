@@ -227,7 +227,7 @@ func CreateCluster(name string, nodes int, opts vm.CreateOpts) error {
 	vmLocations := map[string][]string{}
 	for i, p := 1, 0; i <= nodes; i++ {
 		pName := opts.VMProviders[p]
-		vmName := fmt.Sprintf("%s-%0.4d", name, i)
+		vmName := vm.Name(name, i)
 		vmLocations[pName] = append(vmLocations[pName], vmName)
 
 		p = (p + 1) % providerCount

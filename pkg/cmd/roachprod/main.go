@@ -85,6 +85,7 @@ var (
 	external       = false
 	adminurlOpen   = false
 	adminurlPath   = ""
+	adminurlIPs    = false
 	useTreeDist    = true
 	encrypt        = false
 	quiet          = false
@@ -702,6 +703,15 @@ func syncAll(cloud *cld.Cloud, quiet bool) error {
 	if err := syncHosts(cloud); err != nil {
 		return err
 	}
+
+	var vms vm.List
+	for _, c := range cloud.Clusters {
+		vms = append(vms, c.VMs...)
+	}
+	if err := gce.SyncDNS(vms); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to update %s DNS: %v", gce.Subdomain, err)
+	}
+
 	err = vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
 		return p.CleanSSH()
 	})
@@ -1259,7 +1269,10 @@ var adminurlCmd = &cobra.Command{
 		}
 
 		for _, node := range c.ServerNodes() {
-			ip := c.VMs[node-1]
+			host := vm.Name(c.Name, node) + "." + gce.Subdomain
+			if adminurlIPs {
+				host = c.VMs[node-1]
+			}
 			port := install.GetAdminUIPort(c.Impl.NodePort(c, node))
 			scheme := "http"
 			if c.Secure {
@@ -1268,7 +1281,7 @@ var adminurlCmd = &cobra.Command{
 			if !strings.HasPrefix(adminurlPath, "/") {
 				adminurlPath = "/" + adminurlPath
 			}
-			url := fmt.Sprintf("%s://%s:%d%s", scheme, ip, port, adminurlPath)
+			url := fmt.Sprintf("%s://%s:%d%s", scheme, host, port, adminurlPath)
 			if adminurlOpen {
 				if err := exec.Command("python", "-m", "webbrowser", url).Run(); err != nil {
 					return err
@@ -1462,6 +1475,8 @@ func main() {
 		&adminurlOpen, `open`, false, `Open the url in a browser`)
 	adminurlCmd.Flags().StringVar(
 		&adminurlPath, `path`, "/", `Path to add to URL (e.g. to open a same page on each node)`)
+	adminurlCmd.Flags().BoolVar(
+		&adminurlIPs, `ips`, false, `Use Public IPs instead of DNS names in URL`)
 
 	gcCmd.Flags().BoolVarP(
 		&dryrun, "dry-run", "n", dryrun, "dry run (don't perform any actions)")
