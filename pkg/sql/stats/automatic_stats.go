@@ -38,7 +38,7 @@ import (
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 	"sql.stats.experimental_automatic_collection.enabled",
 	"experimental automatic statistics collection mode",
-	false,
+	true,
 )
 
 // AutomaticStatisticsIdleTime controls the cluster setting for the fraction
