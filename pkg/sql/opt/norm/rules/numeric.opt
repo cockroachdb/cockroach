@@ -3,28 +3,36 @@
 # =============================================================================
 
 # FoldPlusZero folds $left + 0 for numeric types.
+#
+# Note: It is necessary to cast $left to the column type of the binary
+# operation since the type of $left may not match the column type. For example,
+# 1::int + 0::decimal should result in 1::decimal, not 1::int. The execution
+# engine panics when it expects one type but receives another, so this cast is
+# essential. If $left is already of the correct type, the cast will be removed
+# by the EliminateCast rule. Otherwise, if $left is a constant, the cast will
+# be folded away by the FoldCast rule.
 [FoldPlusZero, Normalize]
-(Plus $left:* (Const 0)) => $left
+(Plus $left:* $right:(Const 0)) => (Cast $left (BinaryColType Plus $left $right))
 
 # FoldZeroPlus folds 0 + $right for numeric types.
 [FoldZeroPlus, Normalize]
-(Plus (Const 0) $right:*) => $right
+(Plus $left:(Const 0) $right:*) => (Cast $right (BinaryColType Plus $left $right))
 
 # FoldMinusZero folds $left - 0 for numeric types.
 [FoldMinusZero, Normalize]
-(Minus $left:* (Const 0)) => $left
+(Minus $left:* $right:(Const 0)) => (Cast $left (BinaryColType Minus $left $right))
 
 # FoldMultOne folds $left * 1 for numeric types.
 [FoldMultOne, Normalize]
-(Mult $left:* (Const 1)) => $left
+(Mult $left:* $right:(Const 1)) => (Cast $left (BinaryColType Mult $left $right))
 
 # FoldOneMult folds 1 * $right for numeric types.
 [FoldOneMult, Normalize]
-(Mult (Const 1) $right:*) => $right
+(Mult $left:(Const 1) $right:*) => (Cast $right (BinaryColType Mult $left $right))
 
 # FoldDivOne folds $left / 1 for numeric types.
 [FoldDivOne, Normalize]
-(Div | FloorDiv $left:* (Const 1)) => $left
+(Div | FloorDiv $left:* $right:(Const 1)) => (Cast $left (BinaryColType (OpName) $left $right))
 
 # InvertMinus rewrites -(a - b) to (b - a) if the operand types allow it.
 [InvertMinus, Normalize]

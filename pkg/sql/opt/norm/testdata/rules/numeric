@@ -34,6 +34,28 @@ project
       ├── d + d [type=decimal, outer=(4)]
       └── d + d [type=decimal, outer=(4)]
 
+
+# Regression test for #35113.
+opt expect=FoldPlusZero
+SELECT 1::int8 + 0::decimal
+----
+values
+ ├── columns: "?column?":1(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (1,) [type=tuple{decimal}]
+
+opt expect=FoldZeroPlus
+SELECT 0::decimal + 1::int8
+----
+values
+ ├── columns: "?column?":1(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (1,) [type=tuple{decimal}]
+
 # --------------------------------------------------
 # FoldMinusZero
 # --------------------------------------------------
@@ -54,6 +76,17 @@ project
       ├── i + i [type=int, outer=(2)]
       ├── f + f [type=float, outer=(3)]
       └── d + d [type=decimal, outer=(4)]
+
+# Regression test for #35113.
+opt expect=FoldMinusZero
+SELECT 0::int8 - 0::decimal
+----
+values
+ ├── columns: "?column?":1(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (0,) [type=tuple{decimal}]
 
 # --------------------------------------------------
 # FoldMultOne, FoldOneMult
@@ -79,6 +112,27 @@ project
       ├── d + d [type=decimal, outer=(4)]
       └── d + d [type=decimal, outer=(4)]
 
+# Regression test for #35113.
+opt expect=FoldMultOne
+SELECT 2::int8 * 1::decimal
+----
+values
+ ├── columns: "?column?":1(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (2,) [type=tuple{decimal}]
+
+opt expect=FoldOneMult
+SELECT 1::decimal * 2::int8
+----
+values
+ ├── columns: "?column?":1(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (2,) [type=tuple{decimal}]
+
 # --------------------------------------------------
 # FoldDivOne
 # --------------------------------------------------
@@ -95,9 +149,30 @@ project
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections
-      ├── variable: i [type=int, outer=(2)]
+      ├── i::DECIMAL [type=decimal, outer=(2)]
       ├── variable: f [type=float, outer=(3)]
       └── variable: d [type=decimal, outer=(4)]
+
+# Regression test for #35113.
+opt expect=FoldDivOne
+SELECT 1::int8 / 1::decimal
+----
+values
+ ├── columns: "?column?":1(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (1,) [type=tuple{decimal}]
+
+opt expect=FoldDivOne
+SELECT 1::int8 / 1::int8
+----
+values
+ ├── columns: "?column?":1(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (1,) [type=tuple{decimal}]
 
 # --------------------------------------------------
 # InvertMinus
