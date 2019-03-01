@@ -2536,12 +2536,12 @@ func TestDistributedTxnCleanup(t *testing.T) {
 				// normal or min priority txn.
 				if force {
 					ba := roachpb.BatchRequest{}
+					ba.Timestamp = store.Clock().Now()
 					ba.RangeID = lhs.RangeID
 					ba.Add(&roachpb.PushTxnRequest{
 						RequestHeader: roachpb.RequestHeader{
 							Key: proto.Key,
 						},
-						Now:       store.Clock().Now(),
 						PusheeTxn: proto.TxnMeta,
 						PushType:  roachpb.PUSH_ABORT,
 						Force:     true,
