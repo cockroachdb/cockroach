@@ -1,0 +1,201 @@
+exec-ddl
+CREATE TABLE a (a INT PRIMARY KEY)
+----
+TABLE a
+ ├── a int not null
+ └── INDEX primary
+      └── a int not null
+
+exec-ddl
+CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
+----
+TABLE b
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string not null
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
+
+# --------------------------------------------------
+# EliminateUnionAllLeft
+# --------------------------------------------------
+
+opt expect=EliminateUnionAllLeft
+SELECT k FROM
+  (SELECT k FROM b)
+  UNION ALL
+  (SELECT k FROM b WHERE k IN ())
+----
+project
+ ├── columns: k:11(int)
+ ├── scan b
+ │    ├── columns: b.k:1(int!null)
+ │    └── key: (1)
+ └── projections
+      └── variable: b.k [type=int, outer=(1)]
+
+# --------------------------------------------------
+# EliminateUnionAllRight
+# --------------------------------------------------
+
+opt expect=EliminateUnionAllRight
+SELECT k FROM
+  (SELECT k FROM b WHERE Null)
+  UNION ALL
+  (SELECT k FROM b)
+----
+project
+ ├── columns: k:11(int)
+ ├── scan b
+ │    ├── columns: b.k:6(int!null)
+ │    └── key: (6)
+ └── projections
+      └── variable: b.k [type=int, outer=(6)]
+
+opt
+SELECT k FROM
+  (SELECT k FROM b WHERE False)
+  UNION ALL
+  (SELECT k FROM b WHERE i IN ())
+----
+values
+ ├── columns: k:11(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(11)
+
+# --------------------------------------------------
+# PropagateSetTypesLeft + PropagateSetTypesRight
+# --------------------------------------------------
+
+opt expect=PropagateSetTypesLeft
+VALUES (NULL, NULL), (NULL, 'x') UNION VALUES (1, 'a'), (2, 'b')
+----
+union
+ ├── columns: column1:5(int) column2:6(string)
+ ├── left columns: column1:7(int) column2:2(string)
+ ├── right columns: column1:3(int) column2:4(string)
+ ├── cardinality: [1 - 4]
+ ├── key: (5,6)
+ ├── project
+ │    ├── columns: column1:7(int) column2:2(string)
+ │    ├── cardinality: [2 - 2]
+ │    ├── values
+ │    │    ├── columns: column1:1(unknown) column2:2(string)
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (NULL, NULL) [type=tuple{unknown, string}]
+ │    │    └── (NULL, 'x') [type=tuple{unknown, string}]
+ │    └── projections
+ │         └── column1::INT8 [type=int, outer=(1)]
+ └── values
+      ├── columns: column1:3(int) column2:4(string)
+      ├── cardinality: [2 - 2]
+      ├── (1, 'a') [type=tuple{int, string}]
+      └── (2, 'b') [type=tuple{int, string}]
+
+opt expect=PropagateSetTypesRight
+VALUES (3, NULL), (NULL, 'x') INTERSECT VALUES (1, NULL), (2, NULL)
+----
+intersect
+ ├── columns: column1:5(int) column2:6(string)
+ ├── left columns: column1:1(int) column2:2(string)
+ ├── right columns: column1:3(int) column2:7(string)
+ ├── cardinality: [0 - 2]
+ ├── key: (5,6)
+ ├── values
+ │    ├── columns: column1:1(int) column2:2(string)
+ │    ├── cardinality: [2 - 2]
+ │    ├── (3, NULL) [type=tuple{int, string}]
+ │    └── (NULL, 'x') [type=tuple{int, string}]
+ └── project
+      ├── columns: column2:7(string) column1:3(int)
+      ├── cardinality: [2 - 2]
+      ├── values
+      │    ├── columns: column1:3(int) column2:4(unknown)
+      │    ├── cardinality: [2 - 2]
+      │    ├── (1, NULL) [type=tuple{int, unknown}]
+      │    └── (2, NULL) [type=tuple{int, unknown}]
+      └── projections
+           └── column2::STRING [type=string, outer=(4)]
+
+opt expect=(PropagateSetTypesLeft,PropagateSetTypesRight)
+VALUES (NULL, NULL), (NULL, 'x') UNION ALL VALUES (1, NULL), (2, NULL)
+----
+union-all
+ ├── columns: column1:5(int) column2:6(string)
+ ├── left columns: column1:7(int) column2:2(string)
+ ├── right columns: column1:3(int) column2:8(string)
+ ├── cardinality: [4 - 4]
+ ├── project
+ │    ├── columns: column1:7(int) column2:2(string)
+ │    ├── cardinality: [2 - 2]
+ │    ├── values
+ │    │    ├── columns: column1:1(unknown) column2:2(string)
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (NULL, NULL) [type=tuple{unknown, string}]
+ │    │    └── (NULL, 'x') [type=tuple{unknown, string}]
+ │    └── projections
+ │         └── column1::INT8 [type=int, outer=(1)]
+ └── project
+      ├── columns: column2:8(string) column1:3(int)
+      ├── cardinality: [2 - 2]
+      ├── values
+      │    ├── columns: column1:3(int) column2:4(unknown)
+      │    ├── cardinality: [2 - 2]
+      │    ├── (1, NULL) [type=tuple{int, unknown}]
+      │    └── (2, NULL) [type=tuple{int, unknown}]
+      └── projections
+           └── column2::STRING [type=string, outer=(4)]
+
+opt expect-not=(PropagateSetTypesLeft,PropagateSetTypesRight)
+VALUES (NULL, NULL), (NULL, NULL) UNION ALL VALUES (NULL, NULL), (NULL, NULL)
+----
+union-all
+ ├── columns: column1:5(unknown) column2:6(unknown)
+ ├── left columns: column1:1(unknown) column2:2(unknown)
+ ├── right columns: column1:3(unknown) column2:4(unknown)
+ ├── cardinality: [4 - 4]
+ ├── values
+ │    ├── columns: column1:1(unknown) column2:2(unknown)
+ │    ├── cardinality: [2 - 2]
+ │    ├── (NULL, NULL) [type=tuple{unknown, unknown}]
+ │    └── (NULL, NULL) [type=tuple{unknown, unknown}]
+ └── values
+      ├── columns: column1:3(unknown) column2:4(unknown)
+      ├── cardinality: [2 - 2]
+      ├── (NULL, NULL) [type=tuple{unknown, unknown}]
+      └── (NULL, NULL) [type=tuple{unknown, unknown}]
+
+# Regression test for #34524.
+opt expect=PropagateSetTypesLeft
+(SELECT NULL FROM a) EXCEPT (VALUES((SELECT 1 FROM a LIMIT 1)), (1))
+----
+except
+ ├── columns: "?column?":6(int)
+ ├── left columns: "?column?":7(int)
+ ├── right columns: column1:5(int)
+ ├── key: (6)
+ ├── project
+ │    ├── columns: "?column?":7(int)
+ │    ├── fd: ()-->(7)
+ │    ├── scan a
+ │    └── projections
+ │         └── null [type=int]
+ └── values
+      ├── columns: column1:5(int)
+      ├── cardinality: [2 - 2]
+      ├── tuple [type=tuple{int}]
+      │    └── subquery [type=int]
+      │         └── project
+      │              ├── columns: "?column?":4(int!null)
+      │              ├── cardinality: [0 - 1]
+      │              ├── key: ()
+      │              ├── fd: ()-->(4)
+      │              ├── scan a
+      │              │    ├── limit: 1
+      │              │    └── key: ()
+      │              └── projections
+      │                   └── const: 1 [type=int]
+      └── (1,) [type=tuple{int}]

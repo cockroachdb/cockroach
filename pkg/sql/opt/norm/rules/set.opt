@@ -1,0 +1,73 @@
+# =============================================================================
+# set.opt contains normalization rules for set operators.
+# =============================================================================
+
+# EliminateUnionAllLeft replaces a union all with a right side having a
+# cardinality of zero, with just the left side operand.
+[EliminateUnionAllLeft, Normalize]
+(UnionAll
+    $left:*
+    $right:* & (HasZeroRows $right)
+    $colmap:*
+)
+=>
+(Project
+    $left
+    (ProjectColMapLeft $colmap)
+    (MakeEmptyColSet)
+)
+
+# EliminateUnionAllRight replaces a union all with a left side having a
+# cardinality of zero, with just the right side operand.
+[EliminateUnionAllRight, Normalize]
+(UnionAll
+    $left:* & (HasZeroRows $left)
+    $right:*
+    $colmap:*
+)
+=>
+(Project
+    $right
+    (ProjectColMapRight $colmap)
+    (MakeEmptyColSet)
+)
+
+# PropagateSetTypesLeft applies for all set operations if the types of the
+# left input columns do not match the types of the output columns. This can
+# happen if a column on the left side has type Unknown, but the corresponding
+# column on the right side has a known type such as Int. The known type must
+# be propagated to the left side to prevent errors in the execution engine
+# related to mismatched types.
+#
+# If there are any column types on the left that don't match the output, then
+# PropagateUnionTypesLeft propagates the output types of the given Set operation
+# down to the left input by wrapping the left input in a Project operation.
+# The Project operation passes through columns that already have the correct
+# type, and creates cast expressions for those that don't.
+[PropagateSetTypesLeft, Normalize]
+(Set
+  $left:*
+  $right:*
+  $private:* & ^(SetTypesMatchLeft $private)
+)
+=>
+(PropagateSetTypesLeft (OpName)
+  $left
+  $right
+  $private
+)
+
+# PropagateSetTypesRight is similar to PropagateSetTypesLeft, but applies
+# to the right input rather than the left.
+[PropagateSetTypesRight, Normalize]
+(Set
+  $left:*
+  $right:*
+  $private:* & ^(SetTypesMatchRight $private)
+)
+=>
+(PropagateSetTypesRight (OpName)
+  $left
+  $right
+  $private
+)

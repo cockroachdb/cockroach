@@ -658,32 +658,6 @@ func (c *CustomFuncs) AreProjectionsCorrelated(
 	return false
 }
 
-// ProjectColMapLeft returns a Projections operator that maps the left side
-// columns in a SetPrivate to the output columns in it. Useful for replacing set
-// operations with simpler constructs.
-func (c *CustomFuncs) ProjectColMapLeft(set *memo.SetPrivate) memo.ProjectionsExpr {
-	return c.projectColMapSide(set.OutCols, set.LeftCols)
-}
-
-// ProjectColMapRight returns a Project operator that maps the right side
-// columns in a SetPrivate to the output columns in it. Useful for replacing set
-// operations with simpler constructs.
-func (c *CustomFuncs) ProjectColMapRight(set *memo.SetPrivate) memo.ProjectionsExpr {
-	return c.projectColMapSide(set.OutCols, set.RightCols)
-}
-
-// projectColMapSide implements the side-agnostic logic from ProjectColMapLeft
-// and ProjectColMapRight.
-func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.ProjectionsExpr {
-	items := make(memo.ProjectionsExpr, len(toList))
-	for idx, fromCol := range fromList {
-		toCol := toList[idx]
-		items[idx].Element = c.f.ConstructVariable(fromCol)
-		items[idx].Col = toCol
-	}
-	return items
-}
-
 // MakeEmptyColSet returns a column set with no columns in it.
 func (c *CustomFuncs) MakeEmptyColSet() opt.ColSet {
 	return opt.ColSet{}
@@ -883,6 +857,123 @@ func (c *CustomFuncs) ZipOuterCols(zip memo.ZipExpr) opt.ColSet {
 		colSet.UnionWith(zip[i].ScalarProps(c.mem).OuterCols)
 	}
 	return colSet
+}
+
+// ----------------------------------------------------------------------
+//
+// Set Rules
+//   Custom match and replace functions used with set.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// ProjectColMapLeft returns a Projections operator that maps the left side
+// columns in a SetPrivate to the output columns in it. Useful for replacing set
+// operations with simpler constructs.
+func (c *CustomFuncs) ProjectColMapLeft(set *memo.SetPrivate) memo.ProjectionsExpr {
+	return c.projectColMapSide(set.OutCols, set.LeftCols)
+}
+
+// ProjectColMapRight returns a Project operator that maps the right side
+// columns in a SetPrivate to the output columns in it. Useful for replacing set
+// operations with simpler constructs.
+func (c *CustomFuncs) ProjectColMapRight(set *memo.SetPrivate) memo.ProjectionsExpr {
+	return c.projectColMapSide(set.OutCols, set.RightCols)
+}
+
+// projectColMapSide implements the side-agnostic logic from ProjectColMapLeft
+// and ProjectColMapRight.
+func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.ProjectionsExpr {
+	items := make(memo.ProjectionsExpr, len(toList))
+	for idx, fromCol := range fromList {
+		toCol := toList[idx]
+		items[idx].Element = c.f.ConstructVariable(fromCol)
+		items[idx].Col = toCol
+	}
+	return items
+}
+
+// SetTypesMatchLeft returns true if the types of the left input columns are
+// equivalent to the types of the output columns.
+func (c *CustomFuncs) SetTypesMatchLeft(private *memo.SetPrivate) bool {
+	return c.setTypesMatch(private.LeftCols, private.OutCols)
+}
+
+// SetTypesMatchRight returns true if the types of the right input columns are
+// equivalent to the types of the output columns.
+func (c *CustomFuncs) SetTypesMatchRight(private *memo.SetPrivate) bool {
+	return c.setTypesMatch(private.RightCols, private.OutCols)
+}
+
+// setTypesMatch implements the side-agnostic logic from SetTypesMatchLeft
+// and SetTypesMatchRight.
+func (c *CustomFuncs) setTypesMatch(inCols, outCols opt.ColList) bool {
+	for i := 0; i < len(inCols); i++ {
+		inType := c.mem.Metadata().ColumnMeta(inCols[i]).Type
+		outType := c.mem.Metadata().ColumnMeta(outCols[i]).Type
+		if !inType.Equivalent(outType) {
+			return false
+		}
+	}
+	return true
+}
+
+// PropagateSetTypesLeft propagates the output types of the given Set operation
+// down to the left input by wrapping the left input in a Project operation.
+// The Project operation passes through columns that already have the correct
+// type, and creates cast expressions for those that don't.
+func (c *CustomFuncs) PropagateSetTypesLeft(
+	op opt.Operator, left, right memo.RelExpr, private *memo.SetPrivate,
+) opt.Expr {
+	newLeft, newLeftCols := c.propagateSetTypes(left, private.LeftCols, private.OutCols)
+	newPrivate := memo.SetPrivate{
+		LeftCols: newLeftCols, RightCols: private.RightCols, OutCols: private.OutCols,
+	}
+	return c.f.DynamicConstruct(op, newLeft, right, &newPrivate)
+}
+
+// PropagateSetTypesRight propagates the output types of the given Set operation
+// down to the right input by wrapping the right input in a Project operation.
+// The Project operation passes through columns that already have the correct
+// type, and creates cast expressions for those that don't.
+func (c *CustomFuncs) PropagateSetTypesRight(
+	op opt.Operator, left, right memo.RelExpr, private *memo.SetPrivate,
+) opt.Expr {
+	newRight, newRightCols := c.propagateSetTypes(right, private.RightCols, private.OutCols)
+	newPrivate := memo.SetPrivate{
+		LeftCols: private.LeftCols, RightCols: newRightCols, OutCols: private.OutCols,
+	}
+	return c.f.DynamicConstruct(op, left, newRight, &newPrivate)
+}
+
+// propagateSetTypes implements the side-agnostic logic from
+// PropagateSetTypesLeft and PropagateSetTypesRight.
+func (c *CustomFuncs) propagateSetTypes(
+	input memo.RelExpr, inCols, outCols opt.ColList,
+) (memo.RelExpr, opt.ColList) {
+	projections := make(memo.ProjectionsExpr, 0, len(inCols))
+	passthrough := opt.ColSet{}
+	newCols := make(opt.ColList, len(inCols))
+	for i := 0; i < len(inCols); i++ {
+		inColMeta := c.mem.Metadata().ColumnMeta(inCols[i])
+		inType := inColMeta.Type
+		outType := c.mem.Metadata().ColumnMeta(outCols[i]).Type
+		if !inType.Equivalent(outType) {
+			// Create a new column which casts the old column to the correct type.
+			colType, _ := coltypes.DatumTypeToColumnType(outType)
+			expr := c.f.ConstructCast(c.f.ConstructVariable(inCols[i]), colType)
+			colID := c.mem.Metadata().AddColumn(inColMeta.Alias, outType)
+			projections = append(projections, memo.ProjectionsItem{
+				Element: expr, ColPrivate: memo.ColPrivate{Col: colID}},
+			)
+			newCols[i] = colID
+		} else {
+			// The column is already the correct type, so add it as a passthrough
+			// column.
+			passthrough.Add(int(inCols[i]))
+			newCols[i] = inCols[i]
+		}
+	}
+	return c.f.ConstructProject(input, projections, passthrough), newCols
 }
 
 // ----------------------------------------------------------------------
