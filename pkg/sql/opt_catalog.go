@@ -55,8 +55,12 @@ var _ cat.Catalog = &optCatalog{}
 // init allows the caller to pre-allocate optCatalog.
 func (oc *optCatalog) init(planner *planner) {
 	oc.planner = planner
-	oc.cfg = planner.execCfg.Gossip.GetSystemConfig()
 	oc.dataSources = nil
+
+	// Gossip can be nil in testing scenarios.
+	if planner.execCfg.Gossip != nil {
+		oc.cfg = planner.execCfg.Gossip.GetSystemConfig()
+	}
 }
 
 // optSchema is a wrapper around sqlbase.DatabaseDescriptor that implements the

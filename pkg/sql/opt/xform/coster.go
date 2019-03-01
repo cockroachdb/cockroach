@@ -19,17 +19,34 @@ import (
 	"math"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // Coster is used by the optimizer to assign a cost to a candidate expression
 // that can provide a set of required physical properties. If a candidate
 // expression has a lower cost than any other expression in the memo group, then
 // it becomes the new best expression for the group.
+//
+// The set of costing formulas maintained by the coster for the set of all
+// operators constitute the "cost model". A given cost model can be designed to
+// maximize any optimization goal, such as:
+//
+//   1. Max aggregate cluster throughput (txns/sec across cluster)
+//   2. Min transaction latency (time to commit txns)
+//   3. Min latency to first row (time to get first row of txns)
+//   4. Min memory usage
+//   5. Some weighted combination of #1 - #4
+//
+// The cost model in this file targets #1 as the optimization goal. However,
+// note that #2 is implicitly important to that goal, since overall cluster
+// throughput will suffer if there are lots of pending transactions waiting on
+// I/O.
 //
 // Coster is an interface so that different costing algorithms can be used by
 // the optimizer. For example, the OptSteps command uses a custom coster that
@@ -51,6 +68,14 @@ type Coster interface {
 // tree.
 type coster struct {
 	mem *memo.Memo
+
+	// locality gives the location of the current node as a set of user-defined
+	// key/value pairs, ordered from most inclusive to least inclusive. If there
+	// are no tiers, then the node's location is not known. Example:
+	//
+	//   [region=us,dc=east]
+	//
+	locality roachpb.Locality
 
 	// perturbation indicates how much to randomly perturb the cost. It is used
 	// to generate alternative plans for testing. For example, if perturbation is
@@ -77,6 +102,18 @@ const (
 	seqIOCostFactor  = 1
 	randIOCostFactor = 4
 
+	// latencyCostFactor represents the throughput impact of doing scans on an
+	// index that may be remotely located in a different locality. If latencies
+	// are higher, then overall cluster throughput will suffer somewhat, as there
+	// will be more queries in memory blocking on I/O. The impact on throughput
+	// is expected to be relatively low, so latencyCostFactor is set to a small
+	// value. However, even a low value will cause the optimizer to prefer
+	// indexes that are likely to be geographically closer, if they are otherwise
+	// the same cost to access.
+	// TODO(andyk): Need to do analysis to figure out right value and/or to come
+	// up with better way to incorporate latency into the coster.
+	latencyCostFactor = cpuCostFactor
+
 	// hugeCost is used with expressions we want to avoid; these are expressions
 	// that "violate" a hint like forcing a specific index or join algorithm.
 	// If the final expression has this cost or larger, it means that there was no
@@ -85,8 +122,9 @@ const (
 )
 
 // Init initializes a new coster structure with the given memo.
-func (c *coster) Init(mem *memo.Memo, perturbation float64) {
+func (c *coster) Init(evalCtx *tree.EvalContext, mem *memo.Memo, perturbation float64) {
 	c.mem = mem
+	c.locality = evalCtx.Locality
 	c.perturbation = perturbation
 }
 
@@ -446,16 +484,94 @@ func (c *coster) rowSortCost(numKeyCols int) memo.Cost {
 	return memo.Cost(cost)
 }
 
+// localityMatchScore returns a number from 0.0 to 1.0 that describes how well
+// the current node's locality matches the given zone constraints, with 0.0
+// indicating 0% and 1.0 indicating 100%. In order to match, each successive
+// locality tier must match at least one REQUIRED constraint and not match any
+// PROHIBITED constraints. Locality tiers are hierarchical, so if a locality
+// tier does not match, then tiers after it do not match either. For example:
+//
+//   Locality = [region=us,dc=east]
+//   0.0      = []
+//   0.0      = [+region=eu,+dc=uk]
+//   0.0      = [-region=us]
+//   0.0      = [+region=eu,+dc=east]
+//   0.5      = [+region=us,+dc=west]
+//   0.5      = [+region=us,-dc=east]
+//   1.0      = [+region=us,+dc=east]
+//   1.0      = [+region=us,+dc=east,+rack=1,-ssd]
+//
+// Note that constraints need not be specified in any particular order, so scan
+// all constraints when matching each locality tier.
+func (c *coster) localityMatchScore(zone cat.Zone) float64 {
+	// If there are no replica constraints, then locality can't match.
+	if zone.ReplicaConstraintsCount() == 0 {
+		return 0.0
+	}
+
+	// matchTier returns true if it can locate a required constraint that matches
+	// the given tier.
+	matchConstraints := func(zc cat.ReplicaConstraints, tier *roachpb.Tier) bool {
+		for i, n := 0, zc.ConstraintCount(); i < n; i++ {
+			con := zc.Constraint(i)
+			if tier.Key == con.GetKey() && tier.Value == con.GetValue() {
+				// If this is a required constraint, then it matches, and no need to
+				// iterate further. If it's prohibited, then it cannot match, so no
+				// need to go further.
+				return con.IsRequired()
+			}
+		}
+		return false
+	}
+
+	// matchReplConstraints returns true if all replica constraints match the
+	// given tier.
+	matchReplConstraints := func(zone cat.Zone, tier *roachpb.Tier) bool {
+		for i, n := 0, zone.ReplicaConstraintsCount(); i < n; i++ {
+			replCon := zone.ReplicaConstraints(i)
+			if !matchConstraints(replCon, tier) {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Keep iterating until non-matching tier is found, or all tiers are found to
+	// match.
+	matchCount := 0
+	for i := range c.locality.Tiers {
+		if !matchReplConstraints(zone, &c.locality.Tiers[i]) {
+			break
+		}
+		matchCount++
+	}
+
+	return float64(matchCount) / float64(len(c.locality.Tiers))
+}
+
 // rowScanCost is the CPU cost to scan one row, which depends on the number of
 // columns in the index and (to a lesser extent) on the number of columns we are
 // scanning.
-func (c *coster) rowScanCost(table opt.TableID, index int, numScannedCols int) memo.Cost {
+func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) memo.Cost {
 	md := c.mem.Metadata()
-	numCols := md.Table(table).Index(index).ColumnCount()
+	tab := md.Table(tabID)
+	idx := tab.Index(idxOrd)
+	numCols := idx.ColumnCount()
+
+	// Adjust cost based on how well the current locality matches the index's
+	// zone constraints.
+	var costFactor memo.Cost = cpuCostFactor
+	if len(c.locality.Tiers) != 0 {
+		// If 0% of locality tiers have matching constraints, then add additional
+		// cost. If 100% of locality tiers have matching constraints, then add no
+		// additional cost. Anything in between is proportional to the number of
+		// matches.
+		costFactor += latencyCostFactor * memo.Cost(1.0-c.localityMatchScore(idx.Zone()))
+	}
 
 	// The number of the columns in the index matter because more columns means
 	// more data to scan. The number of columns we actually return also matters
 	// because that is the amount of data that we could potentially transfer over
 	// the network.
-	return memo.Cost(numCols+numScannedCols) * cpuCostFactor
+	return memo.Cost(numCols+numScannedCols) * costFactor
 }
