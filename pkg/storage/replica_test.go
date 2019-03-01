@@ -1572,7 +1572,6 @@ func pushTxnArgs(
 		RequestHeader: roachpb.RequestHeader{
 			Key: pushee.Key,
 		},
-		Now:       pusher.Timestamp,
 		PushTo:    pusher.Timestamp.Next(),
 		PusherTxn: *pusher,
 		PusheeTxn: pushee.TxnMeta,
@@ -3227,7 +3226,6 @@ func TestSerializableDeadline(t *testing.T) {
 	pusher := newTransaction(
 		"test pusher", key, roachpb.MaxUserPriority, tc.Clock())
 	pushReq := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
-	pushReq.Now = tc.Clock().Now()
 	resp, pErr := tc.SendWrapped(&pushReq)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -3281,7 +3279,6 @@ func TestTxnRecordUnderTxnSpanGCThreshold(t *testing.T) {
 	// will be aborted before it even tries.
 	pushee := newTransaction("pushee", key, 1, tc.Clock())
 	pushReq := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
-	pushReq.Now = tc.Clock().Now()
 	pushReq.Force = true
 	resp, pErr := tc.SendWrapped(&pushReq)
 	if pErr != nil {
@@ -4992,10 +4989,9 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// Now, attempt to push the transaction with Now set to the txn start time + offset.
 		args := pushTxnArgs(pusher, pushee, test.pushType)
-		args.Now = pushee.OrigTimestamp.Add(test.timeOffset, 0)
-		args.PushTo = args.Now
+		args.PushTo = pushee.OrigTimestamp.Add(test.timeOffset, 0)
 
-		reply, pErr := tc.SendWrapped(&args)
+		reply, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
 
 		if test.expSuccess != (pErr == nil) {
 			t.Fatalf("%d: expSuccess=%t; got pErr %s, args=%+v, reply=%+v", i,
@@ -5035,21 +5031,23 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	var rra roachpb.ResolveIntentRangeRequest
 
 	ctx := context.Background()
+	h := roachpb.Header{Txn: txn, Timestamp: tc.Clock().Now()}
 	// Should not be able to push or resolve in a transaction.
-	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
+	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: h, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
 		t.Fatalf("transactional PushTxn returned unexpected error: %v", err)
 	}
-	if _, err := batcheval.ResolveIntent(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &ra}, &roachpb.ResolveIntentResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
+	if _, err := batcheval.ResolveIntent(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: h, Args: &ra}, &roachpb.ResolveIntentResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
 		t.Fatalf("transactional ResolveIntent returned unexpected error: %v", err)
 	}
-	if _, err := batcheval.ResolveIntentRange(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &rra}, &roachpb.ResolveIntentRangeResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
+	if _, err := batcheval.ResolveIntentRange(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: h, Args: &rra}, &roachpb.ResolveIntentRangeResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
 		t.Fatalf("transactional ResolveIntentRange returned unexpected error: %v", err)
 	}
 
 	// Should not get a transaction back from PushTxn. It used to erroneously
 	// return args.PusherTxn.
+	h = roachpb.Header{Timestamp: tc.Clock().Now()}
 	var reply roachpb.PushTxnResponse
-	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{EvalCtx: tc.repl, Stats: &ms, Args: &pa}, &reply); err != nil {
+	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{EvalCtx: tc.repl, Stats: &ms, Header: h, Args: &pa}, &reply); err != nil {
 		t.Fatal(err)
 	} else if reply.Txn != nil {
 		t.Fatalf("expected nil response txn, but got %s", reply.Txn)
@@ -5121,7 +5119,7 @@ func TestPushTxnPriorities(t *testing.T) {
 		// Now, attempt to push the transaction with intent epoch set appropriately.
 		args := pushTxnArgs(pusher, pushee, test.pushType)
 
-		_, pErr := tc.SendWrapped(&args)
+		_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
 
 		if test.expSuccess != (pErr == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, pErr)
@@ -5162,9 +5160,9 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	// Now, push the transaction using a PUSH_TIMESTAMP push request.
 	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_TIMESTAMP)
 
-	resp, pErr := tc.SendWrapped(&args)
+	resp, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
 	if pErr != nil {
-		t.Errorf("unexpected error on push: %s", pErr)
+		t.Fatalf("unexpected error on push: %s", pErr)
 	}
 	expTS := pusher.Timestamp
 	expTS.Logical++
@@ -5204,9 +5202,9 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	// Now, push the transaction using a PUSH_TIMESTAMP push request.
 	args := pushTxnArgs(pusher, pushee, roachpb.PUSH_TIMESTAMP)
 
-	resp, pErr := tc.SendWrapped(&args)
+	resp, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
 	if pErr != nil {
-		t.Errorf("unexpected pError on push: %s", pErr)
+		t.Fatalf("unexpected pError on push: %s", pErr)
 	}
 	reply := resp.(*roachpb.PushTxnResponse)
 	if reply.PusheeTxn.Timestamp != pushee.Timestamp {
@@ -8247,7 +8245,6 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			Key: txn.TxnMeta.Key,
 		},
 		PusheeTxn: txn.TxnMeta,
-		Now:       cfg.Clock.Now(),
 		PushType:  roachpb.PUSH_ABORT,
 		Force:     true,
 	}
@@ -10276,7 +10273,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
-				pt.Now = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
@@ -10294,7 +10290,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
-				pt.Now = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
@@ -10313,7 +10308,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
-				pt.Now = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
@@ -10329,7 +10323,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
-				pt.Now = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
@@ -10345,7 +10338,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			name: "begin transaction after push abort",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
-				pt.Now = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
@@ -10359,7 +10351,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			name: "heartbeat transaction after push abort",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
-				pt.Now = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
@@ -10373,7 +10364,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			name: "heartbeat transaction after push abort and restart",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
-				pt.Now = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
@@ -10393,7 +10383,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			name: "end transaction (abort) after push abort",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
-				pt.Now = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
@@ -10408,7 +10397,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			name: "end transaction (commit) after push abort",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
-				pt.Now = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
