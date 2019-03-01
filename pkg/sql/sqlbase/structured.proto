@@ -494,12 +494,26 @@ message IndexDescriptor {
   optional Type type = 16 [(gogoproto.nullable)=false];
 }
 
-message ConstraintToValidate {
+// ConstraintToUpdate represents a constraint to be added to the table and
+// validated for existing rows. More generally, in the future, when we support
+// adding constraints that are unvalidated for existing rows and can be
+// validated later using VALIDATE CONSTRAINT, this mutation will also represent
+// either adding an unvalidated constraint or validating an existing constraint.
+//
+// This mutation effects changes only in the backfill step of the schema
+// changer: First, a new version of the table descriptor with the constraint
+// added is published, after all columns being added have been backfilled. After
+// waiting for the constraint to be enforced for writes on all nodes, the
+// constraint is then validated for all existing rows. This ensures that
+// constraints added to columns that are being added are correctly enforced
+// before the column becomes public.
+message ConstraintToUpdate {
   enum ConstraintType {
     CHECK = 0;
   }
   required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
   required string name = 2 [(gogoproto.nullable) = false];
+  optional TableDescriptor.CheckConstraint check = 3 [(gogoproto.nullable) = false];
 }
 
 // A DescriptorMutation represents a column or an index that
@@ -508,11 +522,13 @@ message ConstraintToValidate {
 // completely deleted. A table descriptor in the middle of a
 // schema change will have a DescriptorMutation FIFO queue
 // containing each column/index descriptor being added or dropped.
+// Mutations for constraints work differently from columns and
+// indexes; see the documentation for ConstraintToUpdate.
 message DescriptorMutation {
   oneof descriptor {
     ColumnDescriptor column = 1;
     IndexDescriptor index = 2;
-    ConstraintToValidate constraint = 8;
+    ConstraintToUpdate constraint = 8;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to
