@@ -101,7 +101,7 @@ func (o *Optimizer) Init(evalCtx *tree.EvalContext) {
 	o.f.Init(evalCtx)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
-	o.defaultCoster.Init(o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation)
+	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation)
 	o.coster = &o.defaultCoster
 	o.stateMap = make(map[groupStateKey]*groupState)
 	o.matchedRule = nil
@@ -879,7 +879,7 @@ func (o *Optimizer) FormatMemo(flags FmtFlags) string {
 // the real computed cost, not the perturbed cost.
 func (o *Optimizer) RecomputeCost() {
 	var c coster
-	c.Init(o.mem, 0 /* perturbation */)
+	c.Init(o.evalCtx, o.mem, 0 /* perturbation */)
 
 	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()

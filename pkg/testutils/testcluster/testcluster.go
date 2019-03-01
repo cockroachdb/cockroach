@@ -151,6 +151,17 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		} else {
 			serverArgs = args.ServerArgs
 		}
+
+		// If there are multiple nodes, place them in different localities by
+		// default.
+		if nodes > 0 {
+			tiers := []roachpb.Tier{
+				{Key: "region", Value: "test"},
+				{Key: "dc", Value: fmt.Sprintf("dc%d", i+1)},
+			}
+			serverArgs.Locality = roachpb.Locality{Tiers: tiers}
+		}
+
 		if i > 0 {
 			serverArgs.JoinAddr = tc.Servers[0].ServingAddr()
 		}

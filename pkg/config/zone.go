@@ -729,13 +729,13 @@ func (z ZoneConfig) subzoneSplits() []roachpb.RKey {
 }
 
 // ReplicaConstraintsCount is part of the cat.Zone interface.
-func (zc *ZoneConfig) ReplicaConstraintsCount() int {
-	return len(zc.Constraints)
+func (z *ZoneConfig) ReplicaConstraintsCount() int {
+	return len(z.Constraints)
 }
 
 // ReplicaConstraints is part of the cat.Zone interface.
-func (zc *ZoneConfig) ReplicaConstraints(i int) cat.ReplicaConstraints {
-	return &zc.Constraints[i]
+func (z *ZoneConfig) ReplicaConstraints(i int) cat.ReplicaConstraints {
+	return &z.Constraints[i]
 }
 
 // ReplicaCount is part of the cat.ReplicaConstraints interface.

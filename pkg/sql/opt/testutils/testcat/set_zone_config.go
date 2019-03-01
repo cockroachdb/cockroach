@@ -24,10 +24,6 @@ import (
 
 // SetZoneConfig is a partial implementation of the ALTER TABLE ... CONFIGURE
 // ZONE USING statement.
-//
-// Supported commands:
-//  - INJECT STATISTICS: imports table statistics from a JSON object.
-//
 func (tc *Catalog) SetZoneConfig(stmt *tree.SetZoneConfig) *config.ZoneConfig {
 	// Update the table name to include catalog and schema if not provided.
 	tabName := stmt.TableOrIndex.Table

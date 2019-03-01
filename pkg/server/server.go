@@ -600,6 +600,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	execCfg = sql.ExecutorConfig{
 		Settings:                s.st,
 		NodeInfo:                nodeInfo,
+		Locality:                s.cfg.Locality,
 		AmbientCtx:              s.cfg.AmbientCtx,
 		DB:                      s.db,
 		Gossip:                  s.gossip,

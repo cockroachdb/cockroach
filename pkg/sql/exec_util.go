@@ -331,6 +331,7 @@ type nodeStatusGenerator interface {
 type ExecutorConfig struct {
 	Settings *cluster.Settings
 	NodeInfo
+	Locality         roachpb.Locality
 	AmbientCtx       log.AmbientContext
 	DB               *client.DB
 	Gossip           *gossip.Gossip

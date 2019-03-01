@@ -24,6 +24,7 @@ import (
 	"testing"
 	"text/tabwriter"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -122,6 +123,15 @@ type Flags struct {
 	// ReorderJoinsLimit is the maximum number of joins in a query which the optimizer
 	// should attempt to reorder.
 	JoinLimit int
+
+	// Locality specifies the location of the planning node as a set of user-
+	// defined key/value pairs, ordered from most inclusive to least inclusive.
+	// If there are no tiers, then the node's location is not known. Examples:
+	//
+	//   [region=eu]
+	//   [region=us,dc=east]
+	//
+	Locality roachpb.Locality
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -223,6 +233,10 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    expression in the query tree for the purpose of creating alternate query
 //    plans in the optimizer.
 //
+//  - locality: used to set the locality of the node that plans the query. This
+//    can affect costing when there are multiple possible indexes to choose
+//    from, each in different localities.
+//
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -240,6 +254,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	ot.Flags.Verbose = testing.Verbose()
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
+	ot.evalCtx.Locality = ot.Flags.Locality
 
 	switch d.Cmd {
 	case "exec-ddl":
@@ -505,6 +520,14 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		}
 		var err error
 		f.PerturbCost, err = strconv.ParseFloat(arg.Vals[0], 64)
+		if err != nil {
+			return err
+		}
+
+	case "locality":
+		// Recombine multiple arguments, separated by commas.
+		locality := strings.Join(arg.Vals, ",")
+		err := f.Locality.Set(locality)
 		if err != nil {
 			return err
 		}
