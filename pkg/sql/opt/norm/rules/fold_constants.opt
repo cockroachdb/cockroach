@@ -65,3 +65,19 @@ $result
 )
 =>
 $result
+
+# FoldCast is similar to FoldUnary, but it involves a cast operation. As with
+# FoldUnary, FoldCast applies as long as the evaluation would not cause an
+# error.
+#
+# This rule is marked as low priority so that the FoldNull rules in scalar.opt
+# can run first.
+[FoldCast, Normalize, LowPriority]
+(Cast
+    $input:*
+    $typ:* &
+        (IsConstValueOrTuple $input) &
+        (Succeeded $result:(FoldCast $input $typ))
+)
+=>
+$result
