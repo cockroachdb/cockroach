@@ -49,9 +49,7 @@ import (
 
 // insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
 // it to the pending map. Returns the assigned MaxLeaseIndex, if any.
-func (r *Replica) insertProposalLocked(
-	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease roachpb.Lease,
-) int64 {
+func (r *Replica) insertProposalLocked(proposal *ProposalData) int64 {
 	// Assign a lease index. Note that we do this as late as possible
 	// to make sure (to the extent that we can) that we don't assign
 	// (=predict) the index differently from the order in which commands are
@@ -64,8 +62,10 @@ func (r *Replica) insertProposalLocked(
 		r.mu.lastAssignedLeaseIndex++
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
-	proposal.command.ProposerReplica = proposerReplica
-	proposal.command.ProposerLeaseSequence = proposerLease.Sequence
+	if proposal.command.ProposerReplica == (roachpb.ReplicaDescriptor{}) {
+		// 0 is a valid LeaseSequence value so we can't actually enforce it.
+		log.Fatalf(context.TODO(), "ProposerReplica and ProposerLeaseSequence must be filled in")
+	}
 
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
@@ -265,7 +265,16 @@ func (r *Replica) evalAndPropose(
 	if r.mu.commandSizes != nil {
 		r.mu.commandSizes[proposal.idKey] = proposalSize
 	}
-	maxLeaseIndex, pErr := r.proposeLocked(ctx, proposal, lease)
+
+	// Record the proposer and lease sequence.
+	repDesc, err := r.getReplicaDescriptorRLocked()
+	if err != nil {
+		return nil, nil, 0, roachpb.NewError(err)
+	}
+	proposal.command.ProposerReplica = repDesc
+	proposal.command.ProposerLeaseSequence = lease.Sequence
+
+	maxLeaseIndex, pErr := r.proposeLocked(ctx, proposal)
 	if pErr != nil {
 		return nil, nil, 0, pErr
 	}
@@ -300,7 +309,7 @@ func (r *Replica) evalAndPropose(
 // r.mu.internalRaftGroup is nil, r.raftMu must also be held (note
 // that lock ordering requires that raftMu be acquired first).
 func (r *Replica) proposeLocked(
-	ctx context.Context, proposal *ProposalData, lease roachpb.Lease,
+	ctx context.Context, proposal *ProposalData,
 ) (_ int64, pErr *roachpb.Error) {
 	// Make sure we clean up the proposal if we fail to submit it successfully.
 	// This is important both to ensure that that the proposals map doesn't
@@ -320,11 +329,7 @@ func (r *Replica) proposeLocked(
 		return 0, roachpb.NewError(r.mu.destroyStatus.err)
 	}
 
-	repDesc, err := r.getReplicaDescriptorRLocked()
-	if err != nil {
-		return 0, roachpb.NewError(err)
-	}
-	maxLeaseIndex := r.insertProposalLocked(proposal, repDesc, lease)
+	maxLeaseIndex := r.insertProposalLocked(proposal)
 
 	if err := r.submitProposalLocked(proposal); err == raft.ErrProposalDropped {
 		// Silently ignore dropped proposals (they were always silently ignored
@@ -2056,17 +2061,13 @@ func (r *Replica) processRaftCommand(
 func (r *Replica) tryReproposeWithNewLeaseIndex(proposal *ProposalData) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	lease := *r.mu.state.Lease
-	if lease.OwnedBy(r.StoreID()) && lease.Sequence == proposal.command.ProposerLeaseSequence {
-		// Some tests check for this log message in the trace.
-		log.VEventf(proposal.ctx, 2, "retry: proposalIllegalLeaseIndex")
-		if _, pErr := r.proposeLocked(proposal.ctx, proposal, lease); pErr != nil {
-			log.Warningf(proposal.ctx, "failed to repropose with new lease index: %s", pErr)
-			return false
-		}
-		return true
+	// Some tests check for this log message in the trace.
+	log.VEventf(proposal.ctx, 2, "retry: proposalIllegalLeaseIndex")
+	if _, pErr := r.proposeLocked(proposal.ctx, proposal); pErr != nil {
+		log.Warningf(proposal.ctx, "failed to repropose with new lease index: %s", pErr)
+		return false
 	}
-	return false
+	return true
 }
 
 // maybeAcquireSnapshotMergeLock checks whether the incoming snapshot subsumes
