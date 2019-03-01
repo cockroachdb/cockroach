@@ -157,8 +157,8 @@ func (ex *connExecutor) prepare(
 	// anything other than getting a timestamp.
 	txn := client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
 
-	p := &ex.planner
-	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+	p := ex.plannerPool.Checkout(ctx, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+	defer ex.plannerPool.Release(p)
 	p.stmt = &stmt
 	flags, err := ex.populatePrepared(ctx, txn, placeholderHints, p)
 	if err != nil {
