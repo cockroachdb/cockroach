@@ -1147,28 +1147,15 @@ func (c *CustomFuncs) IsConstValueEqual(const1, const2 opt.ScalarExpr) bool {
 	}
 }
 
-// ensureTyped makes sure that any NULL passing through gets tagged with an
-// appropriate type.
-func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ types.T) opt.ScalarExpr {
-	if d.DataType() == types.Unknown {
-		return c.f.ConstructNull(typ)
-	}
-	return d
-}
-
 // SimplifyWhens removes known unreachable WHEN cases and constructs a new CASE
 // statement. Any known true condition is converted to the ELSE. If only the
 // ELSE remains, its expression is returned. condition must be a ConstValue.
 func (c *CustomFuncs) SimplifyWhens(
 	condition opt.ScalarExpr, whens memo.ScalarListExpr, orElse opt.ScalarExpr,
 ) opt.ScalarExpr {
-	var typ types.T
 	newWhens := make(memo.ScalarListExpr, 0, len(whens))
 	for _, item := range whens {
 		when := item.(*memo.WhenExpr)
-		if typ == nil || typ == types.Unknown {
-			typ = when.Typ
-		}
 		if opt.IsConstValueOp(when.Condition) {
 			if !c.IsConstValueEqual(condition, when.Condition) {
 				// Ignore known unmatching conditions.
@@ -1178,7 +1165,7 @@ func (c *CustomFuncs) SimplifyWhens(
 			// If this is true, we won't ever match anything else, so convert this to
 			// the ELSE (or just return it if there are no earlier items).
 			if len(newWhens) == 0 {
-				return when.Value
+				return c.ensureTyped(when.Value, memo.InferWhensType(whens, orElse))
 			}
 			return c.f.ConstructCase(condition, newWhens, when.Value)
 		}
@@ -1193,10 +1180,19 @@ func (c *CustomFuncs) SimplifyWhens(
 		// a type we observed earlier.
 		// typ will never be nil here because the definition of
 		// SimplifyCaseWhenConstValue ensures that whens is nonempty.
-		return c.ensureTyped(orElse, typ)
+		return c.ensureTyped(orElse, memo.InferWhensType(whens, orElse))
 	}
 
 	return c.f.ConstructCase(condition, newWhens, orElse)
+}
+
+// ensureTyped makes sure that any NULL passing through gets tagged with an
+// appropriate type.
+func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ types.T) opt.ScalarExpr {
+	if d.DataType() == types.Unknown {
+		return c.f.ConstructNull(typ)
+	}
+	return d
 }
 
 // OpsAreSame returns true if the two operators are the same.
