@@ -670,24 +670,9 @@ func syncAll(cloud *cld.Cloud, quiet bool) error {
 		return err
 	}
 
-	{
-		names := make([]string, 0, len(cloud.Clusters)*3)
-		for name, c := range cloud.Clusters {
-			names = append(names, name)
-			for i := range c.VMs {
-				names = append(names, fmt.Sprintf("%s:%d", name, i))
-			}
-		}
-		for _, cmd := range []*cobra.Command{
-			startCmd, stopCmd, wipeCmd,
-			extendCmd, destroyCmd,
-			statusCmd, monitorCmd,
-			runCmd, sqlCmd,
-			adminurlCmd, pgurlCmd, ipCmd,
-		} {
-			cmd.ValidArgs = names
-		}
-		_ = rootCmd.GenBashCompletionFile(bashCompletion)
+	// TODO(dt): Write custom completions: https://github.com/spf13/cobra/blob/master/bash_completions.md
+	if err := rootCmd.GenBashCompletionFile(bashCompletion); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing bash completions to %s: %v\n", bashCompletion, err)
 	}
 	return vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
 		return p.ConfigSSH()
