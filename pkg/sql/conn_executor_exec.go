@@ -371,7 +371,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	// For regular statements (the ones that get to this point), we don't return
 	// any event unless an an error happens.
 
-	var p *planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	// Only run statements asynchronously through the parallelize queue if the
 	// statements are parallelized and we're in a transaction. Parallelized
@@ -379,14 +378,14 @@ func (ex *connExecutor) execStmtInOpenState(
 	// results, which has the same effect as running asynchronously but
 	// immediately blocking.
 	runInParallel := parallelize && !os.ImplicitTxn.Get()
-	if runInParallel {
-		// Create a new planner since we're executing in parallel.
-		p = ex.newPlanner(ctx, ex.state.mu.txn, stmtTS)
-	} else {
-		// We're not executing in parallel; we'll use the cached planner.
-		p = &ex.planner
-		ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
-	}
+
+	// Get a planner. It will be released back to the pool by a defer at the top.
+	p := ex.plannerPool.Checkout(ctx, ex.state.mu.txn, stmtTS)
+	defer func() {
+		if p != nil {
+			ex.plannerPool.Release(p)
+		}
+	}()
 
 	if os.ImplicitTxn.Get() {
 		asOfTs, err := p.isAsOf(stmt.AST)
@@ -434,7 +433,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
 	if runInParallel {
+		stmt := p.stmt
 		cols, err := ex.execStmtInParallel(ctx, p, queryDone)
+		p = nil // Ownership of p has been passed to execStmtInParallel.
 		// Responsibility for calling queryDone has been passed to
 		// execStmtInParallel.
 		queryDone = nil
@@ -442,11 +443,12 @@ func (ex *connExecutor) execStmtInOpenState(
 			res.SetError(err)
 			return makeErrEvent(err)
 		}
+
 		// Produce mocked out results for the query - the "zero value" of the
 		// statement's result type:
 		// - tree.Rows -> an empty set of rows
 		// - tree.RowsAffected -> zero rows affected
-		if err := ex.initStatementResult(ctx, res, p.stmt, cols); err != nil {
+		if err := ex.initStatementResult(ctx, res, stmt, cols); err != nil {
 			return makeErrEvent(err)
 		}
 		// No event is generated.
@@ -667,15 +669,21 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 // other queries).
 //
 // Args:
+// planner: The planner to be used for planning and execution. This planner will
+//   be released back to ex's pool.
 // queryDone: A cleanup function to be called when the execution is done.
 func (ex *connExecutor) execStmtInParallel(
 	ctx context.Context, planner *planner, queryDone func(context.Context, RestrictedCommandResult),
 ) (sqlbase.ResultColumns, error) {
+	cleanup := func(ctx context.Context, res RestrictedCommandResult) {
+		queryDone(ctx, res)
+		ex.plannerPool.Release(planner)
+	}
 	defer func() {
 		// Call the cleanup function unless responsibility has been transferred
 		// elsewhere.
-		if queryDone != nil {
-			queryDone(ctx, nil /* res */)
+		if cleanup != nil {
+			cleanup(ctx, nil /* res */)
 		}
 	}()
 
@@ -740,15 +748,15 @@ func (ex *connExecutor) execStmtInParallel(
 	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
-	// Responsibility for calling queryDone is taken by the closure below.
-	queryDoneCpy := queryDone
-	queryDone = nil
+	// Responsibility for calling cleanup is taken by the closure below.
+	cleanupCpy := cleanup
+	cleanup = nil
 	// Responsibility for calling planCleanup is taken by the closure below.
 	planCleanupCpy := planCleanup
 	planCleanup = nil
-	cleanup := func(ctx context.Context) {
+	doCleanup := func(ctx context.Context) {
 		planCleanupCpy(ctx)
-		queryDoneCpy(ctx, nil /* res */)
+		cleanupCpy(ctx, nil /* res */)
 	}
 	if err := ex.parallelizeQueue.Add(params, func() error {
 		res := &bufferedCommandResult{errOnly: true}
@@ -808,7 +816,7 @@ func (ex *connExecutor) execStmtInParallel(
 			return err
 		}
 		return res.Err()
-	}, cleanup); err != nil {
+	}, doCleanup); err != nil {
 		planner.maybeLogStatement(ctx, "par-queue" /* lbl */, 0 /* rows */, err)
 		return nil, err
 	}
@@ -1118,8 +1126,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		rwMode = ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode)
 		return rwMode, now.GoTime(), nil, nil
 	}
-	p := &ex.planner
-	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime())
+	p := ex.plannerPool.Checkout(ctx, nil /* txn */, now.GoTime())
 	ts, err := p.EvalAsOfTimestamp(s.Modes.AsOf)
 	if err != nil {
 		return 0, time.Time{}, nil, err
