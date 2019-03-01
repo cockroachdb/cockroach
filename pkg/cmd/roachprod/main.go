@@ -95,6 +95,8 @@ var (
 	logsFrom       time.Time
 	logsTo         time.Time
 	logsInterval   time.Duration
+
+	cachedHostsCluster string
 )
 
 func sortedClusters() []string {
@@ -468,6 +470,39 @@ directory is removed.
 	}),
 }
 
+var cachedHostsCmd = &cobra.Command{
+	Use:   "cached-hosts",
+	Short: "list all clusters (and optionally their host numbers) from local cache",
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		if err := loadClusters(); err != nil {
+			return err
+		}
+
+		names := make([]string, 0, len(install.Clusters))
+		for name := range install.Clusters {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		for _, name := range names {
+			c := install.Clusters[name]
+			if strings.HasPrefix(c.Name, "teamcity") {
+				continue
+			}
+			fmt.Print(c.Name)
+			// when invokved by bash-completion, cachedHostsCluster is what the user
+			// has currently typed -- if this cluster matches that, expand its hosts.
+			if strings.HasPrefix(cachedHostsCluster, c.Name) {
+				for i := range c.VMs {
+					fmt.Printf(" %s:%d", c.Name, i+1)
+				}
+			}
+			fmt.Println()
+		}
+		return nil
+	}),
+}
+
 var listCmd = &cobra.Command{
 	Use:   "list [--details] [ --mine | <cluster name regex> ]",
 	Short: "list all clusters",
@@ -670,25 +705,8 @@ func syncAll(cloud *cld.Cloud, quiet bool) error {
 		return err
 	}
 
-	{
-		names := make([]string, 0, len(cloud.Clusters)*3)
-		for name, c := range cloud.Clusters {
-			names = append(names, name)
-			for i := range c.VMs {
-				names = append(names, fmt.Sprintf("%s:%d", name, i))
-			}
-		}
-		for _, cmd := range []*cobra.Command{
-			startCmd, stopCmd, wipeCmd,
-			extendCmd, destroyCmd,
-			statusCmd, monitorCmd,
-			runCmd, sqlCmd,
-			adminurlCmd, pgurlCmd, ipCmd,
-		} {
-			cmd.ValidArgs = names
-		}
-		_ = rootCmd.GenBashCompletionFile(bashCompletion)
-	}
+	_ = rootCmd.GenBashCompletionFile(bashCompletion)
+
 	return vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
 		return p.ConfigSSH()
 	})
@@ -1348,6 +1366,34 @@ func main() {
 
 		webCmd,
 		dumpCmd,
+		cachedHostsCmd,
+	)
+	rootCmd.BashCompletionFunction = fmt.Sprintf(`__custom_func()
+	{
+		# only complete the 2nd arg, e.g. adminurl <foo>
+		if ! [ $c -eq 2 ]; then
+			return
+		fi
+
+		# don't complete commands which do not accept a cluster/host arg
+		case ${last_command} in
+			%s)
+				return
+				;;
+		esac
+
+		local hosts_out
+		if hosts_out=$(roachprod cached-hosts --cluster="${cur}" 2>/dev/null); then
+				COMPREPLY=( $( compgen -W "${hosts_out[*]}" -- "$cur" ) )
+		fi
+
+	}`,
+		strings.Join(func(cmds ...*cobra.Command) (s []string) {
+			for _, cmd := range cmds {
+				s = append(s, fmt.Sprintf("%s_%s", rootCmd.Name(), cmd.Name()))
+			}
+			return s
+		}(createCmd, listCmd, syncCmd, gcCmd, webCmd, dumpCmd), " | "),
 	)
 
 	rootCmd.PersistentFlags().BoolVarP(
@@ -1457,6 +1503,8 @@ func main() {
 		&logsInterval, "interval", 200*time.Millisecond, "interval to poll logs from host")
 	logsCmd.Flags().StringVar(
 		&logsDir, "logs-dir", "logs", "path to the logs dir, if remote, relative to username's home dir, ignored if local")
+
+	cachedHostsCmd.Flags().StringVar(&cachedHostsCluster, "cluster", "", "print hosts matching cluster")
 
 	for _, cmd := range []*cobra.Command{
 		getCmd, putCmd, runCmd, startCmd, statusCmd, stopCmd, testCmd,
