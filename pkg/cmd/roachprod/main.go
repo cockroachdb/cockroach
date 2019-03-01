@@ -98,6 +98,7 @@ var (
 	logsFrom          time.Time
 	logsTo            time.Time
 	logsInterval      time.Duration
+	maxConcurrency    int
 
 	monitorIgnoreEmptyNodes bool
 	monitorOneShot          bool
@@ -185,6 +186,7 @@ Hint: use "roachprod sync" to update the list of available clusters.
 	}
 	c.UseTreeDist = useTreeDist
 	c.Quiet = quiet || !terminal.IsTerminal(int(os.Stdout.Fd()))
+	c.MaxConcurrency = maxConcurrency
 	return c, nil
 }
 
@@ -1573,7 +1575,9 @@ func main() {
 
 	rootCmd.PersistentFlags().BoolVarP(
 		&quiet, "quiet", "q", false, "disable fancy progress output")
-
+	rootCmd.PersistentFlags().IntVarP(
+		&maxConcurrency, "max-concurrency", "", 32,
+		"maximum number of operations to execute on nodes concurrently, set to zero for infinite")
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
 			"Username to run under, detect if blank")
