@@ -322,7 +322,8 @@ func (r *Replica) ShouldBackpressureWrites() bool {
 	return r.shouldBackpressureWrites()
 }
 
-// GetRaftLogSize returns the raft log size.
+// GetRaftLogSize returns the approximate raft log size. See r.mu.raftLogSize
+// for details.
 func (r *Replica) GetRaftLogSize() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -365,9 +366,10 @@ func (sl *StoreList) Stores() []roachpb.StoreDescriptor {
 	return stores
 }
 
-// SideloadedDir returns r.raftMu.sideloaded.Dir().
-func (r *Replica) SideloadedDir() string {
-	return r.raftMu.sideloaded.Dir()
+// SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
+// to RaftLock() or some other guarantee that r.raftMu is held.
+func (r *Replica) SideloadedRaftMuLocked() SideloadStorage {
+	return r.raftMu.sideloaded
 }
 
 func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyValue) {

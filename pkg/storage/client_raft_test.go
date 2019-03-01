@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -653,25 +654,35 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assertEqualRaftLogSize := func() error {
-		var expectedSize int64
-		for i, s := range mtc.stores {
+	// Verifies the recomputed log size against what we track in `r.mu.raftLogSize`.
+	assertCorrectRaftLogSize := func() error {
+		for _, s := range mtc.stores {
 			repl, err := s.GetReplica(rangeID)
 			if err != nil {
 				t.Fatal(err)
 			}
 
+			// Recompute under raft lock so that the log doesn't change while we
+			// compute its size.
+			repl.RaftLock()
+			realSize, err := storage.ComputeRaftLogSize(
+				context.Background(), repl.RangeID, repl.Engine(), repl.SideloadedRaftMuLocked(),
+			)
 			size := repl.GetRaftLogSize()
-			if i == 0 {
-				expectedSize = size
-			} else if expectedSize != size {
-				return fmt.Errorf("%s: expected raftLogSize %d, but found %d", repl, expectedSize, size)
+			repl.RaftUnlock()
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if size != realSize {
+				return fmt.Errorf("%s: raft log claims size %d, but is in fact %d", repl, size, realSize)
 			}
 		}
 		return nil
 	}
 
-	testutils.SucceedsSoon(t, assertEqualRaftLogSize)
+	assert.NoError(t, assertCorrectRaftLogSize())
 
 	truncArgs := truncateLogArgs(index+1, 1)
 	if _, err := client.SendWrapped(
@@ -679,7 +690,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutils.SucceedsSoon(t, assertEqualRaftLogSize)
+	assert.NoError(t, assertCorrectRaftLogSize())
 }
 
 // TestSnapshotAfterTruncation tests that Raft will properly send a

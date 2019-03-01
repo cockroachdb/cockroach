@@ -29,7 +29,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-var _ sideloadStorage = &diskSideloadStorage{}
+var _ SideloadStorage = &diskSideloadStorage{}
 
 type diskSideloadStorage struct {
 	st         *cluster.Settings
@@ -84,7 +84,7 @@ func exists(path string) (bool, error) {
 // The method is aware of the "new" naming scheme that is not dependent on the
 // replicaID (see sideloadedPath) and will not touch them.
 func moveSideloadedData(
-	prevSideloaded sideloadStorage, base string, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+	prevSideloaded SideloadStorage, base string, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
 ) error {
 	if prevSideloaded == nil || prevSideloaded.Dir() == "" {
 		// No storage or in-memory storage.
@@ -176,10 +176,12 @@ func (ss *diskSideloadStorage) createDir() error {
 	return err
 }
 
+// Dir implements SideloadStorage.
 func (ss *diskSideloadStorage) Dir() string {
 	return ss.dir
 }
 
+// Put implements SideloadStorage.
 func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, contents []byte) error {
 	filename := ss.filename(ctx, index, term)
 	// There's a chance the whole path is missing (for example after Clear()),
@@ -201,6 +203,7 @@ func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 	}
 }
 
+// Get implements SideloadStorage.
 func (ss *diskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]byte, error) {
 	filename := ss.filename(ctx, index, term)
 	b, err := ss.eng.ReadFile(filename)
@@ -210,6 +213,7 @@ func (ss *diskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]b
 	return b, err
 }
 
+// Filename implements SideloadStorage.
 func (ss *diskSideloadStorage) Filename(ctx context.Context, index, term uint64) (string, error) {
 	return ss.filename(ctx, index, term), nil
 }
@@ -218,11 +222,12 @@ func (ss *diskSideloadStorage) filename(ctx context.Context, index, term uint64)
 	return filepath.Join(ss.dir, fmt.Sprintf("i%d.t%d", index, term))
 }
 
+// Purge implements SideloadStorage.
 func (ss *diskSideloadStorage) Purge(ctx context.Context, index, term uint64) (int64, error) {
 	return ss.purgeFile(ctx, ss.filename(ctx, index, term))
 }
 
-func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (int64, error) {
+func (ss *diskSideloadStorage) fileSize(filename string) (int64, error) {
 	// TODO(tschottdorf): this should all be done through the env. As written,
 	// the sizes returned here will be wrong if encryption is on. We want the
 	// size of the unencrypted payload.
@@ -235,8 +240,14 @@ func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 		}
 		return 0, err
 	}
-	size := info.Size()
+	return info.Size(), nil
+}
 
+func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (int64, error) {
+	size, err := ss.fileSize(filename)
+	if err != nil {
+		return 0, err
+	}
 	if err := ss.eng.DeleteFile(filename); err != nil {
 		if os.IsNotExist(err) {
 			return 0, errSideloadedFileNotFound
@@ -246,19 +257,56 @@ func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 	return size, nil
 }
 
+// Clear implements SideloadStorage.
 func (ss *diskSideloadStorage) Clear(_ context.Context) error {
 	err := ss.eng.DeleteDirAndFiles(ss.dir)
 	ss.dirCreated = ss.dirCreated && err != nil
 	return err
 }
 
-func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) (int64, error) {
+// TruncateTo implements SideloadStorage.
+func (ss *diskSideloadStorage) TruncateTo(
+	ctx context.Context, firstIndex uint64,
+) (bytesFreed, bytesRetained int64, _ error) {
+	deletedAll := true
+	if err := ss.forEach(ctx, func(index uint64, filename string) error {
+		if index >= firstIndex {
+			size, err := ss.fileSize(filename)
+			if err != nil {
+				return err
+			}
+			bytesRetained += size
+			deletedAll = false
+			return nil
+		}
+		fileSize, err := ss.purgeFile(ctx, filename)
+		if err != nil {
+			return err
+		}
+		bytesFreed += fileSize
+		return nil
+	}); err != nil {
+		return 0, 0, err
+	}
+
+	if deletedAll {
+		// The directory may not exist, or it may exist and have been empty.
+		// Not worth trying to figure out which one, just try to delete.
+		err := os.Remove(ss.dir)
+		if !os.IsNotExist(err) {
+			return bytesFreed, 0, errors.Wrapf(err, "while purging %q", ss.dir)
+		}
+	}
+	return bytesFreed, bytesRetained, nil
+}
+
+func (ss *diskSideloadStorage) forEach(
+	ctx context.Context, visit func(index uint64, filename string) error,
+) error {
 	matches, err := filepath.Glob(filepath.Join(ss.dir, "i*.t*"))
 	if err != nil {
-		return 0, err
+		return err
 	}
-	var deleted int
-	var size int64
 	for _, match := range matches {
 		base := filepath.Base(match)
 		if len(base) < 1 || base[0] != 'i' {
@@ -266,26 +314,28 @@ func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) (in
 		}
 		base = base[1:]
 		upToDot := strings.SplitN(base, ".", 2)
-		i, err := strconv.ParseUint(upToDot[0], 10, 64)
+		logIdx, err := strconv.ParseUint(upToDot[0], 10, 64)
 		if err != nil {
-			return size, errors.Wrapf(err, "while parsing %q during TruncateTo", match)
+			return errors.Wrapf(err, "while parsing %q during TruncateTo", match)
 		}
-		if i >= index {
-			continue
+		if err := visit(logIdx, match); err != nil {
+			return errors.Wrap(err, match)
 		}
-		fileSize, err := ss.purgeFile(ctx, match)
-		if err != nil {
-			return size, errors.Wrapf(err, "while purging %q", match)
-		}
-		deleted++
-		size += fileSize
 	}
+	return nil
+}
 
-	if deleted == len(matches) {
-		err = os.Remove(ss.dir)
-		if !os.IsNotExist(err) {
-			return size, errors.Wrapf(err, "while purging %q", ss.dir)
-		}
+// String lists the files in the storage without guaranteeing an ordering.
+func (ss *diskSideloadStorage) String() string {
+	var buf strings.Builder
+	var count int
+	if err := ss.forEach(context.Background(), func(_ uint64, filename string) error {
+		count++
+		_, _ = fmt.Fprintln(&buf, filename)
+		return nil
+	}); err != nil {
+		return err.Error()
 	}
-	return size, nil
+	fmt.Fprintf(&buf, "(%d files)\n", count)
+	return buf.String()
 }

@@ -2460,3 +2460,38 @@ func handleTruncatedStateBelowRaft(
 	// Haven't migrated yet, don't ever discard the update.
 	return true, nil
 }
+
+// ComputeRaftLogSize computes the size (in bytes) of the Raft log from the
+// storage engine. This will iterate over the Raft log and sideloaded files, so
+// depending on the size of these it can be mildly to extremely expensive and
+// thus should not be called frequently.
+//
+// The sideloaded storage may be nil, in which case it is treated as empty.
+func ComputeRaftLogSize(
+	ctx context.Context, rangeID roachpb.RangeID, reader engine.Reader, sideloaded SideloadStorage,
+) (int64, error) {
+	prefix := keys.RaftLogPrefix(rangeID)
+	prefixEnd := prefix.PrefixEnd()
+	iter := reader.NewIterator(engine.IterOptions{
+		LowerBound: prefix,
+		UpperBound: prefixEnd,
+	})
+	defer iter.Close()
+	from := engine.MakeMVCCMetadataKey(prefix)
+	to := engine.MakeMVCCMetadataKey(prefixEnd)
+	ms, err := iter.ComputeStats(from, to, 0 /* nowNanos */)
+	if err != nil {
+		return 0, err
+	}
+	var totalSideloaded int64
+	if sideloaded != nil {
+		var err error
+		// Truncating all indexes strictly smaller than zero is a no-op but
+		// gives us the number of bytes in the storage back.
+		_, totalSideloaded, err = sideloaded.TruncateTo(ctx, 0)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return ms.SysBytes + totalSideloaded, nil
+}

@@ -15,6 +15,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -114,6 +114,7 @@ func TestGetQuorumIndex(t *testing.T) {
 
 func TestComputeTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	const targetSize = 1000
 
@@ -212,23 +213,48 @@ func TestComputeTruncateDecision(t *testing.T) {
 			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		}}
 	for i, c := range testCases {
-		status := raft.Status{
-			Progress: make(map[uint64]raft.Progress),
-		}
-		for j, v := range c.progress {
-			status.Progress[uint64(j)] = raft.Progress{RecentActive: true, State: raft.ProgressStateReplicate, Match: v, Next: v + 1}
-		}
-		decision := computeTruncateDecision(truncateDecisionInput{
-			RaftStatus:                     status,
-			LogSize:                        c.raftLogSize,
-			MaxLogSize:                     targetSize,
-			FirstIndex:                     c.firstIndex,
-			LastIndex:                      c.lastIndex,
-			PendingPreemptiveSnapshotIndex: c.pendingSnapshot,
+		t.Run(fmt.Sprintf("%+v", c), func(t *testing.T) {
+			status := raft.Status{
+				Progress: make(map[uint64]raft.Progress),
+			}
+			for j, v := range c.progress {
+				status.Progress[uint64(j)] = raft.Progress{RecentActive: true, State: raft.ProgressStateReplicate, Match: v, Next: v + 1}
+			}
+			input := truncateDecisionInput{
+				RaftStatus:                     status,
+				LogSize:                        c.raftLogSize,
+				MaxLogSize:                     targetSize,
+				FirstIndex:                     c.firstIndex,
+				LastIndex:                      c.lastIndex,
+				PendingPreemptiveSnapshotIndex: c.pendingSnapshot,
+			}
+			decision := computeTruncateDecision(input)
+			if act, exp := decision.String(), c.exp; act != exp {
+				t.Errorf("%d: got:\n%s\nwanted:\n%s", i, act, exp)
+			}
+
+			// Verify the triggers that queue a range for recomputation. In essence,
+			// when the raft log size is zero we'll want to suggest a truncation and
+			// also a recomputation. Before the log size is zero, we'll just see the
+			// decision play out as before. With a zero log size, we always want to
+			// truncate and recompute.
+			// The real tests for this are in TestRaftLogQueueShouldQueue, but this is
+			// some nice extra coverage.
+			should, recompute, prio := (*raftLogQueue)(nil).shouldQueueImpl(ctx, decision)
+			assert.Equal(t, decision.ShouldTruncate(), should)
+			assert.False(t, recompute)
+			assert.Equal(t, decision.ShouldTruncate(), prio != 0)
+			input.LogSize = 0
+			input.RaftStatus.RaftState = raft.StateLeader
+			if input.LastIndex <= input.FirstIndex {
+				input.LastIndex = input.FirstIndex + 1
+			}
+			decision = computeTruncateDecision(input)
+			should, recompute, prio = (*raftLogQueue)(nil).shouldQueueImpl(ctx, decision)
+			assert.True(t, should)
+			assert.True(t, prio > 0)
+			assert.True(t, recompute)
 		})
-		if act, exp := decision.String(), c.exp; act != exp {
-			t.Errorf("%d: got:\n%s\nwanted:\n%s", i, act, exp)
-		}
 	}
 }
 
@@ -337,17 +363,10 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize
 	r.mu.Unlock()
-	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 1))
-	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, math.MaxUint64))
-
-	var ms enginepb.MVCCStats
-	iter := r.store.engine.NewIterator(engine.IterOptions{UpperBound: end.Key})
-	defer iter.Close()
-	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
+	actualRaftLogSize, err := ComputeRaftLogSize(context.Background(), r.RangeID, r.Engine(), r.SideloadedRaftMuLocked())
 	if err != nil {
 		t.Fatal(err)
 	}
-	actualRaftLogSize := ms.SysBytes
 	if actualRaftLogSize != raftLogSize {
 		t.Fatalf("replica claims raft log size %d, but computed %d", raftLogSize, actualRaftLogSize)
 	}
@@ -685,4 +704,212 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	assertMin(0, now.Add(2*raftLogQueuePendingSnapshotGracePeriod))
 
 	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, map[uuid.UUID]snapTruncationInfo(nil))
+}
+
+// TestTruncateLog verifies that the TruncateLog command removes a
+// prefix of the raft logs (modifying FirstIndex() and making them
+// inaccessible via Entries()).
+func TestTruncateLog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+	tc.repl.store.SetRaftLogQueueActive(false)
+
+	// Populate the log with 10 entries. Save the LastIndex after each write.
+	var indexes []uint64
+	for i := 0; i < 10; i++ {
+		args := incrementArgs([]byte("a"), int64(i))
+
+		if _, pErr := tc.SendWrapped(&args); pErr != nil {
+			t.Fatal(pErr)
+		}
+		idx, err := tc.repl.GetLastIndex()
+		if err != nil {
+			t.Fatal(err)
+		}
+		indexes = append(indexes, idx)
+	}
+
+	rangeID := tc.repl.RangeID
+
+	// Discard the first half of the log.
+	truncateArgs := truncateLogArgs(indexes[5], rangeID)
+	if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &truncateArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// FirstIndex has changed.
+	firstIndex, err := tc.repl.GetFirstIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstIndex != indexes[5] {
+		t.Errorf("expected firstIndex == %d, got %d", indexes[5], firstIndex)
+	}
+
+	// We can still get what remains of the log.
+	tc.repl.mu.Lock()
+	entries, err := tc.repl.raftEntriesLocked(indexes[5], indexes[9], math.MaxUint64)
+	tc.repl.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != int(indexes[9]-indexes[5]) {
+		t.Errorf("expected %d entries, got %d", indexes[9]-indexes[5], len(entries))
+	}
+
+	// But any range that includes the truncated entries returns an error.
+	tc.repl.mu.Lock()
+	_, err = tc.repl.raftEntriesLocked(indexes[4], indexes[9], math.MaxUint64)
+	tc.repl.mu.Unlock()
+	if err != raft.ErrCompacted {
+		t.Errorf("expected ErrCompacted, got %s", err)
+	}
+
+	// The term of the last truncated entry is still available.
+	tc.repl.mu.Lock()
+	term, err := tc.repl.raftTermRLocked(indexes[4])
+	tc.repl.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if term == 0 {
+		t.Errorf("invalid term 0 for truncated entry")
+	}
+
+	// The terms of older entries are gone.
+	tc.repl.mu.Lock()
+	_, err = tc.repl.raftTermRLocked(indexes[3])
+	tc.repl.mu.Unlock()
+	if err != raft.ErrCompacted {
+		t.Errorf("expected ErrCompacted, got %s", err)
+	}
+
+	// Truncating logs that have already been truncated should not return an
+	// error.
+	truncateArgs = truncateLogArgs(indexes[3], rangeID)
+	if _, pErr := tc.SendWrapped(&truncateArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Truncating logs that have the wrong rangeID included should not return
+	// an error but should not truncate any logs.
+	truncateArgs = truncateLogArgs(indexes[9], rangeID+1)
+	if _, pErr := tc.SendWrapped(&truncateArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	tc.repl.mu.Lock()
+	// The term of the last truncated entry is still available.
+	term, err = tc.repl.raftTermRLocked(indexes[4])
+	tc.repl.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if term == 0 {
+		t.Errorf("invalid term 0 for truncated entry")
+	}
+}
+
+func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	var rlq *raftLogQueue
+
+	_ = ctx
+	_ = rlq
+
+	// NB: Cases for which decision.ShouldTruncate() is true are tested in
+	// TestComputeTruncateDecision, so here the decision itself is never
+	// positive.
+	var decision truncateDecision
+	decision.Input.MaxLogSize = 1000
+
+	verify := func(shouldQ bool, recompute bool, prio float64) {
+		t.Helper()
+		isQ, isR, isP := rlq.shouldQueueImpl(ctx, decision)
+		assert.Equal(t, shouldQ, isQ)
+		assert.Equal(t, recompute, isR)
+		assert.Equal(t, prio, isP)
+	}
+
+	verify(false, false, 0)
+
+	// Check all the boxes: unknown log size, leader, and non-empty log.
+	decision.Input.LogSize = 0
+	decision.Input.FirstIndex = 10
+	decision.Input.LastIndex = 20
+
+	verify(true, true, 1+float64(decision.Input.MaxLogSize)/2)
+
+	golden := decision
+
+	// Check all boxes except that log is not empty.
+	decision.Input.LogSize = 1
+	verify(false, false, 0)
+
+	// Check all boxes except that log is empty.
+	decision = golden
+	decision.Input.LastIndex = decision.Input.FirstIndex
+	verify(false, false, 0)
+}
+
+// TestTruncateLogRecompute checks that if raftLogSize is zero, the raft log
+// queue picks up the replica, recomputes the log size, and considers a
+// truncation.
+func TestTruncateLogRecompute(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	cache := engine.NewRocksDBCache(1 << 20)
+	defer cache.Release()
+	eng, err := engine.NewRocksDB(engine.RocksDBConfig{Dir: dir}, cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eng.Close()
+
+	tc := testContext{
+		engine: eng,
+	}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+	tc.repl.store.SetRaftLogQueueActive(false)
+
+	key := roachpb.Key("a")
+	repl := tc.store.LookupReplica(keys.MustAddr(key))
+
+	var v roachpb.Value
+	v.SetBytes(bytes.Repeat([]byte("x"), RaftLogQueueStaleSize*5))
+	put := roachpb.NewPut(key, v)
+	var ba roachpb.BatchRequest
+	ba.Add(put)
+	ba.RangeID = repl.RangeID
+
+	if _, pErr := tc.store.Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	decision, err := newTruncateDecision(ctx, repl)
+	assert.NoError(t, err)
+	assert.True(t, decision.ShouldTruncate())
+
+	repl.mu.Lock()
+	repl.mu.raftLogSize = 0
+	repl.mu.raftLogLastCheckSize = 0
+	repl.mu.Unlock()
+
+	// Force a raft log queue run. The result should be a nonzero Raft log of
+	// size below the threshold (though we won't check that since it could have
+	// grown over threshold again; we compute instead that its size is correct).
+	tc.store.SetRaftLogQueueActive(true)
+	tc.store.MustForceRaftLogScanAndProcess()
+	verifyLogSizeInSync(t, repl)
 }
