@@ -56,6 +56,11 @@ type VM struct {
 	Zone        string `json:"zone"`
 }
 
+// Name generates the name for the i'th node in a cluster.
+func Name(cluster string, idx int) string {
+	return fmt.Sprintf("%s-%0.4d", cluster, idx)
+}
+
 // Error values for VM.Error
 var (
 	ErrBadNetwork   = errors.New("could not determine network information")
