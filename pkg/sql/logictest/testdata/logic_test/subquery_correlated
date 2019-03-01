@@ -245,12 +245,6 @@ WHERE
 ----
 1  CA
 
-# For now, we can't decorrelate semi-join-apply cases.
-statement error could not decorrelate subquery
-SELECT *
-FROM c
-WHERE (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
-
 # Customers with more than one order.
 query IT rowsort
 SELECT * FROM c WHERE (SELECT count(*) FROM o WHERE o.c_id=c.c_id) > 1;
@@ -384,11 +378,12 @@ ORDER BY c_id
 2  TX
 4  TX
 
-# Max1Row prevents decorrelation.
-statement error could not decorrelate subquery
+# Apply
+query IT rowsort
 SELECT *
 FROM c
 WHERE (SELECT o_id FROM o WHERE o.c_id=c.c_id AND ship='WY')=4;
+----
 
 # ------------------------------------------------------------------------------
 # Subqueries in projection lists.
@@ -710,11 +705,16 @@ ORDER BY c_id;
 5  false
 6  false
 
-# For now, we can't decorrelate semi-join-apply cases.
-statement error could not decorrelate subquery
+# Apply.
+query IT rowsort
 SELECT *
 FROM c
 WHERE (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+----
+1  CA
+2  TX
+4  TX
+6  FL
 
 # Customers with at least one shipping address = minimum shipping address.
 query IB
@@ -928,12 +928,13 @@ ON c.c_id=o.c_id AND EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id AND ship IS NULL
 4  70
 4  80
 
-# Can't decorrelate this case.
-statement error could not decorrelate subquery
+query II rowsort
 SELECT c.c_id, o.o_id
 FROM c
 INNER JOIN o
 ON c.c_id=o.c_id AND o.ship = (SELECT o.ship FROM o WHERE o.c_id=c.c_id);
+----
+6  90
 
 statement error AS OF SYSTEM TIME must be provided on a top-level statement
 SELECT (SELECT c_id FROM o AS OF SYSTEM TIME '-1us')
@@ -975,6 +976,27 @@ SELECT
   c_id,
   ARRAY(SELECT (o_id, ship) FROM o WHERE o.c_id = c.c_id ORDER BY o_id)
 FROM c ORDER BY c_id
+
+# Regression for issue #24676: missing support for correlated subquery in JSON
+# operator.
+statement ok
+CREATE TABLE groups(
+  id SERIAL PRIMARY KEY,
+  data JSONB
+);
+INSERT INTO groups(data) VALUES('{"name": "Group 1", "members": [{"name": "admin", "type": "USER"}, {"name": "user", "type": "USER"}]}');
+INSERT INTO groups(data) VALUES('{"name": "Group 2", "members": [{"name": "admin2", "type": "USER"}]}');
+
+query TT
+SELECT
+  g.data->>'name' AS group_name,
+  jsonb_array_elements( (SELECT gg.data->'members' FROM groups gg WHERE gg.data->>'name' = g.data->>'name') )
+FROM
+  groups g
+----
+Group 1	{"name": "admin", "type": "USER"}
+Group 1	{"name": "user", "type": "USER"}
+Group 2	{"name": "admin2", "type": "USER"}
 
 # ------------------------------------------------------------------------------
 # Regression test cases.

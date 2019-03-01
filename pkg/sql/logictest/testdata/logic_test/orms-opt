@@ -1,0 +1,90 @@
+# LogicTest: local-opt fakedist-opt
+
+## This test file contains various complex queries that ORMs issue during
+## startup or general use, that pre-CBO code can't handle. This file should be
+## merged with the orms test file once the heuristic planner is gone.
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+# ActiveRecord query that needs apply join.
+query TTTBTITT
+SELECT a.attname,
+  format_type(a.atttypid, a.atttypmod),
+  pg_get_expr(d.adbin, d.adrelid),
+  a.attnotnull,
+  a.atttypid,
+  a.atttypmod,
+  (SELECT c.collname
+   FROM pg_collation c, pg_type t
+   WHERE c.oid = a.attcollation
+   AND t.oid = a.atttypid
+   AND a.attcollation <> t.typcollation),
+   col_description(a.attrelid, a.attnum) AS comment
+FROM pg_attribute a LEFT JOIN pg_attrdef d
+ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+WHERE a.attrelid = '"a"'::regclass
+AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum
+----
+a  bigint  NULL  true  20  -1  NULL  NULL
+
+# Navicat metadata query.
+
+query TTBBB
+SELECT
+    attname AS name,
+    attrelid AS tid,
+    COALESCE(
+        (
+            SELECT
+                attnum = ANY conkey
+            FROM
+                pg_constraint
+            WHERE
+                contype = 'p' AND conrelid = attrelid
+        ),
+        false
+    )
+        AS primarykey,
+    NOT (attnotnull) AS allownull,
+    (
+        SELECT
+            seq.oid
+        FROM
+            pg_class AS seq
+            LEFT JOIN pg_depend AS dep
+            ON seq.oid = dep.objid
+        WHERE
+            (
+                seq.relkind = 'S'::CHAR
+                AND dep.refobjsubid = attnum
+            )
+            AND dep.refobjid = attrelid
+    )
+    IS NOT NULL
+        AS autoincrement
+FROM
+    pg_attribute
+WHERE
+    (
+        attisdropped = false
+        AND attrelid
+            = (
+                    SELECT
+                        tbl.oid
+                    FROM
+                        pg_class AS tbl
+                        LEFT JOIN pg_namespace AS sch
+                        ON tbl.relnamespace = sch.oid
+                    WHERE
+                        (
+                            tbl.relkind = 'r'::"char"
+                            AND tbl.relname = 'a'
+                        )
+                        AND sch.nspname = 'public'
+                )
+    )
+    AND attname = 'a';
+----
+a  53  true  false  false
