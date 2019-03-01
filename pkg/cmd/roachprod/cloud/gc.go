@@ -345,6 +345,7 @@ func GCClusters(cloud *Cloud, dryrun bool) error {
 			if err := DestroyCluster(c); err != nil {
 				postError(client, channel, err)
 			}
+			delete(cloud.Clusters, c.Name)
 		}
 	}
 	return nil
