@@ -17,7 +17,7 @@ package optbuilder
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -51,26 +51,22 @@ func (b *Builder) buildUnion(
 	outScope = inScope.push()
 	outScope.appendColumnsFromScope(leftScope)
 
-	// newColsNeeded indicates whether or not we need to synthesize output
-	// columns. This is always required for a UNION, because the output columns
-	// of the union contain values from the left and right relations, and we must
-	// synthesize new columns to contain these values. This is not necessary for
-	// INTERSECT or EXCEPT, since these operations are basically filters on the
-	// left relation.
-	//
-	// Another benefit to synthesizing new columns is to handle the case
-	// when the type of one of the columns in the left relation is unknown, but
-	// the type of the matching column in the right relation is known.
+	// We must synthesize new columns to handle the case when the type of one of
+	// the columns in the left relation is unknown, but the type of the matching
+	// column in the right relation is known.
 	// For example:
 	//   SELECT NULL UNION SELECT 1
 	// The type of NULL is unknown, and the type of 1 is int. We need to
 	// synthesize a new column so the output column will have the correct type.
-	newColsNeeded := clause.Type == tree.UnionOp
-	if newColsNeeded {
-		// Create a new scope to hold the new synthesized columns.
-		outScope = outScope.push()
-		outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
-	}
+	//
+	// Create a new scope to hold the new synthesized columns.
+	outScope = outScope.push()
+	outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
+
+	// propagateTypesLeft/propagateTypesRight indicate whether we need to wrap
+	// the left/right side in a projection to cast some of the columns to the
+	// correct type.
+	var propagateTypesLeft, propagateTypesRight bool
 
 	// Build map from left columns to right columns.
 	for i := range leftScope.cols {
@@ -88,28 +84,34 @@ func (b *Builder) buildUnion(
 			panic(fmt.Errorf("%v types cannot be matched", clause.Type))
 		}
 
-		if newColsNeeded {
-			var typ types.T
-			if l.typ != types.Unknown {
-				typ = l.typ
-			} else {
-				typ = r.typ
+		var typ types.T
+		if l.typ != types.Unknown {
+			typ = l.typ
+			if r.typ == types.Unknown {
+				propagateTypesRight = true
 			}
-
-			b.synthesizeColumn(outScope, string(l.name), typ, nil, nil /* scalar */)
+		} else {
+			typ = r.typ
+			if r.typ != types.Unknown {
+				propagateTypesLeft = true
+			}
 		}
+
+		b.synthesizeColumn(outScope, string(l.name), typ, nil, nil /* scalar */)
+	}
+
+	if propagateTypesLeft {
+		leftScope = b.propagateTypes(leftScope, outScope)
+	}
+	if propagateTypesRight {
+		rightScope = b.propagateTypes(rightScope, outScope)
 	}
 
 	// Create the mapping between the left-side columns, right-side columns and
-	// new columns (if needed).
+	// new columns.
 	leftCols := colsToColList(leftScope.cols)
 	rightCols := colsToColList(rightScope.cols)
-	var newCols opt.ColList
-	if newColsNeeded {
-		newCols = colsToColList(outScope.cols)
-	} else {
-		newCols = leftCols
-	}
+	newCols := colsToColList(outScope.cols)
 
 	left := leftScope.expr.(memo.RelExpr)
 	right := rightScope.expr.(memo.RelExpr)
@@ -136,4 +138,33 @@ func (b *Builder) buildUnion(
 	}
 
 	return outScope
+}
+
+// propagateTypes propagates the types of the output columns down to the
+// input by wrapping the input in a Project operation. The Project operation
+// passes through columns that already have the correct type, and creates cast
+// expressions for those that don't.
+func (b *Builder) propagateTypes(inScope, outScope *scope) *scope {
+	input := inScope.expr.(memo.RelExpr)
+	inCols := inScope.cols
+
+	newScope := inScope.push()
+	newScope.cols = make([]scopeColumn, 0, len(inCols))
+
+	for i := 0; i < len(inCols); i++ {
+		inType := inCols[i].typ
+		outType := outScope.cols[i].typ
+		if !inType.Equivalent(outType) {
+			// Create a new column which casts the old column to the correct type.
+			colType, _ := coltypes.DatumTypeToColumnType(outType)
+			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(inCols[i].id), colType)
+			b.synthesizeColumn(newScope, string(inCols[i].name), outType, nil /* expr */, castExpr)
+		} else {
+			// The column is already the correct type, so add it as a passthrough
+			// column.
+			newScope.appendColumn(&inCols[i])
+		}
+	}
+	newScope.expr = b.constructProject(input, newScope.cols)
+	return newScope
 }
