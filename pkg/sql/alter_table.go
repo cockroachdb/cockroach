@@ -217,10 +217,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				ck.Validity = sqlbase.ConstraintValidity_Validating
-				n.tableDesc.Checks = append(n.tableDesc.Checks, ck)
-				descriptorChanged = true
-
-				n.tableDesc.AddCheckValidationMutation(ck.Name)
+				n.tableDesc.AddCheckValidationMutation(ck)
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
@@ -399,7 +396,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			// Drop check constraints which reference the column.
 			validChecks := n.tableDesc.Checks[:0]
-			for _, check := range n.tableDesc.Checks {
+			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
 				if used, err := check.UsesColumn(n.tableDesc.TableDesc(), col.ID); err != nil {
 					return err
 				} else if used {
@@ -455,7 +452,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			case sqlbase.ConstraintTypeUnique:
 				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX with CASCADE if you really want to drop it", t.Constraint)
 			case sqlbase.ConstraintTypeCheck:
-				for i, c := range n.tableDesc.Checks {
+				for i, c := range n.tableDesc.AllActiveAndInactiveChecks() {
 					if c.Name == name {
 						if c.Validity == sqlbase.ConstraintValidity_Validating {
 							return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
@@ -503,10 +500,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 				if !found {
-					panic("constraint returned by GetConstraintInfo not found")
-				}
-
-				if n.tableDesc.Checks[idx].Validity == sqlbase.ConstraintValidity_Validating {
 					return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 

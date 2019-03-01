@@ -74,7 +74,7 @@ type AnalyzeExprFunction func(
 func NewEvalCheckHelper(
 	ctx context.Context, analyzeExpr AnalyzeExprFunction, tableDesc *ImmutableTableDescriptor,
 ) (*CheckHelper, error) {
-	if len(tableDesc.AllChecks()) == 0 {
+	if len(tableDesc.ActiveChecks()) == 0 {
 		return nil, nil
 	}
 
@@ -85,9 +85,9 @@ func NewEvalCheckHelper(
 		ResultColumnsFromColDescs(tableDesc.Columns),
 	)
 
-	c.Exprs = make([]tree.TypedExpr, len(tableDesc.AllChecks()))
-	exprStrings := make([]string, len(tableDesc.AllChecks()))
-	for i, check := range tableDesc.AllChecks() {
+	c.Exprs = make([]tree.TypedExpr, len(tableDesc.ActiveChecks()))
+	exprStrings := make([]string, len(tableDesc.ActiveChecks()))
+	for i, check := range tableDesc.ActiveChecks() {
 		exprStrings[i] = check.Expr
 	}
 	exprs, err := parser.ParseExprs(exprStrings)
@@ -213,7 +213,7 @@ func (c *CheckHelper) CheckInput(checkVals tree.Datums) error {
 			"mismatched check constraint columns: expected %d, got %d", c.checkSet.Len(), len(checkVals))
 	}
 
-	for i, check := range c.tableDesc.AllChecks() {
+	for i, check := range c.tableDesc.ActiveChecks() {
 		if !c.checkSet.Contains(i) {
 			continue
 		}

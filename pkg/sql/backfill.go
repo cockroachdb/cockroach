@@ -125,7 +125,9 @@ func (sc *SchemaChanger) runBackfill(
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexDescs []sqlbase.IndexDescriptor
 
-	var checksToValidate []sqlbase.ConstraintToValidate
+	var addedChecks []*sqlbase.TableDescriptor_CheckConstraint
+	var droppedChecks []*sqlbase.TableDescriptor_CheckConstraint
+	var checksToValidate []sqlbase.ConstraintToUpdate
 
 	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -160,7 +162,8 @@ func (sc *SchemaChanger) runBackfill(
 				addedIndexDescs = append(addedIndexDescs, *t.Index)
 			case *sqlbase.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToValidate_CHECK:
+				case sqlbase.ConstraintToUpdate_CHECK:
+					addedChecks = append(addedChecks, &t.Constraint.Check)
 					checksToValidate = append(checksToValidate, *t.Constraint)
 				default:
 					return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
@@ -178,14 +181,32 @@ func (sc *SchemaChanger) runBackfill(
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				}
 			case *sqlbase.DescriptorMutation_Constraint:
-				// no-op
+				// Only possible during a rollback
+				if !m.Rollback {
+					panic("trying to drop constraint through schema changer outside of a rollback")
+				}
+				switch t.Constraint.ConstraintType {
+				case sqlbase.ConstraintToUpdate_CHECK:
+					droppedChecks = append(droppedChecks, &t.Constraint.Check)
+				default:
+					return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
+				}
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
 			}
 		}
 	}
 
-	// First drop indexes, then add/drop columns, and only then add indexes.
+	// First drop constraints and indexes, then add/drop columns, and only then add indexes and constraints.
+
+	// Drop check constraints (if this is a rollback).
+	if len(droppedChecks) > 0 {
+		desc, err := sc.dropChecksInRollback(ctx, droppedChecks)
+		if err != nil {
+			return err
+		}
+		version = desc.Version
+	}
 
 	// Drop indexes not to be removed by `ClearRange`.
 	if len(droppedIndexDescs) > 0 {
@@ -209,6 +230,13 @@ func (sc *SchemaChanger) runBackfill(
 		}
 	}
 
+	// Add check constraints.
+	if len(addedChecks) > 0 {
+		if _, err := sc.addChecks(ctx, addedChecks); err != nil {
+			return err
+		}
+	}
+
 	// Validate check constraints.
 	if len(checksToValidate) > 0 {
 		if err := sc.validateChecks(ctx, evalCtx, lease, checksToValidate); err != nil {
@@ -218,11 +246,95 @@ func (sc *SchemaChanger) runBackfill(
 	return nil
 }
 
+func (sc *SchemaChanger) addChecks(
+	ctx context.Context, addedChecks []*sqlbase.TableDescriptor_CheckConstraint,
+) (*ImmutableTableDescriptor, error) {
+	desc, err := sc.leaseMgr.Publish(ctx, sc.tableID,
+		func(desc *sqlbase.MutableTableDescriptor) error {
+			for i, added := range addedChecks {
+				found := false
+				for _, c := range desc.Checks {
+					if c.Name == added.Name {
+						log.VEventf(
+							ctx, 2,
+							"backfiller tried to add constraint %+v but found existing constraint %+v, presumably due to a retry",
+							added, c,
+						)
+						found = true
+						break
+					}
+				}
+				if !found {
+					desc.Checks = append(desc.Checks, addedChecks[i])
+				}
+			}
+			return nil
+		},
+		func(txn *client.Txn) error {
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
+
+func (sc *SchemaChanger) dropChecksInRollback(
+	ctx context.Context, droppedChecks []*sqlbase.TableDescriptor_CheckConstraint,
+) (*ImmutableTableDescriptor, error) {
+	desc, err := sc.leaseMgr.Publish(ctx, sc.tableID,
+		func(desc *sqlbase.MutableTableDescriptor) error {
+			remainingDroppedChecks := make(map[string]struct{})
+			for _, dropped := range droppedChecks {
+				remainingDroppedChecks[dropped.Name] = struct{}{}
+			}
+
+			checks := make([]*sqlbase.TableDescriptor_CheckConstraint, 0)
+			for _, c := range desc.Checks {
+				found := false
+				for _, dropped := range droppedChecks {
+					if dropped.Name == c.Name {
+						found = true
+						delete(remainingDroppedChecks, dropped.Name)
+						break
+					}
+				}
+				if !found {
+					checks = append(checks, c)
+				}
+			}
+			for droppedName := range remainingDroppedChecks {
+				log.VEventf(
+					ctx, 2,
+					"backfiller tried to drop constraint %+v which does not exist, presumably due to a retry",
+					droppedName,
+				)
+			}
+			desc.Checks = checks
+			return nil
+		},
+		func(txn *client.Txn) error {
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
+
 func (sc *SchemaChanger) validateChecks(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	checks []sqlbase.ConstraintToValidate,
+	checks []sqlbase.ConstraintToUpdate,
 ) error {
 	if testDisableTableLeases {
 		return nil
@@ -915,7 +1027,7 @@ func runSchemaChangesInTxn(
 	// all column mutations.
 	doneColumnBackfill := false
 	// Checks are validated after all other mutations have been applied.
-	var checksToValidate []sqlbase.ConstraintToValidate
+	var checksToValidate []sqlbase.ConstraintToUpdate
 
 	for _, m := range tableDesc.Mutations {
 		immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc.TableDesc())
@@ -938,7 +1050,8 @@ func runSchemaChangesInTxn(
 
 			case *sqlbase.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToValidate_CHECK:
+				case sqlbase.ConstraintToUpdate_CHECK:
+					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
 					checksToValidate = append(checksToValidate, *t.Constraint)
 				default:
 					return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
