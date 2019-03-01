@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	// "postgres" gosql driver
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -937,7 +936,7 @@ func (c *cluster) FetchDmesg(ctx context.Context) error {
 	c.status("fetching dmesg")
 
 	// Don't hang forever.
-	return contextutil.RunWithTimeout(ctx, "debug zip", 20*time.Second, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "dmesg", 20*time.Second, func(ctx context.Context) error {
 		const name = "dmesg.txt"
 		path := filepath.Join(c.t.ArtifactsDir(), name)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -952,6 +951,25 @@ func (c *cluster) FetchDmesg(ctx context.Context) error {
 			c.l.Printf("during dmesg fetching: %s", err)
 		}
 		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
+	})
+}
+
+// FetchCores fetches any core files on the cluster.
+func (c *cluster) FetchCores(ctx context.Context) error {
+	if c.nodes == 0 || c.isLocal() {
+		// No nodes can happen during unit tests and implies nothing to do.
+		// Also, don't grab dmesg on local runs.
+		return nil
+	}
+
+	c.l.Printf("fetching cores\n")
+	c.status("fetching cores")
+
+	// Don't hang forever. The core files can be large, so we give a generous
+	// timeout.
+	return contextutil.RunWithTimeout(ctx, "cores", 60*time.Second, func(ctx context.Context) error {
+		path := filepath.Join(c.t.ArtifactsDir(), "cores")
+		return execCmd(ctx, c.l, roachprod, "get", c.name, "/tmp/cores" /* src */, path /* dest */)
 	})
 }
 

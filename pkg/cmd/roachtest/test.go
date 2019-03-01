@@ -1163,6 +1163,9 @@ func (r *registry) runAsync(
 			if err := c.FetchDmesg(ctx); err != nil {
 				c.l.Printf("failed to fetch dmesg: %s", err)
 			}
+			if err := c.FetchCores(ctx); err != nil {
+				c.l.Printf("failed to fetch cores: %s", err)
+			}
 			// NB: fetch the logs even when we have a debug zip because
 			// debug zip can't ever get the logs for down nodes.
 			// We only save artifacts for failed tests in CI, so this
