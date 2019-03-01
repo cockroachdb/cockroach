@@ -69,12 +69,10 @@ func TestValidations(t *testing.T) {
 			})
 
 			const requestedResolved = 7
-			var numResolved, rowsSinceResolved int
-
-			v := cdctest.Validators{
+			v := cdctest.MakeCountValidator(cdctest.Validators{
 				cdctest.NewOrderValidator(`bank`),
 				cdctest.NewFingerprintValidator(db, `bank`, `fprint`, bankFeed.Partitions()),
-			}
+			})
 			sqlDB.Exec(t, `CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`)
 			for {
 				m, err := bankFeed.Next()
@@ -86,23 +84,18 @@ func TestValidations(t *testing.T) {
 						t.Fatal(err)
 					}
 					v.NoteRow(m.Partition, string(m.Key), string(m.Value), updated)
-					rowsSinceResolved++
 				} else if m.Resolved != nil {
 					_, resolved, err := cdctest.ParseJSONValueTimestamps(m.Resolved)
 					if err != nil {
 						t.Fatal(err)
 					}
-					if rowsSinceResolved > 0 || true {
-						if err := v.NoteResolved(m.Partition, resolved); err != nil {
-							t.Fatal(err)
-						}
-						numResolved++
-						if numResolved > requestedResolved {
-							atomic.StoreInt64(&done, 1)
-							break
-						}
+					if err := v.NoteResolved(m.Partition, resolved); err != nil {
+						t.Fatal(err)
 					}
-					rowsSinceResolved = 0
+					if v.NumResolvedWithRows > requestedResolved {
+						atomic.StoreInt64(&done, 1)
+						break
+					}
 				}
 			}
 			for _, f := range v.Failures() {

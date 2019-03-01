@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx"
@@ -57,6 +58,12 @@ type TestFeed interface {
 	// greater than zero (a row updated) or len(payload) will be (a resolved
 	// timestamp).
 	Next() (*TestFeedMessage, error)
+	// Pause stops the feed from running. Next will continue to return any results
+	// that were queued before the pause, eventually blocking or erroring once
+	// they've all been drained.
+	Pause() error
+	// Resume restarts the feed from the last changefeed-wide resolved timestamp.
+	Resume() error
 	// Close shuts down the changefeed and releases resources.
 	Close() error
 }
@@ -85,24 +92,16 @@ func (f *sinklessFeedFactory) Feed(create string, args ...interface{}) (TestFeed
 	if err != nil {
 		return nil, err
 	}
-	s := &sinklessFeed{seen: make(map[string]struct{})}
-	s.conn, err = pgx.Connect(pgxConfig)
-	if err != nil {
-		return nil, err
+	s := &sinklessFeed{
+		create:  create,
+		args:    args,
+		connCfg: pgxConfig,
+		seen:    make(map[string]struct{}),
 	}
-
-	// The syntax for a sinkless changefeed is `EXPERIMENTAL CHANGEFEED FOR ...`
-	// but it's convenient to accept the `CREATE CHANGEFEED` syntax from the
-	// test, so we can keep the current abstraction of running each test over
-	// both types. This bit turns what we received into the real sinkless
-	// syntax.
-	create = strings.Replace(create, `CREATE CHANGEFEED`, `EXPERIMENTAL CHANGEFEED`, 1)
-
-	s.rows, err = s.conn.Query(create, args...)
-	if err != nil {
-		return nil, err
-	}
-	return s, nil
+	// Resuming a sinkless feed is the same as killing it and creating a brand new
+	// one with the 'cursor' option set to the last resolved timestamp returned,
+	// so reuse the same code for both.
+	return s, s.Resume()
 }
 
 // Server implements the TestFeedFactory interface.
@@ -113,9 +112,14 @@ func (f *sinklessFeedFactory) Server() serverutils.TestServerInterface {
 // sinklessFeed is an implementation of the `TestFeed` interface for a
 // "sinkless" (results returned over pgwire) feed.
 type sinklessFeed struct {
-	conn *pgx.Conn
-	rows *pgx.Rows
-	seen map[string]struct{}
+	create  string
+	args    []interface{}
+	connCfg pgx.ConnConfig
+
+	conn           *pgx.Conn
+	rows           *pgx.Rows
+	seen           map[string]struct{}
+	latestResolved hlc.Timestamp
 }
 
 // Partitions implements the TestFeed interface.
@@ -148,12 +152,52 @@ func (c *sinklessFeed) Next() (*TestFeedMessage, error) {
 		}
 		m.Resolved = m.Value
 		m.Key, m.Value = nil, nil
+
+		// Keep track of the latest resolved timestamp so Resume can use it.
+		// TODO(dan): Also do this for non-json feeds.
+		if _, resolved, err := ParseJSONValueTimestamps(m.Resolved); err == nil {
+			c.latestResolved.Forward(resolved)
+		}
+
 		return m, nil
 	}
 }
 
+// Pause implements the TestFeed interface.
+func (c *sinklessFeed) Pause() error {
+	return c.Close()
+}
+
+// Resume implements the TestFeed interface.
+func (c *sinklessFeed) Resume() error {
+	var err error
+	c.conn, err = pgx.Connect(c.connCfg)
+	if err != nil {
+		return err
+	}
+
+	// The syntax for a sinkless changefeed is `EXPERIMENTAL CHANGEFEED FOR ...`
+	// but it's convenient to accept the `CREATE CHANGEFEED` syntax from the
+	// test, so we can keep the current abstraction of running each test over
+	// both types. This bit turns what we received into the real sinkless
+	// syntax.
+	create := strings.Replace(c.create, `CREATE CHANGEFEED`, `EXPERIMENTAL CHANGEFEED`, 1)
+	if !c.latestResolved.IsEmpty() {
+		// NB: The TODO in Next means c.latestResolved is currently never set for
+		// non-json feeds.
+		if strings.Contains(create, `WITH`) {
+			create += fmt.Sprintf(`, cursor='%s'`, c.latestResolved.AsOfSystemTime())
+		} else {
+			create += fmt.Sprintf(` WITH cursor='%s'`, c.latestResolved.AsOfSystemTime())
+		}
+	}
+	c.rows, err = c.conn.Query(create, c.args...)
+	return err
+}
+
 // Close implements the TestFeed interface.
 func (c *sinklessFeed) Close() error {
+	c.rows = nil
 	return c.conn.Close()
 }
 
@@ -202,6 +246,17 @@ func (f *jobFeed) fetchJobError() error {
 		f.jobErr = errors.New(errorStr.String)
 	}
 	return nil
+}
+
+func (f *jobFeed) Pause() error {
+	_, err := f.db.Exec(`PAUSE JOB $1`, f.JobID)
+	return err
+}
+
+func (f *jobFeed) Resume() error {
+	_, err := f.db.Exec(`RESUME JOB $1`, f.JobID)
+	f.jobErr = nil
+	return err
 }
 
 type tableFeedFactory struct {
@@ -481,6 +536,11 @@ func (c *cloudFeed) Next() (*TestFeedMessage, error) {
 }
 
 func (c *cloudFeed) walkDir(path string, info os.FileInfo, _ error) error {
+	if strings.HasSuffix(path, `.tmp`) {
+		// File in the process of being written by ExportStorage. Ignore.
+		return nil
+	}
+
 	if info.IsDir() {
 		// Nothing to do for directories.
 		return nil
@@ -521,7 +581,7 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, _ error) error {
 	for s.Scan() {
 		c.rows = append(c.rows, cloudFeedEntry{
 			topic: topic,
-			value: s.Bytes(),
+			value: append([]byte(nil), s.Bytes()...),
 		})
 	}
 	return nil

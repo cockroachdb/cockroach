@@ -17,14 +17,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -338,53 +333,5 @@ func TestCloudStorageSink(t *testing.T) {
 			"e3next\n",
 			`{"resolved":"4.0000000000"}`,
 		}, slurpDir(t, dir))
-	})
-}
-
-// TODO(dan): Validations-based cloudStorageSink testing.
-func TestCloudStorage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	dir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
-
-	flushCh := make(chan struct{}, 1)
-	defer close(flushCh)
-	knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{
-		AfterSinkFlush: func() error {
-			select {
-			case flushCh <- struct{}{}:
-			default:
-			}
-			return nil
-		},
-	}}}
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		UseDatabase:   "d",
-		ExternalIODir: dir,
-		Knobs:         knobs,
-	})
-	defer s.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
-	sqlDB.Exec(t, `CREATE DATABASE d`)
-
-	f := cdctest.MakeCloudFeedFactory(s, db, dir, flushCh)
-
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
-
-	foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved`)
-	defer closeFeed(t, foo)
-
-	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'b')`)
-
-	assertPayloads(t, foo, []string{
-		`foo: ->{"after": {"a": 1}}`,
-		`foo: ->{"after": {"a": 2, "b": "b"}}`,
 	})
 }
