@@ -363,13 +363,11 @@ type optTable struct {
 	// table.
 	name cat.DataSourceName
 
-	// primaryIndex is the inlined wrapper for the table's primary index.
-	primaryIndex optIndex
+	// indexes are the inlined wrappers for the table's primary and secondary
+	// indexes.
+	indexes []optIndex
 
-	// indexes is a cache of index wrappers that's used to satisfy repeated
-	// calls to the Index method for the same index.
-	indexes map[*sqlbase.IndexDescriptor]*optIndex
-
+	// stats are the inlined wrappers for table statistics.
 	stats []optTableStat
 
 	// family is the inlined wrapper for the table's primary family. The primary
@@ -377,9 +375,11 @@ type optTable struct {
 	// were explicitly specified, then the primary family is synthesized.
 	primaryFamily optFamily
 
-	// families is a cache of family wrappers (all except primary family) that's
-	// used to satisfy repeated calls to the Family method for the same family.
-	families map[*sqlbase.ColumnFamilyDescriptor]*optFamily
+	// families are the inlined wrappers for the table's non-primary families,
+	// which are all the families specified by the user after the first. The
+	// primary family is kept separate since the common case is that there's just
+	// one family.
+	families []optFamily
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
@@ -395,23 +395,32 @@ func newOptTable(
 	stats []*stats.TableStatistic,
 ) *optTable {
 	ot := &optTable{desc: desc, id: id, name: *name}
-	if stats != nil {
-		ot.stats = make([]optTableStat, len(stats))
-		n := 0
-		for i := range stats {
-			// We skip any stats that have columns that don't exist in the table anymore.
-			if ot.stats[n].init(ot, stats[i]) {
-				n++
-			}
-		}
-		ot.stats = ot.stats[:n]
-	}
 
 	// The cat.Table interface requires that table names be fully qualified.
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
 
-	ot.primaryIndex.init(ot, &desc.PrimaryIndex)
+	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
+	ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
+	for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
+		ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
+	}
+
+	if !ot.desc.IsVirtualTable() {
+		// Build the indexes (add 1 to account for lack of primary index in
+		// DeletableIndexes slice).
+		ot.indexes = make([]optIndex, 1+len(ot.desc.DeletableIndexes()))
+
+		for i := range ot.indexes {
+			var idxDesc *sqlbase.IndexDescriptor
+			if i == 0 {
+				idxDesc = &desc.PrimaryIndex
+			} else {
+				idxDesc = &ot.desc.DeletableIndexes()[i-1]
+			}
+			ot.indexes[i].init(ot, idxDesc)
+		}
+	}
 
 	if len(desc.Families) == 0 {
 		// This must be a virtual table, so synthesize a primary family. Only
@@ -424,6 +433,23 @@ func newOptTable(
 		ot.primaryFamily.init(ot, family)
 	} else {
 		ot.primaryFamily.init(ot, &desc.Families[0])
+		ot.families = make([]optFamily, len(desc.Families)-1)
+		for i := range ot.families {
+			ot.families[i].init(ot, &desc.Families[i+1])
+		}
+	}
+
+	// Add stats last, now that other metadata is initialized.
+	if stats != nil {
+		ot.stats = make([]optTableStat, len(stats))
+		n := 0
+		for i := range stats {
+			// We skip any stats that have columns that don't exist in the table anymore.
+			if ot.stats[n].init(ot, stats[i]) {
+				n++
+			}
+		}
+		ot.stats = ot.stats[:n]
 	}
 
 	return ot
@@ -529,24 +555,7 @@ func (ot *optTable) DeletableIndexCount() int {
 
 // Index is part of the cat.Table interface.
 func (ot *optTable) Index(i int) cat.Index {
-	// Primary index is always 0th index.
-	if i == cat.PrimaryIndex {
-		return &ot.primaryIndex
-	}
-
-	// Bias i to account for lack of primary index in DeletableIndexes slice.
-	desc := &ot.desc.DeletableIndexes()[i-1]
-
-	// Check to see if there's already a wrapper for this index descriptor.
-	if ot.indexes == nil {
-		ot.indexes = make(map[*sqlbase.IndexDescriptor]*optIndex, len(ot.desc.Indexes))
-	}
-	wrapper, ok := ot.indexes[desc]
-	if !ok {
-		wrapper = newOptIndex(ot, desc)
-		ot.indexes[desc] = wrapper
-	}
-	return wrapper
+	return &ot.indexes[i]
 }
 
 // StatisticCount is part of the cat.Table interface.
@@ -557,15 +566,6 @@ func (ot *optTable) StatisticCount() int {
 // Statistic is part of the cat.Table interface.
 func (ot *optTable) Statistic(i int) cat.TableStatistic {
 	return &ot.stats[i]
-}
-
-func (ot *optTable) ensureColMap() {
-	if ot.colMap == nil {
-		ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
-		for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
-			ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
-		}
-	}
 }
 
 // CheckCount is part of the cat.Table interface.
@@ -581,34 +581,20 @@ func (ot *optTable) Check(i int) cat.CheckConstraint {
 
 // FamilyCount is part of the cat.Table interface.
 func (ot *optTable) FamilyCount() int {
-	return len(ot.desc.Families)
+	return 1 + len(ot.families)
 }
 
 // Family is part of the cat.Table interface.
 func (ot *optTable) Family(i int) cat.Family {
-	// The default family is always 0th index.
 	if i == 0 {
 		return &ot.primaryFamily
 	}
-	desc := &ot.desc.Families[i]
-
-	// Check to see if there's already a wrapper for this family descriptor, and
-	// if not, create one.
-	if ot.families == nil {
-		ot.families = make(map[*sqlbase.ColumnFamilyDescriptor]*optFamily, len(ot.desc.Families))
-	}
-	wrapper, ok := ot.families[desc]
-	if !ok {
-		wrapper = newOptFamily(ot, desc)
-		ot.families[desc] = wrapper
-	}
-	return wrapper
+	return &ot.families[i-1]
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
-	ot.ensureColMap()
 	col, ok := ot.colMap[colID]
 	if ok {
 		return col, nil
@@ -636,12 +622,6 @@ type optIndex struct {
 }
 
 var _ cat.Index = &optIndex{}
-
-func newOptIndex(tab *optTable, desc *sqlbase.IndexDescriptor) *optIndex {
-	oi := &optIndex{}
-	oi.init(tab, desc)
-	return oi
-}
 
 // init can be used instead of newOptIndex when we have a pre-allocated instance
 // (e.g. as part of a bigger struct).
@@ -798,7 +778,6 @@ func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool
 	os.distinctCount = stat.DistinctCount
 	os.nullCount = stat.NullCount
 	os.columnOrdinals = make([]int, len(stat.ColumnIDs))
-	tab.ensureColMap()
 	for i, c := range stat.ColumnIDs {
 		var ok bool
 		os.columnOrdinals[i], ok = tab.colMap[c]
@@ -863,12 +842,6 @@ type optFamily struct {
 }
 
 var _ cat.Family = &optFamily{}
-
-func newOptFamily(tab *optTable, desc *sqlbase.ColumnFamilyDescriptor) *optFamily {
-	oi := &optFamily{}
-	oi.init(tab, desc)
-	return oi
-}
 
 // init can be used instead of newOptFamily when we have a pre-allocated
 // instance (e.g. as part of a bigger struct).
