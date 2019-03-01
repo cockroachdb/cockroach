@@ -342,12 +342,7 @@ func (td *truncateDecision) String() string {
 
 func (td *truncateDecision) NumTruncatableIndexes() int {
 	if td.NewFirstIndex < td.Input.FirstIndex {
-		log.Fatalf(
-			context.Background(),
-			"invalid truncate decision: first index would move from %d to %d",
-			td.Input.FirstIndex,
-			td.NewFirstIndex,
-		)
+		return 0
 	}
 	return int(td.NewFirstIndex - td.Input.FirstIndex)
 }
@@ -490,7 +485,35 @@ func (rlq *raftLogQueue) shouldQueue(
 		log.Warning(ctx, err)
 		return false, 0
 	}
-	return decision.ShouldTruncate(), float64(decision.Input.LogSize)
+
+	shouldQ, _, prio := rlq.shouldQueueImpl(ctx, decision)
+	return shouldQ, prio
+}
+
+// shouldQueueImpl returns whether the given truncate decision should lead to
+// a log truncation. This is either the case if the decision says so or of
+// we want to recompute the log size (in which case `recomputeRaftLogSize` and
+// `shouldQ` are both true and a reasonable priority is returned).
+func (rlq *raftLogQueue) shouldQueueImpl(
+	ctx context.Context, decision truncateDecision,
+) (shouldQ bool, recomputeRaftLogSize bool, priority float64) {
+	if decision.ShouldTruncate() {
+		return true, false, float64(decision.Input.LogSize)
+	}
+	if decision.Input.LogSize > 0 ||
+		decision.Input.LastIndex == decision.Input.FirstIndex {
+
+		return false, false, 0
+	}
+	// We have a nonempty log (first index != last index) and think that its size is
+	// zero, which can't be true (even an empty entry's Size() is nonzero). We queue
+	// the replica; processing it will force a recomputation. For the priority, we
+	// have to pick one as we usually use the log size which is not available here.
+	// Going half-way between zero and the MaxLogSize should give a good tradeoff
+	// between processing the recomputation quickly, and not starving replicas which
+	// see a significant amount of write traffic until they run over and truncate
+	// more aggressively than they need to.
+	return true, true, 1.0 + float64(decision.Input.MaxLogSize)/2.0
 }
 
 // process truncates the raft log of the range if the replica is the raft
@@ -500,6 +523,35 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {
 		return err
+	}
+
+	if _, recompute, _ := rlq.shouldQueueImpl(ctx, decision); recompute {
+		log.VEventf(ctx, 2, "recomputing raft log based on decision %+v", decision)
+
+		// We need to hold raftMu both to access the sideloaded storage and to
+		// make sure concurrent Raft activity doesn't foul up our update to the
+		// cached in-memory values.
+		r.raftMu.Lock()
+		n, err := ComputeRaftLogSize(ctx, r.RangeID, r.Engine(), r.raftMu.sideloaded)
+		if err == nil {
+			r.mu.Lock()
+			r.mu.raftLogSize = n
+			r.mu.raftLogLastCheckSize = n
+			r.mu.Unlock()
+		}
+		r.raftMu.Unlock()
+
+		if err != nil {
+			return errors.Wrap(err, "recomputing raft log size")
+		}
+
+		log.VEventf(ctx, 2, "recomputed raft log size to %s", humanizeutil.IBytes(n))
+
+		// Override the decision, now that an accurate log size is available.
+		decision, err = newTruncateDecision(ctx, r)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Can and should the raft logs be truncated?

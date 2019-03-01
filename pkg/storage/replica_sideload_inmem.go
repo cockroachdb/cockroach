@@ -35,7 +35,7 @@ type inMemSideloadStorage struct {
 
 func mustNewInMemSideloadStorage(
 	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
-) sideloadStorage {
+) SideloadStorage {
 	ss, err := newInMemSideloadStorage(cluster.MakeTestingClusterSettings(), rangeID, replicaID, baseDir, nil)
 	if err != nil {
 		panic(err)
@@ -49,7 +49,7 @@ func newInMemSideloadStorage(
 	replicaID roachpb.ReplicaID,
 	baseDir string,
 	eng engine.Engine,
-) (sideloadStorage, error) {
+) (SideloadStorage, error) {
 	return &inMemSideloadStorage{
 		prefix: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),
 		m:      make(map[slKey][]byte),
@@ -100,14 +100,17 @@ func (ss *inMemSideloadStorage) Clear(_ context.Context) error {
 	return nil
 }
 
-func (ss *inMemSideloadStorage) TruncateTo(_ context.Context, index uint64) (int64, error) {
+func (ss *inMemSideloadStorage) TruncateTo(
+	_ context.Context, index uint64,
+) (freed, retained int64, _ error) {
 	// Not efficient, but this storage is for testing purposes only anyway.
-	var size int64
 	for k, v := range ss.m {
 		if k.index < index {
-			size += int64(len(v))
+			freed += int64(len(v))
 			delete(ss.m, k)
+		} else {
+			retained += int64(len(v))
 		}
 	}
-	return size, nil
+	return freed, retained, nil
 }

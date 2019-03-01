@@ -371,7 +371,7 @@ func addSSTablePreApply(
 	ctx context.Context,
 	st *cluster.Settings,
 	eng engine.Engine,
-	sideloaded sideloadStorage,
+	sideloaded SideloadStorage,
 	term, index uint64,
 	sst storagepb.ReplicatedEvalResult_AddSSTable,
 	limiter *rate.Limiter,
@@ -537,7 +537,7 @@ func (r *Replica) handleReplicatedEvalResult(
 			// could rot.
 			{
 				log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", newTruncState.Index)
-				if size, err := r.raftMu.sideloaded.TruncateTo(ctx, newTruncState.Index+1); err != nil {
+				if size, _, err := r.raftMu.sideloaded.TruncateTo(ctx, newTruncState.Index+1); err != nil {
 					// We don't *have* to remove these entries for correctness. Log a
 					// loud error, but keep humming along.
 					log.Errorf(ctx, "while removing sideloaded files during log truncation: %s", err)

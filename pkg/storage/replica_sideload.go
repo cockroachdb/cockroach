@@ -29,9 +29,9 @@ import (
 
 var errSideloadedFileNotFound = errors.New("sideloaded file not found")
 
-// sideloadStorage is the interface used for Raft SSTable sideloading.
+// SideloadStorage is the interface used for Raft SSTable sideloading.
 // Implementations do not need to be thread safe.
-type sideloadStorage interface {
+type SideloadStorage interface {
 	// The directory in which the sideloaded files are stored. May or may not
 	// exist.
 	Dir() string
@@ -48,11 +48,12 @@ type sideloadStorage interface {
 	//
 	// Returns the total size of the purged payloads.
 	Purge(_ context.Context, index, term uint64) (int64, error)
-	// Clear files that may have been written by this sideloadStorage.
+	// Clear files that may have been written by this SideloadStorage.
 	Clear(context.Context) error
 	// TruncateTo removes all files belonging to an index strictly smaller than
-	// the given one. Returns the number of bytes freed.
-	TruncateTo(_ context.Context, index uint64) (int64, error)
+	// the given one. Returns the number of bytes freed, the number of bytes in
+	// files that remain, or an error.
+	TruncateTo(_ context.Context, index uint64) (freed, retained int64, _ error)
 	// Returns an absolute path to the file that Get() would return the contents
 	// of. Does not check whether the file actually exists.
 	Filename(_ context.Context, index, term uint64) (string, error)
@@ -86,13 +87,13 @@ func (r *Replica) maybeSideloadEntriesRaftMuLocked(
 // maybeSideloadEntriesImpl iterates through the provided slice of entries. If
 // no sideloadable entries are found, it returns the same slice. Otherwise, it
 // returns a new slice in which all applicable entries have been sideloaded to
-// the specified sideloadStorage. maybeRaftCommand is called when sideloading is
+// the specified SideloadStorage. maybeRaftCommand is called when sideloading is
 // necessary and can optionally supply a pre-Unmarshaled RaftCommand (which
 // usually is provided by the Replica in-flight proposal map.
 func maybeSideloadEntriesImpl(
 	ctx context.Context,
 	entriesToAppend []raftpb.Entry,
-	sideloaded sideloadStorage,
+	sideloaded SideloadStorage,
 	maybeRaftCommand func(storagebase.CmdIDKey) (storagepb.RaftCommand, bool),
 ) (_ []raftpb.Entry, sideloadedEntriesSize int64, _ error) {
 
@@ -170,7 +171,7 @@ func sniffSideloadedRaftCommand(data []byte) (sideloaded bool) {
 
 // maybeInlineSideloadedRaftCommand takes an entry and inspects it. If its
 // command encoding version indicates a sideloaded entry, it uses the entryCache
-// or sideloadStorage to inline the payload, returning a new entry (which must
+// or SideloadStorage to inline the payload, returning a new entry (which must
 // be treated as immutable by the caller) or nil (if inlining does not apply)
 //
 // If a payload is missing, returns an error whose Cause() is
@@ -179,7 +180,7 @@ func maybeInlineSideloadedRaftCommand(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	ent raftpb.Entry,
-	sideloaded sideloadStorage,
+	sideloaded SideloadStorage,
 	entryCache *raftentry.Cache,
 ) (*raftpb.Entry, error) {
 	if !sniffSideloadedRaftCommand(ent.Data) {
@@ -259,7 +260,7 @@ func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 // and returns the total number of bytes removed. Nonexistent entries are
 // silently skipped over.
 func maybePurgeSideloaded(
-	ctx context.Context, ss sideloadStorage, firstIndex, lastIndex uint64, term uint64,
+	ctx context.Context, ss SideloadStorage, firstIndex, lastIndex uint64, term uint64,
 ) (int64, error) {
 	var totalSize int64
 	for i := firstIndex; i <= lastIndex; i++ {

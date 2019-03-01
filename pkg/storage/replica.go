@@ -197,7 +197,7 @@ type Replica struct {
 		// depending on which lock is being held.
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
-		sideloaded sideloadStorage
+		sideloaded SideloadStorage
 
 		// rangefeed is an instance of a rangefeed Processor that is capable of
 		// routing rangefeed events to a set of subscribers. Will be nil if no
@@ -250,10 +250,16 @@ type Replica struct {
 		// already finished snapshot "pending" for extended periods of time
 		// (preventing log truncation).
 		snapshotLogTruncationConstraints map[uuid.UUID]snapTruncationInfo
-		// raftLogSize is the approximate size in bytes of the persisted raft log.
-		// On server restart, this value is assumed to be zero to avoid costly scans
-		// of the raft log. This will be correct when all log entries predating this
-		// process have been truncated.
+		// raftLogSize is the approximate size in bytes of the persisted raft
+		// log, including sideloaded entries' payloads. The value itself is not
+		// persisted and is computed lazily, paced by the raft log truncation
+		// queue which will recompute the log size when it finds it
+		// uninitialized. This recomputation mechanism isn't relevant for ranges
+		// which see regular write activity (for those the log size will deviate
+		// from zero quickly, and so it won't be recomputed but will undercount
+		// until the first truncation is carried out), but it prevents a large
+		// dormant Raft log from sitting around forever, which has caused problems
+		// in the past.
 		raftLogSize int64
 		// raftLogLastCheckSize is the value of raftLogSize the last time the Raft
 		// log was checked for truncation or at the time of the last Raft log
