@@ -1727,7 +1727,9 @@ func (ex *connExecutor) synchronizeParallelStmts(ctx context.Context) error {
 }
 
 // setTransactionModes implements the txnModesSetter interface.
-func (ex *connExecutor) setTransactionModes(modes tree.TransactionModes) error {
+func (ex *connExecutor) setTransactionModes(
+	modes tree.TransactionModes, asOfTs hlc.Timestamp,
+) error {
 	// This method cheats and manipulates ex.state directly, not through an event.
 	// The alternative would be to create a special event, but it's unclear how
 	// that'd work given that this method is called while executing a statement.
@@ -1747,18 +1749,15 @@ func (ex *connExecutor) setTransactionModes(modes tree.TransactionModes) error {
 		return errors.Errorf("unknown isolation level: %s", modes.Isolation)
 	}
 	rwMode := modes.ReadWriteMode
-	if modes.AsOf.Expr != nil {
-
-		ts, err := ex.planner.EvalAsOfTimestamp(modes.AsOf)
-		if err != nil {
-			return err
-		}
+	if modes.AsOf.Expr != nil && (asOfTs == hlc.Timestamp{}) {
+		return pgerror.NewAssertionErrorf("expected an evaluated AS OF timestamp")
+	}
+	if (asOfTs != hlc.Timestamp{}) {
+		ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs)
+		ex.state.sqlTimestamp = asOfTs.GoTime()
 		if rwMode == tree.UnspecifiedReadWriteMode {
 			rwMode = tree.ReadOnly
 		}
-		ex.state.setHistoricalTimestamp(ex.Ctx(), ts)
-		ex.planner.semaCtx.AsOfTimestamp = &ts
-		ex.state.sqlTimestamp = ts.GoTime()
 	}
 	return ex.state.setReadOnlyMode(rwMode)
 }

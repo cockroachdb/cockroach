@@ -258,3 +258,18 @@ RELEASE SAVEPOINT cockroach_restart
 
 statement ok
 COMMIT
+
+# Ensure that errors evaluating AOST clauses in BEGIN and SET TRANSACTION do not
+# cause problems.
+
+statement error pq: AS OF SYSTEM TIME: zero timestamp is invalid
+BEGIN AS OF SYSTEM TIME '0'
+
+statement ok
+BEGIN
+
+statement error pq: AS OF SYSTEM TIME: zero timestamp is invalid
+SET TRANSACTION AS OF SYSTEM TIME '0'
+
+statement ok
+ROLLBACK
