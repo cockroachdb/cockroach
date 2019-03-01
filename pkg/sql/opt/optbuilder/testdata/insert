@@ -81,6 +81,22 @@ TABLE checks
  ├── CHECK (checks.b < d)
  └── CHECK (a > 0)
 
+exec-ddl
+CREATE TABLE checkmutations (
+    a INT PRIMARY KEY,
+    "b:write-only" INT,
+    "c:delete-only" INT,
+    CHECK (b < c)
+)
+----
+TABLE checkmutations
+ ├── a int not null
+ ├── b int (mutation)
+ ├── c int (mutation)
+ ├── INDEX primary
+ │    └── a int not null
+ └── CHECK (b < c)
+
 # Unknown target table.
 build
 INSERT INTO unknown VALUES (1, 2, 3)
@@ -1185,18 +1201,21 @@ insert mutation
  │    ├──  column1:6 => m:1
  │    ├──  column2:7 => n:2
  │    ├──  column8:8 => o:3
- │    └──  column9:9 => p:4
+ │    ├──  column10:10 => p:4
+ │    └──  column9:9 => q:5
  └── project
-      ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      ├── columns: column10:10(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int)
       ├── project
-      │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    ├── columns: column8:8(int!null) column9:9(int) column1:6(int) column2:7(int)
       │    ├── values
       │    │    ├── columns: column1:6(int) column2:7(int)
       │    │    └── tuple [type=tuple{int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 2 [type=int]
       │    └── projections
-      │         └── const: 10 [type=int]
+      │         ├── const: 10 [type=int]
+      │         └── cast: INT8 [type=int]
+      │              └── null [type=unknown]
       └── projections
            └── plus [type=int]
                 ├── variable: column8 [type=int]
@@ -1212,18 +1231,21 @@ insert mutation
  │    ├──  column1:6 => m:1
  │    ├──  column2:7 => n:2
  │    ├──  column8:8 => o:3
- │    └──  column9:9 => p:4
+ │    ├──  column10:10 => p:4
+ │    └──  column9:9 => q:5
  └── project
-      ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      ├── columns: column10:10(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int)
       ├── project
-      │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    ├── columns: column8:8(int!null) column9:9(int) column1:6(int) column2:7(int)
       │    ├── values
       │    │    ├── columns: column1:6(int) column2:7(int)
       │    │    └── tuple [type=tuple{int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 2 [type=int]
       │    └── projections
-      │         └── const: 10 [type=int]
+      │         ├── const: 10 [type=int]
+      │         └── cast: INT8 [type=int]
+      │              └── null [type=unknown]
       └── projections
            └── plus [type=int]
                 ├── variable: column8 [type=int]
@@ -1316,3 +1338,31 @@ insert checks
            └── gt [type=bool]
                 ├── variable: abcde.a [type=int]
                 └── const: 0 [type=int]
+
+# Regression for #35193: Insert into table where check depends on mutation
+# columns.
+build
+INSERT INTO checkmutations (a) VALUES (1)
+----
+insert checkmutations
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:4 => a:1
+ │    ├──  column5:5 => b:2
+ │    └──  column5:5 => c:3
+ ├── check columns: check1:6(bool)
+ └── project
+      ├── columns: check1:6(bool) column1:4(int) column5:5(int)
+      ├── project
+      │    ├── columns: column5:5(int) column1:4(int)
+      │    ├── values
+      │    │    ├── columns: column1:4(int)
+      │    │    └── tuple [type=tuple{int}]
+      │    │         └── const: 1 [type=int]
+      │    └── projections
+      │         └── cast: INT8 [type=int]
+      │              └── null [type=unknown]
+      └── projections
+           └── lt [type=bool]
+                ├── variable: column5 [type=int]
+                └── variable: column5 [type=int]

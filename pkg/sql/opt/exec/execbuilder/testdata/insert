@@ -455,15 +455,32 @@ BEGIN; ALTER TABLE mutation ADD COLUMN z INT AS (x + y) STORED
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
 ----
-count             ·              ·                      ()                           ·
- └── insert       ·              ·                      ()                           ·
-      │           into           mutation(x, y, rowid)  ·                            ·
-      │           strategy       inserter               ·                            ·
-      └── values  ·              ·                      (column1, column2, column7)  ·
-·                 size           3 columns, 1 row       ·                            ·
-·                 row 0, expr 0  2                      ·                            ·
-·                 row 0, expr 1  2                      ·                            ·
-·                 row 0, expr 2  unique_rowid()         ·                            ·
+count             ·              ·                         ()                                    ·
+ └── insert       ·              ·                         ()                                    ·
+      │           into           mutation(x, y, rowid, z)  ·                                     ·
+      │           strategy       inserter                  ·                                     ·
+      └── values  ·              ·                         (column1, column2, column7, column8)  ·
+·                 size           4 columns, 1 row          ·                                     ·
+·                 row 0, expr 0  2                         ·                                     ·
+·                 row 0, expr 1  2                         ·                                     ·
+·                 row 0, expr 2  unique_rowid()            ·                                     ·
+·                 row 0, expr 3  4                         ·                                     ·
 
 statement ok
 ROLLBACK
+
+# This test returns an error with the heuristic planner, but succeeds with the
+# cost-based optimizer. See issue #35193 for more details.
+subtest regression_35193
+
+statement ok
+CREATE TABLE t35193(a INT)
+
+statement ok
+BEGIN; ALTER TABLE t35193 ADD COLUMN b INT; ALTER TABLE t35193 ADD CHECK (a > b)
+
+statement ok
+INSERT INTO t35193 (a) VALUES (1)
+
+statement ok
+COMMIT

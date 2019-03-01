@@ -1990,7 +1990,8 @@ upsert mutation
  │    ├──  column1:6 => a:1
  │    ├──  column2:7 => b:2
  │    ├──  column3:8 => c:3
- │    └──  column9:9 => d:4
+ │    ├──  column9:9 => d:4
+ │    └──  column9:9 => e:5
  ├── update-mapping:
  │    └──  upsert_b:17 => b:2
  ├── cardinality: [0 - 0]

@@ -319,3 +319,19 @@ INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING
 
 statement ok
 INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
+
+# This test returns an error with the heuristic planner, but succeeds with the
+# cost-based optimizer. See issue #35193 for more details.
+subtest regression_35193
+
+statement ok
+CREATE TABLE t35193(a INT)
+
+statement ok
+BEGIN; ALTER TABLE t35193 ADD COLUMN b INT; ALTER TABLE t35193 ADD CHECK (a > b)
+
+statement ok
+INSERT INTO t35193 VALUES (1) ON CONFLICT (rowid) DO UPDATE SET a=1
+
+statement ok
+COMMIT

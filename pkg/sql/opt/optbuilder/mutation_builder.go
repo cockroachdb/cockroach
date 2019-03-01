@@ -324,9 +324,9 @@ func (mb *mutationBuilder) addSynthesizedCols(
 ) {
 	var projectionsScope *scope
 
-	// Skip delete-only mutation columns, since they are ignored by all mutation
-	// operators that synthesize columns.
-	for i, n := 0, mb.tab.WritableColumnCount(); i < n; i++ {
+	// Include mutation columns, because they can be used by other computed
+	// expressions as well as check expressions.
+	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
 		// Skip columns that are already specified.
 		if colList[i] != 0 {
 			continue

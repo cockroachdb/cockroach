@@ -302,3 +302,19 @@ querying next range at /Table/57/1/1/1/1
 r20: sending batch 2 Del, 1 EndTxn to (n1,s1):1
 fast path completed
 rows affected: 1
+
+# This test returns an error with the heuristic planner, but succeeds with the
+# cost-based optimizer. See issue #35193 for more details.
+subtest regression_35193
+
+statement ok
+CREATE TABLE t35193(a INT)
+
+statement ok
+BEGIN; ALTER TABLE t35193 ADD COLUMN b INT; ALTER TABLE t35193 ADD CHECK (a > b)
+
+statement ok
+UPDATE t35193 SET a=1
+
+statement ok
+COMMIT

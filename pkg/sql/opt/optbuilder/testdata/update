@@ -79,6 +79,22 @@ TABLE checks
  ├── CHECK (checks.b < d)
  └── CHECK (a > 0)
 
+exec-ddl
+CREATE TABLE checkmutations (
+    a INT PRIMARY KEY,
+    "b:write-only" INT,
+    "c:delete-only" INT,
+    CHECK (b < c)
+)
+----
+TABLE checkmutations
+ ├── a int not null
+ ├── b int (mutation)
+ ├── c int (mutation)
+ ├── INDEX primary
+ │    └── a int not null
+ └── CHECK (b < c)
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -1506,3 +1522,26 @@ update checks
            └── gt [type=bool]
                 ├── variable: abcde.a [type=int]
                 └── const: 0 [type=int]
+
+# Update table where check depends on mutation columns.
+build
+UPDATE checkmutations SET a=1
+----
+update checkmutations
+ ├── columns: <none>
+ ├── fetch columns: a:4(int) b:5(int) c:6(int)
+ ├── update-mapping:
+ │    └──  column7:7 => a:1
+ ├── check columns: check1:8(bool)
+ └── project
+      ├── columns: check1:8(bool) a:4(int!null) b:5(int) c:6(int) column7:7(int!null)
+      ├── project
+      │    ├── columns: column7:7(int!null) a:4(int!null) b:5(int) c:6(int)
+      │    ├── scan checkmutations
+      │    │    └── columns: a:4(int!null) b:5(int) c:6(int)
+      │    └── projections
+      │         └── const: 1 [type=int]
+      └── projections
+           └── lt [type=bool]
+                ├── variable: b [type=int]
+                └── variable: c [type=int]

@@ -115,6 +115,22 @@ TABLE checks
  ├── CHECK (checks.b < d)
  └── CHECK (a > 0)
 
+exec-ddl
+CREATE TABLE checkmutations (
+    a INT PRIMARY KEY,
+    "b:write-only" INT,
+    "c:delete-only" INT,
+    CHECK (b < c)
+)
+----
+TABLE checkmutations
+ ├── a int not null
+ ├── b int (mutation)
+ ├── c int (mutation)
+ ├── INDEX primary
+ │    └── a int not null
+ └── CHECK (b < c)
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -1078,41 +1094,44 @@ UPDATE SET m=mutation.m+1
 ----
 upsert mutation
  ├── columns: <none>
- ├── canary column: 10
- ├── fetch columns: m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+ ├── canary column: 11
+ ├── fetch columns: m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
  ├── insert-mapping:
  │    ├──  column1:6 => m:1
  │    ├──  column2:7 => n:2
  │    ├──  column8:8 => o:3
- │    └──  column9:9 => p:4
+ │    ├──  column10:10 => p:4
+ │    └──  column9:9 => q:5
  ├── update-mapping:
- │    ├──  upsert_m:17 => m:1
- │    └──  upsert_p:20 => p:4
+ │    ├──  upsert_m:18 => m:1
+ │    └──  upsert_p:21 => p:4
  └── project
-      ├── columns: upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      ├── columns: upsert_m:18(int) upsert_n:19(int) upsert_o:20(int) upsert_p:21(int) upsert_q:22(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) column10:10(int) m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
       ├── project
-      │    ├── columns: column16:16(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
+      │    ├── columns: column17:17(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) column10:10(int) m:11(int) n:12(int) o:13(int) p:14(int) q:15(int) column16:16(int)
       │    ├── project
-      │    │    ├── columns: column15:15(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    ├── columns: column16:16(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) column10:10(int) m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
       │    │    ├── left-join
-      │    │    │    ├── columns: column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    ├── columns: column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) column10:10(int) m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    │    │    │    ├── columns: column10:10(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    │    │    │    ├── columns: column8:8(int!null) column9:9(int) column1:6(int) column2:7(int)
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:6(int) column2:7(int)
       │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │    │         └── const: 2 [type=int]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── const: 10 [type=int]
+      │    │    │    │    │         ├── const: 10 [type=int]
+      │    │    │    │    │         └── cast: INT8 [type=int]
+      │    │    │    │    │              └── null [type=unknown]
       │    │    │    │    └── projections
       │    │    │    │         └── plus [type=int]
       │    │    │    │              ├── variable: column8 [type=int]
       │    │    │    │              └── variable: column2 [type=int]
       │    │    │    ├── scan mutation
-      │    │    │    │    └── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    │    └── columns: m:11(int!null) n:12(int) o:13(int) p:14(int) q:15(int)
       │    │    │    └── filters
       │    │    │         └── eq [type=bool]
       │    │    │              ├── variable: column1 [type=int]
@@ -1133,7 +1152,7 @@ upsert mutation
            │    │    │    ├── variable: m [type=int]
            │    │    │    └── null [type=unknown]
            │    │    └── variable: column1 [type=int]
-           │    └── variable: column15 [type=int]
+           │    └── variable: column16 [type=int]
            ├── case [type=int]
            │    ├── true [type=bool]
            │    ├── when [type=int]
@@ -1150,6 +1169,14 @@ upsert mutation
            │    │    │    └── null [type=unknown]
            │    │    └── variable: column8 [type=int]
            │    └── variable: o [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: m [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column10 [type=int]
+           │    └── variable: column17 [type=int]
            └── case [type=int]
                 ├── true [type=bool]
                 ├── when [type=int]
@@ -1157,7 +1184,7 @@ upsert mutation
                 │    │    ├── variable: m [type=int]
                 │    │    └── null [type=unknown]
                 │    └── variable: column9 [type=int]
-                └── variable: column16 [type=int]
+                └── variable: q [type=int]
 
 # ------------------------------------------------------------------------------
 # Test UPSERT.
@@ -1409,39 +1436,42 @@ UPSERT INTO mutation (m, n) VALUES (1, 2)
 ----
 upsert mutation
  ├── columns: <none>
- ├── canary column: 10
- ├── fetch columns: m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+ ├── canary column: 11
+ ├── fetch columns: m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
  ├── insert-mapping:
  │    ├──  column1:6 => m:1
  │    ├──  column2:7 => n:2
  │    ├──  column8:8 => o:3
- │    └──  column9:9 => p:4
+ │    ├──  column10:10 => p:4
+ │    └──  column9:9 => q:5
  ├── update-mapping:
  │    ├──  column2:7 => n:2
- │    └──  upsert_p:18 => p:4
+ │    └──  upsert_p:19 => p:4
  └── project
-      ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      ├── columns: upsert_m:17(int) upsert_o:18(int) upsert_p:19(int) upsert_q:20(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) column10:10(int) m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
       ├── project
-      │    ├── columns: column15:15(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    ├── columns: column16:16(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) column10:10(int) m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
       │    ├── left-join
-      │    │    ├── columns: column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    ├── columns: column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) column10:10(int) m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
       │    │    ├── project
-      │    │    │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    │    │    ├── columns: column10:10(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    │    │    ├── columns: column8:8(int!null) column9:9(int) column1:6(int) column2:7(int)
       │    │    │    │    ├── values
       │    │    │    │    │    ├── columns: column1:6(int) column2:7(int)
       │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │         └── const: 2 [type=int]
       │    │    │    │    └── projections
-      │    │    │    │         └── const: 10 [type=int]
+      │    │    │    │         ├── const: 10 [type=int]
+      │    │    │    │         └── cast: INT8 [type=int]
+      │    │    │    │              └── null [type=unknown]
       │    │    │    └── projections
       │    │    │         └── plus [type=int]
       │    │    │              ├── variable: column8 [type=int]
       │    │    │              └── variable: column2 [type=int]
       │    │    ├── scan mutation
-      │    │    │    └── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    └── columns: m:11(int!null) n:12(int) o:13(int) p:14(int) q:15(int)
       │    │    └── filters
       │    │         └── eq [type=bool]
       │    │              ├── variable: column1 [type=int]
@@ -1467,6 +1497,14 @@ upsert mutation
            │    │    │    └── null [type=unknown]
            │    │    └── variable: column8 [type=int]
            │    └── variable: o [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: m [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column10 [type=int]
+           │    └── variable: column16 [type=int]
            └── case [type=int]
                 ├── true [type=bool]
                 ├── when [type=int]
@@ -1474,7 +1512,7 @@ upsert mutation
                 │    │    ├── variable: m [type=int]
                 │    │    └── null [type=unknown]
                 │    └── variable: column9 [type=int]
-                └── variable: column15 [type=int]
+                └── variable: q [type=int]
 
 # Don't directly update mutation columns. However, computed columns do need to
 # be updated. Use implicit target columns.
@@ -1483,39 +1521,42 @@ UPSERT INTO mutation VALUES (1, 2)
 ----
 upsert mutation
  ├── columns: <none>
- ├── canary column: 10
- ├── fetch columns: m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+ ├── canary column: 11
+ ├── fetch columns: m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
  ├── insert-mapping:
  │    ├──  column1:6 => m:1
  │    ├──  column2:7 => n:2
  │    ├──  column8:8 => o:3
- │    └──  column9:9 => p:4
+ │    ├──  column10:10 => p:4
+ │    └──  column9:9 => q:5
  ├── update-mapping:
  │    ├──  column2:7 => n:2
- │    └──  upsert_p:18 => p:4
+ │    └──  upsert_p:19 => p:4
  └── project
-      ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      ├── columns: upsert_m:17(int) upsert_o:18(int) upsert_p:19(int) upsert_q:20(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) column10:10(int) m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
       ├── project
-      │    ├── columns: column15:15(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    ├── columns: column16:16(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) column10:10(int) m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
       │    ├── left-join
-      │    │    ├── columns: column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    ├── columns: column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) column10:10(int) m:11(int) n:12(int) o:13(int) p:14(int) q:15(int)
       │    │    ├── project
-      │    │    │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    │    │    ├── columns: column10:10(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    │    │    ├── columns: column8:8(int!null) column9:9(int) column1:6(int) column2:7(int)
       │    │    │    │    ├── values
       │    │    │    │    │    ├── columns: column1:6(int) column2:7(int)
       │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │         └── const: 2 [type=int]
       │    │    │    │    └── projections
-      │    │    │    │         └── const: 10 [type=int]
+      │    │    │    │         ├── const: 10 [type=int]
+      │    │    │    │         └── cast: INT8 [type=int]
+      │    │    │    │              └── null [type=unknown]
       │    │    │    └── projections
       │    │    │         └── plus [type=int]
       │    │    │              ├── variable: column8 [type=int]
       │    │    │              └── variable: column2 [type=int]
       │    │    ├── scan mutation
-      │    │    │    └── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    └── columns: m:11(int!null) n:12(int) o:13(int) p:14(int) q:15(int)
       │    │    └── filters
       │    │         └── eq [type=bool]
       │    │              ├── variable: column1 [type=int]
@@ -1541,6 +1582,14 @@ upsert mutation
            │    │    │    └── null [type=unknown]
            │    │    └── variable: column8 [type=int]
            │    └── variable: o [type=int]
+           ├── case [type=int]
+           │    ├── true [type=bool]
+           │    ├── when [type=int]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: m [type=int]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: column10 [type=int]
+           │    └── variable: column16 [type=int]
            └── case [type=int]
                 ├── true [type=bool]
                 ├── when [type=int]
@@ -1548,7 +1597,7 @@ upsert mutation
                 │    │    ├── variable: m [type=int]
                 │    │    └── null [type=unknown]
                 │    └── variable: column9 [type=int]
-                └── variable: column15 [type=int]
+                └── variable: q [type=int]
 
 # Use unknown name in upsert column list.
 build
@@ -1897,3 +1946,73 @@ upsert checks
            └── gt [type=bool]
                 ├── variable: abc.a [type=int]
                 └── const: 0 [type=int]
+
+# Upsert into table where check depends on mutation columns.
+build
+INSERT INTO checkmutations (a) VALUES (1) ON CONFLICT (a) DO UPDATE SET a=2
+----
+upsert checkmutations
+ ├── columns: <none>
+ ├── canary column: 6
+ ├── fetch columns: a:6(int) b:7(int) c:8(int)
+ ├── insert-mapping:
+ │    ├──  column1:4 => a:1
+ │    ├──  column5:5 => b:2
+ │    └──  column5:5 => c:3
+ ├── update-mapping:
+ │    └──  upsert_a:10 => a:1
+ ├── check columns: check1:13(bool)
+ └── project
+      ├── columns: check1:13(bool) column1:4(int) column5:5(int) a:6(int) b:7(int) c:8(int) upsert_a:10(int) upsert_b:11(int) upsert_c:12(int)
+      ├── project
+      │    ├── columns: upsert_a:10(int) upsert_b:11(int) upsert_c:12(int) column1:4(int) column5:5(int) a:6(int) b:7(int) c:8(int)
+      │    ├── project
+      │    │    ├── columns: column9:9(int!null) column1:4(int) column5:5(int) a:6(int) b:7(int) c:8(int)
+      │    │    ├── left-join
+      │    │    │    ├── columns: column1:4(int) column5:5(int) a:6(int) b:7(int) c:8(int)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column5:5(int) column1:4(int)
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:4(int)
+      │    │    │    │    │    └── tuple [type=tuple{int}]
+      │    │    │    │    │         └── const: 1 [type=int]
+      │    │    │    │    └── projections
+      │    │    │    │         └── cast: INT8 [type=int]
+      │    │    │    │              └── null [type=unknown]
+      │    │    │    ├── scan checkmutations
+      │    │    │    │    └── columns: a:6(int!null) b:7(int) c:8(int)
+      │    │    │    └── filters
+      │    │    │         └── eq [type=bool]
+      │    │    │              ├── variable: column1 [type=int]
+      │    │    │              └── variable: a [type=int]
+      │    │    └── projections
+      │    │         └── const: 2 [type=int]
+      │    └── projections
+      │         ├── case [type=int]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=int]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: a [type=int]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: column1 [type=int]
+      │         │    └── variable: column9 [type=int]
+      │         ├── case [type=int]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=int]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: a [type=int]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: column5 [type=int]
+      │         │    └── variable: b [type=int]
+      │         └── case [type=int]
+      │              ├── true [type=bool]
+      │              ├── when [type=int]
+      │              │    ├── is [type=bool]
+      │              │    │    ├── variable: a [type=int]
+      │              │    │    └── null [type=unknown]
+      │              │    └── variable: column5 [type=int]
+      │              └── variable: c [type=int]
+      └── projections
+           └── lt [type=bool]
+                ├── variable: upsert_b [type=int]
+                └── variable: upsert_c [type=int]
