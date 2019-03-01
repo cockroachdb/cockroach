@@ -453,7 +453,12 @@ func ImportFixture(
 			return errors.Wrapf(err, `importing table %s`, table.Name)
 		})
 	}
-	return bytesAtomic, g.Wait()
+	if err := g.Wait(); err != nil {
+		return 0, err
+	}
+	// TODO(dan): This needs to do splits and run PostLoad hooks. Unify this,
+	// RestoreFixture, and workload.Setup.
+	return atomic.LoadInt64(&bytesAtomic), nil
 }
 
 func importFixtureTable(
@@ -465,6 +470,7 @@ func importFixtureTable(
 	directIngestion bool,
 	output string,
 ) (int64, error) {
+	start := timeutil.Now()
 	var buf bytes.Buffer
 	var params []interface{}
 	fmt.Fprintf(&buf, `IMPORT TABLE "%s"."%s" %s CSV DATA (`, dbName, table.Name, table.Schema)
@@ -484,17 +490,24 @@ func importFixtureTable(
 	if directIngestion {
 		buf.WriteString(`, experimental_direct_ingestion`)
 	}
-	var ignored driver.Value
-	var bytes int64
+	var rows, index, tableBytes int64
+	var discard driver.Value
 	err := sqlDB.QueryRow(buf.String(), params...).Scan(
-		&ignored, &ignored, &ignored, &ignored, &ignored, &ignored, &bytes,
+		&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
 	)
-	return bytes, err
+	log.Infof(ctx, `imported %s (%s, %d rows, %d index entries, %v)`,
+		table.Name, timeutil.Since(start).Round(time.Second), rows, index,
+		humanizeutil.IBytes(tableBytes),
+	)
+	return tableBytes, err
 }
 
 // RestoreFixture loads a fixture into a CockroachDB cluster. An enterprise
 // license is required to have been set in the cluster.
-func RestoreFixture(ctx context.Context, sqlDB *gosql.DB, fixture Fixture, database string) error {
+func RestoreFixture(
+	ctx context.Context, sqlDB *gosql.DB, fixture Fixture, database string,
+) (int64, error) {
+	var bytesAtomic int64
 	g, gCtx := errgroup.WithContext(ctx)
 	for _, table := range fixture.Tables {
 		table := table
@@ -503,36 +516,38 @@ func RestoreFixture(ctx context.Context, sqlDB *gosql.DB, fixture Fixture, datab
 			// database `csv`.
 			start := timeutil.Now()
 			importStmt := fmt.Sprintf(`RESTORE csv.%s FROM $1 WITH into_db=$2`, table.TableName)
-			var rows, index, bytes int64
+			var rows, index, tableBytes int64
 			var discard interface{}
 			if err := sqlDB.QueryRow(importStmt, table.BackupURI, database).Scan(
-				&discard, &discard, &discard, &rows, &index, &discard, &bytes,
+				&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
 			); err != nil {
 				return err
 			}
+			atomic.AddInt64(&bytesAtomic, tableBytes)
 			log.Infof(gCtx, `loaded %s (%s, %d rows, %d index entries, %v)`,
-				table.TableName, timeutil.Since(start).Round(time.Second), rows, index, humanizeutil.IBytes(bytes),
+				table.TableName, timeutil.Since(start).Round(time.Second), rows, index,
+				humanizeutil.IBytes(tableBytes),
 			)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return err
+		return 0, err
 	}
 	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
 	for _, table := range fixture.Generator.Tables() {
 		if err := workload.Split(ctx, sqlDB, table, splitConcurrency); err != nil {
-			return errors.Wrapf(err, `splitting %s`, table.Name)
+			return 0, errors.Wrapf(err, `splitting %s`, table.Name)
 		}
 	}
 	if h, ok := fixture.Generator.(workload.Hookser); ok {
 		if hooks := h.Hooks(); hooks.PostLoad != nil {
 			if err := hooks.PostLoad(sqlDB); err != nil {
-				return errors.Wrap(err, `PostLoad hook`)
+				return 0, errors.Wrap(err, `PostLoad hook`)
 			}
 		}
 	}
-	return nil
+	return atomic.LoadInt64(&bytesAtomic), nil
 }
 
 // ListFixtures returns the object paths to all fixtures stored in a FixtureConfig.
