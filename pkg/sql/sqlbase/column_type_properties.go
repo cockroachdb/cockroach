@@ -673,7 +673,7 @@ func LimitValueWidth(
 		if typ.Width > 0 && utf8.RuneCountInString(sv) > int(typ.Width) {
 			return nil, pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
 				"value too long for type %s (column %q)",
-				typ.SQLString(), tree.ErrNameString(name))
+				typ.SQLString(), tree.ErrNameStringP(name))
 		}
 	case ColumnType_INT:
 		if v, ok := tree.AsDInt(inVal); ok {
@@ -686,7 +686,7 @@ func LimitValueWidth(
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
 					return nil, pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
 						"integer out of range for type %s (column %q)",
-						typ.VisibleType, tree.ErrNameString(name))
+						typ.VisibleType, tree.ErrNameStringP(name))
 				}
 			}
 		}
@@ -724,7 +724,7 @@ func LimitValueWidth(
 			err := tree.LimitDecimalWidth(&outDec.Decimal, int(typ.Precision), int(typ.Width))
 			if err != nil {
 				return nil, errors.Wrapf(err, "type %s (column %q)",
-					typ.SQLString(), tree.ErrNameString(name))
+					typ.SQLString(), tree.ErrNameStringP(name))
 			}
 			return &outDec, nil
 		}
@@ -798,13 +798,13 @@ func CheckDatumTypeFitsColumnType(
 		if err := pmap.SetType(p.Idx, colTyp); err != nil {
 			return pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeError,
 				"cannot infer type for placeholder %s from column %q: %s",
-				p.Idx, tree.ErrNameString(&col.Name), err)
+				p.Idx, tree.ErrNameString(col.Name), err)
 		}
 	} else if !typ.Equivalent(colTyp) {
 		// Not a placeholder; check that the value cast has succeeded.
 		return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"value type %s doesn't match type %s of column %q",
-			typ, col.Type.SQLString(), tree.ErrNameString(&col.Name))
+			typ, col.Type.SQLString(), tree.ErrNameString(col.Name))
 	}
 	return nil
 }
