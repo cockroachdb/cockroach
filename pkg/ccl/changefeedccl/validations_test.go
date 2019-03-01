@@ -43,7 +43,9 @@ func TestValidations(t *testing.T) {
 			ctx := context.Background()
 			const numRows, numRanges, payloadBytes, maxTransfer = 10, 10, 10, 999
 			gen := bank.FromConfig(numRows, payloadBytes, numRanges)
-			if _, err := workload.Setup(ctx, db, gen, 0, 0); err != nil {
+			var l workload.InsertsDataLoader
+			const dontRunChecks = false
+			if _, err := workload.Setup(ctx, db, gen, l, dontRunChecks); err != nil {
 				t.Fatal(err)
 			}
 
@@ -121,7 +123,9 @@ func TestCatchupScanOrdering(t *testing.T) {
 			ctx := context.Background()
 			const numRows, numRanges, payloadBytes, maxTransfer = 10, 10, 10, 999
 			gen := bank.FromConfig(numRows, payloadBytes, numRanges)
-			if _, err := workload.Setup(ctx, db, gen, 0, 0); err != nil {
+			var l workload.InsertsDataLoader
+			const dontRunChecks = false
+			if _, err := workload.Setup(ctx, db, gen, l, dontRunChecks); err != nil {
 				t.Fatal(err)
 			}
 

@@ -27,7 +27,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -36,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
@@ -98,6 +96,11 @@ type Hooks struct {
 	// PreLoad is called after workload tables are created and before workload
 	// data is loaded. It is not called when storing or loading a fixture.
 	// Implementations should be idempotent.
+	//
+	// TODO(dan): Deprecate the PreLoad hook, it doesn't play well with fixtures.
+	// It's only used in practice for zone configs, so it should be reasonably
+	// straightforward to make zone configs first class citizens of
+	// workload.Table.
 	PreLoad func(*gosql.DB) error
 	// PostLoad is called after workload tables are created workload data is
 	// loaded. It called after restoring a fixture. This, for example, is where
@@ -301,107 +304,31 @@ func ApproxDatumSize(x interface{}) int64 {
 // SetBytes of benchmarks. The exact definition of this is deferred to the
 // ApproxDatumSize implementation.
 func Setup(
-	ctx context.Context, db *gosql.DB, gen Generator, batchSize, concurrency int,
+	ctx context.Context, db *gosql.DB, gen Generator, l InitialDataLoader, runChecks bool,
 ) (int64, error) {
-	if batchSize <= 0 {
-		batchSize = 1000
-	}
-	if concurrency < 1 {
-		concurrency = 1
+	bytes, err := l.InitialDataLoad(ctx, db, gen)
+	if err != nil {
+		return 0, err
 	}
 
-	tables := gen.Tables()
 	var hooks Hooks
 	if h, ok := gen.(Hookser); ok {
 		hooks = h.Hooks()
 	}
-
-	for _, table := range tables {
-		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS "%s" %s`, table.Name, table.Schema)
-		if _, err := db.ExecContext(ctx, createStmt); err != nil {
-			return 0, errors.Wrapf(err, "could not create table: %s", table.Name)
-		}
-	}
-
-	if hooks.PreLoad != nil {
-		if err := hooks.PreLoad(db); err != nil {
-			return 0, errors.Wrapf(err, "Could not preload")
-		}
-	}
-
-	var size int64
-	for _, table := range tables {
-		if table.InitialRows.NumBatches == 0 {
-			continue
-		} else if table.InitialRows.Batch == nil {
-			return 0, errors.Errorf(
-				`initial data is not supported for workload %s`, gen.Meta().Name)
-		}
-		batchesPerWorker := table.InitialRows.NumBatches / concurrency
-		g, gCtx := errgroup.WithContext(ctx)
-		for i := 0; i < concurrency; i++ {
-			startIdx := i * batchesPerWorker
-			endIdx := startIdx + batchesPerWorker
-			if i == concurrency-1 {
-				// Account for any rounding error in batchesPerWorker.
-				endIdx = table.InitialRows.NumBatches
-			}
-			g.Go(func() error {
-				var insertStmtBuf bytes.Buffer
-				var params []interface{}
-				var numRows int
-				flush := func() error {
-					if len(params) > 0 {
-						insertStmt := insertStmtBuf.String()
-						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
-							return errors.Wrapf(err, "failed insert into %s", table.Name)
-						}
-					}
-					insertStmtBuf.Reset()
-					fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
-					params = params[:0]
-					numRows = 0
-					return nil
-				}
-				_ = flush()
-
-				for rowBatchIdx := startIdx; rowBatchIdx < endIdx; rowBatchIdx++ {
-					for _, row := range table.InitialRows.Batch(rowBatchIdx) {
-						if len(params) != 0 {
-							insertStmtBuf.WriteString(`,`)
-						}
-						insertStmtBuf.WriteString(`(`)
-						for i, datum := range row {
-							atomic.AddInt64(&size, ApproxDatumSize(datum))
-							if i != 0 {
-								insertStmtBuf.WriteString(`,`)
-							}
-							fmt.Fprintf(&insertStmtBuf, `$%d`, len(params)+i+1)
-						}
-						params = append(params, row...)
-						insertStmtBuf.WriteString(`)`)
-						if numRows++; numRows >= batchSize {
-							if err := flush(); err != nil {
-								return err
-							}
-						}
-					}
-				}
-				return flush()
-			})
-		}
-		if err := g.Wait(); err != nil {
-			return 0, err
-		}
-	}
-
 	if hooks.PostLoad != nil {
 		if err := hooks.PostLoad(db); err != nil {
 			return 0, errors.Wrapf(err, "Could not postload")
 		}
 	}
 
-	return size, nil
+	if consistencyCheckFn := hooks.CheckConsistency; runChecks && consistencyCheckFn != nil {
+		log.Info(ctx, "data is loaded; now running consistency checks (ctrl-c to abort)")
+		if err := consistencyCheckFn(ctx, db); err != nil {
+			return bytes, err
+		}
+	}
+
+	return bytes, nil
 }
 
 func maybeDisableMergeQueue(db *gosql.DB) error {

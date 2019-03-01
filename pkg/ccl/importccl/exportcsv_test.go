@@ -41,7 +41,9 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	db.Exec(t, "CREATE DATABASE test")
 
 	wk := bank.FromRows(rows)
-	if _, err := workload.Setup(ctx, conn, wk, 100, 3); err != nil {
+	l := workload.InsertsDataLoader{BatchSize: 100, Concurrency: 3}
+	const dontRunChecks = false
+	if _, err := workload.Setup(ctx, conn, wk, l, dontRunChecks); err != nil {
 		t.Fatal(err)
 	}
 

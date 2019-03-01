@@ -272,6 +272,29 @@ func fixturesMake(gen workload.Generator, urls []string, _ string) error {
 	return nil
 }
 
+// restoreDataLoader is an InitialDataLoader implementation that loads data with
+// RESTORE.
+type restoreDataLoader struct {
+	fixture  workloadccl.Fixture
+	database string
+}
+
+// InitialDataLoad implements the InitialDataLoader interface.
+func (l restoreDataLoader) InitialDataLoad(
+	ctx context.Context, db *gosql.DB, gen workload.Generator,
+) (int64, error) {
+	log.Infof(ctx, "starting restore of %d tables", len(gen.Tables()))
+	start := timeutil.Now()
+	bytes, err := workloadccl.RestoreFixture(ctx, db, l.fixture, l.database)
+	if err != nil {
+		return 0, errors.Wrap(err, `restoring fixture`)
+	}
+	elapsed := timeutil.Since(start)
+	log.Infof(ctx, "imported %s bytes in %d tables (took %s, %s)",
+		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
+	return bytes, nil
+}
+
 func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 	gcs, err := getStorage(ctx)
@@ -293,23 +316,9 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 		return errors.Wrap(err, `finding fixture`)
 	}
 
-	log.Infof(ctx, "starting load of %d tables", len(gen.Tables()))
-	bytes, err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, dbName)
-	if err != nil {
-		return errors.Wrap(err, `restoring fixture`)
-	}
-	log.Infof(ctx, "loaded %s bytes in %d tables", humanizeutil.IBytes(bytes), len(gen.Tables()))
-
-	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
-		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
-			log.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
-			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	l := restoreDataLoader{fixture: fixture, database: dbName}
+	_, err = workload.Setup(ctx, sqlDB, gen, l, *fixturesRunChecks)
+	return err
 }
 
 func fixturesImport(gen workload.Generator, urls []string, dbName string) error {
@@ -322,31 +331,13 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 		return err
 	}
 
-	log.Infof(ctx, "starting import of %d tables", len(gen.Tables()))
-	start := timeutil.Now()
-	directIngestion := *fixturesImportDirectIngestionTable
-	filesPerNode := *fixturesImportFilesPerNode
-	injectStats := *fixturesImportInjectStats
-	bytes, err := workloadccl.ImportFixture(
-		ctx, sqlDB, gen, dbName, directIngestion, filesPerNode, injectStats,
-	)
-	if err != nil {
-		return errors.Wrap(err, `importing fixture`)
+	l := workloadccl.ImportDataLoader{
+		DirectIngestion: *fixturesImportDirectIngestionTable,
+		FilesPerNode:    *fixturesImportFilesPerNode,
+		InjectStats:     *fixturesImportInjectStats,
 	}
-	elapsed := timeutil.Since(start)
-	log.Infof(ctx, "imported %s bytes in %d tables (took %s, %s)",
-		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
-
-	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
-		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
-			log.Info(ctx, "fixture is imported; now running consistency checks (ctrl-c to abort)")
-			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	_, err = workload.Setup(ctx, sqlDB, gen, l, *fixturesRunChecks)
+	return err
 }
 
 func fixturesURL(gen workload.Generator) func(*cobra.Command, []string) {

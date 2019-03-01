@@ -75,8 +75,9 @@ func TestAllRegisteredWorkloadsValidate(t *testing.T) {
 					t.Fatalf(`%+v`, err)
 				}
 			} else {
-				const batchSize, concurrency = 0, 0
-				if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+				var l workload.InsertsDataLoader
+				const dontRunChecks = false
+				if _, err := workload.Setup(ctx, db, gen, l, dontRunChecks); err != nil {
 					t.Fatalf(`%+v`, err)
 				}
 			}

@@ -56,7 +56,9 @@ var initFlags = pflag.NewFlagSet(`init`, pflag.ContinueOnError)
 var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exists")
 
 var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
-var pprofport = initFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
+var pprofport = sharedFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
+var dataLoader = sharedFlags.String("data-loader", `INSERT`,
+	"How to load initial table data. Options are INSERT and IMPORT")
 
 var histograms = runFlags.String(
 	"histograms", "",
@@ -266,12 +268,23 @@ func runInitImpl(
 		return err
 	}
 
-	const batchSize = -1
-	// TODO(dan): Don't hardcode this. Similar to dbOverride, this should be
-	// hooked up to a flag directly once once more of run.go moves inside
-	// workload.
-	const concurrency = 16
-	_, err := workload.Setup(ctx, initDB, gen, batchSize, concurrency)
+	var l workload.InitialDataLoader
+	switch strings.ToLower(*dataLoader) {
+	case `insert`, `inserts`:
+		l = workload.InsertsDataLoader{
+			// TODO(dan): Don't hardcode this. Similar to dbOverride, this should be
+			// hooked up to a flag directly once once more of run.go moves inside
+			// workload.
+			Concurrency: 16,
+		}
+	case `import`, `imports`:
+		l = workload.ImportDataLoader
+	default:
+		return errors.Errorf(`unknown data loader: %s`, *dataLoader)
+	}
+
+	const dontRunChecks = false
+	_, err := workload.Setup(ctx, initDB, gen, l, dontRunChecks)
 	return err
 }
 

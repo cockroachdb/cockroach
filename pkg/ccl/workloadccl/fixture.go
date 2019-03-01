@@ -40,6 +40,10 @@ const (
 	fixtureGCSURIScheme = `gs`
 )
 
+func init() {
+	workload.ImportDataLoader = ImportDataLoader{}
+}
+
 // FixtureConfig describes a storage place for fixtures.
 type FixtureConfig struct {
 	// GCSBucket is a Google Cloud Storage bucket.
@@ -429,6 +433,37 @@ func MakeFixture(
 	return GetFixture(ctx, gcs, config, gen)
 }
 
+// ImportDataLoader is an InitialDataLoader implementation that loads data with
+// IMPORT. The zero-value gets some sane defaults for the tunable
+// settings.
+type ImportDataLoader struct {
+	DirectIngestion bool
+	FilesPerNode    int
+	InjectStats     bool
+}
+
+// InitialDataLoad implements the InitialDataLoader interface.
+func (l ImportDataLoader) InitialDataLoad(
+	ctx context.Context, db *gosql.DB, gen workload.Generator,
+) (int64, error) {
+	if l.FilesPerNode == 0 {
+		l.FilesPerNode = 1
+	}
+
+	log.Infof(ctx, "starting import of %d tables", len(gen.Tables()))
+	start := timeutil.Now()
+	const useConnectionDB = ``
+	bytes, err := ImportFixture(ctx, db, gen, useConnectionDB, l.DirectIngestion, l.FilesPerNode, l.InjectStats)
+	if err != nil {
+		return 0, errors.Wrap(err, `importing fixture`)
+	}
+	elapsed := timeutil.Since(start)
+	log.Infof(ctx, "imported %s bytes in %d tables (took %s, %s)",
+		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
+
+	return bytes, nil
+}
+
 // ImportFixture works like MakeFixture, but instead of stopping halfway or
 // writing a backup to cloud storage, it finishes ingesting the data.
 // It also includes the option to inject pre-calculated table statistics if
@@ -492,7 +527,13 @@ func importFixtureTable(
 	start := timeutil.Now()
 	var buf bytes.Buffer
 	var params []interface{}
-	fmt.Fprintf(&buf, `IMPORT TABLE "%s"."%s" %s CSV DATA (`, dbName, table.Name, table.Schema)
+	var qualifiedTableName string
+	if dbName != `` {
+		qualifiedTableName = fmt.Sprintf(`"%s"."%s"`, dbName, table.Name)
+	} else {
+		qualifiedTableName = fmt.Sprintf(`"%s"`, table.Name)
+	}
+	fmt.Fprintf(&buf, `IMPORT TABLE %s %s CSV DATA (`, qualifiedTableName, table.Schema)
 	// Generate $1,...,$N-1, where N is the number of csv paths.
 	for _, path := range paths {
 		params = append(params, path)
@@ -514,6 +555,9 @@ func importFixtureTable(
 	err := sqlDB.QueryRow(buf.String(), params...).Scan(
 		&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
 	)
+	if err != nil {
+		return 0, err
+	}
 	log.Infof(ctx, `imported %s (%s, %d rows, %d index entries, %v)`,
 		table.Name, timeutil.Since(start).Round(time.Second), rows, index,
 		humanizeutil.IBytes(tableBytes),
@@ -524,10 +568,12 @@ func importFixtureTable(
 
 	// Inject pre-calculated stats.
 	if injectStats && len(table.Stats) > 0 {
-		err = injectStatistics(dbName, &table, sqlDB)
+		if err := injectStatistics(qualifiedTableName, &table, sqlDB); err != nil {
+			return 0, err
+		}
 	}
 
-	return tableBytes, err
+	return tableBytes, nil
 }
 
 // disableAutoStats disables automatic stats if they are enabled and returns
@@ -565,14 +611,14 @@ func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
 }
 
 // injectStatistics injects pre-calculated statistics for the given table.
-func injectStatistics(dbName string, table *workload.Table, sqlDB *gosql.DB) error {
+func injectStatistics(qualifiedTableName string, table *workload.Table, sqlDB *gosql.DB) error {
 	var encoded []byte
 	encoded, err := json.Marshal(table.Stats)
 	if err != nil {
 		return err
 	}
-	_, err = sqlDB.Exec(fmt.Sprintf(`ALTER TABLE "%s"."%s" INJECT STATISTICS '%s'`,
-		dbName, table.Name, encoded))
+	_, err = sqlDB.Exec(fmt.Sprintf(
+		`ALTER TABLE %s INJECT STATISTICS '%s'`, qualifiedTableName, encoded))
 	return err
 }
 
