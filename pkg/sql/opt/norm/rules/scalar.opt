@@ -312,8 +312,8 @@
     $cmp
 )
 
-# FoldCollate converts a Collate expr over an uncollated string into a collated string
-# constant.
+# FoldCollate converts a Collate expr over an uncollated string into a collated
+# string constant.
 [FoldCollate, Normalize]
 (Collate
     $input:(Const)
