@@ -1751,7 +1751,6 @@ func (ex *connExecutor) setTransactionModes(modes tree.TransactionModes) error {
 
 		ts, err := ex.planner.EvalAsOfTimestamp(modes.AsOf)
 		if err != nil {
-			ex.state.mu.Unlock()
 			return err
 		}
 		if rwMode == tree.UnspecifiedReadWriteMode {
