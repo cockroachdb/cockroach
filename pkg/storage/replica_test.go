@@ -7271,7 +7271,9 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			}
 			repl.mu.Lock()
 
-			repl.insertProposalLocked(proposal, repDesc, lease)
+			proposal.command.ProposerReplica = repDesc
+			proposal.command.ProposerLeaseSequence = lease.Sequence
+			repl.insertProposalLocked(proposal)
 			// We actually propose the command only if we don't
 			// cancel it to simulate the case in which Raft loses
 			// the command and it isn't reproposed due to the
@@ -7349,7 +7351,9 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 			tc.repl.raftMu.Lock()
 			tc.repl.mu.Lock()
-			tc.repl.insertProposalLocked(cmd, repDesc, status.Lease)
+			cmd.command.ProposerReplica = repDesc
+			cmd.command.ProposerLeaseSequence = status.Lease.Sequence
+			tc.repl.insertProposalLocked(cmd)
 			chs = append(chs, cmd.doneCh)
 			tc.repl.mu.Unlock()
 			tc.repl.raftMu.Unlock()
@@ -7455,7 +7459,9 @@ func TestReplicaLeaseReproposal(t *testing.T) {
 	// Decrement the MaxLeaseIndex. If refreshProposalsLocked didn't know that
 	// MaxLeaseIndex doesn't matter for lease requests, it might be tempted to
 	// end the proposal early (since it would assume that it couldn't commit).
-	repl.insertProposalLocked(proposal, repDesc, lease)
+	proposal.command.ProposerReplica = repDesc
+	proposal.command.ProposerLeaseSequence = lease.Sequence
+	repl.insertProposalLocked(proposal)
 	proposal.command.MaxLeaseIndex = ai - 1
 	repl.refreshProposalsLocked(1 /* delta */, reasonTicks)
 	select {
@@ -7546,7 +7552,9 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		dropProposals.Unlock()
 
 		r.mu.Lock()
-		r.insertProposalLocked(cmd, repDesc, lease)
+		cmd.command.ProposerReplica = repDesc
+		cmd.command.ProposerLeaseSequence = lease.Sequence
+		r.insertProposalLocked(cmd)
 		if err := r.submitProposalLocked(cmd); err != nil {
 			t.Error(err)
 		}
