@@ -224,7 +224,14 @@ func (r *Refresher) Start(
 						}
 
 						for tableID, rowsAffected := range mutationCounts {
+							// Check the cluster setting before each refresh in case it was
+							// disabled recently.
+							if !AutomaticStatisticsClusterMode.Get(st) {
+								break
+							}
+
 							r.maybeRefreshStats(ctx, stopper, tableID, rowsAffected, r.asOfTime)
+
 							select {
 							case <-stopper.ShouldQuiesce():
 								// Don't bother trying to refresh the remaining tables if we
