@@ -223,7 +223,7 @@ func ShowCreateTable(
 		f.WriteString(")")
 	}
 
-	for _, e := range desc.Checks {
+	for _, e := range desc.AllActiveAndInactiveChecks() {
 		f.WriteString(",\n\t")
 		if len(e.Name) > 0 {
 			f.WriteString("CONSTRAINT ")

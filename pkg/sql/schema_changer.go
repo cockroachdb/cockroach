@@ -1157,7 +1157,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			if constraint := mutation.GetConstraint(); constraint != nil &&
 				mutation.Direction == sqlbase.DescriptorMutation_ADD {
 				log.Warningf(ctx, "dropping constraint %+v", constraint)
-				if err := sc.dropValidatingConstraint(desc, constraint); err != nil {
+				if err := sc.maybeDropValidatingConstraint(ctx, desc, constraint); err != nil {
 					return err
 				}
 			}
@@ -1310,25 +1310,23 @@ func (sc *SchemaChanger) createRollbackJob(
 	return nil, fmt.Errorf("no job found for table %d mutation %d", sc.tableID, sc.mutationID)
 }
 
-func (sc *SchemaChanger) dropValidatingConstraint(
-	desc *MutableTableDescriptor, constraint *sqlbase.ConstraintToValidate,
+func (sc *SchemaChanger) maybeDropValidatingConstraint(
+	ctx context.Context, desc *MutableTableDescriptor, constraint *sqlbase.ConstraintToUpdate,
 ) error {
 	switch constraint.ConstraintType {
-	case sqlbase.ConstraintToValidate_CHECK:
-		check, err := desc.FindCheckByName(constraint.Name)
-		if err != nil {
-			return err
-		}
-		// This isn't possible right now, but will be when it becomes possible to add constraints as NOT VALID
-		if check.Validity == sqlbase.ConstraintValidity_Unvalidated {
-			break
-		}
-
+	case sqlbase.ConstraintToUpdate_CHECK:
 		for j, c := range desc.Checks {
 			if c.Name == constraint.Name {
 				desc.Checks = append(desc.Checks[:j], desc.Checks[j+1:]...)
-				break
+				return nil
 			}
+		}
+		if log.V(2) {
+			log.Infof(
+				ctx,
+				"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
+				constraint.Name,
+			)
 		}
 	default:
 		return errors.Errorf("unsupported constraint type: %d", constraint.ConstraintType)
