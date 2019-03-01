@@ -346,15 +346,20 @@ func newColOperator(
 				jr  RowSource
 				err error
 			)
+			// The lookup and index joiners need to be passed the post-process specs,
+			// since they inspect them to figure out information about needed columns.
+			// This means that we'll let those processors do any renders or filters,
+			// which isn't ideal. We could improve this.
 			if len(core.JoinReader.LookupColumns) == 0 {
 				jr, err = newIndexJoiner(
-					flowCtx, spec.ProcessorID, core.JoinReader, input, &distsqlpb.PostProcessSpec{}, nil, /* output */
+					flowCtx, spec.ProcessorID, core.JoinReader, input, post, nil, /* output */
 				)
 			} else {
 				jr, err = newJoinReader(
-					flowCtx, spec.ProcessorID, core.JoinReader, input, &distsqlpb.PostProcessSpec{}, nil, /* output */
+					flowCtx, spec.ProcessorID, core.JoinReader, input, post, nil, /* output */
 				)
 			}
+			post = &distsqlpb.PostProcessSpec{}
 			if err != nil {
 				return nil, err
 			}
