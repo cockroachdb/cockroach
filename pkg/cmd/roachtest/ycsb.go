@@ -18,37 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
-
-	"github.com/pkg/errors"
 )
-
-// performanceExpectations is a map from workload to a map from core count to
-// expected throughput below which we consider the test to have failed.
-var performanceExpectations = map[string]map[int]float64{
-	// The below numbers are minimum expectations based on historical data.
-	"A": {8: 2000},
-	"B": {8: 15000},
-}
-
-func getPerformanceExpectation(wl string, cpus int) (float64, bool) {
-	m, exists := performanceExpectations[wl]
-	if !exists {
-		return 0, false
-	}
-	expected, exists := m[cpus]
-	return expected, exists
-}
-
-func parseThroughputFromOutput(output string) (opsPerSec float64, _ error) {
-	prefix := "__result\n" // this string precedes the cumulative results
-	idx := strings.LastIndex(output, prefix)
-	if idx == -1 {
-		return 0, fmt.Errorf("failed to find %q in output", prefix)
-	}
-	return strconv.ParseFloat(strings.Fields(output[idx+len(prefix):])[3], 64)
-}
 
 func registerYCSB(r *registry) {
 	runYCSB := func(ctx context.Context, t *test, c *cluster, wl string, cpus int) {
@@ -68,22 +38,7 @@ func registerYCSB(r *registry) {
 					" --workload=%s --concurrency=64 --histograms=logs/stats.json"+
 					ramp+duration+" {pgurl:1-%d}",
 				wl, nodes)
-			out, err := c.RunWithBuffer(ctx, t.l, c.Node(nodes+1), cmd)
-			if err != nil {
-				return errors.Wrapf(err, "failed with output %q", string(out))
-			}
-			if expected, ok := getPerformanceExpectation(wl, cpus); ok {
-				throughput, err := parseThroughputFromOutput(string(out))
-				if err != nil {
-					return err
-				}
-				t.debugEnabled = teamCity
-				if throughput < expected {
-					return fmt.Errorf("%v failed to meet throughput expectations: "+
-						"observed %v, expected at least %v", t.Name(), expected, throughput)
-				}
-				c.l.Printf("Observed throughput of %v > %v", throughput, expected)
-			}
+			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
 		})
 		m.Wait()
