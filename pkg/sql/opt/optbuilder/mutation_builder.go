@@ -640,5 +640,5 @@ func checkDatumTypeFitsColumnType(col cat.Column, typ types.T) {
 	colName := string(col.ColName())
 	panic(builderError{pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 		"value type %s doesn't match type %s of column %q",
-		typ, col.ColTypeStr(), tree.ErrNameString(&colName))})
+		typ, col.ColTypeStr(), tree.ErrNameString(colName))})
 }

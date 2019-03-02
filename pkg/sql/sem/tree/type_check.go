@@ -585,7 +585,7 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired types.T) (Type
 	if expr.ColIndex < 0 {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"could not identify column %q in %s",
-			ErrNameString(&expr.ColName), resolvedType,
+			ErrNameStringP(&expr.ColName), resolvedType,
 		)
 	}
 
@@ -1216,7 +1216,7 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 			for j := 0; j < i; j++ {
 				if expr.Labels[i] == expr.Labels[j] {
 					return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
-						"found duplicate tuple label: %q", ErrNameString(&expr.Labels[i]),
+						"found duplicate tuple label: %q", ErrNameStringP(&expr.Labels[i]),
 					)
 				}
 			}
