@@ -14,7 +14,12 @@
 
 package coldata
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+import (
+	"fmt"
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
 
 // Batch is the type that columnar operators receive and produce. It
 // represents a set of column vectors (partial data columns) as well as
@@ -39,9 +44,14 @@ type Batch interface {
 	SetSelection(bool)
 	// AppendCol appends a Vec with the specified type to this batch.
 	AppendCol(types.T)
+	// Reset modifies the caller in-place to have the given length and columns
+	// with the given types. If it's possible, Reset will reuse the existing
+	// columns and allocations, invalidating existing references to the Batch or
+	// its Vecs. However, Reset does _not_ zero out the column data.
+	Reset(types []types.T, length int)
 }
 
-var _ Batch = &memBatch{}
+var _ Batch = &MemBatch{}
 
 // BatchSize is the maximum number of tuples that fit in a column batch.
 // TODO(jordan): tune
@@ -56,7 +66,10 @@ func NewMemBatch(types []types.T) Batch {
 // NewMemBatchWithSize allocates a new in-memory Batch with the given column
 // size. Use for operators that have a precisely-sized output batch.
 func NewMemBatchWithSize(types []types.T, size int) Batch {
-	b := &memBatch{}
+	if max := math.MaxUint16; size > max {
+		panic(fmt.Sprintf(`batches cannot have length larger than %d; requested %d`, max, size))
+	}
+	b := &MemBatch{}
 	b.b = make([]Vec, len(types))
 
 	for i, t := range types {
@@ -67,7 +80,8 @@ func NewMemBatchWithSize(types []types.T, size int) Batch {
 	return b
 }
 
-type memBatch struct {
+// MemBatch is an in-memory implementation of Batch.
+type MemBatch struct {
 	// length of batch or sel in tuples
 	n uint16
 	// slice of columns in this batch.
@@ -78,37 +92,66 @@ type memBatch struct {
 	sel []uint16
 }
 
-func (m *memBatch) Length() uint16 {
+// Length implements the Batch interface.
+func (m *MemBatch) Length() uint16 {
 	return m.n
 }
 
-func (m *memBatch) Width() int {
+// Width implements the Batch interface.
+func (m *MemBatch) Width() int {
 	return len(m.b)
 }
 
-func (m *memBatch) ColVec(i int) Vec {
+// ColVec implements the Batch interface.
+func (m *MemBatch) ColVec(i int) Vec {
 	return m.b[i]
 }
 
-func (m *memBatch) ColVecs() []Vec {
+// ColVecs implements the Batch interface.
+func (m *MemBatch) ColVecs() []Vec {
 	return m.b
 }
 
-func (m *memBatch) Selection() []uint16 {
+// Selection implements the Batch interface.
+func (m *MemBatch) Selection() []uint16 {
 	if !m.useSel {
 		return nil
 	}
 	return m.sel
 }
 
-func (m *memBatch) SetSelection(b bool) {
+// SetSelection implements the Batch interface.
+func (m *MemBatch) SetSelection(b bool) {
 	m.useSel = b
 }
 
-func (m *memBatch) SetLength(n uint16) {
+// SetLength implements the Batch interface.
+func (m *MemBatch) SetLength(n uint16) {
 	m.n = n
 }
 
-func (m *memBatch) AppendCol(t types.T) {
+// AppendCol implements the Batch interface.
+func (m *MemBatch) AppendCol(t types.T) {
 	m.b = append(m.b, NewMemColumn(t, BatchSize))
+}
+
+// Reset implements the Batch interface.
+func (m *MemBatch) Reset(types []types.T, length int) {
+	// TODO(dan): Reset could be more aggressive about finding columns to reuse.
+	if m == nil || int(m.Length()) != length || m.Width() != len(types) {
+		*m = *NewMemBatchWithSize(types, length).(*MemBatch)
+		m.SetLength(uint16(length))
+		return
+	}
+	for i, col := range m.ColVecs() {
+		if col.Type() != types[i] {
+			*m = *NewMemBatchWithSize(types, length).(*MemBatch)
+			m.SetLength(uint16(length))
+			return
+		}
+	}
+	m.SetLength(uint16(length))
+	for _, col := range m.ColVecs() {
+		col.Nulls().UnsetNulls()
+	}
 }

@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
-	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
 )
 
@@ -172,7 +170,7 @@ func GetFixture(
 func csvServerPaths(
 	csvServerURL string, gen workload.Generator, table workload.Table, numNodes int,
 ) []string {
-	if table.InitialRows.Batch == nil {
+	if table.InitialRows.FillBatch == nil {
 		// Some workloads don't support initial table data.
 		return nil
 	}
@@ -243,7 +241,7 @@ func MakeFixture(
 	filesPerNode int,
 ) (Fixture, error) {
 	for _, t := range gen.Tables() {
-		if t.InitialRows.Batch == nil {
+		if t.InitialRows.FillBatch == nil {
 			return Fixture{}, errors.Errorf(
 				`make fixture is not supported for workload %s`, gen.Meta().Name,
 			)
@@ -373,13 +371,13 @@ func importFixtureTable(
 	err := sqlDB.QueryRow(buf.String(), params...).Scan(
 		&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
 	)
-	log.Infof(ctx, `imported %s (%s, %d rows, %d index entries, %v)`,
-		table.Name, timeutil.Since(start).Round(time.Second), rows, index,
-		humanizeutil.IBytes(tableBytes),
-	)
 	if err != nil {
 		return 0, err
 	}
+	elapsed := timeutil.Since(start)
+	log.Infof(ctx, `imported %s in %s table (%d rows, %d index entries, took %s, %s)`,
+		humanizeutil.IBytes(tableBytes), table.Name, rows, index, elapsed,
+		humanizeutil.DataRate(tableBytes, elapsed))
 
 	// Inject pre-calculated stats.
 	if injectStats && len(table.Stats) > 0 {
@@ -441,10 +439,10 @@ func RestoreFixture(
 	ctx context.Context, sqlDB *gosql.DB, fixture Fixture, database string,
 ) (int64, error) {
 	var bytesAtomic int64
-	g, gCtx := errgroup.WithContext(ctx)
+	g := ctxgroup.WithContext(ctx)
 	for _, table := range fixture.Tables {
 		table := table
-		g.Go(func() error {
+		g.GoCtx(func(ctx context.Context) error {
 			// The IMPORT ... CSV DATA command generates a backup with the table in
 			// database `csv`.
 			start := timeutil.Now()
@@ -457,10 +455,10 @@ func RestoreFixture(
 				return err
 			}
 			atomic.AddInt64(&bytesAtomic, tableBytes)
-			log.Infof(gCtx, `loaded %s (%s, %d rows, %d index entries, %v)`,
-				table.TableName, timeutil.Since(start).Round(time.Second), rows, index,
-				humanizeutil.IBytes(tableBytes),
-			)
+			elapsed := timeutil.Since(start)
+			log.Infof(ctx, `loaded %s table %s in %s (%d rows, %d index entries, %s)`,
+				humanizeutil.IBytes(tableBytes), table.TableName, elapsed, rows, index,
+				humanizeutil.IBytes(int64(float64(tableBytes)/elapsed.Seconds())))
 			return nil
 		})
 	}

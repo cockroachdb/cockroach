@@ -278,7 +278,7 @@ func loadWorkloadBatches(sqlDB *gosql.DB, table workload.Table) ([]time.Time, in
 		params = params[:0]
 		insertStmtBuf.Reset()
 		insertStmtBuf.WriteString(`INSERT INTO "` + table.Name + `" VALUES `)
-		for _, row := range table.InitialRows.Batch(batchIdx) {
+		for _, row := range table.InitialRows.BatchRows(batchIdx) {
 			if len(params) != 0 {
 				insertStmtBuf.WriteString(`,`)
 			}

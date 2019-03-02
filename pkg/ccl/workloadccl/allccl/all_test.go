@@ -10,13 +10,11 @@ package allccl
 
 import (
 	"context"
-	gosql "database/sql"
-	"fmt"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -24,39 +22,58 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
-func hackSetupUsingImport(db *gosql.DB, gen workload.Generator) error {
-	ts := httptest.NewServer(workload.CSVMux(workload.Registered()))
-	defer ts.Close()
+const (
+	directIngestion  = true
+	oneFilePerNode   = 1
+	noInjectStats    = false
+	skipCSVRoundtrip = ``
+)
 
-	for _, table := range gen.Tables() {
-		csvTableURL := fmt.Sprintf(`%s/csv/%s/%s`, ts.URL, gen.Meta().Name, table.Name)
-		importStmt := fmt.Sprintf(`IMPORT TABLE "%s" %s CSV DATA ('%s') WITH nullif='NULL'`,
-			table.Name, table.Schema, csvTableURL)
-		if _, err := db.Exec(importStmt); err != nil {
-			return err
-		}
+func bigInitialData(meta workload.Meta) bool {
+	switch meta.Name {
+	case `tpcc`, `tpch`:
+		return true
+	default:
+		return false
 	}
-	return nil
 }
 
-func TestAllRegisteredWorkloadsValidate(t *testing.T) {
+func TestAllRegisteredImportFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, meta := range workload.Registered() {
+		meta := meta
 		gen := meta.New()
-
-		var checkConsistencyFn func(context.Context, *gosql.DB) error
-		if h, ok := gen.(workload.Hookser); ok {
-			checkConsistencyFn = h.Hooks().CheckConsistency
+		hasInitialData := true
+		for _, table := range gen.Tables() {
+			if table.InitialRows.FillBatch == nil {
+				hasInitialData = false
+				break
+			}
 		}
-		if checkConsistencyFn == nil {
-			// Not all workloads have CheckConsistency defined.
+		if !hasInitialData {
+			continue
+		}
+
+		// This test is big enough that it causes timeout issues under race, so only
+		// run one workload. Doing any more than this doesn't get us enough to be
+		// worth the hassle.
+		if util.RaceEnabled && meta.Name != `bank` {
+			continue
+		}
+
+		switch meta.Name {
+		case `ycsb`, `startrek`, `roachmart`, `interleavedpartitioned`:
+			// These don't work with IMPORT.
+			continue
+		case `tpch`:
+			// tpch has an incomplete initial data implemention.
 			continue
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
-			if meta.Name == `tpcc` && (testing.Short() || util.RaceEnabled) {
-				t.Skip(`tpcc loads a lot of data`)
+			if bigInitialData(meta) && testing.Short() {
+				t.Skipf(`%s loads a lot of data`, meta.Name)
 			}
 
 			ctx := context.Background()
@@ -66,23 +83,67 @@ func TestAllRegisteredWorkloadsValidate(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
 
-			if meta.Name == `tpcc` {
-				// Special case-tpcc because Setup using the batched inserts
-				// takes so long. Unfortunately, we can't do this for all
-				// generators because some of them use things that IMPORT
-				// doesn't yet handle, like foreign keys.
-				if err := hackSetupUsingImport(db, gen); err != nil {
-					t.Fatalf(`%+v`, err)
-				}
-			} else {
-				const batchSize, concurrency = 0, 0
-				if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
-					t.Fatalf(`%+v`, err)
-				}
+			if _, err := workloadccl.ImportFixture(
+				ctx, db, gen, `d`, directIngestion, oneFilePerNode, noInjectStats, skipCSVRoundtrip,
+			); err != nil {
+				t.Fatal(err)
 			}
 
-			if err := checkConsistencyFn(ctx, db); err != nil {
-				t.Errorf(`%+v`, err)
+			// Run the consistency check if this workload has one.
+			if h, ok := gen.(workload.Hookser); ok {
+				if checkConsistencyFn := h.Hooks().CheckConsistency; checkConsistencyFn != nil {
+					if err := checkConsistencyFn(ctx, db); err != nil {
+						t.Errorf(`%+v`, err)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestAllRegisteredSetup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, meta := range workload.Registered() {
+		if bigInitialData(meta) {
+			continue
+		}
+
+		// This test is big enough that it causes timeout issues under race, so only
+		// run one workload. Doing any more than this doesn't get us enough to be
+		// worth the hassle.
+		if util.RaceEnabled && meta.Name != `bank` {
+			continue
+		}
+
+		switch meta.Name {
+		case `roachmart`, `interleavedpartitioned`:
+			// These require a specific node locality setup
+			continue
+		}
+
+		gen := meta.New()
+		t.Run(meta.Name, func(t *testing.T) {
+			ctx := context.Background()
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				UseDatabase: "d",
+			})
+			defer s.Stopper().Stop(ctx)
+			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
+			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`)
+
+			const batchSize, concurrency = 0, 0
+			if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+				t.Fatalf(`%+v`, err)
+			}
+
+			// Run the consistency check if this workload has one.
+			if h, ok := gen.(workload.Hookser); ok {
+				if checkConsistencyFn := h.Hooks().CheckConsistency; checkConsistencyFn != nil {
+					if err := checkConsistencyFn(ctx, db); err != nil {
+						t.Errorf(`%+v`, err)
+					}
+				}
 			}
 		})
 	}

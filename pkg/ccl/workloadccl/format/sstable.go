@@ -72,9 +72,8 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(kvCh)
 		evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
-		var alloc sqlbase.DatumAlloc
 		finishedBatchFn := func() {}
-		return wc.Worker(ctx, evalCtx, &alloc, finishedBatchFn)
+		return wc.Worker(ctx, evalCtx, finishedBatchFn)
 	})
 	g.GoCtx(func(ctx context.Context) error {
 		for kvBatch := range kvCh {
