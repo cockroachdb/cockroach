@@ -47,10 +47,29 @@ type tpccOptions struct {
 // tpccFixturesCmd generates the command string to load tpcc data for the
 // specified warehouse count into a cluster using either `fixtures import`
 // or `fixtures load` depending on the cloud.
-func tpccFixturesCmd(cloud string, warehouses int, checks bool) string {
-	action := "load"
-	if cloud == "aws" {
+func tpccFixturesCmd(t *test, cloud string, warehouses int, checks bool) string {
+	var action string
+	switch cloud {
+	case "gce":
+		// TODO(nvanbenschoten): We could switch to import for both clouds.
+		// At the moment, import is still a little unstable and load is still
+		// marginally faster.
+		action = "load"
+		fixtureWarehouses := -1
+		for _, w := range []int{1, 10, 100, 1000, 2000, 5000, 10000} {
+			if w >= warehouses {
+				fixtureWarehouses = w
+				break
+			}
+		}
+		if fixtureWarehouses == -1 {
+			t.Fatalf("could not find fixture big enough for %d warehouses", warehouses)
+		}
+		warehouses = fixtureWarehouses
+	case "aws":
 		action = "import"
+	default:
+		t.Fatalf("unknown cloud: %q", cloud)
 	}
 	return fmt.Sprintf("./workload fixtures %s tpcc --checks=%v --warehouses=%d {pgurl:1}",
 		action, checks, warehouses)
@@ -70,17 +89,6 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	c.Put(ctx, workload, "./workload", workloadNode)
 
 	t.Status("loading fixture")
-	fixtureWarehouses := -1
-	for _, w := range []int{1, 10, 100, 1000, 2000, 5000, 10000} {
-		if w >= opts.Warehouses {
-			fixtureWarehouses = w
-			break
-		}
-	}
-	if fixtureWarehouses == -1 {
-		t.Fatalf("could not find fixture big enough for %d warehouses", opts.Warehouses)
-	}
-
 	func() {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
@@ -94,7 +102,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 				t.Status("loading dataset")
 				c.Start(ctx, t, crdbNodes)
 
-				c.Run(ctx, workloadNode, tpccFixturesCmd(cloud, fixtureWarehouses, true /* checks */))
+				c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, true /* checks */))
 				c.Stop(ctx, crdbNodes)
 
 				c.Run(ctx, crdbNodes, "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
@@ -104,7 +112,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 			c.Start(ctx, t, crdbNodes)
 		} else {
 			c.Start(ctx, t, crdbNodes)
-			c.Run(ctx, workloadNode, tpccFixturesCmd(cloud, fixtureWarehouses, true /* checks */))
+			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, true /* checks */))
 		}
 	}()
 	t.Status("waiting")
@@ -140,7 +148,15 @@ func registerTPCC(r *registry) {
 		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			warehouses := 1350
+			var warehouses int
+			switch cloud {
+			case "gce":
+				warehouses = 1350
+			case "aws":
+				warehouses = 2300
+			default:
+				t.Fatalf("unknown cloud: %q", cloud)
+			}
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				Duration:   120 * time.Minute,
@@ -444,7 +460,7 @@ func loadTPCCBench(
 
 	// Load the corresponding fixture.
 	t.l.Printf("restoring tpcc fixture\n")
-	cmd := tpccFixturesCmd(cloud, b.LoadWarehouses, false /* checks */)
+	cmd := tpccFixturesCmd(t, cloud, b.LoadWarehouses, false /* checks */)
 	if err := c.RunE(ctx, loadNode, cmd); err != nil {
 		return err
 	}
