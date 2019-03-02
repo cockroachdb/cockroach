@@ -223,7 +223,8 @@ func TestConcurrentEvictions(t *testing.T) {
 	// data is read and correct or is not read. At the end, all the ranges are
 	// cleared and we ensure that the entry count is zero.
 
-	const N = 20000
+	// NB: N is chosen based on the race detector's limit of 8128 goroutines.
+	const N = 8000
 	const numRanges = 200
 	const maxEntriesPerWrite = 111
 	rangeData := make(map[roachpb.RangeID][]raftpb.Entry)
@@ -395,7 +396,8 @@ func TestConcurrentUpdates(t *testing.T) {
 	c := NewCache(10000)
 	ents := []raftpb.Entry{newEntry(20, 35), newEntry(21, 35)}
 	var wg sync.WaitGroup
-	const N = 10000
+	// NB: N is chosen based on the race detector's limit of 8128 goroutines.
+	const N = 8000
 	wg.Add(N)
 	for i := 0; i < N; i++ {
 		go func(i int) {
