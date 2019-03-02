@@ -24,6 +24,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -390,7 +393,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 		Schema: genericChildSchema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: w.initSessions,
-			Batch:      w.childInitialRowBatchFunc(2, w.customersPerSession),
+			FillBatch:  w.childInitialRowBatchFunc(2, w.customersPerSession),
 		},
 	}
 	devicesTable := workload.Table{
@@ -398,7 +401,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 		Schema: deviceSchema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: w.initSessions,
-			Batch:      w.deviceInitialRowBatch,
+			FillBatch:  w.deviceInitialRowBatch,
 		},
 	}
 	variantsTable := workload.Table{
@@ -406,7 +409,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 		Schema: genericChildSchema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: w.initSessions,
-			Batch:      w.childInitialRowBatchFunc(3, w.variantsPerSession),
+			FillBatch:  w.childInitialRowBatchFunc(3, w.variantsPerSession),
 		},
 	}
 	parametersTable := workload.Table{
@@ -414,7 +417,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 		Schema: genericChildSchema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: w.initSessions,
-			Batch:      w.childInitialRowBatchFunc(4, w.parametersPerSession),
+			FillBatch:  w.childInitialRowBatchFunc(4, w.parametersPerSession),
 		},
 	}
 	queriesTable := workload.Table{
@@ -422,7 +425,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 		Schema: querySchema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: w.initSessions,
-			Batch:      w.queryInitialRowBatch,
+			FillBatch:  w.queryInitialRowBatch,
 		},
 	}
 	return []workload.Table{
@@ -812,66 +815,111 @@ func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
 	}
 }
 
+var childColTypes = []types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+}
+
 func (w *interleavedPartitioned) childInitialRowBatchFunc(
 	rngFactor int64, nPerBatch int,
-) func(int) [][]interface{} {
-	return func(sessionRowIdx int) [][]interface{} {
+) func(int, coldata.Batch, *bufalloc.ByteAllocator) {
+	return func(sessionRowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 		sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
 		sessionID := randomSessionID(sessionRNG, `east`, w.initEastPercent)
 		nowString := timeutil.Now().UTC().Format(time.RFC3339)
 		rng := rand.New(rand.NewSource(int64(sessionRowIdx) + rngFactor))
-		var rows [][]interface{}
-		for i := 0; i < nPerBatch; i++ {
-			rows = append(rows, []interface{}{
-				sessionID,           // session_id
-				randString(rng, 50), // id
-				randString(rng, 50), // value
-				nowString,           // created
-				nowString,           // updated
-			})
+
+		cb.Reset(childColTypes, nPerBatch)
+		sessionIDCol := cb.ColVec(0).Bytes()
+		idCol := cb.ColVec(1).Bytes()
+		valueCol := cb.ColVec(2).Bytes()
+		createdCol := cb.ColVec(3).Bytes()
+		updatedCol := cb.ColVec(4).Bytes()
+		for rowIdx := 0; rowIdx < nPerBatch; rowIdx++ {
+			sessionIDCol[rowIdx] = []byte(sessionID)
+			idCol[rowIdx] = []byte(randString(rng, 50))
+			valueCol[rowIdx] = []byte(randString(rng, 50))
+			createdCol[rowIdx] = []byte(nowString)
+			updatedCol[rowIdx] = []byte(nowString)
 		}
-		return rows
 	}
 }
 
-func (w *interleavedPartitioned) deviceInitialRowBatch(sessionRowIdx int) [][]interface{} {
+var deviceColTypes = []types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+}
+
+func (w *interleavedPartitioned) deviceInitialRowBatch(
+	sessionRowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
+) {
 	rng := rand.New(rand.NewSource(int64(sessionRowIdx) * 64))
 	sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
 	sessionID := randomSessionID(sessionRNG, `east`, w.initEastPercent)
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
-	var rows [][]interface{}
-	for i := 0; i < w.devicesPerSession; i++ {
-		rows = append(rows, []interface{}{
-			sessionID,            // session_id
-			randString(rng, 100), // id
-			randString(rng, 50),  // device_id
-			randString(rng, 50),  // name
-			randString(rng, 50),  // make
-			randString(rng, 50),  // macaddress
-			randString(rng, 50),  // model
-			randString(rng, 50),  // serial_number
-			nowString,            // created
-			nowString,            // updated
-		})
+
+	cb.Reset(deviceColTypes, w.devicesPerSession)
+	sessionIDCol := cb.ColVec(0).Bytes()
+	idCol := cb.ColVec(1).Bytes()
+	deviceIDCol := cb.ColVec(2).Bytes()
+	nameCol := cb.ColVec(3).Bytes()
+	makeCol := cb.ColVec(4).Bytes()
+	macaddressCol := cb.ColVec(5).Bytes()
+	modelCol := cb.ColVec(6).Bytes()
+	serialNumberCol := cb.ColVec(7).Bytes()
+	createdCol := cb.ColVec(8).Bytes()
+	updatedCol := cb.ColVec(9).Bytes()
+	for rowIdx := 0; rowIdx < w.devicesPerSession; rowIdx++ {
+		sessionIDCol[rowIdx] = []byte(sessionID)
+		idCol[rowIdx] = []byte(randString(rng, 100))
+		deviceIDCol[rowIdx] = []byte(randString(rng, 50))
+		nameCol[rowIdx] = []byte(randString(rng, 50))
+		makeCol[rowIdx] = []byte(randString(rng, 50))
+		macaddressCol[rowIdx] = []byte(randString(rng, 50))
+		modelCol[rowIdx] = []byte(randString(rng, 50))
+		serialNumberCol[rowIdx] = []byte(randString(rng, 50))
+		createdCol[rowIdx] = []byte(nowString)
+		updatedCol[rowIdx] = []byte(nowString)
 	}
-	return rows
 }
 
-func (w *interleavedPartitioned) queryInitialRowBatch(sessionRowIdx int) [][]interface{} {
-	var rows [][]interface{}
+var queryColTypes = []types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+}
+
+func (w *interleavedPartitioned) queryInitialRowBatch(
+	sessionRowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
+) {
 	rng := rand.New(rand.NewSource(int64(sessionRowIdx) * 64))
 	sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
 	sessionID := randomSessionID(sessionRNG, `east`, w.initEastPercent)
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
-	for i := 0; i < w.queriesPerSession; i++ {
-		rows = append(rows, []interface{}{
-			sessionID,           // session_id
-			randString(rng, 50), // id
-			nowString,           // created
-			nowString,           // updated
-		})
+
+	cb.Reset(queryColTypes, w.queriesPerSession)
+	sessionIDCol := cb.ColVec(0).Bytes()
+	idCol := cb.ColVec(1).Bytes()
+	createdCol := cb.ColVec(2).Bytes()
+	updatedCol := cb.ColVec(3).Bytes()
+	for rowIdx := 0; rowIdx < w.queriesPerSession; rowIdx++ {
+		sessionIDCol[rowIdx] = []byte(sessionID)
+		idCol[rowIdx] = []byte(randString(rng, 50))
+		createdCol[rowIdx] = []byte(nowString)
+		updatedCol[rowIdx] = []byte(nowString)
 	}
-	return rows
 }
 
 func randomSessionID(rng *rand.Rand, locality string, localPercent int) string {

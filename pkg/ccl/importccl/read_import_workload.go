@@ -140,7 +140,7 @@ func (w *workloadReader) readFiles(
 				}
 				lastProgress = rows
 			}
-			for _, row := range t.InitialRows.Batch(int(b)) {
+			for _, row := range t.InitialRows.BatchRows(int(b)) {
 				rows++
 				for i, value := range row {
 					converted, err := makeDatumFromRaw(&alloc, value, w.conv.visibleColTypes[i], w.conv.evalCtx)

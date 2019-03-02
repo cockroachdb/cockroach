@@ -30,7 +30,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -163,9 +167,16 @@ type BatchedTuples struct {
 	// NumTotal is the total number of tuples in all batches. Not all generators
 	// will know this, it's set to 0 when unknown.
 	NumTotal int
-	// Batch is a function to deterministically compute a batch of tuples given
-	// its index.
-	Batch func(int) [][]interface{}
+	// FillBatch is a function to deterministically compute a columnar-batch of
+	// tuples given its index.
+	//
+	// To save allocations, the `Vec`s in the passed `Batch` are reused when
+	// possible, so the results of this call are invalidated the next time the
+	// same `Batch` is passed to `FillBatch`. Ditto the `ByteAllocator`, which can
+	// be reset in between calls. If a caller needs the `Batch` and its contents
+	// to be long lived, simply pass a new `Batch` to each call and don't reset
+	// the `ByteAllocator`.
+	FillBatch func(int, coldata.Batch, *bufalloc.ByteAllocator)
 }
 
 // Tuples returns a BatchedTuples where each batch has size 1.
@@ -175,11 +186,101 @@ func Tuples(count int, fn func(int) []interface{}) BatchedTuples {
 		NumTotal:   count,
 	}
 	if fn != nil {
-		t.Batch = func(batchIdx int) [][]interface{} {
-			return [][]interface{}{fn(batchIdx)}
+		t.FillBatch = func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
+			row := fn(batchIdx)
+			// It'd be nice if we could share this between calls to save the work and
+			// the allocation.
+			colTypes := make([]types.T, len(row))
+			for i, datum := range row {
+				if datum == nil {
+					// WIP what do we do here
+					colTypes[i] = types.Bytes
+				} else {
+					switch datum.(type) {
+					case time.Time:
+						colTypes[i] = types.Bytes
+					default:
+						colTypes[i] = types.FromGoType(datum)
+					}
+				}
+			}
+			cb.Reset(colTypes, 1)
+			for colIdx, col := range cb.ColVecs() {
+				switch d := row[colIdx].(type) {
+				case nil:
+					col.SetNull(0)
+				case bool:
+					col.Bool()[0] = d
+				case int:
+					col.Int64()[0] = int64(d)
+				case float64:
+					col.Float64()[0] = d
+				case string:
+					col.Bytes()[0] = []byte(d)
+				case []byte:
+					col.Bytes()[0] = d
+				case time.Time:
+					col.Bytes()[0] = []byte(d.Round(time.Microsecond).UTC().Format(tree.TimestampOutputFormat))
+				default:
+					panic(fmt.Sprintf(`unhandled datum type %T`, d))
+				}
+			}
 		}
 	}
 	return t
+}
+
+// BatchRows is a function to deterministically compute a row-batch of tuples
+// given its index. BatchRows doesn't attempt any reuse and so is allocation
+// heavy. In performance-critical code, FillBatch should be used directly,
+// instead.
+func (b BatchedTuples) BatchRows(batchIdx int) [][]interface{} {
+	cb := coldata.NewMemBatch(nil)
+	var a bufalloc.ByteAllocator
+	b.FillBatch(batchIdx, cb, &a)
+	return ColBatchToRows(cb)
+}
+
+// ColBatchToRows materializes the columnar data in a coldata.Batch into rows.
+func ColBatchToRows(cb coldata.Batch) [][]interface{} {
+	numRows, numCols := int(cb.Length()), cb.Width()
+	// Allocate all the []interface{} row slices in one go.
+	datums := make([]interface{}, numRows*numCols)
+	for colIdx, col := range cb.ColVecs() {
+		switch col.Type() {
+		case types.Bool:
+			for rowIdx, datum := range col.Bool() {
+				if !col.NullAt64(uint64(rowIdx)) {
+					datums[rowIdx*numCols+colIdx] = datum
+				}
+			}
+		case types.Int64:
+			for rowIdx, datum := range col.Int64() {
+				if !col.NullAt64(uint64(rowIdx)) {
+					datums[rowIdx*numCols+colIdx] = datum
+				}
+			}
+		case types.Float64:
+			for rowIdx, datum := range col.Float64() {
+				if !col.NullAt64(uint64(rowIdx)) {
+					datums[rowIdx*numCols+colIdx] = datum
+				}
+			}
+		case types.Bytes:
+			for rowIdx, datum := range col.Bytes() {
+				if !col.NullAt64(uint64(rowIdx)) {
+					datums[rowIdx*numCols+colIdx] = datum
+				}
+			}
+		default:
+			panic(fmt.Sprintf(`unhandled type %s`, col.Type().GoTypeName()))
+		}
+	}
+	rows := make([][]interface{}, numRows)
+	for rowIdx := 0; rowIdx < numRows; rowIdx++ {
+		rows[rowIdx] = datums[rowIdx*numCols : (rowIdx+1)*numCols]
+	}
+	return rows
 }
 
 // QueryLoad represents some SQL query workload performable on a database
@@ -277,6 +378,8 @@ func ApproxDatumSize(x interface{}) int64 {
 		// used to batch things by size and table of all `0`s should not get
 		// infinite size batches.
 		return int64(bits.Len(uint(t))+8) / 8
+	case int64:
+		return int64(bits.Len64(uint64(t))+8) / 8
 	case uint64:
 		return int64(bits.Len64(t)+8) / 8
 	case float64:
@@ -333,7 +436,7 @@ func Setup(
 	for _, table := range tables {
 		if table.InitialRows.NumBatches == 0 {
 			continue
-		} else if table.InitialRows.Batch == nil {
+		} else if table.InitialRows.FillBatch == nil {
 			return 0, errors.Errorf(
 				`initial data is not supported for workload %s`, gen.Meta().Name)
 		}
@@ -365,8 +468,8 @@ func Setup(
 				}
 				_ = flush()
 
-				for rowBatchIdx := startIdx; rowBatchIdx < endIdx; rowBatchIdx++ {
-					for _, row := range table.InitialRows.Batch(rowBatchIdx) {
+				for batchIdx := startIdx; batchIdx < endIdx; batchIdx++ {
+					for _, row := range table.InitialRows.BatchRows(batchIdx) {
 						if len(params) != 0 {
 							insertStmtBuf.WriteString(`,`)
 						}
@@ -427,7 +530,7 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 	}
 	splitPoints := make([][]interface{}, 0, table.Splits.NumBatches)
 	for splitIdx := 0; splitIdx < table.Splits.NumBatches; splitIdx++ {
-		splitPoints = append(splitPoints, table.Splits.Batch(splitIdx)...)
+		splitPoints = append(splitPoints, table.Splits.BatchRows(splitIdx)...)
 	}
 	sort.Sort(sliceSliceInterface(splitPoints))
 
@@ -525,6 +628,8 @@ func StringTuple(datums []interface{}) []string {
 		switch x := datum.(type) {
 		case int:
 			s[i] = strconv.Itoa(x)
+		case int64:
+			s[i] = strconv.FormatInt(x, 10)
 		case uint64:
 			s[i] = strconv.FormatUint(x, 10)
 		case string:
@@ -554,6 +659,13 @@ func (s sliceSliceInterface) Less(i, j int) bool {
 		switch x := s[i][offset].(type) {
 		case int:
 			if y := s[j][offset].(int); x < y {
+				return true
+			} else if x > y {
+				return false
+			}
+			continue
+		case int64:
+			if y := s[j][offset].(int64); x < y {
 				return true
 			} else if x > y {
 				return false
