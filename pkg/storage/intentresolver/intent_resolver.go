@@ -422,38 +422,29 @@ func (ir *IntentResolver) MaybePushTransactions(
 		return nil, nil
 	}
 
+	pusherTxn := getPusherTxn(h)
 	log.Eventf(ctx, "pushing %d transaction(s)", len(pushTxns))
 
 	// Attempt to push the transaction(s).
-	now := ir.clock.Now()
-	pusherTxn := getPusherTxn(h)
-	var pushReqs []roachpb.Request
+	b := &client.Batch{}
+	b.Header.Timestamp = ir.clock.Now()
 	for _, pushTxn := range pushTxns {
-		pushReqs = append(pushReqs, &roachpb.PushTxnRequest{
+		b.AddRawRequest(&roachpb.PushTxnRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key: pushTxn.Key,
 			},
-			PusherTxn: pusherTxn,
-			PusheeTxn: pushTxn,
-			PushTo:    h.Timestamp,
-			// The timestamp is used by PushTxn for figuring out whether the
-			// transaction is abandoned. If we used the argument's timestamp
-			// here, we would run into busy loops because that timestamp
-			// usually stays fixed among retries, so it will never realize
-			// that a transaction has timed out. See #877.
-			Now:      now,
-			PushType: pushType,
+			PusherTxn:       pusherTxn,
+			PusheeTxn:       pushTxn,
+			PushTo:          h.Timestamp.Next(),
+			InclusivePushTo: true,
+			DeprecatedNow:   b.Header.Timestamp,
+			PushType:        pushType,
 		})
 	}
-	b := &client.Batch{}
-	b.AddRawRequest(pushReqs...)
-	var pErr *roachpb.Error
-	if err := ir.db.Run(ctx, b); err != nil {
-		pErr = b.MustPErr()
-	}
+	err := ir.db.Run(ctx, b)
 	cleanupInFlightPushes()
-	if pErr != nil {
-		return nil, pErr
+	if err != nil {
+		return nil, b.MustPErr()
 	}
 
 	br := b.RawResponse()
@@ -461,7 +452,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 	for _, resp := range br.Responses {
 		txn := resp.GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 		if _, ok := pushedTxns[txn.ID]; ok {
-			log.Fatalf(ctx, "have two PushTxn responses for %s\nreqs: %+v", txn.ID, pushReqs)
+			log.Fatalf(ctx, "have two PushTxn responses for %s", txn.ID)
 		}
 		pushedTxns[txn.ID] = txn
 		log.Eventf(ctx, "%s is now %s", txn.ID, txn.Status)
@@ -699,14 +690,16 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 					return
 				}
 				b := &client.Batch{}
+				b.Header.Timestamp = now
 				b.AddRawRequest(&roachpb.PushTxnRequest{
 					RequestHeader: roachpb.RequestHeader{Key: txn.Key},
 					PusherTxn: roachpb.Transaction{
 						TxnMeta: enginepb.TxnMeta{Priority: roachpb.MaxTxnPriority},
 					},
-					PusheeTxn: txn.TxnMeta,
-					Now:       now,
-					PushType:  roachpb.PUSH_ABORT,
+					PusheeTxn:       txn.TxnMeta,
+					DeprecatedNow:   b.Header.Timestamp,
+					PushType:        roachpb.PUSH_ABORT,
+					InclusivePushTo: true,
 				})
 				pushed = true
 				if err := ir.db.Run(ctx, b); err != nil {

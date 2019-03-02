@@ -16,9 +16,12 @@ package storage
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -29,7 +32,10 @@ import (
 func (r *Replica) updateTimestampCache(
 	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) {
-	tc := r.store.tsCache
+	addToTSCache := r.store.tsCache.Add
+	if util.RaceEnabled {
+		addToTSCache = checkedTSCacheUpdate(r.store.Clock().Now(), r.store.tsCache, ba, br, pErr)
+	}
 	// Update the timestamp cache using the timestamp at which the batch
 	// was executed. Note this may have moved forward from ba.Timestamp,
 	// as when the request is retried locally on WriteTooOldErrors.
@@ -66,7 +72,7 @@ func (r *Replica) updateTimestampCache(
 				// to or greater than the transaction's OrigTimestamp,
 				// which is consulted in CanCreateTxnRecord.
 				key := keys.TransactionKey(start, txnID)
-				tc.Add(key, nil, ts, txnID, false /* readCache */)
+				addToTSCache(key, nil, ts, txnID, false /* readCache */)
 			case *roachpb.PushTxnRequest:
 				// A successful PushTxn request bumps the timestamp cache for
 				// the pushee's transaction key. The pushee will consult the
@@ -80,16 +86,6 @@ func (r *Replica) updateTimestampCache(
 				// creation of the transaction record entirely.
 				pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 
-				// Update the local clock to the pushee's new timestamp. This
-				// ensures that we can safely update the timestamp cache based
-				// on this value. The pushee's timestamp is not reflected in
-				// the batch request's or response's timestamp.
-				// TODO(nvanbenschoten): there are some concerns that this is
-				// incorrect because this pushee.Timestamp was not accounted
-				// for in the local clock before this request's lease check.
-				// Do something about it.
-				r.store.Clock().Update(pushee.Timestamp)
-
 				var readCache bool
 				switch pushee.Status {
 				case roachpb.PENDING:
@@ -102,7 +98,7 @@ func (r *Replica) updateTimestampCache(
 					continue
 				}
 				key := keys.TransactionKey(start, pushee.ID)
-				tc.Add(key, nil, pushee.Timestamp, t.PusherTxn.ID, readCache)
+				addToTSCache(key, nil, pushee.Timestamp, t.PusherTxn.ID, readCache)
 			case *roachpb.ConditionalPutRequest:
 				if pErr != nil {
 					// ConditionalPut still updates on ConditionFailedErrors.
@@ -110,7 +106,7 @@ func (r *Replica) updateTimestampCache(
 						continue
 					}
 				}
-				tc.Add(start, end, ts, txnID, true /* readCache */)
+				addToTSCache(start, end, ts, txnID, true /* readCache */)
 			case *roachpb.InitPutRequest:
 				if pErr != nil {
 					// InitPut still updates on ConditionFailedErrors.
@@ -118,7 +114,7 @@ func (r *Replica) updateTimestampCache(
 						continue
 					}
 				}
-				tc.Add(start, end, ts, txnID, true /* readCache */)
+				addToTSCache(start, end, ts, txnID, true /* readCache */)
 			case *roachpb.ScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
 				if resp.ResumeSpan != nil {
@@ -127,7 +123,7 @@ func (r *Replica) updateTimestampCache(
 					// end key for the span to update the timestamp cache.
 					end = resp.ResumeSpan.Key
 				}
-				tc.Add(start, end, ts, txnID, true /* readCache */)
+				addToTSCache(start, end, ts, txnID, true /* readCache */)
 			case *roachpb.ReverseScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
 				if resp.ResumeSpan != nil {
@@ -137,7 +133,7 @@ func (r *Replica) updateTimestampCache(
 					// the span to update the timestamp cache.
 					start = resp.ResumeSpan.EndKey
 				}
-				tc.Add(start, end, ts, txnID, true /* readCache */)
+				addToTSCache(start, end, ts, txnID, true /* readCache */)
 			case *roachpb.QueryIntentRequest:
 				if t.IfMissing == roachpb.QueryIntentRequest_PREVENT {
 					resp := br.Responses[i].GetInner().(*roachpb.QueryIntentResponse)
@@ -150,13 +146,32 @@ func (r *Replica) updateTimestampCache(
 						// transaction ID so that we block the intent regardless
 						// of whether it is part of the current batch's transaction
 						// or not.
-						tc.Add(start, end, t.Txn.Timestamp, uuid.UUID{}, true /* readCache */)
+						addToTSCache(start, end, t.Txn.Timestamp, uuid.UUID{}, true /* readCache */)
 					}
 				}
 			default:
-				tc.Add(start, end, ts, txnID, !roachpb.UpdatesWriteTimestampCache(args))
+				addToTSCache(start, end, ts, txnID, !roachpb.UpdatesWriteTimestampCache(args))
 			}
 		}
+	}
+}
+
+// checkedTSCacheUpdate wraps tscache.Cache and asserts that any update to the
+// cache is at or below the specified time.
+func checkedTSCacheUpdate(
+	now hlc.Timestamp,
+	tc tscache.Cache,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
+) func(roachpb.Key, roachpb.Key, hlc.Timestamp, uuid.UUID, bool) {
+	return func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
+		if now.Less(ts) {
+			panic(fmt.Sprintf("Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
+				"cache after evaluating %v (resp=%v; err=%v) with local hlc clock at timestamp %s. "+
+				"The timestamp cache update could be lost on a lease transfer.", ts, ba, br, pErr, now))
+		}
+		tc.Add(start, end, ts, txnID, readCache)
 	}
 }
 

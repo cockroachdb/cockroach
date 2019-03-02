@@ -1372,29 +1372,32 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 			// roachpb.PUSH_TOUCH, though it might appear more semantically correct,
 			// returns immediately and causes us to spin hot, whereas
 			// roachpb.PUSH_ABORT efficiently blocks until the transaction completes.
-			res, pErr := client.SendWrapped(ctx, r.DB().NonTransactionalSender(), &roachpb.PushTxnRequest{
+			b := &client.Batch{}
+			b.Header.Timestamp = r.Clock().Now()
+			b.AddRawRequest(&roachpb.PushTxnRequest{
 				RequestHeader: roachpb.RequestHeader{Key: intent.Txn.Key},
 				PusherTxn: roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{Priority: roachpb.MinTxnPriority},
 				},
-				PusheeTxn: intent.Txn,
-				Now:       r.Clock().Now(),
-				PushType:  roachpb.PUSH_ABORT,
+				PusheeTxn:       intent.Txn,
+				DeprecatedNow:   b.Header.Timestamp,
+				PushType:        roachpb.PUSH_ABORT,
+				InclusivePushTo: true,
 			})
-			if pErr != nil {
+			if err := r.DB().Run(ctx, b); err != nil {
 				select {
 				case <-r.store.stopper.ShouldQuiesce():
 					// The server is shutting down. The error while pushing the
 					// transaction was probably caused by the shutdown, so ignore it.
 					return
 				default:
-					log.Warningf(ctx, "error while watching for merge to complete: PushTxn: %s", pErr)
+					log.Warningf(ctx, "error while watching for merge to complete: PushTxn: %s", err)
 					// We can't safely unblock traffic until we can prove that the merge
 					// transaction is committed or aborted. Nothing to do but try again.
 					continue
 				}
 			}
-			pushTxnRes = res.(*roachpb.PushTxnResponse)
+			pushTxnRes = b.RawResponse().Responses[0].GetInner().(*roachpb.PushTxnResponse)
 			break
 		}
 
