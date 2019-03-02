@@ -87,20 +87,20 @@ func (s *schema) ReloadSchemas(db *gosql.DB) error {
 
 func extractTables(db *gosql.DB) ([]tableRef, error) {
 	rows, err := db.Query(`
-	SELECT
-		table_catalog,
-		table_schema,
-		table_name,
-		column_name,
-		crdb_sql_type,
-		generation_expression != '' AS computed,
-		is_nullable = 'YES' AS nullable
-	FROM
-		information_schema.columns
-	WHERE
-		table_schema = 'public'
-	ORDER BY
-		table_catalog, table_schema, table_name
+SELECT
+	table_catalog,
+	table_schema,
+	table_name,
+	column_name,
+	crdb_sql_type,
+	generation_expression != '' AS computed,
+	is_nullable = 'YES' AS nullable
+FROM
+	information_schema.columns
+WHERE
+	table_schema = 'public'
+ORDER BY
+	table_catalog, table_schema, table_name
 	`)
 	// TODO(justin): have a flag that includes system tables?
 	if err != nil {
@@ -178,6 +178,8 @@ FROM
 	pg_catalog.pg_operator
 WHERE
 	0 NOT IN (oprresult, oprright, oprleft)
+ORDER BY
+	oprname, oprleft, oprright, oprresult
 `)
 	if err != nil {
 		return nil, err
@@ -243,7 +245,7 @@ var binOps = map[string]tree.BinaryOperator{
 func extractFunctions(db *gosql.DB) (map[oid.Oid][]function, error) {
 	rows, err := db.Query(`
 SELECT
-	proname, proargtypes::INT[], prorettype
+	proname, proargtypes::INT8[], prorettype
 FROM
 	pg_catalog.pg_proc
 WHERE
@@ -251,6 +253,8 @@ WHERE
 	AND NOT proiswindow
 	AND NOT proretset
 	AND proname NOT LIKE 'crdb_internal.force_%'
+ORDER BY
+	proname, proargtypes::string, prorettype
 `)
 	if err != nil {
 		return nil, err
