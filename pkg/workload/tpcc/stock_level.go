@@ -17,11 +17,11 @@ package tpcc
 
 import (
 	"context"
-	"math/rand"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"golang.org/x/exp/rand"
 )
 
 // 2.8 The Stock-Level Transaction
@@ -95,7 +95,7 @@ func createStockLevel(
 }
 
 func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	// 2.8.1.2: The threshold of minimum quantity in stock is selected at random
 	// within [10..20].

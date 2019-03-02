@@ -16,11 +16,11 @@
 package tpcc
 
 import (
-	"math/rand"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"golang.org/x/exp/rand"
 )
 
 // These constants are all set by the spec - they're not knobs. Don't change
@@ -205,7 +205,7 @@ func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
-	l.rng.Seed(w.seed + int64(rowIdx))
+	l.rng.Seed(w.seed + uint64(rowIdx))
 	numOrderLines := randInt(l.rng, minOrderLinesPerOrder, maxOrderLinesPerOrder)
 
 	oID := (rowIdx % numOrdersPerDistrict) + 1
@@ -225,7 +225,7 @@ func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
 			// We need a random permutation of customers that stable for all orders in a
 			// district, so use the district ID to seed the random permutation.
 			w.randomCIDsCache.values[dID] = make([]int, numCustomersPerDistrict)
-			for i, cID := range rand.New(rand.NewSource(int64(dID))).Perm(numCustomersPerDistrict) {
+			for i, cID := range rand.New(rand.NewSource(uint64(dID))).Perm(numCustomersPerDistrict) {
 				w.randomCIDsCache.values[dID][i] = cID + 1
 			}
 		}
@@ -259,7 +259,7 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(orderRowIdx int) [][]interface{} {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
-	l.rng.Seed(w.seed + int64(orderRowIdx))
+	l.rng.Seed(w.seed + uint64(orderRowIdx))
 	numOrderLines := randInt(l.rng, minOrderLinesPerOrder, maxOrderLinesPerOrder)
 
 	// NB: There is one batch of order_line rows per order

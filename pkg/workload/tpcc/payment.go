@@ -18,7 +18,6 @@ package tpcc
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/rand"
 )
 
 // Section 2.5:
@@ -161,7 +161,7 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 	atomic.AddUint64(&p.config.auditor.paymentTransactions, 1)
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	d := paymentData{
 		dID: rng.Intn(10) + 1,

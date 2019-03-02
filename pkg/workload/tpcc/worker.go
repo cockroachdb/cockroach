@@ -18,7 +18,6 @@ package tpcc
 import (
 	"context"
 	"math"
-	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/rand"
 )
 
 const (

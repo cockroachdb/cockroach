@@ -1446,6 +1446,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:d87af402fc3f371d6b008f58903e98bee8873db45263dc54762f00735c582495"
+  name = "golang.org/x/exp"
+  packages = ["rand"]
+  pruneopts = "UT"
+  revision = "01c40f57f5f67e0faa42df53dbcfb58f5a65bb4e"
+
+[[projects]]
+  branch = "master"
   digest = "1:aa2a7acc4a2f78d9bc0e6ffc795e24221d25f1b1d56fb472f834e377ebed7d28"
   name = "golang.org/x/net"
   packages = [
@@ -1834,6 +1842,7 @@
     "golang.org/x/crypto/ssh/agent",
     "golang.org/x/crypto/ssh/knownhosts",
     "golang.org/x/crypto/ssh/terminal",
+    "golang.org/x/exp/rand",
     "golang.org/x/net/html",
     "golang.org/x/net/http2",
     "golang.org/x/net/trace",

@@ -16,11 +16,11 @@
 package tpcc
 
 import (
-	"math/rand"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"golang.org/x/exp/rand"
 )
 
 const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -42,7 +42,7 @@ var cCustomerID int
 var cItemID int
 
 func init() {
-	rand.Seed(timeutil.Now().UnixNano())
+	rand.Seed(uint64(timeutil.Now().UnixNano()))
 	cLoad = rand.Intn(256)
 	cItemID = rand.Intn(1024)
 	cCustomerID = rand.Intn(8192)
