@@ -27,6 +27,9 @@ type column interface{}
 // Vec is an interface that represents a column vector that's accessible by
 // Go native types.
 type Vec interface {
+	// Type returns the type of data stored in this Vec.
+	Type() types.T
+
 	// TODO(jordan): is a bitmap or slice of bools better?
 	// Bool returns a bool list.
 	Bool() []bool
@@ -110,6 +113,7 @@ var _ Vec = &memColumn{}
 // memColumn is a simple pass-through implementation of Vec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
+	t     types.T
 	col   column
 	nulls Nulls
 }
@@ -120,26 +124,30 @@ func NewMemColumn(t types.T, n int) Vec {
 
 	switch t {
 	case types.Bool:
-		return &memColumn{col: make([]bool, n), nulls: nulls}
+		return &memColumn{t: t, col: make([]bool, n), nulls: nulls}
 	case types.Bytes:
-		return &memColumn{col: make([][]byte, n), nulls: nulls}
+		return &memColumn{t: t, col: make([][]byte, n), nulls: nulls}
 	case types.Int8:
-		return &memColumn{col: make([]int8, n), nulls: nulls}
+		return &memColumn{t: t, col: make([]int8, n), nulls: nulls}
 	case types.Int16:
-		return &memColumn{col: make([]int16, n), nulls: nulls}
+		return &memColumn{t: t, col: make([]int16, n), nulls: nulls}
 	case types.Int32:
-		return &memColumn{col: make([]int32, n), nulls: nulls}
+		return &memColumn{t: t, col: make([]int32, n), nulls: nulls}
 	case types.Int64:
-		return &memColumn{col: make([]int64, n), nulls: nulls}
+		return &memColumn{t: t, col: make([]int64, n), nulls: nulls}
 	case types.Float32:
-		return &memColumn{col: make([]float32, n), nulls: nulls}
+		return &memColumn{t: t, col: make([]float32, n), nulls: nulls}
 	case types.Float64:
-		return &memColumn{col: make([]float64, n), nulls: nulls}
+		return &memColumn{t: t, col: make([]float64, n), nulls: nulls}
 	case types.Decimal:
-		return &memColumn{col: make([]apd.Decimal, n), nulls: nulls}
+		return &memColumn{t: t, col: make([]apd.Decimal, n), nulls: nulls}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", t))
 	}
+}
+
+func (m *memColumn) Type() types.T {
+	return m.t
 }
 
 func (m *memColumn) SetCol(col interface{}) {

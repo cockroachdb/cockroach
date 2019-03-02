@@ -549,7 +549,7 @@ type finiteBatchSource struct {
 
 var _ Operator = &finiteBatchSource{}
 
-var emptyBatch = coldata.NewMemBatch([]types.T{})
+var emptyBatch = coldata.NewMemBatchWithSize([]types.T{}, 0)
 
 // newFiniteBatchSource returns a new Operator initialized to return its input
 // batch a specified number of times.

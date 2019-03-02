@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -169,21 +170,15 @@ func (g *ycsb) Hooks() workload.Hooks {
 	}
 }
 
+var usertableColTypes = []types.T{
+	types.Bytes, types.Bytes, types.Bytes, types.Bytes, types.Bytes, types.Bytes,
+	types.Bytes, types.Bytes, types.Bytes, types.Bytes, types.Bytes,
+}
+
 // Tables implements the Generator interface.
 func (g *ycsb) Tables() []workload.Table {
 	usertable := workload.Table{
 		Name: `usertable`,
-		InitialRows: workload.Tuples(
-			g.initialRows,
-			func(rowIdx int) []interface{} {
-				w := ycsbWorker{config: g, hashFunc: fnv.New64()}
-				key := w.buildKeyName(uint64(rowIdx))
-				if g.json {
-					return []interface{}{key, "{}"}
-				}
-				return []interface{}{key, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}
-			},
-		),
 		Splits: workload.Tuples(
 			g.splits,
 			func(splitIdx int) []interface{} {
@@ -194,14 +189,31 @@ func (g *ycsb) Tables() []workload.Table {
 			},
 		),
 	}
+	usertableInitialRowsFn := func(rowIdx int) []interface{} {
+		w := ycsbWorker{config: g, hashFunc: fnv.New64()}
+		key := w.buildKeyName(uint64(rowIdx))
+		if g.json {
+			return []interface{}{key, "{}"}
+		}
+		return []interface{}{key, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}
+	}
 	if g.json {
 		usertable.Schema = usertableSchemaJSON
+		usertable.InitialRows = workload.Tuples(
+			g.initialRows,
+			usertableInitialRowsFn,
+		)
 	} else {
 		if g.families {
 			usertable.Schema = usertableSchemaRelationalWithFamilies
 		} else {
 			usertable.Schema = usertableSchemaRelational
 		}
+		usertable.InitialRows = workload.TypedTuples(
+			g.initialRows,
+			usertableColTypes,
+			usertableInitialRowsFn,
+		)
 	}
 	return []workload.Table{usertable}
 }

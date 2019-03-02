@@ -24,6 +24,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -78,20 +80,25 @@ func TestHandleCSV(t *testing.T) {
 func BenchmarkWriteCSVRows(b *testing.B) {
 	ctx := context.Background()
 
-	var rows [][][]interface{}
+	var batches []coldata.Batch
 	for _, table := range tpcc.FromWarehouses(1).Tables() {
-		rows = append(rows, table.InitialRows.Batch(0))
+		cb := coldata.NewMemBatch(nil)
+		var a bufalloc.ByteAllocator
+		table.InitialRows.FillBatch(0, cb, &a)
+		batches = append(batches, cb)
 	}
 	table := workload.Table{
 		InitialRows: workload.BatchedTuples{
-			Batch: func(rowIdx int) [][]interface{} { return rows[rowIdx] },
+			FillBatch: func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
+				*cb.(*coldata.MemBatch) = *batches[batchIdx].(*coldata.MemBatch)
+			},
 		},
 	}
 
 	var buf bytes.Buffer
 	fn := func() {
 		const limit = -1
-		if _, err := workload.WriteCSVRows(ctx, &buf, table, 0, len(rows), limit); err != nil {
+		if _, err := workload.WriteCSVRows(ctx, &buf, table, 0, len(batches), limit); err != nil {
 			b.Fatalf(`%+v`, err)
 		}
 	}
@@ -123,14 +130,19 @@ func TestCSVRowsReader(t *testing.T) {
 }
 
 func BenchmarkCSVRowsReader(b *testing.B) {
-	var rows [][][]interface{}
+	var batches []coldata.Batch
 	for _, table := range tpcc.FromWarehouses(1).Tables() {
-		rows = append(rows, table.InitialRows.Batch(0))
+		cb := coldata.NewMemBatch(nil)
+		var a bufalloc.ByteAllocator
+		table.InitialRows.FillBatch(0, cb, &a)
+		batches = append(batches, cb)
 	}
 	table := workload.Table{
 		InitialRows: workload.BatchedTuples{
-			Batch:      func(rowIdx int) [][]interface{} { return rows[rowIdx] },
-			NumBatches: len(rows),
+			NumBatches: len(batches),
+			FillBatch: func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
+				*cb.(*coldata.MemBatch) = *batches[batchIdx].(*coldata.MemBatch)
+			},
 		},
 	}
 
