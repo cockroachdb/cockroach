@@ -267,7 +267,7 @@ func TestContendedIntent(t *testing.T) {
 		if req, ok := ba.Requests[0].GetInner().(*roachpb.ResolveIntentRequest); ok {
 			key.Equal(req.Key)
 		} else {
-			t.Fatalf("expected PushTxnRequest, got %T", ba.Requests[0].GetInner())
+			t.Fatalf("expected ResolveIntentRequest, got %T", ba.Requests[0].GetInner())
 		}
 	}
 
@@ -395,6 +395,32 @@ func TestContendedIntent(t *testing.T) {
 			// There should be a push of orig and then a resolve of intent.
 			verifyPushTxn(<-reqChan, roTxn1.ID, origTxn.ID)
 			verifyResolveIntent(<-reqChan, keyA)
+
+			// Minimum and maximum priority txns pass through without queuing.
+			// This is a convenient place to perform this check because roTxn1
+			// push is still blocking all other txn pushes, but the min and max
+			// priority txn's requests won't mix with requests.
+			for name, pusher := range map[string]*roachpb.Transaction{
+				"min priority": newTransaction("min-txn", keyA, roachpb.MinUserPriority, clock),
+				"max priority": newTransaction("max-txn", keyA, roachpb.MaxUserPriority, clock),
+			} {
+				t.Run(name, func(t *testing.T) {
+					wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{{
+						Txn:  origTxn.TxnMeta,
+						Span: roachpb.Span{Key: keyA},
+					}}}
+					h := roachpb.Header{Txn: pusher}
+					cleanupFunc, pErr := ir.ProcessWriteIntentError(ctx, roachpb.NewError(wiErr), nil, h, roachpb.PUSH_ABORT)
+					if pErr != nil {
+						panic(pErr)
+					}
+					if cleanupFunc != nil {
+						t.Fatal("unexpected cleanup func; should not have entered contentionQueue")
+					}
+					verifyPushTxn(<-reqChan, pusher.ID, origTxn.ID)
+					verifyResolveIntent(<-reqChan, keyA)
+				})
+			}
 			fallthrough
 		case 1, 2, 3:
 			// The remaining roTxns should not do anything upon cleanup.
@@ -727,18 +753,6 @@ func newTransaction(
 	}
 	txn := roachpb.MakeTransaction(name, baseKey, userPriority, now, offset)
 	return &txn
-}
-
-// assignSeqNumsForReqs sets sequence numbers for each of the provided requests
-// given a transaction proto. It also updates the proto to reflect the incremented
-// sequence number.
-func assignSeqNumsForReqs(txn *roachpb.Transaction, reqs ...roachpb.Request) {
-	for _, ru := range reqs {
-		txn.Sequence++
-		oldHeader := ru.Header()
-		oldHeader.Sequence = txn.Sequence
-		ru.SetHeader(oldHeader)
-	}
 }
 
 // makeTxnIntents creates a slice of Intent which each have a unique txn.
