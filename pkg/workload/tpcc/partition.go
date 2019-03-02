@@ -20,12 +20,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/rand"
 )
 
 // partitioner encapsulates all logic related to partitioning discrete numbers

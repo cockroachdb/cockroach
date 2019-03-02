@@ -19,7 +19,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"math/rand"
 	"strings"
 	"sync/atomic"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/rand"
 )
 
 // 2.7 The Delivery Transaction
@@ -86,7 +86,7 @@ func createDelivery(
 func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 	atomic.AddUint64(&del.config.auditor.deliveryTransactions, 1)
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	oCarrierID := rng.Intn(10) + 1
 	olDeliveryD := timeutil.Now()

@@ -18,7 +18,6 @@ package tpcc
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/rand"
 )
 
 // From the TPCC spec, section 2.4:
@@ -123,7 +123,7 @@ func createNewOrder(
 	)
 
 	n.insertNewOrder = n.sr.Define(`
-		INSERT INTO new_order (no_o_id, no_d_id, no_w_id) 
+		INSERT INTO new_order (no_o_id, no_d_id, no_w_id)
 		VALUES ($1, $2, $3)`,
 	)
 
@@ -137,7 +137,7 @@ func createNewOrder(
 func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 	atomic.AddUint64(&n.config.auditor.newOrderTransactions, 1)
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	d := newOrderData{
 		wID:    wID,
