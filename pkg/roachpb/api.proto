@@ -734,15 +734,23 @@ message PushTxnRequest {
   // up-to-date value of the transaction record, but will be set or
   // merged as appropriate.
   storage.engine.enginepb.TxnMeta pushee_txn = 3 [(gogoproto.nullable) = false];
-  // PushTo is the timestamp just after which PusheeTxn is attempted to be
-  // pushed. During conflict resolution, it should be set to the timestamp
-  // of the its conflicting write.
+  // PushTo is the timestamp which PusheeTxn should be pushed to. During
+  // conflict resolution, it should be set just after the timestamp of the
+  // conflicting read or write.
   util.hlc.Timestamp push_to = 4 [(gogoproto.nullable) = false];
-  // Now holds the timestamp used to compare the last heartbeat of the pushee
-  // against. This is necessary since the request header's timestamp does not
-  // necessarily advance with the node clock across retries and hence cannot
-  // detect abandoned transactions.
-  util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
+  // InclusivePushTo is sent by nodes to specify that their PushTo timestamp
+  // is the timestamp they want the transaction to be pushed to, instead of
+  // the timestamp before the one they want the transaction to be pushed to.
+  // It is used to assist that field's migration.
+  // TODO(nvanbenschoten): Remove this field in 19.2.
+  bool inclusive_push_to = 9;
+  // DeprecatedNow holds the timestamp used to compare the last heartbeat of the
+  // pushee against.
+  //
+  // The field remains for compatibility with 2.1 nodes. Users should set the
+  // same value for this field and the batch header timestamp.
+  // TODO(nvanbenschoten): Remove this field in 19.2.
+  util.hlc.Timestamp deprecated_now = 5 [(gogoproto.nullable) = false];
   // Readers set this to PUSH_TIMESTAMP to move pushee_txn's provisional
   // commit timestamp forward. Writers set this to PUSH_ABORT to request
   // that pushee_txn be aborted if possible. Inconsistent readers set
