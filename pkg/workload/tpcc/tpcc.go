@@ -76,7 +76,7 @@ type tpcc struct {
 		syncutil.Mutex
 		values [][]int
 	}
-	rngPool *sync.Pool
+	localsPool *sync.Pool
 }
 
 func init() {
@@ -298,9 +298,13 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 // Tables implements the Generator interface.
 func (w *tpcc) Tables() []workload.Table {
-	if w.rngPool == nil {
-		w.rngPool = &sync.Pool{
-			New: func() interface{} { return rand.New(rand.NewSource(timeutil.Now().UnixNano())) },
+	if w.localsPool == nil {
+		w.localsPool = &sync.Pool{
+			New: func() interface{} {
+				return &generateLocals{
+					rng: rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+				}
+			},
 		}
 	}
 

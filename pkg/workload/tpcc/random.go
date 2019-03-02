@@ -17,7 +17,9 @@ package tpcc
 
 import (
 	"math/rand"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -46,7 +48,9 @@ func init() {
 	cCustomerID = rand.Intn(8192)
 }
 
-func randStringFromAlphabet(rng *rand.Rand, minLen, maxLen int, alphabet string) string {
+func randStringFromAlphabet(
+	rng *rand.Rand, a *bufalloc.ByteAllocator, minLen, maxLen int, alphabet string,
+) string {
 	size := maxLen
 	if maxLen-minLen != 0 {
 		size = randInt(rng, minLen, maxLen)
@@ -55,46 +59,50 @@ func randStringFromAlphabet(rng *rand.Rand, minLen, maxLen int, alphabet string)
 		return ""
 	}
 
-	b := make([]byte, size)
+	var b []byte
+	*a, b = a.Alloc(size, 0 /* extraCap */)
 	for i := range b {
 		b[i] = alphabet[rng.Intn(len(alphabet))]
 	}
-	return string(b)
+	// strings.Builder uses this trick, so it's probably safe enough these days.
+	// The other important thing is to make sure we never use these bytes for
+	// anything else, but the tpcc ByteAllocator usage is pretty straightforward.
+	return *(*string)(unsafe.Pointer(&b))
 }
 
 // randAString generates a random alphanumeric string of length between min and
 // max inclusive. See 4.3.2.2.
-func randAString(rng *rand.Rand, min, max int) string {
-	return randStringFromAlphabet(rng, min, max, aChars)
+func randAString(rng *rand.Rand, a *bufalloc.ByteAllocator, min, max int) string {
+	return randStringFromAlphabet(rng, a, min, max, aChars)
 }
 
 // randOriginalString generates a random a-string[26..50] with 10% chance of
 // containing the string "ORIGINAL" somewhere in the middle of the string.
 // See 4.3.3.1.
-func randOriginalString(rng *rand.Rand) string {
+func randOriginalString(rng *rand.Rand, a *bufalloc.ByteAllocator) string {
 	if rng.Intn(9) == 0 {
 		l := randInt(rng, 26, 50)
 		off := randInt(rng, 0, l-8)
-		return randAString(rng, off, off) + originalString + randAString(rng, l-off-8, l-off-8)
+		return randAString(rng, a, off, off) + originalString + randAString(rng, a, l-off-8, l-off-8)
 	}
-	return randAString(rng, 26, 50)
+	return randAString(rng, a, 26, 50)
 }
 
 // randNString generates a random numeric string of length between min anx max
 // inclusive. See 4.3.2.2.
-func randNString(rng *rand.Rand, min, max int) string {
-	return randStringFromAlphabet(rng, min, max, numbers)
+func randNString(rng *rand.Rand, a *bufalloc.ByteAllocator, min, max int) string {
+	return randStringFromAlphabet(rng, a, min, max, numbers)
 }
 
 // randState produces a random US state. (spec just says 2 letters)
-func randState(rng *rand.Rand) string {
-	return randStringFromAlphabet(rng, 2, 2, letters)
+func randState(rng *rand.Rand, a *bufalloc.ByteAllocator) string {
+	return randStringFromAlphabet(rng, a, 2, 2, letters)
 }
 
 // randZip produces a random "zip code" - a 4-digit number plus the constant
 // "11111". See 4.3.2.7.
-func randZip(rng *rand.Rand) string {
-	return randNString(rng, 4, 4) + "11111"
+func randZip(rng *rand.Rand, a *bufalloc.ByteAllocator) string {
+	return randNString(rng, a, 4, 4) + "11111"
 }
 
 // randTax produces a random tax between [0.0000..0.2000]
