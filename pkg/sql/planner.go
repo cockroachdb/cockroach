@@ -592,7 +592,10 @@ func (p *planner) runWithDistSQL(
 // txnModesSetter is an interface used by SQL execution to influence the current
 // transaction.
 type txnModesSetter interface {
-	setTransactionModes(modes tree.TransactionModes) error
+	// setTransactionModes updates some characteristics of the current
+	// transaction.
+	// asOfTs, if not empty, is the evaluation of modes.AsOf.
+	setTransactionModes(modes tree.TransactionModes, asOfTs hlc.Timestamp) error
 }
 
 // sqlStatsCollector is the interface used by SQL execution, through the
