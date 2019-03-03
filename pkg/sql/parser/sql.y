@@ -1986,7 +1986,8 @@ comment_stmt:
 comment_text:
   SCONST
   {
-    $$.val = &$1
+    t := $1
+    $$.val = &t
   }
 | NULL
   {
