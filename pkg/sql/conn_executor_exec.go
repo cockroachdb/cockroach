@@ -449,39 +449,40 @@ func (ex *connExecutor) execStmtInOpenState(
 		if err := ex.initStatementResult(ctx, res, p.stmt, cols); err != nil {
 			return makeErrEvent(err)
 		}
-	} else {
-		p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
-		if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
-			return nil, nil, err
-		}
-		if err := res.Err(); err != nil {
-			return makeErrEvent(err)
-		}
-
-		txn := ex.state.mu.txn
-		if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
-			rc, canAutoRetry := ex.getRewindTxnCapability()
-			if canAutoRetry {
-				ev := eventRetriableErr{
-					IsCommit:     fsm.FromBool(isCommit(stmt.AST)),
-					CanAutoRetry: fsm.FromBool(canAutoRetry),
-				}
-				txn.ManualRestart(ctx, ex.server.cfg.Clock.Now())
-				payload := eventRetriableErrPayload{
-					err: roachpb.NewTransactionRetryWithProtoRefreshError(
-						"serializable transaction timestamp pushed (detected by connExecutor)",
-						txn.ID(),
-						// No updated transaction required; we've already manually updated our
-						// client.Txn.
-						roachpb.Transaction{},
-					),
-					rewCap: rc,
-				}
-				return ev, payload, nil
-			}
-		}
+		// No event is generated.
+		return nil, nil, nil
 	}
 
+	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
+	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
+		return nil, nil, err
+	}
+	if err := res.Err(); err != nil {
+		return makeErrEvent(err)
+	}
+
+	txn := ex.state.mu.txn
+	if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
+		rc, canAutoRetry := ex.getRewindTxnCapability()
+		if canAutoRetry {
+			ev := eventRetriableErr{
+				IsCommit:     fsm.FromBool(isCommit(stmt.AST)),
+				CanAutoRetry: fsm.FromBool(canAutoRetry),
+			}
+			txn.ManualRestart(ctx, ex.server.cfg.Clock.Now())
+			payload := eventRetriableErrPayload{
+				err: roachpb.NewTransactionRetryWithProtoRefreshError(
+					"serializable transaction timestamp pushed (detected by connExecutor)",
+					txn.ID(),
+					// No updated transaction required; we've already manually updated our
+					// client.Txn.
+					roachpb.Transaction{},
+				),
+				rewCap: rc,
+			}
+			return ev, payload, nil
+		}
+	}
 	// No event was generated.
 	return nil, nil, nil
 }
