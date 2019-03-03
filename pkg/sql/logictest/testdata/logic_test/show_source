@@ -175,21 +175,21 @@ query TT colnames
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 table_name        comment
-comments          NULL
-descriptor        NULL
-eventlog          NULL
-jobs              NULL
-lease             NULL
-locations         NULL
-namespace         NULL
-rangelog          NULL
-role_members      NULL
-settings          NULL
-table_statistics  NULL
-ui                NULL
-users             NULL
-web_sessions      NULL
-zones             NULL
+namespace         ·
+descriptor        ·
+users             ·
+zones             ·
+settings          ·
+lease             ·
+eventlog          ·
+rangelog          ·
+ui                ·
+jobs              ·
+web_sessions      ·
+table_statistics  ·
+locations         ·
+role_members      ·
+comments          ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries

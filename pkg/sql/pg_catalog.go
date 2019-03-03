@@ -232,6 +232,8 @@ var pgCatalog = virtualSchema{
 // See: https://www.postgresql.org/docs/9.5/static/catalog-pg-am.html and
 // https://www.postgresql.org/docs/9.6/static/catalog-pg-am.html.
 var pgCatalogAmTable = virtualSchemaTable{
+	comment: `index access methods (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-am.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_am (
 	oid OID,
@@ -309,8 +311,9 @@ CREATE TABLE pg_catalog.pg_am (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-attrdef.html.
 var pgCatalogAttrDefTable = virtualSchemaTable{
+	comment: `column default values
+https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_attrdef (
 	oid OID,
@@ -343,8 +346,9 @@ CREATE TABLE pg_catalog.pg_attrdef (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-attribute.html.
 var pgCatalogAttributeTable = virtualSchemaTable{
+	comment: `table columns (incomplete - see also information_schema.columns)
+https://www.postgresql.org/docs/9.5/catalog-pg-attribute.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_attribute (
 	attrelid OID,
@@ -421,8 +425,9 @@ CREATE TABLE pg_catalog.pg_attribute (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-auth-members.html.
 var pgCatalogAuthMembersTable = virtualSchemaTable{
+	comment: `role membership
+https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_auth_members (
 	roleid OID,
@@ -453,8 +458,9 @@ var (
 	relPersistencePermanent = tree.NewDString("p")
 )
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-class.html.
 var pgCatalogClassTable = virtualSchemaTable{
+	comment: `tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
+https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_class (
 	oid OID,
@@ -572,8 +578,9 @@ CREATE TABLE pg_catalog.pg_class (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-collation.html.
 var pgCatalogCollationTable = virtualSchemaTable{
+	comment: `available collations (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_collation (
   oid OID,
@@ -646,8 +653,9 @@ var (
 	}
 )
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-constraint.html.
 var pgCatalogConstraintTable = virtualSchemaTable{
+	comment: `table constraints (incomplete - see also information_schema.table_constraints)
+https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_constraint (
 	oid OID,
@@ -854,8 +862,9 @@ func colIDArrayToVector(arr []sqlbase.ColumnID) (tree.Datum, error) {
 	return tree.NewDIntVectorFromDArray(tree.MustBeDArray(dArr)), nil
 }
 
-// See https://www.postgresql.org/docs/9.6/static/catalog-pg-database.html.
 var pgCatalogDatabaseTable = virtualSchemaTable{
+	comment: `available databases (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_database (
 	oid OID,
@@ -913,8 +922,6 @@ var (
 	pgClassTableName       = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_class"))
 )
 
-// See https://www.postgresql.org/docs/9.6/static/catalog-pg-depend.html.
-//
 // pg_depend is a fairly complex table that details many different kinds of
 // relationships between database objects. We do not implement the vast
 // majority of this table, as it is mainly used by pgjdbc to address a
@@ -924,6 +931,8 @@ var (
 // provide those rows in pg_depend that track the dependency of foreign key
 // constraints on their supporting index entries in pg_class.
 var pgCatalogDependTable = virtualSchemaTable{
+	comment: `dependency relationships (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_depend (
   classid OID,
@@ -987,8 +996,9 @@ CREATE TABLE pg_catalog.pg_depend (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-description.html.
 var pgCatalogDescriptionTable = virtualSchemaTable{
+	comment: `object comments
+https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_description (
 	objoid OID,
@@ -1005,57 +1015,33 @@ CREATE TABLE pg_catalog.pg_description (
 			ctx,
 			"select-comments",
 			p.EvalContext().Txn,
-			"SELECT object_id, sub_id, comment FROM system.comments")
+			`SELECT COALESCE(pc.object_id, sc.object_id) AS object_id,
+              COALESCE(pc.sub_id, sc.sub_id) AS sub_id,
+              COALESCE(pc.comment, sc.comment) AS comment
+         FROM (SELECT * FROM system.comments) AS sc
+    FULL JOIN (SELECT * FROM crdb_internal.predefined_comments) AS pc
+           ON (pc.object_id = sc.object_id AND pc.sub_id = sc.sub_id AND pc.type = sc.type)`)
 		if err != nil {
 			return err
 		}
 
-		commentMap := make(map[tree.DInt]tree.Datums)
 		for _, comment := range comments {
-			id := *comment[0].(*tree.DInt)
-			commentMap[id] = comment
-		}
-
-		err = forEachTableDescWithTableLookup(
-			ctx,
-			p,
-			dbContext,
-			hideVirtual,
-			func(
-				db *sqlbase.DatabaseDescriptor,
-				scName string,
-				table *sqlbase.TableDescriptor,
-				tableLookup tableLookupFn) error {
-				if comment, ok := commentMap[tree.DInt(table.ID)]; ok {
-					return addRow(
-						defaultOid(table.ID),
-						oidZero,
-						comment[1],
-						comment[2])
-				}
-
-				return nil
-			})
-		if err != nil {
-			return err
-		}
-
-		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, func(db *sqlbase.DatabaseDescriptor) error {
-			if comment, ok := commentMap[tree.DInt(db.ID)]; ok {
-				return addRow(
-					defaultOid(db.ID),
-					oidZero,
-					comment[1],
-					comment[2])
+			objID := sqlbase.ID(*comment[0].(*tree.DInt))
+			if err := addRow(
+				defaultOid(objID),
+				oidZero,
+				comment[1],
+				comment[2]); err != nil {
+				return err
 			}
-
-			return nil
-		})
+		}
+		return nil
 	},
 }
 
-// See: https://www.postgresql.org/docs/current/static/catalog-pg-shdescription.html.
 var pgCatalogSharedDescriptionTable = virtualSchemaTable{
+	comment: `shared object comments (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_shdescription (
 	objoid OID,
@@ -1068,8 +1054,9 @@ CREATE TABLE pg_catalog.pg_shdescription (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-enum.html.
 var pgCatalogEnumTable = virtualSchemaTable{
+	comment: `enum types and labels (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_enum (
   oid OID,
@@ -1083,8 +1070,9 @@ CREATE TABLE pg_catalog.pg_enum (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-extension.html.
 var pgCatalogExtensionTable = virtualSchemaTable{
+	comment: `installed extensions (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-extension.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_extension (
   extname NAME,
@@ -1101,8 +1089,9 @@ CREATE TABLE pg_catalog.pg_extension (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-foreign-data-wrapper.html.
 var pgCatalogForeignDataWrapperTable = virtualSchemaTable{
+	comment: `foreign data wrappers (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-foreign-data-wrapper.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_foreign_data_wrapper (
   oid OID,
@@ -1119,8 +1108,9 @@ CREATE TABLE pg_catalog.pg_foreign_data_wrapper (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-foreign-server.html.
 var pgCatalogForeignServerTable = virtualSchemaTable{
+	comment: `foreign servers (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-foreign-server.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_foreign_server (
   oid OID,
@@ -1138,8 +1128,9 @@ CREATE TABLE pg_catalog.pg_foreign_server (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-foreign-table.html.
 var pgCatalogForeignTableTable = virtualSchemaTable{
+	comment: `foreign tables (empty  - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-foreign-table.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_foreign_table (
   ftrelid OID,
@@ -1172,8 +1163,9 @@ func makeZeroedIntVector(size int) (tree.Datum, error) {
 	return tree.NewDIntVectorFromDArray(intArray), nil
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-index.html.
 var pgCatalogIndexTable = virtualSchemaTable{
+	comment: `indexes (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_index (
     indexrelid OID,
@@ -1258,11 +1250,11 @@ CREATE TABLE pg_catalog.pg_index (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/view-pg-indexes.html.
-//
-// Note that crdb_oid is an extension of the schema to much more easily map
-// index OIDs to the corresponding index definition.
 var pgCatalogIndexesTable = virtualSchemaTable{
+	comment: `index creation statements
+https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
+	// Note: crdb_oid is an extension of the schema to much more easily map
+	// index OIDs to the corresponding index definition.
 	schema: `
 CREATE TABLE pg_catalog.pg_indexes (
 	crdb_oid OID,
@@ -1354,8 +1346,9 @@ func indexDefFromDescriptor(
 	return indexDef.String(), nil
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-inherits.html.
 var pgCatalogInheritsTable = virtualSchemaTable{
+	comment: `table inheritance hierarchy (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-inherits.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_inherits (
 	inhrelid OID,
@@ -1368,8 +1361,9 @@ CREATE TABLE pg_catalog.pg_inherits (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-language.html.
 var pgCatalogLanguageTable = virtualSchemaTable{
+	comment: `available languages (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-language.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_language (
 	oid OID,
@@ -1388,8 +1382,9 @@ CREATE TABLE pg_catalog.pg_language (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-namespace.html.
 var pgCatalogNamespaceTable = virtualSchemaTable{
+	comment: `available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
+https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_namespace (
 	oid OID,
@@ -1421,8 +1416,9 @@ var (
 	_ = postfixKind
 )
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-operator.html.
 var pgCatalogOperatorTable = virtualSchemaTable{
+	comment: `operators (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_operator (
 	oid OID,
@@ -1535,8 +1531,9 @@ var (
 	_ = proArgModeTable
 )
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-proc.html.
 var pgCatalogProcTable = virtualSchemaTable{
+	comment: `built-in functions (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_proc (
 	oid OID,
@@ -1692,8 +1689,9 @@ CREATE TABLE pg_catalog.pg_proc (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-range.html.
 var pgCatalogRangeTable = virtualSchemaTable{
+	comment: `range types (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-range.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_range (
 	rngtypid OID,
@@ -1711,8 +1709,9 @@ CREATE TABLE pg_catalog.pg_range (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-rewrite.html.
 var pgCatalogRewriteTable = virtualSchemaTable{
+	comment: `rewrite rules (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-rewrite.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_rewrite (
 	oid OID,
@@ -1730,8 +1729,9 @@ CREATE TABLE pg_catalog.pg_rewrite (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/view-pg-roles.html.
 var pgCatalogRolesTable = virtualSchemaTable{
+	comment: `database roles
+https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_roles (
 	oid OID,
@@ -1779,8 +1779,9 @@ CREATE TABLE pg_catalog.pg_roles (
 	},
 }
 
-// See: https://www.postgresql.org/docs/10/static/catalog-pg-sequence.html.
 var pgCatalogSequencesTable = virtualSchemaTable{
+	comment: `sequences (see also information_schema.sequences)
+https://www.postgresql.org/docs/9.5/catalog-pg-sequence.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_sequence (
 	seqrelid OID,
@@ -1818,8 +1819,9 @@ var (
 	settingsCtxUser = tree.NewDString("user")
 )
 
-// See: https://www.postgresql.org/docs/9.6/static/view-pg-settings.html.
 var pgCatalogSettingsTable = virtualSchemaTable{
+	comment: `session variables (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_settings (
     name STRING,
@@ -1890,8 +1892,9 @@ CREATE TABLE pg_catalog.pg_settings (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/view-pg-tables.html.
 var pgCatalogTablesTable = virtualSchemaTable{
+	comment: `tables summary (see also information_schema.tables, pg_catalog.pg_class)
+https://www.postgresql.org/docs/9.5/view-pg-tables.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_tables (
 	schemaname NAME,
@@ -1926,8 +1929,9 @@ CREATE TABLE pg_catalog.pg_tables (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-tablespace.html.
 var pgCatalogTablespaceTable = virtualSchemaTable{
+	comment: `available tablespaces (incomplete; concept inapplicable to CockroachDB)
+https://www.postgresql.org/docs/9.5/catalog-pg-tablespace.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_tablespace (
 	oid OID,
@@ -1949,8 +1953,9 @@ CREATE TABLE pg_catalog.pg_tablespace (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-trigger.html.
 var pgCatalogTriggerTable = virtualSchemaTable{
+	comment: `triggers (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-trigger.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_trigger (
 	oid OID,
@@ -2021,8 +2026,9 @@ var (
 	typDelim = tree.NewDString(",")
 )
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-type.html.
 var pgCatalogTypeTable = virtualSchemaTable{
+	comment: `scalar types (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_type (
 	oid OID,
@@ -2137,8 +2143,9 @@ CREATE TABLE pg_catalog.pg_type (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/view-pg-user.html.
 var pgCatalogUserTable = virtualSchemaTable{
+	comment: `database users
+https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_user (
 	usename NAME,
@@ -2174,8 +2181,9 @@ CREATE TABLE pg_catalog.pg_user (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-user-mapping.html.
 var pgCatalogUserMappingTable = virtualSchemaTable{
+	comment: `local to remote user mapping (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-user-mapping.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_user_mapping (
 	oid OID,
@@ -2190,8 +2198,9 @@ CREATE TABLE pg_catalog.pg_user_mapping (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW
 var pgCatalogStatActivityTable = virtualSchemaTable{
+	comment: `backend access statistics (empty - monitoring works differently in CockroachDB)
+https://www.postgresql.org/docs/9.6/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW`,
 	schema: `
 CREATE TABLE pg_catalog.pg_stat_activity (
 	datid OID,
@@ -2220,9 +2229,9 @@ CREATE TABLE pg_catalog.pg_stat_activity (
 	},
 }
 
-//
-// See https://www.postgresql.org/docs/current/static/catalog-pg-seclabel.html
 var pgCatalogSecurityLabelTable = virtualSchemaTable{
+	comment: `security labels (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-seclabel.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_seclabel (
 	objoid OID,
@@ -2237,8 +2246,9 @@ CREATE TABLE pg_catalog.pg_seclabel (
 	},
 }
 
-// See https://www.postgresql.org/docs/current/static/catalog-pg-shseclabel.html
 var pgCatalogSharedSecurityLabelTable = virtualSchemaTable{
+	comment: `shared security labels (empty - feature not supported)
+https://www.postgresql.org/docs/9.5/catalog-pg-shseclabel.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_shseclabel (
 	objoid OID,
@@ -2317,8 +2327,9 @@ func typCategory(typ types.T) tree.Datum {
 	return datumToTypeCategory[reflect.TypeOf(types.UnwrapType(typ))]
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/view-pg-views.html.
 var pgCatalogViewsTable = virtualSchemaTable{
+	comment: `view definitions (incomplete - see also information_schema.views)
+https://www.postgresql.org/docs/9.5/view-pg-views.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_views (
 	schemaname NAME,

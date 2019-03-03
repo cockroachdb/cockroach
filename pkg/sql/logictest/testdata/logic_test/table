@@ -120,12 +120,12 @@ c            INT8       false        NULL            ·                      {pr
 query TT
 SHOW TABLES FROM test WITH COMMENT
 ----
-a a_comment
-b NULL
-c NULL
-d NULL
-e NULL
-f NULL
+a  a_comment
+b  ·
+c  ·
+d  ·
+e  ·
+f  ·
 
 statement ok
 SET DATABASE = ""
