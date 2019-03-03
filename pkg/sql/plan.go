@@ -314,8 +314,8 @@ type planTop struct {
 // The caller is responsible for populating the placeholders
 // beforehand (currently in semaCtx.Placeholders).
 //
-// After makePlan(), the caller should be careful to also call
-// p.curPlan.Close().
+// If no error is returned, the caller must call p.curPlan.Close() once the plan
+// is no longer needed.
 func (p *planner) makePlan(ctx context.Context) error {
 	// Reinitialize.
 	stmt := p.stmt

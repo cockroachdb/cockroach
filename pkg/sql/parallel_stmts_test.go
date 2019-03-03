@@ -76,7 +76,7 @@ func (pq *ParallelizeQueue) MustAdd(t *testing.T, plan planNode, exec func() err
 		extendedEvalCtx: &p.extendedEvalCtx,
 	}
 	params.p.curPlan.plan = plan
-	if err := pq.Add(params, exec); err != nil {
+	if err := pq.Add(params, exec, p.curPlan.close /* cleanup */); err != nil {
 		t.Fatalf("ParallelizeQueue.Add failed: %v", err)
 	}
 }
