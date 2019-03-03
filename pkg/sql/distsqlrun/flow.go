@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -605,10 +606,11 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 
 	// We'll take care of the last processor in particular.
 	var headProc Processor
-	if len(f.processors) > 0 {
-		headProc = f.processors[len(f.processors)-1]
-		f.processors = f.processors[:len(f.processors)-1]
+	if len(f.processors) == 0 {
+		return pgerror.NewAssertionErrorf("no processors in flow")
 	}
+	headProc = f.processors[len(f.processors)-1]
+	f.processors = f.processors[:len(f.processors)-1]
 
 	if err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
@@ -619,9 +621,7 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 		}
 		return err
 	}
-	if headProc != nil {
-		headProc.Run(ctx)
-	}
+	headProc.Run(ctx)
 	return nil
 }
 
