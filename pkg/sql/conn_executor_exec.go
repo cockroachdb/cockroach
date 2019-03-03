@@ -147,6 +147,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	// Canceling a query cancels its transaction's context so we take a reference
 	// to the cancelation function here.
 	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
+
+	// queryDone is a cleanup function dealing with unregistering a query.
+	// It also deals with overwriting res.Error to a more user-friendly message in
+	// case of query cancelation. res can be nil to opt out of this.
 	queryDone := func(ctx context.Context, res RestrictedCommandResult) {
 		if timeoutTicker != nil {
 			if !timeoutTicker.Stop() {
@@ -163,7 +167,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// sorts of errors on the result. Rather than trying to impose discipline
 		// in that jungle, we just overwrite them all here with an error that's
 		// nicer to look at for the client.
-		if ctx.Err() != nil && res.Err() != nil {
+		if res != nil && ctx.Err() != nil && res.Err() != nil {
 			if queryTimedOut {
 				res.SetError(sqlbase.QueryTimeoutError)
 			} else {
@@ -431,8 +435,11 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if runInParallel {
 		cols, err := ex.execStmtInParallel(ctx, p, queryDone)
+		// Responsibility for calling queryDone has been passed to
+		// execStmtInParallel.
 		queryDone = nil
 		if err != nil {
+			res.SetError(err)
 			return makeErrEvent(err)
 		}
 		// Produce mocked out results for the query - the "zero value" of the
@@ -663,6 +670,14 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 func (ex *connExecutor) execStmtInParallel(
 	ctx context.Context, planner *planner, queryDone func(context.Context, RestrictedCommandResult),
 ) (sqlbase.ResultColumns, error) {
+	defer func() {
+		// Call the cleanup function unless responsibility has been transferred
+		// elsewhere.
+		if queryDone != nil {
+			queryDone(ctx, nil /* res */)
+		}
+	}()
+
 	params := runParams{
 		ctx:             ctx,
 		extendedEvalCtx: planner.ExtendedEvalContext(),
@@ -718,11 +733,13 @@ func (ex *connExecutor) execStmtInParallel(
 	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
+	// Responsibility for calling queryDone is taken by the closure below.
+	queryDoneCpy := queryDone
+	queryDone = nil
 	if err := ex.parallelizeQueue.Add(params, func() error {
 		res := &bufferedCommandResult{errOnly: true}
 
-		defer queryDone(ctx, res)
-
+		defer queryDoneCpy(ctx, res)
 		defer func() {
 			planner.maybeLogStatement(ctx, "par-exec" /* lbl */, res.RowsAffected(), res.Err())
 		}()
