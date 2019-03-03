@@ -708,6 +708,12 @@ func (ex *connExecutor) execStmtInParallel(
 		planner.maybeLogStatement(ctx, "par-prepare" /* lbl */, 0 /* rows */, err)
 		return nil, err
 	}
+	planCleanup := planner.curPlan.close
+	defer func() {
+		if planCleanup != nil {
+			planCleanup(ctx)
+		}
+	}()
 
 	// Prepare the result set, and determine the execution parameters.
 	var cols sqlbase.ResultColumns
@@ -737,10 +743,16 @@ func (ex *connExecutor) execStmtInParallel(
 	// Responsibility for calling queryDone is taken by the closure below.
 	queryDoneCpy := queryDone
 	queryDone = nil
+	// Responsibility for calling planCleanup is taken by the closure below.
+	planCleanupCpy := planCleanup
+	planCleanup = nil
+	cleanup := func(ctx context.Context) {
+		planCleanupCpy(ctx)
+		queryDoneCpy(ctx, nil /* res */)
+	}
 	if err := ex.parallelizeQueue.Add(params, func() error {
 		res := &bufferedCommandResult{errOnly: true}
 
-		defer queryDoneCpy(ctx, res)
 		defer func() {
 			planner.maybeLogStatement(ctx, "par-exec" /* lbl */, res.RowsAffected(), res.Err())
 		}()
@@ -796,7 +808,7 @@ func (ex *connExecutor) execStmtInParallel(
 			return err
 		}
 		return res.Err()
-	}); err != nil {
+	}, cleanup); err != nil {
 		planner.maybeLogStatement(ctx, "par-queue" /* lbl */, 0 /* rows */, err)
 		return nil, err
 	}
