@@ -147,6 +147,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	// Canceling a query cancels its transaction's context so we take a reference
 	// to the cancelation function here.
 	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
+
+	// queryDone is a cleanup function dealing with unregistering a query.
+	// It also deals with overwriting res.Error to a more user-friendly message in
+	// case of query cancelation. res can be nil to opt out of this.
 	queryDone := func(ctx context.Context, res RestrictedCommandResult) {
 		if timeoutTicker != nil {
 			if !timeoutTicker.Stop() {
@@ -163,7 +167,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// sorts of errors on the result. Rather than trying to impose discipline
 		// in that jungle, we just overwrite them all here with an error that's
 		// nicer to look at for the client.
-		if ctx.Err() != nil && res.Err() != nil {
+		if res != nil && ctx.Err() != nil && res.Err() != nil {
 			if queryTimedOut {
 				res.SetError(sqlbase.QueryTimeoutError)
 			} else {
@@ -431,8 +435,11 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if runInParallel {
 		cols, err := ex.execStmtInParallel(ctx, p, queryDone)
+		// Responsibility for calling queryDone has been passed to
+		// execStmtInParallel.
 		queryDone = nil
 		if err != nil {
+			res.SetError(err)
 			return makeErrEvent(err)
 		}
 		// Produce mocked out results for the query - the "zero value" of the
@@ -442,39 +449,40 @@ func (ex *connExecutor) execStmtInOpenState(
 		if err := ex.initStatementResult(ctx, res, p.stmt, cols); err != nil {
 			return makeErrEvent(err)
 		}
-	} else {
-		p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
-		if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
-			return nil, nil, err
-		}
-		if err := res.Err(); err != nil {
-			return makeErrEvent(err)
-		}
-
-		txn := ex.state.mu.txn
-		if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
-			rc, canAutoRetry := ex.getRewindTxnCapability()
-			if canAutoRetry {
-				ev := eventRetriableErr{
-					IsCommit:     fsm.FromBool(isCommit(stmt.AST)),
-					CanAutoRetry: fsm.FromBool(canAutoRetry),
-				}
-				txn.ManualRestart(ctx, ex.server.cfg.Clock.Now())
-				payload := eventRetriableErrPayload{
-					err: roachpb.NewTransactionRetryWithProtoRefreshError(
-						"serializable transaction timestamp pushed (detected by connExecutor)",
-						txn.ID(),
-						// No updated transaction required; we've already manually updated our
-						// client.Txn.
-						roachpb.Transaction{},
-					),
-					rewCap: rc,
-				}
-				return ev, payload, nil
-			}
-		}
+		// No event is generated.
+		return nil, nil, nil
 	}
 
+	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
+	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
+		return nil, nil, err
+	}
+	if err := res.Err(); err != nil {
+		return makeErrEvent(err)
+	}
+
+	txn := ex.state.mu.txn
+	if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
+		rc, canAutoRetry := ex.getRewindTxnCapability()
+		if canAutoRetry {
+			ev := eventRetriableErr{
+				IsCommit:     fsm.FromBool(isCommit(stmt.AST)),
+				CanAutoRetry: fsm.FromBool(canAutoRetry),
+			}
+			txn.ManualRestart(ctx, ex.server.cfg.Clock.Now())
+			payload := eventRetriableErrPayload{
+				err: roachpb.NewTransactionRetryWithProtoRefreshError(
+					"serializable transaction timestamp pushed (detected by connExecutor)",
+					txn.ID(),
+					// No updated transaction required; we've already manually updated our
+					// client.Txn.
+					roachpb.Transaction{},
+				),
+				rewCap: rc,
+			}
+			return ev, payload, nil
+		}
+	}
 	// No event was generated.
 	return nil, nil, nil
 }
@@ -663,6 +671,14 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 func (ex *connExecutor) execStmtInParallel(
 	ctx context.Context, planner *planner, queryDone func(context.Context, RestrictedCommandResult),
 ) (sqlbase.ResultColumns, error) {
+	defer func() {
+		// Call the cleanup function unless responsibility has been transferred
+		// elsewhere.
+		if queryDone != nil {
+			queryDone(ctx, nil /* res */)
+		}
+	}()
+
 	params := runParams{
 		ctx:             ctx,
 		extendedEvalCtx: planner.ExtendedEvalContext(),
@@ -692,6 +708,12 @@ func (ex *connExecutor) execStmtInParallel(
 		planner.maybeLogStatement(ctx, "par-prepare" /* lbl */, 0 /* rows */, err)
 		return nil, err
 	}
+	planCleanup := planner.curPlan.close
+	defer func() {
+		if planCleanup != nil {
+			planCleanup(ctx)
+		}
+	}()
 
 	// Prepare the result set, and determine the execution parameters.
 	var cols sqlbase.ResultColumns
@@ -718,10 +740,18 @@ func (ex *connExecutor) execStmtInParallel(
 	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
+	// Responsibility for calling queryDone is taken by the closure below.
+	queryDoneCpy := queryDone
+	queryDone = nil
+	// Responsibility for calling planCleanup is taken by the closure below.
+	planCleanupCpy := planCleanup
+	planCleanup = nil
+	cleanup := func(ctx context.Context) {
+		planCleanupCpy(ctx)
+		queryDoneCpy(ctx, nil /* res */)
+	}
 	if err := ex.parallelizeQueue.Add(params, func() error {
 		res := &bufferedCommandResult{errOnly: true}
-
-		defer queryDone(ctx, res)
 
 		defer func() {
 			planner.maybeLogStatement(ctx, "par-exec" /* lbl */, res.RowsAffected(), res.Err())
@@ -778,7 +808,7 @@ func (ex *connExecutor) execStmtInParallel(
 			return err
 		}
 		return res.Err()
-	}); err != nil {
+	}, cleanup); err != nil {
 		planner.maybeLogStatement(ctx, "par-queue" /* lbl */, 0 /* rows */, err)
 		return nil, err
 	}

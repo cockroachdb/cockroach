@@ -78,20 +78,21 @@ func MakeParallelizeQueue(analyzer DependencyAnalyzer) ParallelizeQueue {
 //
 // Add should not be called concurrently with Wait. See Wait's comment for more
 // details.
-func (pq *ParallelizeQueue) Add(params runParams, exec func() error) error {
+//
+// cleanup is called before Add() returns, in both success and error cases.
+func (pq *ParallelizeQueue) Add(
+	params runParams, exec func() error, cleanup func(context.Context),
+) error {
 	prereqs, finishLocked, err := pq.insertInQueue(params)
 	if err != nil {
-		params.p.curPlan.close(params.ctx)
+		cleanup(params.ctx)
 		return err
 	}
 
 	pq.runningGroup.Add(1)
 	go func() {
+		defer cleanup(params.ctx)
 		defer pq.runningGroup.Done()
-		// Be careful to close the planner's top-level node, and not just
-		// the hash key retrieved above -- there may be more work done by
-		// this close() method than plan.Close().
-		defer params.p.curPlan.close(params.ctx)
 
 		// Block on the execution of each prerequisite plan blocking us.
 		for _, prereq := range prereqs {
