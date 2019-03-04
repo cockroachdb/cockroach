@@ -39,18 +39,18 @@ type singleRangeInfo struct {
 // provided channel.
 func (ds *DistSender) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, eventCh chan<- *roachpb.RangeFeedEvent,
-) *roachpb.Error {
+) error {
 	ctx = ds.AnnotateCtx(ctx)
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer sp.Finish()
 
 	startRKey, err := keys.Addr(args.Span.Key)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	endRKey, err := keys.Addr(args.Span.EndKey)
 	if err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	rs := roachpb.RSpan{Key: startRKey, EndKey: endRKey}
 
@@ -77,7 +77,7 @@ func (ds *DistSender) RangeFeed(
 		return ds.divideAndSendRangeFeedToRanges(ctx, args, rs, rangeCh)
 	})
 
-	return roachpb.NewError(g.Wait())
+	return g.Wait()
 }
 
 func (ds *DistSender) divideAndSendRangeFeedToRanges(
