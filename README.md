@@ -5,7 +5,6 @@ CockroachDB is a cloud-native SQL database for building global, scalable cloud s
 
 [![TeamCity CI](https://teamcity.cockroachdb.com/guestAuth/app/rest/builds/buildType:(id:Cockroach_UnitTests)/statusIcon.svg)](https://teamcity.cockroachdb.com/viewLog.html?buildTypeId=Cockroach_UnitTests&buildId=lastFinished&guest=1)
 [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.svg)](https://godoc.org/github.com/cockroachdb/cockroach)
-[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/cockroachdb/cockroach?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 - [What is CockroachDB?](#what-is-cockroachdb)
 - [Docs](#docs)
@@ -84,9 +83,6 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 - [CockroachDB Forum](https://forum.cockroachlabs.com/) and
   [Stack Overflow](https://stackoverflow.com/questions/tagged/cockroachdb) - Ask questions,
   find answers, and help other users.
-
-- [Join us on Gitter](https://gitter.im/cockroachdb/cockroach) - This is the most immediate
-  way to connect with CockroachDB engineers.
 
 - For filing bugs, suggesting improvements, or requesting new features, help us out by
   [opening an issue](https://github.com/cockroachdb/cockroach/issues/new).
