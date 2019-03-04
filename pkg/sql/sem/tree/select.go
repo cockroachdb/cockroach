@@ -436,24 +436,26 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 		if node.JoinType != "" {
 			ctx.WriteString(node.JoinType)
 			ctx.WriteByte(' ')
-			if node.Hint != "" {
-				ctx.WriteString(node.Hint)
-				ctx.WriteByte(' ')
-			}
 		}
 		ctx.WriteString("JOIN ")
+		if node.Hint != "" {
+			ctx.WriteByte('@')
+			ctx.WriteString(node.Hint)
+			ctx.WriteByte(' ')
+		}
 		ctx.FormatNode(node.Right)
 	} else {
 		// General syntax: "<a> <join_type> [<join_hint>] JOIN <b> <condition>"
 		if node.JoinType != "" {
 			ctx.WriteString(node.JoinType)
 			ctx.WriteByte(' ')
-			if node.Hint != "" {
-				ctx.WriteString(node.Hint)
-				ctx.WriteByte(' ')
-			}
 		}
 		ctx.WriteString("JOIN ")
+		if node.Hint != "" {
+			ctx.WriteByte('@')
+			ctx.WriteString(node.Hint)
+			ctx.WriteByte(' ')
+		}
 		ctx.FormatNode(node.Right)
 		if node.Cond != nil {
 			ctx.WriteByte(' ')

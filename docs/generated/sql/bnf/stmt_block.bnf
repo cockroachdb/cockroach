@@ -2026,11 +2026,11 @@ opt_alias_clause ::=
 
 joined_table ::=
 	'(' joined_table ')'
-	| table_ref 'CROSS' 'JOIN' table_ref
-	| table_ref join_type opt_join_hint 'JOIN' table_ref join_qual
-	| table_ref 'JOIN' table_ref join_qual
-	| table_ref 'NATURAL' join_type opt_join_hint 'JOIN' table_ref
-	| table_ref 'NATURAL' 'JOIN' table_ref
+	| table_ref 'CROSS' 'JOIN' opt_join_hint table_ref
+	| table_ref join_type 'JOIN' opt_join_hint table_ref join_qual
+	| table_ref 'JOIN' opt_join_hint table_ref join_qual
+	| table_ref 'NATURAL' join_type 'JOIN' opt_join_hint table_ref
+	| table_ref 'NATURAL' 'JOIN' opt_join_hint table_ref
 
 alias_clause ::=
 	'AS' table_alias_name opt_column_list
@@ -2159,17 +2159,17 @@ char_aliases ::=
 window_definition ::=
 	window_name 'AS' window_specification
 
+opt_join_hint ::=
+	'@' 'HASH'
+	| '@' 'MERGE'
+	| '@' 'LOOKUP'
+	| 
+
 join_type ::=
 	'FULL' join_outer
 	| 'LEFT' join_outer
 	| 'RIGHT' join_outer
 	| 'INNER'
-
-opt_join_hint ::=
-	'HASH'
-	| 'MERGE'
-	| 'LOOKUP'
-	| 
 
 join_qual ::=
 	'USING' '(' name_list ')'

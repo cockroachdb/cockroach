@@ -6065,25 +6065,25 @@ joined_table:
   {
     $$.val = &tree.ParenTableExpr{Expr: $2.tblExpr()}
   }
-| table_ref CROSS JOIN table_ref
+| table_ref CROSS JOIN opt_join_hint table_ref
   {
-    $$.val = &tree.JoinTableExpr{JoinType: tree.AstCross, Left: $1.tblExpr(), Right: $4.tblExpr()}
+    $$.val = &tree.JoinTableExpr{JoinType: tree.AstCross, Hint: $4, Left: $1.tblExpr(), Right: $5.tblExpr()}
   }
-| table_ref join_type opt_join_hint JOIN table_ref join_qual
+| table_ref join_type JOIN opt_join_hint table_ref join_qual
   {
-    $$.val = &tree.JoinTableExpr{JoinType: $2, Left: $1.tblExpr(), Right: $5.tblExpr(), Cond: $6.joinCond(), Hint: $3}
+    $$.val = &tree.JoinTableExpr{JoinType: $2, Left: $1.tblExpr(), Right: $5.tblExpr(), Cond: $6.joinCond(), Hint: $4}
   }
-| table_ref JOIN table_ref join_qual
+| table_ref JOIN opt_join_hint table_ref join_qual
   {
-    $$.val = &tree.JoinTableExpr{Left: $1.tblExpr(), Right: $3.tblExpr(), Cond: $4.joinCond()}
+    $$.val = &tree.JoinTableExpr{Left: $1.tblExpr(), Right: $4.tblExpr(), Cond: $5.joinCond(), Hint: $3}
   }
-| table_ref NATURAL join_type opt_join_hint JOIN table_ref
+| table_ref NATURAL join_type JOIN opt_join_hint table_ref
   {
-    $$.val = &tree.JoinTableExpr{JoinType: $3, Left: $1.tblExpr(), Right: $6.tblExpr(), Cond: tree.NaturalJoinCond{}, Hint: $4}
+    $$.val = &tree.JoinTableExpr{JoinType: $3, Left: $1.tblExpr(), Right: $6.tblExpr(), Cond: tree.NaturalJoinCond{}, Hint: $5}
   }
-| table_ref NATURAL JOIN table_ref
+| table_ref NATURAL JOIN opt_join_hint table_ref
   {
-    $$.val = &tree.JoinTableExpr{Left: $1.tblExpr(), Right: $4.tblExpr(), Cond: tree.NaturalJoinCond{}}
+    $$.val = &tree.JoinTableExpr{Left: $1.tblExpr(), Right: $5.tblExpr(), Cond: tree.NaturalJoinCond{}, Hint: $4}
   }
 
 alias_clause:
@@ -6157,15 +6157,15 @@ join_outer:
 //  - When a join hint is specified, the two tables will not be reordered
 //    by the optimizer.
 opt_join_hint:
-  HASH
+  '@' HASH
   {
     $$ = tree.AstHash
   }
-| MERGE
+| '@' MERGE
   {
     $$ = tree.AstMerge
   }
-| LOOKUP
+| '@' LOOKUP
   {
     $$ = tree.AstLookup
   }
