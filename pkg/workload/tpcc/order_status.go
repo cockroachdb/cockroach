@@ -18,7 +18,6 @@ package tpcc
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/rand"
 )
 
 // From the TPCC spec, section 2.6:
@@ -127,7 +127,7 @@ func createOrderStatus(
 func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 	atomic.AddUint64(&o.config.auditor.orderStatusTransactions, 1)
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	d := orderStatusData{
 		dID: rng.Intn(10) + 1,

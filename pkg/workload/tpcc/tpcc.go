@@ -19,7 +19,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"math/rand"
 	"net/url"
 	"strings"
 	"sync"
@@ -32,13 +31,14 @@ import (
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/rand"
 )
 
 type tpcc struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed             int64
+	seed             uint64
 	warehouses       int
 	activeWarehouses int
 	interleaved      bool
@@ -76,7 +76,7 @@ type tpcc struct {
 		syncutil.Mutex
 		values [][]int
 	}
-	rngPool *sync.Pool
+	localsPool *sync.Pool
 }
 
 func init() {
@@ -116,7 +116,7 @@ var tpccMeta = workload.Meta{
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
-		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
+		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
 		// Hardcode this since it doesn't seem like anyone will want to change
@@ -298,9 +298,13 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 // Tables implements the Generator interface.
 func (w *tpcc) Tables() []workload.Table {
-	if w.rngPool == nil {
-		w.rngPool = &sync.Pool{
-			New: func() interface{} { return rand.New(rand.NewSource(timeutil.Now().UnixNano())) },
+	if w.localsPool == nil {
+		w.localsPool = &sync.Pool{
+			New: func() interface{} {
+				return &generateLocals{
+					rng: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
+				}
+			},
 		}
 	}
 
