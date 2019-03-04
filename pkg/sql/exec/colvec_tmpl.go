@@ -293,6 +293,8 @@ func (m *memColumn) ExtendNulls(
 	}
 	if vec.HasNulls() {
 		for i := uint16(0); i < toAppend; i++ {
+			// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
+			// like m.nulls[i] |= vec.nulls[i].
 			if vec.NullAt(srcStartIdx + i) {
 				m.SetNull64(destStartIdx + uint64(i))
 			}
@@ -310,6 +312,8 @@ func (m *memColumn) ExtendNullsWithSel(
 		m.nulls = append(m.nulls, make([]int64, (toAppend-1)>>6+1)...)
 	}
 	for i := uint16(0); i < toAppend; i++ {
+		// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
+		// like m.nulls[i] |= vec.nulls[i].
 		if vec.NullAt(sel[srcStartIdx+i]) {
 			m.SetNull64(destStartIdx + uint64(i))
 		}
