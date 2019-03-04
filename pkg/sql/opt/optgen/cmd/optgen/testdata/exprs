@@ -408,7 +408,8 @@ func (m *Memo) AddProjectToGroup(e *ProjectExpr, grp RelExpr) *ProjectExpr {
 		m.memEstimate += size
 		m.checkExpr(e)
 	} else if interned.group() != grp.group() {
-		panic(fmt.Sprintf("%s expression cannot be added to multiple groups: %s", e.Op(), interned))
+		// This is a group collision, do nothing.
+		return nil
 	}
 	return interned
 }
