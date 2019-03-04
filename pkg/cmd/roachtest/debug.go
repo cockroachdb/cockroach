@@ -66,8 +66,17 @@ func registerDebug(r *registry) {
 
 		waitForFullReplication(t, db)
 
-		// Kill first nodes-1 nodes.
-		for i := 1; i < nodes; i++ {
+		// Kill the first node and verify debug zip can be generated with one node
+		// down.
+		c.Stop(ctx, c.Node(1))
+
+		// Run debug zip command against the second node.
+		if err := debugExtractExist(2, "output.zip"); err != nil {
+			t.Fatal(err)
+		}
+
+		// Kill all but the last node.
+		for i := 2; i < nodes; i++ {
 			c.Stop(ctx, c.Node(i))
 		}
 

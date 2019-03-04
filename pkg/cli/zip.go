@@ -275,7 +275,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				err = contextutil.RunWithTimeout(baseCtx, "request stacks", timeout,
 					func(ctx context.Context) error {
 						stacks, err := status.Stacks(ctx, &serverpb.StacksRequest{NodeId: id})
-						if err != nil {
+						if err == nil {
 							stacksData = stacks.Data
 						}
 						return err
@@ -291,7 +291,9 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 							NodeId: id,
 							Type:   serverpb.ProfileRequest_HEAP,
 						})
-						heapData = heap.Data
+						if err == nil {
+							heapData = heap.Data
+						}
 						return err
 					})
 				if err := z.createRawOrError(prefix+"/heap", heapData, err); err != nil {
@@ -311,7 +313,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					if err := z.createError(prefix+"/heapfiles", err); err != nil {
 						return err
 					}
-				} else {
+				} else if profiles != nil {
 					for _, file := range profiles.Files {
 						name := prefix + "/heapprof/" + file.Name
 						if err := z.createRaw(name, file.Contents); err != nil {
@@ -330,7 +332,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					if err := z.createError(prefix+"/logs", err); err != nil {
 						return err
 					}
-				} else {
+				} else if logs != nil {
 					for _, file := range logs.Files {
 						name := prefix + "/logs/" + file.Name
 						var entries *serverpb.LogEntriesResponse
