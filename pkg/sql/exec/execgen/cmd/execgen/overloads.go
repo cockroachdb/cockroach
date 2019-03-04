@@ -245,10 +245,11 @@ type bytesCustomizer struct{}
 // variable-set semantics.
 type decimalCustomizer struct{}
 
-// float32Customizer and float64Customizer are necessary since float32 and
-// float64 require additional logic for hashing.
-type float32Customizer struct{}
-type float64Customizer struct{}
+// floatCustomizers are used for hash functions.
+type floatCustomizer struct{ width int }
+
+// intCustomizers are used for hash functions.
+type intCustomizer struct{ width int }
 
 func (boolCustomizer) getCmpOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
@@ -264,11 +265,11 @@ func (boolCustomizer) getCmpOpAssignFunc() assignFunc {
 func (boolCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
 		return fmt.Sprintf(`
-			x := uint64(0)
+			x := 0
 			if %[2]s {
     		x = 1
 			}
-			%[1]s = x
+			%[1]s = %[1]s*31 + uintptr(x)
 		`, target, v)
 	}
 }
@@ -289,11 +290,9 @@ func (bytesCustomizer) getCmpOpAssignFunc() assignFunc {
 func (bytesCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
 		return fmt.Sprintf(`
-			_temp := 1
-			for b := range %s {
-				_temp = _temp*31 + b
-			}
-			%s = uint64(hash)
+			sh := (*reflect.SliceHeader)(unsafe.Pointer(&%[1]s))
+			%[2]s = memhash(unsafe.Pointer(sh.Data), %[2]s, uintptr(len(%[1]s)))
+
 		`, v, target)
 	}
 }
@@ -319,20 +318,21 @@ func (decimalCustomizer) getHashAssignFunc() assignFunc {
 			if err != nil {
 				panic(fmt.Sprintf("%%v", err))
 			}
-			%[1]s = math.Float64bits(d)
+
+			%[1]s = f64hash(noescape(unsafe.Pointer(&d)), %[1]s)
 		`, target, v)
 	}
 }
 
-func (float32Customizer) getHashAssignFunc() assignFunc {
+func (c floatCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
-		return fmt.Sprintf("%s = uint64(math.Float32bits(%s))", target, v)
+		return fmt.Sprintf("%[1]s = f%[3]dhash(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)
 	}
 }
 
-func (float64Customizer) getHashAssignFunc() assignFunc {
+func (c intCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
-		return fmt.Sprintf("%s = math.Float64bits(%s)", target, v)
+		return fmt.Sprintf("%[1]s = memhash%[3]d(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)
 	}
 }
 
@@ -341,8 +341,12 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(types.Bool, boolCustomizer{})
 	registerTypeCustomizer(types.Bytes, bytesCustomizer{})
 	registerTypeCustomizer(types.Decimal, decimalCustomizer{})
-	registerTypeCustomizer(types.Float32, float32Customizer{})
-	registerTypeCustomizer(types.Float64, float64Customizer{})
+	registerTypeCustomizer(types.Float32, floatCustomizer{width: 32})
+	registerTypeCustomizer(types.Float64, floatCustomizer{width: 64})
+	registerTypeCustomizer(types.Int8, intCustomizer{width: 8})
+	registerTypeCustomizer(types.Int16, intCustomizer{width: 16})
+	registerTypeCustomizer(types.Int32, intCustomizer{width: 32})
+	registerTypeCustomizer(types.Int64, intCustomizer{width: 64})
 }
 
 // Avoid unused warning for Assign, which is only used in templates.
