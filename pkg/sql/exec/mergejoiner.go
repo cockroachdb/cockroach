@@ -96,7 +96,7 @@ type mergeJoinOp struct {
 
 	// Output buffer definition.
 	output          ColBatch
-	outputBatchSize int
+	outputBatchSize uint16
 
 	// Local buffer for the last left and right saved runs.
 	// Used when the run ends with a batch and the run on each side needs to be saved to state
@@ -134,12 +134,12 @@ func (c *mergeJoinOp) Init() {
 	c.initWithBatchSize(ColBatchSize)
 }
 
-func (c *mergeJoinOp) initWithBatchSize(outBatchSize int) {
+func (c *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
 	outColTypes := make([]types.T, len(c.left.sourceTypes)+len(c.right.sourceTypes))
 	copy(outColTypes, c.left.sourceTypes)
 	copy(outColTypes[len(c.left.sourceTypes):], c.right.sourceTypes)
 
-	c.output = NewMemBatchWithSize(outColTypes, outBatchSize)
+	c.output = NewMemBatchWithSize(outColTypes, int(outBatchSize))
 	c.savedOutput = NewMemBatchWithSize(outColTypes, ColBatchSize)
 	c.left.source.Init()
 	c.right.source.Init()
@@ -192,20 +192,20 @@ func getValForIdx(keys []int64, idx int, sel []uint16) int64 {
 
 // buildSavedOutput flushes the savedOutput to output.
 func (c *mergeJoinOp) buildSavedOutput() uint16 {
-	toAppend := uint16(c.savedOutputEndIdx)
+	toAppend := c.savedOutputEndIdx
 	offset := len(c.left.sourceTypes)
-	if toAppend > uint16(c.outputBatchSize) {
-		toAppend = uint16(c.outputBatchSize)
+	if toAppend > int(c.outputBatchSize) {
+		toAppend = int(c.outputBatchSize)
 	}
 
 	for _, idx := range c.left.outCols {
-		c.output.ColVec(int(idx)).AppendSlice(c.savedOutput.ColVec(int(idx)), c.left.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, toAppend)
+		c.output.ColVec(int(idx)).AppendSlice(c.savedOutput.ColVec(int(idx)), c.left.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, uint16(toAppend))
 	}
 	for _, idx := range c.right.outCols {
-		c.output.ColVec(offset+int(idx)).AppendSlice(c.savedOutput.ColVec(offset+int(idx)), c.right.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, toAppend)
+		c.output.ColVec(offset+int(idx)).AppendSlice(c.savedOutput.ColVec(offset+int(idx)), c.right.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, uint16(toAppend))
 	}
 
-	if c.savedOutputEndIdx > int(toAppend) {
+	if c.savedOutputEndIdx > toAppend {
 		for _, idx := range c.left.outCols {
 			c.savedOutput.ColVec(int(idx)).Copy(c.savedOutput.ColVec(int(idx)), uint64(toAppend), uint64(c.savedOutputEndIdx), c.left.sourceTypes[idx])
 		}
@@ -213,8 +213,8 @@ func (c *mergeJoinOp) buildSavedOutput() uint16 {
 			c.savedOutput.ColVec(offset+int(idx)).Copy(c.savedOutput.ColVec(offset+int(idx)), uint64(toAppend), uint64(c.savedOutputEndIdx), c.right.sourceTypes[idx])
 		}
 	}
-	c.savedOutputEndIdx -= int(toAppend)
-	return toAppend
+	c.savedOutputEndIdx -= toAppend
+	return uint16(toAppend)
 }
 
 // saveBatchesToState puts both "working" batches in state to have the ability to resume them
@@ -363,6 +363,10 @@ func (c *mergeJoinOp) Next() ColBatch {
 				if lIdx == lLength {
 					lIdx, lBat, lSel = nextBatch(&c.left)
 					lLength = int(lBat.Length())
+					if lLength == 0 {
+						// The run is complete if there are no more batches left.
+						break
+					}
 					lKeys = lBat.ColVec(int(c.left.eqCols[eqColIdx])).Int64()
 				}
 			}
@@ -381,11 +385,18 @@ func (c *mergeJoinOp) Next() ColBatch {
 				if rIdx == rLength {
 					rIdx, rBat, rSel = nextBatch(&c.right)
 					rLength = int(rBat.Length())
+					if rLength == 0 {
+						// The run is complete if there are no more batches left.
+						break
+					}
 					rKeys = rBat.ColVec(int(c.right.eqCols[eqColIdx])).Int64()
 				}
 			}
 
 			outCount = c.buildSavedRuns()
+			c.saveBatchesToState(lIdx, lBat, rIdx, rBat)
+			c.output.SetLength(outCount)
+			return c.output
 		}
 
 		// Phase 1: probe.

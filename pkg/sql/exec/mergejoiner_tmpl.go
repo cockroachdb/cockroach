@@ -174,7 +174,7 @@ func (c *mergeJoinOp) buildLeftGroups(
 						for k := 0; k < leftGroup.numRepeats; k++ {
 							srcStartIdx := curSrcStartIdx
 							srcEndIdx := curSrcStartIdx + 1
-							if outStartIdx < c.outputBatchSize {
+							if outStartIdx < int(c.outputBatchSize) {
 
 								// TODO (georgeutsin): update template language to automatically generate template function function parameter definitions from expressions passed in.
 								t_dest := out
@@ -211,7 +211,7 @@ func (c *mergeJoinOp) buildLeftGroups(
 						for k := 0; k < leftGroup.numRepeats; k++ {
 							srcStartIdx := curSrcStartIdx
 							srcEndIdx := curSrcStartIdx + 1
-							if outStartIdx < c.outputBatchSize {
+							if outStartIdx < int(c.outputBatchSize) {
 
 								copy(outCol[outStartIdx:], srcCol[srcStartIdx:srcEndIdx])
 
@@ -295,8 +295,8 @@ func (c *mergeJoinOp) buildRightGroups(
 					// Repeat every group numRepeats times.
 					for k := 0; k < rightGroup.numRepeats; k++ {
 						toAppend := rightGroup.rowEndIdx - rightGroup.rowStartIdx
-						if outStartIdx+toAppend > c.outputBatchSize {
-							toAppend = c.outputBatchSize - outStartIdx
+						if outStartIdx+toAppend > int(c.outputBatchSize) {
+							toAppend = int(c.outputBatchSize) - outStartIdx
 						}
 
 						t_dest := out
@@ -328,8 +328,8 @@ func (c *mergeJoinOp) buildRightGroups(
 					// Repeat every group numRepeats times.
 					for k := 0; k < rightGroup.numRepeats; k++ {
 						toAppend := rightGroup.rowEndIdx - rightGroup.rowStartIdx
-						if outStartIdx+toAppend > c.outputBatchSize {
-							toAppend = c.outputBatchSize - outStartIdx
+						if outStartIdx+toAppend > int(c.outputBatchSize) {
+							toAppend = int(c.outputBatchSize) - outStartIdx
 						}
 
 						copy(outCol[outStartIdx:], srcCol[rightGroup.rowStartIdx:rightGroup.rowStartIdx+toAppend])
