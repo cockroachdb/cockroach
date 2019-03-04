@@ -446,11 +446,9 @@ func (ht *hashTable) loadBatch(batch ColBatch) {
 // key is a tuple of various types, rehash is used to apply a transformation on
 // the resulting hash value based on an element of the key of a specified type.
 //
-// The current integer tuple hashing heuristic is based off of Java's
-// Arrays.hashCode(int[]) and only supports int8, int16, int32, and int64
-// elements. float32 and float64 are hashed according to their respective 32-bit
-// and 64-bit integer representation. bool keys are hashed as a 1 for true and 0
-// for false. bytes are hashed as an array of int8 integers.
+// We currently use the same hash functions used by go's maps.
+// TODO(asubiotto): Once https://go-review.googlesource.com/c/go/+/155118/ is
+// in, we should use the public API.
 //
 // initHash initializes the hash value of each key to its initial state for
 // rehashing purposes.
