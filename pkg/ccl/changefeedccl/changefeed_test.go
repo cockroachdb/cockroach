@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	gosql "database/sql"
-	gojson "encoding/json"
 	"fmt"
 	"net/url"
 	"sort"
@@ -22,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -31,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -41,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -207,38 +206,37 @@ func TestChangefeedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		beforeEmitRowCh := make(chan struct{})
-		beforeEmitRowHook := func() error {
-			<-beforeEmitRowCh
-			return nil
-		}
-		f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsqlrun.TestingKnobs).
-			Changefeed.(*TestingKnobs).BeforeEmitRow = beforeEmitRowHook
-
 		ctx := context.Background()
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
 
-		var ts0 string
-		if err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
-			return tx.QueryRow(
-				`INSERT INTO foo VALUES (0) RETURNING cluster_logical_timestamp()`,
-			).Scan(&ts0)
-		}); err != nil {
-			t.Fatal(err)
-		}
-
-		beforeFeed := tree.TimestampToDecimal(f.Server().Clock().Now())
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, resolved`)
 		defer closeFeed(t, foo)
-		// Make sure the changefeed has picked a statement timestamp by waiting
-		// on something that happens after it (the first BeforeEmitRow hook
-		// call). Then unblock the hook for the rest of the test.
-		beforeEmitRowCh <- struct{}{}
-		close(beforeEmitRowCh)
-		afterFeed := tree.TimestampToDecimal(f.Server().Clock().Now())
 
+		// Grab the first non resolved-timestamp row.
+		var row0 *cdctest.TestFeedMessage
+		for {
+			var err error
+			row0, err = foo.Next()
+			assert.NoError(t, err)
+			if len(row0.Value) > 0 {
+				break
+			}
+		}
+
+		// If this changefeed uses jobs (and thus stores a ChangefeedDetails), get
+		// the statement timestamp from row0 and verify that they match. Otherwise,
+		// just skip the row.
+		if !strings.Contains(t.Name(), `sinkless`) {
+			d, err := foo.(*cdctest.TableFeed).Details()
+			assert.NoError(t, err)
+			expected := `{"after": {"a": 0}, "updated": "` + d.StatementTime.AsOfSystemTime() + `"}`
+			assert.Equal(t, expected, string(row0.Value))
+		}
+
+		// Assert the remaining key using assertPayloads, since we know the exact
+		// timestamp expected.
 		var ts1 string
 		if err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
 			return tx.QueryRow(
@@ -247,50 +245,6 @@ func TestChangefeedTimestamps(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-
-		// TODO(mtracy): Find a way to get the statement time of a feed. Without the
-		// exact timestamp, we are forced to parse and compare the feed results to
-		// our sentinel before and after timestamps, which is significantly more
-		// complicated.
-		var m *cdctest.TestFeedMessage
-		for {
-			var err error
-			m, err = foo.Next()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if m == nil {
-				t.Fatal("unexpected end of feed")
-			}
-			if m.Key != nil {
-				break
-			}
-		}
-
-		if a, e := string(m.Key), "[0]"; a != e {
-			t.Errorf("got key %s, wanted %s", a, e)
-		}
-		var out map[string]interface{}
-		if err := gojson.Unmarshal(m.Value, &out); err != nil {
-			t.Fatal(err)
-		}
-		after := out["after"].(map[string]interface{})
-		if a, e := after["a"].(float64), float64(0); a != e {
-			t.Fatalf("column a got value %f, wanted %f", a, e)
-		}
-		tsApd, _, err := apd.NewFromString(out["updated"].(string))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if beforeFeed.Cmp(tsApd) > 0 {
-			t.Fatalf("ts %s was before lower bound %s", tsApd, beforeFeed)
-		}
-		if afterFeed.Cmp(tsApd) < 0 {
-			t.Fatalf("ts %s was after upper bound %s", tsApd, afterFeed)
-		}
-
-		// Assert the remaining key using assertPayloads, since we know the exact
-		// timestamp expected.
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"a": 1}, "updated": "` + ts1 + `"}`,
 		})
@@ -306,7 +260,9 @@ func TestChangefeedTimestamps(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
+	// Most poller tests use sinklessTest, but this one uses enterpriseTest
+	// because we get an extra assertion out of it.
+	t.Run(`poller`, pollerTest(enterpriseTest, testFn))
 }
 
 func TestChangefeedResolvedFrequency(t *testing.T) {
@@ -938,8 +894,10 @@ func TestChangefeedMonitoring(t *testing.T) {
 		}
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		var usingRangeFeed bool
+		sqlDB.QueryRow(t, `SHOW CLUSTER SETTING changefeed.push.enabled`, &usingRangeFeed)
 
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		start := timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
@@ -959,8 +917,17 @@ func TestChangefeedMonitoring(t *testing.T) {
 		if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
 		}
+		if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c != 0 {
+			t.Errorf(`expected %d got %d`, 0, c)
+		}
 		if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c != noMinHighWaterSentinel {
 			t.Errorf(`expected %d got %d`, noMinHighWaterSentinel, c)
+		}
+		if c := s.MustGetSQLCounter(`changefeed.buffer_entries.in`); c != 0 {
+			t.Errorf(`expected 0 got %d`, c)
+		}
+		if c := s.MustGetSQLCounter(`changefeed.buffer_entries.out`); c != 0 {
+			t.Errorf(`expected 0 got %d`, c)
 		}
 
 		beforeEmitRowCh <- struct{}{}
@@ -982,17 +949,41 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
+			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c <= 0 {
+				return errors.Errorf(`expected > 0 got %d`, c)
+			}
 			if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c == noMinHighWaterSentinel {
 				return errors.New(`waiting for high-water to not be sentinel`)
 			} else if c <= start.UnixNano() {
 				return errors.Errorf(`expected > %d got %d`, start.UnixNano(), c)
 			}
+			if usingRangeFeed {
+				// Only RangeFeed-based changefeeds use this buffer.
+				if c := s.MustGetSQLCounter(`changefeed.buffer_entries.in`); c <= 0 {
+					return errors.Errorf(`expected > 0 got %d`, c)
+				}
+				if c := s.MustGetSQLCounter(`changefeed.buffer_entries.out`); c <= 0 {
+					return errors.Errorf(`expected > 0 got %d`, c)
+				}
+			}
 			return nil
 		})
 
-		// Not reading from foo will backpressure it and the min_high_water will
-		// stagnate.
+		// Not reading from foo will backpressure it. max_behind_nanos will grow and
+		// min_high_water will stagnate.
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+		const expectedLatency = 100 * time.Millisecond
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1`,
+			(expectedLatency / 10).String())
+
+		testutils.SucceedsSoon(t, func() error {
+			waitForBehindNanos := 2 * expectedLatency.Nanoseconds()
+			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c < waitForBehindNanos {
+				return errors.Errorf(
+					`waiting for the feed to be > %d nanos behind got %d`, waitForBehindNanos, c)
+			}
+			return nil
+		})
 		stalled := s.MustGetSQLCounter(`changefeed.min_high_water`)
 		for i := 0; i < 100; {
 			i++
@@ -1002,9 +993,19 @@ func TestChangefeedMonitoring(t *testing.T) {
 				i = 0
 			}
 		}
-		// Unblocking the emit should update the min_high_water.
+
+		// Unblocking the emit should bring the max_behind_nanos back down and
+		// should update the min_high_water.
 		beforeEmitRowCh <- struct{}{}
 		_, _ = foo.Next()
+		testutils.SucceedsSoon(t, func() error {
+			waitForBehindNanos := expectedLatency.Nanoseconds()
+			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c > waitForBehindNanos {
+				return errors.Errorf(
+					`waiting for the feed to be < %d nanos behind got %d`, waitForBehindNanos, c)
+			}
+			return nil
+		})
 		testutils.SucceedsSoon(t, func() error {
 			if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c <= stalled {
 				return errors.Errorf(`expected > %d got %d`, stalled, c)
@@ -1015,6 +1016,8 @@ func TestChangefeedMonitoring(t *testing.T) {
 		// Check that two changefeeds add correctly.
 		beforeEmitRowCh <- struct{}{}
 		beforeEmitRowCh <- struct{}{}
+		// Set cluster settings back so we don't interfere with schema changes.
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 		fooCopy := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		_, _ = fooCopy.Next()
 		_, _ = fooCopy.Next()
@@ -1028,12 +1031,15 @@ func TestChangefeedMonitoring(t *testing.T) {
 			return nil
 		})
 
-		// Cancel all the changefeeds and check that the min_high_water returns to the
-		// no high-water sentinel.
+		// Cancel all the changefeeds and check that max_behind_nanos returns to 0
+		// and min_high_water returns to the no high-water sentinel.
 		close(beforeEmitRowCh)
 		require.NoError(t, foo.Close())
 		require.NoError(t, fooCopy.Close())
 		testutils.SucceedsSoon(t, func() error {
+			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c != 0 {
+				return errors.Errorf(`expected 0 got %d`, c)
+			}
 			if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c != noMinHighWaterSentinel {
 				return errors.Errorf(`expected %d got %d`, noMinHighWaterSentinel, c)
 			}
@@ -1275,7 +1281,7 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = false`)
 	sqlDB.Exec(t, `CREATE TABLE rangefeed_off (a INT PRIMARY KEY)`)
 	sqlDB.ExpectErr(
-		t, `rangefeeds are not enabled. See kv.rangefeed.enabled.`,
+		t, `rangefeeds require the kv.rangefeed.enabled setting`,
 		`EXPERIMENTAL CHANGEFEED FOR rangefeed_off`,
 	)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled TO DEFAULT`)
@@ -1446,15 +1452,19 @@ func TestChangefeedDescription(t *testing.T) {
 
 		var jobID int64
 		sqlDB.QueryRow(t,
-			`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, envelope = $2`, sink.String(), `row`,
+			`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, envelope = $2`, sink.String(), `wrapped`,
 		).Scan(&jobID)
+
+		// Secrets get removed from the sink parameter.
+		expectedSink := sink
+		expectedSink.RawQuery = ``
 
 		var description string
 		sqlDB.QueryRow(t,
 			`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
 		).Scan(&description)
-		expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + sink.String() +
-			`' WITH envelope = 'row', updated`
+		expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + expectedSink.String() +
+			`' WITH envelope = 'wrapped', updated`
 		if description != expected {
 			t.Errorf(`got "%s" expected "%s"`, description, expected)
 		}
@@ -1464,7 +1474,6 @@ func TestChangefeedDescription(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`poller`, pollerTest(enterpriseTest, testFn))
 }
-
 func TestChangefeedPauseUnpause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1658,5 +1667,49 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 		`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
 		`foo: [3]->{"after": {"a": 3, "b": "third"}}`,
 	})
+}
 
+func TestChangefeedTelemetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+
+		// Reset the counts.
+		_ = telemetry.GetAndResetFeatureCounts(false)
+
+		// Start some feeds (and read from them to make sure they've started.
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+		fooBar := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH format=json`)
+		defer closeFeed(t, fooBar)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+		assertPayloads(t, fooBar, []string{
+			`bar: [1]->{"after": {"a": 1}}`,
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+
+		var expectedSink string
+		if strings.Contains(t.Name(), `sinkless`) || strings.Contains(t.Name(), `poller`) {
+			expectedSink = `sinkless`
+		} else {
+			expectedSink = `experimental-sql`
+		}
+
+		counts := telemetry.GetAndResetFeatureCounts(false)
+		require.Equal(t, int32(2), counts[`changefeed.create.sink.`+expectedSink])
+		require.Equal(t, int32(2), counts[`changefeed.create.format.json`])
+		require.Equal(t, int32(1), counts[`changefeed.create.num_tables.1`])
+		require.Equal(t, int32(1), counts[`changefeed.create.num_tables.2`])
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
