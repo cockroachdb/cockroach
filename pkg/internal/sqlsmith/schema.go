@@ -44,9 +44,15 @@ type function struct {
 type schema struct {
 	rnd       *rand.Rand
 	lock      syncutil.Mutex
-	tables    []tableRef
+	tables    []*tableRef
 	operators map[oid.Oid][]operator
 	functions map[oid.Oid][]function
+}
+
+// tableRef represents a table and its columns.
+type tableRef struct {
+	TableName *tree.TableName
+	Columns   []*tree.ColumnTableDef
 }
 
 func (s *schema) makeScope() *scope {
@@ -85,7 +91,7 @@ func (s *schema) ReloadSchemas(db *gosql.DB) error {
 	return err
 }
 
-func extractTables(db *gosql.DB) ([]tableRef, error) {
+func extractTables(db *gosql.DB) ([]*tableRef, error) {
 	rows, err := db.Query(`
 SELECT
 	table_catalog,
@@ -114,13 +120,13 @@ ORDER BY
 
 	firstTime := true
 	var lastCatalog, lastSchema, lastName tree.Name
-	var tables []tableRef
+	var tables []*tableRef
 	var currentCols []*tree.ColumnTableDef
 	emit := func() {
 		if lastSchema != "public" {
 			return
 		}
-		tables = append(tables, tableRef{
+		tables = append(tables, &tableRef{
 			TableName: tree.NewTableName(lastCatalog, lastName),
 			Columns:   currentCols,
 		})
@@ -150,7 +156,7 @@ ORDER BY
 			return nil, err
 		}
 		column := tree.ColumnTableDef{
-			Name: tree.Name(col),
+			Name: col,
 			Type: coltyp,
 		}
 		if nullable {
