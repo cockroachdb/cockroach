@@ -571,15 +571,8 @@ func (tu *tableUpserter) updateConflictingRow(
 		// - values coming from the table are valid by construction.
 		// However the SET expression can be arbitrary and can introduce errors
 		// downstream, so we need to (re)validate here.
-		for i, updateCol := range tu.ru.UpdateCols {
-			if !updateCol.Nullable && updateValues[i] == tree.DNull {
-				return nil, sqlbase.NewNonNullViolationError(updateCol.Name)
-			}
-			outVal, err := sqlbase.LimitValueWidth(updateCol.Type, updateValues[i], &updateCol.Name)
-			if err != nil {
-				return nil, err
-			}
-			updateValues[i] = outVal
+		if err := enforceLocalColumnConstraints(updateValues, tu.ru.UpdateCols); err != nil {
+			return nil, err
 		}
 
 		if checkHelper != nil {
