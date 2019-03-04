@@ -69,6 +69,8 @@ export const SET_CLUSTER_SETTING = "set_cluster_setting";
 export const SET_ZONE_CONFIG = "set_zone_config";
 // Recorded when a zone config is removed.
 export const REMOVE_ZONE_CONFIG = "remove_zone_config";
+// Recorded when statistics are collected for a table.
+export const CREATE_STATISTICS = "create_statistics";
 
 // Node Event Types
 export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];
