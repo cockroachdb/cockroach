@@ -22,11 +22,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
@@ -257,6 +259,20 @@ func (f *jobFeed) Resume() error {
 	_, err := f.db.Exec(`RESUME JOB $1`, f.JobID)
 	f.jobErr = nil
 	return err
+}
+
+func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
+	var payloadBytes []byte
+	if err := f.db.QueryRow(
+		`SELECT payload FROM system.jobs WHERE id=$1`, f.JobID,
+	).Scan(&payloadBytes); err != nil {
+		return nil, err
+	}
+	var payload jobspb.Payload
+	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
+		return nil, err
+	}
+	return payload.GetChangefeed(), nil
 }
 
 type tableFeedFactory struct {

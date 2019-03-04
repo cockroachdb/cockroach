@@ -264,7 +264,7 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 		// `tableHist` is responsible for detecting and enforcing these (they queue
 		// up in `p.scanBoundaries`), but the after-poller buffer doesn't have
 		// access to any of this state. A cleanup is in order.
-		memBuf := makeMemBuffer(p.mm.MakeBoundAccount())
+		memBuf := makeMemBuffer(p.mm.MakeBoundAccount(), p.metrics)
 		defer memBuf.Close(ctx)
 
 		// Maintain a local spanfrontier to tell when all the component rangefeeds

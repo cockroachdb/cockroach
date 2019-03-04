@@ -10,16 +10,19 @@ package changefeedccl
 
 import (
 	"context"
+	"net/url"
 	"regexp"
 	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -144,7 +147,10 @@ func changefeedPlanHook(
 			return err
 		}
 
-		jobDescription := changefeedJobDescription(changefeedStmt, sinkURI, opts)
+		jobDescription, err := changefeedJobDescription(changefeedStmt, sinkURI, opts)
+		if err != nil {
+			return err
+		}
 
 		statementTime := hlc.Timestamp{
 			WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
@@ -207,6 +213,23 @@ func changefeedPlanHook(
 			},
 		}
 
+		if details, err = validateDetails(details); err != nil {
+			return err
+		}
+
+		// Feature telemetry
+		parsedSink, err := url.Parse(sinkURI)
+		if err != nil {
+			return err
+		}
+		telemetrySink := parsedSink.Scheme
+		if telemetrySink == `` {
+			telemetrySink = `sinkless`
+		}
+		telemetry.Count(`changefeed.create.sink.` + telemetrySink)
+		telemetry.Count(`changefeed.create.format.` + details.Opts[optFormat])
+		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
+
 		if details.SinkURI == `` {
 			return distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
 		}
@@ -215,10 +238,6 @@ func changefeedPlanHook(
 		if err := utilccl.CheckEnterpriseEnabled(
 			settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
 		); err != nil {
-			return err
-		}
-
-		if details, err = validateDetails(details); err != nil {
 			return err
 		}
 
@@ -281,12 +300,14 @@ func changefeedPlanHook(
 
 func changefeedJobDescription(
 	changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
-) string {
+) (string, error) {
+	cleanedSinkURI, err := storageccl.SanitizeExportStorageURI(sinkURI)
+	if err != nil {
+		return "", err
+	}
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
-		// If/when we start accepting export storage uris (or ones with
-		// secrets), we'll need to sanitize sinkURI.
-		SinkURI: tree.NewDString(sinkURI),
+		SinkURI: tree.NewDString(cleanedSinkURI),
 	}
 	for k, v := range opts {
 		opt := tree.KVOption{Key: tree.Name(k)}
@@ -296,7 +317,7 @@ func changefeedJobDescription(
 		c.Options = append(c.Options, opt)
 	}
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
-	return tree.AsStringWithFlags(c, tree.FmtAlwaysQualifyTableNames)
+	return tree.AsStringWithFlags(c, tree.FmtAlwaysQualifyTableNames), nil
 }
 
 func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails, error) {

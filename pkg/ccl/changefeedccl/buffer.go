@@ -97,6 +97,8 @@ var memBufferColTypes = []sqlbase.ColumnType{
 // events. It's size is limited only by the BoundAccount passed to the
 // constructor.
 type memBuffer struct {
+	metrics *Metrics
+
 	mu struct {
 		syncutil.Mutex
 		entries rowcontainer.RowContainer
@@ -108,8 +110,8 @@ type memBuffer struct {
 	}
 }
 
-func makeMemBuffer(acc mon.BoundAccount) *memBuffer {
-	b := &memBuffer{}
+func makeMemBuffer(acc mon.BoundAccount, metrics *Metrics) *memBuffer {
+	b := &memBuffer{metrics: metrics}
 	b.mu.entries.Init(acc, sqlbase.ColTypeInfoFromColTypes(memBufferColTypes), 0 /* rowCapacity */)
 	return b
 }
@@ -196,6 +198,7 @@ func (b *memBuffer) addRow(ctx context.Context, row tree.Datums) error {
 	b.mu.Lock()
 	_, err := b.mu.entries.AddRow(ctx, row)
 	b.mu.Unlock()
+	b.metrics.BufferEntriesIn.Inc(1)
 	return err
 }
 
@@ -214,6 +217,7 @@ func (b *memBuffer) getRow(ctx context.Context) (tree.Datums, error) {
 		}
 		b.mu.Unlock()
 		if row != nil {
+			b.metrics.BufferEntriesOut.Inc(1)
 			return row, nil
 		}
 	}
