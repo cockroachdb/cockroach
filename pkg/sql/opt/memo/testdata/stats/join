@@ -100,12 +100,34 @@ inner-join
 norm
 SELECT * FROM xysd JOIN uv ON false
 ----
-values
- ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int)
+inner-join
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
- ├── key: ()
- └── fd: ()-->(1-6)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── select
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── scan xysd
+ │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    │    ├── stats: [rows=5000]
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── filters
+ │         └── false [type=bool]
+ ├── select
+ │    ├── columns: u:5(int) v:6(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── scan uv
+ │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    └── stats: [rows=10000]
+ │    └── filters
+ │         └── false [type=bool]
+ └── filters (true)
 
 build colstat=2
 SELECT *, rowid FROM xysd INNER JOIN uv ON x=u

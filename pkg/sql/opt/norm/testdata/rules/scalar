@@ -402,11 +402,10 @@ select
                 ├── cardinality: [1 - 1]
                 ├── key: ()
                 ├── fd: ()-->(13)
-                ├── values
+                ├── scan a
                 │    ├── columns: s:10(string)
-                │    ├── cardinality: [0 - 0]
-                │    ├── key: ()
-                │    └── fd: ()-->(10)
+                │    ├── constraint: /7: contradiction
+                │    └── cardinality: [0 - 0]
                 └── aggregations
                      └── max [type=string, outer=(10)]
                           └── variable: s [type=string]
@@ -1006,11 +1005,11 @@ project
 opt
 SELECT k FROM e WHERE tz > NULL::TIMESTAMP
 ----
-values
- ├── columns: k:1(int)
+scan e
+ ├── columns: k:1(int!null)
+ ├── constraint: /1: contradiction
  ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1)
+ └── key: (1)
 
 # Working in concert with other norm rules
 opt

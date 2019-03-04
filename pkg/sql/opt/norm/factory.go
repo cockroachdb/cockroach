@@ -244,6 +244,9 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	return nil
 }
 
+// TODO(justin): re-enable this when we have a better solution for #35253.
+const enableSimplifyZeroCardinalityGroup = false
+
 // onConstructRelational is called as a final step by each factory method that
 // constructs a relational expression, so that any custom manual pattern
 // matching/replacement code can be run.
@@ -252,7 +255,7 @@ func (f *Factory) onConstructRelational(rel memo.RelExpr) memo.RelExpr {
 	// SimplifyZeroCardinalityGroup replaces a group with [0 - 0] cardinality
 	// with an empty values expression. It is placed here because it depends on
 	// the logical properties of the group in question.
-	if rel.Op() != opt.ValuesOp {
+	if enableSimplifyZeroCardinalityGroup && rel.Op() != opt.ValuesOp {
 		relational := rel.Relational()
 		if relational.Cardinality.IsZero() && !relational.CanHaveSideEffects {
 			if f.matchedRule == nil || f.matchedRule(opt.SimplifyZeroCardinalityGroup) {

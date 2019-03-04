@@ -267,11 +267,38 @@ right-join
 opt expect=(InlineJoinConstantsLeft,InlineJoinConstantsRight)
 SELECT * FROM (SELECT 1 AS one) INNER JOIN (SELECT 2 AS two) ON one=two
 ----
-values
+inner-join
  ├── columns: one:1(int) two:2(int)
  ├── cardinality: [0 - 0]
  ├── key: ()
- └── fd: ()-->(1,2)
+ ├── fd: ()-->(1,2)
+ ├── select
+ │    ├── columns: one:1(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── values
+ │    │    ├── columns: one:1(int)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,) [type=tuple{int}]
+ │    └── filters
+ │         └── false [type=bool]
+ ├── select
+ │    ├── columns: two:2(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── columns: two:2(int)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(2)
+ │    │    └── (2,) [type=tuple{int}]
+ │    └── filters
+ │         └── false [type=bool]
+ └── filters (true)
 
 # Constant column exists in input, but is not referenced.
 opt expect-not=(InlineJoinConstantsLeft,InlineJoinConstantsRight)

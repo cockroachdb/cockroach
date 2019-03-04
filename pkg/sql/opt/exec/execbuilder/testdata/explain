@@ -3,14 +3,16 @@
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
-tree    field  description
-norows  ·      ·
+tree         field  description
+render       ·      ·
+ └── norows  ·      ·
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
 ----
-tree    field  description
-norows  ·      ·
+tree         field  description
+render       ·      ·
+ └── norows  ·      ·
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE

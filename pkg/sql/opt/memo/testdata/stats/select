@@ -69,12 +69,19 @@ scan a
 norm
 SELECT * FROM a WHERE false
 ----
-values
- ├── columns: x:1(int) y:2(int)
+select
+ ├── columns: x:1(int!null) y:2(int)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
- ├── key: ()
- └── fd: ()-->(1,2)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=4000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── false [type=bool]
 
 # Distinct values calculation with constraints.
 norm
