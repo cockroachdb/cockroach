@@ -46,7 +46,8 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c *cluster) {
 	cmdInit := fmt.Sprintf("./workload init json {pgurl:1}")
 	c.Run(ctx, workloadNode, cmdInit)
 
-	initialDataDuration := time.Hour
+	// On a 4-node GCE cluster with the standard configuration, this generates ~10 million rows
+	initialDataDuration := time.Minute * 20
 	indexDuration := time.Hour
 	if c.isLocal() {
 		initialDataDuration = time.Minute
