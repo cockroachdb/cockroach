@@ -676,23 +676,26 @@ func GenerateInsertRow(
 		evalCtx.PopIVarContainer()
 	}
 
-	// Check to see if NULL is being inserted into any non-nullable column.
-	for _, col := range tableDesc.WritableColumns() {
-		if !col.Nullable {
-			if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !ok || rowVals[i] == tree.DNull {
-				return nil, sqlbase.NewNonNullViolationError(col.Name)
-			}
-		}
+	if err := enforceLocalColumnConstraints(rowVals, insertCols); err != nil {
+		return nil, err
 	}
+	// // Check to see if NULL is being inserted into any non-nullable column.
+	// for _, col := range tableDesc.WritableColumns() {
+	// 	if !col.Nullable {
+	// 		if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !ok || rowVals[i] == tree.DNull {
+	// 			return nil, sqlbase.NewNonNullViolationError(col.Name)
+	// 		}
+	// 	}
+	// }
 
-	// Ensure that the values honor the specified column widths.
-	for i := 0; i < len(insertCols); i++ {
-		outVal, err := sqlbase.LimitValueWidth(insertCols[i].Type, rowVals[i], &insertCols[i].Name)
-		if err != nil {
-			return nil, err
-		}
-		rowVals[i] = outVal
-	}
+	// // Ensure that the values honor the specified column widths.
+	// for i := 0; i < len(insertCols); i++ {
+	// 	outVal, err := sqlbase.LimitValueWidth(insertCols[i].Type, rowVals[i], &insertCols[i].Name)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	rowVals[i] = outVal
+	// }
 	return rowVals, nil
 }
 
