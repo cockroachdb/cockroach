@@ -33,3 +33,17 @@ func TestComposeGSS(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestComposeFlyway(t *testing.T) {
+	out, err := exec.Command(
+		"docker-compose",
+		"-f", filepath.Join("compose", "flyway", "docker-compose.yml"),
+		"up",
+		"--force-recreate",
+		"--exit-code-from", "flyway",
+	).CombinedOutput()
+	if err != nil {
+		t.Log(string(out))
+		t.Fatal(err)
+	}
+}
