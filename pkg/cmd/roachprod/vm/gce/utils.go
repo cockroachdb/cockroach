@@ -59,7 +59,6 @@ sudo service sshguard stop
 # root and non-root users. Load generators running a lot of concurrent
 # workers bump into this often.
 sudo sh -c 'echo "root - nofile 65536\n* - nofile 65536" > /etc/security/limits.d/10-roachprod-nofiles.conf'
-sudo touch /mnt/data1/.roachprod-initialized
 
 # Send TCP keepalives every minute since GCE will terminate idle connections
 # after 10m. Note that keepalives still need to be requested by the application
@@ -69,7 +68,26 @@ net.ipv4.tcp_keepalive_time=60
 net.ipv4.tcp_keepalive_intvl=60
 net.ipv4.tcp_keepalive_probes=5
 EOF
+
+# Enable core dumps
+cat <<EOF > /etc/security/limits.d/core_unlimited.conf
+* soft core unlimited
+* hard core unlimited
+root soft core unlimited
+root hard core unlimited
+EOF
+
+mkdir -p /tmp/cores
+chmod a+w /tmp/cores
+CORE_PATTERN="/tmp/cores/core.%e.%p.%h.%t"
+echo "$CORE_PATTERN" > /proc/sys/kernel/core_pattern
+sed -i'~' 's/enabled=1/enabled=0/' /etc/default/apport
+sed -i'~' '/.*kernel\\.core_pattern.*/c\\' /etc/sysctl.conf
+echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
+
 sysctl --system  # reload sysctl settings
+
+sudo touch /mnt/data1/.roachprod-initialized
 `
 
 // writeStartupScript writes the startup script to a temp file.
